@@ -151,7 +151,7 @@ class NcclLowLatencyLadderSizing(unittest.TestCase):
         backend._ll = low_latency
         backend.zero_copy = True
         backend.world_size, backend.num_local_experts, backend.device = 8, 4, "cuda:0"
-        backend.args = types.SimpleNamespace(hidden=7168, experts=256, topk=8)
+        backend.args = types.SimpleNamespace(hidden=7168, experts=256, topk=8, phase="decode")
         backend._algorithm = "LL" if low_latency else "HT"
         backend._layout = module.Layout.RANK_MAJOR if low_latency else module.Layout.FLAT
         backend._bootstrap_comm = lambda: None
@@ -208,6 +208,35 @@ class NcclLowLatencyLadderSizing(unittest.TestCase):
         self.assertEqual(spec.ladder, [32, 256, 512, 1024])
         self.assertEqual(spec.dropped, [])
 
+    def test_fp8_ll_accepts_both_phases_and_keeps_ht_disabled(self):
+        module = self._module()
+        module.nccl_ep.DispatchQuantizationRecipe = types.SimpleNamespace(DS_FP8E3M4="ds-fp8")
+        module.DispatchConfig = lambda **kw: types.SimpleNamespace(**kw)
+        with mock.patch.dict(os.environ, {"COLLX_NCCL_LL_LAYOUT": "rank-major"}):
+            for phase in ("decode", "prefill"):
+                with self.subTest(phase=phase):
+                    options = args(phase=phase, precision="fp8", mode="low-latency",
+                                   hidden=7168, experts=384, topk=6, scale_up_domain=72)
+                    backend = module.NCCLEPBackend(options, 0, 8, 0, "cuda:0")
+                    self.assertEqual(backend._dispatch_cfg.quantization_recipe, "ds-fp8")
+                    self.assertEqual(backend.dispatch_dtype, "fp8-e4m3fn")
+                    self.assertTrue(backend.zero_copy)
+                    self.assertEqual(backend.cuda_graph_supported, phase == "decode")
+                    options.mode = "normal"
+                    with self.assertRaisesRegex(ValueError, "low-latency mode only"):
+                        module.NCCLEPBackend(options, 0, 8, 0, "cuda:0")
+
+    def test_ll_prefill_uses_the_full_ladder_receive_without_graphs(self):
+        module = self._module()
+        backend = self._backend(module, low_latency=True)
+        backend.mode = "low-latency"
+        backend.args.phase = "prefill"
+        self.assertIsNone(backend.buffer_cap(backend.args))
+        backend.create_buffer(types.SimpleNamespace(max_tokens_per_rank=8192))
+        self.assertEqual(backend._recv_x.shape, (8, 8192, 7168))
+        self.assertEqual(backend.created_configs[0].max_dispatch_tokens_per_rank, 8192)
+        self.assertFalse(backend.cuda_graph_supported)
+
     def test_ht_registers_a_symmetric_zero_copy_receive_window(self):
         module = self._module()
         backend = self._backend(module, low_latency=False)
@@ -233,6 +262,55 @@ class NcclLowLatencyLadderSizing(unittest.TestCase):
         self.assertEqual(backend._recv_x.shape, (8, 64, 7168))
         self.assertEqual(backend._recv_count.shape, (8,))
         self.assertIs(backend._recv_x_t.window, backend._recv_window)
+
+    def test_fp8_buffer_binding_follows_selected_policy_in_both_phases(self):
+        for phase in ("decode", "prefill"):
+            for zero_copy in (False, True):
+                with self.subTest(phase=phase, zero_copy=zero_copy):
+                    module = self._module()
+                    backend = self._backend(module, low_latency=True)
+                    backend.args.phase = phase
+                    backend._fp8 = True
+                    backend.zero_copy = zero_copy
+                    windows = [types.SimpleNamespace(is_valid=True, close=mock.Mock())
+                               for _ in range(2)]
+                    backend._comm.register_window.side_effect = windows
+                    backend.create_buffer(types.SimpleNamespace(max_tokens_per_rank=1024))
+                    self.assertEqual(backend._recv_x.shape, (8, 1024, 7168))
+                    self.assertEqual(backend._recv_scales.shape, (8, 1024, 56))
+                    self.assertIs(backend._recv_x_t.window, windows[0] if zero_copy else None)
+                    self.assertIs(backend._recv_scales_t.window,
+                                  windows[1] if zero_copy else None)
+                    self.assertIs(backend._recv_scales_t.buffer, backend._recv_scales)
+                    self.assertIs(backend._combine_x_t.buffer, backend._combine_scratch)
+                    self.assertIsNone(backend._combine_x_t.window)
+                    backend._handle = None
+                    backend._bound = None
+                    backend._ep_group = types.SimpleNamespace(destroy=lambda: None)
+                    backend._comm.destroy = lambda: None
+                    module.dist.barrier = lambda: None
+                    module.dist.destroy_process_group = lambda: None
+                    self.assertEqual(backend.finalize(0), 0)
+                    for window in windows:
+                        self.assertEqual(window.close.call_count, int(zero_copy))
+
+    def test_fp8_scale_registration_failure_releases_token_window_and_group(self):
+        module = self._module()
+        backend = self._backend(module, low_latency=True)
+        backend._fp8 = True
+        windows = [types.SimpleNamespace(is_valid=valid, close=mock.Mock())
+                   for valid in (True, False)]
+        backend._comm.register_window.side_effect = windows
+        group = types.SimpleNamespace(destroy=mock.Mock())
+        module.nccl_ep.Group.create = lambda *a, **k: group
+        with self.assertRaisesRegex(RuntimeError, "scale window registration failed"):
+            backend.create_buffer(types.SimpleNamespace(max_tokens_per_rank=1024))
+        for window in windows:
+            window.close.assert_called_once()
+        group.destroy.assert_called_once()
+        self.assertIsNone(backend._recv_window)
+        self.assertIsNone(backend._recv_scales_window)
+        self.assertIsNone(backend._ep_group)
 
     def test_ll_dispatch_uses_rank_major_metadata_and_returns_expert_inputs(self):
         module = self._module()
@@ -332,6 +410,7 @@ def _stub_modules():
 
     torch = types.ModuleType("torch")
     torch.bfloat16 = "bfloat16"
+    torch.float8_e4m3fn = "float8_e4m3fn"
     torch.int32 = "int32"
     torch.float32 = "float32"
     torch.int64 = "int64"
