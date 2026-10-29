@@ -11592,3 +11592,15 @@
     - "Update DeepSeek-V4.1-Flash FP4 B300 SGLang AgentX to image lmsysorg/sglang:nightly-dev-cu13-20261020-ab580b2e (digest-pinned), and keep TP4 concurrency 1 and 4 on nightly-dev-cu13-20261014-684fea8a under the new dsv41flash-fp4-b300-sglang-agentic-dspark-lowconc key."
     - "Enable trtllm DSv4 attention and decoder SWA bounded replay for TP2 C32, set SGLANG_DSV4_DECODER_TAIL_GRAPH_MAX_ROWS=0 for DEP2 C64 and C256, and remove the TP4/EP4 DPA C256 point."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4627
+
+- config-keys:
+    - h3-bf16-h100-sglang-video
+    - h3-bf16-h200-sglang-video
+    - h3-bf16-b200-sglang-video
+    - h3-bf16-h200-vllm-omni-video
+  scenario-type: [video-generation]
+  description:
+    - "Run native H3 v0.1 C1 sweeps on four GPUs: H100 SGLang TP2/Ulysses2, H200 and B200 SGLang Ulysses4, and H200 vLLM-Omni Ulysses4."
+    - "Select 20 distinct measured prompts, a disjoint warmup, 124 frames, 49 denoising updates, pinned images, and explicit cross-request conditioning-cache policy."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916
+

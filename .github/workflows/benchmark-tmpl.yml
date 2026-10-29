@@ -95,7 +95,7 @@ env:
   PORT: '8888'
   INFMAX_CONTAINER_WORKSPACE: '/workspace'
   ENROOT_IMPORT_TIME_LIMIT: '120'
-  SALLOC_TIME_LIMIT: '480'
+  SALLOC_TIME_LIMIT: ${{ inputs.scenario-type == 'video-generation' && '75' || '480' }}
   IS_MULTINODE: 'false'
   REQUIRE_POWER: ${{ inputs.require-power && '1' || '0' }}
   RANDOM_RANGE_RATIO: 0.8
@@ -107,9 +107,9 @@ env:
   MODEL: ${{ fromJSON(inputs.config).model }}
   THINKING_MODE: thinking_on
   MODEL_PREFIX: ${{ fromJSON(inputs.config).model-prefix }}
-  ISL: ${{ inputs.scenario-type == 'agentic-coding' && '0' || fromJSON(inputs.config).isl }}
-  OSL: ${{ inputs.scenario-type == 'agentic-coding' && '0' || fromJSON(inputs.config).osl }}
-  MAX_MODEL_LEN: ${{ inputs.scenario-type == 'agentic-coding' && '0' || fromJSON(inputs.config).max-model-len }}
+  ISL: ${{ (inputs.scenario-type == 'agentic-coding' || inputs.scenario-type == 'video-generation') && '0' || fromJSON(inputs.config).isl }}
+  OSL: ${{ (inputs.scenario-type == 'agentic-coding' || inputs.scenario-type == 'video-generation') && '0' || fromJSON(inputs.config).osl }}
+  MAX_MODEL_LEN: ${{ (inputs.scenario-type == 'agentic-coding' || inputs.scenario-type == 'video-generation') && '0' || fromJSON(inputs.config).max-model-len }}
   IMAGE: ${{ fromJSON(inputs.config).image }}
   FRAMEWORK: ${{ fromJSON(inputs.config).framework }}
   PRECISION: ${{ fromJSON(inputs.config).precision }}
@@ -137,6 +137,13 @@ env:
   DURATION: ${{ inputs.duration }}
   AIPERF_EXPERIMENTAL_FAST: ${{ inputs.agentx-fast && '1' || '0' }}
   EVAL_LIMIT: ${{ inputs.eval-limit }}
+  # Video-generation env (one H3 job per row, every concurrency in CONC_LIST). Other rows leave these empty.
+  GITHUB_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  VIDEO_ARTIFACT_NAME: ${{ inputs.scenario-type == 'video-generation' && format('h3-results-{0}-{1}-{2}', github.run_id, github.run_attempt, fromJSON(inputs.config).recipe-fingerprint) || '' }}
+  H3_SPEC: ${{ inputs.scenario-type == 'video-generation' && fromJSON(inputs.config).spec || '' }}
+  H3_SET: ${{ inputs.scenario-type == 'video-generation' && fromJSON(inputs.config).set || '' }}
+  VIDEO_GPUS: ${{ inputs.scenario-type == 'video-generation' && fromJSON(inputs.config).gpus || '' }}
+  VIDEO_CONC_LIST: ${{ inputs.scenario-type == 'video-generation' && join(fromJSON(inputs.config).conc-list, ' ') || '' }}
   AIPERF_FAILED_REQUEST_THRESHOLD: '0.10'
   RESULT_DIR: /workspace/results
   PYTHONDONTWRITEBYTECODE: '1'
@@ -171,14 +178,14 @@ jobs:
         ) ||
         format('[{0}]', toJSON(inputs.runner))
       ) }}
-    timeout-minutes: ${{ inputs.runner == 'cluster:h200-dgxc' && fromJSON(inputs.config).model-prefix == 'dsv41flash' && fromJSON(inputs.config).framework == 'sglang' && inputs.scenario-type == 'agentic-coding' && !inputs.eval-only && fromJSON(inputs.config).conc >= 64 && 1470 || 500 }}
+    timeout-minutes: ${{ inputs.scenario-type == 'video-generation' && 90 || inputs.runner == 'cluster:h200-dgxc' && fromJSON(inputs.config).model-prefix == 'dsv41flash' && fromJSON(inputs.config).framework == 'sglang' && inputs.scenario-type == 'agentic-coding' && !inputs.eval-only && fromJSON(inputs.config).conc >= 64 && 1470 || 500 }}
     name: >-
       ${{ inputs.klaud-run && 'klaud | ' || '' }}p${{ inputs.priority }} | ${{ fromJSON(inputs.config).model-prefix }} ${{ fromJSON(inputs.config).precision }} ${{ inputs.runner }} ${{ fromJSON(inputs.config).framework == 'sglang' && 'sgl' || fromJSON(inputs.config).framework == 'dynamo-sglang' && 'dyn-sgl' || fromJSON(inputs.config).framework == 'sglang-disagg' && 'sgl-disagg' || fromJSON(inputs.config).framework }}
-      TP${{ fromJSON(inputs.config).tp }}${{ format('{0}', fromJSON(inputs.config).pp) != '' && format('{0}', fromJSON(inputs.config).pp) != '1' && format('/PP{0}', fromJSON(inputs.config).pp) || '' }}${{ format('{0}', fromJSON(inputs.config).dcp-size) != '' && format('{0}', fromJSON(inputs.config).dcp-size) != '1' && format('/DCP{0}', fromJSON(inputs.config).dcp-size) || '' }}${{ format('{0}', fromJSON(inputs.config).pcp-size) != '' && format('{0}', fromJSON(inputs.config).pcp-size) != '1' && format('/PCP{0}', fromJSON(inputs.config).pcp-size) || '' }}${{ format('{0}', fromJSON(inputs.config).ep) != '' && format('{0}', fromJSON(inputs.config).ep) != '1' && format('/EP{0}', fromJSON(inputs.config).ep) || '' }}${{ inputs.dp-attn && '/DPA' || '' }}
+      ${{ inputs.scenario-type == 'video-generation' && format('{0} GPU', fromJSON(inputs.config).gpus) || format('TP{0}', fromJSON(inputs.config).tp) }}${{ format('{0}', fromJSON(inputs.config).pp) != '' && format('{0}', fromJSON(inputs.config).pp) != '1' && format('/PP{0}', fromJSON(inputs.config).pp) || '' }}${{ format('{0}', fromJSON(inputs.config).dcp-size) != '' && format('{0}', fromJSON(inputs.config).dcp-size) != '1' && format('/DCP{0}', fromJSON(inputs.config).dcp-size) || '' }}${{ format('{0}', fromJSON(inputs.config).pcp-size) != '' && format('{0}', fromJSON(inputs.config).pcp-size) != '1' && format('/PCP{0}', fromJSON(inputs.config).pcp-size) || '' }}${{ format('{0}', fromJSON(inputs.config).ep) != '' && format('{0}', fromJSON(inputs.config).ep) != '1' && format('/EP{0}', fromJSON(inputs.config).ep) || '' }}${{ inputs.dp-attn && '/DPA' || '' }}
       ${{ fromJSON(inputs.config).spec-decoding != 'none' && fromJSON(inputs.config).spec-decoding || '' }}
       ${{ inputs.scenario-type == 'agentic-coding' && format('{0}', fromJSON(inputs.config).kv-offloading) != '' && fromJSON(inputs.config).kv-offloading != 'none' && format('{0} KV offload', fromJSON(inputs.config).kv-offloading) || '' }}
       ${{ inputs.scenario-type == 'agentic-coding' && fromJSON(inputs.config).kv-offload-backend.name != 'none' && fromJSON(inputs.config).kv-offload-backend.name != 'default' && format('{0}', fromJSON(inputs.config).kv-offload-backend.name) || '' }}
-      c${{ fromJSON(inputs.config).conc }}${{ inputs.eval-only && ' | eval-only' || (inputs.run-eval && ' | eval' || '') }}
+      c${{ inputs.scenario-type == 'video-generation' && join(fromJSON(inputs.config).conc-list, 'x') || fromJSON(inputs.config).conc }}${{ inputs.eval-only && ' | eval-only' || (inputs.run-eval && ' | eval' || '') }}
     steps:
       - name: Repair root-owned artifacts (pre-run)
         if: ${{ inputs.runner == 'cluster:mi355x-amds' }}
@@ -270,7 +277,13 @@ jobs:
           echo "INFERENCEX_E2E_ROOT=$PWD" >> "$GITHUB_ENV"
           RESULT_FILENAME=$(python3 -m infx.results.result_filename)
           export RESULT_FILENAME
-          export GPU_COUNT=$((TP * PP_SIZE * PCP_SIZE))
+          if [[ "$SCENARIO_TYPE" == video-generation ]]; then
+            export GPU_COUNT="$VIDEO_GPUS"
+            export CONC_LIST="$VIDEO_CONC_LIST"
+            echo "CONC_LIST=${CONC_LIST}" >> "$GITHUB_ENV"
+          else
+            export GPU_COUNT=$((TP * PP_SIZE * PCP_SIZE))
+          fi
           echo "GPU_COUNT=${GPU_COUNT}" >> "$GITHUB_ENV"
 
           echo "RESULT_FILENAME=${RESULT_FILENAME}" >> "$GITHUB_ENV"
@@ -313,8 +326,17 @@ jobs:
             results/aiperf_artifacts \
             --failed-request-threshold "$AIPERF_FAILED_REQUEST_THRESHOLD"
 
+      - name: Upload video results
+        id: upload-video-results
+        if: ${{ always() && inputs.scenario-type == 'video-generation' && env.RESULT_FILENAME != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ env.VIDEO_ARTIFACT_NAME }}
+          path: ${{ env.INFERENCEX_E2E_ROOT }}/h3-results
+          if-no-files-found: error
+
       - name: Process result
-        if: ${{ always() && env.RESULT_FILENAME != '' && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
+        if: ${{ always() && env.RESULT_FILENAME != '' && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' && inputs.scenario-type != 'video-generation' }}
         env:
           RUNNER_TYPE: ${{ inputs.runner }}
           PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
@@ -333,7 +355,7 @@ jobs:
 
       - name: Upload result
         id: upload-result
-        if: ${{ success() && env.RESULT_FILENAME != '' && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
+        if: ${{ success() && env.RESULT_FILENAME != '' && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' && inputs.scenario-type != 'video-generation' }}
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -458,6 +480,7 @@ jobs:
             ${{ env.INFERENCEX_E2E_ROOT }}/results/*.log
             ${{ env.INFERENCEX_E2E_ROOT }}/results/*_config.json
             ${{ env.INFERENCEX_E2E_ROOT }}/srt-single-node-logs.tar.gz
+            ${{ env.INFERENCEX_E2E_ROOT }}/srt-video-logs.tar.gz
             ${{ env.INFERENCEX_E2E_ROOT }}/srt-single-node-submission.json
             ${{ env.INFERENCEX_E2E_ROOT }}/srt-slurm-sha.txt
             ${{ env.INFERENCEX_E2E_ROOT }}/srt-setup.log
@@ -473,9 +496,13 @@ jobs:
             ${{ env.INFERENCEX_E2E_ROOT }}/${{ env.RESULT_FILENAME }}.json
             ${{ env.INFERENCEX_E2E_ROOT }}/agg_${{ env.RESULT_FILENAME }}.json
             ${{ env.INFERENCEX_E2E_ROOT }}/power_validation_${{ env.RESULT_FILENAME }}.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/${{ env.RESULT_FILENAME }}_conc*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/power_validation_${{ env.RESULT_FILENAME }}_conc*.json
             ${{ env.INFERENCEX_E2E_ROOT }}/results/agentic_power_timezone_offset.txt
             ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/power/**
             ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/agentic_power_concurrency_*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/h3/**/benchmark_concurrency_*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/h3/server/*.json
             ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/${{ env.RESULT_FILENAME }}.json
             ${{ env.INFERENCEX_E2E_ROOT }}/power-producer-sha.txt
             ${{ env.INFERENCEX_E2E_ROOT }}/exporter-image.sha256

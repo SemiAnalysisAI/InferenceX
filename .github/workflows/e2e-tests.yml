@@ -207,6 +207,7 @@ jobs:
             agentic-eval-config: ${{ steps.get-jobs.outputs.agentic-eval-config }}
             multi-node-agentic-config: ${{ steps.get-jobs.outputs.multi-node-agentic-config }}
             multi-node-agentic-eval-config: ${{ steps.get-jobs.outputs.multi-node-agentic-eval-config }}
+            video-config: ${{ steps.get-jobs.outputs.video-config }}
         steps:
             - name: Checkout code (ref)
               id: checkout-ref
@@ -328,9 +329,10 @@ jobs:
                   AGENTIC_EVAL=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' not in x and x.get('run-eval', False)]))" | score_matrix agentic-eval)
                   MULTI_AGENTIC=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' in x and not x.get('eval-only', False)]))" | score_matrix multi-agentic)
                   MULTI_AGENTIC_EVAL=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' in x and x.get('run-eval', False)]))" | score_matrix multi-agentic-eval)
-                  SINGLE=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('scenario-type') != 'agentic-coding' and not x.get('eval-only', False)]))" | score_matrix single)
+                  VIDEO=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'video-generation']))" | score_matrix video)
+                  SINGLE=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('scenario-type') not in ('agentic-coding', 'video-generation') and not x.get('eval-only', False)]))" | score_matrix single)
                   MULTI=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' in x and x.get('scenario-type') != 'agentic-coding' and not x.get('eval-only', False)]))" | score_matrix multi)
-                  EVALS=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('scenario-type') != 'agentic-coding' and x.get('run-eval', False)]))" | score_matrix eval)
+                  EVALS=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('scenario-type') not in ('agentic-coding', 'video-generation') and x.get('run-eval', False)]))" | score_matrix eval)
                   MULTI_EVAL=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' in x and x.get('scenario-type') != 'agentic-coding' and x.get('run-eval', False)]))" | score_matrix multi-eval)
                   {
                     echo "agentic-config=$AGENTIC"
@@ -341,6 +343,7 @@ jobs:
                     echo "multi-node-config=$MULTI"
                     echo "eval-config=$EVALS"
                     echo "multi-node-eval-config=$MULTI_EVAL"
+                    echo "video-config=$VIDEO"
                   } >> "$GITHUB_OUTPUT"
 
             - name: Record source identity
@@ -554,6 +557,30 @@ jobs:
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
             test-name: ${{ inputs.test-name }}
 
+    test-sweep-video:
+        needs: get-jobs
+        if: ${{ needs.get-jobs.outputs.video-config != '' && needs.get-jobs.outputs.video-config != '[]' }}
+        uses: $/.github/workflows/benchmark-tmpl.yml
+        name: video /
+        strategy:
+            fail-fast: ${{ inputs.fail-fast }}
+            matrix:
+                config: ${{ fromJson(needs.get-jobs.outputs.video-config) }}
+        secrets:
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+        with:
+            require-power: ${{ inputs.require-power }}
+            config: ${{ toJSON(matrix.config) }}
+            klaud-run: ${{ inputs.klaud-run }}
+            runner: ${{ matrix.config.runner }}
+            test-name: ${{ inputs.test-name }}
+            priority: ${{ matrix.config.priority }}
+            queue-token: ${{ matrix.config['queue-token'] }}
+            dp-attn: ${{ matrix.config.dp-attn }}
+            run-eval: false
+            scenario-type: video-generation
+            ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
+
     test-sweep-single-node:
         needs: get-jobs
         if: ${{ needs.get-jobs.outputs.single-node-config != '' && needs.get-jobs.outputs.single-node-config != '[]' }}
@@ -622,7 +649,7 @@ jobs:
 
     collect-job-events:
         name: collect-job-events
-        needs: [get-jobs, test-sweep-multi-node, test-sweep-multi-node-evals, test-sweep-agentic, test-sweep-agentic-evals, test-sweep-multi-node-agentic, test-sweep-multi-node-agentic-evals, test-sweep-single-node, test-sweep-evals]
+        needs: [get-jobs, test-sweep-multi-node, test-sweep-multi-node-evals, test-sweep-agentic, test-sweep-agentic-evals, test-sweep-multi-node-agentic, test-sweep-multi-node-agentic-evals, test-sweep-single-node, test-sweep-evals, test-sweep-video]
         if: ${{ !cancelled() && needs.get-jobs.result == 'success' }}
         permissions:
             actions: read # List the run's jobs to record the jobs that wrote no event.

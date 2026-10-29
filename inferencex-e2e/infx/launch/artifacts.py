@@ -12,7 +12,7 @@ import re
 import shutil
 import sys
 import tarfile
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -218,6 +218,61 @@ def validate_agentic_power(
         ):  # fmt: skip
             rc = step
     return rc
+
+
+def validate_video_results(
+    results_python: str,
+    workspace: Path,
+    logs_dir: Path,
+    producer_sha: str,
+    *,
+    result_filename: str,
+    concurrencies: Sequence[int],
+    gpu_count: int,
+    require_power: bool,
+    identity: Mapping[str, str],
+) -> int:
+    """Join every concurrency's H3 result to the native power package under ``logs_dir``."""
+    argv = [
+        results_python, "-P", "-m", "infx.results.video",
+        "--logs-root", str(logs_dir), "--workspace", str(workspace),
+        "--result-filename", result_filename, "--gpu-count", str(gpu_count),
+        "--expected-producer-sha", producer_sha,
+        "--concurrencies", *map(str, concurrencies),
+        *(f"--{name}={value}" for name, value in identity.items()),
+        *(["--require-power"] if require_power else []),
+    ]  # fmt: skip
+    return proc.run(argv, env=_results_env(), cwd=workspace).returncode
+
+
+def build_video_bundle(
+    results_python: str,
+    workspace: Path,
+    logs_dir: Path,
+    *,
+    package: Path,
+    output: Path,
+    result_filename: str,
+    concurrencies: Sequence[int],
+) -> int:
+    """Assemble the app-facing H3 bundle from the job's results and validation sidecars."""
+    argv = [
+        results_python, "-P", "-m", "evaluator.cli", "srt-finalize",
+        "--h3-dir", str(logs_dir / "h3"), "--power-dir", str(logs_dir / "power"),
+        "--workspace", str(workspace), "--result-filename", result_filename,
+        "--output", str(output), "--concurrencies", *map(str, concurrencies),
+    ]  # fmt: skip
+    env = _results_env()
+    env["PYTHONPATH"] = f"{package}{os.pathsep}{env['PYTHONPATH']}"
+    return proc.run(argv, env=env, cwd=workspace).returncode
+
+
+def _results_env() -> dict[str, str]:
+    python_path = os.environ.get("PYTHONPATH")
+    return {
+        **os.environ,
+        "PYTHONPATH": f"{_PROJECT_ROOT}:{python_path}" if python_path else str(_PROJECT_ROOT),
+    }
 
 
 def run_power_adapter(

@@ -193,6 +193,7 @@ jobs:
         outputs:
             tooling-ref: ${{ steps.tooling.outputs.result }}
             search-space-config: ${{ steps.setup.outputs.search-space-config }}
+            has-benchmark-results: ${{ steps.setup.outputs.has-benchmark-results }}
         steps:
             - name: Checkout code
               id: checkout
@@ -313,6 +314,8 @@ jobs:
                     --criteria-json "$PRIORITY_CRITERIA")
 
                   echo "search-space-config=$CONFIG_JSON" >> "$GITHUB_OUTPUT"
+                  has_benchmark_results=$(jq '[.single_node | to_entries[] | select(.key != "video") | .value[]] + [.multi_node | .[][]] | length > 0' <<<"$CONFIG_JSON")
+                  echo "has-benchmark-results=$has_benchmark_results" >> "$GITHUB_OUTPUT"
 
     canary-select:
         name: canary-select
@@ -340,10 +343,10 @@ jobs:
                         | if $idx == null then . else del(.[$idx]) end
                       end;
 
-                    (((.single_node["1k1k"] // []) + (.single_node["8k1k"] // []) + (.single_node.agentic // []))
+                    (((.single_node["1k1k"] // []) + (.single_node["8k1k"] // []) + (.single_node.agentic // []) + (.single_node.video // []))
                       | map(select(.["run-eval"] != true))) as $single_candidates
                     | ((.multi_node.agentic // []) | map(select(.["run-eval"] != true))) as $multi_candidates
-                    | (if ($single_candidates | length) == 0 then null else ($single_candidates | min_by(.conc)) end) as $canary
+                    | (if ($single_candidates | length) == 0 then null else ($single_candidates | min_by(.conc // .["conc-list"][0])) end) as $canary
                     | (if $canary != null or ($multi_candidates | length) == 0 then null
                        else ($multi_candidates | min_by(.conc[0])) end) as $multi_canary
                     | {
@@ -355,6 +358,7 @@ jobs:
                           | .single_node["1k1k"] = ((.single_node["1k1k"] // []) | remove_one($canary))
                           | .single_node["8k1k"] = ((.single_node["8k1k"] // []) | remove_one($canary))
                           | .single_node.agentic = ((.single_node.agentic // []) | remove_one($canary))
+                          | .single_node.video = ((.single_node.video // []) | remove_one($canary))
                           | .multi_node = (.multi_node // {})
                           | .multi_node.agentic = ((.multi_node.agentic // []) | remove_one($multi_canary))
                         )
@@ -548,6 +552,36 @@ jobs:
             scenario-type: agentic-coding
             agentx-fast: ${{ contains(github.event.pull_request.labels.*.name, 'agentx-fast') }}
 
+    sweep-video:
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
+        if: >-
+            ${{
+              !cancelled() &&
+              needs.setup.result == 'success' &&
+              (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
+              toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['video']) != 'null' &&
+              toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['video']) != '[]'
+            }}
+        uses: $/.github/workflows/benchmark-tmpl.yml
+        name: video /
+        strategy:
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
+            matrix:
+                config: ${{ fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['video'] }}
+        secrets:
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+        with:
+            config: ${{ toJSON(matrix.config) }}
+            pr-number: *pr-number
+            klaud-run: *klaud-run
+            runner: ${{ matrix.config.runner }}
+            priority: ${{ matrix.config.priority }}
+            queue-token: ${{ matrix.config['queue-token'] }}
+            dp-attn: ${{ matrix.config.dp-attn }}
+            run-eval: false
+            scenario-type: video-generation
+
     sweep-multi-node-agentic:
         needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
         if: >-
@@ -737,6 +771,7 @@ jobs:
             ${{
               always() &&
               needs.setup.result == 'success' &&
+              needs.setup.outputs.has-benchmark-results == 'true' &&
               (
                 needs.canary-sweep.result == 'success' ||
                 needs.canary-multi-node-sweep.result == 'success' ||
@@ -769,6 +804,7 @@ jobs:
                 sweep-single-node-1k1k,
                 sweep-single-node-8k1k,
                 sweep-agentic,
+                sweep-video,
                 sweep-multi-node-1k1k,
                 sweep-multi-node-8k1k,
                 sweep-multi-node-agentic,
@@ -787,7 +823,7 @@ jobs:
 
     upload-changelog-metadata:
         name: upload-changelog-metadata
-        needs: [setup, collect-results, collect-evals]
+        needs: [setup, collect-results, collect-evals, sweep-video]
         if: ${{ always() && needs.setup.result == 'success' }}
         runs-on: ubuntu-latest
         steps:
@@ -812,6 +848,9 @@ jobs:
                       'head': os.environ['SWEEP_HEAD'], 'run-id': int(os.environ['GITHUB_RUN_ID']),
                       'run-attempt': int(os.environ['GITHUB_RUN_ATTEMPT']),
                       'full-sweep': sweep_labels == {'full-sweep-fail-fast'},
+                      'video-full-sweep': bool(sweep_labels & {
+                          'full-sweep-enabled', 'non-canary-full-sweep-enabled', 'full-sweep-fail-fast',
+                      }) and not bool(sweep_labels & {'evals-only', 'agentx-fast'}),
                       'matrix': matrix,
                   }))
                   PY
@@ -821,6 +860,16 @@ jobs:
               with:
                   name: changelog-metadata
                   path: changelog_metadata.json
+                  overwrite: true
+
+            - name: Upload selected video matrix
+              if: ${{ (contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') || contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') || contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast')) && !contains(github.event.pull_request.labels.*.name, 'evals-only') && !contains(github.event.pull_request.labels.*.name, 'agentx-fast') && toJson(fromJson(needs.setup.outputs.search-space-config).single_node.video) != 'null' && toJson(fromJson(needs.setup.outputs.search-space-config).single_node.video) != '[]' }}
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: video-sweep-manifest
+                  path: sweep_manifest.json
+                  overwrite: true
+                  if-no-files-found: error
 
             - name: Upload Klaud validation manifest
               if: *klaud-run
@@ -829,6 +878,33 @@ jobs:
                   name: klaud-sweep-manifest
                   path: sweep_manifest.json
                   if-no-files-found: error
+
+    validate-video-results:
+        name: validate-video-results
+        needs: [setup, canary-sweep, sweep-video, upload-changelog-metadata]
+        if: ${{ !cancelled() && (contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') || contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') || contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast')) && !contains(github.event.pull_request.labels.*.name, 'evals-only') && !contains(github.event.pull_request.labels.*.name, 'agentx-fast') && needs.setup.result == 'success' && toJson(fromJson(needs.setup.outputs.search-space-config).single_node.video) != 'null' && toJson(fromJson(needs.setup.outputs.search-space-config).single_node.video) != '[]' }}
+        runs-on: ubuntu-latest
+        permissions:
+            actions: read # Download the current run's video artifacts.
+            contents: read # Check out the video validator.
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+            - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              with:
+                  pattern: h3-results-*
+                  path: video-artifacts
+            - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              with:
+                  name: video-sweep-manifest
+                  path: video-artifacts/video-sweep-manifest
+            - name: Validate the complete selected video matrix
+              env:
+                  PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+              run: |
+                  python3 -m infx.results.video_artifacts --artifacts-dir video-artifacts \
+                    --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" --head-sha "$PR_HEAD_SHA"
 
     calc-success-rate:
         name: calc-success-rate

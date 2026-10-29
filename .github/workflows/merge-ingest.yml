@@ -82,7 +82,13 @@ jobs:
                     --head-ref "$PUSH_AFTER" > "$RUNNER_TEMP/plan.json"
                   jq -c '.changelog_metadata' "$RUNNER_TEMP/plan.json" > "$GITHUB_WORKSPACE/changelog_metadata.json"
                   agentic=$(jq '((.single_node.agentic // []) + (.multi_node.agentic // [])) | length > 0' "$RUNNER_TEMP/plan.json")
-                  echo "agentic=$agentic" >> "$GITHUB_OUTPUT"
+                  video=$(jq '(.single_node.video // []) | length > 0' "$RUNNER_TEMP/plan.json")
+                  llm=$(jq '[.single_node | to_entries[] | select(.key != "video") | .value[]] + [.multi_node | .[][]] + .evals + .agentic_evals + .multinode_evals + .multinode_agentic_evals | length > 0' "$RUNNER_TEMP/plan.json")
+                  {
+                    echo "agentic=$agentic"
+                    echo "video=$video"
+                    echo "llm=$llm"
+                  } >> "$GITHUB_OUTPUT"
 
             - name: Upload changelog artifact
               uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -91,7 +97,55 @@ jobs:
                   path: changelog_metadata.json
                   if-no-files-found: error
 
+            - name: Download reused video bundles
+              if: steps.plan.outputs.video == 'true'
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              with:
+                  github-token: ${{ github.token }}
+                  run-id: ${{ steps.reuse.outputs.reuse-source-run-id }}
+                  pattern: h3-results-*
+                  path: video-artifacts
+
+            - name: Download the selected video matrix
+              if: steps.plan.outputs.video == 'true'
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              with:
+                  github-token: ${{ github.token }}
+                  run-id: ${{ steps.reuse.outputs.reuse-source-run-id }}
+                  name: video-sweep-manifest
+                  path: video-artifacts/video-sweep-manifest
+
+            - name: Validate reused video coverage
+              if: steps.plan.outputs.video == 'true'
+              env:
+                  SOURCE_RUN_ID: ${{ steps.reuse.outputs.reuse-source-run-id }}
+                  SOURCE_HEAD_SHA: ${{ steps.reuse.outputs.reuse-source-head-sha }}
+                  SOURCE_RUN_ATTEMPT: ${{ steps.reuse.outputs.reuse-source-run-attempt }}
+              run: |
+                  python3 -m infx.results.video_artifacts --artifacts-dir video-artifacts \
+                    --run-id "$SOURCE_RUN_ID" --run-attempt "$SOURCE_RUN_ATTEMPT" --head-sha "$SOURCE_HEAD_SHA"
+
+            - name: Publish reused videos
+              if: steps.plan.outputs.video == 'true'
+              uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+              env:
+                  SOURCE_RUN_ID: ${{ steps.reuse.outputs.reuse-source-run-id }}
+                  MERGE_RUN_ID: ${{ github.run_id }}
+              with:
+                  github-token: ${{ secrets.FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
+                  script: |
+                    await github.rest.repos.createDispatchEvent({
+                      owner: "SemiAnalysisAI",
+                      repo: "InferenceX-app",
+                      event_type: "publish-video-results",
+                      client_payload: {
+                        source_run_id: process.env.SOURCE_RUN_ID,
+                        merge_run_id: process.env.MERGE_RUN_ID,
+                      },
+                    });
+
             - name: Trigger database ingest
+              if: steps.plan.outputs.llm == 'true'
               uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
               env:
                   AGENTIC: ${{ steps.plan.outputs.agentic }}
