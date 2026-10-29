@@ -1,0 +1,156 @@
+# The identity of every committed golden curve: which runs select it, and how it was collected.
+#
+# Curve files are named <model>__<method>__<draft>__<draft_sample>-<verify>.yaml, built from the
+# curve's model key and its collection below ("default" for a setting the collector did not set). curves.curve_name selects the one curve whose `select` block matches a run:
+#
+#   model_prefixes  InferenceX model prefixes that use the curve
+#   method          mtp (model-native head), eagle3, dspark or dflash; see curves.normalize_method
+#   draft_family    when set, "gqa" or "default" by whether the draft model id contains "gqa"
+#   draft_sample    when set, the run's draft_sample_method must equal it
+#
+# `collection` records how the curve was measured. The audit (infx.srt_slurm.spec_identity)
+# compares it with each run and reports differences; it never changes the selected curve.
+# Each fact is {value, source}:
+#
+#   explicit    set by the collector or recipe
+#   documented  fixed by the connector or engine: a recipe's synthetic sampler becomes block, and
+#               block, relaxed and adaptive verification are opt-in, so unset means standard and
+#               not adaptive
+#   assumed     the connector's own reading, e.g. ATOM DSpark drafts probabilistically
+#   default     unset; whatever the engine's default was (value null)
+#   unknown     not readable (value null)
+#
+# draft_sample: greedy | probabilistic   verify: standard | block | relaxed
+# adaptive: true | false                  topology: chain | tree-topk<N>
+# A curve marked provisional was not measured for its model.
+
+deepseek-v4-pro__mtp__native__default-default:
+  select: {model_prefixes: [dsv4], method: mtp}
+  collection:
+    engine: vllm
+    draft: native
+    draft_sample: {value: null, source: default}
+    verify: {value: standard, source: documented}
+    adaptive: {value: false, source: documented}
+    topology: {value: chain, source: documented}
+
+deepseek-v4-pro-0813__dspark__native__probabilistic-default:
+  select: {model_prefixes: [dsv4, dsv4dspark, dsv4dsparkprob], method: dspark}
+  collection:
+    engine: vllm
+    draft: native
+    draft_sample: {value: probabilistic, source: explicit}
+    verify: {value: standard, source: documented}
+    adaptive: {value: false, source: documented}
+    topology: {value: chain, source: documented}
+
+deepseek-v4.1-flash__dspark__native__probabilistic-block:
+  select: {model_prefixes: [dsv41flash], method: dspark}
+  collection:
+    engine: vllm
+    draft: native
+    draft_sample: {value: probabilistic, source: explicit}
+    verify: {value: block, source: explicit}
+    adaptive: {value: false, source: explicit}
+    topology: {value: chain, source: documented}
+
+glm-5.2-fp8__mtp__native__default-default:
+  select: {model_prefixes: [glm5.2], method: mtp}
+  collection:
+    engine: vllm
+    draft: native
+    draft_sample: {value: null, source: default}
+    verify: {value: standard, source: documented}
+    adaptive: {value: false, source: documented}
+    topology: {value: chain, source: documented}
+
+glm-5.3-fp8__mtp__native__default-default:
+  select: {model_prefixes: [glm5.3], method: mtp}
+  provisional: true
+  collection:
+    engine: vllm
+    draft: native
+    draft_sample: {value: null, source: default}
+    verify: {value: standard, source: documented}
+    adaptive: {value: false, source: documented}
+    topology: {value: chain, source: documented}
+
+kimi-k3__dspark__kimi-k3-dspark__default-default:
+  select: {model_prefixes: [kimik3], method: dspark, draft_sample: greedy}
+  collection:
+    engine: vllm
+    draft: Inferact/Kimi-K3-DSpark
+    draft_sample: {value: null, source: default}
+    verify: {value: standard, source: documented}
+    adaptive: {value: false, source: documented}
+    topology: {value: chain, source: documented}
+
+kimi-k3__dspark__kimi-k3-dspark__probabilistic-block:
+  select: {model_prefixes: [kimik3], method: dspark, draft_sample: probabilistic}
+  collection:
+    engine: vllm
+    draft: Inferact/Kimi-K3-DSpark
+    draft_sample: {value: probabilistic, source: explicit}
+    verify: {value: block, source: explicit}
+    adaptive: {value: false, source: documented}
+    topology: {value: chain, source: documented}
+
+minimax-m3__eagle3__minimax-m3-eagle3__default-default:
+  select: {model_prefixes: [minimaxm3], method: eagle3, draft_family: default}
+  collection:
+    engine: vllm
+    draft: Inferact/MiniMax-M3-EAGLE3
+    draft_sample: {value: null, source: default}
+    verify: {value: standard, source: documented}
+    adaptive: {value: false, source: documented}
+    topology: {value: chain, source: documented}
+
+minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default:
+  select: {model_prefixes: [minimaxm3], method: eagle3, draft_family: gqa}
+  collection:
+    engine: vllm
+    draft: Inferact/MiniMax-M3-EAGLE3-GQA
+    draft_sample: {value: null, source: default}
+    verify: {value: standard, source: documented}
+    adaptive: {value: false, source: documented}
+    topology: {value: chain, source: documented}
+
+minimax-m3.1-flash__dspark__native__probabilistic-block:
+  select: {model_prefixes: [minimaxm31flash], method: dspark}
+  collection:
+    engine: vllm
+    draft: native
+    draft_sample: {value: probabilistic, source: explicit}
+    verify: {value: block, source: explicit}
+    adaptive: {value: false, source: documented}
+    topology: {value: chain, source: documented}
+
+muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default:
+  select: {model_prefixes: [musespark], method: dflash}
+  collection:
+    engine: sglang
+    draft: RadixArk/Muse-Spark-Open-DFlash2
+    draft_sample: {value: null, source: default}
+    verify: {value: standard, source: documented}
+    adaptive: {value: false, source: documented}
+    topology: {value: chain, source: documented}
+
+qwen3.5-397b-a17b-nvfp4__mtp__native__default-default:
+  select: {model_prefixes: [qwen3.5], method: mtp}
+  collection:
+    engine: vllm
+    draft: native
+    draft_sample: {value: null, source: default}
+    verify: {value: standard, source: documented}
+    adaptive: {value: false, source: documented}
+    topology: {value: chain, source: documented}
+
+qwen3.8-flash-next-fp8__mtp__native__default-default:
+  select: {model_prefixes: [qwen3.8next], method: mtp}
+  collection:
+    engine: vllm
+    draft: native
+    draft_sample: {value: null, source: default}
+    verify: {value: standard, source: documented}
+    adaptive: {value: false, source: documented}
+    topology: {value: chain, source: documented}
