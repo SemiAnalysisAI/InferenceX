@@ -31,7 +31,10 @@ from infx.srt_slurm.synthetic_acceptance import ENGINES, spec_parameters
 # Arguments of a generation role that describe speculative decoding, per engine spelling.
 SPEC_ARGUMENTS = (
     "speculative", "with-mtp", "num-mtp", "method", "num-speculative-tokens", "draft-model",
+    "kv-cache-dtype", "kv_cache_dtype", "kv_cache_config",
 )  # fmt: skip
+# Spellings of one KV cache dtype; "auto" leaves the engine default.
+DTYPE_ALIASES = {"fp8_e4m3": "fp8", "bfloat16": "bf16", "auto": None}
 DEFAULT = Fact(None, "default")
 UNKNOWN = Fact(None, "unknown")
 CHAIN = Fact("chain", "documented")
@@ -100,6 +103,33 @@ def _atom(method: str) -> dict[str, Fact]:
     }
 
 
+def _dtype(value: Any) -> Fact:
+    if isinstance(value, str):
+        value = DTYPE_ALIASES.get(value.lower(), value.lower())
+    return _set(value)
+
+
+def _precision(args: Mapping[str, Any], spec: Mapping[str, Any], engine: str) -> dict[str, Fact]:
+    """The draft weights' quantization and the draft's and target's KV cache dtypes."""
+    config = args.get("kv_cache_config")
+    target = args.get("kv-cache-dtype", args.get("kv_cache_dtype"))
+    if target is None and isinstance(config, Mapping):
+        target = config.get("dtype")
+    if engine == "vllm":
+        draft, draft_kv = spec.get("quantization"), spec.get("kv_cache_dtype")
+    elif engine == "sglang":
+        draft = args.get("speculative-draft-model-quantization")
+        draft_kv = args.get("speculative-draft-kv-cache-dtype")
+    else:
+        draft = draft_kv = None
+    unread = engine == "tilert"  # TileRT's draft settings are not readable here
+    return {
+        "draft_precision": UNKNOWN if unread else _set(draft),
+        "draft_kv_cache_dtype": UNKNOWN if unread else _dtype(draft_kv),
+        "kv_cache_dtype": _dtype(target),
+    }
+
+
 def _tilert() -> dict[str, Fact]:
     return {"draft_sample": UNKNOWN, "verify": UNKNOWN, "adaptive": DEFAULT, "topology": CHAIN}
 
@@ -121,6 +151,7 @@ def run_collection(model_prefix: str, role: Mapping[str, Any], framework: str) -
         "atom": lambda: _atom(method),
         "tilert": _tilert,
     }[engine]()
+    facts |= _precision(args, spec, engine)
     return Collection(engine=engine, draft=str(spec.get("model") or "native"), **facts)
 
 

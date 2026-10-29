@@ -155,7 +155,7 @@ gh workflow run speedbench-al.yml \
 [`identities.yaml`](identities.yaml) 为每条曲线提供两个块：
 
 - `select` 决定哪些运行使用该曲线：`model_prefixes`、`method`，以及仅在同一模型的曲线因其而不同时才设置的 `draft_family`（MiniMax-M3 GQA）和 `draft_sample`（Kimi K3 DSpark）。`curve_name` 返回唯一匹配的曲线，没有或有多条匹配时报错。SGLang 的 `EAGLE` 和 `NEXTN` 选择模型原生 `mtp` 曲线，MiniMax-M3 的 EAGLE 选择 `eagle3`。
-- `collection` 记录曲线的测量方式：`engine`、`draft`、`draft_sample`、`verify`（`standard`、`block`、`relaxed`）、`adaptive` 和 `topology`（`chain`、`tree-topk<N>`）。每项为 `{value, source}`，source 为 `explicit`、`documented`、`assumed`、`default`（未设置，value 为 null）或 `unknown`（value 为 null）。
+- `collection` 记录曲线的测量方式：`engine`、`draft`、`draft_sample`、`verify`（`standard`、`block`、`relaxed`）、`adaptive`、`topology`（`chain`、`tree-topk<N>`）、`draft_precision`（草稿权重的量化方式）、`draft_kv_cache_dtype` 和 `kv_cache_dtype`（目标模型的）。每项为 `{value, source}`，source 为 `explicit`、`documented`、`assumed`、`default`（未设置，value 为 null）或 `unknown`（value 为 null）。
 
 新曲线合并前必须补充其身份；测试会检查每个文件名与身份是否一致。
 

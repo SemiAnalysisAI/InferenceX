@@ -118,6 +118,7 @@ def test_malformed_identity_is_rejected(change, message) -> None:
         "collection": {
             "engine": "vllm", "draft": "native", "draft_sample": default, "verify": default,
             "adaptive": default, "topology": {"value": "chain", "source": "documented"},
+            "draft_precision": default, "draft_kv_cache_dtype": default, "kv_cache_dtype": default,
         },
     }  # fmt: skip
     for block, fields in change.items():
@@ -171,16 +172,17 @@ def test_vllm_unset_settings_are_defaults_and_synthetic_is_block() -> None:
 
 
 def test_same_engine_defaults_agree_but_cross_engine_defaults_are_unverified() -> None:
-    role = _role(**{"speculative-config": {"method": "mtp", "num_speculative_tokens": 3}})
+    spec = {"method": "mtp", "num_speculative_tokens": 3}
+    role = _role(**{"speculative-config": spec, "kv-cache-dtype": "fp8"})
     assert audit("qwen3.5", role, "vllm")["findings"] == []
     args = {
-        "speculative-algorithm": "NEXTN",
-        "speculative-num-steps": 3,
-        "speculative-eagle-topk": 1,
-    }
+        "speculative-algorithm": "NEXTN", "speculative-num-steps": 3, "speculative-eagle-topk": 1,
+        "kv-cache-dtype": "fp8",
+    }  # fmt: skip
     findings = audit("qwen3.5", _role(**args), "sglang")["findings"]
     assert [f[:2] for f in findings] == [
-        ["unverified", "draft_sample"], ["engine", "engine"],
+        ["unverified", "draft_sample"], ["unverified", "draft_precision"],
+        ["unverified", "draft_kv_cache_dtype"], ["engine", "engine"],
     ]  # fmt: skip
 
 
@@ -223,16 +225,42 @@ def test_adaptive_run_is_reported() -> None:
         "rejection_sample_method": "block", "enable_adaptive_verification": True,
     }  # fmt: skip
     findings = audit("dsv41flash", _role(**{"speculative-config": spec}), "vllm")["findings"]
-    assert findings == [["adaptive", "adaptive", "True (explicit)", "False (explicit)"]]
+    assert findings[0] == ["adaptive", "adaptive", "True (explicit)", "False (explicit)"]
+    assert all(finding[0] == "unverified" for finding in findings[1:])
 
 
 def test_compare_reports_provisional_curves() -> None:
     run = Collection(
         "vllm", "native", Fact(None, "default"), Fact("standard", "documented"),
-        Fact(False, "documented"), Fact("chain", "documented"),
+        Fact(False, "documented"), Fact("chain", "documented"), Fact(None, "default"),
+        Fact(None, "default"), Fact("fp8", "explicit"),
     )  # fmt: skip
     curve = load_identities()["glm-5.3-fp8__mtp__native__default-default"]
     assert [finding.kind for finding in compare(run, curve)] == ["provisional"]
+
+
+def test_precision_and_kv_cache_dtypes_are_read_per_engine() -> None:
+    spec = {
+        "method": "dspark", "num_speculative_tokens": 7, "kv_cache_dtype": "fp8",
+        "draft_sample_method": "probabilistic", "rejection_sample_method": "block",
+    }  # fmt: skip
+    role = _role(**{"speculative-config": spec, "kv-cache-dtype": "nvfp4"})
+    run = run_collection("minimaxm31flash", role, "vllm")
+    assert run.draft_kv_cache_dtype == Fact("fp8", "explicit")
+    assert run.kv_cache_dtype == Fact("nvfp4", "explicit")
+    assert audit("minimaxm31flash", role, "vllm")["findings"] == []
+    args = {
+        "speculative-algorithm": "DSPARK", "speculative-dspark-block-size": 7,
+        "speculative-draft-model-quantization": "nvfp4_online",
+        "speculative-draft-kv-cache-dtype": "fp8_e4m3", "kv-cache-dtype": "auto",
+    }  # fmt: skip
+    run = run_collection("minimaxm31flash", _role(**args), "sglang")
+    assert run.draft_precision == Fact("nvfp4_online", "explicit")
+    assert run.draft_kv_cache_dtype == Fact("fp8", "explicit")
+    assert run.kv_cache_dtype == Fact(None, "default")
+    config = {"decoding_type": "MTP", "max_draft_len": 3}
+    trt = _role(speculative_config=config, kv_cache_config={"dtype": "fp8"})
+    assert run_collection("dsv4", trt, "dynamo-trt").kv_cache_dtype == Fact("fp8", "explicit")
 
 
 def test_non_speculative_role_has_no_collection() -> None:

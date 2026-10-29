@@ -148,7 +148,10 @@ def test_a_thinking_mode_written_as_a_list_is_rejected(tmp_path) -> None:
     (tmp_path / "identities.yaml").write_text(
         "m_mtp:\n  select: {model_prefixes: [m], method: mtp}\n  collection:\n"
         "    engine: vllm\n    draft: native\n"
-        + "".join(f"    {field}: {fact}\n" for field in ("draft_sample", "verify", "adaptive"))
+        + "".join(f"    {field}: {fact}\n" for field in (
+            "draft_sample", "verify", "adaptive", "draft_precision", "draft_kv_cache_dtype",
+            "kv_cache_dtype",
+        ))
         + "    topology: {value: chain, source: documented}\n"
     )
     (tmp_path / "m_mtp.yaml").write_text("m:\n  thinking_on: [1.5, 2.3, 2.9]\n")

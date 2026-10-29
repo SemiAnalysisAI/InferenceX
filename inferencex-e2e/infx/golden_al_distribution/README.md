@@ -162,7 +162,7 @@ Every curve file is named `<model>__<method>__<draft>__<draft_sample>-<verify>.y
 [`identities.yaml`](identities.yaml) gives each curve two blocks:
 
 - `select` decides which runs use the curve: `model_prefixes`, `method`, and, only where curves of one model differ by them, `draft_family` (MiniMax-M3 GQA) and `draft_sample` (Kimi K3 DSpark). `curve_name` returns the one curve whose block matches and fails when none or several do. SGLang `EAGLE` and `NEXTN` select the model's native `mtp` curve, and MiniMax-M3's EAGLE selects `eagle3`.
-- `collection` records how the curve was measured: `engine`, `draft`, `draft_sample`, `verify` (`standard`, `block`, `relaxed`), `adaptive` and `topology` (`chain`, `tree-topk<N>`). Each fact is `{value, source}` with source `explicit`, `documented`, `assumed`, `default` (unset; value null) or `unknown` (value null).
+- `collection` records how the curve was measured: `engine`, `draft`, `draft_sample`, `verify` (`standard`, `block`, `relaxed`), `adaptive`, `topology` (`chain`, `tree-topk<N>`), `draft_precision` (the draft weights' quantization), `draft_kv_cache_dtype` and `kv_cache_dtype` (the target's). Each fact is `{value, source}` with source `explicit`, `documented`, `assumed`, `default` (unset; value null) or `unknown` (value null).
 
 A new curve needs its identity before it merges; a test checks each file name against it.
 
