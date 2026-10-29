@@ -5373,7 +5373,7 @@ qwen3.5-fp4-b200-vllm-agentic-mtp:
       search-space:
       # TP2 + EP2 with MTP (3 draft tokens), FP8 KV cache, 48 running sequences and
       # 160 GiB of vLLM native CPU KV offload at every point.
-      - { tp: 2, ep: 2, kv-offloading: dram, kv-offload-backend: { name: native }, spec-decoding: mtp, conc-list: [16, 32, 64], srt-recipe: agentic.yaml }
+      - { tp: 2, ep: 2, kv-offloading: dram, kv-offload-backend: { name: native }, spec-decoding: mtp, conc-list: [4, 8, 16, 32, 64], srt-recipe: agentic.yaml }
 
 # Qwen3.8-Flash-Next NVFP4 AgentX on B200 via SGLang with native NEXTN MTP.
 # TP1 matches the verified single-node recipe.

@@ -65,5 +65,5 @@ zip_override_tp2:
         tensor-parallel-size: 2
   benchmark:
     env:
-      CONC: ['16', '32', '64']
+      CONC: ['4', '8', '16', '32', '64']
       KV_OFFLOADING: dram
