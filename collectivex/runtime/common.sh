@@ -37,7 +37,7 @@ COLLX_UCCL_COMMIT="df000fd3001da04a397253fd6a2204bde62d32aa"
 # low-latency ladder clamp. nccl4py and cuda-core are pinned alongside so a rebuild resolves the
 # same tree. Whitespace-separated pip specs: the install site word-splits this deliberately, and the
 # whole string keys the shared cache dir.
-COLLX_NCCL_EP_SPEC="nccl-extensions[cu13]==0.2.0.dev20261013 nccl4py[cu13]==0.5.0 cuda-core==1.2.1"
+COLLX_NCCL_EP_SPEC="nccl-extensions[cu13]==0.2.0.dev20261021 nccl4py[cu13]==0.5.0 cuda-core==1.2.1"
 # vLLM main's FlashInfer pin and the companions its one-sided all-to-all imports, installed over the
 # image's older FlashInfer. The cubin and jit-cache wheels must match flashinfer-python's version or
 # it refuses to import. jit-cache goes in without deps: its per-arch providers hold no all-to-all
@@ -57,6 +57,8 @@ COLLX_OFI_NCCL_SHA256="2533d1ec179a86dcf0470fc39800b06cd9169cd854c0c913cc4782a42
 # has no runtime hwloc dependency. 2.10.0 is the h100-dgxc hosts' distro version.
 COLLX_HWLOC_VERSION="2.10.0"
 COLLX_HWLOC_SHA256="c7fd8a1404a9719c76aadc642864b9f77aed1dc1fc8882d6af861a9260ba240d"
+COLLX_PCIACCESS_VERSION="0.16"
+COLLX_PCIACCESS_SHA256="84413553994aef0070cf420050aa5c0a51b1956b404920e21b81e96db6a61a27"
 
 collx_log_tail() {
   local log_path="$1"
