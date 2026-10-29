@@ -7,12 +7,23 @@ import pytest
 import yaml
 
 from infx.serving.client import (
-    ProbeError, agentx_argv, datasets_cache, label_result, online, probe, redacted, with_token_source,
+    ProbeError,
+    agentx_argv,
+    datasets_cache,
+    label_result,
+    online,
+    probe,
+    redacted,
+    with_token_source,
 )
 
 ENV = {
-    "PORT": "21000", "MODEL": "Qwen/Qwen3.8-27B", "SERVED_MODEL_NAME": "", "CONC": "8",
-    "RESULT_DIR": "/workspace/results", "SERVING_SEARCH": "0",
+    "PORT": "21000",
+    "MODEL": "Qwen/Qwen3.8-27B",
+    "SERVED_MODEL_NAME": "",
+    "CONC": "8",
+    "RESULT_DIR": "/workspace/results",
+    "SERVING_SEARCH": "0",
     "AIPERF_GPU_TELEMETRY_URL": "http://localhost:21001/metrics",
     "AIPERF_SERVER_METRICS_URLS": "http://localhost:21000/metrics,http://localhost:21002/metrics",
 }
@@ -20,18 +31,31 @@ ENV = {
 
 def test_fixed_concurrency_argv():
     argv = agentx_argv("/venv/bin/agentx", Path("/workspace/results/scenario.yaml"), ENV)
-    assert argv[:4] == ["/venv/bin/agentx", "profile", "--config", "/workspace/results/scenario.yaml"]
+    assert argv[:4] == [
+        "/venv/bin/agentx",
+        "profile",
+        "--config",
+        "/workspace/results/scenario.yaml",
+    ]
     assert argv[argv.index("--url") + 1] == "http://localhost:21000"
     assert argv[argv.index("--model") + 1] == "Qwen/Qwen3.8-27B"
     assert argv[argv.index("--concurrency") + 1] == "8"
     assert argv[argv.index("--gpu-telemetry") + 1] == "http://localhost:21001/metrics"
     metrics = argv.index("--server-metrics")
-    assert argv[metrics + 1: metrics + 3] == ["http://localhost:21000/metrics", "http://localhost:21002/metrics"]
+    assert argv[metrics + 1 : metrics + 3] == [
+        "http://localhost:21000/metrics",
+        "http://localhost:21002/metrics",
+    ]
     assert argv[-2:] == ["--output-artifact-dir", "/workspace/results/aiperf_artifacts"]
 
 
 def test_search_lets_aiperf_pick_the_concurrency_and_served_name_wins():
-    env = {**ENV, "SERVING_SEARCH": "1", "SERVED_MODEL_NAME": "qwen", "AIPERF_GPU_TELEMETRY_URL": ""}
+    env = {
+        **ENV,
+        "SERVING_SEARCH": "1",
+        "SERVED_MODEL_NAME": "qwen",
+        "AIPERF_GPU_TELEMETRY_URL": "",
+    }
     argv = agentx_argv("agentx", Path("s.yaml"), env)
     assert "--concurrency" not in argv and "--no-gpu-telemetry" in argv
     assert argv[argv.index("--model") + 1] == "qwen"
@@ -51,8 +75,12 @@ def test_online_drops_the_engine_offline_switches():
 
 
 REMOTE_ENV = {
-    "MODEL": "gpt-5", "CONC": "4", "RESULT_DIR": "/workspace/results", "SERVING_SEARCH": "0",
-    "SERVING_REMOTE_URL": "https://api.example.com", "SERVING_TOKENIZER": "builtin",
+    "MODEL": "gpt-5",
+    "CONC": "4",
+    "RESULT_DIR": "/workspace/results",
+    "SERVING_SEARCH": "0",
+    "SERVING_REMOTE_URL": "https://api.example.com",
+    "SERVING_TOKENIZER": "builtin",
     "SERVING_API_KEY": "sk-secret-123",
 }
 
@@ -75,11 +103,32 @@ def test_redacted_hides_the_key():
     assert redacted(argv)[argv.index("--api-key") + 1] == "***"
 
 
+def test_basic_auth_key_becomes_an_authorization_header():
+    env = {**REMOTE_ENV, "SERVING_API_KEY": "Basic dXNlcjpwYXNz"}
+    argv = agentx_argv("agentx", Path("s.yaml"), env)
+    assert argv[argv.index("--header") + 1] == "Authorization:Basic dXNlcjpwYXNz"
+    assert "--api-key" not in argv
+    assert "Basic dXNlcjpwYXNz" not in " ".join(redacted(argv))
+
+
+def test_probe_sends_a_basic_key_as_the_raw_authorization():
+    url, seen, server = serve(200, WITH_USAGE)
+    try:
+        assert probe(url, "m", "Basic dXNlcjpwYXNz") == "server"
+    finally:
+        server.shutdown()
+    assert seen[0][1]["Authorization"] == "Basic dXNlcjpwYXNz"
+
+
 def test_client_token_source_turns_server_counting_off():
-    text = yaml.safe_dump({"benchmark": {"endpoint": {"type": "chat", "useServerTokenCount": True}}})
+    text = yaml.safe_dump(
+        {"benchmark": {"endpoint": {"type": "chat", "useServerTokenCount": True}}}
+    )
     assert with_token_source(text, "server") == text
     assert yaml.safe_load(with_token_source(text, "client"))["benchmark"]["endpoint"] == {
-        "type": "chat", "useServerTokenCount": False}
+        "type": "chat",
+        "useServerTokenCount": False,
+    }
 
 
 def test_label_result_records_the_token_count_source(tmp_path):
@@ -87,7 +136,10 @@ def test_label_result_records_the_token_count_source(tmp_path):
     path.write_text(json.dumps({"conc": 4}))
     label_result(path, "agentx-cc-062126-smoke", token_count_source="client")
     assert json.loads(path.read_text()) == {
-        "conc": 4, "scenario": "agentx-cc-062126-smoke", "token_count_source": "client"}
+        "conc": 4,
+        "scenario": "agentx-cc-062126-smoke",
+        "token_count_source": "client",
+    }
 
 
 def serve(status: int, body: bytes):
@@ -110,9 +162,11 @@ def serve(status: int, body: bytes):
     return f"http://127.0.0.1:{server.server_port}", seen, server
 
 
-WITH_USAGE = (b'data: {"choices":[{"delta":{"content":"OK"}}]}\n\n'
-              b'data: {"choices":[],"usage":{"prompt_tokens":9,"completion_tokens":1}}\n\n'
-              b"data: [DONE]\n\n")
+WITH_USAGE = (
+    b'data: {"choices":[{"delta":{"content":"OK"}}]}\n\n'
+    b'data: {"choices":[],"usage":{"prompt_tokens":9,"completion_tokens":1}}\n\n'
+    b"data: [DONE]\n\n"
+)
 WITHOUT_USAGE = b'data: {"choices":[{"delta":{"content":"OK"}}]}\n\ndata: [DONE]\n\n'
 
 
@@ -137,13 +191,25 @@ def test_probe_without_usage_falls_back_to_client_counting():
         server.shutdown()
 
 
-@pytest.mark.parametrize("status, body, secret, message", [
-    (401, b'{"error":"bad key"}', "OPENAI_API_KEY", "HTTP 401: key rejected; check GitHub secret OPENAI_API_KEY"),
-    (401, b"", "", "HTTP 401: the endpoint wants a key; set endpoint.api-key-secret"),
-    (404, b"no such model", "", "HTTP 404: check endpoint.url and endpoint.model"),
-    (400, b'{"error":{"message":"Unrecognized request argument supplied: ignore_eos"}}', "",
-     "HTTP 400: Unrecognized request argument supplied: ignore_eos"),
-])
+@pytest.mark.parametrize(
+    "status, body, secret, message",
+    [
+        (
+            401,
+            b'{"error":"bad key"}',
+            "OPENAI_API_KEY",
+            "HTTP 401: key rejected; check GitHub secret OPENAI_API_KEY",
+        ),
+        (401, b"", "", "HTTP 401: the endpoint wants a key; set endpoint.api-key-secret"),
+        (404, b"no such model", "", "HTTP 404: check endpoint.url and endpoint.model"),
+        (
+            400,
+            b'{"error":{"message":"Unrecognized request argument supplied: ignore_eos"}}',
+            "",
+            "HTTP 400: Unrecognized request argument supplied: ignore_eos",
+        ),
+    ],
+)
 def test_probe_failures_name_the_fix(status, body, secret, message):
     url, _, server = serve(status, body)
     try:
@@ -157,6 +223,9 @@ def test_probe_failures_name_the_fix(status, body, secret, message):
 
 def test_datasets_arrow_cache_lives_beside_the_node_hub_cache():
     assert datasets_cache({"HF_HUB_CACHE": "/mnt/hf_hub_cache/"}) == {
-        "HF_DATASETS_CACHE": "/mnt/hf_hub_cache/.datasets-arrow"}
-    assert datasets_cache({"HF_HUB_CACHE": "/mnt/hf", "HF_DATASETS_CACHE": "/x"}) == {}  # caller's choice wins
+        "HF_DATASETS_CACHE": "/mnt/hf_hub_cache/.datasets-arrow"
+    }
+    assert (
+        datasets_cache({"HF_HUB_CACHE": "/mnt/hf", "HF_DATASETS_CACHE": "/x"}) == {}
+    )  # caller's choice wins
     assert datasets_cache({}) == {}  # no node cache mounted: keep the library default
