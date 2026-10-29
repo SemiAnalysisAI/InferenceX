@@ -31,7 +31,14 @@ from infx.bench.agentic.traces import LOADERS
 
 from . import github
 from .github import VerificationError
-from .models import Contract, Family, family_keys, identity, normalized_image
+from .models import (
+    DATASET_PROVENANCE_UNAVAILABLE,
+    Contract,
+    Family,
+    family_keys,
+    identity,
+    normalized_image,
+)
 
 if TYPE_CHECKING:
     from infx.klaud.lifecycle import Session
@@ -1010,23 +1017,13 @@ def upsert(session: Session, pull: dict, name: str, data: str, text: str) -> Non
     github.write(session.repository, path, "PATCH" if previous else "POST", {"body": body})
 
 
-def publish_final(
-    session: Session, run: dict, evidence: tuple[dict, list[dict], list[dict]]
-) -> None:
-    """Publish the final report of passed sweep ``run`` built from its verified ``evidence``.
+def final_points(run: dict, matrix: dict, rows: list[dict]) -> list[Point]:
+    """The points of passed sweep ``run``, one per result row of ``rows`` and in their order.
 
-    Normal finish and recovery publish the same artifact-derived report. Mixed images raise
-    VerificationError.
+    Labels and settings come from the canonical ``matrix`` entry each row reproduces.
     """
-    from infx.results.eval_artifacts import eval_key
-
-    from .validation import benchmark_entries, expected_evals
-
-    matrix, rows, eval_rows = evidence
     generated = {
-        (entry["recipe-fingerprint"], int(conc)): {**entry, "conc": int(conc)}
-        for entry in benchmark_entries(matrix)
-        for conc in (entry["conc"] if isinstance(entry["conc"], list) else [entry["conc"]])
+        (entry["recipe-fingerprint"], entry["conc"]): entry for entry in matrix_points(matrix)
     }
     points = []
     for row in rows:
@@ -1044,7 +1041,14 @@ def publish_final(
                 head=run["head_sha"],
             )
         )
-    evaluations = [
+    return points
+
+
+def final_evals(run: dict, eval_rows: list[dict]) -> list[Evaluation]:
+    """The evals of passed sweep ``run`` from its aggregate ``eval_rows``, by concurrency."""
+    from infx.results.eval_artifacts import eval_key
+
+    return [
         Evaluation(
             key=identity(eval_key(row)),
             suite=row.get("eval_suite") or "gsm8k",
@@ -1058,6 +1062,21 @@ def publish_final(
         )
         for row in sorted(eval_rows, key=lambda row: (int(row["conc"]), row.get("eval_suite", "")))
     ]
+
+
+def publish_final(
+    session: Session, run: dict, evidence: tuple[dict, list[dict], list[dict]]
+) -> None:
+    """Publish the final report of passed sweep ``run`` built from its verified ``evidence``.
+
+    Normal finish and recovery publish the same artifact-derived report. Mixed images raise
+    VerificationError.
+    """
+    from .validation import expected_evals
+
+    matrix, rows, eval_rows = evidence
+    points = final_points(run, matrix, rows)
+    evaluations = final_evals(run, eval_rows)
     images = {row["image"] for row in rows}
     if len(images) != 1:
         raise VerificationError("Final report contains mixed images")
@@ -1079,7 +1098,7 @@ def publish_final(
                 en="Mark ready for maintainer review.",
                 zh="标记为就绪，等待维护者审查。",
             ),
-            benchmarks_expected=len(generated),
+            benchmarks_expected=len(matrix_points(matrix)),
             benchmarks_passed=len(points),
             evals_expected=len(expected_evals(matrix)),
             evals_passed=len(expected_evals(matrix)),
@@ -1158,11 +1177,16 @@ def matrix_points(matrix: dict) -> list[dict]:
     ]
 
 
-def missing_baseline_points(matrix: dict, baseline: Baseline) -> list[Point]:
-    """Frozen baseline points that ``matrix`` cannot reproduce and the baseline did not retire."""
+def missing_baseline_points(matrix: dict, baseline: Baseline) -> list[str]:
+    """Keys of frozen baseline points and unbaselined-key points that ``matrix`` cannot reproduce.
+
+    Retired points are exempt.
+    """
     covered = {point_key(point) for point in matrix_points(matrix)}
     covered.update(key for retirement in baseline.retirements for key in retirement.points)
-    return [point for point in baseline.points if point.key not in covered]
+    roster = [point.key for point in baseline.points]
+    roster += [key for row in baseline.keys.values() for key in row.points]
+    return [key for key in roster if key not in covered]
 
 
 def unpublished_keys(matrix: dict, baseline: Baseline) -> list[str]:
@@ -1205,6 +1229,101 @@ def check_baseline_coverage(
         )
     if missing_baseline_points(matrix, baseline):
         raise VerificationError("Final matrix omits or changes frozen baseline points")
+
+
+MAX_THROUGHPUT_DROP = 0.3
+MIN_EVAL_RETENTION = 0.5
+MIN_EVAL_SCORE = 0.5
+# Published scores of these suites sit above 0.9, while BFCL and GPQA legitimately score lower.
+FLOORED_EVAL_SUITES = (
+    "gsm8k",
+    "kimi_tool_call_schema",
+    "kimi_tool_call_schema_full",
+    "minimax_m3_full",
+)
+
+
+def request_error_rate(row: dict) -> float | None:
+    """The share of result ``row``'s requests that errored, or None without a request count."""
+    if "request_metrics" in row.get("metrics", row):
+        accounting = row.get("request_accounting", {})
+        errors, total = accounting.get("records_error_dropped"), accounting.get("records_total")
+    else:
+        outcome = row.get("benchmark_outcome", {})
+        errors, total = outcome.get("failed"), outcome.get("requested")
+    return errors / total if errors is not None and total else None
+
+
+def check_regressions(
+    run: dict, evidence: tuple[dict, list[dict], list[dict]], baseline: Baseline
+) -> None:
+    """Raise VerificationError if passed final sweep ``run`` regressed against ``baseline``.
+
+    Validation is blocked by a matched point whose output throughput fell more than
+    MAX_THROUGHPUT_DROP or cannot be compared (missing or zero), and by any point whose
+    request error rate exceeds the serving client's MAX_FAILURE_RATE. A frozen point without
+    a dataset is assumed to share the new corpus, and only a different known corpus is skipped.
+    An eval is blocked below MIN_EVAL_RETENTION of its baseline score, and FLOORED_EVAL_SUITES
+    below MIN_EVAL_SCORE whatever the baseline. Labels come from the canonical matrix, never
+    artifact text.
+    """
+    from infx.bench_serving.benchmark_outcome import MAX_FAILURE_RATE
+
+    from .validation import COVERAGE_LABELS, eval_labels
+
+    matrix, rows, eval_rows = evidence
+    old = {point.key: point for point in baseline.points}
+    unbaselined = unbaselined_reasons(baseline)
+    slower, failing, unknown = [], [], []
+    for point, row in zip(final_points(run, matrix, rows), rows, strict=True):
+        rate = request_error_rate(row)
+        if rate is not None and rate > MAX_FAILURE_RATE:
+            failing.append(f"{point.label} ({rate:.0%})")
+        previous = old.get(point.key)
+        if point.key in unbaselined or not previous or previous.result != "passed":
+            continue
+        if (
+            previous.scenario != point.scenario
+            or previous.values.latency_statistic != point.values.latency_statistic
+            or (previous.dataset and point.dataset and previous.dataset != point.dataset)
+        ):
+            continue
+        a, b = previous.values.output_tps_gpu, point.values.output_tps_gpu
+        if not a or b is None:
+            unknown.append(point.label)
+        elif b < (1 - MAX_THROUGHPUT_DROP) * a:
+            slower.append(f"{point.label} ({delta(a, b)})")
+    labels = {identity(key): label for key, label in eval_labels(matrix).items()}
+    frozen = {
+        (row.key, row.suite, row.metric): row.score
+        for row in baseline.evals
+        if row.result == "passed" and row.score is not None
+    }
+    dropped, weak = [], []
+    for row in final_evals(run, eval_rows):
+        reference = frozen.get((row.key, row.suite, row.metric))
+        if row.score is None:
+            continue
+        if reference is not None and row.score < MIN_EVAL_RETENTION * reference:
+            dropped.append(f"{labels[row.key]} ({row.score:.0%} vs {reference:.0%})")
+        elif row.suite in FLOORED_EVAL_SUITES and row.score < MIN_EVAL_SCORE:
+            weak.append(f"{labels[row.key]} ({row.score:.0%})")
+    problems = [
+        f"{reason} at {', '.join(items[:COVERAGE_LABELS])}"
+        + (f" and {len(items) - COVERAGE_LABELS} more" if len(items) > COVERAGE_LABELS else "")
+        for reason, items in (
+            (f"output tok/s/GPU fell more than {MAX_THROUGHPUT_DROP:.0%}", slower),
+            (f"request errors exceed {MAX_FAILURE_RATE:.0%}", failing),
+            ("output throughput cannot be compared (missing or zero)", unknown),
+            (f"eval score fell below {MIN_EVAL_RETENTION:.0%} of its baseline", dropped),
+            (f"eval score below {MIN_EVAL_SCORE:.0%}", weak),
+        )
+        if items
+    ]
+    if problems:
+        raise VerificationError(
+            "Final sweep cannot be validated against the frozen baseline: " + "; ".join(problems)
+        )
 
 
 @dataclass(frozen=True)
@@ -1576,21 +1695,22 @@ def resolve_baseline(
     published: dict[str, Point] = {}
     unverified: list[dict] = []
     sources = list(public.sources)
-    datasets: dict[tuple[int, int | None], str | None] = {}
+    datasets: dict[tuple[int, int | None], str] = {}
 
     def dataset(row: dict, run_id: int, run_attempt: int | None) -> str | None:
         """The corpus the dashboard linked to the producer run of a published AgentX row."""
-        if row.get("benchmark_type") != "agentic_traces" or row.get("id") is None:
+        if row.get("benchmark_type") != "agentic_traces":
             return None
         if (run_id, run_attempt) not in datasets:
+            if row.get("id") is None:
+                raise VerificationError(DATASET_PROVENANCE_UNAVAILABLE)
             feed = fetch("benchmark-siblings", benchmark=int(row["id"]))
             sku = feed.payload.get("sku") if isinstance(feed.payload, dict) else None
-            if not isinstance(sku, dict) or str(sku.get("github_run_id")) != str(run_id):
-                raise VerificationError("Public baseline dataset provenance is unavailable")
-            slug = sku.get("dataset_slug")
-            datasets[run_id, run_attempt] = (
-                dataset_slug(slug) if isinstance(slug, str) and slug.strip() else None
-            )
+            slug = sku.get("dataset_slug") if isinstance(sku, dict) else None
+            corpus = dataset_slug(slug) if isinstance(slug, str) else None
+            if not corpus or str(sku.get("github_run_id")) != str(run_id):
+                raise VerificationError(DATASET_PROVENANCE_UNAVAILABLE)
+            datasets[run_id, run_attempt] = corpus
             sources.append(feed.url)
         return datasets[run_id, run_attempt]
 
