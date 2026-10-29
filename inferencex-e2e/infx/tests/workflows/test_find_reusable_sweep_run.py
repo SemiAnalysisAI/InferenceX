@@ -490,7 +490,8 @@ def identity_zip(**changes) -> bytes:
     }
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as bundle:
-        bundle.writestr("source_identity.json", json.dumps(identity))
+        member = zipfile.ZipInfo("source_identity.json", (2026, 1, 1, 0, 0, 0))
+        bundle.writestr(member, json.dumps(identity))
     return buffer.getvalue()
 
 

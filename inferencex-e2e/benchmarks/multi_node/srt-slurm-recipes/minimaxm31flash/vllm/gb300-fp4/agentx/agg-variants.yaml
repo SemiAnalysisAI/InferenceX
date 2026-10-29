@@ -1,0 +1,164 @@
+schema: 2
+base:
+  name: minimaxm31flash-gb300-dynamo-agg
+  identity:
+    frameworks:
+      dynamo: 1.6.0.dev20261023
+  dynamo:
+    install: true
+    source:
+      wheel: 1.6.0.dev20261023
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  # Cold loads of the 250 GB checkpoint from the hub cache run past half an hour.
+  observability:
+    tachometer:
+      enabled: false
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  environment:
+    PYTHONHASHSEED: '0'
+  services:
+  - name: etcd
+    type: etcd
+    placement:
+      node: infra
+  - name: nats
+    type: nats
+    placement:
+      node: infra
+    options:
+      max_payload_mb: 32
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+    args:
+      router-mode: kv
+      router-session-affinity-ttl-secs: 14400
+    env:
+      DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: '3600'
+      HF_HOME: /hf_hub_cache
+      HF_HUB_CACHE: /hf_hub_cache
+      DYN_TCP_CONNECT_TIMEOUT: '120'
+  engine:
+    type: vllm
+    connector: null
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      kv_events: true
+      env:
+        HF_HOME: /hf_hub_cache
+        HF_HUB_CACHE: /hf_hub_cache
+        VLLM_FLOAT32_MATMUL_PRECISION: high
+        PYTHONUNBUFFERED: '1'
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '600'
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+        VLLM_CHAT_TEMPLATE_RENDER_TIMEOUT: '600'
+        DYN_TCP_CONNECT_TIMEOUT: '120'
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: '1024'
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT: '1024'
+        DYN_BACKEND_ADMISSION_REQUEST_QUEUE_LIMIT: '2048'
+      args:
+        served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
+        language-model-only: true
+        trust-remote-code: true
+        dyn-tool-call-parser: minimax_m3
+        dyn-reasoning-parser: minimax_m3
+        # MSA sparse/index cache needs 128-token blocks.
+        block-size: 128
+        # The checkpoint is QAT-trained for an NVFP4 KV cache.
+        kv-cache-dtype: nvfp4
+        attention-config: '{"indexer_kv_dtype":"nvfp4","use_prefill_query_quantization":true}'
+        disable-hybrid-kv-cache-manager: true
+        enable-prefix-caching: true
+        tensor-parallel-size: 4
+        gpu-memory-utilization: 0.9
+        max-model-len: 1048576
+        max-num-batched-tokens: 32768
+        # Prefill CUDA graphs up to 8192 tokens; the default capture stops at 512.
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192,200,208,216,224,232,240,248,256,320,384,448,512,576,640,704,768,832,896,960,1024,1536,2048,3072,4096,6144,8192]}'
+        # Golden AL 4.04.
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASH_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  sbatch_directives:
+    cpus-per-task: '144'
+    mem: '0'
+  srun_options:
+    container-remap-root: ''
+  benchmark:
+    env:
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+
+override_tp4_c1:
+  name: minimaxm31flash-gb300-dynamo-agg-tp4-c1
+  roles:
+    agg:
+      args:
+        max-num-seqs: 2
+
+override_tp4_c4:
+  name: minimaxm31flash-gb300-dynamo-agg-tp4-c4
+  roles:
+    agg:
+      args:
+        max-num-seqs: 8
+
+override_tp4_c8:
+  name: minimaxm31flash-gb300-dynamo-agg-tp4-c8
+  roles:
+    agg:
+      args:
+        max-num-seqs: 16
+
+override_tp4_c16:
+  name: minimaxm31flash-gb300-dynamo-agg-tp4-c16
+  roles:
+    agg:
+      args:
+        max-num-seqs: 32
+
+override_tp4_c32:
+  name: minimaxm31flash-gb300-dynamo-agg-tp4-c32
+  roles:
+    agg:
+      args:
+        max-num-seqs: 64
+
+override_tp4_c40:
+  name: minimaxm31flash-gb300-dynamo-agg-tp4-dram-c40
+  roles:
+    agg:
+      env:
+        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
+      args:
+        max-num-seqs: 64
+        gpu-memory-utilization: 0.86
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":860000000000,"lazy_offload":true}}'
+
+override_tp4_c48:
+  name: minimaxm31flash-gb300-dynamo-agg-tp4-dram-c48
+  roles:
+    agg:
+      env:
+        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
+      args:
+        max-num-seqs: 64
+        gpu-memory-utilization: 0.86
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":860000000000,"lazy_offload":true}}'
+
+override_tp4_c56:
+  name: minimaxm31flash-gb300-dynamo-agg-tp4-dram-c56
+  roles:
+    agg:
+      env:
+        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
+      args:
+        max-num-seqs: 96
+        gpu-memory-utilization: 0.86
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":860000000000,"lazy_offload":true}}'
