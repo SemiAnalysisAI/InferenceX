@@ -91,7 +91,7 @@ python -m atom.entrypoints.openai_server \
    其中 `1` 是目标模型保证生成的验证 token。结果四舍五入到小数点后两位。
 6. 收集脚本生成 YAML 矩阵。工作流将其发布到 GitHub Actions step summary，并上传为 `speedbench-reference-al-<model-prefix>` artifact。
 7. 工作流保留服务日志和逐请求详细结果，以便审阅者确认输出合理、思考模式正确，并且没有静默的服务或聊天模板故障。
-8. 审阅完成后，将矩阵连同准确的采样元数据和源 Actions run URL 一并提交到本目录。设置 `open-pr=true` 和 `golden-curve=<曲线文件名>`（例如 `dsv4_mtp`）时，工作流会写入本目录下的 `<曲线文件名>.yaml`，首行为源 run URL，再通过 `python -m infx.golden_al_distribution show` 加载校验，然后开启 PR。它会替换整个文件，因此本次未收集的格子会被删除。
+8. 审阅完成后，将矩阵连同准确的采样元数据和源 Actions run URL 一并提交到本目录。设置 `open-pr=true` 和 `golden-curve=<曲线文件名>`（例如 `deepseek-v4-pro__mtp__native__default-default`）时，工作流会写入本目录下的 `<曲线文件名>.yaml`，首行为源 run URL，再通过 `python -m infx.golden_al_distribution show` 加载校验，然后开启 PR。它会替换整个文件，因此本次未收集的格子会被删除。
 
 收集过程仅通过测量真实草稿头质量来建立黄金曲线。之后，AgentX 对所有可比较提交使用该已提交曲线作为合成接受目标。
 
@@ -127,18 +127,18 @@ gh workflow run speedbench-al.yml \
 
 | 模型 | 方法 | 黄金 YAML | 源 run |
 | --- | --- | --- | --- |
-| DeepSeek V4 Pro | MTP | [`dsv4_mtp.yaml`](dsv4_mtp.yaml) | [27180633016](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27180633016) |
-| DeepSeek V4 Pro 0813 | DSpark（概率采样草稿） | [`dsv4-pro-0813-dspark.yaml`](dsv4-pro-0813-dspark.yaml) | [31742838308](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/31742838308) |
-| DeepSeek V4.1 Flash | DSpark（概率采样草稿 + 块验证） | [`dsv41flash_dspark.yaml`](dsv41flash_dspark.yaml) | [34493175056](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34493175056) |
-| Qwen3.5 397B-A17B | MTP | [`qwen3.5_mtp.yaml`](qwen3.5_mtp.yaml) | [27317114007](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27317114007) |
-| Kimi K3 | DSpark | [`kimik3_dspark.yaml`](kimik3_dspark.yaml) | [30304797750](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/30304797750) |
-| Kimi K3 | DSpark（概率采样草稿 + 块验证） | [`kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml`](kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml) | [30316471205](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/30316471205) |
-| MiniMax-M3 | EAGLE3 | [`minimaxm3_eagle3.yaml`](minimaxm3_eagle3.yaml) | [28061204145](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28061204145) |
-| MiniMax-M3 | EAGLE3（GQA） | [`minimaxm3_eagle3_gqa.yaml`](minimaxm3_eagle3_gqa.yaml) | [29784780049](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/29784780049) |
-| GLM-5.2 | MTP | [`glm5.2_mtp.yaml`](glm5.2_mtp.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479) |
-| GLM-5.3 | MTP（临时，K=3 取自 GLM-5.2） | [`glm5.3_mtp.yaml`](glm5.3_mtp.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479)（GLM-5.2） |
-| Qwen3.8-Flash-Next | MTP (native) | [`qwen3.8next_mtp.yaml`](qwen3.8next_mtp.yaml) | [33034290269](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/33034290269) |
-| Muse Spark Open | DFlash2 | [`musespark_dflash.yaml`](musespark_dflash.yaml) | [38808046215](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/38808046215) |
+| DeepSeek V4 Pro | MTP | [`deepseek-v4-pro__mtp__native__default-default.yaml`](deepseek-v4-pro__mtp__native__default-default.yaml) | [27180633016](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27180633016) |
+| DeepSeek V4 Pro 0813 | DSpark（概率采样草稿） | [`deepseek-v4-pro-0813__dspark__native__probabilistic-default.yaml`](deepseek-v4-pro-0813__dspark__native__probabilistic-default.yaml) | [31742838308](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/31742838308) |
+| DeepSeek V4.1 Flash | DSpark（概率采样草稿 + 块验证） | [`deepseek-v4.1-flash__dspark__native__probabilistic-block.yaml`](deepseek-v4.1-flash__dspark__native__probabilistic-block.yaml) | [34493175056](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34493175056) |
+| Qwen3.5 397B-A17B | MTP | [`qwen3.5-397b-a17b-nvfp4__mtp__native__default-default.yaml`](qwen3.5-397b-a17b-nvfp4__mtp__native__default-default.yaml) | [27317114007](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27317114007) |
+| Kimi K3 | DSpark | [`kimi-k3__dspark__kimi-k3-dspark__default-default.yaml`](kimi-k3__dspark__kimi-k3-dspark__default-default.yaml) | [30304797750](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/30304797750) |
+| Kimi K3 | DSpark（概率采样草稿 + 块验证） | [`kimi-k3__dspark__kimi-k3-dspark__probabilistic-block.yaml`](kimi-k3__dspark__kimi-k3-dspark__probabilistic-block.yaml) | [30316471205](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/30316471205) |
+| MiniMax-M3 | EAGLE3 | [`minimax-m3__eagle3__minimax-m3-eagle3__default-default.yaml`](minimax-m3__eagle3__minimax-m3-eagle3__default-default.yaml) | [28061204145](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28061204145) |
+| MiniMax-M3 | EAGLE3（GQA） | [`minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default.yaml`](minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default.yaml) | [29784780049](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/29784780049) |
+| GLM-5.2 | MTP | [`glm-5.2-fp8__mtp__native__default-default.yaml`](glm-5.2-fp8__mtp__native__default-default.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479) |
+| GLM-5.3 | MTP（临时，K=3 取自 GLM-5.2） | [`glm-5.3-fp8__mtp__native__default-default.yaml`](glm-5.3-fp8__mtp__native__default-default.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479)（GLM-5.2） |
+| Qwen3.8-Flash-Next | MTP (native) | [`qwen3.8-flash-next-fp8__mtp__native__default-default.yaml`](qwen3.8-flash-next-fp8__mtp__native__default-default.yaml) | [33034290269](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/33034290269) |
+| Muse Spark Open | DFlash2 | [`muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml`](muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml) | [38808046215](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/38808046215) |
 
 ## 在 srt-slurm 运行中使用黄金曲线
 
@@ -148,13 +148,45 @@ gh workflow run speedbench-al.yml \
 - 仅评测和非 AgentX 运行使用真实验证，连接器会移除陈旧的合成设置。非投机角色不会收到模拟设置。`RUN_EVAL` 不会关闭吞吐部分的模拟。
 - 缺少黄金曲线或 draft 长度未测量时，会在提交前失败。新组合应补充实测黄金数据，而不是使用猜测或硬编码的长度。
 
+## 曲线身份与命名
+
+每个曲线文件命名为 `<model>__<method>__<draft>__<draft_sample>-<verify>.yaml`：曲线的模型键、方法（模型原生头为 `mtp`，以及 `eagle3`、`dspark`、`dflash`）、草稿模型（`native` 或草稿模型名），以及收集脚本设置的草稿采样器和验证器（沿用引擎默认值时为 `default`）。
+
+[`identities.yaml`](identities.yaml) 为每条曲线提供两个块。新曲线合并前必须同时具备二者；测试会据此检查每个文件名。
+
+`select` 决定哪些运行使用该曲线。`curve_name` 返回唯一匹配的曲线，没有或有多条匹配时报错。
+
+| 键 | 含义 |
+| --- | --- |
+| `model_prefixes` | 使用该曲线的 InferenceX 模型前缀 |
+| `method` | `mtp`、`eagle3`、`dspark` 或 `dflash`。SGLang 的 `EAGLE` 和 `NEXTN` 表示模型原生 `mtp` 头，MiniMax-M3 的 EAGLE 除外，其为 `eagle3` |
+| `draft_family` | 仅在同一模型的曲线因草稿模型而不同时设置：草稿模型名含 `gqa` 时为 `gqa`，否则为 `default` |
+| `draft_sample` | 仅在同一模型的曲线因草稿采样器而不同时设置：运行的 `draft_sample_method` 必须与之相等 |
+
+`collection` 记录曲线的测量方式：`engine`、`draft`、`draft_sample`（`greedy`、`probabilistic`）、`verify`（`standard`、`block`、`relaxed`）、`adaptive`、`topology`（`chain`、`tree-topk<N>`）、`draft_precision`（草稿权重的量化方式）、`draft_kv_cache_dtype` 和 `kv_cache_dtype`（目标模型的）。`provisional: true` 表示该曲线并非针对该模型测量。每项为 `{value, source}`：
+
+| Source | 含义 |
+| --- | --- |
+| `explicit` | 由收集脚本或配方显式设置 |
+| `documented` | 由 connector 或引擎确定：配方中的 synthetic 采样器会变为 `block`；block、relaxed 和 adaptive 验证均需显式开启，未设置即为 `standard` 且非自适应 |
+| `assumed` | connector 自身的判断，例如 ATOM DSpark 采用 probabilistic 草稿 |
+| `default` | 未设置，沿用引擎默认值；`value` 为 null |
+| `unknown` | 无法读取，例如 ATOM 的验证器；`value` 为 null |
+
+[`infx/srt_slurm/spec_identity.py`](../srt_slurm/spec_identity.py) 用同一词汇描述运行的生成角色，并对照所选曲线进行审计，但不改变选择结果。KV cache dtype 会做归一化：`fp8_e4m3` 即 `fp8`，`bfloat16` 即 `bf16`，`auto` 为引擎默认值。结果类型包括 `mismatch`（双方值均已知且不同）、`unverified`（任一方为引擎默认值或未知，双方同为同一引擎默认值时除外）、`adaptive`（不适用固定 k 曲线）、`provisional` 和 `engine`。审计扫描矩阵中的每个推测解码角色：
+
+```bash
+python -m infx.matrix.generate full-sweep --config-files configs/nvidia-master.yaml configs/amd-master.yaml --scenario-type agentic-coding > matrix.json
+python -m infx.srt_slurm.spec_identity snapshot matrix.json --root .
+```
+
 ## 查询曲线
 
 本目录即 `infx.golden_al_distribution` Python 包。`golden_length(model_prefix, spec, thinking)` 返回 AgentX 合成接受所使用的数值，`curve_name` 给出某个投机解码配置对应的 YAML。也可以在 shell 中执行相同的查询：
 
 ```bash
 python -m infx.golden_al_distribution list                          # 所有曲线及其已测量的草稿长度
-python -m infx.golden_al_distribution show qwen3.5_mtp              # 单条曲线的全部 AL
+python -m infx.golden_al_distribution show qwen3.5-397b-a17b-nvfp4__mtp__native__default-default              # 单条曲线的全部 AL
 python -m infx.golden_al_distribution lookup qwen3.5 mtp 3          # 3.39（默认 thinking_on）
 python -m infx.golden_al_distribution lookup kimik3 dspark 7 --draft-sample-method probabilistic --json
 ```

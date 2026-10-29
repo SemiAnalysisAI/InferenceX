@@ -35,7 +35,7 @@ base:
         mem-fraction-static: 0.86
         max-running-requests: 256
         cuda-graph-max-bs-decode: 64
-        # The connector selects golden AL 2.99 for K=3 from glm5.3_mtp.yaml.
+        # The connector selects golden AL 2.99 for K=3 from glm-5.3-fp8__mtp__native__default-default.yaml.
         speculative-algorithm: NEXTN
         speculative-num-steps: 3
         speculative-eagle-topk: 1

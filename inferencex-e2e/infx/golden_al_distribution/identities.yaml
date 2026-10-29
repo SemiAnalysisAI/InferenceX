@@ -1,0 +1,169 @@
+deepseek-v4-pro__mtp__native__default-default:
+  select: {model_prefixes: [dsv4], method: mtp}
+  collection:
+    engine: vllm
+    draft: native
+    draft_sample: {value: null, source: default}
+    verify: {value: standard, source: documented}
+    adaptive: {value: false, source: documented}
+    topology: {value: chain, source: documented}
+    draft_precision: {value: null, source: default}
+    draft_kv_cache_dtype: {value: null, source: default}
+    kv_cache_dtype: {value: fp8, source: explicit}
+
+deepseek-v4-pro-0813__dspark__native__probabilistic-default:
+  select: {model_prefixes: [dsv4, dsv4dspark, dsv4dsparkprob], method: dspark}
+  collection:
+    engine: vllm
+    draft: native
+    draft_sample: {value: probabilistic, source: explicit}
+    verify: {value: standard, source: documented}
+    adaptive: {value: false, source: documented}
+    topology: {value: chain, source: documented}
+    draft_precision: {value: null, source: default}
+    draft_kv_cache_dtype: {value: null, source: default}
+    kv_cache_dtype: {value: fp8, source: explicit}
+
+deepseek-v4.1-flash__dspark__native__probabilistic-block:
+  select: {model_prefixes: [dsv41flash], method: dspark}
+  collection:
+    engine: vllm
+    draft: native
+    draft_sample: {value: probabilistic, source: explicit}
+    verify: {value: block, source: explicit}
+    adaptive: {value: false, source: explicit}
+    topology: {value: chain, source: documented}
+    draft_precision: {value: null, source: unknown}
+    draft_kv_cache_dtype: {value: null, source: unknown}
+    kv_cache_dtype: {value: null, source: unknown}
+
+glm-5.2-fp8__mtp__native__default-default:
+  select: {model_prefixes: [glm5.2], method: mtp}
+  collection:
+    engine: vllm
+    draft: native
+    draft_sample: {value: null, source: default}
+    verify: {value: standard, source: documented}
+    adaptive: {value: false, source: documented}
+    topology: {value: chain, source: documented}
+    draft_precision: {value: null, source: default}
+    draft_kv_cache_dtype: {value: null, source: default}
+    kv_cache_dtype: {value: fp8, source: explicit}
+
+glm-5.3-fp8__mtp__native__default-default:
+  select: {model_prefixes: [glm5.3], method: mtp}
+  provisional: true
+  collection:
+    engine: vllm
+    draft: native
+    draft_sample: {value: null, source: default}
+    verify: {value: standard, source: documented}
+    adaptive: {value: false, source: documented}
+    topology: {value: chain, source: documented}
+    draft_precision: {value: null, source: default}
+    draft_kv_cache_dtype: {value: null, source: default}
+    kv_cache_dtype: {value: fp8, source: explicit}
+
+kimi-k3__dspark__kimi-k3-dspark__default-default:
+  select: {model_prefixes: [kimik3], method: dspark, draft_sample: greedy}
+  collection:
+    engine: vllm
+    draft: Inferact/Kimi-K3-DSpark
+    draft_sample: {value: null, source: default}
+    verify: {value: standard, source: documented}
+    adaptive: {value: false, source: documented}
+    topology: {value: chain, source: documented}
+    draft_precision: {value: null, source: default}
+    draft_kv_cache_dtype: {value: null, source: default}
+    kv_cache_dtype: {value: fp8, source: explicit}
+
+kimi-k3__dspark__kimi-k3-dspark__probabilistic-block:
+  select: {model_prefixes: [kimik3], method: dspark, draft_sample: probabilistic}
+  collection:
+    engine: vllm
+    draft: Inferact/Kimi-K3-DSpark
+    draft_sample: {value: probabilistic, source: explicit}
+    verify: {value: block, source: explicit}
+    adaptive: {value: false, source: documented}
+    topology: {value: chain, source: documented}
+    draft_precision: {value: null, source: default}
+    draft_kv_cache_dtype: {value: null, source: default}
+    kv_cache_dtype: {value: fp8, source: explicit}
+
+minimax-m3__eagle3__minimax-m3-eagle3__default-default:
+  select: {model_prefixes: [minimaxm3], method: eagle3, draft_family: default}
+  collection:
+    engine: vllm
+    draft: Inferact/MiniMax-M3-EAGLE3
+    draft_sample: {value: null, source: default}
+    verify: {value: standard, source: documented}
+    adaptive: {value: false, source: documented}
+    topology: {value: chain, source: documented}
+    draft_precision: {value: null, source: default}
+    draft_kv_cache_dtype: {value: null, source: default}
+    kv_cache_dtype: {value: null, source: default}
+
+minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default:
+  select: {model_prefixes: [minimaxm3], method: eagle3, draft_family: gqa}
+  collection:
+    engine: vllm
+    draft: Inferact/MiniMax-M3-EAGLE3-GQA
+    draft_sample: {value: null, source: default}
+    verify: {value: standard, source: documented}
+    adaptive: {value: false, source: documented}
+    topology: {value: chain, source: documented}
+    draft_precision: {value: null, source: default}
+    draft_kv_cache_dtype: {value: null, source: default}
+    kv_cache_dtype: {value: null, source: default}
+
+minimax-m3.1-flash__dspark__native__probabilistic-block:
+  select: {model_prefixes: [minimaxm31flash], method: dspark}
+  collection:
+    engine: vllm
+    draft: native
+    draft_sample: {value: probabilistic, source: explicit}
+    verify: {value: block, source: explicit}
+    adaptive: {value: false, source: documented}
+    topology: {value: chain, source: documented}
+    draft_precision: {value: null, source: default}
+    draft_kv_cache_dtype: {value: fp8, source: explicit}
+    kv_cache_dtype: {value: nvfp4, source: explicit}
+
+muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default:
+  select: {model_prefixes: [musespark], method: dflash}
+  collection:
+    engine: sglang
+    draft: RadixArk/Muse-Spark-Open-DFlash2
+    draft_sample: {value: null, source: default}
+    verify: {value: standard, source: documented}
+    adaptive: {value: false, source: documented}
+    topology: {value: chain, source: documented}
+    draft_precision: {value: null, source: default}
+    draft_kv_cache_dtype: {value: null, source: default}
+    kv_cache_dtype: {value: fp8, source: explicit}
+
+qwen3.5-397b-a17b-nvfp4__mtp__native__default-default:
+  select: {model_prefixes: [qwen3.5], method: mtp}
+  collection:
+    engine: vllm
+    draft: native
+    draft_sample: {value: null, source: default}
+    verify: {value: standard, source: documented}
+    adaptive: {value: false, source: documented}
+    topology: {value: chain, source: documented}
+    draft_precision: {value: null, source: default}
+    draft_kv_cache_dtype: {value: null, source: default}
+    kv_cache_dtype: {value: fp8, source: explicit}
+
+qwen3.8-flash-next-fp8__mtp__native__default-default:
+  select: {model_prefixes: [qwen3.8next], method: mtp}
+  collection:
+    engine: vllm
+    draft: native
+    draft_sample: {value: null, source: default}
+    verify: {value: standard, source: documented}
+    adaptive: {value: false, source: documented}
+    topology: {value: chain, source: documented}
+    draft_precision: {value: null, source: default}
+    draft_kv_cache_dtype: {value: null, source: default}
+    kv_cache_dtype: {value: null, source: default}

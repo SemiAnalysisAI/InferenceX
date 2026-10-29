@@ -39,7 +39,7 @@ base:
         attention-config: '{"indexer_kv_dtype":"fp8"}'
         moe-backend: marlin
         # Three-token DSpark with probabilistic drafting and block rejection, as
-        # measured for minimaxm31flash_dspark. Throughput runs switch to synthetic
+        # measured for minimax-m3.1-flash__dspark__native__probabilistic-block. Throughput runs switch to synthetic
         # rejection at the golden acceptance length.
         speculative-config: '{"method":"dspark","num_speculative_tokens":3,"draft_sample_method":"probabilistic","attention_backend":"FLASH_ATTN","kv_cache_dtype":"fp8","rejection_sample_method":"block"}'
         disable-hybrid-kv-cache-manager: true
