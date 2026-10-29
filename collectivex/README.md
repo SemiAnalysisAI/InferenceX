@@ -146,8 +146,8 @@ needs its own `squash_dir` or `storage_roots` as well: each shard creates its ba
 
 Every non-MNNVL EP16 placement requires `rdma_devices`, the operator-approved scale-out devices.
 The other network fields are `socket_ifname`, `ib_gid_index`, `rdma_service_level`,
-`rdma_traffic_class`, `rail_isolated`, `rdma_fabric`, `rdma_relaxed_ordering`, `rdma_gbs` and
-`single_node_rdma_devices`. Without `socket_ifname` each node's default-route interface carries the
+`rdma_traffic_class`, `rail_isolated`, `rdma_fabric`, `rdma_relaxed_ordering`, `rdma_gbs`,
+`uccl_rdma_recv_tokens` and `single_node_rdma_devices`. Without `socket_ifname` each node's default-route interface carries the
 cross-node sockets (h100-dgxc, h200-dgxc, b300). HCAs are never guessed, and every scale-out node must
 show its socket interface up and an active port on each listed device before backend setup; the
 methodology's [Execution Isolation](docs/methodology.md#execution-isolation) says what each field
