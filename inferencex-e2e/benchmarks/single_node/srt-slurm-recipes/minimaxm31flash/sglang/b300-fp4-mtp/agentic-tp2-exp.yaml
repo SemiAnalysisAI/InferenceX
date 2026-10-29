@@ -229,3 +229,43 @@ override_tp2_c48_mixed:
     env:
       CONC: '48'
       KV_OFFLOADING: dram
+
+override_tp2_c48_write_through:
+  # Back up KV to host as it is computed, so eviction drops instead of copying.
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 2
+        moe-runner-backend: flashinfer_trtllm_routed
+        chunked-prefill-size: 32768
+        max-running-requests: 96
+        cuda-graph-max-bs-decode: 96
+        mem-fraction-static: 0.87
+        enable-hierarchical-cache: true
+        hicache-size: 370
+        hicache-write-policy: write_through
+        schedule-policy: lpm
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: dram
+
+override_tp2_c48_write_through_selective:
+  # Back up only reused prefixes ahead of eviction.
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 2
+        moe-runner-backend: flashinfer_trtllm_routed
+        chunked-prefill-size: 32768
+        max-running-requests: 96
+        cuda-graph-max-bs-decode: 96
+        mem-fraction-static: 0.87
+        enable-hierarchical-cache: true
+        hicache-size: 370
+        hicache-write-policy: write_through_selective
+        schedule-policy: lpm
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: dram
