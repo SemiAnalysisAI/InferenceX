@@ -11571,6 +11571,6 @@
   description:
     - "Add TP2 points with DRAM KV offload (L2 HiCache) at conc 40 to 56 to the existing curve: shortest-prefill-first scheduling with a prefill-decode interval of 16, 8192-token prefill chunks, mem-fraction-static 0.92 and stream interval 20."
     - "Add a second conc 48 point with a prefill-decode interval of 32."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4647
   scenario-type: [agentic-coding]
   append-only: true
