@@ -34,6 +34,7 @@ tight combine gate (COMBINE_REL_TOL = 8*2^-8) is preserved, not loosened.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import types
 from importlib import metadata
@@ -207,6 +208,19 @@ class UCCLEPBackend(LegacyBufferLL, EPBackend):
         # not vendor-keyed). At EP16 their RDMA send chunks also meet the internode combine kernel's
         # num_max_rdma_chunked_send_tokens >= num_warps_per_forwarder assert.
         self.dispatch_config = Buffer.get_dispatch_config(self.world_size)
+        # A pool whose registry sets uccl_rdma_recv_tokens deepens the internode dispatch RDMA
+        # receive ring past vLLM's default. h200-dgxc needs it: with the default ring, BF16
+        # prefill deadlocks inside UCCL (uccl-project/uccl#1110). The rows say so in
+        # kernel_generation and library_config; nothing else about the launch changes.
+        recv_tokens = int(os.environ.get("COLLX_UCCL_RDMA_RECV_TOKENS") or 0)
+        if self._internode and recv_tokens:
+            c = self.dispatch_config
+            # Config rounds the ring up to a multiple of the send chunk; the label names what ran.
+            self.dispatch_config = Config(
+                c.num_sms, c.num_max_nvl_chunked_send_tokens, c.num_max_nvl_chunked_recv_tokens,
+                c.num_max_rdma_chunked_send_tokens, recv_tokens)
+            realized = self.dispatch_config.num_max_rdma_chunked_recv_tokens
+            self.kernel_generation = f"{type(self).kernel_generation}-rdmarecv{realized}"
         self.combine_config = Buffer.get_combine_config(self.world_size)
         num_rdma_bytes = _VLLM_DEEPEP_BUFFER_BYTES if self._internode else 0
         num_qps_per_rank = _VLLM_HT_NUM_SMS // 2 if self._internode else 1
