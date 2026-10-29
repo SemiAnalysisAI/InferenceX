@@ -1167,6 +1167,8 @@ def _agentic_entries(
         entry.update(srt_recipe_fields(config, benchmark))
         if benchmark.get(Fields.POWER.value):
             entry[Fields.POWER.value] = True
+        if benchmark.get(Fields.REQUIRE_POWER.value, benchmark.get("require_power", False)):
+            entry[Fields.REQUIRE_POWER.value] = True
         entry.update(
             {
                 Fields.KV_OFFLOADING.value: kv_offloading,

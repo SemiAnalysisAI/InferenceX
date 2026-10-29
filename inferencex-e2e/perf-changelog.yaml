@@ -11556,3 +11556,10 @@
     - "Disagg: 6 DEP2 prefill workers with a DEP8 decode at conc 280-360 or a DEP16 decode at conc 300; DeepGEMM MegaMoE, NIXL transfer plus a shared MooncakeStore DRAM pool (160 GB per rank), Dynamo KV router."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4468
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - qwen3.8next-fp4-gb300-sglang-agentic-mtp
+  description:
+    - "Require valid measured GPU power for the Qwen3.8 GB300 AgentX sweep."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4552
+  scenario-type: [agentic-coding]

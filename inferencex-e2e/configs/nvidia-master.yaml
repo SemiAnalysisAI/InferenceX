@@ -9961,6 +9961,7 @@ qwen3.8next-fp4-gb300-sglang-agentic-mtp:
     - dram-utilization: 1.0
       search-space:
       - tp: 1
+        require-power: true
         ep: 1
         dp-attn: false
         spec-decoding: mtp
