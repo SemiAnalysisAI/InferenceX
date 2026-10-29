@@ -141,6 +141,7 @@ jobs:
                           'ref': mergeSha,
                           'changelog-base-ref': pull.base.sha,
                           'changelog-head-ref': pull.head.sha,
+                          'source-pr-number': String(pull.number),
                           'trim-conc': 'false',
                           'all-evals': String(labels.includes('all-evals')),
                           'evals-only': String(labels.includes('evals-only')),

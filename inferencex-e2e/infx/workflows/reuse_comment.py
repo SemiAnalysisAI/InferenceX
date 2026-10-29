@@ -21,7 +21,12 @@ BOT_STATUS = ("+1", "-1")
 
 
 def warn_outside_pr(
-    repo: str, pr_number: int, comment: dict[str, Any], run: dict[str, Any], token: str
+    repo: str,
+    pr_number: int,
+    comment: dict[str, Any],
+    run: dict[str, Any],
+    head_sha: str,
+    token: str,
 ) -> None:
     """Post a warning comment once for a reuse source outside the PR."""
     marker = f"<!-- reuse-outside-pr request={comment['id']} run={run['id']} -->"
@@ -31,7 +36,6 @@ def warn_outside_pr(
         for c in comments
     ):
         return
-    head_sha = str(run.get("head_sha") or "")
     source_pr = reuse.run_pr_number(repo, run, token)
     origin_en = f"from PR #{source_pr}, " if source_pr else ""
     origin_zh = f"来自 PR #{source_pr}，" if source_pr else ""
@@ -88,7 +92,7 @@ def acknowledge(repo: str, event: dict[str, Any], token: str) -> int:
         if pr.get("state") != "open":
             raise RuntimeError(f"PR #{pr_number} is not open.")
         run = reuse.resolve_reusable_run(repo, "run-sweep.yml", pr_number, pr, token, pinned_run_id)
-        head_sha = str(run.get("head_sha") or "")
+        head_sha = reuse.source_head_sha(repo, run, token)
         outside_pr = head_sha not in reuse.pr_commit_shas(repo, pr_number, token)
 
         latest = github.api(repo, comment_path, token)
@@ -109,7 +113,7 @@ def acknowledge(repo: str, event: dict[str, Any], token: str) -> int:
         message = f"Reuse accepted / 复用请求已接受: PR #{pr_number}, run {run['id']} ({run['conclusion']})."
         if outside_pr:
             try:
-                warn_outside_pr(repo, pr_number, comment, run, token)
+                warn_outside_pr(repo, pr_number, comment, run, head_sha, token)
             except Exception as exc:  # noqa: BLE001
                 print(f"::warning::Could not post outside-PR warning comment: {exc}")
             print(
