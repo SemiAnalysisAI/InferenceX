@@ -128,6 +128,36 @@ elif mode == "agentic":
     for conc in os.environ["CONC_LIST"].split():
         (workspace / f"{result}_conc{conc}.json").write_text(json.dumps({"conc": int(conc)}))
         (logs / "agentic" / f"conc_{conc}").mkdir(parents=True)
+elif mode == "video":
+    # The H3 service and client leave the server record, one run per concurrency and
+    # each cell's measured window; the native power package is what srt-slurm retained.
+    # The client runs the plan the launcher declared before startup (video-identity.json).
+    workspace = pathlib.Path(os.environ["INFMAX_WORKSPACE"])
+    declared = json.loads((workspace / "video-identity.json").read_text())
+    (logs / "power").mkdir()
+    (logs / "power/samples.csv").write_text("retained native samples\n")
+    (logs / "h3/server").mkdir(parents=True)
+    (logs / "h3/server/spec.json").write_text(json.dumps({"gpu_uuids": ["GPU-a", "GPU-b"], "plan": declared["workload_plan"],
+        "baseline": {"name": declared["engine"]["name"], "revision": declared["engine"]["revision"]}}))
+    for conc in os.environ["CONC_LIST"].split():
+        cell = logs / "h3/gpu" / f"c{conc}"
+        (cell / "baseline").mkdir(parents=True)
+        summary = {"scheduled": 4, "completed": 4, "valid": 4, "failed": 0, "not_started": 0,
+                   "latency_median_seconds": 119.0, "valid_clips_per_second": 0.05}
+        (cell / "baseline/run.json").write_text(json.dumps({
+            "status": "complete", "plan_id": declared["workload_plan"]["plan_id"], "plan_sha256": declared["plan_sha256"],
+            "records": [], "plan": declared["workload_plan"],
+            "configuration": {"runtime": declared["engine"]["name"], "runtime_revision": declared["engine"]["revision"]},
+            "measurement": {"concurrency": int(conc), "start_monotonic_seconds": 1.0,
+                            "end_monotonic_seconds": 61.0, "wall_seconds": 60.0},
+            "serving": {"mode": "closed_loop", "concurrency": int(conc),
+                        "client_ready_latency_seconds": {"p50": 118.0}},
+            "summary": summary, "started_at": "2026-10-17T00:00:00Z", "finished_at": "2026-10-17T00:01:00Z",
+        }))
+        (cell / f"benchmark_concurrency_{conc}.json").write_text(json.dumps({
+            "max_concurrency": int(conc), "benchmark_start_time_unix": 1000.0,
+            "benchmark_end_time_unix": 1060.0, "duration": 60.0, "completed": 4, "scheduled": 4,
+            "valid": 4, "failed": 0, "energy_normalization": "clips"}))
 if os.environ.get("RUN_EVAL") == "true" or os.environ.get("EVAL_ONLY") == "true":
     (logs / "eval_results").mkdir()
     (logs / "eval_results" / "results_gsm8k.json").write_text("{}")

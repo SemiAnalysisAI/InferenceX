@@ -10,6 +10,7 @@ import zipfile
 from typing import Any
 
 from infx import github
+from infx.results.video_artifacts import VIDEO_ARTIFACT
 
 # trusted-external-sweep.yml dispatches e2e-tests.yml on main with this title.
 TRUSTED_EXTERNAL_PATH = ".github/workflows/e2e-tests.yml"
@@ -139,8 +140,13 @@ def run_pr_number(repo: str, run: dict[str, Any], token: str) -> int | None:
 
 def has_reusable_result_artifacts(names: set[str]) -> bool:
     """Return whether a run produced ingest-relevant result artifacts."""
-    return bool(names & REUSABLE_AGGREGATE_ARTIFACTS) or any(
-        name.startswith("bmk_agentic_") for name in names
+    return (
+        bool(names & REUSABLE_AGGREGATE_ARTIFACTS)
+        or any(name.startswith("bmk_agentic_") for name in names)
+        or (
+            "video-sweep-manifest" in names
+            and any(VIDEO_ARTIFACT.fullmatch(name) for name in names)
+        )
     )
 
 

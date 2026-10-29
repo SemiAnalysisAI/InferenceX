@@ -41,7 +41,9 @@ from infx.launch.request import (
     MultiNodeRequest,
     RequestError,
     SingleNodeRequest,
+    VideoRequest,
 )
+from infx.srt_slurm.video import PACKAGE_MOUNT, video_package
 from infx.srt_slurm.workload import BOUND_RECIPE
 
 if TYPE_CHECKING:
@@ -117,6 +119,76 @@ def run_single_node(launch: Launch) -> int:
             (logs / "power").mkdir(parents=True, exist_ok=True)
             (logs / "power/native-job-status.txt").write_text(f"{job.id}|{status.raw}\n")
         rc = collect.finalize_single_node_results(run, logs, checkout.commit)
+    return rc or int(not status.succeeded)
+
+
+def run_video(launch: Launch) -> int:
+    """One native video-generation job: bind the services-only recipe, submit, follow, verify.
+
+    The H3 server is a recipe service on the job's GPUs and the H3 client its custom
+    benchmark; the harness is mounted beside the workspace and the model is served from
+    the mounted HF hub cache. Power is always collected natively.
+    """
+    event = launch.life.event
+    with event.stage("prepare"):
+        request = VideoRequest.from_env(launch.request.env)
+        run = SrtRun.create(launch, request)
+        package = video_package(run.workspace)
+        if not package.is_dir():
+            raise LaunchError(f"video-generation harness not found at {package}")
+        hf_cache = models.single_node_hf_cache(run.cluster, request)
+        time_limit = str(request.salloc_time_limit)
+        root = Path(tempfile.mkdtemp(prefix="srt-video.", dir=run.workspace))
+        checkout = prepare_checkout(run, root / "checkout", power=True)
+        install_srtctl(run, checkout)
+        step_mib = job_mib = config.gpu_share_mib(run.cluster, request.gpu_count)
+        if run.srt.single_node_exclusive and job_mib is not None:
+            step_mib, job_mib = None, 0
+        if (options := config.srun_options(run.backend.settings, step_mib)) is not None:
+            run.env["SRT_SRUN_OPTIONS"] = options
+        if rc := submit.bind_video(run, checkout, root / "arguments"):
+            return rc
+        selected, bound, runtime_args = submit.bound_arguments(root / "arguments")
+        event.set(recipe=selected.removeprefix(f"{run.workspace}/"))
+        collect.stage_video_identity(run, Path(bound))
+        fetched = root / "fetched-outputs"
+        submitted = submit.Submitted(manifest=run.workspace / submit.VIDEO_SUBMISSION)
+        run.life.callback(collect.finish_video, run, submitted, fetched)
+        image, reference = config.stage_gpu_exporter(run, single_node=True)
+        job_config = config.SrtJob(
+            srtctl_root=checkout.root,
+            workspace=run.workspace,
+            time_limit=time_limit,
+            image=request.image,
+            container=run.backend.stage_image(request.image, single_node=True).reference,
+            containers={image: reference},
+            model_paths={f"hf:{request.model}": f"hf:{request.model}"},
+            mounts=[(str(hf_cache), request.hf_hub_cache), (str(package), PACKAGE_MOUNT)],
+            single_node=True,
+            account=run.account,
+            mem_mib=job_mib,
+        )
+        config.create_volume_mounts(run)
+        config.write(checkout.root / "srtslurm.yaml", config.render(run.cluster, job_config))
+        if rc := run_setup(run, checkout):
+            return rc
+
+    arguments = ["--json", "--yes", "--output", str(root / "outputs"), *runtime_args]
+    applied = submit.apply(run, checkout, bound, arguments, stdout=submitted.manifest)
+    if applied.returncode:
+        sys.stderr.write(applied.stdout)
+        return applied.returncode
+    job = submitted.read_manifest(run.backend)
+    try:
+        run.backend.stream_logs(job)
+    except BackendError:
+        return 1
+    status = run.backend.state(job)
+    with event.stage("collect"):
+        logs = run.backend.fetch_outputs(job, fetched) / "logs"
+        (logs / "power").mkdir(parents=True, exist_ok=True)
+        (logs / "power/native-job-status.txt").write_text(f"{job.id}|{status.raw}\n")
+        rc = collect.finalize_video_results(run, logs, checkout.commit)
     return rc or int(not status.succeeded)
 
 
