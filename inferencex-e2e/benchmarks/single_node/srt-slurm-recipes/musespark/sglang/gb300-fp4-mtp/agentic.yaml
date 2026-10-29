@@ -43,6 +43,7 @@ base:
         tool-call-parser: muse
         watchdog-timeout: 3600
         enable-metrics: true
+        stream-interval: 20
       env:
         PYTHONNOUSERSITE: '1'
         PYTHONUNBUFFERED: '1'
@@ -50,6 +51,7 @@ base:
         # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
         HF_HUB_OFFLINE: '1'
+        SGLANG_FLASHINFER_NVFP4_PER_TOKEN_ACTIVATION: '0'
   # Cold 533 GB weight loads from shared storage plus graph capture outlast the default.
   health_check:
     max_attempts: 1440
@@ -103,8 +105,8 @@ override_tp4_c10:
   roles:
     agg:
       args:
-        max-running-requests: 10
-        cuda-graph-max-bs-decode: 10
+        max-running-requests: 3
+        cuda-graph-max-bs-decode: 3
         mem-fraction-static: 0.88
         prefill-decode-interval: 64
         speculative-draft-attention-backend: fa4
@@ -129,39 +131,28 @@ override_tp4_c15:
     env:
       CONC: '15'
 
-override_tp4_c16:
-  roles:
-    agg:
-      args:
-        max-running-requests: 12
-        cuda-graph-max-bs-decode: 12
-        mem-fraction-static: 0.95
-        schedule-policy: shortest-prefill-first
-        prefill-decode-interval: 48
-        enable-hierarchical-cache: true
-        hicache-size: 120
-        hicache-write-policy: write_through
-  benchmark:
-    env:
-      CONC: '16'
-
-override_tp4_c20:
-  roles:
-    agg:
-      args:
-        max-running-requests: 10
-        cuda-graph-max-bs-decode: 10
-        mem-fraction-static: 0.95
-        schedule-policy: shortest-prefill-first
-        prefill-decode-interval: 48
-        enable-hierarchical-cache: true
-        hicache-size: 120
-        hicache-write-policy: write_through
-  benchmark:
-    env:
-      CONC: '20'
-
 override_tp4_c24:
+  roles:
+    agg:
+      args:
+        max-running-requests: 48
+        cuda-graph-max-bs-decode: 48
+        mem-fraction-static: 0.95
+        swa-full-tokens-ratio: 0.1
+        cuda-graph-backend-prefill: breakable
+        max-prefill-tokens: 8192
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 96
+        enable-hierarchical-cache: true
+        hicache-size: 120
+        hicache-write-policy: write_through
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '2048'
+  benchmark:
+    env:
+      CONC: '24'
+
+override_tp4_c28:
   roles:
     agg:
       args:
@@ -174,13 +165,34 @@ override_tp4_c24:
         schedule-policy: shortest-prefill-first
         prefill-decode-interval: 32
         enable-hierarchical-cache: true
-        hicache-size: 120
-        hicache-write-policy: write_through
+        hicache-size: 160
+        hicache-write-policy: write_back
       env:
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '2048'
   benchmark:
     env:
-      CONC: '24'
+      CONC: '28'
+
+override_tp4_c30:
+  roles:
+    agg:
+      args:
+        max-running-requests: 48
+        cuda-graph-max-bs-decode: 48
+        mem-fraction-static: 0.95
+        swa-full-tokens-ratio: 0.1
+        cuda-graph-backend-prefill: breakable
+        max-prefill-tokens: 8192
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 64
+        enable-hierarchical-cache: true
+        hicache-size: 160
+        hicache-write-policy: write_back
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '2048'
+  benchmark:
+    env:
+      CONC: '30'
 
 override_tp4_c34:
   roles:
@@ -196,8 +208,8 @@ override_tp4_c34:
         schedule-policy: shortest-prefill-first
         prefill-decode-interval: 48
         enable-hierarchical-cache: true
-        hicache-size: 150
-        hicache-write-policy: write_through
+        hicache-size: 160
+        hicache-write-policy: write_back
       env:
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '4096'
         SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '4'
@@ -205,7 +217,7 @@ override_tp4_c34:
     env:
       CONC: '34'
 
-override_tp4_c40:
+override_tp4_c44:
   roles:
     agg:
       args:
@@ -218,11 +230,33 @@ override_tp4_c40:
         speculative-draft-kv-cache-dtype: fp8_e4m3
         enable-hierarchical-cache: true
         hicache-size: 149
-        hicache-write-policy: write_through
+        hicache-write-policy: write_back
         tokenizer-worker-num: 4
         incremental-streaming-output: true
       env:
         SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '4'
   benchmark:
     env:
-      CONC: '40'
+      CONC: '44'
+
+override_tp4_c48:
+  roles:
+    agg:
+      args:
+        max-running-requests: 24
+        cuda-graph-max-bs-decode: 24
+        mem-fraction-static: 0.9
+        swa-full-tokens-ratio: 0.1
+        chunked-prefill-size: null
+        speculative-draft-attention-backend: trtllm_mha
+        speculative-draft-kv-cache-dtype: fp8_e4m3
+        enable-hierarchical-cache: true
+        hicache-size: 149
+        hicache-write-policy: write_back
+        tokenizer-worker-num: 4
+        incremental-streaming-output: true
+      env:
+        SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '4'
+  benchmark:
+    env:
+      CONC: '48'

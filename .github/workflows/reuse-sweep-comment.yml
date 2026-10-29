@@ -31,7 +31,7 @@ jobs:
       - name: Checkout trusted workflow code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.sha }} # issue_comment uses the default-branch commit
+          ref: ${{ github.sha }}
           persist-credentials: false
 
       - name: Validate request and update reaction
