@@ -247,9 +247,27 @@ Three things differ from the other families:
   the aggregate result (`infx/serving/specdec.py`). A point without speculative decoding has no such block.
 - The runner needs `GREENLAB_HF_TOKEN` in `actions-runner/.env`: the release is not public.
 
-A base arm and a speculative arm are two serving YAMLs that differ in the `--speculative-config` line. The
-`summary` job of `gn-benchmark.yml` prints one table of all points of a run on the run page, with the
-speedup of each speculative point over the base point of the same scenario and concurrency.
+A base arm and a speculative arm are the `arms:` of one serving YAML (below). The `summary` job of
+`gn-benchmark.yml` prints one table of all points of a run on the run page, with the speedup of each
+speculative point over the base point of the same scenario and concurrency.
+
+### Arms
+
+`arms:` runs engine variants of one serving YAML in one run: `serve:` and `env:` are shared, an arm adds
+flags with `append` and overlays `env`. Each arm is its own job on its own engine (the name of the point
+is `<name>-<arm>_c<conc>`), so arms multiply with `conc` and with a workload grid.
+
+```yaml
+serve: vllm serve <model> --tensor-parallel-size 1 ...
+arms:
+  base: {}
+  mtp6:
+    append: |
+      --speculative-config '{"method": "mtp", "model": "<draft>", "num_speculative_tokens": 6}'
+```
+
+Two arms that end up with the same command and env are rejected, and `arms:` does not combine with
+`endpoint:`. The `spec-decoding` field of each point follows its own command (`mtp`, `draft_model` or `none`).
 
 The synthetic family takes `workload:` instead:
 

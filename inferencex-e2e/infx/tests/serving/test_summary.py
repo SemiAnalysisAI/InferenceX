@@ -17,11 +17,11 @@ def test_speculative_row_gets_acceptance_and_speedup_over_the_base(tmp_path):
     (tmp_path / "bmk_a").mkdir()
     (tmp_path / "bmk_a/base.json").write_text(json.dumps(_result("none", 100.0)))
     (tmp_path / "bmk_a/mtp.json").write_text(json.dumps(
-        _result("mtp", 180.0, spec_decode={"acceptance_length": 3.25, "acceptance_rate": 0.375})))
+        _result("mtp", 180.0, spec_decode={"acceptance_length": 3.25, "acceptance_rate": 0.375, "draft_depth": 6})))
     (tmp_path / "bmk_a/other.json").write_text(json.dumps({"hello": 1}))  # not an aggregate
     lines = table(load(tmp_path)).splitlines()
     assert len(lines) == 4  # header, rule, two points
-    assert "| greenspec-diverse | mtp | 16 | 99/100 | 180.0 | 200 / 1,500 | 20.0 | 3.25 | 37.5% | 1.80x |" in lines
+    assert "| greenspec-diverse | mtpx6 | 16 | 99/100 | 180.0 | 200 / 1,500 | 20.0 | 3.25 | 37.5% | 1.80x |" in lines
     assert "| greenspec-diverse | none | 16 | 99/100 | 100.0 | 200 / 1,500 | 20.0 | - | - | - |" in lines
 
 

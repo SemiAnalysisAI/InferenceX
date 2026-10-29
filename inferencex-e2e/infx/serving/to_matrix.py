@@ -16,7 +16,7 @@ from pathlib import Path
 
 from infx.serving.render import CLIENT_IMAGE, _flag_value, render, render_remote, split_serve
 from infx.serving.scenarios import Rendered
-from infx.serving.schema import ServingError, ServingSpec, load_serving, variants
+from infx.serving.schema import ServingError, ServingSpec, arm_specs, load_serving, variants
 
 
 def spec_decoding(serve_cmd: str) -> str:
@@ -81,20 +81,25 @@ def _secret(spec: ServingSpec) -> str:
 
 def build(text: str, inventory=None) -> dict:
     spec = load_serving(text, inventory)
-    rendered = render_remote() if spec.endpoint else render(spec)
     chosen = variants(spec)
+    arms = arm_specs(spec)
     multi = len(chosen) > 1
     points = []
-    for variant in chosen:
-        for conc in spec.conc:
-            if multi:
-                exp_name = f"{spec.name}-{variant.label}"
-            else:
-                exp_name = f"{spec.name}_search" if variant.search else f"{spec.name}_c{conc}"
-            row = _row(spec, rendered["framework"], conc, int(variant.duration), exp_name, rendered["serve-cmd"])
-            points.append({"config": row, "serving": _serving(spec, rendered, variant, text),
-                           "api_key_secret": _secret(spec)})
+    for arm, engine in arms:
+        rendered = render_remote() if spec.endpoint else render(engine)
+        stem = f"{spec.name}-{arm}" if arm else spec.name
+        for variant in chosen:
+            for conc in spec.conc:
+                if multi:
+                    exp_name = f"{stem}-{variant.label}"
+                else:
+                    exp_name = f"{stem}_search" if variant.search else f"{stem}_c{conc}"
+                row = _row(spec, rendered["framework"], conc, int(variant.duration), exp_name, rendered["serve-cmd"])
+                points.append({"config": row, "serving": _serving(engine, rendered, variant, text),
+                               "api_key_secret": _secret(spec)})
     what = f"{len(chosen)} points" if multi else chosen[0].label
+    if spec.arms:
+        what += f" x {len(arms)} arms ({','.join(spec.arms)})"
     durations = {int(variant.duration) for variant in chosen}
     seconds = "mixed" if len(durations) > 1 else f"{durations.pop()}s" if durations != {0} else "whole selection"  # greenspec has no duration
     concs = ",".join(str(conc) for conc in spec.conc)

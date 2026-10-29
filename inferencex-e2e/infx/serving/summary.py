@@ -68,7 +68,7 @@ def row(result: dict[str, Any], speedup: float | None) -> list[str]:
     ok, total = result.get("num_requests_successful"), result.get("num_requests_total")
     return [
         str(result["scenario"]),
-        str(result.get("spec_decoding", "none")),
+        str(result.get("spec_decoding", "none")) + (f"x{spec['draft_depth']}" if spec.get("draft_depth") else ""),
         str(result.get("conc", DASH)),
         f"{ok}/{total}" if ok is not None and total is not None else DASH,
         number(dig(result, *OUTPUT_TPS)),

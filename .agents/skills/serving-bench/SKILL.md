@@ -30,6 +30,9 @@ router:                             # optional: any router in front of the engin
 storage:                            # optional: a non-GPU sidecar started first (e.g. Mooncake master)
   image: <image>
   serve: mooncake_master --port={{storage_master_port}} --http_metadata_server_port={{storage_meta_port}}
+arms:                               # optional: engine variants in one run, e.g. base vs speculative (see ARCHITECTURE.md, Arms)
+  base: {}
+  mtp6: {append: "--speculative-config '...'"}
 scenario: agentx                    # agentx | tau2 | livekit | shared-prefix-e2 | hidden-prefix-e3 | synthetic | greenspec
 overrides: {duration: 180}          # optional variant, see the table below
 conc: [4, 8]                        # one benchmark job per value

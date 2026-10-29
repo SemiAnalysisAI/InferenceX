@@ -99,3 +99,15 @@ def test_engine_point_carries_no_remote_fields():
 ])
 def test_spec_decoding_follows_the_serve_command(serve, expected):
     assert spec_decoding(serve) == expected
+
+
+def test_arms_are_one_job_each_with_their_own_engine_in_one_run():
+    text = (ENGINE + "arms:\n  base: {}\n  mtp:\n    append: |\n      --speculative-config '{\"method\": \"mtp\", \"num_speculative_tokens\": 4}'\n"
+            "scenario: agentx\nconc: [8]\n")
+    result = build(text)
+    names = [p["config"]["exp-name"] for p in result["points"]]
+    assert names == ["qwen-tp1-base_c8", "qwen-tp1-mtp_c8"]
+    assert [p["config"]["spec-decoding"] for p in result["points"]] == ["none", "mtp"]
+    commands = [json.loads(p["serving"])["serve_cmd"] for p in result["points"]]
+    assert "--speculative-config" not in commands[0] and "--speculative-config" in commands[1]
+    assert "2 arms (base,mtp)" in result["title"]

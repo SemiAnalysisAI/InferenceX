@@ -1,0 +1,40 @@
+# Pattern: speculative decoding against its base, in one run (arms:). GreenSpec, whole diverse subset,
+# Gemma-4-31B FP8-block, vLLM, 1 GPU, CCU 16, MTP draft depth 6. serve: is shared by every arm; an arm adds
+# flags (append) and env. Each arm is its own job and its own engine; the run's summary table lines them up
+# and gives the speedup of each speculative arm over the arm without one.
+# Same engine flags as the earlier SPEED-Bench cells (prefix caching off, 256k context). The run is one
+# request per row of the selection (no duration): the results carry spec_decode.acceptance_length.
+name: gemma4-greenspec-diverse
+runner: cluster:hcm-hgx02
+image: vllm/vllm-openai:v0.30.0
+model: RedHatAI/gemma-4-31B-it-FP8-block
+gpus: 1
+precision: fp8block
+env:
+  NCCL_P2P_LEVEL: NVL
+  VLLM_DISABLE_COMPILE_CACHE: "1"
+  VLLM_ATTENTION_BACKEND: FLASHINFER
+serve: |
+  vllm serve RedHatAI/gemma-4-31B-it-FP8-block
+  --served-model-name RedHatAI/gemma-4-31B-it-FP8-block
+  --trust-remote-code
+  --tensor-parallel-size 1
+  --gpu-memory-utilization 0.92
+  --max-model-len 262144
+  --max-num-seqs 64
+  --max-num-batched-tokens 16384
+  --enable-chunked-prefill
+  --long-prefill-token-threshold 8192
+  --no-enable-prefix-caching
+  --enable-auto-tool-choice
+  --tool-call-parser gemma4
+  --reasoning-parser gemma4
+arms:
+  base: {}
+  mtp6:
+    append: |
+      --speculative-config '{"method": "mtp", "model": "google/gemma-4-31B-it-assistant", "num_speculative_tokens": 6}'
+scenario: greenspec
+overrides:
+  subset: diverse
+conc: [16]

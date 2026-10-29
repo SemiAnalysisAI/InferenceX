@@ -30,7 +30,7 @@ def test_acceptance_is_one_plus_accepted_per_draft_event():
     result = specdec.acceptance(before, after)
     assert result["acceptance_length"] == pytest.approx(3.0)
     assert result["acceptance_rate"] == pytest.approx(1000 / 3000)
-    assert result["spec_draft_events"] == 500
+    assert result["spec_draft_events"] == 500 and result["draft_depth"] == 6
 
 
 def test_no_series_means_no_speculative_decoding():
