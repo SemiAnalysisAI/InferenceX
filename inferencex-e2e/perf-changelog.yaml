@@ -11579,6 +11579,7 @@
     - glm5.2-fp4-b200-dynamo-sglang-agentic-disagg
   description:
     - "Collect GPU-board power for the six aggregated and two disaggregated GLM-5.2 B200 Dynamo-SGLang AgentX points, which currently publish no power."
-    - "Serving settings, concurrency points and evaluation coverage are unchanged."
+    - "Move the disaggregated key from the pruned lmsysorg/sglang:nightly-dev-20260910-00840301 tag (Docker Hub 404) to the digest-pinned v0.5.22-cu130 image the aggregated key already serves."
+    - "Concurrency points and evaluation coverage are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4656
   scenario-type: [agentic-coding]
