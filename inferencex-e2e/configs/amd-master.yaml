@@ -1495,9 +1495,10 @@ glm5.2-fp8-mi355x-sglang-agentic-mtp:
 # C1/C2 run the GLM-5.2 mono decode at K3. Large concurrency (C16-C48) adds DCP4
 # to shard the decode KV and the LMCache DRAM tier. The recipe sets the draft
 # depth per point (K3 for C1/C2 and C48, K5 for C4/C8, K4 for C10-C40). The TP8
-# arm stays GPU-resident with no KV offload.
+# arm stays GPU-resident with no KV offload; TP8 C1/C2 also run mono decode at
+# K3 (ROCm/ATOM PR 2736) and C4 stays at K5.
 glm5.2-fp4-mi355x-atom-agentic-mtp:
-  image: rocm/atom-dev:nightly_202610181506
+  image: rocm/atom-dev:nightly_202610271459
   model: amd/GLM-5.2-MXFP4
   model-prefix: glm5.2
   runner: cluster:mi355x-amds
