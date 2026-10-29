@@ -39,6 +39,7 @@ base:
         data-parallel-size: 1
         gpu-memory-utilization: 0.86
         moe-backend: aiter
+        monokernel: true
         compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE"}'
         # Six-token DSpark with probabilistic drafting. Throughput runs replace
         # verification with the golden acceptance length.
@@ -167,6 +168,8 @@ override_dep8_c64:
       args:
         tensor-parallel-size: 1
         data-parallel-size: 8
+        # Pro's monokernel requires TP8 without data parallelism.
+        monokernel: false
         prefill-schedule-interval: 8
         long-prefill-token-threshold: 16384
         max-num-seqs: 64
@@ -189,6 +192,7 @@ override_dep8_c128:
       args:
         tensor-parallel-size: 1
         data-parallel-size: 8
+        monokernel: false
         prefill-schedule-interval: 8
         long-prefill-token-threshold: 16384
         max-num-seqs: 128
@@ -211,6 +215,7 @@ override_dep8_c192:
       args:
         tensor-parallel-size: 1
         data-parallel-size: 8
+        monokernel: false
         prefill-schedule-interval: 8
         long-prefill-token-threshold: 16384
         max-num-seqs: 192
