@@ -11556,3 +11556,11 @@
     - "Disagg: 6 DEP2 prefill workers with a DEP8 decode at conc 280-360 or a DEP16 decode at conc 300; DeepGEMM MegaMoE, NIXL transfer plus a shared MooncakeStore DRAM pool (160 GB per rank), Dynamo KV router."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4468
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - qwen3.5-fp8-h100-sglang-agentic
+    - qwen3.5-fp8-h100-sglang-agentic-mtp
+  description:
+    - "Update the Qwen3.5 FP8 H100 SGLang AgentX image to lmsysorg/sglang:v0.5.22-cu130 (digest-pinned)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4634
+  scenario-type: [agentic-coding]
