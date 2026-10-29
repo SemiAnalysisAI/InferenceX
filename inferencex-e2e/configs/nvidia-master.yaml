@@ -9045,8 +9045,16 @@ minimaxm31flash-fp4-gb300-vllm-agentic-dspark:
   scenarios:
     agentic-coding:
     - search-space:
-      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 16, 32], srt-recipe: agentic.yaml }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 32], srt-recipe: agentic.yaml }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [8], srt-recipe: agentic.yaml:override_tp4_c8_cudagraph }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [16], srt-recipe: agentic.yaml:override_tp4_c16_cudagraph }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [24], srt-recipe: agentic.yaml:override_tp4_c24_batched32k }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [40], srt-recipe: agentic.yaml:override_tp4_c40_batched8k }
       - { tp: 4, ep: 4, dp-attn: true, spec-decoding: mtp, kv-offloading: none, conc-list: [64, 96, 128], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
+    - dram-utilization: 1.0
+      search-space:
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [28], srt-recipe: agentic.yaml:override_tp2_c28_cpu_offload }
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [44], srt-recipe: agentic.yaml:override_tp2_c44_cpu_offload }
 
 # MiniMax-M3.1-Flash AgentX on GB300 with SGLang: day-zero image from the SGLang
 # cookbook (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1),

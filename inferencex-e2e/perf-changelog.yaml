@@ -11582,3 +11582,11 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4647
   scenario-type: [agentic-coding]
   append-only: true
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-vllm-agentic-dspark
+  description:
+    - "Retune TP4 c8 and c16 with CUDA graph capture sizes, add TP4 c24 and c40 points, and add TP2 c28 and c44 points with CPU KV offload."
+    - "Image and speculative config are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4662
+  scenario-type: [agentic-coding]
