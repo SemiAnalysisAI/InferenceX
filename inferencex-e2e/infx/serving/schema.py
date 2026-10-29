@@ -229,6 +229,7 @@ class ServingSpec(BaseModel):
         "hidden-prefix-e3",
         "synthetic",
         "greenspec",
+        "speedbench",
     ]
     overrides: dict[str, Any] = Field(default_factory=dict)
     workload: Workload | None = None

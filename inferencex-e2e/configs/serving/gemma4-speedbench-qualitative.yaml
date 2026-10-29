@@ -1,0 +1,40 @@
+# Pattern: SPEED-Bench acceptance length, thinking off, one category per job (speedbench scenario).
+# Gemma-4-31B FP8-block, vLLM, 1 GPU, one request in flight (the SPEED-Bench collectors' CONCURRENCY=1), MTP draft
+# depth 6 against the base engine in one run (arms:). Sampling is the golden AL matrices' (temperature 1.0,
+# top_p 0.95, 4096 output tokens); the thinking switch is chat_template_kwargs. Without `category:` the run
+# is all 880 prompts of the qualitative config (11 categories x 80); `config: throughput_8k` selects the
+# entropy tiers at 8k input. The run is one request per row of the selection (no duration): the results carry
+# spec_decode.acceptance_length. The prompts are public; the resolved copy is read with GREENLAB_HF_TOKEN.
+name: gemma4-speedbench-qualitative
+runner: cluster:hcm-hgx02
+image: vllm/vllm-openai:v0.30.0
+model: RedHatAI/gemma-4-31B-it-FP8-block
+gpus: 1
+precision: fp8block
+env:
+  NCCL_P2P_LEVEL: NVL
+  VLLM_DISABLE_COMPILE_CACHE: "1"
+  VLLM_ATTENTION_BACKEND: FLASHINFER
+serve: |
+  vllm serve RedHatAI/gemma-4-31B-it-FP8-block
+  --served-model-name RedHatAI/gemma-4-31B-it-FP8-block
+  --trust-remote-code
+  --tensor-parallel-size 1
+  --gpu-memory-utilization 0.92
+  --max-model-len 16384
+  --max-num-seqs 64
+  --no-enable-prefix-caching
+  --enable-auto-tool-choice
+  --tool-call-parser gemma4
+  --reasoning-parser gemma4
+arms:
+  base: {}
+  mtp6:
+    append: |
+      --speculative-config '{"method": "mtp", "model": "google/gemma-4-31B-it-assistant", "num_speculative_tokens": 6}'
+scenario: speedbench
+overrides:
+  category: coding
+  chat_template_kwargs:
+    enable_thinking: false
+conc: [1]

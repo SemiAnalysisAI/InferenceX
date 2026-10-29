@@ -212,7 +212,7 @@ that several nodes need belong in a registry, where every node caches its own sq
 
 ## 6. Scenarios
 
-Seven base files in `benchmarks/single_node/serving/scenarios/`:
+Eight base files in `benchmarks/single_node/serving/scenarios/`:
 
 | Family | Workload | Dataset |
 |---|---|---|
@@ -223,6 +223,7 @@ Seven base files in `benchmarks/single_node/serving/scenarios/`:
 | `hidden-prefix-e3` | prefixes reused without being visible to the router | pinned file, Mooncake trace format |
 | `synthetic` | generated ISL/OSL with a shared-prefix share | synthetic |
 | `greenspec` | speculative-decoding bench cut from production chat traffic, one request per row | pinned private file (`Green-Lab/GreenSpec`), `raw_payload` format |
+| `speedbench` | SPEED-Bench acceptance-length prompts, one request per row | pinned files (`Green-Lab/speed-bench-prepared`, a private copy of public data), `raw_payload` format |
 
 Pinned files are listed in `benchmarks/single_node/serving/datasets/lock.yaml` with their URL and
 sha256; the client downloads and checks them before the run.
@@ -246,6 +247,16 @@ Three things differ from the other families:
   before and after the replay and files `spec_decode` (`acceptance_length`, `acceptance_rate`, counts) in
   the aggregate result (`infx/serving/specdec.py`). A point without speculative decoding has no such block.
 - The runner needs `GREENLAB_HF_TOKEN` in `actions-runner/.env`: the release is not public.
+
+`speedbench` follows the same pattern (no duration, the `spec_decode` block, `GREENLAB_HF_TOKEN`) with its own
+keys: `config` (`qualitative`, default, or `throughput_1k` ... `throughput_32k`), `category` (one of
+that config's categories; default all), `max_tokens` (default 4096), `temperature` (1.0), `top_p` (0.95),
+`chat_template_kwargs` (the thinking switch, e.g. `enable_thinking: false`) and `requests`. The defaults are the
+golden AL matrices'. A request is the first turn of a row alone, as the aiperf and vLLM SPEED-Bench loaders send
+it. The result label carries every non-default key (`speedbench-qualitative-coding-ctk-enable_thinking-false`),
+so runs that differ in thinking mode never share a summary row. The files are the fully resolved copy of
+`nvidia/SPEED-Bench`: the public release masks about 60% of the qualitative rows. The prompts are public, so
+none of GreenSpec's guard applies: console, server log and results upload as for any other family.
 
 A base arm and a speculative arm are the `arms:` of one serving YAML (below). The `summary` job of
 `gn-benchmark.yml` prints one table of all points of a run on the run page, with the speedup of each

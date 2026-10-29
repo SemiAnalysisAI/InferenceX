@@ -20,10 +20,11 @@ import urllib.error
 import urllib.request
 from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 from infx.bench import proc
 from infx.bench.agentic.venv import Runtime, bootstrap
-from infx.serving import greenspec, specdec
+from infx.serving import greenspec, specdec, speedbench
 
 OFFLINE = ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE", "HF_DATASETS_OFFLINE")
 DATASET_PATH = ".dataset_path"
@@ -186,6 +187,18 @@ def with_token_source(scenario_yaml: str, source: str) -> str:
     return yaml.safe_dump(doc, sort_keys=False)
 
 
+def selection_family(env: Mapping[str, str]) -> tuple[Any, Any] | None:
+    """The (module, Settings) of the selection family the job's serving YAML runs, else None.
+
+    greenspec and speedbench replay a selection of a pinned file, one request per row, and report
+    acceptance length. Only greenspec's file is internal: it alone goes through ``guard``.
+    """
+    for module in (greenspec, speedbench):
+        if (chosen := module.settings(env)) is not None:
+            return module, chosen
+    return None
+
+
 def with_requests(scenario_yaml: str, requests: int) -> str:
     """The scenario with its profiling phase set to ``requests`` requests (the size of the selection)."""
     import yaml  # in the AgentX venv
@@ -215,13 +228,14 @@ def prepare(env: Mapping[str, str], runtime: Runtime) -> int:
 
         try:
             path = fetch(env["SERVING_DATASET"])
-            if chosen := greenspec.settings(env):
+            if found := selection_family(env):
+                module, chosen = found
                 selection = Path(SELECTION_DIR) / "selection.jsonl"
-                count = greenspec.write_selection(path, chosen, served_model(env), selection)
-                print(f"GreenSpec selection {greenspec.label(chosen)}: {count} requests", flush=True)
+                count = module.write_selection(path, chosen, served_model(env), selection)
+                print(f"{module.TAG} selection {module.label(chosen)}: {count} requests", flush=True)
                 path = selection
             (result_dir / DATASET_PATH).write_text(str(path))
-        except (DatasetError, greenspec.GreenSpecError) as error:
+        except (DatasetError, greenspec.GreenSpecError, speedbench.SpeedBenchError) as error:
             print(f"ERROR {error}", file=sys.stderr)
             return 1
     if url := env.get("SERVING_REMOTE_URL"):
@@ -256,7 +270,9 @@ def run(env: Mapping[str, str], runtime: Runtime) -> int:
     scenario = result_dir / "scenario.yaml"
     token_marker = result_dir / COUNT_SOURCE_MARKER
     source = token_marker.read_text().strip() if token_marker.exists() else None
-    chosen = greenspec.settings(env)
+    found = selection_family(env)
+    chosen = found[1] if found else None
+    internal = found is not None and found[0] is greenspec
     scenario_yaml = with_token_source(env["SERVING_SCENARIO_YAML"], source or "server")
     child = online(env) | {
         "AIPERF_DATASET_CONFIGURATION_TIMEOUT": "1800",
@@ -280,7 +296,7 @@ def run(env: Mapping[str, str], runtime: Runtime) -> int:
     metrics_urls = [url for url in env.get("AIPERF_SERVER_METRICS_URLS", "").split(",") if url]
     if chosen:
         specdec.save(result_dir / "spec_metrics_before.json", specdec.snapshot(metrics_urls))
-    replay = greenspec.tee_filtered if chosen else proc.tee
+    replay = greenspec.tee_filtered if internal else proc.tee
     replay_rc = replay(argv, result_dir / "benchmark.log", child)
     if chosen:
         specdec.save(result_dir / "spec_metrics_after.json", specdec.snapshot(metrics_urls))
@@ -302,7 +318,8 @@ def run(env: Mapping[str, str], runtime: Runtime) -> int:
                   file=sys.stderr)
         else:
             specdec.merge(aggregate, spec)
-        guard_rc = guard(env, result_dir, aggregate, output_dir)
+        if internal:
+            guard_rc = guard(env, result_dir, aggregate, output_dir)
     return replay_rc or aggregate_rc or validate_rc or guard_rc
 
 
