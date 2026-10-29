@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import io
 import json
+import os
 import re
+import stat
 import subprocess
 import time
 import zipfile
@@ -154,35 +157,69 @@ def file_at(repository: str, head: str, path: str) -> bytes:
     return base64.b64decode(result["content"])
 
 
-def download_json(repository: str, artifact: dict, destination: Path) -> None:
-    """Write the JSON members of ``artifact`` under ``destination``, raising VerificationError.
-
-    Archives over 256 MiB, unsafe paths and duplicates are rejected. Artifact code never runs.
-    """
+def download_files(
+    repository: str,
+    artifact: dict,
+    destination: Path,
+    *,
+    token: str | None = None,
+    json_only: bool = False,
+) -> None:
+    """Read bounded artifact files without trusting ZIP paths or executing content."""
     limit = 256 * 1024 * 1024
     if artifact["expired"] or not 0 < artifact["size_in_bytes"] <= limit:
         raise VerificationError("Artifact unavailable or too large")
     archive = subprocess.check_output(
-        [
-            "gh",
-            "api",
-            f"repos/{repository}/actions/artifacts/{int(artifact['id'])}/zip",
-        ],
+        ["gh", "api", f"repos/{repository}/actions/artifacts/{int(artifact['id'])}/zip"],
+        env={**os.environ, "GH_TOKEN": token} if token is not None else None,
         timeout=60,
     )
+    if len(archive) > limit:
+        raise VerificationError("Artifact archive too large")
+    if artifact.get("digest") and artifact["digest"] != (
+        "sha256:" + hashlib.sha256(archive).hexdigest()
+    ):
+        raise VerificationError("Artifact digest mismatch")
     try:
         with zipfile.ZipFile(io.BytesIO(archive)) as source:
-            members = [item for item in source.infolist() if item.filename.endswith(".json")]
-            if not members or sum(item.file_size for item in members) > limit:
-                raise VerificationError("Invalid artifact JSON size")
+            members = [
+                item
+                for item in source.infolist()
+                if not item.is_dir() and (not json_only or item.filename.endswith(".json"))
+            ]
+            expanded_limit = limit if json_only else 4 * limit
+            if (
+                not members
+                or len(members) > 4000
+                or sum(item.file_size for item in members) > expanded_limit
+            ):
+                raise VerificationError("Invalid artifact expanded size")
+            paths = set()
             for member in members:
                 path = PurePosixPath(member.filename)
-                if path.is_absolute() or ".." in path.parts or "\\" in member.filename:
-                    raise VerificationError("Invalid artifact path")
-                target = destination.joinpath(*path.parts)
+                mode = stat.S_IFMT(member.external_attr >> 16)
+                if (
+                    path.is_absolute()
+                    or ".." in path.parts
+                    or "\\" in member.filename
+                    or not path.parts
+                    or mode not in {0, stat.S_IFREG}
+                    or path in paths
+                    or any(parent in paths for parent in path.parents)
+                    or any(path in previous.parents for previous in paths)
+                ):
+                    raise VerificationError("Invalid or duplicate artifact path")
+                paths.add(path)
+            for member in members:
+                target = destination.joinpath(*PurePosixPath(member.filename).parts)
                 if target.exists():
                     raise VerificationError("Duplicate artifact path")
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(source.read(member))
     except zipfile.BadZipFile as error:
         raise VerificationError("Invalid artifact archive") from error
+
+
+def download_json(repository: str, artifact: dict, destination: Path) -> None:
+    """Read bounded JSON only; never execute artifact code."""
+    download_files(repository, artifact, destination, json_only=True)
