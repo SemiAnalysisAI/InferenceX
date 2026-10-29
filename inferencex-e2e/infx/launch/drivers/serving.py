@@ -25,8 +25,15 @@ from infx.serving.schema import is_local_squash
 
 JOB_SCRIPT = Path("benchmarks/single_node/serving/job.sh")
 REMOTE_JOB_SCRIPT = Path("benchmarks/single_node/serving/remote.sh")
-REMOTE_RESOURCES = ("--ntasks=1", "--cpus-per-task=16", "--mem=64G")  # dataset build: 1 GPU job's CPU share
-GPU_SHARE_FLAGS = ("--cpus-per-gpu", "--mem-per-gpu")  # a GPU-less job cannot ask for a per-GPU share
+REMOTE_RESOURCES = (
+    "--ntasks=1",
+    "--cpus-per-task=16",
+    "--mem=64G",
+)  # dataset build: 1 GPU job's CPU share
+GPU_SHARE_FLAGS = (
+    "--cpus-per-gpu",
+    "--mem-per-gpu",
+)  # a GPU-less job cannot ask for a per-GPU share
 DCGM_IMAGE = "nvcr.io/nvidia/k8s/dcgm-exporter:4.2.3-4.1.3-ubuntu22.04"
 HF_VOLUME = "hf-hub-cache"
 PENDING_NOTE_S = 60.0
@@ -36,14 +43,20 @@ def check_local_squash(role: str, image: str) -> None:
     """Fail before sbatch when a node-local squash is missing, unreadable or not a squashfs."""
     path = Path(image)
     if not path.is_file():
-        raise LaunchError(f"{role} image {image} is not a file on this node; pin runner: cluster:<id> to the node that holds it")
+        raise LaunchError(
+            f"{role} image {image} is not a file on this node; pin runner: cluster:<id> to the node that holds it"
+        )
     if not os.access(path, os.R_OK):
-        raise LaunchError(f"{role} image {image} is not readable by {getpass.getuser()}; chmod o+r it and its directories")
+        raise LaunchError(
+            f"{role} image {image} is not readable by {getpass.getuser()}; chmod o+r it and its directories"
+        )
     if subprocess.run(["unsquashfs", "-l", image], capture_output=True, check=False).returncode:
         raise LaunchError(f"{role} image {image} is not a valid squashfs (unsquashfs -l failed)")
 
 
-def wait_started(job_id: str, log: Path, *, poll_s: float = 10.0, note_s: float = PENDING_NOTE_S) -> None:
+def wait_started(
+    job_id: str, log: Path, *, poll_s: float = 10.0, note_s: float = PENDING_NOTE_S
+) -> None:
     """Say why Slurm holds the job until it writes its log; stream_logs is silent meanwhile.
 
     Returns once the log exists or squeue drops the job (stream_logs then reports how it ended).
@@ -51,8 +64,12 @@ def wait_started(job_id: str, log: Path, *, poll_s: float = 10.0, note_s: float 
     start = time.monotonic()
     noted = -note_s
     while not log.exists():
-        held = subprocess.run(["squeue", "-h", "-j", job_id, "-o", "%T %r %N"],
-                              capture_output=True, text=True, check=False).stdout.strip()
+        held = subprocess.run(
+            ["squeue", "-h", "-j", job_id, "-o", "%T %r %N"],
+            capture_output=True,
+            text=True,
+            check=False,
+        ).stdout.strip()
         if not held:
             return
         waited = time.monotonic() - start
@@ -98,6 +115,7 @@ class Serving(BaseModel):
     yaml: str
     remote_url: str = ""
     tokenizer: str = ""
+    tls_verify: bool = True
     api_key_secret: str = ""
 
 
@@ -127,6 +145,7 @@ def job_env(serving: Serving, images: dict[str, str], hf_cache: Path) -> dict[st
         "SERVING_YAML": serving.yaml,
         "SERVING_REMOTE_URL": serving.remote_url,
         "SERVING_TOKENIZER": serving.tokenizer,
+        "SERVING_TLS_VERIFY": "1" if serving.tls_verify else "0",
         "SERVING_API_KEY_SECRET": serving.api_key_secret,
     }
 
@@ -136,17 +155,29 @@ def remote_sbatch_args(salloc_args: Sequence[str]) -> list[str]:
     return [*REMOTE_RESOURCES, *(arg for arg in salloc_args if not arg.startswith(GPU_SHARE_FLAGS))]
 
 
-def submit_remote(backend: SlurmBackend, request: ServingRequest, minutes: int, log: Path) -> SlurmJob:
+def submit_remote(
+    backend: SlurmBackend, request: ServingRequest, minutes: int, log: Path
+) -> SlurmJob:
     """sbatch remote.sh without gres; cancelled with the launch like submit_batch's jobs.
 
     submit_batch cannot take this job: the cluster records' salloc-args carry --cpus-per-gpu and
     --mem-per-gpu, which Slurm rejects for a job that asks for no GPU.
     """
     settings = backend.settings
-    resources = cli.Resources(partition=settings.partition, account=settings.account, time_min=minutes,
-                              job_name=request.runner_name, exclude=settings.exclude)
-    job = cli.sbatch(request.workspace / REMOTE_JOB_SCRIPT, resources, output=log,
-                     chdir=request.workspace, extra=remote_sbatch_args(settings.salloc_args))
+    resources = cli.Resources(
+        partition=settings.partition,
+        account=settings.account,
+        time_min=minutes,
+        job_name=request.runner_name,
+        exclude=settings.exclude,
+    )
+    job = cli.sbatch(
+        request.workspace / REMOTE_JOB_SCRIPT,
+        resources,
+        output=log,
+        chdir=request.workspace,
+        extra=remote_sbatch_args(settings.salloc_args),
+    )
     backend.life.callback(cli.cancel, job)
     backend.life.event.set(slurm_job_id=job.id)
     backend.life.event.evidence(log)
@@ -161,15 +192,23 @@ def run(launch: Launch) -> int:
         serving = Serving.model_validate_json(request.serving_json)
     except ValidationError as error:
         fields = ", ".join(".".join(map(str, item["loc"])) or "serving" for item in error.errors())
-        raise RequestError(f"SERVING_JSON is not a serving point (bad or missing: {fields})") from None
+        raise RequestError(
+            f"SERVING_JSON is not a serving point (bad or missing: {fields})"
+        ) from None
     backend = launch.backend
     if not isinstance(backend, SlurmBackend):
-        raise LaunchError(f"the serving path needs a slurm cluster, not {launch.cluster.scheduler!r}")
+        raise LaunchError(
+            f"the serving path needs a slurm cluster, not {launch.cluster.scheduler!r}"
+        )
     volume = backend.settings.volumes.get(HF_VOLUME)
     if volume is None:
         raise LaunchError(f"cluster {launch.cluster.id!r} has no {HF_VOLUME!r} volume")
     minutes = policy.salloc_time_limit(launch.cluster.id, request)
-    wanted = {"engine": request.image} if serving.remote_url else {"engine": request.image, "dcgm": DCGM_IMAGE}
+    wanted = (
+        {"engine": request.image}
+        if serving.remote_url
+        else {"engine": request.image, "dcgm": DCGM_IMAGE}
+    )
     if serving.router_image:
         wanted["router"] = serving.router_image
     if serving.storage_image:
@@ -178,19 +217,33 @@ def run(launch: Launch) -> int:
         for role, image in wanted.items():
             if is_local_squash(image):
                 check_local_squash(role, image)
-        images = {role: image if is_local_squash(image) else backend.stage_image(image, single_node=True).reference
-                  for role, image in wanted.items()}
-    os.environ.update(job_env(serving, images, volume.path))  # sbatch --export=ALL hands them to job.sh
+        images = {
+            role: image
+            if is_local_squash(image)
+            else backend.stage_image(image, single_node=True).reference
+            for role, image in wanted.items()
+        }
+    os.environ.update(
+        job_env(serving, images, volume.path)
+    )  # sbatch --export=ALL hands them to job.sh
     log = Path(request.env.get("RUNNER_TEMP") or request.workspace) / f"serving-{os.getpid()}.log"
     with event.stage("submit"):
         try:
             if serving.remote_url:
                 job = submit_remote(backend, request, minutes, log)
             else:
-                job = backend.submit_batch(request.workspace / JOB_SCRIPT, gpus=request.gpu_count,
-                                           time_min=minutes, log=log)
+                job = backend.submit_batch(
+                    request.workspace / JOB_SCRIPT,
+                    gpus=request.gpu_count,
+                    time_min=minutes,
+                    log=log,
+                )
         except BackendError as error:
-            event.fail(type(error).__name__, f"batch allocation unavailable: {error}", retriable=error.retriable)
+            event.fail(
+                type(error).__name__,
+                f"batch allocation unavailable: {error}",
+                retriable=error.retriable,
+            )
             return 1
     print(f"Serving job {job.id}; log: {log}", flush=True)
     wait_started(job.id, log)

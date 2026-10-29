@@ -1,4 +1,5 @@
 import json
+import ssl
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -118,6 +119,41 @@ def test_probe_sends_a_basic_key_as_the_raw_authorization():
     finally:
         server.shutdown()
     assert seen[0][1]["Authorization"] == "Basic dXNlcjpwYXNz"
+
+
+def _serve_tls(status: int, body: bytes):
+    """A one-route stub endpoint behind a self-signed certificate, like a -k-only gateway."""
+    seen = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            length = int(self.headers["Content-Length"])
+            seen.append(dict(self.headers))
+            self.send_response(status)
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    fixtures = Path(__file__).parent / "fixtures"
+    context.load_cert_chain(fixtures / "self-signed.pem", fixtures / "self-signed.key")
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server.socket = context.wrap_socket(server.socket, server_side=True)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return f"https://127.0.0.1:{server.server_port}", seen, server
+
+
+def test_probe_skips_tls_verification_when_the_endpoint_asks_for_it():
+    url, seen, server = _serve_tls(200, WITH_USAGE)
+    try:
+        assert probe(url, "m", "", verify=False) == "server"
+        assert seen, "the unverified probe reached the self-signed endpoint"
+    finally:
+        server.shutdown()
+    with pytest.raises(ProbeError, match="unreachable"):
+        probe(url, "m", "", verify=True)
 
 
 def test_client_token_source_turns_server_counting_off():

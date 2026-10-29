@@ -34,30 +34,33 @@ def _row(spec: ServingSpec, framework: str, conc: int, duration: int, exp_name: 
 
 
 def _serving(spec: ServingSpec, rendered: dict[str, str], variant: Rendered, text: str) -> str:
-    return json.dumps({
-        "framework": rendered["framework"],
-        "serve_cmd": rendered["serve-cmd"],
-        "serve_env": rendered["serve-env"],
-        "served_model_name": rendered["served-model-name"],
-        "router_image": rendered["router-image"],
-        "router_cmd": rendered["router-cmd"],
-        "router_env": rendered["router-env"],
-        "router_profile": rendered["router-profile"],
-        "router_metrics_port": rendered["router-metrics-port"],
-        "replicas": spec.replicas,
-        "storage_image": rendered["storage-image"],
-        "storage_cmd": rendered["storage-cmd"],
-        "storage_env": rendered["storage-env"],
-        "scenario_yaml": variant.yaml(),
-        "scenario_label": variant.label,
-        "dataset_kind": variant.kind,
-        "dataset": variant.dataset,
-        "search": variant.search,
-        "yaml": text,
-        "remote_url": spec.endpoint.url if spec.endpoint else "",
-        "tokenizer": spec.endpoint.tokenizer if spec.endpoint else "",
-        "api_key_secret": _secret(spec),
-    })
+    return json.dumps(
+        {
+            "framework": rendered["framework"],
+            "serve_cmd": rendered["serve-cmd"],
+            "serve_env": rendered["serve-env"],
+            "served_model_name": rendered["served-model-name"],
+            "router_image": rendered["router-image"],
+            "router_cmd": rendered["router-cmd"],
+            "router_env": rendered["router-env"],
+            "router_profile": rendered["router-profile"],
+            "router_metrics_port": rendered["router-metrics-port"],
+            "replicas": spec.replicas,
+            "storage_image": rendered["storage-image"],
+            "storage_cmd": rendered["storage-cmd"],
+            "storage_env": rendered["storage-env"],
+            "scenario_yaml": variant.yaml(),
+            "scenario_label": variant.label,
+            "dataset_kind": variant.kind,
+            "dataset": variant.dataset,
+            "search": variant.search,
+            "yaml": text,
+            "remote_url": spec.endpoint.url if spec.endpoint else "",
+            "tokenizer": spec.endpoint.tokenizer if spec.endpoint else "",
+            "tls_verify": spec.endpoint.tls_verify if spec.endpoint else True,
+            "api_key_secret": _secret(spec),
+        }
+    )
 
 
 def _secret(spec: ServingSpec) -> str:
@@ -78,19 +81,31 @@ def build(text: str, inventory=None) -> dict:
             else:
                 exp_name = f"{spec.name}_search" if variant.search else f"{spec.name}_c{conc}"
             row = _row(spec, rendered["framework"], conc, int(variant.duration), exp_name)
-            points.append({"config": row, "serving": _serving(spec, rendered, variant, text),
-                           "api_key_secret": _secret(spec)})
+            points.append(
+                {
+                    "config": row,
+                    "serving": _serving(spec, rendered, variant, text),
+                    "api_key_secret": _secret(spec),
+                }
+            )
     what = f"{len(chosen)} points" if multi else chosen[0].label
     durations = {int(variant.duration) for variant in chosen}
     seconds = f"{durations.pop()}s" if len(durations) == 1 else "mixed"
     concs = ",".join(str(conc) for conc in spec.conc)
-    return {"points": points, "title": f"gn-benchmark {spec.name} {what} ({seconds}) c{concs} {spec.runner}"}
+    return {
+        "points": points,
+        "title": f"gn-benchmark {spec.name} {what} ({seconds}) c{concs} {spec.runner}",
+    }
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("path", type=Path)
-    parser.add_argument("--check", action="store_true", help="validate and print the run title only")
+    parser.add_argument(
+        "--check", action="store_true", help="validate and print the run title only"
+    )
     args = parser.parse_args(argv)
     try:
         try:

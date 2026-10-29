@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import shlex
+import ssl
 import sys
 import urllib.error
 import urllib.request
@@ -123,7 +124,20 @@ def _error_detail(error: urllib.error.HTTPError) -> str:
     return parsed.get("message", str(parsed)) if isinstance(parsed, dict) else str(parsed)
 
 
-def probe(url: str, model: str, api_key: str, secret: str = "", timeout: float = 60.0) -> str:
+def _tls_context(verify: bool) -> ssl.SSLContext | None:
+    """None verifies as usual; an unverified context serves endpoint.tls-verify: false
+    (self-signed gateway certificates)."""
+    if verify:
+        return None
+    context = ssl.create_default_context()
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    return context
+
+
+def probe(
+    url: str, model: str, api_key: str, secret: str = "", timeout: float = 60.0, verify: bool = True
+) -> str:
     """One streaming request shaped like agentx's: "server" if a chunk carries usage, else "client"."""
     headers = {"Content-Type": "application/json", "Accept": "text/event-stream"}
     if api_key:
@@ -131,7 +145,9 @@ def probe(url: str, model: str, api_key: str, secret: str = "", timeout: float =
     body = json.dumps({"model": model, **PROBE_BODY}).encode()
     request = urllib.request.Request(f"{url}/v1/chat/completions", data=body, headers=headers)  # noqa: S310 -- http(s) only, checked by the schema
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+        with urllib.request.urlopen(  # noqa: S310 -- http(s) only, checked by the schema
+            request, timeout=timeout, context=_tls_context(verify)
+        ) as response:
             for raw in response:
                 line = raw.decode(errors="replace").strip()
                 if not line.startswith("data:") or line == "data: [DONE]":
@@ -191,6 +207,7 @@ def prepare(env: Mapping[str, str], runtime: Runtime) -> int:
                 env["MODEL"],
                 env.get("SERVING_API_KEY", ""),
                 env.get("SERVING_API_KEY_SECRET", ""),
+                verify=env.get("SERVING_TLS_VERIFY", "1") != "0",
             )
         except ProbeError as error:
             print(f"ERROR remote endpoint: {error}", file=sys.stderr)
@@ -224,6 +241,8 @@ def run(env: Mapping[str, str], runtime: Runtime) -> int:
         "PYTHONPATH": proc.pythonpath(env),
         **datasets_cache(env),
     }
+    if env.get("SERVING_TLS_VERIFY", "1") == "0":
+        child["AIPERF_HTTP_SSL_VERIFY"] = "false"  # aiperf's own switch for self-signed gateways
     if (marker := result_dir / DATASET_PATH).exists():
         child["IX_CUSTOM_DATASET_FILE"] = marker.read_text().strip()
     argv = agentx_argv(str(runtime.agentx), scenario, env)
