@@ -21,6 +21,9 @@ adjustments:
     mtp: 0.1
     draft_model: 0.1
   framework-prefix:
+    # Greenfield benchmarks run ahead of every engine benchmark.
+    collectivex: 100.0
+    operatorx: 100.0
     sglang: 1.5
     vllm: 1.5
     dynamo-sglang: 1.5
