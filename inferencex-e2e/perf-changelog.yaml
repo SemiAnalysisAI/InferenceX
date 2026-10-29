@@ -11573,3 +11573,12 @@
     - "Rerun the whole curve so every point uses the FP8 draft KV cache."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4599
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-disagg
+  description:
+    - "Collect GPU-board power for the six aggregated and two disaggregated GLM-5.2 B200 Dynamo-SGLang AgentX points, which currently publish no power."
+    - "Serving settings, concurrency points and evaluation coverage are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  scenario-type: [agentic-coding]
