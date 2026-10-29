@@ -301,10 +301,10 @@ pushes a synchronization commit, waits for checks, then merges.
 
 At merge, `merge-ingest.yml` ("Merge Ingest") publishes the reused sweep. It
 runs on pushes to `main` that change `inferencex-e2e/perf-changelog.yaml`. Its
-single `ingest` job resolves the merge commit's PR, reuse command, and source
-run with `infx.workflows.reuse`, computes the changelog delta with
-`infx.matrix.plan` before reuse lookup, and fails before uploading or dispatching anything unless
-reuse is validly authorized. It then uploads merge-time `changelog-metadata`
+single `ingest` job first computes the changelog delta with `infx.matrix.plan`.
+For entries with results, it resolves the merge commit's PR, reuse command, and
+source run with `infx.workflows.reuse`, and fails before uploading or dispatching
+anything unless reuse is validly authorized. It then uploads merge-time `changelog-metadata`
 and sends one `repository_dispatch` to InferenceX-app: `ingest-agentic-results`
 (with `database-target: production`) when the delta has agentic entries,
 otherwise `ingest-results`. The payload's `source-run-id` is the reused PR
