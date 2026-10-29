@@ -477,7 +477,7 @@ jobs:
                     --criteria-json "$PRIORITY_CRITERIA" --input "$RUNNER_TEMP/plan.json" > "$RUNNER_TEMP/al-gate-plan.json"
                   uv run --no-project --exclude-newer PT12H --python 3.12 \
                     python -m infx.workflows.al_gate_reuse "$RUNNER_TEMP/al-gate-plan.json" \
-                    --workspace "$PWD" --srt-slurm-commit "$(git rev-parse HEAD:./utils/srt-slurm)" \
+                    --code-version "$(git rev-parse HEAD:./infx HEAD:./benchmarks/srt_al_gate.sh HEAD:./utils/srt-slurm | tr '\n' ' ')" \
                     --repo "$GITHUB_REPOSITORY" --branch "$GITHUB_HEAD_REF" \
                     --output "$RUNNER_TEMP/al-gate-gates.json" --results "$RUNNER_TEMP/al_gate_reused"
                   jq -r '"gates=\(.single_node + .multi_node | length > 0)", "single-node-config=\(.single_node | tojson)", "multi-node-config=\(.multi_node | tojson)"' "$RUNNER_TEMP/al-gate-gates.json" >> "$GITHUB_OUTPUT"

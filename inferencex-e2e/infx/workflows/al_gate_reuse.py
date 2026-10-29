@@ -18,26 +18,12 @@ from infx.workflows import sweep_runs
 
 KINDS = ("single_node", "multi_node")
 LOOKBACK_RUNS = 30
-GATE_INPUTS = (
-    "benchmarks/srt_al_gate.sh",
-    "infx/bench/al_gate.py",
-    "infx/bench/speedbench.py",
-    "infx/bench/agentic/requirements.txt",
-    "infx/bench_serving/encoding_dsv4.py",
-    "infx/results/agentic/spec_decode.py",
-    "infx/srt_slurm/synthetic_acceptance.py",
-    "infx/launch/drivers/srt/submit.py",
-)
 
 
-def gate_key(gate: dict[str, Any], workspace: Path, srt_slurm_commit: str) -> str:
-    """Hash the gate's deployment, recipe, golden curve, srt-slurm commit and gate code."""
-    identity = [gate["al-gate"]["id"], gate["recipe-fingerprint"], srt_slurm_commit]
-    digest = hashlib.sha256(json.dumps(identity).encode())
-    curve = Path("infx/golden_al_distribution") / f"{gate['al-gate']['curve']}.yaml"
-    for name in (curve, *GATE_INPUTS):
-        digest.update((workspace / name).read_bytes())
-    return digest.hexdigest()[:16]
+def gate_key(gate: dict[str, Any], code_version: str) -> str:
+    """Hash the gate's deployment id, recipe fingerprint and the version of all code it runs."""
+    identity = [gate["al-gate"]["id"], gate["recipe-fingerprint"], code_version]
+    return hashlib.sha256(json.dumps(identity).encode()).hexdigest()[:16]
 
 
 def measured(repo: str, branch: str, keys: set[str], token: str) -> dict[str, dict[str, Any]]:
@@ -66,8 +52,7 @@ def measured(repo: str, branch: str, keys: set[str], token: str) -> dict[str, di
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("plan", type=Path)
-    parser.add_argument("--workspace", type=Path, required=True)
-    parser.add_argument("--srt-slurm-commit", required=True)
+    parser.add_argument("--code-version", required=True)
     parser.add_argument("--repo", required=True)
     parser.add_argument("--branch", required=True)
     parser.add_argument("--output", type=Path, required=True)
@@ -76,7 +61,7 @@ def main(argv: list[str] | None = None) -> int:
     plan = json.loads(args.plan.read_text())
     gates = [gate for kind in KINDS for gate in plan[kind]]
     for gate in gates:
-        gate["al-gate"]["key"] = gate_key(gate, args.workspace, args.srt_slurm_commit)
+        gate["al-gate"]["key"] = gate_key(gate, args.code_version)
     keys = {gate["al-gate"]["key"] for gate in gates}
     try:
         found = measured(args.repo, args.branch, keys, os.environ["GH_TOKEN"]) if keys else {}
