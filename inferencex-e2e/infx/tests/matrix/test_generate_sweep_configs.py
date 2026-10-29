@@ -2362,7 +2362,7 @@ class TestCommandLine:
             for row in result
         ] == [('narrow.yaml', [2], True, 2), ('wide.yaml', [2], False, None)]
 
-    def test_trimmed_agentic_eval_without_a_framework_still_claims_its_app_eval(self):
+    def test_trimmed_agentic_eval_without_a_framework_still_claims_its_app_eval(self, tmp_path):
         # dense.yaml's eval moves from conc 64 to its conc-16 row; sparse.yaml evaluates conc 16.
         shape = {
             'scenario-type': 'agentic-coding', 'model': 'm', 'model-prefix': 'm',
@@ -2376,7 +2376,9 @@ class TestCommandLine:
             {**shape, 'srt-recipe': 'sparse.yaml', 'conc': [16]},
         ]
 
-        result = generate_sweep_configs.select_matrix_evals(rows, mode='default', trim=True)
+        result = generate_sweep_configs.select_matrix_evals(
+            rows, mode='default', trim=True, root=tmp_path,
+        )
 
         assert [
             (row['srt-recipe'], row['conc'], row['run-eval'], row.get('eval-framework'))
