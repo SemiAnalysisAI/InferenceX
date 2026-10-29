@@ -1,32 +1,3 @@
-# The identity of every committed golden curve: which runs select it, and how it was collected.
-#
-# Curve files are named <model>__<method>__<draft>__<draft_sample>-<verify>.yaml, built from the
-# curve's model key and its collection below ("default" for a setting the collector did not set). curves.curve_name selects the one curve whose `select` block matches a run:
-#
-#   model_prefixes  InferenceX model prefixes that use the curve
-#   method          mtp (model-native head), eagle3, dspark or dflash; see curves.normalize_method
-#   draft_family    when set, "gqa" or "default" by whether the draft model id contains "gqa"
-#   draft_sample    when set, the run's draft_sample_method must equal it
-#
-# `collection` records how the curve was measured. The audit (infx.srt_slurm.spec_identity)
-# compares it with each run and reports differences; it never changes the selected curve.
-# Each fact is {value, source}:
-#
-#   explicit    set by the collector or recipe
-#   documented  fixed by the connector or engine: a recipe's synthetic sampler becomes block, and
-#               block, relaxed and adaptive verification are opt-in, so unset means standard and
-#               not adaptive
-#   assumed     the connector's own reading, e.g. ATOM DSpark drafts probabilistically
-#   default     unset; whatever the engine's default was (value null)
-#   unknown     not readable (value null)
-#
-# draft_sample: greedy | probabilistic   verify: standard | block | relaxed
-# adaptive: true | false                  topology: chain | tree-topk<N>
-# draft_precision: the draft weights' quantization; default when the draft loads as shipped
-# draft_kv_cache_dtype, kv_cache_dtype: the draft's and the target's KV cache dtype (fp8 is
-#   e4m3); default when unset, which follows the engine default (the draft follows the target)
-# A curve marked provisional was not measured for its model.
-
 deepseek-v4-pro__mtp__native__default-default:
   select: {model_prefixes: [dsv4], method: mtp}
   collection:

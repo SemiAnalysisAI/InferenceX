@@ -100,7 +100,7 @@ def lookup_command(args: argparse.Namespace) -> None:
         print(
             json.dumps(
                 {
-                    "curve": curve_name(args.model, spec),
+                    "curve": curve_name(args.model, spec, args.golden_dir),
                     "thinking": args.thinking,
                     "tokens": args.tokens,
                     "acceptance_length": value,
