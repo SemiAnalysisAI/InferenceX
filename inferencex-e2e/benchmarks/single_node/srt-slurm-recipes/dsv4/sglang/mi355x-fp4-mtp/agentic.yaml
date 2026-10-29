@@ -88,6 +88,7 @@ override_tp8_c1:
         max-running-requests: 2
         cuda-graph-max-bs-decode: 2
         cuda-graph-backend-prefill: breakable
+        enable-amd-monokernel: true
   benchmark:
     env:
       CONC: '1'
