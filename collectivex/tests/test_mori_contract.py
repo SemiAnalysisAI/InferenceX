@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import os
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -308,8 +309,30 @@ class MoriContract(unittest.TestCase):
         used = self.module.metadata
         with mock.patch.object(used, "version", return_value="1.2.3.post1"):
             self.assertEqual(backend.library_version, "1.2.3.post1")
-        with mock.patch.object(used, "version", side_effect=used.PackageNotFoundError):
+        with (
+            mock.patch.object(used, "version", side_effect=used.PackageNotFoundError),
+            mock.patch.object(self.module, "_IMAGE_BUILD_RECORD", "/nonexistent/versions.txt"),
+        ):
             self.assertEqual(backend.library_version, "unknown")
+
+    def test_an_unstamped_build_takes_the_image_build_record_ref(self):
+        backend = self.backend()
+        self.mori.__version__ = "0.0.0"
+        used = self.module.metadata
+        with tempfile.TemporaryDirectory() as tmp:
+            record = os.path.join(tmp, "versions.txt")
+            with open(record, "w", encoding="utf-8") as handle:
+                handle.write("AITER_BRANCH: v0.1.24.post1\nMORI_BRANCH: v1.2.3.post1\n")
+            with (
+                mock.patch.object(used, "version", return_value="0.0.0"),
+                mock.patch.object(self.module, "_IMAGE_BUILD_RECORD", record),
+            ):
+                self.assertEqual(backend.library_version, "v1.2.3.post1")
+            with (
+                mock.patch.object(used, "version", return_value="0.0.0"),
+                mock.patch.object(self.module, "_IMAGE_BUILD_RECORD", os.path.join(tmp, "absent")),
+            ):
+                self.assertEqual(backend.library_version, "0.0.0")
 
 
 @unittest.skipUnless(_torch is not None, "the FP8 codec check requires torch")
