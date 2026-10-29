@@ -11556,3 +11556,15 @@
     - "Disagg: 6 DEP2 prefill workers with a DEP8 decode at conc 280-360 or a DEP16 decode at conc 300; DeepGEMM MegaMoE, NIXL transfer plus a shared MooncakeStore DRAM pool (160 GB per rank), Dynamo KV router."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4468
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dep16-disagg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+  description:
+    - "Update GB300 Kimi-K3 AgentX to image vllm/vllm-openai:nightly-3966924d566340e971a6da313e790d05492aa505 (includes KIMI_K3_KV_BALANCED_MLA, vLLM #63638, and the Mooncake store padding skip, vLLM #63513) and move to the points chosen from the Oct 26 sweep."
+    - "Throughput points run decode attention and the DSpark draft on KIMI_K3_KV_BALANCED_MLA: DCP8 2P4D c112/c128, 2P3D c128/c152, 3P4D c240 and 3P3D c240/c264, and TP8 prefill + DEP16 decode 3P1D c256/c288/c336. Drop 1P2D c48/c64 and 2P3D c240."
+    - "Latency-specialized decode points (DCP8 1P3D c16, 1P2D c24/c32, agg DCP16 c1) keep TOKENSPEED_MLA decode and DSpark draft attention."
+    - "Disable Tachometer on every point, and stop publishing prefill KV events (unused by the least-loaded router) on the disaggregated points."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4638
+  scenario-type: [agentic-coding]

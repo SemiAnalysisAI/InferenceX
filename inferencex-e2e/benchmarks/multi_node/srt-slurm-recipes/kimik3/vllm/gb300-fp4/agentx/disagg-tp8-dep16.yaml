@@ -5,13 +5,18 @@ base:
     model: {}
     container: {}
     frameworks:
-      vllm: "e4a5b5537344b103ed10de7764378ef09604ef3d"
+      vllm: "3966924d566340e971a6da313e790d05492aa505"
       dynamo: "a0de541ea8c861d5ac01d15953ca529bea68637b"
 
   dynamo:
     install: true
     source:
       rev: "a0de541ea8c861d5ac01d15953ca529bea68637b"
+
+  # InferenceX does not read Tachometer's output.
+  observability:
+    tachometer:
+      enabled: false
 
   slurm:
     time_limit: "04:00:00"
@@ -137,7 +142,6 @@ base:
         attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true,"trtllm_ragged_backend":"cute-dsl"}'
         enable-prefix-caching: true
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-      kv_events: true
     decode:
       nodes: 4
       workers: 1
@@ -167,11 +171,11 @@ base:
         max-cudagraph-capture-size: 512
         stream-interval: 10
         language-model-only: true
-        attention-backend: "TOKENSPEED_MLA"
+        attention-backend: "KIMI_K3_KV_BALANCED_MLA"
         attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true,"tokenspeed_mla_min_split_kv":8}'
         no-enable-prefix-caching: true
         use-replayssm: true
-        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"KIMI_K3_KV_BALANCED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   sbatch_directives:
     mem: "0"
     cpus-per-task: "72"
@@ -194,13 +198,13 @@ base:
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
       AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: "14400"
 
-override_3p1d_c336:
+override_3p1d:
   roles:
     prefill:
       nodes: 6
       workers: 3
 
-override_3p1d_c336_eval:
+override_3p1d_eval:
   roles:
     prefill:
       nodes: 6

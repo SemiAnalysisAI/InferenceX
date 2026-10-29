@@ -4,9 +4,13 @@ base:
     model: {}
     container: {}
     frameworks:
-      vllm: e4a5b5537344b103ed10de7764378ef09604ef3d
+      vllm: 3966924d566340e971a6da313e790d05492aa505
   dynamo:
     install: false
+  # InferenceX does not read Tachometer's output.
+  observability:
+    tachometer:
+      enabled: false
   slurm:
     time_limit: 04:00:00
   health_check:
