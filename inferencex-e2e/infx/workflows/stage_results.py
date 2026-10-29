@@ -12,7 +12,7 @@ from typing import Any, NoReturn
 
 from infx import github
 
-from . import sweep_runs
+from . import reuse, sweep_runs
 
 FULL_SWEEP_LABELS = (
     "full-sweep-enabled",
@@ -52,28 +52,69 @@ def full_sweep_at(events: list[dict[str, Any]], created_at: str) -> bool:
     return bool(active)
 
 
+def pinned_reuse_run(repo: str, pr_number: int, pull: dict[str, Any], token: str) -> int | None:
+    """Return the run pinned by the PR's latest authorized reuse request, if it is reusable.
+
+    Raises RuntimeError when the pinned run fails reuse validation.
+    """
+    allowed = set(reuse.DEFAULT_ALLOWED_AUTHOR_ASSOCIATIONS)
+    comment, run_id = reuse.find_reuse_request(repo, pr_number, token, "/reuse-sweep-run", allowed)
+    if comment is None or run_id is None:
+        return None
+    reuse.resolve_reusable_run(repo, "run-sweep.yml", pr_number, pull, token, run_id)
+    return run_id
+
+
 def resolve_run(
-    repo: str, pr_number: int, pull: dict[str, Any], token: str, requested_id: str | None
+    repo: str,
+    pr_number: int,
+    pull: dict[str, Any],
+    token: str,
+    requested_id: str | None,
+    reuse_run_id: int | None = None,
 ) -> dict[str, Any]:
     """Return the requested_id run, or else the first eligible completed sweep run on the PR.
 
+    With ``reuse_run_id``, only that already validated reuse source can be staged.
     Raises RuntimeError naming why no run qualifies.
     """
+    if reuse_run_id is not None and requested_id is None:
+        requested_id = str(reuse_run_id)
     timeline = github.paginate(repo, f"/issues/{pr_number}/timeline", token)
     commits = sweep_runs.pr_commit_shas(repo, pr_number, token)
 
-    def rejection(run: dict[str, Any]) -> str:
-        """Return why run cannot be staged, or an empty string if it can."""
-        if (
+    def origin_rejection(run: dict[str, Any]) -> str:
+        """Return why run's origin rules out staging on this PR, or an empty string."""
+        if reuse_run_id is not None:
+            if run.get("id") != reuse_run_id:
+                return f"it is not run {reuse_run_id} pinned by this PR's reuse request"
+            return ""
+        external_pr = sweep_runs.trusted_external_pr(run)
+        if external_pr is not None and requested_id is not None:
+            if external_pr != pr_number:
+                return f"it tested external PR #{external_pr}, not PR #{pr_number}"
+            identity = sweep_runs.source_identity(repo, run, token)
+            title = sweep_runs.TRUSTED_EXTERNAL_TITLE.fullmatch(run["display_title"])
+            tested = identity["head_sha"] if identity else title[2]
+            if not any(sha.startswith(tested) for sha in commits):
+                return "its tested head commit is not in the PR commit list"
+        elif (
             run.get("path") != ".github/workflows/run-sweep.yml"
             or run.get("event") != "pull_request"
         ):
             return "not a pull-request run of run-sweep.yml"
-        associated = any(pr["number"] == pr_number for pr in run.get("pull_requests") or [])
-        if run.get("head_sha") not in commits and not (requested_id is not None and associated):
-            return "its head commit is not in the PR commit list"
+        else:
+            associated = any(pr["number"] == pr_number for pr in run.get("pull_requests") or [])
+            if run.get("head_sha") not in commits and not (requested_id is not None and associated):
+                return "its head commit is not in the PR commit list"
         if not full_sweep_at(timeline, run.get("created_at", "")):
             return "it was not created while a full-sweep label was applied"
+        return ""
+
+    def rejection(run: dict[str, Any]) -> str:
+        """Return why run cannot be staged, or an empty string if it can."""
+        if reason := origin_rejection(run):
+            return reason
         conclusion = run.get("conclusion")
         if run.get("status") != "completed" or conclusion not in {
             "success",
@@ -156,14 +197,23 @@ def request(repo: str, event: dict[str, Any], token: str) -> dict[str, str] | No
         )
     pull = github.api(repo, f"/pulls/{pr_number}", token)
     labels = {label if isinstance(label, str) else label.get("name") for label in pull["labels"]}
+    reuse_run_id = None
     if not labels.intersection(FULL_SWEEP_LABELS):
-        reject(
-            "PR does not have a full-sweep label",
-            f"@{actor} staging requires a completed run from a PR using one of: "
-            + ", ".join(f"`{label}`" for label in FULL_SWEEP_LABELS)
-            + ".",
-        )
-    run = resolve_run(repo, pr_number, pull, token, command[1])
+        try:
+            reuse_run_id = pinned_reuse_run(repo, pr_number, pull, token)
+        except RuntimeError as exc:
+            reject(
+                f"Pinned reuse source is not reusable: {exc}",
+                f"@{actor} the run pinned by this PR's reuse request cannot be staged: {exc}",
+            )
+        if reuse_run_id is None:
+            reject(
+                "PR does not have a full-sweep label",
+                f"@{actor} staging requires a completed run from a PR using one of: "
+                + ", ".join(f"`{label}`" for label in FULL_SWEEP_LABELS)
+                + ", or an accepted `/use <run-id>` reuse request.",
+            )
+    run = resolve_run(repo, pr_number, pull, token, command[1], reuse_run_id)
     attempt = run.get("run_attempt")
     return {
         "run-id": str(run["id"]),

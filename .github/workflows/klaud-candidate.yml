@@ -37,7 +37,7 @@ jobs:
     permissions:
       contents: read
       actions: read # Read workflow runs and artifacts.
-      pull-requests: read # Read PR metadata.
+      pull-requests: write # Read PR metadata and set display-only Klaud status labels.
       issues: write # Set display-only Klaud status labels on its PR.
     env:
       MAX_REPAIRS: '5'
@@ -141,7 +141,7 @@ jobs:
                 }]}],
                 "PostToolUse": [{"hooks": [{
                   "type": "command",
-                  "command": "cd \"$GITHUB_WORKSPACE\" && uv run --project \"$INFERENCEX_TOOLING_PROJECT\" --locked python -P -m infx.klaud check-deadline"
+                  "command": "s=\"${KLAUD_SESSION_STARTED:-}\"; [ -n \"$s\" ] || exit 0; e=$(($(date +%s) - s)); [ \"$e\" -ge 18000 ] || exit 0; m=$(((19800 - e) / 60)); [ \"$m\" -ge 0 ] || m=0; printf '{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"About %s minutes remain in this session. Publish attempt reports for owned runs now, then run park, or finish if the outcome is terminal, and end with StructuredOutput.\"}}\\n' \"$m\""
                 }]}]
               }
             }
@@ -155,6 +155,23 @@ jobs:
             Read .github/klaud-candidate-prompt.md and follow it for the candidate in
             ${{ runner.temp }}/klaud/candidate.json. MAX_REPAIRS, KLAUD_BRANCH, KLAUD_SESSION,
             KLAUD_TEST_NAME, KLAUD_EVIDENCE and KLAUD_RESUME are provided in your environment.
+      - name: Check whether the agent used a tool
+        id: tools
+        if: always() && steps.claude.outcome == 'failure'
+        continue-on-error: true
+        env:
+          KLAUD_EXECUTION: ${{ steps.claude.outputs.execution_file }}
+        run: |
+          execution="${KLAUD_EXECUTION:-$RUNNER_TEMP/claude-execution-output.json}"
+          used=true
+          if [[ -f "$execution" ]]; then
+            used=$(jq 'any(.[]?; .type == "assistant" and any(.message.content[]?; .type == "tool_use"))' "$execution")
+          fi
+          echo "used=$used" >> "$GITHUB_OUTPUT"
+      # Recovery reads this step's success: the session did no work, so it never counts as expired.
+      - name: Record that the agent never used a tool
+        if: always() && steps.tools.outputs.used == 'false'
+        run: echo "The agent failed before its first tool call."
       - name: Reconcile agent-owned state
         if: always() && steps.claude.outcome != 'skipped'
         env:
