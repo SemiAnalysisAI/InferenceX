@@ -9898,7 +9898,7 @@ dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg:
   srt-recipe-dir: dsv41flash/vllm/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    # Four prefill DP ranks per node each offload up to 70 GiB of KV on an 840 GiB node.
+    # This metadata ratio is not the recipe's per-rank cpu_bytes_to_use limit.
     - dram-utilization: 0.333333
       search-space:
       - spec-decoding: mtp
