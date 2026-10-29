@@ -24,7 +24,9 @@ from urllib.parse import urlencode
 from . import claims, github
 from .github import ListingUnavailable, VerificationError
 from .models import (
+    INFRA_REASONS,
     LEGACY_OUTCOMES,
+    LIMIT_REASONS,
     CandidateOutcome,
     OwnedCandidate,
     Ownership,
@@ -49,6 +51,7 @@ SWEEP_LABELS = {
 }
 RERUN_GRACE_SECONDS = 30 * 60
 RERUN_GIVE_UP_SECONDS = 24 * 60 * 60
+NO_CAPACITY_SECONDS = 48 * 60 * 60
 MAX_RUN_ATTEMPTS = 10
 MAX_SESSIONS = 12
 MAX_EXPIRED_SESSIONS = 4
@@ -160,16 +163,17 @@ class Session:
     def validation(self, run: dict) -> tuple[dict, list[dict], list[dict]]:
         """Return the sweep evidence of final sweep ``run``, cached per run attempt.
 
-        Raises VerificationError if the sweep or its baseline coverage fails verification.
+        Raises VerificationError if the sweep, its baseline coverage or its regression guard
+        fails verification.
         """
         key = (run["id"], run["head_sha"], run["run_attempt"])
         if key not in self.validations:
-            from .reporting import baseline_for, check_baseline_coverage
+            from .reporting import baseline_for, check_baseline_coverage, check_regressions
 
             evidence = verify_sweep(self.repository, run, self.candidate.family)
-            check_baseline_coverage(
-                self.repository, self.candidate, evidence[0], baseline_for(self, self.pulls()[0])
-            )
+            baseline = baseline_for(self, self.pulls()[0])
+            check_baseline_coverage(self.repository, self.candidate, evidence[0], baseline)
+            check_regressions(run, evidence, baseline)
             self.validations[key] = evidence
         return self.validations[key]
 
@@ -468,7 +472,7 @@ class Session:
         else:
             if pull and (
                 pull["state"] != "closed"
-                or (not pull["draft"] and outcome.outcome != "closed-by-maintainer")
+                or (not pull["draft"] and not self.closed_by_maintainer(pull))
                 or any(label["name"] in SWEEP_LABELS for label in pull["labels"])
             ):
                 raise VerificationError("Failure/deferral PR cleanup is incomplete")
@@ -486,8 +490,9 @@ class Session:
     def finish(self, outcome: CandidateOutcome) -> CandidateOutcome:
         """Apply ``outcome`` to this session and return it with the real PR and run IDs.
 
-        Validated PRs are published and marked ready. Others have runs cancelled, the PR closed
-        and the branch deleted. Then the report is posted and the family claim released.
+        Validated PRs are published, marked ready and get one ``/use <final run ID>`` comment.
+        Others have runs cancelled, the PR closed and the branch deleted. Then the report is
+        posted and the family claim released.
         """
         pulls = self.pulls()
         pull = pulls[0] if pulls else None
@@ -599,6 +604,17 @@ class Session:
                     "run-id": final["id"],
                     "run-attempt": final["run_attempt"],
                 }
+                use = f"/use {final['id']}"
+                if not any(
+                    comment["user"]["login"] == BOT and comment["body"].strip() == use
+                    for comment in self.listing(f"issues/{pull['number']}/comments?per_page=100")
+                ):
+                    github.write(
+                        self.repository,
+                        f"issues/{pull['number']}/comments",
+                        "POST",
+                        {"body": use},
+                    )
             record = {
                 "head": pull["head"]["sha"],
                 "outcome": outcome.model_dump(by_alias=True, exclude_unset=True),
@@ -710,11 +726,62 @@ def preempted(repository: str, run: dict) -> bool:
     )
 
 
+def gpu_job(job: dict) -> bool:
+    """Whether ``job`` runs on our own runners: some label is not a GitHub-hosted image."""
+    labels = job.get("labels") or []
+    return any(not re.match(r"(ubuntu|macos|windows)-", label) for label in labels)
+
+
+def runnerless(job: dict) -> bool:
+    """Whether GPU ``job`` waits, or was cancelled waiting, for a runner it never got."""
+    return not job.get("runner_name") and job["conclusion"] in (None, "cancelled")
+
+
+def starved(jobs: list[dict]) -> bool:
+    """Whether no job of an attempt failed and none of its own GPU jobs got a runner.
+
+    Jobs a rerun copied from an earlier attempt keep their original start and are left out.
+    """
+    own = [
+        job
+        for job in jobs
+        if gpu_job(job)
+        and job["conclusion"] != "skipped"
+        and utc(job["started_at"]) >= utc(job["created_at"])
+    ]
+    return (
+        bool(own)
+        and all(runnerless(job) for job in own)
+        and not any(job["conclusion"] in ("failure", "timed_out") for job in jobs)
+    )
+
+
+def no_capacity(session: Session, run: dict, now: datetime) -> bool:
+    """Whether owned ``run`` cannot get runners, so its candidate stops as ``no-capacity``.
+
+    That is once its last two attempts ended ``starved``, or NO_CAPACITY_SECONDS after its
+    current attempt started while that attempt, ended or not, is ``starved``. A rerun keeps the
+    run's creation time, so its age counts from the attempt's start.
+    """
+    if terminal(run) and run["conclusion"] != "cancelled":
+        return False
+    aged = now - utc(run["run_started_at"]) >= timedelta(seconds=NO_CAPACITY_SECONDS)
+    if not aged and (not terminal(run) or run["run_attempt"] < 2):
+        return False
+
+    def jobs(attempt: int) -> list[dict]:
+        path = f"actions/runs/{run['id']}/attempts/{attempt}/jobs?per_page=100"
+        return session.listing(path, "jobs")
+
+    current = jobs(run["run_attempt"])
+    return starved(current) and (aged or starved(jobs(run["run_attempt"] - 1)))
+
+
 def await_rerun(session: Session, pull: dict, run: dict, now: datetime) -> None:
     """Raise AwaitingRerun to keep ``session`` while preempted owned ``run`` can rerun.
 
-    Waits RERUN_GRACE_SECONDS for the scheduler's own rerun, then requests one. Returns if
-    ``run`` was not preempted or is out of attempts.
+    Waits RERUN_GRACE_SECONDS for the scheduler's own rerun, with a wake scheduled for its end,
+    then requests one. Returns if ``run`` was not preempted or is out of attempts.
     """
     try:
         if not preempted(session.repository, run):
@@ -722,10 +789,31 @@ def await_rerun(session: Session, pull: dict, run: dict, now: datetime) -> None:
     except (OSError, subprocess.SubprocessError, VerificationError) as error:
         raise AwaitingRerun("Preemption check unavailable; retrying next pass") from error
     if now - utc(run["updated_at"]) < timedelta(seconds=RERUN_GRACE_SECONDS):
+        wake_at(session, utc(run["updated_at"]) + timedelta(seconds=RERUN_GRACE_SECONDS))
         raise AwaitingRerun("Preempted run is waiting for its rerun")
     if run["run_attempt"] >= MAX_RUN_ATTEMPTS:
         return
     request_rerun(session, pull, run, "Reran preempted run")
+
+
+def wake_at(session: Session, when: datetime) -> None:
+    """Best effort: have klaud-wake.yml start a recovery pass for ``session`` at ``when``.
+
+    Otherwise nothing wakes recovery for a rerun due then until the hourly wake.
+    """
+    due = stamp(utc(when).replace(microsecond=0))
+    try:
+        github.write(
+            session.repository,
+            "actions/workflows/klaud-wake.yml/dispatches",
+            "POST",
+            {"ref": "main", "inputs": {"candidate": session.candidate.id, "not-before": due}},
+        )
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        print(
+            f"::warning::Klaud: wake for candidate {session.candidate.id} at {due} failed "
+            f"({type(error).__name__}); the hourly wake covers it."
+        )
 
 
 def request_rerun(session: Session, pull: dict, run: dict, reason: str) -> NoReturn:
@@ -892,8 +980,9 @@ def park(
 
     Each waited-on run needs a published attempt report so the next session can find it.
     ``rerun`` names a reported, ended owned run with failed or cancelled jobs and the time after
-    which recovery reruns them once, before it starts the next session. Without live runs or a
-    rerun only an ``overdue`` session may park. Raises VerificationError otherwise.
+    which recovery reruns them once, before it starts the next session, and schedules a wake for
+    that time. Without live runs or a rerun only an ``overdue`` session may park. Raises
+    VerificationError otherwise.
     """
     from .reporting import reported_runs
 
@@ -983,6 +1072,8 @@ def park(
         )
     else:
         github.write(repository, f"issues/{pull['number']}/comments", "POST", {"body": body})
+    if request:
+        wake_at(session, rerun[1])
     return waiting
 
 
@@ -1113,6 +1204,60 @@ def grant(session: Session, pull: dict) -> int:
     return number
 
 
+def grant_deferred(
+    repository: str, parent: int, candidate: str, number: int, listed: set[str], now: datetime
+) -> bool:
+    """Grant session ``number`` of ``candidate`` of run ``parent``, which a pass approved but had
+    no slot for, and return True once its resume run is dispatched.
+
+    Rechecks only what may have changed since that pass reconciled it: the candidate still holds
+    its claim for that run, no session of it runs or started since, and it may still resume.
+    Drops the record once it no longer applies; keeps it while state is unreadable, another pass
+    holds the lease or the grant fails.
+    """
+    try:
+        try:
+            owner = claims.candidate_owner(repository, candidate)
+            if not owner or owner.run_id != parent or candidate in listed:
+                raise VerificationError("Deferred resume no longer applies")
+            run = github.read(repository, f"actions/runs/{parent}")
+            if (
+                run["head_branch"] != "main"
+                or run["path"] != ".github/workflows/klaud-plan.yml"
+                or run["event"] not in ("schedule", "workflow_dispatch")
+            ):
+                raise VerificationError("Untrusted ownership parent")
+            session = Session(repository, run, owner.candidates[0], recovering=True)
+            if not session.idle() or not claims.recovery_lease(
+                repository, parent, session.candidate
+            ):
+                return False
+            if sessions_started(session) + 1 != number:
+                raise VerificationError("Deferred resume no longer applies")
+            pulls = session.pulls()
+            resume(session, pulls[0] if pulls else None, now)
+            raise VerificationError("Deferred resume no longer applies")
+        except ResumeSession as approval:
+            grant(session, approval.pull)
+        except (PendingCleanup, ListingUnavailable):
+            return False
+        except VerificationError:
+            claims.clear_deferred(repository, parent, candidate, number)
+            return False
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
+        reason = str(error) if isinstance(error, VerificationError) else type(error).__name__
+        print(
+            f"::warning::Klaud: deferred resume of candidate {candidate} of planner run {parent} "
+            f"not granted: {reason}."
+        )
+        return False
+    summarize(repository, session.candidate, parent, f"resumed / 已恢复 (session {number})")
+    show_status(session)
+    with contextlib.suppress(OSError, subprocess.SubprocessError):
+        claims.clear_deferred(repository, parent, candidate, number)
+    return True
+
+
 def retained(session: Session, now: datetime) -> bool:
     """Whether recovery keeps a session it could not reconcile for a later pass.
 
@@ -1179,6 +1324,8 @@ def status_label(session: Session, pull: dict) -> str | None:
         CandidateOutcome.model_validate(record["outcome"]) if record else session.pending(pull)
     )
     if outcome:
+        if outcome.reason_code in INFRA_REASONS + LIMIT_REASONS:
+            return "klaud-infra"
         return OUTCOME_LABELS.get(outcome.outcome)
     if not unfinished_draft(session, pull):
         return None
@@ -1250,14 +1397,16 @@ def check_waiting(session: Session, now: datetime) -> None:
     """Raise PendingCleanup while ``session`` only waits, so recovery needs no lease this pass.
 
     That is while no outcome or cleanup was recorded on its open or missing PR and an owned run
-    is live or the rerun its latest session requested is not due at ``now``.
+    is live, none of them ``no_capacity``, or the rerun its latest session requested is not due
+    at ``now``.
     """
     pulls = session.pulls()
     pull = pulls[0] if pulls else None
     if pull and (pull["state"] != "open" or session.report(pull) or session.pending(pull)):
         return
     runs = session.runs()
-    if any(not terminal(run) for run in runs):
+    live = [run for run in runs if not terminal(run)]
+    if live and not any(no_capacity(session, run, now) for run in live):
         raise PendingCleanup("Owned work is still running; retained for the next recovery pass")
     if pull:
         due_rerun(session, pull, runs, now)
@@ -1268,28 +1417,33 @@ def reconcile(session: Session, now: datetime) -> bool:
 
     Raises PendingCleanup subclasses while owned work runs, while the latest exact-head final
     sweep or a newer targeted run was preempted and may rerun, while the rerun the latest
-    session requested is due, or when the session may resume. Returns False for a merged PR or
-    no owned work.
+    session requested is due, while final sweep evidence is unreadable, or when the session may
+    resume. Finishes as ``no-capacity`` once an owned run is ``no_capacity``, and a validated PR
+    a maintainer closed as ``closed-by-maintainer``. Returns False for a merged PR or no owned
+    work.
     """
     pulls = session.pulls()
     pull = pulls[0] if pulls else None
     if pull and pull["merged_at"]:
         return False
     record = session.report(pull) if pull else None
+    closed = False
     if record:
         outcome = CandidateOutcome.model_validate(record["outcome"])
-        session.verify(outcome, require_branch_deleted=False)
-        changed = False
-        if outcome.outcome != "validated" and pull and session.branch_exists():
-            session.delete_branch(pull)
-            changed = True
-        session.verify(outcome)
-        return changed
+        closed = outcome.outcome == "validated" and session.closed_by_maintainer(pull)
+        if not closed:
+            session.verify(outcome, require_branch_deleted=False)
+            changed = False
+            if outcome.outcome != "validated" and pull and session.branch_exists():
+                session.delete_branch(pull)
+                changed = True
+            session.verify(outcome)
+            return changed
     runs = session.runs()
     if not pull and not runs:
         return False
     pending = session.pending(pull) if pull else None
-    if pull and not pending and session.closed_by_maintainer(pull):
+    if pull and not pending and (closed or session.closed_by_maintainer(pull)):
         session.finish(
             CandidateOutcome(
                 outcome="closed-by-maintainer",
@@ -1308,6 +1462,32 @@ def reconcile(session: Session, now: datetime) -> bool:
         and run["head_sha"] == pull["head"]["sha"]
         and run["conclusion"] != "skipped"
     ]
+    latest = max(final, key=lambda r: r["created_at"]) if final else None
+    targeted = max(
+        (run for run in runs if run["event"] != "pull_request" and run["conclusion"] != "skipped"),
+        key=lambda r: r["created_at"],
+        default=None,
+    )
+    if targeted and latest and targeted["created_at"] < latest["created_at"]:
+        targeted = None
+    stuck = None
+    if not pending:
+        live = [run for run in runs if not terminal(run)]
+        stuck = next(
+            (run for run in (*live, latest, targeted) if run and no_capacity(session, run, now)),
+            None,
+        )
+    if stuck:
+        session.finish(
+            CandidateOutcome(
+                outcome="no-capacity",
+                phase="final-sweep" if stuck["event"] == "pull_request" else "targeted",
+                pull_request=pull["number"] if pull else None,
+                run_ids=[run["id"] for run in runs],
+                repairs_used=None,
+            )
+        )
+        return True
     if not pending and any(not terminal(run) for run in runs):
         raise PendingCleanup("Owned work is still running; retained for the next recovery pass")
     if (
@@ -1317,14 +1497,6 @@ def reconcile(session: Session, now: datetime) -> bool:
         and (due := due_rerun(session, pull, runs, now))
     ):
         request_rerun(session, pull, due, "Reran failed jobs at the requested time")
-    latest = max(final, key=lambda r: r["created_at"]) if final else None
-    targeted = max(
-        (run for run in runs if run["event"] != "pull_request" and run["conclusion"] != "skipped"),
-        key=lambda r: r["created_at"],
-        default=None,
-    )
-    if targeted and latest and targeted["created_at"] < latest["created_at"]:
-        targeted = None
     for run in (latest, targeted):
         if (
             not pending
@@ -1339,6 +1511,8 @@ def reconcile(session: Session, now: datetime) -> bool:
     if validated and not pending:
         try:
             session.validation(latest)
+        except ListingUnavailable as error:
+            raise PendingCleanup("Final sweep evidence unreadable; retrying next pass") from error
         except VerificationError as error:
             print(
                 f"::warning::Klaud: final sweep of candidate {session.candidate.id} "
@@ -1360,7 +1534,7 @@ def reconcile(session: Session, now: datetime) -> bool:
     return True
 
 
-def recover(max_sessions: int) -> None:
+def recover(max_sessions: int, target: str | None = None) -> None:
     """Reconcile every owned candidate, then resume approved sessions, oldest planners first.
 
     Resumes only while sessions already running plus those resumed here stay below
@@ -1370,7 +1544,15 @@ def recover(max_sessions: int) -> None:
     abandoned-work sweep is skipped. A session that only waits is reported without taking its
     lease. With the API budget below MIN_API_BUDGET, does nothing but write ``deferred=true``
     to ``$GITHUB_OUTPUT``. Sessions ``retirable`` names are dropped with a warning, so their
-    ownership artifact can be deleted.
+    ownership artifact can be deleted. Unreadable ownership artifacts leave only the claimed
+    candidates this pass, and a failed artifact deletion is warned, one already gone ignored.
+    After both outputs are written, with live work known, finished PRs that conflict only on the
+    changelog get main merged in, a few per pass.
+
+    A wake for one ``target`` candidate ID reconciles only it: it skips that unless the candidate
+    holds its family claim, reads only its planner's ownership artifact, reads running sessions
+    only to resume, and skips the abandoned-work sweep and both outputs. While slots remain it
+    also grants the resumes earlier passes approved but deferred for lack of a slot.
     """
     repository = os.environ["GITHUB_REPOSITORY"]
     if github.budget_low():
@@ -1383,14 +1565,39 @@ def recover(max_sessions: int) -> None:
                 output.write("deferred=true\n")
         return
     now = datetime.now(UTC)
-    inventory = github.items(
-        repository, "actions/artifacts?name=klaud-ownership&per_page=100", "artifacts"
-    )
     try:
-        claimed = claims.family_owners(repository)
+        if target:
+            claimed = [owner] if (owner := claims.candidate_owner(repository, target)) else []
+        else:
+            claimed = claims.family_owners(repository)
     except (OSError, subprocess.SubprocessError, ListingUnavailable):
         print("::warning::Klaud: family claims unreadable; every claimed family stays claimed.")
         claimed = None
+    deferred = []
+    if target:
+        try:
+            deferred = [
+                entry for entry in claims.deferred_resumes(repository) if entry[1] != target
+            ]
+        except (OSError, subprocess.SubprocessError, ListingUnavailable):
+            print("::warning::Klaud: deferred resumes unreadable; the next full pass grants them.")
+    if target and claimed == []:
+        print(f"Klaud: candidate {target} holds no family claim; nothing to recover.")
+        if not deferred:
+            return
+    try:
+        inventory = (
+            []
+            if target and claimed == []
+            else github.items(
+                repository, "actions/artifacts?name=klaud-ownership&per_page=100", "artifacts"
+            )
+        )
+    except (OSError, subprocess.SubprocessError, ListingUnavailable):
+        if claimed is None:
+            raise
+        print("::warning::Klaud: ownership artifacts unreadable; reconciling claimed ones only.")
+        inventory = []
     owners = [(owner, None) for owner in claimed or []]
     parents = {}
     for artifact in inventory:
@@ -1398,6 +1605,8 @@ def recover(max_sessions: int) -> None:
             continue
         try:
             run_id = artifact["workflow_run"]["id"]
+            if target and claimed and run_id != claimed[0].run_id:
+                continue
             parent = parents.get(run_id) or github.read(repository, f"actions/runs/{run_id}")
             if (
                 parent["head_branch"] != "main"
@@ -1415,6 +1624,8 @@ def recover(max_sessions: int) -> None:
             raise VerificationError("Ownership parent mismatch")
         parents[parent["id"]] = parent
         owners.append((owner, artifact))
+    if target:
+        owners = [pair for pair in owners if target in (owned.id for owned in pair[0].candidates)]
     results = {}
     blocked = set()
     live = set()
@@ -1425,6 +1636,8 @@ def recover(max_sessions: int) -> None:
             parents[owner.run_id] = github.read(repository, f"actions/runs/{owner.run_id}")
         except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
             for candidate in owner.candidates:
+                if target and candidate.id != target:
+                    continue
                 results[(owner.run_id, candidate.id)] = False
                 blocked.add(candidate.family)
                 live.add(candidate.id)
@@ -1448,7 +1661,7 @@ def recover(max_sessions: int) -> None:
         parent = parents[owner.run_id]
         for candidate in owner.candidates:
             key = (parent["id"], candidate.id)
-            if key in results:
+            if key in results or (target and candidate.id != target):
                 continue
             results[key] = False
             session = Session(
@@ -1510,9 +1723,11 @@ def recover(max_sessions: int) -> None:
             if status:
                 summarize(repository, candidate, parent["id"], status)
             show_status(session)
+    listed, planners, running = None, set(), 0
     try:
-        listed, unfinished, planners = plan_activity(repository)
-        running = len(unfinished)
+        if approved or deferred or not target:
+            listed, unfinished, planners = plan_activity(repository)
+            running = len(unfinished)
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         print("::warning::Klaud: running sessions unavailable; resuming none this pass.")
         listed, planners, running = None, set(), max_sessions
@@ -1522,6 +1737,15 @@ def recover(max_sessions: int) -> None:
         run_id = session.parent["id"]
         if running + resumed >= max_sessions:
             status = "pending / 等待后续收尾 (resume deferred: every session slot is in use)"
+            try:
+                claims.defer_resume(
+                    repository, run_id, session.candidate, sessions_started(session) + 1
+                )
+            except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+                print(
+                    f"::warning::Klaud: deferred resume of candidate {session.candidate.id} not "
+                    "recorded; the next full pass grants it."
+                )
         else:
             try:
                 number = grant(session, pull)
@@ -1541,18 +1765,37 @@ def recover(max_sessions: int) -> None:
                 status = f"resumed / 已恢复 (session {number})"
         summarize(repository, session.candidate, run_id, status)
         show_status(session)
+    for parent_id, candidate_id, number in deferred:
+        if running + resumed >= max_sessions:
+            break
+        resumed += grant_deferred(repository, parent_id, candidate_id, number, listed, now)
     for owner, artifact in owners:
         if artifact and all(
-            results[(owner.run_id, candidate.id)] for candidate in owner.candidates
+            results.get((owner.run_id, candidate.id)) for candidate in owner.candidates
         ):
-            current = github.read(repository, f"actions/runs/{owner.run_id}")
-            if terminal(current) and current["run_attempt"] == parents[owner.run_id]["run_attempt"]:
-                github.write(repository, f"actions/artifacts/{artifact['id']}", "DELETE")
+            try:
+                current = github.read(repository, f"actions/runs/{owner.run_id}")
+                if (
+                    terminal(current)
+                    and current["run_attempt"] == parents[owner.run_id]["run_attempt"]
+                ):
+                    github.write(repository, f"actions/artifacts/{artifact['id']}", "DELETE")
+            except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
+                status = github.http_status(error)
+                if status not in (404, 410):
+                    print(
+                        f"::warning::Klaud: ownership artifact {artifact['id']} not deleted "
+                        f"({f'HTTP {status}' if status else type(error).__name__})."
+                    )
+    if target:
+        github.api_budget()
+        return
     if listed is None or claimed is None:
         print("::warning::Klaud abandoned-work sweep skipped: owned work unavailable.")
     else:
+        active = live | listed
         try:
-            live |= sweep_abandoned(repository, live | listed, claimed, planners)
+            live |= sweep_abandoned(repository, active, claimed, planners)
         except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
             print(f"::warning::Klaud abandoned-work sweep skipped: {type(error).__name__}")
         else:
@@ -1564,6 +1807,10 @@ def recover(max_sessions: int) -> None:
     if filename := os.environ.get("GITHUB_OUTPUT"):
         with open(filename, "a") as output:
             output.write(f"active-sessions={running + resumed}\n")
+    if listed is not None and claimed is not None:
+        from .finished import sync_conflicts
+
+        sync_conflicts(repository, active, claimed)
     github.api_budget()
 
 
@@ -1571,7 +1818,8 @@ def plan_activity(repository: str) -> tuple[set[str], set[str], set[int]]:
     """Return the session work of active klaud-plan runs in ``repository``.
 
     That is the candidates with a session job in such a run, those whose job has not finished,
-    and the runs whose reconcile job is unfinished.
+    and the runs whose reconcile job is unfinished. A resume run without its candidate job yet
+    counts by its title, so a pass sees resumes another pass just dispatched.
     """
     listed: set[str] = set()
     unfinished: set[str] = set()
@@ -1581,15 +1829,22 @@ def plan_activity(repository: str) -> tuple[set[str], set[str], set[int]]:
         for run in github.items(
             repository, f"actions/workflows/klaud-plan.yml/runs?{query}", "workflow_runs"
         ):
+            sessions = False
             for job in github.items(
                 repository, f"actions/runs/{run['id']}/jobs?per_page=100", "jobs"
             ):
                 if match := re.search(rf"Run candidate ({CANDIDATE_ID})", job["name"]):
+                    sessions = True
                     listed.add(match[1])
                     if not job.get("completed_at"):
                         unfinished.add(match[1])
                 elif job["name"] == claims.RECONCILE_JOB and job["status"] != "completed":
                     planners.add(run["id"])
+            title = run.get("display_title") or ""
+            pattern = rf"Klaud Cold resume \d+ ({CANDIDATE_ID}) session [1-9][0-9]*"
+            if not sessions and (resumed := re.fullmatch(pattern, title)):
+                listed.add(resumed[1])
+                unfinished.add(resumed[1])
     return listed, unfinished, planners
 
 
