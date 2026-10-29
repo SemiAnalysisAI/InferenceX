@@ -59,39 +59,6 @@ base:
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
-override_tp4_c1:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        cuda-graph-max-bs-decode: 1
-        expert-parallel-size: 1
-        max-running-requests: 1
-        mem-fraction-static: 0.7
-        schedule-policy: lpm
-        swa-prefix-tails: 128
-        tensor-parallel-size: 4
-  benchmark:
-    env:
-      CONC: '1'
-      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
-
-override_tp4_c4:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        expert-parallel-size: 1
-        max-running-requests: 8
-        mem-fraction-static: 0.7
-        prefill-decode-interval: 192
-        swa-prefix-tails: 256
-        tensor-parallel-size: 4
-  benchmark:
-    env:
-      CONC: '4'
-      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
-
 override_tp4_c8:
   roles:
     agg:
