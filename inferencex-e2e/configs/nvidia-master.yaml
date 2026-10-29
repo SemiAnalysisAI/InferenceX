@@ -5055,7 +5055,7 @@ dsv4-fp4-gb300-dynamo-vllm-agentic:
           dp-attn: true
 
 qwen3.5-fp8-h100-sglang-agentic:
-  image: lmsysorg/sglang:v0.5.12-cu130
+  image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:h100-dsxe
@@ -5147,7 +5147,7 @@ qwen3.5-fp8-h200-sglang-agentic-hicache-mtp:
       - { tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [12], srt-recipe: agentic.yaml }
 
 qwen3.5-fp8-h100-sglang-agentic-mtp:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260914-4358a161
+  image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:h100-dsxe

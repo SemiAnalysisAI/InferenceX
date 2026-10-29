@@ -12,8 +12,6 @@ base:
     tachometer:
       enabled: false
   engine: sglang
-  # This release drops cached_tokens_details on the multi-tokenizer path.
-  setup_script: sglang-multi-tokenizer-cached-tokens-details.sh
   roles:
     agg:
       nodes: 1
