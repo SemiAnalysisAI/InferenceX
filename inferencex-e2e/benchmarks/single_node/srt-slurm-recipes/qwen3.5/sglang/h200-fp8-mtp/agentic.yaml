@@ -85,7 +85,7 @@ override_hicache_tp4_c8:
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
-        mem-fraction-static: 0.92
+        mem-fraction-static: 0.90
         page-size: 64
         enable-hierarchical-cache: true
         hicache-size: 77
