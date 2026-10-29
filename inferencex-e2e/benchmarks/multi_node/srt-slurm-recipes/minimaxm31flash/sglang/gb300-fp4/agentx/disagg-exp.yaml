@@ -1,7 +1,10 @@
 schema: 2
 
-# Experiment only (not for merge): SGLang PD on the vLLM GB300 topology from
-# PR #4468 (6x DEP2 prefill + DEP8 decode, 20 GPUs, conc 360).
+# Experiment only (not for merge): SGLang PD on the vLLM GB300 GPU budget from
+# PR #4468 (12 prefill GPUs + 8 decode GPUs, conc 360) without DP attention.
+# In this image the DSpark-MiniMax draft projection all-gathers over the full TP
+# group and assumes TP-replicated rows, which DP attention breaks, so both roles
+# use plain TP: 6x TP2 prefill and 2x TP4 decode.
 
 base:
   name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-exp
@@ -58,9 +61,7 @@ base:
       active-prefill-tokens-threshold-frac: "None"
   engine: sglang
   roles:
-    # DEP2 prefill: attention DP2 + MoE EP2. In this image DP attention requires
-    # MegaMoE with DeepGEMM; flashinfer_trtllm_routed needs matching attention TP
-    # and EP groups.
+    # TP2 prefill workers, the single-node B300/GB300 TP2 shape.
     prefill:
       nodes: 3
       workers: 6
@@ -73,7 +74,6 @@ base:
         SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "3600"
         SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "3600"
         SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
-        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "32768"
         NCCL_MNNVL_ENABLE: "1"
         NCCL_CUMEM_ENABLE: "1"
         MC_FORCE_MNNVL: "1"
@@ -87,11 +87,7 @@ base:
         reasoning-parser: minimax-m3
         tool-call-parser: minimax-m3
         tensor-parallel-size: 2
-        data-parallel-size: 2
-        expert-parallel-size: 2
-        enable-dp-attention: true
-        enable-dp-lm-head: true
-        moe-a2a-backend: megamoe
+        moe-runner-backend: flashinfer_trtllm_routed
         disaggregation-transfer-backend: mooncake
         # vLLM caps each request at 4096 prefill tokens per step inside a
         # 32768-token batch; SGLang caps the whole batch, so use a middle value.
@@ -112,21 +108,19 @@ base:
         enable-metrics: true
         enable-cache-report: true
       kv_events: true
-    # DEP8 decode across two trays.
+    # Two TP4 decode workers, one per tray; TP4 matches the model's four KV heads.
     decode:
       nodes: 2
-      workers: 1
-      gpus: 8
+      workers: 2
+      gpus: 4
       env:
         PYTHONUNBUFFERED: "1"
         PYTHONNOUSERSITE: "1"
         FMHA_SM100_ALLOW_JIT: "1"
         SGLANG_TIMEOUT_KEEP_ALIVE: "1800"
-        DYN_SGL_GATEWAY_WORKERS: "8"
         SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "3600"
         SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "3600"
         SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
-        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "16384"
         NCCL_MNNVL_ENABLE: "1"
         NCCL_CUMEM_ENABLE: "1"
         MC_FORCE_MNNVL: "1"
@@ -138,23 +132,21 @@ base:
         trust-remote-code: true
         reasoning-parser: minimax-m3
         tool-call-parser: minimax-m3
-        tensor-parallel-size: 8
-        data-parallel-size: 8
-        expert-parallel-size: 8
-        enable-dp-attention: true
-        enable-dp-lm-head: true
-        moe-a2a-backend: megamoe
+        tensor-parallel-size: 4
+        moe-runner-backend: flashinfer_trtllm_routed
         disaggregation-transfer-backend: mooncake
-        router-mode: round-robin
-        load-balance-method: total_tokens
-        # 48 per DP rank, as vLLM's decode max-num-seqs.
-        max-running-requests: 384
-        cuda-graph-max-bs-decode: 48
+        # Half of conc 360 per worker plus headroom; the decode graph batch matches it.
+        max-running-requests: 192
+        cuda-graph-max-bs-decode: 192
         mem-fraction-static: 0.85
         speculative-algorithm: DSPARK
         speculative-dspark-block-size: 7
         speculative-use-block-verification: true
         speculative-draft-kv-cache-dtype: fp8_e4m3
+        # The active-request term dominates KV overlap, so decode picks balance
+        # request counts across the two workers.
+        router-mode: kv
+        router-decode-active-request-weight: "8192"
         watchdog-timeout: 3600
         enable-metrics: true
       kv_events: false
@@ -173,5 +165,5 @@ base:
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
 
-override_6p_dep2_dep8_c360:
-  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-exp-6p-dep2-dep8-c360
+override_6p_tp2_2d_tp4_c360:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-exp-6p-tp2-2d-tp4-c360
