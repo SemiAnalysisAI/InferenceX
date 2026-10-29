@@ -6,13 +6,29 @@ This document tracks every model benchmarked by InferenceX-e2e: when it was adde
 
 Following the principles of fairness and equitableness, the service-level objective (SLO) we aim for when reviewing and merging PRs is `max(1 day from when pinged on slack, vendor response time)`. Vendor response time is the time vendors take to respond to InferenceX core maintainers' questions, messages, PRs, requests for follow-up reviews, etc. We will probably review and merge PRs sooner than this formula allows, but this is the SLO we aim for.
 
+## Serving-image main-branch policy
+
+For official InferenceX (non-preview) that have hardware support in upstream, established models must use upstream engines images built from the inference engine's upstream `master` branch (or its equivalent default development branch). New models may temporarily use model-enablement branches, but must move to main-branch images within a reasonable time after release.
+
 ## Deprecation policy
 
 InferenceX-e2e runs on a fixed GPU pool with a small team, so scenarios, precisions, and recipe variants that no longer earn their cluster hours are retired. The support matrix below is the current record of what is active and retired; git history and `perf-changelog.yaml` hold past settings.
 
+## Benchmarks what matters
+
+In general, we should be benchmarking free & ~open engines that is used in production by actual customers. Priority goes towards stuff that is used more in prod
+
 - **Pending A/B baseline retirement (not yet enacted):** standalone non-spec-decode baselines kept only for comparison with speculative decoding are slated for retirement. This covers `dsv4` and `qwen3.5` non-MTP and `kimik3` non-DSpark, whose active configs still contain non-spec-decode points. `glm5.2` and `minimaxm3` have no active non-spec-decode configs. Retire one only once replacement coverage exists for the affected model, hardware, and engine. A spec-decode counterpart existing is not by itself a reason to remove a config.
 - **No separate A/B tracks for new models:** [`infx/golden_al_distribution/`](../infx/golden_al_distribution) pins speculative AgentX runs to one measured acceptance-length curve, so spec-decode results are comparable on their own. New models, including Kimi-K3, do not need a non-spec-decode baseline from day 0.
 - **Publish the best Pareto points, with or without speculative decoding.** Recipes may disable MTP, EAGLE/EAGLE3, DSpark, or another draft method when that gives a better operating point. Valid non-spec-decode results stay eligible under the [North-star Pareto policy](#north-star-pareto-policy), so a frontier may mix both.
+
+## all-reduce policy
+
+New models must not use integer-quantized all-reduce, including INT4, INT6, and INT8. This restriction addresses accuracy regressions in 800k+ long-context evaluations and quality drops observed by teams deploying it in end-user production workloads. 
+
+Existing models listed in the [model support matrix at the policy baseline](https://github.com/SemiAnalysisAI/InferenceX/blob/2a45791dab6ade3dd855a67eb3ee923389124af8/inferencex-e2e/docs/MODELS.md#model-support-matrix) are grandfathered, including subsequent recipe and image updates for those models. The exception does not extend to new model releases or architectures added later, even if they reuse a prefix. Existing eval, draft-precision, and deprecation rules still apply; historical results are unchanged.
+
+For non-grandfathered models, `ROCM_QUICK_REDUCE_QUANTIZATION`, `VLLM_ROCM_QUICK_REDUCE_QUANTIZATION`, `AITER_QUICK_REDUCE_QUANTIZATION`, and equivalent controls must not be set to values other than `0` or `NONE`. An unset control is acceptable only when the pinned engine's effective default disables integer quantization; `0` is acceptable only where the engine interprets it as disabled. SGLang ROCm serving workers must explicitly set `ROCM_QUICK_REDUCE_QUANTIZATION=NONE` to override integer-quantized image defaults, such as the `INT8` setting in the [ROCm Dockerfile](https://github.com/sgl-project/sglang/blob/f1a36c4789e6a4e766e00a902728ebd37a9df604/docker/rocm.Dockerfile); unset or `0` does not satisfy this SGLang requirement. Check inherited environment, container defaults, and every serving role, not just the recipe's visible flags.
 
 ## Scenarios
 
