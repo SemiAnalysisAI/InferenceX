@@ -97,21 +97,8 @@ override_1p1d_mcstore:
     nodes: all
     timeout_seconds: 1800
     commands:
-      # A recipe host_setup replaces the cluster default, which also drops the page cache under DRAM KV offloading.
-      - IBDEVICES=rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/setup.sh"
-      # Owners take 786432 2 MiB pages, half per NUMA node; reserve 2% more above the pages host services hold.
-      # Only the prefill node holds owners; srtctl starts the prefill on the head node, which launches this srun.
-      - >-
-        if hostname -I | tr ' ' '\n' | grep -qxF "${SLURM_LAUNCH_NODE_IPADDR:?srun did not set SLURM_LAUNCH_NODE_IPADDR}"; then
-        echo "[hugepage] $(hostname -s) is the head node; reserving the owners' pages";
-        held=$(awk '/^HugePages_Total:/ {total = $2} /^HugePages_Free:/ {free = $2} /^HugePages_Rsvd:/ {rsvd = $2} END {print total - free + rsvd}' /proc/meminfo);
-        HUGEPAGES_TARGET=$(( held + 786432 * 102 / 100 )) HUGEPAGE_GROW_TOLERANCE_PCT=1
-        bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/hugepage_sanity.sh" || exit 1;
-        for node in 0 1; do
-        free=$(cat /sys/devices/system/node/node$node/hugepages/hugepages-2048kB/free_hugepages);
-        echo "[hugepage] NUMA$node: $free free 2 MiB pages, owners need 393216";
-        [[ $free -ge 393216 ]] || exit 1;
-        done; fi
+      # Reserves the Store owners' 2 MiB pages on the head node, where srtctl starts the prefill.
+      - HEAD_NODE_HUGEPAGES_PER_NUMA=393216 IBDEVICES=rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/setup.sh"
     teardown:
       - HUGEPAGES_TARGET=0 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/hugepage_sanity.sh"
   services:
@@ -209,21 +196,8 @@ override_1p2d_mcstore_c56:
     nodes: all
     timeout_seconds: 1800
     commands:
-      # A recipe host_setup replaces the cluster default, which also drops the page cache under DRAM KV offloading.
-      - IBDEVICES=rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/setup.sh"
-      # Owners take 714752 2 MiB pages, half per NUMA node; reserve 2% more above the pages host services hold.
-      # Only the prefill node holds owners; srtctl starts the prefill on the head node, which launches this srun.
-      - >-
-        if hostname -I | tr ' ' '\n' | grep -qxF "${SLURM_LAUNCH_NODE_IPADDR:?srun did not set SLURM_LAUNCH_NODE_IPADDR}"; then
-        echo "[hugepage] $(hostname -s) is the head node; reserving the owners' pages";
-        held=$(awk '/^HugePages_Total:/ {total = $2} /^HugePages_Free:/ {free = $2} /^HugePages_Rsvd:/ {rsvd = $2} END {print total - free + rsvd}' /proc/meminfo);
-        HUGEPAGES_TARGET=$(( held + 714752 * 102 / 100 )) HUGEPAGE_GROW_TOLERANCE_PCT=1
-        bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/hugepage_sanity.sh" || exit 1;
-        for node in 0 1; do
-        free=$(cat /sys/devices/system/node/node$node/hugepages/hugepages-2048kB/free_hugepages);
-        echo "[hugepage] NUMA$node: $free free 2 MiB pages, owners need 357376";
-        [[ $free -ge 357376 ]] || exit 1;
-        done; fi
+      # Reserves the Store owners' 2 MiB pages on the head node, where srtctl starts the prefill.
+      - HEAD_NODE_HUGEPAGES_PER_NUMA=357376 IBDEVICES=rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/setup.sh"
     teardown:
       - HUGEPAGES_TARGET=0 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/hugepage_sanity.sh"
   services: &prefill_budget_services
