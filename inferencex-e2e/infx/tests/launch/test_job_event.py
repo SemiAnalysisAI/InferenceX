@@ -23,7 +23,7 @@ def test_annotation_escapes_workflow_command_data_and_title():
 
 def test_an_agentic_point_records_no_sequence_lengths_and_its_pinned_versions(tmp_path, monkeypatch):
     requirements = tmp_path / "requirements.txt"
-    requirements.write_text("agentx-harness==9.8.7\ndatasets>=4.7.0\n")
+    requirements.write_text("aiperf==0.13.0.dev20261027\ndatasets>=4.7.0\n")
     monkeypatch.setattr(job_event, "REQUIREMENTS", requirements)
     digest = "sha256:" + "ab" * 32
     env = {
@@ -35,7 +35,10 @@ def test_an_agentic_point_records_no_sequence_lengths_and_its_pinned_versions(tm
     }  # fmt: skip
     record = JobEventBuilder.begin(env).event
     assert (record.isl, record.osl) == (None, None)
-    assert (record.versions.agentx_harness, record.versions.image_digest) == ("9.8.7", digest)
+    assert (record.versions.agentx_harness, record.versions.image_digest) == (
+        "0.13.0.dev20261027",
+        digest,
+    )
     assert record.topology.model_dump() == {
         "tp": None, "ep": None, "pp": None, "dp_attn": None, "gpu_count": None, "node_count": 3,
         "prefill": {"num_workers": 2, "tp": 4, "ep": 4, "dp_attn": True},

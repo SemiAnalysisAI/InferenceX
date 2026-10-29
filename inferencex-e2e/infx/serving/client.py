@@ -60,6 +60,11 @@ def authorization(api_key: str) -> str:
 
 
 def agentx_argv(agentx: str, scenario: Path, env: Mapping[str, str]) -> list[str]:
+    """The ``aiperf profile`` argv; ``agentx`` is the venv's ``aiperf`` executable.
+
+    Kept the historical name: the argv (and ``benchmark_command.txt``) is the
+    AgentX-shaped scenario replay; only the binary changed in the aiperf
+    migration."""
     argv = [agentx, "profile", "--config", str(scenario)]
     argv += ["--url", env.get("SERVING_REMOTE_URL") or f"http://localhost:{env['PORT']}"]
     argv += ["--model", env.get("SERVED_MODEL_NAME") or env["MODEL"]]
@@ -221,7 +226,7 @@ def prepare(env: Mapping[str, str], runtime: Runtime) -> int:
                 "hidden reasoning tokens are not counted)",
                 file=sys.stderr,
             )
-        return 0  # no weights to download; agentx fetches an HF tokenizer itself
+        return 0  # no weights to download; aiperf fetches an HF tokenizer itself
     return proc.call([str(runtime.hf), "download", env["MODEL"]], online(env))
 
 
@@ -236,6 +241,7 @@ def run(env: Mapping[str, str], runtime: Runtime) -> int:
     child = online(env) | {
         "AIPERF_DATASET_CONFIGURATION_TIMEOUT": "1800",
         "AIPERF_SERVICE_PROFILE_CONFIGURE_TIMEOUT": "1800",
+        "AIPERF_HTTP_TCP_USER_TIMEOUT": "900000",
         "RESULT_DIR": str(result_dir),
         "AGENTIC_OUTPUT_DIR": str(output_dir),
         "PYTHONPATH": proc.pythonpath(env),
@@ -245,7 +251,7 @@ def run(env: Mapping[str, str], runtime: Runtime) -> int:
         child["AIPERF_HTTP_SSL_VERIFY"] = "false"  # aiperf's own switch for self-signed gateways
     if (marker := result_dir / DATASET_PATH).exists():
         child["IX_CUSTOM_DATASET_FILE"] = marker.read_text().strip()
-    argv = agentx_argv(str(runtime.agentx), scenario, env)
+    argv = agentx_argv(str(runtime.aiperf), scenario, env)
     (result_dir / "benchmark_command.txt").write_text(shlex.join(redacted(argv)) + "\n")
     replay_rc = proc.tee(argv, result_dir / "benchmark.log", child)
     python = str(runtime.python)

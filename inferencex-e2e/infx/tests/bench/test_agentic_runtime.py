@@ -25,9 +25,9 @@ elif [ "$1" = pip ]; then
     [ "$FAIL" = pip ] && exit 2
     [ "$FAIL" = incomplete ] && exit 0
     bin="$(dirname "$4")"
-    printf '#!/bin/sh\nexit 0\n' > "$bin/agentx"
+    printf '#!/bin/sh\nexit 0\n' > "$bin/aiperf"
     printf '#!/bin/sh\nexit 0\n' > "$bin/hf"
-    chmod +x "$bin/agentx" "$bin/hf"
+    chmod +x "$bin/aiperf" "$bin/hf"
 fi
 """
 
@@ -110,7 +110,7 @@ def test_failed_venv_creation_returns_uv_status_without_installing(tmp_path, too
     ("failure", "message"),
     [
         ("pip", "benchmark client dependency bootstrap failed"),
-        ("incomplete", "isolated AgentX environment is incomplete"),
+        ("incomplete", "isolated AIPerf environment is incomplete"),
         ("installer", "uv installation did not create"),
     ],
 )
