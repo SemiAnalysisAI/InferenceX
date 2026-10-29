@@ -648,6 +648,73 @@ def test_invalid_key_after_valid_key_rejects_entire_selection(changelog_run, key
         changelog_run([{"config-keys": keys}])
 
 
+@pytest.mark.parametrize("include_active", [False, True])
+def test_retirement_records_deleted_configs_without_running_them(
+    committed_planning_repo, include_active
+):
+    root, base, head = committed_planning_repo
+    path = root / "configs/nvidia-master.yaml"
+    master = yaml.safe_load(path.read_text())
+    del master["single"]
+    path.write_text(yaml.safe_dump(master))
+    (root / "benchmarks/single_node/srt-slurm-recipes/fixture/recipe.yaml").unlink()
+    entries = [{
+        "config-keys": ["single"], "retired": True, "description": ["Retire single"],
+        "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
+    }]
+    if include_active:
+        entries.append({
+            "config-keys": ["multi"], "description": ["Update multi"],
+            "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
+        })
+
+    result = process_changelog.build_plan(entries, base_ref=base, head_ref=head)
+
+    assert result.single_node == {}
+    assert result.evals == result.agentic_evals == []
+    assert result.changelog_metadata.entries[0].retired is True
+    assert result.changelog_metadata.entries[0].config_keys == ["single"]
+    if include_active:
+        assert result.multi_node["8k1k"][0].conc == [16, 32, 64]
+        assert result.multinode_evals[0].conc == [16, 32, 64]
+    else:
+        assert result.multi_node == {}
+        assert result.multinode_evals == result.multinode_agentic_evals == []
+
+
+@pytest.mark.parametrize(("keys", "message"), [
+    (["single"], "retired configs still exist in head"),
+    (["missing"], "not found"),
+    (["missing-*"], "No config keys matched"),
+    (["*"], "retired configs still exist in head"),
+])
+def test_retirement_requires_real_base_keys_absent_from_head(
+    committed_planning_repo, keys, message
+):
+    _, base, head = committed_planning_repo
+    entries = [{
+        "config-keys": keys, "retired": True, "description": ["Retire configs"],
+        "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
+    }]
+    with pytest.raises(ValueError, match=message):
+        process_changelog.build_plan(entries, base_ref=base, head_ref=head)
+
+
+@pytest.mark.parametrize("flags", [
+    {"append-only": True}, {"evals-only": True}, {"all-evals": True}, {"no-evals": True},
+    {"eval-min-prefill-ep": 2}, {"scenario-type": ["agentic-coding"]},
+])
+def test_retirement_rejects_sweep_and_partial_scenario_options(changelog_run, flags):
+    with pytest.raises(ValueError, match="retired entries cannot use sweep or scenario"):
+        changelog_run([{"retired": True, **flags}])
+
+
+@pytest.mark.parametrize("flag", ["--all-evals", "--evals-only"])
+def test_retirement_rejects_eval_modifiers(changelog_run, flag):
+    with pytest.raises(ValueError, match="retired entries cannot use all-evals or evals-only"):
+        changelog_run([{"retired": True}], [flag])
+
+
 @pytest.mark.parametrize("trim", [False, True])
 def test_append_only_main_runs_only_added_points_and_skips_evals(planning_repo, changelog_run, trim):
     root, master, _ = planning_repo

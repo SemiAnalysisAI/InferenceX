@@ -29,6 +29,8 @@ Every PR description must include an **AI model disclosure** section inside a co
 
 **Performance changelog:** A PR that changes what any benchmark runs **MUST** append one new entry covering the affected config keys to the physical end of `inferencex-e2e/perf-changelog.yaml`; `python -m infx.matrix.changed --base origin/main` (run from `inferencex-e2e/`) lists them. A PR that changes no benchmark point adds none. Historical entries **MUST NOT** be edited.
 
+For full config retirement, list the deleted config keys with `retired: true`. The planner verifies that every selected key existed in the base revision and is absent from the current master configs, retains the entry in changelog metadata, and schedules no benchmarks or evals for it. Retirement entries cannot use scenario filters, `append-only`, or eval-selection fields or modifiers; partial scenario retirement uses a regular entry for the surviving config.
+
 ## Draft-model precision
 
 The rule is simple: **serve the draft as it ships.** A speculative-decoding
