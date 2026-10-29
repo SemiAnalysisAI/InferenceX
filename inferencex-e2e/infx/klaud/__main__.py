@@ -39,6 +39,7 @@ from .github import (
 from .models import (
     ASSET_REASONS,
     INFRA_REASONS,
+    LIMIT_REASONS,
     CandidateOutcome,
     OwnedCandidate,
     Ownership,
@@ -59,7 +60,7 @@ CLUSTER_STATE = "cluster-state.json"
 RETRY_NEXT_WAVE = frozenset({"no-capacity", "agent-not-started"})
 MAINTAINER_CLOSE_HOLD_DAYS = 7
 REQUEUE_LABEL = "klaud-requeue"
-INFRA_OUTCOMES = frozenset({"missing-assets", "weights-missing"})
+INFRA_OUTCOMES = frozenset({"missing-assets", "weights-missing", *LIMIT_REASONS})
 INFRA_COOLDOWN_DAYS = 7
 LONG_HOLD_HOURS = 72
 LONG_HOLD_OUTCOMES = frozenset({"already-updated", "duplicate", "route-mismatch"})
@@ -69,6 +70,8 @@ DATED_TAG = re.compile(r"(?<!\d)20\d\d(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])(?
 INFRA_BACKOFF_HOURS = 48
 INFRA_BACKOFF_OUTCOMES = 2
 PRODUCER_MARGIN = 5
+PRODUCER_ALTERNATES = 3
+BASELINE_HOLD_REASONS = frozenset({"baseline-point-mismatch"})
 EVAL_FIELDS = frozenset(
     {"run-eval", "eval-only", "eval-conc", "eval-all-concs", "eval-framework", "eval-suite"}
 )
@@ -78,22 +81,25 @@ class Family(NamedTuple):
     """A live family's target clusters, node demands and whether its smoke matrix is complete.
 
     ``node_demand`` is the node count of its largest AgentX job, ``sweep_node_demand`` the
-    nodes of every job of its full AgentX sweep.
+    nodes of every job of its full AgentX sweep. ``images`` pairs each key with its master image
+    when the keys use different images, and is empty otherwise.
     """
 
     clusters: frozenset[str]
     node_demand: int
     sweep_node_demand: int
     smoke_covers_full: bool
+    images: tuple[tuple[str, str], ...] = ()
 
 
 class History(NamedTuple):
-    """Recent candidate outcomes that still hold candidates, weights, images or clusters."""
+    """Recent candidate outcomes that still hold candidates, families, weights, images or clusters."""
 
     recent: dict[str, str | None]
     paused_weights: set[tuple]
     held_images: dict[str, datetime]
     infra_clusters: set[str]
+    held_families: set[str]
 
 
 def observation_key(row: dict) -> tuple:
@@ -156,9 +162,9 @@ def live_families(root: Path) -> dict[tuple, dict[str, Family]]:
 
     Archives and fixed-seq-len points are excluded. A family is one AgentX dashboard curve: every
     master key of one master file whose points share model, hardware, framework and precision,
-    since the newest run replaces that whole curve. Curves spanning master files or using several
-    images are left out. A family's smoke matrix covers its full sweep when the generator's
-    ``--smoke`` selection keeps every benchmark point and default eval.
+    since the newest run replaces that whole curve. Curves spanning master files are left out.
+    A family's smoke matrix covers its full sweep when the generator's ``--smoke`` selection
+    keeps every benchmark point and default eval.
     """
     from infx.clusters import load_inventory
     from infx.config import project_root
@@ -215,9 +221,7 @@ def live_families(root: Path) -> dict[tuple, dict[str, Family]]:
         if not clusters:
             print(f"::warning::Klaud live-family-clusters-unresolved: {family}")
             continue
-        if len({normalized_image(entry["image"]) for entry in entries}) > 1:
-            print(f"::notice::Klaud skips {family}: its keys use different images.")
-            continue
+        images = {key: normalized_image(rows[0]["image"]) for (_, key), rows in members.items()}
         evals = [
             dict(row, **{"eval-only": True})
             for row in mark_eval_entries(deepcopy(entries), root)
@@ -231,6 +235,7 @@ def live_families(root: Path) -> dict[tuple, dict[str, Family]]:
             sweep_node_demand=sum(entry.get("node-count", 1) for entry in [*entries, *evals]),
             smoke_covers_full=point_identities(smoke) == point_identities(entries)
             and expected_evals({"evals": smoke_evals}) == expected_evals({"evals": evals}),
+            images=tuple(sorted(images.items())) if len(set(images.values())) > 1 else (),
         )
         for entry in entries:
             row = {
@@ -260,18 +265,24 @@ def choose(
     A branch or claim of the family, or of a single-key family of one of its keys, occupies it.
     The order is a weighted shuffle: a family's weight is its benchmark age in days plus one, so
     older images tend to lead without starving recent ones. Headroom is checked but not consumed
-    here, so the overlap review keeps alternatives.
+    here, so the overlap review keeps alternatives. A family whose keys use different images
+    maps each key to the curve's newest observation of that key's image as ``sources``, and
+    each key whose image has none to that image as ``unbaselined-keys``.
     """
     occupied = {re.sub(r"^klaud[e]?/auto-", "klaud/auto-", branch) for branch in occupied}
     selected = []
     keys: list[float] = []
     seen = set()
-    valid = [item for item in items if item["source-status"] == "baseline"]
-    for item in sorted(
-        valid,
+    valid = sorted(
+        (item for item in items if item["source-status"] == "baseline"),
         key=lambda item: (item["source"]["date"], item["source-id"]),
         reverse=True,
-    ):
+    )
+    newest: dict[tuple[str, str], dict] = {}
+    for item in valid:
+        for family in families.get(observation_key(item["source"]), {}):
+            newest.setdefault((family, observation_key(item["source"])[-1]), item["source"])
+    for item in valid:
         row = item["source"]
         legacy = identity(
             {
@@ -294,12 +305,22 @@ def choose(
                 name = identity(member)[:16]
                 claims |= {f"klaud/auto-{name}-", f"klaud/auto-{name}-{image_key}"}
                 claims.add(f"klaud/claim-{name}")
+            sources = {
+                key: row if image == observation_key(row)[-1] else newest.get((family, image))
+                for key, image in record.images
+            }
             if (
                 family in seen
                 or claims & occupied
                 or any(headroom.get(cluster, 0) < record.node_demand for cluster in record.clusters)
             ):
                 continue
+            mixed = {
+                "sources": {key: source for key, source in sources.items() if source},
+                "unbaselined-keys": {
+                    key: image for key, image in record.images if not sources[key]
+                },
+            }
             selected.append(
                 {
                     "id": branch.removeprefix("klaud/auto-"),
@@ -310,6 +331,7 @@ def choose(
                     "smoke-covers-full": record.smoke_covers_full,
                     "source": row,
                     "branch": branch,
+                    **(mixed if sources else {}),
                 }
             )
             keys.append(random.expovariate(item["benchmark-age-days"] + 1))
@@ -338,14 +360,16 @@ def hold(label: str | None, phase: str | None, cooldown_hours: int) -> timedelta
 
 
 def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> History:
-    """Return the recent outcomes that still hold candidates, weights, images or clusters.
+    """Return the recent outcomes that still hold candidates, families, weights, images or clusters.
 
     Each candidate's newest session artifact counts and holds the candidate for ``hold``. While
     held, missing weights and route mismatches (PAUSED_WEIGHTS) pause their (model, precision,
-    hardware) key. An already-updated outcome holds its image from its newest time, and
+    hardware) key, and a cluster time limit (LIMIT_REASONS) holds the candidate's family prefix
+    whatever its image. An already-updated outcome holds its image from its newest time, and
     INFRA_BACKOFF_OUTCOMES infrastructure failures within INFRA_BACKOFF_HOURS back off a target
-    cluster. Only scheduled auto-sweeps and Klaud Cold's resume runs hold sessions. Resumed
-    sessions record outcomes in later waves, so history reaches MAX_SESSIONS waves back.
+    cluster. A wave's baseline deferral for a BASELINE_HOLD_REASONS reason holds the candidate
+    for LONG_HOLD_HOURS. Only scheduled auto-sweeps and Klaud Cold's resume runs hold sessions.
+    Resumed sessions record outcomes in later waves, so history reaches MAX_SESSIONS waves back.
     Unreadable history means no cooldown.
     """
     from .lifecycle import BOT, MAX_SESSIONS, WAKE_TITLE, WAVE_HOURS, resume_parent
@@ -365,7 +389,13 @@ def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> History:
         ]
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         print("::warning::Klaud cooldown history unavailable; continuing without cooldown")
-        return History(recent={}, paused_weights=set(), held_images={}, infra_clusters=set())
+        return History(
+            recent={},
+            paused_weights=set(),
+            held_images={},
+            infra_clusters=set(),
+            held_families=set(),
+        )
     dated = set()
     plans: dict[int, int] = {}
     for run in runs:
@@ -404,7 +434,18 @@ def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> History:
                 continue
     result: dict[str, str | None] = {}
     held_images: dict[str, datetime] = {}
+    held_families: set[str] = set()
     planned_labels: dict[int, dict[str, str]] = {}
+    for created, run_id in dated:
+        if plans[run_id] == run_id and now - created < timedelta(hours=LONG_HOLD_HOURS):
+            reasons = plan_selection(repository, listings.get(run_id, [])).get(
+                "baseline-deferral-reasons", {}
+            )
+            result.update(
+                (candidate, reason)
+                for candidate, reason in reasons.items()
+                if reason in BASELINE_HOLD_REASONS and candidate not in latest
+            )
     for candidate, (artifact, run_id) in latest.items():
         label, phase = recorded_outcome(repository, artifact)
         created = utc(artifact["created_at"])
@@ -416,6 +457,8 @@ def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> History:
         if now - created >= hold(label, phase, cooldown_hours):
             continue
         result[candidate] = label
+        if label in LIMIT_REASONS:
+            held_families.add(candidate.split("-", 1)[0])
         if label in PAUSED_WEIGHTS:
             planned_labels.setdefault(plans[run_id], {})[candidate] = label
     paused_weights = set()
@@ -439,7 +482,22 @@ def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> History:
         paused_weights=paused_weights,
         held_images=held_images,
         infra_clusters={cluster for cluster, n in infra.items() if n >= INFRA_BACKOFF_OUTCOMES},
+        held_families=held_families,
     )
+
+
+def plan_selection(repository: str, artifacts: list[dict]) -> dict:
+    """Return the selection.json in the klaud-plan artifact among ``artifacts``, or {}."""
+    plan = next((a for a in artifacts if a.get("name") == "klaud-plan"), None)
+    if not plan or plan.get("expired", True):
+        return {}
+    with tempfile.TemporaryDirectory() as scratch:
+        try:
+            download_json(repository, plan, Path(scratch))
+            selection = json.loads((Path(scratch) / "selection.json").read_text())
+        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+            return {}
+    return selection if isinstance(selection, dict) else {}
 
 
 def planned_candidates(repository: str, artifacts: list[dict]) -> list[dict]:
@@ -472,7 +530,7 @@ def recorded_outcome(repository: str, artifact: dict) -> tuple[str | None, str |
                 return "agent-not-started", None
             outcome = CandidateOutcome.model_validate(diagnostics["candidate-outcome"])
             reason = outcome.reason_code
-            labelled = reason in ASSET_REASONS or reason in INFRA_REASONS
+            labelled = reason in ASSET_REASONS or reason in INFRA_REASONS + LIMIT_REASONS
             return (reason if labelled else outcome.outcome), outcome.phase
         except (
             OSError,
@@ -670,6 +728,7 @@ def plan(root: Path, directory: Path, review_batch_size: int, cooldown_hours: in
         for candidate in candidates
         if weights_key(candidate["source"]) not in history.paused_weights
         and not image_held(candidate, history.held_images, now)
+        and candidate["id"].split("-", 1)[0] not in history.held_families
     ]
     candidates = order_by_cooldown(candidates, history.recent)
     candidates = candidates[:review_batch_size]
@@ -1132,11 +1191,12 @@ def regenerate_producers(directory: Path, max_candidates: int, active_sessions: 
     """Write ``producers.json``: proceed candidates' producer families, by family and head.
 
     ``select`` takes candidates in order up to ``max_candidates`` less ``active_sessions``,
-    skipping those the wave's capacity cannot take. This walks them the same way, with the plan's
-    headroom from CLUSTER_STATE, and regenerates that many plus PRODUCER_MARGIN replacements, none
-    without a slot. Producer revisions regenerate their own families, so this step runs without
-    credentials. A producer that fails is logged and left out; ``select`` defers the candidates
-    needing it.
+    skipping those the wave's capacity cannot take, and one full sweep usually fills a cluster
+    for the wave. So this prepares, in order, candidates that fit the plan's headroom from
+    CLUSTER_STATE, at most PRODUCER_ALTERNATES per target cluster in case earlier ones are
+    deferred, up to that many plus PRODUCER_MARGIN, none without a slot. Producer revisions
+    regenerate their own families, so this step runs without credentials. A producer that fails
+    is logged and left out; ``select`` defers the candidates needing it.
     """
     from .reporting import publication
     from .validation import ProducerRegenerationError, producer_matrix
@@ -1154,6 +1214,7 @@ def regenerate_producers(directory: Path, max_candidates: int, active_sessions: 
     wave = WaveCapacity(state["headroom"], state["size"], set(state["infra-backoff"]))
     proceeding = []
     taken: set[str] = set()
+    prepared: Counter[str] = Counter()
     for candidate in contexts:
         if len(proceeding) >= (slots + PRODUCER_MARGIN if slots else 0):
             break
@@ -1161,9 +1222,10 @@ def regenerate_producers(directory: Path, max_candidates: int, active_sessions: 
             candidate["id"] in models
             and candidate["family"] not in taken
             and not wave.blocker(candidate)
+            and all(prepared[cluster] < PRODUCER_ALTERNATES for cluster in candidate["clusters"])
         ):
-            wave.take(candidate)
             taken.add(candidate["family"])
+            prepared.update(candidate["clusters"])
             proceeding.append(candidate)
     repository = os.environ["GITHUB_REPOSITORY"]
     families: dict[str, dict[str, dict]] = {}
@@ -1202,7 +1264,13 @@ def select(
     ``directory``.
     """
     from . import claims, validation
-    from .reporting import BaselinePreflight, Prose, missing_baseline_points, resolve_baseline
+    from .reporting import (
+        BaselinePreflight,
+        Prose,
+        missing_baseline_points,
+        resolve_baseline,
+        unpublished_keys,
+    )
 
     contexts = json.loads((directory / "candidates.json").read_text())
     producers = json.loads((directory / PRODUCERS).read_text())
@@ -1274,6 +1342,7 @@ def select(
                 baseline=baseline,
             )
             missing = missing_baseline_points(matrix, baseline)
+            unpublished = unpublished_keys(matrix, baseline)
         except (VerificationError, ReadError) as error:
             baseline_deferred.append(candidate["id"])
             baseline_reasons[candidate["id"]] = str(error)
@@ -1289,7 +1358,7 @@ def select(
             baseline_reasons[candidate["id"]] = f"{type(error).__name__}: {str(error)[:300]}"
             families.add(decision.family)
             continue
-        if missing:
+        if missing or unpublished:
             baseline_deferred.append(candidate["id"])
             baseline_reasons[candidate["id"]] = "baseline-point-mismatch"
             baseline_mismatches.append(
@@ -1297,6 +1366,7 @@ def select(
                     "id": candidate["id"],
                     "reason": "baseline-point-mismatch",
                     "missing-points": len(missing),
+                    **({"unpublished-keys": unpublished} if unpublished else {}),
                 }
             )
             families.add(decision.family)
