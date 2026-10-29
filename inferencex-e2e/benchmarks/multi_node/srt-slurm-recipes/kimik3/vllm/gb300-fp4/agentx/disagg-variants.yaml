@@ -5,13 +5,18 @@ base:
     model: {}
     container: {}
     frameworks:
-      vllm: "e4a5b5537344b103ed10de7764378ef09604ef3d"
+      vllm: "3966924d566340e971a6da313e790d05492aa505"
       dynamo: "a0de541ea8c861d5ac01d15953ca529bea68637b"
 
   dynamo:
     install: true
     source:
       rev: "a0de541ea8c861d5ac01d15953ca529bea68637b"
+
+  # InferenceX does not read Tachometer's output.
+  observability:
+    tachometer:
+      enabled: false
 
   slurm:
     time_limit: "04:00:00"
@@ -136,7 +141,6 @@ base:
         moe-backend: deep_gemm_mega_moe
         max-num-seqs: 32
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-      kv_events: true
     decode:
       nodes: 2
       workers: 1
@@ -161,11 +165,11 @@ base:
         max-cudagraph-capture-size: 512
         stream-interval: 10
         language-model-only: true
-        attention-backend: "TOKENSPEED_MLA"
+        attention-backend: "KIMI_K3_KV_BALANCED_MLA"
         attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true,"tokenspeed_mla_min_split_kv":8}'
         enable-prefix-caching: true
         max-num-seqs: 128
-        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"KIMI_K3_KV_BALANCED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   sbatch_directives:
     mem: "0"
     cpus-per-task: "72"
@@ -212,10 +216,12 @@ override_1p3d_specdecode:
         enable-flashinfer-autotune: null
         no-enable-flashinfer-autotune: true
         additional-config: '{"decode_backend":"latency_specialized"}'
+        attention-backend: "TOKENSPEED_MLA"
         attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
         max-num-seqs: 12
         max-cudagraph-capture-size: 64
         compilation-config: '{"cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64]}'
+        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
 
 override_1p3d_specdecode_eval:
   roles:
@@ -270,33 +276,33 @@ override_1p2d_specdecode_eval:
 
 # Regular decode without a batch cap (base max-num-seqs 128), so TTFT is not
 # traded for ITL by a standing decode queue.
-override_1p2d_cap128:
+override_2p4d_cap128:
   roles:
-    prefill: &override_1p2d_cap128_prefill
-      nodes: 2
-      workers: 1
-      args: &override_1p2d_cap128_prefill_args {}
-    decode: &override_1p2d_cap128_decode
+    prefill: &override_2p4d_cap128_prefill
       nodes: 4
       workers: 2
-      args: &override_1p2d_cap128_decode_args
+      args: &override_2p4d_cap128_prefill_args {}
+    decode: &override_2p4d_cap128_decode
+      nodes: 8
+      workers: 4
+      args: &override_2p4d_cap128_decode_args
         max-num-seqs: 128
         use-replayssm: true
 
-override_1p2d_cap128_eval:
+override_2p4d_cap128_eval:
   roles:
     prefill:
-      <<: *override_1p2d_cap128_prefill
+      <<: *override_2p4d_cap128_prefill
       args:
-        <<: *override_1p2d_cap128_prefill_args
+        <<: *override_2p4d_cap128_prefill_args
         reasoning-parser: kimi_k3
         dyn-tool-call-parser: kimi_k3
         dyn-reasoning-parser: kimi_k3
         dyn-enable-structural-tag: true
     decode:
-      <<: *override_1p2d_cap128_decode
+      <<: *override_2p4d_cap128_decode
       args:
-        <<: *override_1p2d_cap128_decode_args
+        <<: *override_2p4d_cap128_decode_args
         reasoning-parser: kimi_k3
         dyn-tool-call-parser: kimi_k3
         dyn-reasoning-parser: kimi_k3
@@ -361,6 +367,38 @@ override_2p3d_cap128_eval:
       <<: *override_2p3d_cap128_decode
       args:
         <<: *override_2p3d_cap128_decode_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+
+override_3p3d_cap128:
+  roles:
+    prefill: &override_3p3d_cap128_prefill
+      nodes: 6
+      workers: 3
+      args: &override_3p3d_cap128_prefill_args {}
+    decode: &override_3p3d_cap128_decode
+      nodes: 6
+      workers: 3
+      args: &override_3p3d_cap128_decode_args
+        max-num-seqs: 128
+        use-replayssm: true
+
+override_3p3d_cap128_eval:
+  roles:
+    prefill:
+      <<: *override_3p3d_cap128_prefill
+      args:
+        <<: *override_3p3d_cap128_prefill_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+    decode:
+      <<: *override_3p3d_cap128_decode
+      args:
+        <<: *override_3p3d_cap128_decode_args
         reasoning-parser: kimi_k3
         dyn-tool-call-parser: kimi_k3
         dyn-reasoning-parser: kimi_k3
