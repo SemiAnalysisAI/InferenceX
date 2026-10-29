@@ -135,6 +135,18 @@ def family_owners(repository: str) -> list[Ownership]:
     return result
 
 
+def candidate_owner(repository: str, candidate: str) -> Ownership | None:
+    """Return the family claim candidate ID ``candidate`` holds, or None if it holds none.
+
+    The ID starts with its family's claim name, so this reads one claim instead of all of them.
+    """
+    value = ref(repository, "klaud/claim-" + candidate.split("-", 1)[0])
+    if not value:
+        return None
+    owner = Ownership.model_validate(record(repository, value))
+    return owner if [owned.id for owned in owner.candidates] == [candidate] else None
+
+
 def recovery_lease(repository: str, parent: int, candidate: OwnedCandidate) -> bool:
     """Take the recovery lease for ``candidate`` of run ``parent`` and return True if held.
 

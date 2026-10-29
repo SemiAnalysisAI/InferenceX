@@ -125,6 +125,8 @@ class Ownership(Contract):
 ASSET_REASONS = ("weights-missing", "route-mismatch")
 INFRA_REASONS = ("infra-registry-rate-limit", "infra-hf-rate-limit", "infra-node-fault")
 LIMIT_REASONS = ("cluster-time-limit",)
+REQUEUE_LABEL = "klaud-requeue"
+DATASET_PROVENANCE_UNAVAILABLE = "Public baseline dataset provenance is unavailable"
 
 LEGACY_OUTCOMES = {
     "readiness-blocked": "missing-assets",
