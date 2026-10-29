@@ -11575,11 +11575,20 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
-    - qwen3.8next-fp4-gb300-sglang-agentic-mtp
+    - minimaxm31flash-fp4-b300-sglang-agentic-dspark
+  description:
+    - "Add TP2 points with DRAM KV offload (L2 HiCache) at conc 40 to 56 to the existing curve: shortest-prefill-first scheduling with a prefill-decode interval of 16, 8192-token prefill chunks, mem-fraction-static 0.92 and stream interval 20."
+    - "Add a second conc 48 point with a prefill-decode interval of 32."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4647
+  scenario-type: [agentic-coding]
+  append-only: true
+
+- config-keys:
+    - dsv41flash-fp4-b300-sglang-agentic-dspark
+    - dsv41flash-fp4-b300-sglang-agentic-dspark-lowconc
   scenario-type:
     - agentic-coding
   description:
-    - "Upstream the report-only speculative acceptance gate from NVIDIA/InferenceMAX#1063. Measure real NEXTN MTP acceptance on pinned SPEED-Bench coding prompts alongside the AgentX throughput jobs; report the comparison with golden AL 2.32 without blocking throughput."
-    - "Run the existing one-GPU Qwen3.8-Flash-Next NVFP4 SGLang GB300 concurrency ladder at 1, 2, 4, 8, 16, 32, 48, and 64, plus its selected real-verification accuracy eval. Gate planning shares one concurrency-64 measurement across all eight points."
-    - "Adapt the gate to the pinned agentx-harness runtime, bound schema-2 recipe fragments, and native power collection. Retain main's SGLang v0.5.22 image, serving configuration, cluster routing, caches, and canonical AgentX duration."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4654
+    - "Update DeepSeek-V4.1-Flash FP4 B300 SGLang AgentX to image lmsysorg/sglang:nightly-dev-cu13-20261020-ab580b2e (digest-pinned), and keep TP4 concurrency 1 and 4 on nightly-dev-cu13-20261014-684fea8a under the new dsv41flash-fp4-b300-sglang-agentic-dspark-lowconc key."
+    - "Enable trtllm DSv4 attention and decoder SWA bounded replay for TP2 C32, set SGLANG_DSV4_DECODER_TAIL_GRAPH_MAX_ROWS=0 for DEP2 C64 and C256, and remove the TP4/EP4 DPA C256 point."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4627
