@@ -11563,5 +11563,5 @@
   description:
     - "Use the fastokens frontend tokenizer (DYN_TOKENIZER=fastokens) on every point. The default tokenizer disables its prefix cache for this model, so each turn re-tokenized the full prompt."
     - "Add conc 360 to the 6 DEP2 prefill + DEP16 decode point, next to conc 300."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4631
   scenario-type: [agentic-coding]
