@@ -682,6 +682,77 @@ def test_retirement_records_deleted_configs_without_running_them(
         assert result.multinode_evals == result.multinode_agentic_evals == []
 
 
+@pytest.mark.parametrize(("mode", "expected"), [
+    ("retirement", "true"), ("mixed", "false"), ("empty", None), ("still-active", None),
+])
+def test_merge_ingest_executes_the_plan_before_classifying_retirement(
+    committed_planning_repo, mode, expected, tmp_path
+):
+    import json
+    import os
+    import subprocess
+    import sys
+
+    root, _, base = committed_planning_repo
+    project = Path(__file__).resolve().parents[3]
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "inferencex-e2e").symlink_to(root, target_is_directory=True)
+    (root / "benchmarks/check_env.sh").symlink_to(project / "benchmarks/check_env.sh")
+    entries = []
+    if mode != "empty":
+        entries.append({
+            "config-keys": ["single"], "retired": True, "description": ["Retire single"],
+            "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
+        })
+    if mode == "mixed":
+        entries.append({
+            "config-keys": ["multi"], "description": ["Update multi"],
+            "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
+        })
+    if mode != "still-active":
+        config = root / "configs/nvidia-master.yaml"
+        master = yaml.safe_load(config.read_text())
+        del master["single"]
+        config.write_text(yaml.safe_dump(master))
+    with (root / "perf-changelog.yaml").open("a") as handle:
+        if entries:
+            handle.write(yaml.safe_dump(entries))
+    subprocess.run(["git", "add", "."], cwd=root, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-qm", "retirement"], cwd=root, check=True)
+    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    uv = fake_bin / "uv"
+    uv.write_text(
+        f'#!/bin/sh\nwhile [ "$1" != python ]; do shift; done\nshift\nexec "{sys.executable}" "$@"\n'
+    )
+    uv.chmod(0o755)
+    output = tmp_path / "outputs"
+    workflow = yaml.safe_load((project.parent / ".github/workflows/merge-ingest.yml").read_text())
+    step = next(step for step in workflow["jobs"]["ingest"]["steps"] if step.get("id") == "plan")
+    result = subprocess.run(
+        ["bash", "-e", "-c", step["run"]], capture_output=True, text=True, cwd=workspace,
+        env={
+            **os.environ, "PATH": f"{fake_bin}:{os.environ['PATH']}", "PYTHONPATH": str(project),
+            "GITHUB_WORKSPACE": str(workspace), "GITHUB_OUTPUT": str(output),
+            "RUNNER_TEMP": str(tmp_path), "PUSH_BEFORE": base, "PUSH_AFTER": head,
+        },
+    )
+    if expected is None:
+        assert result.returncode != 0
+        message = "No additions found" if mode == "empty" else "retired configs still exist in head"
+        assert message in result.stderr
+        assert not output.exists()
+    else:
+        assert result.returncode == 0, result.stderr
+        assert f"retirement-only={expected}\n" in output.read_text()
+        metadata = json.loads((workspace / "changelog_metadata.json").read_text())
+        assert [entry["retired"] for entry in metadata["entries"]] == [
+            entry.get("retired", False) for entry in entries
+        ]
+
+
 @pytest.mark.parametrize(("keys", "message"), [
     (["single"], "retired configs still exist in head"),
     (["missing"], "not found"),
