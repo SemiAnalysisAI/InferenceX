@@ -136,7 +136,7 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
     # vLLM's low-latency send/receive split (see LegacyBufferLL).
     ll_recv_hook = True
     # The num_sms the timed dispatch passes: 0 hands the count to DeepEP's model, as vLLM does;
-    # create_buffer overrides it only on EFA.
+    # create_buffer overrides it where the registry sets rdma_gbs.
     _dispatch_num_sms = 0
 
     @staticmethod
@@ -380,7 +380,7 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
             num_experts=self.args.experts,
             num_max_tokens_per_rank=self._dispatch_capacity(p.T),
             expert_alignment=1,
-            num_sms=self._dispatch_num_sms,  # 0 (DeepEP's model) except on EFA; see create_buffer
+            num_sms=self._dispatch_num_sms,  # 0 (DeepEP's model) unless rdma_gbs is set
             async_with_compute_stream=False,
             do_handle_copy=True,
             do_cpu_sync=False,
