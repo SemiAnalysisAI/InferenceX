@@ -182,8 +182,8 @@ when the LSA team is smaller than the world. x86 EP16 is that hybrid path, GIN a
 domains of eight scale-up ranks each. GB EP16 stays inside MNNVL and uses LSA. Hybrid EP16 allocates
 33 GIN QPs per peer (a fixed 512-QP budget) instead of the automatic 65/129, which exhausts the
 per-NIC QP budget on CX-7. DeepEP's SM model reads the scale-out rate from an `ibstat` probe that cannot
-see EFA and that the vLLM image does not ship, so on the EFA pools and on h200-dgxc the registry's
-`network.rdma_gbs` supplies the per-GPU rate and the resulting count is passed explicitly
+see EFA and that the vLLM image does not ship, so on the EFA pools, h200-dgxc and b200-nscale the
+registry's `network.rdma_gbs` supplies the per-GPU rate and the resulting count is passed explicitly
 (`library_config.sm_model_rdma_gbs`).
 
 **A virtualized pool can make a scale-out row measure the hypervisor.** ElasticBuffer registers its GIN
