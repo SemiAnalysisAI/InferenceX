@@ -335,20 +335,33 @@ def test_dated_nightly_images_are_held_shorter_than_other_tags(image, hours, hel
     assert klaud.image_held(candidate, {"2" * 16: utc(ago(hours))}, utc(NOW)) is False
 
 
-@pytest.mark.parametrize("other", [
-    pytest.param({"sources": {"agg": {"image": "example/sglang:v1"},
-                              "mtp": {"image": "example/vllm:v2"}}}, id="baselined-key"),
-    pytest.param({"sources": {"agg": {"image": "example/sglang:v1"}},
-                  "unbaselined-keys": {"mtp": "example/vllm:v2"}}, id="unbaselined-key"),
-])  # fmt: skip
-def test_a_mixed_image_curve_is_held_only_while_every_image_is(other):
+def test_a_mixed_image_curve_is_held_only_while_every_published_image_is():
     held, fresh = (identity(image)[:16] for image in ("example/sglang:v1", "example/vllm:v2"))
     candidate = {"id": candidate_id("configs/nvidia-master.yaml:agg,mtp", held),
-                 "source": {"image": "example/sglang:v1"}, **other}  # fmt: skip
+                 "source": {"image": "example/sglang:v1"},
+                 "sources": {"agg": {"image": "example/sglang:v1"},
+                             "mtp": {"image": "example/vllm:v2"}}}  # fmt: skip
     since = utc(ago(1))
 
     assert klaud.image_held(candidate, {held: since}, utc(NOW)) is False
     assert klaud.image_held(candidate, {held: since, fresh: since}, utc(NOW)) is True
+
+
+def test_a_mixed_curve_with_an_unbaselined_key_stays_held_after_already_updated(monkeypatch):
+    tried = candidate_id("configs/nvidia-master.yaml:agg,mtp", identity("example/sglang:v1")[:16])
+    candidate = {"id": tried, "source": {"image": "example/sglang:v1"},
+                 "sources": {"agg": {"image": "example/sglang:v1"}},
+                 "unbaselined-keys": {"mtp": "example/vllm:v2"}}  # fmt: skip
+    serve_history(
+        monkeypatch,
+        [workflow_run(1, "schedule", hours=30)],
+        {1: [session(10, tried, 30)]},
+        {10: outcome("already-updated", "resolve")},
+    )
+
+    history = klaud.recent_candidate_outcomes("example/project", 24)
+
+    assert klaud.image_held(candidate, history.held_images, utc(NOW)) is True
 
 
 @pytest.mark.parametrize(("hours", "backoff"), [

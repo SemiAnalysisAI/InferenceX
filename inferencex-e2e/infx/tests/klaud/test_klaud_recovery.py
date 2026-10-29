@@ -640,6 +640,54 @@ def test_a_wake_defers_a_resume_while_another_pass_just_filled_the_last_slot(mon
 
     assert world.writes == world.dispatches == []
     assert "resume deferred: every session slot is in use" in summary.read_text()
+    assert world.deferred == [(42, world.session.candidate.id, 2)]
+
+
+@pytest.mark.parametrize(("number", "max_sessions", "granted", "kept"), [
+    pytest.param(2, 5, True, False, id="slot-free"),
+    pytest.param(2, 0, False, True, id="no-slot"),
+    pytest.param(3, 5, False, False, id="another-session-since"),
+])  # fmt: skip
+def test_any_wake_grants_a_resume_an_earlier_pass_deferred_once_a_slot_is_free(
+    monkeypatch, tmp_path, number, max_sessions, granted, kept
+):
+    world = ended_session_sweep(monkeypatch, conclusion="failure", sessions=("failure",))
+    candidate = world.session.candidate
+    world.deferred.append((42, candidate.id, number))
+    monkeypatch.setattr(claims, "candidate_owner", lambda _r, owned: (
+        Ownership(run_id=42, candidates=[candidate]) if owned == candidate.id else None))
+
+    # The wake is for another candidate, whose run ended after it finished.
+    summary, _ = recovery_pass(monkeypatch, tmp_path, max_sessions=max_sessions,
+                               target=f"{'1' * 16}-{'2' * 16}")
+
+    assert world.writes == ([GRANT, DISPATCH] if granted else [])
+    assert [dispatch["inputs"] for dispatch in world.dispatches] == ([{
+        "resume-parent": "42", "resume-candidate": candidate.id, "resume-session": "2"}]
+        if granted else [])
+    assert (summary.exists() and "resumed / 已恢复 (session 2)" in summary.read_text()) is granted
+    assert world.deferred == ([(42, candidate.id, number)] if kept else [])
+
+
+def test_deferred_resume_records_round_trip_through_their_branch_names(monkeypatch):
+    first, second = f"{'1' * 16}-{'2' * 16}", f"{'3' * 16}-{'4' * 16}"
+    refs = [{"ref": "refs/heads/" + claims.deferred_name(77, first, 2)},
+            {"ref": "refs/heads/" + claims.deferred_name(42, second, 11)},
+            {"ref": "refs/heads/klaud/deferred-unrelated"}]
+    monkeypatch.setattr(github, "items", lambda _r, path, _key=None: (
+        refs if path == "git/matching-refs/heads/klaud/deferred-" else pytest.fail(path)))
+    deleted = []
+
+    def write(_repository, path, method, _payload=None):
+        deleted.append((method, path))
+        raise http_error(422)
+
+    monkeypatch.setattr(github, "write", write)
+
+    assert claims.deferred_resumes("example/project") == [(42, second, 11), (77, first, 2)]
+    # Another pass already deleted it.
+    claims.clear_deferred("example/project", 42, second, 11)
+    assert deleted == [("DELETE", f"git/refs/heads/klaud/deferred-42-{second}-11")]
 
 
 @pytest.mark.parametrize(("args", "target"), [
@@ -812,20 +860,27 @@ def test_recovery_stops_a_final_sweep_whose_last_two_attempts_never_got_a_runner
 QUEUED = [HOSTED, gpu_job(103, "gpu-0", "success", copied=True), gpu_job(101, conclusion=None)]
 
 
-@pytest.mark.parametrize(("now", "jobs", "starved"), [
-    pytest.param("2026-10-16T01:59:59Z", QUEUED, False, id="within-two-days"),
-    pytest.param("2026-10-16T02:00:00Z", QUEUED, True, id="two-days-after-the-run-was-created"),
-    pytest.param("2026-10-16T02:00:00Z",
+# Run 9 was created 2026-10-14T02:00:00Z, and its current attempt started at 20:00:00Z.
+@pytest.mark.parametrize(("now", "attempt", "started", "jobs", "starved"), [
+    pytest.param("2026-10-16T19:59:59Z", 1, None, QUEUED, False, id="within-two-days"),
+    pytest.param("2026-10-16T20:00:00Z", 1, None, QUEUED, True,
+                 id="two-days-after-the-attempt-started"),
+    pytest.param("2026-10-16T20:00:00Z", 1, None,
                  [HOSTED, gpu_job(101, conclusion=None, labels=UNSCHEDULED)], True,
                  id="without-the-priority-scheduler"),
-    pytest.param("2026-10-16T02:00:00Z", [*QUEUED, gpu_job(102, "gpu-0", conclusion=None)],
-                 False, id="a-gpu-job-of-the-attempt-is-running"),
+    pytest.param("2026-10-16T20:00:00Z", 1, None,
+                 [*QUEUED, gpu_job(102, "gpu-0", conclusion=None)], False,
+                 id="a-gpu-job-of-the-attempt-is-running"),
+    pytest.param("2026-10-17T02:00:00Z", 2, "2026-10-17T01:00:00Z", QUEUED, False,
+                 id="a-rerun-of-a-three-day-old-run-started-an-hour-ago"),
 ])  # fmt: skip
-def test_recovery_stops_a_run_still_waiting_for_a_runner_two_days_after_it_was_created(
-    monkeypatch, now, jobs, starved
+def test_recovery_stops_a_run_still_waiting_for_a_runner_two_days_after_its_attempt_started(
+    monkeypatch, now, attempt, started, jobs, starved
 ):
-    world = ended_session_sweep(monkeypatch, conclusion=None)
-    world.listings["actions/runs/9/attempts/1/jobs?per_page=100"] = jobs
+    world = ended_session_sweep(monkeypatch, attempt=attempt, conclusion=None)
+    if started:
+        world.sweep["run_started_at"] = started
+    world.listings[f"actions/runs/9/attempts/{attempt}/jobs?per_page=100"] = jobs
     at = lifecycle.utc(now)
 
     if starved:

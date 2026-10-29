@@ -642,8 +642,9 @@ def ended_session_sweep(monkeypatch, *, attempt=1, jobs=(), conclusion="cancelle
     instead of resume runs. A candidate job ended ``sessions[N - 1]`` or its ``reruns`` outcome
     (see ``candidate_job``). By default every session ran, so none is left to resume. Otherwise
     the planner run ended ``planner``; candidate jobs have the resume gate when ``gated``.
-    Record GitHub writes, dispatched resume runs, finished outcomes, released family claims
-    and posted PR comments; tests may add comments and resume runs and replace reads."""
+    Record GitHub writes, dispatched resume runs, finished outcomes, released family claims,
+    deferred resumes and posted PR comments; tests may add comments, resume runs and deferred
+    resumes and replace reads."""
     candidate = OwnedCandidate(id=f"{identity(FAMILY)[:16]}-{'2' * 16}", family=FAMILY,
                                base="a" * 40)
     branch = f"klaud/auto-{candidate.id}"
@@ -662,7 +663,7 @@ def ended_session_sweep(monkeypatch, *, attempt=1, jobs=(), conclusion="cancelle
     sweep = {"id": 9, "event": "pull_request", "head_sha": "c" * 40, "run_attempt": attempt,
              "status": "completed" if conclusion else "in_progress", "conclusion": conclusion,
              "actor": {"login": "Klaud-Cold"}, "created_at": "2026-10-14T02:00:00Z",
-             "updated_at": "2026-10-15T00:00:00Z",
+             "run_started_at": "2026-10-14T20:00:00Z", "updated_at": "2026-10-15T00:00:00Z",
              "head_repository": {"full_name": "example/project"}, "pull_requests": [{"number": 7}]}
 
     def candidate_job(job_id, run_id, name, run_start, number, outcome):
@@ -778,7 +779,7 @@ def ended_session_sweep(monkeypatch, *, attempt=1, jobs=(), conclusion="cancelle
     world = SimpleNamespace(
         session=lifecycle.Session("example/project", parent, candidate, recovering=True),
         pull=pull, reads=reads, comments=comments, writes=[], dispatches=[], finished=[],
-        released=[], start_resume=start_resume, sweep=sweep, listings=listings,
+        released=[], deferred=[], start_resume=start_resume, sweep=sweep, listings=listings,
     )
 
     def write(_repository, path, method, payload=None):
@@ -806,6 +807,11 @@ def ended_session_sweep(monkeypatch, *, attempt=1, jobs=(), conclusion="cancelle
     monkeypatch.setattr(claims, "recovery_lease", lambda *_: True)
     monkeypatch.setattr(claims, "release_family", lambda _r, owned, run: (
         world.released.append((owned.id, run))))
+    monkeypatch.setattr(claims, "defer_resume", lambda _r, run, owned, number: (
+        world.deferred.append((run, owned.id, number))))
+    monkeypatch.setattr(claims, "deferred_resumes", lambda _r: sorted(world.deferred))
+    monkeypatch.setattr(claims, "clear_deferred", lambda _r, run, owned, number: (
+        world.deferred.remove((run, owned, number))))
     return world
 
 
@@ -1255,7 +1261,8 @@ def test_recovery_reruns_the_preempted_final_sweep_or_a_newer_targeted_run(
         "display_title": f"e2e Test - klaud-42-{world.session.candidate.id}",
         "actor": {"login": "Klaud-Cold"}, "head_repository": {"full_name": "example/project"},
         "status": "completed", "conclusion": targeted,
-        "created_at": "2026-10-14T04:00:00Z", "updated_at": "2026-10-15T00:00:00Z",
+        "created_at": "2026-10-14T04:00:00Z", "run_started_at": "2026-10-14T04:00:00Z",
+        "updated_at": "2026-10-15T00:00:00Z",
     }
     serve = github.items
 
@@ -1677,6 +1684,8 @@ def test_recovery_keeps_an_approved_session_without_a_resume_slot_for_the_next_w
         f"Klaud `{world.session.candidate.id}`: pending / 等待后续收尾 (resume deferred: every "
         "session slot is in use). [Parent run / 父运行](https://github.com/example/project/actions/runs/42)"
         "\n\n")
+    # A later wake grants session 2 from this record once a slot frees.
+    assert world.deferred == [(42, world.session.candidate.id, 2)]
 
 
 def test_recovery_keeps_a_session_whose_resume_dispatch_failed_without_leaving_its_grant(

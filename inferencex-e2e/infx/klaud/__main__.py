@@ -600,16 +600,15 @@ def order_by_cooldown(candidates: list[dict], recent: dict[str, str | None]) -> 
 def image_held(candidate: dict, held_images: dict[str, datetime], now: datetime) -> bool:
     """Whether already-updated outcomes still hold every image of ``candidate``'s curve at ``now``.
 
-    A curve whose keys use different images stays in the pool while one of them may have an
-    update. Dated nightly tags are republished often, so they hold for LONG_HOLD_HOURS and other
-    tags for UNDATED_IMAGE_HOLD_DAYS.
+    A curve whose keys use different images stays in the pool while one of its published images
+    may have an update. Only the ID's image and the ``sources`` images count, since no candidate
+    ID, and so no outcome, names an image of ``unbaselined-keys``. Dated nightly tags are
+    republished often, so they hold for LONG_HOLD_HOURS and other tags for
+    UNDATED_IMAGE_HOLD_DAYS.
     """
     images = {candidate["id"].split("-", 1)[1]: candidate["source"]["image"]}
-    for image in [
-        *(source["image"] for source in candidate.get("sources", {}).values()),
-        *candidate.get("unbaselined-keys", {}).values(),
-    ]:
-        images.setdefault(identity(normalized_image(image))[:16], image)
+    for source in candidate.get("sources", {}).values():
+        images.setdefault(identity(normalized_image(source["image"]))[:16], source["image"])
 
     def held(key: str, image: str) -> bool:
         since = held_images.get(key)

@@ -7,7 +7,7 @@ run-name: >-
 # A parked Klaud session resumes only after recovery sees its owned runs end. Rather than wait
 # for the hourly :47 wake, start a recovery-only planner pass for the candidate as soon as a
 # Klaud-owned targeted run (e2e Test - klaud-*) or PR sweep (klaud/auto-* branch) completes,
-# unless its session is still running and sees the end itself, or another of its runs is still
+# unless its session's agent is still running and sees the end itself, or another of its runs is still
 # active and will wake recovery when it ends. Recovery dispatches this workflow for a rerun it
 # holds until a set time (a parked infrastructure rerun, or a preempted run's grace period); that
 # run sleeps until then and wakes recovery for the candidate. No checkout and no event data
@@ -82,12 +82,23 @@ jobs:
                 github.rest.actions.listJobsForWorkflowRun,
                 { ...context.repo, run_id: run.id, per_page: 100 },
               )));
-              const session = jobs.flat().find(
+              const running = jobs.flat().filter(
                 (job) => job.name.startsWith(`Run candidate ${candidate}`) && job.status !== 'completed',
               );
-              if (session) {
-                core.info(`Session job ${session.id} of candidate ${candidate} is still running; it sees the run end.`);
+              const agent = running.find((job) => !(job.steps ?? []).some(
+                (step) => step.name === 'Let Klaud Cold own the candidate PR' && step.status === 'completed',
+              ));
+              if (agent) {
+                core.info(`Session job ${agent.id} of candidate ${candidate} is still running its agent; it sees the run end.`);
                 return;
+              }
+              // Recovery skips a session whose job still runs, so let its cleanup steps finish first (up to 10 minutes).
+              for (const job of running) {
+                for (let poll = 0; poll < 40; poll += 1) {
+                  await new Promise((resolve) => setTimeout(resolve, 15000));
+                  const { data } = await github.rest.actions.getJobForWorkflowRun({ ...context.repo, job_id: job.id });
+                  if (data.status === 'completed') break;
+                }
               }
               inputs['wake-candidate'] = candidate;
             }

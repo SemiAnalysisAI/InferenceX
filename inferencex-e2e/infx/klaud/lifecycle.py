@@ -759,12 +759,13 @@ def starved(jobs: list[dict]) -> bool:
 def no_capacity(session: Session, run: dict, now: datetime) -> bool:
     """Whether owned ``run`` cannot get runners, so its candidate stops as ``no-capacity``.
 
-    That is once its last two attempts ended ``starved``, or NO_CAPACITY_SECONDS after it was
-    created while its current attempt, ended or not, is ``starved``.
+    That is once its last two attempts ended ``starved``, or NO_CAPACITY_SECONDS after its
+    current attempt started while that attempt, ended or not, is ``starved``. A rerun keeps the
+    run's creation time, so its age counts from the attempt's start.
     """
     if terminal(run) and run["conclusion"] != "cancelled":
         return False
-    aged = now - utc(run["created_at"]) >= timedelta(seconds=NO_CAPACITY_SECONDS)
+    aged = now - utc(run["run_started_at"]) >= timedelta(seconds=NO_CAPACITY_SECONDS)
     if not aged and (not terminal(run) or run["run_attempt"] < 2):
         return False
 
@@ -1203,6 +1204,60 @@ def grant(session: Session, pull: dict) -> int:
     return number
 
 
+def grant_deferred(
+    repository: str, parent: int, candidate: str, number: int, listed: set[str], now: datetime
+) -> bool:
+    """Grant session ``number`` of ``candidate`` of run ``parent``, which a pass approved but had
+    no slot for, and return True once its resume run is dispatched.
+
+    Rechecks only what may have changed since that pass reconciled it: the candidate still holds
+    its claim for that run, no session of it runs or started since, and it may still resume.
+    Drops the record once it no longer applies; keeps it while state is unreadable, another pass
+    holds the lease or the grant fails.
+    """
+    try:
+        try:
+            owner = claims.candidate_owner(repository, candidate)
+            if not owner or owner.run_id != parent or candidate in listed:
+                raise VerificationError("Deferred resume no longer applies")
+            run = github.read(repository, f"actions/runs/{parent}")
+            if (
+                run["head_branch"] != "main"
+                or run["path"] != ".github/workflows/klaud-plan.yml"
+                or run["event"] not in ("schedule", "workflow_dispatch")
+            ):
+                raise VerificationError("Untrusted ownership parent")
+            session = Session(repository, run, owner.candidates[0], recovering=True)
+            if not session.idle() or not claims.recovery_lease(
+                repository, parent, session.candidate
+            ):
+                return False
+            if sessions_started(session) + 1 != number:
+                raise VerificationError("Deferred resume no longer applies")
+            pulls = session.pulls()
+            resume(session, pulls[0] if pulls else None, now)
+            raise VerificationError("Deferred resume no longer applies")
+        except ResumeSession as approval:
+            grant(session, approval.pull)
+        except (PendingCleanup, ListingUnavailable):
+            return False
+        except VerificationError:
+            claims.clear_deferred(repository, parent, candidate, number)
+            return False
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
+        reason = str(error) if isinstance(error, VerificationError) else type(error).__name__
+        print(
+            f"::warning::Klaud: deferred resume of candidate {candidate} of planner run {parent} "
+            f"not granted: {reason}."
+        )
+        return False
+    summarize(repository, session.candidate, parent, f"resumed / 已恢复 (session {number})")
+    show_status(session)
+    with contextlib.suppress(OSError, subprocess.SubprocessError):
+        claims.clear_deferred(repository, parent, candidate, number)
+    return True
+
+
 def retained(session: Session, now: datetime) -> bool:
     """Whether recovery keeps a session it could not reconcile for a later pass.
 
@@ -1494,9 +1549,10 @@ def recover(max_sessions: int, target: str | None = None) -> None:
     After both outputs are written, with live work known, finished PRs that conflict only on the
     changelog get main merged in, a few per pass.
 
-    A wake for one ``target`` candidate ID reconciles only it: it returns at once unless the
-    candidate holds its family claim, reads only its planner's ownership artifact, reads running
-    sessions only to resume it, and skips the abandoned-work sweep and both outputs.
+    A wake for one ``target`` candidate ID reconciles only it: it skips that unless the candidate
+    holds its family claim, reads only its planner's ownership artifact, reads running sessions
+    only to resume, and skips the abandoned-work sweep and both outputs. While slots remain it
+    also grants the resumes earlier passes approved but deferred for lack of a slot.
     """
     repository = os.environ["GITHUB_REPOSITORY"]
     if github.budget_low():
@@ -1517,12 +1573,25 @@ def recover(max_sessions: int, target: str | None = None) -> None:
     except (OSError, subprocess.SubprocessError, ListingUnavailable):
         print("::warning::Klaud: family claims unreadable; every claimed family stays claimed.")
         claimed = None
+    deferred = []
+    if target:
+        try:
+            deferred = [
+                entry for entry in claims.deferred_resumes(repository) if entry[1] != target
+            ]
+        except (OSError, subprocess.SubprocessError, ListingUnavailable):
+            print("::warning::Klaud: deferred resumes unreadable; the next full pass grants them.")
     if target and claimed == []:
         print(f"Klaud: candidate {target} holds no family claim; nothing to recover.")
-        return
+        if not deferred:
+            return
     try:
-        inventory = github.items(
-            repository, "actions/artifacts?name=klaud-ownership&per_page=100", "artifacts"
+        inventory = (
+            []
+            if target and claimed == []
+            else github.items(
+                repository, "actions/artifacts?name=klaud-ownership&per_page=100", "artifacts"
+            )
         )
     except (OSError, subprocess.SubprocessError, ListingUnavailable):
         if claimed is None:
@@ -1656,7 +1725,7 @@ def recover(max_sessions: int, target: str | None = None) -> None:
             show_status(session)
     listed, planners, running = None, set(), 0
     try:
-        if approved or not target:
+        if approved or deferred or not target:
             listed, unfinished, planners = plan_activity(repository)
             running = len(unfinished)
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
@@ -1668,6 +1737,15 @@ def recover(max_sessions: int, target: str | None = None) -> None:
         run_id = session.parent["id"]
         if running + resumed >= max_sessions:
             status = "pending / 等待后续收尾 (resume deferred: every session slot is in use)"
+            try:
+                claims.defer_resume(
+                    repository, run_id, session.candidate, sessions_started(session) + 1
+                )
+            except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+                print(
+                    f"::warning::Klaud: deferred resume of candidate {session.candidate.id} not "
+                    "recorded; the next full pass grants it."
+                )
         else:
             try:
                 number = grant(session, pull)
@@ -1687,6 +1765,10 @@ def recover(max_sessions: int, target: str | None = None) -> None:
                 status = f"resumed / 已恢复 (session {number})"
         summarize(repository, session.candidate, run_id, status)
         show_status(session)
+    for parent_id, candidate_id, number in deferred:
+        if running + resumed >= max_sessions:
+            break
+        resumed += grant_deferred(repository, parent_id, candidate_id, number, listed, now)
     for owner, artifact in owners:
         if artifact and all(
             results.get((owner.run_id, candidate.id)) for candidate in owner.candidates
