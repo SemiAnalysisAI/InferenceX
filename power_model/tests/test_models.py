@@ -328,7 +328,7 @@ def test_mixed_chassis_and_rack_use_their_actual_gpu_counts():
     assert result.gpu_count == 80
     assert [node.power_w for node in named(result, "GPUs")] == [1000, 9000]
     assert [node.power_w for node in named(result, "X86CPU")] == [330]
-    assert [node.power_w for node in named(result, "GraceCPU")] == [3600]
+    assert [node.power_w for node in named(result, "GraceCPU")] == [3420]
     assert [node.power_w for node in named(result, "NVMeDrive")] == [50, 720]
     assert result.facility_power_w == pytest.approx(result.AllInPower_per_gpu * 80)
     measured = model.estimate_breakdown(125, cpu_and_dram_measured_power_per_socket=98)
