@@ -11092,6 +11092,15 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
+    - qwen3.5-fp8-h200-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use the FA3 attention backend for the H200 Qwen3.5-397B-A17B-FP8 SGLang TP8/EP1 HiCache AgentX points at concurrency 4, 8, 12 and 24, and add FA3 points at concurrency 32 and 48."
+    - "Update the SGLang image from v0.5.21-cu130 to nightly-dev-20261021-c1c287a4, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4455
+
+- config-keys:
     - minimaxm31flash-fp4-gb200-sglang-agentic-dspark
   description:
     - "Add day-zero MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4) AgentX on GB200 with SGLang image lmsysorg/sglang:dev-minimax-m31-flash (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1)."
@@ -11498,4 +11507,62 @@
     - "TP8 concurrency 4 drops max-running-requests from 8 to 2 and keeps cuda-graph-max-bs-decode at 8. No other point moves: TP8 concurrency 1 and 2 and every TP4 HiCache point keep admission at 2x CONC."
     - "At this point the slowest decodes are the ones that share a decode batch, so admission above the in-flight tail only widens the batch that tail runs in. A max-running-requests sweep at TP8 concurrency 4 measured interactivity at p90 TPOT 222.3 to 255.0 output tokens/s/user and the slowest decile's mean concurrent decode partners 1.68 to 0.71, against TTFT p90 1.07 to 1.22 s and 3911 to 3754 tokens/s/GPU; requests over the cap wait for a slot."
     - "The image, EAGLE shape (5 steps, 6 draft tokens), chunked-prefill-size, mem-fraction-static, HiCache tier and the DSA triton prefill and decode backends are unchanged."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4630
+
+- config-keys:
+    - minimaxm31flash-fp4-b200-sglang-agentic-dspark
+    - minimaxm31flash-fp4-gb200-sglang-agentic-dspark
+    - minimaxm31flash-fp4-b300-sglang-agentic-dspark
+  description:
+    - "Add a Low-Latency TP4 point at conc 1 with the MSA-V1 MonoKernel to the existing curve, following the GB300 recipe."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4509
+  scenario-type: [agentic-coding]
+  append-only: true
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-sglang-agentic-dspark
+  description:
+    - "Store the DSpark draft KV cache in FP8 (speculative-draft-kv-cache-dtype fp8_e4m3) on every point except the batch-size-1 MonoKernel Low-Latency point, instead of the bf16 default, matching the vLLM DSpark drafter; this frees HBM and HiCache host pool space for target KV."
+    - "Rerun the whole curve so it is measured on one recipe revision."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4600
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm31flash-fp4-b200-sglang-agentic-dspark
+  description:
+    - "Store the DSpark draft KV cache in FP8 (speculative-draft-kv-cache-dtype fp8_e4m3) instead of the bf16 default, matching the vLLM DSpark drafter; this frees HBM and HiCache host pool space for target KV."
+    - "Rerun the whole curve so every point uses the FP8 draft KV cache."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4598
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+    - dsv4-fp4-b200-vllm-agentic-mtp-lowconc
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the DeepSeek-V4-Pro-0813 FP4 B200 AgentX vLLM image to vllm/vllm-openai:nightly-8e2beaa3bff595577a069d49d96bde9074294ec2 (digest-pinned). Keep TP8 c1, c6 and c14, move TP8 c4 to the lowconc key and remove TP8 c10 and c16. Retune c32 to TP4 x DP2 with deep_gemm_mega_moe and SimpleCPU offload, and switch DEP8 c64 to c192 from deep_gemm_amxf4_mega_moe to deep_gemm_mega_moe with a smaller per-rank KV cache at c96 to c192."
+    - "Add the dsv4-fp4-b200-vllm-agentic-mtp-lowconc key (vllm/vllm-openai digest-pinned) with TP8 c4 and TP2 x DP4 c48 and c64."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4554
+
+- config-keys:
+    - minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-agg
+    - minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-disagg
+  description:
+    - "Add MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4 experts, NVFP4 KV and indexer caches) AgentX on GB200 with Dynamo and the arm64 vLLM image (minimax-m31-flash-arm64-cu134)."
+    - "DSpark with the built-in drafter, 7 draft tokens (golden AL 4.04) and an fp8 drafter KV cache on every point."
+    - "Agg: TP4 at conc 1-16, and TP4 with SimpleCPUOffloadConnector (lazy offload, 360 GB) at conc 32 and 40."
+    - "Disagg: 3 DEP4 prefill workers with a DEP8 decode at conc 256 or a DEP16 decode at conc 280, and 4 DEP4 prefill workers with a DEP16 decode at conc 352; DeepGEMM MegaMoE, NIXL transfer plus a shared MooncakeStore DRAM pool (150 GB per rank), Dynamo KV router."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4464
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg
+    - minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
+  description:
+    - "Add MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4 experts, NVFP4 KV and indexer caches) AgentX on GB300 with Dynamo and the arm64 vLLM image (minimax-m31-flash-arm64-cu134)."
+    - "DSpark with the built-in drafter, 7 draft tokens (golden AL 4.04) and an fp8 drafter KV cache on every point."
+    - "Agg: TP4 at conc 1-32, and TP4 with SimpleCPUOffloadConnector (lazy offload, 860 GB) at conc 40-56."
+    - "Disagg: 6 DEP2 prefill workers with a DEP8 decode at conc 280-360 or a DEP16 decode at conc 300; DeepGEMM MegaMoE, NIXL transfer plus a shared MooncakeStore DRAM pool (160 GB per rank), Dynamo KV router."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4468
+  scenario-type: [agentic-coding]
