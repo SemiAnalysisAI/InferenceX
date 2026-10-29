@@ -43,7 +43,7 @@ base:
     options:
       store_config:
         metadata_server: P2PHANDSHAKE
-        global_segment_size: 150GB
+        global_segment_size: 190GB
         local_buffer_size: 4GB
         protocol: rdma
         device_name: '@fabric.rdma-devices'
@@ -59,6 +59,7 @@ base:
       HF_HOME: /hf_hub_cache
       HF_HUB_CACHE: /hf_hub_cache
       DYN_TCP_CONNECT_TIMEOUT: '120'
+      DYN_TOKENIZER: fastokens
     placement:
       node: head
   engine:
@@ -210,8 +211,18 @@ base:
   setup_script: vllm-mooncake.sh
 override_3p1d_c256:
   name: minimaxm31flash-gb200-disagg-mooncake-3p1d-c256
+override_3p1d_c288:
+  name: minimaxm31flash-gb200-disagg-mooncake-3p1d-c288
 override_3p1d_dep16_c280:
   name: minimaxm31flash-gb200-disagg-mooncake-3p1d-dep16-c280
+  roles:
+    decode:
+      nodes: 4
+      gpus: 16
+      args:
+        data-parallel-size: 16
+override_3p1d_dep16_c320:
+  name: minimaxm31flash-gb200-disagg-mooncake-3p1d-dep16-c320
   roles:
     decode:
       nodes: 4
