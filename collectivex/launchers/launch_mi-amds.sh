@@ -103,6 +103,7 @@ for allocation_attempt in 1 2 3; do
 done
 unset COLLX_SALLOC_ATTEMPT COLLX_NETWORK_VALIDATION_ATTEMPT
 CONTAINER_MOUNTS="$MOUNT_SRC:$MOUNT_DIR$DEVICE_MOUNTS"
+collx_add_host_verbs_provider_mount
 # uccl-ep builds from source, so it gets the cross-allocation backend cache single-slurm uses.
 # Its parent is COLLX_STAGE_DIR, not SQUASH_DIR: this SKU's squash dir is node-local and
 # root-owned (/var/lib/squash), so the submit-side mkdir fails and the path is not what compute
