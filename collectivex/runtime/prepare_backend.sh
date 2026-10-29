@@ -14,9 +14,9 @@ collx_log "backend preparation: runner=$COLLX_RUNNER bench=$COLLX_BENCH nodes=${
 # Fresh rank tasks source only these backend-created values. Network variables
 # are reapplied by the rank wrapper from the platform profile.
 readonly -a RANK_ENV_VARS=(
-  PATH VIRTUAL_ENV LD_LIBRARY_PATH PYTHONPATH CUDA_HOME CPATH NVCC_PREPEND_FLAGS
+  PATH VIRTUAL_ENV LD_LIBRARY_PATH LIBRARY_PATH PYTHONPATH CUDA_HOME CPATH NVCC_PREPEND_FLAGS
   NVSHMEM_DIR EP_NCCL_ROOT_DIR EP_NVSHMEM_ROOT_DIR EP_JIT_CACHE_DIR
-  EP_REUSE_NCCL_COMM NCCL_CUMEM_ENABLE UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC COLLX_OFI_NCCL_LIB_DIR
+  EP_REUSE_NCCL_COMM NCCL_CUMEM_ENABLE UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC COLLX_OFI_NCCL_LIB_DIR FLASHINFER_WORKSPACE_BASE
 )
 readonly -a DEEPEP_RANK_UNSETS=(EP_SUPPRESS_NCCL_CHECK)
 
@@ -188,6 +188,22 @@ deepep_cache_root() {
 
 deepep_ready() { [ -f "$1/.ready" ] && [ -x "$1/venv/bin/python" ] && [ -d "$1/source" ]; }
 
+# Runtime images (vLLM's) ship a trimmed CUDA toolkit without the cuSPARSE and similar headers that
+# torch's ATen/cuda headers include, which the extension build needs. The venv's torch already
+# pulled the matching CUDA wheels, so link only the headers the toolkit lacks into
+# <root>/cuda-include: nothing shadows the toolkit's own headers, and full-toolkit images leave
+# the directory empty.
+deepep_cuda_header_overlay() {
+  local root="$1" cuda_home="$2" overlay="$1/cuda-include" wheel_include header
+  mkdir -p "$overlay" || return 1
+  for wheel_include in "$root"/venv/lib/python*/site-packages/nvidia/cu13/include; do
+    [ -d "$wheel_include" ] || continue
+    for header in "$wheel_include"/*.h; do
+      [ -e "$cuda_home/include/${header##*/}" ] || ln -sfn "$header" "$overlay/" || return 1
+    done
+  done
+}
+
 deepep_activate() {
   local root="$1" venv venv_site nccl_root nvshmem_package overlay
   local toolchain cuda_home cccl execution_id
@@ -215,7 +231,7 @@ deepep_activate() {
     PATH="$venv/bin:${PATH#"$venv/bin:"}" \
     PYTHONPATH="$venv_site${PYTHONPATH:+:$PYTHONPATH}" \
     CUDA_HOME="$cuda_home" \
-    CPATH="$cccl:${CPATH:-}" \
+    CPATH="$cccl:${CPATH:-}${CPATH:+:}$root/cuda-include" \
     NVCC_PREPEND_FLAGS="-I$cccl ${NVCC_PREPEND_FLAGS:-}" \
     NVSHMEM_DIR="$overlay" \
     EP_NCCL_ROOT_DIR="$nccl_root" \
@@ -223,7 +239,11 @@ deepep_activate() {
     EP_JIT_CACHE_DIR="/tmp/collectivex-deepep-v2-jit-$execution_id" \
     EP_REUSE_NCCL_COMM=1 \
     NCCL_CUMEM_ENABLE=1 \
-    LD_LIBRARY_PATH="$overlay/lib:$nccl_root/lib:$nvshmem_package/lib:${LD_LIBRARY_PATH:-}"
+    LD_LIBRARY_PATH="$overlay/lib:$nccl_root/lib:$nvshmem_package/lib:${LD_LIBRARY_PATH:-}" \
+    LIBRARY_PATH="$nccl_root/lib${LIBRARY_PATH:+:$LIBRARY_PATH}"
+  # LIBRARY_PATH: DeepEP links -l:libnccl.so.2 with only an rpath to the wheel, so the link step
+  # needs the wheel's lib directory on the search path. Images with a system NCCL (SGLang's)
+  # resolved it from /usr/lib; vLLM's image has NCCL only as a pip wheel.
   unset "${DEEPEP_RANK_UNSETS[@]}"
 
   # Shared JIT caches race across nodes; keep this cache node-local. CUMEM is
@@ -266,6 +286,11 @@ deepep_install() {
   # Torch pins NCCL 2.28.9; ElasticBuffer requires 2.30.4.
   "${pip[@]}" --force-reinstall --no-deps "nvidia-nccl-cu13==2.30.4" >&2 2>&1 \
     || { collx_log "ERROR: NCCL 2.30.4 installation failed"; return 1; }
+  local toolchain cuda_home cccl
+  toolchain="$(cuda_toolchain_paths)" || return 1
+  IFS=$'\t' read -r cuda_home cccl <<< "$toolchain"
+  deepep_cuda_header_overlay "$root" "$cuda_home" \
+    || { collx_log "ERROR: DeepEP V2 CUDA header overlay failed"; return 1; }
   deepep_activate "$root" \
     || { collx_log "ERROR: DeepEP V2 environment activation failed"; return 1; }
   collx_materialize_source "deepep-v2-$COLLX_DEEPEP_V2_COMMIT" "$source_dir" \
@@ -368,6 +393,14 @@ PY
 # up its own Docker image and cannot run inside enroot/pyxis). The built deep_ep/uccl packages
 # persist under a cache root and reach the ranks via PYTHONPATH, so later allocations skip the build.
 
+# On EFA pools UCCL-EP builds its EFA transport only for multi-node shards, against the host
+# rdma-core the launcher binds (collx_add_efa_host_mounts); inside one node UCCL starts no proxy, so
+# single-node shards build without it. The two builds key separate caches.
+uccl_efa_build() {
+  [ "${COLLX_RDMA_FABRIC:-}" = efa ] || return 0
+  if [ "${COLLX_NODES:-1}" -le 1 ]; then printf 'noefa'; else printf 'efa'; fi
+}
+
 uccl_cache_root() {
   local arch
   arch="$(printf '%s' "$1" | tr -cs 'A-Za-z0-9_.-' '-')"
@@ -385,15 +418,17 @@ uccl_activate() {
 uccl_install() {
   local root="$1" arch="$2" source_dir="/tmp/collectivex-uccl-$COLLX_UCCL_COMMIT" arch_env sp
   local -a flags=("${UCCL_BUILD_FLAGS[@]}")
-  # UCCL builds its EFA transport whenever EFA_HOME (/opt/amazon/efa) exists. The EFA pools'
-  # containers carry that directory beside an image rdma-core whose efadv.h predates the fields UCCL
-  # uses (h100-dgxc: efadv_qp_init_attr has no sl or flags), so the build fails. uccl-ep never
-  # leaves one node there, and inside one node UCCL starts no proxy, so those pools build without it.
-  if [ "${COLLX_RDMA_FABRIC:-}" = efa ]; then
-    [ "${COLLX_NODES:-1}" -le 1 ] \
-      || { collx_log "ERROR: UCCL-EP across EFA needs an EFA build against the host rdma-core"; return 1; }
-    flags+=(EFA_HOME=/nonexistent)
-  fi
+  # UCCL builds its EFA transport whenever EFA_HOME exists, from EFA_HOME/include and EFA_HOME/lib.
+  # The EFA pools' containers carry /opt/amazon/efa beside an image rdma-core whose efadv.h predates
+  # the fields UCCL uses (h100-dgxc: efadv_qp_init_attr has no sl or flags), so EFA_HOME names the
+  # host rdma-core bound for multi-node shards instead (see uccl_efa_build).
+  case "$(uccl_efa_build)" in
+    noefa) flags+=(EFA_HOME=/nonexistent) ;;
+    efa)
+      [ -r "$COLLX_EFA_HOST_ROOT/include/infiniband/efadv.h" ] && [ -e "$COLLX_EFA_HOST_ROOT/lib/libefa.so" ] \
+        || { collx_log "ERROR: UCCL-EP across EFA needs the host rdma-core headers and libefa"; return 1; }
+      flags+=(EFA_HOME="$COLLX_EFA_HOST_ROOT") ;;
+  esac
   if [ -e "$root" ] || [ -L "$root" ]; then
     rm -rf "$root" || { collx_log "ERROR: incomplete UCCL cache-reset failed"; return 1; }
   fi
@@ -466,16 +501,17 @@ PY
 }
 
 uccl_prepare() {
-  local arch shared
+  local arch shared efa
   command -v python3 >/dev/null || { collx_log "ERROR: python3 unavailable for UCCL build"; return 1; }
   if [ "${COLLX_VENDOR:-nvidia}" = amd ]; then
     arch="$(uccl_rocm_arch)" || return 1
   else
     arch="$(cuda_arch)" || return 1
   fi
-  shared="$(uccl_cache_root "$arch")" || shared=""
+  efa="$(uccl_efa_build)"
+  shared="$(uccl_cache_root "$arch${efa:+-$efa}")" || shared=""
   prepare_site_cache UCCL-EP UCCL "$COLLX_UCCL_COMMIT" "$shared" \
-    "/tmp/collectivex-uccl-cache-$COLLX_UCCL_COMMIT-$UCCL_BUILD_GEN" uccl_install "$arch" || return 1
+    "/tmp/collectivex-uccl-cache-$COLLX_UCCL_COMMIT-$UCCL_BUILD_GEN${efa:+-$efa}" uccl_install "$arch" || return 1
   uccl_activate "$CACHE_ROOT" || return 1
   uccl_probe "$CACHE_ROOT" || { collx_log "ERROR: UCCL import probe failed"; return 1; }
   collx_log "UCCL-EP ready ($COLLX_UCCL_COMMIT, deep_ep wrapper over uccl.ep CPU-proxy runtime)"
@@ -537,7 +573,7 @@ nccl_ep_install() {
   mkdir -p "$site" || { collx_log "ERROR: NCCL EP cache-site-create failed"; return 1; }
   collx_log "NCCL EP: installing $COLLX_NCCL_EP_SPEC (pip --target)"
   # --target does not touch the system env, so PEP 668 does not apply. $COLLX_NCCL_EP_SPEC is
-  # unquoted on purpose: it carries two whitespace-separated pip specs.
+  # unquoted on purpose: it carries whitespace-separated pip specs.
   # shellcheck disable=SC2086
   python3 -m pip install -q --disable-pip-version-check --no-input \
       --pre --extra-index-url https://pypi.nvidia.com \
@@ -567,6 +603,51 @@ nccl_ep_prepare() {
 # no libfabric GDA ops on those hosts.
 ofi_nccl_ready() { [ -f "$1/.ready" ] && [ -r "$1/lib/libnccl-net-ofi.so" ]; }
 
+# Static hwloc for images without its headers (see COLLX_HWLOC_VERSION).
+ofi_nccl_build_hwloc() {
+  local root="$1" version="$COLLX_HWLOC_VERSION" tarball pciaccess
+  pciaccess="libpciaccess-$COLLX_PCIACCESS_VERSION"
+  curl -sSfL --connect-timeout 30 --max-time 300 --retry 3 -o "$root/$pciaccess.tar.gz" \
+      "https://www.x.org/releases/individual/lib/$pciaccess.tar.gz" \
+    && printf '%s  %s\n' "$COLLX_PCIACCESS_SHA256" "$root/$pciaccess.tar.gz" | sha256sum -c --quiet \
+    && tar -xzf "$root/$pciaccess.tar.gz" -C "$root" \
+    || { collx_log "ERROR: libpciaccess source fetch failed"; return 1; }
+  (
+    cd "$root/$pciaccess" \
+      && ./configure -q --prefix="$root/pciaccess" --enable-static --disable-shared --with-pic \
+      && make -s -j"$(nproc)" && make -s install
+  ) >&2 2>&1 || { collx_log "ERROR: libpciaccess build failed"; return 1; }
+  rm -rf "${root:?}/$pciaccess" "${root:?}/$pciaccess.tar.gz"
+  tarball="hwloc-$version.tar.gz"
+  curl -sSfL --connect-timeout 30 --max-time 300 --retry 3 -o "$root/$tarball" \
+      "https://download.open-mpi.org/release/hwloc/v${version%.*}/$tarball" \
+    && printf '%s  %s\n' "$COLLX_HWLOC_SHA256" "$root/$tarball" | sha256sum -c --quiet \
+    && tar -xzf "$root/$tarball" -C "$root" \
+    || { collx_log "ERROR: hwloc source fetch failed"; return 1; }
+  # The plugin groups each GPU with its nearest EFA NICs from hwloc's PCI tree, so I/O discovery
+  # must stay on (without it every group is empty and the RDMA protocol, the only one GIN supports,
+  # fails to start). hwloc reads the PCI tree through libpciaccess, built static alongside it; the
+  # GPU-vendor components would only link vendor libraries into the static archive.
+  collx_log "aws-ofi-nccl: building hwloc $version (the image has no hwloc headers)"
+  (
+    cd "$root/hwloc-$version" \
+      && HWLOC_PCIACCESS_CFLAGS="-I$root/pciaccess/include" \
+        HWLOC_PCIACCESS_LIBS="$root/pciaccess/lib/libpciaccess.a" \
+        ./configure -q --prefix="$root/hwloc" --enable-static --disable-shared --with-pic \
+        --disable-libxml2 --disable-cairo --disable-plugins --disable-libudev \
+        --disable-cuda --disable-nvml --disable-opencl --disable-rsmi --disable-levelzero \
+      && make -s -j"$(nproc)" && make -s install
+  ) >&2 2>&1 || { collx_log "ERROR: hwloc build failed"; return 1; }
+  # libtool cannot pass a bare static archive through to a shared plugin, so libpciaccess's objects
+  # join libhwloc.a and -lhwloc carries both; without hwloc's .la, libtool takes the archive as is.
+  (
+    mkdir "$root/pciaccess/objects" && cd "$root/pciaccess/objects" \
+      && ar x ../lib/libpciaccess.a && ar rs "$root/hwloc/lib/libhwloc.a" ./*.o
+  ) >&2 2>&1 || { collx_log "ERROR: hwloc archive merge failed"; return 1; }
+  rm -f "$root/hwloc/lib/libhwloc.la"
+  rm -rf "${root:?}/hwloc-$version" "${root:?}/$tarball" "${root:?}/pciaccess/objects"
+}
+
 ofi_nccl_install() {
   local root="$1" version="$COLLX_OFI_NCCL_VERSION" tarball cuda_home
   rm -rf "$root" && mkdir -m 700 "$root" \
@@ -579,11 +660,16 @@ ofi_nccl_install() {
     && tar -xzf "$root/$tarball" -C "$root" \
     || { collx_log "ERROR: aws-ofi-nccl source fetch failed"; return 1; }
   IFS=$'\t' read -r cuda_home _ <<< "$(cuda_toolchain_paths)" && [ -n "$cuda_home" ] || return 1
+  local -a hwloc=()
+  if [ ! -r /usr/include/hwloc.h ]; then
+    ofi_nccl_build_hwloc "$root" || return 1
+    hwloc=(--with-hwloc="$root/hwloc")
+  fi
   collx_log "aws-ofi-nccl: building $version"
   (
     cd "$root/aws-ofi-nccl-$version" \
       && ./configure -q --prefix="$root" --with-libfabric=/opt/amazon/efa --with-cuda="$cuda_home" \
-        --enable-platform-aws --disable-tests \
+        "${hwloc[@]}" --enable-platform-aws --disable-tests \
       && make -s -j"$(nproc)" && make -s install
   ) >&2 2>&1 || { collx_log "ERROR: aws-ofi-nccl build failed"; return 1; }
   rm -rf "${root:?}/aws-ofi-nccl-$version" "${root:?}/$tarball"
@@ -595,13 +681,25 @@ ofi_nccl_prepare() {
   unset COLLX_OFI_NCCL_LIB_DIR
   [ "${COLLX_RDMA_FABRIC:-}" = efa ] && [ "${COLLX_NODES:-1}" -gt 1 ] || return 0
   # ncclGinPlugin_v14 (the EFA GDA op table) first shipped in 1.21.0: such a host plugin already has
-  # the worker signal path (b300's 1.21.1, EFA installer 1.50.0).
-  if grep -qF ncclGinPlugin_v14 /opt/amazon/ofi-nccl/lib/libnccl-net-ofi.so; then
-    collx_log "aws-ofi-nccl: using the host plugin"
-    return 0
+  # the worker signal path (b300's 1.21.1, EFA installer 1.50.0). It must also load in this image: the
+  # host build links libhwloc.so.15, which the vLLM images lack. NCCL does not fail on a plugin it
+  # cannot dlopen; it falls back to its internal IB transport on the hosts' CX-7 ports, so the build
+  # below (static hwloc) stands in.
+  local host=/opt/amazon/ofi-nccl/lib/libnccl-net-ofi.so missing
+  if grep -qF ncclGinPlugin_v14 "$host"; then
+    missing="$(LD_LIBRARY_PATH="/opt/amazon/efa/lib:${COLLX_EFA_HOST_ROOT:-/nonexistent}/lib:${LD_LIBRARY_PATH:-}" \
+      ldd "$host" 2>&1 | awk '/not found/ {print $1}' | paste -sd, -)"
+    if [ -z "$missing" ]; then
+      collx_log "aws-ofi-nccl: using the host plugin"
+      return 0
+    fi
+    collx_log "aws-ofi-nccl: the host plugin cannot load in this image (missing $missing); building it"
   fi
-  root="$(backend_cache_root ofi-nccl efa "$COLLX_OFI_NCCL_VERSION")" \
-    || root="/tmp/collectivex-ofi-nccl-$COLLX_OFI_NCCL_VERSION"
+  # A plugin built on the bundled hwloc keys its own cache, so a change to that build replaces it.
+  local variant="$COLLX_OFI_NCCL_VERSION"
+  [ -r /usr/include/hwloc.h ] || variant+="-hwloc$COLLX_HWLOC_VERSION-pciaccess$COLLX_PCIACCESS_VERSION-merged"
+  root="$(backend_cache_root ofi-nccl efa "$variant")" \
+    || root="/tmp/collectivex-ofi-nccl-$variant"
   with_cache_lock "aws-ofi-nccl" "$root" ofi_nccl_ready ofi_nccl_install || return 1
   export COLLX_OFI_NCCL_LIB_DIR="$root/lib"
   collx_log "aws-ofi-nccl $COLLX_OFI_NCCL_VERSION ready"
@@ -674,32 +772,251 @@ validate_container_network() {
   done
 }
 
-# The pinned SGLang images ship flashinfer-python with the one-sided MoE all-to-all, so this is a
-# capability assert, not an install: fail early rather than mid-case inside create_buffer.
-flashinfer_ep_prepare() {
-  command -v python3 >/dev/null \
-    || { collx_log "ERROR: python3 unavailable for FlashInfer EP"; return 1; }
-  python3 - <<'FICHECK'
+# FlashInfer lifecycle
+
+# Keys both the shared and the node-local cache, so a pin change never reuses an older venv.
+flashinfer_spec_digest() {
+  # "aot" names the cache layout below; change it when the layout changes.
+  printf 'aot %s %s' "$COLLX_FLASHINFER_SPEC" "$COLLX_FLASHINFER_JIT_CACHE_SPEC" \
+    | sha256sum | cut -c1-12
+}
+
+flashinfer_cache_root() {
+  local arch digest
+  arch="$(printf '%s' "$1" | tr -cs 'A-Za-z0-9_.-' '-')"
+  digest="$(flashinfer_spec_digest)" || return 1
+  backend_cache_root flashinfer-ep "${arch#-}" "$digest"
+}
+
+flashinfer_ready() { [ -f "$1/.ready" ] && [ -x "$1/venv/bin/python" ]; }
+
+# The venv sees the image's torch and NCCL (--system-site-packages) and shadows its FlashInfer.
+flashinfer_activate() {
+  local venv="$1/venv" site
+  for site in "$venv"/lib/python*/site-packages; do break; done
+  [ -d "$site" ] || { collx_log "ERROR: FlashInfer venv site-packages is unavailable"; return 1; }
+  export \
+    VIRTUAL_ENV="$venv" \
+    PATH="$venv/bin:${PATH#"$venv/bin:"}" \
+    PYTHONPATH="$site${PYTHONPATH:+:$PYTHONPATH}" \
+    FLASHINFER_WORKSPACE_BASE="$1/workspace"
+}
+
+# FlashInfer takes a file lock and reruns ninja on every load of a JIT module, which fails on
+# NFS without lock support and relinks the library while other ranks load it. An artifact in the
+# package's own AOT directory loads without either, so the module is built once under the cache
+# lock and copied there.
+flashinfer_promote_aot() {
+  python3 - <<'PY'
+import os
+import shutil
+
+from flashinfer.comm.trtllm_moe_alltoall import gen_moe_alltoall_module
+from flashinfer.jit import env as jit_env
+
+spec = gen_moe_alltoall_module("legacy")
+spec.build_and_load()
+target = jit_env.FLASHINFER_AOT_DIR / spec.name / f"{spec.name}.so"
+target.parent.mkdir(parents=True, exist_ok=True)
+staged = target.with_name(target.name + ".tmp")
+shutil.copyfile(spec.jit_library_path, staged)
+os.chmod(staged, 0o755)
+os.replace(staged, target)
+PY
+}
+
+# Asserts the pinned wheel and that the all-to-all module loads from the AOT directory.
+flashinfer_probe() {
+  python3 - "${COLLX_FLASHINFER_SPEC%% *}" <<'PY'
 import sys
-try:
-    import flashinfer
-    from flashinfer.comm import Mapping  # noqa: F401
-    from flashinfer.comm.mnnvl import MnnvlConfig  # noqa: F401
-    from flashinfer.comm.trtllm_moe_alltoall import (  # noqa: F401
-        MoeAlltoAll,
-        moe_a2a_get_workspace_size_per_rank,
-    )
-except Exception as exc:  # noqa: BLE001 - the reason belongs in the leg log
-    print(f"flashinfer one-sided a2a import failed: {exc}", file=sys.stderr)
-    raise SystemExit(1)
-print(f"FlashInfer {getattr(flashinfer, '__version__', 'unknown')} one-sided A2A available")
-FICHECK
-  local rc=$?
-  [ "$rc" -eq 0 ] || { collx_log "ERROR: FlashInfer EP one-sided A2A unavailable in this image"; return 1; }
+
+import flashinfer
+from flashinfer.comm import Mapping  # noqa: F401
+from flashinfer.comm.mnnvl import MnnvlConfig  # noqa: F401
+from flashinfer.comm.trtllm_moe_alltoall import (  # noqa: F401
+    MoeAlltoAll,
+    gen_moe_alltoall_module,
+    get_moe_alltoall_module,
+    moe_a2a_get_workspace_size_per_rank,
+)
+
+pinned = sys.argv[1].split("==")[1]
+if flashinfer.__version__ != pinned:
+    raise SystemExit(f"flashinfer {flashinfer.__version__} loaded, {pinned} pinned")
+if not gen_moe_alltoall_module("legacy").is_aot:
+    raise SystemExit("the all-to-all module is not in FlashInfer's AOT directory")
+get_moe_alltoall_module()
+print(f"FlashInfer {flashinfer.__version__} one-sided A2A available", file=sys.stderr)
+PY
+}
+
+flashinfer_install() {
+  local root="$1" venv="$1/venv" report="$1/pip-report.json"
+  local -a pip jit_parts
+  if [ -e "$root" ] || [ -L "$root" ]; then
+    rm -rf "$root" || { collx_log "ERROR: incomplete FlashInfer cache-reset failed"; return 1; }
+  fi
+  mkdir -m 700 "$root" || { collx_log "ERROR: FlashInfer cache-create failed"; return 1; }
+  python3 -m venv --system-site-packages "$venv" \
+    || { collx_log "ERROR: FlashInfer venv creation failed"; return 1; }
+  pip=("$venv/bin/python" -m pip install -q --disable-pip-version-check --no-input
+       --extra-index-url https://flashinfer.ai/whl/cu130 --extra-index-url https://flashinfer.ai/whl)
+  collx_log "FlashInfer: installing $COLLX_FLASHINFER_SPEC"
+  # The specs are unquoted on purpose: the variable carries whitespace-separated pip specs.
+  # shellcheck disable=SC2086
+  # --no-deps: the spec names every package FlashInfer needs beyond the image. Resolving deps would
+  # also re-resolve the image's torch, whose metadata pins an NCCL older than the one the image
+  # ships (vLLM v0.32.0: torch 2.13 declares nvidia-nccl-cu13==2.29.7 over the installed 2.30.7), so
+  # pip would downgrade NCCL. The check after the install covers what --no-deps skips.
+  "${pip[@]}" --no-deps --dry-run --report "$report" $COLLX_FLASHINFER_SPEC >&2 2>&1 \
+    || { collx_log "ERROR: FlashInfer dependency resolution failed"; return 1; }
+  # Replacing the image's torch or NCCL would change what every other backend measures.
+  python3 - "$report" <<'PY' \
+    || { collx_log "ERROR: FlashInfer would replace the image's torch or NCCL"; return 1; }
+import json, re, sys
+
+names = [item["metadata"]["name"] for item in json.load(open(sys.argv[1]))["install"]]
+clash = [name for name in names if re.match(r"(torch|triton|pytorch-triton|nvidia-nccl)", name, re.I)]
+if clash:
+    raise SystemExit(f"refusing to install {clash}")
+PY
+  # shellcheck disable=SC2086
+  "${pip[@]}" --no-deps $COLLX_FLASHINFER_SPEC >&2 2>&1 \
+    && "${pip[@]}" --no-deps "$COLLX_FLASHINFER_JIT_CACHE_SPEC" >&2 2>&1 \
+    || { collx_log "ERROR: FlashInfer installation failed"; return 1; }
+  # The jit-cache wheel is a meta-package over per-architecture cache wheels pinned to its own
+  # version, and images that ship an older FlashInfer (vLLM's) carry older ones. Install exactly
+  # the parts it declares, at its version, without re-resolving anything else.
+  mapfile -t jit_parts < <("$venv/bin/python" - "${COLLX_FLASHINFER_JIT_CACHE_SPEC%%==*}" <<'PY'
+import sys
+from importlib import metadata
+
+for requirement in metadata.requires(sys.argv[1]) or ():
+    if requirement.startswith("flashinfer-jit-cache") and "extra ==" not in requirement:
+        print(requirement.split(";")[0].replace(" ", ""))
+PY
+  ) || { collx_log "ERROR: FlashInfer jit-cache metadata is unreadable"; return 1; }
+  [ "${#jit_parts[@]}" -eq 0 ] || "${pip[@]}" --no-deps "${jit_parts[@]}" >&2 2>&1 \
+    || { collx_log "ERROR: FlashInfer jit-cache parts installation failed"; return 1; }
+  # Every requirement of the installed set must already hold; pip check lines about the image's
+  # own packages (its torch/NCCL pin disagreement among them) are not this venv's to settle.
+  # shellcheck disable=SC2086
+  # pip check exits non-zero for any broken requirement, the image's included, so only the
+  # filter's verdict counts.
+  { "$venv/bin/python" -m pip check 2>&1 || true; } | python3 -c '
+import re, sys
+ours = {re.split(r"[\[=<>]", spec)[0].lower().replace("_", "-") for spec in sys.argv[1:]}
+def mine(name):
+    return name in ours or name.startswith("flashinfer-jit-cache")
+bad = [line for line in sys.stdin.read().splitlines()
+       if mine(line.split(" ", 1)[0].lower().replace("_", "-"))]
+print("\n".join(bad), file=sys.stderr)
+sys.exit(1 if bad else 0)' $COLLX_FLASHINFER_SPEC "$COLLX_FLASHINFER_JIT_CACHE_SPEC" \
+    || { collx_log "ERROR: FlashInfer environment has unmet requirements"; return 1; }
+  flashinfer_activate "$root" || return 1
+  flashinfer_promote_aot || { collx_log "ERROR: FlashInfer all-to-all build failed"; return 1; }
+  flashinfer_probe || { collx_log "ERROR: FlashInfer import probe failed"; return 1; }
+  : > "$root/.ready"
+}
+
+flashinfer_ep_prepare() {
+  local arch shared
+  command -v python3 >/dev/null || { collx_log "ERROR: python3 unavailable for FlashInfer EP"; return 1; }
+  arch="$(cuda_arch)" || return 1
+  shared="$(flashinfer_cache_root "$arch")" || shared=""
+  if [ -n "$shared" ]; then
+    CACHE_ROOT="$shared"
+    command -v flock >/dev/null || { collx_log "ERROR: flock is required for FlashInfer caching"; return 1; }
+    mkdir -p "${shared%/*}" || return 1
+    collx_log "FlashInfer: preparing (shared cache $shared)"
+    with_cache_lock "FlashInfer" "$shared" flashinfer_ready flashinfer_install \
+      || { collx_log "ERROR: shared FlashInfer environment is incomplete"; return 1; }
+  else
+    CACHE_ROOT="/tmp/collectivex-flashinfer-cache-$arch-$(flashinfer_spec_digest)" || return 1
+    collx_log "FlashInfer: preparing (node-local $CACHE_ROOT; no shared cache mounted)"
+    flashinfer_ready "$CACHE_ROOT" || flashinfer_install "$CACHE_ROOT" || return 1
+  fi
+  flashinfer_activate "$CACHE_ROOT" || return 1
+  flashinfer_probe || { collx_log "ERROR: FlashInfer EP one-sided A2A unavailable"; return 1; }
+}
+
+# Host verbs provider (collx_add_host_verbs_provider_mount). The vendor's build targets the host's
+# distro: Broadcom's libbnxt_re 237.1.137.0 is linked on Ubuntu 24.04 and needs GLIBC_2.38 for one
+# symbol, __isoc23_strtol (C23 strtol, which only adds 0b prefixes), while the ROCm images ship glibc
+# 2.35. That symbol is unversioned and served by a forwarding shim, and the now-unused GLIBC_2.38
+# requirement is retargeted to GLIBC_2.2.5 (elf_vernaux.py). The result must load and must list the
+# registry's RDMA devices, or preparation fails. It replaces the image's provider of the same name
+# in this node's writable container, which every rank of the shard then loads.
+readonly VERBS_PATCHELF_SPEC="patchelf==0.17.2.1"
+
+# The RDMA devices libibverbs lists, space-separated. ibv_devices is not in every image.
+verbs_device_names() {
+  python3 - <<'PY'
+import ctypes
+lib = ctypes.CDLL("libibverbs.so.1")
+lib.ibv_get_device_list.restype = ctypes.POINTER(ctypes.c_void_p)
+lib.ibv_get_device_name.restype = ctypes.c_char_p
+count = ctypes.c_int(0)
+devices = lib.ibv_get_device_list(ctypes.byref(count))
+print(" ".join(lib.ibv_get_device_name(ctypes.c_void_p(devices[i])).decode()
+               for i in range(count.value)) if devices else "")
+PY
+}
+
+verbs_lists_registry_devices() {
+  local listed device
+  listed=" $(verbs_device_names 2>/dev/null) "
+  for device in ${COLLX_RDMA_DEVICES//,/ }; do
+    [[ "$listed" == *" ${device%%:*} "* ]] || return 1
+  done
+}
+
+verbs_provider_prepare() {
+  local provider="${COLLX_HOST_VERBS_PROVIDER:-}" name source providers target work
+  [ -n "$provider" ] && [ "${COLLX_NODES:-1}" -gt 1 ] && [ "${COLLX_TRANSPORT:-}" != mnnvl ] || return 0
+  # An image that ships a provider for this driver (the vLLM ROCm images carry Broadcom's) needs
+  # nothing from the host.
+  if verbs_lists_registry_devices; then
+    collx_log "verbs provider: the image's provider lists every registry device; keeping it"
+    return 0
+  fi
+  name="${provider##*/}"
+  source="$COLLX_HOST_VERBS_ROOT/$name"
+  [ -r "$source" ] || { collx_log "ERROR: host verbs provider $name is not bound"; return 1; }
+  # rdma-core tries its provider directory before the loader path, so a copy there wins over one
+  # an image installs elsewhere (/usr/local/lib for Broadcom's packages).
+  providers="$(ls -d /usr/lib/*-linux-gnu/libibverbs 2>/dev/null | head -n 1)"
+  [ -n "$providers" ] || { collx_log "ERROR: the image has no rdma-core provider directory"; return 1; }
+  target="$providers/$name"
+  work="$(mktemp -d /tmp/collectivex-verbs.XXXXXX)" || return 1
+  cp "$source" "$work/$name" || return 1
+  if ! python3 -c 'import ctypes, sys; ctypes.CDLL(sys.argv[1])' "$work/$name" 2>/dev/null; then
+    collx_log "verbs provider: $name needs a newer glibc; shimming __isoc23_strtol"
+    printf '%s\n' '#include <stdlib.h>' \
+      'long __isoc23_strtol(const char *s, char **end, int base) { return strtol(s, end, base); }' \
+      > "$work/cx_c23.c"
+    cc -shared -fPIC -O2 -o "$work/libcx_c23.so" "$work/cx_c23.c" \
+      && python3 -m pip install -q --disable-pip-version-check --no-input \
+        --target "$work/patchelf" "$VERBS_PATCHELF_SPEC" >&2 \
+      && "$work/patchelf/bin/patchelf" --clear-symbol-version __isoc23_strtol \
+        --add-needed libcx_c23.so --set-rpath '$ORIGIN' "$work/$name" \
+      && python3 "$COLLX_RUNTIME_DIR/elf_vernaux.py" "$work/$name" GLIBC_2.38 GLIBC_2.2.5 \
+      || { collx_log "ERROR: verbs provider patch failed"; return 1; }
+    python3 -c 'import ctypes, sys; ctypes.CDLL(sys.argv[1])' "$work/$name" \
+      || { collx_log "ERROR: patched verbs provider does not load"; return 1; }
+    cp "$work/libcx_c23.so" "$providers/libcx_c23.so" || return 1
+  fi
+  cp "$work/$name" "$target.collectivex" && mv -f "$target.collectivex" "$target" \
+    || { collx_log "ERROR: verbs provider install failed"; return 1; }
+  rm -rf "$work"
+  verbs_lists_registry_devices \
+    || { collx_log "ERROR: verbs provider $name does not list every registry device"; return 1; }
+  collx_log "verbs provider: installed host $name"
 }
 
 main() {
   collx_apply_network_profile "${COLLX_NODES:-1}" "${COLLX_TRANSPORT:-}" || return 1
+  verbs_provider_prepare || return 1
   validate_container_network || return 1
   ofi_nccl_prepare || return 1
   case "$COLLX_BENCH" in

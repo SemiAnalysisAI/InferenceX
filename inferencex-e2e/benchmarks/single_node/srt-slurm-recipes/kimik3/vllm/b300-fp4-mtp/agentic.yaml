@@ -213,32 +213,3 @@ override_c28:
   benchmark:
     env:
       CONC: '28'
-
-override_c40:
-  services:
-    - name: mooncake-master
-      type: mooncake-master
-      readiness:
-        port: 8700
-        timeout_seconds: 900
-      preamble: bash /configs/vllm-mooncake.sh
-      args: ["--eviction_high_watermark_ratio=0.95", "--eviction_ratio=0.10", "--default_kv_lease_ttl=60000"]
-      options:
-        store_config:
-          mode: embedded
-          metadata_server: P2PHANDSHAKE
-          global_segment_size: 256GB
-          local_buffer_size: 4GB
-          protocol: rdma
-          device_name: ""
-          enable_offload: false
-  roles:
-    agg:
-      args:
-        max-num-seqs: 80
-        gpu-memory-utilization: 0.92
-        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256,260,264,268,272,276,280,284,288,292,296,300,304,308,312,316,320,512,1024,2048,4096,8192]}'
-        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":3,"attention_backend":"TOKENSPEED_MLA","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-  benchmark:
-    env:
-      CONC: '40'

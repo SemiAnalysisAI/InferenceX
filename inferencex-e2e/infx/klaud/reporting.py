@@ -31,7 +31,14 @@ from infx.bench.agentic.traces import LOADERS
 
 from . import github
 from .github import VerificationError
-from .models import Contract, identity, normalized_image
+from .models import (
+    DATASET_PROVENANCE_UNAVAILABLE,
+    Contract,
+    Family,
+    family_keys,
+    identity,
+    normalized_image,
+)
 
 if TYPE_CHECKING:
     from infx.klaud.lifecycle import Session
@@ -151,8 +158,27 @@ class Retirement(Contract):
     points: list[Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]] = Field(min_length=1)
 
 
+class KeyBaseline(Contract):
+    """The old image of one key of a mixed-image family and the observation it froze from.
+
+    A key whose image has no published observation has no ``date``, freezes nothing and lists
+    its current ``points``, whose deltas stay N/A.
+    """
+
+    image: str = Field(pattern=r"^[A-Za-z0-9_./:@+-]+$")
+    date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    points: list[Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def unbaselined(self) -> Self:
+        """Return the key, raising ValueError unless exactly an unbaselined key lists points."""
+        if (self.date is None) != bool(self.points):
+            raise ValueError("Only a key without a published baseline lists its points")
+        return self
+
+
 class Baseline(Contract):
-    family: str = Field(pattern=r"^configs/[^/:]+-master\.yaml:[^\s:]+$")
+    family: Family
     date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
     image: str = Field(pattern=r"^[A-Za-z0-9_./:@+-]+$")
     goal: Prose
@@ -160,6 +186,7 @@ class Baseline(Contract):
     points: list[Point]
     evals: list[Evaluation] = Field(default_factory=list)
     retirements: list[Retirement] = Field(default_factory=list)
+    keys: dict[str, KeyBaseline] = Field(default_factory=dict)
 
     @field_validator("sources")
     @classmethod
@@ -180,7 +207,7 @@ class Baseline(Contract):
 
     @model_validator(mode="after")
     def distinct(self) -> Self:
-        """Return the baseline, raising ValueError on duplicates or invalid retirements."""
+        """Return the baseline, raising ValueError on duplicates, invalid retirements or keys."""
         unique_points(self.points)
         unique_evals(self.evals)
         retired = [key for retirement in self.retirements for key in retirement.points]
@@ -192,14 +219,25 @@ class Baseline(Contract):
             raise ValueError("Only a retirement after the baseline date can exempt a point")
         if self.points and len(retired) == len(self.points):
             raise ValueError("A baseline needs at least one point that is not retired")
+        observed = {(key.date, normalized_image(key.image)) for key in self.keys.values()}
+        skipped = {point for key in self.keys.values() for point in key.points}
+        if self.keys and (
+            sorted(self.keys) != family_keys(self.family)
+            or len({image for _, image in observed}) < 2
+            or (self.date, normalized_image(self.image)) not in observed
+            or skipped & {point.key for point in self.points}
+        ):
+            raise ValueError("Per-key baselines must name every family key and several images")
         return self
 
     @model_serializer(mode="wrap")
     def compatible(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
-        """Return the serialized baseline, omitting ``retirements`` when it is empty."""
+        """Return the serialized baseline, omitting ``retirements`` and ``keys`` when empty."""
         data = handler(self)
         if not self.retirements:
             data.pop("retirements", None)
+        if not self.keys:
+            data.pop("keys", None)
         return data
 
 
@@ -462,11 +500,12 @@ def point_table(
     ``context`` adds the shared settings caption.
     """
     old = {point.key: point for point in baseline.points} if baseline else {}
+    unbaselined = unbaselined_reasons(baseline)
     heading, labels, settings = point_layout(points)
     rows, issues = [], {}
     for point, label in zip(points, labels, strict=False):
         previous = old.get(point.key)
-        unmatched = mismatch(previous, point)
+        unmatched = unbaselined.get(point.key) or mismatch(previous, point)
         comparable = unmatched is None
         a, b = previous.values if previous else Values(), point.values
         rows.append(
@@ -571,6 +610,20 @@ def retirement_reasons(baseline: Baseline) -> dict[str, str]:
     }
 
 
+def unbaselined_reasons(baseline: Baseline | None) -> dict[str, str]:
+    """Each point of a key without a published baseline and why its deltas stay N/A."""
+    names: dict[str, list[str]] = {}
+    images: dict[str, str] = {}
+    for name, key in baseline.keys.items() if baseline else ():
+        for point in key.points:
+            names.setdefault(point, []).append(name)
+            images[point] = key.image
+    return {
+        point: f"no published baseline for {', '.join(keys)} on `{images[point]}`"
+        for point, keys in names.items()
+    }
+
+
 def baseline_table(baseline: Baseline, *, context: bool = True) -> str:
     """Return the Markdown table of the frozen ``baseline`` points with notes.
 
@@ -626,8 +679,20 @@ def render_body(baseline: Baseline) -> str:
     _, _, settings = point_layout(baseline.points)
     sources = ", ".join(f"[API {i + 1}]({url})" for i, url in enumerate(baseline.sources)) or "N/A"
     meta = " · ".join(part for part in (settings, f"Sources: {sources}") if part)
+
+    def old(unpublished: str) -> str:
+        """Each key's old image and date, with ``unpublished`` for a key without a baseline."""
+        return (
+            "; ".join(
+                f"`{key}` {row.date or unpublished} · `{row.image}`"
+                for key, row in baseline.keys.items()
+            )
+            or f"{baseline.date} · `{baseline.image}`"
+        )
+
     english = (
-        f"**Goal:** {baseline.goal.en}  \n**Baseline:** {baseline.date} · `{baseline.image}`  \n{meta}\n\n"
+        f"**Goal:** {baseline.goal.en}  \n**Baseline:** {old('no published baseline')}  \n"
+        f"{meta}\n\n"
         + baseline_table(baseline, context=False)
         + "\n\n"
         + (eval_table(baseline.evals, None, compare=False) if baseline.evals else "**Eval:** N/A")
@@ -635,7 +700,7 @@ def render_body(baseline: Baseline) -> str:
         "runs and deletes its branch."
     )
     chinese = (
-        f"**目标：**{baseline.goal.zh}  \n**基线：**{baseline.date} · `{baseline.image}`  \n"
+        f"**目标：**{baseline.goal.zh}  \n**基线：**{old('无已发布基线')}  \n"
         + meta.replace("Mean latency", "平均延迟")
         .replace("Median latency", "中位延迟")
         .replace("Sources:", "来源：")
@@ -891,6 +956,18 @@ def publish(session: Session, record: Baseline | Attempt) -> None:
     name = f"run-{record.run_id}-{record.run_attempt}"
     previous = stored(session, pull, name)
     baseline = baseline_for(session, pull)
+    if (
+        baseline
+        and baseline.evals
+        and record.evals
+        and not {(row.key, row.suite, row.metric) for row in baseline.evals}
+        & {(row.key, row.suite, row.metric) for row in record.evals}
+    ):
+        print(
+            f"::warning::Klaud: none of the {len(record.evals)} evals of run {record.run_id} "
+            "match a frozen baseline eval; the eval identity (topology, suite or metric) "
+            "drifted from the baseline."
+        )
     text = render_attempt(record, baseline, session.repository)
     packed = record.model_dump(by_alias=True)
     chunks = []
@@ -940,23 +1017,13 @@ def upsert(session: Session, pull: dict, name: str, data: str, text: str) -> Non
     github.write(session.repository, path, "PATCH" if previous else "POST", {"body": body})
 
 
-def publish_final(
-    session: Session, run: dict, evidence: tuple[dict, list[dict], list[dict]]
-) -> None:
-    """Publish the final report of passed sweep ``run`` built from its verified ``evidence``.
+def final_points(run: dict, matrix: dict, rows: list[dict]) -> list[Point]:
+    """The points of passed sweep ``run``, one per result row of ``rows`` and in their order.
 
-    Normal finish and recovery publish the same artifact-derived report. Mixed images raise
-    VerificationError.
+    Labels and settings come from the canonical ``matrix`` entry each row reproduces.
     """
-    from infx.results.eval_artifacts import eval_key
-
-    from .validation import benchmark_entries, expected_evals
-
-    matrix, rows, eval_rows = evidence
     generated = {
-        (entry["recipe-fingerprint"], int(conc)): {**entry, "conc": int(conc)}
-        for entry in benchmark_entries(matrix)
-        for conc in (entry["conc"] if isinstance(entry["conc"], list) else [entry["conc"]])
+        (entry["recipe-fingerprint"], entry["conc"]): entry for entry in matrix_points(matrix)
     }
     points = []
     for row in rows:
@@ -974,7 +1041,14 @@ def publish_final(
                 head=run["head_sha"],
             )
         )
-    evaluations = [
+    return points
+
+
+def final_evals(run: dict, eval_rows: list[dict]) -> list[Evaluation]:
+    """The evals of passed sweep ``run`` from its aggregate ``eval_rows``, by concurrency."""
+    from infx.results.eval_artifacts import eval_key
+
+    return [
         Evaluation(
             key=identity(eval_key(row)),
             suite=row.get("eval_suite") or "gsm8k",
@@ -988,6 +1062,21 @@ def publish_final(
         )
         for row in sorted(eval_rows, key=lambda row: (int(row["conc"]), row.get("eval_suite", "")))
     ]
+
+
+def publish_final(
+    session: Session, run: dict, evidence: tuple[dict, list[dict], list[dict]]
+) -> None:
+    """Publish the final report of passed sweep ``run`` built from its verified ``evidence``.
+
+    Normal finish and recovery publish the same artifact-derived report. Mixed images raise
+    VerificationError.
+    """
+    from .validation import expected_evals
+
+    matrix, rows, eval_rows = evidence
+    points = final_points(run, matrix, rows)
+    evaluations = final_evals(run, eval_rows)
     images = {row["image"] for row in rows}
     if len(images) != 1:
         raise VerificationError("Final report contains mixed images")
@@ -1009,7 +1098,7 @@ def publish_final(
                 en="Mark ready for maintainer review.",
                 zh="标记为就绪，等待维护者审查。",
             ),
-            benchmarks_expected=len(generated),
+            benchmarks_expected=len(matrix_points(matrix)),
             benchmarks_passed=len(points),
             evals_expected=len(expected_evals(matrix)),
             evals_passed=len(expected_evals(matrix)),
@@ -1088,11 +1177,31 @@ def matrix_points(matrix: dict) -> list[dict]:
     ]
 
 
-def missing_baseline_points(matrix: dict, baseline: Baseline) -> list[Point]:
-    """Frozen baseline points that ``matrix`` cannot reproduce and the baseline did not retire."""
+def missing_baseline_points(matrix: dict, baseline: Baseline) -> list[str]:
+    """Keys of frozen baseline points and unbaselined-key points that ``matrix`` cannot reproduce.
+
+    Retired points are exempt.
+    """
     covered = {point_key(point) for point in matrix_points(matrix)}
     covered.update(key for retirement in baseline.retirements for key in retirement.points)
-    return [point for point in baseline.points if point.key not in covered]
+    roster = [point.key for point in baseline.points]
+    roster += [key for row in baseline.keys.values() for key in row.points]
+    return [key for key in roster if key not in covered]
+
+
+def unpublished_keys(matrix: dict, baseline: Baseline) -> list[str]:
+    """Baselined keys of a mixed-image ``baseline`` whose old image has no published point."""
+    passed = {point.key for point in baseline.points if point.result == "passed"}
+    images = {
+        normalized_image(entry["image"])
+        for entry in matrix_points(matrix)
+        if point_key(entry) in passed
+    }
+    return [
+        key
+        for key, row in baseline.keys.items()
+        if row.date is not None and normalized_image(row.image) not in images
+    ]
 
 
 def check_baseline_coverage(
@@ -1122,6 +1231,101 @@ def check_baseline_coverage(
         raise VerificationError("Final matrix omits or changes frozen baseline points")
 
 
+MAX_THROUGHPUT_DROP = 0.3
+MIN_EVAL_RETENTION = 0.5
+MIN_EVAL_SCORE = 0.5
+# Published scores of these suites sit above 0.9, while BFCL and GPQA legitimately score lower.
+FLOORED_EVAL_SUITES = (
+    "gsm8k",
+    "kimi_tool_call_schema",
+    "kimi_tool_call_schema_full",
+    "minimax_m3_full",
+)
+
+
+def request_error_rate(row: dict) -> float | None:
+    """The share of result ``row``'s requests that errored, or None without a request count."""
+    if "request_metrics" in row.get("metrics", row):
+        accounting = row.get("request_accounting", {})
+        errors, total = accounting.get("records_error_dropped"), accounting.get("records_total")
+    else:
+        outcome = row.get("benchmark_outcome", {})
+        errors, total = outcome.get("failed"), outcome.get("requested")
+    return errors / total if errors is not None and total else None
+
+
+def check_regressions(
+    run: dict, evidence: tuple[dict, list[dict], list[dict]], baseline: Baseline
+) -> None:
+    """Raise VerificationError if passed final sweep ``run`` regressed against ``baseline``.
+
+    Validation is blocked by a matched point whose output throughput fell more than
+    MAX_THROUGHPUT_DROP or cannot be compared (missing or zero), and by any point whose
+    request error rate exceeds the serving client's MAX_FAILURE_RATE. A frozen point without
+    a dataset is assumed to share the new corpus, and only a different known corpus is skipped.
+    An eval is blocked below MIN_EVAL_RETENTION of its baseline score, and FLOORED_EVAL_SUITES
+    below MIN_EVAL_SCORE whatever the baseline. Labels come from the canonical matrix, never
+    artifact text.
+    """
+    from infx.bench_serving.benchmark_outcome import MAX_FAILURE_RATE
+
+    from .validation import COVERAGE_LABELS, eval_labels
+
+    matrix, rows, eval_rows = evidence
+    old = {point.key: point for point in baseline.points}
+    unbaselined = unbaselined_reasons(baseline)
+    slower, failing, unknown = [], [], []
+    for point, row in zip(final_points(run, matrix, rows), rows, strict=True):
+        rate = request_error_rate(row)
+        if rate is not None and rate > MAX_FAILURE_RATE:
+            failing.append(f"{point.label} ({rate:.0%})")
+        previous = old.get(point.key)
+        if point.key in unbaselined or not previous or previous.result != "passed":
+            continue
+        if (
+            previous.scenario != point.scenario
+            or previous.values.latency_statistic != point.values.latency_statistic
+            or (previous.dataset and point.dataset and previous.dataset != point.dataset)
+        ):
+            continue
+        a, b = previous.values.output_tps_gpu, point.values.output_tps_gpu
+        if not a or b is None:
+            unknown.append(point.label)
+        elif b < (1 - MAX_THROUGHPUT_DROP) * a:
+            slower.append(f"{point.label} ({delta(a, b)})")
+    labels = {identity(key): label for key, label in eval_labels(matrix).items()}
+    frozen = {
+        (row.key, row.suite, row.metric): row.score
+        for row in baseline.evals
+        if row.result == "passed" and row.score is not None
+    }
+    dropped, weak = [], []
+    for row in final_evals(run, eval_rows):
+        reference = frozen.get((row.key, row.suite, row.metric))
+        if row.score is None:
+            continue
+        if reference is not None and row.score < MIN_EVAL_RETENTION * reference:
+            dropped.append(f"{labels[row.key]} ({row.score:.0%} vs {reference:.0%})")
+        elif row.suite in FLOORED_EVAL_SUITES and row.score < MIN_EVAL_SCORE:
+            weak.append(f"{labels[row.key]} ({row.score:.0%})")
+    problems = [
+        f"{reason} at {', '.join(items[:COVERAGE_LABELS])}"
+        + (f" and {len(items) - COVERAGE_LABELS} more" if len(items) > COVERAGE_LABELS else "")
+        for reason, items in (
+            (f"output tok/s/GPU fell more than {MAX_THROUGHPUT_DROP:.0%}", slower),
+            (f"request errors exceed {MAX_FAILURE_RATE:.0%}", failing),
+            ("output throughput cannot be compared (missing or zero)", unknown),
+            (f"eval score fell below {MIN_EVAL_RETENTION:.0%} of its baseline", dropped),
+            (f"eval score below {MIN_EVAL_SCORE:.0%}", weak),
+        )
+        if items
+    ]
+    if problems:
+        raise VerificationError(
+            "Final sweep cannot be validated against the frozen baseline: " + "; ".join(problems)
+        )
+
+
 @dataclass(frozen=True)
 class Publication:
     """A candidate's source-date public rows, each with its producer run ID, attempt and head.
@@ -1140,59 +1344,57 @@ class Publication:
 
 
 def publication(repository: str, context: dict, model: str) -> Publication:
-    """Fetch the source-date rows of ``context``'s source workload for display ``model``.
+    """Fetch the source-date rows of ``context``'s source curve for display ``model``.
 
-    ISL/OSL are not filtered: that would erase other curves of the original family.
+    A mixed-image family fetches each key's own ``sources`` observation instead. Speculation,
+    disaggregation and ISL/OSL are not filtered, since that would erase other keys or workloads
+    of the family.
     """
     from .api import fetch
 
     source = context["source"]
-    feed = fetch("benchmarks", model=model, date=source["date"])
-    info = fetch("workflow-info", date=source["date"])
-    producers = {int(row["github_run_id"]): row for row in info.payload["runs"]}
-    heads: dict[int, set[str]] = {}
-    for row in info.payload["runConfigs"]:
-        if row.get("head_sha"):
-            heads.setdefault(int(row["github_run_id"]), set()).add(row["head_sha"])
+    observed: dict[str, set[str]] = {}
+    for row in context.get("sources", {}).values() or [source]:
+        observed.setdefault(row["date"], set()).add(normalized_image(row["image"]))
+    urls: list[str] = []
+    changelogs: list[dict] = []
     rows: list[tuple[dict, int | None, int | None, str | None]] = []
-    for row in feed.payload:
-        if not isinstance(row, dict) or not isinstance(row.get("image"), str):
-            continue
-        if any(
-            (
-                normalized_image(row[key]) != normalized_image(source[key])
-                if key == "image"
-                else row.get(key) != source[key]
+    for published, images in observed.items():
+        feed = fetch("benchmarks", model=model, date=published)
+        info = fetch("workflow-info", date=published)
+        producers = {int(row["github_run_id"]): row for row in info.payload["runs"]}
+        heads: dict[int, set[str]] = {}
+        for row in info.payload["runConfigs"]:
+            if row.get("head_sha"):
+                heads.setdefault(int(row["github_run_id"]), set()).add(row["head_sha"])
+        for row in feed.payload:
+            if not isinstance(row, dict) or not isinstance(row.get("image"), str):
+                continue
+            if normalized_image(row["image"]) not in images or any(
+                row.get(key) != source[key]
+                for key in ("model", "hardware", "framework", "precision")
+            ):
+                continue
+            producer = re.fullmatch(
+                r"https://github.com/"
+                + re.escape(repository)
+                + r"/actions/runs/(\d+)(?:/attempts/(\d+))?",
+                row.get("run_url") or "",
             )
-            for key in (
-                "model",
-                "hardware",
-                "framework",
-                "precision",
-                "spec_method",
-                "disagg",
-                "image",
+            run_id = int(producer[1]) if producer else None
+            run_attempt = int(producer[2]) if producer and producer[2] else None
+            proven = (
+                run_id in producers
+                and len(heads.get(run_id, ())) == 1
+                and (run_attempt is None or run_attempt <= int(producers[run_id]["run_attempt"]))
             )
-        ):
-            continue
-        producer = re.fullmatch(
-            r"https://github.com/"
-            + re.escape(repository)
-            + r"/actions/runs/(\d+)(?:/attempts/(\d+))?",
-            row.get("run_url") or "",
-        )
-        run_id = int(producer[1]) if producer else None
-        run_attempt = int(producer[2]) if producer and producer[2] else None
-        proven = (
-            run_id in producers
-            and len(heads.get(run_id, ())) == 1
-            and (run_attempt is None or run_attempt <= int(producers[run_id]["run_attempt"]))
-        )
-        head = next(iter(heads[run_id])) if proven else None
-        if not (isinstance(head, str) and re.fullmatch(r"[0-9a-f]{40}", head)):
-            head = None
-        rows.append((row, run_id, run_attempt, head))
-    return Publication([feed.url, info.url], info.payload["changelogs"], rows)
+            head = next(iter(heads[run_id])) if proven else None
+            if not (isinstance(head, str) and re.fullmatch(r"[0-9a-f]{40}", head)):
+                head = None
+            rows.append((row, run_id, run_attempt, head))
+        urls += [feed.url, info.url]
+        changelogs += info.payload["changelogs"]
+    return Publication(urls, changelogs, rows)
 
 
 MODEL_COLUMNS = (
@@ -1445,7 +1647,8 @@ def resolve_baseline(
     ``matrix`` is the candidate family's canonical matrix at the candidate base. ``producers``
     holds the families producer revisions regenerated themselves, so nothing here runs a
     revision's code. Legacy fingerprints may be absent, but exact producer provenance and a
-    unique workload/topology/concurrency match are required. Raw API data stays private.
+    unique workload/topology/concurrency match are required. A mixed-image family freezes each
+    point only from rows of its own current image. Raw API data stays private.
     """
     from fnmatch import fnmatchcase
 
@@ -1456,13 +1659,22 @@ def resolve_baseline(
 
     public = publication(repository, context, model)
     old_image = context["source"]["image"]
+    key_sources = context.get("sources", {})
+    unbaselined = context.get("unbaselined-keys", {})
+    old_images = {normalized_image(row["image"]) for row in key_sources.values()} or {
+        normalized_image(old_image)
+    }
     entries = {point_key(entry): entry for entry in matrix_points(matrix)}
-    if not entries or any(
-        normalized_image(entry["image"]) != normalized_image(old_image)
-        for entry in entries.values()
+    if not entries or {normalized_image(entry["image"]) for entry in entries.values()} != (
+        old_images | {normalized_image(image) for image in unbaselined.values()}
     ):
         raise VerificationError("Baseline source image no longer matches the selected base")
     current = {key: public_point(entry) for key, entry in entries.items()}
+    entries = {
+        key: entry
+        for key, entry in entries.items()
+        if normalized_image(entry["image"]) in old_images
+    }
 
     def current_key(entry: dict) -> str | None:
         """Return the current-family key of producer ``entry``, or None if it has none.
@@ -1479,33 +1691,38 @@ def resolve_baseline(
         return keys[0] if keys else None
 
     historical: dict[str, list[tuple[dict, dict]]] = {}
-    additions: dict[str, list[tuple[str, dict]]] = {}
+    additions: dict[tuple[str, str], list[tuple[str, dict]]] = {}
     published: dict[str, Point] = {}
     unverified: list[dict] = []
     sources = list(public.sources)
-    datasets: dict[tuple[int, int | None], str | None] = {}
+    datasets: dict[tuple[int, int | None], str] = {}
 
     def dataset(row: dict, run_id: int, run_attempt: int | None) -> str | None:
         """The corpus the dashboard linked to the producer run of a published AgentX row."""
-        if row.get("benchmark_type") != "agentic_traces" or row.get("id") is None:
+        if row.get("benchmark_type") != "agentic_traces":
             return None
         if (run_id, run_attempt) not in datasets:
+            if row.get("id") is None:
+                raise VerificationError(DATASET_PROVENANCE_UNAVAILABLE)
             feed = fetch("benchmark-siblings", benchmark=int(row["id"]))
             sku = feed.payload.get("sku") if isinstance(feed.payload, dict) else None
-            if not isinstance(sku, dict) or str(sku.get("github_run_id")) != str(run_id):
-                raise VerificationError("Public baseline dataset provenance is unavailable")
-            slug = sku.get("dataset_slug")
-            datasets[run_id, run_attempt] = (
-                dataset_slug(slug) if isinstance(slug, str) and slug.strip() else None
-            )
+            slug = sku.get("dataset_slug") if isinstance(sku, dict) else None
+            corpus = dataset_slug(slug) if isinstance(slug, str) else None
+            if not corpus or str(sku.get("github_run_id")) != str(run_id):
+                raise VerificationError(DATASET_PROVENANCE_UNAVAILABLE)
+            datasets[run_id, run_attempt] = corpus
             sources.append(feed.url)
         return datasets[run_id, run_attempt]
 
-    published_family = public_config_key(candidate.family.split(":", 1)[1])
+    published_keys = [public_config_key(key) for key in family_keys(candidate.family)]
     family_runs = {
         int(change["workflow_run_id"])
         for change in public.changelogs
-        if any(fnmatchcase(published_family, key) for key in change["config_keys"])
+        if any(
+            fnmatchcase(published, key)
+            for published in published_keys
+            for key in change["config_keys"]
+        )
     }
     for row, run_id, run_attempt, head in public.rows:
         if head is None:
@@ -1531,16 +1748,18 @@ def resolve_baseline(
         if len(matches) != 1:
             raise VerificationError("Public baseline recipe identity is ambiguous or mismatched")
         key = current_key(matches[0]) or point_key(matches[0])
+        image = normalized_image(row["image"])
+        if key in current and current[key]["image"] != image:
+            continue
         if key in published:
             raise VerificationError("Duplicate public baseline point")
-        if head not in additions:
-            additions[head] = [
+        if (head, image) not in additions:
+            additions[head, image] = [
                 (point_key(point), point)
                 for point, _ in historical[head]
-                if normalized_image(point["image"]) == normalized_image(old_image)
-                and current_key(point) is None
+                if normalized_image(point["image"]) == image and current_key(point) is None
             ]
-        entries.update(additions[head])
+        entries.update(additions[head, image])
         entry = entries[key]
         published[key] = Point(
             key=key,
@@ -1590,13 +1809,34 @@ def resolve_baseline(
         retirements=retirements(
             repository, candidate.base, context["source"]["date"], points, current
         ),
+        keys=dict(
+            sorted(
+                {
+                    **{
+                        key: KeyBaseline(date=row["date"], image=row["image"])
+                        for key, row in key_sources.items()
+                    },
+                    **{
+                        key: KeyBaseline(
+                            image=image,
+                            points=sorted(
+                                point
+                                for point, fields in current.items()
+                                if fields["image"] == normalized_image(image)
+                            ),
+                        )
+                        for key, image in unbaselined.items()
+                    },
+                }.items()
+            )
+        ),
     )
 
 
 def prepare_baseline(session: Session, context: dict, model: str, goal: Prose) -> Baseline:
     """The baseline preflight selection froze for this session's candidate, with ``goal``.
 
-    It must be bound to the candidate, its base, its source observation and ``model``.
+    It must be bound to the candidate, its base, its source observations and ``model``.
     """
     preflight_file = Path(os.environ["KLAUD_EVIDENCE"]) / "baseline-preflight.json"
     if not preflight_file.exists():
@@ -1614,6 +1854,20 @@ def prepare_baseline(session: Session, context: dict, model: str, goal: Prose) -
         or preflight.baseline.date != context["source"]["date"]
         or normalized_image(preflight.baseline.image)
         != normalized_image(context["source"]["image"])
+        or {
+            key: (row.date, normalized_image(row.image))
+            for key, row in preflight.baseline.keys.items()
+        }
+        != {
+            **{
+                key: (row["date"], normalized_image(row["image"]))
+                for key, row in context.get("sources", {}).items()
+            },
+            **{
+                key: (None, normalized_image(image))
+                for key, image in context.get("unbaselined-keys", {}).items()
+            },
+        }
     ):
         raise VerificationError("Baseline preflight does not match this candidate")
     return preflight.baseline.model_copy(update={"goal": goal})

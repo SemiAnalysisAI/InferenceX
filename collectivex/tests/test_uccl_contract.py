@@ -197,6 +197,21 @@ class NormalModeLaunchConfig(unittest.TestCase):
         self.assertEqual(list(details["combine_config"].values()), [20, 4, 288, 12, 132])
         self.assertEqual((details["is_intranode"], details["cpu_proxy_threads"]), (False, 4))
 
+    def test_a_registry_receive_ring_deepens_only_the_internode_dispatch_and_labels_the_row(self):
+        with mock.patch.dict(os.environ, {"COLLX_UCCL_RDMA_RECV_TOKENS": "1024"}):
+            backend, _ = _built(self.module, world_size=16)
+            intranode, _ = _built(self.module, world_size=8)
+        details = backend.implementation_details()
+        # 1024 rounds up to 1040, the next multiple of the 20-token send chunk.
+        self.assertEqual(list(details["dispatch_config"].values()), [20, 36, 288, 20, 1040])
+        self.assertEqual(list(details["combine_config"].values()), [20, 4, 288, 12, 132])
+        self.assertEqual(backend.kernel_generation, "uccl-legacy-buffer-vllm-ht-rdmarecv1040")
+        self.assertEqual(intranode.kernel_generation, "uccl-legacy-buffer-vllm-ht")
+        self.assertEqual(list(intranode.implementation_details()["dispatch_config"].values()),
+                         [20, 6, 256, 6, 132])
+        unset, _ = _built(self.module, world_size=16)
+        self.assertEqual(unset.kernel_generation, "uccl-legacy-buffer-vllm-ht")
+
     def test_one_sm_budget_at_ep8_and_ep16_on_cuda_and_hip(self):
         budgets = set()
         for module in (self.module, _load(hip="7.2")):
@@ -308,6 +323,22 @@ class Provenance(unittest.TestCase):
         self.assertEqual(rooted.returncode, 0, rooted.stderr)
         # cache root, backend, cpu, arch, image, commit prefix, then the build generation.
         self.assertRegex(rooted.stdout, r"^/cache/uccl-ep-[^/]+-9\.0-img-df000fd3001d-[^/-]+$")
+
+
+class EfaBuild(unittest.TestCase):
+    """On EFA pools only multi-node shards build UCCL's EFA transport, and the two builds never
+    share a cache."""
+
+    def _variant(self, fabric, nodes):
+        result = _prepare(["uccl_efa_build"], "uccl_efa_build", env={
+            "COLLX_RDMA_FABRIC": fabric, "COLLX_NODES": str(nodes)})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout
+
+    def test_the_variant_follows_the_fabric_and_the_placement(self):
+        self.assertEqual(self._variant("efa", 2), "efa")
+        self.assertEqual(self._variant("efa", 1), "noefa")
+        self.assertEqual(self._variant("", 2), "")
 
 
 class ImportProbe(unittest.TestCase):
