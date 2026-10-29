@@ -154,7 +154,7 @@ gh workflow run speedbench-al.yml \
 
 [`identities.yaml`](identities.yaml) 为每条曲线提供两个块。新曲线合并前必须同时具备二者；测试会据此检查每个文件名。
 
-`select` 决定哪些运行使用该曲线。`curve_name` 返回唯一匹配的曲线，没有或有多条匹配时报错。
+`select` 决定哪些运行使用该曲线。`curve_name` 返回最具体的匹配曲线（声明 `draft_family`、`draft_sample`、`verify` 最多的那条），没有匹配或最具体的多条并列时报错。
 
 | 键 | 含义 |
 | --- | --- |
@@ -162,6 +162,7 @@ gh workflow run speedbench-al.yml \
 | `method` | `mtp`、`eagle3`、`dspark` 或 `dflash`。SGLang 的 `EAGLE` 和 `NEXTN` 表示模型原生 `mtp` 头，MiniMax-M3 的 EAGLE 除外，其为 `eagle3` |
 | `draft_family` | 仅在同一模型的曲线因草稿模型而不同时设置：草稿模型名含 `gqa` 时为 `gqa`，否则为 `default` |
 | `draft_sample` | 仅在同一模型的曲线因草稿采样器而不同时设置：运行的 `draft_sample_method` 必须与之相等 |
+| `verify` | 仅在同一模型的曲线因验证器而不同时设置：`standard`、`block` 或 `relaxed`。运行的验证器按审计相同的方式读取；未知验证器（ATOM、TileRT）不会匹配设置了 `verify` 的曲线 |
 
 `collection` 记录曲线的测量方式：`engine`、`draft`、`draft_sample`（`greedy`、`probabilistic`）、`verify`（`standard`、`block`、`relaxed`）、`adaptive`、`topology`（`chain`、`tree-topk<N>`）、`draft_precision`（草稿权重的量化方式）、`draft_kv_cache_dtype` 和 `kv_cache_dtype`（目标模型的）。`provisional: true` 表示该曲线并非针对该模型测量。每项为 `{value, source}`：
 

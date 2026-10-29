@@ -161,7 +161,7 @@ Every curve file is named `<model>__<method>__<draft>__<draft_sample>-<verify>.y
 
 [`identities.yaml`](identities.yaml) gives each curve two blocks. A new curve needs both before it merges; a test checks each file name against them.
 
-`select` decides which runs use the curve. `curve_name` returns the one curve whose block matches and fails when none or several do.
+`select` decides which runs use the curve. `curve_name` returns the most specific matching curve (the one declaring the most of `draft_family`, `draft_sample` and `verify`) and fails when none match or the most specific ones tie.
 
 | Key | Meaning |
 | --- | --- |
@@ -169,6 +169,7 @@ Every curve file is named `<model>__<method>__<draft>__<draft_sample>-<verify>.y
 | `method` | `mtp`, `eagle3`, `dspark` or `dflash`. SGLang `EAGLE` and `NEXTN` mean the model's native `mtp` head, except MiniMax-M3's EAGLE, which is `eagle3` |
 | `draft_family` | Only where one model's curves differ by draft: `gqa` when the draft model id contains `gqa`, else `default` |
 | `draft_sample` | Only where one model's curves differ by draft sampler: the run's `draft_sample_method` must equal it |
+| `verify` | Only where one model's curves differ by verifier: `standard`, `block` or `relaxed`. The run's verifier is read as the audit reads it; an unknown verifier (ATOM, TileRT) never matches a curve that sets `verify` |
 
 `collection` records how the curve was measured: `engine`, `draft`, `draft_sample` (`greedy`, `probabilistic`), `verify` (`standard`, `block`, `relaxed`), `adaptive`, `topology` (`chain`, `tree-topk<N>`), `draft_precision` (the draft weights' quantization), `draft_kv_cache_dtype` and `kv_cache_dtype` (the target's). `provisional: true` marks a curve not measured for its model. Each fact is `{value, source}`:
 

@@ -240,8 +240,8 @@ def test_image_refs_normalize_registry_separator():
 
 @pytest.mark.parametrize(("framework", "setting", "pinned", "matches"), [("dynamo-trt", 2.5, 2.5, True), ("vllm", 3.5, 2.5, False)])
 def test_golden_al_subtracts_bonus_token_only_for_trt(monkeypatch, framework, setting, pinned, matches):
-    monkeypatch.setattr(signoff_facts.curves, "curve_name", lambda model, spec: "m_mtp")
-    monkeypatch.setattr(signoff_facts.curves, "golden_length", lambda model, spec, thinking: 3.5)
+    monkeypatch.setattr(signoff_facts.curves, "curve_name", lambda model, spec, verify=None: "m_mtp")
+    monkeypatch.setattr(signoff_facts.curves, "golden_length", lambda model, spec, thinking, verify=None: 3.5)
     report = signoff_facts.golden_al("m", {}, "thinking_on", framework, pinned)
     assert report["expected_setting"] == setting
     assert report["matches"] is matches

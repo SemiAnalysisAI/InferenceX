@@ -95,12 +95,12 @@ def lookup_command(args: argparse.Namespace) -> None:
         spec["model"] = args.draft_model
     if args.draft_sample_method:
         spec["draft_sample_method"] = args.draft_sample_method
-    value = golden_length(args.model, spec, args.thinking, args.golden_dir)
+    value = golden_length(args.model, spec, args.thinking, args.golden_dir, args.verify)
     if args.json:
         print(
             json.dumps(
                 {
-                    "curve": curve_name(args.model, spec, args.golden_dir),
+                    "curve": curve_name(args.model, spec, args.golden_dir, args.verify),
                     "thinking": args.thinking,
                     "tokens": args.tokens,
                     "acceptance_length": value,
@@ -146,6 +146,11 @@ def main(argv: list[str] | None = None) -> int:
         "--draft-sample-method",
         choices=("greedy", "probabilistic"),
         help="Kimi DSpark draft sampler",
+    )
+    lookup_parser.add_argument(
+        "--verify",
+        choices=("standard", "block", "relaxed"),
+        help="the run's verifier; omit when unknown (selects block-verified curves only by it)",
     )
     lookup_parser.add_argument("--json", action="store_true")
     lookup_parser.set_defaults(handler=lookup_command)
