@@ -173,17 +173,27 @@ deepep_nvshmem_overlay() {
   printf '%s' "$overlay"
 }
 
+deepep_nccl_version() {
+  if [ "${COLLX_RDMA_FABRIC:-}" = efa ]; then
+    printf '%s' "${COLLX_DEEPEP_V2_EFA_NCCL_VERSION:?}"
+  else
+    printf '%s' "${COLLX_DEEPEP_V2_NCCL_VERSION:?}"
+  fi
+}
+
 deepep_cache_root() {
   # The NVSHMEM wheel is part of the built venv's identity (see common.sh: the cu12
   # wheel on cu130 images broke sm103), so it keys the cache and a spec change rebuilds.
   local nvshmem_key="${COLLX_DEEPEP_V2_NVSHMEM_SPEC#nvidia-}"
   nvshmem_key="${nvshmem_key//==/-}"
   local torch_key="${COLLX_DEEPEP_V2_TORCH_SPEC//==/-}"
-  local build_gen="${COLLX_DEEPEP_V2_BUILD_GEN:?}"
+  local build_gen="${COLLX_DEEPEP_V2_BUILD_GEN:?}" nccl
+  nccl="$(deepep_nccl_version)" || return 1
   [[ "$nvshmem_key" =~ ^[A-Za-z0-9._-]+$ && "$torch_key" =~ ^[A-Za-z0-9._-]+$ \
-     && "$build_gen" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
-  backend_cache_root deepep-v2 "sm${1/./}" "${COLLX_DEEPEP_V2_COMMIT:0:12}" \
-    "$torch_key" "$nvshmem_key" "$build_gen"
+     && "$build_gen" =~ ^[A-Za-z0-9._-]+$ && "$nccl" =~ ^[0-9.]+$ ]] || return 1
+  local -a parts=("$torch_key" "$nvshmem_key" "$build_gen")
+  [ "$nccl" = "$COLLX_DEEPEP_V2_NCCL_VERSION" ] || parts+=("nccl-$nccl")
+  backend_cache_root deepep-v2 "sm${1/./}" "${COLLX_DEEPEP_V2_COMMIT:0:12}" "${parts[@]}"
 }
 
 deepep_ready() { [ -f "$1/.ready" ] && [ -x "$1/venv/bin/python" ] && [ -d "$1/source" ]; }
@@ -283,9 +293,11 @@ deepep_install() {
   "${pip[@]}" --index-url https://download.pytorch.org/whl/cu130 \
     --extra-index-url https://pypi.org/simple "$COLLX_DEEPEP_V2_TORCH_SPEC" >&2 2>&1 \
     || { collx_log "ERROR: $COLLX_DEEPEP_V2_TORCH_SPEC (cu130) installation failed"; return 1; }
-  # Torch pins NCCL 2.28.9; ElasticBuffer requires 2.30.4.
-  "${pip[@]}" --force-reinstall --no-deps "nvidia-nccl-cu13==2.30.4" >&2 2>&1 \
-    || { collx_log "ERROR: NCCL 2.30.4 installation failed"; return 1; }
+  # Torch pins NCCL 2.28.9; ElasticBuffer requires 2.30.4 (EFA pools: see COLLX_DEEPEP_V2_NCCL_VERSION).
+  local nccl
+  nccl="$(deepep_nccl_version)" || return 1
+  "${pip[@]}" --force-reinstall --no-deps "nvidia-nccl-cu13==$nccl" >&2 2>&1 \
+    || { collx_log "ERROR: NCCL $nccl installation failed"; return 1; }
   local toolchain cuda_home cccl
   toolchain="$(cuda_toolchain_paths)" || return 1
   IFS=$'\t' read -r cuda_home cccl <<< "$toolchain"

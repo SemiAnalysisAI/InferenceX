@@ -29,6 +29,14 @@ COLLX_DEEPEP_V2_TORCH_SPEC="torch==2.11.0"
 # any pin changing, so venvs that already carry .ready are not reused with a stale recipe.
 COLLX_DEEPEP_V2_BUILD_GEN="dlarch2"
 
+# NCCL in the DeepEP V2 venv: ElasticBuffer needs at least 2.30.4. The EFA pools take 2.30.7, the
+# first NCCL that loads the RMA plugin aws-ofi-nccl 1.21 exports (ncclRmaPlugin_v14/v15; 2.30.4
+# looks only for v13). Under 2.30.4 that load fails, NCCL falls back to its internal IB proxy, and
+# hybrid EP16 dies with "GIN_IB_PROXY does not support specifying qp depth". The vLLM v0.32.0 image
+# ships 2.30.7. A version other than the default keys the venv cache.
+COLLX_DEEPEP_V2_NCCL_VERSION="2.30.4"
+COLLX_DEEPEP_V2_EFA_NCCL_VERSION="2.30.7"
+
 COLLX_UCCL_REPO="https://github.com/uccl-project/uccl"
 COLLX_UCCL_COMMIT="df000fd3001da04a397253fd6a2204bde62d32aa"
 
