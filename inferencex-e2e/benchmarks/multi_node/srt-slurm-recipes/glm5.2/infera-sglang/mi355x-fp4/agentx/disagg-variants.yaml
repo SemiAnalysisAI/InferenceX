@@ -64,7 +64,9 @@ base:
           MC_GID_INDEX: "@fabric.rdma-gid-index"
           # Rail-isolated fabric: each transfer uses the NIC of the same name on both ends.
           MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
-          # ionic rejects a 2 GiB dma-buf registration that starts 1 GiB-aligned.
+          # Register VRAM the peer way, not through dma-buf, as ATOM P/D does on this cluster
+          # with the same Mooncake (78566d45); 1 GiB regions keep every registration small.
+          MOONCAKE_DISABLE_HIP_DMABUF: "1"
           MC_MAX_MR_SIZE: "1073741824"
           RDMAV_FORK_SAFE: "1"
         SGLANG_HICACHE_HOST_REGISTER_CHUNK_GB: "512"
@@ -131,6 +133,8 @@ base:
   extra_mount:
     # The node-local hub cache the single-node GLM-5.2 points already fill.
     - /var/lib/hf-hub-cache:/mnt/hf_home/hub
+    # Match the host's Ionic provider without replacing the image's verbs core.
+    - /usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so:/usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so:ro
   health_check:
     # Cold start: weight load, the 1 TB pinned HiCache pool per prefill and graph capture.
     max_attempts: 1080
