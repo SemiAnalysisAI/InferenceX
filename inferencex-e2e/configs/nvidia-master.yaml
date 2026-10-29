@@ -5091,7 +5091,7 @@ qwen3.5-fp8-h100-sglang-agentic:
 # fixed-seq-len H200 MTP entry already runs conc 4-128 at TP8/EP8 versus H100's
 # 4-32, so the GPU-resident arm extends to 24 and HiCache to 48.
 qwen3.5-fp8-h200-sglang-agentic-mtp:
-  image: lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9
+  image: lmsysorg/sglang:nightly-dev-20261029-c10e0e17@sha256:78142f9f4b7fb3ee27f59065615dc7bb263f643ed256c9299c3861086ade4d47
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:h200-dgxc
@@ -5124,7 +5124,7 @@ qwen3.8next-fp8-h200-sglang-agentic-mtp:
 # H200 AgentX MTP frontier with DRAM HiCache. This is intentionally an MTP-only
 # submission; the model's non-speculative AgentX arm is not included.
 qwen3.5-fp8-h200-sglang-agentic-hicache-mtp:
-  image: lmsysorg/sglang:nightly-dev-20261021-c1c287a4@sha256:a8eedda74b54f7dfecc445ee66d298f8d8f6f50192201a53b0a6dd7571ff8d26
+  image: lmsysorg/sglang:nightly-dev-20261029-c10e0e17@sha256:78142f9f4b7fb3ee27f59065615dc7bb263f643ed256c9299c3861086ade4d47
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:h200-dgxc
