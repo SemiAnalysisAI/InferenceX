@@ -25,34 +25,34 @@
 
   <!-- rank lanes -->
   <g>
-    <text x="20" y="150" font-weight="bold">rank 0</text>
+    <text x="20" y="153" font-weight="bold">rank 0</text>
     <text x="96" y="176" fill="#555">▲</text>
     <rect x="100" y="135" width="220" height="26" fill="#e2e2e2" stroke="#888"/>
     <rect x="320" y="135" width="80" height="26" fill="#e3c7f2" stroke="#8a5aa8"/>
-    <path d="M400,142 l6,-6 l6,6 l-6,6 z" fill="#f5b971" stroke="#c97a1e"/>
+    <path d="M400,148 l6,-6 l6,6 l-6,6 z" fill="#f5b971" stroke="#c97a1e"/>
     <rect x="412" y="135" width="150" height="26" fill="#a8cdf5" stroke="#3b78c2"/><text x="480" y="153" fill="#1d4f8a">D</text>
     <rect x="562" y="135" width="160" height="26" fill="#b9e6b5" stroke="#3f9a45"/><text x="636" y="153" fill="#24692a">C</text>
-    <path d="M722,142 l6,-6 l6,6 l-6,6 z" fill="#f5b971" stroke="#c97a1e"/>
+    <path d="M722,148 l6,-6 l6,6 l-6,6 z" fill="#f5b971" stroke="#c97a1e"/>
   </g>
   <g>
-    <text x="20" y="205" font-weight="bold">rank 1</text>
+    <text x="20" y="208" font-weight="bold">rank 1</text>
     <text x="156" y="231" fill="#555">▲</text>
     <rect x="160" y="190" width="220" height="26" fill="#e2e2e2" stroke="#888"/>
     <rect x="380" y="190" width="20" height="26" fill="#e3c7f2" stroke="#8a5aa8"/>
-    <path d="M400,197 l6,-6 l6,6 l-6,6 z" fill="#f5b971" stroke="#c97a1e"/>
+    <path d="M400,203 l6,-6 l6,6 l-6,6 z" fill="#f5b971" stroke="#c97a1e"/>
     <rect x="412" y="190" width="140" height="26" fill="#a8cdf5" stroke="#3b78c2"/><text x="475" y="208" fill="#1d4f8a">D</text>
     <rect x="552" y="190" width="200" height="26" fill="#b9e6b5" stroke="#3f9a45"/><text x="646" y="208" fill="#24692a">C</text>
-    <path d="M752,197 l6,-6 l6,6 l-6,6 z" fill="#f5b971" stroke="#c97a1e"/>
+    <path d="M752,203 l6,-6 l6,6 l-6,6 z" fill="#f5b971" stroke="#c97a1e"/>
   </g>
   <g>
-    <text x="20" y="260" font-weight="bold">rank 2</text>
+    <text x="20" y="263" font-weight="bold">rank 2</text>
     <text x="126" y="286" fill="#555">▲</text>
     <rect x="130" y="245" width="220" height="26" fill="#e2e2e2" stroke="#888"/>
     <rect x="350" y="245" width="50" height="26" fill="#e3c7f2" stroke="#8a5aa8"/>
-    <path d="M400,252 l6,-6 l6,6 l-6,6 z" fill="#f5b971" stroke="#c97a1e"/>
+    <path d="M400,258 l6,-6 l6,6 l-6,6 z" fill="#f5b971" stroke="#c97a1e"/>
     <rect x="412" y="245" width="160" height="26" fill="#a8cdf5" stroke="#3b78c2"/><text x="486" y="263" fill="#1d4f8a">D</text>
     <rect x="572" y="245" width="130" height="26" fill="#b9e6b5" stroke="#3f9a45"/><text x="631" y="263" fill="#24692a">C</text>
-    <path d="M702,252 l6,-6 l6,6 l-6,6 z" fill="#f5b971" stroke="#c97a1e"/>
+    <path d="M702,258 l6,-6 l6,6 l-6,6 z" fill="#f5b971" stroke="#c97a1e"/>
   </g>
 
   <!-- reduction brackets -->
