@@ -9759,5 +9759,5 @@
     - "Add TP4/EP4 points with decode context parallelism (DCP4) at concurrency 16, 24, 40 and 48; the latent KV is striped across the four ranks, so these points run without HiCache, which DSA DCP rejects."
     - "Keep the EAGLE draft with 5 steps, top-k 1 and 6 draft tokens, FP8 KV, the triton DSA prefill and decode backends, admission at twice the concurrency and a decode graph limit of min(2 x concurrency, 64)."
     - "Validate decode-context-parallel-size against the matrix DCP size for SGLang recipes as well as vLLM and ATOM."
-    - "Requires an SGLang ROCm image with sgl-project/sglang#43735 and the triton sparse-MLA LSE path for DCP."
+    - "Use lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261028 for all three arms; the published nightly includes sgl-project/sglang#43735 and #44322, enabling Triton DSA DCP with FP8 KV and MTP on ROCm."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4064
