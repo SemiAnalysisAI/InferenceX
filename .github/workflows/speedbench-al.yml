@@ -128,7 +128,7 @@ jobs:
         env:
           GOLDEN_CURVE: ${{ inputs.golden-curve }}
         run: |
-          if [[ ! "$GOLDEN_CURVE" =~ ^[a-z0-9_.-]+$ ]]; then
+          if [[ ! "$GOLDEN_CURVE" =~ ^[a-z0-9_.-]+$ || "$GOLDEN_CURVE" == identities ]]; then
             echo "::error::open-pr needs golden-curve, a curve file stem such as deepseek-v4-pro__mtp__native__default-default (got '$GOLDEN_CURVE')." >&2
             exit 1
           fi

@@ -150,22 +150,34 @@ gh workflow run speedbench-al.yml \
 
 ## 曲线身份与命名
 
-每个曲线文件命名为 `<model>__<method>__<draft>__<draft_sample>-<verify>.yaml`：曲线的模型键、方法（模型原生头为 `mtp`，以及 `eagle3`、`dspark`、`dflash`）、草稿模型（`native` 或草稿模型名），以及收集脚本设置的草稿采样器和验证器（未设置、沿用引擎默认值时为 `default`）。
+每个曲线文件命名为 `<model>__<method>__<draft>__<draft_sample>-<verify>.yaml`：曲线的模型键、方法（模型原生头为 `mtp`，以及 `eagle3`、`dspark`、`dflash`）、草稿模型（`native` 或草稿模型名），以及收集脚本设置的草稿采样器和验证器（沿用引擎默认值时为 `default`）。
 
-[`identities.yaml`](identities.yaml) 为每条曲线提供两个块：
+[`identities.yaml`](identities.yaml) 为每条曲线提供两个块。新曲线合并前必须同时具备二者；测试会据此检查每个文件名。
 
-- `select` 决定哪些运行使用该曲线：`model_prefixes`、`method`，以及仅在同一模型的曲线因其而不同时才设置的 `draft_family`（MiniMax-M3 GQA）和 `draft_sample`（Kimi K3 DSpark）。`curve_name` 返回唯一匹配的曲线，没有或有多条匹配时报错。SGLang 的 `EAGLE` 和 `NEXTN` 选择模型原生 `mtp` 曲线，MiniMax-M3 的 EAGLE 选择 `eagle3`。
-- `collection` 记录曲线的测量方式：`engine`、`draft`、`draft_sample`、`verify`（`standard`、`block`、`relaxed`）、`adaptive`、`topology`（`chain`、`tree-topk<N>`）、`draft_precision`（草稿权重的量化方式）、`draft_kv_cache_dtype` 和 `kv_cache_dtype`（目标模型的）。每项为 `{value, source}`，source 为 `explicit`、`documented`、`assumed`、`default`（未设置，value 为 null）或 `unknown`（value 为 null）。
+`select` 决定哪些运行使用该曲线。`curve_name` 返回唯一匹配的曲线，没有或有多条匹配时报错。
 
-新曲线合并前必须补充其身份；测试会检查每个文件名与身份是否一致。
+| 键 | 含义 |
+| --- | --- |
+| `model_prefixes` | 使用该曲线的 InferenceX 模型前缀 |
+| `method` | `mtp`、`eagle3`、`dspark` 或 `dflash`。SGLang 的 `EAGLE` 和 `NEXTN` 表示模型原生 `mtp` 头，MiniMax-M3 的 EAGLE 除外，其为 `eagle3` |
+| `draft_family` | 仅在同一模型的曲线因草稿模型而不同时设置：草稿模型名含 `gqa` 时为 `gqa`，否则为 `default` |
+| `draft_sample` | 仅在同一模型的曲线因草稿采样器而不同时设置：运行的 `draft_sample_method` 必须与之相等 |
 
-[`infx/srt_slurm/spec_identity.py`](../srt_slurm/spec_identity.py) 用同一词汇描述运行的生成角色，并对照所选曲线进行审计，但不改变选择结果。结果类型包括 `mismatch`（双方值均已知且不同）、`unverified`（任一方为引擎默认值或未知，双方同为同一引擎默认值时除外；ATOM 的验证器始终未知）、`adaptive`（不适用固定 k 曲线）、`provisional` 和 `engine`。
+`collection` 记录曲线的测量方式：`engine`、`draft`、`draft_sample`（`greedy`、`probabilistic`）、`verify`（`standard`、`block`、`relaxed`）、`adaptive`、`topology`（`chain`、`tree-topk<N>`）、`draft_precision`（草稿权重的量化方式）、`draft_kv_cache_dtype` 和 `kv_cache_dtype`（目标模型的）。`provisional: true` 表示该曲线并非针对该模型测量。每项为 `{value, source}`：
 
-[`current_spec_roles.json`](../tests/golden_al_distribution/current_spec_roles.json) 固定了当前扫描矩阵中每个推测解码生成角色的曲线、黄金 AL 和差异结果。有意修改后请重新生成并审查差异：
+| Source | 含义 |
+| --- | --- |
+| `explicit` | 由收集脚本或配方显式设置 |
+| `documented` | 由 connector 或引擎确定：配方中的 synthetic 采样器会变为 `block`；block、relaxed 和 adaptive 验证均需显式开启，未设置即为 `standard` 且非自适应 |
+| `assumed` | connector 自身的判断，例如 ATOM DSpark 采用 probabilistic 草稿 |
+| `default` | 未设置，沿用引擎默认值；`value` 为 null |
+| `unknown` | 无法读取，例如 ATOM 的验证器；`value` 为 null |
+
+[`infx/srt_slurm/spec_identity.py`](../srt_slurm/spec_identity.py) 用同一词汇描述运行的生成角色，并对照所选曲线进行审计，但不改变选择结果。KV cache dtype 会做归一化：`fp8_e4m3` 即 `fp8`，`bfloat16` 即 `bf16`，`auto` 为引擎默认值。结果类型包括 `mismatch`（双方值均已知且不同）、`unverified`（任一方为引擎默认值或未知，双方同为同一引擎默认值时除外）、`adaptive`（不适用固定 k 曲线）、`provisional` 和 `engine`。审计扫描矩阵中的每个推测解码角色：
 
 ```bash
 python -m infx.matrix.generate full-sweep --config-files configs/nvidia-master.yaml configs/amd-master.yaml --scenario-type agentic-coding > matrix.json
-python -m infx.srt_slurm.spec_identity snapshot matrix.json --root . > infx/tests/golden_al_distribution/current_spec_roles.json
+python -m infx.srt_slurm.spec_identity snapshot matrix.json --root .
 ```
 
 ## 查询曲线

@@ -159,20 +159,32 @@ Before accepting an updated curve, reviewers should verify:
 
 Every curve file is named `<model>__<method>__<draft>__<draft_sample>-<verify>.yaml`: the curve's model key, its method (`mtp` for a model-native head, `eagle3`, `dspark`, `dflash`), its draft (`native` or the draft model), and the draft sampler and verifier the collector set (`default` when it left the engine default).
 
-[`identities.yaml`](identities.yaml) gives each curve two blocks:
+[`identities.yaml`](identities.yaml) gives each curve two blocks. A new curve needs both before it merges; a test checks each file name against them.
 
-- `select` decides which runs use the curve: `model_prefixes`, `method`, and, only where curves of one model differ by them, `draft_family` (MiniMax-M3 GQA) and `draft_sample` (Kimi K3 DSpark). `curve_name` returns the one curve whose block matches and fails when none or several do. SGLang `EAGLE` and `NEXTN` select the model's native `mtp` curve, and MiniMax-M3's EAGLE selects `eagle3`.
-- `collection` records how the curve was measured: `engine`, `draft`, `draft_sample`, `verify` (`standard`, `block`, `relaxed`), `adaptive`, `topology` (`chain`, `tree-topk<N>`), `draft_precision` (the draft weights' quantization), `draft_kv_cache_dtype` and `kv_cache_dtype` (the target's). Each fact is `{value, source}` with source `explicit`, `documented`, `assumed`, `default` (unset; value null) or `unknown` (value null).
+`select` decides which runs use the curve. `curve_name` returns the one curve whose block matches and fails when none or several do.
 
-A new curve needs its identity before it merges; a test checks each file name against it.
+| Key | Meaning |
+| --- | --- |
+| `model_prefixes` | InferenceX model prefixes that use the curve |
+| `method` | `mtp`, `eagle3`, `dspark` or `dflash`. SGLang `EAGLE` and `NEXTN` mean the model's native `mtp` head, except MiniMax-M3's EAGLE, which is `eagle3` |
+| `draft_family` | Only where one model's curves differ by draft: `gqa` when the draft model id contains `gqa`, else `default` |
+| `draft_sample` | Only where one model's curves differ by draft sampler: the run's `draft_sample_method` must equal it |
 
-[`infx/srt_slurm/spec_identity.py`](../srt_slurm/spec_identity.py) describes a run's generation role in the same vocabulary and audits it against its selected curve without changing the selection. Findings are `mismatch` (both values known and different), `unverified` (an engine default or unknown on either side, other than the same engine's default on both; ATOM's verifier is always unknown), `adaptive` (no fixed-k curve applies), `provisional` and `engine`.
+`collection` records how the curve was measured: `engine`, `draft`, `draft_sample` (`greedy`, `probabilistic`), `verify` (`standard`, `block`, `relaxed`), `adaptive`, `topology` (`chain`, `tree-topk<N>`), `draft_precision` (the draft weights' quantization), `draft_kv_cache_dtype` and `kv_cache_dtype` (the target's). `provisional: true` marks a curve not measured for its model. Each fact is `{value, source}`:
 
-[`current_spec_roles.json`](../tests/golden_al_distribution/current_spec_roles.json) pins the curve, golden AL and findings of every speculative generation role in the current sweep matrix. Regenerate it after a deliberate change and review the diff:
+| Source | Meaning |
+| --- | --- |
+| `explicit` | Set by the collector or recipe |
+| `documented` | Fixed by the connector or engine: a recipe's synthetic sampler becomes `block`, and block, relaxed and adaptive verification are opt-in, so unset means `standard` and not adaptive |
+| `assumed` | The connector's own reading, such as ATOM DSpark drafting probabilistically |
+| `default` | Unset, so the engine default; `value` is null |
+| `unknown` | Not readable, such as ATOM's verifier; `value` is null |
+
+[`infx/srt_slurm/spec_identity.py`](../srt_slurm/spec_identity.py) describes a run's generation role in the same vocabulary and audits it against its selected curve without changing the selection. KV cache dtypes are normalized: `fp8_e4m3` is `fp8`, `bfloat16` is `bf16` and `auto` is the engine default. Findings are `mismatch` (both values known and different), `unverified` (an engine default or unknown on either side, other than the same engine's default on both), `adaptive` (no fixed-k curve applies), `provisional` and `engine`. To audit every speculative role of the sweep matrix:
 
 ```bash
 python -m infx.matrix.generate full-sweep --config-files configs/nvidia-master.yaml configs/amd-master.yaml --scenario-type agentic-coding > matrix.json
-python -m infx.srt_slurm.spec_identity snapshot matrix.json --root . > infx/tests/golden_al_distribution/current_spec_roles.json
+python -m infx.srt_slurm.spec_identity snapshot matrix.json --root .
 ```
 
 ## Querying the curves
