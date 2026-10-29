@@ -11556,3 +11556,14 @@
     - "Disagg: 6 DEP2 prefill workers with a DEP8 decode at conc 280-360 or a DEP16 decode at conc 300; DeepGEMM MegaMoE, NIXL transfer plus a shared MooncakeStore DRAM pool (160 GB per rank), Dynamo KV router."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4468
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - glm5.2-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Image rocm/atom-dev:nightly_202610181506 (ATOM 0.1.8.dev77+gdf86c4829) -> nightly_202610271459 (ATOM 0.1.9.dev59+g06dbf6692, digest sha256:5332ae78c51985d1bd8462935bdd80817f12350c39f8e8db7d93ab9037ff5f1c), the first nightly that contains ROCm/ATOM PR 2736. The atomesh router container_image digest moves from 1bb1909a to 5332ae78, the same nightly as the workers."
+    - "TP8 C1 and C2 follow the TP8 recipe added to recipes/Agentic-GLM-5.2.md by ROCm/ATOM PR 2736: the TP4 C1/C2 command with -tp 8. Both run the GLM-5.2 mono decode (ATOM_MONO_ENABLE=1) on the external-indexer path at 3 draft tokens (golden AL 2.99), with max-num-seqs equal to the concurrency and CUDA graphs at [1] and [1,2]. C1 was 5 draft tokens, max-num-seqs 2 and graphs [1,2]; C2 was 5 draft tokens, max-num-seqs 4 and graphs [1,2,4]."
+    - "TP8 C4, TP4 C1-C10 and TP4+DCP4 C16-C48 keep their settings and ATOM_MONO_ENABLE values; they rerun only for the image change. LMCache stays at 0.5.6.dev139+gf22dec28, the wheel pinned in both images."
+    - "ATOM changes in the new image that matter here: mono decode admits TP8 and keeps the fused indexer at TP4 only (ROCm/ATOM #2736). Shared paths the TP4, DCP4 and TP8 C4 points also pick up: one graph mechanism per region, including the glm5_next indexer and kpool (#2688); MoE routing before the rows move (#2725); chunked DSA indexer decode logits (#2607); speculative output buffer reuse (#2670); MLA Triton decode on the maintained AITER API (#2669)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4608
