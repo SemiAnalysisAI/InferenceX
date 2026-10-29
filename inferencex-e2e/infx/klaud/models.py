@@ -124,6 +124,7 @@ class Ownership(Contract):
 
 ASSET_REASONS = ("weights-missing", "route-mismatch")
 INFRA_REASONS = ("infra-registry-rate-limit", "infra-hf-rate-limit", "infra-node-fault")
+LIMIT_REASONS = ("cluster-time-limit",)
 
 LEGACY_OUTCOMES = {
     "readiness-blocked": "missing-assets",
@@ -165,6 +166,7 @@ class CandidateOutcome(Contract):
             "infra-registry-rate-limit",
             "infra-hf-rate-limit",
             "infra-node-fault",
+            "cluster-time-limit",
         ]
         | None
     ) = None
@@ -191,7 +193,7 @@ class CandidateOutcome(Contract):
         if self.reason_code in ASSET_REASONS:
             if self.outcome != "missing-assets":
                 raise ValueError("Asset reason codes require a missing-assets outcome")
-        elif self.reason_code in INFRA_REASONS:
+        elif self.reason_code in INFRA_REASONS + LIMIT_REASONS:
             if self.outcome not in ("failed", "inconclusive") or self.phase not in (
                 "resolve",
                 "targeted",
