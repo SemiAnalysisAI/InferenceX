@@ -11562,6 +11562,9 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Bump to lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261028."
-    - "Enable --enable-amd-monokernel at concurrency 1. Each DSpark verify there is one request's 7 tokens, which the monokernels run as one persistent launch per layer; steps with more rows run the standard forward."
+    - "Image: lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261019 -> v0.5.22-rocm720-mi35x-20261028 (SGLang 5d9c956f8e -> e0df901d68, AITER 2bb549102b -> 285579b621; ROCm 7.2 and torch 2.9.1 unchanged)."
+    - "Points: unchanged (TP8 c1/4/16 no offload; c32/48 HiCache; c128 DP-attention HiCache; c128/256/384 DP-attention EP8 MegaMoE HiCache)."
+    - "TP8 c1 (max-running-requests 2, decode graphs up to batch 2): add --enable-amd-monokernel. The sgl-amd-mono DeepSeek-V4 TP8 spec runs a whole target layer in one launch for steps of up to 8 rows, so the batch-1 DSpark verify (7 tokens) uses it and the batch-2 verify (14 rows) and prefill keep SGLang's standard forward. Other points are unchanged."
+    - "Upstream SGLang: mono-kernel specs are registered by architecture and model type (sgl-project/sglang#46036) on the new plugin kernel backend (#45389); the DSpark draft MoE is kept out of the target's expert placement (#45299); attn_sink is refreshed after weight loading (#41630); the draft and final mHC streams are combined from BF16 without an FP32 copy (#45964, #45940)."
+    - "Draft model data type: no change. The DSpark draft (mtp.0-2 in DeepSeek-V4-Pro-0813) runs as shipped, like the target layers: FP8 E4M3 attention, shared-expert and main_proj weights with 128x128 UE8M0 block scales, MXFP4 routed experts, BF16 norms, router gate and Markov head, and wo_a dequantized to BF16 at load. Its KV stays a BF16 ring under SGLANG_DSV4_UNIFIED_KV_FP8, and no sgl-amd-mono spec covers the DeepSeek-V4 DSpark draft, so the draft keeps SGLang's forward."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4596
