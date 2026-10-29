@@ -222,6 +222,15 @@ keeps it on NVLink. UCCL-EP is built from source at its pin with UCCL's drop-in 
 `USE_DMABUF=1 PER_EXPERT_BATCHING=1`; `implementation.library_version` names the commit and flags,
 and the import probe rejects any other `deep_ep`.
 
+**h200-dgxc EP16 runs a deeper RDMA receive ring than vLLM.** With vLLM's dispatch config (RDMA
+chunks send 20 / receive 140), BF16 prefill deadlocks inside UCCL on every attempt: the sender
+coordinator waits for a full chunk the senders cannot prepare, and the receiver for tokens that are
+never delivered ([uccl-project/uccl#1110](https://github.com/uccl-project/uccl/issues/1110)). A
+receive ring of 1040 tokens (a multiple of the send chunk) is deep enough that no prefill stream
+wraps, and every rung passes the oracle. The registry's `network.uccl_rdma_recv_tokens` sets it for
+h200-dgxc only; those rows carry `-rdmarecv1040` in `kernel_generation` and the realized config in
+`library_config`, so they are library rows rather than vLLM's configuration until UCCL is fixed.
+
 UCCL-EP EP16 is not registered on mi355x: its CPU-proxy RDMA works over the Pollara fabric but runs
 about 13x under UCCL's documented bandwidth, unchanged by registration mode or traffic class (an
 ionic-driver suspect).
