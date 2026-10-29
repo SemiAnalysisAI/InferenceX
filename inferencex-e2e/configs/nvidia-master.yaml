@@ -10665,6 +10665,102 @@ glm5.3-fp4-b300-sglang-agentic-mtp:
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [22, 24, 25, 28], srt-recipe: agentic.yaml }
 
+minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-agg:
+  image: vllm/vllm-openai:minimax-m31-flash-arm64-cu134@sha256:5d76347628973fb80519a919a2f2740b6645b62cba3fe2bd87b25f111bd0e948
+  model: MiniMaxAI/MiniMax-M3.1-Flash
+  model-prefix: minimaxm31flash
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: dynamo-vllm
+  router:
+    name: dynamo-router
+    version: 1.6.0.dev20261023
+  multinode: true
+  disagg: false
+  srt-recipe-dir: minimaxm31flash/vllm/gb200-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [1]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp4_c1
+        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [4]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp4_c4
+        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [8]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp4_c8
+        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [16]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp4_c16
+        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
+    - dram-utilization: 1.0
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [32]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp4_c32
+        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [40]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp4_c40
+        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
+
+minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-disagg:
+  image: vllm/vllm-openai:minimax-m31-flash-arm64-cu134@sha256:5d76347628973fb80519a919a2f2740b6645b62cba3fe2bd87b25f111bd0e948
+  model: MiniMaxAI/MiniMax-M3.1-Flash
+  model-prefix: minimaxm31flash
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: dynamo-vllm
+  router:
+    name: dynamo-router
+    version: 1.6.0.dev20261023
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  srt-recipe-dir: minimaxm31flash/vllm/gb200-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 1.0
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: 0.3.13.post1 }
+        conc-list: [280]
+        srt-recipe: disagg-mooncake.yaml:override_3p1d_dep16_c280
+        prefill: { num-worker: 3, tp: 4, ep: 4, dp-attn: true }
+        decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: true }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: 0.3.13.post1 }
+        conc-list: [352]
+        srt-recipe: disagg-mooncake.yaml:override_4p1d_dep16_c352
+        prefill: { num-worker: 4, tp: 4, ep: 4, dp-attn: true }
+        decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: true }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: 0.3.13.post1 }
+        conc-list: [256]
+        srt-recipe: disagg-mooncake.yaml:override_3p1d_c256
+        prefill: { num-worker: 3, tp: 4, ep: 4, dp-attn: true }
+        decode: { num-worker: 1, tp: 8, ep: 8, dp-attn: true }
 minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg:
   image: vllm/vllm-openai:minimax-m31-flash-arm64-cu134@sha256:5d76347628973fb80519a919a2f2740b6645b62cba3fe2bd87b25f111bd0e948
   model: MiniMaxAI/MiniMax-M3.1-Flash
@@ -10767,3 +10863,4 @@ minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg:
         srt-recipe: disagg-mooncake.yaml:override_3p4d16
         prefill: { num-worker: 6, tp: 2, ep: 2, dp-attn: true }
         decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: true }
+
