@@ -8,15 +8,30 @@ import tempfile
 from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING, Any
 
 from infx.results import artifacts, eval_artifacts
 
 from . import github
 from .github import VerificationError
-from .models import OwnedCandidate, utc
+from .models import OwnedCandidate, family_keys, utc
+
+if TYPE_CHECKING:
+    from infx.matrix.revision import Revision
+
+SCENARIO = "agentic-coding"
+
+
+def in_scope(entry: dict) -> bool:
+    """Return True if matrix ``entry`` is an AgentX point.
+
+    Klaud autosweeps cover only AgentX, so fixed-seq-len points are out of scope.
+    """
+    return entry.get("scenario-type") == SCENARIO
 
 
 def benchmark_entries(matrix: dict) -> list[dict]:
+    """Return every single-node and multi-node benchmark entry of ``matrix``."""
     return [
         entry
         for group in ("single_node", "multi_node")
@@ -26,6 +41,7 @@ def benchmark_entries(matrix: dict) -> list[dict]:
 
 
 def benchmark_points(entries: list[dict]) -> set[tuple]:
+    """Return the (recipe fingerprint, concurrency, image) point of each entry concurrency."""
     return {
         (entry["recipe-fingerprint"], int(conc), entry["image"])
         for entry in entries
@@ -40,7 +56,7 @@ def project_prefix(repository: str, head: str) -> str:
 
 
 def canonical_matrix(repository: str, head: str, family: str) -> dict:
-    """Generate the unfiltered family from exact-head YAML using trusted local code.
+    """Return the family's AgentX matrix generated from exact-head YAML by trusted local code.
 
     Candidate source is data only. A future generator-policy change can require manual
     inspection of an older run; it cannot silently waive points or required evals.
@@ -57,15 +73,15 @@ def canonical_matrix(repository: str, head: str, family: str) -> dict:
     from infx.srt_slurm.workload import NATIVE_TELEMETRY_BLOCK, SHARED_BLOCKS, TELEMETRY_BLOCK
 
     OwnedCandidate(id="0" * 16 + "-" + "0" * 16, family=family, base=head)
-    source, key = family.split(":", 1)
+    source, keys = family.split(":", 1)[0], family_keys(family)
     prefix = project_prefix(repository, head)
     master = yaml.safe_load(github.file_at(repository, head, prefix + source))
     runners = yaml.safe_load(github.file_at(repository, head, prefix + "configs/runners.yaml"))
-    family_config = {key: master[key]}
+    family_config = {key: master[key] for key in keys}
     with tempfile.TemporaryDirectory(prefix="klaud-recipes-") as temp:
         root = Path(temp)
-        references = srt_recipe_references(family_config)[key]
-        paths = {reference.partition(":")[0] for reference in references}
+        references = srt_recipe_references(family_config)
+        paths = {reference.partition(":")[0] for key in keys for reference in references[key]}
         blocks = [
             block.as_posix()
             for block in (*SHARED_BLOCKS.values(), TELEMETRY_BLOCK, NATIVE_TELEMETRY_BLOCK)
@@ -73,20 +89,24 @@ def canonical_matrix(repository: str, head: str, family: str) -> dict:
         for path in [*paths, *blocks]:
             (root / path).parent.mkdir(parents=True, exist_ok=True)
             (root / path).write_bytes(github.file_at(repository, head, prefix + path))
-        entries = generate_test_config_sweep(
-            SimpleNamespace(config_keys=[key]),
-            validate_master_config(family_config, root),
-            validate_runner_config(runners),
-            root,
-        )
+        entries = [
+            entry
+            for entry in generate_test_config_sweep(
+                SimpleNamespace(config_keys=keys),
+                validate_master_config(family_config, root),
+                validate_runner_config(runners),
+                root,
+            )
+            if in_scope(entry)
+        ]
         fingerprinted = [
             {**row, "recipe-fingerprint": recipe_fingerprint(row, root)} for row in entries
         ]
-    evals = [
-        dict(row, **{"eval-only": True})
-        for row in mark_eval_entries(deepcopy(entries))
-        if row.get("run-eval")
-    ]
+        evals = [
+            dict(row, **{"eval-only": True})
+            for row in mark_eval_entries(deepcopy(entries), root)
+            if row.get("run-eval")
+        ]
     return {"single_node": {"all": fingerprinted}, "evals": evals}
 
 
@@ -101,6 +121,7 @@ class ProducerRegenerationError(VerificationError):
     """
 
     def __init__(self, stderr: str) -> None:
+        """Store the tool's ``stderr`` and carry the fixed public reason as the message."""
         super().__init__(PRODUCER_UNAVAILABLE)
         self.stderr = stderr
 
@@ -126,9 +147,10 @@ def producer_matrix(repository: str, head: str, family: str) -> dict:
                 timeout=300,
             )
         with snapshot(head) as producer:
-            rows = producer.generate([family.split(":", 1)[1]], ["--no-evals"])
+            rows = throughput_rows(producer, producer_keys(producer, family))
             if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
                 raise ValueError("the generator did not print a list of matrix rows")
+            rows = [row for row in rows if in_scope(row)]
             fingerprints = producer.fingerprints(rows)
     except subprocess.SubprocessError as error:
         stderr = getattr(error, "stderr", None) or b""
@@ -146,7 +168,53 @@ def producer_matrix(repository: str, head: str, family: str) -> dict:
     }
 
 
+def producer_keys(producer: Revision, family: str) -> list[str]:
+    """Return the keys of ``family`` that the producer revision's master configs define.
+
+    A curve key added after the producer ran has no rows from it. Raises ValueError if none.
+    """
+    import yaml
+
+    present: set[str] = set()
+    for path in map(Path, producer.master_configs):
+        if path.is_file():
+            try:
+                master = yaml.safe_load(path.read_text())
+            except yaml.YAMLError as error:
+                raise ValueError(f"{path.name} is not valid YAML") from error
+            if isinstance(master, dict):
+                present.update(master)
+    keys = [key for key in family_keys(family) if key in present]
+    if not keys:
+        raise ValueError("the producer revision defines none of the family's config keys")
+    return keys
+
+
+def throughput_rows(producer: Revision, keys: list[str]) -> list[dict]:
+    """Return the producer's throughput rows for config ``keys`` without eval-only rows.
+
+    Producers too old for ``--no-evals`` have their eval rows stripped here instead.
+    """
+    try:
+        return producer.generate(keys, ["--no-evals"])
+    except subprocess.CalledProcessError as error:
+        if "unrecognized arguments: --no-evals" not in (error.stderr or ""):
+            raise
+    rows = producer.generate(keys, [])
+    if not isinstance(rows, list):
+        return rows
+    return [
+        {**row, "run-eval": False} if isinstance(row, dict) and row.get("run-eval") else row
+        for row in rows
+        if not (isinstance(row, dict) and row.get("eval-only"))
+    ]
+
+
 def check_matrix(matrix: dict, canonical: dict, head: str, family: str) -> None:
+    """Raise VerificationError unless ``matrix`` matches ``canonical`` for ``head`` and ``family``.
+
+    Checks the selected curve, per-point settings, duplicate points, coverage and default evals.
+    """
     from pydantic import TypeAdapter
 
     from infx.matrix.validation import (
@@ -167,8 +235,12 @@ def check_matrix(matrix: dict, canonical: dict, head: str, family: str) -> None:
     if metadata["head_ref"] != head:
         raise VerificationError("Matrix was generated from a different head")
     entries = metadata["entries"]
-    if len(entries) != 1 or entries[0]["config-keys"] != [family.split(":", 1)[1]]:
-        raise VerificationError("Final changelog must select exactly the candidate family")
+    if (
+        len(entries) != 1
+        or entries[0].get("append-only")
+        or set(entries[0]["config-keys"]) != set(family_keys(family))
+    ):
+        raise VerificationError("Final changelog must select exactly the candidate curve")
     expected = benchmark_points(benchmark_entries(canonical))
     generated = {
         point: schema.validate_python(entry).model_dump(by_alias=True, exclude_none=True)
@@ -195,7 +267,13 @@ def check_matrix(matrix: dict, canonical: dict, head: str, family: str) -> None:
 
 
 def expected_evals(matrix: dict) -> set[tuple]:
-    expected = set()
+    """Return the artifact identities of every default eval in ``matrix``."""
+    return {key for key, _, _ in eval_identities(matrix)}
+
+
+def eval_identities(matrix: dict) -> list[tuple[tuple, dict, Any]]:
+    """Each default eval's artifact identity with its matrix entry and concurrency."""
+    identities = []
     for bucket in (
         "evals",
         "agentic_evals",
@@ -225,13 +303,19 @@ def expected_evals(matrix: dict) -> set[tuple]:
                 if multi and entry.get("eval-all-concs")
                 else [entry["eval-conc"] if multi else entry["conc"]]
             )
-            expected.update(eval_artifacts.eval_key({**row, "conc": conc}) for conc in concs)
-    return expected
+            identities.extend(
+                (eval_artifacts.eval_key({**row, "conc": conc}), entry, conc) for conc in concs
+            )
+    return identities
 
 
 def check_coverage(
     directory: Path, manifest: dict, run: dict, family: str, canonical: dict
 ) -> None:
+    """Raise VerificationError unless the artifacts in ``directory`` cover the sweep.
+
+    ``manifest`` must match ``run``, and its matrix must match ``canonical`` for ``family``.
+    """
     if (
         manifest["head"] != run["head_sha"]
         or manifest["run-id"] != run["id"]
@@ -255,19 +339,55 @@ def check_coverage(
     eval_artifacts.dedupe_reran_evals(directory)
     eval_rows, eval_errors = eval_artifacts.inspect_eval_artifacts(directory)
     errors += eval_errors
-    errors += artifacts.validate_identity_set(
-        "eval", expected_evals(matrix), {row[:-1] for row in eval_rows}
-    )
+    found_evals = {row[:-1] for row in eval_rows}
+    errors += artifacts.validate_identity_set("eval", expected_evals(matrix), found_evals)
     if errors:
-        raise VerificationError("Full-sweep result coverage or consistency failed")
+        raise VerificationError(
+            "Full-sweep result coverage or consistency failed; "
+            + coverage_summary("benchmark point", point_labels(canonical), set(actual))
+            + "; "
+            + coverage_summary("eval", eval_labels(canonical), found_evals)
+        )
+
+
+def point_labels(matrix: dict) -> dict[tuple, str]:
+    """Each benchmark point identity of ``matrix`` with its experiment name and concurrency."""
+    return {
+        (entry["recipe-fingerprint"], int(conc), entry["image"]): f"{entry['exp-name']} c{conc}"
+        for entry in benchmark_entries(matrix)
+        for conc in (entry["conc"] if isinstance(entry["conc"], list) else [entry["conc"]])
+    }
+
+
+def eval_labels(matrix: dict) -> dict[tuple, str]:
+    """Each default eval identity of ``matrix`` with its experiment name, suite and concurrency."""
+    return {
+        key: f"{entry['exp-name']} {entry.get('eval-suite') or 'gsm8k'} c{conc}"
+        for key, entry, conc in eval_identities(matrix)
+    }
+
+
+COVERAGE_LABELS = 5
+
+
+def coverage_summary(kind: str, labels: dict[tuple, str], found: set[tuple]) -> str:
+    """Count the ``kind`` identities missing from or extra to ``labels``, naming a few missing.
+
+    Names come only from the canonical matrix, so the text never repeats artifact content.
+    """
+    missing = sorted(label for key, label in labels.items() if key not in found)
+    extra = len(found - labels.keys())
+    named = ", ".join(missing[:COVERAGE_LABELS])
+    more = f" and {len(missing) - COVERAGE_LABELS} more" if len(missing) > COVERAGE_LABELS else ""
+    named_part = f" ({named}{more})" if missing else ""
+    return f"{len(missing)} {kind}(s) missing{named_part}, {extra} unexpected"
 
 
 def select_artifacts(inventory: list[dict], run: dict, attempt: dict) -> list[dict]:
-    """Newest same-name artifact within this run; never overlay two archives.
+    """Return the newest ``inventory`` artifact of each wanted name in ``run``, never overlaid.
 
-    Retained point artifacts from successful jobs in an earlier attempt are allowed.
-    The final manifest must be current. An earlier aggregate is retained only when
-    none of its point producers reran. Coverage/raw agreement still must pass.
+    Points from before ``attempt`` may be retained, but the manifest must be current and an
+    older aggregate only stands if none of its producers reran. Raises VerificationError.
     """
     selected: dict[str, dict] = {}
     for artifact in inventory:
@@ -316,6 +436,10 @@ def select_artifacts(inventory: list[dict], run: dict, attempt: dict) -> list[di
 
 
 def verify_sweep(repository: str, run: dict, family: str) -> tuple[dict, list[dict], list[dict]]:
+    """Verify the passed final sweep ``run`` for ``family`` and return its data.
+
+    Return the canonical matrix, benchmark rows and eval rows, or raise VerificationError.
+    """
     if run["status"] != "completed" or run["conclusion"] != "success":
         raise VerificationError("Final sweep has not passed")
     attempt = github.read(repository, f"actions/runs/{run['id']}/attempts/{run['run_attempt']}")

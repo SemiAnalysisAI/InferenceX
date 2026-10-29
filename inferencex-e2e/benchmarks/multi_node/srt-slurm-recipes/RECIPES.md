@@ -2,7 +2,7 @@
 
 InferenceX owns the recipes in this directory. For every NVIDIA srt-slurm launch, the srt driver ([`infx/launch/drivers/srt/checkout.py`](../../../infx/launch/drivers/srt/checkout.py)) makes a job-local Git clone of the pinned submodule and copies this entire tree into `recipes/`. It records the actual revision in `srt-slurm-sha.txt`; power lanes copy that revision into `power-producer-sha.txt` for result validation.
 
-The shared version is the Git submodule pointer at [`utils/srt-slurm`](../../../utils/srt-slurm), currently [v2.51.1](https://github.com/NVIDIA/srt-slurm/releases/tag/v2.51.1) (`545233a0d36e7d21cf74bb01a4365475c9214003`). Update that submodule pointer when upgrading, then run the recipe and integration checks. Do not add model-specific checkout branches to launchers.
+The shared version is the Git submodule pointer at [`utils/srt-slurm`](../../../utils/srt-slurm), currently [v2.59.1](https://github.com/NVIDIA/srt-slurm/releases/tag/v2.59.1) (`ae3d6877c46f3147e3a5dafa46ee4cd89322e52f`). Update that submodule pointer when upgrading, then run the recipe and integration checks. Do not add model-specific checkout branches to launchers.
 
 InferenceX requires srt-slurm 2.0 or newer and `schema: 2` recipes. Legacy recipe layouts are unsupported; migrate them before adding them to this tree.
 
@@ -16,8 +16,8 @@ glm5.2/sglang/h200-fp8/agentx/disagg-1p1d-pcp8-tp8-dp8-mtp6-hicache.yaml
 qwen3.5/trtllm/gb300-fp4/agentx/disagg-variants.yaml
 ```
 
-- Use the master config's `model-prefix` and `precision` labels. Engines are `sglang`, `vllm`, `trtllm`, and `tilert`; frontend selection remains explicit inside the recipe. Hardware directories use GPU types such as `b200` and `gb300`, rather than cluster names.
-- Workloads are `1k1k`, `8k1k`, or `agentx`. Existing bundles spanning several fixed sequence lengths use `fixed-seq-len`; keep their override selectors intact.
+- Use the master config's `model-prefix` and `precision` labels. Engines are `sglang`, `vllm`, `trtllm`, `atom`, and `tilert`. Frontend selection remains explicit inside the recipe. Hardware directories use GPU types such as `b200` and `gb300`, rather than cluster names.
+- Workloads are `1k1k`, `8k1k`, or `agentx`.
 - Use lowercase, hyphen-separated filenames beginning with `agg` or `disagg`. Include topology and the settings that distinguish sibling recipes, such as parallelism, batch size, concurrency, MTP, offload, or cache configuration. Avoid dates, numbered latency/throughput labels, and repeating the model or hardware already in the path.
 - In topology names, `1p4d` denotes prefill/decode worker counts, not necessarily physical nodes. Role-qualified `p-tp4` and `d-tp8` identify prefill/decode TP; `b` denotes batch size and `c` concurrency. The YAML is authoritative for runtime settings.
 - A master-config entry with two or more rows of one recipe design keeps them in one `<agg|disagg>[-<axis>]-variants.yaml`; the axis only tells bundles in one directory apart. `base` holds everything the points share, with `schema: 2` beside it, and each row gets one plain `override_<topology>_c<conc>` block (or a similarly point-identifying name, without dates or hardware) holding only its deltas. An override's `null` deletes the base key, so a null that a point needs, such as TensorRT-LLM's `cuda_graph_config:`, stays in `base`. Rows select it with `srt-recipe: <bundle>.yaml:override_<name>`, relative to `srt-recipe-dir`. Do not add `zip_override_*` blocks or share a bundle across entries, and keep one override per row: recipe references participate in eval grouping. An entry that reruns another entry's points selects that entry's overrides instead of copying them. Standalone files remain for single-row entries, adapted upstream recipes whose `# Source:` base materially differs, and points too different to share a base, such as a TP low-latency recipe beside wide-EP ones.
@@ -106,4 +106,4 @@ The initial migration also resolves compatibility issues that `srtctl migrate` c
 - The power reader accepts both generations of samples CSV while validating utilization values and continuing to compute board energy from watts.
 - Post-eval selection uses native `post_eval.command` and `post_eval.passthrough_env` with [`srt_eval.sh`](../srt_eval.sh). TRT AgentX recipes declare their existing Dynamo fork with `dynamo.source.git`; launchers no longer rewrite the srt-slurm source.
 
-Append a new entry to the physical end of `perf-changelog.yaml` for every recipe or runtime change. Preserve all historical bytes. Validate the PR with `full-sweep-fail-fast`, including evals, before following the repository's review and artifact-reuse merge process.
+Append a new entry to the physical end of `perf-changelog.yaml`, covering the listed config keys, when `infx.matrix.changed` lists any; add none when it lists none. Preserve all historical bytes. When you append an entry, validate the PR with `full-sweep-fail-fast`, including evals, before following the repository's review and artifact-reuse merge process.

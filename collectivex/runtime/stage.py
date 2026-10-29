@@ -4,8 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import os
-import pwd
 from pathlib import Path
 import shutil
 
@@ -15,33 +13,11 @@ EXCLUDES = {"__pycache__", "results", ".shards", ".collx_workloads", ".collx_bac
             "notes.md"}
 
 
-def implicit_stage_base(args) -> None:
-    # Resolve the account home from /etc/passwd, not $HOME. The GHA launcher deliberately
-    # points $HOME at a runner-local /tmp sandbox. The passwd home is compute-visible.
-    base = args.home or pwd.getpwuid(os.getuid()).pw_dir
-    home = Path(base).resolve()
-    suffix = ""
-    if args.isolation_key:
-        if not all(char.isalnum() or char in "._-" for char in args.isolation_key):
-            raise SystemExit(1)
-        suffix = "-" + args.isolation_key
-    path = home / f".inferencex-collectivex-stage{suffix}"
-    path.mkdir(mode=0o700, exist_ok=True)
-    print(path, end="")
-
-
-def resolve_directory(args) -> None:
-    path = Path(args.path).resolve()
-    if not path.is_dir(): raise SystemExit(1)
-    print(path, end="")
-
-
 def validate_stage_path(args) -> None:
     base, child = Path(args.base).resolve(), Path(args.child)
     if child.parent.resolve() != base or child.exists() or base == Path("/"):
         raise SystemExit(1)
-    for excluded in (args.repo, args.job_root, args.workspace):
-        if excluded and base == Path(excluded).resolve(): raise SystemExit(1)
+    if base == Path(args.repo).resolve(): raise SystemExit(1)
     print(child, end="")
 
 
@@ -64,14 +40,11 @@ def validate_cleanup(args) -> None:
 # positional argv; there are no optional flags. That argv shape is a string contract with
 # common.sh — a subcommand or flag common.sh passes but this parser does not declare fails
 # with "unrecognized arguments" and aborts the leg at repository-stage. Keep the two halves in
-# lockstep (see tests/test_runtime.py::StageContract), which is exactly the contract that broke
-# when the --allow-* flags were dropped here but left on the common.sh callers.
+# lockstep.
 SPECS = {
-    "implicit-stage-base": (("home", "?"), ("isolation_key", "?")),
-    "resolve-directory": (("path",),),
-    "validate-stage-path": (("repo",), ("base",), ("child",), ("job_root", "?"), ("workspace", "?")),
-    "create-stage": (("stage",),), "copy-repository": (("source",), ("target",)),
-    "validate-cleanup": (("root",),),
+    "validate-stage-path": ("repo", "base", "child"),
+    "create-stage": ("stage",), "copy-repository": ("source", "target"),
+    "validate-cleanup": ("root",),
 }
 
 
@@ -82,7 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
     for name, arguments in SPECS.items():
         command = commands.add_parser(name)
         for item in arguments:
-            command.add_argument(item[0], nargs=item[1] if len(item) > 1 else None, default="")
+            command.add_argument(item)
         command.set_defaults(handler=handlers[name.replace("-", "_")])
     return parser
 

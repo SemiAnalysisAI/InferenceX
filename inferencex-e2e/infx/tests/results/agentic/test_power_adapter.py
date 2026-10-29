@@ -21,6 +21,7 @@ def test_single_node_collector_finalizes_native_agentx_power(
     tmp_path: Path, require_power: bool, failure: str | None,
 ) -> None:
     from infx.launch.drivers.srt.collect import finalize_single_node_results
+    from infx.launch.lifecycle import Lifecycle
 
     pkg = build_package(tmp_path)
     result_dir = pkg.logs_root / "agentic"
@@ -56,9 +57,13 @@ def test_single_node_collector_finalizes_native_agentx_power(
     request = SimpleNamespace(is_agentic=True, eval_only=False, run_eval=False,
                               require_power=require_power, inferencex_results_python=sys.executable,
                               result_filename="point", env=env)
-    run = SimpleNamespace(request=request, env=env, workspace=tmp_path)
+    run = SimpleNamespace(request=request, env=env, workspace=tmp_path, life=Lifecycle())
     producer_sha = "b" * 40 if failure == "producer_commit_mismatch" else PRODUCER_SHA
-    assert finalize_single_node_results(run, pkg.logs_root, producer_sha) == int(require_power and failure is not None)
+    failed = require_power and failure is not None
+    rc = finalize_single_node_results(run, pkg.logs_root, producer_sha)
+    assert rc == int(failed)
+    error = run.life.event.finish(rc).error
+    assert (error.type if error else None) == ("PowerValidationFailed" if failed else None)
     aggregate = json.loads(aggregate_path.read_text())
     validation = json.loads((tmp_path / "power_validation_point.json").read_text())
     assert not (result_dir / "power_validation.json").exists()
@@ -280,6 +285,20 @@ def test_build_power_window_rejects_ambiguous_inputs(
 
     assert window is None
     assert expected_reason in reasons
+
+
+@pytest.mark.parametrize(
+    ("aggregate", "records"),
+    [(["2023-11-14T22:13:21+00:00"], None), (None, [["not", "an", "object"]])],
+)
+def test_build_power_window_rejects_non_object_profile_json(
+    tmp_path: Path, aggregate: list | None, records: list | None
+):
+    from infx.results.agentic.power_adapter import build_power_window
+
+    result_dir = _write_artifacts(tmp_path, aggregate=aggregate, records=records)
+
+    assert build_power_window(result_dir) == (None, ["profile_artifacts_invalid"])
 
 
 _RETIRED_FORK_WINDOW_ENV = (

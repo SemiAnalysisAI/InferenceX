@@ -152,7 +152,7 @@ def resolve_conflict_bytes(
     expected_link = f"https://github.com/{repo}/pull/{pr_number}"
 
     if additions:
-        main_signatures = {entry_signature(entry) for entry in main_entries}
+        main_signatures = {entry_signature(entry) for entry in main_entries[len(base_entries) :]}
         pr_spans = entry_spans(pr_raw, pr_entries)
         contribution_blocks: list[bytes] = []
         for index, entry in enumerate(

@@ -1,0 +1,140 @@
+base:
+  schema: 2
+  name: musespark-fp4-mi355x-sglang-agentic
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        served-model-name: amd/Muse-Spark-Open-816B-A42B-Quark-MXFP4
+        attention-backend: aiter
+        page-size: 16
+        kv-cache-dtype: fp8_e4m3
+        mem-fraction-static: 0.85
+        max-running-requests: 128
+        # DFlash2 verifies 8 tokens per step: the current token plus 7 drafts.
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: RadixArk/Muse-Spark-Open-DFlash2
+        speculative-draft-attention-backend: triton
+        speculative-num-draft-tokens: 8
+        reasoning-parser: muse
+        tool-call-parser: muse
+        watchdog-timeout: 1800
+        enable-metrics: true
+        prefill-decode-interval: 20
+        scheduler-recv-interval: 20
+        tokenizer-worker-num: 4
+        # SWA layers only need the 2047-token window.
+        swa-full-tokens-ratio: 0.2
+        speculative-draft-window-size: 2048
+        random-seed: 42
+      env:
+        PYTHONNOUSERSITE: '1'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        SGLANG_USE_AITER: '1'
+        SGLANG_USE_AITER_UNIFIED_ATTN: '1'
+        MUSE_MOE_BACKEND: flydsl
+        # Serve from the pre-seeded shared HF cache with no Hub API calls: every
+        # rank's revision lookup otherwise trips the 1000-per-5-min 429 limit
+        # when several points start together.
+        HF_HUB_OFFLINE: '1'
+  benchmark:
+    env:
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+override_tp8_c1:
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp8_c2:
+  benchmark:
+    env:
+      CONC: '2'
+      KV_OFFLOADING: none
+
+override_tp8_c4:
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp8_c8:
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
+override_tp8_c16:
+  roles:
+    agg:
+      args:
+        enable-hierarchical-cache: true
+        hicache-size: 253
+        hicache-write-policy: write_through
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: dram
+
+override_tp8_c32:
+  roles:
+    agg:
+      args:
+        enable-hierarchical-cache: true
+        hicache-size: 253
+        hicache-write-policy: write_through
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: dram
+
+override_tp8_c48:
+  roles:
+    agg:
+      args:
+        enable-hierarchical-cache: true
+        hicache-size: 253
+        hicache-write-policy: write_through
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: dram
+
+override_tp8_c64:
+  roles:
+    agg:
+      args:
+        enable-hierarchical-cache: true
+        hicache-size: 253
+        hicache-write-policy: write_through
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+  benchmark:
+    env:
+      CONC: '64'
+      KV_OFFLOADING: dram

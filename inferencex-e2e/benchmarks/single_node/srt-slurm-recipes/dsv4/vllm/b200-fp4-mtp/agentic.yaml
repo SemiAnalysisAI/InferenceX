@@ -62,7 +62,7 @@ base:
 # consistent-hash vLLM Router (turns of one conversation share a rank), admits
 # 2x CONC across the ranks with MegaMoE experts, reserves verification slots
 # beyond an 8192-token prefill budget, and splits TOTAL_CPU_DRAM_GB GB of eager
-# offload across the ranks; c160 and c192 shrink the per-rank KV cache.
+# offload across the ranks; c96 to c192 shrink the per-rank KV cache.
 override_tp8_c1:
   roles:
     agg:
@@ -173,26 +173,27 @@ override_dep8_c32:
     agg:
       gpus: 8
       args:
-        tensor-parallel-size: 1
-        data-parallel-size: 8
+        tensor-parallel-size: 4
+        data-parallel-size: 2
         enable-expert-parallel: true
         enable-ep-weight-filter: true
-        moe-backend: deep_gemm_amxf4_mega_moe
+        moe-backend: deep_gemm_mega_moe
         prefill-schedule-interval: 16
         long-prefill-token-threshold: 512
-        kv-cache-memory-bytes: 37580963840
-        max-num-batched-tokens: 8248
-        max-num-seqs: 8
-        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56],"mode":0}'
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":243375000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'
+        kv-cache-memory-bytes: 51539607552
+        max-num-batched-tokens: 8416
+        max-num-seqs: 32
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,105,112,119,126,133,140,147,154,161,168,175,182,189,196,203,210,217,224],"mode":0}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":241500000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'
       env:
         PYTORCH_ALLOC_CONF: 'expandable_segments:True'
+        VLLM_DSV4_MEGA_FP8_COMBINE: null
         PYTHONHASHSEED: '42'
   benchmark:
     env:
       CONC: '32'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1947'
+      TOTAL_CPU_DRAM_GB: '1932'
       AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'
 
 override_dep8_c64:
@@ -213,14 +214,14 @@ override_dep8_c64:
         data-parallel-size: 8
         enable-expert-parallel: true
         enable-ep-weight-filter: true
-        moe-backend: deep_gemm_amxf4_mega_moe
+        moe-backend: deep_gemm_mega_moe
         prefill-schedule-interval: 16
         long-prefill-token-threshold: 512
         kv-cache-memory-bytes: 37580963840
         max-num-batched-tokens: 8304
         max-num-seqs: 16
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,105,112],"mode":0}'
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":243375000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":241500000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'
       env:
         PYTORCH_ALLOC_CONF: 'expandable_segments:True'
         PYTHONHASHSEED: '42'
@@ -228,7 +229,7 @@ override_dep8_c64:
     env:
       CONC: '64'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1947'
+      TOTAL_CPU_DRAM_GB: '1932'
       AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'
 
 override_dep8_c96:
@@ -249,14 +250,14 @@ override_dep8_c96:
         data-parallel-size: 8
         enable-expert-parallel: true
         enable-ep-weight-filter: true
-        moe-backend: deep_gemm_amxf4_mega_moe
+        moe-backend: deep_gemm_mega_moe
         prefill-schedule-interval: 16
         long-prefill-token-threshold: 512
-        kv-cache-memory-bytes: 37580963840
+        kv-cache-memory-bytes: 33285996544
         max-num-batched-tokens: 8360
         max-num-seqs: 24
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,105,112,119,126,133,140,147,154,161,168],"mode":0}'
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":243375000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":241500000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'
       env:
         PYTORCH_ALLOC_CONF: 'expandable_segments:True'
         PYTHONHASHSEED: '42'
@@ -264,7 +265,7 @@ override_dep8_c96:
     env:
       CONC: '96'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1947'
+      TOTAL_CPU_DRAM_GB: '1932'
       AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'
 
 override_dep8_c128:
@@ -285,14 +286,14 @@ override_dep8_c128:
         data-parallel-size: 8
         enable-expert-parallel: true
         enable-ep-weight-filter: true
-        moe-backend: deep_gemm_amxf4_mega_moe
+        moe-backend: deep_gemm_mega_moe
         prefill-schedule-interval: 16
         long-prefill-token-threshold: 512
-        kv-cache-memory-bytes: 37580963840
+        kv-cache-memory-bytes: 33285996544
         max-num-batched-tokens: 8416
         max-num-seqs: 32
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,105,112,119,126,133,140,147,154,161,168,175,182,189,196,203,210,217,224],"mode":0}'
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":243375000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":241500000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'
       env:
         PYTORCH_ALLOC_CONF: 'expandable_segments:True'
         PYTHONHASHSEED: '42'
@@ -300,7 +301,7 @@ override_dep8_c128:
     env:
       CONC: '128'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1947'
+      TOTAL_CPU_DRAM_GB: '1932'
       AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'
 
 override_dep8_c160:
@@ -321,14 +322,14 @@ override_dep8_c160:
         data-parallel-size: 8
         enable-expert-parallel: true
         enable-ep-weight-filter: true
-        moe-backend: deep_gemm_amxf4_mega_moe
+        moe-backend: deep_gemm_mega_moe
         prefill-schedule-interval: 16
         long-prefill-token-threshold: 512
-        kv-cache-memory-bytes: 36507222016
+        kv-cache-memory-bytes: 32212254720
         max-num-batched-tokens: 8472
         max-num-seqs: 40
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,105,112,119,126,133,140,147,154,161,168,175,182,189,196,203,210,217,224,231,238,245,252,259,266,273,280],"mode":0}'
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":243375000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":241500000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'
       env:
         PYTORCH_ALLOC_CONF: 'expandable_segments:True'
         PYTHONHASHSEED: '42'
@@ -336,7 +337,7 @@ override_dep8_c160:
     env:
       CONC: '160'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1947'
+      TOTAL_CPU_DRAM_GB: '1932'
       AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'
 
 override_dep8_c192:
@@ -357,14 +358,14 @@ override_dep8_c192:
         data-parallel-size: 8
         enable-expert-parallel: true
         enable-ep-weight-filter: true
-        moe-backend: deep_gemm_amxf4_mega_moe
+        moe-backend: deep_gemm_mega_moe
         prefill-schedule-interval: 16
         long-prefill-token-threshold: 512
-        kv-cache-memory-bytes: 36507222016
+        kv-cache-memory-bytes: 32212254720
         max-num-batched-tokens: 8528
         max-num-seqs: 48
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,105,112,119,126,133,140,147,154,161,168,175,182,189,196,203,210,217,224,231,238,245,252,259,266,273,280,287,294,301,308,315,322,329,336],"mode":0}'
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":243375000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":241500000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'
       env:
         PYTORCH_ALLOC_CONF: 'expandable_segments:True'
         PYTHONHASHSEED: '42'
@@ -372,5 +373,5 @@ override_dep8_c192:
     env:
       CONC: '192'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1947'
+      TOTAL_CPU_DRAM_GB: '1932'
       AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'

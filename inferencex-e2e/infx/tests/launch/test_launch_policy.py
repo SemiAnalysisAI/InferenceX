@@ -13,7 +13,7 @@ from infx.launch.drivers.srt import models, power
 from infx.launch.drivers.srt.power import PowerPolicyError, decide_power
 from infx.launch.lifecycle import Lifecycle
 from infx.launch.policy import LaunchPath, Match, salloc_time_limit
-from infx.launch.request import LaunchRequest, MultiNodeRequest
+from infx.launch.request import LaunchRequest, MultiNodeRequest, RequestError
 
 DCGM, AGENTX, ADAPTER, ERR = "dcgm", "agentx", "adapter", "error"
 MULTI, NATIVE = LaunchPath.SRT_MULTI, LaunchPath.SRT_NATIVE
@@ -53,7 +53,6 @@ CASES = [
     ("h200-dgxc", MULTI, "1", "dsv4", "fp8", "dynamo-sglang", ADAPTER),
     ("h200-dgxc", MULTI, "0", "dsv4", "fp8", "dynamo-sglang", ERR),
     ("h200-dgxc", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", ERR),
-    ("h100-dgxc", MULTI, "0", "dsr1", "fp8", "dynamo-sglang", ERR),
 ]
 
 
@@ -169,3 +168,26 @@ def test_cluster_settings_beat_the_host_but_never_the_points_settings(chosen, ex
     env = policy.runtime_env(cluster, request, {"LATER": "later", "SHARED": "later"})
 
     assert {name: env[name] for name in HOST} == expected
+
+
+def test_a_role_without_additional_settings_arrives_as_null_and_sets_no_names():
+    record = {**RECORD, "env": {"CLUSTER": "cluster", "SHARED": "cluster"}}
+    cluster = load_inventory({"labels": {"cluster:c": ["c_0"]}, "clusters": {"c": record}}).clusters["c"]
+    request = _request(
+        PREFILL_ADDITIONAL_SETTINGS='["SHARED=point"]', DECODE_ADDITIONAL_SETTINGS="null",
+        **{**HOST, "SHARED": "point"},
+    )
+
+    env = policy.runtime_env(cluster, request, {"LATER": "later", "SHARED": "later"})
+
+    assert {name: env[name] for name in HOST} == {"CLUSTER": "cluster", "LATER": "later", "SHARED": "point"}
+
+
+@pytest.mark.parametrize(("settings", "kind"), [("5", "int"), ("true", "bool"), ('{"SHARED=point": 1}', "dict")])
+def test_additional_settings_that_are_not_a_list_are_rejected(settings, kind):
+    record = {**RECORD, "env": {"CLUSTER": "cluster", "SHARED": "cluster"}}
+    cluster = load_inventory({"labels": {"cluster:c": ["c_0"]}, "clusters": {"c": record}}).clusters["c"]
+    request = _request(DECODE_ADDITIONAL_SETTINGS=settings, **HOST)
+
+    with pytest.raises(RequestError, match=f"^DECODE_ADDITIONAL_SETTINGS must be a JSON list .*, got {kind}$"):
+        policy.runtime_env(cluster, request, {"LATER": "later", "SHARED": "later"})

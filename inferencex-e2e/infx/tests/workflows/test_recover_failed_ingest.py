@@ -18,10 +18,15 @@ from infx.tests.historical_revision import (
 from infx.tests.srt_recipes import single_node_fragment, write_shared_blocks
 from infx.workflows.recover_failed_ingest import (
     RecoveryError,
+    append_entries,
     audit_changelog_bytes,
     build_config,
+    check_merge_ingest_runs,
+    check_source_belongs_to_pr,
     create_synthetic_commit,
+    extract_original_entries,
     parse_target_url,
+    relink_entries,
     select_failed_job,
     validate_reconstruction,
     validate_recovery_workflow,
@@ -473,3 +478,154 @@ def test_build_config_plans_a_hardware_layout_revision_with_its_own_planner(
     metadata = json.loads(metadata_output.read_text())
     assert (metadata["base_ref"], metadata["head_ref"]) == (base, head)
     assert [entry["pr-link"] for entry in metadata["entries"]] == [HEAD_LINK]
+
+
+PR9 = "https://github.com/SemiAnalysisAI/InferenceX/pull/9"
+PR50 = "https://github.com/SemiAnalysisAI/InferenceX/pull/50"
+
+
+def test_recovery_entries_are_original_bytes_with_only_the_link_replaced():
+    base = block("base", "https://github.com/SemiAnalysisAI/InferenceX/pull/1")
+    original = (
+        b"- config-keys:\n    - new  # keep\n  description:\n    - \"Bump 'image'\"\n"
+        b"  pr-link: " + PR9.encode() + b"\n"
+    )
+    main = base + b"\n" + block("later", "https://github.com/SemiAnalysisAI/InferenceX/pull/20")
+
+    entries = relink_entries(extract_original_entries(base, base + b"\n" + original, 9), 9, PR50)
+
+    assert append_entries(main, entries) == main + b"\n" + (
+        b"- config-keys:\n    - new  # keep\n  description:\n    - \"Bump 'image'\"\n"
+        b"  pr-link: " + PR50.encode() + b"\n"
+    )
+
+
+@pytest.mark.parametrize("base,merge,message", [
+    (block("a", PR9), block("b", PR9), "byte-for-byte"),
+    (block("a", PR9), block("a", PR9) + b"\n" + block("b", PR50), "must all link"),
+    (block("a", PR9), block("a", PR9), "did not append"),
+])
+def test_extract_original_entries_fails_closed(base, merge, message):
+    with pytest.raises(RecoveryError, match=message):
+        extract_original_entries(base, merge, 9)
+
+
+def test_relink_refuses_a_link_it_cannot_replace_line_for_line():
+    with pytest.raises(RecoveryError, match="0 pr-link lines for 1 entries"):
+        relink_entries(block("a", f'"{PR9}"'), 9, PR50)
+
+
+@pytest.mark.parametrize("runs,message", [
+    ([], None),
+    ([{"id": 1, "status": "completed", "conclusion": "failure"},
+      {"id": 2, "status": "completed", "conclusion": "cancelled"}], None),
+    ([{"id": 1, "status": "in_progress", "conclusion": None}], "still running"),
+    ([{"id": 1, "status": "completed", "conclusion": "failure"},
+      {"id": 2, "status": "completed", "conclusion": "success"}], r"\[2\] succeeded"),
+])
+def test_merge_ingest_must_be_missing_or_failed(runs, message):
+    runs = [{**run, "head_sha": "merge", "event": "push", "head_branch": "main"} for run in runs]
+    unrelated = {"id": 3, "status": "completed", "conclusion": "success",
+                 "head_sha": "other", "event": "push", "head_branch": "main"}
+    if message is None:
+        assert check_merge_ingest_runs([*runs, unrelated], "merge") == runs
+    else:
+        with pytest.raises(RecoveryError, match=message):
+            check_merge_ingest_runs([*runs, unrelated], "merge")
+
+
+EXTERNAL_TITLE = "e2e Test - External PR #{} @ 0123456789ab"
+EXTERNAL_RUN = {"event": "workflow_dispatch", "path": ".github/workflows/e2e-tests.yml",
+                "head_branch": "main", "head_sha": "mainsha"}
+
+
+@pytest.mark.parametrize("run,accepted", [
+    ({"event": "pull_request", "head_sha": "prsha"}, True),
+    ({"event": "pull_request", "head_sha": "elsewhere"}, False),
+    ({**EXTERNAL_RUN, "display_title": EXTERNAL_TITLE.format(9)}, True),
+    ({**EXTERNAL_RUN, "display_title": EXTERNAL_TITLE.format(8)}, False),
+])
+def test_source_must_have_tested_the_original_pr(run, accepted):
+    if accepted:
+        check_source_belongs_to_pr(run, 9, {"prsha"})
+    else:
+        with pytest.raises(RecoveryError, match="#9"):
+            check_source_belongs_to_pr(run, 9, {"prsha"})
+
+
+@pytest.mark.parametrize("recovered", [False, True])
+def test_plan_recovery_pr_reads_the_merge_append_from_git(tmp_path, monkeypatch, recovered):
+    from infx.workflows import recover_failed_ingest as recovery
+
+    def git(cwd, *args):
+        return subprocess.check_output(["git", *args], cwd=cwd, text=True).strip()
+
+    origin, checkout = tmp_path / "origin.git", tmp_path / "checkout"
+    git(tmp_path, "init", "-q", "--bare", str(origin))
+    git(tmp_path, "clone", "-q", str(origin), str(checkout))
+    git(checkout, "symbolic-ref", "HEAD", "refs/heads/main")
+    git(checkout, "config", "user.name", "Test")
+    git(checkout, "config", "user.email", "test@example.com")
+    changelog = checkout / "inferencex-e2e/perf-changelog.yaml"
+    changelog.parent.mkdir()
+    base = block("base", "https://github.com/SemiAnalysisAI/InferenceX/pull/1")
+    changelog.write_bytes(base)
+    git(checkout, "add", ".")
+    git(checkout, "commit", "-qm", "base")
+    base_sha = git(checkout, "rev-parse", "HEAD")
+    changelog.write_bytes(base + b"\n" + block("new", PR9))
+    git(checkout, "commit", "-qam", "merge")
+    merge_sha = git(checkout, "rev-parse", "HEAD")
+    if recovered:
+        changelog.write_bytes(changelog.read_bytes() + b"\n" + block("new", PR50))
+        git(checkout, "commit", "-qam", "recovery")
+    git(checkout, "push", "-q", "origin", "main")
+    git(checkout, "reset", "-q", "--hard", base_sha)
+
+    pr = {"number": 9, "title": "Add new", "merged_at": "x", "merge_commit_sha": merge_sha,
+          "base": {"ref": "main"}, "labels": []}
+    source = {"id": 77, "event": "pull_request", "head_sha": "prsha", "run_attempt": 2,
+              "path": ".github/workflows/run-sweep.yml", "conclusion": "failure",
+              "html_url": "source-url"}
+    monkeypatch.setattr(recovery, "gh_api", lambda repo, endpoint, **_: {
+        "pulls/9": pr,
+        f"actions/workflows/merge-ingest.yml/runs?event=push&head_sha={merge_sha}": [
+            {"id": 5, "status": "completed", "conclusion": "failure", "head_sha": merge_sha,
+             "event": "push", "head_branch": "main"},
+        ],
+    }[endpoint])
+    pinned = []
+
+    def resolve(repo, workflow, number, payload, token, pinned_run_id, **_):
+        pinned.append(pinned_run_id)
+        return source
+
+    monkeypatch.setattr(recovery, "resolve_reusable_run", resolve)
+    monkeypatch.setattr(recovery, "pr_commit_shas", lambda *_: {"prsha"})
+
+    if recovered:
+        with pytest.raises(RecoveryError, match="already be recovered"):
+            recovery.plan_recovery_pr("example/project", 9, 77, "token", checkout)
+        return
+    plan = recovery.plan_recovery_pr("example/project", 9, 77, "token", checkout)
+
+    assert pinned == [77]
+    assert (plan["base_sha"], plan["changelog_path"]) == (
+        base_sha, "inferencex-e2e/perf-changelog.yaml",
+    )
+    assert plan["entries"] == block("new", PR9).decode()
+    assert plan["failed_merge_ingest_runs"] == [{"id": 5, "conclusion": "failure"}]
+    assert (plan["source_run_attempt"], plan["branch"]) == (2, "chore/recover-9-ingest")
+
+
+@pytest.mark.parametrize("flags,message", [
+    (["--post-use"], "requires --execute"),
+    (["--execute"], "requires --ai-disclosure"),
+])
+def test_create_pr_refuses_unsafe_flag_combinations(monkeypatch, capsys, flags, message):
+    from infx.workflows import recover_failed_ingest as recovery
+
+    monkeypatch.setattr(sys, "argv", ["recover", "create-pr", "--pr-number", "9",
+                                      "--source-run-id", "77", *flags])
+    assert recovery.main() == 1
+    assert message in capsys.readouterr().err

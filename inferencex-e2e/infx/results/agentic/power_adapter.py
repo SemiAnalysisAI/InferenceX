@@ -85,7 +85,9 @@ def build_power_window(
     try:
         aggregate = load_aggregate(aggregate_path)
         records = load_records(records_path)
-    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+    except (AttributeError, OSError, json.JSONDecodeError, TypeError, ValueError):
+        return None, ["profile_artifacts_invalid"]
+    if not isinstance(aggregate, dict):
         return None, ["profile_artifacts_invalid"]
 
     raw_start = aggregate.get("start_time")
@@ -140,6 +142,7 @@ def build_power_window(
 
 
 def _fail_multinode_adapter(message: str, *, require_power: bool) -> int:
+    """Log ``message`` to stderr and return exit code 1 when ``require_power`` is set, else 0."""
     print(f"[agentx_power] {message}", file=sys.stderr)
     return 1 if require_power else 0
 
@@ -192,6 +195,7 @@ def _window_payload(
     end: float | None,
     duration: float | None,
 ) -> dict[str, Any]:
+    """Build the formal custom-benchmark window JSON for ``result_path`` with the given status and times."""
     return {
         "schema_version": 1,
         "benchmark_type": "custom",
@@ -281,6 +285,7 @@ def _record_multinode_adapter_failure(
     validation_result: Path,
     reasons: list[str],
 ) -> None:
+    """Mark ``agg_result`` power-invalid and always write ``validation_result`` with ``reasons``."""
     try:
         aggregate = json.loads(agg_result.read_text(encoding="utf-8"))
         if not isinstance(aggregate, dict):
@@ -298,6 +303,7 @@ def _record_multinode_adapter_failure(
 
 
 def _write_multinode_failure_validation(validation_result: Path, reasons: list[str]) -> None:
+    """Write a power-invalid validation JSON with ``reasons`` to ``validation_result``."""
     _write_json_atomic(
         validation_result,
         {
@@ -309,6 +315,7 @@ def _write_multinode_failure_validation(validation_result: Path, reasons: list[s
 
 
 def _formal_result_for_directory(result_dir: Path) -> Path | None:
+    """Return the single agentic_power_concurrency_*.json in ``result_dir``, or None if absent or ambiguous."""
     candidates = [
         path
         for path in result_dir.glob("agentic_power_concurrency_*.json")
@@ -318,6 +325,7 @@ def _formal_result_for_directory(result_dir: Path) -> Path | None:
 
 
 def _gpu_count(value: Any) -> int | None:
+    """Return ``value`` when it is a non-negative int (not bool), else None."""
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         return None
     return value
@@ -431,6 +439,7 @@ def run_native_agentic_power(
 
 
 def main() -> int:
+    """Run the window, missing-contract or power-join mode chosen by argv and return the exit code."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--result-dir", type=Path, required=True)
     parser.add_argument("--agg-result", type=Path)

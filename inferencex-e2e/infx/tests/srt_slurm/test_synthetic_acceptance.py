@@ -12,6 +12,7 @@ import pytest
 import yaml
 
 from infx.srt_slurm.synthetic_acceptance import (
+    acceptance_length,
     build_overrides,
     plan_commands,
     selected_recipes,
@@ -51,6 +52,7 @@ def golden_dir(tmp_path: Path) -> Path:
         ("minimaxm3_eagle3.yaml", "minimax-m3", 2.5),
         ("minimaxm3_eagle3_gqa.yaml", "minimax-m3", 2.6),
         ("glm5.3_mtp.yaml", "glm-5.3", 3.2),
+        ("musespark_dflash.yaml", "muse-spark-open", 3.4),
     ]:
         (directory / filename).write_text(
             yaml.safe_dump(
@@ -146,6 +148,97 @@ def test_thinking_mode_and_decode_priority(golden_dir: Path) -> None:
     assert result["roles"]["prefill"] == {"args": {"tensor-parallel-size": 8}}
 
 
+def test_adaptive_dspark_skips_golden_acceptance_on_throughput(golden_dir: Path) -> None:
+    recipe = {
+        "roles": {
+            "prefill": {
+                "args": {
+                    "speculative-config": json.dumps(
+                        {
+                            "method": "dspark",
+                            "num_speculative_tokens": 1,
+                            "enable_adaptive_verification": True,
+                        }
+                    )
+                }
+            },
+            "decode": {
+                "args": {
+                    "speculative-config": json.dumps(
+                        {
+                            "method": "dspark",
+                            "num_speculative_tokens": 3,
+                            "enable_adaptive_verification": True,
+                        }
+                    )
+                }
+            },
+        }
+    }
+    original = copy.deepcopy(recipe)
+    result = apply_native(
+        recipe,
+        build_overrides(
+            recipe,
+            "llmd-vllm",
+            {**ENV, "SPEC_DECODING": "dspark"},
+            golden_dir=golden_dir,
+        ),
+    )
+    assert result == original
+    tp8_recipe = vllm_recipe(
+        "dspark", num_speculative_tokens=3, enable_adaptive_verification=False
+    )
+    tp8 = apply_native(
+        tp8_recipe,
+        build_overrides(
+            tp8_recipe,
+            "vllm",
+            {**ENV, "SPEC_DECODING": "dspark"},
+            golden_dir=golden_dir,
+        ),
+    )
+    spec = json.loads(tp8["roles"]["agg"]["args"]["speculative-config"])
+    assert spec["synthetic_acceptance_length"] == 2.7
+    assert spec["rejection_sample_method"] == "synthetic"
+
+
+def test_adaptive_verification_records_no_golden_acceptance(golden_dir: Path) -> None:
+    adaptive = {
+        "args": {
+            "speculative-config": json.dumps(
+                {"method": "dspark", "num_speculative_tokens": 5, "enable_adaptive_verification": True}
+            )
+        }
+    }
+    recipe = {"roles": {"prefill": adaptive, "decode": adaptive}}
+    env = {**ENV, "SPEC_DECODING": "dspark"}
+
+    assert acceptance_length(recipe, "vllm-disagg", env, golden_dir=golden_dir) is None
+    assert build_overrides(recipe, "vllm-disagg", env, golden_dir=golden_dir) == []
+
+
+def test_adaptive_generation_records_no_golden_acceptance_while_prefill_simulates(
+    golden_dir: Path,
+) -> None:
+    decode = vllm_recipe("dspark", enable_adaptive_verification=True)["roles"]["agg"]
+    prefill = vllm_recipe("dspark")["roles"]["agg"]
+    recipe = {"roles": {"prefill": prefill, "decode": decode}}
+    env = {**ENV, "SPEC_DECODING": "dspark"}
+
+    assert acceptance_length(recipe, "vllm-disagg", env, golden_dir=golden_dir) is None
+    result = apply_native(
+        recipe, build_overrides(recipe, "vllm-disagg", env, golden_dir=golden_dir)
+    )
+    assert result["roles"]["decode"] == decode
+    assert json.loads(result["roles"]["prefill"]["args"]["speculative-config"]) == {
+        "method": "dspark",
+        "num_speculative_tokens": 3,
+        "rejection_sample_method": "synthetic",
+        "synthetic_acceptance_length": 2.7,
+    }
+
+
 @pytest.mark.parametrize("sampling", [None, "unknown"])
 def test_kimi_curve_requires_an_explicit_supported_sampler(
     golden_dir: Path, sampling: str | None
@@ -173,6 +266,20 @@ def test_kimi_curve_requires_an_explicit_supported_sampler(
             {"SPEC_DECODING": "dspark"},
             {
                 "SGLANG_SIMULATE_ACC_LEN": "2.7",
+                "SGLANG_SIMULATE_ACC_METHOD": "match-expected",
+                "SGLANG_SIMULATE_ACC_TOKEN_MODE": "real-draft-token",
+            },
+        ),
+        (
+            "sglang",
+            {
+                "speculative-algorithm": "DFLASH",
+                "speculative-draft-model-path": "RadixArk/Muse-Spark-Open-DFlash2",
+                "speculative-num-draft-tokens": 4,
+            },
+            {"MODEL_PREFIX": "musespark"},
+            {
+                "SGLANG_SIMULATE_ACC_LEN": "3.4",
                 "SGLANG_SIMULATE_ACC_METHOD": "match-expected",
                 "SGLANG_SIMULATE_ACC_TOKEN_MODE": "real-draft-token",
             },
@@ -224,6 +331,24 @@ def test_engine_token_selection_and_environment(
     assert result["roles"]["prefill"]["env"] == {"KEEP": "prefill"}
     assert result["benchmark"] == {"env": {"KEEP": "client"}}
     assert result["environment"] == {"KEEP_GLOBAL": "yes"}
+
+
+@pytest.mark.parametrize("width", [None, True, 1, 4.0])
+def test_dflash_rejects_invalid_verification_block(golden_dir: Path, width: Any) -> None:
+    recipe = {
+        "roles": {
+            "agg": {
+                "args": {
+                    "speculative-algorithm": "DFLASH",
+                    "speculative-num-draft-tokens": width,
+                }
+            }
+        }
+    }
+    with pytest.raises(ValueError, match="positive integer draft length"):
+        build_overrides(
+            recipe, "sglang", {**ENV, "MODEL_PREFIX": "musespark"}, golden_dir=golden_dir
+        )
 
 
 @pytest.mark.parametrize(
@@ -327,7 +452,7 @@ def test_tilert_plan_uses_caller_decode_depth_and_keeps_prefill_real(
         golden_dir=golden_dir,
     )
     assert len(commands) == 1
-    result = apply_native(recipe, commands[0])
+    result = apply_native(recipe, commands[0].command)
     assert result["roles"]["decode"]["env"] == {
         "GLM5_AR_N": "2",
         "TILERT_SIMULATE_ACC_LEN": "3.2",
@@ -479,7 +604,7 @@ def test_variants_use_resolved_tokens_and_preserve_caller_arguments(
         golden_dir=golden_dir,
     )
     assert len(commands) == 2
-    for index, command in enumerate(commands):
+    for index, (command, length) in enumerate(commands):
         assert command[:2] == ["srtctl", "apply"]
         assert command[command.index("--tags") + 1] == "x y"
         selector = f"zip_override_test[{index}]"
@@ -489,6 +614,7 @@ def test_variants_use_resolved_tokens_and_preserve_caller_arguments(
             json.loads(resolved["roles"]["agg"]["args"]["speculative-config"])[
                 "synthetic_acceptance_length"
             ]
+            == length
             == [1.8, 2.4][index]
         )
         assert resolved["benchmark"]["env"] == {"KEEP": "caller"}
@@ -510,7 +636,7 @@ def test_caller_json_is_merged_before_golden_selection(tmp_path: Path, golden_di
         ENV,
         golden_dir=golden_dir,
     )
-    result = apply_native(yaml.safe_load(recipe.read_text()), commands[0])
+    result = apply_native(yaml.safe_load(recipe.read_text()), commands[0].command)
     assert json.loads(result["roles"]["agg"]["args"]["speculative-config"]) == {
         "method": "dspark",
         "num_speculative_tokens": 3,
@@ -520,7 +646,12 @@ def test_caller_json_is_merged_before_golden_selection(tmp_path: Path, golden_di
     }
 
 
-def test_cli_forwards_options_and_submission_failure(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("ending", "returncode"), [("sys.exit(7)", 7), ("os.kill(os.getpid(), signal.SIGKILL)", 137)]
+)
+def test_cli_forwards_options_and_submission_failure(
+    tmp_path: Path, ending: str, returncode: int
+) -> None:
     recipe = tmp_path / "recipe.yaml"
     recipe.write_text(
         yaml.safe_dump(
@@ -529,12 +660,14 @@ def test_cli_forwards_options_and_submission_failure(tmp_path: Path) -> None:
     )
     binary = tmp_path / "srtctl"
     binary.write_text(
-        f"#!{sys.executable}\nimport json,sys\nprint(json.dumps(sys.argv[1:]))\nsys.exit(7)\n"
+        f"#!{sys.executable}\nimport json,os,signal,sys\n"
+        f"print(json.dumps(sys.argv[1:]), flush=True)\n{ending}\n"
     )
     binary.chmod(0o755)
+    record = tmp_path / "acceptance.json"
     result = subprocess.run(
         [
-            sys.executable, "-m", "infx.srt_slurm.synthetic_acceptance",
+            sys.executable, "-m", "infx.srt_slurm.synthetic_acceptance", "--record", str(record),
             str(recipe), "vllm", "--", "-f", str(recipe), "--tags", "a b",
         ],  # fmt: skip
         cwd=tmp_path,
@@ -549,7 +682,8 @@ def test_cli_forwards_options_and_submission_failure(tmp_path: Path) -> None:
         capture_output=True,
         text=True,
     )
-    assert result.returncode == 7, result.stderr
+    assert result.returncode == returncode, result.stderr
+    assert json.loads(record.read_text()) == {"golden_acceptance_length": None}
     argv = json.loads(result.stdout)
     assert argv[:5] == ["apply", "-f", str(recipe), "--tags", "a b"]
     result_recipe = apply_native(yaml.safe_load(recipe.read_text()), argv)
@@ -688,7 +822,7 @@ def test_qwen_mtp_checks_effective_generation_window(tmp_path: Path, golden_dir:
         environment,
         golden_dir=golden_dir,
     )
-    result = apply_native(raw, commands[0])
+    result = apply_native(raw, commands[0].command)
     assert result["roles"]["decode"]["args"]["speculative-num-draft-tokens"] == 4
     assert result["roles"]["decode"]["env"]["SGLANG_SIMULATE_ACC_LEN"] == "2.6"
     assert result["roles"]["prefill"]["args"]["speculative-num-steps"] == 2

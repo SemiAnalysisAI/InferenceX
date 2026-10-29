@@ -13,13 +13,14 @@ import json
 import os
 import re
 from collections.abc import Callable, Iterator, Mapping
-from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from infx import yamlio
 from infx.config import repository_root
+from infx.fastcopy import deepcopy
 from infx.results.metadata import parse_component_metadata
 from infx.srt_slurm.synthetic_acceptance import selected_recipes, spec_parameters
 
@@ -51,7 +52,7 @@ _WORKFLOW_ENV = (
     "POWER", "REQUIRE_POWER", "IS_AGENTIC", "SCENARIO_TYPE", "RUN_EVAL", "EVAL_ONLY",
 )  # fmt: skip
 _MULTINODE_ENV = (
-    "SPEC_DECODING", "KV_OFFLOADING", "TOTAL_CPU_DRAM_GB", "PREFILL_DWDP_SIZE",
+    "SPEC_DECODING", "KV_OFFLOADING", "TOTAL_CPU_DRAM_GB", "DECODE_CPU_DRAM_GB", "PREFILL_DWDP_SIZE",
     *(f"{role}_{field}" for role in ("PREFILL", "DECODE")
       for field in ("NUM_WORKERS", "TP", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "EP", "DP_ATTN")),
 )  # fmt: skip
@@ -108,6 +109,7 @@ def merge_blocks(shared: Mapping[str, Any], fragment: Mapping[str, Any]) -> dict
 
 
 def _lookup(block: Any, key: tuple[str, ...]) -> tuple[bool, Any]:
+    """Follow ``key`` into nested mappings and return whether it is present and its value."""
     for part in key:
         if not isinstance(block, Mapping) or part not in block:
             return False, None
@@ -158,7 +160,8 @@ def check_fragment(raw: Mapping[str, Any], source: Path, *, agentic: bool, multi
 
 
 def _block(path: Path) -> dict[str, Any]:
-    block = yaml.safe_load(path.read_text())
+    """Load the YAML mapping at ``path``, or raise ValueError if it is not a mapping."""
+    block = yamlio.safe_load(path.read_text())
     if not isinstance(block, dict):
         raise ValueError(f"{path}: shared block must be a mapping")
     return block
@@ -193,7 +196,7 @@ def compose_recipe(
 
     ``power_port`` adds the DCGM telemetry block with its exporter on that port.
     """
-    raw = yaml.safe_load(path.read_text())
+    raw = yamlio.safe_load(path.read_text())
     if not isinstance(raw, dict):
         raise ValueError(f"{path}: recipe must be a mapping")
     check_fragment(raw, path, agentic=agentic, multinode=multinode)
@@ -209,6 +212,7 @@ def compose_recipe(
 
 
 def _required(environment: Mapping[str, str], name: str) -> str:
+    """Return the input ``name`` from ``environment``, or raise ValueError if it is blank."""
     value = environment.get(name, "")
     if not value.strip():
         raise ValueError(f"Missing workload input: {name}")
@@ -216,6 +220,7 @@ def _required(environment: Mapping[str, str], name: str) -> str:
 
 
 def _positive(value: str, name: str) -> int:
+    """Return ``value`` as a positive int, or raise ValueError naming ``name``."""
     if not value.isascii() or not value.isdecimal() or int(value) <= 0:
         raise ValueError(f"{name} must be a positive integer: {value!r}")
     return int(value)
@@ -407,6 +412,7 @@ def add_fabric_argument(parser: argparse.ArgumentParser) -> None:
 
 
 def _assignment(text: str) -> tuple[str, str]:
+    """Split a ``NAME=VALUE`` argument, or raise ArgumentTypeError if malformed."""
     name, separator, value = text.partition("=")
     if not separator or not name:
         raise argparse.ArgumentTypeError(f"expected NAME=VALUE, got {text!r}")
@@ -414,6 +420,7 @@ def _assignment(text: str) -> tuple[str, str]:
 
 
 def main(argv: list[str] | None = None) -> None:
+    """Bind the multi-node recipe variant ``argv`` names and write it to the output path."""
     parser = argparse.ArgumentParser(description="Bind one multi-node recipe variant")
     parser.add_argument("recipe", help="fragment[:selector]")
     parser.add_argument("output", type=Path)

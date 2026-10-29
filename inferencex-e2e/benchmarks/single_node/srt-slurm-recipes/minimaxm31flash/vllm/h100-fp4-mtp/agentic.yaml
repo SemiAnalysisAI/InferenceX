@@ -1,0 +1,79 @@
+base:
+  schema: 2
+  name: minimaxm31flash-fp4-h100-vllm-agentic-dspark
+  resources:
+    gpu_type: h100
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  # The engine may take the full VLLM_ENGINE_READY_TIMEOUT_S to become ready.
+  health_check:
+    interval_seconds: 10
+    max_attempts: 720
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      # Serve flags follow the Hopper TP8 recipe at
+      # https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3.1-Flash. Hopper has no FP4
+      # tensor cores, so the KV and indexer caches are FP8 and the NVFP4 experts
+      # run on Marlin. DSpark follows the GB200 recipe's FLASH_ATTN drafter.
+      args:
+        served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
+        language-model-only: true
+        trust-remote-code: true
+        reasoning-parser: minimax_m3
+        tool-call-parser: minimax_m3
+        enable-auto-tool-choice: true
+        # MSA sparse/index cache needs 128-token blocks.
+        block-size: 128
+        kv-cache-dtype: fp8
+        attention-config: '{"indexer_kv_dtype":"fp8"}'
+        moe-backend: marlin
+        # Three-token DSpark with probabilistic drafting and block rejection, as
+        # measured for minimaxm31flash_dspark. Throughput runs switch to synthetic
+        # rejection at the golden acceptance length.
+        speculative-config: '{"method":"dspark","num_speculative_tokens":3,"draft_sample_method":"probabilistic","attention_backend":"FLASH_ATTN","kv_cache_dtype":"fp8","rejection_sample_method":"block"}'
+        disable-hybrid-kv-cache-manager: true
+        enable-prefix-caching: true
+        # Upstream caps Hopper at 256K, but the AgentX corpus for this prefix is
+        # uncapped; keep the native 1M context like the Blackwell arms.
+        max-model-len: 1048576
+        max-num-batched-tokens: 8192
+        gpu-memory-utilization: 0.90
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
+        disable-uvicorn-access-log: true
+        # Lazy-load the shards from the shared NFS HF cache, as on the MiniMax-M3 H100 arm.
+        safetensors-load-strategy: lazy
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+        # Atomic reduction for the Marlin MoE path.
+        VLLM_MARLIN_USE_ATOMIC_ADD: '1'
+  benchmark:
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+
+# Native zip expansion creates one variant per concurrency. The scheduler batch
+# is 2x CONC (AgentX subagent fan-out) and graph capture is the smallest power of
+# two covering it at four tokens per sequence (three drafts), up to 2048.
+zip_override_tp8:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        max-num-seqs: [2, 4, 8, 12, 16, 20, 24]
+        max-cudagraph-capture-size: [8, 16, 32, 64, 64, 128, 128]
+  benchmark:
+    env:
+      CONC: ['1', '2', '4', '6', '8', '10', '12']

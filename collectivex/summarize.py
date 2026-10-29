@@ -12,11 +12,10 @@ from pathlib import Path
 CASE_RECORD_TYPE = "case-attempt"
 
 
-def load_results(directory: str, runner: str | None, timestamp: str | None) -> list[dict]:
+def load_results(directory: str, runner: str | None) -> list[dict]:
     documents: list[dict] = []
-    for path in sorted(Path(directory).glob("*.json")):
-        if timestamp and timestamp not in path.name:
-            continue
+    # results/<sku>/<case_id>.json; recursive, so one SKU's folder or the whole tree both work.
+    for path in sorted(Path(directory).rglob("*.json")):
         try:
             with path.open() as handle:
                 document = json.load(handle)
@@ -65,8 +64,8 @@ def _wire_basis(document: dict) -> str:
     """Which copy basis this backend's kernels actually move.
 
     Low-latency deepep-v2/uccl-ep/nccl-ep expert-major receive one copy per (token, expert); MoRI's
-    AsyncLL and nccl-ep rank-major deduplicate by destination rank -- ~1.5x different combine
-    traffic at EP8, so not equal work.
+    InterNodeV1LL and nccl-ep rank-major deduplicate by destination rank, so they move fewer copies
+    (~1.5x fewer at EP8) and do not do equal work.
     """
     rows = document["measurement"]["rows"]
     copies = (rows[0] if rows else {}).get("logical_copies") or {}
@@ -138,6 +137,17 @@ def render(documents: list[dict]) -> str:
             f"{phase} | {routing} | {ep} | {topo} | {wire} | "
             f"{document['outcome']['status']} | {token} | {p50} | {p99} | {min50} | {skew} |"
         )
+    slow = [
+        (document["identity"]["case_id"], clocks.get("sm_clock_ratio_min"))
+        for document in documents
+        if (clocks := (document.get("runtime") or {}).get("gpu_clocks") or {}).get("slow_gpu")
+    ]
+    if slow:
+        lines.append(
+            f"\n> **{len(slow)} case(s) ran a slow or throttled GPU** (`runtime.gpu_clocks.slow_gpu`; "
+            "slowest/fastest rank clock in brackets): "
+            + ", ".join(f"`{case}` ({'n/a' if ratio is None else f'{ratio:.2f}'})" for case, ratio in slow)
+        )
     if not documents:
         lines.append("\n> No valid native outcome documents found.")
     # The starred columns can hold two different quantities, so the table always says which — and
@@ -168,11 +178,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Summarize CollectiveX native v1 outcomes")
     parser.add_argument("--results-dir", default="results")
     parser.add_argument("--runner")
-    parser.add_argument("--ts")
     args = parser.parse_args()
-    documents = load_results(args.results_dir, args.runner, args.ts)
+    documents = load_results(args.results_dir, args.runner)
     print(render(documents))
-    # Pure renderer — never gates CI. The per-case leg gate lives in ep_harness.run_sweep: a
+    # Pure renderer — gates nothing. The per-case gate lives in ep_harness.run_sweep: a
     # non-success outcome returns nonzero and fails the shard (see collx_run_shard).
     return 0
 

@@ -54,7 +54,6 @@ on:
         description: "Git ref (branch/sha) to checkout"
         required: false
         type: string
-      # Agentic-coding inputs. Fixed-seq-len jobs leave these empty.
       scenario-type:
         description: "Scenario type (fixed-seq-len or agentic-coding)"
         required: false
@@ -80,16 +79,23 @@ on:
         type: boolean
         required: false
         default: false
+      pr-number:
+        description: "Pull request whose sweep runs this job; empty for other triggers"
+        required: false
+        type: string
+        default: ""
+      test-name:
+        description: "Name of the dispatched test run; empty for other triggers"
+        required: false
+        type: string
+        default: ""
 env:
   PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
   INFERENCEX_E2E_ROOT: ${{ github.workspace }}
   PORT: '8888'
   INFMAX_CONTAINER_WORKSPACE: '/workspace'
-  DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE: '1'
-  MODEL_DOWNLOAD_LOCK_TIMEOUT: '21600'
   ENROOT_IMPORT_TIME_LIMIT: '120'
   SALLOC_TIME_LIMIT: '480'
-  KEEP_LOGS: '0'
   IS_MULTINODE: 'false'
   REQUIRE_POWER: ${{ inputs.require-power && '1' || '0' }}
   RANDOM_RANGE_RATIO: 0.8
@@ -120,16 +126,14 @@ env:
   EVAL_ONLY: ${{ inputs.eval-only }}
   EVAL_FRAMEWORK: ${{ inputs.eval-framework }}
   EVAL_SUITE: ${{ inputs.eval-suite }}
-  # Agentic-coding env. Fixed-seq-len jobs leave these empty.
   SCENARIO_TYPE: ${{ inputs.scenario-type }}
-  SCENARIO_SUBDIR: ${{ inputs.scenario-type == 'agentic-coding' && 'agentic/' || 'fixed_seq_len/' }}
   IS_AGENTIC: ${{ inputs.scenario-type == 'agentic-coding' && '1' || '0' }}
   KV_OFFLOADING: ${{ inputs.scenario-type == 'agentic-coding' && format('{0}', fromJSON(inputs.config).kv-offloading) || '' }}
   KV_OFFLOAD_BACKEND: ${{ inputs.scenario-type == 'agentic-coding' && format('{0}', fromJSON(inputs.config).kv-offload-backend.name) || '' }}
   KV_OFFLOAD_BACKEND_METADATA: ${{ inputs.scenario-type == 'agentic-coding' && fromJSON(inputs.config).kv-offload-backend && toJSON(fromJSON(inputs.config).kv-offload-backend) || '' }}
   ROUTER_METADATA: ${{ fromJSON(inputs.config).router && toJSON(fromJSON(inputs.config).router) || '' }}
   KV_P2P_TRANSFER: ${{ fromJSON(inputs.config).kv-p2p-transfer || '' }}
-  TOTAL_CPU_DRAM_GB: ${{ inputs.scenario-type != 'agentic-coding' && '0' || fromJSON(inputs.config).total-cpu-dram-gb }}
+  TOTAL_CPU_DRAM_GB: ${{ fromJSON(inputs.config).total-cpu-dram-gb || '0' }}
   DURATION: ${{ inputs.duration }}
   AIPERF_EXPERIMENTAL_FAST: ${{ inputs.agentx-fast && '1' || '0' }}
   EVAL_LIMIT: ${{ inputs.eval-limit }}
@@ -137,13 +141,16 @@ env:
   RESULT_DIR: /workspace/results
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
+  BENCHMARK_REF: ${{ inputs.ref || github.sha }}
+  PR_NUMBER: ${{ inputs.pr-number }}
+  TEST_NAME: ${{ inputs.test-name }}
 
 permissions:
   contents: read
 
 jobs:
   benchmark:
-    runs-on: >-
+    runs-on: >- # zizmor: ignore[self-hosted-runner] GPU Slurm runners by design; callers gate fork PRs behind maintainer-applied sweep labels
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         (
@@ -193,8 +200,6 @@ jobs:
             done
           fi
 
-      # A cancelled or crashed job can leave git state in this persistent
-      # workspace that breaks checkout; re-cloning fixes it and is idempotent.
       - id: checkout
         continue-on-error: true
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -219,7 +224,6 @@ jobs:
         with:
           ref: ${{ github.workflow_sha }}
           path: .result-tooling
-          # Only inferencex-e2e/ is read from this checkout.
           sparse-checkout: inferencex-e2e
           persist-credentials: false
 
@@ -257,9 +261,8 @@ jobs:
         env:
           RUNNER_NAME: ${{ runner.name }}
           RUNNER_TYPE: ${{ inputs.runner }}
-          RESULT_FILENAME_BASE: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_tp${{ env.TP }}-pp${{ env.PP_SIZE }}-dcp${{ env.DCP_SIZE }}-pcp${{ env.PCP_SIZE }}-ep${{ env.EP_SIZE }}-dpa${{ env.DP_ATTENTION }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ env.CONC }}_${{ runner.name }}
-          # Suppress per-job eval markdown from being appended to the step summary.
-          # We'll publish a single combined eval table in the collection job instead.
+          JOB_CHECK_RUN_ID: ${{ job.check_run_id }}
+          RESULT_FILENAME_BASE: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_tp${{ env.TP }}-pp${{ env.PP_SIZE }}-dcp${{ env.DCP_SIZE }}-pcp${{ env.PCP_SIZE }}-ep${{ env.EP_SIZE }}-dpa${{ env.DP_ATTENTION }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ env.CONC }}_a${{ github.run_attempt }}_${{ runner.name }}
           GITHUB_STEP_SUMMARY: ''
         run: |
           if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
@@ -270,7 +273,6 @@ jobs:
           export GPU_COUNT=$((TP * PP_SIZE * PCP_SIZE))
           echo "GPU_COUNT=${GPU_COUNT}" >> "$GITHUB_ENV"
 
-          # Export RESULT_FILENAME early so it's available for artifact uploads even if cancelled
           echo "RESULT_FILENAME=${RESULT_FILENAME}" >> "$GITHUB_ENV"
 
           source benchmarks/runtime_settings.sh
@@ -278,7 +280,6 @@ jobs:
 
           if [ "${EVAL_ONLY}" = "true" ]; then
             echo "Eval-only mode: skipping benchmark result file check"
-            # Verify eval produced results
             if ! ls results*.json 1>/dev/null 2>&1; then
               echo "Eval-only run failed: no results*.json files found." >&2
               exit 1
@@ -325,7 +326,6 @@ jobs:
             echo "no raw result to process: $RESULT_FILENAME.json" >&2
             exit 1
           fi
-          # A native power job's launcher stamp names the telemetry producer
           if [ -f power-producer-sha.txt ]; then
             export POWER_PRODUCER_SHA="$(cat power-producer-sha.txt)"
           fi
@@ -453,7 +453,6 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ inputs.eval-only && 'eval_server_logs_' || 'server_logs_' }}${{ env.RESULT_FILENAME }}${{ inputs.eval-only && format('_{0}_{1}', env.EVAL_FRAMEWORK, env.EVAL_SUITE) || '' }}
-          # fixed-seq writes server.log at root; agentic writes logs under results/.
           path: |
             ${{ env.INFERENCEX_E2E_ROOT }}/server.log
             ${{ env.INFERENCEX_E2E_ROOT }}/results/*.log
@@ -462,6 +461,7 @@ jobs:
             ${{ env.INFERENCEX_E2E_ROOT }}/srt-single-node-submission.json
             ${{ env.INFERENCEX_E2E_ROOT }}/srt-slurm-sha.txt
             ${{ env.INFERENCEX_E2E_ROOT }}/srt-setup.log
+            ${{ env.INFERENCEX_E2E_ROOT }}/srt-bind.log
           if-no-files-found: ignore
 
       - name: Upload power audit bundle
@@ -479,6 +479,15 @@ jobs:
             ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/${{ env.RESULT_FILENAME }}.json
             ${{ env.INFERENCEX_E2E_ROOT }}/power-producer-sha.txt
             ${{ env.INFERENCEX_E2E_ROOT }}/exporter-image.sha256
+          if-no-files-found: ignore
+
+      - name: Upload job event
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: job_event_${{ env.RESULT_FILENAME }}${{ inputs.eval-only && format('_{0}_{1}', env.EVAL_FRAMEWORK, env.EVAL_SUITE) || '' }}
+          path: ${{ env.INFERENCEX_E2E_ROOT }}/job_event.json
           if-no-files-found: ignore
 
       - name: Upload eval results (if any)
@@ -560,7 +569,6 @@ jobs:
         run: |
           if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           rm -f meta_env.json || true
-          # Remove any eval results JSONs that were moved into workspace
           rm -f results*.json || true
           rm -f -- ./*_report.json || true
           rm -f -- ./*_results.jsonl || true

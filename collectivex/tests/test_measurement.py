@@ -22,19 +22,17 @@ except Exception:  # torch is absent in the plain CPU test image; runs on GPU CI
 import ep_oracle  # noqa: E402  (stdlib-only at import)
 
 
-class _FakeLLBackend:
-    """Correct single-rank low-latency backend over pure CPU torch (ep_size == 1, so
-    every expert is local). Delivers one slot per (source token, expert) assignment in
-    per-expert order and combines by the source-side gate-weighted sum the kernel does."""
+class _GateSkippingLLBackend:
+    """Single-rank low-latency backend over pure CPU torch (ep_size == 1, so every expert is
+    local). Delivers one slot per (source token, expert) assignment in per-expert order, but its
+    combine returns the unweighted sum of every slot instead of the gate-weighted one."""
 
-    name = "fake-ll"
     receive_layout = "token-expert"
     combine_weight_semantics = "weighted-kernel-sum"
     combine_model = ep_oracle.WeightedKernelSum()
 
-    def __init__(self, experts_per_rank: int, seed: int):
+    def __init__(self, experts_per_rank: int):
         self.experts_per_rank = experts_per_rank
-        self.seed = seed
 
     def semantic_payload(self, x):
         return x  # BF16 control: no quantization round-trip
@@ -67,15 +65,7 @@ class _FakeLLBackend:
         )
 
     def combine_transformed(self, p, h, transformed):
-        torch = _torch
-        T = p.x.shape[0]
-        out = torch.zeros((T, p.x.shape[1]), dtype=torch.float32)
-        for i in range(int(h.slot_token.numel())):
-            token = int(h.slot_token[i])
-            expert = int(h.slot_expert[i])
-            gate = float(p.topk_weights[token][(p.topk_idx[token] == expert).nonzero()[0]])
-            out[token] += gate * transformed[i].float()
-        return out.to(p.x.dtype)
+        return sum(transformed[i] for i in range(int(h.slot_token.numel())))
 
 
 @unittest.skipUnless(_torch is not None, "low-latency oracle e2e check requires torch")
@@ -98,11 +88,7 @@ class LowLatencyOracleEndToEnd(unittest.TestCase):
         torch = _torch
         T, hidden, topk, experts = 8, 128, 4, 16
         problem, idx_g, w_g = self._problem(T, hidden, topk, experts, seed=67)
-        backend = _FakeLLBackend(experts_per_rank=experts, seed=67)
-        # A backend that returns the unweighted sum (skips the gate) must fail combine_values.
-        backend.combine_transformed = lambda p, h, transformed: sum(
-            transformed[i] for i in range(int(h.slot_token.numel()))
-        )  # wrong shape/values on purpose
+        backend = _GateSkippingLLBackend(experts_per_rank=experts)
         with mock.patch.object(torch.cuda, "synchronize", lambda *a, **k: None):
             report = ep_oracle.run_expert_oracle(
                 torch, routing, backend, problem, idx_g, w_g,
@@ -178,10 +164,9 @@ class BandwidthMath(unittest.TestCase):
         self.assertIn("excluded 1 gate-failed rung", out)
 
     def test_wire_basis_bytes_are_preferred_over_the_deduplicated_basis(self):
-        # A token-expert LL row moves one copy per (token, expert): dividing GB/s from the
-        # rank-deduplicated `byte_provenance` published a LOWER BOUND as if it were the wire
-        # rate (34% low on nccl-ep LL EP8 at T=128). With `wire_byte_provenance` present the
-        # fit must use it; the pre-wire fixture rows above pin the fallback path.
+        # The rank-deduplicated `byte_provenance` is a lower bound on what a token-expert row
+        # moves; with `wire_byte_provenance` present the fit must use it (the rows above, which
+        # carry none, cover the fallback).
         rows = _linear(LADDER)
         for row in rows:
             row["wire_byte_provenance"] = {
@@ -189,9 +174,8 @@ class BandwidthMath(unittest.TestCase):
                     row["byte_provenance"][c]["total_logical_bytes"] * 3 // 2}
                 for c in COMPONENTS
             }
-        baseline = bandwidth.fit_alpha_beta(_doc(_linear(LADDER)), "dispatch")
         fit = bandwidth.fit_alpha_beta(_doc(rows), "dispatch")
-        self.assertAlmostEqual(fit.beta_gbps, baseline.beta_gbps * 1.5, places=4)
+        self.assertAlmostEqual(fit.beta_gbps, 375.0, places=4)  # 1.5x the logical 250 GB/s
 
 
 if __name__ == "__main__":

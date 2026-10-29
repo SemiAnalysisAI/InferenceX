@@ -6,7 +6,7 @@ base:
     gpus_per_node: 8
   frontend:
     type: atomesh
-    container_image: rocm/atom-dev@sha256:bb3912c372dda0c82fc6831afdd76e366a372d5e9fe223373499db63b06cce65
+    container_image: rocm/atom-dev@sha256:ef65fed021823c29d37c636101e6242b7b97b970f5e3f5e8badd672f73935d61
     enable_multiple_frontends: false
   observability:
     enabled: false
@@ -28,7 +28,10 @@ base:
         gpu-memory-utilization: 0.9
         max-num-batched-tokens: 16384
         attn-prefill-chunk-size: 16384
-        state-checkpoint-interval-tokens: 8192
+        # State checkpoints at prompt ends only: a prefix hit past the nearest
+        # one recomputes the window's receptive field below it (7,875 tokens
+        # with DSpark) and rebuilds the state exactly (ATOM_DSV4_STATE_REPLAY).
+        state-checkpoint-interval-tokens: -1
         level: 3
         cudagraph-mode: FULL
         method: dspark
@@ -41,6 +44,8 @@ base:
         ATOM_DEBUG_PREFIX_HITS: '1'
         ATOM_PROFILER_MORE: '0'
         ATOM_PROFILER_TIMEOUT: '1200'
+        ATOM_DSV4_STATE_REPLAY: '1'
+        ATOM_STATE_CHECKPOINT_DEMAND: '0'
   benchmark:
     env:
       # Long AgentX stalls exceed AIPerf's 30 s TCP_USER_TIMEOUT default.
@@ -48,15 +53,15 @@ base:
       AIPERF_TIMING_CANCEL_DRAIN_TIMEOUT: '300'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'atom:'
 
-# One variant per point. KV is BF16 through concurrency 16 and FP8 in the DEP
-# band. DEP pins sessions to one DP-attention rank so later turns reach their
-# prefix KV, and captures every small per-rank decode batch.
+# One variant per point. KV is FP8 at every point. DEP pins sessions to one
+# DP-attention rank so later turns reach their prefix KV, and captures every
+# small per-rank decode batch.
 override_tp8_c1:
   roles:
     agg:
       args:
         max-num-seqs: 2
-        kv-cache-dtype: bf16
+        kv-cache-dtype: fp8
   benchmark:
     env:
       CONC: '1'
@@ -66,7 +71,7 @@ override_tp8_c2:
     agg:
       args:
         max-num-seqs: 4
-        kv-cache-dtype: bf16
+        kv-cache-dtype: fp8
   benchmark:
     env:
       CONC: '2'
@@ -76,7 +81,7 @@ override_tp8_c4:
     agg:
       args:
         max-num-seqs: 8
-        kv-cache-dtype: bf16
+        kv-cache-dtype: fp8
   benchmark:
     env:
       CONC: '4'
@@ -86,7 +91,7 @@ override_tp8_c8:
     agg:
       args:
         max-num-seqs: 16
-        kv-cache-dtype: bf16
+        kv-cache-dtype: fp8
   benchmark:
     env:
       CONC: '8'
@@ -96,7 +101,7 @@ override_tp8_c16:
     agg:
       args:
         max-num-seqs: 32
-        kv-cache-dtype: bf16
+        kv-cache-dtype: fp8
   benchmark:
     env:
       CONC: '16'
@@ -267,7 +272,7 @@ override_tp8_c256_dep_lmcache:
         ATOM_EPLB_MAX_REBALANCES: '4'
         ATOM_KV_OFFLOAD: lmcache_mp
         # Braces doubled: srtctl expands {node}/{node_id} in env values with str.format_map.
-        ATOM_KV_OFFLOAD_EXTRA_CONFIG: '{{"lmcache.mp.host": "tcp://127.0.0.1", "lmcache.mp.port": 8750, "lmcache.mp.tp_rank_collapse": true, "lmcache.mp.max_pinned_state_bytes": 1000000000000}}'
+        ATOM_KV_OFFLOAD_EXTRA_CONFIG: '{{"lmcache.mp.host": "tcp://127.0.0.1", "lmcache.mp.port": 8750, "lmcache.mp.tp_rank_collapse": true}}'
         LMCACHE_CHUNK_SIZE: '256'
         OFFLOAD_MAX_PENDING_SAVES: '8'
         OFFLOAD_MIN_LOAD_TOKENS: '8192'
@@ -326,7 +331,7 @@ override_tp8_c384_dep_lmcache:
         ATOM_EPLB_MAX_REBALANCES: '5'
         ATOM_KV_OFFLOAD: lmcache_mp
         # Braces doubled: srtctl expands {node}/{node_id} in env values with str.format_map.
-        ATOM_KV_OFFLOAD_EXTRA_CONFIG: '{{"lmcache.mp.host": "tcp://127.0.0.1", "lmcache.mp.port": 8750, "lmcache.mp.tp_rank_collapse": true, "lmcache.mp.max_pinned_state_bytes": 1000000000000}}'
+        ATOM_KV_OFFLOAD_EXTRA_CONFIG: '{{"lmcache.mp.host": "tcp://127.0.0.1", "lmcache.mp.port": 8750, "lmcache.mp.tp_rank_collapse": true}}'
         LMCACHE_CHUNK_SIZE: '256'
         OFFLOAD_MAX_PENDING_SAVES: '8'
         OFFLOAD_MIN_LOAD_TOKENS: '8192'

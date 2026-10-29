@@ -18,7 +18,7 @@ esac
 RUNNER="$PRODUCT"
 export COLLX_RUNNER="$RUNNER" COLLX_BENCH="${COLLX_BENCH:-deepep-v2}"
 export COLLX_VENDOR=nvidia
-collx_launcher_prologue "$RUNNER"
+collx_launcher_prologue
 collx_set_placement 2 4 72 mnnvl
 if [ "$PRODUCT" = gb200 ]; then default_time=30; else default_time=90; fi
 TIME_MIN="${COLLX_TIME:-$default_time}"

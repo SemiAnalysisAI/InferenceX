@@ -73,7 +73,6 @@ on:
         type: string
         required: false
         default: ''
-      # Agentic-coding inputs. Fixed-seq-len jobs leave these empty.
       scenario-type:
         description: "Scenario type (fixed-seq-len or agentic-coding)"
         type: string
@@ -94,32 +93,30 @@ on:
         type: boolean
         required: false
         default: false
-      total-cpu-dram-gb:
-        description: "Total CPU DRAM in GB for KV offloading"
-        required: false
-        type: string
-        default: '600'
       ref:
         description: "Git ref (branch/sha) to checkout"
         required: false
         type: string
+      pr-number:
+        description: "Pull request whose sweep runs this job; empty for other triggers"
+        required: false
+        type: string
+        default: ""
+      test-name:
+        description: "Name of the dispatched test run; empty for other triggers"
+        required: false
+        type: string
+        default: ""
 
 env:
   PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
   INFERENCEX_E2E_ROOT: ${{ github.workspace }}
   PORT: '8888'
   INFMAX_CONTAINER_WORKSPACE: '/workspace'
-  DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE: '1'
-  MODEL_DOWNLOAD_LOCK_TIMEOUT: '21600'
   ENROOT_IMPORT_TIME_LIMIT: '120'
   SALLOC_TIME_LIMIT: '480'
-  KEEP_LOGS: '0'
   IS_MULTINODE: 'true'
   RANDOM_RANGE_RATIO: 0.8
-  # Day-zero models resolved via hf: ids download from the Hub inside the
-  # slurm job (srtctl pre-download + dynamo hub fetch). Anonymous requests
-  # get 429-rate-limited when several workers pull a 444 GB snapshot at
-  # once; sbatch/srun inherit this env so the token reaches the workers.
   HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
   EXP_NAME: ${{ fromJSON(inputs.config).exp-name }}
   RECIPE_FINGERPRINT: ${{ fromJSON(inputs.config)['recipe-fingerprint'] || '' }}
@@ -148,9 +145,7 @@ env:
   POWER: ${{ fromJSON(inputs.config).power && '1' || '0' }}
   REQUIRE_POWER: ${{ inputs.require-power && '1' || '0' }}
   POWER_PRODUCER_SHA: ${{ inputs.power-producer-sha }}
-  # Agentic-coding env. Fixed-seq-len jobs leave these empty.
   SCENARIO_TYPE: ${{ inputs.scenario-type }}
-  SCENARIO_SUBDIR: ${{ inputs.scenario-type == 'agentic-coding' && 'agentic/' || 'fixed_seq_len/' }}
   IS_AGENTIC: ${{ inputs.scenario-type == 'agentic-coding' && '1' || '0' }}
   CONC: ${{ inputs.conc }}
   DURATION: ${{ inputs.duration }}
@@ -160,9 +155,14 @@ env:
   KV_OFFLOAD_BACKEND_METADATA: ${{ inputs.scenario-type == 'agentic-coding' && fromJSON(inputs.config)['kv-offload-backend'] && toJSON(fromJSON(inputs.config)['kv-offload-backend']) || '' }}
   ROUTER_METADATA: ${{ fromJSON(inputs.config).router && toJSON(fromJSON(inputs.config).router) || '' }}
   KV_P2P_TRANSFER: ${{ fromJSON(inputs.config)['kv-p2p-transfer'] || '' }}
-  TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
+  TOTAL_CPU_DRAM_GB: ${{ fromJSON(inputs.config)['total-cpu-dram-gb'] || '0' }}
+  DECODE_CPU_DRAM_GB: ${{ fromJSON(inputs.config)['decode-cpu-dram-gb'] || '0' }}
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
+  NODE_COUNT: ${{ inputs.node-count }}
+  BENCHMARK_REF: ${{ inputs.ref || github.sha }}
+  PR_NUMBER: ${{ inputs.pr-number }}
+  TEST_NAME: ${{ inputs.test-name }}
 
   PREFILL_NUM_WORKERS: ${{ fromJSON(inputs.config).prefill.num-worker }}
   PREFILL_TP: ${{ fromJSON(inputs.config).prefill.tp }}
@@ -187,7 +187,7 @@ permissions:
 
 jobs:
   benchmark:
-    runs-on: >-
+    runs-on: >- # zizmor: ignore[self-hosted-runner] GPU Slurm runners by design; callers gate fork PRs behind maintainer-applied sweep labels
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         (
@@ -208,9 +208,6 @@ jobs:
         ) ||
         format('[{0}]', toJSON(inputs.runner))
       ) }}
-    # Full-context AgentX warmup can legitimately exceed the fixed-sequence
-    # eight-hour envelope at high concurrency. Keep one hour beyond the
-    # recipe's 12-hour Slurm limit for checkout, staging, and artifact upload.
     timeout-minutes: ${{ inputs.scenario-type == 'agentic-coding' && 780 || 480 }}
     name: >-
       ${{ inputs.klaud-run && 'klaud | ' || '' }}p${{ inputs.priority }} | ${{ fromJSON(inputs.config).model-prefix }} ${{ fromJSON(inputs.config).precision }} ${{ inputs.runner }} ${{ fromJSON(inputs.config).framework == 'sglang' && 'sgl' || fromJSON(inputs.config).framework == 'dynamo-sglang' && 'dyn-sgl' || fromJSON(inputs.config).framework == 'sglang-disagg' && 'sgl-disagg' || fromJSON(inputs.config).framework }}
@@ -235,8 +232,6 @@ jobs:
             done
           fi
 
-      # A cancelled or crashed job can leave git state in this persistent
-      # workspace that breaks checkout; re-cloning fixes it and is idempotent.
       - id: checkout
         continue-on-error: true
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -261,7 +256,6 @@ jobs:
         with:
           ref: ${{ github.workflow_sha }}
           path: .result-tooling
-          # Only inferencex-e2e/ is read from this checkout.
           sparse-checkout: inferencex-e2e
           persist-credentials: false
 
@@ -283,7 +277,7 @@ jobs:
       - name: Prepare launcher Python
         env: *uv-setup-env
         run: |
-          launch_venv="$RUNNER_TEMP/infx-launch-venv"
+          launch_venv="$(mktemp -d "$RUNNER_TEMP/infx-launch-venv.XXXXXX")"
           uv venv --quiet --python 3.12 "$launch_venv"
           uv pip install --quiet --exclude-newer PT12H --python "$launch_venv/bin/python" \
             -r "$GITHUB_WORKSPACE/.result-tooling/inferencex-e2e/pyproject.toml"
@@ -301,7 +295,8 @@ jobs:
           DECODE_ADDITIONAL_SETTINGS: ${{ toJSON(fromJSON(inputs.config).decode.additional-settings) }}
           RUNNER_NAME: ${{ runner.name }}
           RUNNER_TYPE: ${{ inputs.runner }}
-          RESULT_FILENAME_BASE: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_prefill-tp${{ env.PREFILL_TP }}-pp${{ env.PREFILL_PP_SIZE }}-dcp${{ env.PREFILL_DCP_SIZE }}-pcp${{ env.PREFILL_PCP_SIZE }}${{ env.DWDP_ARTIFACT_SUFFIX }}-ep${{ env.PREFILL_EP }}-dp${{ env.PREFILL_DP_ATTN }}-nw${{ env.PREFILL_NUM_WORKERS }}_decode-tp${{ env.DECODE_TP }}-pp${{ env.DECODE_PP_SIZE }}-dcp${{ env.DECODE_DCP_SIZE }}-pcp${{ env.DECODE_PCP_SIZE }}-ep${{ env.DECODE_EP }}-dp${{ env.DECODE_DP_ATTN }}-nw${{ env.DECODE_NUM_WORKERS }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ join(fromJson(inputs.conc-list), 'x') }}_${{ runner.name }}
+          JOB_CHECK_RUN_ID: ${{ job.check_run_id }}
+          RESULT_FILENAME_BASE: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_prefill-tp${{ env.PREFILL_TP }}-pp${{ env.PREFILL_PP_SIZE }}-dcp${{ env.PREFILL_DCP_SIZE }}-pcp${{ env.PREFILL_PCP_SIZE }}${{ env.DWDP_ARTIFACT_SUFFIX }}-ep${{ env.PREFILL_EP }}-dp${{ env.PREFILL_DP_ATTN }}-nw${{ env.PREFILL_NUM_WORKERS }}_decode-tp${{ env.DECODE_TP }}-pp${{ env.DECODE_PP_SIZE }}-dcp${{ env.DECODE_DCP_SIZE }}-pcp${{ env.DECODE_PCP_SIZE }}-ep${{ env.DECODE_EP }}-dp${{ env.DECODE_DP_ATTN }}-nw${{ env.DECODE_NUM_WORKERS }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ join(fromJson(inputs.conc-list), 'x') }}_a${{ github.run_attempt }}_${{ runner.name }}
         run: |
           if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           export GITHUB_WORKSPACE="$PWD"
@@ -309,7 +304,6 @@ jobs:
           set -x
           RESULT_FILENAME=$(python3 -m infx.results.result_filename)
           export RESULT_FILENAME
-          # Export RESULT_FILENAME early so it's available for artifact uploads even if cancelled
           echo "RESULT_FILENAME=${RESULT_FILENAME}" >> "$GITHUB_ENV"
           echo "EVAL_ARTIFACT_RECIPE=${RECIPE_FINGERPRINT:0:16}" >> "$GITHUB_ENV"
           eval_artifact_conc="$(python3 -c 'import hashlib,os; print(hashlib.sha256(os.environ["CONC_LIST"].encode()).hexdigest()[:12])')"
@@ -317,7 +311,6 @@ jobs:
 
           source benchmarks/runtime_settings.sh
           source benchmarks/multi_node/runtime_settings.sh
-          # Assign data literally; recipe values must never become shell code.
           settings_json=$(jq -cen \
             --argjson prefill "$PREFILL_ADDITIONAL_SETTINGS" \
             --argjson decode "$DECODE_ADDITIONAL_SETTINGS" \
@@ -327,7 +320,6 @@ jobs:
           while IFS= read -r -d '' setting; do
             export "$setting"
           done < <(jq -j '.[] + "\u0000"' <<< "$settings_json")
-          # Resolve the workflow's documented automatic eval-concurrency selection.
           if [[ -z "$EVAL_CONC" ]]; then
             EVAL_CONC=$(python3 -c 'import os; print(max(map(int, os.environ["CONC_LIST"].split())))')
           fi
@@ -336,7 +328,6 @@ jobs:
           "$INFERENCEX_LAUNCH_PYTHON" -m infx.launch run
           if [ "${EVAL_ONLY}" = "true" ]; then
             echo "Eval-only mode: skipping benchmark result file check"
-            # Verify eval produced results
             if ! ls results*.json 1>/dev/null 2>&1; then
               echo "Eval-only run failed: no results*.json files found." >&2
               exit 1
@@ -350,9 +341,6 @@ jobs:
               echo "Run failed: expected $expected_count agentic results, found ${#agentic_results[@]}." >&2
               exit 1
             fi
-            # Existence is not enough: the agentic aggregation step writes the
-            # aggregate even when aiperf recorded zero valid requests. Require
-            # successful requests in every concurrency result.
             for result_file in "${agentic_results[@]}"; do
               echo "Found agentic result file: $result_file"
               ok=$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(int(bool(d.get('num_requests_successful'))))" "$result_file" 2>/dev/null || echo 0)
@@ -379,8 +367,6 @@ jobs:
           if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           source "$PYTHONPATH/benchmarks/check_env.sh"
           check_env_vars INFERENCEX_RESULTS_PYTHON
-          # Launcher stamp supplies the producer SHA unless the
-          # power-producer-sha input is set as a manual override
           if [ -z "$POWER_PRODUCER_SHA" ] && [ -f power-producer-sha.txt ]; then
             export POWER_PRODUCER_SHA="$(cat power-producer-sha.txt)"
             echo "POWER_PRODUCER_SHA derived from launcher stamp: $POWER_PRODUCER_SHA"
@@ -444,10 +430,19 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: multinode_server_logs_${{ env.RESULT_FILENAME }}${{ inputs.eval-only && format('_{0}_{1}', env.EVAL_FRAMEWORK, env.EVAL_SUITE) || '' }}
-          # multinode launchers package server logs into this tarball.
           path: |
             ${{ env.INFERENCEX_E2E_ROOT }}/multinode_server_logs.tar.gz
             ${{ env.INFERENCEX_E2E_ROOT }}/srt-setup.log
+            ${{ env.INFERENCEX_E2E_ROOT }}/srt-bind.log
+          if-no-files-found: ignore
+
+      - name: Upload job event
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: job_event_${{ env.RESULT_FILENAME }}${{ inputs.eval-only && format('_{0}_{1}', env.EVAL_FRAMEWORK, env.EVAL_SUITE) || '' }}
+          path: ${{ env.INFERENCEX_E2E_ROOT }}/job_event.json
           if-no-files-found: ignore
 
       - name: Upload agentic aggregated result

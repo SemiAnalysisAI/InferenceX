@@ -154,7 +154,7 @@ base:
         unified-cache-external-linker-backend: mori
         hicache-storage-backend-extra-config: '{"standalone_startup_timeout_ms":120000}'
         enable-cache-report: true
-        # Optimistic prefill (sgl-project/sglang#38978) is wired for the linker only.
+        # Optimistic prefill requires the external linker.
         optimistic-prefill-attempts: 2
     decode:
       nodes: 1
@@ -197,18 +197,14 @@ base:
       TOKENIZERS_PARALLELISM: "false"
       TRANSFORMERS_VERBOSITY: error
 
-# One variant per point; each point runs in its own allocation. Admission is
-# 2x CONC on both roles. Decode captures graphs up to 2x CONC, or CONC/4 per
-# rank under DP attention. DSpark draft length is 6 at c4/c16/c32 (the golden
-# AL peak) and 3 above; MoRI decode dispatch scales with it (64 x (draft + 1)).
-override_c4:
+override_c1:
   roles:
     prefill:
       gpus: 4
       env:
-        # Split-K 8 for the HCA (compress ratio 128) decode stream in the
-        # unified_kv kernels, over the image default 4. Only c4 sets it.
+        # HCA split-K applies only to the bf16 KV path.
         SGLANG_MLA_HCA_KV_SPLITS: "8"
+        SGLANG_DSV4_UNIFIED_KV_FP8: "1"
       args:
         tp-size: 4
         mem-fraction-static: 0.86
@@ -221,6 +217,7 @@ override_c4:
       env:
         SGLANG_MLA_HCA_KV_SPLITS: "8"
         MORI_MAX_DISPATCH_TOKENS_DECODE: "448"
+        SGLANG_DSV4_UNIFIED_KV_FP8: "1"
       args:
         tp-size: 4
         mem-fraction-static: 0.86
@@ -241,6 +238,8 @@ override_c16:
   roles:
     prefill:
       gpus: 4
+      env: &tp_kernel_env
+        SGLANG_DSV4_UNIFIED_KV_FP8: "1"
       args:
         tp-size: 4
         mem-fraction-static: 0.86
@@ -251,6 +250,7 @@ override_c16:
     decode:
       gpus: 8
       env:
+        <<: *tp_kernel_env
         MORI_MAX_DISPATCH_TOKENS_DECODE: "448"
       args:
         tp-size: 8
@@ -296,6 +296,7 @@ override_c32:
   roles:
     prefill:
       gpus: 4
+      env: *tp_kernel_env
       args:
         tp-size: 4
         mem-fraction-static: 0.86
@@ -306,6 +307,7 @@ override_c32:
     decode:
       gpus: 8
       env:
+        <<: *tp_kernel_env
         MORI_MAX_DISPATCH_TOKENS_DECODE: "448"
       args:
         tp-size: 8
@@ -383,6 +385,7 @@ override_c48:
   roles:
     prefill:
       gpus: 4
+      env: *tp_kernel_env
       args:
         tp-size: 4
         mem-fraction-static: 0.86
@@ -393,6 +396,7 @@ override_c48:
     decode:
       gpus: 8
       env:
+        <<: *tp_kernel_env
         MORI_MAX_DISPATCH_TOKENS_DECODE: "256"
       args:
         tp-size: 8
@@ -499,16 +503,18 @@ override_c48:
         speculative-num-draft-tokens: 4
 
 override_c192:
+  frontend: &p2c_frontend
+    args:
+      decode-policy: power_of_two
+      worker-startup-check-interval: 1
+    env: &p2c_router_env
+      SGLANG_ROUTER_P2C_LOAD_METRIC: least_requests
   roles:
     prefill:
       gpus: 8
       env:
         GPU_MAX_HW_QUEUES: "5"
-        # Aiter MegaMoEv2 (sgl-project/sglang#35619). The megamoe a2a backend
-        # alone only selects the hook; without this flag it falls through to
-        # the DeepGEMM path, which has no ROCm kernel. The flag is not
-        # backend-local -- schedule_batch.py also keys the SWA eviction cadence
-        # off it -- so it stays off the decode role entirely.
+        # Select the ROCm MegaMoE kernel; this also changes SWA eviction cadence.
         SGLANG_AMD_USE_FLYDSL_MEGA_MOE: "1"
         # Must cover the per-rank prefill chunk: sglang divides
         # chunked-prefill-size by dp-size, i.e. 65536 / 8. Tokens past MTPR
@@ -545,9 +551,6 @@ override_c192:
         dp-size: 8
         # MegaMoE replaces mori dispatch/combine outright (mori stays only as
         # the shmem bootstrap), so none of the mori EP knobs apply here.
-        # Shared-expert fusion stays as base sets it: the image carries
-        # sgl-project/sglang#40943, which enables it on the grouped-topk path
-        # MegaMoE uses.
         ep-size: 8
         moe-a2a-backend: megamoe
         moe-dense-tp-size: 1
@@ -637,16 +640,13 @@ override_c192:
       AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
 
 override_c256:
+  frontend: *p2c_frontend
   roles:
     prefill:
       gpus: 8
       env:
         GPU_MAX_HW_QUEUES: "5"
-        # Aiter MegaMoEv2 (sgl-project/sglang#35619). The megamoe a2a backend
-        # alone only selects the hook; without this flag it falls through to
-        # the DeepGEMM path, which has no ROCm kernel. The flag is not
-        # backend-local -- schedule_batch.py also keys the SWA eviction cadence
-        # off it -- so it stays off the decode role entirely.
+        # Select the ROCm MegaMoE kernel; this also changes SWA eviction cadence.
         SGLANG_AMD_USE_FLYDSL_MEGA_MOE: "1"
         # Must cover the per-rank prefill chunk: sglang divides
         # chunked-prefill-size by dp-size, i.e. 65536 / 8. Tokens past MTPR
@@ -683,9 +683,6 @@ override_c256:
         dp-size: 8
         # MegaMoE replaces mori dispatch/combine outright (mori stays only as
         # the shmem bootstrap), so none of the mori EP knobs apply here.
-        # Shared-expert fusion stays as base sets it: the image carries
-        # sgl-project/sglang#40943, which enables it on the grouped-topk path
-        # MegaMoE uses.
         ep-size: 8
         moe-a2a-backend: megamoe
         moe-dense-tp-size: 1
@@ -807,16 +804,15 @@ override_c384:
       # disaggregation/mori/conn.py, _process_transfer_chunk). 14400 matches
       # the single-node agentic recipes.
       request-timeout-secs: 14400
+      decode-policy: power_of_two
+      worker-startup-check-interval: 1
+    env: *p2c_router_env
   roles:
     prefill:
       gpus: 8
       env:
         GPU_MAX_HW_QUEUES: "5"
-        # Aiter MegaMoEv2 (sgl-project/sglang#35619). The megamoe a2a backend
-        # alone only selects the hook; without this flag it falls through to
-        # the DeepGEMM path, which has no ROCm kernel. The flag is not
-        # backend-local -- schedule_batch.py also keys the SWA eviction cadence
-        # off it -- so it stays off the decode role entirely.
+        # Select the ROCm MegaMoE kernel; this also changes SWA eviction cadence.
         SGLANG_AMD_USE_FLYDSL_MEGA_MOE: "1"
         # Must cover the per-rank prefill chunk: sglang divides
         # chunked-prefill-size by dp-size, i.e. 65536 / 8. Tokens past MTPR
@@ -853,9 +849,6 @@ override_c384:
         dp-size: 8
         # MegaMoE replaces mori dispatch/combine outright (mori stays only as
         # the shmem bootstrap), so none of the mori EP knobs apply here.
-        # Shared-expert fusion stays as base sets it: the image carries
-        # sgl-project/sglang#40943, which enables it on the grouped-topk path
-        # MegaMoE uses.
         ep-size: 8
         moe-a2a-backend: megamoe
         moe-dense-tp-size: 1
@@ -1001,16 +994,15 @@ override_c512:
       # disaggregation/mori/conn.py, _process_transfer_chunk). 14400 matches
       # the single-node agentic recipes.
       request-timeout-secs: 14400
+      decode-policy: power_of_two
+      worker-startup-check-interval: 1
+    env: *p2c_router_env
   roles:
     prefill:
       gpus: 8
       env:
         GPU_MAX_HW_QUEUES: "5"
-        # Aiter MegaMoEv2 (sgl-project/sglang#35619). The megamoe a2a backend
-        # alone only selects the hook; without this flag it falls through to
-        # the DeepGEMM path, which has no ROCm kernel. The flag is not
-        # backend-local -- schedule_batch.py also keys the SWA eviction cadence
-        # off it -- so it stays off the decode role entirely.
+        # Select the ROCm MegaMoE kernel; this also changes SWA eviction cadence.
         SGLANG_AMD_USE_FLYDSL_MEGA_MOE: "1"
         # Must cover the per-rank prefill chunk: sglang divides
         # chunked-prefill-size by dp-size, i.e. 65536 / 8. Tokens past MTPR
@@ -1042,14 +1034,14 @@ override_c512:
         # or the handshake fails, so it is set on prefill and decode alike. The
         # DSpark draft worker stays bf16 (kv_cache_configurator.py excludes it).
         SGLANG_DSV4_UNIFIED_KV_FP8: "1"
+        SGLANG_AITER_MEGA_RANK_SYNC: "1"
+        SGLANG_AITER_MEGA_EPLB_PREFILL_ONLY: "1"
+        SGLANG_AITER_MEGA_EPLB_FUSED_MAP_RECORD: "1"
       args:
         tp-size: 8
         dp-size: 8
         # MegaMoE replaces mori dispatch/combine outright (mori stays only as
         # the shmem bootstrap), so none of the mori EP knobs apply here.
-        # Shared-expert fusion stays as base sets it: the image carries
-        # sgl-project/sglang#40943, which enables it on the grouped-topk path
-        # MegaMoE uses.
         ep-size: 8
         moe-a2a-backend: megamoe
         moe-dense-tp-size: 1
@@ -1063,6 +1055,10 @@ override_c512:
         max-running-requests: 1024
         speculative-dspark-block-size: 3
         speculative-num-draft-tokens: 4
+        # expert-balancedness-report-mode deadlocks with EPLB_PREFILL_ONLY.
+        enable-eplb: true
+        eplb-rebalance-num-iterations: 200
+        expert-distribution-recorder-mode: stat
     decode:
       gpus: 8
       env:

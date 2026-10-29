@@ -176,7 +176,8 @@ class RankSum(CombineModel):
 class DomainFP32(RankSum):
     """Ranks sharing a scale-up domain reduce in FP32; each domain casts its aggregate to BF16 for
     the scale-out send before the partials are summed (omitting that cast left multi-node EP16
-    ~0.048 off). One domain, so no scale-out rounding, whenever ep_size <= scale_up_domain."""
+    ~0.048 off, when DeepEP V2 still ran allow_multiple_reduction=True). One domain, so no
+    scale-out rounding, whenever ep_size <= scale_up_domain."""
 
     def reduce(self, torch, x, destination, valid, present, rank_message, scale_up_domain):
         ranks_per_domain = max(1, scale_up_domain)
@@ -195,8 +196,10 @@ class DomainFP32(RankSum):
 
 
 class RankFP32(RankSum):
-    """NCCL-EP LL rank-major: one BF16 row per unique destination rank, summed in FP32 in top-k
-    order, with no per-domain cast."""
+    """One BF16 row per unique destination rank, summed in FP32 in top-k order, with no per-domain
+    cast. NCCL-EP LL rank-major, and DeepEP V2 with allow_multiple_reduction=False at any scope: its
+    hybrid forwarders relay each rank's row unreduced into the source's top-k slot, and the source
+    epilogue sums the first slot of each unique rank in FP32 (combine_reduce_epilogue.cuh)."""
 
     def reduce(self, torch, x, destination, valid, present, rank_message, scale_up_domain):
         return topk_rank_fp32_combine(
@@ -398,7 +401,7 @@ def run_expert_oracle(torch, routing, backend, problem, global_idx, global_weigh
     torch.cuda.synchronize()
     try:
         view = backend.inspect_dispatch(problem, handle)
-        source_ids = routing.decode_source_ids(view.payload, seed)
+        source_ids = routing.decode_source_ids(view.payload)
     except Exception as inspection_error:
         # Drain the in-flight dispatch before reporting: an abandoned handle deadlocks the peers.
         try:

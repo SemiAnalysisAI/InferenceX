@@ -1,7 +1,8 @@
 """Run the benchmark point the workflow environment describes, or clean up after earlier ones.
 
-``run`` exits with the point's return code (128 + N after signal N); ``cleanup`` has the
-runner's cluster backend remove what earlier launches on the runner left behind.
+``run`` exits with the point's return code (128 + N after signal N) and leaves its record,
+``job_event.json``, in the workspace; ``cleanup`` has the runner's cluster backend remove what
+earlier launches on the runner left behind.
 """
 
 from __future__ import annotations
@@ -13,36 +14,58 @@ from pathlib import Path
 
 import yaml
 
+from infx.bench.proc import status
 from infx.clusters import Cluster, resolve_cluster
 from infx.launch import drivers
 from infx.launch.backends import BACKENDS, backend_class
 from infx.launch.backends.base import BackendError
 from infx.launch.context import LaunchError
+from infx.launch.event import JobEventBuilder
 from infx.launch.lifecycle import Lifecycle
 from infx.launch.request import LaunchRequest, RequestError
 
 
-def launch(cluster: Cluster, request: LaunchRequest) -> int:
+def launch(cluster: Cluster, request: LaunchRequest, event: JobEventBuilder | None = None) -> int:
     """Run ``request`` on ``cluster``; a launch error is one ``ERROR:`` line, not a traceback."""
-    with Lifecycle() as life:
+    with Lifecycle(event) as life:
         try:
-            life.record(drivers.run(cluster, request, life))
+            rc = status(drivers.run(cluster, request, life))
         except (LaunchError, BackendError, RequestError) as error:
-            print(f"ERROR: {error}", file=sys.stderr)
-            life.record(1)
+            life.event.error(error)
+            rc = 1
+        life.event.exited(rc)
+        life.record(rc)
     return life.returncode
 
 
 def _run(runner_config: Path | None) -> int:
+    """Launch the point the environment describes, emit its job record and return its exit code."""
+    event = JobEventBuilder.begin(os.environ)
+    rc = 1
     try:
         request = LaunchRequest.from_env()
+        try:
+            cluster = resolve_cluster(request.runner_name, runner_config)
+        except (OSError, ValueError, yaml.YAMLError) as error:
+            event.error(error)
+            return rc
+        event.set(cluster=cluster.id)
+        rc = launch(cluster, request, event)
     except RequestError as error:
-        print(f"ERROR: {error}", file=sys.stderr)
-        return 1
-    return launch(resolve_cluster(request.runner_name, runner_config), request)
+        event.error(error)
+    except SystemExit as stop:
+        rc = 0 if stop.code is None else stop.code if isinstance(stop.code, int) else 1
+        raise
+    except BaseException as error:
+        event.error(error, report=False)
+        raise
+    finally:
+        event.emit(rc)
+    return rc
 
 
 def _cleanup(runner_config: Path | None) -> int:
+    """Remove leftovers of earlier launches on ``RUNNER_NAME`` and return 0, or 1 if it is unset."""
     runner = os.environ.get("RUNNER_NAME", "")
     if not runner:
         print("ERROR: RUNNER_NAME is required", file=sys.stderr)
@@ -59,6 +82,7 @@ def _cleanup(runner_config: Path | None) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Parse ``argv``, run the ``run`` or ``cleanup`` command and return its exit code."""
     parser = argparse.ArgumentParser(prog="python -m infx.launch", description=__doc__)
     parser.add_argument(
         "--runner-config",

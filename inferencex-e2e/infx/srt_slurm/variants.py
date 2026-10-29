@@ -8,8 +8,9 @@ selectors a master config accepts.
 from __future__ import annotations
 
 import re
-from copy import deepcopy
 from typing import Any
+
+from infx.fastcopy import deepcopy
 
 ZIP_VARIANT = re.compile(r"(zip_override_[\w-]+)\[(\d+)\]")
 
@@ -28,6 +29,7 @@ def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]
 
 
 def _list_lengths(group: dict[str, Any]) -> list[int]:
+    """Return the length of every list value in ``group``, nested mappings included."""
     lengths = []
     for value in group.values():
         if isinstance(value, list):
@@ -49,6 +51,7 @@ def _zip_length(group: dict[str, Any]) -> int:
 
 
 def _zip_slice(group: dict[str, Any], index: int) -> dict[str, Any]:
+    """Return ``group`` with each list replaced by its ``index`` item, or its only item."""
     sliced = {}
     for key, value in group.items():
         if isinstance(value, list):
@@ -80,6 +83,7 @@ def _block_variants(raw: dict[str, Any], key: str) -> list[tuple[str, dict[str, 
 
 
 def without_nulls(value: Any) -> Any:
+    """Return ``value`` with null-valued keys removed from every nested mapping."""
     if isinstance(value, dict):
         return {key: without_nulls(item) for key, item in value.items() if item is not None}
     return value

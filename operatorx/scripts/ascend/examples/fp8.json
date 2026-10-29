@@ -1,0 +1,4 @@
+[
+  {"type":"gemm","args":{"m":240,"n":2304,"k":7168,"a":{"dtype":"e4m3","scale":{"dtype":"fp32","group":[1,128],"static":false}},"b":{"dtype":"e4m3","scale":{"dtype":"fp32","group":[128,128],"static":true}},"out":"bf16"},"sources":[]},
+  {"type":"gemm","args":{"m":264,"n":2304,"k":7168,"a":{"dtype":"e4m3","scale":{"dtype":"fp32","group":[1,128],"static":false}},"b":{"dtype":"e4m3","scale":{"dtype":"fp32","group":[128,128],"static":true}},"out":"bf16"},"sources":[]}
+]

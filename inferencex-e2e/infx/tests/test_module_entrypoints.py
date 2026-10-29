@@ -44,6 +44,20 @@ def test_collector_preserves_nested_json_and_empty_inputs(invoke, tmp_path, payl
     assert json.loads((tmp_path / "agg_test.json").read_text()) == expected
 
 
+def test_collector_orders_rows_by_artifact_path(invoke, tmp_path):
+    for name in ("tp8_conc64", "tp4_conc4", "tp8_conc4", "tp2_conc16", "tp4_conc64", "tp1_conc1"):
+        artifact = tmp_path / "inputs" / f"bmk_dsr1_1k1k_{name}"
+        artifact.mkdir(parents=True)
+        (artifact / f"dsr1_1k1k_{name}.json").write_text(json.dumps({"point": name}))
+
+    result = invoke("infx.results.collect_results", "inputs", "test")
+
+    assert result.returncode == 0, result.stderr
+    assert [row["point"] for row in json.loads((tmp_path / "agg_test.json").read_text())] == [
+        "tp1_conc1", "tp2_conc16", "tp4_conc4", "tp4_conc64", "tp8_conc4", "tp8_conc64",
+    ]
+
+
 @pytest.mark.parametrize("published", [None, b'[{"previous": true}]\n'])
 def test_collector_does_not_publish_partial_output_on_invalid_json(invoke, tmp_path, published):
     inputs = tmp_path / "inputs"

@@ -1,4 +1,8 @@
-"""Acknowledge reuse requests with reactions; never post a separate comment."""
+"""Acknowledge reuse requests with reactions.
+
+An accepted request gets 👍. If its source run's commit is not part of the PR,
+the bot also posts one warning comment per request and run; reuse still proceeds.
+"""
 
 from __future__ import annotations
 
@@ -13,8 +17,46 @@ from infx import github
 
 from . import reuse
 
+BOT_STATUS = ("+1", "-1")
+
+
+def warn_outside_pr(
+    repo: str,
+    pr_number: int,
+    comment: dict[str, Any],
+    run: dict[str, Any],
+    head_sha: str,
+    token: str,
+) -> None:
+    """Post a warning comment once for a reuse source outside the PR."""
+    marker = f"<!-- reuse-outside-pr request={comment['id']} run={run['id']} -->"
+    comments = github.paginate(repo, f"/issues/{pr_number}/comments", token, "")
+    if any(
+        c.get("user", {}).get("login") == "github-actions[bot]" and marker in str(c.get("body"))
+        for c in comments
+    ):
+        return
+    source_pr = reuse.run_pr_number(repo, run, token)
+    origin_en = f"from PR #{source_pr}, " if source_pr else ""
+    origin_zh = f"来自 PR #{source_pr}，" if source_pr else ""
+    body = (
+        f"{marker}\n"
+        f"⚠️ Reuse source run [{run['id']}]({run.get('html_url', '')}) "
+        f"({origin_en}commit `{head_sha[:12]}`) is not part of this PR. Its results will "
+        f"publish under this PR's changelog entry at merge.\n\n"
+        f"<details>\n<summary>中文</summary>\n\n"
+        f"⚠️ 复用的来源运行 [{run['id']}]({run.get('html_url', '')})，{origin_zh}"
+        f"提交 `{head_sha[:12]}`，不属于本 PR，合并后其结果将以本 PR 的 changelog 条目发布。\n\n"
+        f"</details>"
+    )
+    github.api(repo, f"/issues/{pr_number}/comments", token, method="POST", data={"body": body})
+
 
 def acknowledge(repo: str, event: dict[str, Any], token: str) -> int:
+    """React to a reuse command comment on a PR and report whether it was accepted.
+
+    Returns 0 when accepted or not applicable, 1 when the request is rejected.
+    """
     if event.get("action") not in {"created", "edited"} or not event.get("issue", {}).get(
         "pull_request"
     ):
@@ -29,7 +71,9 @@ def acknowledge(repo: str, event: dict[str, Any], token: str) -> int:
     comment = github.api(repo, comment_path, token)
     if any(comment.get(key) != event["comment"].get(key) for key in ("body", "updated_at")):
         return 0
-    github.set_comment_reaction(repo, comment_id, token, None, replace=("+1", "-1"))
+    github.set_comment_reaction(
+        repo, comment_id, token, None, collection="issues", replace=BOT_STATUS
+    )
     body = str(comment.get("body") or "")
     if not command_pattern.search(body):
         return 0
@@ -48,6 +92,8 @@ def acknowledge(repo: str, event: dict[str, Any], token: str) -> int:
         if pr.get("state") != "open":
             raise RuntimeError(f"PR #{pr_number} is not open.")
         run = reuse.resolve_reusable_run(repo, "run-sweep.yml", pr_number, pr, token, pinned_run_id)
+        head_sha = reuse.source_head_sha(repo, run, token)
+        outside_pr = head_sha not in reuse.pr_commit_shas(repo, pr_number, token)
 
         latest = github.api(repo, comment_path, token)
         selected, _ = reuse.find_reuse_request(repo, pr_number, token, "/reuse-sweep-run", allowed)
@@ -57,16 +103,31 @@ def acknowledge(repo: str, event: dict[str, Any], token: str) -> int:
             or selected.get("id") != comment_id
             or any(selected.get(key) != comment.get(key) for key in ("body", "updated_at"))
         ):
-            github.set_comment_reaction(repo, comment_id, token, None, replace=("+1", "-1"))
+            github.set_comment_reaction(
+                repo, comment_id, token, None, collection="issues", replace=BOT_STATUS
+            )
             return 0
-        github.set_comment_reaction(repo, comment_id, token, "+1", replace=("+1", "-1"))
+        github.set_comment_reaction(
+            repo, comment_id, token, "+1", collection="issues", replace=BOT_STATUS
+        )
         message = f"Reuse accepted / 复用请求已接受: PR #{pr_number}, run {run['id']} ({run['conclusion']})."
+        if outside_pr:
+            try:
+                warn_outside_pr(repo, pr_number, comment, run, head_sha, token)
+            except Exception as exc:  # noqa: BLE001
+                print(f"::warning::Could not post outside-PR warning comment: {exc}")
+            print(
+                f"::warning::Reuse source run {run['id']} head {head_sha} is not part of "
+                f"PR #{pr_number}; its results will publish under this PR's changelog."
+            )
         code = 0
     except Exception as exc:  # noqa: BLE001
         latest = github.api(repo, comment_path, token)
         if any(latest.get(key) != comment.get(key) for key in ("body", "updated_at")):
             return 0
-        github.set_comment_reaction(repo, comment_id, token, "-1", replace=("+1", "-1"))
+        github.set_comment_reaction(
+            repo, comment_id, token, "-1", collection="issues", replace=BOT_STATUS
+        )
         message = f"Reuse rejected / 复用请求未接受: {exc}"
         code = 1
     print(message)
@@ -77,6 +138,10 @@ def acknowledge(repo: str, event: dict[str, Any], token: str) -> int:
 
 
 def main() -> int:
+    """Acknowledge the comment from the GitHub Actions event and return the exit code.
+
+    Raises RuntimeError if no GitHub token is set.
+    """
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
     if not token:
         raise RuntimeError("GH_TOKEN or GITHUB_TOKEN is required")

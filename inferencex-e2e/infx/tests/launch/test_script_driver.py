@@ -14,6 +14,7 @@ import yaml
 
 from infx.clusters import load_inventory
 from infx.launch.__main__ import launch
+from infx.launch.event import JobEventBuilder
 from infx.launch.request import LaunchRequest
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -26,7 +27,14 @@ args = sys.argv[1:]
 with open(os.environ["FAKE_CALLS"], "a") as log:
     log.write(json.dumps([name, *args]) + "\n")
 if name == "salloc":
+    if os.environ.get("FAKE_QUEUED_MARKER"):
+        open(os.environ["FAKE_QUEUED_MARKER"], "w").close()
+        import time
+        time.sleep(60)
     print("salloc: Granted job allocation 42", file=sys.stderr)
+elif name == "squeue":
+    if os.environ.get("FAKE_STUCK_JOB"):
+        print(os.environ["FAKE_STUCK_JOB"])
 elif name == "unsquashfs":
     sys.exit(1)
 elif name == "srun":
@@ -203,9 +211,16 @@ def test_collector_failure_propagates_and_still_cancels_the_allocation(
     fakes, workspace, tmp_path, monkeypatch
 ):
     monkeypatch.setenv("COLLECTOR_RC", "7")
+    event = JobEventBuilder()
 
-    assert launch(cluster_for(tmp_path), request_for(workspace)) == 7
+    assert launch(cluster_for(tmp_path), request_for(workspace), event) == 7
     assert fakes()[-1] == ["scancel", "42"]
+    record = event.finish(7)
+    assert (record.slurm_job_id, list(record.stages)) == ("42", ["prepare", "queue_wait", "run"])
+    error = record.error
+    assert (error.stage, error.type, error.message, error.exit_code) == (
+        "run", "JobFailed", "container step in Slurm job 42 exited 7", 7,
+    )
 
 
 def test_unavailable_staged_checkpoint_blocks_before_the_container_starts(
@@ -247,6 +262,7 @@ def test_collectors_serve_the_checkpoint_srt_jobs_would(fakes, workspace, tmp_pa
 
 @pytest.mark.parametrize(("overrides", "message"), [
     ({"OUT_YAML": "/tmp/speedbench-reference-al.yaml"}, "lies outside the container workspace"),
+    ({"OUT_YAML": "/workspace/../etc/reference.yaml"}, "lies outside the container workspace"),
     ({"GPU_COUNT": ""}, "GPU_COUNT"),
 ])  # fmt: skip
 def test_a_bad_input_fails_before_any_slurm_call(fakes, workspace, tmp_path, capsys, overrides, message):
@@ -295,6 +311,17 @@ def test_salloc_exclude_escape_hatch_extends_the_cluster_exclusions(fakes, works
     assert option(allocation, "--exclude") == "bad-node,node[1,3]"
 
 
+def test_the_echoed_container_step_masks_secrets_in_the_container_env(fakes, workspace, tmp_path, capsys):
+    inventory = inventory_for(tmp_path)
+    inventory["clusters"]["fixture"]["env"]["MIRROR_TOKEN"] = "tok-cluster-only"
+
+    assert launch(load_inventory(inventory).clusters["fixture"], request_for(workspace)) == 0
+
+    assert "MIRROR_TOKEN=tok-cluster-only" in option(container_step(fakes()), "--export").split(",")
+    err = capsys.readouterr().err
+    assert "MIRROR_TOKEN=***" in err and "tok-cluster-only" not in err
+
+
 def test_sigterm_during_the_collector_cancels_the_allocation_and_exits_143(
     fakes, workspace, tmp_path
 ):
@@ -316,3 +343,29 @@ def test_sigterm_during_the_collector_cancels_the_allocation_and_exits_143(
 
     assert launcher.wait(timeout=60) == 143
     assert fakes()[-1] == ["scancel", "42"]
+
+
+def test_sigterm_while_salloc_is_queued_cancels_the_pending_request(fakes, workspace, tmp_path):
+    config = tmp_path / "runners.yaml"
+    config.write_text(yaml.safe_dump(inventory_for(tmp_path)))
+    queued = tmp_path / "salloc-queued"
+    launcher = subprocess.Popen(
+        [sys.executable, "-m", "infx.launch", "--runner-config", str(config), "run"],
+        env={**os.environ, **launch_env(workspace), "PYTHONPATH": str(ROOT),
+             "FAKE_QUEUED_MARKER": str(queued), "FAKE_STUCK_JOB": "99", "USER": "runner"},
+        cwd=workspace, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )  # fmt: skip
+    try:
+        deadline = time.monotonic() + 60
+        while not queued.exists() and launcher.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.1)
+        assert queued.exists(), "salloc never started"
+
+        launcher.send_signal(signal.SIGTERM)
+
+        assert launcher.wait(timeout=30) == 143
+    finally:
+        launcher.kill()
+        launcher.wait()
+    assert ["scancel", "--user=runner", "--name=fixture_00"] in fakes()
+    assert [call for call in fakes() if call[0] == "squeue"] == []

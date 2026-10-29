@@ -19,14 +19,14 @@ adjustments:
     fp4: 0.1
   spec-decoding:
     mtp: 0.1
-    eagle: 0.1
-    eagle3: 0.1
+    draft_model: 0.1
   framework-prefix:
     sglang: 1.5
     vllm: 1.5
     dynamo-sglang: 1.5
     dynamo-vllm: 1.5
   model-prefix:
+    musespark: 5.0
     dsv41flash: 0.5
     kimik3: 0.5
     glm5.2: 0.5

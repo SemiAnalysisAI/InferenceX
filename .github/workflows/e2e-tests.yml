@@ -4,7 +4,6 @@ run-name: e2e Test - ${{ inputs.test-name || inputs.generate-cli-command || gith
 permissions:
     contents: read
 
-# Independent GPU dispatches queue through the priority scheduler; newer runs must not cancel them.
 on: # zizmor: ignore[concurrency-limits]
     workflow_dispatch:
         inputs:
@@ -71,13 +70,18 @@ on: # zizmor: ignore[concurrency-limits]
                 required: false
                 type: string
                 default: ""
+            source-pr-number:
+                description: "Trusted-dispatch mode: external PR number recorded in the source-identity artifact"
+                required: false
+                type: string
+                default: ""
             trim-conc:
                 description: "Trim each configuration to its minimum concurrency"
                 required: false
                 type: boolean
                 default: false
             all-evals:
-                description: "Expand eval selection to every fixed-sequence config; eval-only with generate-cli-command, changelog mode keeps throughput unless evals-only"
+                description: "Expand eval selection to every eligible 8k1k fixed-sequence and agentic config; eval-only with generate-cli-command, changelog mode keeps throughput unless evals-only"
                 required: false
                 type: boolean
                 default: false
@@ -87,7 +91,7 @@ on: # zizmor: ignore[concurrency-limits]
                 type: boolean
                 default: false
             fail-fast:
-                description: "Cancel the rest of each matrix after its first failure"
+                description: "Cancel the rest of each matrix after its first failure (always on for klaud-run)"
                 required: false
                 type: boolean
                 default: false
@@ -159,13 +163,18 @@ on: # zizmor: ignore[concurrency-limits]
                 required: false
                 type: string
                 default: ""
+            source-pr-number:
+                description: "Trusted-dispatch mode: external PR number recorded in the source-identity artifact"
+                required: false
+                type: string
+                default: ""
             trim-conc:
                 description: "Trim each configuration to its minimum concurrency"
                 required: false
                 type: boolean
                 default: false
             all-evals:
-                description: "Expand eval selection to every fixed-sequence config; eval-only with generate-cli-command, changelog mode keeps throughput unless evals-only"
+                description: "Expand eval selection to every eligible 8k1k fixed-sequence and agentic config; eval-only with generate-cli-command, changelog mode keeps throughput unless evals-only"
                 required: false
                 type: boolean
                 default: false
@@ -175,7 +184,7 @@ on: # zizmor: ignore[concurrency-limits]
                 type: boolean
                 default: false
             fail-fast:
-                description: "Cancel the rest of each matrix after its first failure"
+                description: "Cancel the rest of each matrix after its first failure (always on for klaud-run)"
                 required: false
                 type: boolean
                 default: false
@@ -282,6 +291,8 @@ jobs:
                       CMD+=(--evals-only)
                     fi
                     RAW_CONFIG_JSON=$("${CMD[@]}")
+                    python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["changelog_metadata"]))' \
+                      <<<"$RAW_CONFIG_JSON" > "$RUNNER_TEMP/changelog_metadata.json"
                     CONFIG_JSON=$(python3 -c 'import json,sys; data=json.load(sys.stdin); rows=[row for family in ("single_node","multi_node") for group in data.get(family,{}).values() for row in group]; rows.extend(row for family in ("evals","agentic_evals","multinode_evals","multinode_agentic_evals") for row in data.get(family,[])); print(json.dumps(rows))' <<<"$RAW_CONFIG_JSON")
                   else
                     if [ -z "$GENERATE_COMMAND" ]; then
@@ -332,13 +343,56 @@ jobs:
                     echo "multi-node-eval-config=$MULTI_EVAL"
                   } >> "$GITHUB_OUTPUT"
 
+            - name: Record source identity
+              if: ${{ inputs.source-pr-number != '' }}
+              env:
+                  SOURCE_PR_NUMBER: ${{ inputs.source-pr-number }}
+                  CHANGELOG_HEAD_REF: ${{ inputs.changelog-head-ref }}
+                  MERGE_SHA: ${{ steps.checkout-ref.outputs.commit }}
+                  EVALS_ONLY: ${{ inputs.evals-only }}
+                  AGENTX_FAST: ${{ inputs.agentx-fast }}
+                  ALL_EVALS: ${{ inputs.all-evals }}
+                  FAIL_FAST: ${{ inputs.fail-fast }}
+              run: |
+                  python3 - <<'PY'
+                  import json, os, re
+                  from pathlib import Path
+                  identity = {
+                      'pr_number': int(os.environ['SOURCE_PR_NUMBER']),
+                      'head_sha': os.environ['CHANGELOG_HEAD_REF'],
+                      'merge_sha': os.environ['MERGE_SHA'],
+                      **{key: os.environ[key.upper()] == 'true'
+                         for key in ('evals_only', 'agentx_fast', 'all_evals', 'fail_fast')},
+                  }
+                  for key in ('head_sha', 'merge_sha'):
+                      if not re.fullmatch(r'[0-9a-f]{40}', identity[key]):
+                          raise SystemExit(f'{key} must be a full commit SHA, got {identity[key]!r}')
+                  Path(os.environ['RUNNER_TEMP'], 'source_identity.json').write_text(json.dumps(identity))
+                  PY
+
+            - name: Upload source identity
+              if: ${{ inputs.source-pr-number != '' }}
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: source-identity
+                  path: ${{ runner.temp }}/source_identity.json
+                  if-no-files-found: error
+
+            - name: Upload changelog artifact
+              if: ${{ inputs.source-pr-number != '' }}
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: changelog-metadata
+                  path: ${{ runner.temp }}/changelog_metadata.json
+                  if-no-files-found: error
+
     test-sweep-multi-node:
         needs: get-jobs
         if: ${{ needs.get-jobs.outputs.multi-node-config != '' && needs.get-jobs.outputs.multi-node-config != '[]' }}
         uses: $/.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node /
         strategy:
-            fail-fast: ${{ inputs.fail-fast }}
+            fail-fast: ${{ inputs.fail-fast || inputs.klaud-run }}
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-config) }}
         secrets:
@@ -355,6 +409,7 @@ jobs:
             require-power: ${{ inputs.require-power || (matrix.config['require-power'] == true && matrix.config['eval-only'] != true) }}
             power-producer-sha: ${{ inputs.power-producer-sha }}
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
+            test-name: ${{ inputs.test-name }}
 
     test-sweep-multi-node-evals:
         needs: get-jobs
@@ -362,7 +417,7 @@ jobs:
         uses: $/.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node eval /
         strategy:
-            fail-fast: ${{ inputs.fail-fast }}
+            fail-fast: ${{ inputs.fail-fast || inputs.klaud-run }}
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-eval-config) }}
         secrets:
@@ -382,6 +437,7 @@ jobs:
             eval-framework: ${{ inputs.eval-framework == 'auto' && (matrix.config['eval-framework'] || 'lm-eval') || inputs.eval-framework }}
             eval-suite: ${{ inputs.eval-suite != '' && inputs.eval-suite || (inputs.eval-framework == 'auto' && matrix.config['eval-suite'] || '') }}
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
+            test-name: ${{ inputs.test-name }}
 
     test-sweep-agentic:
         needs: get-jobs
@@ -389,7 +445,7 @@ jobs:
         uses: $/.github/workflows/benchmark-tmpl.yml
         name: agentic /
         strategy:
-            fail-fast: ${{ inputs.fail-fast }}
+            fail-fast: ${{ inputs.fail-fast || inputs.klaud-run }}
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.agentic-config) }}
         secrets:
@@ -407,6 +463,7 @@ jobs:
             run-eval: false
             scenario-type: agentic-coding
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
+            test-name: ${{ inputs.test-name }}
 
     test-sweep-agentic-evals:
         needs: get-jobs
@@ -414,7 +471,7 @@ jobs:
         uses: $/.github/workflows/benchmark-tmpl.yml
         name: agentic eval /
         strategy:
-            fail-fast: ${{ inputs.fail-fast }}
+            fail-fast: ${{ inputs.fail-fast || inputs.klaud-run }}
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.agentic-eval-config) }}
         secrets:
@@ -435,6 +492,7 @@ jobs:
             eval-suite: ${{ inputs.eval-suite != '' && inputs.eval-suite || (inputs.eval-framework == 'auto' && matrix.config['eval-suite'] || '') }}
             scenario-type: agentic-coding
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
+            test-name: ${{ inputs.test-name }}
 
     test-sweep-multi-node-agentic:
         needs: get-jobs
@@ -442,7 +500,7 @@ jobs:
         uses: $/.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node agentic /
         strategy:
-            fail-fast: ${{ inputs.fail-fast }}
+            fail-fast: ${{ inputs.fail-fast || inputs.klaud-run }}
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-agentic-config) }}
         secrets:
@@ -463,6 +521,7 @@ jobs:
             power-producer-sha: ${{ inputs.power-producer-sha }}
             scenario-type: agentic-coding
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
+            test-name: ${{ inputs.test-name }}
 
     test-sweep-multi-node-agentic-evals:
         needs: get-jobs
@@ -470,7 +529,7 @@ jobs:
         uses: $/.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node agentic eval /
         strategy:
-            fail-fast: false
+            fail-fast: ${{ inputs.fail-fast || inputs.klaud-run }}
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-agentic-eval-config) }}
         secrets:
@@ -493,6 +552,7 @@ jobs:
             eval-suite: ${{ inputs.eval-suite != '' && inputs.eval-suite || (inputs.eval-framework == 'auto' && matrix.config['eval-suite'] || '') }}
             scenario-type: agentic-coding
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
+            test-name: ${{ inputs.test-name }}
 
     test-sweep-single-node:
         needs: get-jobs
@@ -500,7 +560,7 @@ jobs:
         uses: $/.github/workflows/benchmark-tmpl.yml
         name: single-node /
         strategy:
-            fail-fast: ${{ inputs.fail-fast }}
+            fail-fast: ${{ inputs.fail-fast || inputs.klaud-run }}
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.single-node-config) }}
         secrets:
@@ -515,6 +575,7 @@ jobs:
             dp-attn: ${{ matrix.config.dp-attn }}
             run-eval: false
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
+            test-name: ${{ inputs.test-name }}
 
     test-sweep-evals:
         needs: get-jobs
@@ -522,7 +583,7 @@ jobs:
         uses: $/.github/workflows/benchmark-tmpl.yml
         name: eval /
         strategy:
-            fail-fast: ${{ inputs.fail-fast }}
+            fail-fast: ${{ inputs.fail-fast || inputs.klaud-run }}
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.eval-config) }}
         secrets:
@@ -540,6 +601,7 @@ jobs:
             eval-framework: ${{ inputs.eval-framework == 'auto' && (matrix.config['eval-framework'] || 'lm-eval') || inputs.eval-framework }}
             eval-suite: ${{ inputs.eval-suite != '' && inputs.eval-suite || (inputs.eval-framework == 'auto' && matrix.config['eval-suite'] || '') }}
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
+            test-name: ${{ inputs.test-name }}
 
     collect-results:
         name: collect-results
@@ -555,6 +617,17 @@ jobs:
         needs: [get-jobs, test-sweep-evals, test-sweep-multi-node-evals, test-sweep-agentic-evals, test-sweep-multi-node-agentic-evals]
         if: ${{ always() && (needs.test-sweep-evals.result != 'skipped' || needs.test-sweep-multi-node-evals.result != 'skipped' || needs.test-sweep-agentic-evals.result != 'skipped' || needs.test-sweep-multi-node-agentic-evals.result != 'skipped') }}
         uses: $/.github/workflows/collect-evals.yml
+        with:
+            tooling-ref: ${{ needs.get-jobs.outputs.tooling-ref }}
+
+    collect-job-events:
+        name: collect-job-events
+        needs: [get-jobs, test-sweep-multi-node, test-sweep-multi-node-evals, test-sweep-agentic, test-sweep-agentic-evals, test-sweep-multi-node-agentic, test-sweep-multi-node-agentic-evals, test-sweep-single-node, test-sweep-evals]
+        if: ${{ !cancelled() && needs.get-jobs.result == 'success' }}
+        permissions:
+            actions: read # List the run's jobs to record the jobs that wrote no event.
+            contents: read
+        uses: $/.github/workflows/collect-job-events.yml
         with:
             tooling-ref: ${{ needs.get-jobs.outputs.tooling-ref }}
 

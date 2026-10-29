@@ -9,10 +9,10 @@ Install the pinned PyPI release in a Python 3.11–3.13 virtual environment:
 ```bash
 python3 -m venv .venv-agentx
 source .venv-agentx/bin/activate
-python -m pip install 'agentx-harness==1.0.7'
+python -m pip install 'agentx-harness==1.0.12'
 ```
 
-The package version matches the `agentx-v1.0.7` GitHub release. The `agentx`
+The package version matches the `agentx-v1.0.12` GitHub release. The `agentx`
 command selects the `agentx` scenario by default.
 
 ## Run
@@ -42,6 +42,14 @@ and shared reporting and runtime settings. Explicit CLI arguments and `AIPERF_*`
 environment variables override preset defaults. Model, tokenizer, dataset,
 concurrency, and output remain caller inputs; `--tokenizer-trust-remote-code` is
 needed only for tokenizers with custom code.
+
+InferenceX's `python3 -m infx.bench agentic` wrapper defaults to the full,
+uncapped corpus (`semianalysis_cc_traces_weka_062126`). Model prefixes beginning
+with `dsr1`, `qwen3.5`, or `qwen3.8next` explicitly select the
+256k-capped corpus (`semianalysis_cc_traces_weka_062126_256k`). New model families
+use the full corpus unless added to `CAPPED_FAMILIES` in
+`infx/bench/agentic/traces.py`. `WEKA_LOADER_OVERRIDE` can pin either loader
+regardless of model family; it does not configure the standalone `agentx` CLI.
 
 The default random seed is **42**. Keep this seed when reproducing AgentX results,
 or pass `--random-seed 123` to use a different seed.

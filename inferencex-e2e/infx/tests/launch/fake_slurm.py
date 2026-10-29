@@ -52,7 +52,8 @@ exit 0
 """,
     "sacct": r"""
 state="${FAKE_STATE:-COMPLETED|0:0}"
-if [[ " $* " == *" 4242 "* && "$(cat "$FAKE_LOG_DIR/batch-rc" 2>/dev/null)" != 0 ]]; then state="FAILED|1:0"; fi
+rc="$(cat "$FAKE_LOG_DIR/batch-rc" 2>/dev/null)"
+if [[ " $* " == *" 4242 "* && -n "$rc" && "$rc" != 0 ]]; then state="FAILED|$rc:0"; fi
 echo "$state"
 """,
     "scontrol": "exit 1",
@@ -111,13 +112,13 @@ else:
 output = base / "42"
 logs = output / "logs"
 logs.mkdir(parents=True, exist_ok=True)
-(logs / "sweep_42.log").write_text("benchmark complete\n")
+(logs / "sweep_42.log").write_text(os.environ.get("FAKE_SWEEP_LOG", "benchmark complete\n"))
 result = os.environ["RESULT_FILENAME"]
 mode = os.environ["FAKE_RESULTS"]
 if mode == "single":
     (logs / "power").mkdir()
     (logs / "power/samples.csv").write_text("retained native samples\n")
-    (logs / f"{result}.json").write_text('{"completed": 2}')
+    (logs / f"{result}.json").write_text(os.environ.get("FAKE_RESULT", '{"completed": 2}'))
 elif mode == "fixed":
     point = logs / "sweep_isl_1024_osl_1024"
     point.mkdir()
@@ -136,7 +137,7 @@ if os.environ.get("RUN_EVAL") == "true" or os.environ.get("EVAL_ONLY") == "true"
 if os.environ.get("FAKE_ACTIVE"):
     pathlib.Path(os.environ["FAKE_ACTIVE"]).touch()
 if "--json" in argv:
-    print(json.dumps({"status": "submitted", "slurm_job_id": "42", "output_dir": str(output)}))
+    print(os.environ.get("FAKE_MANIFEST") or json.dumps({"status": "submitted", "slurm_job_id": "42", "output_dir": str(output)}))
 else:
     print("✅ Job 42 submitted!")
 sys.exit(int(os.environ.get("FAKE_SRTCTL_RC", "0")))
@@ -236,7 +237,10 @@ def base_env(*, fakes: Path, logs: Path, workspace: Path, sandbox: Path) -> dict
         key: value
         for key, value in os.environ.items()
         if not key.startswith(("SLURM_", "FAKE_", "SRT_", "INFERENCEX_", "INFX_", "UV_"))
-        and key not in {"VIRTUAL_ENV", "MODEL_PATH", "CONFIG_FILE", "EVAL_SRT_RECIPE", "BENCH_SCRIPT_OVERRIDE"}
+        and key not in {
+            "VIRTUAL_ENV", "MODEL_PATH", "CONFIG_FILE", "EVAL_SRT_RECIPE", "BENCH_SCRIPT_OVERRIDE",
+            "GITHUB_ACTIONS",
+        }
     }
     env.update(
         PATH=f"{fakes}{os.pathsep}{Path(sys.executable).parent}{os.pathsep}/usr/bin{os.pathsep}/bin",

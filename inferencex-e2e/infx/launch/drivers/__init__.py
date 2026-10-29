@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 from infx.launch import policy
 from infx.launch.backends import backend_class
 from infx.launch.context import Launch, LaunchError
-from infx.launch.drivers import llmd, script, srt
+from infx.launch.drivers import script, srt
 from infx.launch.policy import LaunchPath, launch_path
 
 if TYPE_CHECKING:
@@ -36,7 +36,6 @@ ROUTES: dict[LaunchPath, Route] = {
     LaunchPath.SRT_MULTI: Route("slurm", srt.run_multinode),
     LaunchPath.SRT_NATIVE: Route("slurm", srt.run_multinode),
     LaunchPath.SCRIPT: Route(None, script.run),
-    LaunchPath.LLMD: Route("slurm", llmd.run),
 }
 
 
@@ -57,6 +56,7 @@ def run(cluster: Cluster, request: LaunchRequest, life: Lifecycle) -> int:
     """
     check_tables({cluster.id: cluster}, only=cluster.id)
     path = launch_path(cluster.id, request)
+    life.event.set(launch_path=path.value)
     route = ROUTES[path]
     if route.scheduler not in (None, cluster.scheduler):
         runnable = sorted(p for p, r in ROUTES.items() if r.scheduler in (None, cluster.scheduler))

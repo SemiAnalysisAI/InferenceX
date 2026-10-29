@@ -40,7 +40,7 @@ def test_default_point_leaves_the_replay_policy_to_the_scenario():
         "--model", "deepseek-ai/DeepSeek-V4-Pro", "--tokenizer", "deepseek-ai/DeepSeek-V4-Pro",
         "--concurrency", "8", "--benchmark-duration", "3600", "--tokenizer-trust-remote-code",
         "--output-artifact-dir", "/results/aiperf_artifacts",
-        "--public-dataset", traces.CAPPED,
+        "--public-dataset", "semianalysis_cc_traces_weka_062126",
     ]  # fmt: skip
 
 
@@ -168,16 +168,37 @@ def test_malformed_replay_inputs_are_rejected(overrides, message):
 
 
 @pytest.mark.parametrize(
-    ("prefix", "override", "loader"),
+    ("prefix", "override", "capped"),
     [
-        ("big41flash", None, traces.UNCAPPED),
-        ("other", None, traces.CAPPED),
-        ("other", traces.UNCAPPED, traces.UNCAPPED),
+        ("dsr1", None, True),
+        ("qwen3.5", None, True),
+        ("qwen3.8next", None, True),
+        ("musespark", None, False),
+        ("qwen3.5-variant", None, True),
+        ("dsv4", None, False),
+        ("dsv41flash", None, False),
+        ("glm5.2", None, False),
+        ("glm5.3", None, False),
+        ("minimaxm3", None, False),
+        ("kimik3", None, False),
+        ("new-model", None, False),
+        ("qwen3.9", None, False),
+        ("new-model", "", False),
+        ("qwen3.5", traces.UNCAPPED, False),
+        ("new-model", traces.CAPPED, True),
     ],
 )
-def test_corpus_follows_the_model_family_context_unless_pinned(
-    monkeypatch, prefix, override, loader
-):
-    monkeypatch.setattr(traces, "UNCAPPED_FAMILIES", ("big4",))
+def test_corpus_is_uncapped_unless_explicitly_capped_or_pinned(prefix, override, capped):
+    loader, dataset = (
+        ("semianalysis_cc_traces_weka_062126_256k", "semianalysisai/cc-traces-weka-062126-256k")
+        if capped
+        else ("semianalysis_cc_traces_weka_062126", "semianalysisai/cc-traces-weka-062126")
+    )
+    env = {**BASE_ENV, "MODEL_PREFIX": prefix}
+    if override is not None:
+        env["WEKA_LOADER_OVERRIDE"] = override
 
-    assert traces.resolve(prefix, override) == (loader, traces.LOADERS[loader])
+    config = ReplayConfig.from_env(env, Path("/results"))
+
+    assert (config.loader, config.dataset) == (loader, dataset)
+    assert _value(replay_argv(config, "/venv/bin/agentx"), "--public-dataset") == loader

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import datetime
 import inspect
 import json
 import math
@@ -212,6 +213,10 @@ def main(argv: list[str] | None = None) -> int:
         type=positive_int,
         help="exclude points whose block_bytes * num_blocks exceeds this limit",
     )
+    parser.add_argument("--case-id", help="matrix case identity recorded in the result")
+    parser.add_argument("--profile", help="configs/swap_sweep.json profile this case came from")
+    parser.add_argument("--sku", default=os.environ.get("COLLX_SHARD_SKU"),
+                        help="pool the result is filed under")
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args(argv)
     if args.warmup < 0 or args.device < 0:
@@ -234,6 +239,9 @@ def main(argv: list[str] | None = None) -> int:
     torch.cuda.set_device(args.device)
     result = {
         "schema": "collectivex-swap-blocks-v1",
+        "case_id": args.case_id,
+        "profile": args.profile,
+        "generated_at": datetime.datetime.now().astimezone().isoformat(),
         "operation": "vllm._custom_ops.swap_blocks",
         "timing": "drained-wall-clock-including-submission-and-synchronization",
         "warmup": args.warmup,
@@ -245,7 +253,7 @@ def main(argv: list[str] | None = None) -> int:
             "skipped_cases": skipped,
         },
         "runtime": {
-            "sku": os.environ.get("COLLX_SHARD_SKU"),
+            "sku": args.sku,
             "torch": str(torch.__version__),
             "vllm": vllm.__version__,
             "cuda": torch.version.cuda,
@@ -255,6 +263,7 @@ def main(argv: list[str] | None = None) -> int:
             "image": os.environ.get("COLLECTIVEX_IMAGE"),
             "source_sha": os.environ.get("COLLECTIVEX_SOURCE_SHA")
             or os.environ.get("GITHUB_SHA"),
+            "source_dirty": {"0": False, "1": True}.get(os.environ.get("COLLECTIVEX_SOURCE_DIRTY")),
         },
         "cases": [],
     }
@@ -279,7 +288,7 @@ def main(argv: list[str] | None = None) -> int:
             f"p50={row['latency']['percentiles_us']['p50']:.3f} us",
             flush=True,
         )
-    # The caller supplies an existing output directory, including in containers.
+    args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, allow_nan=False) + "\n")
     return 0
 

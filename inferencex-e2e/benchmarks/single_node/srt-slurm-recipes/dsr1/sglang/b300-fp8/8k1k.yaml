@@ -21,7 +21,7 @@ base:
         served-model-name: deepseek-ai/DeepSeek-R1-0528
         tensor-parallel-size: 8
         data-parallel-size: 1
-        cuda-graph-max-bs: 128
+        cuda-graph-max-bs-decode: 128
         max-running-requests: 128
         mem-fraction-static: 0.82
         kv-cache-dtype: fp8_e4m3
@@ -50,7 +50,7 @@ zip_override_tp4_ep1:
       gpus: 4
       args:
         chunked-prefill-size: 8192
-        cuda-graph-max-bs: 32
+        cuda-graph-max-bs-decode: 32
         max-prefill-tokens: 8192
         max-running-requests: 32
         mem-fraction-static: 0.95

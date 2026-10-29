@@ -54,8 +54,6 @@ class _ChainBackend(ep_backend.EPBackend):
         self.fp8_consume = fp8_consume
         self.precision = precision
         self.device = "cpu"
-        self.rank = 0
-        self.world_size = 2
         # Per-dispatch cost overrides, consumed in order; the constant cost applies after.
         self._dispatch_schedule = list(dispatch_schedule or [])
 

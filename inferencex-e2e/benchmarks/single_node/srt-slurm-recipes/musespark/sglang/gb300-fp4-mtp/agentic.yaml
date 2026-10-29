@@ -1,0 +1,262 @@
+base:
+  schema: 2
+  name: musespark-fp4-gb300-sglang-agentic
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  slurm:
+    time_limit: '4:00:00'
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        served-model-name: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+        trust-remote-code: true
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        quantization: modelopt_fp4
+        moe-runner-backend: flashinfer_trtllm
+        kv-cache-dtype: fp8_e4m3
+        mem-fraction-static: 0.85
+        # 46 of 62 layers use a 2048-token window; at the 0.8 default the SWA pool sat
+        # 4% used while full-attention KV saturated at concurrency 24.
+        swa-full-tokens-ratio: 0.3
+        chunked-prefill-size: 8192
+        enable-layernorm-sp: true
+        enable-megamoe-for-layernorm-sp: true
+        # DFlash2 verifies 8 tokens per step: the current token plus 7 drafts.
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: RadixArk/Muse-Spark-Open-DFlash2
+        speculative-num-draft-tokens: 8
+        mm-feature-transport: cpu
+        reasoning-parser: muse
+        tool-call-parser: muse
+        watchdog-timeout: 3600
+        enable-metrics: true
+        stream-interval: 20
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        HF_HUB_OFFLINE: '1'
+        SGLANG_FLASHINFER_NVFP4_PER_TOKEN_ACTIVATION: '0'
+  # Cold 533 GB weight loads from shared storage plus graph capture outlast the default.
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  benchmark:
+    env:
+      # The gated Hub repo is unreadable with the job token; tokenize from the staged checkpoint.
+      TOKENIZER: /model
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+
+override_tp4_c1:
+  roles:
+    agg:
+      args:
+        max-running-requests: 1
+        cuda-graph-max-bs-decode: 1
+        mem-fraction-static: 0.88
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp4_c5:
+  roles:
+    agg:
+      args:
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+        mem-fraction-static: 0.88
+        prefill-decode-interval: 64
+        speculative-draft-attention-backend: fa4
+  benchmark:
+    env:
+      CONC: '5'
+
+override_tp4_c8:
+  roles:
+    agg:
+      args:
+        max-running-requests: 3
+        cuda-graph-max-bs-decode: 3
+        mem-fraction-static: 0.88
+        prefill-decode-interval: 64
+  benchmark:
+    env:
+      CONC: '8'
+
+override_tp4_c10:
+  roles:
+    agg:
+      args:
+        max-running-requests: 3
+        cuda-graph-max-bs-decode: 3
+        mem-fraction-static: 0.88
+        prefill-decode-interval: 64
+        speculative-draft-attention-backend: fa4
+        tokenizer-worker-num: 4
+        incremental-streaming-output: true
+  benchmark:
+    env:
+      CONC: '10'
+
+override_tp4_c15:
+  roles:
+    agg:
+      args:
+        max-running-requests: 12
+        cuda-graph-max-bs-decode: 12
+        mem-fraction-static: 0.88
+        prefill-decode-interval: 64
+        speculative-draft-attention-backend: fa4
+        tokenizer-worker-num: 4
+        incremental-streaming-output: true
+  benchmark:
+    env:
+      CONC: '15'
+
+override_tp4_c24:
+  roles:
+    agg:
+      args:
+        max-running-requests: 48
+        cuda-graph-max-bs-decode: 48
+        mem-fraction-static: 0.95
+        swa-full-tokens-ratio: 0.1
+        cuda-graph-backend-prefill: breakable
+        max-prefill-tokens: 8192
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 96
+        enable-hierarchical-cache: true
+        hicache-size: 120
+        hicache-write-policy: write_through
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '2048'
+  benchmark:
+    env:
+      CONC: '24'
+
+override_tp4_c28:
+  roles:
+    agg:
+      args:
+        max-running-requests: 48
+        cuda-graph-max-bs-decode: 48
+        mem-fraction-static: 0.95
+        swa-full-tokens-ratio: 0.1
+        cuda-graph-backend-prefill: breakable
+        max-prefill-tokens: 8192
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 32
+        enable-hierarchical-cache: true
+        hicache-size: 160
+        hicache-write-policy: write_back
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '2048'
+  benchmark:
+    env:
+      CONC: '28'
+
+override_tp4_c30:
+  roles:
+    agg:
+      args:
+        max-running-requests: 48
+        cuda-graph-max-bs-decode: 48
+        mem-fraction-static: 0.95
+        swa-full-tokens-ratio: 0.1
+        cuda-graph-backend-prefill: breakable
+        max-prefill-tokens: 8192
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 64
+        enable-hierarchical-cache: true
+        hicache-size: 160
+        hicache-write-policy: write_back
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '2048'
+  benchmark:
+    env:
+      CONC: '30'
+
+override_tp4_c34:
+  roles:
+    agg:
+      args:
+        max-running-requests: 96
+        cuda-graph-max-bs-decode: 96
+        mem-fraction-static: 0.95
+        swa-full-tokens-ratio: 0.1
+        cuda-graph-backend-prefill: breakable
+        chunked-prefill-size: 16384
+        max-prefill-tokens: 16384
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 48
+        enable-hierarchical-cache: true
+        hicache-size: 160
+        hicache-write-policy: write_back
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '4096'
+        SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '4'
+  benchmark:
+    env:
+      CONC: '34'
+
+override_tp4_c44:
+  roles:
+    agg:
+      args:
+        max-running-requests: 24
+        cuda-graph-max-bs-decode: 24
+        mem-fraction-static: 0.9
+        swa-full-tokens-ratio: 0.1
+        chunked-prefill-size: null
+        speculative-draft-attention-backend: trtllm_mha
+        speculative-draft-kv-cache-dtype: fp8_e4m3
+        enable-hierarchical-cache: true
+        hicache-size: 149
+        hicache-write-policy: write_back
+        tokenizer-worker-num: 4
+        incremental-streaming-output: true
+      env:
+        SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '4'
+  benchmark:
+    env:
+      CONC: '44'
+
+override_tp4_c48:
+  roles:
+    agg:
+      args:
+        max-running-requests: 24
+        cuda-graph-max-bs-decode: 24
+        mem-fraction-static: 0.9
+        swa-full-tokens-ratio: 0.1
+        chunked-prefill-size: null
+        speculative-draft-attention-backend: trtllm_mha
+        speculative-draft-kv-cache-dtype: fp8_e4m3
+        enable-hierarchical-cache: true
+        hicache-size: 149
+        hicache-write-policy: write_back
+        tokenizer-worker-num: 4
+        incremental-streaming-output: true
+      env:
+        SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '4'
+  benchmark:
+    env:
+      CONC: '48'
