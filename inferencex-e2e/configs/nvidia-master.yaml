@@ -889,7 +889,7 @@ dsv4-fp4-b200-sglang-agentic-hicache-mtp:
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [64, 96, 128, 160], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: agentic.yaml }
 
 dsv4-fp4-b200-vllm-agentic-mtp:
-  image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-20ebb28@sha256:dfdee3dbba3d8d30554d90f723a3a18dac562f8442f2c2e8f81804acd1ec673f
+  image: vllm/vllm-openai:nightly-8e2beaa3bff595577a069d49d96bde9074294ec2@sha256:3207cb99c0f59b92f7d47a74da8c6eb5467565d811a4f8d9df51df5188f59c70
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:b200-nscale
@@ -902,9 +902,26 @@ dsv4-fp4-b200-vllm-agentic-mtp:
     - dram-utilization: 0.90
       search-space:
       # TP8 resident KV + DSpark6
-      - { tp: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 6, 10, 14, 16], srt-recipe: agentic.yaml }
+      - { tp: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 6, 14], srt-recipe: agentic.yaml }
       # DEP8 SimpleCPU + DSpark6
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: draft_model, conc-list: [32, 64, 96, 128, 160, 192], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
+
+dsv4-fp4-b200-vllm-agentic-mtp-lowconc:
+  image: vllm/vllm-openai@sha256:d428631bb917a33d22308265d1b8be91522f862bf9fd133bee62dde3313664ae
+  model: deepseek-ai/DeepSeek-V4-Pro-0813
+  model-prefix: dsv4
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: vllm
+  multinode: false
+  srt-recipe-dir: dsv4/vllm/b200-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.90
+      search-space:
+      - { tp: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [4], srt-recipe: agentic-lowconc.yaml }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: draft_model, conc-list: [64], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic-tp2dp4-c64.yaml }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: draft_model, conc-list: [48], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic-tp2dp4-c48.yaml }
 
 # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
 # does not have a B300-specific recipe, so this config reuses the existing DSR1 FP4
