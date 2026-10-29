@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="450" viewBox="0 0 960 450" font-family="Helvetica, Arial, sans-serif" font-size="13">
+  <rect width="960" height="450" fill="#ffffff"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#555"/>
+    </marker>
+  </defs>
+  <text x="20" y="30" font-size="17" font-weight="bold" fill="#111">One fresh-entry sample (roundtrip shown)</text>
+  <text x="20" y="50" fill="#444">Every rank spins, then joins a device all-reduce. All windows open at the barrier's exit, so entry skew and launch latency stay outside them.</text>
+
+  <!-- legend -->
+  <g transform="translate(20,68)">
+    <rect width="16" height="12" fill="#e2e2e2" stroke="#888"/><text x="22" y="10">GPU spin (2 ms)</text>
+    <rect x="140" width="16" height="12" fill="#e3c7f2" stroke="#8a5aa8"/><text x="162" y="10">all-reduce barrier</text>
+    <rect x="300" width="16" height="12" fill="#a8cdf5" stroke="#3b78c2"/><text x="322" y="10">dispatch</text>
+    <rect x="400" width="16" height="12" fill="#b9e6b5" stroke="#3f9a45"/><text x="422" y="10">combine</text>
+    <path d="M512,6 l6,-6 l6,6 l-6,6 z" fill="#f5b971" stroke="#c97a1e"/><text x="530" y="10">CUDA event</text>
+    <text x="630" y="10" fill="#555">▲ host launch</text>
+  </g>
+
+  <!-- barrier exit line -->
+  <line x1="400" y1="100" x2="400" y2="290" stroke="#c0392b" stroke-dasharray="5,4"/>
+  <text x="406" y="112" fill="#c0392b">barrier exit: every window opens here</text>
+
+  <!-- rank lanes -->
+  <g>
+    <text x="20" y="150" font-weight="bold">rank 0</text>
+    <text x="96" y="176" fill="#555">▲</text>
+    <rect x="100" y="135" width="220" height="26" fill="#e2e2e2" stroke="#888"/>
+    <rect x="320" y="135" width="80" height="26" fill="#e3c7f2" stroke="#8a5aa8"/>
+    <path d="M400,142 l6,-6 l6,6 l-6,6 z" fill="#f5b971" stroke="#c97a1e"/>
+    <rect x="412" y="135" width="150" height="26" fill="#a8cdf5" stroke="#3b78c2"/><text x="480" y="153" fill="#1d4f8a">D</text>
+    <rect x="562" y="135" width="160" height="26" fill="#b9e6b5" stroke="#3f9a45"/><text x="636" y="153" fill="#24692a">C</text>
+    <path d="M722,142 l6,-6 l6,6 l-6,6 z" fill="#f5b971" stroke="#c97a1e"/>
+  </g>
+  <g>
+    <text x="20" y="205" font-weight="bold">rank 1</text>
+    <text x="156" y="231" fill="#555">▲</text>
+    <rect x="160" y="190" width="220" height="26" fill="#e2e2e2" stroke="#888"/>
+    <rect x="380" y="190" width="20" height="26" fill="#e3c7f2" stroke="#8a5aa8"/>
+    <path d="M400,197 l6,-6 l6,6 l-6,6 z" fill="#f5b971" stroke="#c97a1e"/>
+    <rect x="412" y="190" width="140" height="26" fill="#a8cdf5" stroke="#3b78c2"/><text x="475" y="208" fill="#1d4f8a">D</text>
+    <rect x="552" y="190" width="200" height="26" fill="#b9e6b5" stroke="#3f9a45"/><text x="646" y="208" fill="#24692a">C</text>
+    <path d="M752,197 l6,-6 l6,6 l-6,6 z" fill="#f5b971" stroke="#c97a1e"/>
+  </g>
+  <g>
+    <text x="20" y="260" font-weight="bold">rank 2</text>
+    <text x="126" y="286" fill="#555">▲</text>
+    <rect x="130" y="245" width="220" height="26" fill="#e2e2e2" stroke="#888"/>
+    <rect x="350" y="245" width="50" height="26" fill="#e3c7f2" stroke="#8a5aa8"/>
+    <path d="M400,252 l6,-6 l6,6 l-6,6 z" fill="#f5b971" stroke="#c97a1e"/>
+    <rect x="412" y="245" width="160" height="26" fill="#a8cdf5" stroke="#3b78c2"/><text x="486" y="263" fill="#1d4f8a">D</text>
+    <rect x="572" y="245" width="130" height="26" fill="#b9e6b5" stroke="#3f9a45"/><text x="631" y="263" fill="#24692a">C</text>
+    <path d="M702,252 l6,-6 l6,6 l-6,6 z" fill="#f5b971" stroke="#c97a1e"/>
+  </g>
+
+  <!-- reduction brackets -->
+  <line x1="406" y1="300" x2="758" y2="300" stroke="#333"/>
+  <line x1="758" y1="294" x2="758" y2="306" stroke="#333"/>
+  <text x="766" y="304" fill="#111">MAX → component (rank 1)</text>
+  <line x1="406" y1="322" x2="708" y2="322" stroke="#333"/>
+  <line x1="708" y1="316" x2="708" y2="328" stroke="#333"/>
+  <text x="716" y="326" fill="#111">MIN → cross_rank_min_us</text>
+  <text x="406" y="346" fill="#444">MAX − MIN → cross_rank_spread_us</text>
+
+  <text x="20" y="378" fill="#333">Each sample is reduced across ranks first; percentiles come after, over 256 trials × 8 samples. dispatch and combine are timed</text>
+  <text x="20" y="396" fill="#333">the same way, one op per window; combine runs behind its own untimed dispatch.</text>
+  <text x="20" y="414" fill="#333">Eager: spin and all-reduce are queued on the stream before each sample. Graphed: both are captured in the graph ahead of its first event.</text>
+  <text x="20" y="432" fill="#333">A sample counts as missed when a rank's host took longer than the spin to enqueue its timed work.</text>
+</svg>

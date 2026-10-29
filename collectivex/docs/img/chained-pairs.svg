@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="440" viewBox="0 0 960 440" font-family="Helvetica, Arial, sans-serif" font-size="13">
+  <rect width="960" height="440" fill="#ffffff"/>
+  <text x="20" y="30" font-size="17" font-weight="bold" fill="#111">One chain trial: two sibling chains of 128 back-to-back pairs</text>
+  <text x="20" y="50" fill="#444">No host sync inside either chain. Each chain opens with one all-reduce; the first 16 pairs are dropped as pipeline fill; 4 trials per point.</text>
+
+  <!-- legend -->
+  <g transform="translate(20,68)">
+    <rect width="16" height="12" fill="#e3c7f2" stroke="#8a5aa8"/><text x="22" y="10">all-reduce (once per chain)</text>
+    <rect x="200" width="16" height="12" fill="#a8cdf5" stroke="#3b78c2"/><text x="222" y="10">dispatch</text>
+    <rect x="300" width="16" height="12" fill="#b9e6b5" stroke="#3f9a45"/><text x="322" y="10">combine</text>
+    <path d="M412,6 l6,-6 l6,6 l-6,6 z" fill="#f5b971" stroke="#c97a1e"/><text x="430" y="10">CUDA event</text>
+  </g>
+
+  <!-- floors chain -->
+  <text x="20" y="118" font-weight="bold" fill="#111">1. Floors chain: events around each op (4 per pair)</text>
+  <g transform="translate(20,130)">
+    <rect x="0" y="0" width="40" height="28" fill="#e3c7f2" stroke="#8a5aa8"/><text x="10" y="19" fill="#5d2f7a">AR</text>
+    <g transform="translate(50,0)">
+      <path d="M0,14 l6,-6 l6,6 l-6,6 z" fill="#f5b971" stroke="#c97a1e"/>
+      <rect x="12" y="0" width="110" height="28" fill="#a8cdf5" stroke="#3b78c2"/><text x="62" y="19" fill="#1d4f8a">D</text>
+      <path d="M122,14 l6,-6 l6,6 l-6,6 z" fill="#f5b971" stroke="#c97a1e"/>
+      <path d="M140,14 l6,-6 l6,6 l-6,6 z" fill="#f5b971" stroke="#c97a1e"/>
+      <rect x="152" y="0" width="120" height="28" fill="#b9e6b5" stroke="#3f9a45"/><text x="206" y="19" fill="#24692a">C</text>
+      <path d="M272,14 l6,-6 l6,6 l-6,6 z" fill="#f5b971" stroke="#c97a1e"/>
+    </g>
+    <g transform="translate(350,0)">
+      <path d="M0,14 l6,-6 l6,6 l-6,6 z" fill="#f5b971" stroke="#c97a1e"/>
+      <rect x="12" y="0" width="110" height="28" fill="#a8cdf5" stroke="#3b78c2"/><text x="62" y="19" fill="#1d4f8a">D</text>
+      <path d="M122,14 l6,-6 l6,6 l-6,6 z" fill="#f5b971" stroke="#c97a1e"/>
+      <path d="M140,14 l6,-6 l6,6 l-6,6 z" fill="#f5b971" stroke="#c97a1e"/>
+      <rect x="152" y="0" width="120" height="28" fill="#b9e6b5" stroke="#3f9a45"/><text x="206" y="19" fill="#24692a">C</text>
+      <path d="M272,14 l6,-6 l6,6 l-6,6 z" fill="#f5b971" stroke="#c97a1e"/>
+    </g>
+    <text x="650" y="19" fill="#555">… 128 pairs</text>
+    <line x1="68" y1="38" x2="172" y2="38" stroke="#3b78c2"/><text x="70" y="54" fill="#1d4f8a">dispatch window</text>
+    <line x1="208" y1="38" x2="322" y2="38" stroke="#3f9a45"/><text x="210" y="54" fill="#24692a">combine window</text>
+  </g>
+  <text x="40" y="208" fill="#333">chain_floor_us.dispatch / .combine: each op window, reduced across ranks by MIN. The last rank into a collective waited least,</text>
+  <text x="40" y="226" fill="#333">so its window is the op's floor (within ~10% of profiler kernel time). Chained per-op medians are never published.</text>
+
+  <!-- period chain -->
+  <text x="20" y="268" font-weight="bold" fill="#111">2. Period chain: events only around each pair (2 per pair)</text>
+  <g transform="translate(20,280)">
+    <rect x="0" y="0" width="40" height="28" fill="#e3c7f2" stroke="#8a5aa8"/><text x="10" y="19" fill="#5d2f7a">AR</text>
+    <g transform="translate(50,0)">
+      <path d="M0,14 l6,-6 l6,6 l-6,6 z" fill="#f5b971" stroke="#c97a1e"/>
+      <rect x="12" y="0" width="120" height="28" fill="#a8cdf5" stroke="#3b78c2"/><text x="67" y="19" fill="#1d4f8a">D</text>
+      <rect x="132" y="0" width="130" height="28" fill="#b9e6b5" stroke="#3f9a45"/><text x="191" y="19" fill="#24692a">C</text>
+      <path d="M262,14 l6,-6 l6,6 l-6,6 z" fill="#f5b971" stroke="#c97a1e"/>
+    </g>
+    <g transform="translate(340,0)">
+      <path d="M0,14 l6,-6 l6,6 l-6,6 z" fill="#f5b971" stroke="#c97a1e"/>
+      <rect x="12" y="0" width="120" height="28" fill="#a8cdf5" stroke="#3b78c2"/><text x="67" y="19" fill="#1d4f8a">D</text>
+      <rect x="132" y="0" width="130" height="28" fill="#b9e6b5" stroke="#3f9a45"/><text x="191" y="19" fill="#24692a">C</text>
+      <path d="M262,14 l6,-6 l6,6 l-6,6 z" fill="#f5b971" stroke="#c97a1e"/>
+    </g>
+    <text x="640" y="19" fill="#555">… 128 pairs</text>
+    <line x1="56" y1="38" x2="318" y2="38" stroke="#333"/><text x="58" y="54" fill="#111">pair window → pair_period</text>
+    <line x1="56" y1="64" x2="396" y2="64" stroke="#8a5aa8"/><line x1="56" y1="58" x2="56" y2="70" stroke="#8a5aa8"/><line x1="396" y1="58" x2="396" y2="70" stroke="#8a5aa8"/><text x="58" y="80" fill="#5d2f7a">start-to-start</text>
+    <text x="326" y="54" fill="#555">↑ gap: the host's two record() calls land here</text>
+  </g>
+  <text x="40" y="390" fill="#333">pair_period (the headline): each pair window, reduced across ranks by MEDIAN. The collectives lock all ranks to one cadence,</text>
+  <text x="40" y="408" fill="#333">so the period is a rate and a MAX would only report the rank that hiccuped.</text>
+  <text x="40" y="426" fill="#333">interpair_gap_us = start-to-start − pair window; pair_spread_us = per-pair cross-rank spread; settle_drift_us = late − early half.</text>
+</svg>
