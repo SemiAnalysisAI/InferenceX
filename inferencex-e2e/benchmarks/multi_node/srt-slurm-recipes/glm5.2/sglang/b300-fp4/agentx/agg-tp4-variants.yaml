@@ -4,7 +4,7 @@
 #
 # EAGLE runs off GLM-5.2's built-in nextn head at K=5 (5 steps, topk 1, 6 draft
 # tokens). The launcher pins acceptance to the golden thinking-on AL for K=5
-# (3.61, infx/golden_al_distribution/glm5.2_mtp.yaml); the recipe sets no
+# (3.61, infx/golden_al_distribution/glm-5.2-fp8__mtp__native__default-default.yaml); the recipe sets no
 # SGLANG_SIMULATE_ACC_* values. The draft head runs at its shipped precision
 # (SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE=0, the pinned image's default).
 

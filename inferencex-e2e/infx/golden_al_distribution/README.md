@@ -98,7 +98,7 @@ The push-button [`speedbench-al.yml`](../../../.github/workflows/speedbench-al.y
    The `1` is the target model's guaranteed verification token. Values are rounded to two decimal places.
 6. The collector emits a YAML matrix. The workflow publishes it in the GitHub Actions step summary and uploads it as a `speedbench-reference-al-<model-prefix>` artifact.
 7. Server logs and detailed per-request results are retained so reviewers can confirm sensible output, correct thinking mode, and the absence of silent server or chat-template failures.
-8. After review, the matrix is committed here with its exact sampling metadata and source Actions run URL. With `open-pr=true` and `golden-curve=<curve stem>` (for example `dsv4_mtp`), the workflow writes `<curve stem>.yaml` here with the source run URL on its first line. It loads the file through `python -m infx.golden_al_distribution show` and then opens the PR. The whole file is replaced, so cells the run did not collect are dropped.
+8. After review, the matrix is committed here with its exact sampling metadata and source Actions run URL. With `open-pr=true` and `golden-curve=<curve stem>` (for example `deepseek-v4-pro__mtp__native__default-default`), the workflow writes `<curve stem>.yaml` here with the source run URL on its first line. It loads the file through `python -m infx.golden_al_distribution show` and then opens the PR. The whole file is replaced, so cells the run did not collect are dropped.
 
 The collection measures real head quality only to establish the golden curve. AgentX then uses that committed curve as the synthetic acceptance target for every comparable submission.
 
@@ -134,18 +134,18 @@ Before accepting an updated curve, reviewers should verify:
 
 | Model | Method | Golden YAML | Source run |
 | --- | --- | --- | --- |
-| DeepSeek V4 Pro | MTP | [`dsv4_mtp.yaml`](dsv4_mtp.yaml) | [27180633016](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27180633016) |
-| DeepSeek V4 Pro 0813 | DSpark (probabilistic draft) | [`dsv4-pro-0813-dspark.yaml`](dsv4-pro-0813-dspark.yaml) | [31742838308](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/31742838308) |
-| DeepSeek V4.1 Flash | DSpark (probabilistic draft, block verify) | [`dsv41flash_dspark.yaml`](dsv41flash_dspark.yaml) | [34493175056](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34493175056) |
-| Qwen3.5 397B-A17B | MTP | [`qwen3.5_mtp.yaml`](qwen3.5_mtp.yaml) | [27317114007](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27317114007) |
-| Kimi K3 | DSpark | [`kimik3_dspark.yaml`](kimik3_dspark.yaml) | [30304797750](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/30304797750) |
-| Kimi K3 | DSpark (probabilistic draft, block verify) | [`kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml`](kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml) | [30316471205](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/30316471205) |
-| MiniMax-M3 | EAGLE3 | [`minimaxm3_eagle3.yaml`](minimaxm3_eagle3.yaml) | [28061204145](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28061204145) |
-| MiniMax-M3 | EAGLE3 (GQA) | [`minimaxm3_eagle3_gqa.yaml`](minimaxm3_eagle3_gqa.yaml) | [29784780049](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/29784780049) |
-| GLM-5.2 | MTP | [`glm5.2_mtp.yaml`](glm5.2_mtp.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479) |
-| GLM-5.3 | MTP (provisional, K=3 copied from GLM-5.2) | [`glm5.3_mtp.yaml`](glm5.3_mtp.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479) (GLM-5.2) |
-| Qwen3.8-Flash-Next | MTP (native) | [`qwen3.8next_mtp.yaml`](qwen3.8next_mtp.yaml) | [33034290269](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/33034290269) |
-| Muse Spark Open | DFlash2 | [`musespark_dflash.yaml`](musespark_dflash.yaml) | [38808046215](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/38808046215) |
+| DeepSeek V4 Pro | MTP | [`deepseek-v4-pro__mtp__native__default-default.yaml`](deepseek-v4-pro__mtp__native__default-default.yaml) | [27180633016](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27180633016) |
+| DeepSeek V4 Pro 0813 | DSpark (probabilistic draft) | [`deepseek-v4-pro-0813__dspark__native__probabilistic-default.yaml`](deepseek-v4-pro-0813__dspark__native__probabilistic-default.yaml) | [31742838308](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/31742838308) |
+| DeepSeek V4.1 Flash | DSpark (probabilistic draft, block verify) | [`deepseek-v4.1-flash__dspark__native__probabilistic-block.yaml`](deepseek-v4.1-flash__dspark__native__probabilistic-block.yaml) | [34493175056](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34493175056) |
+| Qwen3.5 397B-A17B | MTP | [`qwen3.5-397b-a17b-nvfp4__mtp__native__default-default.yaml`](qwen3.5-397b-a17b-nvfp4__mtp__native__default-default.yaml) | [27317114007](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27317114007) |
+| Kimi K3 | DSpark | [`kimi-k3__dspark__kimi-k3-dspark__default-default.yaml`](kimi-k3__dspark__kimi-k3-dspark__default-default.yaml) | [30304797750](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/30304797750) |
+| Kimi K3 | DSpark (probabilistic draft, block verify) | [`kimi-k3__dspark__kimi-k3-dspark__probabilistic-block.yaml`](kimi-k3__dspark__kimi-k3-dspark__probabilistic-block.yaml) | [30316471205](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/30316471205) |
+| MiniMax-M3 | EAGLE3 | [`minimax-m3__eagle3__minimax-m3-eagle3__default-default.yaml`](minimax-m3__eagle3__minimax-m3-eagle3__default-default.yaml) | [28061204145](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28061204145) |
+| MiniMax-M3 | EAGLE3 (GQA) | [`minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default.yaml`](minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default.yaml) | [29784780049](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/29784780049) |
+| GLM-5.2 | MTP | [`glm-5.2-fp8__mtp__native__default-default.yaml`](glm-5.2-fp8__mtp__native__default-default.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479) |
+| GLM-5.3 | MTP (provisional, K=3 copied from GLM-5.2) | [`glm-5.3-fp8__mtp__native__default-default.yaml`](glm-5.3-fp8__mtp__native__default-default.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479) (GLM-5.2) |
+| Qwen3.8-Flash-Next | MTP (native) | [`qwen3.8-flash-next-fp8__mtp__native__default-default.yaml`](qwen3.8-flash-next-fp8__mtp__native__default-default.yaml) | [33034290269](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/33034290269) |
+| Muse Spark Open | DFlash2 | [`muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml`](muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml) | [38808046215](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/38808046215) |
 
 ## Using golden curves in srt-slurm runs
 
@@ -155,13 +155,33 @@ Before accepting an updated curve, reviewers should verify:
 - Eval-only and non-AgentX runs use real verification, and the connector removes stale synthetic settings. Non-speculative roles receive no simulation settings. `RUN_EVAL` does not disable simulation for the throughput portion.
 - Missing golden curves or unmeasured draft lengths fail before submission. Add measured golden data for a new combination instead of a guessed or hard-coded length.
 
+## Curve identities and names
+
+Every curve file is named `<model>__<method>__<draft>__<draft_sample>-<verify>.yaml`: the curve's model key, its method (`mtp` for a model-native head, `eagle3`, `dspark`, `dflash`), its draft (`native` or the draft model), and the draft sampler and verifier the collector set (`default` when it left the engine default).
+
+[`identities.yaml`](identities.yaml) gives each curve two blocks:
+
+- `select` decides which runs use the curve: `model_prefixes`, `method`, and, only where curves of one model differ by them, `draft_family` (MiniMax-M3 GQA) and `draft_sample` (Kimi K3 DSpark). `curve_name` returns the one curve whose block matches and fails when none or several do. SGLang `EAGLE` and `NEXTN` select the model's native `mtp` curve, and MiniMax-M3's EAGLE selects `eagle3`.
+- `collection` records how the curve was measured: `engine`, `draft`, `draft_sample`, `verify` (`standard`, `block`, `relaxed`), `adaptive` and `topology` (`chain`, `tree-topk<N>`). Each fact is `{value, source}` with source `explicit`, `documented`, `assumed`, `default` (unset; value null) or `unknown` (value null).
+
+A new curve needs its identity before it merges; a test checks each file name against it.
+
+[`infx/srt_slurm/spec_identity.py`](../srt_slurm/spec_identity.py) describes a run's generation role in the same vocabulary and audits it against its selected curve without changing the selection. Findings are `mismatch` (both values known and different), `unverified` (an engine default or unknown on either side, other than the same engine's default on both; ATOM's verifier is always unknown), `adaptive` (no fixed-k curve applies), `provisional` and `engine`.
+
+[`current_spec_roles.json`](../tests/golden_al_distribution/current_spec_roles.json) pins the curve, golden AL and findings of every speculative generation role in the current sweep matrix. Regenerate it after a deliberate change and review the diff:
+
+```bash
+python -m infx.matrix.generate full-sweep --config-files configs/nvidia-master.yaml configs/amd-master.yaml --scenario-type agentic-coding > matrix.json
+python -m infx.srt_slurm.spec_identity snapshot matrix.json --root . > infx/tests/golden_al_distribution/current_spec_roles.json
+```
+
 ## Querying the curves
 
 This directory is the `infx.golden_al_distribution` Python package. `golden_length(model_prefix, spec, thinking)` returns the value AgentX synthetic acceptance applies, and `curve_name` shows which YAML a speculative config resolves to. The same lookup runs from a shell:
 
 ```bash
 python -m infx.golden_al_distribution list                          # every curve and its measured draft lengths
-python -m infx.golden_al_distribution show qwen3.5_mtp              # every AL in one curve
+python -m infx.golden_al_distribution show qwen3.5-397b-a17b-nvfp4__mtp__native__default-default              # every AL in one curve
 python -m infx.golden_al_distribution lookup qwen3.5 mtp 3          # 3.39 (thinking_on by default)
 python -m infx.golden_al_distribution lookup kimik3 dspark 7 --draft-sample-method probabilistic --json
 ```

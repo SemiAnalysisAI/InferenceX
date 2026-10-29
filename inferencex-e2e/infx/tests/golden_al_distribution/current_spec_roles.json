@@ -1,0 +1,3609 @@
+[
+ {
+  "model_prefix": "dsv4",
+  "framework": "atom",
+  "args": {
+   "method": "dspark",
+   "num-speculative-tokens": 6
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/dsv4/atom/mi355x-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 11,
+  "expected": {
+   "curve": "deepseek-v4-pro-0813__dspark__native__probabilistic-default",
+   "draft_tokens": 6,
+   "golden": 3.77,
+   "findings": [
+    [
+     "unverified",
+     "verify",
+     "unknown",
+     "standard (documented)"
+    ],
+    [
+     "unverified",
+     "adaptive",
+     "default",
+     "False (documented)"
+    ],
+    [
+     "engine",
+     "engine",
+     "atom",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "dsv4",
+  "framework": "atom-disagg",
+  "args": {
+   "method": "dspark",
+   "num-speculative-tokens": 3
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/atom/mi355x-fp4/agentx/disagg-lmcache-dspark.yaml:override_dpa8_c128",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/atom/mi355x-fp4/agentx/disagg-lmcache-dspark.yaml:override_dpa8_c256_lmcache",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/atom/mi355x-fp4/agentx/disagg-lmcache-dspark.yaml:override_dpa8_c64",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/atom/mi355x-fp4/agentx/disagg-lmcache-dspark.yaml:override_tp8_c1",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/atom/mi355x-fp4/agentx/disagg-lmcache-dspark.yaml:override_tp8_c16"
+  ],
+  "rows": 5,
+  "expected": {
+   "curve": "deepseek-v4-pro-0813__dspark__native__probabilistic-default",
+   "draft_tokens": 3,
+   "golden": 3.01,
+   "findings": [
+    [
+     "unverified",
+     "verify",
+     "unknown",
+     "standard (documented)"
+    ],
+    [
+     "unverified",
+     "adaptive",
+     "default",
+     "False (documented)"
+    ],
+    [
+     "engine",
+     "engine",
+     "atom",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "dsv4",
+  "framework": "dynamo-sglang",
+  "args": {
+   "speculative-algorithm": "DSPARK",
+   "speculative-dspark-block-size": 4,
+   "speculative-num-steps": 1,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 5
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_2p1d_pp8_dep8_c880"
+  ],
+  "rows": 1,
+  "expected": {
+   "curve": "deepseek-v4-pro-0813__dspark__native__probabilistic-default",
+   "draft_tokens": 4,
+   "golden": 3.36,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "probabilistic (explicit)"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "dsv4",
+  "framework": "dynamo-sglang",
+  "args": {
+   "speculative-algorithm": "DSPARK",
+   "speculative-dspark-block-size": 5,
+   "speculative-num-steps": 1,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 6
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_2p1d_pp8_dep12_c800",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_2p1d_pp8_dep16_c720"
+  ],
+  "rows": 2,
+  "expected": {
+   "curve": "deepseek-v4-pro-0813__dspark__native__probabilistic-default",
+   "draft_tokens": 5,
+   "golden": 3.61,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "probabilistic (explicit)"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "dsv4",
+  "framework": "dynamo-sglang",
+  "args": {
+   "speculative-algorithm": "DSPARK",
+   "speculative-dspark-block-size": 6,
+   "speculative-num-steps": 1,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 7
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/b200-fp4/agentx/agg-variants.yaml:override_c1",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/b200-fp4/agentx/agg-variants.yaml:override_c4",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/b200-fp4/agentx/agg-variants.yaml:override_c8",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/b200-fp4/agentx/disagg-variants.yaml:override_1p1d_c128",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/b200-fp4/agentx/disagg-variants.yaml:override_1p1d_c64",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/b200-fp4/agentx/disagg-variants.yaml:override_2p1d_c256",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/gb200-fp4/agentx/agg-variants.yaml:override_tp8_c1",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/gb200-fp4/agentx/agg-variants.yaml:override_tp8_c4",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/gb200-fp4/agentx/disagg-variants.yaml:override_1p1d_dep16_dep32_c256",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/gb200-fp4/agentx/disagg-variants.yaml:override_1p1d_dep8_dep16_c128",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/gb200-fp4/agentx/disagg-variants.yaml:override_1p1d_dep8_dep16_c64",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/gb200-fp4/agentx/disagg-variants.yaml:override_2p1d_dep16_dep32_c1024",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/gb200-fp4/agentx/disagg-variants.yaml:override_2p1d_dep16_dep32_c1280",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/gb200-fp4/agentx/disagg-variants.yaml:override_2p1d_dep16_dep32_c768",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/gb300-fp4/agentx/agg-variants.yaml:override_tp4",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/gb300-fp4/agentx/agg-variants.yaml:override_tp8_c1",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_1p1d_pp8_dep16_c300",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_1p1d_pp8_dep16_kv",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/h200-fp8/agentx/agg-tp8-mtp-kvoffload.yaml"
+  ],
+  "rows": 26,
+  "expected": {
+   "curve": "deepseek-v4-pro-0813__dspark__native__probabilistic-default",
+   "draft_tokens": 6,
+   "golden": 3.77,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "probabilistic (explicit)"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "dsv4",
+  "framework": "dynamo-sglang",
+  "args": {
+   "speculative-algorithm": "DSPARK",
+   "speculative-dspark-block-size": 6
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/b300-fp4/agentx/agg-dep8-c384-mtp-kvoffload.yaml",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/b300-fp4/agentx/agg-tp4-c4-mtp.yaml",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/b300-fp4/agentx/agg-tp4-c8-mtp-kvoffload.yaml",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/b300-fp4/agentx/agg-tp8-c1-mtp.yaml",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/b300-fp4/agentx/disagg-1p1d-dep8-dep8-c240-mtp-kvoffload.yaml",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/b300-fp4/agentx/disagg-1p1d-dep8-dep8-c64-mtp-kvoffload.yaml",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/b300-fp4/agentx/disagg-1p2d-dep8-dep8-c64-mtp-kvoffload.yaml"
+  ],
+  "rows": 7,
+  "expected": {
+   "curve": "deepseek-v4-pro-0813__dspark__native__probabilistic-default",
+   "draft_tokens": 6,
+   "golden": 3.77,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "probabilistic (explicit)"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "dsv4",
+  "framework": "dynamo-trt",
+  "args": {
+   "speculative_config": {
+    "decoding_type": "MTP",
+    "max_draft_len": 3
+   }
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_1p1d_dep8_dep32_c388_b4",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_1p4d_dep4_tep8_c4_b1",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_1p6d_dep4_tep4_c24_b4",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_2p1d_dep8_dep32_c736_b8",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_3p1d_dep8_dep16_c1152_b32",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_5p1d_dep8_dep16_c2626_b96"
+  ],
+  "rows": 6,
+  "expected": {
+   "curve": "deepseek-v4-pro__mtp__native__default-default",
+   "draft_tokens": 3,
+   "golden": 2.49,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "trtllm",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "dsv4",
+  "framework": "dynamo-vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":5,\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb200-fp4/agentx/disagg-1p1d-dep12-dep12-c384-dspark5.yaml",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb200-fp4/agentx/disagg-1p1d-dep8-dep8-c128-dspark5.yaml",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb200-fp4/agentx/disagg-1p1d-dep8-dep8-c256-dspark5.yaml",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb200-fp4/agentx/disagg-1p1d-dep8-dep8-c32-dspark5.yaml",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb200-fp4/agentx/disagg-1p1d-dep8-dep8-c64-dspark5.yaml"
+  ],
+  "rows": 5,
+  "expected": {
+   "curve": "deepseek-v4-pro-0813__dspark__native__probabilistic-default",
+   "draft_tokens": 5,
+   "golden": 3.61,
+   "findings": [
+    [
+     "mismatch",
+     "verify",
+     "block (explicit)",
+     "standard (documented)"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "dsv4",
+  "framework": "dynamo-vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":6,\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb200-fp4/agentx/agg-tp8-c1-dspark6.yaml",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb200-fp4/agentx/agg-tp8-c4-dspark6.yaml",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb200-fp4/agentx/agg-tp8-c8-dspark6.yaml",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb200-fp4/agentx/disagg-1p1d-dep12-dep16-c512-dspark6.yaml",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb200-fp4/agentx/disagg-1p1d-dep8-dep12-c360-dspark6.yaml",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb200-fp4/agentx/disagg-1p1d-dep8-dep8-c384-dspark6.yaml"
+  ],
+  "rows": 6,
+  "expected": {
+   "curve": "deepseek-v4-pro-0813__dspark__native__probabilistic-default",
+   "draft_tokens": 6,
+   "golden": 3.77,
+   "findings": [
+    [
+     "mismatch",
+     "verify",
+     "block (explicit)",
+     "standard (documented)"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "dsv4",
+  "framework": "dynamo-vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":6,\"draft_sample_method\":\"probabilistic\"}"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb300-fp4/agentx/agg-variants.yaml:override_tp4_c1",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb300-fp4/agentx/agg-variants.yaml:override_tp4_c2",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb300-fp4/agentx/agg-variants.yaml:override_tp4_c4",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb300-fp4/agentx/agg-variants.yaml:override_tp8_c1",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb300-fp4/agentx/disagg-mtp-variants.yaml:override_1p1d_dep4_dep16_c128",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb300-fp4/agentx/disagg-mtp-variants.yaml:override_1p1d_dep8_dep16_c384",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb300-fp4/agentx/disagg-mtp-variants.yaml:override_1p1d_dep8_dep16_c512",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb300-fp4/agentx/disagg-mtp-variants.yaml:override_2p1d_dep8_dep12_c1152",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb300-fp4/agentx/disagg-mtp-variants.yaml:override_2p1d_dep8_dep16_c1024"
+  ],
+  "rows": 9,
+  "expected": {
+   "curve": "deepseek-v4-pro-0813__dspark__native__probabilistic-default",
+   "draft_tokens": 6,
+   "golden": 3.77,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "dsv4",
+  "framework": "dynamo-vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"mtp\",\"num_speculative_tokens\":2}"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb200-fp4/agentx/agg-mtp-variants.yaml:override_dep8",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb200-fp4/agentx/agg-mtp-variants.yaml:override_tp8",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb200-fp4/agentx/disagg-mtp-variants.yaml:override_1p1d",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb200-fp4/agentx/disagg-mtp-variants.yaml:override_2p1d"
+  ],
+  "rows": 34,
+  "expected": {
+   "curve": "deepseek-v4-pro__mtp__native__default-default",
+   "draft_tokens": 2,
+   "golden": 2.27,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "dsv4",
+  "framework": "dynamo-vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"mtp\",\"num_speculative_tokens\":3}"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb200-fp4/agentx/agg-mtp3-variants.yaml:override_c4",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb200-fp4/agentx/agg-mtp3-variants.yaml:override_c8",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb200-fp4/agentx/disagg-mtp3-variants.yaml:override_1p1d_c128",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb200-fp4/agentx/disagg-mtp3-variants.yaml:override_1p1d_c256",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb200-fp4/agentx/disagg-mtp3-variants.yaml:override_2p1d_dep12_c576",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb200-fp4/agentx/disagg-mtp3-variants.yaml:override_2p1d_dep16_c512"
+  ],
+  "rows": 7,
+  "expected": {
+   "curve": "deepseek-v4-pro__mtp__native__default-default",
+   "draft_tokens": 3,
+   "golden": 2.49,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "dsv4",
+  "framework": "llmd-vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":3,\"draft_sample_method\":\"probabilistic\",\"attention_backend\":\"FLASHINFER_MLA_SPARSE_DSV4\",\"enable_adaptive_verification\":true}"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb200-fp4/agentx/disagg-llm-d.yaml:override_1p1d",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb200-fp4/agentx/disagg-llm-d.yaml:override_2p1d"
+  ],
+  "rows": 6,
+  "expected": {
+   "curve": "deepseek-v4-pro-0813__dspark__native__probabilistic-default",
+   "draft_tokens": 3,
+   "golden": 3.01,
+   "findings": [
+    [
+     "adaptive",
+     "adaptive",
+     "True (explicit)",
+     "False (documented)"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "dsv4",
+  "framework": "llmd-vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":3,\"enable_adaptive_verification\":true,\"draft_sample_method\":\"probabilistic\",\"attention_backend\":\"FLASHINFER_MLA_SPARSE_DSV4\"}"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb200-fp4/agentx/agg-llm-d.yaml:override_dep8",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb200-fp4/agentx/agg-llm-d.yaml:override_dep8_mooncake"
+  ],
+  "rows": 5,
+  "expected": {
+   "curve": "deepseek-v4-pro-0813__dspark__native__probabilistic-default",
+   "draft_tokens": 3,
+   "golden": 3.01,
+   "findings": [
+    [
+     "adaptive",
+     "adaptive",
+     "True (explicit)",
+     "False (documented)"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "dsv4",
+  "framework": "llmd-vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":5,\"enable_adaptive_verification\":false,\"draft_sample_method\":\"probabilistic\",\"attention_backend\":\"FLASHINFER_MLA_SPARSE_DSV4\"}"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/vllm/gb200-fp4/agentx/agg-llm-d.yaml:override_tp8"
+  ],
+  "rows": 5,
+  "expected": {
+   "curve": "deepseek-v4-pro-0813__dspark__native__probabilistic-default",
+   "draft_tokens": 5,
+   "golden": 3.61,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "dsv4",
+  "framework": "sglang",
+  "args": {
+   "speculative-algorithm": "DSPARK",
+   "speculative-dspark-block-size": 6,
+   "speculative-num-steps": 1,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 7
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/dsv4/sglang/b200-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/dsv4/sglang/b300-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/dsv4/sglang/mi355x-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 33,
+  "expected": {
+   "curve": "deepseek-v4-pro-0813__dspark__native__probabilistic-default",
+   "draft_tokens": 6,
+   "golden": 3.77,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "probabilistic (explicit)"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "dsv4",
+  "framework": "sglang",
+  "args": {
+   "speculative-algorithm": "EAGLE",
+   "speculative-num-steps": 3,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 4
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/dsv4/sglang/b300-fp4-eagle/agentic.yaml"
+  ],
+  "rows": 17,
+  "expected": {
+   "curve": "deepseek-v4-pro__mtp__native__default-default",
+   "draft_tokens": 3,
+   "golden": 2.49,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "dsv4",
+  "framework": "sglang-disagg",
+  "args": {
+   "speculative-algorithm": "DSPARK",
+   "speculative-eagle-topk": 1,
+   "speculative-num-steps": 1,
+   "speculative-dspark-block-size": 3,
+   "speculative-num-draft-tokens": 4
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/mi355x-fp4/agentx/disagg-umbp-dspark.yaml:override_c192",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/mi355x-fp4/agentx/disagg-umbp-dspark.yaml:override_c256",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/mi355x-fp4/agentx/disagg-umbp-dspark.yaml:override_c384",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/mi355x-fp4/agentx/disagg-umbp-dspark.yaml:override_c48",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/mi355x-fp4/agentx/disagg-umbp-dspark.yaml:override_c512"
+  ],
+  "rows": 5,
+  "expected": {
+   "curve": "deepseek-v4-pro-0813__dspark__native__probabilistic-default",
+   "draft_tokens": 3,
+   "golden": 3.01,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "probabilistic (explicit)"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "dsv4",
+  "framework": "sglang-disagg",
+  "args": {
+   "speculative-algorithm": "DSPARK",
+   "speculative-eagle-topk": 1,
+   "speculative-num-steps": 1,
+   "speculative-dspark-block-size": 6,
+   "speculative-num-draft-tokens": 7
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/mi355x-fp4/agentx/disagg-umbp-dspark.yaml:override_c1",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/mi355x-fp4/agentx/disagg-umbp-dspark.yaml:override_c16",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/sglang/mi355x-fp4/agentx/disagg-umbp-dspark.yaml:override_c32"
+  ],
+  "rows": 3,
+  "expected": {
+   "curve": "deepseek-v4-pro-0813__dspark__native__probabilistic-default",
+   "draft_tokens": 6,
+   "golden": 3.77,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "probabilistic (explicit)"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "dsv4",
+  "framework": "vllm",
+  "args": {
+   "speculative-config": "{\"method\": \"dspark\", \"num_speculative_tokens\": 6, \"draft_sample_method\": \"probabilistic\"}"
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/dsv4/vllm/mi355x-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 12,
+  "expected": {
+   "curve": "deepseek-v4-pro-0813__dspark__native__probabilistic-default",
+   "draft_tokens": 6,
+   "golden": 3.77,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "dsv4",
+  "framework": "vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":6,\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"synthetic\",\"synthetic_acceptance_length\":3.77}"
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/dsv4/vllm/b200-fp4-mtp/agentic-tp2dp4-c48.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/dsv4/vllm/b200-fp4-mtp/agentic-tp2dp4-c64.yaml"
+  ],
+  "rows": 2,
+  "expected": {
+   "curve": "deepseek-v4-pro-0813__dspark__native__probabilistic-default",
+   "draft_tokens": 6,
+   "golden": 3.77,
+   "findings": [
+    [
+     "mismatch",
+     "verify",
+     "block (documented)",
+     "standard (documented)"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "dsv4",
+  "framework": "vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":6,\"draft_sample_method\":\"probabilistic\"}"
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/dsv4/vllm/b200-fp4-mtp/agentic-lowconc.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/dsv4/vllm/b200-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/dsv4/vllm/b300-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 22,
+  "expected": {
+   "curve": "deepseek-v4-pro-0813__dspark__native__probabilistic-default",
+   "draft_tokens": 6,
+   "golden": 3.77,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "dsv41flash",
+  "framework": "atom",
+  "args": {
+   "method": "dspark",
+   "num-speculative-tokens": 5
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/atom/mi355x-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 11,
+  "expected": {
+   "curve": "deepseek-v4.1-flash__dspark__native__probabilistic-block",
+   "draft_tokens": 5,
+   "golden": 3.51,
+   "findings": [
+    [
+     "unverified",
+     "verify",
+     "unknown",
+     "block (explicit)"
+    ],
+    [
+     "unverified",
+     "adaptive",
+     "default",
+     "False (explicit)"
+    ],
+    [
+     "engine",
+     "engine",
+     "atom",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "dsv41flash",
+  "framework": "dynamo-sglang",
+  "args": {
+   "speculative-algorithm": "DSPARK",
+   "speculative-dspark-block-size": 5,
+   "speculative-num-steps": 5
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/dsv41flash/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_3p1d_dep2_dep16_c1228",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv41flash/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_5p1d_dep2_dep16_c2884",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv41flash/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_8p1d_dep2_dep16_c4096"
+  ],
+  "rows": 3,
+  "expected": {
+   "curve": "deepseek-v4.1-flash__dspark__native__probabilistic-block",
+   "draft_tokens": 5,
+   "golden": 3.51,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "probabilistic (explicit)"
+    ],
+    [
+     "mismatch",
+     "verify",
+     "standard (documented)",
+     "block (explicit)"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "dsv41flash",
+  "framework": "dynamo-sglang",
+  "args": {
+   "speculative-algorithm": "DSPARK",
+   "speculative-dspark-block-size": 5
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/dsv41flash/sglang/gb300-fp4/agentx/agg-variants.yaml:override_tp2_c16",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv41flash/sglang/gb300-fp4/agentx/agg-variants.yaml:override_tp4_c1",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv41flash/sglang/gb300-fp4/agentx/agg-variants.yaml:override_tp4_c16",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv41flash/sglang/gb300-fp4/agentx/agg-variants.yaml:override_tp4_c4"
+  ],
+  "rows": 4,
+  "expected": {
+   "curve": "deepseek-v4.1-flash__dspark__native__probabilistic-block",
+   "draft_tokens": 5,
+   "golden": 3.51,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "probabilistic (explicit)"
+    ],
+    [
+     "mismatch",
+     "verify",
+     "standard (documented)",
+     "block (explicit)"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "dsv41flash",
+  "framework": "dynamo-vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":5,\"draft_sample_method\":\"probabilistic\",\"enable_adaptive_verification\":false}"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/dsv41flash/vllm/gb300-fp4/agentx/disagg-variants.yaml:override_16p1d_dep2_dep32_c10888",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv41flash/vllm/gb300-fp4/agentx/disagg-variants.yaml:override_6p1d_dep2_dep32_c3018",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv41flash/vllm/gb300-fp4/agentx/disagg-variants.yaml:override_9p1d_dep2_dep16_c7480"
+  ],
+  "rows": 3,
+  "expected": {
+   "curve": "deepseek-v4.1-flash__dspark__native__probabilistic-block",
+   "draft_tokens": 5,
+   "golden": 3.51,
+   "findings": [
+    [
+     "mismatch",
+     "verify",
+     "standard (documented)",
+     "block (explicit)"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "dsv41flash",
+  "framework": "dynamo-vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":5,\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\",\"enable_adaptive_verification\":false}"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/dsv41flash/vllm/gb300-fp4/agentx/agg-variants.yaml:override_tp4_c16",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv41flash/vllm/gb300-fp4/agentx/agg-variants.yaml:override_tp4_c1_seq1"
+  ],
+  "rows": 2,
+  "expected": {
+   "curve": "deepseek-v4.1-flash__dspark__native__probabilistic-block",
+   "draft_tokens": 5,
+   "golden": 3.51,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "dsv41flash",
+  "framework": "sglang",
+  "args": {
+   "speculative-algorithm": "DSPARK",
+   "speculative-dspark-block-size": 5
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/b200-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/b300-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/gb200-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/gb300-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/h100-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/h200-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/mi355x-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 73,
+  "expected": {
+   "curve": "deepseek-v4.1-flash__dspark__native__probabilistic-block",
+   "draft_tokens": 5,
+   "golden": 3.51,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "probabilistic (explicit)"
+    ],
+    [
+     "mismatch",
+     "verify",
+     "standard (documented)",
+     "block (explicit)"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "dsv41flash",
+  "framework": "vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":5,\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\",\"enable_adaptive_verification\":false}"
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/b200-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/b300-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/gb200-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/gb300-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/h100-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/h200-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/mi300x-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/mi325x-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/mi355x-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 101,
+  "expected": {
+   "curve": "deepseek-v4.1-flash__dspark__native__probabilistic-block",
+   "draft_tokens": 5,
+   "golden": 3.51,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "dsv41flash",
+  "framework": "vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":5,\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\",\"enable_adaptive_verification\":true}"
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/gb200-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 5,
+  "expected": {
+   "curve": "deepseek-v4.1-flash__dspark__native__probabilistic-block",
+   "draft_tokens": 5,
+   "golden": 3.51,
+   "findings": [
+    [
+     "adaptive",
+     "adaptive",
+     "True (explicit)",
+     "False (explicit)"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "glm5.2",
+  "framework": "atom",
+  "args": {
+   "method": "mtp",
+   "num-speculative-tokens": 3
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/glm5.2/atom/mi355x-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 5,
+  "expected": {
+   "curve": "glm-5.2-fp8__mtp__native__default-default",
+   "draft_tokens": 3,
+   "golden": 2.99,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "unknown",
+     "default"
+    ],
+    [
+     "unverified",
+     "verify",
+     "unknown",
+     "standard (documented)"
+    ],
+    [
+     "unverified",
+     "adaptive",
+     "default",
+     "False (documented)"
+    ],
+    [
+     "engine",
+     "engine",
+     "atom",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "glm5.2",
+  "framework": "atom",
+  "args": {
+   "method": "mtp",
+   "num-speculative-tokens": 4
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/glm5.2/atom/mi355x-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 5,
+  "expected": {
+   "curve": "glm-5.2-fp8__mtp__native__default-default",
+   "draft_tokens": 4,
+   "golden": 3.33,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "unknown",
+     "default"
+    ],
+    [
+     "unverified",
+     "verify",
+     "unknown",
+     "standard (documented)"
+    ],
+    [
+     "unverified",
+     "adaptive",
+     "default",
+     "False (documented)"
+    ],
+    [
+     "engine",
+     "engine",
+     "atom",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "glm5.2",
+  "framework": "atom",
+  "args": {
+   "method": "mtp",
+   "num-speculative-tokens": 5
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/glm5.2/atom/mi355x-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 5,
+  "expected": {
+   "curve": "glm-5.2-fp8__mtp__native__default-default",
+   "draft_tokens": 5,
+   "golden": 3.61,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "unknown",
+     "default"
+    ],
+    [
+     "unverified",
+     "verify",
+     "unknown",
+     "standard (documented)"
+    ],
+    [
+     "unverified",
+     "adaptive",
+     "default",
+     "False (documented)"
+    ],
+    [
+     "engine",
+     "engine",
+     "atom",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "glm5.2",
+  "framework": "dynamo-sglang",
+  "args": {
+   "speculative-algorithm": "EAGLE",
+   "speculative-num-steps": 2,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 3,
+   "speculative-moe-a2a-backend": "deepep",
+   "speculative-moe-runner-backend": "deep_gemm"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/b200-fp4/agentx/disagg-variants.yaml:override_1p1d_c64"
+  ],
+  "rows": 1,
+  "expected": {
+   "curve": "glm-5.2-fp8__mtp__native__default-default",
+   "draft_tokens": 2,
+   "golden": 2.5,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "glm5.2",
+  "framework": "dynamo-sglang",
+  "args": {
+   "speculative-algorithm": "EAGLE",
+   "speculative-num-steps": 5,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 6,
+   "speculative-moe-a2a-backend": "none",
+   "speculative-moe-runner-backend": "flashinfer_trtllm"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-variants.yaml:override_1p1d_pp8_dep8_c96",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-variants.yaml:override_1p2d_pp8_dep8_c64",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-variants.yaml:override_1p2d_pp8_dep8_c96",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-variants.yaml:override_2p1d_pp8_dep16_c224",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-variants.yaml:override_3p1d_pp8_dep16_c336",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_1p1d_pp4_dep8_c56",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_3p1d_pp4_dep8_c216",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_3p1d_pp4_dep8_c264",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_4p1d_pp4_dep16_c256"
+  ],
+  "rows": 9,
+  "expected": {
+   "curve": "glm-5.2-fp8__mtp__native__default-default",
+   "draft_tokens": 5,
+   "golden": 3.61,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "glm5.2",
+  "framework": "dynamo-sglang",
+  "args": {
+   "speculative-algorithm": "EAGLE",
+   "speculative-num-steps": 2,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 3
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/b200-fp4/agentx/disagg-variants.yaml:override_1p4d_tp4_c48"
+  ],
+  "rows": 1,
+  "expected": {
+   "curve": "glm-5.2-fp8__mtp__native__default-default",
+   "draft_tokens": 2,
+   "golden": 2.5,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "glm5.2",
+  "framework": "dynamo-sglang",
+  "args": {
+   "speculative-algorithm": "EAGLE",
+   "speculative-num-steps": 3,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 4
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/h200-fp8/agentx/agg-variants.yaml:override_tp8_c12",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/h200-fp8/agentx/agg-variants.yaml:override_tp8_c16",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/h200-fp8/agentx/agg-variants.yaml:override_tp8_c2",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/h200-fp8/agentx/agg-variants.yaml:override_tp8_c4",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/h200-fp8/agentx/agg-variants.yaml:override_tp8_c8",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/h200-fp8/agentx/disagg-2p2d-pcp8-tp8-dp8-mtp.yaml"
+  ],
+  "rows": 8,
+  "expected": {
+   "curve": "glm-5.2-fp8__mtp__native__default-default",
+   "draft_tokens": 3,
+   "golden": 2.99,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "glm5.2",
+  "framework": "dynamo-sglang",
+  "args": {
+   "speculative-algorithm": "EAGLE",
+   "speculative-eagle-topk": 1,
+   "speculative-num-steps": 4,
+   "speculative-num-draft-tokens": 5
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb300-fp4/agentx/agg-variants.yaml:override_tp4_c1"
+  ],
+  "rows": 1,
+  "expected": {
+   "curve": "glm-5.2-fp8__mtp__native__default-default",
+   "draft_tokens": 4,
+   "golden": 3.33,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "glm5.2",
+  "framework": "dynamo-sglang",
+  "args": {
+   "speculative-algorithm": "EAGLE",
+   "speculative-num-steps": 5,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 6
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/b200-fp4/agentx/agg-variants.yaml:override_c1",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/b200-fp4/agentx/agg-variants.yaml:override_c12",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/b200-fp4/agentx/agg-variants.yaml:override_c4",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/b200-fp4/agentx/agg-variants.yaml:override_c8",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/b200-fp4/agentx/agg-variants.yaml:override_tp8_c1",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/b200-fp4/agentx/agg-variants.yaml:override_tp8_dp8attn_c32",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/b300-fp4/agentx/agg-tp4-variants.yaml:override_c1",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/b300-fp4/agentx/agg-tp4-variants.yaml:override_c16",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/b300-fp4/agentx/agg-tp4-variants.yaml:override_c20",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/b300-fp4/agentx/agg-tp4-variants.yaml:override_c24",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/b300-fp4/agentx/agg-tp4-variants.yaml:override_c32",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/b300-fp4/agentx/agg-tp4-variants.yaml:override_c48",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/b300-fp4/agentx/agg-tp4-variants.yaml:override_c8",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/agg-variants.yaml:override_tp4_c1",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/agg-variants.yaml:override_tp8_c1",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-variants.yaml:override_1p4d_pp8_tp4_c48",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-variants.yaml:override_1p6d_pp8_tp4_c36",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb300-fp4/agentx/agg-variants.yaml:override_tp8_c1",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_1p3d_pp4_tp4_c40",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_1p5d_pp4_tp4_c30"
+  ],
+  "rows": 20,
+  "expected": {
+   "curve": "glm-5.2-fp8__mtp__native__default-default",
+   "draft_tokens": 5,
+   "golden": 3.61,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "glm5.2",
+  "framework": "dynamo-sglang",
+  "args": {
+   "speculative-algorithm": "EAGLE",
+   "speculative-num-steps": 6,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 7
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/h200-fp8/agentx/disagg-1p1d-pcp8-tp8-dp8-mtp6-hicache.yaml"
+  ],
+  "rows": 3,
+  "expected": {
+   "curve": "glm-5.2-fp8__mtp__native__default-default",
+   "draft_tokens": 6,
+   "golden": 3.78,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "glm5.2",
+  "framework": "dynamo-trt",
+  "args": {
+   "speculative_config": {
+    "decoding_type": "MTP",
+    "max_draft_len": 3
+   }
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_4p1d_dep8_c227_b16_mtp3",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_5p1d_dep16_c260_b16_mtp3"
+  ],
+  "rows": 2,
+  "expected": {
+   "curve": "glm-5.2-fp8__mtp__native__default-default",
+   "draft_tokens": 3,
+   "golden": 2.99,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "trtllm",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "glm5.2",
+  "framework": "dynamo-trt",
+  "args": {
+   "speculative_config": {
+    "decoding_type": "MTP",
+    "max_draft_len": 5
+   }
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_1p1d_tep8_c20_b5_mtp5",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_1p1d_tp8_c1_b1_mtp5",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_1p4d_tep4_c30_b2_mtp5",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_3p4d_tep4_c60_b5_mtp5"
+  ],
+  "rows": 4,
+  "expected": {
+   "curve": "glm-5.2-fp8__mtp__native__default-default",
+   "draft_tokens": 5,
+   "golden": 3.61,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "trtllm",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "glm5.2",
+  "framework": "sglang",
+  "args": {
+   "speculative-algorithm": "EAGLE",
+   "speculative-num-steps": 3,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 4
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/glm5.2/sglang/b200-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/glm5.2/sglang/b300-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/glm5.2/sglang/b300-fp8-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/glm5.2/sglang/mi325x-fp8-mtp/agentic.yaml"
+  ],
+  "rows": 23,
+  "expected": {
+   "curve": "glm-5.2-fp8__mtp__native__default-default",
+   "draft_tokens": 3,
+   "golden": 2.99,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "glm5.2",
+  "framework": "sglang",
+  "args": {
+   "speculative-algorithm": "EAGLE",
+   "speculative-num-steps": 4,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 5
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/glm5.2/sglang/b300-fp8-mtp/agentic.yaml"
+  ],
+  "rows": 2,
+  "expected": {
+   "curve": "glm-5.2-fp8__mtp__native__default-default",
+   "draft_tokens": 4,
+   "golden": 3.33,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "glm5.2",
+  "framework": "sglang",
+  "args": {
+   "speculative-algorithm": "EAGLE",
+   "speculative-num-steps": 5,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 6
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/glm5.2/sglang/b200-fp8-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/glm5.2/sglang/b300-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/glm5.2/sglang/b300-fp8-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/glm5.2/sglang/mi355x-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/glm5.2/sglang/mi355x-fp8-mtp/agentic.yaml"
+  ],
+  "rows": 28,
+  "expected": {
+   "curve": "glm-5.2-fp8__mtp__native__default-default",
+   "draft_tokens": 5,
+   "golden": 3.61,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "glm5.2",
+  "framework": "sglang",
+  "args": {
+   "speculative-algorithm": "EAGLE",
+   "speculative-num-steps": 6,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 7
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/glm5.2/sglang/b200-fp8-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/glm5.2/sglang/b300-fp8-mtp/agentic.yaml"
+  ],
+  "rows": 2,
+  "expected": {
+   "curve": "glm-5.2-fp8__mtp__native__default-default",
+   "draft_tokens": 6,
+   "golden": 3.78,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "glm5.3",
+  "framework": "sglang",
+  "args": {
+   "speculative-algorithm": "NEXTN",
+   "speculative-num-steps": 3,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 4
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/b300-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 10,
+  "expected": {
+   "curve": "glm-5.3-fp8__mtp__native__default-default",
+   "draft_tokens": 3,
+   "golden": 2.99,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "provisional",
+     "values",
+     "-",
+     "not measured for this model"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "glm5.3",
+  "framework": "tilert",
+  "args": {
+   "with-mtp": true,
+   "num-mtp": 3
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.3/tilert/mi355x-fp8/agentx/disagg-1p1d-tp8-mtp.yaml"
+  ],
+  "rows": 1,
+  "expected": {
+   "curve": "glm-5.3-fp8__mtp__native__default-default",
+   "draft_tokens": 3,
+   "golden": 2.99,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "unknown",
+     "default"
+    ],
+    [
+     "unverified",
+     "verify",
+     "unknown",
+     "standard (documented)"
+    ],
+    [
+     "unverified",
+     "adaptive",
+     "default",
+     "False (documented)"
+    ],
+    [
+     "provisional",
+     "values",
+     "-",
+     "not measured for this model"
+    ],
+    [
+     "engine",
+     "engine",
+     "tilert",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "kimik3",
+  "framework": "atom",
+  "args": {
+   "method": "dspark",
+   "draft-model": "Inferact/Kimi-K3-DSpark",
+   "num-speculative-tokens": 4
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/kimik3/atom/mi355x-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 8,
+  "expected": {
+   "curve": "kimi-k3__dspark__kimi-k3-dspark__probabilistic-block",
+   "draft_tokens": 4,
+   "golden": 3.36,
+   "findings": [
+    [
+     "unverified",
+     "verify",
+     "unknown",
+     "block (explicit)"
+    ],
+    [
+     "unverified",
+     "adaptive",
+     "default",
+     "False (documented)"
+    ],
+    [
+     "engine",
+     "engine",
+     "atom",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "kimik3",
+  "framework": "atom",
+  "args": {
+   "method": "dspark",
+   "draft-model": "Inferact/Kimi-K3-DSpark",
+   "num-speculative-tokens": 7
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/kimik3/atom/mi355x-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 3,
+  "expected": {
+   "curve": "kimi-k3__dspark__kimi-k3-dspark__probabilistic-block",
+   "draft_tokens": 7,
+   "golden": 3.84,
+   "findings": [
+    [
+     "unverified",
+     "verify",
+     "unknown",
+     "block (explicit)"
+    ],
+    [
+     "unverified",
+     "adaptive",
+     "default",
+     "False (documented)"
+    ],
+    [
+     "engine",
+     "engine",
+     "atom",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "kimik3",
+  "framework": "dynamo-vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"dspark\",\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":2,\"attention_backend\":\"FLASHINFER_MLA\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/gb200-fp4/agentx/agg-variants.yaml:override_dep16",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/gb200-fp4/agentx/agg-variants.yaml:override_dep16_vllm_simple_offload",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/gb200-fp4/agentx/agg-variants.yaml:override_tep16_balanced",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/gb200-fp4/agentx/agg-variants.yaml:override_tp16_latency"
+  ],
+  "rows": 22,
+  "expected": {
+   "curve": "kimi-k3__dspark__kimi-k3-dspark__probabilistic-block",
+   "draft_tokens": 2,
+   "golden": 2.51,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "kimik3",
+  "framework": "dynamo-vllm",
+  "args": {
+   "speculative-config": "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"attention_backend\":\"TOKENSPEED_MLA\",\"method\":\"dspark\",\"num_speculative_tokens\":4,\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/gb200-fp4/agentx/agg-dcp16-dspark4-maxseq2-mooncake.yaml",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/gb300-fp4/agentx/disagg-tp8-dep16.yaml:override_3p1d_c336",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/gb300-fp4/agentx/disagg-variants.yaml:override_1p2d_cap128",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/gb300-fp4/agentx/disagg-variants.yaml:override_1p2d_specdecode",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/gb300-fp4/agentx/disagg-variants.yaml:override_1p3d_specdecode",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/gb300-fp4/agentx/disagg-variants.yaml:override_2p3d_cap128",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/gb300-fp4/agentx/disagg-variants.yaml:override_3p4d_cap128"
+  ],
+  "rows": 20,
+  "expected": {
+   "curve": "kimi-k3__dspark__kimi-k3-dspark__probabilistic-block",
+   "draft_tokens": 4,
+   "golden": 3.36,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "kimik3",
+  "framework": "dynamo-vllm",
+  "args": {
+   "speculative-config": "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"attention_backend\":\"TOKENSPEED_MLA\",\"method\":\"dspark\",\"num_speculative_tokens\":4,\"draft_sample_method\":\"probabilistic\"}"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/gb200-fp4/agentx/disagg-variants.yaml:override_1p1d_dcp16_dcp16_dspark4_c16",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/gb200-fp4/agentx/disagg-variants.yaml:override_1p1d_dcp16_dcp16_dspark4_c32",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/gb200-fp4/agentx/disagg-variants.yaml:override_1p1d_dcp16_dcp16_dspark4_c48"
+  ],
+  "rows": 6,
+  "expected": {
+   "curve": "kimi-k3__dspark__kimi-k3-dspark__probabilistic-block",
+   "draft_tokens": 4,
+   "golden": 3.36,
+   "findings": [
+    [
+     "mismatch",
+     "verify",
+     "standard (documented)",
+     "block (explicit)"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "kimik3",
+  "framework": "dynamo-vllm",
+  "args": {
+   "speculative-config": "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"attention_backend\":\"TOKENSPEED_MLA\",\"method\":\"dspark\",\"num_speculative_tokens\":5,\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/gb300-fp4/agentx/agg-megakernel-variants.yaml:override_tp16_dspark5"
+  ],
+  "rows": 2,
+  "expected": {
+   "curve": "kimi-k3__dspark__kimi-k3-dspark__probabilistic-block",
+   "draft_tokens": 5,
+   "golden": 3.62,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "kimik3",
+  "framework": "dynamo-vllm",
+  "args": {
+   "speculative-config": "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":4,\"method\":\"dspark\",\"attention_backend\":\"TOKENSPEED_MLA\",\"draft_sample_method\":\"probabilistic\"}"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/b200-fp4/agentx/agg-variants.yaml:override_tp8pp2_c24",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/b200-fp4/agentx/agg-variants.yaml:override_tp8pp2_c32",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/b200-fp4/agentx/agg-variants.yaml:override_tp8pp2_c48",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/b200-fp4/agentx/agg-variants.yaml:override_tp8pp2_c56",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/b200-fp4/agentx/agg-variants.yaml:override_tp8pp2_c72",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/b200-fp4/agentx/agg-variants.yaml:override_tp8pp2_c80",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/gb200-fp4/agentx/agg-tp8pp2-variants.yaml:override_tp8pp2_c24",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/gb200-fp4/agentx/agg-tp8pp2-variants.yaml:override_tp8pp2_c32",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/gb200-fp4/agentx/agg-tp8pp2-variants.yaml:override_tp8pp2_c48",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/gb200-fp4/agentx/agg-tp8pp2-variants.yaml:override_tp8pp2_c56"
+  ],
+  "rows": 20,
+  "expected": {
+   "curve": "kimi-k3__dspark__kimi-k3-dspark__probabilistic-block",
+   "draft_tokens": 4,
+   "golden": 3.36,
+   "findings": [
+    [
+     "mismatch",
+     "verify",
+     "standard (documented)",
+     "block (explicit)"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "kimik3",
+  "framework": "dynamo-vllm",
+  "args": {
+   "speculative-config": "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":7,\"method\":\"dspark\",\"attention_backend\":\"TOKENSPEED_MLA\",\"draft_sample_method\":\"probabilistic\"}"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/b200-fp4/agentx/agg-variants.yaml:override_tp8pp2_c1",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/b200-fp4/agentx/agg-variants.yaml:override_tp8pp2_c14",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/b200-fp4/agentx/agg-variants.yaml:override_tp8pp2_c4",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/b200-fp4/agentx/agg-variants.yaml:override_tp8pp2_c8",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/gb200-fp4/agentx/agg-tp8pp2-variants.yaml:override_tp8pp2_c1",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/gb200-fp4/agentx/agg-tp8pp2-variants.yaml:override_tp8pp2_c4",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/gb200-fp4/agentx/agg-tp8pp2-variants.yaml:override_tp8pp2_c8"
+  ],
+  "rows": 7,
+  "expected": {
+   "curve": "kimi-k3__dspark__kimi-k3-dspark__probabilistic-block",
+   "draft_tokens": 7,
+   "golden": 3.84,
+   "findings": [
+    [
+     "mismatch",
+     "verify",
+     "standard (documented)",
+     "block (explicit)"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "kimik3",
+  "framework": "vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"dspark\",\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":2,\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/h200-fp4/agentx/agg-tp16dp2ep32-latency.yaml",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/h200-fp4/agentx/agg-tp8dp4ep32-balanced.yaml",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/h200-fp4/agentx/agg-tp8dp4ep32-vllm-simple.yaml"
+  ],
+  "rows": 37,
+  "expected": {
+   "curve": "kimi-k3__dspark__kimi-k3-dspark__probabilistic-block",
+   "draft_tokens": 2,
+   "golden": 2.51,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "kimik3",
+  "framework": "vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"dspark\",\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":3,\"attention_backend\":\"TOKENSPEED_MLA\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/kimik3/vllm/b300-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 1,
+  "expected": {
+   "curve": "kimi-k3__dspark__kimi-k3-dspark__probabilistic-block",
+   "draft_tokens": 3,
+   "golden": 3.0,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "kimik3",
+  "framework": "vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"dspark\",\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":7,\"attention_backend\":\"TOKENSPEED_MLA\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/kimik3/vllm/b300-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 4,
+  "expected": {
+   "curve": "kimi-k3__dspark__kimi-k3-dspark__probabilistic-block",
+   "draft_tokens": 7,
+   "golden": 3.84,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "kimik3",
+  "framework": "vllm",
+  "args": {
+   "speculative-config": "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":4,\"method\":\"dspark\",\"attention_backend\":\"ROCM_AITER_MLA\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/kimik3/vllm/mi355x-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 8,
+  "expected": {
+   "curve": "kimi-k3__dspark__kimi-k3-dspark__probabilistic-block",
+   "draft_tokens": 4,
+   "golden": 3.36,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "kimik3",
+  "framework": "vllm",
+  "args": {
+   "speculative-config": "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":5,\"method\":\"dspark\",\"attention_backend\":\"ROCM_AITER_MLA\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/kimik3/vllm/mi355x-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 1,
+  "expected": {
+   "curve": "kimi-k3__dspark__kimi-k3-dspark__probabilistic-block",
+   "draft_tokens": 5,
+   "golden": 3.62,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "kimik3",
+  "framework": "vllm",
+  "args": {
+   "speculative-config": "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":7,\"method\":\"dspark\",\"attention_backend\":\"ROCM_AITER_MLA\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/kimik3/vllm/mi355x-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 4,
+  "expected": {
+   "curve": "kimi-k3__dspark__kimi-k3-dspark__probabilistic-block",
+   "draft_tokens": 7,
+   "golden": 3.84,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "kimik3",
+  "framework": "vllm",
+  "args": {},
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/kimik3/vllm/b300-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 7,
+  "expected": null
+ },
+ {
+  "model_prefix": "kimik3",
+  "framework": "vllm-disagg",
+  "args": {
+   "speculative-config": "{\"model\":\"/models/Inferact-Kimi-K3-DSpark\",\"method\":\"dspark\",\"num_speculative_tokens\":4,\"attention_backend\":\"ROCM_AITER_MLA\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/mi355x-fp4/agentx/disagg-variants.yaml:override_1p1d_c48",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/mi355x-fp4/agentx/disagg-variants.yaml:override_1p1d_c56",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/mi355x-fp4/agentx/disagg-variants.yaml:override_1p2d_c24",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/mi355x-fp4/agentx/disagg-variants.yaml:override_1p2d_c48",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/mi355x-fp4/agentx/disagg-variants.yaml:override_1p3d_c12",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/mi355x-fp4/agentx/disagg-variants.yaml:override_1p3d_c24"
+  ],
+  "rows": 11,
+  "expected": {
+   "curve": "kimi-k3__dspark__kimi-k3-dspark__probabilistic-block",
+   "draft_tokens": 4,
+   "golden": 3.36,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "minimaxm3",
+  "framework": "atom",
+  "args": {
+   "method": "eagle3",
+   "draft-model": "Inferact/MiniMax-M3-EAGLE3-GQA",
+   "num-speculative-tokens": 3
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/atom/mi355x-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 23,
+  "expected": {
+   "curve": "minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default",
+   "draft_tokens": 3,
+   "golden": 2.78,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "unknown",
+     "default"
+    ],
+    [
+     "unverified",
+     "verify",
+     "unknown",
+     "standard (documented)"
+    ],
+    [
+     "unverified",
+     "adaptive",
+     "default",
+     "False (documented)"
+    ],
+    [
+     "engine",
+     "engine",
+     "atom",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "minimaxm3",
+  "framework": "dynamo-trt",
+  "args": {
+   "speculative_config": {
+    "decoding_type": "Eagle3",
+    "max_draft_len": 3,
+    "speculative_model": "Inferact/MiniMax-M3-EAGLE3-GQA"
+   }
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm3/trtllm/gb200-fp4/agentx/agg-variants.yaml:override_c10_b10",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm3/trtllm/gb200-fp4/agentx/agg-variants.yaml:override_c15_b15",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm3/trtllm/gb200-fp4/agentx/agg-variants.yaml:override_c20_b20",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm3/trtllm/gb200-fp4/agentx/agg-variants.yaml:override_c25_b25",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm3/trtllm/gb200-fp4/agentx/agg-variants.yaml:override_c30_b30",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm3/trtllm/gb200-fp4/agentx/agg-variants.yaml:override_c40_b40",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm3/trtllm/gb200-fp4/agentx/agg-variants.yaml:override_c5_b5"
+  ],
+  "rows": 11,
+  "expected": {
+   "curve": "minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default",
+   "draft_tokens": 3,
+   "golden": 2.78,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "trtllm",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "minimaxm3",
+  "framework": "dynamo-vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"eagle3\",\"model\":\"Inferact/MiniMax-M3-EAGLE3-GQA\",\"num_speculative_tokens\":3,\"attention_backend\":\"FLASHINFER\",\"use_local_argmax_reduction\":true}"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm3/vllm/gb200-fp4/agentx/agg-nightly-native-variants.yaml:override_tp4_c1",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm3/vllm/gb200-fp4/agentx/agg-nightly-native-variants.yaml:override_tp4_mns16_c10",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm3/vllm/gb200-fp4/agentx/agg-nightly-native-variants.yaml:override_tp4_vllm_simple_c30",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm3/vllm/gb200-fp4/agentx/agg-nightly-native-variants.yaml:override_tp4_vllm_simple_mns12_c22",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm3/vllm/gb200-fp4/agentx/agg-nightly-native-variants.yaml:override_tp4_vllm_simple_mns16_c25",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm3/vllm/gb200-fp4/agentx/agg-nightly-native-variants.yaml:override_tp4_vllm_simple_mns8_c20",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm3/vllm/gb200-fp4/agentx/agg-nightly-native-variants.yaml:override_tp8_c1",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm3/vllm/gb200-fp4/agentx/agg-nightly-native-variants.yaml:override_tp8_mns8_c5"
+  ],
+  "rows": 14,
+  "expected": {
+   "curve": "minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default",
+   "draft_tokens": 3,
+   "golden": 2.78,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "minimaxm3",
+  "framework": "dynamo-vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"eagle3\",\"model\":\"Inferact/MiniMax-M3-EAGLE3-GQA\",\"num_speculative_tokens\":3,\"attention_backend\":\"FLASH_ATTN\",\"rejection_sample_method\":\"block\"}"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm3/vllm/gb200-fp4/agentx/disagg-variants.yaml:override_1p1d_c24",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm3/vllm/gb200-fp4/agentx/disagg-variants.yaml:override_1p1d_tp8_c1",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm3/vllm/gb200-fp4/agentx/disagg-variants.yaml:override_1p2d_c8_c16",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm3/vllm/gb300-fp4/agentx/disagg-variants.yaml:override_1p1d_tep4_tp4_c1",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm3/vllm/gb300-fp4/agentx/disagg-variants.yaml:override_1p1d_tp2_tp4_c20_c24",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm3/vllm/gb300-fp4/agentx/disagg-variants.yaml:override_1p3d_dep4_tp4_c24",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm3/vllm/gb300-fp4/agentx/disagg-variants.yaml:override_1p3d_tp2_tp2_c48",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm3/vllm/gb300-fp4/agentx/disagg-variants.yaml:override_2p5d_tp2_tp2_c120"
+  ],
+  "rows": 17,
+  "expected": {
+   "curve": "minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default",
+   "draft_tokens": 3,
+   "golden": 2.78,
+   "findings": [
+    [
+     "mismatch",
+     "verify",
+     "block (explicit)",
+     "standard (documented)"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "minimaxm3",
+  "framework": "trt",
+  "args": {
+   "speculative_config": {
+    "decoding_type": "Eagle3",
+    "max_draft_len": 3,
+    "speculative_model": "Inferact/MiniMax-M3-EAGLE3-GQA"
+   }
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/trtllm/b200-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/trtllm/b300-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 24,
+  "expected": {
+   "curve": "minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default",
+   "draft_tokens": 3,
+   "golden": 2.78,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "trtllm",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "minimaxm3",
+  "framework": "vllm",
+  "args": {
+   "speculative-config": "{\"method\": \"eagle3\", \"model\": \"Inferact/MiniMax-M3-EAGLE3-GQA\", \"num_speculative_tokens\": 3, \"attention_backend\": \"TRITON_ATTN\"}"
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/mi325x-fp8-mtp/agentic.yaml"
+  ],
+  "rows": 10,
+  "expected": {
+   "curve": "minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default",
+   "draft_tokens": 3,
+   "golden": 2.78,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "minimaxm3",
+  "framework": "vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"eagle3\",\"model\":\"Inferact/MiniMax-M3-EAGLE3-GQA\",\"num_speculative_tokens\":3,\"attention_backend\":\"FLASHINFER\",\"use_local_argmax_reduction\":true}"
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/b200-fp4-mtp/agentic.yaml:override_tp4_c15",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/b200-fp4-mtp/agentic.yaml:override_tp4_c30_dram",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/b200-fp4-mtp/agentic.yaml:override_tp4_c32_dram",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/b200-fp4-mtp/agentic.yaml:override_tp4_c38_dram",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/b300-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 14,
+  "expected": {
+   "curve": "minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default",
+   "draft_tokens": 3,
+   "golden": 2.78,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "minimaxm3",
+  "framework": "vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"eagle3\",\"model\":\"Inferact/MiniMax-M3-EAGLE3-GQA\",\"num_speculative_tokens\":3,\"attention_backend\":\"FLASHINFER\"}"
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/b200-fp4-mtp/agentic.yaml:override_cap16_tp4_c32_dram",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/b200-fp4-mtp/agentic.yaml:override_cap3_tp4_c20_dram",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/b200-fp4-mtp/agentic.yaml:override_cap4_tp4_c20_dram",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/b200-fp4-mtp/agentic.yaml:override_cap6_tp4_c32_dram"
+  ],
+  "rows": 5,
+  "expected": {
+   "curve": "minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default",
+   "draft_tokens": 3,
+   "golden": 2.78,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "minimaxm3",
+  "framework": "vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"eagle3\",\"model\":\"Inferact/MiniMax-M3-EAGLE3-GQA\",\"num_speculative_tokens\":3,\"attention_backend\":\"FLASH_ATTN\"}"
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/h100-fp8-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/h200-fp8-mtp/agentic.yaml"
+  ],
+  "rows": 18,
+  "expected": {
+   "curve": "minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default",
+   "draft_tokens": 3,
+   "golden": 2.78,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "minimaxm3",
+  "framework": "vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"eagle3\",\"model\":\"Inferact/MiniMax-M3-EAGLE3-GQA\",\"num_speculative_tokens\":3,\"attention_backend\":\"ROCM_AITER_UNIFIED_ATTN\"}"
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/mi355x-fp4-mtp/agg-variants.yaml:override_tp2_c1",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/mi355x-fp4-mtp/agg-variants.yaml:override_tp2_c2",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/mi355x-fp4-mtp/agg-variants.yaml:override_tp4_c1",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/mi355x-fp4-mtp/agg-variants.yaml:override_tp4_c10",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/mi355x-fp4-mtp/agg-variants.yaml:override_tp4_c12",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/mi355x-fp4-mtp/agg-variants.yaml:override_tp4_c15",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/mi355x-fp4-mtp/agg-variants.yaml:override_tp4_c20",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/mi355x-fp4-mtp/agg-variants.yaml:override_tp4_c24",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/mi355x-fp4-mtp/agg-variants.yaml:override_tp4_c32",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/mi355x-fp4-mtp/agg-variants.yaml:override_tp4_c4",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/mi355x-fp4-mtp/agg-variants.yaml:override_tp4_c5",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/mi355x-fp4-mtp/agg-variants.yaml:override_tp4_c8"
+  ],
+  "rows": 13,
+  "expected": {
+   "curve": "minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default",
+   "draft_tokens": 3,
+   "golden": 2.78,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "minimaxm3",
+  "framework": "vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"eagle3\",\"model\":\"Inferact/MiniMax-M3-EAGLE3-GQA\",\"num_speculative_tokens\":3,\"attention_backend\":\"TRITON_ATTN\"}"
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/mi300x-fp8-mtp/agentic.yaml"
+  ],
+  "rows": 8,
+  "expected": {
+   "curve": "minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default",
+   "draft_tokens": 3,
+   "golden": 2.78,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "minimaxm3",
+  "framework": "vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"eagle3\",\"model\":\"Inferact/MiniMax-M3-EAGLE3-GQA\",\"num_speculative_tokens\":5,\"attention_backend\":\"FLASHINFER\"}"
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/b200-fp4-mtp/agentic.yaml:override_cap1_k5_tp4_c10",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/b200-fp4-mtp/agentic.yaml:override_cap1_k5_tp8_c10"
+  ],
+  "rows": 3,
+  "expected": {
+   "curve": "minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default",
+   "draft_tokens": 5,
+   "golden": 3.21,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "minimaxm31flash",
+  "framework": "dynamo-vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":7,\"attention_backend\":\"FLASHINFER_TS\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm31flash/vllm/gb200-fp4/agentx/disagg-mooncake.yaml:override_3p1d_c256",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm31flash/vllm/gb200-fp4/agentx/disagg-mooncake.yaml:override_3p1d_dep16_c280",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm31flash/vllm/gb200-fp4/agentx/disagg-mooncake.yaml:override_4p1d_dep16_c352",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm31flash/vllm/gb300-fp4/agentx/disagg-mooncake.yaml:override_3p2d8",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm31flash/vllm/gb300-fp4/agentx/disagg-mooncake.yaml:override_3p4d16"
+  ],
+  "rows": 7,
+  "expected": {
+   "curve": "minimax-m3.1-flash__dspark__native__probabilistic-block",
+   "draft_tokens": 7,
+   "golden": 4.04,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "minimaxm31flash",
+  "framework": "dynamo-vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":7,\"attention_backend\":\"FLASH_ATTN\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm31flash/vllm/gb200-fp4/agentx/agg-variants.yaml:override_tp4_c1",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm31flash/vllm/gb200-fp4/agentx/agg-variants.yaml:override_tp4_c16",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm31flash/vllm/gb200-fp4/agentx/agg-variants.yaml:override_tp4_c32",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm31flash/vllm/gb200-fp4/agentx/agg-variants.yaml:override_tp4_c4",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm31flash/vllm/gb200-fp4/agentx/agg-variants.yaml:override_tp4_c40",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm31flash/vllm/gb200-fp4/agentx/agg-variants.yaml:override_tp4_c8",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm31flash/vllm/gb300-fp4/agentx/agg-variants.yaml:override_tp4_c1",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm31flash/vllm/gb300-fp4/agentx/agg-variants.yaml:override_tp4_c16",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm31flash/vllm/gb300-fp4/agentx/agg-variants.yaml:override_tp4_c32",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm31flash/vllm/gb300-fp4/agentx/agg-variants.yaml:override_tp4_c4",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm31flash/vllm/gb300-fp4/agentx/agg-variants.yaml:override_tp4_c40",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm31flash/vllm/gb300-fp4/agentx/agg-variants.yaml:override_tp4_c48",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm31flash/vllm/gb300-fp4/agentx/agg-variants.yaml:override_tp4_c56",
+   "benchmarks/multi_node/srt-slurm-recipes/minimaxm31flash/vllm/gb300-fp4/agentx/agg-variants.yaml:override_tp4_c8"
+  ],
+  "rows": 14,
+  "expected": {
+   "curve": "minimax-m3.1-flash__dspark__native__probabilistic-block",
+   "draft_tokens": 7,
+   "golden": 4.04,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "minimaxm31flash",
+  "framework": "sglang",
+  "args": {
+   "speculative-algorithm": "DSPARK",
+   "speculative-dspark-block-size": 7,
+   "speculative-use-block-verification": true,
+   "speculative-draft-kv-cache-dtype": "fp8_e4m3"
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/sglang/b200-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/sglang/b300-fp4-mtp/agentic-tp2.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/sglang/b300-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/sglang/gb200-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/sglang/gb300-fp4-mtp/agentic-tp2.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/sglang/gb300-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 55,
+  "expected": {
+   "curve": "minimax-m3.1-flash__dspark__native__probabilistic-block",
+   "draft_tokens": 7,
+   "golden": 4.04,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "probabilistic (explicit)"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "minimaxm31flash",
+  "framework": "sglang",
+  "args": {
+   "speculative-algorithm": "DSPARK",
+   "speculative-use-block-verification": true,
+   "speculative-num-steps": 1,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 8,
+   "speculative-dspark-block-size": 7
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/sglang/b200-fp4-mtp/agentic-low-latency.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/sglang/b300-fp4-mtp/agentic-low-latency.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/sglang/gb200-fp4-mtp/agentic-low-latency.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/sglang/gb300-fp4-mtp/agentic-low-latency.yaml"
+  ],
+  "rows": 4,
+  "expected": {
+   "curve": "minimax-m3.1-flash__dspark__native__probabilistic-block",
+   "draft_tokens": 7,
+   "golden": 4.04,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "probabilistic (explicit)"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "minimaxm31flash",
+  "framework": "sglang",
+  "args": {
+   "speculative-algorithm": "DSPARK",
+   "speculative-dspark-block-size": 7,
+   "speculative-use-block-verification": true
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/sglang/mi355x-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 8,
+  "expected": {
+   "curve": "minimax-m3.1-flash__dspark__native__probabilistic-block",
+   "draft_tokens": 7,
+   "golden": 4.04,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "probabilistic (explicit)"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "minimaxm31flash",
+  "framework": "vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":3,\"attention_backend\":\"FLASHINFER_TS\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/vllm/gb300-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 3,
+  "expected": {
+   "curve": "minimax-m3.1-flash__dspark__native__probabilistic-block",
+   "draft_tokens": 3,
+   "golden": 2.88,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "minimaxm31flash",
+  "framework": "vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":3,\"attention_backend\":\"FLASH_ATTN\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/vllm/gb200-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 2,
+  "expected": {
+   "curve": "minimax-m3.1-flash__dspark__native__probabilistic-block",
+   "draft_tokens": 3,
+   "golden": 2.88,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "minimaxm31flash",
+  "framework": "vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":3,\"attention_backend\":\"TRITON_ATTN\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/vllm/mi355x-fp4/agentic.yaml"
+  ],
+  "rows": 3,
+  "expected": {
+   "curve": "minimax-m3.1-flash__dspark__native__probabilistic-block",
+   "draft_tokens": 3,
+   "golden": 2.88,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "minimaxm31flash",
+  "framework": "vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":3,\"draft_sample_method\":\"probabilistic\",\"attention_backend\":\"FLASH_ATTN\",\"kv_cache_dtype\":\"fp8\",\"rejection_sample_method\":\"block\"}"
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/vllm/h100-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/vllm/h200-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 15,
+  "expected": {
+   "curve": "minimax-m3.1-flash__dspark__native__probabilistic-block",
+   "draft_tokens": 3,
+   "golden": 2.88,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "minimaxm31flash",
+  "framework": "vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":7,\"attention_backend\":\"FLASHINFER_TS\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/vllm/b300-fp4-mtp/agentic.yaml:zip_override_tp2[0]",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/vllm/b300-fp4-mtp/agentic.yaml:zip_override_tp2[1]",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/vllm/b300-fp4-mtp/agentic.yaml:zip_override_tp2[2]",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/vllm/b300-fp4-mtp/agentic.yaml:zip_override_tp2[3]",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/vllm/gb300-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 9,
+  "expected": {
+   "curve": "minimax-m3.1-flash__dspark__native__probabilistic-block",
+   "draft_tokens": 7,
+   "golden": 4.04,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "minimaxm31flash",
+  "framework": "vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":7,\"attention_backend\":\"FLASH_ATTN\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/vllm/b200-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/vllm/b200-fp4-mtp/agg-variants.yaml:override_tp4_c40",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/vllm/b200-fp4-mtp/agg-variants.yaml:override_tp4_c48",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/vllm/b200-fp4-mtp/agg-variants.yaml:override_tp4_c56",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/vllm/b300-fp4-mtp/agentic.yaml:override_tp4_c24",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/vllm/b300-fp4-mtp/agentic.yaml:override_tp4_c32",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/vllm/b300-fp4-mtp/agentic.yaml:zip_override_tp4[0]",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/vllm/b300-fp4-mtp/agentic.yaml:zip_override_tp4[1]",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/vllm/b300-fp4-mtp/agentic.yaml:zip_override_tp4[2]",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/vllm/b300-fp4-mtp/agentic.yaml:zip_override_tp4[3]",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/vllm/b300-fp4-mtp/agentic.yaml:zip_override_tp4_dram[0]",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/vllm/b300-fp4-mtp/agentic.yaml:zip_override_tp4_dram[1]",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/vllm/b300-fp4-mtp/agentic.yaml:zip_override_tp4_dram[2]",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/vllm/gb200-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 23,
+  "expected": {
+   "curve": "minimax-m3.1-flash__dspark__native__probabilistic-block",
+   "draft_tokens": 7,
+   "golden": 4.04,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "minimaxm31flash",
+  "framework": "vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":7,\"attention_backend\":\"TRITON_ATTN\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/vllm/mi355x-fp4/agentic.yaml"
+  ],
+  "rows": 4,
+  "expected": {
+   "curve": "minimax-m3.1-flash__dspark__native__probabilistic-block",
+   "draft_tokens": 7,
+   "golden": 4.04,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "musespark",
+  "framework": "dynamo-sglang",
+  "args": {
+   "speculative-algorithm": "DFLASH",
+   "speculative-draft-model-path": "RadixArk/Muse-Spark-Open-DFlash2",
+   "speculative-draft-model-revision": "46c90f412549c472941a68382d91a99e5e6372a0",
+   "speculative-num-draft-tokens": 8,
+   "speculative-draft-attention-backend": "fa4"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/musespark/sglang/gb300-fp4/agentx/agg-variants.yaml:override_tp8_c14"
+  ],
+  "rows": 1,
+  "expected": {
+   "curve": "muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default",
+   "draft_tokens": 7,
+   "golden": 4.05,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "musespark",
+  "framework": "dynamo-sglang",
+  "args": {
+   "speculative-algorithm": "DFLASH",
+   "speculative-draft-model-path": "RadixArk/Muse-Spark-Open-DFlash2",
+   "speculative-draft-model-revision": "46c90f412549c472941a68382d91a99e5e6372a0",
+   "speculative-num-draft-tokens": 8
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/musespark/sglang/gb300-fp4/agentx/agg-variants.yaml:override_tp4_c16",
+   "benchmarks/multi_node/srt-slurm-recipes/musespark/sglang/gb300-fp4/agentx/agg-variants.yaml:override_tp4_c20",
+   "benchmarks/multi_node/srt-slurm-recipes/musespark/sglang/gb300-fp4/agentx/agg-variants.yaml:override_tp4_c32",
+   "benchmarks/multi_node/srt-slurm-recipes/musespark/sglang/gb300-fp4/agentx/agg-variants.yaml:override_tp4_c40",
+   "benchmarks/multi_node/srt-slurm-recipes/musespark/sglang/gb300-fp4/agentx/agg-variants.yaml:override_tp4_c8",
+   "benchmarks/multi_node/srt-slurm-recipes/musespark/sglang/gb300-fp4/agentx/agg-variants.yaml:override_tp8_c10",
+   "benchmarks/multi_node/srt-slurm-recipes/musespark/sglang/gb300-fp4/agentx/agg-variants.yaml:override_tp8_c3",
+   "benchmarks/multi_node/srt-slurm-recipes/musespark/sglang/gb300-fp4/agentx/agg-variants.yaml:override_tp8_c4"
+  ],
+  "rows": 8,
+  "expected": {
+   "curve": "muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default",
+   "draft_tokens": 7,
+   "golden": 4.05,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "musespark",
+  "framework": "sglang",
+  "args": {
+   "speculative-algorithm": "DFLASH",
+   "speculative-draft-model-path": "RadixArk/Muse-Spark-Open-DFlash2",
+   "speculative-draft-attention-backend": "fa4",
+   "speculative-num-draft-tokens": 8,
+   "speculative-use-block-verification": true
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/musespark/sglang/b200-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/musespark/sglang/b300-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 7,
+  "expected": {
+   "curve": "muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default",
+   "draft_tokens": 7,
+   "golden": 4.05,
+   "findings": [
+    [
+     "mismatch",
+     "verify",
+     "block (explicit)",
+     "standard (documented)"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "musespark",
+  "framework": "sglang",
+  "args": {
+   "speculative-algorithm": "DFLASH",
+   "speculative-draft-model-path": "RadixArk/Muse-Spark-Open-DFlash2",
+   "speculative-draft-attention-backend": "fa4",
+   "speculative-num-draft-tokens": 8
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/musespark/sglang/gb200-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/musespark/sglang/gb300-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/musespark/sglang/h100-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/musespark/sglang/h200-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 21,
+  "expected": {
+   "curve": "muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default",
+   "draft_tokens": 7,
+   "golden": 4.05,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "musespark",
+  "framework": "sglang",
+  "args": {
+   "speculative-algorithm": "DFLASH",
+   "speculative-draft-model-path": "RadixArk/Muse-Spark-Open-DFlash2",
+   "speculative-draft-attention-backend": "triton",
+   "speculative-num-draft-tokens": 8,
+   "speculative-draft-window-size": 2048
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/musespark/sglang/mi355x-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 8,
+  "expected": {
+   "curve": "muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default",
+   "draft_tokens": 7,
+   "golden": 4.05,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "musespark",
+  "framework": "sglang",
+  "args": {
+   "speculative-algorithm": "DFLASH",
+   "speculative-draft-model-path": "RadixArk/Muse-Spark-Open-DFlash2",
+   "speculative-num-draft-tokens": 8,
+   "speculative-draft-attention-backend": "trtllm_mha",
+   "speculative-draft-kv-cache-dtype": "fp8_e4m3"
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/musespark/sglang/gb300-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 2,
+  "expected": {
+   "curve": "muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default",
+   "draft_tokens": 7,
+   "golden": 4.05,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "musespark",
+  "framework": "sglang",
+  "args": {
+   "speculative-algorithm": "DFLASH",
+   "speculative-draft-model-path": "RadixArk/Muse-Spark-Open-DFlash2",
+   "speculative-num-draft-tokens": 8,
+   "speculative-use-block-verification": true
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/musespark/sglang/b200-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/musespark/sglang/b300-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 19,
+  "expected": {
+   "curve": "muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default",
+   "draft_tokens": 7,
+   "golden": 4.05,
+   "findings": [
+    [
+     "mismatch",
+     "verify",
+     "block (explicit)",
+     "standard (documented)"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "musespark",
+  "framework": "sglang",
+  "args": {
+   "speculative-algorithm": "DFLASH",
+   "speculative-draft-model-path": "RadixArk/Muse-Spark-Open-DFlash2",
+   "speculative-num-draft-tokens": 8
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/musespark/sglang/gb200-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/musespark/sglang/gb300-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 12,
+  "expected": {
+   "curve": "muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default",
+   "draft_tokens": 7,
+   "golden": 4.05,
+   "findings": []
+  }
+ },
+ {
+  "model_prefix": "musespark",
+  "framework": "trt",
+  "args": {
+   "speculative_config": {
+    "decoding_type": "DFlash",
+    "max_draft_len": 7,
+    "speculative_model": "/hf_hub_cache/models--RadixArk--Muse-Spark-Open-DFlash2/snapshots/46c90f412549c472941a68382d91a99e5e6372a0"
+   }
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/musespark/trtllm/gb300-fp4/agentx/agg-variants.yaml:override_tep4_c1",
+   "benchmarks/multi_node/srt-slurm-recipes/musespark/trtllm/gb300-fp4/agentx/agg-variants.yaml:override_tep4_c20",
+   "benchmarks/multi_node/srt-slurm-recipes/musespark/trtllm/gb300-fp4/agentx/agg-variants.yaml:override_tep4_c32",
+   "benchmarks/multi_node/srt-slurm-recipes/musespark/trtllm/gb300-fp4/agentx/agg-variants.yaml:override_tep4_c4",
+   "benchmarks/multi_node/srt-slurm-recipes/musespark/trtllm/gb300-fp4/agentx/agg-variants.yaml:override_tep4_c48",
+   "benchmarks/multi_node/srt-slurm-recipes/musespark/trtllm/gb300-fp4/agentx/agg-variants.yaml:override_tep4_c8",
+   "benchmarks/multi_node/srt-slurm-recipes/musespark/trtllm/gb300-fp4/agentx/agg-variants.yaml:override_tep8_c1"
+  ],
+  "rows": 7,
+  "expected": {
+   "curve": "muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default",
+   "draft_tokens": 7,
+   "golden": 4.05,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "trtllm",
+     "sglang"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "qwen3.5",
+  "framework": "atom",
+  "args": {
+   "method": "mtp",
+   "num-speculative-tokens": 3
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/qwen3.5/atom/mi355x-fp8-mtp/agentic.yaml"
+  ],
+  "rows": 11,
+  "expected": {
+   "curve": "qwen3.5-397b-a17b-nvfp4__mtp__native__default-default",
+   "draft_tokens": 3,
+   "golden": 3.39,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "unknown",
+     "default"
+    ],
+    [
+     "unverified",
+     "verify",
+     "unknown",
+     "standard (documented)"
+    ],
+    [
+     "unverified",
+     "adaptive",
+     "default",
+     "False (documented)"
+    ],
+    [
+     "engine",
+     "engine",
+     "atom",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "qwen3.5",
+  "framework": "dynamo-sglang",
+  "args": {
+   "speculative-algorithm": "NEXTN",
+   "speculative-eagle-topk": 1,
+   "speculative-draft-model-quantization": "nvfp4_online",
+   "speculative-moe-runner-backend": "flashinfer_trtllm_routed",
+   "speculative-moe-a2a-backend": "flashinfer",
+   "speculative-num-steps": 4,
+   "speculative-num-draft-tokens": 5
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb300-fp4/agentx/disagg-pp-pareto-variants.yaml:override_3p4d_c565"
+  ],
+  "rows": 1,
+  "expected": {
+   "curve": "qwen3.5-397b-a17b-nvfp4__mtp__native__default-default",
+   "draft_tokens": 4,
+   "golden": 3.97,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "qwen3.5",
+  "framework": "dynamo-sglang",
+  "args": {
+   "speculative-algorithm": "NEXTN",
+   "speculative-eagle-topk": 1,
+   "speculative-draft-model-quantization": "nvfp4_online",
+   "speculative-moe-runner-backend": "flashinfer_trtllm_routed",
+   "speculative-moe-a2a-backend": "flashinfer",
+   "speculative-num-steps": 5,
+   "speculative-num-draft-tokens": 6
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb300-fp4/agentx/disagg-pp-pareto-variants.yaml:override_3p2d_c704"
+  ],
+  "rows": 1,
+  "expected": {
+   "curve": "qwen3.5-397b-a17b-nvfp4__mtp__native__default-default",
+   "draft_tokens": 5,
+   "golden": 4.41,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "qwen3.5",
+  "framework": "dynamo-sglang",
+  "args": {
+   "speculative-algorithm": "NEXTN",
+   "speculative-num-steps": 5,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 6,
+   "speculative-moe-runner-backend": "flashinfer_trtllm_routed",
+   "speculative-moe-a2a-backend": "flashinfer"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb300-fp8/agentx/disagg-variants.yaml:override_1p1d_pp4_dep4_c100",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb300-fp8/agentx/disagg-variants.yaml:override_1p1d_pp4_dep4_c200",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb300-fp8/agentx/disagg-variants.yaml:override_3p2d_pp4_dep4_c600",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb300-fp8/agentx/disagg-variants.yaml:override_5p3d_pp4_dep4_c1000"
+  ],
+  "rows": 4,
+  "expected": {
+   "curve": "qwen3.5-397b-a17b-nvfp4__mtp__native__default-default",
+   "draft_tokens": 5,
+   "golden": 4.41,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "qwen3.5",
+  "framework": "dynamo-sglang",
+  "args": {
+   "speculative-algorithm": "NEXTN",
+   "speculative-num-steps": 6,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 7,
+   "speculative-moe-runner-backend": "flashinfer_trtllm_routed",
+   "speculative-moe-a2a-backend": "flashinfer"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb300-fp8/agentx/disagg-dep16-mtp6-variants.yaml:override_1p1d",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb300-fp8/agentx/disagg-dep16-mtp6-variants.yaml:override_2p1d",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb300-fp8/agentx/disagg-dep16-mtp6-variants.yaml:override_3p1d"
+  ],
+  "rows": 3,
+  "expected": {
+   "curve": "qwen3.5-397b-a17b-nvfp4__mtp__native__default-default",
+   "draft_tokens": 6,
+   "golden": 4.8,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "qwen3.5",
+  "framework": "dynamo-sglang",
+  "args": {
+   "speculative-algorithm": "NEXTN",
+   "speculative-num-steps": 6,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 7,
+   "speculative-moe-runner-backend": "flashinfer_cutedsl",
+   "speculative-moe-a2a-backend": "none"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/b300-fp4/agentx/agg-tp4-mtp6-hicache-variants.yaml:base",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb300-fp4/agentx/agg-pareto-variants.yaml:override_tp8_c7_b1"
+  ],
+  "rows": 2,
+  "expected": {
+   "curve": "qwen3.5-397b-a17b-nvfp4__mtp__native__default-default",
+   "draft_tokens": 6,
+   "golden": 4.8,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "qwen3.5",
+  "framework": "dynamo-sglang",
+  "args": {
+   "speculative-algorithm": "NEXTN",
+   "speculative-num-steps": 5,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 6,
+   "speculative-moe-runner-backend": "flashinfer_trtllm",
+   "speculative-moe-a2a-backend": "none"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/b300-fp4/agentx/agg-tp2-b2-mtp5-hicache.yaml"
+  ],
+  "rows": 1,
+  "expected": {
+   "curve": "qwen3.5-397b-a17b-nvfp4__mtp__native__default-default",
+   "draft_tokens": 5,
+   "golden": 4.41,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "qwen3.5",
+  "framework": "dynamo-sglang",
+  "args": {
+   "speculative-algorithm": "NEXTN",
+   "speculative-num-steps": 6,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 7,
+   "speculative-moe-runner-backend": "flashinfer_trtllm",
+   "speculative-moe-a2a-backend": "none"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb300-fp4/agentx/agg-pareto-variants.yaml:override_tp2_c44_b1",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb300-fp4/agentx/agg-pareto-variants.yaml:override_tp2_c44_b2",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb300-fp8/agentx/agg-variants.yaml:override_tp4_c1_b1",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb300-fp8/agentx/agg-variants.yaml:override_tp4_c44_b1",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb300-fp8/agentx/agg-variants.yaml:override_tp4_c44_b2",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb300-fp8/agentx/agg-variants.yaml:override_tp4_c44_b4",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb300-fp8/agentx/agg-variants.yaml:override_tp8_c1_b1"
+  ],
+  "rows": 7,
+  "expected": {
+   "curve": "qwen3.5-397b-a17b-nvfp4__mtp__native__default-default",
+   "draft_tokens": 6,
+   "golden": 4.8,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "qwen3.5",
+  "framework": "dynamo-sglang",
+  "args": {
+   "speculative-algorithm": "NEXTN",
+   "speculative-num-steps": 7,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 8,
+   "speculative-moe-runner-backend": "flashinfer_trtllm",
+   "speculative-moe-a2a-backend": "none"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/b300-fp4/agentx/agg-tp2-mtp7-hicache-variants.yaml:zip_override_running_cap[0]",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/b300-fp4/agentx/agg-tp2-mtp7-hicache-variants.yaml:zip_override_running_cap[2]"
+  ],
+  "rows": 2,
+  "expected": {
+   "curve": "qwen3.5-397b-a17b-nvfp4__mtp__native__default-default",
+   "draft_tokens": 7,
+   "golden": 5.04,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "qwen3.5",
+  "framework": "dynamo-sglang",
+  "args": {
+   "speculative-algorithm": "NEXTN",
+   "speculative-num-steps": 3,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 4,
+   "speculative-moe-runner-backend": "flashinfer_trtllm"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/b300-fp4/agentx/agg-tp2ep2-mtp3-hicache.yaml",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb200-fp4/agentx/agg-variants.yaml:override_tp2ep2_hicache_cap48",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb200-fp4/agentx/agg-variants.yaml:override_tp2ep2_hicache_k3_baseline"
+  ],
+  "rows": 4,
+  "expected": {
+   "curve": "qwen3.5-397b-a17b-nvfp4__mtp__native__default-default",
+   "draft_tokens": 3,
+   "golden": 3.39,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "qwen3.5",
+  "framework": "dynamo-sglang",
+  "args": {
+   "speculative-algorithm": "NEXTN",
+   "speculative-num-steps": 5,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 6,
+   "speculative-moe-runner-backend": "flashinfer_trtllm"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb200-fp4/agentx/agg-variants.yaml:override_tp2ep2_hicache"
+  ],
+  "rows": 1,
+  "expected": {
+   "curve": "qwen3.5-397b-a17b-nvfp4__mtp__native__default-default",
+   "draft_tokens": 5,
+   "golden": 4.41,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "qwen3.5",
+  "framework": "dynamo-sglang",
+  "args": {
+   "speculative-algorithm": "NEXTN",
+   "speculative-num-steps": 3,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 4
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/b200-fp8/agentx/disagg-variants.yaml:override_1p1d_p_tp4_d_tp4_c16",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/b200-fp8/agentx/disagg-variants.yaml:override_1p1d_p_tp4_d_tp4_c24",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/b200-fp8/agentx/disagg-variants.yaml:override_1p1d_p_tp4_d_tp4_c32",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/b200-fp8/agentx/disagg-variants.yaml:override_1p1d_p_tp4_d_tp4_c48_write_through",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/b200-fp8/agentx/disagg-variants.yaml:override_1p1d_p_tp4_d_tp4_c64_write_through",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/b200-fp8/agentx/disagg-variants.yaml:override_1p1d_p_tp4_d_tp4_c8",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/b300-fp8/agentx/disagg-variants.yaml:override_tp2ep2_tp2ep2_c32",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/b300-fp8/agentx/disagg-variants.yaml:override_tp2ep2_tp2ep2_c40",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/b300-fp8/agentx/disagg-variants.yaml:override_tp2ep2_tp2ep2_c44",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/b300-fp8/agentx/disagg-variants.yaml:override_tp2ep2_tp2ep2_c48",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/b300-fp8/agentx/disagg-variants.yaml:override_tp2ep2_tp2ep2_c56_replayssm",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/b300-fp8/agentx/disagg-variants.yaml:override_tp4_tp4_c12",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/b300-fp8/agentx/disagg-variants.yaml:override_tp4_tp4_c24",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/b300-fp8/agentx/disagg-variants.yaml:override_tp4_tp4_c4",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/b300-fp8/agentx/disagg-variants.yaml:override_tp4ep4_tp4_c32",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb300-fp4/agentx/agg-variants.yaml:override_c1",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb300-fp4/agentx/agg-variants.yaml:override_c24",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb300-fp4/agentx/agg-variants.yaml:override_c32",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb300-fp4/agentx/agg-variants.yaml:override_c40",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb300-fp4/agentx/agg-variants.yaml:override_c48",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb300-fp4/agentx/agg-variants.yaml:override_c52",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb300-fp4/agentx/agg-variants.yaml:override_c64",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_tp2_tp2_c72",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_tp4_tp4_c128",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_tp4_tp4_c16",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_tp4_tp4_c32",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_tp4_tp4_c64",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_tp4_tp4_c8",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_tp4_tp4_c96"
+  ],
+  "rows": 29,
+  "expected": {
+   "curve": "qwen3.5-397b-a17b-nvfp4__mtp__native__default-default",
+   "draft_tokens": 3,
+   "golden": 3.39,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "qwen3.5",
+  "framework": "dynamo-sglang",
+  "args": {
+   "speculative-algorithm": "NEXTN",
+   "speculative-num-steps": 5,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 6
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb200-fp4/agentx/agg-variants.yaml:override_tp4",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb200-fp4/agentx/agg-variants.yaml:override_tp4_no_symm",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/gb200-fp4/agentx/agg-variants.yaml:override_tp4_parity"
+  ],
+  "rows": 7,
+  "expected": {
+   "curve": "qwen3.5-397b-a17b-nvfp4__mtp__native__default-default",
+   "draft_tokens": 5,
+   "golden": 4.41,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "qwen3.5",
+  "framework": "dynamo-trt",
+  "args": {
+   "speculative_config": {
+    "decoding_type": "MTP",
+    "max_draft_len": 6
+   }
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_1p1d_dep1_tep2_b8",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_1p1d_dep1_tep2_c45_b4",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_1p2d_tep4_tep8_c48_b4",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_1p4d_tep4_tep8_c38_b1",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_1p4d_tep4_tep8_c38_b4",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_2p3d_tep4_tep8_c136_b4",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_3p1d_dep4_dep16_c565_b8",
+   "benchmarks/multi_node/srt-slurm-recipes/qwen3.5/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_3p2d_dep4_dep4_c704_b32"
+  ],
+  "rows": 9,
+  "expected": {
+   "curve": "qwen3.5-397b-a17b-nvfp4__mtp__native__default-default",
+   "draft_tokens": 6,
+   "golden": 4.8,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "trtllm",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "qwen3.5",
+  "framework": "sglang",
+  "args": {
+   "speculative-algorithm": "EAGLE",
+   "speculative-num-steps": 3,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 4
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/h100-fp8-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/h200-fp8-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/mi300x-fp8-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/mi325x-fp8-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/mi355x-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/mi355x-fp8-mtp/agentic.yaml"
+  ],
+  "rows": 100,
+  "expected": {
+   "curve": "qwen3.5-397b-a17b-nvfp4__mtp__native__default-default",
+   "draft_tokens": 3,
+   "golden": 3.39,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "qwen3.5",
+  "framework": "sglang",
+  "args": {
+   "speculative-algorithm": "EAGLE",
+   "speculative-num-steps": 4,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 5
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/h200-fp8-mtp/agentic.yaml:override_hicache_ep1_fa3_k4_c48"
+  ],
+  "rows": 1,
+  "expected": {
+   "curve": "qwen3.5-397b-a17b-nvfp4__mtp__native__default-default",
+   "draft_tokens": 4,
+   "golden": 3.97,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "qwen3.5",
+  "framework": "sglang",
+  "args": {
+   "speculative-algorithm": "EAGLE",
+   "speculative-num-steps": 5,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 6
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/h200-fp8-mtp/agentic.yaml:override_hicache_ep1_fa3_k5_c12",
+   "benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/h200-fp8-mtp/agentic.yaml:override_hicache_ep1_fa3_k5_c4",
+   "benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/h200-fp8-mtp/agentic.yaml:override_hicache_ep1_fa3_k5_c8"
+  ],
+  "rows": 3,
+  "expected": {
+   "curve": "qwen3.5-397b-a17b-nvfp4__mtp__native__default-default",
+   "draft_tokens": 5,
+   "golden": 4.41,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "qwen3.5",
+  "framework": "sglang",
+  "args": {
+   "speculative-algorithm": "EAGLE",
+   "speculative-num-steps": 6,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 7
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/h200-fp8-mtp/agentic.yaml:override_hicache_ep1_fa3_k6_c24",
+   "benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/h200-fp8-mtp/agentic.yaml:override_hicache_ep1_fa3_k6_c32"
+  ],
+  "rows": 2,
+  "expected": {
+   "curve": "qwen3.5-397b-a17b-nvfp4__mtp__native__default-default",
+   "draft_tokens": 6,
+   "golden": 4.8,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "qwen3.5",
+  "framework": "sglang",
+  "args": {
+   "speculative-algorithm": "NEXTN",
+   "speculative-num-steps": 3,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 4
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/b200-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/b200-fp8-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/b300-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/b300-fp8-mtp/agentic.yaml"
+  ],
+  "rows": 127,
+  "expected": {
+   "curve": "qwen3.5-397b-a17b-nvfp4__mtp__native__default-default",
+   "draft_tokens": 3,
+   "golden": 3.39,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "qwen3.8next",
+  "framework": "sglang",
+  "args": {
+   "speculative-draft-model-revision": "fc694b54fb0174e0913e6adf86691ef85a4ead47",
+   "speculative-algorithm": "NEXTN",
+   "speculative-num-steps": 3,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 4,
+   "speculative-moe-runner-backend": "flashinfer_trtllm",
+   "speculative-draft-kv-cache-dtype": "bfloat16"
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/qwen3.8next/sglang/gb300-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 8,
+  "expected": {
+   "curve": "qwen3.8-flash-next-fp8__mtp__native__default-default",
+   "draft_tokens": 3,
+   "golden": 2.32,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "qwen3.8next",
+  "framework": "sglang",
+  "args": {
+   "speculative-algorithm": "NEXTN",
+   "speculative-num-steps": 3,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 4
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/qwen3.8next/sglang/b200-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/qwen3.8next/sglang/b300-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/qwen3.8next/sglang/h200-fp8-mtp/agentic.yaml"
+  ],
+  "rows": 16,
+  "expected": {
+   "curve": "qwen3.8-flash-next-fp8__mtp__native__default-default",
+   "draft_tokens": 3,
+   "golden": 2.32,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ }
+]
