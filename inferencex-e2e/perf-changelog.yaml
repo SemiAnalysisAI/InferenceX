@@ -11604,3 +11604,10 @@
     - "Select 20 distinct measured prompts, a disjoint warmup, 124 frames, 49 denoising updates, pinned images, and explicit cross-request conditioning-cache policy."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916
 
+- config-keys:
+    - h3-bf16-gb200-sglang-video
+  scenario-type: [video-generation]
+  description:
+    - "Add two- and four-GPU MiniMax-H3 SGLang deployments on GB200 with the pinned public arm64 v0.5.22-cu130 image and model snapshot."
+    - "Select the shared release-v1 C1 workload: 20 measured clips and one warmup, 50 inference steps, 107 frames at 24 fps and 1344x768."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4644

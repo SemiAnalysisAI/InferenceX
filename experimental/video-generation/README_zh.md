@@ -14,7 +14,8 @@ diffusion 引擎在单节点上提供服务，选定的冻结 YAML 工作负载�
 `python3 -m infx.bench video serve` 把引擎作为 generic service 启动，
 并以 `benchmark.type: custom` 运行 `python3 -m infx.bench video client`。
 本目录以 `/h3-package` 挂载进任务。H100、H200 与 B200 选用
-`h3-v0.1.yaml/release-v1`，在 C1 测量 20 个不同 prompt。
+`h3-v0.1.yaml/release-v1`，在 C1 测量 20 个不同 prompt；GB200 保留
+`h3.yaml/release-v1` 及其独立的 107 帧合同。
 产物身份、复用校验与合并后发布见
 [原生视频交付](../../inferencex-e2e/docs/video-generation.md)。
 

@@ -16,7 +16,8 @@ the SKU recipe under `benchmarks/single_node/srt-slurm-recipes/h3/` starts the
 engine through `python3 -m infx.bench video serve` as a generic service and runs
 `python3 -m infx.bench video client` as `benchmark.type: custom`. This directory
 is mounted into the job as `/h3-package`. H100, H200 and B200 select
-`h3-v0.1.yaml/release-v1`: 20 distinct measured prompts at C1. See
+`h3-v0.1.yaml/release-v1`: 20 distinct measured prompts at C1. GB200 retains
+`h3.yaml/release-v1` with its separate 107-frame contract. See
 [native video delivery](../../inferencex-e2e/docs/video-generation.md) for
 artifact identity, reuse validation and post-merge publication.
 

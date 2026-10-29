@@ -10680,6 +10680,29 @@ h3-bf16-b200-sglang-video:
             srt-recipe: serving-client.yaml
             conc-list: [1]
 
+h3-bf16-gb200-sglang-video:
+  image: lmsysorg/sglang:v0.5.22-cu130@sha256:06441be3de19a816ddbac917535e920cbfc7fc43171abc08417394f43634ffb6
+  model: MiniMaxAI/MiniMax-H3
+  model-prefix: h3
+  runner: cluster:gb200-nv
+  precision: bf16
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: h3/sglang/gb200-bf16
+  scenarios:
+    video-generation:
+      - spec: h3.yaml
+        set: release-v1
+        search-space:
+          - gpus: 2
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
+          - gpus: 4
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
+
+# Sol Engine GB200 stays disabled until its arm64 image and serving contract are available.
+# h3-bf16-gb200-sol-engine-video:
 # Kimi-K3 GB200 disaggregated points: one
 # TP16/DCP16 prefill role and one TP16/DCP16 decode role, four 4-GPU nodes each
 # (32 GPUs). DSpark depth 4 with the golden acceptance selected by the launcher.

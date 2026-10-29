@@ -4,14 +4,33 @@ The `video-generation` scenario schedules one server job per deployment. H100,
 H200, and B200 SGLang and H200 vLLM-Omni select four-GPU C1 deployments using
 `h3-v0.1.yaml`: 20 distinct measured prompts, a separate warmup, 49 denoising
 updates, and 124 frames at 24 fps and 1344×768. A five-second request produces
-124/24 seconds of video. Config presence is not GPU or quality qualification.
-The H100/H200/B200 SGLang recipes pin the public amd64 v0.5.23-cu130 image.
-Actual step execution, media,
+124/24 seconds of video. GB200 retains its separate two- and four-GPU C1
+deployments on `h3.yaml` `release-v1`: 20 measured clips and one warmup at 50
+updates and 107 frames. The two workloads are not directly comparable. Config
+presence is not GPU or quality qualification.
+The H100/H200/B200 SGLang recipes pin the public amd64 v0.5.23-cu130 image;
+GB200 retains its arm64 v0.5.22-cu130 image. Actual step execution, media,
 and power must be checked in the original run. The YAML workload has no `model.path`
 or Python field: the binder derives the pinned model snapshot path from `MODEL`,
 `HF_HUB_CACHE`, and the model revision. The service recipe selects the engine executable.
 Native power is accepted only when its sampled GPU UUIDs match the server's
 `spec.json` and `launch.json` assignment.
+The GB200 checkpoint must be staged at the pinned snapshot under the cluster's
+shared HF cache before dispatch. The `gb200-nv.models.entries` record points to
+that snapshot; it does not download it. On the authorized submit host, set
+`HF_HUB_CACHE` to the host-side shared cache path from `configs/runners.yaml`, then stage it with:
+
+```bash
+hf download MiniMaxAI/MiniMax-H3 \
+  --revision 42ed227ee7df40d41602854ae760620d6eb651fe \
+  --cache-dir "$HF_HUB_CACHE"
+```
+
+Verify the returned snapshot revision and required FL2VA and model-index files
+before dispatch.
+Sol Engine remains outside the executable matrix until a public arm64 image and
+its actual serve command, readiness endpoint, request payload, and media response
+contract are available.
 The H100 runner provides an HF hub cache mount, but the pinned H3 snapshot must
 be verified there before execution. MI355X is excluded because the prepared
 CUDA image cannot run on AMD. Historical artifacts remain evidence of their
@@ -98,6 +117,7 @@ adapters and workloads; the table does not establish final-head GPU qualificatio
 | `h3-bf16-h200-sglang-video` | `h3/sglang/h200-bf16/serving-client.yaml` | 4 | 20 at C1, v0.1 |
 | `h3-bf16-h200-vllm-omni-video` | `h3/vllm-omni/h200-bf16/serving-client.yaml` | 4 | 20 at C1, v0.1 |
 | `h3-bf16-b200-sglang-video` | `h3/sglang/b200-bf16/serving-client.yaml` | 4 | 20 at C1, v0.1 |
+| `h3-bf16-gb200-sglang-video` | `h3/sglang/gb200-bf16/serving-client.yaml` | 2 and 4 | 20 at C1 per deployment |
 
 1. Choose an existing combination and keep its frozen workload, model revision,
    concurrency population and measurement boundary. Put the full engine command
@@ -108,8 +128,8 @@ adapters and workloads; the table does not establish final-head GPU qualificatio
 2. Change the existing row in `configs/nvidia-master.yaml`, or copy it with a
    distinct key and recipe for a deployment that must remain separately selectable.
    Pin the image by digest and use its real interpreter and architecture. The
-   H100/H200/B200 SGLang rows use the public amd64 image. A shared image does
-   not qualify a different topology or SKU: validate
+   H200/B200 SGLang rows use the public amd64 image, while GB200 uses its arm64
+   digest. A shared image does not qualify a different topology or SKU: validate
    the selected deployments through their sweep. Maintainers stage model snapshots in the runner's
    existing HF cache; contributors do not patch the cache or SSH extra launch flags.
 3. Render locally from `inferencex-e2e/`, using the repository's pinned srt-slurm
