@@ -11556,3 +11556,10 @@
     - "Disagg: 6 DEP2 prefill workers with a DEP8 decode at conc 280-360 or a DEP16 decode at conc 300; DeepGEMM MegaMoE, NIXL transfer plus a shared MooncakeStore DRAM pool (160 GB per rank), Dynamo KV router."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4468
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-b200-sglang-agentic-dspark
+  description:
+    - "Update the SGLang image from nightly-dev-cu13-20261026-8252e3af to nightly-dev-cu13-20261029-c10e0e17."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4635
+  scenario-type: [agentic-coding]
