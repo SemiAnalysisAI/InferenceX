@@ -17,7 +17,7 @@ base:
       nodes: 1
       workers: 1
       args:
-        served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4
+        served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
         trust-remote-code: true
         data-parallel-size: 1
         expert-parallel-size: 1
