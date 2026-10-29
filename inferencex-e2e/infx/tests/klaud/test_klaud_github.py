@@ -2721,6 +2721,44 @@ def test_canonical_family_matrix_reads_revision_layout(monkeypatch, family_confi
     )
 
 
+def test_canonical_power_family_uses_the_fetched_inventory(monkeypatch, family_configs):
+    master, runners = family_configs
+    master["fixture"].update(multinode=True, disagg=True, **{"kv-p2p-transfer": "nixl"})
+    search = master["fixture"]["scenarios"]["agentic-coding"][0]["search-space"][0]
+    search.pop("tp")
+    search.update(power=True, **{
+        role: {"tp": 8, "num-worker": 1, "ep": 1, "dp-attn": False}
+        for role in ("prefill", "decode")
+    })
+    files = {
+        "configs/nvidia-master.yaml": yaml.safe_dump(master),
+        "configs/runners.yaml": yaml.safe_dump(runners),
+        "benchmarks/multi_node/srt-slurm-recipes/fixture/recipe.yaml": yaml.safe_dump({
+            "schema": 2, "engine": "sglang", "roles": {
+                "prefill": {"nodes": 1}, "decode": {"nodes": 1},
+            },
+        }).encode(),
+        **{path: text.encode() for path, text in shared_blocks().items()},
+    }
+    monkeypatch.setattr(github, "read", lambda *_: {"tree": [{"path": "configs"}]})
+    monkeypatch.setattr(github, "file_at", lambda _repo, _head, path: files[path])
+
+    def family() -> list[dict]:
+        return validation.canonical_matrix(
+            "example/project", "a" * 40, "configs/nvidia-master.yaml:fixture",
+        )["single_node"]["all"]
+
+    rows = family()
+    assert [(row["conc"], row["power"]) for row in rows] == [([2], True), ([6], True)]
+    files["configs/srt-recipes/telemetry-dcgm.yaml"] = (
+        b"telemetry: {enabled: true, collect_interval_ms: 500}\n"
+    )
+    changed = family()
+    assert {row["recipe-fingerprint"] for row in changed}.isdisjoint(
+        row["recipe-fingerprint"] for row in rows
+    )
+
+
 @pytest.mark.parametrize(("entry", "accepted"), [
     ({"config-keys": ["mtp", "agg"]}, True),
     ({"config-keys": ["agg"]}, False),

@@ -1,6 +1,6 @@
-"""DCGM power eligibility of the srt-slurm multi-node lanes.
+"""GPU power eligibility of the srt-slurm multi-node lanes.
 
-A matrix point asks for DCGM power with its master ``power`` field; each lane lists the
+A matrix point asks for GPU power with its master ``power`` field; each lane lists the
 requests that may have it.
 """
 
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 
 class PowerPolicyError(LaunchError):
-    """The point asks for DCGM power on a lane that does not support it."""
+    """The point asks for GPU power on a lane that does not support it."""
 
 
 @dataclass(frozen=True)
@@ -28,6 +28,7 @@ class PowerRule:
     agentx: bool
     adapter: bool = False
     require: bool = False
+    native: bool = False
 
 
 @dataclass(frozen=True)
@@ -40,6 +41,17 @@ class PowerLane:
 
 
 POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
+    ("mi355x-amds", LaunchPath.SRT_MULTI): PowerLane(
+        rules=(
+            PowerRule(
+                Match(any_of("kimik3"), any_of("fp4"), any_of("vllm-disagg"), agentic=True),
+                agentx=True,
+                require=True,
+                native=True,
+            ),
+        ),
+        error="MI355X multi-node power requires Kimi-K3 FP4 vllm-disagg AgentX",
+    ),
     ("gb200-nv", LaunchPath.SRT_MULTI): PowerLane(
         rules=(
             PowerRule(
@@ -138,6 +150,7 @@ class PowerDecision:
     agentx: bool
     adapter: bool = False
     require: bool = False
+    native: bool = False
 
 
 NO_POWER = PowerDecision(dcgm=False, agentx=False)
@@ -152,11 +165,17 @@ def decide_power(cluster_id: str, path: LaunchPath, request: MultiNodeRequest) -
         return NO_POWER
     lane = POWER_LANES.get((cluster_id, path))
     if lane is None:
-        raise PowerPolicyError(f"cluster {cluster_id!r} measures no DCGM power on {path}")
+        raise PowerPolicyError(f"cluster {cluster_id!r} measures no GPU power on {path}")
     for rule in lane.rules:
         if rule.when(request):
+            if rule.native and request.eval_only:
+                return NO_POWER
             return PowerDecision(
-                dcgm=True, agentx=rule.agentx, adapter=rule.adapter, require=rule.require
+                dcgm=not rule.native,
+                agentx=rule.agentx,
+                adapter=rule.adapter,
+                require=rule.require,
+                native=rule.native,
             )
     message = lane.agentic_error if request.is_agentic and lane.agentic_error else lane.error
     raise PowerPolicyError(message)

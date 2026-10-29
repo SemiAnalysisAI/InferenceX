@@ -5,7 +5,7 @@ import json
 import os
 import subprocess
 import threading
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +21,9 @@ from .validation import config_root, load_config_files, load_runner_file
 Matrix = dict[str, tuple[dict[tuple[str, int], dict[str, Any]], list[str]]]
 
 
-def _points(rows: list[dict], root: Path) -> tuple[dict, list[str]]:
+def _points(
+    rows: list[dict], root: Path, runner_config: str | Path | Mapping[str, Any]
+) -> tuple[dict, list[str]]:
     """Expand generated rows into one point per concurrency, keyed by (fingerprint, conc).
 
     Return the points and the messages of rows whose recipe could not be fingerprinted.
@@ -29,7 +31,7 @@ def _points(rows: list[dict], root: Path) -> tuple[dict, list[str]]:
     points, errors = {}, []
     for row in rows:
         try:
-            fingerprint = recipe_fingerprint(row, root)
+            fingerprint = recipe_fingerprint(row, root, runner_config)
             identity = fingerprint
         except ValueError as error:
             fingerprint = None
@@ -47,7 +49,9 @@ def head_matrix(config_files: list[str], runner_config: str) -> Matrix:
     root = config_root(config_files)
     return {
         key: _points(
-            generate_config_matrix([key], master, runners, eval_mode="none", root=root), root
+            generate_config_matrix([key], master, runners, eval_mode="none", root=root),
+            root,
+            runners,
         )
         for key in master
     }
@@ -70,7 +74,7 @@ def base_matrix(ref: str, config_files: list[str]) -> Matrix:
         ]
         rows = revision.generate_each(requests, os.cpu_count() or 1)
         return {
-            key: _points(generated, revision.root)
+            key: _points(generated, revision.root, revision.runner_config)
             for key, generated in zip(master, rows, strict=True)
         }
 

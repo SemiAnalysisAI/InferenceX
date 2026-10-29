@@ -455,7 +455,7 @@ def build_plan(
             all_benchmark_results = trim_conc(all_benchmark_results)
 
         for result in all_benchmark_results:
-            result["recipe-fingerprint"] = recipe_fingerprint(result, root)
+            result["recipe-fingerprint"] = recipe_fingerprint(result, root, runner_config)
             node_type = "multi_node" if result.get("prefill") is not None else "single_node"
             if result.get("scenario-type") == "agentic-coding":
                 scenario = "agentic"

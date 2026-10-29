@@ -2646,6 +2646,26 @@ def agentic_config(request, sample_single_node_config):
 
 
 class TestAgenticGeneration:
+    @pytest.mark.parametrize("required", [False, True])
+    def test_required_power_reaches_throughput_but_not_eval_only(
+        self, agentic_config, sample_runner_config, generate_agentic_sweep, required,
+    ):
+        from infx.matrix.generate import select_matrix_evals
+        from infx.matrix.validation import AgenticCodingConfig
+
+        config, benchmark = agentic_config
+        benchmark["conc-list"] = [16]
+        scenario = next(iter(config.values()))["scenarios"]["agentic-coding"][0]
+        scenario["require-power"] = required
+        AgenticCodingConfig.model_validate(scenario)
+        rows = generate_agentic_sweep(config, sample_runner_config)
+        assert len(rows) == 1
+        assert rows[0].get("require-power", False) is required
+        evals = select_matrix_evals(rows, mode="subset")
+        assert len(evals) == 1
+        assert evals[0]["eval-only"] is True
+        assert "require-power" not in evals[0]
+
     def test_point_order_and_input_preservation(
         self, agentic_config, sample_runner_config, generate_agentic_sweep,
     ):

@@ -93,6 +93,10 @@ The below list describes what each field is:
 - `multinode`: Required. `true` selects the multinode schema with `prefill`/`decode` or `worker` blocks, and `false` the single-node schema with `tp` entries.
 - `disagg`: Enables disaggregated serving and may only be `true` when
   `multinode` is also `true`.
+- Agentic scenarios may set `require-power: true` to require validated GPU power
+  for throughput, including the canary. Eval-only jobs do not require power.
+  This gate does not enable collection; multi-node points also need an enabled
+  collector and supported power lane.
 - `hardware`: Optional metadata within each `prefill` and `decode` worker block
   for heterogeneous disaggregated deployments. If one worker declares a GPU
   SKU, the other must also declare one. Omit both fields for homogeneous

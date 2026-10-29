@@ -100,7 +100,7 @@ def canonical_matrix(repository: str, head: str, family: str) -> dict:
             if in_scope(entry)
         ]
         fingerprinted = [
-            {**row, "recipe-fingerprint": recipe_fingerprint(row, root)} for row in entries
+            {**row, "recipe-fingerprint": recipe_fingerprint(row, root, runners)} for row in entries
         ]
         evals = [
             dict(row, **{"eval-only": True})

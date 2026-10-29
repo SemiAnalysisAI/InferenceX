@@ -745,11 +745,13 @@ kimik3-fp4-mi355x-atom-agentic-mtp:
   srt-recipe-dir: kimik3/atom/mi355x-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.343
+    - require-power: true
+      dram-utilization: 0.343
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [1, 4], spec-decoding: mtp, srt-recipe: agentic.yaml }
       - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [14, 16, 48], spec-decoding: mtp, srt-recipe: agentic.yaml }
-    - dram-utilization: 0.513
+    - require-power: true
+      dram-utilization: 0.513
       search-space:
       - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [56, 72], spec-decoding: mtp, srt-recipe: agentic.yaml }
 
@@ -774,7 +776,8 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
   srt-recipe-dir: kimik3/vllm/mi355x-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.6
+    - require-power: true
+      dram-utilization: 0.6
       search-space:
       - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: none, conc-list: [1, 4], spec-decoding: mtp, srt-recipe: agentic.yaml }
       - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [4, 10, 16, 24, 32, 48, 52, 60], spec-decoding: mtp, srt-recipe: agentic.yaml }
@@ -1728,9 +1731,11 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
   srt-recipe-dir: kimik3/vllm/mi355x-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.6
+    - require-power: true
+      dram-utilization: 0.6
       search-space:
-      - spec-decoding: mtp
+      - power: true
+        spec-decoding: mtp
         conc-list: [12]
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple }
@@ -1744,7 +1749,8 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
           additional-settings:
           - TOTAL_CPU_DRAM_GB=1799
         decode: { num-worker: 3, tp: 8, dcp-size: 1, ep: 1, dp-attn: false }
-      - spec-decoding: mtp
+      - power: true
+        spec-decoding: mtp
         conc-list: [24]
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple }
@@ -1758,7 +1764,8 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
           additional-settings:
           - TOTAL_CPU_DRAM_GB=1799
         decode: { num-worker: 3, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
-      - spec-decoding: mtp
+      - power: true
+        spec-decoding: mtp
         conc-list: [24]
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple }
@@ -1772,7 +1779,8 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
           additional-settings:
           - TOTAL_CPU_DRAM_GB=1799
         decode: { num-worker: 2, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
-      - spec-decoding: mtp
+      - power: true
+        spec-decoding: mtp
         conc-list: [48]
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple }
@@ -1787,7 +1795,8 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
           # Recipe enables P-only scratch reclaim; D and GMU0.90 are unchanged.
           - TOTAL_CPU_DRAM_GB=1799
         decode: { num-worker: 1, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
-      - spec-decoding: mtp
+      - power: true
+        spec-decoding: mtp
         conc-list: [56]
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple }
@@ -1801,7 +1810,8 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
           additional-settings:
           - TOTAL_CPU_DRAM_GB=1799
         decode: { num-worker: 1, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
-      - spec-decoding: mtp
+      - power: true
+        spec-decoding: mtp
         conc-list: [48]
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple }

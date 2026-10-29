@@ -198,6 +198,30 @@ def test_a_multinode_agentx_power_point_gets_its_clusters_exporter_port_and_clie
     assert recipe["benchmark"]["concurrencies"] == [8]
 
 
+
+def test_native_multinode_power_uses_the_clusters_exporter_and_requires_valid_power(
+    project, power_lane, monkeypatch, tmp_path
+):
+    rules = (power.PowerRule(Match(agentic=True), agentx=True, require=True, native=True),)
+    monkeypatch.setitem(
+        power.POWER_LANES, ("fixture", LaunchPath.SRT_MULTI), power.PowerLane(rules, error="no power")
+    )
+    output = tmp_path / "out"
+    assert generate(project, output, "agentx-multi") == 0
+
+    [(_, recipe)] = written(output)
+    assert recipe["telemetry"] == {"enabled": True, "required": True}
+    assert recipe["benchmark"]["env"]["REQUIRE_POWER"] == "1"
+    assert recipe["benchmark"]["env"]["ENABLE_AGENTX_POWER"] == "1"
+    assert recipe["benchmark"]["concurrencies"] == [8]
+    from srtctl.core.config import resolve_config_with_defaults
+
+    defaults = yaml.safe_load((project / "configs/runners.yaml").read_text())
+    defaults = defaults["clusters"]["fixture"]["slurm"]["srt-slurm"]["extra"]
+    resolved = resolve_config_with_defaults(recipe, defaults)
+    assert resolved["telemetry"]["dcgm_exporter"]["port"] == 9499
+    assert resolved["telemetry"]["dcgm_exporter"]["container_image"] == "exporter:test"
+
 def test_a_multinode_agentx_point_without_power_turns_its_clients_power_off(
     project, power_lane, tmp_path
 ):

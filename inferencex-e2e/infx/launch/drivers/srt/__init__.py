@@ -181,7 +181,9 @@ def run_multinode(launch: Launch) -> int:
             require(request, "PREFILL_IMAGE")
         shared = any(match(request) for match in lane.shared_run_root)
 
-        checkout = prepare_checkout(run, checkout_dir(run, shared=shared), power=decision.dcgm)
+        checkout = prepare_checkout(
+            run, checkout_dir(run, shared=shared), power=decision.dcgm or decision.native
+        )
         overrides = eval_overrides(checkout.root / "recipes", lane, request)
         system_python = (
             "/usr/bin/python3" if shared and os.access("/usr/bin/python3", os.X_OK) else None
@@ -195,7 +197,9 @@ def run_multinode(launch: Launch) -> int:
 
         recipe = str(checkout.root / BOUND_RECIPE)
         power_port, client_env = config.binder_inputs(run.cluster, run.srt, lane, request, decision)
-        if rc := submit.bind_recipe(run, checkout, staged, recipe, power_port, client_env):
+        if rc := submit.bind_recipe(
+            run, checkout, staged, recipe, power_port, client_env, native_power=decision.native
+        ):
             return rc
         prepare_recipe(Path(recipe), srtctl_job_name(request.runner_name), run.srt.dist_timeout_s)
         arguments = submit.multinode_arguments(run, lane, recipe, overrides, preflight=preflight)
@@ -243,13 +247,17 @@ def table_problems(clusters: Mapping[str, Cluster], only: str | None = None) -> 
             problems.append(f"{where}: no srt-slurm.shared-run-root")
         if srt.default_time_limit is not None and (lane.time_limit or lane.long_time_limit):
             problems.append(f"{where}: its time limits are shadowed by default-time-limit")
-    for cluster_id, path in power.POWER_LANES:
+    for (cluster_id, path), power_lane in power.POWER_LANES.items():
         where = f"POWER_LANES[{cluster_id!r}, {path}]"
         if not scoped(cluster_id):
             continue
         if (cluster_id, path) not in lanes.SRT_LANES:
             problems.append(f"{where}: no SRT_LANES row")
-        elif (srt := _srt_settings(clusters.get(cluster_id))) and srt.power_exporter_port is None:
+        elif (
+            (srt := _srt_settings(clusters.get(cluster_id)))
+            and srt.power_exporter_port is None
+            and (not power_lane.rules or not all(rule.native for rule in power_lane.rules))
+        ):
             problems.append(f"{where}: no srt-slurm.power-exporter-port")
     for cluster_id, overrides in models.OVERRIDES.items():
         if scoped(cluster_id) and profile("OVERRIDES", cluster_id) is not None:

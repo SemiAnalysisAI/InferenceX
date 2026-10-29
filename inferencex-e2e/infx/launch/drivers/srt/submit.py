@@ -91,11 +91,15 @@ def bind_recipe(
     output: str,
     power_port: int | None,
     client_env: Mapping[str, str],
+    *,
+    native_power: bool = False,
 ) -> int:
-    """Compose and bind the staged fragment into ``output``, with telemetry if ``power_port``."""
+    """Compose and bind the staged fragment with the selected telemetry backend."""
     bind = [str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.workload", staged, output]
     if power_port is not None:
         bind += ["--power-port", str(power_port)]
+    if native_power:
+        bind += ["--native-power"]
     for name, value in client_env.items():
         bind += ["--client-env", f"{name}={value}"]
     bind += _fabric(run)

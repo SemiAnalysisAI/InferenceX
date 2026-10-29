@@ -450,26 +450,38 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
     assert outputs.exists() is not outputs.is_relative_to(checkout)
 
 
-@pytest.mark.parametrize(("model_prefix", "precision", "framework", "model", "require_power", "lane"), [
-    ("kimik3", "fp4", "vllm", "moonshotai/Kimi-K3", "0", "agentx"),
-    ("glm5.2", "fp8", "dynamo-sglang", "zai-org/GLM-5.2-FP8", "1", "adapter"),
-    ("glm5.2", "fp8", "dynamo-sglang", "zai-org/GLM-5.2-FP8", "0", "adapter"),
+@pytest.mark.parametrize(("cluster", "model_prefix", "precision", "framework", "model", "require_power", "lane", "adapter_rc"), [
+    ("h200-dgxc", "kimik3", "fp4", "vllm", "moonshotai/Kimi-K3", "0", "agentx", 0),
+    ("h200-dgxc", "glm5.2", "fp8", "dynamo-sglang", "zai-org/GLM-5.2-FP8", "1", "adapter", 0),
+    ("h200-dgxc", "glm5.2", "fp8", "dynamo-sglang", "zai-org/GLM-5.2-FP8", "0", "adapter", 0),
+    ("mi355x-amds", "kimik3", "fp4", "vllm-disagg", "moonshotai/Kimi-K3", "1", "agentx", 0),
+    ("mi355x-amds", "kimik3", "fp4", "vllm-disagg", "moonshotai/Kimi-K3", "1", "agentx", 7),
 ])  # fmt: skip
 def test_power_lane_stages_provenance_and_validates_each_concurrency(
-    harness, model_prefix, precision, framework, model, require_power, lane
+    harness, cluster, model_prefix, precision, framework, model, require_power, lane, adapter_rc
 ):
     adapter = harness.tmp / "results-python"
     adapter.write_text(
         "#!/bin/bash\nprintf '%s\\n' \"$*\" >> \"$FAKE_LOG_DIR/adapter.log\"\n"
     )
+    with adapter.open("a") as script:
+        script.write(f"exit {adapter_rc}\n")
     adapter.chmod(0o755)
+    if cluster == "mi355x-amds":
+        inventory = yaml.safe_load(harness.config.read_text())
+        exporter = inventory["clusters"][cluster]["slurm"]["srt-slurm"]["extra"]["default_gpu_exporter"]
+        exporter.update(kind="custom", port=19555, command="fixture-exporter")
+        exporter["gpu_metrics"]["power"]["metric"] = "fixture_gpu_watts"
+        exporter["gpu_labels"]["identity"] = "fixture_serial"
+        harness.config.write_text(yaml.safe_dump(inventory))
     env = lane_env(
-        harness, "h200-dgxc", LANE_FRAGMENT + POWER_TELEMETRY,
+        harness, cluster, "schema: 2\n" + LANE_FRAGMENT + POWER_TELEMETRY,
         MODEL_PREFIX=model_prefix, PRECISION=precision, FRAMEWORK=framework, MODEL=model,
         IS_AGENTIC="1", ISL="0", OSL="0", CONC="4", CONC_LIST="4", FAKE_RESULTS="agentic",
         REQUIRE_POWER=require_power, INFERENCEX_RESULTS_PYTHON=str(adapter), POWER="1",
     )  # fmt: skip
-    assert_ok(launch(env, harness.config, harness.workspace))
+    result = launch(env, harness.config, harness.workspace)
+    assert result.returncode == adapter_rc, result.stdout[-4000:] + result.stderr[-8000:]
 
     workspace = harness.workspace
     commit = harness.env["FAKE_SRT_COMMIT"]
@@ -477,7 +489,10 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     [checkout] = workspace.glob("srt-slurm-9001-*")
     exporter = srtslurm(checkout)["containers"]["dcgm-exporter"]
     provenance = (workspace / "exporter-image.sha256").read_text()
-    assert provenance.endswith(f"  {exporter}\n")
+    if cluster == "mi355x-amds":
+        assert provenance == exporter + "\n"
+    else:
+        assert provenance.endswith(f"  {exporter}\n")
     assert (workspace / "LOGS/power/exporter-image.sha256").read_text() == provenance
     assert (workspace / "LOGS/power/power-producer-sha.txt").read_text() == commit + "\n"
     bound = yaml.safe_load((checkout / "recipe.yaml").read_text())
@@ -485,7 +500,18 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     assert bound["benchmark"]["env"]["ENABLE_AGENTX_POWER"] == "1"
     assert bound["benchmark"]["env"]["REQUIRE_POWER"] == require_power
     assert bound["telemetry"]["collector_join_timeout_seconds"] == 12
-    assert (bound["telemetry"]["enabled"], bound["telemetry"]["dcgm_exporter"]["port"]) == (True, 9401)
+    resolved = resolve_config_with_defaults(bound, srtslurm(checkout))
+    assert resolved["telemetry"]["enabled"] is True
+    if cluster == "mi355x-amds":
+        assert bound["benchmark"]["env"]["RESULT_DIR"] == "/logs/agentic"
+        assert resolved["telemetry"]["required"] is True
+        gpu_exporter = resolved["telemetry"]["dcgm_exporter"]
+        assert (gpu_exporter["kind"], gpu_exporter["port"]) == ("custom", 19555)
+        assert gpu_exporter["gpu_metrics"]["power"]["metric"] == "fixture_gpu_watts"
+        assert gpu_exporter["gpu_labels"]["identity"] == "fixture_serial"
+        assert gpu_exporter["command"] == "fixture-exporter"
+    else:
+        assert resolved["telemetry"]["dcgm_exporter"]["port"] == 9401
 
     runs = lines(harness.logs, "adapter")
     assert [run.split("--result-dir ")[1].split()[0].rsplit("/", 1)[1] for run in runs] == ["conc_4"]

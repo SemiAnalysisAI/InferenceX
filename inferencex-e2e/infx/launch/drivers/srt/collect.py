@@ -140,7 +140,7 @@ def _stage_logs(run: SrtRun, logs: Path, power: PowerDecision) -> None:
     if not logs.is_dir():
         return
     workspace = run.workspace
-    if power.dcgm:
+    if power.dcgm or power.native:
         power_dir = logs / "power"
         power_dir.mkdir(parents=True, exist_ok=True)
         for name in (EXPORTER_PROVENANCE, "power-producer-sha.txt"):
