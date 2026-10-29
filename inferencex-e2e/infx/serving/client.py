@@ -14,6 +14,7 @@ import json
 import os
 import shlex
 import shutil
+import ssl
 import sys
 import urllib.error
 import urllib.request
@@ -31,8 +32,11 @@ COUNT_SOURCE_MARKER = ".token_count"
 SELECTION_DIR = "/tmp/greenspec-selection"  # noqa: S108 -- inside the job container; outside the result dir: request bodies are never uploaded
 PRIVATE_LOGS = ".greenspec-private-logs"  # beside the aggregate, on the node; not in any upload path
 PROBE_BODY = {  # the shape agentx sends: streaming, usage requested, ignore_eos injected by the scenario
-    "messages": [{"role": "user", "content": "Say OK."}], "stream": True,
-    "stream_options": {"include_usage": True}, "max_completion_tokens": 16, "ignore_eos": True,
+    "messages": [{"role": "user", "content": "Say OK."}],
+    "stream": True,
+    "stream_options": {"include_usage": True},
+    "max_completion_tokens": 16,
+    "ignore_eos": True,
 }
 
 
@@ -57,13 +61,22 @@ def served_model(env: Mapping[str, str]) -> str:
     return env.get("SERVED_MODEL_NAME") or env["MODEL"]
 
 
+def authorization(api_key: str) -> str:
+    """A key with a space is a full header value ("Basic <b64>"): gateways that
+    only accept scheme auth reject "Bearer Basic <b64>"."""
+    return api_key if " " in api_key else f"Bearer {api_key}"
+
+
 def agentx_argv(agentx: str, scenario: Path, env: Mapping[str, str]) -> list[str]:
     argv = [agentx, "profile", "--config", str(scenario)]
     argv += ["--url", env.get("SERVING_REMOTE_URL") or f"http://localhost:{env['PORT']}"]
     argv += ["--model", served_model(env)]
     argv += ["--tokenizer", env.get("SERVING_TOKENIZER") or env["MODEL"]]
     if key := env.get("SERVING_API_KEY"):
-        argv += ["--api-key", key]
+        if " " in key:
+            argv += ["--header", f"Authorization:{key}"]
+        else:
+            argv += ["--api-key", key]
     if env.get("SERVING_SEARCH") != "1":
         argv += ["--concurrency", env["CONC"]]
     if telemetry := env.get("AIPERF_GPU_TELEMETRY_URL"):
@@ -77,8 +90,17 @@ def agentx_argv(agentx: str, scenario: Path, env: Mapping[str, str]) -> list[str
 
 
 def redacted(argv: list[str]) -> list[str]:
-    """``argv`` with the --api-key value replaced, for benchmark_command.txt (an uploaded artifact)."""
-    return ["***" if index and argv[index - 1] == "--api-key" else arg for index, arg in enumerate(argv)]
+    """``argv`` with the --api-key value and Authorization header replaced, for
+    benchmark_command.txt (an uploaded artifact)."""
+    hidden = []
+    for index, arg in enumerate(argv):
+        if (index and argv[index - 1] == "--api-key") or (
+            index and argv[index - 1] == "--header" and arg.lower().startswith("authorization:")
+        ):
+            hidden.append("***")
+        else:
+            hidden.append(arg)
+    return hidden
 
 
 class ProbeError(RuntimeError):
@@ -93,8 +115,10 @@ def _probe_hint(status: int, detail: str, has_key: bool, secret: str) -> str:
     if status == 404:
         return f"HTTP 404: check endpoint.url and endpoint.model ({detail})"
     if status == 400:
-        return (f"HTTP 400: {detail} -- the endpoint may reject ignore_eos or max_completion_tokens "
-                "(see the serving-bench skill, remote endpoint)")
+        return (
+            f"HTTP 400: {detail} -- the endpoint may reject ignore_eos or max_completion_tokens "
+            "(see the serving-bench skill, remote endpoint)"
+        )
     return f"HTTP {status}: {detail}"
 
 
@@ -108,15 +132,30 @@ def _error_detail(error: urllib.error.HTTPError) -> str:
     return parsed.get("message", str(parsed)) if isinstance(parsed, dict) else str(parsed)
 
 
-def probe(url: str, model: str, api_key: str, secret: str = "", timeout: float = 60.0) -> str:
+def _tls_context(verify: bool) -> ssl.SSLContext | None:
+    """None verifies as usual; an unverified context serves endpoint.tls-verify: false
+    (self-signed gateway certificates)."""
+    if verify:
+        return None
+    context = ssl.create_default_context()
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    return context
+
+
+def probe(
+    url: str, model: str, api_key: str, secret: str = "", timeout: float = 60.0, verify: bool = True
+) -> str:
     """One streaming request shaped like agentx's: "server" if a chunk carries usage, else "client"."""
     headers = {"Content-Type": "application/json", "Accept": "text/event-stream"}
     if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
+        headers["Authorization"] = authorization(api_key)
     body = json.dumps({"model": model, **PROBE_BODY}).encode()
     request = urllib.request.Request(f"{url}/v1/chat/completions", data=body, headers=headers)  # noqa: S310 -- http(s) only, checked by the schema
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+        with urllib.request.urlopen(  # noqa: S310 -- http(s) only, checked by the schema
+            request, timeout=timeout, context=_tls_context(verify)
+        ) as response:
             for raw in response:
                 line = raw.decode(errors="replace").strip()
                 if not line.startswith("data:") or line == "data: [DONE]":
@@ -128,7 +167,9 @@ def probe(url: str, model: str, api_key: str, secret: str = "", timeout: float =
                 if isinstance(chunk, dict) and chunk.get("usage"):
                     return "server"
     except urllib.error.HTTPError as error:
-        raise ProbeError(_probe_hint(error.code, _error_detail(error), bool(api_key), secret)) from None
+        raise ProbeError(
+            _probe_hint(error.code, _error_detail(error), bool(api_key), secret)
+        ) from None
     except (urllib.error.URLError, OSError) as error:
         raise ProbeError(f"{url} unreachable: {getattr(error, 'reason', error)}") from None
     return "client"
@@ -185,16 +226,25 @@ def prepare(env: Mapping[str, str], runtime: Runtime) -> int:
             return 1
     if url := env.get("SERVING_REMOTE_URL"):
         try:
-            source = probe(url, env["MODEL"], env.get("SERVING_API_KEY", ""), env.get("SERVING_API_KEY_SECRET", ""))
+            source = probe(
+                url,
+                env["MODEL"],
+                env.get("SERVING_API_KEY", ""),
+                env.get("SERVING_API_KEY_SECRET", ""),
+                verify=env.get("SERVING_TLS_VERIFY", "1") != "0",
+            )
         except ProbeError as error:
             print(f"ERROR remote endpoint: {error}", file=sys.stderr)
             return 1
         (result_dir / COUNT_SOURCE_MARKER).write_text(source)
         print(f"Remote endpoint {url} answered; token counts from the {source}", flush=True)
         if source == "client":
-            print("WARNING remote endpoint streams no usage; ISL/OSL are counted client-side with "
-                  f"tokenizer {env.get('SERVING_TOKENIZER')} (approximate unless it is the model's own; "
-                  "hidden reasoning tokens are not counted)", file=sys.stderr)
+            print(
+                "WARNING remote endpoint streams no usage; ISL/OSL are counted client-side with "
+                f"tokenizer {env.get('SERVING_TOKENIZER')} (approximate unless it is the model's own; "
+                "hidden reasoning tokens are not counted)",
+                file=sys.stderr,
+            )
         return 0  # no weights to download; agentx fetches an HF tokenizer itself
     return proc.call([str(runtime.hf), "download", env["MODEL"]], online(env))
 
@@ -216,6 +266,8 @@ def run(env: Mapping[str, str], runtime: Runtime) -> int:
         "PYTHONPATH": proc.pythonpath(env),
         **datasets_cache(env),
     }
+    if env.get("SERVING_TLS_VERIFY", "1") == "0":
+        child["AIPERF_HTTP_SSL_VERIFY"] = "false"  # aiperf's own switch for self-signed gateways
     if (marker := result_dir / DATASET_PATH).exists():
         child["IX_CUSTOM_DATASET_FILE"] = marker.read_text().strip()
     if chosen:

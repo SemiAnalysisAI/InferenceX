@@ -1,0 +1,36 @@
+# One SGLang TP4 server (no router), LiveKit v1.1-warm trace (the livekit scenario's
+# default dataset, 1200 s) at c96. Migrated from the bench/gemma4-livekit-sgl-pfgraph
+# branch's serving/gemma4-livekit-sgl-tp4-fp8kv-v11.yaml (ngoctg2's stack, report
+# 2026-10-21: V1 c96 TTFT p95 507 ms, c64 451 ms).
+# Image: lmsysorg/sglang:v0.5.22 + 3 patches baked in by ngoctg2 (/etc/sglang-patch-info):
+#   sgl-project/sglang#44399 per-layer FA3/FA4 routing for Gemma-4;
+#   FA4 SM90 FP8 e4m3 KV for head_dim 512 + hd512 decode overlap default;
+#   frozen-KV MTP draft runner adopts target token_to_kv_pool (#43542; MTP off here).
+# Node-local .sqsh on hgx-h200-01/-02; source + patch in /shared/ngoctg2-bench/images/.
+name: gemma4-livekit-sgl-tp4-fp8kv
+runner: cluster:hcm-hgx02
+image: /data/ngoctg2-enroot/images/sglang-v0.5.22-gemma4-fp8kv-amd64.sqsh
+model: RedHatAI/gemma-4-31B-it-FP8-block
+gpus: 4
+precision: fp8
+env:
+  SGLANG_SWA_EVICTION_INTERVAL: "32"
+  NCCL_P2P_LEVEL: NVL
+serve: |
+  python3 -m sglang.launch_server
+  --model-path RedHatAI/gemma-4-31B-it-FP8-block
+  --tp 4
+  --context-length 262144
+  --max-running-requests 160
+  --attention-backend fa3
+  --page-size 64
+  --kv-cache-dtype fp8_e4m3
+  --chunked-prefill-size 4096
+  --schedule-policy shortest-prefill-first
+  --swa-full-tokens-ratio 0.2
+  --mem-fraction-static 0.92
+  --enable-cache-report --enable-metrics
+  --tool-call-parser gemma4 --reasoning-parser gemma4
+  --trust-remote-code
+scenario: livekit
+conc: [96]

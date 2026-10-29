@@ -1,0 +1,55 @@
+# One TP4 SGLang FP8-KV engine (fa4fp8mma image) behind the Dynamo KV router, prefill CUDA
+# graph (breakable) + fastokens frontend tokenizer + custom all-reduce up to 128 MB, on the
+# LiveKit v1.1-warm trace (the livekit scenario's default dataset, 1200 s).
+# Migrated from bench/gemma4-livekit-sgl-pfgraph's serving/…-car128-v11.yaml, which ran 2x TP4
+# behind the router at c150/c200/c250 — the refactor flow does not support Dynamo multi-replica
+# yet (schema.py rejects replicas > 1 with dynamo.frontend), so this is one engine at half the
+# conc: same per-engine CCU (c75/c100/c125; one TP4 engine at c100 = GPU busy 96% per the load
+# profile in Slurm job 6108). See docs/handoffs/2026-10-29-inferencex-dynamo-multi-replica-support.md.
+# Custom all-reduce: the tuned SM90 TP4 table routes up to 128 MB to the custom 2shot_pull
+# kernel in CUDA graphs, but SGLANG_CUSTOM_ALL_REDUCE_V2_MAX_SIZE_KB (default 16 MB) clipped
+# it and every prefill all-reduce fell back to NCCL; raised to 131072 KB (128 MB) here.
+# Fastokens + the session-affinity/bcg preprocessor load via PYTHONPATH runners/sglang_gemma4_bcg.
+# Legacy-only fields host_cpus/host_mem_gb are dropped (not ported to this flow).
+name: gemma4-livekit-tp4-dyn-sgl-fp8kv-pfbreak-fa4fp8mma-fastok-car128
+runner: cluster:hcm-hgx02
+image: /data/ngoctg2-enroot/images/sglang-v0.5.22-gemma4-fp8kv-fa4fp8mma-amd64.sqsh
+model: RedHatAI/gemma-4-31B-it-FP8-block
+gpus: 4
+precision: fp8
+env:
+  SGLANG_SWA_EVICTION_INTERVAL: "32"
+  NCCL_P2P_LEVEL: NVL
+  SGLANG_CUSTOM_ALL_REDUCE_V2_MAX_SIZE_KB: "131072"
+  AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+  PYTHONPATH: /workspace/runners/sglang_gemma4_bcg
+serve: |
+  python3 -m dynamo.sglang
+  --model-path RedHatAI/gemma-4-31B-it-FP8-block
+  --served-model-name RedHatAI/gemma-4-31B-it-FP8-block
+  --tp 4
+  --context-length 262144
+  --max-running-requests 256
+  --attention-backend fa3
+  --page-size 64
+  --kv-cache-dtype fp8_e4m3
+  --chunked-prefill-size 4096
+  --schedule-policy shortest-prefill-first
+  --swa-full-tokens-ratio 0.2
+  --mem-fraction-static 0.92
+  --enable-cache-report --enable-metrics
+  --trust-remote-code
+  --cuda-graph-backend-prefill breakable
+  --dyn-tool-call-parser gemma4 --dyn-reasoning-parser gemma4
+router:
+  image: /data/ngoctg2-enroot/images/sglang-v0.5.22-gemma4-fp8kv-amd64.sqsh
+  env:
+    DYN_LOG: info,dynamo_kv_router::scheduling::selector=debug
+    FASTOKENS_BPE_THREADS: "4"
+  serve: |
+    python3 -m dynamo.frontend
+    --router-mode=kv --router-prefill-load-scale=16 --router-min-initial-workers=1
+    --router-session-affinity-ttl-secs=1800 --router-session-affinity-mode=hard
+    --tokenizer fastokens
+scenario: livekit
+conc: [75, 100, 125]

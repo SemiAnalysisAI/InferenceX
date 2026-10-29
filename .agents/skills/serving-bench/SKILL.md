@@ -120,6 +120,8 @@ via an OpenAI-compatible API), write `endpoint:` instead of `image`/`model`/`gpu
   | HAN H200 node 1 / 2 / 4 | `cluster:han-h200-01` / `-02` / `-04` | 1 (16 CPU, ~110 GB RAM) |
   | either HAN node | `h200-han` | 1 |
 
+  Any value outside this table (e.g. the legacy `hardware-hcm-8x_01`-style labels) is out-of-scheme: dispatch rejects it, and it would pin the whole run to one runner slot.
+
   Check load first: `ssh slurm-client squeue -p hardware-hcm` (or `-p rtx6000pro-hcm`, `-p test` for HAN). If the node is busy, tell the user the job waits in the Slurm queue. Never cancel another user's job.
 - **docker-compose / k8s:** `image` from `image:`; `serve` from `command:` + `args:`; `env` from `environment:` / `env:`.
 - **Drop `--numa-node …`.**
