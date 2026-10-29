@@ -1,11 +1,86 @@
-# CollectiveX EP Benchmark Methodology
+# Summary
+
+What CollectiveX measures, how, and how to read it. The sections after this summary hold the
+evidence behind each rule; the [README](../README.md) holds usage and coverage. Where the docs and
+`collectivex/bench/` disagree, the code is authoritative.
+
+## Scope and workload
+
+CollectiveX times one MoE layer's expert-parallel communication on real allocations: **dispatch**
+sends each token to the ranks owning its top-k experts, **combine** brings the expert outputs back.
+No expert compute runs, so it measures neither overlap nor serving throughput, and it does not rank
+or recommend.
+
+- **Shape** `deepseek-v4-pro`: hidden 7168, top-k 6, 384 experts, packed placement, uniform
+  deterministic routing, proven identical on every rank.
+- **`T` is tokens per rank**: decode 1-512, prefill 1024-8192, powers of two. Unreachable rungs go
+  in `ladder_dropped`.
+- **Precision**: dispatch BF16, or FP8 (per-128-block e4m3, FP32 scales) where the backend supports
+  it upstream; combine always BF16.
+- **Scale**: EP8 is one 8-GPU node (2x4 MNNVL on GB200/GB300); EP16 is 2x8 over RDMA, or 4x4 MNNVL
+  on GB200/GB300.
+
+## Backends run as engines run them
+
+Each backend runs the configuration its reference engine selects, so `production` rows compare
+deployed contracts. `production` means an engine can select it today; `candidate` rows describe the
+library only. Details are under [Backends](#backends).
+
+| Backend | Maturity | Launch | Engine contract |
+|---|---|---|---|
+| deepep-v2 | production | graph; normal prefill eager | vLLM `deepep_v2` and `deepep_low_latency`; LL stops at T=256 |
+| nccl-ep | production for in-domain zero-copy LL rank-major BF16; library otherwise | graph decode; prefill eager | TensorRT-LLM `NcclEP` with NVIDIA/TensorRT-LLM#20631; HT and FP8 (DS_FP8E3M4) are library rows |
+| uccl-ep | candidate | normal eager; LL graph | vLLM's DeepEP configuration on UCCL's drop-in `deep_ep`; no engine ships its selector |
+| mori | production | graph decode; eager prefill | vLLM's MoRI IntraNode / InterNodeV1, LL EP16 only |
+| flashinfer-ep | production | graph decode; eager prefill | vLLM's integration, GB200/GB300 only |
+
+## Timing
+
+Every window is a pair of CUDA events.
+
+**Fresh entry** times one drained `roundtrip`, `dispatch` or `combine` per sample (256 trials x 8).
+Each sample opens with a 2 ms GPU spin and a device all-reduce, so launch skew stays outside the
+window, and is reduced across ranks by MAX; MIN and the spread are kept too. A sample whose host
+enqueued slower than the spin is a **miss**. See [Rank Alignment](#rank-alignment).
+
+**Chained** times 128 back-to-back pairs with no host sync, 16 dropped as fill, 4 trials:
+
+- **`pair_period`**, the headline: events only around each pair, MEDIAN across ranks.
+- **`chain_floor_us`**: events around each op, MIN across ranks; tracks kernel time to about 10%.
+- Health: `pair_spread_us`, `interpair_gap_us`, `settle_drift_us`. Chained per-op medians are
+  never published.
+
+Graphed rows replay CUDA graphs as engines capture decode; the rest run eager. The two regimes carry
+different `kernel_generation` suffixes and never pool.
+
+## Validation
+
+Every case is gated by an oracle before and after timing and after the chain: per-expert transforms,
+metadata, counts, payload and a combine model matching each backend's reduction (tolerance 8 x 2^-8
+relative). Graphed replays must rewrite poisoned outputs. Any failure makes the case `invalid`.
+
+## Reading results
+
+- Rank on `pair_period` p50. Each case is one run, so a small gap is no result.
+- Fresh-entry p90/p95/p99 are withheld once misses reach 10/5/1% of samples. Do not rank
+  multi-node decode on fresh-entry p99.
+- Bandwidth is logical wire payload over latency, never link utilization.
+- FP8 `stage` (the dequant) is excluded from `roundtrip` and `pair_period`; do not sum it in.
+- EFA pools (b300, h100) run EP16 through a CPU proxy, so those rows measure the proxy.
+- On GB200/GB300, eager FP8 prefill chains at T=1024 are bound by the Grace host, not the fabric.
+- Vendor tables time kernels in a profiler; compare them with `cross_rank_min_us` or
+  `chain_floor_us`.
+- Limits: no compute between ops, uniform routing, no L2 flush, unlocked clocks (`slow_gpu` flags
+  outliers), interior chain pairs unvalidated.
+
+# Methodology
 
 CollectiveX runs expert-parallel (EP) communication benchmarks by hand on real accelerator
 allocations and writes one result document per case into `collectivex/results/`. Uploading those
 files to the CollectiveX database publishes them; they are not committed. CollectiveX does not rank,
 recommend or select: the frontend reads `results/cases.json` and the result documents and makes its
-own display decisions. [methodology-summary.md](methodology-summary.md) states the same rules in
-brief. Where either disagrees with the code in `collectivex/bench/`, the code is authoritative.
+own display decisions. The [Summary](#summary) above states the rules in
+brief. Where the docs disagree with the code in `collectivex/bench/`, the code is authoritative.
 
 ## Product Boundary
 

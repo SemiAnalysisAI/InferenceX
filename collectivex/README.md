@@ -10,9 +10,8 @@ CollectiveX is run by hand on each pool (see [Running By Hand](#running-by-hand)
 results to the CollectiveX database is the publish step: the dashboard shows the latest stored run.
 Results are not committed to this repository. CollectiveX does not rank, recommend, or select; any
 downstream display or comparison is the consumer's responsibility.
-[docs/methodology-summary.md](docs/methodology-summary.md) states the measurement rules, including
-each backend's engine contract, and [docs/methodology.md](docs/methodology.md) holds the evidence
-behind them.
+[docs/methodology.md](docs/methodology.md) states the measurement rules in a summary, including
+each backend's engine contract, and holds the evidence behind them.
 
 ## Coverage
 
