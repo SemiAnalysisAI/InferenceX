@@ -1171,7 +1171,10 @@ minimaxm3-fp8-mi325x-vllm-agentic-mtp:
 # golden AL 3.51 for throughput, real block verification for evals, adaptive
 # verification off on ROCm.
 dsv41flash-fp4-mi325x-vllm-agentic-dspark:
-  image: vllm/vllm-openai-rocm:v0.32.0@sha256:14f6a575e1fb0a580b0f633c09e06f648709d60405b85f6a7ff3f80d49f39905
+  # ROCm 10.0 nightly carrying vllm-project/vllm#60731 (gfx942 mono decode,
+  # switched by --monokernel), its fix #63576, and #59039 (decoder SWA bounded
+  # replay on ROCm).
+  image: vllm/vllm-openai-rocm:nightly-rocm100-edad8b03c5285a1c12e7e4f83c1af709b319a01b@sha256:009169c114af5b15e25eddc808afb3c1fc3f12c94e746472b16f39fcf39cd716
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi325x-amd
