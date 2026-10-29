@@ -49,7 +49,7 @@
     "b200-nscale": {
       "arch": "sm100",
       "product": "b200",
-      "image": "lmsysorg/sglang:v0.5.11-cu130",
+      "image": "vllm/vllm-openai:v0.32.0",
       "image_platform": "linux/amd64",
       "gpus_per_node": 8,
       "scale_up_domain": 8,
@@ -65,7 +65,8 @@
       },
       "network": {
         "socket_ifname": "bond0",
-        "rdma_devices": "mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_10,mlx5_11"
+        "rdma_devices": "mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_10,mlx5_11",
+        "rdma_gbs": 50
       }
     },
     "b300": {
@@ -94,7 +95,7 @@
     "gb200": {
       "arch": "sm100",
       "product": "gb200",
-      "image": "lmsysorg/sglang:v0.5.11-cu130",
+      "image": "vllm/vllm-openai:v0.32.0",
       "image_platform": "linux/arm64",
       "gpus_per_node": 4,
       "scale_up_domain": 72,
@@ -114,7 +115,7 @@
     "gb300": {
       "arch": "sm103",
       "product": "gb300",
-      "image": "lmsysorg/sglang:v0.5.11-cu130",
+      "image": "vllm/vllm-openai:v0.32.0",
       "image_platform": "linux/arm64",
       "gpus_per_node": 4,
       "scale_up_domain": 72,
