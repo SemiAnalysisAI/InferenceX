@@ -2,15 +2,19 @@ name: Klaud Cold auto-sweep
 run-name: >-
   ${{ inputs.resume-parent && format('Klaud Cold resume {0} {1} session {2}',
   inputs.resume-parent, inputs.resume-candidate, inputs.resume-session)
-  || (github.event.schedule == '30 * * * *' || inputs.wake) && 'Klaud Cold wake'
+  || (github.event.schedule == '47 * * * *' || inputs.wake) && 'Klaud Cold wake'
   || 'Klaud Cold auto-sweep' }}
 
-# Wakes, dispatched by klaud-wake.yml when a Klaud-owned run ends or scheduled hourly as a
-# backstop, share one group: one runs and one waits, so a burst collapses into a single recovery
-# pass. Every other run is its own group, so the 4-hourly auto-sweep's recover can overlap a wake
-# pass. Recovery leases keep two passes off the same candidate.
+# Wakes, dispatched by klaud-wake.yml when a Klaud-owned run ends or a delayed rerun is due, or
+# scheduled hourly as a backstop, collapse bursts: a wake for one candidate shares that
+# candidate's group and full passes share another, where one runs, one waits and a newer waiting
+# pass replaces an older one. Passes of one group cover the same candidates, so a replaced wake
+# loses none. Every other run is its own group, so the 4-hourly auto-sweep's recover can overlap
+# a wake pass. Recovery leases keep two passes off the same candidate.
 concurrency:
-  group: ${{ (inputs.wake || github.event.schedule == '30 * * * *') && 'klaud-wake' || github.run_id }}
+  group: >-
+    ${{ (inputs.wake || github.event.schedule == '47 * * * *')
+    && format('klaud-wake-{0}', inputs.wake && inputs.wake-candidate || 'all') || github.run_id }}
   cancel-in-progress: false
 
 on: # zizmor: ignore[concurrency-limits]
@@ -32,9 +36,13 @@ on: # zizmor: ignore[concurrency-limits]
         description: Recovery-only pass, dispatched when a Klaud-owned run ends
         type: boolean
         default: false
+      wake-candidate:
+        description: Candidate the wake reconciles alone; empty for every candidate
+        type: string
+        default: ''
   schedule:
-    - cron: '0 */4 * * *'
-    - cron: '30 * * * *'
+    - cron: '17 */4 * * *'
+    - cron: '47 * * * *'
 
 permissions:
   contents: read
@@ -97,8 +105,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.AGENT_PAT }} # zizmor: ignore[secrets-outside-env]
           KLAUD_STATUS_TOKEN: ${{ github.token }}
+          WAKE_CANDIDATE: ${{ inputs.wake && inputs.wake-candidate || '' }}
         run: |
-          uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud recover --max-sessions "$MAX_CANDIDATES_PER_RUN"
+          uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud recover --max-sessions "$MAX_CANDIDATES_PER_RUN" ${WAKE_CANDIDATE:+--candidate "$WAKE_CANDIDATE"}
           if [[ -f "$RUNNER_TEMP/klaud-recovery.json" ]]; then
             echo "blocked-families=$(jq -c . "$RUNNER_TEMP/klaud-recovery.json")" >> "$GITHUB_OUTPUT"
           fi
@@ -106,7 +115,11 @@ jobs:
   review:
     name: Review candidate overlap
     needs: recover
-    if: github.event.schedule != '30 * * * *' && !inputs.wake && needs.recover.outputs.deferred != 'true'
+    # A job-level if cannot read env, so 5 is MAX_CANDIDATES_PER_RUN. With no free slot the wave
+    # skips review and selection.
+    if: >-
+      github.event.schedule != '47 * * * *' && !inputs.wake && needs.recover.outputs.deferred != 'true'
+      && fromJSON(needs.recover.outputs.active-sessions || '0') < 5
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -147,11 +160,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           KLAUD_DASHBOARD_API_KEY: ${{ secrets.DASH_API_KEY }} # zizmor: ignore[secrets-outside-env]
+          KLAUD_REQUEUE_TOKEN: ${{ secrets.AGENT_PAT }} # zizmor: ignore[secrets-outside-env]
+          KLAUD_ACTIVE_SESSIONS: ${{ needs.recover.outputs.active-sessions }}
         run: >-
           uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud plan
           --directory "$RUNNER_TEMP/klaud"
           --review-batch-size "$REVIEW_BATCH_SIZE"
           --cooldown-hours "$CANDIDATE_COOLDOWN_HOURS"
+          --max-candidates-per-run "$MAX_CANDIDATES_PER_RUN"
+          --active-sessions "${KLAUD_ACTIVE_SESSIONS:-0}"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: klaud-review-input
