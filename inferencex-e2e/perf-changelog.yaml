@@ -11567,6 +11567,14 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
+    - minimaxm31flash-fp4-gb200-sglang-agentic-dspark
+  description:
+    - "Store the DSpark draft KV cache in FP8 (speculative-draft-kv-cache-dtype fp8_e4m3) instead of the bf16 default, matching the vLLM DSpark drafter; this frees HBM and HiCache host pool space for target KV."
+    - "Rerun the whole curve so every point uses the FP8 draft KV cache."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4599
+  scenario-type: [agentic-coding]
+
+- config-keys:
     - minimaxm31flash-fp4-b300-sglang-agentic-dspark
   description:
     - "Add TP2 points with DRAM KV offload (L2 HiCache) at conc 40 to 56 to the existing curve: shortest-prefill-first scheduling with a prefill-decode interval of 16, 8192-token prefill chunks, mem-fraction-static 0.92 and stream interval 20."
