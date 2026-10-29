@@ -11575,6 +11575,25 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
+    - minimaxm31flash-fp4-b300-sglang-agentic-dspark
+  description:
+    - "Add TP2 points with DRAM KV offload (L2 HiCache) at conc 40 to 56 to the existing curve: shortest-prefill-first scheduling with a prefill-decode interval of 16, 8192-token prefill chunks, mem-fraction-static 0.92 and stream interval 20."
+    - "Add a second conc 48 point with a prefill-decode interval of 32."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4647
+  scenario-type: [agentic-coding]
+  append-only: true
+
+- config-keys:
+    - dsv41flash-fp4-b300-sglang-agentic-dspark
+    - dsv41flash-fp4-b300-sglang-agentic-dspark-lowconc
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update DeepSeek-V4.1-Flash FP4 B300 SGLang AgentX to image lmsysorg/sglang:nightly-dev-cu13-20261020-ab580b2e (digest-pinned), and keep TP4 concurrency 1 and 4 on nightly-dev-cu13-20261014-684fea8a under the new dsv41flash-fp4-b300-sglang-agentic-dspark-lowconc key."
+    - "Enable trtllm DSv4 attention and decoder SWA bounded replay for TP2 C32, set SGLANG_DSV4_DECODER_TAIL_GRAPH_MAX_ROWS=0 for DEP2 C64 and C256, and remove the TP4/EP4 DPA C256 point."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4627
+
+- config-keys:
     - dsv4-fp4-mi355x-vllm-agentic-mtp
   scenario-type:
     - agentic-coding
