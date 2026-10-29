@@ -118,6 +118,7 @@ class Metrics(_Record):
     )
     @classmethod
     def _rounded(cls, value: float | None) -> float | None:
+        """Round a metric to three decimals, keeping None."""
         return None if value is None else round(value, 3)
 
 
@@ -208,6 +209,7 @@ class JobEventBuilder:
         *,
         annotate: bool = False,
     ) -> None:
+        """Start timing a launch that records into ``event`` and tracks ``workspace`` files."""
         self.event = event if event is not None else JobEvent()
         self.workspace = workspace
         self._annotate = annotate
@@ -223,7 +225,11 @@ class JobEventBuilder:
 
     @classmethod
     def begin(cls, env: Mapping[str, str]) -> Self:
-        """Identify the job from the workflow environment; never raises."""
+        """Identify the job from the workflow environment; never raises.
+
+        AgentX replays traces, so agentic runs leave ISL and OSL unset. A batch-wrapped launch
+        never annotates on GitHub, because its wrapper is the job's exit boundary.
+        """
         scenario = _text(env, "SCENARIO_TYPE")
         multinode = env.get("IS_MULTINODE") == "true"
         eval_only = env.get("EVAL_ONLY") == "true"
@@ -245,7 +251,6 @@ class JobEventBuilder:
                 for word in env.get("CONC_LIST", "").split()
                 if word.isascii() and word.isdecimal()
             ],
-            # AgentX replays traces; the workflow's ISL/OSL of 0 only fill the fixed shape.
             isl=None if scenario == AGENTIC else _number(env, "ISL"),
             osl=None if scenario == AGENTIC else _number(env, "OSL"),
             topology=_topology(env, multinode=multinode),
@@ -261,15 +266,16 @@ class JobEventBuilder:
             kv_offload_backend=_text(env, "KV_OFFLOAD_BACKEND"),
         )
         workspace = Path(env["GITHUB_WORKSPACE"]) if env.get("GITHUB_WORKSPACE") else None
-        # A batch-wrapped launch is not the job's exit boundary; the wrapper annotates.
         annotate = env.get("GITHUB_ACTIONS") == "true" and env.get(BATCH_REENTRY_ENV) != "1"
         return cls(event, workspace, annotate=annotate)
 
     def set(self, **fields: object) -> None:
+        """Set the given fields on the event."""
         for name, value in fields.items():
             setattr(self.event, name, value)
 
     def set_versions(self, **versions: str | None) -> None:
+        """Set the given component versions on the event."""
         for name, value in versions.items():
             setattr(self.event.versions, name, value)
 
@@ -290,6 +296,7 @@ class JobEventBuilder:
 
     @property
     def current_stage(self) -> str:
+        """Return the innermost running stage, else the last one, else ``prepare``."""
         return self._active[-1] if self._active else self._last or "prepare"
 
     def evidence(self, log: Path) -> None:
@@ -324,10 +331,12 @@ class JobEventBuilder:
         self.fail(kind, str(error), stage=stage, retriable=retriable, report=report)
 
     def interrupted(self, signum: int) -> None:
+        """Record a retriable failure for the received signal ``signum``."""
         message = f"received {signal.Signals(signum).name}"
         self.fail("Interrupted", message, retriable=True, report=False)
 
     def exited(self, returncode: int) -> None:
+        """Record a failure if ``returncode`` is non-zero."""
         if returncode:
             self.fail("ExitStatus", f"exited {returncode}", report=False)
 
@@ -344,13 +353,17 @@ class JobEventBuilder:
             self._reentry = inner
 
     def finish(self, returncode: int) -> JobEvent:
+        """Return the completed record for a launch that exited ``returncode``.
+
+        After a batch re-entry the wrapped launch's record is the base, since it knows the
+        benchmark job, and this launch adds its batch job, queue time and ``batch_`` stages.
+        """
         self._lap()
         self.exited(returncode)
         record = self.event.model_copy(deep=True)
         stages = dict(self._stages)
         failure = self._failure
         if (inner := self._reentry) is not None:
-            # The wrapped launch knows the benchmark job; this one only the batch around it.
             outer = record
             record = inner.model_copy(deep=True)
             record.launch_path = outer.launch_path
@@ -412,6 +425,7 @@ class JobEventBuilder:
             print(f"WARNING: could not write {path}: {error}", file=sys.stderr)
 
     def _lap(self) -> None:
+        """Charge the time since the last lap to the innermost active stage."""
         now = time.monotonic()
         if self._active:
             name = self._active[-1]
@@ -419,6 +433,7 @@ class JobEventBuilder:
         self._since = now
 
     def _shown(self, path: Path | None) -> str | None:
+        """Return ``path`` relative to the workspace when inside it, else as given, or None."""
         if path is None:
             return None
         if self.workspace is not None and path.is_relative_to(self.workspace):
@@ -456,6 +471,7 @@ def annotation(error: JobError) -> str:
 
 
 def _escape_data(text: str) -> str:
+    """Escape ``%``, CR and LF in ``text`` for a GitHub Actions workflow command."""
     return text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
 
 
@@ -474,19 +490,23 @@ def _files(directory: Path | None) -> dict[str, tuple[int, int]]:
 
 
 def _text(env: Mapping[str, str], name: str) -> str | None:
+    """Return the variable ``name`` from ``env``, or None if unset or empty."""
     return env.get(name) or None
 
 
 def _number(env: Mapping[str, str], name: str) -> int | None:
+    """Return the variable ``name`` as a non-negative integer, or None if it is not one."""
     value = env.get(name, "")
     return int(value) if value.isascii() and value.isdecimal() else None
 
 
 def _flag(env: Mapping[str, str], name: str) -> bool | None:
+    """Return the variable ``name`` as a bool when it is ``true`` or ``false``, else None."""
     return {"true": True, "false": False}.get(env.get(name, ""))
 
 
 def _topology(env: Mapping[str, str], *, multinode: bool) -> Topology:
+    """Return single-node parallelism, or per-role topology when ``multinode``."""
     if not multinode:
         return Topology(
             tp=_number(env, "TP"),
@@ -508,6 +528,7 @@ def _topology(env: Mapping[str, str], *, multinode: bool) -> Topology:
 
 
 def _versions(env: Mapping[str, str], *, agentx: bool) -> Versions:
+    """Return checkout, workflow and image versions, plus the AgentX harness if ``agentx``."""
     head = None
     with contextlib.suppress(OSError):
         head = _git_head(repository_root())
@@ -527,6 +548,7 @@ def _versions(env: Mapping[str, str], *, agentx: bool) -> Versions:
 
 
 def _github(env: Mapping[str, str]) -> GitHub:
+    """Return the run and job URLs and the event, PR, test and ref details from ``env``."""
     server, repository, run = (
         _text(env, name) for name in ("GITHUB_SERVER_URL", "GITHUB_REPOSITORY", "GITHUB_RUN_ID")
     )
@@ -633,16 +655,19 @@ def _agentx_point(name: str, result: dict[str, Any]) -> Metrics:
 
 
 def _mapping(parent: dict[str, Any], key: str) -> dict[str, Any]:
+    """Return ``parent[key]`` if it is a dict, else an empty dict."""
     value = parent.get(key)
     return value if isinstance(value, dict) else {}
 
 
 def _count(parent: dict[str, Any], key: str) -> int | None:
+    """Return ``parent[key]`` if it is a non-bool int, else None."""
     value = parent.get(key)
     return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
 def _value(parent: dict[str, Any], key: str) -> float | None:
+    """Return ``parent[key]`` as a float if it is a finite non-bool number, else None."""
     value = parent.get(key)
     if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
         return None
@@ -650,4 +675,5 @@ def _value(parent: dict[str, Any], key: str) -> float | None:
 
 
 def _milliseconds(seconds: float | None) -> float | None:
+    """Convert ``seconds`` to milliseconds, keeping None."""
     return None if seconds is None else seconds * 1000

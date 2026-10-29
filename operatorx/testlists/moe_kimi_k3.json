@@ -1,0 +1,2626 @@
+[
+  {
+    "type": "moe",
+    "args": {
+      "tokens": 1,
+      "activation": {
+        "alpha": 4.0,
+        "beta": 25.0,
+        "kind": "situ"
+      },
+      "experts": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "a2": {
+          "dtype": "bf16"
+        },
+        "inter": 3072,
+        "latent": 3584,
+        "latent_norm": true,
+        "num": 896,
+        "top_k": 16,
+        "w1": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        },
+        "w2": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        }
+      },
+      "hidden": 7168,
+      "router": {
+        "bias": true,
+        "gate": {
+          "dtype": "bf16",
+          "logits": "fp32"
+        },
+        "renormalize": true,
+        "scale": 1.0,
+        "scoring": "sigmoid",
+        "select": {
+          "groups": 1,
+          "kind": "grouped_topk",
+          "topk_groups": 1
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      },
+      "shared": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "count": 2,
+        "inter": 3072,
+        "w1": {
+          "dtype": "bf16"
+        },
+        "w2": {
+          "dtype": "bf16"
+        }
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe"
+    ]
+  },
+  {
+    "type": "moe",
+    "args": {
+      "tokens": 2,
+      "activation": {
+        "alpha": 4.0,
+        "beta": 25.0,
+        "kind": "situ"
+      },
+      "experts": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "a2": {
+          "dtype": "bf16"
+        },
+        "inter": 3072,
+        "latent": 3584,
+        "latent_norm": true,
+        "num": 896,
+        "top_k": 16,
+        "w1": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        },
+        "w2": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        }
+      },
+      "hidden": 7168,
+      "router": {
+        "bias": true,
+        "gate": {
+          "dtype": "bf16",
+          "logits": "fp32"
+        },
+        "renormalize": true,
+        "scale": 1.0,
+        "scoring": "sigmoid",
+        "select": {
+          "groups": 1,
+          "kind": "grouped_topk",
+          "topk_groups": 1
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      },
+      "shared": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "count": 2,
+        "inter": 3072,
+        "w1": {
+          "dtype": "bf16"
+        },
+        "w2": {
+          "dtype": "bf16"
+        }
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe"
+    ]
+  },
+  {
+    "type": "moe",
+    "args": {
+      "tokens": 3,
+      "activation": {
+        "alpha": 4.0,
+        "beta": 25.0,
+        "kind": "situ"
+      },
+      "experts": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "a2": {
+          "dtype": "bf16"
+        },
+        "inter": 3072,
+        "latent": 3584,
+        "latent_norm": true,
+        "num": 896,
+        "top_k": 16,
+        "w1": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        },
+        "w2": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        }
+      },
+      "hidden": 7168,
+      "router": {
+        "bias": true,
+        "gate": {
+          "dtype": "bf16",
+          "logits": "fp32"
+        },
+        "renormalize": true,
+        "scale": 1.0,
+        "scoring": "sigmoid",
+        "select": {
+          "groups": 1,
+          "kind": "grouped_topk",
+          "topk_groups": 1
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      },
+      "shared": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "count": 2,
+        "inter": 3072,
+        "w1": {
+          "dtype": "bf16"
+        },
+        "w2": {
+          "dtype": "bf16"
+        }
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe"
+    ]
+  },
+  {
+    "type": "moe",
+    "args": {
+      "tokens": 4,
+      "activation": {
+        "alpha": 4.0,
+        "beta": 25.0,
+        "kind": "situ"
+      },
+      "experts": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "a2": {
+          "dtype": "bf16"
+        },
+        "inter": 3072,
+        "latent": 3584,
+        "latent_norm": true,
+        "num": 896,
+        "top_k": 16,
+        "w1": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        },
+        "w2": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        }
+      },
+      "hidden": 7168,
+      "router": {
+        "bias": true,
+        "gate": {
+          "dtype": "bf16",
+          "logits": "fp32"
+        },
+        "renormalize": true,
+        "scale": 1.0,
+        "scoring": "sigmoid",
+        "select": {
+          "groups": 1,
+          "kind": "grouped_topk",
+          "topk_groups": 1
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      },
+      "shared": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "count": 2,
+        "inter": 3072,
+        "w1": {
+          "dtype": "bf16"
+        },
+        "w2": {
+          "dtype": "bf16"
+        }
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe"
+    ]
+  },
+  {
+    "type": "moe",
+    "args": {
+      "tokens": 6,
+      "activation": {
+        "alpha": 4.0,
+        "beta": 25.0,
+        "kind": "situ"
+      },
+      "experts": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "a2": {
+          "dtype": "bf16"
+        },
+        "inter": 3072,
+        "latent": 3584,
+        "latent_norm": true,
+        "num": 896,
+        "top_k": 16,
+        "w1": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        },
+        "w2": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        }
+      },
+      "hidden": 7168,
+      "router": {
+        "bias": true,
+        "gate": {
+          "dtype": "bf16",
+          "logits": "fp32"
+        },
+        "renormalize": true,
+        "scale": 1.0,
+        "scoring": "sigmoid",
+        "select": {
+          "groups": 1,
+          "kind": "grouped_topk",
+          "topk_groups": 1
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      },
+      "shared": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "count": 2,
+        "inter": 3072,
+        "w1": {
+          "dtype": "bf16"
+        },
+        "w2": {
+          "dtype": "bf16"
+        }
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe"
+    ]
+  },
+  {
+    "type": "moe",
+    "args": {
+      "tokens": 8,
+      "activation": {
+        "alpha": 4.0,
+        "beta": 25.0,
+        "kind": "situ"
+      },
+      "experts": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "a2": {
+          "dtype": "bf16"
+        },
+        "inter": 3072,
+        "latent": 3584,
+        "latent_norm": true,
+        "num": 896,
+        "top_k": 16,
+        "w1": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        },
+        "w2": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        }
+      },
+      "hidden": 7168,
+      "router": {
+        "bias": true,
+        "gate": {
+          "dtype": "bf16",
+          "logits": "fp32"
+        },
+        "renormalize": true,
+        "scale": 1.0,
+        "scoring": "sigmoid",
+        "select": {
+          "groups": 1,
+          "kind": "grouped_topk",
+          "topk_groups": 1
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      },
+      "shared": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "count": 2,
+        "inter": 3072,
+        "w1": {
+          "dtype": "bf16"
+        },
+        "w2": {
+          "dtype": "bf16"
+        }
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe"
+    ]
+  },
+  {
+    "type": "moe",
+    "args": {
+      "tokens": 12,
+      "activation": {
+        "alpha": 4.0,
+        "beta": 25.0,
+        "kind": "situ"
+      },
+      "experts": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "a2": {
+          "dtype": "bf16"
+        },
+        "inter": 3072,
+        "latent": 3584,
+        "latent_norm": true,
+        "num": 896,
+        "top_k": 16,
+        "w1": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        },
+        "w2": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        }
+      },
+      "hidden": 7168,
+      "router": {
+        "bias": true,
+        "gate": {
+          "dtype": "bf16",
+          "logits": "fp32"
+        },
+        "renormalize": true,
+        "scale": 1.0,
+        "scoring": "sigmoid",
+        "select": {
+          "groups": 1,
+          "kind": "grouped_topk",
+          "topk_groups": 1
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      },
+      "shared": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "count": 2,
+        "inter": 3072,
+        "w1": {
+          "dtype": "bf16"
+        },
+        "w2": {
+          "dtype": "bf16"
+        }
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe"
+    ]
+  },
+  {
+    "type": "moe",
+    "args": {
+      "tokens": 16,
+      "activation": {
+        "alpha": 4.0,
+        "beta": 25.0,
+        "kind": "situ"
+      },
+      "experts": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "a2": {
+          "dtype": "bf16"
+        },
+        "inter": 3072,
+        "latent": 3584,
+        "latent_norm": true,
+        "num": 896,
+        "top_k": 16,
+        "w1": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        },
+        "w2": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        }
+      },
+      "hidden": 7168,
+      "router": {
+        "bias": true,
+        "gate": {
+          "dtype": "bf16",
+          "logits": "fp32"
+        },
+        "renormalize": true,
+        "scale": 1.0,
+        "scoring": "sigmoid",
+        "select": {
+          "groups": 1,
+          "kind": "grouped_topk",
+          "topk_groups": 1
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      },
+      "shared": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "count": 2,
+        "inter": 3072,
+        "w1": {
+          "dtype": "bf16"
+        },
+        "w2": {
+          "dtype": "bf16"
+        }
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe"
+    ]
+  },
+  {
+    "type": "moe",
+    "args": {
+      "tokens": 24,
+      "activation": {
+        "alpha": 4.0,
+        "beta": 25.0,
+        "kind": "situ"
+      },
+      "experts": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "a2": {
+          "dtype": "bf16"
+        },
+        "inter": 3072,
+        "latent": 3584,
+        "latent_norm": true,
+        "num": 896,
+        "top_k": 16,
+        "w1": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        },
+        "w2": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        }
+      },
+      "hidden": 7168,
+      "router": {
+        "bias": true,
+        "gate": {
+          "dtype": "bf16",
+          "logits": "fp32"
+        },
+        "renormalize": true,
+        "scale": 1.0,
+        "scoring": "sigmoid",
+        "select": {
+          "groups": 1,
+          "kind": "grouped_topk",
+          "topk_groups": 1
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      },
+      "shared": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "count": 2,
+        "inter": 3072,
+        "w1": {
+          "dtype": "bf16"
+        },
+        "w2": {
+          "dtype": "bf16"
+        }
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe"
+    ]
+  },
+  {
+    "type": "moe",
+    "args": {
+      "tokens": 32,
+      "activation": {
+        "alpha": 4.0,
+        "beta": 25.0,
+        "kind": "situ"
+      },
+      "experts": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "a2": {
+          "dtype": "bf16"
+        },
+        "inter": 3072,
+        "latent": 3584,
+        "latent_norm": true,
+        "num": 896,
+        "top_k": 16,
+        "w1": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        },
+        "w2": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        }
+      },
+      "hidden": 7168,
+      "router": {
+        "bias": true,
+        "gate": {
+          "dtype": "bf16",
+          "logits": "fp32"
+        },
+        "renormalize": true,
+        "scale": 1.0,
+        "scoring": "sigmoid",
+        "select": {
+          "groups": 1,
+          "kind": "grouped_topk",
+          "topk_groups": 1
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      },
+      "shared": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "count": 2,
+        "inter": 3072,
+        "w1": {
+          "dtype": "bf16"
+        },
+        "w2": {
+          "dtype": "bf16"
+        }
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe"
+    ]
+  },
+  {
+    "type": "moe",
+    "args": {
+      "tokens": 48,
+      "activation": {
+        "alpha": 4.0,
+        "beta": 25.0,
+        "kind": "situ"
+      },
+      "experts": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "a2": {
+          "dtype": "bf16"
+        },
+        "inter": 3072,
+        "latent": 3584,
+        "latent_norm": true,
+        "num": 896,
+        "top_k": 16,
+        "w1": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        },
+        "w2": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        }
+      },
+      "hidden": 7168,
+      "router": {
+        "bias": true,
+        "gate": {
+          "dtype": "bf16",
+          "logits": "fp32"
+        },
+        "renormalize": true,
+        "scale": 1.0,
+        "scoring": "sigmoid",
+        "select": {
+          "groups": 1,
+          "kind": "grouped_topk",
+          "topk_groups": 1
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      },
+      "shared": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "count": 2,
+        "inter": 3072,
+        "w1": {
+          "dtype": "bf16"
+        },
+        "w2": {
+          "dtype": "bf16"
+        }
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe"
+    ]
+  },
+  {
+    "type": "moe",
+    "args": {
+      "tokens": 64,
+      "activation": {
+        "alpha": 4.0,
+        "beta": 25.0,
+        "kind": "situ"
+      },
+      "experts": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "a2": {
+          "dtype": "bf16"
+        },
+        "inter": 3072,
+        "latent": 3584,
+        "latent_norm": true,
+        "num": 896,
+        "top_k": 16,
+        "w1": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        },
+        "w2": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        }
+      },
+      "hidden": 7168,
+      "router": {
+        "bias": true,
+        "gate": {
+          "dtype": "bf16",
+          "logits": "fp32"
+        },
+        "renormalize": true,
+        "scale": 1.0,
+        "scoring": "sigmoid",
+        "select": {
+          "groups": 1,
+          "kind": "grouped_topk",
+          "topk_groups": 1
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      },
+      "shared": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "count": 2,
+        "inter": 3072,
+        "w1": {
+          "dtype": "bf16"
+        },
+        "w2": {
+          "dtype": "bf16"
+        }
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe"
+    ]
+  },
+  {
+    "type": "moe",
+    "args": {
+      "tokens": 96,
+      "activation": {
+        "alpha": 4.0,
+        "beta": 25.0,
+        "kind": "situ"
+      },
+      "experts": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "a2": {
+          "dtype": "bf16"
+        },
+        "inter": 3072,
+        "latent": 3584,
+        "latent_norm": true,
+        "num": 896,
+        "top_k": 16,
+        "w1": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        },
+        "w2": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        }
+      },
+      "hidden": 7168,
+      "router": {
+        "bias": true,
+        "gate": {
+          "dtype": "bf16",
+          "logits": "fp32"
+        },
+        "renormalize": true,
+        "scale": 1.0,
+        "scoring": "sigmoid",
+        "select": {
+          "groups": 1,
+          "kind": "grouped_topk",
+          "topk_groups": 1
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      },
+      "shared": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "count": 2,
+        "inter": 3072,
+        "w1": {
+          "dtype": "bf16"
+        },
+        "w2": {
+          "dtype": "bf16"
+        }
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe"
+    ]
+  },
+  {
+    "type": "moe",
+    "args": {
+      "tokens": 128,
+      "activation": {
+        "alpha": 4.0,
+        "beta": 25.0,
+        "kind": "situ"
+      },
+      "experts": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "a2": {
+          "dtype": "bf16"
+        },
+        "inter": 3072,
+        "latent": 3584,
+        "latent_norm": true,
+        "num": 896,
+        "top_k": 16,
+        "w1": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        },
+        "w2": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        }
+      },
+      "hidden": 7168,
+      "router": {
+        "bias": true,
+        "gate": {
+          "dtype": "bf16",
+          "logits": "fp32"
+        },
+        "renormalize": true,
+        "scale": 1.0,
+        "scoring": "sigmoid",
+        "select": {
+          "groups": 1,
+          "kind": "grouped_topk",
+          "topk_groups": 1
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      },
+      "shared": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "count": 2,
+        "inter": 3072,
+        "w1": {
+          "dtype": "bf16"
+        },
+        "w2": {
+          "dtype": "bf16"
+        }
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe"
+    ]
+  },
+  {
+    "type": "moe",
+    "args": {
+      "tokens": 192,
+      "activation": {
+        "alpha": 4.0,
+        "beta": 25.0,
+        "kind": "situ"
+      },
+      "experts": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "a2": {
+          "dtype": "bf16"
+        },
+        "inter": 3072,
+        "latent": 3584,
+        "latent_norm": true,
+        "num": 896,
+        "top_k": 16,
+        "w1": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        },
+        "w2": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        }
+      },
+      "hidden": 7168,
+      "router": {
+        "bias": true,
+        "gate": {
+          "dtype": "bf16",
+          "logits": "fp32"
+        },
+        "renormalize": true,
+        "scale": 1.0,
+        "scoring": "sigmoid",
+        "select": {
+          "groups": 1,
+          "kind": "grouped_topk",
+          "topk_groups": 1
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      },
+      "shared": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "count": 2,
+        "inter": 3072,
+        "w1": {
+          "dtype": "bf16"
+        },
+        "w2": {
+          "dtype": "bf16"
+        }
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe"
+    ]
+  },
+  {
+    "type": "moe",
+    "args": {
+      "tokens": 256,
+      "activation": {
+        "alpha": 4.0,
+        "beta": 25.0,
+        "kind": "situ"
+      },
+      "experts": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "a2": {
+          "dtype": "bf16"
+        },
+        "inter": 3072,
+        "latent": 3584,
+        "latent_norm": true,
+        "num": 896,
+        "top_k": 16,
+        "w1": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        },
+        "w2": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        }
+      },
+      "hidden": 7168,
+      "router": {
+        "bias": true,
+        "gate": {
+          "dtype": "bf16",
+          "logits": "fp32"
+        },
+        "renormalize": true,
+        "scale": 1.0,
+        "scoring": "sigmoid",
+        "select": {
+          "groups": 1,
+          "kind": "grouped_topk",
+          "topk_groups": 1
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      },
+      "shared": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "count": 2,
+        "inter": 3072,
+        "w1": {
+          "dtype": "bf16"
+        },
+        "w2": {
+          "dtype": "bf16"
+        }
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe"
+    ]
+  },
+  {
+    "type": "moe",
+    "args": {
+      "tokens": 384,
+      "activation": {
+        "alpha": 4.0,
+        "beta": 25.0,
+        "kind": "situ"
+      },
+      "experts": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "a2": {
+          "dtype": "bf16"
+        },
+        "inter": 3072,
+        "latent": 3584,
+        "latent_norm": true,
+        "num": 896,
+        "top_k": 16,
+        "w1": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        },
+        "w2": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        }
+      },
+      "hidden": 7168,
+      "router": {
+        "bias": true,
+        "gate": {
+          "dtype": "bf16",
+          "logits": "fp32"
+        },
+        "renormalize": true,
+        "scale": 1.0,
+        "scoring": "sigmoid",
+        "select": {
+          "groups": 1,
+          "kind": "grouped_topk",
+          "topk_groups": 1
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      },
+      "shared": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "count": 2,
+        "inter": 3072,
+        "w1": {
+          "dtype": "bf16"
+        },
+        "w2": {
+          "dtype": "bf16"
+        }
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe"
+    ]
+  },
+  {
+    "type": "moe",
+    "args": {
+      "tokens": 512,
+      "activation": {
+        "alpha": 4.0,
+        "beta": 25.0,
+        "kind": "situ"
+      },
+      "experts": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "a2": {
+          "dtype": "bf16"
+        },
+        "inter": 3072,
+        "latent": 3584,
+        "latent_norm": true,
+        "num": 896,
+        "top_k": 16,
+        "w1": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        },
+        "w2": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        }
+      },
+      "hidden": 7168,
+      "router": {
+        "bias": true,
+        "gate": {
+          "dtype": "bf16",
+          "logits": "fp32"
+        },
+        "renormalize": true,
+        "scale": 1.0,
+        "scoring": "sigmoid",
+        "select": {
+          "groups": 1,
+          "kind": "grouped_topk",
+          "topk_groups": 1
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      },
+      "shared": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "count": 2,
+        "inter": 3072,
+        "w1": {
+          "dtype": "bf16"
+        },
+        "w2": {
+          "dtype": "bf16"
+        }
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe"
+    ]
+  },
+  {
+    "type": "moe",
+    "args": {
+      "tokens": 768,
+      "activation": {
+        "alpha": 4.0,
+        "beta": 25.0,
+        "kind": "situ"
+      },
+      "experts": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "a2": {
+          "dtype": "bf16"
+        },
+        "inter": 3072,
+        "latent": 3584,
+        "latent_norm": true,
+        "num": 896,
+        "top_k": 16,
+        "w1": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        },
+        "w2": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        }
+      },
+      "hidden": 7168,
+      "router": {
+        "bias": true,
+        "gate": {
+          "dtype": "bf16",
+          "logits": "fp32"
+        },
+        "renormalize": true,
+        "scale": 1.0,
+        "scoring": "sigmoid",
+        "select": {
+          "groups": 1,
+          "kind": "grouped_topk",
+          "topk_groups": 1
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      },
+      "shared": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "count": 2,
+        "inter": 3072,
+        "w1": {
+          "dtype": "bf16"
+        },
+        "w2": {
+          "dtype": "bf16"
+        }
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe"
+    ]
+  },
+  {
+    "type": "moe",
+    "args": {
+      "tokens": 1024,
+      "activation": {
+        "alpha": 4.0,
+        "beta": 25.0,
+        "kind": "situ"
+      },
+      "experts": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "a2": {
+          "dtype": "bf16"
+        },
+        "inter": 3072,
+        "latent": 3584,
+        "latent_norm": true,
+        "num": 896,
+        "top_k": 16,
+        "w1": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        },
+        "w2": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        }
+      },
+      "hidden": 7168,
+      "router": {
+        "bias": true,
+        "gate": {
+          "dtype": "bf16",
+          "logits": "fp32"
+        },
+        "renormalize": true,
+        "scale": 1.0,
+        "scoring": "sigmoid",
+        "select": {
+          "groups": 1,
+          "kind": "grouped_topk",
+          "topk_groups": 1
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      },
+      "shared": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "count": 2,
+        "inter": 3072,
+        "w1": {
+          "dtype": "bf16"
+        },
+        "w2": {
+          "dtype": "bf16"
+        }
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe"
+    ]
+  },
+  {
+    "type": "moe",
+    "args": {
+      "tokens": 1536,
+      "activation": {
+        "alpha": 4.0,
+        "beta": 25.0,
+        "kind": "situ"
+      },
+      "experts": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "a2": {
+          "dtype": "bf16"
+        },
+        "inter": 3072,
+        "latent": 3584,
+        "latent_norm": true,
+        "num": 896,
+        "top_k": 16,
+        "w1": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        },
+        "w2": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        }
+      },
+      "hidden": 7168,
+      "router": {
+        "bias": true,
+        "gate": {
+          "dtype": "bf16",
+          "logits": "fp32"
+        },
+        "renormalize": true,
+        "scale": 1.0,
+        "scoring": "sigmoid",
+        "select": {
+          "groups": 1,
+          "kind": "grouped_topk",
+          "topk_groups": 1
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      },
+      "shared": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "count": 2,
+        "inter": 3072,
+        "w1": {
+          "dtype": "bf16"
+        },
+        "w2": {
+          "dtype": "bf16"
+        }
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe"
+    ]
+  },
+  {
+    "type": "moe",
+    "args": {
+      "tokens": 2048,
+      "activation": {
+        "alpha": 4.0,
+        "beta": 25.0,
+        "kind": "situ"
+      },
+      "experts": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "a2": {
+          "dtype": "bf16"
+        },
+        "inter": 3072,
+        "latent": 3584,
+        "latent_norm": true,
+        "num": 896,
+        "top_k": 16,
+        "w1": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        },
+        "w2": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        }
+      },
+      "hidden": 7168,
+      "router": {
+        "bias": true,
+        "gate": {
+          "dtype": "bf16",
+          "logits": "fp32"
+        },
+        "renormalize": true,
+        "scale": 1.0,
+        "scoring": "sigmoid",
+        "select": {
+          "groups": 1,
+          "kind": "grouped_topk",
+          "topk_groups": 1
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      },
+      "shared": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "count": 2,
+        "inter": 3072,
+        "w1": {
+          "dtype": "bf16"
+        },
+        "w2": {
+          "dtype": "bf16"
+        }
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe"
+    ]
+  },
+  {
+    "type": "moe",
+    "args": {
+      "tokens": 3072,
+      "activation": {
+        "alpha": 4.0,
+        "beta": 25.0,
+        "kind": "situ"
+      },
+      "experts": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "a2": {
+          "dtype": "bf16"
+        },
+        "inter": 3072,
+        "latent": 3584,
+        "latent_norm": true,
+        "num": 896,
+        "top_k": 16,
+        "w1": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        },
+        "w2": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        }
+      },
+      "hidden": 7168,
+      "router": {
+        "bias": true,
+        "gate": {
+          "dtype": "bf16",
+          "logits": "fp32"
+        },
+        "renormalize": true,
+        "scale": 1.0,
+        "scoring": "sigmoid",
+        "select": {
+          "groups": 1,
+          "kind": "grouped_topk",
+          "topk_groups": 1
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      },
+      "shared": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "count": 2,
+        "inter": 3072,
+        "w1": {
+          "dtype": "bf16"
+        },
+        "w2": {
+          "dtype": "bf16"
+        }
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe"
+    ]
+  },
+  {
+    "type": "moe",
+    "args": {
+      "tokens": 4096,
+      "activation": {
+        "alpha": 4.0,
+        "beta": 25.0,
+        "kind": "situ"
+      },
+      "experts": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "a2": {
+          "dtype": "bf16"
+        },
+        "inter": 3072,
+        "latent": 3584,
+        "latent_norm": true,
+        "num": 896,
+        "top_k": 16,
+        "w1": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        },
+        "w2": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        }
+      },
+      "hidden": 7168,
+      "router": {
+        "bias": true,
+        "gate": {
+          "dtype": "bf16",
+          "logits": "fp32"
+        },
+        "renormalize": true,
+        "scale": 1.0,
+        "scoring": "sigmoid",
+        "select": {
+          "groups": 1,
+          "kind": "grouped_topk",
+          "topk_groups": 1
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      },
+      "shared": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "count": 2,
+        "inter": 3072,
+        "w1": {
+          "dtype": "bf16"
+        },
+        "w2": {
+          "dtype": "bf16"
+        }
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe"
+    ]
+  },
+  {
+    "type": "moe",
+    "args": {
+      "tokens": 6144,
+      "activation": {
+        "alpha": 4.0,
+        "beta": 25.0,
+        "kind": "situ"
+      },
+      "experts": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "a2": {
+          "dtype": "bf16"
+        },
+        "inter": 3072,
+        "latent": 3584,
+        "latent_norm": true,
+        "num": 896,
+        "top_k": 16,
+        "w1": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        },
+        "w2": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        }
+      },
+      "hidden": 7168,
+      "router": {
+        "bias": true,
+        "gate": {
+          "dtype": "bf16",
+          "logits": "fp32"
+        },
+        "renormalize": true,
+        "scale": 1.0,
+        "scoring": "sigmoid",
+        "select": {
+          "groups": 1,
+          "kind": "grouped_topk",
+          "topk_groups": 1
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      },
+      "shared": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "count": 2,
+        "inter": 3072,
+        "w1": {
+          "dtype": "bf16"
+        },
+        "w2": {
+          "dtype": "bf16"
+        }
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe"
+    ]
+  },
+  {
+    "type": "moe",
+    "args": {
+      "tokens": 8192,
+      "activation": {
+        "alpha": 4.0,
+        "beta": 25.0,
+        "kind": "situ"
+      },
+      "experts": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "a2": {
+          "dtype": "bf16"
+        },
+        "inter": 3072,
+        "latent": 3584,
+        "latent_norm": true,
+        "num": 896,
+        "top_k": 16,
+        "w1": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        },
+        "w2": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        }
+      },
+      "hidden": 7168,
+      "router": {
+        "bias": true,
+        "gate": {
+          "dtype": "bf16",
+          "logits": "fp32"
+        },
+        "renormalize": true,
+        "scale": 1.0,
+        "scoring": "sigmoid",
+        "select": {
+          "groups": 1,
+          "kind": "grouped_topk",
+          "topk_groups": 1
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      },
+      "shared": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "count": 2,
+        "inter": 3072,
+        "w1": {
+          "dtype": "bf16"
+        },
+        "w2": {
+          "dtype": "bf16"
+        }
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe"
+    ]
+  },
+  {
+    "type": "moe",
+    "args": {
+      "tokens": 12288,
+      "activation": {
+        "alpha": 4.0,
+        "beta": 25.0,
+        "kind": "situ"
+      },
+      "experts": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "a2": {
+          "dtype": "bf16"
+        },
+        "inter": 3072,
+        "latent": 3584,
+        "latent_norm": true,
+        "num": 896,
+        "top_k": 16,
+        "w1": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        },
+        "w2": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        }
+      },
+      "hidden": 7168,
+      "router": {
+        "bias": true,
+        "gate": {
+          "dtype": "bf16",
+          "logits": "fp32"
+        },
+        "renormalize": true,
+        "scale": 1.0,
+        "scoring": "sigmoid",
+        "select": {
+          "groups": 1,
+          "kind": "grouped_topk",
+          "topk_groups": 1
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      },
+      "shared": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "count": 2,
+        "inter": 3072,
+        "w1": {
+          "dtype": "bf16"
+        },
+        "w2": {
+          "dtype": "bf16"
+        }
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe"
+    ]
+  },
+  {
+    "type": "moe",
+    "args": {
+      "tokens": 16384,
+      "activation": {
+        "alpha": 4.0,
+        "beta": 25.0,
+        "kind": "situ"
+      },
+      "experts": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "a2": {
+          "dtype": "bf16"
+        },
+        "inter": 3072,
+        "latent": 3584,
+        "latent_norm": true,
+        "num": 896,
+        "top_k": 16,
+        "w1": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        },
+        "w2": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        }
+      },
+      "hidden": 7168,
+      "router": {
+        "bias": true,
+        "gate": {
+          "dtype": "bf16",
+          "logits": "fp32"
+        },
+        "renormalize": true,
+        "scale": 1.0,
+        "scoring": "sigmoid",
+        "select": {
+          "groups": 1,
+          "kind": "grouped_topk",
+          "topk_groups": 1
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      },
+      "shared": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "count": 2,
+        "inter": 3072,
+        "w1": {
+          "dtype": "bf16"
+        },
+        "w2": {
+          "dtype": "bf16"
+        }
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe"
+    ]
+  },
+  {
+    "type": "moe",
+    "args": {
+      "tokens": 24576,
+      "activation": {
+        "alpha": 4.0,
+        "beta": 25.0,
+        "kind": "situ"
+      },
+      "experts": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "a2": {
+          "dtype": "bf16"
+        },
+        "inter": 3072,
+        "latent": 3584,
+        "latent_norm": true,
+        "num": 896,
+        "top_k": 16,
+        "w1": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        },
+        "w2": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        }
+      },
+      "hidden": 7168,
+      "router": {
+        "bias": true,
+        "gate": {
+          "dtype": "bf16",
+          "logits": "fp32"
+        },
+        "renormalize": true,
+        "scale": 1.0,
+        "scoring": "sigmoid",
+        "select": {
+          "groups": 1,
+          "kind": "grouped_topk",
+          "topk_groups": 1
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      },
+      "shared": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "count": 2,
+        "inter": 3072,
+        "w1": {
+          "dtype": "bf16"
+        },
+        "w2": {
+          "dtype": "bf16"
+        }
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe"
+    ]
+  },
+  {
+    "type": "moe",
+    "args": {
+      "tokens": 32768,
+      "activation": {
+        "alpha": 4.0,
+        "beta": 25.0,
+        "kind": "situ"
+      },
+      "experts": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "a2": {
+          "dtype": "bf16"
+        },
+        "inter": 3072,
+        "latent": 3584,
+        "latent_norm": true,
+        "num": 896,
+        "top_k": 16,
+        "w1": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        },
+        "w2": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        }
+      },
+      "hidden": 7168,
+      "router": {
+        "bias": true,
+        "gate": {
+          "dtype": "bf16",
+          "logits": "fp32"
+        },
+        "renormalize": true,
+        "scale": 1.0,
+        "scoring": "sigmoid",
+        "select": {
+          "groups": 1,
+          "kind": "grouped_topk",
+          "topk_groups": 1
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      },
+      "shared": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "count": 2,
+        "inter": 3072,
+        "w1": {
+          "dtype": "bf16"
+        },
+        "w2": {
+          "dtype": "bf16"
+        }
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe"
+    ]
+  },
+  {
+    "type": "moe",
+    "args": {
+      "tokens": 49152,
+      "activation": {
+        "alpha": 4.0,
+        "beta": 25.0,
+        "kind": "situ"
+      },
+      "experts": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "a2": {
+          "dtype": "bf16"
+        },
+        "inter": 3072,
+        "latent": 3584,
+        "latent_norm": true,
+        "num": 896,
+        "top_k": 16,
+        "w1": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        },
+        "w2": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        }
+      },
+      "hidden": 7168,
+      "router": {
+        "bias": true,
+        "gate": {
+          "dtype": "bf16",
+          "logits": "fp32"
+        },
+        "renormalize": true,
+        "scale": 1.0,
+        "scoring": "sigmoid",
+        "select": {
+          "groups": 1,
+          "kind": "grouped_topk",
+          "topk_groups": 1
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      },
+      "shared": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "count": 2,
+        "inter": 3072,
+        "w1": {
+          "dtype": "bf16"
+        },
+        "w2": {
+          "dtype": "bf16"
+        }
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe"
+    ]
+  },
+  {
+    "type": "moe",
+    "args": {
+      "tokens": 65536,
+      "activation": {
+        "alpha": 4.0,
+        "beta": 25.0,
+        "kind": "situ"
+      },
+      "experts": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "a2": {
+          "dtype": "bf16"
+        },
+        "inter": 3072,
+        "latent": 3584,
+        "latent_norm": true,
+        "num": 896,
+        "top_k": 16,
+        "w1": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        },
+        "w2": {
+          "dtype": "e2m1",
+          "scale": {
+            "dtype": "ue8m0",
+            "group": [
+              1,
+              32
+            ],
+            "static": true
+          }
+        }
+      },
+      "hidden": 7168,
+      "router": {
+        "bias": true,
+        "gate": {
+          "dtype": "bf16",
+          "logits": "fp32"
+        },
+        "renormalize": true,
+        "scale": 1.0,
+        "scoring": "sigmoid",
+        "select": {
+          "groups": 1,
+          "kind": "grouped_topk",
+          "topk_groups": 1
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      },
+      "shared": {
+        "a1": {
+          "dtype": "bf16"
+        },
+        "count": 2,
+        "inter": 3072,
+        "w1": {
+          "dtype": "bf16"
+        },
+        "w2": {
+          "dtype": "bf16"
+        }
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe"
+    ]
+  }
+]

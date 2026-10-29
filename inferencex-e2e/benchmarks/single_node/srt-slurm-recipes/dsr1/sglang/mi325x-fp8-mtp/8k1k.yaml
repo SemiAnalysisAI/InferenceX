@@ -22,7 +22,7 @@ base:
         tensor-parallel-size: 8
         expert-parallel-size: 1
         mem-fraction-static: 0.8
-        cuda-graph-max-bs: 128
+        cuda-graph-max-bs-decode: 128
         chunked-prefill-size: 131072
         num-continuous-decode-steps: 4
         max-prefill-tokens: 131072

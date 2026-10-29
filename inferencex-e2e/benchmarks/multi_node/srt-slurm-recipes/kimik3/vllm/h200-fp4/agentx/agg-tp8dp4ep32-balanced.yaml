@@ -78,7 +78,3 @@ srun_options:
 
 telemetry:
   collector_join_timeout_seconds: 12
-
-benchmark:
-  env:
-    AIPERF_TRACE_IDLE_GAP_CAP_SECONDS: "300"

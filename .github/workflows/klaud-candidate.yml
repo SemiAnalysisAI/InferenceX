@@ -16,7 +16,6 @@ on:
       candidate:
         type: string
         required: true
-      # A resume run continues the session of this planner run, as session number `session`.
       parent-run:
         type: string
         required: false
@@ -35,8 +34,12 @@ jobs:
   claude:
     name: Klaud Cold
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read # Read workflow runs and artifacts.
+      pull-requests: write # Read PR metadata and set display-only Klaud status labels.
+      issues: write # Set display-only Klaud status labels on its PR.
     env:
-      # Repair attempts after the initial update; the baseline is already published.
       MAX_REPAIRS: '5'
       KLAUD_BRANCH: klaud/auto-${{ inputs.candidate }}
       KLAUD_PARENT_RUN: ${{ inputs.parent-run || github.run_id }}
@@ -92,11 +95,8 @@ jobs:
           cp -R "$RUNNER_TEMP/plan/$CANDIDATE" "$RUNNER_TEMP/klaud"
           echo "KLAUD_EVIDENCE=$RUNNER_TEMP/klaud" >> "$GITHUB_ENV"
           rm -r "$RUNNER_TEMP/plan"
-          outcome_schema=$(uv run --project "$INFERENCEX_TOOLING_PROJECT" --locked python -P -m infx.klaud outcome-schema)
-          echo "outcome-schema=$outcome_schema" >> "$GITHUB_OUTPUT"
-      # A planner run's own session runs in its first attempt. A resume run that recovery
-      # dispatched runs only the session it granted; anything else skips the steps below.
-      # lifecycle.GATE_STEP and AGENT_STEP name these steps.
+          session_end_schema=$(uv run --project "$INFERENCEX_TOOLING_PROJECT" --locked python -P -m infx.klaud session-end-schema)
+          echo "session-end-schema=$session_end_schema" >> "$GITHUB_OUTPUT"
       - name: Check whether this session should run
         id: gate
         env:
@@ -115,11 +115,13 @@ jobs:
             sleep 15
           done
           echo "path=$claude_cli" >> "$GITHUB_OUTPUT"
+      - name: Record when this session starts
+        if: steps.gate.outputs.run == 'true'
+        run: echo "KLAUD_SESSION_STARTED=$(date +%s)" >> "$GITHUB_ENV"
       - name: Let Klaud Cold own the candidate PR
         id: claude
         if: steps.gate.outputs.run == 'true'
         continue-on-error: true
-        # Stops a session that runs out before the 6-hour job limit, so the steps below still run.
         timeout-minutes: 330
         uses: anthropics/claude-code-action@9171db3e57d6a3140a37ddc2ba92788584e0ead6 # v1.0.234
         env:
@@ -136,23 +138,45 @@ jobs:
                 "Stop": [{"hooks": [{
                   "type": "command",
                   "command": "cd \"$GITHUB_WORKSPACE\" && uv run --project \"$INFERENCEX_TOOLING_PROJECT\" --locked python -P -m infx.klaud check-stop"
+                }]}],
+                "PostToolUse": [{"hooks": [{
+                  "type": "command",
+                  "command": "s=\"${KLAUD_SESSION_STARTED:-}\"; [ -n \"$s\" ] || exit 0; e=$(($(date +%s) - s)); [ \"$e\" -ge 18000 ] || exit 0; m=$(((19800 - e) / 60)); [ \"$m\" -ge 0 ] || m=0; printf '{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"About %s minutes remain in this session. Publish attempt reports for owned runs now, then run park, or finish if the outcome is terminal, and end with StructuredOutput.\"}}\\n' \"$m\""
                 }]}]
               }
             }
           claude_args: >-
             --model 'claude-opus-5-5'
             --max-turns 500
-            --json-schema '${{ steps.context.outputs.outcome-schema }}'
+            --json-schema '${{ steps.context.outputs.session-end-schema }}'
             --add-dir '${{ runner.temp }}/klaud'
             --allowedTools "Read,Write,Edit,Glob,Grep,Bash,WebFetch,WebSearch"
           prompt: |
             Read .github/klaud-candidate-prompt.md and follow it for the candidate in
-            ${{ runner.temp }}/klaud/candidate.json. MAX_REPAIRS, KLAUD_BRANCH,
+            ${{ runner.temp }}/klaud/candidate.json. MAX_REPAIRS, KLAUD_BRANCH, KLAUD_SESSION,
             KLAUD_TEST_NAME, KLAUD_EVIDENCE and KLAUD_RESUME are provided in your environment.
+      - name: Check whether the agent used a tool
+        id: tools
+        if: always() && steps.claude.outcome == 'failure'
+        continue-on-error: true
+        env:
+          KLAUD_EXECUTION: ${{ steps.claude.outputs.execution_file }}
+        run: |
+          execution="${KLAUD_EXECUTION:-$RUNNER_TEMP/claude-execution-output.json}"
+          used=true
+          if [[ -f "$execution" ]]; then
+            used=$(jq 'any(.[]?; .type == "assistant" and any(.message.content[]?; .type == "tool_use"))' "$execution")
+          fi
+          echo "used=$used" >> "$GITHUB_OUTPUT"
+      # Recovery reads this step's success: the session did no work, so it never counts as expired.
+      - name: Record that the agent never used a tool
+        if: always() && steps.tools.outputs.used == 'false'
+        run: echo "The agent failed before its first tool call."
       - name: Reconcile agent-owned state
         if: always() && steps.claude.outcome != 'skipped'
         env:
           GH_TOKEN: ${{ secrets.AGENT_PAT }}
+          KLAUD_STATUS_TOKEN: ${{ github.token }}
         run: uv run --project "$INFERENCEX_TOOLING_PROJECT" --locked python -P -m infx.klaud recover-current
       - name: Save sanitized candidate diagnostics
         id: diagnostics
@@ -173,7 +197,6 @@ jobs:
         if: always() && steps.gate.outputs.run == 'true'
         with:
           name: klaud-candidate-${{ inputs.candidate }}
-          # Never upload the execution transcript or private API/scratch data.
           path: ${{ runner.temp }}/candidate-diagnostics.json
           retention-days: 14
       - name: Require a verified candidate outcome

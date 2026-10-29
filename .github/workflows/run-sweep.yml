@@ -39,7 +39,6 @@ jobs:
         runs-on: ubuntu-latest
         permissions:
             contents: read
-        # Labels opt into sweeps regardless of draft status; readiness only starts reviews.
         if: >-
             github.event.pull_request.head.repo.full_name == github.repository &&
             (
@@ -235,7 +234,6 @@ jobs:
               with:
                   path_to_claude_code_executable: ${{ steps.claude_cli.outputs.path }}
                   github_token: ${{ github.token }}
-                  # Repository integration credential for the scoped sweep/ingest job.
                   anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
                   track_progress: false
                   settings: |
@@ -245,7 +243,7 @@ jobs:
                       --effort low
                       --max-turns 8
                       --allowedTools "Read,Glob,Grep,Bash(git diff:*)"
-                      --json-schema '{"type":"object","properties":{"criteria":{"type":"array","items":{"type":"string","enum":["multi-node","agentic","eval-only","fp4","mtp","eagle","eagle3","sglang","vllm","dynamo-sglang","dynamo-vllm","musespark","dsv41flash","kimik3","glm5.2","dsv4","minimaxm3","qwen3.5","qwen3.8next","dsr1","checklist-complete","patchwork"]},"uniqueItems":true},"reason":{"type":"string"}},"required":["criteria","reason"]}'
+                      --json-schema '{"type":"object","properties":{"criteria":{"type":"array","items":{"type":"string","enum":["multi-node","agentic","eval-only","fp4","mtp","draft_model","sglang","vllm","dynamo-sglang","dynamo-vllm","musespark","dsv41flash","kimik3","glm5.2","dsv4","minimaxm3","qwen3.5","qwen3.8next","dsr1","checklist-complete","patchwork"]},"uniqueItems":true},"reason":{"type":"string"}},"required":["criteria","reason"]}'
                   prompt: |
                       Inspect this pull request's diff against its base branch.
 
@@ -255,7 +253,7 @@ jobs:
                       - agentic: agentic-coding or AgentX workload
                       - eval-only: evaluation without throughput measurement
                       - fp4: FP4 precision
-                      - mtp, eagle, eagle3: speculative decoding method
+                      - mtp, draft_model: speculative decoding method
                       - sglang, vllm, dynamo-vllm: runtime framework
                       - model criterion: matching configured model family
                       - checklist-complete: PR checklist is satisfied
@@ -342,9 +340,6 @@ jobs:
                         | if $idx == null then . else del(.[$idx]) end
                       end;
 
-                    # Canary is a benchmark-only smoke test — exclude entries
-                    # whose primary purpose is eval (run-eval == true) so the
-                    # picked canary never runs an eval pass.
                     (((.single_node["1k1k"] // []) + (.single_node["8k1k"] // []) + (.single_node.agentic // []))
                       | map(select(.["run-eval"] != true))) as $single_candidates
                     | ((.multi_node.agentic // []) | map(select(.["run-eval"] != true))) as $multi_candidates
@@ -385,7 +380,6 @@ jobs:
         with:
             config: ${{ toJSON(matrix.config) }}
             pr-number: &pr-number ${{ github.event.pull_request.number }}
-            # Only same-repository PRs owned by Klaud receive background priority.
             klaud-run: &klaud-run ${{ github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'Klaud-Cold' && (startsWith(github.head_ref, 'klaud/auto-') || startsWith(github.head_ref, 'klaude/auto-')) }}
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
@@ -620,9 +614,6 @@ jobs:
             run-eval: true
             eval-only: true
 
-    # Agentic GSM8K eval rows carry the agentic input shape, so they are
-    # dispatched with sweep-agentic's inputs rather than sweep-evals' fixed-seq-len
-    # inputs (isl/osl/max-model-len, which agentic rows don't have).
     sweep-agentic-evals:
         needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
         if: >-
@@ -691,12 +682,6 @@ jobs:
             eval-only: true
             eval-conc: ${{ (matrix.config['eval-framework'] || 'lm-eval') == 'lm-eval' && matrix.config['eval-all-concs'] && join(matrix.config.conc, ' ') || matrix.config['eval-conc'] }}
 
-    # Multi-node agentic GSM8K eval rows carry the agentic input shape, so
-    # they are dispatched with sweep-multi-node-agentic's inputs rather than
-    # sweep-multi-node-evals' fixed-seq-len inputs (isl/osl/max-model-len,
-    # which agentic rows don't have). Agentic selection uses one highest
-    # eval-conc per topology; fixed-sequence --all-evals rows may instead pass
-    # a joined concurrency list to lm-eval.
     sweep-multi-node-agentic-evals:
         needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
         if: >-
@@ -802,7 +787,6 @@ jobs:
 
     upload-changelog-metadata:
         name: upload-changelog-metadata
-        # collect-evals makes an eval-only rerun upload a manifest for the current run attempt.
         needs: [setup, collect-results, collect-evals]
         if: ${{ always() && needs.setup.result == 'success' }}
         runs-on: ubuntu-latest
@@ -827,7 +811,6 @@ jobs:
                   Path('sweep_manifest.json').write_text(json.dumps({
                       'head': os.environ['SWEEP_HEAD'], 'run-id': int(os.environ['GITHUB_RUN_ID']),
                       'run-attempt': int(os.environ['GITHUB_RUN_ATTEMPT']),
-                      # Klaud validates only full sweeps that ran fail-fast.
                       'full-sweep': sweep_labels == {'full-sweep-fail-fast'},
                       'matrix': matrix,
                   }))
@@ -915,7 +898,6 @@ jobs:
         runs-on: ubuntu-latest
 
         env:
-            # Repository integration credential for the scoped sweep/ingest job.
             DATABASE_URL: ${{ secrets.DB_RO_URL }} # zizmor: ignore[secrets-outside-env]
 
         steps:

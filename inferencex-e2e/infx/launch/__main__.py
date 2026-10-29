@@ -14,6 +14,7 @@ from pathlib import Path
 
 import yaml
 
+from infx.bench.proc import status
 from infx.clusters import Cluster, resolve_cluster
 from infx.launch import drivers
 from infx.launch.backends import BACKENDS, backend_class
@@ -28,7 +29,7 @@ def launch(cluster: Cluster, request: LaunchRequest, event: JobEventBuilder | No
     """Run ``request`` on ``cluster``; a launch error is one ``ERROR:`` line, not a traceback."""
     with Lifecycle(event) as life:
         try:
-            rc = drivers.run(cluster, request, life)
+            rc = status(drivers.run(cluster, request, life))
         except (LaunchError, BackendError, RequestError) as error:
             life.event.error(error)
             rc = 1
@@ -38,11 +39,16 @@ def launch(cluster: Cluster, request: LaunchRequest, event: JobEventBuilder | No
 
 
 def _run(runner_config: Path | None) -> int:
+    """Launch the point the environment describes, emit its job record and return its exit code."""
     event = JobEventBuilder.begin(os.environ)
     rc = 1
     try:
         request = LaunchRequest.from_env()
-        cluster = resolve_cluster(request.runner_name, runner_config)
+        try:
+            cluster = resolve_cluster(request.runner_name, runner_config)
+        except (OSError, ValueError, yaml.YAMLError) as error:
+            event.error(error)
+            return rc
         event.set(cluster=cluster.id)
         rc = launch(cluster, request, event)
     except RequestError as error:
@@ -59,6 +65,7 @@ def _run(runner_config: Path | None) -> int:
 
 
 def _cleanup(runner_config: Path | None) -> int:
+    """Remove leftovers of earlier launches on ``RUNNER_NAME`` and return 0, or 1 if it is unset."""
     runner = os.environ.get("RUNNER_NAME", "")
     if not runner:
         print("ERROR: RUNNER_NAME is required", file=sys.stderr)
@@ -75,6 +82,7 @@ def _cleanup(runner_config: Path | None) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Parse ``argv``, run the ``run`` or ``cleanup`` command and return its exit code."""
     parser = argparse.ArgumentParser(prog="python -m infx.launch", description=__doc__)
     parser.add_argument(
         "--runner-config",

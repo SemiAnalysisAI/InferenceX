@@ -48,7 +48,6 @@ if TYPE_CHECKING:
     from infx.launch.request import LaunchRequest
 
 CANCEL_POLL_S = 10.0
-# End states that lose the job to the cluster rather than fail its workload.
 _LOST_STATES = frozenset({"BOOT_FAIL", "CANCELLED", "NODE_FAIL", "PREEMPTED"})
 
 
@@ -144,7 +143,7 @@ class SlurmBackend(Backend):
         rendered = spec.srun_args()
         extra = ["--mpi=none", *(arg for arg in self.settings.srun_args if arg not in rendered)]
         argv = cli.srun_argv(allocation, container.command, container=spec, extra=extra)
-        echo(argv)
+        echo(argv, spec.env)
         step = subprocess.Popen(argv)
         self.life.callback(_stop, step)
         return SlurmJob(allocation.id, outputs=container.workspace, step=step)
@@ -172,22 +171,26 @@ class SlurmBackend(Backend):
         accounting times.
         """
         job = _slurm_job(job)
+        allocation = ""
         if job.step is not None:
             rc = job.step.poll()
             if rc is None:
                 return JobStatus(JobState.RUNNING, "srun step running")
             state = JobState.SUCCEEDED if rc == 0 else JobState.FAILED
             code = rc if rc >= 0 else 128 - rc
-            status = replace(cli.observe(job), state=state, raw=f"srun exit {rc}", exit_code=code)
+            observed = cli.observe(job)
+            allocation = observed.raw
+            status = replace(observed, state=state, raw=f"srun exit {rc}", exit_code=code)
         elif (queued := cli.queue_state(job)) is not None:
             pending = queued in {"PENDING", "CONFIGURING"}
             return JobStatus(JobState.PENDING if pending else JobState.RUNNING, queued)
         else:
             status = cli.final_status(job)
-        self._record_end(job, status)
+        self._record_end(job, status, allocation)
         return status
 
-    def _record_end(self, job: SlurmJob, status: JobStatus) -> None:
+    def _record_end(self, job: SlurmJob, status: JobStatus, allocation: str) -> None:
+        """Record ``status``; ``allocation`` is a container step's allocation accounting."""
         event = self.life.event
         known = {
             "nodes": status.nodes,
@@ -202,7 +205,13 @@ class SlurmBackend(Backend):
             return
         if job.step is not None:
             message = f"container step in Slurm job {job.id} exited {status.exit_code}"
-            event.fail("JobFailed", message, stage="run")
+            lost = allocation.partition("|")[0].split(" ", 1)[0]
+            if lost in _LOST_STATES:
+                kind = "Job" + lost.title().replace("_", "")
+                message += f" after its allocation ended {lost}"
+                event.fail(kind, message, stage="run", retriable=True)
+            else:
+                event.fail("JobFailed", message, stage="run")
         elif status.state in {JobState.FAILED, JobState.CANCELLED}:
             state, _, exit_code = status.raw.partition("|")
             ended = state.split(" ", 1)[0]
@@ -377,11 +386,28 @@ class SlurmBackend(Backend):
         )
 
     def _allocate(self, gpus: int, time_min: int) -> Job:
-        """``salloc`` one node and cancel it when the launch ends."""
+        """``salloc`` one node and cancel it when the launch ends.
+
+        A signal kills a queued ``salloc`` before it names its job, so that request is
+        cancelled by the runner's job name instead.
+        """
         settings = self.settings
         extra = ["--exclusive"] if settings.exclusive else []
         extra += [f"--{name}={value}" for name, value in settings.cpu_directives().items()]
-        job = cli.salloc(self._resources(gpus, time_min), extra=[*extra, *settings.salloc_args])
+        returned = False
+
+        def cancel_unreturned() -> None:
+            """Cancel the runner's queued request by name if ``salloc`` never returned a job."""
+            if not returned:
+                cli.cancel_named([self.request.runner_name], wait=False)
+
+        self.life.callback(cancel_unreturned)
+        try:
+            job = cli.salloc(self._resources(gpus, time_min), extra=[*extra, *settings.salloc_args])
+        except Exception:
+            returned = True
+            raise
+        returned = True
         self.life.callback(cli.cancel, job)
         return job
 

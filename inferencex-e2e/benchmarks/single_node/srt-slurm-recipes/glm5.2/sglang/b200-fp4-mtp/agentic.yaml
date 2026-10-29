@@ -67,7 +67,7 @@ override_c1:
     agg:
       args:
         max-running-requests: 2
-        cuda-graph-max-bs: 2
+        cuda-graph-max-bs-decode: 2
         hicache-ratio: 0.75
   benchmark:
     env:
@@ -78,7 +78,7 @@ override_c4:
     agg:
       args:
         max-running-requests: 8
-        cuda-graph-max-bs: 8
+        cuda-graph-max-bs-decode: 8
         hicache-ratio: 0.75
   benchmark:
     env:
@@ -89,7 +89,7 @@ override_c8:
     agg:
       args:
         max-running-requests: 16
-        cuda-graph-max-bs: 16
+        cuda-graph-max-bs-decode: 16
         hicache-ratio: 0.75
   benchmark:
     env:
@@ -100,7 +100,7 @@ override_c12:
     agg:
       args:
         max-running-requests: 24
-        cuda-graph-max-bs: 24
+        cuda-graph-max-bs-decode: 24
         hicache-size: 169
   benchmark:
     env:
@@ -111,7 +111,7 @@ override_c16:
     agg:
       args:
         max-running-requests: 32
-        cuda-graph-max-bs: 32
+        cuda-graph-max-bs-decode: 32
         hicache-size: 169
   benchmark:
     env:

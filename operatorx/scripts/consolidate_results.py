@@ -1,15 +1,7 @@
 #!/usr/bin/env python3
-"""Per-chip dedup pass.
-
-For each results/<platform>/<chip>/ directory:
-  1. Read every *.json run file.
-  2. For each unique (op_type, args, backend) tuple, keep the row from the
-     latest run (by run.started_at).
-  3. Emit a single new run file with id/timestamp=NOW, run metadata copied
-     from the most-recent input run for that chip.
-  4. Delete the original files.
-
-Run from the project root (the directory containing `results/`).
+"""Per-chip dedup of results/<platform>/<chip>/*.json: keep the latest row (by run.started_at)
+per (op_type, args, backend) in one new run file, then delete the originals.
+Run from the directory containing results/.
 """
 
 from __future__ import annotations
@@ -24,7 +16,6 @@ from pathlib import Path
 def _row_key(row: dict) -> tuple:
     op = row["op"]
     args = op.get("args", {})
-    # Deterministic ordering for dict; args are JSON-loaded so plain dicts.
     args_t = tuple(sorted(args.items(), key=lambda kv: kv[0]))
     return (op["type"], op.get("backend"), args_t)
 
@@ -45,7 +36,7 @@ def consolidate_chip(chip_dir: Path, dry_run: bool) -> None:
     if not files:
         return
 
-    # Map key -> (started_at, row); keep latest.
+    # key -> (started_at, row)
     latest: dict[tuple, tuple[str, dict]] = {}
     latest_run_meta: dict | None = None
     latest_started = ""
@@ -66,7 +57,6 @@ def consolidate_chip(chip_dir: Path, dry_run: bool) -> None:
     if not latest_run_meta:
         return
 
-    # Build the consolidated run record.
     cluster = latest_run_meta.get("cluster")
     new_id = _run_id(cluster)
     now_iso = _utc_now_iso()
@@ -87,7 +77,6 @@ def consolidate_chip(chip_dir: Path, dry_run: bool) -> None:
         return
 
     out_path.write_text(json.dumps(out, indent=2))
-    # Remove the originals (excluding the freshly-written one).
     for f in files:
         if f != out_path:
             f.unlink()

@@ -79,7 +79,7 @@ base:
         # Parse once in the Dynamo frontend.
         reasoning-parser: None
         tensor-parallel-size: 4
-        engram-config: '{"cpu_offload":true,"use_thp":true}'
+        engram-config: '{"cpu_offload":true,"use_thp":false}'
         kernel-config: '{"enable_flashinfer_autotune":true}'
         attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV41","indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
         kv-cache-dtype: "fp8"
@@ -116,5 +116,26 @@ override_tp4_c8:
       args:
         max-num-seqs: 16
         compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190]}'
+        max-cudagraph-capture-size: 8190
+        max-num-batched-tokens: 8192
+
+override_tp4_c1_seq1:
+  name: "dsv41flash-fp4-gb300-dynamo-vllm-agentx-agg-tp4-c1-seq1"
+  roles:
+    agg:
+      args:
+        max-num-seqs: 1
+        compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[5,6,10,12,15,18,20,24,25,30,35,36,40,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092]}'
+        max-cudagraph-capture-size: 4092
+        max-num-batched-tokens: 4096
+
+override_tp4_c16:
+  name: "dsv41flash-fp4-gb300-dynamo-vllm-agentx-agg-tp4-c16"
+  roles:
+    agg:
+      args:
+        max-num-seqs: 32
+        prefill-schedule-interval: 128
+        compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048,2304,2560,2816,3072,3328,3584,3840,4096]}'
         max-cudagraph-capture-size: 8190
         max-num-batched-tokens: 8192

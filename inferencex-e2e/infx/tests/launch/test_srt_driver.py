@@ -515,6 +515,21 @@ def test_submission_failure_code_propagates_and_cancels_the_job(harness, shape):
 
 
 @pytest.mark.parametrize("shape", ["single", "multi"])
+def test_a_manifest_that_is_not_a_json_object_fails_as_a_launch_error(harness, shape):
+    if shape == "single":
+        env = single_node_env(harness, "mi355x-amds", FAKE_MANIFEST='["42"]')
+    else:
+        env = lane_env(harness, "b300-dsxe", MODEL_PREFIX="dsr1", PRECISION="fp4", FRAMEWORK="dynamo-trt",
+                       MODEL="deepseek-r1-fp4", FAKE_MANIFEST='["42"]')  # fmt: skip
+    result = launch(env, harness.config, harness.workspace)
+    assert result.returncode == 1, result.stderr[-4000:]
+    assert "Traceback" not in result.stderr
+    error = job_event(harness.workspace)["error"]
+    assert error["type"] == "LaunchError"
+    assert error["message"].startswith("srtctl did not report one submitted job")
+
+
+@pytest.mark.parametrize("shape", ["single", "multi"])
 def test_sigterm_while_streaming_cancels_the_job_and_exits_143(harness, shape):
     active, tailing = harness.tmp / "active", harness.tmp / "tailing"
     extra = {"FAKE_ACTIVE": str(active), "FAKE_TAIL_MARKER": str(tailing)}
@@ -593,6 +608,15 @@ def test_a_failed_batch_wrapped_point_reports_the_wrapped_failure_once(harness):
     error = job_event(harness.workspace)["error"]
     assert (error["stage"], error["message"]) == ("run", "Slurm job 42 ended with state=FAILED exit_code=1:0")
     assert (result.stdout + result.stderr).count("::error") == 1
+
+
+def test_a_batch_wrapped_point_exits_with_the_wrapped_launchs_code(harness):
+    env = batch_env(harness, FAKE_SRTCTL_RC="7")
+    result = launch(env, harness.config, harness.workspace)
+    assert (harness.logs / "batch-rc").read_text() == "7"
+    assert result.returncode == 7, result.stderr[-4000:]
+    error = job_event(harness.workspace)["error"]
+    assert (error["type"], error["exit_code"]) == ("SubmitFailed", 7)
 
 
 def test_tilert_uses_upstream_submission_and_prepared_weights(harness):
@@ -707,6 +731,36 @@ def test_a_setup_failure_without_a_bad_archive_is_not_retried(harness):
     assert (error["stage"], error["type"], error["evidence"]) == ("prepare", "SetupFailed", "srt-setup.log")
 
 
+def test_a_setup_step_killed_by_a_signal_exits_128_plus_the_signal(harness):
+    fakes = Path(harness.env["PATH"].split(os.pathsep)[0])
+    (fakes / "make").write_text("#!/bin/bash\nkill -KILL $$\n")
+    env = lane_env(
+        harness, "h200-dgxc", MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang",
+        MODEL="deepseek-ai/DeepSeek-R1-0528",
+    )  # fmt: skip
+    result = launch(env, harness.config, harness.workspace)
+    assert result.returncode == 137, result.stderr[-4000:]
+    error = job_event(harness.workspace)["error"]
+    assert (error["type"], error["exit_code"]) == ("SetupFailed", 137)
+
+
+def test_a_failed_uv_download_fails_the_uv_install(harness):
+    fakes = Path(harness.env["PATH"].split(os.pathsep)[0])
+    (fakes / "uv").unlink()
+    (fakes / "curl").write_text("#!/bin/bash\necho 'curl: (6) Could not resolve host' >&2\nexit 6\n")
+    (fakes / "curl").chmod(0o755)
+    env = lane_env(
+        harness, "h200-dgxc", MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang",
+        MODEL="deepseek-ai/DeepSeek-R1-0528",
+    )  # fmt: skip
+    result = launch(env, harness.config, harness.workspace)
+    assert result.returncode == 1
+    error = job_event(harness.workspace)["error"]
+    assert (error["stage"], error["type"], error["message"]) == (
+        "prepare", "LaunchError", "installing uv failed (exit 6)",
+    )  # fmt: skip
+
+
 @pytest.mark.parametrize(("cluster_id", "env", "message"), [
     ("h200-dgxc", dict(MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-vllm"), "Unsupported framework"),
     ("b200-nscale", dict(MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="dynamo-trt"), "only dynamo-vllm"),
@@ -725,14 +779,21 @@ def test_unsupported_multinode_requests_fail_before_any_setup(harness, cluster_i
 
 @pytest.mark.parametrize(("shape", "overrides", "missing"), [
     ("single", dict(IS_AGENTIC="1", SPEC_DECODING="mtp", THINKING_MODE=""), "THINKING_MODE"),
+    ("single", dict(IS_AGENTIC="1", DURATION="600", INFERENCEX_RESULTS_PYTHON=None),
+     "INFERENCEX_RESULTS_PYTHON"),
     ("multi", dict(SPEC_DECODING=None), "SPEC_DECODING"),
     ("multi", dict(SRT_RECIPE=None), "SRT_RECIPE"),
+    ("power", dict(INFERENCEX_RESULTS_PYTHON=None), "INFERENCEX_RESULTS_PYTHON"),
     ("batch", dict(SRT_RECIPE=None), "SRT_RECIPE"),
 ])  # fmt: skip
 def test_a_missing_input_is_named_before_any_setup(harness, shape, overrides, missing):
     if shape == "multi":
         env = lane_env(harness, "h200-dgxc", MODEL_PREFIX="dsr1", PRECISION="fp8",
                        FRAMEWORK="dynamo-sglang", MODEL="deepseek-ai/DeepSeek-R1-0528")  # fmt: skip
+    elif shape == "power":
+        env = lane_env(harness, "h200-dgxc", MODEL_PREFIX="glm5.2", PRECISION="fp8",
+                       FRAMEWORK="dynamo-sglang", MODEL="zai-org/GLM-5.2-FP8", IS_AGENTIC="1",
+                       CONC="4", FAKE_RESULTS="agentic", POWER="1")  # fmt: skip
     else:
         env = single_node_env(harness, "b300-dsxe" if shape == "batch" else "h100-cw")
     if shape == "batch":

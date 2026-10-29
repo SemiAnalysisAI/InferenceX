@@ -76,8 +76,8 @@ payload cap. `large-blocks` sweeps 257 B to 1 GiB blocks under a **1 GiB copied-
 larger products are excluded and recorded (294 measured points, 126 excluded); each buffer also
 holds two guard blocks, so a 1 GiB block case allocates 3 GiB per buffer plus CPU references.
 
-The two results land in `collectivex/results/<sku>/<case_id>.json`, where each case_id is
-`<sku>-swap-blocks-<profile>-<layout>`. Each records its case_id, profile and pool, the actual
+The two results land in `collectivex/results/<sku>/<case_id>.json` on the cluster, where each
+case_id is `<sku>-swap-blocks-<profile>-<layout>`. Each records its case_id, profile and pool, the actual
 GPU, framework versions, image, source SHA, correctness status, and measurements. The EP
 summary tables skip these documents. CPU CI is separate and does not establish GPU
 correctness.
