@@ -1,0 +1,231 @@
+schema: 2
+base:
+  observability:
+    tachometer:
+      enabled: false
+  identity:
+    frameworks:
+      dynamo: 1.6.0.dev20261023
+  dynamo:
+    install: true
+    source:
+      wheel: 1.6.0.dev20261023
+  resources:
+    gpu_type: gb200
+    gpus_per_node: 4
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  environment:
+    PYTHONHASHSEED: '0'
+    NCCL_NET_GDR_C2C: '1'
+    NVSHMEM_REMOTE_TRANSPORT: none
+    NVSHMEM_ENABLE_NIC_PE_MAPPING: '1'
+    NVSHMEM_HCA_PE_MAPPING: mlx5_0:1:1,mlx5_1:1:1,mlx5_2:1:1,mlx5_3:1:1
+  services:
+  - name: etcd
+    type: etcd
+    placement:
+      node: infra
+  - name: nats
+    type: nats
+    placement:
+      node: infra
+    options:
+      max_payload_mb: 32
+  - name: mooncake-master
+    type: mooncake-master
+    preamble: bash /configs/vllm-mooncake.sh
+    args:
+    - --default_kv_lease_ttl=60000
+    - --eviction_high_watermark_ratio=0.95
+    - --eviction_ratio=0.10
+    options:
+      store_config:
+        metadata_server: P2PHANDSHAKE
+        global_segment_size: 150GB
+        local_buffer_size: 4GB
+        protocol: rdma
+        device_name: '@fabric.rdma-devices'
+        enable_offload: false
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+    args:
+      router-mode: kv
+      router-session-affinity-ttl-secs: 14400
+    env:
+      DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: '3600'
+      HF_HOME: /hf_hub_cache
+      HF_HUB_CACHE: /hf_hub_cache
+      DYN_TCP_CONNECT_TIMEOUT: '120'
+    placement:
+      node: head
+  engine:
+    type: vllm
+    connector: null
+    dp_launch_mode: per_node
+  roles:
+    prefill:
+      kv_events: true
+      nodes: 3
+      workers: 3
+      gpus: 4
+      env:
+        HF_HOME: /hf_hub_cache
+        HF_HUB_CACHE: /hf_hub_cache
+        VLLM_FLOAT32_MATMUL_PRECISION: high
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+        PYTHONUNBUFFERED: '1'
+        DYN_TCP_CONNECT_TIMEOUT: '120'
+        UCX_CUDA_IPC_ENABLE_MNNVL: 'n'
+        UCX_MEMTYPE_CACHE: 'n'
+        UCX_TLS: rc,cuda_copy
+        UCX_MEMTYPE_REG_WHOLE: 'n'
+        UCX_RNDV_PIPELINE_ERROR_HANDLING: 'y'
+        UCX_MODULE_DIR: /usr/local/lib/python3.12/dist-packages/nixl_cu13.libs/ucx
+        NIXL_UCX_SGL_ENABLE: '1'
+        NCCL_IB_HCA: '@fabric.rdma-devices'
+        VLLM_USE_V2_MODEL_RUNNER: '1'
+        UCX_NET_DEVICES: '@fabric.rdma-device-ports'
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '600'
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: '1024'
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT: '1024'
+        DYN_BACKEND_ADMISSION_REQUEST_QUEUE_LIMIT: '2048'
+        VLLM_MOONCAKE_LOAD_RECV_THREADS: '8'
+        MC_SLICE_SIZE: '1048576'
+        MC_MAX_MR_SIZE: '4294967296'
+        MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+        WITH_NVIDIA_PEERMEM: '0'
+        VLLM_RANDOMIZE_DP_DUMMY_INPUTS: '1'
+      args:
+        served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
+        language-model-only: true
+        trust-remote-code: true
+        enable-expert-parallel: true
+        kv-cache-dtype: nvfp4
+        block-size: 128
+        attention-config: '{"indexer_kv_dtype":"nvfp4","use_prefill_query_quantization":true}'
+        disable-hybrid-kv-cache-manager: true
+        max-model-len: 1048576
+        load-format: fastsafetensors
+        kernel-config: '{"moe_backend":"deep_gemm_mega_moe"}'
+        numa-bind: true
+        dyn-tool-call-parser: minimax_m3
+        dyn-reasoning-parser: minimax_m3
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        tensor-parallel-size: 1
+        gpu-memory-utilization: 0.88
+        max-num-seqs: 64
+        max-num-batched-tokens: 16384
+        long-prefill-token-threshold: 4096
+        prefill-schedule-interval: 1
+        enable-prefix-caching: true
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
+        max-cudagraph-capture-size: 2048
+        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["UCX"],"enforce_handshake_compat":false,"kv_lease_duration":120}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}]}}'
+        data-parallel-size: 4
+    decode:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        HF_HOME: /hf_hub_cache
+        HF_HUB_CACHE: /hf_hub_cache
+        VLLM_FLOAT32_MATMUL_PRECISION: high
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+        PYTHONUNBUFFERED: '1'
+        DYN_TCP_CONNECT_TIMEOUT: '120'
+        UCX_CUDA_IPC_ENABLE_MNNVL: 'n'
+        UCX_MEMTYPE_CACHE: 'n'
+        UCX_TLS: rc,cuda_copy
+        UCX_MEMTYPE_REG_WHOLE: 'n'
+        UCX_RNDV_PIPELINE_ERROR_HANDLING: 'y'
+        UCX_MODULE_DIR: /usr/local/lib/python3.12/dist-packages/nixl_cu13.libs/ucx
+        NIXL_UCX_SGL_ENABLE: '1'
+        NCCL_IB_HCA: '@fabric.rdma-devices'
+        VLLM_USE_V2_MODEL_RUNNER: '1'
+        UCX_NET_DEVICES: '@fabric.rdma-device-ports'
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '600'
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: '1024'
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT: '1024'
+        DYN_BACKEND_ADMISSION_REQUEST_QUEUE_LIMIT: '2048'
+        VLLM_MOONCAKE_LOAD_RECV_THREADS: '4'
+        MC_SLICE_SIZE: '1048576'
+        MC_MAX_MR_SIZE: '4294967296'
+        MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+        WITH_NVIDIA_PEERMEM: '0'
+        VLLM_RANDOMIZE_DP_DUMMY_INPUTS: '1'
+        VLLM_MAX_ASYNC_KV_ADMITS_PER_STEP: '4'
+        NCCL_CUMEM_ENABLE: '1'
+        NCCL_MNNVL_ENABLE: '1'
+        NCCL_NVLS_ENABLE: '1'
+        VLLM_ALLREDUCE_USE_SYMM_MEM: '0'
+      args:
+        served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
+        language-model-only: true
+        trust-remote-code: true
+        enable-expert-parallel: true
+        kv-cache-dtype: nvfp4
+        block-size: 128
+        attention-config: '{"indexer_kv_dtype":"nvfp4","use_prefill_query_quantization":true}'
+        disable-hybrid-kv-cache-manager: true
+        max-model-len: 1048576
+        load-format: fastsafetensors
+        kernel-config: '{"moe_backend":"deep_gemm_mega_moe"}'
+        numa-bind: true
+        dyn-tool-call-parser: minimax_m3
+        dyn-reasoning-parser: minimax_m3
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        tensor-parallel-size: 1
+        gpu-memory-utilization: 0.88
+        max-num-seqs: 64
+        max-num-batched-tokens: 8192
+        watermark: 0.05
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
+        max-cudagraph-capture-size: 512
+        numa-bind-nodes:
+        - 0
+        - 0
+        - 1
+        - 1
+        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["UCX"],"enforce_handshake_compat":false,"kv_lease_duration":120}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_consumer","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false,"save_decode_cache":false,"enable_lookup":false}}]}}'
+        data-parallel-size: 8
+        enable-prefix-caching: true
+        data-parallel-rpc-port: 13345
+  sbatch_directives:
+    cpus-per-task: '72'
+    mem: '0'
+  srun_options:
+    container-remap-root: ''
+  benchmark:
+    env:
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+      AIPERF_SERVER_METRICS_COLLECTION_INTERVAL: '1.0'
+    placement:
+      node: dedicated
+  name: minimaxm31flash-gb200-disagg-mooncake
+  setup_script: vllm-mooncake.sh
+override_3p1d_c256:
+  name: minimaxm31flash-gb200-disagg-mooncake-3p1d-c256
+override_3p1d_dep16_c280:
+  name: minimaxm31flash-gb200-disagg-mooncake-3p1d-dep16-c280
+  roles:
+    decode:
+      nodes: 4
+      gpus: 16
+      args:
+        data-parallel-size: 16
+override_4p1d_dep16_c352:
+  name: minimaxm31flash-gb200-disagg-mooncake-4p1d-dep16-c352
+  roles:
+    prefill:
+      nodes: 4
+      workers: 4
+    decode:
+      nodes: 4
+      gpus: 16
+      args:
+        data-parallel-size: 16

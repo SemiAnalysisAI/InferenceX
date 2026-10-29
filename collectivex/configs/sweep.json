@@ -5,6 +5,11 @@
     "normal": ["decode", "prefill"],
     "low-latency": ["decode"]
   },
+  "backend_mode_phases": {
+    "nccl-ep": {
+      "low-latency": ["decode", "prefill"]
+    }
+  },
   "routing": "uniform",
   "ep_degrees": [8, 16],
   "precisions": ["bf16", "fp8"],
