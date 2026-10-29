@@ -5595,7 +5595,7 @@
     - "Image ghcr.io/tile-ai/tilert:0.1.5 (tilert 0.1.5.post2 installed at container start); commands aligned to TileRT README Topology A -- NIXL KV transfer, --kv-cache-dtype fp8_ds_mla (prefill) <-> fp8 (decode), max-seq-len 202752; MTP speculative-config wired via spec-decoding=mtp"
     - "Topology: 1 prefill node (TP8) + 1 decode node (TP8), each 8xB200 exclusive; TileRT decode is bs=1 only so conc-list is a single point [1], ISL 1k/8k OSL 1k"
     - "Runner: launch_b200-dgxc.sh tilert early-return branch (zero impact on the dynamo path); tilert_utils/submit.sh issues two srun --ntasks=1, one per role, because prefill and decode need different container images; roles are dispatched by the TILERT_ROLE it exports, and torn down across nodes via a sentinel file on the shared /workspace"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4627
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
 
 - config-keys:
     - qwen3.5-fp8-b200-sglang-agentic-mtp
@@ -9724,7 +9724,7 @@
     - "Replace the TP4/EP1 and TP2/EP1 C1-C128 sweeps with TP4/EP4 points at concurrency 1, 4, 8 and 16, plus aggregated TP4/EP4 points with DP attention (DP4) at concurrency 32, 64, 128 and 192 behind sglang-router 0.3.2."
     - "Apply the point-specific prefill-decode interval, prefill chunking, admission, memory and SWA prefix-tail settings from the single-node recipe; all points use the default fcfs schedule policy."
     - "No data-type or precision change to the DSpark draft: the bundled draft of deepseek-ai/DeepSeek-V4.1-Flash runs as shipped with block size 5."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4627
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
 
 - config-keys:
     - kimik3-fp4-mi355x-vllm-disagg-agentic
@@ -10287,7 +10287,7 @@
   description:
     - "Update the image from lmsysorg/sglang:nightly-dev-cu13-20260923-06008c17 to lmsysorg/sglang:nightly-dev-cu13-20261013-7224fce1."
     - "Set TP4 concurrency 2 max-running-requests to 2 and sweep concurrency 1 to 16 on TP4 and TP8."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4627
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
 
 - config-keys:
     - dsv4-fp4-mi355x-sglang-agentic-mtp
@@ -10694,7 +10694,7 @@
   description:
     - "Replace the Muse Spark Open B300 TP8/EP8 search space with per-concurrency AgentX settings: TP8/EP8 with GPU-resident KV at concurrency 1, 4, 8 and 14; TP4/EP4 with GPU-resident KV at concurrency 4; TP4/EP4 with 120-175 GB per-rank DRAM HiCache at concurrency 10, 16, 20, 28, 36 and 40."
     - "Tune request admission, decode graph batch limits, memory fraction, SWA/full ratio, prefill-decode interval and chunked prefill per concurrency; enable layernorm SP and MegaMoE at the HiCache points and shortest-prefill-first from concurrency 16."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4627
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
 
 - config-keys:
     - musespark-fp4-b200-sglang-agentic-dflash
@@ -10703,7 +10703,7 @@
   description:
     - "Configure Muse Spark Open B200 SGLang AgentX request admission, scheduling, memory allocation, HiCache, and draft attention per concurrency, adding TP4/EP4 at concurrency 8, 10, 16, and 24 and TP8 at concurrency 6, 10, and 56."
     - "Drop TP8 concurrency 12, 16, 24, 32, 48, and 64."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4627
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
 
 - config-keys:
     - qwen3.5-fp8-b300-sglang-mtp
@@ -10789,7 +10789,7 @@
     - "Disagg: replace the DEP8 prefill + Mooncake store ladder with TP1 x PP8 prefill workers that keep a 2x HiCache host tier, and run W4A4 MegaMoE for the target model on prefill and decode while the DSpark draft MoE stays at the image default (W4A8)."
     - "Disagg points: 1P+DEP16 at concurrency 80, 160 and 200 with the KV router and token-balanced decode; 1P+DEP16 c300, 2P+DEP16 c720, 2P+DEP12 c800 and 2P+DEP8 c880 with a round-robin frontend and request-balanced decode. DSpark block size 6, 6, 5, 5 and 4, matched on prefill and decode."
     - "Agg: TP8 over two nodes at concurrency 1; TP4 on one node at concurrency 1 and 4 with the fastokens tokenizer. DSpark block size 6."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4627
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
 
 - config-keys:
     - glm5.2-fp4-gb200-dynamo-sglang-agentic-agg
@@ -10810,7 +10810,7 @@
   description:
     - "Update the Muse Spark Open GB300 curve to lmsysorg/sglang:nightly-dev-20261021-c1c287a4 and set SGLANG_FLASHINFER_NVFP4_PER_TOKEN_ACTIVATION=0 and --stream-interval 20 at every concurrency."
     - "Lower max-running-requests to 3 at concurrency 10, raise prefill-decode-interval to 96 at concurrency 24, switch HiCache to write_back, and replace concurrency 16, 20 and 40 with 28, 30, 44 and 48."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4627
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
 
 - config-keys:
     - musespark-fp4-b200-sglang-agentic-dflash
@@ -11250,7 +11250,7 @@
     - minimaxm31flash-fp4-gb300-sglang-agentic-dspark
   description:
     - "Add TP2 points with DRAM KV offload, and adjust the memory settings on the DRAM KV offload points."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4627
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
   scenario-type: [agentic-coding]
 
 - config-keys:
