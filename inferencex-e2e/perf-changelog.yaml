@@ -11538,17 +11538,12 @@
 - config-keys:
     - qwen3.5-fp8-gb200-dynamo-sglang
     - qwen3.5-fp8-gb300-dynamo-sglang
-    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg
-    - kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg
-    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2
-    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-disagg
-    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
     - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
   scenario-type:
     - fixed-seq-len
     - agentic-coding
   description:
-    - "Collect ACPI Grace CPU power on the Qwen3.5 GB200/GB300 1P1D, 4P1D, and 8P1D NVL72 recipes and the Kimi K3 GB200/GB300 AgentX recipes. The master rows set cpu-power beside power; the binder merges the cluster's cpu-power-exporter record (ACPI on gb200-nv and gb300-nv) into the bound recipe, and make setup pins cpu-power-exporter v2.59.3 for those jobs, matching the srt-slurm v2.59.3 source pin; its aarch64 build links glibc so the NVML module reader loads."
+    - "Collect ACPI Grace CPU power on the Qwen3.5 GB200/GB300 1P1D, 4P1D, and 8P1D NVL72 recipes and the Kimi K3 GB300 aggregate AgentX recipe. The master rows set cpu-power beside power; the binder merges the cluster's cpu-power-exporter record (ACPI on gb200-nv and gb300-nv) into the bound recipe, and make setup pins cpu-power-exporter v2.59.3 for those jobs, matching the srt-slurm v2.59.3 source pin; its aarch64 build links glibc so the NVML module reader loads."
     - "Integrate each Grace socket total over the formal GPU measurement window and emit cpu_power_valid, avg_cpu_socket_power_w, avg_total_cpu_power_w, and total_cpu_energy_j independently of the GPU power verdict, with the ACPI CPU-only and SysIO rails as separate keys. When the producer writes module_w (CPU samples schema v3), also emit avg_total_module_power_w and total_module_energy_j as a separate NVML superchip module reference rail; the module includes both GPUs and is never added to the CPU totals. Publish validated per-host GPU power so cross-host workers can be modeled as physical trays. Under required power a cpu-power row fails on a missing or invalid CPU leg; other rows keep the best-effort CPU verdict."
     - "Enable required DCGM telemetry with collect_interval_ms: 1000 on the Qwen3.5 GB200/GB300 8P1D recipes, and set require-power on both Qwen3.5 GB200/GB300 8k1k sequences. Keep the Qwen3.5 8P1D frontend, benchmark client, and infra on the reserved head so power and benchmark timestamps share its clock, while retaining 13 allocated nodes and 12 GPU workers."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3296
