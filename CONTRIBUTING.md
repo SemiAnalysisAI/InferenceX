@@ -57,9 +57,10 @@ Allowed (this is the baseline, not an exception):
   DeepSeek V4.1 DSpark `wo_a` projections, stored as FP8, as BF16, matching DeepSeek's
   reference implementation. That conversion is the shipped path. A local patch that
   keeps them FP8 changes the draft computation and is the violation.
-- The framework's default draft KV-cache dtype for that checkpoint, and an
-  upstream-supported KV-cache dtype applied consistently to target and draft (for
-  example FP8 draft KV inherited from an FP8 target).
+- Any upstream-supported draft KV-cache dtype. This rule limits the precision of
+  draft weights, activations, and computation only; the draft KV-cache dtype is not
+  restricted. A submission may set it independently of the target, for example
+  `--speculative-draft-kv-cache-dtype fp8_e4m3` with a BF16 target KV cache.
 - Genuine upstream optimizations that ship in the pinned image and are used in
   production by accuracy-sensitive customers: fused or lower-precision kernels that
   upstream enables by default for that model, scheduling, and anything else that runs
@@ -83,7 +84,7 @@ Forbidden (submission-side precision hacking of the draft):
   applied to a BF16 MTP head, `SGLANG_GLM_NEXTN_MOE_PTPC=1`, and an ATOM
   `--online_quant_config` whose `exclude_layer` patterns do not cover the entire draft
   head.
-- Dtype overrides aimed at the draft that lower its precision below the framework's default for that checkpoint.
+- Weight or compute dtype overrides aimed at the draft that lower its precision below the framework's default for that checkpoint.
 - Substituting a precision-converted or differently quantized draft checkpoint, or a
   draft head taken from a different release than the served target.
 - Patching the pinned image so that it loads or computes the draft at a different
