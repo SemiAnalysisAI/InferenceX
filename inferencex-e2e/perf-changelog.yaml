@@ -11092,6 +11092,15 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
+    - qwen3.5-fp8-h200-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use the FA3 attention backend for the H200 Qwen3.5-397B-A17B-FP8 SGLang TP8/EP1 HiCache AgentX points at concurrency 4, 8, 12 and 24, and add FA3 points at concurrency 32 and 48."
+    - "Update the SGLang image from v0.5.21-cu130 to nightly-dev-20261021-c1c287a4, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4455
+
+- config-keys:
     - minimaxm31flash-fp4-gb200-sglang-agentic-dspark
   description:
     - "Add day-zero MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4) AgentX on GB200 with SGLang image lmsysorg/sglang:dev-minimax-m31-flash (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1)."
@@ -11501,16 +11510,28 @@
   append-only: true
 
 - config-keys:
+    - minimaxm31flash-fp4-gb300-sglang-agentic-dspark
+  description:
+    - "Store the DSpark draft KV cache in FP8 (speculative-draft-kv-cache-dtype fp8_e4m3) on every point except the batch-size-1 MonoKernel Low-Latency point, instead of the bf16 default, matching the vLLM DSpark drafter; this frees HBM and HiCache host pool space for target KV."
+    - "Rerun the whole curve so it is measured on one recipe revision."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4600
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm31flash-fp4-b200-sglang-agentic-dspark
+  description:
+    - "Store the DSpark draft KV cache in FP8 (speculative-draft-kv-cache-dtype fp8_e4m3) instead of the bf16 default, matching the vLLM DSpark drafter; this frees HBM and HiCache host pool space for target KV."
+    - "Rerun the whole curve so every point uses the FP8 draft KV cache."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4598
+  scenario-type: [agentic-coding]
+
+- config-keys:
     - glm5.2-fp4-mi355x-atom-disagg-agentic-mtp
   scenario-type:
     - agentic-coding
   description:
-    - "Add glm5.2-fp4-mi355x-atom-disagg-agentic-mtp: amd/GLM-5.2-MXFP4 on MI355X with ATOM prefill/decode disaggregation behind AToMesh, Mooncake RDMA from prefill to decode and MTP, on rocm/atom-dev:nightly_202610131249 pinned by digest sha256:d5b3fcd99bd44e3489740d1b026037f49f2e3f6160dc70b70c3fd23a125a4905 (ROCm/ATOM 6fd1bb1be, ROCm 7.2.4; AToMesh at the same commit)."
-    - "Nine points with dram-utilization 1.0, each with one CPP4 prefill worker (PP4 x TP1 on GPUs 0-3, layers split 20/20/20/18): 1P1D at concurrency 56, 72, 96, 112 and 128 with a TP4 + DCP4 decode on GPUs 4-7 of the prefill node; 1P2D at concurrency 56 with two TP4 + DCP4 decodes; and 1P3D at concurrency 12, 16 and 24 with three TP4 decodes. In 1P2D and 1P3D each decode has a node of its own (spread_workers)."
-    - "Both roles set kv_cache_dtype fp8, block size 16, AITER_QUICK_REDUCE_QUANTIZATION=INT4 and online_quant_config ptpc_fp8, which quantizes the target's remaining BF16 linear layers to FP8 at load and excludes lm_head, the embedding, the router gates, every routed expert (which keep their MXFP4 weights) and the MTP layer (model.layers.78.*)."
-    - "The prefill runs eager with gpu-memory-utilization 0.85, max-num-seqs 512, max-num-batched-tokens 8192 and one offload load worker. The DCP4 decodes use gpu-memory-utilization 0.94, max-num-seqs 512, max-num-batched-tokens 2048 and FULL CUDA graphs up to batch 256; the 1P3D TP4 decodes use gpu-memory-utilization 0.95, max-num-batched-tokens 16384 and max-num-seqs and CUDA graphs up to 2x concurrency (24, 32, 48). Draft tokens are 3 at 1P1D, 4 at 1P2D and 5 at 1P3D. AToMesh routes round-robin at 1P1D and cache-aware (cache threshold 0.8) at 1P2D and 1P3D."
-    - "Every point keeps its prefill's prefix tier in a Mooncake Store (0.3.13) on the prefill node, with owners on 2 MiB HugeTLB pages. 1P1D, as in ATOM's CI, has one pool shared by all four PP stages: one master and two 768 GiB owners, one per NUMA node (1649 GB, within the prefill's and the colocated decode's 1499 GB DRAM shares), each registered on rdma0-3, with MC_ENABLE_DEST_DEVICE_AFFINITY so each stage reaches them through the NIC of its own name on this rail-isolated fabric. 1P2D and 1P3D keep a pool per prefill NIC, each one master and a 349 GiB owner, the prefill's 1499 GB. After the cluster host setup drops the page cache, host_setup on the head node, where srtctl starts the prefill, reserves the owners' pages plus 2% above the hugepages host services hold and fails unless each NUMA node has its owners' pages free; teardown releases them."
-    - "Workers read the checkpoint from each node's local Hugging Face hub cache, as the single-node GLM-5.2 points do; srtctl fills the first node's cache before they start."
-    - "Patch srt-slurm so its ATOM backend passes -tp as the worker's GPUs over its pipeline and prefill-context stages (NVIDIA/srt-slurm#604); unpatched, the PP4 prefill launches with -tp 4."
-    - "The MTP draft runs as shipped: model.layers.78 of amd/GLM-5.2-MXFP4 is all BF16, including its 256 routed experts (only the router bias is F32), and at ATOM 6fd1bb1be the model.layers.78.* online exclusion keeps every draft layer out of ptpc_fp8. The draft shares the target's FP8 KV cache and FP8 indexer cache (the recipe sets no index_cache_dtype, so it follows kv_cache_dtype)."
+    - "Add GLM-5.2 MXFP4 on MI355X with ATOM prefill/decode disaggregation (AToMesh router, Mooncake transfer, MTP) on rocm/atom-dev:nightly_202610131249."
+    - "Target: MXFP4 routed experts, the other linear layers quantized online to FP8 (ptpc_fp8), the MTP draft in BF16 as shipped; FP8 KV cache."
+    - "One PP4 prefill with a Mooncake Store prefix tier; 1P1D with a DCP4 decode at concurrency 56-128, 1P2D with DCP4 decodes at 56, 1P3D with TP4 decodes at 12-24."
+    - "Patch srt-slurm so ATOM's -tp leaves out the pipeline stages (NVIDIA/srt-slurm#604)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4045
