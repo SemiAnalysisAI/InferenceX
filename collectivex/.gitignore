@@ -6,6 +6,8 @@ unsupported/
 .collx_backend/
 .collx_sources/
 /matrix_full.json
+# Results are uploaded to the CollectiveX database, not committed.
+/results/*/
 gpucore.*
 
 # Local plans and infrastructure inventory.

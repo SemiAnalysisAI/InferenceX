@@ -1,0 +1,73 @@
+base:
+  schema: 2
+  name: dsv4-fp4-b200-vllm-agentic-lowconc
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  # The engine may take the full VLLM_ENGINE_READY_TIMEOUT_S to become ready.
+  health_check:
+    interval_seconds: 10
+    max_attempts: 720
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4-Pro-0813
+        trust-remote-code: true
+        kv-cache-dtype: fp8
+        block-size: 256
+        max-model-len: 1048576
+        gpu-memory-utilization: 0.90
+        numa-bind: true
+        enable-cumem-allocator: true
+        no-enable-flashinfer-autotune: true
+        tokenizer-mode: deepseek_v4
+        tool-call-parser: deepseek_v4
+        enable-auto-tool-choice: true
+        reasoning-parser: deepseek_v4
+        attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"indexer_kv_dtype":"mxfp4"}'
+        # Throughput runs switch to synthetic rejection at the golden acceptance length.
+        speculative-config: '{"method":"dspark","num_speculative_tokens":6,"draft_sample_method":"probabilistic"}'
+        no-disable-hybrid-kv-cache-manager: true
+        disable-uvicorn-access-log: true
+      env:
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+        VLLM_PREFIX_CACHE_RETENTION_INTERVAL: '32768'
+        VLLM_USE_V2_MODEL_RUNNER: '1'
+        VLLM_USE_RUST_FRONTEND: '1'
+        VLLM_DSV4_MEGA_FP8_COMBINE: '1'
+        VLLM_RPC_TIMEOUT: '600000'
+        TORCH_CUDA_ARCH_LIST: '10.0'
+        PYTHONNOUSERSITE: '1'
+        VLLM_FLOAT32_MATMUL_PRECISION: high
+  benchmark:
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+
+override_tp8_c4:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        data-parallel-size: 1
+        max-num-batched-tokens: 16384
+        kv-cache-memory-bytes: 42949672960
+        sparse-indexer-topk-backend: deep_select
+        max-num-seqs: 4
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[7,14,21,28,100,200,300,400,500,640,800,1024,1280,1600,2048,2560,3200,4096,5120,6400,8192,10240,12800,16384],"max_cudagraph_capture_size":16384}'
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
