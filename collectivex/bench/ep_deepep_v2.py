@@ -260,10 +260,10 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
         # model, get_theoretical_num_sms(num_experts, num_topk), and combine reuses the handle's
         # count; num_qps follows from the SM count. The call below is the dispatch's own (same
         # cached arguments), so the recorded count is the one the kernels run with. The model
-        # reads the scale-out rate from ibstat, which cannot see EFA: there the hybrid branch would
-        # divide by zero, so the registry's per-GPU rate (COLLX_RDMA_GBS, set on EFA pools only)
-        # stands in and the result is passed explicitly. With overlap off the model's own count
-        # (10-26 SMs on these pools) is raised to 64 either way.
+        # reads the scale-out rate from ibstat, which cannot see EFA and is absent from the vLLM
+        # image: there the hybrid branch would divide by zero, so the registry's per-GPU rate
+        # (COLLX_RDMA_GBS) stands in and the result is passed explicitly. With overlap off the
+        # model's own count (10-26 SMs on these pools) is raised to 64 either way.
         rdma_gbs = float(os.environ.get("COLLX_RDMA_GBS") or 0)
         if rdma_gbs:
             self.num_sms = int(self.buffer.get_theoretical_num_sms(
