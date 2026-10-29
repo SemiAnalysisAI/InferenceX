@@ -44,7 +44,7 @@ BACKEND_PRECISIONS = {
     "deepep-v2": ("bf16", "fp8"),
     "mori": ("bf16", "fp8"),
     "uccl-ep": ("bf16", "fp8"),
-    # Native DS_FP8E3M4 dispatch, low-latency decode only (the mode/phase gate below).
+    # Native DS_FP8E3M4 dispatch, low-latency prefill and decode (the mode gate below).
     "nccl-ep": ("bf16", "fp8"),
     # FlashInfer FP8 is dispatch-side only (scales as a fourth payload, combine stays BF16),
     # and uses the same per-128-block e4m3 recipe as deepep-v2/uccl-ep so the axis is
@@ -60,8 +60,33 @@ OFF_PATH_PRECISIONS: dict[str, tuple[str, ...]] = {}
 _MODE_SLUG = {"low-latency": "ll"}
 
 
+def _mode_phases() -> dict[str, dict[str, list[str]]]:
+    """Resolve backend phase overrides over the shared mode schedule."""
+    overrides = SWEEP.get("backend_mode_phases", {})
+    if not isinstance(overrides, dict):
+        raise SystemExit("backend_mode_phases must be an object")
+    for backend, modes in overrides.items():
+        if backend not in SWEEP_BACKENDS:
+            raise SystemExit(f"unknown backend_mode_phases backend {backend!r}")
+        if not isinstance(modes, dict):
+            raise SystemExit(f"backend_mode_phases[{backend!r}] must be an object")
+        for mode, phases in modes.items():
+            if mode not in SWEEP["modes"]:
+                raise SystemExit(f"unknown backend_mode_phases mode {mode!r}")
+            if not isinstance(phases, list) or any(
+                not isinstance(phase, str) or phase not in SWEEP["workload"]["token_ladders"]
+                for phase in phases
+            ):
+                raise SystemExit(f"invalid backend_mode_phases phases for {backend!r}/{mode!r}")
+    return {
+        backend: {mode: overrides.get(backend, {}).get(mode, phases)
+                  for mode, phases in SWEEP["modes"].items()}
+        for backend in SWEEP_BACKENDS
+    }
+
+
 def _ll_runnable(platform: dict[str, Any], backend: str, ep: int) -> bool:
-    """Whether this SKU/backend/EP cell can run the low-latency decode kernels.
+    """Whether this SKU/backend/EP cell can run the low-latency kernels.
 
     Capability is data-driven from the platform registry's optional ``ll_backends``
     map (backend -> runnable EP degrees), mirroring ``backends`` for normal mode. A SKU
@@ -186,6 +211,7 @@ def resolve_matrix(
     swap_profile: str = "smoke",
 ) -> dict[str, Any]:
     """Resolve the selected suites into allocation-sized shards."""
+    mode_phases = _mode_phases()
     selected_suites = _comma_subset("suites", suites, SUITES)
     if not selected_suites:
         raise SystemExit("--suites selects no suite")
@@ -256,13 +282,9 @@ def resolve_matrix(
                         and (precision not in off_path or precision in selected_precisions)
                     ]
                     if runnable:
-                        # A runnable cell fans out over the modes it realizes at this
-                        # phase (normal everywhere; low-latency only where the mode is
-                        # decode-scoped in sweep.json AND the cell is capability-gated in),
-                        # crossed with the selected precisions.
                         cell_modes = [
                             mode for mode in SWEEP["modes"]
-                            if phase in SWEEP["modes"][mode]
+                            if phase in mode_phases[target][mode]
                             and (not selected_modes or mode in selected_modes)
                             and (mode == "normal" or _ll_runnable(platform, target, ep))
                         ]
@@ -283,9 +305,7 @@ def resolve_matrix(
                         emit_precisions = sorted(supported)[:1]
                     for mode in cell_modes:
                         for precision in emit_precisions:
-                            if target == "nccl-ep" and precision == "fp8" and (
-                                mode != "low-latency" or phase != "decode"
-                            ):
+                            if target == "nccl-ep" and precision == "fp8" and mode != "low-latency":
                                 continue
                             case = {
                                 "suite": SWEEP["suite"],

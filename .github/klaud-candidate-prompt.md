@@ -123,7 +123,8 @@ Keep targeted work draft with no sweep labels. Dispatch ONLY updated-image e2e-t
 from main, with ref=exact measured SHA, fail-fast=true, klaud-run=true,
 test-name=$KLAUD_TEST_NAME, and
 `generate-cli-command="test-config --config-files FILE --config-keys KEY... --scenario-type agentic-coding --smoke"`,
-listing every family key after `--config-keys`.
+listing every family key after `--config-keys`. Add agentx-fast=true only to this `--smoke`
+dispatch (20-minute profile). Never pass it to a sweep without `--smoke` or to the final sweep.
 Autosweeps cover only the family's AgentX (agentic-coding) points; never run fixed-seq-len points.
 Smoke retains minimum-concurrency throughput and canonical representative eval concurrency;
 it is startup evidence, not a full curve. When candidate.json has `smoke-covers-full: true`, the
@@ -202,7 +203,11 @@ appear once. Use exact 8k/1k lengths, unambiguous point labels, `110 (+10%)`, la
 ↑/↓ headers and `97% (+0.50 pp)` evals with sample counts. Omit Result/Coverage/Finding,
 legends, boilerplate, limitations and redundant milestones. Briefly note failures and N/A
 reasons; preserve sources and uncertainty. Report observations on material changes or after
-30 minutes waiting. Improvement is best effort; there is no regression rejection gate.
+30 minutes waiting. Improvement is best effort, but final-sweep validation (never smoke) blocks
+validated when a matched point's output tok/s/GPU falls over 30% below baseline or has no
+baseline throughput, any point's request errors exceed 5%, or an eval falls below half its
+baseline score or below 50% for gsm8k and the Kimi/MiniMax tool-call suites;
+repair within budget, else finish failed with the affected points.
 
 On terminal resolve/baseline evidence, stop investigating. Finalize attempts; the final
 attempt's Next states why you stopped, because finish shows it as the closing reason. Write
@@ -219,9 +224,8 @@ can be established). Select the first actual blocker, not a guessed cause. A fai
 baseline work belongs in `resolve`, and a failed updated-image run belongs in `targeted` or
 `final-sweep`. Do not put free text, raw responses, private telemetry or transcripts in the
 code. The fixed code appears in sanitized diagnostics and the completion report.
-After finish returns a verified `validated` outcome, check for an existing exact `/use
-<verified-final-run-id>` comment, then post it once on this PR. Never post `/use` for any
-other outcome or any run except the verified final sweep.
+For a verified `validated` outcome, finish itself posts `/use <verified-final-run-id>` once on
+this PR. Never post `/use` yourself.
 Otherwise finish reports the failure/deferral, cancels owned work, confirms every job
 terminal, removes sweep labels, drafts/closes the PR, deletes the candidate branch and releases
 the family claim so a later wave may retry it. Pending cleanup means wait and retry finish.
