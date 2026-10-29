@@ -21,6 +21,9 @@ from infx.launch.drivers.srt.recipe import RECIPES_MIRROR
 from infx.launch.drivers.srt.run import SrtRun, require
 
 SUBMODULE = Path("utils/srt-slurm")
+# The cpu-power-exporter release asset ``make setup`` installs for a job that scrapes Grace CPU
+# power; it ships with the srt-slurm release the submodule pins, so bump both together.
+CPU_POWER_EXPORTER_RELEASE = "v2.59.3"
 PATCHES = Path("runners/srt-slurm/patches")
 SETUP_LOG = "srt-setup.log"
 SETUP_ATTEMPTS = 5
@@ -195,14 +198,19 @@ def _discard_corrupt_archives(configs: Path) -> bool:
     return discarded
 
 
-def run_setup(run: SrtRun, checkout: Checkout) -> int:
-    """Run ``make setup`` in the checkout, logging to SETUP_LOG; return its exit code."""
+def run_setup(run: SrtRun, checkout: Checkout, *, cpu_power_exporter: bool = False) -> int:
+    """Run ``make setup`` in the checkout, logging to SETUP_LOG; return its exit code.
+
+    ``cpu_power_exporter`` pins the cpu-power-exporter release, which makes its download fatal.
+    """
     log = run.workspace / SETUP_LOG
     event = run.life.event
     event.evidence(log)
     for attempt in range(1, SETUP_ATTEMPTS + 1):
         print(f"Setting up srt-slurm, attempt {attempt} (details: {SETUP_LOG})", flush=True)
         argv = ["make", "setup", f"ARCH={run.cluster.arch}"]
+        if cpu_power_exporter:
+            argv.append(f"CPU_POWER_EXPORTER_RELEASE={CPU_POWER_EXPORTER_RELEASE}")
         rc = _run_logged(argv, log, env=run.env, cwd=checkout.root)
         if rc == 0:
             print("srt-slurm setup complete", flush=True)

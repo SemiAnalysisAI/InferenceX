@@ -61,6 +61,7 @@ class Package:
         aggregate_gpus=0,
         sha=PRODUCER_SHA,
         require_power=False,
+        expected_cpu=False,
     ):
         return apm.run(
             self.power_dir,
@@ -73,6 +74,7 @@ class Package:
             logs_root=self.logs_root,
             validation_result=self.validation_result,
             require_power=require_power,
+            expected_cpu=expected_cpu,
         )
 
     def agg(self):
@@ -358,6 +360,12 @@ class TestValidPackage:
         assert agg["joules_per_input_token"] == 2.563477
         assert agg["joules_per_output_token"] == 20.507812
         assert agg["joules_per_total_token"] == 2.278646
+        assert agg["workers"] == [
+            {"role": "decode", "worker_idx": 0, "hosts": ["node-d"],
+             "num_gpus": 2, "avg_power_w": 300.0},
+            {"role": "prefill", "worker_idx": 0, "hosts": ["node-p"],
+             "num_gpus": 2, "avg_power_w": 400.0},
+        ]
         assert agg["prefill_gpu_energy_j"] == 48000.0
         assert agg["decode_gpu_energy_j"] == 36000.0
         assert agg["prefill_avg_power_w"] == 400.0
@@ -768,3 +776,267 @@ def test_non_object_aggregate_is_recorded_as_unwritable(tmp_path, aggregate):
     assert sidecar["metrics"] == {}
     assert pkg.agg_result.read_text() == aggregate
     assert pkg.run(require_power=True) == 1
+
+
+# --- Grace CPU-side power leg (power/cpu/) -----------------------------------
+
+CPU_HOSTS = tuple(sorted({host for host, *_ in DEVICES}))
+CPU_HEADER = [
+    "schema_version", "timestamp_unix", "hostname", "source", "sensor", "socket_id",
+    "power_w", "cpu_rail_w", "soc_w", "dram_w", "total_power_w",
+]
+CPU_HEADER_V3 = [*CPU_HEADER[:-1], "module_w", "total_power_w"]
+GRACE_W = {"node-d": 500.0, "node-p": 700.0}
+DCGM_W = 300.0
+# Component rails never feed a headline metric; the values are chosen so any
+# leak into a headline key is visible against the Grace constants.
+RAILS_W = {"cpu_rail": 200.0, "soc": 50.0}
+# NVML superchip module power per socket, distinct from the Grace and rail
+# constants so a leak into a CPU key is visible.
+MODULE_W = 1500.0
+# srt-slurm cpu_rails.SENSOR_SUFFIXES: the Grace socket meter and the DCGM CPU rail.
+GRACE_SENSOR = "CPU{s}:cpuSidePowerUsageW"
+DCGM_SENSOR = "CPU{s}:cpuPowerUsageW"
+
+
+def _cpu_row(ts, host, socket, kind, watts):
+    if kind == "dcgm":
+        return [2, repr(ts), host, "dcgm", DCGM_SENSOR.format(s=socket), socket, repr(watts), "", "", "", ""]
+    rails = [repr(w) for w in RAILS_W.values()]
+    return [2, repr(ts), host, "acpi", GRACE_SENSOR.format(s=socket), socket, repr(watts), *rails, "", ""]
+
+
+def _cpu_rows(kinds_by_host=None, *, hosts=CPU_HOSTS):
+    """One row per (scrape, host, socket, kind); ``None`` watts means the Grace constant."""
+    kinds_by_host = kinds_by_host or {host: {"grace": None} for host in hosts}
+    rows = []
+    ts = FIRST_TS
+    while ts <= LAST_TS:
+        for host in hosts:
+            for socket in (0, 1):
+                for kind, watts in kinds_by_host.get(host, {}).items():
+                    watts = GRACE_W[host] if watts is None else watts
+                    rows.append(_cpu_row(ts, host, socket, kind, watts))
+        ts += 1.0
+    return rows
+
+
+def _v3(rows, module_w=MODULE_W):
+    """The same scrapes in srt-slurm v2.59.0+'s schema 3; ``None`` leaves module_w blank."""
+    module = "" if module_w is None else repr(module_w)
+    return [[3, *row[1:-1], module, row[-1]] for row in rows]
+
+
+def add_cpu_package(pkg, rows, header=CPU_HEADER):
+    cpu_dir = pkg.power_dir / "cpu"
+    cpu_dir.mkdir()
+    with open(cpu_dir / "samples.csv", "w", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(header)
+        writer.writerows(rows)
+
+
+def _gpu_fields(agg):
+    return {k: v for k, v in agg.items() if k != "cpu_power_valid" and k not in apm.CPU_METRIC_KEYS}
+
+
+def _reference_agg(tmp_path):
+    """The GPU-only aggregate every CPU-leg outcome must reproduce field for field."""
+    reference = build_package(tmp_path / "reference")
+    assert reference.run() == 0
+    return reference.agg()
+
+
+def assert_grace_keys(agg):
+    assert agg["cpu_power_valid"] == 1
+    assert agg["avg_cpu_socket_power_w"] == 600.0
+    assert agg["avg_total_cpu_power_w"] == 2400.0
+    assert agg["total_cpu_energy_j"] == 144000.0
+
+
+class TestCpuSidePower:
+    def test_grace_total_emits_cpu_keys_and_provenance(self, tmp_path):
+        from infx.results.power.audit import audit_summary
+
+        pkg = build_package(tmp_path)
+        rows = _cpu_rows()
+        add_cpu_package(pkg, rows)
+        assert pkg.run(require_power=True) == 0
+
+        agg = pkg.agg()
+        assert_grace_keys(agg)
+        assert agg["avg_total_cpu_rail_power_w"] == 800.0
+        assert agg["total_cpu_rail_energy_j"] == 48000.0
+        assert agg["avg_total_cpu_sysio_power_w"] == 200.0
+        assert agg["total_cpu_sysio_energy_j"] == 12000.0
+        assert _gpu_fields(agg) == _reference_agg(tmp_path)
+
+        cpu = pkg.sidecar()["cpu"]
+        assert cpu["cpu_power_valid"] is True
+        assert cpu["reason_codes"] == []
+        assert cpu["sensor_kind"] == "grace_socket"
+        assert cpu["source"] == "acpi"
+        assert cpu["expected_sockets"] == 4
+        assert cpu["observed_sockets"] == 4
+        assert cpu["sample_row_count"] == len(rows)
+        assert set(cpu["per_series_energy_j"]) == {
+            f"{host}/socket{socket}/{kind}"
+            for host in CPU_HOSTS
+            for socket in (0, 1)
+            for kind in ("grace_socket", "cpu_rail", "cpu_sysio")
+        }
+        assert audit_summary(pkg.sidecar(), "power_validation.json")["power_audit"]["cpu"] == {
+            "sensor_kind": "grace_socket",
+            "source": "acpi",
+            "expected_sockets": 4,
+            "observed_sockets": 4,
+            "sample_row_count": len(rows),
+            "reason_codes": [],
+        }
+
+    def test_rail_gap_drops_only_that_rail(self, tmp_path):
+        pkg = build_package(tmp_path)
+        rows = _cpu_rows()
+        for row in rows:
+            if row[2] == "node-d" and row[5] == 0 and 1020.0 <= float(row[1]) <= 1030.0:
+                row[7] = ""
+        add_cpu_package(pkg, rows)
+        assert pkg.run(require_power=True) == 0
+        agg = pkg.agg()
+        assert_grace_keys(agg)
+        assert "avg_total_cpu_rail_power_w" not in agg
+        assert agg["avg_total_cpu_sysio_power_w"] == 200.0
+
+    def test_v3_module_rail_is_published_apart_from_cpu_keys(self, tmp_path):
+        pkg = build_package(tmp_path)
+        add_cpu_package(pkg, _v3(_cpu_rows()), CPU_HEADER_V3)
+        assert pkg.run(require_power=True) == 0
+        agg = pkg.agg()
+        assert_grace_keys(agg)
+        assert agg["avg_total_module_power_w"] == 6000.0
+        assert agg["total_module_energy_j"] == 360000.0
+        assert _gpu_fields(agg) == _reference_agg(tmp_path)
+        module_series = {f"{host}/socket{socket}/module" for host in CPU_HOSTS for socket in (0, 1)}
+        assert module_series <= set(pkg.sidecar()["cpu"]["per_series_energy_j"])
+
+    @pytest.mark.parametrize("module", ["blank", "gap"])
+    def test_v3_incomplete_module_drops_only_module_keys(self, tmp_path, module):
+        pkg = build_package(tmp_path)
+        if module == "blank":
+            # The musl exporter build cannot load NVML and leaves module_w empty.
+            rows = _v3(_cpu_rows(), module_w=None)
+        else:
+            rows = _v3(_cpu_rows())
+            for row in rows:
+                if row[2] == "node-d" and row[5] == 0 and 1020.0 <= float(row[1]) <= 1030.0:
+                    row[10] = ""
+        add_cpu_package(pkg, rows, CPU_HEADER_V3)
+        assert pkg.run(require_power=True) == 0
+        agg = pkg.agg()
+        assert_grace_keys(agg)
+        assert agg["avg_total_cpu_rail_power_w"] == 800.0
+        assert agg["avg_total_cpu_sysio_power_w"] == 200.0
+        assert {"avg_total_module_power_w", "total_module_energy_j"}.isdisjoint(agg)
+
+    @pytest.mark.parametrize(
+        "cpu, require_power",
+        [("missing", True), ("complete", True), ("missing", False), ("dcgm_only", True)],
+    )
+    def test_expected_acpi_cpu_controls_strict_exit_without_changing_gpu(
+        self, tmp_path, cpu, require_power
+    ):
+        pkg = build_package(tmp_path)
+        if cpu == "complete":
+            add_cpu_package(pkg, _cpu_rows())
+        elif cpu == "dcgm_only":
+            add_cpu_package(pkg, _cpu_rows({host: {"dcgm": DCGM_W} for host in CPU_HOSTS}))
+        assert pkg.run(require_power=require_power, expected_cpu=True) == int(
+            require_power and cpu != "complete"
+        )
+        assert _gpu_fields(pkg.agg()) == _reference_agg(tmp_path)
+        assert pkg.sidecar()["power_valid"] is True
+        assert pkg.agg()["cpu_power_valid"] == int(cpu == "complete")
+        if cpu == "complete":
+            assert_grace_keys(pkg.agg())
+        else:
+            assert set(apm.CPU_METRIC_KEYS).isdisjoint(pkg.agg())
+            assert pkg.sidecar()["cpu"]["reason_codes"]
+            if cpu == "dcgm_only":
+                # The DCGM CPU rail is not the Grace socket meter: no socket series.
+                assert pkg.sidecar()["cpu"]["reason_codes"] == ["cpu_socket_count_mismatch"]
+
+    @pytest.mark.parametrize(
+        "reason, window_trusted",
+        [
+            # srt-slurm power/windows.py _check_coverage: GPU coverage only.
+            ("measurement_window_not_bracketed", True),
+            ("sample_gap_exceeded", True),
+            ("gpu_uuid_changed", True),
+            ("sample_loss_exceeded", True),
+            # The window's own contract: the CPU leg has no window either.
+            ("measurement_window_clock_mismatch", False),
+        ],
+    )
+    def test_only_gpu_coverage_failures_leave_the_cpu_window_bound(self, reason, window_trusted):
+        window = {"benchmark_type": "sa-bench", "concurrency": 4}
+        validations = [{**window, "reason_codes": [reason], "power_coverage_valid": False}]
+        assert apm._window_contract_holds(window, validations) is window_trusted
+
+    def test_package_without_cpu_dir_emits_no_cpu_fields(self, tmp_path):
+        pkg = build_package(tmp_path)
+        assert pkg.run() == 0
+        agg = pkg.agg()
+        assert "cpu_power_valid" not in agg
+        assert set(apm.CPU_METRIC_KEYS).isdisjoint(agg)
+        assert "cpu" not in pkg.sidecar()
+
+    def _drop(self, rows, host, socket, predicate):
+        return [
+            row
+            for row in rows
+            if not (row[2] == host and row[5] == socket and predicate(float(row[1])))
+        ]
+
+    @pytest.fixture
+    def tampered(self, request, tmp_path):
+        kind = request.param
+        pkg = build_package(tmp_path)
+        rows = _cpu_rows()
+        header = CPU_HEADER
+        if kind == "socket":
+            rows = self._drop(rows, "node-p", 1, lambda ts: True)
+        elif kind == "gap":
+            rows = self._drop(rows, "node-d", 0, lambda ts: 1020.0 <= ts <= 1024.0)
+        elif kind == "mixed":
+            rows = _cpu_rows({"node-d": {"grace": None}, "node-p": {"dcgm": DCGM_W}})
+        elif kind == "malformed":
+            rows.append(_cpu_row(FIRST_TS, "node-d", 0, "grace", "n/a"))
+        elif kind == "version":
+            rows, header = _v3(rows), CPU_HEADER_V3
+            rows[0][0] = 2
+        add_cpu_package(pkg, rows, header)
+        return pkg
+
+    @pytest.mark.parametrize(
+        "tampered, reason",
+        [
+            ("socket", "cpu_socket_count_mismatch"),
+            ("gap", "cpu_sample_gap_exceeded"),
+            ("mixed", "cpu_socket_count_mismatch"),
+            ("malformed", "cpu_samples_malformed"),
+            ("version", "cpu_samples_malformed"),
+        ],
+        indirect=["tampered"],
+    )
+    def test_cpu_leg_failures_leave_gpu_fields_untouched(self, tmp_path, tampered, reason):
+        pkg = tampered
+        # Without an expected CPU source, REQUIRE_POWER gates only the GPU leg.
+        assert pkg.run(require_power=True) == 0
+        agg = pkg.agg()
+        assert agg["cpu_power_valid"] == 0
+        assert set(apm.CPU_METRIC_KEYS).isdisjoint(agg)
+        assert _gpu_fields(agg) == _reference_agg(tmp_path)
+        cpu = pkg.sidecar()["cpu"]
+        assert cpu["cpu_power_valid"] is False
+        assert reason in cpu["reason_codes"]
+        assert pkg.sidecar()["power_valid"] is True

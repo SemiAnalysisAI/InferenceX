@@ -46,6 +46,7 @@ class Power(_Record):
     agentx: bool
     adapter: bool
     require: bool = False
+    cpu: bool = False
 
 
 class JobError(_Record):

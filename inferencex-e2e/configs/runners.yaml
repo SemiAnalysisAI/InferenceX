@@ -636,6 +636,7 @@ clusters:
           aiperf-cache: /aiperf_mmap_cache
           hf-hub-cache: /hf_hub_cache
         power-exporter-port: 9401
+        cpu-power-exporter: {source: acpi}
   gb300-nv:
     gpus-per-node: 4
     available-cpu-dram-mib: 920_000
@@ -697,6 +698,7 @@ clusters:
           hf-hub-cache: /hf_hub_cache
           dynamo-wheels: /configs/dynamo-wheels
         power-exporter-port: 19401
+        cpu-power-exporter: {source: acpi}
   mi300x-amd:
     gpus-per-node: 8
     available-cpu-dram-mib: 1_531_436

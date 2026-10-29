@@ -143,6 +143,7 @@ env:
   EVAL_CONC: ${{ inputs.eval-conc }}
   EVAL_LIMIT: ${{ inputs.eval-limit }}
   POWER: ${{ fromJSON(inputs.config).power && '1' || '0' }}
+  CPU_POWER: ${{ fromJSON(inputs.config)['cpu-power'] && '1' || '0' }}
   REQUIRE_POWER: ${{ inputs.require-power && '1' || '0' }}
   POWER_PRODUCER_SHA: ${{ inputs.power-producer-sha }}
   SCENARIO_TYPE: ${{ inputs.scenario-type }}
