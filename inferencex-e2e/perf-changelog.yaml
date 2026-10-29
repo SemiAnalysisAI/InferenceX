@@ -11563,5 +11563,5 @@
   description:
     - "Use the fastokens frontend tokenizer (DYN_TOKENIZER=fastokens) on every point. The default tokenizer disables its prefix cache for this model, so each turn re-tokenized the full prompt."
     - "Raise the shared MooncakeStore DRAM pool from 150 GB to 190 GB per rank, and add 3 DEP4 prefill + DEP8 decode at conc 288 and 3 DEP4 prefill + DEP16 decode at conc 320."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4632
   scenario-type: [agentic-coding]
