@@ -227,7 +227,6 @@ jobs:
 
     steps:
       - name: Slurm cleanup (pre-run)
-        continue-on-error: ${{ inputs.al-gate }}
         run: &slurm-cleanup |
           if command -v squeue >/dev/null 2>&1; then
             for job_name in "${RUNNER_NAME}" "inferencex-${RUNNER_NAME}"; do
@@ -252,17 +251,14 @@ jobs:
 
       - name: Wipe workspace after failed checkout
         if: ${{ steps.checkout.outcome == 'failure' }}
-        continue-on-error: ${{ inputs.al-gate }}
         run: find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
 
       - name: Retry checkout
         if: ${{ steps.checkout.outcome == 'failure' }}
-        continue-on-error: ${{ inputs.al-gate }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: *checkout-inputs
 
       - name: Checkout result tooling
-        continue-on-error: ${{ inputs.al-gate }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.workflow_sha }}
@@ -271,13 +267,11 @@ jobs:
           persist-credentials: false
 
       - name: Set up uv
-        continue-on-error: ${{ inputs.al-gate }}
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: false
 
       - name: Prepare result-processing Python
-        continue-on-error: ${{ inputs.al-gate }}
         env: &uv-setup-env
           UV_CACHE_DIR: ${{ github.workspace }}/../.infx-uv-cache
           UV_PYTHON_INSTALL_DIR: ${{ github.workspace }}/../.infx-uv-python
@@ -288,7 +282,6 @@ jobs:
           echo "INFERENCEX_RESULTS_PYTHON=$result_python" >> "$GITHUB_ENV"
 
       - name: Prepare launcher Python
-        continue-on-error: ${{ inputs.al-gate }}
         env: *uv-setup-env
         run: |
           launch_venv="$(mktemp -d "$RUNNER_TEMP/infx-launch-venv.XXXXXX")"
@@ -298,7 +291,6 @@ jobs:
           echo "INFERENCEX_LAUNCH_PYTHON=$launch_venv/bin/python" >> "$GITHUB_ENV"
 
       - name: Launcher cleanup (pre-run)
-        continue-on-error: ${{ inputs.al-gate }}
         env:
           PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
         run: &launcher-cleanup |
@@ -440,7 +432,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: algate_${{ fromJSON(inputs.config)['al-gate'].id }}
+          name: algate_${{ fromJSON(inputs.config)['al-gate'].key }}
           overwrite: true
           path: |
             ${{ env.INFERENCEX_E2E_ROOT }}/al_gate_${{ env.RESULT_FILENAME }}.json
@@ -465,7 +457,6 @@ jobs:
 
       - name: Upload server logs
         if: always()
-        continue-on-error: ${{ inputs.al-gate }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: multinode_server_logs_${{ env.RESULT_FILENAME }}${{ inputs.eval-only && format('_{0}_{1}', env.EVAL_FRAMEWORK, env.EVAL_SUITE) || '' }}
@@ -657,12 +648,10 @@ jobs:
 
       - name: Slurm cleanup (post-run)
         if: always()
-        continue-on-error: ${{ inputs.al-gate }}
         run: *slurm-cleanup
 
       - name: Launcher cleanup (post-run)
         if: ${{ always() && env.INFERENCEX_LAUNCH_PYTHON != '' }}
-        continue-on-error: ${{ inputs.al-gate }}
         env:
           PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
         run: *launcher-cleanup

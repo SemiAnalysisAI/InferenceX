@@ -62,8 +62,8 @@ def test_a_gate_reads_the_prompts_its_job_downloaded(tmp_path):
 @pytest.mark.parametrize(
     "overrides",
     [{"AL_GATE_CURVE": ""}, {"AL_GATE_DRAFT_TOKENS": "0"}, {"IS_AGENTIC": "0"}, {"SPEC_DECODING": "none"},
-     {"RUN_EVAL": "true"}, {"BENCH_SCRIPT_OVERRIDE": "collect.sh"}, {"FRAMEWORK": "llmd-vllm"}],
-    ids=["no-curve", "zero-drafts", "fixed-sequence", "no-drafting", "eval", "script", "llmd-vllm"],
+     {"RUN_EVAL": "true"}, {"BENCH_SCRIPT_OVERRIDE": "collect.sh"}, {"FRAMEWORK": "dynamo-trt"}],
+    ids=["no-curve", "zero-drafts", "fixed-sequence", "no-drafting", "eval", "script", "exempt"],
 )  # fmt: skip
 def test_a_gate_measures_one_agentx_speculative_srt_point(tmp_path, overrides):
     with pytest.raises(RequestError, match="AL_GATE needs AL_GATE_CURVE"):

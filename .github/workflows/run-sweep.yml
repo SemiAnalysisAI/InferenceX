@@ -423,7 +423,7 @@ jobs:
             agentx-fast: ${{ contains(github.event.pull_request.labels.*.name, 'agentx-fast') }}
 
     # Report-only speculative acceptance gate (README.md#speculative-acceptance-gate).
-    # Planning overlaps the canary, the gates wait for it, and AgentX throughput waits for them.
+    # Planning overlaps the canary, the gates wait for it, and AgentX throughput does not wait for them.
     al-gate-select:
         name: al-gate-select
         needs: setup
@@ -437,6 +437,9 @@ jobs:
               )
             }}
         runs-on: ubuntu-latest
+        permissions:
+            actions: read # Read workflow runs and artifacts.
+            contents: read
         outputs:
             single-node-config: ${{ steps.prompts.outcome == 'success' && steps.select.outputs.single-node-config || '' }}
             multi-node-config: ${{ steps.prompts.outcome == 'success' && steps.select.outputs.multi-node-config || '' }}
@@ -449,25 +452,14 @@ jobs:
             - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
               continue-on-error: true
 
-            - name: Free hosted-runner disk for SPEED-Bench
-              continue-on-error: true
-              run: |
-                  # The pinned resolver materializes about 35 GB of coding source datasets.
-                  # These preinstalled SDKs are unused by this hosted Python-only job.
-                  sudo rm -rf -- /usr/local/lib/android /usr/share/dotnet /opt/ghc \
-                    /usr/local/.ghcup /usr/local/swift /opt/hostedtoolcache/CodeQL
-                  df -h / /mnt
-
-            - name: Plan gates and prepare their prompts
+            - name: Plan gates
               id: select
               # The outputs are written last, so a failure runs no gate.
               continue-on-error: true
               env:
                   SEARCH_SPACE: ${{ needs.setup.outputs.search-space-config }}
                   PRIORITY_CRITERIA: ${{ needs.setup.outputs.priority-criteria }}
-                  # Read-only Hugging Face credential; it only lifts anonymous Hub rate limits.
-                  HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }} # zizmor: ignore[secrets-outside-env]
-                  HF_HOME: /mnt/al-gate-hf-home # The ~35 GB of SPEED-Bench sources exceed the root disk's free space.
+                  GH_TOKEN: ${{ github.token }}
               run: |
                   cd "$GITHUB_WORKSPACE/inferencex-e2e"
                   git submodule update --init --depth 1 utils/srt-slurm
@@ -478,18 +470,17 @@ jobs:
                     --with 'requests>=2.31,<3' --with 'ruamel.yaml>=0.18,<0.20' \
                     python -m infx.srt_slurm.al_gate plan "$RUNNER_TEMP/search-space.json" \
                     --workspace "$PWD" --thinking-mode thinking_on --output "$RUNNER_TEMP/plan.json"
-                  # Gate jobs get their own queue tokens, scored like the throughput they precede.
+                  # Gate jobs get their own queue tokens, scored like the throughput they accompany.
                   uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
                     python -m infx.workflows.ci_priority --event-name "$GITHUB_EVENT_NAME" \
                     --queue-namespace "$GITHUB_RUN_ID:$GITHUB_RUN_ATTEMPT:al-gate" \
                     --criteria-json "$PRIORITY_CRITERIA" --input "$RUNNER_TEMP/plan.json" > "$RUNNER_TEMP/al-gate-plan.json"
-                  if jq -e '(.single_node + .multi_node | length) > 0' "$RUNNER_TEMP/al-gate-plan.json"; then
-                      sudo install -d -o "$(id -u)" -g "$(id -g)" "$HF_HOME"
-                      uv run --no-project --exclude-newer PT12H --python 3.12 \
-                        --with datasets --with numpy --with pandas --with tiktoken \
-                        python -m infx.bench.speedbench --output-dir "$RUNNER_TEMP/al_gate_dataset"
-                  fi
-                  jq -r '"single-node-config=\(.single_node | tojson)", "multi-node-config=\(.multi_node | tojson)"' "$RUNNER_TEMP/al-gate-plan.json" >> "$GITHUB_OUTPUT"
+                  uv run --no-project --exclude-newer PT12H --python 3.12 \
+                    python -m infx.workflows.al_gate_reuse "$RUNNER_TEMP/al-gate-plan.json" \
+                    --workspace "$PWD" --srt-slurm-commit "$(git rev-parse HEAD:./utils/srt-slurm)" \
+                    --repo "$GITHUB_REPOSITORY" --branch "$GITHUB_HEAD_REF" \
+                    --output "$RUNNER_TEMP/al-gate-gates.json" --results "$RUNNER_TEMP/al_gate_reused"
+                  jq -r '"gates=\(.single_node + .multi_node | length > 0)", "single-node-config=\(.single_node | tojson)", "multi-node-config=\(.multi_node | tojson)"' "$RUNNER_TEMP/al-gate-gates.json" >> "$GITHUB_OUTPUT"
 
             - name: Upload gate plan
               continue-on-error: true
@@ -498,14 +489,65 @@ jobs:
                   name: algate_plan
                   path: ${{ runner.temp }}/al-gate-plan.json
 
+            - name: Upload reused gate results
+              continue-on-error: true
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: algate_reused
+                  path: ${{ runner.temp }}/al_gate_reused
+                  if-no-files-found: ignore
+
+            - name: Restore gate prompts
+              id: cached-prompts
+              if: ${{ steps.select.outputs.gates == 'true' }}
+              continue-on-error: true
+              uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+              with:
+                  path: ${{ runner.temp }}/al_gate_dataset
+                  key: al-gate-speedbench-${{ hashFiles('inferencex-e2e/infx/bench/speedbench.py') }}
+
+            - name: Free hosted-runner disk for SPEED-Bench
+              if: ${{ steps.select.outputs.gates == 'true' && steps.cached-prompts.outputs.cache-hit != 'true' }}
+              continue-on-error: true
+              run: |
+                  # The pinned resolver materializes about 35 GB of coding source datasets.
+                  # These preinstalled SDKs are unused by this hosted Python-only job.
+                  sudo rm -rf -- /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+                    /usr/local/.ghcup /usr/local/swift /opt/hostedtoolcache/CodeQL
+                  df -h / /mnt
+
+            - name: Prepare gate prompts
+              id: prepare-prompts
+              if: ${{ steps.select.outputs.gates == 'true' && steps.cached-prompts.outputs.cache-hit != 'true' }}
+              continue-on-error: true
+              env:
+                  # Read-only Hugging Face credential; it only lifts anonymous Hub rate limits.
+                  HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }} # zizmor: ignore[secrets-outside-env]
+                  HF_HOME: /mnt/al-gate-hf-home # The ~35 GB of SPEED-Bench sources exceed the root disk's free space.
+              run: |
+                  cd "$GITHUB_WORKSPACE/inferencex-e2e"
+                  sudo install -d -o "$(id -u)" -g "$(id -g)" "$HF_HOME"
+                  uv run --no-project --exclude-newer 2026-10-27T00:00:00Z --python 3.12 \
+                    --with datasets --with numpy --with pandas --with tiktoken \
+                    python -m infx.bench.speedbench --output-dir "$RUNNER_TEMP/al_gate_dataset"
+
+            - name: Cache gate prompts
+              if: ${{ steps.prepare-prompts.outcome == 'success' }}
+              continue-on-error: true
+              uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+              with:
+                  path: ${{ runner.temp }}/al_gate_dataset
+                  key: al-gate-speedbench-${{ hashFiles('inferencex-e2e/infx/bench/speedbench.py') }}
+
             - name: Upload gate prompts
               id: prompts
+              if: ${{ steps.select.outputs.gates == 'true' }}
               continue-on-error: true
               uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:
                   name: al_gate_dataset
                   path: ${{ runner.temp }}/al_gate_dataset/speedbench_coding.jsonl
-                  if-no-files-found: ignore
+                  if-no-files-found: error
 
     al-gate:
         needs: [al-gate-select, canary-sweep, canary-multi-node-sweep]
@@ -695,7 +737,7 @@ jobs:
         with: *single-node-inputs
 
     sweep-agentic:
-        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep, al-gate-collect]
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
         if: >-
             ${{
               !cancelled() &&
@@ -727,7 +769,7 @@ jobs:
             agentx-fast: ${{ contains(github.event.pull_request.labels.*.name, 'agentx-fast') }}
 
     sweep-multi-node-agentic:
-        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep, al-gate-collect]
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
         if: >-
             ${{
               !cancelled() &&

@@ -199,17 +199,19 @@ def test_dynamo_vllm_data_parallel_workers_across_nodes_are_exempt(
     assert all("only the leader's metrics" in reason for reason in reasons)
 
 
-def test_frameworks_the_gate_cannot_measure_are_exempt(tmp_path: Path) -> None:
+def test_frameworks_the_launcher_refuses_to_gate_are_not_planned(tmp_path: Path) -> None:
     # Exempt points are reported without reading their recipes, which need not exist.
+    frameworks = {4: "dynamo-trt", 1: "tilert"}
     rows = [
-        multi_node_row(conc, 8, "benchmarks/multi_node/srt-slurm-recipes/test/missing.yaml", framework)
-        for conc, framework in ((4, "dynamo-trt"), (1, "tilert"))
+        multi_node_row(
+            conc, 8, "benchmarks/multi_node/srt-slurm-recipes/test/missing.yaml", framework
+        )
+        for conc, framework in frameworks.items()
     ]
     gates = plan_multi_node(rows, tmp_path, write_golden(tmp_path / "golden"))
-    trt, tilert = gates["unresolved"]
-    assert (gates["multi_node"], trt["conc"], tilert["conc"]) == ([], [4], [1])
-    assert "TRT-LLM metrics" in trt["reason"]
-    assert "rejects streaming /v1/completions" in tilert["reason"]
+    assert gates["multi_node"] == []
+    assert sorted(entry["conc"][0] for entry in gates["unresolved"]) == sorted(frameworks)
+    assert all(entry["reason"].startswith("exempt: ") for entry in gates["unresolved"])
 
 
 def test_a_missing_module_fails_the_plan_loudly(

@@ -57,6 +57,10 @@ def _describe(error: ValidationError) -> str:
 
 
 BATCH_REENTRY_ENV = "INFX_BATCH_REENTRY"
+AL_GATE_EXEMPT_FRAMEWORKS = {
+    "dynamo-trt": "the Dynamo TRT-LLM recipes disable TRT-LLM metrics",
+    "tilert": "TileRT rejects streaming /v1/completions and serves no metrics",
+}
 
 
 class LaunchRequest(BaseModel):
@@ -104,11 +108,11 @@ class LaunchRequest(BaseModel):
             and self.is_agentic
             and self.spec_decoding not in (None, "none")
             and not (self.eval_only or self.run_eval or self.bench_script_override)
-            and self.framework != "llmd-vllm"
+            and self.framework not in AL_GATE_EXEMPT_FRAMEWORKS
         ):
             raise ValueError(
                 "AL_GATE needs AL_GATE_CURVE, a positive AL_GATE_DRAFT_TOKENS, IS_AGENTIC=1 and a "
-                "SPEC_DECODING method, and no eval, BENCH_SCRIPT_OVERRIDE or llmd-vllm"
+                "SPEC_DECODING method, and no eval, BENCH_SCRIPT_OVERRIDE or exempt framework"
             )
         workspace, dataset = self.workspace.resolve(), Path(self.al_gate_dataset or "")
         staged = (workspace / dataset).resolve()

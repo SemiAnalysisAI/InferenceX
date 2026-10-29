@@ -11571,7 +11571,7 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Upstream the report-only speculative acceptance gate from NVIDIA/InferenceMAX#1063. Measure real NEXTN MTP acceptance on pinned SPEED-Bench coding prompts before the remaining AgentX throughput jobs; report the comparison with golden AL 2.32 without blocking throughput."
+    - "Upstream the report-only speculative acceptance gate from NVIDIA/InferenceMAX#1063. Measure real NEXTN MTP acceptance on pinned SPEED-Bench coding prompts alongside the AgentX throughput jobs; report the comparison with golden AL 2.32 without blocking throughput."
     - "Run the existing one-GPU Qwen3.8-Flash-Next NVFP4 SGLang GB300 concurrency ladder at 1, 2, 4, 8, 16, 32, 48, and 64, plus its selected real-verification accuracy eval. Gate planning shares one concurrency-64 measurement across all eight points."
     - "Adapt the gate to the pinned agentx-harness runtime, bound schema-2 recipe fragments, and native power collection. Retain main's SGLang v0.5.22 image, serving configuration, cluster routing, caches, and canonical AgentX duration."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4586

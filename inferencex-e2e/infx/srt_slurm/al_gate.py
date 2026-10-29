@@ -1,6 +1,6 @@
 """Plan and summarize the AgentX speculative acceptance gate (milestone M1 of #1651).
 
-Before AgentX throughput, each deployment topology x drafting configuration measures its real
+Alongside AgentX throughput, each deployment topology x drafting configuration measures its real
 SPEED-Bench acceptance length (AL) once against the golden curve. The gate is report-only.
 """
 
@@ -14,6 +14,7 @@ from typing import Any
 
 from infx.clusters import CLUSTER_LABEL_PREFIX, load_clusters
 from infx.golden_al_distribution import GOLDEN_DIR, curve_name, golden_length, load_curve
+from infx.launch.request import AL_GATE_EXEMPT_FRAMEWORKS
 from infx.srt_slurm.generate import bound_variant, point_environment
 from infx.srt_slurm.synthetic_acceptance import (
     ENGINES,
@@ -30,10 +31,6 @@ POINT_FIELDS = frozenset((
 SPEC_FIELDS = (
     "method", "num_speculative_tokens", "model", "draft_sample_method", "rejection_sample_method"
 )  # fmt: skip
-EXEMPT_FRAMEWORKS = {
-    "dynamo-trt": "exempt: the Dynamo TRT-LLM recipes disable TRT-LLM metrics",
-    "tilert": "exempt: TileRT rejects streaming /v1/completions and serves no metrics",
-}
 LEADER_ONLY_METRICS = (
     "exempt: srtctl gives the gate only the leader's metrics of this multi-node Dynamo vLLM "
     "data-parallel worker, so AL would cover part of the prompts"
@@ -79,8 +76,8 @@ def _gate(
     row: Mapping[str, Any], workspace: Path, thinking_mode: str, golden_dir: Path
 ) -> dict[str, Any] | str | None:
     """The point's gate, the reason it gets none, or None when it does not draft."""
-    if row["framework"] in EXEMPT_FRAMEWORKS:
-        return EXEMPT_FRAMEWORKS[row["framework"]]
+    if reason := AL_GATE_EXEMPT_FRAMEWORKS.get(row["framework"]):
+        return f"exempt: {reason}"
     recipe = point_recipe(row, workspace)
     engine = ENGINES[row["framework"]]
     role = generation_role(recipe, engine)
@@ -137,6 +134,10 @@ def _number(value: float | None, digits: int = 2) -> str:
     return "-" if value is None else f"{value:.{digits}f}"
 
 
+def _gate_count(planned: Mapping[str, Any]) -> int:
+    return sum(len(planned.get(kind, [])) for kind in ("single_node", "multi_node"))
+
+
 def summarize(planned: Mapping[str, Any], results: list[Mapping[str, Any]]) -> str:
     """Markdown of the gate verdicts, planned gates without a result, and unresolved points."""
     lines = [
@@ -151,7 +152,7 @@ def summarize(planned: Mapping[str, Any], results: list[Mapping[str, Any]]) -> s
         f"{_number(r.get('ratio'), 3)} | {r.get('status')} |"
         for r in sorted(results, key=lambda r: str(r.get("result_filename")))
     ]
-    gates = sum(len(planned.get(kind, [])) for kind in ("single_node", "multi_node"))
+    gates = _gate_count(planned)
     if gates > len(results):
         lines += ["", f"{gates - len(results)} planned gate(s) have no result; see their logs."]
     by_reason: dict[str, list[str]] = {}
@@ -185,7 +186,15 @@ def main(argv: list[str] | None = None) -> int:
     # The collect job also runs when no plan was uploaded.
     planned = json.loads(args.plan.read_text()) if args.plan and args.plan.is_file() else {}
     results = [json.loads(path.read_text()) for path in args.results.rglob("al_gate_*.json")]
-    sys.stdout.write(summarize(planned, [result for result in results if "status" in result]))
+    results = [result for result in results if "status" in result]
+    sys.stdout.write(summarize(planned, results))
+    gates = _gate_count(planned)
+    if unmeasured := gates - sum(result["status"] != "error" for result in results):
+        print(
+            f"::warning title=Speculative acceptance gate::{unmeasured} of {gates} planned "
+            "gate(s) measured nothing; see the run summary",
+            file=sys.stderr,
+        )
     return 0
 
 
