@@ -619,7 +619,9 @@ inside the container. NCCL GIN rides the plugin's CPU-proxy GIN (`NCCL_GIN_TYPE=
 GDRCopy 2.5+ on the node. The type is pinned because the plugin's GPU-initiated EFA backend has only
 weak signals, which nccl.ep and DeepEP cannot use. Where the host plugin predates 1.21 (h100's 1.20),
 shards build aws-ofi-nccl 1.21.1 into the backend cache, since 1.20's proxy applies every signal with
-an inline GPU read-modify-write (1.3-4.5x slower on b300 EP16). Proxy GIN still bounds these rows
+an inline GPU read-modify-write (1.3-4.5x slower on b300 EP16). They also build it where the host
+plugin cannot load in the image (b300's links libhwloc.so.15, which the vLLM image lacks): NCCL does
+not fail on such a plugin but falls back to its internal IB transport on the hosts' CX-7 ports. Proxy GIN still bounds these rows
 well below the IB pools.
 
 The single-slurm pools (H100, H200, B200, B300) reject an allocation holding a GPU with an active

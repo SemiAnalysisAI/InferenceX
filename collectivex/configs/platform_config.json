@@ -75,7 +75,7 @@
     "b300": {
       "arch": "sm103",
       "product": "b300",
-      "image": "lmsysorg/sglang:v0.5.11-cu130",
+      "image": "vllm/vllm-openai:v0.32.0",
       "image_platform": "linux/amd64",
       "gpus_per_node": 8,
       "scale_up_domain": 8,
