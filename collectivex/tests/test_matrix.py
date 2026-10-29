@@ -161,7 +161,7 @@ class SwapSuiteTests(unittest.TestCase):
     PLATFORMS = {
         "amd-test": {"arch": "gfx942", "launcher": "mi-amds"},
         "cuda-test": {"arch": "sm100", "launcher": "single-slurm",
-                      "runner_label": "cluster:cuda-pool"},
+                      "runner_label": "cluster:cuda-pool", "runner_partition": "batch_1"},
     }
 
     def _swap(self, **options):
@@ -173,8 +173,10 @@ class SwapSuiteTests(unittest.TestCase):
         self.assertEqual(set(shards), {"amd-test", "cuda-test"})
         amd, cuda = shards["amd-test"], shards["cuda-test"]
         self.assertEqual((amd["launcher"], cuda["launcher"]), ("mi-amds", "single-slurm"))
-        # runs-on: the registry's runner_label where it names one, else the SKU.
+        # runs-on: the registry's runner_label where it names one, else the SKU, plus its partition.
         self.assertEqual((amd["runner"], cuda["runner"]), ("amd-test", "cluster:cuda-pool"))
+        self.assertEqual((amd["runner_partition"], cuda["runner_partition"]),
+                         ("", "partition:batch_1"))
         self.assertEqual(amd["image"], sweep_matrix.SWAP_SWEEP["images"]["amd"])
         self.assertEqual(cuda["image"], sweep_matrix.SWAP_SWEEP["images"]["nvidia"])
         for shard in shards.values():

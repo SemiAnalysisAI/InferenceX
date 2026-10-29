@@ -9713,6 +9713,9 @@ minimaxm31flash-fp4-b300-sglang-agentic-dspark:
     - dram-utilization: 0.80
       search-space:
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32, 64, 80, 96], srt-recipe: agentic.yaml }
+    - dram-utilization: 1.0
+      search-space:
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32, 36, 40, 44, 46, 48], srt-recipe: agentic-tp2.yaml }
 
 # Official SGLang nightly; TP4 C1 uses GPU Engram, other points use host DRAM.
 dsv41flash-fp4-gb300-sglang-agentic-dspark:
