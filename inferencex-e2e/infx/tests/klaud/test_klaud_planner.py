@@ -79,11 +79,14 @@ def serve_history(monkeypatch, runs, artifacts, records):
         return artifacts.get(run_id, [])
 
     def download(_repository, artifact, destination):
+        record = records[artifact["id"]]
         if artifact["name"] == "klaud-plan":
-            (destination / "candidates.json").write_text(json.dumps(records[artifact["id"]]))
+            plan = record if isinstance(record, dict) else {"candidates": record}
+            (destination / "candidates.json").write_text(json.dumps(plan["candidates"]))
+            (destination / "selection.json").write_text(json.dumps(plan.get("selection", {})))
         else:
             (destination / "candidate-diagnostics.json").write_text(
-                json.dumps({"candidate-outcome": records[artifact["id"]]}))
+                json.dumps({"candidate-outcome": record}))
 
     frozen_clock(monkeypatch)
     monkeypatch.setattr(klaud, "github_items", items)
@@ -153,6 +156,41 @@ def test_outcomes_hold_their_candidate_and_weights_until_their_hold_ends(
 
     assert (candidate in history.recent) is held
     assert history.paused_weights == ({("dsr1", "fp8", "b200")} if paused else set())
+
+
+@pytest.mark.parametrize(("reason", "hours", "held"), [
+    pytest.param("baseline-point-mismatch", 71 + 59 / 60, True, id="mismatch-held"),
+    pytest.param("baseline-point-mismatch", 72, False, id="mismatch-released"),
+    pytest.param("Baseline producer family cannot be regenerated", 1, False,
+                 id="unprepared-producers-retry-next-wave"),
+])  # fmt: skip
+def test_a_wave_s_baseline_point_mismatch_holds_its_candidate(monkeypatch, reason, hours, held):
+    candidate = candidate_id("stale-baseline")
+    serve_history(
+        monkeypatch,
+        [workflow_run(1, "schedule", hours=hours)],
+        {1: [plan_artifact(11)]},
+        {11: {"candidates": [], "selection": {"baseline-deferral-reasons": {candidate: reason}}}},
+    )
+
+    history = klaud.recent_candidate_outcomes("example/project", 24)
+
+    assert (candidate in history.recent) is held
+
+
+@pytest.mark.parametrize(("hours", "held"), [(167 + 59 / 60, True), (168, False)])
+def test_a_cluster_time_limit_holds_the_family_on_every_image(monkeypatch, hours, held):
+    tried = candidate_id("slow-family")
+    serve_history(
+        monkeypatch,
+        [workflow_run(1, "schedule", hours=hours)],
+        {1: [session(10, tried, hours)]},
+        {10: outcome("failed", "final-sweep", reason="cluster-time-limit")},
+    )
+
+    history = klaud.recent_candidate_outcomes("example/project", 24)
+
+    assert history.held_families == ({tried.split("-", 1)[0]} if held else set())
 
 
 def test_an_already_updated_image_is_held_from_its_newest_outcome(monkeypatch):
@@ -453,8 +491,9 @@ def test_plan_holds_no_op_images_and_claimed_demand_and_orders_idle_clusters_fir
     monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: api.Capacity(
         idle={"a": 2, "b": 6, "big": 20}, queued={}, size={"a": 8, "b": 8, "big": 20}))
     monkeypatch.setattr(klaud, "recent_candidate_outcomes", lambda _repository, _hours: (
-        klaud.History(recent={}, paused_weights=set(), infra_clusters={"a"}, held_images={
-            identity(undated)[:16]: utc(ago(80)), identity(dated)[:16]: utc(ago(80))})))
+        klaud.History(recent={}, paused_weights=set(), infra_clusters={"a"}, held_families=set(),
+                      held_images={identity(undated)[:16]: utc(ago(80)),
+                                   identity(dated)[:16]: utc(ago(80))})))
     directory = tmp_path / "klaud"
 
     klaud.plan(tmp_path, directory, 64, 24)
@@ -468,20 +507,22 @@ def test_plan_holds_no_op_images_and_claimed_demand_and_orders_idle_clusters_fir
         "size": {"a": 8, "b": 8, "big": 20}}  # fmt: skip
 
 
-def regeneration_wave(tmp_path, monkeypatch, proceeding, blocked=0):
+def regeneration_wave(tmp_path, monkeypatch, proceeding, blocked=0, cluster=None):
     """Write a review of ``proceeding`` candidates plus a duplicate and its family's sibling.
 
-    ``blocked`` more candidates lead the order on cluster "full", which has no headroom.
+    Each candidate targets its own cluster, or all share ``cluster``. ``blocked`` more
+    candidates lead the order on cluster "full", which has no headroom.
     """
-    contexts = [wave_context(f"family-{n}", ["a"]) for n in range(proceeding)]
-    duplicate, sibling = wave_context("duplicate", ["a"]), wave_context("duplicate", ["a"])
+    contexts = [wave_context(f"family-{n}", [cluster or f"c{n}"]) for n in range(proceeding)]
+    duplicate, sibling = wave_context("duplicate", ["d"]), wave_context("duplicate", ["d"])
     sibling["id"] = candidate_id("duplicate", "1" * 16)
     contexts[1:1] = [duplicate, sibling]
     contexts[:0] = [wave_context(f"full-{n}", ["full"]) for n in range(blocked)]
     (tmp_path / "candidates.json").write_text(json.dumps(contexts))
+    clusters = {c for context in contexts for c in context["clusters"]} - {"full"}
     (tmp_path / klaud.CLUSTER_STATE).write_text(json.dumps({
-        "committed-demand": {}, "infra-backoff": [], "headroom": {"a": 100},
-        "size": {"a": 100, "full": 8}}))  # fmt: skip
+        "committed-demand": {}, "infra-backoff": [], "headroom": dict.fromkeys(clusters, 100),
+        "size": {**dict.fromkeys(clusters, 100), "full": 8}}))  # fmt: skip
     monkeypatch.setenv("GITHUB_REPOSITORY", "example/project")
     monkeypatch.setenv("KLAUD_PR_REVIEW", json.dumps({"decisions": [
         {"candidate-id": context["id"],
@@ -530,6 +571,14 @@ def test_regeneration_skips_candidates_the_waves_capacity_cannot_take(tmp_path, 
     klaud.regenerate_producers(tmp_path, 1, active_sessions=0)
 
     assert published == [f"family-{n}" for n in range(6)]
+
+
+def test_regeneration_prepares_a_few_alternates_per_cluster(tmp_path, monkeypatch):
+    published = regeneration_wave(tmp_path, monkeypatch, 6, cluster="a")
+
+    klaud.regenerate_producers(tmp_path, 5, active_sessions=0)
+
+    assert published == ["family-0", "family-1", "family-2"]
 
 
 @pytest.mark.parametrize(("record", "summary"), [

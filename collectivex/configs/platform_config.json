@@ -42,7 +42,8 @@
       },
       "network": {
         "rdma_devices": "mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7",
-        "rdma_relaxed_ordering": 1
+        "rdma_relaxed_ordering": 1,
+        "rdma_gbs": 50
       }
     },
     "b200-nscale": {
@@ -93,7 +94,7 @@
     "gb200": {
       "arch": "sm100",
       "product": "gb200",
-      "image": "lmsysorg/sglang:v0.5.11-cu130",
+      "image": "vllm/vllm-openai:v0.32.0",
       "image_platform": "linux/arm64",
       "gpus_per_node": 4,
       "scale_up_domain": 72,
@@ -113,7 +114,7 @@
     "gb300": {
       "arch": "sm103",
       "product": "gb300",
-      "image": "lmsysorg/sglang:v0.5.11-cu130",
+      "image": "vllm/vllm-openai:v0.32.0",
       "image_platform": "linux/arm64",
       "gpus_per_node": 4,
       "scale_up_domain": 72,
