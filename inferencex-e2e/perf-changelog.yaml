@@ -11536,6 +11536,54 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4554
 
 - config-keys:
+    - minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-agg
+    - minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-disagg
+  description:
+    - "Add MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4 experts, NVFP4 KV and indexer caches) AgentX on GB200 with Dynamo and the arm64 vLLM image (minimax-m31-flash-arm64-cu134)."
+    - "DSpark with the built-in drafter, 7 draft tokens (golden AL 4.04) and an fp8 drafter KV cache on every point."
+    - "Agg: TP4 at conc 1-16, and TP4 with SimpleCPUOffloadConnector (lazy offload, 360 GB) at conc 32 and 40."
+    - "Disagg: 3 DEP4 prefill workers with a DEP8 decode at conc 256 or a DEP16 decode at conc 280, and 4 DEP4 prefill workers with a DEP16 decode at conc 352; DeepGEMM MegaMoE, NIXL transfer plus a shared MooncakeStore DRAM pool (150 GB per rank), Dynamo KV router."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4464
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg
+    - minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
+  description:
+    - "Add MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4 experts, NVFP4 KV and indexer caches) AgentX on GB300 with Dynamo and the arm64 vLLM image (minimax-m31-flash-arm64-cu134)."
+    - "DSpark with the built-in drafter, 7 draft tokens (golden AL 4.04) and an fp8 drafter KV cache on every point."
+    - "Agg: TP4 at conc 1-32, and TP4 with SimpleCPUOffloadConnector (lazy offload, 860 GB) at conc 40-56."
+    - "Disagg: 6 DEP2 prefill workers with a DEP8 decode at conc 280-360 or a DEP16 decode at conc 300; DeepGEMM MegaMoE, NIXL transfer plus a shared MooncakeStore DRAM pool (160 GB per rank), Dynamo KV router."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4468
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm31flash-fp4-b300-sglang-agentic-dspark
+  description:
+    - "Add TP2 points with DRAM KV offload (L2 HiCache) at conc 32 to 48."
+    - "Store the DSpark draft KV cache in FP8 (speculative-draft-kv-cache-dtype fp8_e4m3) on every point instead of the bf16 default, matching the vLLM DSpark drafter; this frees about 10 GB of HBM per rank and about 35 GB of the HiCache host pool for target KV."
+    - "Rerun the whole curve so every point uses the FP8 draft KV cache."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4524
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm31flash-fp4-gb200-sglang-agentic-dspark
+  description:
+    - "Store the DSpark draft KV cache in FP8 (speculative-draft-kv-cache-dtype fp8_e4m3) instead of the bf16 default, matching the vLLM DSpark drafter; this frees HBM and HiCache host pool space for target KV."
+    - "Rerun the whole curve so every point uses the FP8 draft KV cache."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4599
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm31flash-fp4-b300-sglang-agentic-dspark
+  description:
+    - "Add TP2 points with DRAM KV offload (L2 HiCache) at conc 40 to 56 to the existing curve: shortest-prefill-first scheduling with a prefill-decode interval of 16, 8192-token prefill chunks, mem-fraction-static 0.92 and stream interval 20."
+    - "Add a second conc 48 point with a prefill-decode interval of 32."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4647
+  scenario-type: [agentic-coding]
+  append-only: true
+
+- config-keys:
     - dsv41flash-fp4-b300-sglang-agentic-dspark
     - dsv41flash-fp4-b300-sglang-agentic-dspark-lowconc
   scenario-type:
