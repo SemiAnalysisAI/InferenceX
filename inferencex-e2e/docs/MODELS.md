@@ -14,6 +14,10 @@ For official InferenceX (non-preview) that have hardware support in upstream, es
 
 InferenceX-e2e runs on a fixed GPU pool with a small team, so scenarios, precisions, and recipe variants that no longer earn their cluster hours are retired. The support matrix below is the current record of what is active and retired; git history and `perf-changelog.yaml` hold past settings.
 
+## Benchmarks what matters
+
+In general, we should be benchmarking free & ~open engines that is used in production by actual customers. Priority goes towards stuff that is used more in prod
+
 - **Pending A/B baseline retirement (not yet enacted):** standalone non-spec-decode baselines kept only for comparison with speculative decoding are slated for retirement. This covers `dsv4` and `qwen3.5` non-MTP and `kimik3` non-DSpark, whose active configs still contain non-spec-decode points. `glm5.2` and `minimaxm3` have no active non-spec-decode configs. Retire one only once replacement coverage exists for the affected model, hardware, and engine. A spec-decode counterpart existing is not by itself a reason to remove a config.
 - **No separate A/B tracks for new models:** [`infx/golden_al_distribution/`](../infx/golden_al_distribution) pins speculative AgentX runs to one measured acceptance-length curve, so spec-decode results are comparable on their own. New models, including Kimi-K3, do not need a non-spec-decode baseline from day 0.
 - **Publish the best Pareto points, with or without speculative decoding.** Recipes may disable MTP, EAGLE/EAGLE3, DSpark, or another draft method when that gives a better operating point. Valid non-spec-decode results stay eligible under the [North-star Pareto policy](#north-star-pareto-policy), so a frontier may mix both.

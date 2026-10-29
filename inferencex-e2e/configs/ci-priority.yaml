@@ -21,6 +21,8 @@ adjustments:
     mtp: 0.1
     draft_model: 0.1
   framework-prefix:
+    collectivex: 10.0
+    operatorx: 10.0
     sglang: 1.5
     vllm: 1.5
     dynamo-sglang: 1.5

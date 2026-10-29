@@ -6,7 +6,8 @@ result file per case into `results/` on the cluster that ran it. A second suite,
 [vLLM `swap_blocks` benchmark](docs/swap-blocks.md), measures pinned CPU↔GPU and same-GPU block
 copies through the same matrix and pool launchers.
 
-CollectiveX is run by hand on each pool (see [Running By Hand](#running-by-hand)). Uploading the
+CollectiveX runs through the [CollectiveX Sweep](#running-in-ci) workflow or by hand on each pool
+(see [Running By Hand](#running-by-hand)). Uploading the
 results to the CollectiveX database is the publish step: the dashboard shows the latest stored run.
 Results are not committed to this repository. CollectiveX does not rank, recommend, or select; any
 downstream display or comparison is the consumer's responsibility.
@@ -44,6 +45,15 @@ A cell is listed as unsupported only when its backend runs on that SKU at anothe
 low-latency adds only runnable cells, so a missing low-latency cell (DeepEP V2 on B300, for example)
 appears nowhere; [docs/methodology.md](docs/methodology.md#backends) gives each reason. The NCCL EP
 contract, row identity and wheel pin are in [docs/nccl-ep.md](docs/nccl-ep.md).
+
+## Running In CI
+
+Dispatch the `CollectiveX Sweep` workflow, choosing a pool (or `all`) and the same filters `run.sh`
+takes. Each shard becomes one job in the InferenceX CI priority queue, scored through
+`inferencex-e2e/configs/ci-priority.yaml`, where `collectivex` ranks above every engine
+benchmark. The job lands on the pool's runner (`runner_label` and `runner_partition` in
+`configs/platform_config.json`), runs `run.sh --shard` and uploads `results/<sku>/` as an artifact
+to publish as below. Hand runs bypass the queue and wait for whatever CI holds the nodes.
 
 ## Running By Hand
 
