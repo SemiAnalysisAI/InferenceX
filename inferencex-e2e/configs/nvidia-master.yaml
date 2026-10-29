@@ -9715,6 +9715,12 @@ minimaxm31flash-fp4-b300-sglang-agentic-dspark:
     - dram-utilization: 1.0
       search-space:
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32, 36, 40, 44, 46, 48], srt-recipe: agentic-tp2.yaml }
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [40], srt-recipe: 'agentic-tp2-spf.yaml:zip_override_tp2_hicache_spf[0]' }
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [44], srt-recipe: 'agentic-tp2-spf.yaml:zip_override_tp2_hicache_spf[1]' }
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [48], srt-recipe: 'agentic-tp2-spf.yaml:zip_override_tp2_hicache_spf[2]' }
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [52], srt-recipe: 'agentic-tp2-spf.yaml:zip_override_tp2_hicache_spf[3]' }
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [56], srt-recipe: 'agentic-tp2-spf.yaml:zip_override_tp2_hicache_spf[4]' }
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [48], srt-recipe: 'agentic-tp2-spf.yaml:override_tp2_c48_spf_interval32' }
 
 # Official SGLang nightly; TP4 C1 uses GPU Engram, other points use host DRAM.
 dsv41flash-fp4-gb300-sglang-agentic-dspark:

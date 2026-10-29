@@ -147,8 +147,11 @@ def _shard(sku: str, shard_id: str, backend: str, cases: list[dict[str, Any]],
     return {
         "id": shard_id,
         "sku": sku,
-        # runs-on label: the SKU unless the registry names the pool's runners.
+        # runs-on labels: the SKU unless the registry names the pool's runners, plus the partition
+        # label on pools whose runners are split by Slurm partition.
         "runner": PLATFORMS[sku].get("runner_label", sku),
+        "runner_partition": (f"partition:{PLATFORMS[sku]['runner_partition']}"
+                             if "runner_partition" in PLATFORMS[sku] else ""),
         "backend": backend,
         "launcher": PLATFORMS[sku]["launcher"],
         **{field: first[field] for field in ("nodes", "gpus_per_node", "scale_up_domain")},

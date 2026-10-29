@@ -197,6 +197,21 @@ class NormalModeLaunchConfig(unittest.TestCase):
         self.assertEqual(list(details["combine_config"].values()), [20, 4, 288, 12, 132])
         self.assertEqual((details["is_intranode"], details["cpu_proxy_threads"]), (False, 4))
 
+    def test_a_registry_receive_ring_deepens_only_the_internode_dispatch_and_labels_the_row(self):
+        with mock.patch.dict(os.environ, {"COLLX_UCCL_RDMA_RECV_TOKENS": "1024"}):
+            backend, _ = _built(self.module, world_size=16)
+            intranode, _ = _built(self.module, world_size=8)
+        details = backend.implementation_details()
+        # 1024 rounds up to 1040, the next multiple of the 20-token send chunk.
+        self.assertEqual(list(details["dispatch_config"].values()), [20, 36, 288, 20, 1040])
+        self.assertEqual(list(details["combine_config"].values()), [20, 4, 288, 12, 132])
+        self.assertEqual(backend.kernel_generation, "uccl-legacy-buffer-vllm-ht-rdmarecv1040")
+        self.assertEqual(intranode.kernel_generation, "uccl-legacy-buffer-vllm-ht")
+        self.assertEqual(list(intranode.implementation_details()["dispatch_config"].values()),
+                         [20, 6, 256, 6, 132])
+        unset, _ = _built(self.module, world_size=16)
+        self.assertEqual(unset.kernel_generation, "uccl-legacy-buffer-vllm-ht")
+
     def test_one_sm_budget_at_ep8_and_ep16_on_cuda_and_hip(self):
         budgets = set()
         for module in (self.module, _load(hip="7.2")):
