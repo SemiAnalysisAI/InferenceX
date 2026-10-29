@@ -583,7 +583,21 @@ jobs:
             agentx-fast: ${{ contains(github.event.pull_request.labels.*.name, 'agentx-fast') }}
 
     sweep-evals:
-        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
+        # Throughput runs go first; evals wait for them to finish (any result).
+        # Under evals-only the throughput jobs are skipped, so evals start right away.
+        needs: &eval-needs
+            [
+                setup,
+                canary-select,
+                canary-sweep,
+                canary-multi-node-sweep,
+                sweep-single-node-1k1k,
+                sweep-single-node-8k1k,
+                sweep-agentic,
+                sweep-multi-node-1k1k,
+                sweep-multi-node-8k1k,
+                sweep-multi-node-agentic,
+            ]
         if: >-
             ${{
               !cancelled() &&
@@ -615,7 +629,7 @@ jobs:
             eval-only: true
 
     sweep-agentic-evals:
-        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
+        needs: *eval-needs
         if: >-
             ${{
               !cancelled() &&
@@ -649,7 +663,7 @@ jobs:
             scenario-type: agentic-coding
 
     sweep-multi-node-evals:
-        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
+        needs: *eval-needs
         if: >-
             ${{
               !cancelled() &&
@@ -683,7 +697,7 @@ jobs:
             eval-conc: ${{ (matrix.config['eval-framework'] || 'lm-eval') == 'lm-eval' && matrix.config['eval-all-concs'] && join(matrix.config.conc, ' ') || matrix.config['eval-conc'] }}
 
     sweep-multi-node-agentic-evals:
-        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
+        needs: *eval-needs
         if: >-
             ${{
               !cancelled() &&
@@ -832,7 +846,8 @@ jobs:
 
     calc-success-rate:
         name: calc-success-rate
-        needs: [setup, collect-results]
+        # Wait for evals so in-flight eval jobs are not counted as failures.
+        needs: [setup, collect-results, sweep-evals, sweep-agentic-evals, sweep-multi-node-evals, sweep-multi-node-agentic-evals]
         if: ${{ always() && needs.collect-results.result != 'skipped'}}
         runs-on: ubuntu-latest
         permissions:
