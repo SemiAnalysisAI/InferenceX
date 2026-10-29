@@ -4,7 +4,8 @@
   "framework": "atom",
   "args": {
    "method": "dspark",
-   "num-speculative-tokens": 6
+   "num-speculative-tokens": 6,
+   "kv-cache-dtype": "fp8"
   },
   "recipes": [
    "benchmarks/single_node/srt-slurm-recipes/dsv4/atom/mi355x-fp4-mtp/agentic.yaml"
@@ -28,6 +29,18 @@
      "False (documented)"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "atom",
@@ -41,7 +54,8 @@
   "framework": "atom-disagg",
   "args": {
    "method": "dspark",
-   "num-speculative-tokens": 3
+   "num-speculative-tokens": 3,
+   "kv_cache_dtype": "fp8"
   },
   "recipes": [
    "benchmarks/multi_node/srt-slurm-recipes/dsv4/atom/mi355x-fp4/agentx/disagg-lmcache-dspark.yaml:override_dpa8_c128",
@@ -67,6 +81,18 @@
      "adaptive",
      "default",
      "False (documented)"
+    ],
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
     ],
     [
      "engine",
@@ -103,6 +129,24 @@
      "probabilistic (explicit)"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "default",
+     "fp8 (explicit)"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -136,6 +180,24 @@
      "draft_sample",
      "default",
      "probabilistic (explicit)"
+    ],
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "default",
+     "fp8 (explicit)"
     ],
     [
      "engine",
@@ -190,6 +252,24 @@
      "probabilistic (explicit)"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "default",
+     "fp8 (explicit)"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -227,6 +307,24 @@
      "probabilistic (explicit)"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "default",
+     "fp8 (explicit)"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -239,6 +337,15 @@
   "model_prefix": "dsv4",
   "framework": "dynamo-trt",
   "args": {
+   "kv_cache_config": {
+    "avg_seq_len": 200000,
+    "dtype": "fp8",
+    "enable_block_reuse": false,
+    "event_buffer_max_size": 0,
+    "free_gpu_memory_fraction": 0.7,
+    "host_cache_size": 0,
+    "tokens_per_block": 128
+   },
    "speculative_config": {
     "decoding_type": "MTP",
     "max_draft_len": 3
@@ -246,13 +353,11 @@
   },
   "recipes": [
    "benchmarks/multi_node/srt-slurm-recipes/dsv4/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_1p1d_dep8_dep32_c388_b4",
-   "benchmarks/multi_node/srt-slurm-recipes/dsv4/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_1p4d_dep4_tep8_c4_b1",
-   "benchmarks/multi_node/srt-slurm-recipes/dsv4/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_1p6d_dep4_tep4_c24_b4",
    "benchmarks/multi_node/srt-slurm-recipes/dsv4/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_2p1d_dep8_dep32_c736_b8",
    "benchmarks/multi_node/srt-slurm-recipes/dsv4/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_3p1d_dep8_dep16_c1152_b32",
    "benchmarks/multi_node/srt-slurm-recipes/dsv4/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_5p1d_dep8_dep16_c2626_b96"
   ],
-  "rows": 6,
+  "rows": 4,
   "expected": {
    "curve": "deepseek-v4-pro__mtp__native__default-default",
    "draft_tokens": 3,
@@ -261,6 +366,73 @@
     [
      "unverified",
      "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "trtllm",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "dsv4",
+  "framework": "dynamo-trt",
+  "args": {
+   "kv_cache_config": {
+    "avg_seq_len": 200000,
+    "dtype": "fp8",
+    "enable_block_reuse": false,
+    "event_buffer_max_size": 0,
+    "free_gpu_memory_fraction": 0.9,
+    "host_cache_size": 0,
+    "tokens_per_block": 128
+   },
+   "speculative_config": {
+    "decoding_type": "MTP",
+    "max_draft_len": 3
+   }
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_1p4d_dep4_tep8_c4_b1",
+   "benchmarks/multi_node/srt-slurm-recipes/dsv4/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_1p6d_dep4_tep4_c24_b4"
+  ],
+  "rows": 2,
+  "expected": {
+   "curve": "deepseek-v4-pro__mtp__native__default-default",
+   "draft_tokens": 3,
+   "golden": 2.49,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
      "default",
      "default"
     ],
@@ -277,6 +449,7 @@
   "model_prefix": "dsv4",
   "framework": "dynamo-vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":5,\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
   },
   "recipes": [
@@ -305,6 +478,7 @@
   "model_prefix": "dsv4",
   "framework": "dynamo-vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":6,\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
   },
   "recipes": [
@@ -334,6 +508,7 @@
   "model_prefix": "dsv4",
   "framework": "dynamo-vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":6,\"draft_sample_method\":\"probabilistic\"}"
   },
   "recipes": [
@@ -359,6 +534,7 @@
   "model_prefix": "dsv4",
   "framework": "dynamo-vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"method\":\"mtp\",\"num_speculative_tokens\":2}"
   },
   "recipes": [
@@ -379,6 +555,7 @@
   "model_prefix": "dsv4",
   "framework": "dynamo-vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"method\":\"mtp\",\"num_speculative_tokens\":3}"
   },
   "recipes": [
@@ -401,6 +578,7 @@
   "model_prefix": "dsv4",
   "framework": "llmd-vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":3,\"draft_sample_method\":\"probabilistic\",\"attention_backend\":\"FLASHINFER_MLA_SPARSE_DSV4\",\"enable_adaptive_verification\":true}"
   },
   "recipes": [
@@ -426,6 +604,7 @@
   "model_prefix": "dsv4",
   "framework": "llmd-vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":3,\"enable_adaptive_verification\":true,\"draft_sample_method\":\"probabilistic\",\"attention_backend\":\"FLASHINFER_MLA_SPARSE_DSV4\"}"
   },
   "recipes": [
@@ -451,6 +630,7 @@
   "model_prefix": "dsv4",
   "framework": "llmd-vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":5,\"enable_adaptive_verification\":false,\"draft_sample_method\":\"probabilistic\",\"attention_backend\":\"FLASHINFER_MLA_SPARSE_DSV4\"}"
   },
   "recipes": [
@@ -468,6 +648,7 @@
   "model_prefix": "dsv4",
   "framework": "sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "DSPARK",
    "speculative-dspark-block-size": 6,
    "speculative-num-steps": 1,
@@ -475,11 +656,9 @@
    "speculative-num-draft-tokens": 7
   },
   "recipes": [
-   "benchmarks/single_node/srt-slurm-recipes/dsv4/sglang/b200-fp4-mtp/agentic.yaml",
-   "benchmarks/single_node/srt-slurm-recipes/dsv4/sglang/b300-fp4-mtp/agentic.yaml",
    "benchmarks/single_node/srt-slurm-recipes/dsv4/sglang/mi355x-fp4-mtp/agentic.yaml"
   ],
-  "rows": 33,
+  "rows": 9,
   "expected": {
    "curve": "deepseek-v4-pro-0813__dspark__native__probabilistic-default",
    "draft_tokens": 6,
@@ -490,6 +669,71 @@
      "draft_sample",
      "default",
      "probabilistic (explicit)"
+    ],
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "dsv4",
+  "framework": "sglang",
+  "args": {
+   "speculative-algorithm": "DSPARK",
+   "speculative-dspark-block-size": 6,
+   "speculative-num-steps": 1,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 7
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/dsv4/sglang/b200-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/dsv4/sglang/b300-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 24,
+  "expected": {
+   "curve": "deepseek-v4-pro-0813__dspark__native__probabilistic-default",
+   "draft_tokens": 6,
+   "golden": 3.77,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "probabilistic (explicit)"
+    ],
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "default",
+     "fp8 (explicit)"
     ],
     [
      "engine",
@@ -525,6 +769,24 @@
      "default"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "default",
+     "fp8 (explicit)"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -537,6 +799,7 @@
   "model_prefix": "dsv4",
   "framework": "sglang-disagg",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "DSPARK",
    "speculative-eagle-topk": 1,
    "speculative-num-steps": 1,
@@ -563,6 +826,18 @@
      "probabilistic (explicit)"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -575,6 +850,7 @@
   "model_prefix": "dsv4",
   "framework": "sglang-disagg",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "DSPARK",
    "speculative-eagle-topk": 1,
    "speculative-num-steps": 1,
@@ -599,6 +875,18 @@
      "probabilistic (explicit)"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -611,6 +899,7 @@
   "model_prefix": "dsv4",
   "framework": "vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"method\": \"dspark\", \"num_speculative_tokens\": 6, \"draft_sample_method\": \"probabilistic\"}"
   },
   "recipes": [
@@ -628,6 +917,7 @@
   "model_prefix": "dsv4",
   "framework": "vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":6,\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"synthetic\",\"synthetic_acceptance_length\":3.77}"
   },
   "recipes": [
@@ -653,6 +943,7 @@
   "model_prefix": "dsv4",
   "framework": "vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":6,\"draft_sample_method\":\"probabilistic\"}"
   },
   "recipes": [
@@ -672,6 +963,7 @@
   "model_prefix": "dsv41flash",
   "framework": "atom",
   "args": {
+   "kv_cache_dtype": "bf16",
    "method": "dspark",
    "num-speculative-tokens": 5
   },
@@ -697,9 +989,83 @@
      "False (explicit)"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "unknown"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "unknown"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "bf16 (explicit)",
+     "unknown"
+    ],
+    [
      "engine",
      "engine",
      "atom",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "dsv41flash",
+  "framework": "dynamo-sglang",
+  "args": {
+   "speculative-algorithm": "DSPARK",
+   "speculative-dspark-block-size": 5,
+   "kv-cache-dtype": "fp8_e4m3"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/dsv41flash/sglang/gb300-fp4/agentx/agg-variants.yaml:override_tp4_c1"
+  ],
+  "rows": 1,
+  "expected": {
+   "curve": "deepseek-v4.1-flash__dspark__native__probabilistic-block",
+   "draft_tokens": 5,
+   "golden": 3.51,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "probabilistic (explicit)"
+    ],
+    [
+     "mismatch",
+     "verify",
+     "standard (documented)",
+     "block (explicit)"
+    ],
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "unknown"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "unknown"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "fp8 (explicit)",
+     "unknown"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
      "vllm"
     ]
    ]
@@ -737,6 +1103,24 @@
      "block (explicit)"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "unknown"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "unknown"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "default",
+     "unknown"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -754,11 +1138,10 @@
   },
   "recipes": [
    "benchmarks/multi_node/srt-slurm-recipes/dsv41flash/sglang/gb300-fp4/agentx/agg-variants.yaml:override_tp2_c16",
-   "benchmarks/multi_node/srt-slurm-recipes/dsv41flash/sglang/gb300-fp4/agentx/agg-variants.yaml:override_tp4_c1",
    "benchmarks/multi_node/srt-slurm-recipes/dsv41flash/sglang/gb300-fp4/agentx/agg-variants.yaml:override_tp4_c16",
    "benchmarks/multi_node/srt-slurm-recipes/dsv41flash/sglang/gb300-fp4/agentx/agg-variants.yaml:override_tp4_c4"
   ],
-  "rows": 4,
+  "rows": 3,
   "expected": {
    "curve": "deepseek-v4.1-flash__dspark__native__probabilistic-block",
    "draft_tokens": 5,
@@ -777,6 +1160,24 @@
      "block (explicit)"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "unknown"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "unknown"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "default",
+     "unknown"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -789,6 +1190,7 @@
   "model_prefix": "dsv41flash",
   "framework": "dynamo-vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":5,\"draft_sample_method\":\"probabilistic\",\"enable_adaptive_verification\":false}"
   },
   "recipes": [
@@ -807,6 +1209,24 @@
      "verify",
      "standard (documented)",
      "block (explicit)"
+    ],
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "unknown"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "unknown"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "fp8 (explicit)",
+     "unknown"
     ]
    ]
   }
@@ -815,6 +1235,7 @@
   "model_prefix": "dsv41flash",
   "framework": "dynamo-vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":5,\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\",\"enable_adaptive_verification\":false}"
   },
   "recipes": [
@@ -826,7 +1247,26 @@
    "curve": "deepseek-v4.1-flash__dspark__native__probabilistic-block",
    "draft_tokens": 5,
    "golden": 3.51,
-   "findings": []
+   "findings": [
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "unknown"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "unknown"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "fp8 (explicit)",
+     "unknown"
+    ]
+   ]
   }
  },
  {
@@ -834,18 +1274,13 @@
   "framework": "sglang",
   "args": {
    "speculative-algorithm": "DSPARK",
-   "speculative-dspark-block-size": 5
+   "speculative-dspark-block-size": 5,
+   "kv-cache-dtype": "fp8_e4m3"
   },
   "recipes": [
-   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/b200-fp4-mtp/agentic.yaml",
-   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/b300-fp4-mtp/agentic.yaml",
-   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/gb200-fp4-mtp/agentic.yaml",
-   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/gb300-fp4-mtp/agentic.yaml",
-   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/h100-fp4-mtp/agentic.yaml",
-   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/h200-fp4-mtp/agentic.yaml",
-   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/mi355x-fp4-mtp/agentic.yaml"
+   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/b200-fp4-mtp/agentic.yaml"
   ],
-  "rows": 73,
+  "rows": 8,
   "expected": {
    "curve": "deepseek-v4.1-flash__dspark__native__probabilistic-block",
    "draft_tokens": 5,
@@ -864,6 +1299,85 @@
      "block (explicit)"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "unknown"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "unknown"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "fp8 (explicit)",
+     "unknown"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "dsv41flash",
+  "framework": "sglang",
+  "args": {
+   "speculative-algorithm": "DSPARK",
+   "speculative-dspark-block-size": 5
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/b200-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/b300-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/gb200-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/gb300-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/h100-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/h200-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/mi355x-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 65,
+  "expected": {
+   "curve": "deepseek-v4.1-flash__dspark__native__probabilistic-block",
+   "draft_tokens": 5,
+   "golden": 3.51,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "probabilistic (explicit)"
+    ],
+    [
+     "mismatch",
+     "verify",
+     "standard (documented)",
+     "block (explicit)"
+    ],
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "unknown"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "unknown"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "default",
+     "unknown"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -876,31 +1390,47 @@
   "model_prefix": "dsv41flash",
   "framework": "vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":5,\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\",\"enable_adaptive_verification\":false}"
   },
   "recipes": [
    "benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/b200-fp4-mtp/agentic.yaml",
    "benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/b300-fp4-mtp/agentic.yaml",
    "benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/gb200-fp4-mtp/agentic.yaml",
-   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/gb300-fp4-mtp/agentic.yaml",
-   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/h100-fp4-mtp/agentic.yaml",
-   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/h200-fp4-mtp/agentic.yaml",
-   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/mi300x-fp4-mtp/agentic.yaml",
-   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/mi325x-fp4-mtp/agentic.yaml",
-   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/mi355x-fp4-mtp/agentic.yaml"
+   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/gb300-fp4-mtp/agentic.yaml"
   ],
-  "rows": 101,
+  "rows": 38,
   "expected": {
    "curve": "deepseek-v4.1-flash__dspark__native__probabilistic-block",
    "draft_tokens": 5,
    "golden": 3.51,
-   "findings": []
+   "findings": [
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "unknown"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "unknown"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "fp8 (explicit)",
+     "unknown"
+    ]
+   ]
   }
  },
  {
   "model_prefix": "dsv41flash",
   "framework": "vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":5,\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\",\"enable_adaptive_verification\":true}"
   },
   "recipes": [
@@ -917,6 +1447,64 @@
      "adaptive",
      "True (explicit)",
      "False (explicit)"
+    ],
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "unknown"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "unknown"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "fp8 (explicit)",
+     "unknown"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "dsv41flash",
+  "framework": "vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":5,\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\",\"enable_adaptive_verification\":false}"
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/h100-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/h200-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/mi300x-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/mi325x-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/mi355x-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 63,
+  "expected": {
+   "curve": "deepseek-v4.1-flash__dspark__native__probabilistic-block",
+   "draft_tokens": 5,
+   "golden": 3.51,
+   "findings": [
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "unknown"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "unknown"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "default",
+     "unknown"
     ]
    ]
   }
@@ -925,6 +1513,7 @@
   "model_prefix": "glm5.2",
   "framework": "atom",
   "args": {
+   "kv_cache_dtype": "fp8",
    "method": "mtp",
    "num-speculative-tokens": 3
   },
@@ -956,6 +1545,18 @@
      "False (documented)"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "atom",
@@ -968,6 +1569,7 @@
   "model_prefix": "glm5.2",
   "framework": "atom",
   "args": {
+   "kv_cache_dtype": "fp8",
    "method": "mtp",
    "num-speculative-tokens": 4
   },
@@ -999,6 +1601,18 @@
      "False (documented)"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "atom",
@@ -1011,6 +1625,7 @@
   "model_prefix": "glm5.2",
   "framework": "atom",
   "args": {
+   "kv_cache_dtype": "fp8",
    "method": "mtp",
    "num-speculative-tokens": 5
   },
@@ -1042,6 +1657,18 @@
      "False (documented)"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "atom",
@@ -1054,6 +1681,7 @@
   "model_prefix": "glm5.2",
   "framework": "dynamo-sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "EAGLE",
    "speculative-num-steps": 2,
    "speculative-eagle-topk": 1,
@@ -1077,45 +1705,14 @@
      "default"
     ],
     [
-     "engine",
-     "engine",
-     "sglang",
-     "vllm"
-    ]
-   ]
-  }
- },
- {
-  "model_prefix": "glm5.2",
-  "framework": "dynamo-sglang",
-  "args": {
-   "speculative-algorithm": "EAGLE",
-   "speculative-num-steps": 5,
-   "speculative-eagle-topk": 1,
-   "speculative-num-draft-tokens": 6,
-   "speculative-moe-a2a-backend": "none",
-   "speculative-moe-runner-backend": "flashinfer_trtllm"
-  },
-  "recipes": [
-   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-variants.yaml:override_1p1d_pp8_dep8_c96",
-   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-variants.yaml:override_1p2d_pp8_dep8_c64",
-   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-variants.yaml:override_1p2d_pp8_dep8_c96",
-   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-variants.yaml:override_2p1d_pp8_dep16_c224",
-   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-variants.yaml:override_3p1d_pp8_dep16_c336",
-   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_1p1d_pp4_dep8_c56",
-   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_3p1d_pp4_dep8_c216",
-   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_3p1d_pp4_dep8_c264",
-   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_4p1d_pp4_dep16_c256"
-  ],
-  "rows": 9,
-  "expected": {
-   "curve": "glm-5.2-fp8__mtp__native__default-default",
-   "draft_tokens": 5,
-   "golden": 3.61,
-   "findings": [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
     [
      "unverified",
-     "draft_sample",
+     "draft_kv_cache_dtype",
      "default",
      "default"
     ],
@@ -1132,6 +1729,59 @@
   "model_prefix": "glm5.2",
   "framework": "dynamo-sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
+   "speculative-algorithm": "EAGLE",
+   "speculative-num-steps": 5,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 6,
+   "speculative-moe-a2a-backend": "none",
+   "speculative-moe-runner-backend": "flashinfer_trtllm"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-variants.yaml:override_1p1d_pp8_dep8_c96",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-variants.yaml:override_1p2d_pp8_dep8_c64",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-variants.yaml:override_1p2d_pp8_dep8_c96",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-variants.yaml:override_2p1d_pp8_dep16_c224",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-variants.yaml:override_3p1d_pp8_dep16_c336"
+  ],
+  "rows": 5,
+  "expected": {
+   "curve": "glm-5.2-fp8__mtp__native__default-default",
+   "draft_tokens": 5,
+   "golden": 3.61,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "glm5.2",
+  "framework": "dynamo-sglang",
+  "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "EAGLE",
    "speculative-num-steps": 2,
    "speculative-eagle-topk": 1,
@@ -1153,6 +1803,18 @@
      "default"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -1165,6 +1827,7 @@
   "model_prefix": "glm5.2",
   "framework": "dynamo-sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "EAGLE",
    "speculative-num-steps": 3,
    "speculative-eagle-topk": 1,
@@ -1191,6 +1854,18 @@
      "default"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -1205,6 +1880,7 @@
   "args": {
    "speculative-algorithm": "EAGLE",
    "speculative-eagle-topk": 1,
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-num-steps": 4,
    "speculative-num-draft-tokens": 5
   },
@@ -1224,6 +1900,18 @@
      "default"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -1236,6 +1924,7 @@
   "model_prefix": "glm5.2",
   "framework": "dynamo-sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "EAGLE",
    "speculative-num-steps": 5,
    "speculative-eagle-topk": 1,
@@ -1258,12 +1947,9 @@
    "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/agg-variants.yaml:override_tp4_c1",
    "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/agg-variants.yaml:override_tp8_c1",
    "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-variants.yaml:override_1p4d_pp8_tp4_c48",
-   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-variants.yaml:override_1p6d_pp8_tp4_c36",
-   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb300-fp4/agentx/agg-variants.yaml:override_tp8_c1",
-   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_1p3d_pp4_tp4_c40",
-   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_1p5d_pp4_tp4_c30"
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb200-fp4/agentx/disagg-variants.yaml:override_1p6d_pp8_tp4_c36"
   ],
-  "rows": 20,
+  "rows": 17,
   "expected": {
    "curve": "glm-5.2-fp8__mtp__native__default-default",
    "draft_tokens": 5,
@@ -1272,6 +1958,18 @@
     [
      "unverified",
      "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
      "default",
      "default"
     ],
@@ -1288,6 +1986,7 @@
   "model_prefix": "glm5.2",
   "framework": "dynamo-sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "EAGLE",
    "speculative-num-steps": 6,
    "speculative-eagle-topk": 1,
@@ -1309,6 +2008,127 @@
      "default"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "glm5.2",
+  "framework": "dynamo-sglang",
+  "args": {
+   "speculative-algorithm": "EAGLE",
+   "speculative-num-steps": 5,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 6,
+   "speculative-moe-a2a-backend": "none",
+   "speculative-moe-runner-backend": "flashinfer_trtllm"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_1p1d_pp4_dep8_c56",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_3p1d_pp4_dep8_c216",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_3p1d_pp4_dep8_c264",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_4p1d_pp4_dep16_c256"
+  ],
+  "rows": 4,
+  "expected": {
+   "curve": "glm-5.2-fp8__mtp__native__default-default",
+   "draft_tokens": 5,
+   "golden": 3.61,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "default",
+     "fp8 (explicit)"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "glm5.2",
+  "framework": "dynamo-sglang",
+  "args": {
+   "speculative-algorithm": "EAGLE",
+   "speculative-eagle-topk": 1,
+   "speculative-num-steps": 5,
+   "speculative-num-draft-tokens": 6
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb300-fp4/agentx/agg-variants.yaml:override_tp8_c1",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_1p3d_pp4_tp4_c40",
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_1p5d_pp4_tp4_c30"
+  ],
+  "rows": 3,
+  "expected": {
+   "curve": "glm-5.2-fp8__mtp__native__default-default",
+   "draft_tokens": 5,
+   "golden": 3.61,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "default",
+     "fp8 (explicit)"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -1321,40 +2141,13 @@
   "model_prefix": "glm5.2",
   "framework": "dynamo-trt",
   "args": {
-   "speculative_config": {
-    "decoding_type": "MTP",
-    "max_draft_len": 3
-   }
-  },
-  "recipes": [
-   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_4p1d_dep8_c227_b16_mtp3",
-   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_5p1d_dep16_c260_b16_mtp3"
-  ],
-  "rows": 2,
-  "expected": {
-   "curve": "glm-5.2-fp8__mtp__native__default-default",
-   "draft_tokens": 3,
-   "golden": 2.99,
-   "findings": [
-    [
-     "unverified",
-     "draft_sample",
-     "default",
-     "default"
-    ],
-    [
-     "engine",
-     "engine",
-     "trtllm",
-     "vllm"
-    ]
-   ]
-  }
- },
- {
-  "model_prefix": "glm5.2",
-  "framework": "dynamo-trt",
-  "args": {
+   "kv_cache_config": {
+    "dtype": "fp8",
+    "enable_block_reuse": false,
+    "event_buffer_max_size": 0,
+    "free_gpu_memory_fraction": 0.8,
+    "tokens_per_block": 64
+   },
    "speculative_config": {
     "decoding_type": "MTP",
     "max_draft_len": 5
@@ -1379,6 +2172,123 @@
      "default"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "trtllm",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "glm5.2",
+  "framework": "dynamo-trt",
+  "args": {
+   "kv_cache_config": {
+    "dtype": "fp8",
+    "enable_block_reuse": false,
+    "event_buffer_max_size": 0,
+    "free_gpu_memory_fraction": 0.9,
+    "tokens_per_block": 64,
+    "host_cache_size": 137438953472
+   },
+   "speculative_config": {
+    "decoding_type": "MTP",
+    "max_draft_len": 3
+   }
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_4p1d_dep8_c227_b16_mtp3"
+  ],
+  "rows": 1,
+  "expected": {
+   "curve": "glm-5.2-fp8__mtp__native__default-default",
+   "draft_tokens": 3,
+   "golden": 2.99,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "trtllm",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "glm5.2",
+  "framework": "dynamo-trt",
+  "args": {
+   "kv_cache_config": {
+    "dtype": "fp8",
+    "enable_block_reuse": false,
+    "event_buffer_max_size": 0,
+    "free_gpu_memory_fraction": 0.9,
+    "tokens_per_block": 64
+   },
+   "speculative_config": {
+    "decoding_type": "MTP",
+    "max_draft_len": 3
+   }
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/glm5.2/trtllm/gb300-fp4/agentx/disagg-variants.yaml:override_5p1d_dep16_c260_b16_mtp3"
+  ],
+  "rows": 1,
+  "expected": {
+   "curve": "glm-5.2-fp8__mtp__native__default-default",
+   "draft_tokens": 3,
+   "golden": 2.99,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "trtllm",
@@ -1391,18 +2301,16 @@
   "model_prefix": "glm5.2",
   "framework": "sglang",
   "args": {
+   "kv-cache-dtype": "bfloat16",
    "speculative-algorithm": "EAGLE",
    "speculative-num-steps": 3,
    "speculative-eagle-topk": 1,
    "speculative-num-draft-tokens": 4
   },
   "recipes": [
-   "benchmarks/single_node/srt-slurm-recipes/glm5.2/sglang/b200-fp4-mtp/agentic.yaml",
-   "benchmarks/single_node/srt-slurm-recipes/glm5.2/sglang/b300-fp4-mtp/agentic.yaml",
-   "benchmarks/single_node/srt-slurm-recipes/glm5.2/sglang/b300-fp8-mtp/agentic.yaml",
    "benchmarks/single_node/srt-slurm-recipes/glm5.2/sglang/mi325x-fp8-mtp/agentic.yaml"
   ],
-  "rows": 23,
+  "rows": 7,
   "expected": {
    "curve": "glm-5.2-fp8__mtp__native__default-default",
    "draft_tokens": 3,
@@ -1411,6 +2319,72 @@
     [
      "unverified",
      "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
+     "mismatch",
+     "kv_cache_dtype",
+     "bf16 (explicit)",
+     "fp8 (explicit)"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "glm5.2",
+  "framework": "sglang",
+  "args": {
+   "kv-cache-dtype": "fp8_e4m3",
+   "speculative-algorithm": "EAGLE",
+   "speculative-num-steps": 3,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 4
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/glm5.2/sglang/b200-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/glm5.2/sglang/b300-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/glm5.2/sglang/b300-fp8-mtp/agentic.yaml"
+  ],
+  "rows": 16,
+  "expected": {
+   "curve": "glm-5.2-fp8__mtp__native__default-default",
+   "draft_tokens": 3,
+   "golden": 2.99,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
      "default",
      "default"
     ],
@@ -1427,6 +2401,7 @@
   "model_prefix": "glm5.2",
   "framework": "sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "EAGLE",
    "speculative-num-steps": 4,
    "speculative-eagle-topk": 1,
@@ -1448,6 +2423,18 @@
      "default"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -1460,6 +2447,7 @@
   "model_prefix": "glm5.2",
   "framework": "sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "EAGLE",
    "speculative-num-steps": 5,
    "speculative-eagle-topk": 1,
@@ -1485,6 +2473,18 @@
      "default"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -1497,6 +2497,7 @@
   "model_prefix": "glm5.2",
   "framework": "sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "EAGLE",
    "speculative-num-steps": 6,
    "speculative-eagle-topk": 1,
@@ -1515,6 +2516,18 @@
     [
      "unverified",
      "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
      "default",
      "default"
     ],
@@ -1552,6 +2565,24 @@
      "default"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "default",
+     "fp8 (explicit)"
+    ],
+    [
      "provisional",
      "values",
      "-",
@@ -1570,6 +2601,7 @@
   "model_prefix": "glm5.3",
   "framework": "tilert",
   "args": {
+   "kv-cache-dtype": "bf16",
    "with-mtp": true,
    "num-mtp": 3
   },
@@ -1601,6 +2633,24 @@
      "False (documented)"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "unknown",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "unknown",
+     "default"
+    ],
+    [
+     "mismatch",
+     "kv_cache_dtype",
+     "bf16 (explicit)",
+     "fp8 (explicit)"
+    ],
+    [
      "provisional",
      "values",
      "-",
@@ -1619,6 +2669,7 @@
   "model_prefix": "kimik3",
   "framework": "atom",
   "args": {
+   "kv_cache_dtype": "fp8",
    "method": "dspark",
    "draft-model": "Inferact/Kimi-K3-DSpark",
    "num-speculative-tokens": 4
@@ -1645,6 +2696,18 @@
      "False (documented)"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "atom",
@@ -1657,6 +2720,7 @@
   "model_prefix": "kimik3",
   "framework": "atom",
   "args": {
+   "kv_cache_dtype": "fp8",
    "method": "dspark",
    "draft-model": "Inferact/Kimi-K3-DSpark",
    "num-speculative-tokens": 7
@@ -1683,6 +2747,18 @@
      "False (documented)"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "atom",
@@ -1695,6 +2771,7 @@
   "model_prefix": "kimik3",
   "framework": "dynamo-vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"method\":\"dspark\",\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":2,\"attention_backend\":\"FLASHINFER_MLA\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
   },
   "recipes": [
@@ -1715,6 +2792,7 @@
   "model_prefix": "kimik3",
   "framework": "dynamo-vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"attention_backend\":\"TOKENSPEED_MLA\",\"method\":\"dspark\",\"num_speculative_tokens\":4,\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
   },
   "recipes": [
@@ -1738,6 +2816,7 @@
   "model_prefix": "kimik3",
   "framework": "dynamo-vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"attention_backend\":\"TOKENSPEED_MLA\",\"method\":\"dspark\",\"num_speculative_tokens\":4,\"draft_sample_method\":\"probabilistic\"}"
   },
   "recipes": [
@@ -1764,6 +2843,7 @@
   "model_prefix": "kimik3",
   "framework": "dynamo-vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"attention_backend\":\"TOKENSPEED_MLA\",\"method\":\"dspark\",\"num_speculative_tokens\":5,\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
   },
   "recipes": [
@@ -1781,6 +2861,7 @@
   "model_prefix": "kimik3",
   "framework": "dynamo-vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":4,\"method\":\"dspark\",\"attention_backend\":\"TOKENSPEED_MLA\",\"draft_sample_method\":\"probabilistic\"}"
   },
   "recipes": [
@@ -1814,6 +2895,7 @@
   "model_prefix": "kimik3",
   "framework": "dynamo-vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":7,\"method\":\"dspark\",\"attention_backend\":\"TOKENSPEED_MLA\",\"draft_sample_method\":\"probabilistic\"}"
   },
   "recipes": [
@@ -1844,25 +2926,7 @@
   "model_prefix": "kimik3",
   "framework": "vllm",
   "args": {
-   "speculative-config": "{\"method\":\"dspark\",\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":2,\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
-  },
-  "recipes": [
-   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/h200-fp4/agentx/agg-tp16dp2ep32-latency.yaml",
-   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/h200-fp4/agentx/agg-tp8dp4ep32-balanced.yaml",
-   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/h200-fp4/agentx/agg-tp8dp4ep32-vllm-simple.yaml"
-  ],
-  "rows": 37,
-  "expected": {
-   "curve": "kimi-k3__dspark__kimi-k3-dspark__probabilistic-block",
-   "draft_tokens": 2,
-   "golden": 2.51,
-   "findings": []
-  }
- },
- {
-  "model_prefix": "kimik3",
-  "framework": "vllm",
-  "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"method\":\"dspark\",\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":3,\"attention_backend\":\"TOKENSPEED_MLA\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
   },
   "recipes": [
@@ -1880,6 +2944,7 @@
   "model_prefix": "kimik3",
   "framework": "vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"method\":\"dspark\",\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":7,\"attention_backend\":\"TOKENSPEED_MLA\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
   },
   "recipes": [
@@ -1897,6 +2962,7 @@
   "model_prefix": "kimik3",
   "framework": "vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":4,\"method\":\"dspark\",\"attention_backend\":\"ROCM_AITER_MLA\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
   },
   "recipes": [
@@ -1907,13 +2973,21 @@
    "curve": "kimi-k3__dspark__kimi-k3-dspark__probabilistic-block",
    "draft_tokens": 4,
    "golden": 3.36,
-   "findings": []
+   "findings": [
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "fp8 (explicit)",
+     "default"
+    ]
+   ]
   }
  },
  {
   "model_prefix": "kimik3",
   "framework": "vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":5,\"method\":\"dspark\",\"attention_backend\":\"ROCM_AITER_MLA\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
   },
   "recipes": [
@@ -1924,13 +2998,21 @@
    "curve": "kimi-k3__dspark__kimi-k3-dspark__probabilistic-block",
    "draft_tokens": 5,
    "golden": 3.62,
-   "findings": []
+   "findings": [
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "fp8 (explicit)",
+     "default"
+    ]
+   ]
   }
  },
  {
   "model_prefix": "kimik3",
   "framework": "vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":7,\"method\":\"dspark\",\"attention_backend\":\"ROCM_AITER_MLA\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
   },
   "recipes": [
@@ -1941,13 +3023,22 @@
    "curve": "kimi-k3__dspark__kimi-k3-dspark__probabilistic-block",
    "draft_tokens": 7,
    "golden": 3.84,
-   "findings": []
+   "findings": [
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "fp8 (explicit)",
+     "default"
+    ]
+   ]
   }
  },
  {
   "model_prefix": "kimik3",
   "framework": "vllm",
-  "args": {},
+  "args": {
+   "kv-cache-dtype": "fp8"
+  },
   "recipes": [
    "benchmarks/single_node/srt-slurm-recipes/kimik3/vllm/b300-fp4-mtp/agentic.yaml"
   ],
@@ -1956,8 +3047,35 @@
  },
  {
   "model_prefix": "kimik3",
+  "framework": "vllm",
+  "args": {
+   "speculative-config": "{\"method\":\"dspark\",\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":2,\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/h200-fp4/agentx/agg-tp16dp2ep32-latency.yaml",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/h200-fp4/agentx/agg-tp8dp4ep32-balanced.yaml",
+   "benchmarks/multi_node/srt-slurm-recipes/kimik3/vllm/h200-fp4/agentx/agg-tp8dp4ep32-vllm-simple.yaml"
+  ],
+  "rows": 37,
+  "expected": {
+   "curve": "kimi-k3__dspark__kimi-k3-dspark__probabilistic-block",
+   "draft_tokens": 2,
+   "golden": 2.51,
+   "findings": [
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "default",
+     "fp8 (explicit)"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "kimik3",
   "framework": "vllm-disagg",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"model\":\"/models/Inferact-Kimi-K3-DSpark\",\"method\":\"dspark\",\"num_speculative_tokens\":4,\"attention_backend\":\"ROCM_AITER_MLA\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
   },
   "recipes": [
@@ -1973,13 +3091,21 @@
    "curve": "kimi-k3__dspark__kimi-k3-dspark__probabilistic-block",
    "draft_tokens": 4,
    "golden": 3.36,
-   "findings": []
+   "findings": [
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "fp8 (explicit)",
+     "default"
+    ]
+   ]
   }
  },
  {
   "model_prefix": "minimaxm3",
   "framework": "atom",
   "args": {
+   "kv_cache_dtype": "fp8",
    "method": "eagle3",
    "draft-model": "Inferact/MiniMax-M3-EAGLE3-GQA",
    "num-speculative-tokens": 3
@@ -2012,6 +3138,24 @@
      "False (documented)"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "fp8 (explicit)",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "atom",
@@ -2024,6 +3168,16 @@
   "model_prefix": "minimaxm3",
   "framework": "dynamo-trt",
   "args": {
+   "kv_cache_config": {
+    "free_gpu_memory_fraction": 0.94,
+    "enable_block_reuse": true,
+    "block_reuse_policy": "per_conversation",
+    "tokens_per_block": 128,
+    "use_kv_cache_manager_v2": true,
+    "dtype": "fp8",
+    "event_buffer_max_size": 0,
+    "host_cache_size": 137438953472
+   },
    "speculative_config": {
     "decoding_type": "Eagle3",
     "max_draft_len": 3,
@@ -2052,6 +3206,24 @@
      "default"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "fp8 (explicit)",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "trtllm",
@@ -2064,6 +3236,7 @@
   "model_prefix": "minimaxm3",
   "framework": "dynamo-vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"method\":\"eagle3\",\"model\":\"Inferact/MiniMax-M3-EAGLE3-GQA\",\"num_speculative_tokens\":3,\"attention_backend\":\"FLASHINFER\",\"use_local_argmax_reduction\":true}"
   },
   "recipes": [
@@ -2081,13 +3254,21 @@
    "curve": "minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default",
    "draft_tokens": 3,
    "golden": 2.78,
-   "findings": []
+   "findings": [
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "fp8 (explicit)",
+     "default"
+    ]
+   ]
   }
  },
  {
   "model_prefix": "minimaxm3",
   "framework": "dynamo-vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"method\":\"eagle3\",\"model\":\"Inferact/MiniMax-M3-EAGLE3-GQA\",\"num_speculative_tokens\":3,\"attention_backend\":\"FLASH_ATTN\",\"rejection_sample_method\":\"block\"}"
   },
   "recipes": [
@@ -2111,6 +3292,12 @@
      "verify",
      "block (explicit)",
      "standard (documented)"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "fp8 (explicit)",
+     "default"
     ]
    ]
   }
@@ -2119,6 +3306,16 @@
   "model_prefix": "minimaxm3",
   "framework": "trt",
   "args": {
+   "kv_cache_config": {
+    "free_gpu_memory_fraction": 0.94,
+    "enable_block_reuse": true,
+    "block_reuse_policy": "per_conversation",
+    "tokens_per_block": 128,
+    "use_kv_cache_manager_v2": true,
+    "dtype": "fp8",
+    "event_buffer_max_size": 0,
+    "host_cache_size": 214748364800
+   },
    "speculative_config": {
     "decoding_type": "Eagle3",
     "max_draft_len": 3,
@@ -2126,10 +3323,9 @@
    }
   },
   "recipes": [
-   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/trtllm/b200-fp4-mtp/agentic.yaml",
-   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/trtllm/b300-fp4-mtp/agentic.yaml"
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/trtllm/b200-fp4-mtp/agentic.yaml"
   ],
-  "rows": 24,
+  "rows": 2,
   "expected": {
    "curve": "minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default",
    "draft_tokens": 3,
@@ -2139,6 +3335,272 @@
      "unverified",
      "draft_sample",
      "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "fp8 (explicit)",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "trtllm",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "minimaxm3",
+  "framework": "trt",
+  "args": {
+   "kv_cache_config": {
+    "free_gpu_memory_fraction": 0.94,
+    "enable_block_reuse": true,
+    "block_reuse_policy": "per_conversation",
+    "tokens_per_block": 128,
+    "use_kv_cache_manager_v2": true,
+    "dtype": "fp8",
+    "event_buffer_max_size": 0,
+    "host_cache_size": 268250000000
+   },
+   "speculative_config": {
+    "decoding_type": "Eagle3",
+    "max_draft_len": 3,
+    "speculative_model": "Inferact/MiniMax-M3-EAGLE3-GQA"
+   }
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/trtllm/b200-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 10,
+  "expected": {
+   "curve": "minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default",
+   "draft_tokens": 3,
+   "golden": 2.78,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "fp8 (explicit)",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "trtllm",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "minimaxm3",
+  "framework": "trt",
+  "args": {
+   "kv_cache_config": {
+    "free_gpu_memory_fraction": 0.94,
+    "enable_block_reuse": true,
+    "block_reuse_policy": "per_conversation",
+    "tokens_per_block": 128,
+    "use_kv_cache_manager_v2": true,
+    "dtype": "fp8",
+    "event_buffer_max_size": 0,
+    "host_cache_size": 309237645312
+   },
+   "speculative_config": {
+    "decoding_type": "Eagle3",
+    "max_draft_len": 3,
+    "speculative_model": "Inferact/MiniMax-M3-EAGLE3-GQA"
+   }
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/trtllm/b300-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 2,
+  "expected": {
+   "curve": "minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default",
+   "draft_tokens": 3,
+   "golden": 2.78,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "fp8 (explicit)",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "trtllm",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "minimaxm3",
+  "framework": "trt",
+  "args": {
+   "kv_cache_config": {
+    "free_gpu_memory_fraction": 0.94,
+    "enable_block_reuse": true,
+    "block_reuse_policy": "per_conversation",
+    "tokens_per_block": 128,
+    "use_kv_cache_manager_v2": true,
+    "dtype": "fp8",
+    "event_buffer_max_size": 0,
+    "host_cache_size": 374500000000
+   },
+   "speculative_config": {
+    "decoding_type": "Eagle3",
+    "max_draft_len": 3,
+    "speculative_model": "Inferact/MiniMax-M3-EAGLE3-GQA"
+   }
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/trtllm/b300-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 4,
+  "expected": {
+   "curve": "minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default",
+   "draft_tokens": 3,
+   "golden": 2.78,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "fp8 (explicit)",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "trtllm",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "minimaxm3",
+  "framework": "trt",
+  "args": {
+   "kv_cache_config": {
+    "free_gpu_memory_fraction": 0.94,
+    "enable_block_reuse": true,
+    "block_reuse_policy": "per_conversation",
+    "tokens_per_block": 128,
+    "use_kv_cache_manager_v2": true,
+    "dtype": "fp8",
+    "event_buffer_max_size": 0,
+    "host_cache_size": 374750000000
+   },
+   "speculative_config": {
+    "decoding_type": "Eagle3",
+    "max_draft_len": 3,
+    "speculative_model": "Inferact/MiniMax-M3-EAGLE3-GQA"
+   }
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm3/trtllm/b300-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 6,
+  "expected": {
+   "curve": "minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default",
+   "draft_tokens": 3,
+   "golden": 2.78,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "fp8 (explicit)",
      "default"
     ],
     [
@@ -2154,6 +3616,7 @@
   "model_prefix": "minimaxm3",
   "framework": "vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"method\": \"eagle3\", \"model\": \"Inferact/MiniMax-M3-EAGLE3-GQA\", \"num_speculative_tokens\": 3, \"attention_backend\": \"TRITON_ATTN\"}"
   },
   "recipes": [
@@ -2164,13 +3627,21 @@
    "curve": "minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default",
    "draft_tokens": 3,
    "golden": 2.78,
-   "findings": []
+   "findings": [
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "fp8 (explicit)",
+     "default"
+    ]
+   ]
   }
  },
  {
   "model_prefix": "minimaxm3",
   "framework": "vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"method\":\"eagle3\",\"model\":\"Inferact/MiniMax-M3-EAGLE3-GQA\",\"num_speculative_tokens\":3,\"attention_backend\":\"FLASHINFER\",\"use_local_argmax_reduction\":true}"
   },
   "recipes": [
@@ -2185,13 +3656,21 @@
    "curve": "minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default",
    "draft_tokens": 3,
    "golden": 2.78,
-   "findings": []
+   "findings": [
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "fp8 (explicit)",
+     "default"
+    ]
+   ]
   }
  },
  {
   "model_prefix": "minimaxm3",
   "framework": "vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"method\":\"eagle3\",\"model\":\"Inferact/MiniMax-M3-EAGLE3-GQA\",\"num_speculative_tokens\":3,\"attention_backend\":\"FLASHINFER\"}"
   },
   "recipes": [
@@ -2205,13 +3684,21 @@
    "curve": "minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default",
    "draft_tokens": 3,
    "golden": 2.78,
-   "findings": []
+   "findings": [
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "fp8 (explicit)",
+     "default"
+    ]
+   ]
   }
  },
  {
   "model_prefix": "minimaxm3",
   "framework": "vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"method\":\"eagle3\",\"model\":\"Inferact/MiniMax-M3-EAGLE3-GQA\",\"num_speculative_tokens\":3,\"attention_backend\":\"FLASH_ATTN\"}"
   },
   "recipes": [
@@ -2223,13 +3710,21 @@
    "curve": "minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default",
    "draft_tokens": 3,
    "golden": 2.78,
-   "findings": []
+   "findings": [
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "fp8 (explicit)",
+     "default"
+    ]
+   ]
   }
  },
  {
   "model_prefix": "minimaxm3",
   "framework": "vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"method\":\"eagle3\",\"model\":\"Inferact/MiniMax-M3-EAGLE3-GQA\",\"num_speculative_tokens\":3,\"attention_backend\":\"ROCM_AITER_UNIFIED_ATTN\"}"
   },
   "recipes": [
@@ -2251,13 +3746,21 @@
    "curve": "minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default",
    "draft_tokens": 3,
    "golden": 2.78,
-   "findings": []
+   "findings": [
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "fp8 (explicit)",
+     "default"
+    ]
+   ]
   }
  },
  {
   "model_prefix": "minimaxm3",
   "framework": "vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"method\":\"eagle3\",\"model\":\"Inferact/MiniMax-M3-EAGLE3-GQA\",\"num_speculative_tokens\":3,\"attention_backend\":\"TRITON_ATTN\"}"
   },
   "recipes": [
@@ -2268,13 +3771,21 @@
    "curve": "minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default",
    "draft_tokens": 3,
    "golden": 2.78,
-   "findings": []
+   "findings": [
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "fp8 (explicit)",
+     "default"
+    ]
+   ]
   }
  },
  {
   "model_prefix": "minimaxm3",
   "framework": "vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
    "speculative-config": "{\"method\":\"eagle3\",\"model\":\"Inferact/MiniMax-M3-EAGLE3-GQA\",\"num_speculative_tokens\":5,\"attention_backend\":\"FLASHINFER\"}"
   },
   "recipes": [
@@ -2286,13 +3797,21 @@
    "curve": "minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default",
    "draft_tokens": 5,
    "golden": 3.21,
-   "findings": []
+   "findings": [
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "fp8 (explicit)",
+     "default"
+    ]
+   ]
   }
  },
  {
   "model_prefix": "minimaxm31flash",
   "framework": "dynamo-vllm",
   "args": {
+   "kv-cache-dtype": "nvfp4",
    "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":7,\"attention_backend\":\"FLASHINFER_TS\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
   },
   "recipes": [
@@ -2314,6 +3833,7 @@
   "model_prefix": "minimaxm31flash",
   "framework": "dynamo-vllm",
   "args": {
+   "kv-cache-dtype": "nvfp4",
    "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":7,\"attention_backend\":\"FLASH_ATTN\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
   },
   "recipes": [
@@ -2370,6 +3890,18 @@
      "probabilistic (explicit)"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "default",
+     "nvfp4 (explicit)"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -2408,6 +3940,24 @@
      "probabilistic (explicit)"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "fp8 (explicit)"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "default",
+     "nvfp4 (explicit)"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -2440,6 +3990,24 @@
      "probabilistic (explicit)"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "fp8 (explicit)"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "default",
+     "nvfp4 (explicit)"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -2452,6 +4020,58 @@
   "model_prefix": "minimaxm31flash",
   "framework": "vllm",
   "args": {
+   "kv-cache-dtype": "fp8",
+   "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":3,\"draft_sample_method\":\"probabilistic\",\"attention_backend\":\"FLASH_ATTN\",\"kv_cache_dtype\":\"fp8\",\"rejection_sample_method\":\"block\"}"
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/vllm/h100-fp4-mtp/agentic.yaml",
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/vllm/h200-fp4-mtp/agentic.yaml"
+  ],
+  "rows": 15,
+  "expected": {
+   "curve": "minimax-m3.1-flash__dspark__native__probabilistic-block",
+   "draft_tokens": 3,
+   "golden": 2.88,
+   "findings": [
+    [
+     "mismatch",
+     "kv_cache_dtype",
+     "fp8 (explicit)",
+     "nvfp4 (explicit)"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "minimaxm31flash",
+  "framework": "vllm",
+  "args": {
+   "kv-cache-dtype": "fp8",
+   "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":7,\"attention_backend\":\"TRITON_ATTN\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/vllm/mi355x-fp4/agentic.yaml"
+  ],
+  "rows": 4,
+  "expected": {
+   "curve": "minimax-m3.1-flash__dspark__native__probabilistic-block",
+   "draft_tokens": 7,
+   "golden": 4.04,
+   "findings": [
+    [
+     "mismatch",
+     "kv_cache_dtype",
+     "fp8 (explicit)",
+     "nvfp4 (explicit)"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "minimaxm31flash",
+  "framework": "vllm",
+  "args": {
+   "kv-cache-dtype": "nvfp4",
    "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":3,\"attention_backend\":\"FLASHINFER_TS\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
   },
   "recipes": [
@@ -2469,6 +4089,7 @@
   "model_prefix": "minimaxm31flash",
   "framework": "vllm",
   "args": {
+   "kv-cache-dtype": "nvfp4",
    "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":3,\"attention_backend\":\"FLASH_ATTN\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
   },
   "recipes": [
@@ -2486,6 +4107,7 @@
   "model_prefix": "minimaxm31flash",
   "framework": "vllm",
   "args": {
+   "kv-cache-dtype": "nvfp4",
    "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":3,\"attention_backend\":\"TRITON_ATTN\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
   },
   "recipes": [
@@ -2503,24 +4125,7 @@
   "model_prefix": "minimaxm31flash",
   "framework": "vllm",
   "args": {
-   "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":3,\"draft_sample_method\":\"probabilistic\",\"attention_backend\":\"FLASH_ATTN\",\"kv_cache_dtype\":\"fp8\",\"rejection_sample_method\":\"block\"}"
-  },
-  "recipes": [
-   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/vllm/h100-fp4-mtp/agentic.yaml",
-   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/vllm/h200-fp4-mtp/agentic.yaml"
-  ],
-  "rows": 15,
-  "expected": {
-   "curve": "minimax-m3.1-flash__dspark__native__probabilistic-block",
-   "draft_tokens": 3,
-   "golden": 2.88,
-   "findings": []
-  }
- },
- {
-  "model_prefix": "minimaxm31flash",
-  "framework": "vllm",
-  "args": {
+   "kv-cache-dtype": "nvfp4",
    "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":7,\"attention_backend\":\"FLASHINFER_TS\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
   },
   "recipes": [
@@ -2542,6 +4147,7 @@
   "model_prefix": "minimaxm31flash",
   "framework": "vllm",
   "args": {
+   "kv-cache-dtype": "nvfp4",
    "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":7,\"attention_backend\":\"FLASH_ATTN\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
   },
   "recipes": [
@@ -2569,26 +4175,10 @@
   }
  },
  {
-  "model_prefix": "minimaxm31flash",
-  "framework": "vllm",
-  "args": {
-   "speculative-config": "{\"method\":\"dspark\",\"num_speculative_tokens\":7,\"attention_backend\":\"TRITON_ATTN\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
-  },
-  "recipes": [
-   "benchmarks/single_node/srt-slurm-recipes/minimaxm31flash/vllm/mi355x-fp4/agentic.yaml"
-  ],
-  "rows": 4,
-  "expected": {
-   "curve": "minimax-m3.1-flash__dspark__native__probabilistic-block",
-   "draft_tokens": 7,
-   "golden": 4.04,
-   "findings": []
-  }
- },
- {
   "model_prefix": "musespark",
   "framework": "dynamo-sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "DFLASH",
    "speculative-draft-model-path": "RadixArk/Muse-Spark-Open-DFlash2",
    "speculative-draft-model-revision": "46c90f412549c472941a68382d91a99e5e6372a0",
@@ -2610,6 +4200,7 @@
   "model_prefix": "musespark",
   "framework": "dynamo-sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "DFLASH",
    "speculative-draft-model-path": "RadixArk/Muse-Spark-Open-DFlash2",
    "speculative-draft-model-revision": "46c90f412549c472941a68382d91a99e5e6372a0",
@@ -2637,6 +4228,7 @@
   "model_prefix": "musespark",
   "framework": "sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "DFLASH",
    "speculative-draft-model-path": "RadixArk/Muse-Spark-Open-DFlash2",
    "speculative-draft-attention-backend": "fa4",
@@ -2666,6 +4258,7 @@
   "model_prefix": "musespark",
   "framework": "sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "DFLASH",
    "speculative-draft-model-path": "RadixArk/Muse-Spark-Open-DFlash2",
    "speculative-draft-attention-backend": "fa4",
@@ -2689,6 +4282,7 @@
   "model_prefix": "musespark",
   "framework": "sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "DFLASH",
    "speculative-draft-model-path": "RadixArk/Muse-Spark-Open-DFlash2",
    "speculative-draft-attention-backend": "triton",
@@ -2710,6 +4304,7 @@
   "model_prefix": "musespark",
   "framework": "sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "DFLASH",
    "speculative-draft-model-path": "RadixArk/Muse-Spark-Open-DFlash2",
    "speculative-num-draft-tokens": 8,
@@ -2724,13 +4319,21 @@
    "curve": "muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default",
    "draft_tokens": 7,
    "golden": 4.05,
-   "findings": []
+   "findings": [
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "fp8 (explicit)",
+     "default"
+    ]
+   ]
   }
  },
  {
   "model_prefix": "musespark",
   "framework": "sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "DFLASH",
    "speculative-draft-model-path": "RadixArk/Muse-Spark-Open-DFlash2",
    "speculative-num-draft-tokens": 8,
@@ -2759,6 +4362,7 @@
   "model_prefix": "musespark",
   "framework": "sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "DFLASH",
    "speculative-draft-model-path": "RadixArk/Muse-Spark-Open-DFlash2",
    "speculative-num-draft-tokens": 8
@@ -2779,6 +4383,24 @@
   "model_prefix": "musespark",
   "framework": "trt",
   "args": {
+   "kv_cache_config": {
+    "iteration_stats_interval": 20,
+    "use_kv_cache_manager_v2": true,
+    "block_reuse_config": {
+     "policy": "all_reusable",
+     "swa_endpoint_rewind_tokens": 1024
+    },
+    "dtype": "fp8",
+    "enable_block_reuse": true,
+    "enable_partial_reuse": true,
+    "free_gpu_memory_fraction": 0.8,
+    "host_cache_size": 0,
+    "tokens_per_block": 32,
+    "pool_ratio": [
+     0.15,
+     0.85
+    ]
+   },
    "speculative_config": {
     "decoding_type": "DFlash",
     "max_draft_len": 7,
@@ -2786,15 +4408,9 @@
    }
   },
   "recipes": [
-   "benchmarks/multi_node/srt-slurm-recipes/musespark/trtllm/gb300-fp4/agentx/agg-variants.yaml:override_tep4_c1",
-   "benchmarks/multi_node/srt-slurm-recipes/musespark/trtllm/gb300-fp4/agentx/agg-variants.yaml:override_tep4_c20",
-   "benchmarks/multi_node/srt-slurm-recipes/musespark/trtllm/gb300-fp4/agentx/agg-variants.yaml:override_tep4_c32",
-   "benchmarks/multi_node/srt-slurm-recipes/musespark/trtllm/gb300-fp4/agentx/agg-variants.yaml:override_tep4_c4",
-   "benchmarks/multi_node/srt-slurm-recipes/musespark/trtllm/gb300-fp4/agentx/agg-variants.yaml:override_tep4_c48",
-   "benchmarks/multi_node/srt-slurm-recipes/musespark/trtllm/gb300-fp4/agentx/agg-variants.yaml:override_tep4_c8",
    "benchmarks/multi_node/srt-slurm-recipes/musespark/trtllm/gb300-fp4/agentx/agg-variants.yaml:override_tep8_c1"
   ],
-  "rows": 7,
+  "rows": 1,
   "expected": {
    "curve": "muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default",
    "draft_tokens": 7,
@@ -2803,6 +4419,150 @@
     [
      "unverified",
      "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "trtllm",
+     "sglang"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "musespark",
+  "framework": "trt",
+  "args": {
+   "kv_cache_config": {
+    "iteration_stats_interval": 20,
+    "use_kv_cache_manager_v2": true,
+    "block_reuse_config": {
+     "policy": "all_reusable",
+     "swa_endpoint_rewind_tokens": 1024
+    },
+    "dtype": "fp8",
+    "enable_block_reuse": true,
+    "enable_partial_reuse": true,
+    "free_gpu_memory_fraction": 0.8,
+    "host_cache_size": 103079215104,
+    "tokens_per_block": 32,
+    "pool_ratio": [
+     0.15,
+     0.85
+    ]
+   },
+   "speculative_config": {
+    "decoding_type": "DFlash",
+    "max_draft_len": 7,
+    "speculative_model": "/hf_hub_cache/models--RadixArk--Muse-Spark-Open-DFlash2/snapshots/46c90f412549c472941a68382d91a99e5e6372a0"
+   }
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/musespark/trtllm/gb300-fp4/agentx/agg-variants.yaml:override_tep4_c1",
+   "benchmarks/multi_node/srt-slurm-recipes/musespark/trtllm/gb300-fp4/agentx/agg-variants.yaml:override_tep4_c4",
+   "benchmarks/multi_node/srt-slurm-recipes/musespark/trtllm/gb300-fp4/agentx/agg-variants.yaml:override_tep4_c8"
+  ],
+  "rows": 3,
+  "expected": {
+   "curve": "muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default",
+   "draft_tokens": 7,
+   "golden": 4.05,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "trtllm",
+     "sglang"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "musespark",
+  "framework": "trt",
+  "args": {
+   "kv_cache_config": {
+    "iteration_stats_interval": 20,
+    "use_kv_cache_manager_v2": true,
+    "block_reuse_config": {
+     "policy": "all_reusable",
+     "swa_endpoint_rewind_tokens": 1024
+    },
+    "dtype": "fp8",
+    "enable_block_reuse": true,
+    "enable_partial_reuse": true,
+    "free_gpu_memory_fraction": 0.8,
+    "host_cache_size": 171798691840,
+    "tokens_per_block": 32,
+    "pool_ratio": [
+     0.25,
+     0.75
+    ]
+   },
+   "speculative_config": {
+    "decoding_type": "DFlash",
+    "max_draft_len": 7,
+    "speculative_model": "/hf_hub_cache/models--RadixArk--Muse-Spark-Open-DFlash2/snapshots/46c90f412549c472941a68382d91a99e5e6372a0"
+   }
+  },
+  "recipes": [
+   "benchmarks/multi_node/srt-slurm-recipes/musespark/trtllm/gb300-fp4/agentx/agg-variants.yaml:override_tep4_c20",
+   "benchmarks/multi_node/srt-slurm-recipes/musespark/trtllm/gb300-fp4/agentx/agg-variants.yaml:override_tep4_c32",
+   "benchmarks/multi_node/srt-slurm-recipes/musespark/trtllm/gb300-fp4/agentx/agg-variants.yaml:override_tep4_c48"
+  ],
+  "rows": 3,
+  "expected": {
+   "curve": "muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default",
+   "draft_tokens": 7,
+   "golden": 4.05,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
      "default",
      "default"
     ],
@@ -2819,6 +4579,7 @@
   "model_prefix": "qwen3.5",
   "framework": "atom",
   "args": {
+   "kv_cache_dtype": "fp8",
    "method": "mtp",
    "num-speculative-tokens": 3
   },
@@ -2850,6 +4611,18 @@
      "False (documented)"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "atom",
@@ -2862,6 +4635,7 @@
   "model_prefix": "qwen3.5",
   "framework": "dynamo-sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "NEXTN",
    "speculative-eagle-topk": 1,
    "speculative-draft-model-quantization": "nvfp4_online",
@@ -2886,6 +4660,18 @@
      "default"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "nvfp4_online (explicit)",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -2898,6 +4684,7 @@
   "model_prefix": "qwen3.5",
   "framework": "dynamo-sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "NEXTN",
    "speculative-eagle-topk": 1,
    "speculative-draft-model-quantization": "nvfp4_online",
@@ -2922,6 +4709,18 @@
      "default"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "nvfp4_online (explicit)",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -2934,6 +4733,7 @@
   "model_prefix": "qwen3.5",
   "framework": "dynamo-sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "NEXTN",
    "speculative-num-steps": 5,
    "speculative-eagle-topk": 1,
@@ -2960,6 +4760,18 @@
      "default"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -2972,6 +4784,7 @@
   "model_prefix": "qwen3.5",
   "framework": "dynamo-sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "NEXTN",
    "speculative-num-steps": 6,
    "speculative-eagle-topk": 1,
@@ -2997,6 +4810,18 @@
      "default"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -3009,6 +4834,7 @@
   "model_prefix": "qwen3.5",
   "framework": "dynamo-sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "NEXTN",
    "speculative-num-steps": 6,
    "speculative-eagle-topk": 1,
@@ -3033,6 +4859,18 @@
      "default"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -3045,6 +4883,7 @@
   "model_prefix": "qwen3.5",
   "framework": "dynamo-sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "NEXTN",
    "speculative-num-steps": 5,
    "speculative-eagle-topk": 1,
@@ -3068,6 +4907,18 @@
      "default"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -3080,6 +4931,7 @@
   "model_prefix": "qwen3.5",
   "framework": "dynamo-sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "NEXTN",
    "speculative-num-steps": 6,
    "speculative-eagle-topk": 1,
@@ -3109,6 +4961,18 @@
      "default"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -3121,6 +4985,7 @@
   "model_prefix": "qwen3.5",
   "framework": "dynamo-sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "NEXTN",
    "speculative-num-steps": 7,
    "speculative-eagle-topk": 1,
@@ -3145,6 +5010,18 @@
      "default"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -3157,6 +5034,7 @@
   "model_prefix": "qwen3.5",
   "framework": "dynamo-sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "NEXTN",
    "speculative-num-steps": 3,
    "speculative-eagle-topk": 1,
@@ -3181,6 +5059,18 @@
      "default"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -3193,6 +5083,7 @@
   "model_prefix": "qwen3.5",
   "framework": "dynamo-sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "NEXTN",
    "speculative-num-steps": 5,
    "speculative-eagle-topk": 1,
@@ -3215,6 +5106,18 @@
      "default"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -3227,6 +5130,7 @@
   "model_prefix": "qwen3.5",
   "framework": "dynamo-sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "NEXTN",
    "speculative-num-steps": 3,
    "speculative-eagle-topk": 1,
@@ -3276,6 +5180,18 @@
      "default"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -3288,6 +5204,7 @@
   "model_prefix": "qwen3.5",
   "framework": "dynamo-sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "NEXTN",
    "speculative-num-steps": 5,
    "speculative-eagle-topk": 1,
@@ -3311,6 +5228,18 @@
      "default"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -3323,6 +5252,17 @@
   "model_prefix": "qwen3.5",
   "framework": "dynamo-trt",
   "args": {
+   "kv_cache_config": {
+    "avg_seq_len": 102150,
+    "dtype": "fp8",
+    "enable_block_reuse": false,
+    "event_buffer_max_size": 0,
+    "free_gpu_memory_fraction": 0.85,
+    "host_cache_size": 137438953472,
+    "iteration_stats_interval": 40,
+    "tokens_per_block": 64,
+    "use_kv_cache_manager_v2": true
+   },
    "speculative_config": {
     "decoding_type": "MTP",
     "max_draft_len": 6
@@ -3351,6 +5291,18 @@
      "default"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "trtllm",
@@ -3363,6 +5315,7 @@
   "model_prefix": "qwen3.5",
   "framework": "sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "EAGLE",
    "speculative-num-steps": 3,
    "speculative-eagle-topk": 1,
@@ -3371,12 +5324,11 @@
   "recipes": [
    "benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/h100-fp8-mtp/agentic.yaml",
    "benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/h200-fp8-mtp/agentic.yaml",
-   "benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/mi300x-fp8-mtp/agentic.yaml",
    "benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/mi325x-fp8-mtp/agentic.yaml",
    "benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/mi355x-fp4-mtp/agentic.yaml",
    "benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/mi355x-fp8-mtp/agentic.yaml"
   ],
-  "rows": 100,
+  "rows": 90,
   "expected": {
    "curve": "qwen3.5-397b-a17b-nvfp4__mtp__native__default-default",
    "draft_tokens": 3,
@@ -3385,6 +5337,18 @@
     [
      "unverified",
      "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
      "default",
      "default"
     ],
@@ -3401,6 +5365,7 @@
   "model_prefix": "qwen3.5",
   "framework": "sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "EAGLE",
    "speculative-num-steps": 4,
    "speculative-eagle-topk": 1,
@@ -3422,6 +5387,18 @@
      "default"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -3434,6 +5411,7 @@
   "model_prefix": "qwen3.5",
   "framework": "sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "EAGLE",
    "speculative-num-steps": 5,
    "speculative-eagle-topk": 1,
@@ -3457,6 +5435,18 @@
      "default"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -3469,6 +5459,7 @@
   "model_prefix": "qwen3.5",
   "framework": "sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "EAGLE",
    "speculative-num-steps": 6,
    "speculative-eagle-topk": 1,
@@ -3491,6 +5482,18 @@
      "default"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -3503,6 +5506,7 @@
   "model_prefix": "qwen3.5",
   "framework": "sglang",
   "args": {
+   "kv-cache-dtype": "fp8_e4m3",
    "speculative-algorithm": "NEXTN",
    "speculative-num-steps": 3,
    "speculative-eagle-topk": 1,
@@ -3527,6 +5531,69 @@
      "default"
     ],
     [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
+     "engine",
+     "engine",
+     "sglang",
+     "vllm"
+    ]
+   ]
+  }
+ },
+ {
+  "model_prefix": "qwen3.5",
+  "framework": "sglang",
+  "args": {
+   "speculative-algorithm": "EAGLE",
+   "speculative-num-steps": 3,
+   "speculative-eagle-topk": 1,
+   "speculative-num-draft-tokens": 4
+  },
+  "recipes": [
+   "benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/mi300x-fp8-mtp/agentic.yaml"
+  ],
+  "rows": 10,
+  "expected": {
+   "curve": "qwen3.5-397b-a17b-nvfp4__mtp__native__default-default",
+   "draft_tokens": 3,
+   "golden": 3.39,
+   "findings": [
+    [
+     "unverified",
+     "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "default",
+     "fp8 (explicit)"
+    ],
+    [
      "engine",
      "engine",
      "sglang",
@@ -3545,6 +5612,7 @@
    "speculative-eagle-topk": 1,
    "speculative-num-draft-tokens": 4,
    "speculative-moe-runner-backend": "flashinfer_trtllm",
+   "kv-cache-dtype": "bfloat16",
    "speculative-draft-kv-cache-dtype": "bfloat16"
   },
   "recipes": [
@@ -3560,6 +5628,24 @@
      "unverified",
      "draft_sample",
      "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "bf16 (explicit)",
+     "default"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
+     "bf16 (explicit)",
      "default"
     ],
     [
@@ -3594,6 +5680,24 @@
     [
      "unverified",
      "draft_sample",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_precision",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "draft_kv_cache_dtype",
+     "default",
+     "default"
+    ],
+    [
+     "unverified",
+     "kv_cache_dtype",
      "default",
      "default"
     ],

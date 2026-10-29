@@ -18,7 +18,10 @@ from infx import yamlio
 IDENTITY_DIR = Path(__file__).resolve().parent
 IDENTITIES_STEM = "identities"
 SOURCES = ("explicit", "documented", "assumed", "default", "unknown")
-FACTS = ("draft_sample", "verify", "adaptive", "topology")
+FACTS = (
+    "draft_sample", "verify", "adaptive", "topology",
+    "draft_precision", "draft_kv_cache_dtype", "kv_cache_dtype",
+)  # fmt: skip
 ENGINES = ("vllm", "sglang", "trtllm", "atom", "tilert")
 METHODS = ("mtp", "eagle3", "dspark", "dflash")
 DRAFT_FAMILIES = ("default", "gqa")
@@ -58,6 +61,9 @@ class Collection:
     verify: Fact
     adaptive: Fact
     topology: Fact
+    draft_precision: Fact
+    draft_kv_cache_dtype: Fact
+    kv_cache_dtype: Fact
 
 
 @dataclass(frozen=True)

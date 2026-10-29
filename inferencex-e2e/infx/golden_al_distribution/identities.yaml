@@ -22,6 +22,9 @@
 #
 # draft_sample: greedy | probabilistic   verify: standard | block | relaxed
 # adaptive: true | false                  topology: chain | tree-topk<N>
+# draft_precision: the draft weights' quantization; default when the draft loads as shipped
+# draft_kv_cache_dtype, kv_cache_dtype: the draft's and the target's KV cache dtype (fp8 is
+#   e4m3); default when unset, which follows the engine default (the draft follows the target)
 # A curve marked provisional was not measured for its model.
 
 deepseek-v4-pro__mtp__native__default-default:
@@ -33,6 +36,9 @@ deepseek-v4-pro__mtp__native__default-default:
     verify: {value: standard, source: documented}
     adaptive: {value: false, source: documented}
     topology: {value: chain, source: documented}
+    draft_precision: {value: null, source: default}
+    draft_kv_cache_dtype: {value: null, source: default}
+    kv_cache_dtype: {value: fp8, source: explicit}
 
 deepseek-v4-pro-0813__dspark__native__probabilistic-default:
   select: {model_prefixes: [dsv4, dsv4dspark, dsv4dsparkprob], method: dspark}
@@ -43,6 +49,9 @@ deepseek-v4-pro-0813__dspark__native__probabilistic-default:
     verify: {value: standard, source: documented}
     adaptive: {value: false, source: documented}
     topology: {value: chain, source: documented}
+    draft_precision: {value: null, source: default}
+    draft_kv_cache_dtype: {value: null, source: default}
+    kv_cache_dtype: {value: fp8, source: explicit}
 
 deepseek-v4.1-flash__dspark__native__probabilistic-block:
   select: {model_prefixes: [dsv41flash], method: dspark}
@@ -53,6 +62,9 @@ deepseek-v4.1-flash__dspark__native__probabilistic-block:
     verify: {value: block, source: explicit}
     adaptive: {value: false, source: explicit}
     topology: {value: chain, source: documented}
+    draft_precision: {value: null, source: unknown}
+    draft_kv_cache_dtype: {value: null, source: unknown}
+    kv_cache_dtype: {value: null, source: unknown}
 
 glm-5.2-fp8__mtp__native__default-default:
   select: {model_prefixes: [glm5.2], method: mtp}
@@ -63,6 +75,9 @@ glm-5.2-fp8__mtp__native__default-default:
     verify: {value: standard, source: documented}
     adaptive: {value: false, source: documented}
     topology: {value: chain, source: documented}
+    draft_precision: {value: null, source: default}
+    draft_kv_cache_dtype: {value: null, source: default}
+    kv_cache_dtype: {value: fp8, source: explicit}
 
 glm-5.3-fp8__mtp__native__default-default:
   select: {model_prefixes: [glm5.3], method: mtp}
@@ -74,6 +89,9 @@ glm-5.3-fp8__mtp__native__default-default:
     verify: {value: standard, source: documented}
     adaptive: {value: false, source: documented}
     topology: {value: chain, source: documented}
+    draft_precision: {value: null, source: default}
+    draft_kv_cache_dtype: {value: null, source: default}
+    kv_cache_dtype: {value: fp8, source: explicit}
 
 kimi-k3__dspark__kimi-k3-dspark__default-default:
   select: {model_prefixes: [kimik3], method: dspark, draft_sample: greedy}
@@ -84,6 +102,9 @@ kimi-k3__dspark__kimi-k3-dspark__default-default:
     verify: {value: standard, source: documented}
     adaptive: {value: false, source: documented}
     topology: {value: chain, source: documented}
+    draft_precision: {value: null, source: default}
+    draft_kv_cache_dtype: {value: null, source: default}
+    kv_cache_dtype: {value: fp8, source: explicit}
 
 kimi-k3__dspark__kimi-k3-dspark__probabilistic-block:
   select: {model_prefixes: [kimik3], method: dspark, draft_sample: probabilistic}
@@ -94,6 +115,9 @@ kimi-k3__dspark__kimi-k3-dspark__probabilistic-block:
     verify: {value: block, source: explicit}
     adaptive: {value: false, source: documented}
     topology: {value: chain, source: documented}
+    draft_precision: {value: null, source: default}
+    draft_kv_cache_dtype: {value: null, source: default}
+    kv_cache_dtype: {value: fp8, source: explicit}
 
 minimax-m3__eagle3__minimax-m3-eagle3__default-default:
   select: {model_prefixes: [minimaxm3], method: eagle3, draft_family: default}
@@ -104,6 +128,9 @@ minimax-m3__eagle3__minimax-m3-eagle3__default-default:
     verify: {value: standard, source: documented}
     adaptive: {value: false, source: documented}
     topology: {value: chain, source: documented}
+    draft_precision: {value: null, source: default}
+    draft_kv_cache_dtype: {value: null, source: default}
+    kv_cache_dtype: {value: null, source: default}
 
 minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default:
   select: {model_prefixes: [minimaxm3], method: eagle3, draft_family: gqa}
@@ -114,6 +141,9 @@ minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default:
     verify: {value: standard, source: documented}
     adaptive: {value: false, source: documented}
     topology: {value: chain, source: documented}
+    draft_precision: {value: null, source: default}
+    draft_kv_cache_dtype: {value: null, source: default}
+    kv_cache_dtype: {value: null, source: default}
 
 minimax-m3.1-flash__dspark__native__probabilistic-block:
   select: {model_prefixes: [minimaxm31flash], method: dspark}
@@ -124,6 +154,9 @@ minimax-m3.1-flash__dspark__native__probabilistic-block:
     verify: {value: block, source: explicit}
     adaptive: {value: false, source: documented}
     topology: {value: chain, source: documented}
+    draft_precision: {value: null, source: default}
+    draft_kv_cache_dtype: {value: fp8, source: explicit}
+    kv_cache_dtype: {value: nvfp4, source: explicit}
 
 muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default:
   select: {model_prefixes: [musespark], method: dflash}
@@ -134,6 +167,9 @@ muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-defaul
     verify: {value: standard, source: documented}
     adaptive: {value: false, source: documented}
     topology: {value: chain, source: documented}
+    draft_precision: {value: null, source: default}
+    draft_kv_cache_dtype: {value: null, source: default}
+    kv_cache_dtype: {value: fp8, source: explicit}
 
 qwen3.5-397b-a17b-nvfp4__mtp__native__default-default:
   select: {model_prefixes: [qwen3.5], method: mtp}
@@ -144,6 +180,9 @@ qwen3.5-397b-a17b-nvfp4__mtp__native__default-default:
     verify: {value: standard, source: documented}
     adaptive: {value: false, source: documented}
     topology: {value: chain, source: documented}
+    draft_precision: {value: null, source: default}
+    draft_kv_cache_dtype: {value: null, source: default}
+    kv_cache_dtype: {value: fp8, source: explicit}
 
 qwen3.8-flash-next-fp8__mtp__native__default-default:
   select: {model_prefixes: [qwen3.8next], method: mtp}
@@ -154,3 +193,6 @@ qwen3.8-flash-next-fp8__mtp__native__default-default:
     verify: {value: standard, source: documented}
     adaptive: {value: false, source: documented}
     topology: {value: chain, source: documented}
+    draft_precision: {value: null, source: default}
+    draft_kv_cache_dtype: {value: null, source: default}
+    kv_cache_dtype: {value: null, source: default}
