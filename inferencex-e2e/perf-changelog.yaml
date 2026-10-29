@@ -11769,3 +11769,14 @@
     - "6 DEP2 prefill workers with a DEP8 decode at conc 280-400 or a DEP16 decode at conc 300; MegaMoE, DSpark block 7 with fp8 draft KV, Dynamo KV router with fastokens for prefill and least-loaded routing across decode DP ranks."
     - "Prefill: shortest-prefill-first, chunk 8192, mem-fraction-static 0.85, HiCache 200 GB per rank write_back."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4686
+
+- config-keys:
+    - h3-bf16-h100-sglang-video
+    - h3-bf16-h200-sglang-video
+    - h3-bf16-b200-sglang-video
+    - h3-bf16-h200-vllm-omni-video
+  scenario-type: [video-generation]
+  description:
+    - "Run native H3 v0.1 C1 sweeps on four GPUs: H100 SGLang TP2/Ulysses2, H200 and B200 SGLang Ulysses4, and H200 vLLM-Omni Ulysses4."
+    - "Select 20 distinct measured prompts, a disjoint warmup, 124 frames, 49 denoising updates, pinned images, and explicit cross-request conditioning-cache policy."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916

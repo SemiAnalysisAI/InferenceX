@@ -8756,6 +8756,78 @@ musespark-fp4-h100-sglang-agentic-dflash:
       search-space:
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [1, 2, 4, 8], srt-recipe: agentic.yaml }
 
+h3-bf16-h100-sglang-video:
+  image: lmsysorg/sglang:v0.5.23-cu130@sha256:f7876bef696ccf9cf75a2bf7ccb82970f5fac577f082fb8ca95c9a59d2160eb5
+  model: MiniMaxAI/MiniMax-H3
+  model-prefix: h3
+  runner: cluster:h100-dsxe
+  precision: bf16
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: h3/sglang/h100-bf16
+  scenarios:
+    video-generation:
+      - spec: h3-v0.1.yaml
+        set: release-v1
+        search-space:
+          - gpus: 4
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
+
+h3-bf16-h200-sglang-video:
+  image: lmsysorg/sglang:v0.5.23-cu130@sha256:f7876bef696ccf9cf75a2bf7ccb82970f5fac577f082fb8ca95c9a59d2160eb5
+  model: MiniMaxAI/MiniMax-H3
+  model-prefix: h3
+  runner: cluster:h200-dgxc
+  precision: bf16
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: h3/sglang/h200-bf16
+  scenarios:
+    video-generation:
+      - spec: h3-v0.1.yaml
+        set: release-v1
+        search-space:
+          - gpus: 4
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
+
+h3-bf16-h200-vllm-omni-video:
+  image: vllm/vllm-omni:v0.30.0@sha256:fc77cfaac7b1b43c30cbf32eaea214864434c6e0f303e6e9eb9f64104241a994
+  model: MiniMaxAI/MiniMax-H3
+  model-prefix: h3
+  runner: cluster:h200-dgxc
+  precision: bf16
+  framework: vllm-omni
+  multinode: false
+  srt-recipe-dir: h3/vllm-omni/h200-bf16
+  scenarios:
+    video-generation:
+      - spec: h3-v0.1.yaml
+        set: release-v1
+        search-space:
+          - gpus: 4
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
+
+h3-bf16-b200-sglang-video:
+  image: lmsysorg/sglang:v0.5.23-cu130@sha256:f7876bef696ccf9cf75a2bf7ccb82970f5fac577f082fb8ca95c9a59d2160eb5
+  model: MiniMaxAI/MiniMax-H3
+  model-prefix: h3
+  runner: cluster:b200-nscale
+  precision: bf16
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: h3/sglang/b200-bf16
+  scenarios:
+    video-generation:
+      - spec: h3-v0.1.yaml
+        set: release-v1
+        search-space:
+          - gpus: 4
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
+
 # Kimi-K3 GB200 disaggregated points: one
 # TP16/DCP16 prefill role and one TP16/DCP16 decode role, four 4-GPU nodes each
 # (32 GPUs). DSpark depth 4 with the golden acceptance selected by the launcher.
@@ -9071,4 +9143,3 @@ minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg:
         srt-recipe: disagg-mooncake.yaml:override_3p4d16
         prefill: { num-worker: 6, tp: 2, ep: 2, dp-attn: true }
         decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: true }
-

@@ -1,0 +1,77 @@
+schema: 2
+name: h3-sglang-serving-client
+
+resources:
+  gpu_type: b200
+
+frontend:
+  type: none
+
+services:
+  - name: h3-server
+    type: generic
+    nodes: 1
+    critical: true
+    start: before_workers
+    command: [python3, -m, infx.bench, video, serve]
+    args:
+      - --model-view
+      - snapshot
+      - --
+      - /opt/sglang/bin/python3
+      - -m
+      - evaluator.srt_selected
+      - serve
+      - --model-type
+      - diffusion
+      - --model-path
+      - "{model_path}"
+      - --model-id
+      - "{model_id}"
+      - --revision
+      - "{model_revision}"
+      - --model-variant
+      - fl2va
+      - --num-gpus
+      - "{gpus_per_node}"
+      - --ulysses-degree
+      - "4"
+      - --tp-size
+      - "1"
+      - --encoder-parallel
+      - auto
+      - --warmup-resolutions
+      - 1344x768
+      - --disable-conditioning-cache
+      - --performance-mode
+      - speed
+      - --host
+      - 0.0.0.0
+      - --port
+      - "30283"
+      - --enable-torch-compile
+      - "false"
+      - --dit-cpu-offload
+      - "false"
+    env:
+      PYTHONPATH: /h3-package:/infmax-workspace
+      PYTHONUNBUFFERED: "1"
+      H3_SERVER_PORT: "30283"
+      VIDEO_RUNTIME_REVISION: 297e54fd105e974cdf401e5b4d20253a22c16f90
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+    readiness:
+      http:
+        port: 30283
+        path: /health
+      timeout_seconds: 1800
+      interval_seconds: 5
+
+benchmark:
+  type: custom
+  command: python3 -m infx.bench video client --request-seconds 900
+  env:
+    PYTHONPATH: /h3-package:/infmax-workspace
+    PYTHONUNBUFFERED: "1"
+    H3_SERVER_SERVICE: h3-server
+    H3_SERVER_PORT: "30283"

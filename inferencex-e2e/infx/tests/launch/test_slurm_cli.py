@@ -90,7 +90,39 @@ def test_final_status_maps_allocation_accounting(fake_bin, tmp_path, record, sta
     fake_bin("sacct", f"{recorder(log)}\necho '{record}'")
     status = final_status(Job("42"), delay_s=0)
     assert (status.state, status.exit_code, status.nodes) == (state, exit_code, nodes)
-    assert calls(log) == [["-X", "-n", "-P", "-j", "42", "--format=State,ExitCode,NodeList,Submit,Start,End"]]
+    assert calls(log) == [["-X", "-n", "-P", "-j", "42",
+                           "--format=State,ExitCode,NodeList,Submit,Start,End,AllocTRES"]]
+
+
+def test_observe_carries_raw_alloc_tres_from_accounting(fake_bin):
+    allocation = "cpu=16,gres/gpu=8,mem=128G,node=1"
+    fake_bin("sacct", f"echo 'COMPLETED|0:0|gpu03|1791547200|1791548100|1791551700|{allocation}'")
+
+    status = cli.observe(Job("42"))
+
+    assert status.alloc_tres == allocation
+
+
+def test_observe_fills_missing_accounting_alloc_tres_from_matching_controller(fake_bin):
+    allocation = "cpu=16,gres/gpu=8,mem=128G,node=1"
+    fake_bin("sacct", "echo 'COMPLETED|0:0|gpu03|1791547200|1791548100|1791551700|Unknown'")
+    fake_bin("scontrol", f"echo 'JobId=42 JobState=FAILED ExitCode=1:0 NodeList=gpu03 AllocTRES={allocation}'")
+
+    status = cli.observe(Job("42"))
+
+    assert status.state is JobState.SUCCEEDED
+    assert status.alloc_tres == allocation
+
+
+def test_observe_does_not_take_alloc_tres_from_another_controller_job(fake_bin):
+    allocation = "cpu=16,gres/gpu=8,mem=128G,node=1"
+    fake_bin("sacct", "echo 'COMPLETED|0:0|gpu03|1791547200|1791548100|1791551700|Unknown'")
+    fake_bin("scontrol", f"echo 'JobId=420 JobState=COMPLETED ExitCode=0:0 NodeList=gpu03 AllocTRES={allocation}'")
+
+    status = cli.observe(Job("42"))
+
+    assert status.state is JobState.SUCCEEDED
+    assert status.alloc_tres is None
 
 
 def test_final_status_reads_the_accounting_times_as_epoch_seconds(fake_bin):
