@@ -603,7 +603,6 @@ jobs:
             queue-token: ${{ matrix.config['queue-token'] }}
             conc-list: ${{ toJson(matrix.config.conc) }}
             conc: ${{ matrix.config.conc[0] }}
-            total-cpu-dram-gb: ${{ matrix.config['total-cpu-dram-gb'] }}
             scenario-type: agentic-coding
             al-gate: true
 
