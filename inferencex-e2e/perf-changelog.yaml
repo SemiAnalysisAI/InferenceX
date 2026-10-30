@@ -11703,3 +11703,10 @@
     - "Disagg 3 × DEP2 prefill and 1 × DEP16 decode at c1228 (override_3p1d_dep2_dep16_c1228) on nightly-dev-cu13-20261028-586355a8, with the prefill host-DRAM HiCache base recipe and the retired key's c1228 decode sizing: max-running-requests 384, decode CUDA graph batch 24, disaggregation-decode-extra-slots 36."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4679
   append-only: true
+
+- config-keys:
+    - musespark-fp4-gb300-dynamo-sglang-agentic-dflash
+  description:
+    - "Update the SGLang image from dev-muse-spark-open to nightly-dev-20261026-8252e3af, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4561
+  scenario-type: [agentic-coding]
