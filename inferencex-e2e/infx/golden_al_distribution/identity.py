@@ -26,6 +26,7 @@ ENGINES = ("vllm", "sglang", "trtllm", "atom", "tilert")
 METHODS = ("mtp", "eagle3", "dspark", "dflash")
 DRAFT_FAMILIES = ("default", "gqa")
 SAMPLERS = ("greedy", "probabilistic")
+VERIFIERS = ("standard", "block", "relaxed")
 
 
 @dataclass(frozen=True)
@@ -74,6 +75,11 @@ class Selector:
     method: str
     draft_family: str | None = None
     draft_sample: str | None = None
+    verify: str | None = None
+
+    @property
+    def specificity(self) -> int:
+        return sum(key is not None for key in (self.draft_family, self.draft_sample, self.verify))
 
 
 @dataclass(frozen=True)
@@ -155,6 +161,7 @@ def parse_identity(name: str, data: Any) -> CurveIdentity:
             method=select["method"],
             draft_family=select.get("draft_family"),
             draft_sample=select.get("draft_sample"),
+            verify=select.get("verify"),
         )
         if not prefixes or selector.method not in METHODS:
             raise ValueError("select needs model_prefixes and a known method")
@@ -162,6 +169,8 @@ def parse_identity(name: str, data: Any) -> CurveIdentity:
             raise ValueError(f"draft_family must be one of {', '.join(DRAFT_FAMILIES)}")
         if selector.draft_sample not in (None, *SAMPLERS):
             raise ValueError(f"select draft_sample must be one of {', '.join(SAMPLERS)}")
+        if selector.verify not in (None, *VERIFIERS):
+            raise ValueError(f"select verify must be one of {', '.join(VERIFIERS)}")
         identity = CurveIdentity(
             name=name,
             select=selector,
@@ -190,27 +199,41 @@ def load_identities(golden_dir: Path = IDENTITY_DIR) -> dict[str, CurveIdentity]
     return {str(name): parse_identity(str(name), value) for name, value in data.items()}
 
 
-def _selects(selector: Selector, model_prefix: str, spec: Mapping[str, Any]) -> bool:
+def _selects(
+    selector: Selector, model_prefix: str, spec: Mapping[str, Any], verify: str | None
+) -> bool:
     if model_prefix not in selector.model_prefixes:
         return False
     if normalize_method(model_prefix, str(spec.get("method", ""))) != selector.method:
         return False
     if selector.draft_family and draft_family(str(spec.get("model", ""))) != selector.draft_family:
         return False
+    if selector.verify and verify != selector.verify:
+        return False
     return not selector.draft_sample or spec.get("draft_sample_method") == selector.draft_sample
 
 
 def select_curve(
-    model_prefix: str, spec: Mapping[str, Any], golden_dir: Path = IDENTITY_DIR
+    model_prefix: str,
+    spec: Mapping[str, Any],
+    golden_dir: Path = IDENTITY_DIR,
+    verify: str | None = None,
 ) -> str:
-    """The one curve whose ``select`` block matches, or ValueError naming the near misses."""
+    """The most specific curve whose ``select`` block matches, or ValueError.
+
+    ``verify`` is the run's verifier, None when unknown; an unknown verifier matches only
+    curves that do not select on it. Ties for the most specific match are an error.
+    """
     identities = load_identities(golden_dir).values()
-    matches = [i.name for i in identities if _selects(i.select, model_prefix, spec)]
-    if len(matches) == 1:
-        return matches[0]
-    method = normalize_method(model_prefix, str(spec.get("method", "")))
+    matches = [i for i in identities if _selects(i.select, model_prefix, spec, verify)]
     if matches:
-        raise ValueError(f"{model_prefix} {method} matches several golden curves: {matches}")
+        best = max(i.select.specificity for i in matches)
+        names = [i.name for i in matches if i.select.specificity == best]
+        if len(names) == 1:
+            return names[0]
+        method = normalize_method(model_prefix, str(spec.get("method", "")))
+        raise ValueError(f"{model_prefix} {method} matches several golden curves: {names}")
+    method = normalize_method(model_prefix, str(spec.get("method", "")))
     near = [
         i.select
         for i in identities
@@ -223,6 +246,7 @@ def select_curve(
                 for key, value in (
                     ("draft_family", s.draft_family),
                     ("draft_sample", s.draft_sample),
+                    ("verify", s.verify),
                 )
                 if value
             )
@@ -230,8 +254,8 @@ def select_curve(
         )
         raise ValueError(
             f"No {model_prefix} {method} golden curve for draft model "
-            f"{spec.get('model')!r} and draft sampling {spec.get('draft_sample_method')!r}; "
-            f"curves need {options}"
+            f"{spec.get('model')!r}, draft sampling {spec.get('draft_sample_method')!r} and "
+            f"verify {verify!r}; curves need {options}"
         )
     raise ValueError(f"No golden curve for model prefix {model_prefix!r} and method {method!r}")
 

@@ -26,7 +26,7 @@ from infx.golden_al_distribution.identity import (
     load_identities,
     normalize_method,
 )
-from infx.srt_slurm.synthetic_acceptance import ENGINES, spec_parameters
+from infx.srt_slurm.synthetic_acceptance import ENGINES, spec_parameters, verifier
 
 # Arguments of a generation role that describe speculative decoding, per engine spelling.
 SPEC_ARGUMENTS = (
@@ -38,8 +38,7 @@ DTYPE_ALIASES = {"fp8_e4m3": "fp8", "bfloat16": "bf16", "auto": None}
 DEFAULT = Fact(None, "default")
 UNKNOWN = Fact(None, "unknown")
 CHAIN = Fact("chain", "documented")
-# Block, relaxed and adaptive verification are opt-in engine flags.
-STANDARD = Fact("standard", "documented")
+# Adaptive verification is an opt-in engine flag.
 NOT_ADAPTIVE = Fact(False, "documented")
 
 
@@ -48,19 +47,9 @@ def _set(value: Any) -> Fact:
 
 
 def _vllm(spec: Mapping[str, Any]) -> dict[str, Fact]:
-    verify = spec.get("rejection_sample_method")
     adaptive = spec.get("enable_adaptive_verification")
     return {
         "draft_sample": _set(spec.get("draft_sample_method")),
-        # A recipe's synthetic sampler becomes block verification on real runs
-        # (synthetic_acceptance.build_overrides).
-        "verify": (
-            Fact("block", "documented")
-            if verify == "synthetic"
-            else Fact(verify, "explicit")
-            if verify
-            else STANDARD
-        ),
         "adaptive": (NOT_ADAPTIVE if adaptive is None else Fact(adaptive, "explicit")),
         "topology": CHAIN,
     }
@@ -74,30 +63,21 @@ def _sglang(args: Mapping[str, Any], method: str) -> dict[str, Fact]:
         topology = Fact("chain" if topk == 1 else f"tree-topk{topk}", "explicit")
     else:
         topology = DEFAULT  # SGLang chooses topk itself when it is unset
-    block = args.get("speculative-use-block-verification")
     return {
         "draft_sample": DEFAULT,
-        "verify": Fact("block", "explicit") if block is True else STANDARD,
         "adaptive": NOT_ADAPTIVE,
         "topology": topology,
     }
 
 
-def _trtllm(args: Mapping[str, Any]) -> dict[str, Fact]:
-    relaxed = (args.get("speculative_config") or {}).get("use_relaxed_acceptance_for_thinking")
-    return {
-        "draft_sample": DEFAULT,
-        "verify": Fact("relaxed", "explicit") if relaxed is True else STANDARD,
-        "adaptive": NOT_ADAPTIVE,
-        "topology": CHAIN,
-    }
+def _trtllm() -> dict[str, Fact]:
+    return {"draft_sample": DEFAULT, "adaptive": NOT_ADAPTIVE, "topology": CHAIN}
 
 
 def _atom(method: str) -> dict[str, Fact]:
     return {
         # spec_parameters gives ATOM DSpark probabilistic drafting; ATOM has no sampler flag.
         "draft_sample": Fact("probabilistic", "assumed") if method == "dspark" else UNKNOWN,
-        "verify": UNKNOWN,  # ATOM does not document its verifier
         "adaptive": DEFAULT,
         "topology": CHAIN,
     }
@@ -131,7 +111,7 @@ def _precision(args: Mapping[str, Any], spec: Mapping[str, Any], engine: str) ->
 
 
 def _tilert() -> dict[str, Fact]:
-    return {"draft_sample": UNKNOWN, "verify": UNKNOWN, "adaptive": DEFAULT, "topology": CHAIN}
+    return {"draft_sample": UNKNOWN, "adaptive": DEFAULT, "topology": CHAIN}
 
 
 def run_collection(model_prefix: str, role: Mapping[str, Any], framework: str) -> Collection | None:
@@ -147,11 +127,12 @@ def run_collection(model_prefix: str, role: Mapping[str, Any], framework: str) -
     facts = {
         "vllm": lambda: _vllm(spec),
         "sglang": lambda: _sglang(args, method),
-        "trtllm": lambda: _trtllm(args),
+        "trtllm": _trtllm,
         "atom": lambda: _atom(method),
         "tilert": _tilert,
     }[engine]()
     facts |= _precision(args, spec, engine)
+    facts["verify"] = verifier(role, engine)
     return Collection(engine=engine, draft=str(spec.get("model") or "native"), **facts)
 
 
@@ -167,11 +148,12 @@ def audit(
     if run is None:
         return None
     spec = spec_parameters(role, ENGINES[framework])
-    curve = curve_name(model_prefix, spec, golden_dir)
+    verify = run.verify.value
+    curve = curve_name(model_prefix, spec, golden_dir, verify)
     return {
         "curve": curve,
         "draft_tokens": spec["num_speculative_tokens"],
-        "golden": golden_length(model_prefix, spec, thinking, golden_dir),
+        "golden": golden_length(model_prefix, spec, thinking, golden_dir, verify),
         "findings": [f.as_list() for f in compare(run, load_identities(golden_dir)[curve])],
     }
 

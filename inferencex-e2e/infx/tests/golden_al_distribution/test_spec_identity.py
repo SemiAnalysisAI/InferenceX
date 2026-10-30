@@ -44,6 +44,21 @@ def test_overlapping_selectors_are_rejected(tmp_path) -> None:
         curve_name("m", {"method": "mtp"}, tmp_path)
 
 
+def test_verify_selector_wins_and_unknown_verifiers_keep_the_general_curve(tmp_path) -> None:
+    block = _identity("m")
+    block["select"]["verify"] = "block"
+    identities = {"general": _identity("m"), "block": block}
+    (tmp_path / "identities.yaml").write_text(yaml.safe_dump(identities))
+    spec = {"method": "mtp"}
+    assert curve_name("m", spec, tmp_path, "block") == "block"
+    assert curve_name("m", spec, tmp_path, "standard") == "general"
+    assert curve_name("m", spec, tmp_path, None) == "general"
+    del identities["general"]
+    (tmp_path / "identities.yaml").write_text(yaml.safe_dump(identities))
+    with pytest.raises(ValueError, match="verify None; curves need verify=block"):
+        curve_name("m", spec, tmp_path, None)
+
+
 @pytest.mark.parametrize(
     ("field", "fact", "message"),
     [

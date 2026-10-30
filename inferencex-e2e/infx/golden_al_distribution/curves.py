@@ -43,10 +43,15 @@ class Curve:
         return value
 
 
-def curve_name(model: str, spec: Mapping[str, Any], golden_dir: Path = GOLDEN_DIR) -> str:
-    """The curve file stem whose ``identities.yaml`` select block matches a model prefix and
-    speculative config, or ValueError when none or several do."""
-    name = select_curve(model, spec, golden_dir)
+def curve_name(
+    model: str,
+    spec: Mapping[str, Any],
+    golden_dir: Path = GOLDEN_DIR,
+    verify: str | None = None,
+) -> str:
+    """The curve file stem whose ``identities.yaml`` select block best matches a model prefix,
+    speculative config and verifier (None when unknown), or ValueError."""
+    name = select_curve(model, spec, golden_dir, verify)
     if not CURVE_NAME.fullmatch(name):
         raise ValueError(f"Invalid golden curve identity: {name!r}")
     return name
@@ -78,10 +83,15 @@ def list_curves(golden_dir: Path = GOLDEN_DIR) -> list[Curve]:
 
 
 def golden_length(
-    model: str, spec: Mapping[str, Any], thinking: str, golden_dir: Path = GOLDEN_DIR
+    model: str,
+    spec: Mapping[str, Any],
+    thinking: str,
+    golden_dir: Path = GOLDEN_DIR,
+    verify: str | None = None,
 ) -> float:
-    """Return the committed AL for a model prefix, speculative config and thinking mode."""
-    name = curve_name(model, spec, golden_dir)
+    """Return the committed AL for a model prefix, speculative config, thinking mode and
+    verifier (None when unknown)."""
+    name = curve_name(model, spec, golden_dir, verify)
     tokens = spec.get("num_speculative_tokens")
     if not isinstance(tokens, int) or isinstance(tokens, bool) or tokens <= 0:
         raise ValueError("Speculative decoding requires a positive integer draft length")
