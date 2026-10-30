@@ -29,6 +29,10 @@ Every PR description must include an **AI model disclosure** section inside a co
 
 **Performance changelog:** A PR that changes what any benchmark runs **MUST** append one new entry covering the affected config keys to the physical end of `inferencex-e2e/perf-changelog.yaml`; `python -m infx.matrix.changed --base origin/main` (run from `inferencex-e2e/`) lists them. A PR that changes no benchmark point adds none. Historical entries **MUST NOT** be edited.
 
+For full config retirement, list the deleted config keys with `retired: true`. The planner verifies that every selected key existed in the base revision and is absent from the current master configs, retains the entry in changelog metadata, and schedules no benchmarks or evals for it. Retirement entries cannot use scenario filters, `append-only`, or eval-selection fields or modifiers; partial scenario retirement uses a regular entry for the surviving config.
+
+A PR whose new entries are all retirements has no result artifacts to reuse. After review and required checks, merge it directly rather than through `merge_with_reuse`; no `/use` is required. Merge Ingest validates the retirement plan and uploads its changelog metadata, but skips reuse lookup and database dispatch. Mixed retirement and active entries still require normal sweep reuse. Do not re-append retirement entries for ingest recovery; they have no results to recover.
+
 ## Draft-model precision
 
 The rule is simple: **serve the draft as it ships.** A speculative-decoding
@@ -163,6 +167,7 @@ A full benchmark sweep is expensive GPU time, and the runners are shared by ever
 - `/reuse-sweep-run <run_id>` remains supported with identical behavior. Bare `/reuse-sweep-run` selects automatically; bare `/use` is rejected.
 - The merge-to-`main` run then validates and ingests the PR sweep's artifacts; `main` never re-runs the sweep itself.
 - **Reuse is mandatory.** A green sweep alone is not enough. The reuse command must be on record (the sign-off verification checks for it), otherwise the `main` run fails and the PR's results are never ingested.
+- Retirement-only changes are the no-results exception described above: merge directly after review and required checks, without `/use`. Empty or mixed changelogs do not qualify.
 - Reuse does not require retaining a primary label, but it is rejected while the PR carries `evals-only` or `agentx-fast`, and `merge_with_reuse` refuses a PR with more than one primary label. The bot reacts to the command with 👍 when accepted or 👎 when rejected, with details in the Actions run summary, and posts a warning comment when the pinned run's commit is outside the PR; source artifacts are revalidated at merge.
 - A missing authorized reuse command produces a Check 4 **WARN**, not a rejection. The warning stays visible in the sign-off verdict; posting an authorized command is still required to reuse artifacts.
 - From the repository root, `uv run --project inferencex-e2e --extra workflows python -m infx.workflows.merge_with_reuse <pr-number>` is the supported merge path. It posts the command, syncs the branch with `main`, waits for checks, and squash-merges. See the [workflows README](.github/workflows/README.md#reusing-an-approved-pr-full-sweep) for eligibility details.
