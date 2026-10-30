@@ -73,7 +73,7 @@ zip_override_tp2_spf_interval32:
       CONC: ['20', '24', '28', '32', '36', '40']
       KV_OFFLOADING: dram
 
-# Around conc 48-52 a shorter interval keeps the queue from building.
+# Around conc 48-50 a shorter interval keeps the queue from building.
 override_tp2_c48_spf_interval24:
   roles:
     agg:
@@ -114,25 +114,4 @@ override_tp2_c50_spf_interval20:
   benchmark:
     env:
       CONC: '50'
-      KV_OFFLOADING: dram
-
-override_tp2_c52_spf_interval24:
-  roles:
-    agg:
-      args:
-        tensor-parallel-size: 2
-        moe-runner-backend: flashinfer_trtllm_routed
-        chunked-prefill-size: 8192
-        max-running-requests: 104
-        cuda-graph-max-bs-decode: 104
-        mem-fraction-static: 0.92
-        enable-hierarchical-cache: true
-        hicache-size: 370
-        hicache-write-policy: write_back
-        schedule-policy: shortest-prefill-first
-        prefill-decode-interval: 24
-        stream-interval: 20
-  benchmark:
-    env:
-      CONC: '52'
       KV_OFFLOADING: dram
