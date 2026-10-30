@@ -182,8 +182,8 @@ when the LSA team is smaller than the world. x86 EP16 is that hybrid path, GIN a
 domains of eight scale-up ranks each. GB EP16 stays inside MNNVL and uses LSA. Hybrid EP16 allocates
 33 GIN QPs per peer (a fixed 512-QP budget) instead of the automatic 65/129, which exhausts the
 per-NIC QP budget on CX-7. DeepEP's SM model reads the scale-out rate from an `ibstat` probe that cannot
-see EFA and that the vLLM image does not ship, so on the EFA pools and on h200-dgxc the registry's
-`network.rdma_gbs` supplies the per-GPU rate and the resulting count is passed explicitly
+see EFA and that the vLLM image does not ship, so on the EFA pools, h200-dgxc and b200-nscale the
+registry's `network.rdma_gbs` supplies the per-GPU rate and the resulting count is passed explicitly
 (`library_config.sm_model_rdma_gbs`).
 
 **A virtualized pool can make a scale-out row measure the hypervisor.** ElasticBuffer registers its GIN
@@ -221,6 +221,15 @@ as DeepEP V2 (send kernel plus receive hook) with vLLM's 256-token receive; at E
 keeps it on NVLink. UCCL-EP is built from source at its pin with UCCL's drop-in flags
 `USE_DMABUF=1 PER_EXPERT_BATCHING=1`; `implementation.library_version` names the commit and flags,
 and the import probe rejects any other `deep_ep`.
+
+**h200-dgxc EP16 runs a deeper RDMA receive ring than vLLM.** With vLLM's dispatch config (RDMA
+chunks send 20 / receive 140), BF16 prefill deadlocks inside UCCL on every attempt: the sender
+coordinator waits for a full chunk the senders cannot prepare, and the receiver for tokens that are
+never delivered ([uccl-project/uccl#1110](https://github.com/uccl-project/uccl/issues/1110)). A
+receive ring of 1040 tokens (a multiple of the send chunk) is deep enough that no prefill stream
+wraps, and every rung passes the oracle. The registry's `network.uccl_rdma_recv_tokens` sets it for
+h200-dgxc only; those rows carry `-rdmarecv1040` in `kernel_generation` and the realized config in
+`library_config`, so they are library rows rather than vLLM's configuration until UCCL is fixed.
 
 UCCL-EP EP16 is not registered on mi355x: its CPU-proxy RDMA works over the Pollara fabric but runs
 about 13x under UCCL's documented bandwidth, unchanged by registration mode or traffic class (an
@@ -619,7 +628,9 @@ inside the container. NCCL GIN rides the plugin's CPU-proxy GIN (`NCCL_GIN_TYPE=
 GDRCopy 2.5+ on the node. The type is pinned because the plugin's GPU-initiated EFA backend has only
 weak signals, which nccl.ep and DeepEP cannot use. Where the host plugin predates 1.21 (h100's 1.20),
 shards build aws-ofi-nccl 1.21.1 into the backend cache, since 1.20's proxy applies every signal with
-an inline GPU read-modify-write (1.3-4.5x slower on b300 EP16). Proxy GIN still bounds these rows
+an inline GPU read-modify-write (1.3-4.5x slower on b300 EP16). They also build it where the host
+plugin cannot load in the image (b300's links libhwloc.so.15, which the vLLM image lacks): NCCL does
+not fail on such a plugin but falls back to its internal IB transport on the hosts' CX-7 ports. Proxy GIN still bounds these rows
 well below the IB pools.
 
 The single-slurm pools (H100, H200, B200, B300) reject an allocation holding a GPU with an active
