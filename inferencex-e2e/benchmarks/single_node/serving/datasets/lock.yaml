@@ -2,6 +2,7 @@
 # Each entry pins one file at one HF commit; infx/serving/datasets.py downloads it
 # (token: GREENLAB_HF_TOKEN if set) and verifies sha256. `entries` is the dataset's
 # session count, copied into the scenario when a serving YAML picks this dataset.
+# `private: true` marks a repo that needs GREENLAB_HF_TOKEN to read (the runner-setup skill keys off it).
 tau2-cs:
   repo: Green-Lab/customer-service-agent-traces
   revision: 2c793380d8ba45bfde79f9a5c7b5991ed40ab2ea
@@ -42,14 +43,15 @@ livekit-111868-v1.1-warm:
   file: trace.v1.1-append-ideal-warm.jsonl
   sha256: e26542392a202764849c05018f2f8ea3f9574277ffa3400615f0b4df23b0eb2f
   entries: 671
-# GreenSpec v1.1.0: one flat file with every subset (infx.serving.greenspec selects rows from it).
+# GreenSpec v1.1.1: one flat file with every subset (infx.serving.greenspec selects rows from it).
 # Private repo: GREENLAB_HF_TOKEN must be able to read it. The benchmark repo is public, so the
 # greenspec scenario never uploads anything derived from the rows (see infx/serving/greenspec.py).
-greenspec-v1.1.0:
+greenspec-v1.1.1:
   repo: Green-Lab/GreenSpec
-  revision: f76978679a941e21eb701e7e046a0038a94efa7b
+  revision: f7ea173f12917bcf1d3b9926a281a167d2b8243d
   file: greenspec.jsonl
-  sha256: 8c1a8dad3bd1afbe6155e57287e533cb50beaced482074ded4b34c87c7789fe4
+  sha256: 6a26785d07c235446e57ba34463a1ae9e2dcff938fec6246881492e511fb0f43
+  private: true
 # SPEED-Bench, fully resolved: every row the public release masks is refetched from its source
 # (infx.serving.speedbench selects rows from the config's file). The prompts are public data, but the
 # resolved copy lives in a private repo: GREENLAB_HF_TOKEN must be able to read it.
@@ -58,28 +60,34 @@ speedbench-qualitative:
   revision: 184d7ed9fae19efa9d4d4e9959ac83cca83b3415
   file: qualitative.jsonl
   sha256: e9bbbe998472b79501ed79ba2bf126e58b63e153a6deef70ce2b63ea7a4de845
+  private: true
 speedbench-throughput-1k:
   repo: Green-Lab/speed-bench-prepared
   revision: 184d7ed9fae19efa9d4d4e9959ac83cca83b3415
   file: throughput_1k.jsonl
   sha256: 0b5665f61dcbf52dd357d515fd45f9e4c17c68eb902c788c81a4c9271b217377
+  private: true
 speedbench-throughput-2k:
   repo: Green-Lab/speed-bench-prepared
   revision: 184d7ed9fae19efa9d4d4e9959ac83cca83b3415
   file: throughput_2k.jsonl
   sha256: be247367a3ddd3c74b72d03122818d89c6e2e2fe956e6d66099d7ae0c45402a6
+  private: true
 speedbench-throughput-8k:
   repo: Green-Lab/speed-bench-prepared
   revision: 184d7ed9fae19efa9d4d4e9959ac83cca83b3415
   file: throughput_8k.jsonl
   sha256: 94f3ab2d3cd456654ee234faf888c459c5451069d6cfab6e051591b288e71739
+  private: true
 speedbench-throughput-16k:
   repo: Green-Lab/speed-bench-prepared
   revision: 184d7ed9fae19efa9d4d4e9959ac83cca83b3415
   file: throughput_16k.jsonl
   sha256: 77cbee1b4abc6b205ee9ad918bd8e1290a6514f4cf0ff9dc7db497afd1fffca2
+  private: true
 speedbench-throughput-32k:
   repo: Green-Lab/speed-bench-prepared
   revision: 184d7ed9fae19efa9d4d4e9959ac83cca83b3415
   file: throughput_32k.jsonl
   sha256: 04148f06e19c490856dcb9efc1b1fd4593354d4abd4bf07c6f5dc4ce91348c0b
+  private: true

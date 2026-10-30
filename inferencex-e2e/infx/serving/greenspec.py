@@ -165,6 +165,64 @@ def select(path: Path, chosen: Settings) -> list[dict[str, Any]]:
     return [row for row in iter_rows(path) if keep(row, chosen)]
 
 
+SCHEMA_MAPS = ("properties", "patternProperties", "$defs", "definitions", "dependentSchemas")
+SCHEMA_LISTS = ("allOf", "anyOf", "oneOf", "prefixItems", "items")
+SCHEMA_ONES = (
+    "items",
+    "additionalProperties",
+    "additionalItems",
+    "contains",
+    "propertyNames",
+    "not",
+    "if",
+    "then",
+    "else",
+    "unevaluatedItems",
+    "unevaluatedProperties",
+)
+
+
+def fix_required(schema: Any) -> Any:
+    """A copy of a JSON schema whose ``required`` keyword is a list wherever it was an empty dict.
+
+    Some releases (v1.1.0) serialized "no required fields" as ``{}``. vLLM accepts it, SGLang
+    rejects the request with a 400, and the chat template prints nothing for either. Only the
+    keyword is rewritten: a property *named* ``required`` lives under ``properties`` and is a
+    sub-schema, so the walk goes by schema structure and leaves names, enum, const and default alone.
+    """
+    if not isinstance(schema, dict):
+        return schema
+    out = dict(schema)
+    if out.get("required") == {}:
+        out["required"] = []
+    for key in SCHEMA_MAPS:
+        if isinstance(out.get(key), dict):
+            out[key] = {name: fix_required(sub) for name, sub in out[key].items()}
+    for key in SCHEMA_LISTS:
+        if isinstance(out.get(key), list):
+            out[key] = [fix_required(sub) for sub in out[key]]
+    for key in SCHEMA_ONES:
+        if isinstance(out.get(key), dict):
+            out[key] = fix_required(out[key])
+    return out
+
+
+def fix_tools(tools: Any) -> Any:
+    """``tools`` with every function's ``parameters`` run through :func:`fix_required`."""
+    if not isinstance(tools, list):
+        return tools
+    fixed = []
+    for tool in tools:
+        function = tool.get("function") if isinstance(tool, dict) else None
+        if isinstance(function, dict) and "parameters" in function:
+            tool = {
+                **tool,
+                "function": {**function, "parameters": fix_required(function["parameters"])},
+            }
+        fixed.append(tool)
+    return fixed
+
+
 def payload(row: dict[str, Any], model: str, chosen: Settings) -> dict[str, Any]:
     """One row -> the request body the client sends for it.
 
@@ -173,6 +231,8 @@ def payload(row: dict[str, Any], model: str, chosen: Settings) -> dict[str, Any]
     row's own cap.
     """
     body = {k: v for k, v in row.items() if k not in META_KEYS}
+    if "tools" in body:
+        body["tools"] = fix_tools(body["tools"])
     if chosen.recorded:
         body.update(row.get("recorded") or {})
     capped = [k for k in MAX_TOKEN_KEYS if k in body]

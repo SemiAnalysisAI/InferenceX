@@ -14,7 +14,7 @@ benchmark:
     streaming: true
     useServerTokenCount: true
   datasets:
-  - name: greenspec-v1.1.0
+  - name: greenspec-v1.1.1
     type: file
     format: raw_payload
     path: ${IX_CUSTOM_DATASET_FILE}

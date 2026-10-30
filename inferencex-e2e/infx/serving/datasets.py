@@ -37,6 +37,7 @@ class LockEntry:
     file: str
     sha256: str
     entries: int | None = None
+    private: bool = False
 
 
 def load_lock(path: Path = LOCK) -> dict[str, LockEntry]:
@@ -50,9 +51,9 @@ def load_lock(path: Path = LOCK) -> dict[str, LockEntry]:
     lock = {}
     for name, entry in raw.items():
         keys = set(entry) if isinstance(entry, dict) else set()
-        if not set(FIELDS) <= keys or keys - {*FIELDS, "entries"}:
+        if not set(FIELDS) <= keys or keys - {*FIELDS, "entries", "private"}:
             raise DatasetError(
-                f"lock: {name} needs exactly {', '.join(FIELDS)} (and optional entries)"
+                f"lock: {name} needs exactly {', '.join(FIELDS)} (and optional entries, private)"
             )
         for field, pattern in FIELDS.items():
             if not re.fullmatch(pattern, str(entry[field])):
@@ -64,7 +65,10 @@ def load_lock(path: Path = LOCK) -> dict[str, LockEntry]:
             isinstance(entries, bool) or not isinstance(entries, int) or entries < 1
         ):
             raise DatasetError(f"lock: {name}.entries must be a positive integer")
-        lock[name] = LockEntry(name, *(str(entry[field]) for field in FIELDS), entries)
+        private = entry.get("private", False)
+        if not isinstance(private, bool):
+            raise DatasetError(f"lock: {name}.private must be true or false")
+        lock[name] = LockEntry(name, *(str(entry[field]) for field in FIELDS), entries, private)
     return lock
 
 

@@ -33,7 +33,7 @@ storage:                            # optional: a non-GPU sidecar started first 
 arms:                               # optional: engine variants in one run, e.g. base vs speculative (see ARCHITECTURE.md, Arms)
   base: {}
   mtp6: {append: "--speculative-config '...'"}
-scenario: agentx                    # agentx | tau2 | livekit | shared-prefix-e2 | hidden-prefix-e3 | synthetic | greenspec
+scenario: agentx                    # agentx | tau2 | livekit | shared-prefix-e2 | hidden-prefix-e3 | synthetic | greenspec | speedbench
 overrides: {duration: 180}          # optional variant, see the table below
 conc: [4, 8]                        # one benchmark job per value
 ```
@@ -50,6 +50,7 @@ Working examples, one per pattern: `inferencex-e2e/configs/serving/*.yaml`. They
 | `shared-prefix-e2` / `hidden-prefix-e3` | prefix-cache A/B traces (HiCache L2 vs Mooncake L3) | 1800 s |
 | `synthetic` | synthetic ISL/OSL with a shared-prefix cache hit, needs `workload:` | 300 s per point |
 | `greenspec` | speculative-decoding bench from production chat traffic (private; result has `spec_decode.acceptance_length`) | the whole selection, no duration |
+| `speedbench` | SPEED-Bench acceptance-length prompts (private copy of public data; result has `spec_decode.acceptance_length`) | the whole selection, no duration |
 
 Variants (`overrides:`, only these keys):
 
@@ -62,6 +63,7 @@ Variants (`overrides:`, only these keys):
 | LiveKit V1 / V2 trace | `overrides: {dataset: livekit-111868-v1}` (or `-v2`) |
 | a different trace idle-gap cap | `overrides: {trace_idle_gap_cap: 1}` |
 | GreenSpec subset, lite, bucket, cap | `scenario: greenspec` + `overrides: {subset: agentic_tools, lite: true, max_tokens: 4096, requests: 200}` (only these keys; no `duration`) |
+| SPEED-Bench config, category, cap | `scenario: speedbench` + `overrides: {config: qualitative, category: coding, requests: 40}` (config: `qualitative` or `throughput_{1k,2k,8k,16k,32k}`; no `duration`) |
 
 Synthetic grid, one job per point, all in one run:
 
