@@ -136,11 +136,9 @@ base:
       gpus: 16
       env:
         PYTHONUNBUFFERED: "1"
-        # Decode ranks read Engram rows from peer shards instead of a host table.
         SGLANG_OPT_DSV41_ENGRAM_PEER_SHARDS: "1"
         SGLANG_DSV4_KV_LAYOUT: v41_new
-        # One gateway process saturates a CPU core serving 16 DP ranks; with 8, one
-        # instance stalls at high concurrency.
+        # One gateway process saturates a CPU core serving 16 DP ranks.
         DYN_SGL_GATEWAY_WORKERS: "16"
         SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "3600"
         SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "3600"
