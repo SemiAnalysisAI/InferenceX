@@ -11,6 +11,8 @@ from infx.serving.greenspec import (
     ConsoleFilter,
     GreenSpecError,
     Settings,
+    fix_required,
+    fix_tools,
     guard,
     label,
     normalize,
@@ -96,6 +98,56 @@ def test_payload_recorded_replays_sampling_and_the_cap_only_lowers():
     assert low["max_completion_tokens"] == 2048 and "max_tokens" not in low
     high = payload(ROWS[0], "m", Settings(mode="recorded"))
     assert high["max_completion_tokens"] == 4096 and high["temperature"] == 0.6
+
+
+def test_fix_required_rewrites_the_keyword_at_every_schema_level():
+    schema = {
+        "type": "object",
+        "required": {},
+        "properties": {
+            "a": {"type": "object", "required": {}, "properties": {"b": {"required": {}}}},
+            "c": {"type": "array", "items": {"type": "object", "required": {}}},
+            "d": {"anyOf": [{"required": {}}, {"type": "null"}]},
+        },
+        "$defs": {"e": {"required": {}}},
+    }
+    fixed = fix_required(schema)
+    assert fixed["required"] == []
+    assert fixed["properties"]["a"]["required"] == []
+    assert fixed["properties"]["a"]["properties"]["b"]["required"] == []
+    assert fixed["properties"]["c"]["items"]["required"] == []
+    assert fixed["properties"]["d"]["anyOf"][0]["required"] == []
+    assert fixed["$defs"]["e"]["required"] == []
+    assert schema["required"] == {}  # the input is not mutated
+
+
+def test_fix_required_leaves_a_property_named_required_and_other_values_alone():
+    schema = {
+        "type": "object",
+        "required": ["x"],
+        "properties": {
+            "required": {},
+            "x": {"type": "string", "enum": [{}], "default": {"required": {}}, "const": {"required": {}}},
+        },
+    }
+    assert fix_required(schema) == schema
+
+
+def test_fix_tools_only_touches_function_parameters():
+    tools = [
+        {"type": "function", "function": {"name": "f", "parameters": {"type": "object", "required": {}}}},
+        {"type": "function", "function": {"name": "g"}},
+        {"type": "function"},
+    ]
+    fixed = fix_tools(tools)
+    assert fixed[0]["function"]["parameters"]["required"] == []
+    assert fixed[1:] == tools[1:]
+    assert fix_tools(None) is None
+
+
+def test_payload_sends_valid_tool_schemas():
+    row = {**ROWS[0], "tools": [{"type": "function", "function": {"name": "f", "parameters": {"required": {}}}}]}
+    assert payload(row, "m", Settings())["tools"][0]["function"]["parameters"] == {"required": []}
 
 
 def test_write_selection_one_body_per_line(dataset, tmp_path):

@@ -90,7 +90,7 @@ def test_bad_variants_fail_with_one_line(args, message):
 def test_greenspec_renders_the_selection_and_has_no_duration():
     rendered = render("greenspec", {"subset": "agentic_tools", "lite": True, "requests": 50})
     dataset = rendered.doc["benchmark"]["datasets"][0]
-    assert (rendered.kind, rendered.dataset, rendered.label) == ("file", "greenspec-v1.1.0", "greenspec-agentic_tools-lite-n50")
+    assert (rendered.kind, rendered.dataset, rendered.label) == ("file", "greenspec-v1.1.1", "greenspec-agentic_tools-lite-n50")
     assert dataset["format"] == "raw_payload" and dataset["path"] == "${IX_CUSTOM_DATASET_FILE}"
     [phase] = rendered.doc["benchmark"]["phases"]
     assert phase["requests"] == 50 and "duration" not in phase and rendered.duration == 0.0

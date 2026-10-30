@@ -291,8 +291,8 @@ def test_guard_scans_the_release_and_prunes_the_result_dir(tmp_path, monkeypatch
     (result_dir / "scenario.yaml").write_text("benchmark: {}")
     aggregate = output / "agg.json"
     aggregate.write_text("{}")
-    assert client.guard({"SERVING_DATASET": "greenspec-v1.1.0"}, result_dir, aggregate, output) == 0
+    assert client.guard({"SERVING_DATASET": "greenspec-v1.1.1"}, result_dir, aggregate, output) == 0
     assert not (tmp_path / "selection").exists() and not (result_dir / "server.log").exists()
     assert (output / client.PRIVATE_LOGS / "server.log").read_text() == "engine output"
     aggregate.write_text('{"note": "m/secret"}')
-    assert client.guard({"SERVING_DATASET": "greenspec-v1.1.0"}, result_dir, aggregate, output) == 1
+    assert client.guard({"SERVING_DATASET": "greenspec-v1.1.1"}, result_dir, aggregate, output) == 1
