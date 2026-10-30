@@ -149,6 +149,7 @@ A friendly reminder. Please follow the latest checklist template **correctly**:
   > As a PR reviewer and CODEOWNER, I have reviewed this and have:
 
   Our CI verification workflow, [`codeowner-signoff-verify.yml`](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/workflows/codeowner-signoff-verify.yml), triggers on exactly this phrase. It must open the comment, so a comment that only quotes or mentions it does not start verification. **If your approval comment does not start with that phrase, the workflow will not verify the checklist.**
+- Keep the template's `<details>` block so the checklist items render collapsed. The opening phrase, additional detail section, and signature stay outside it and remain visible.
 - The sign-off can be posted as a regular conversation comment, a review summary, or an inline review comment. All three trigger verification.
 - Submit a new checklist when the PR is open and ready. Editing that checklist triggers verification again. Pushes, reopening, and leaving draft do not trigger verification. If a review event was missed during a merge conflict, retry after resolving it using manual dispatch.
 - Starting Claude requires an eligible human actor with repository write access.
