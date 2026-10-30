@@ -92,8 +92,11 @@ result:
 | `COLLX_ALIGN_SPIN_US` | `2000` | the per-sample rank-alignment spin |
 
 `COLLX_TIME` (allocation minutes: 300 per EP shard and 45 per swap-blocks shard unless set),
-`COLLX_RUN_TIMEOUT` (the per-case hang guard, 5400 s) and `COLLX_IMAGE_REFRESH=1` (re-import the
-image) change only how a shard runs.
+`COLLX_RUN_TIMEOUT` (the per-case hang guard, 5400 s), `COLLX_IMAGE_REFRESH=1` (re-import the
+image) and `COLLX_ALLOCATION=sbatch` change only how a shard runs. `COLLX_ALLOCATION=sbatch` holds
+the nodes with a batch job that only sleeps instead of `salloc`. It is for a pool whose controller
+kills interactive allocations about ten seconds after granting them while batch jobs run; every
+later step already goes through `srun --jobid`.
 
 Results record the commit they were measured at, so `run.sh` refuses to start while tracked files
 under `collectivex/` (outside `results/`) have uncommitted edits. `--allow-dirty` runs anyway and
