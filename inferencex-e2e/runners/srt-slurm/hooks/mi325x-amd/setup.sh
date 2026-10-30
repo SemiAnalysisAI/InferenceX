@@ -6,9 +6,7 @@ set -eo pipefail
 # this srun step, so the sampler runs as a transient systemd unit and stops when
 # the job's slurmstepd exits.
 host=$(hostname -s)
-step_log=$(readlink -f "/proc/$$/fd/1")
-[[ -f "$step_log" ]] || { echo "[$host] stdout is not a log file: $step_log" >&2; exit 1; }
-out="$(dirname "$step_log")/bmc_power_${host}.csv"
+out="${SRTCTL_OUTPUT_DIR:?srtctl sets SRTCTL_OUTPUT_DIR}/logs/bmc_power_${host}.csv"
 sudo -n ipmitool sensor reading Power_Memory Power_CPU
 sudo -n systemd-run --quiet --collect --unit "powerx-bmc-${SLURM_JOB_ID}" \
     --uid "$(id -u)" --gid "$(id -g)" --property RuntimeMaxSec=36000 \
