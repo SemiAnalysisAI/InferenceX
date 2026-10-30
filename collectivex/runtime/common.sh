@@ -606,6 +606,11 @@ collx_salloc_jobid() {
     return 1
   fi
   collx_log "scheduler-request=submit"
+  if [ "${COLLX_ALLOCATION:-salloc}" = sbatch ]; then
+    collx_sbatch_hold_jobid "$log" "$@"
+    return
+  fi
+  [ "${COLLX_ALLOCATION:-salloc}" = salloc ] || collx_die "COLLX_ALLOCATION must be salloc or sbatch"
   # salloc --no-shell does not notice a job that ends between the grant and its own poll (a node
   # prolog that fails the job ten seconds in leaves it waiting forever), so the job is watched
   # here: once Slurm no longer lists the queued job and no grant was logged, salloc is stopped.
@@ -633,6 +638,41 @@ collx_salloc_jobid() {
       's/.*Granted job allocation ([1-9][0-9]*).*/\1/p' "$log" | head -n1)"
   [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || return 1
   JOB_ID="$job_id"
+}
+
+# COLLX_ALLOCATION=sbatch holds the same nodes with a batch job that only sleeps, for pools whose
+# controller fails interactive allocations (salloc granted, then killed at MessageTimeout) while
+# batch jobs run. Every later step already goes through `srun --jobid`, which is unaffected.
+collx_sbatch_hold_jobid() {
+  local log="$1" job_id state
+  shift
+  if ! job_id="$(sbatch --parsable "$@" --output=/dev/null --wrap 'exec sleep infinity' 2>>"$log")"; then
+    collx_log "ERROR: scheduler allocation failed"
+    collx_log_tail "$log"
+    return 1
+  fi
+  job_id="${job_id%%;*}"
+  [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || return 1
+  # Recorded before the wait, so an interrupted launch still cancels the queued job.
+  JOB_ID="$job_id"
+  printf 'Pending job allocation %s (sbatch hold)\n' "$job_id" >> "$log"
+  while :; do
+    if state="$(squeue -h -j "$job_id" -o %T 2>/dev/null)"; then
+      case "$state" in
+        RUNNING) break ;;
+        ""|PENDING|CONFIGURING) ;;
+        *)
+          collx_log "ERROR: scheduled job $job_id ended in state $state before its allocation was granted"
+          return 1 ;;
+      esac
+      if [ -z "$state" ] && collx_job_gone "$job_id"; then
+        collx_log "ERROR: scheduled job $job_id ended before its allocation was granted"
+        return 1
+      fi
+    fi
+    sleep 5
+  done
+  printf 'Granted job allocation %s\n' "$job_id" >> "$log"
 }
 
 # Cancels only this launcher's own allocation, by job id.

@@ -16,6 +16,11 @@ from pathlib import Path
 from typing import ClassVar
 from unittest import mock
 
+try:
+    import torch as _torch
+except Exception:  # torch is absent in the plain CPU test image; the math checks run on CI
+    _torch = None
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "bench")]
 
@@ -279,6 +284,14 @@ class LowLatencyContract(unittest.TestCase):
         self.assertIs(buffer.calls[2][1]["zero_copy"], False)
         self.assertIs(backend.implementation_details()["return_recv_hook"], True)
 
+    def test_only_low_latency_models_the_in_kernel_cast(self):
+        # Normal mode sends the vendored helper's output; low-latency's kernel quantizes itself.
+        normal = _backend(self.module, precision="fp8")
+        self.assertIs(normal._fp8_codec[0], self.module.per_token_cast_to_fp8)
+        ll = _backend(self.module, precision="fp8", mode="low-latency")
+        self.assertIs(ll._fp8_codec[0].func, self.module.kernel_cast_to_fp8)
+        self.assertEqual(ll._fp8_codec[0].keywords["fp8_max"], 448.0)
+
     def test_only_intranode_low_latency_replays(self):
         # No per-SKU eager exception (b200 FP8 once had one); scale-out LL runs through the CPU
         # proxy, unvalidated under capture; normal host-syncs.
@@ -379,6 +392,33 @@ class ImportProbe(unittest.TestCase):
 
     def test_a_record_for_another_commit_fails(self):
         self.assertIn("build record is stale", self._probe(commit="0" * 40).stderr)
+
+
+@unittest.skipUnless(_torch is not None, "FP8 cast checks require torch")
+class LowLatencyKernelCast(unittest.TestCase):
+    """Low-latency FP8 is quantized in the kernel, and the payload compare is bit-exact, so the
+    oracle's cast must be the kernel's: one correctly rounded fp8_max / amax per block."""
+
+    def setUp(self):
+        # Not imported under patch.dict: restoring sys.modules would drop torch's lazy submodules.
+        self.legacy = importlib.import_module("ep_legacy_ll")
+
+    def test_rounding_midpoints_land_where_the_kernel_puts_them(self):
+        torch = _torch
+        # Activation-lattice values (k/64). 105/126 and 99/110 of 240 are exactly 200 and 216, the
+        # midpoints of 192|208 and 208|224, so round-to-nearest-even must pick 192 and 224 -- what
+        # MI300X's kernel produced. amax.reciprocal() * 240 lands one ulp above 200 and picks 208.
+        x = torch.zeros(2, 256, dtype=torch.bfloat16)
+        x[0, 0], x[0, 1] = 126 / 64, 105 / 64
+        x[1, 128], x[1, 129] = 110 / 64, 99 / 64
+        x[1, 0] = 1.0
+        values, scales = self.legacy.kernel_cast_to_fp8(x, torch.float8_e4m3fnuz, 240.0)
+        self.assertEqual(values.dtype, torch.float8_e4m3fnuz)
+        self.assertEqual(float(values[0, 1].float()), 192.0)
+        self.assertEqual(float(values[1, 129].float()), 224.0)
+        self.assertEqual(float(values[0, 0].float()), 240.0)
+        amax = torch.tensor([[126 / 64, 0.0], [1.0, 110 / 64]]).clamp(min=1e-4)
+        self.assertTrue(torch.equal(scales, amax * torch.tensor(1 / 240.0, dtype=torch.float32)))
 
 
 if __name__ == "__main__":
