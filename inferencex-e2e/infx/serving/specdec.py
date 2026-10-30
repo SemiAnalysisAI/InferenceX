@@ -8,7 +8,7 @@ delta under ``spec_decode`` in the aggregate result:
     draft_depth       = drafted tokens / draft events           (num_speculative_tokens)
 
 SGLang only exports a running-average gauge (``sglang:spec_accept_length``), recorded as read after
-the run. A point without speculative decoding has no such series: ``summarize`` returns None and the
+the run; it is 0.0 on an engine without speculative decoding, which counts as no series. A point without speculative decoding has no such series: ``summarize`` returns None and the
 aggregate stays untouched.
 """
 
@@ -67,7 +67,9 @@ def snapshot(urls: Iterable[str], timeout: float = 10.0) -> dict[str, float]:
 
 def acceptance(before: dict[str, float], after: dict[str, float]) -> dict[str, Any] | None:
     """Acceptance over the run from two snapshots, or None when the engine reports no speculative decoding."""
-    if not WANTED & {*before, *after}:
+    # SGLang exports the gauge on every engine, 0.0 when the engine does not speculate.
+    sglang_length = after.get(SGLANG_ACCEPT_LENGTH, 0.0)
+    if not {*before, *after} & set(VLLM_COUNTERS.values()) and sglang_length <= 0:
         return None
     delta = {
         key: round(after.get(name, 0.0) - before.get(name, 0.0))
@@ -85,8 +87,8 @@ def acceptance(before: dict[str, float], after: dict[str, float]) -> dict[str, A
     result["acceptance_rate"] = (
         delta["accepted_tokens"] / delta["drafted_tokens"] if delta["drafted_tokens"] > 0 else None
     )
-    if result["acceptance_length"] is None and SGLANG_ACCEPT_LENGTH in after:
-        result["acceptance_length"] = after[SGLANG_ACCEPT_LENGTH]
+    if result["acceptance_length"] is None and sglang_length > 0:
+        result["acceptance_length"] = sglang_length
     return result
 
 

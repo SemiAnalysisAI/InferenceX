@@ -43,6 +43,10 @@ def test_sglang_gauge_is_read_after_the_run():
     assert result["acceptance_length"] == 2.4
 
 
+def test_sglang_gauge_of_zero_is_no_speculative_decoding():
+    assert specdec.acceptance({"sglang:spec_accept_length": 0.0}, {"sglang:spec_accept_length": 0.0}) is None
+
+
 def test_summarize_and_merge(tmp_path):
     before, after, agg = tmp_path / "b.json", tmp_path / "a.json", tmp_path / "agg.json"
     assert specdec.summarize(before, after) is None
