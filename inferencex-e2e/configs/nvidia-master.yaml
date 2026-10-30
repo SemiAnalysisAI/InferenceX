@@ -9066,7 +9066,7 @@ minimaxm31flash-fp4-gb300-sglang-agentic-dspark:
       # High-Throughput with L2 HiCache: 175 GB per rank at conc 64 and 128.
       - { tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64, 128], srt-recipe: agentic.yaml }
 
-# Experiment only (not for merge): SGLang PD on the vLLM GB300 GPU budget from #4468, plain TP.
+# Experiment only (not for merge): SGLang PD at half the vLLM GB300 PD scale from #4468, plain TP2.
 minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-exp:
   image: lmsysorg/sglang:dev-minimax-m31-flash@sha256:614b1509bcb729c653528d448bff9850f8977fcad9d12ba56bd6dbe3d7985e87
   model: MiniMaxAI/MiniMax-M3.1-Flash
@@ -9084,18 +9084,18 @@ minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-exp:
     - dram-utilization: 1.0
       search-space:
       - spec-decoding: mtp
-        conc-list: [360]
-        srt-recipe: disagg-exp.yaml:override_6p_tp2_2d_tp4_c360
+        conc-list: [180]
+        srt-recipe: disagg-exp.yaml:override_3p_tp2_2d_tp2_c180
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         prefill:
-          num-worker: 6
+          num-worker: 3
           tp: 2
           ep: 1
           dp-attn: false
         decode:
           num-worker: 2
-          tp: 4
+          tp: 2
           ep: 1
           dp-attn: false
 

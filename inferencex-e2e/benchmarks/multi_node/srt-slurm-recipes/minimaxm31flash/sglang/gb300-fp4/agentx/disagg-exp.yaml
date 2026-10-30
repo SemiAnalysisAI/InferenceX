@@ -1,10 +1,10 @@
 schema: 2
 
-# Experiment only (not for merge): SGLang PD on the vLLM GB300 GPU budget from
-# PR #4468 (12 prefill GPUs + 8 decode GPUs, conc 360) without DP attention.
-# In this image the DSpark-MiniMax draft projection all-gathers over the full TP
-# group and assumes TP-replicated rows, which DP attention breaks, so both roles
-# use plain TP: 6x TP2 prefill and 2x TP4 decode.
+# Experiment only (not for merge): SGLang PD at half the vLLM GB300 PD scale from
+# PR #4468 (same 3:2 prefill:decode GPU ratio, conc 180 instead of 360), without
+# DP attention. DSpark-MiniMax breaks under DP attention, and MiniMax sparse PD
+# requires matching attention TP on both sides, so both roles use TP2:
+# 3x TP2 prefill and 2x TP2 decode.
 
 base:
   name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-exp
@@ -66,10 +66,11 @@ base:
       active-prefill-tokens-threshold-frac: "None"
   engine: sglang
   roles:
-    # TP2 prefill workers, the single-node B300/GB300 TP2 shape.
+    # TP2 prefill workers, the single-node B300/GB300 TP2 shape. Three workers
+    # leave two GPUs of the second tray idle.
     prefill:
-      nodes: 3
-      workers: 6
+      nodes: 2
+      workers: 3
       gpus: 2
       env:
         PYTHONUNBUFFERED: "1"
@@ -113,11 +114,12 @@ base:
         enable-metrics: true
         enable-cache-report: true
       kv_events: true
-    # Two TP4 decode workers, one per tray; TP4 matches the model's four KV heads.
+    # Two TP2 decode workers on one tray; MiniMax sparse PD needs the prefill
+    # attention TP on the decode side too.
     decode:
-      nodes: 2
+      nodes: 1
       workers: 2
-      gpus: 4
+      gpus: 2
       env:
         PYTHONUNBUFFERED: "1"
         PYTHONNOUSERSITE: "1"
@@ -137,12 +139,12 @@ base:
         trust-remote-code: true
         reasoning-parser: minimax-m3
         tool-call-parser: minimax-m3
-        tensor-parallel-size: 4
+        tensor-parallel-size: 2
         moe-runner-backend: flashinfer_trtllm_routed
         disaggregation-transfer-backend: mooncake
-        # Half of conc 360 per worker plus headroom; the decode graph batch matches it.
-        max-running-requests: 192
-        cuda-graph-max-bs-decode: 192
+        # Half of conc 180 per worker plus headroom; the decode graph batch matches it.
+        max-running-requests: 96
+        cuda-graph-max-bs-decode: 96
         mem-fraction-static: 0.85
         speculative-algorithm: DSPARK
         speculative-dspark-block-size: 7
@@ -170,5 +172,5 @@ base:
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
 
-override_6p_tp2_2d_tp4_c360:
-  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-exp-6p-tp2-2d-tp4-c360
+override_3p_tp2_2d_tp2_c180:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-exp-3p-tp2-2d-tp2-c180
