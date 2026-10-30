@@ -11672,6 +11672,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4664
 
 - config-keys:
+    - musespark-fp4-mi355x-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump to lmsysorg/sglang-rocm:muse-spark-open-1027."
+    - "Concurrency 1, 4, 8 and 13: TP8/EP8 with the AMD monokernel backend and GPU-only KV; 10 to 40: TP4/EP4 with a 253 to 310 GB-per-rank HiCache DRAM tier."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4606
+
+- config-keys:
     - dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg
     - dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-hicache
   scenario-type: [agentic-coding]
