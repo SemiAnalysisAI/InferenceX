@@ -9054,6 +9054,8 @@ minimaxm31flash-fp4-gb300-vllm-agentic-dspark:
     - dram-utilization: 1.0
       search-space:
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [28], srt-recipe: agentic.yaml:override_tp2_c28_cpu_offload }
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [32], srt-recipe: agentic.yaml:override_tp2_c32_cpu_offload }
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [36], srt-recipe: agentic.yaml:override_tp2_c36_cpu_offload }
 
 # MiniMax-M3.1-Flash AgentX on GB300 with SGLang: day-zero image from the SGLang
 # cookbook (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1),
