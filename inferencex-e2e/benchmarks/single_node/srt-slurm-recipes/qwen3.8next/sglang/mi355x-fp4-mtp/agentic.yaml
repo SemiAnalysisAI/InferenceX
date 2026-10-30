@@ -1,6 +1,7 @@
 # Qwen3.8-Flash-Next Quark MXFP4 MoE (MTP experts included), FP8 attention and
 # FP8 PLE, AgentX on MI355X via SGLang with native NEXTN MTP. The ~116 GiB
 # checkpoint fits on one MI355X, so TP1.
+# Golden acceptance policy and prior experiment references: REPRODUCTION.md.
 base:
   schema: 2
   name: qwen3.8next-fp4-mi355x-sglang-agentic
@@ -98,9 +99,8 @@ base:
 # intermediate SSM states, so ReplaySSM is off, admission equals the decode graph
 # batch, and mem-fraction-static is used as given instead of the aiter backend's
 # 0.85 scaling. c8 drafts one token per step (2 verify tokens). c12 and c16 keep
-# ReplaySSM, 2x CONC admission and the default path. c12 and c16 capture decode
-# graphs up to their admission, so bursts past CONC stay in a graph, and use
-# mem-fraction-static 0.9 as given (a larger KV pool than the scaled 0.765).
+# ReplaySSM, 2x CONC admission and the default path. c12 captures decode graphs
+# up to admission and uses mem-fraction-static 0.9 as given.
 override_c1:
   roles:
     agg:
@@ -124,10 +124,17 @@ override_c2:
         enable-linear-replayssm-spec: null
         max-running-requests: 2
         cuda-graph-max-bs-decode: 2
+        mem-fraction-static: 0.9
+        chunked-prefill-size: 16384
+        context-length: 262144
+        speculative-use-rejection-sampling: true
       env:
         SGLANG_ENABLE_QWEN4_MONOKERNEL: '1'
         SGLANG_ENABLE_QWEN4_MTP_MONOKERNEL: '1'
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
+        SGLANG_GDN_FUSED_QKV_NORM: '1'
+        SGLANG_OPT_QWEN4_FUSED_HC: '1'
+        SGLANG_AITER_MLA_PERSIST: '1'
   benchmark:
     env:
       CONC: '2'
@@ -186,10 +193,18 @@ override_c16:
     agg:
       args:
         max-running-requests: 32
-        cuda-graph-max-bs-decode: 32
-        mem-fraction-static: 0.9
+        cuda-graph-max-bs-decode: 16
+        mem-fraction-static: 0.88
+        chunked-prefill-size: 8192
+        context-length: 262144
+        speculative-use-rejection-sampling: true
       env:
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
+        SGLANG_ENABLE_QSA_PAGED_PREFILL: '0'
+        SGLANG_AITER_FUSE_RMSNORM_PAD: '1'
+        SGLANG_AITER_MLA_PERSIST: '1'
+        SGLANG_OPT_QWEN4_FUSED_HC: '0'
+        AITER_LOG_TUNED_CONFIG: '1'
   benchmark:
     env:
       CONC: '16'
