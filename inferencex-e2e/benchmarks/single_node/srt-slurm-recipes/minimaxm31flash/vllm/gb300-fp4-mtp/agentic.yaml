@@ -147,25 +147,6 @@ override_tp2_c28_cpu_offload:
     env:
       CONC: '28'
 
-override_tp2_c44_cpu_offload:
-  roles:
-    agg:
-      gpus: 2
-      args:
-        tensor-parallel-size: 2
-        max-num-seqs: 66
-        max-num-batched-tokens: 32768
-        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,4,8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192,200,208,216,224,232,240,248,256,264,272,280,288,296,304,312,320,328,336,344,352,360,368,376,384,392,400,408,416,424,432,440,448,456,464,472,480,488,496,504,512,640,768,896,1024,1152,1280,1408,1536,1664,1792,1920,2048,2304,2560,2816,3072,3328,3584,3840,4096,4608,5120,5632,6144,6656,7168,7680,8192]}'
-        # Half of the GB300 node's 920,000 MiB CPU DRAM, the matrix's TP2 share.
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":482000000000,"lazy_offload":true}}'
-      env:
-        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
-        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '600'
-  benchmark:
-    env:
-      CONC: '44'
-
 zip_override_dep4:
   frontend:
     type: vllm-router
