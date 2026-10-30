@@ -122,6 +122,15 @@ def execute(plan: Plan, runtime: Runtime, environ: Mapping[str, str]) -> int:
         "AGENTIC_OUTPUT_DIR": str(plan.output_dir),
         "PYTHONPATH": proc.pythonpath(environ),
     }
+    # Defaults the retired agentx-harness wrapper's scenario injected as
+    # environment_defaults; upstream aiperf ships smaller ones (300/600 s, 30 s
+    # TCP). Set only-if-unset so a recipe can still override.
+    for key, value in (
+        ("AIPERF_DATASET_CONFIGURATION_TIMEOUT", "1800"),
+        ("AIPERF_SERVICE_PROFILE_CONFIGURE_TIMEOUT", "1800"),
+        ("AIPERF_HTTP_TCP_USER_TIMEOUT", "900000"),
+    ):
+        env.setdefault(key, value)
     rc = _download_traces(cfg, runtime, env)
     if rc:
         return rc
@@ -134,7 +143,7 @@ def execute(plan: Plan, runtime: Runtime, environ: Mapping[str, str]) -> int:
     rc = _open_power_window(plan, python, env)
     if rc:
         return rc
-    argv = replay_argv(cfg, runtime.agentx)
+    argv = replay_argv(cfg, runtime.aiperf)
     (plan.result_dir / "benchmark_command.txt").write_text(f"{shlex.join(argv)}\n")
     log = plan.result_dir / "benchmark.log"
     with proc.DeferSignals() as signals:

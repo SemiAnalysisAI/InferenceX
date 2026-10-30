@@ -25,6 +25,28 @@ MIN_SCENARIO_DURATION_S = 900
 FAST_DURATION_S = 1200
 FAST_WARMUP_REQUESTS_PER_LANE = "1"
 
+SCENARIO = "inferencex-agentx-mvp"
+"""Upstream's name for the retired ``agentx`` wrapper scenario.
+
+``aiperf`` silently no-ops the scenario when ``--scenario`` is absent
+(``apply_scenario`` returns early), so an agentic CLI replay MUST pass it
+explicitly or traces stop replaying."""
+
+# Defaults the retired agentx-harness wrapper injected via the ``agentx``
+# scenario's cli_defaults (fork spec deleted upstream). Kept verbatim so the
+# migration is behavior-neutral; override per point with the documented env
+# vars / flags where ReplayConfig already supports it.
+STATS_INTERVAL_S = "30"
+RANDOM_SEED = "42"
+TRACE_IDLE_GAP_CAP_S = "300"
+NUM_DATASET_ENTRIES = "393"
+SLICE_DURATION_S = "1.0"
+WARMUP_REQUESTS_PER_LANE = "10"
+WARMUP_GRACE_PERIOD_S = "1800"
+FAILED_REQUEST_THRESHOLD = "0.10"
+TRAJECTORY_START_MIN_RATIO = "0.25"
+TRAJECTORY_START_MAX_RATIO = "0.75"
+
 
 @dataclass(frozen=True)
 class ReplayConfig:
@@ -136,16 +158,29 @@ def _server_metrics_urls(env: Mapping[str, str]) -> tuple[str, ...]:
 
 
 def replay_argv(cfg: ReplayConfig, cli: str | Path) -> list[str]:
-    """The ``agentx profile`` argv for ``cfg``; ``cli`` is the ``agentx`` executable."""
-    argv = [str(cli), "profile", "--url", cfg.url]
+    """The ``aiperf profile`` argv for ``cfg``; ``cli`` is the ``aiperf`` executable."""
+    argv = [str(cli), "profile", "--scenario", SCENARIO, "--url", cfg.url]
     argv += ["--model", cfg.model, "--tokenizer", cfg.tokenizer]
     argv += ["--concurrency", str(cfg.concurrency), "--benchmark-duration", str(cfg.duration)]
-    if cfg.live_failed_request_threshold is not None:
-        argv += ["--failed-request-threshold", cfg.live_failed_request_threshold]
-    if cfg.warmup_requests_per_lane is not None:
-        argv += ["--warmup-requests-per-lane", cfg.warmup_requests_per_lane]
-    if cfg.warmup_grace_period is not None:
-        argv += ["--warmup-grace-period", cfg.warmup_grace_period]
+    argv += ["--streaming", "--use-server-token-count"]
+    argv += ["--stats-interval", STATS_INTERVAL_S, "--random-seed", RANDOM_SEED]
+    argv += ["--trace-idle-gap-cap-seconds", TRACE_IDLE_GAP_CAP_S]
+    argv += ["--num-dataset-entries", NUM_DATASET_ENTRIES]
+    argv += ["--slice-duration", SLICE_DURATION_S]
+    argv += ["--no-gpu-telemetry"]
+    argv += [
+        "--trajectory-start-min-ratio", TRAJECTORY_START_MIN_RATIO,
+        "--trajectory-start-max-ratio", TRAJECTORY_START_MAX_RATIO,
+    ]
+    argv += [
+        "--failed-request-threshold",
+        cfg.live_failed_request_threshold or FAILED_REQUEST_THRESHOLD,
+    ]
+    argv += [
+        "--warmup-requests-per-lane",
+        cfg.warmup_requests_per_lane or WARMUP_REQUESTS_PER_LANE,
+    ]
+    argv += ["--warmup-grace-period", cfg.warmup_grace_period or WARMUP_GRACE_PERIOD_S]
     if cfg.extra_inputs:
         argv += ["--extra-inputs", *cfg.extra_inputs]
     if cfg.dynamo_session_timeout is not None:

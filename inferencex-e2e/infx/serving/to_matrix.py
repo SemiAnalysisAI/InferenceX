@@ -14,6 +14,7 @@ import json
 import sys
 from pathlib import Path
 
+from infx.clusters import RunnerInventory
 from infx.serving.render import CLIENT_IMAGE, _flag_value, render, render_remote, split_serve
 from infx.serving.scenarios import Rendered
 from infx.serving.schema import ServingError, ServingSpec, arm_specs, load_serving, variants
@@ -82,7 +83,7 @@ def _secret(spec: ServingSpec) -> str:
     return (spec.endpoint.api_key_secret or "") if spec.endpoint else ""
 
 
-def build(text: str, inventory=None) -> dict:
+def build(text: str, inventory: RunnerInventory | None = None) -> dict:
     spec = load_serving(text, inventory)
     chosen = variants(spec)
     arms = arm_specs(spec)

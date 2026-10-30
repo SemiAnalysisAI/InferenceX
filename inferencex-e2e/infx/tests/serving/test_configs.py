@@ -7,7 +7,7 @@ from infx.serving.to_matrix import build
 CONFIGS = sorted((Path(__file__).resolve().parents[3] / "configs/serving").glob("*.yaml"))
 
 
-def test_thirteen_examples_one_per_pattern():
+def test_example_configs_one_per_pattern():
     assert len(CONFIGS) == 13
 
 
