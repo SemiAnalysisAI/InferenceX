@@ -1,4 +1,7 @@
+import json
+import shlex
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 import yaml
@@ -9,7 +12,10 @@ from infx.workflows.ci_priority import (
     calculate_priority,
     load_policy,
     queue_token,
+    supported_criteria,
 )
+
+ROOT = Path(__file__).resolve().parents[4]
 
 
 @pytest.fixture
@@ -226,3 +232,20 @@ def test_queue_tokens_are_stable_for_reordered_keys_but_distinct_for_duplicate_j
 @pytest.mark.parametrize("framework,expected", [("vllm", "15"), ("vllm-disagg", "15"), ("vllmish", "10")])
 def test_framework_prefix_matching_requires_a_separator(policy, framework, expected):
     assert calculate_priority({"framework": framework}, policy) == Decimal(expected)
+
+
+def test_sweep_classifier_enum_matches_live_policy_criteria():
+    """A criterion missing from the classifier enum silently drops its weight from PR sweeps."""
+    workflow = yaml.safe_load((ROOT / ".github/workflows/run-sweep.yml").read_text())
+    [classify] = [
+        step
+        for job in workflow["jobs"].values()
+        for step in job.get("steps", [])
+        if step.get("name") == "Classify priority criteria"
+    ]
+    args = shlex.split(classify["with"]["claude_args"])
+    schema = json.loads(args[args.index("--json-schema") + 1])
+    enum = schema["properties"]["criteria"]["items"]["enum"]
+    assert len(enum) == len(set(enum))
+    policy = load_policy(ROOT / "inferencex-e2e/configs/ci-priority.yaml")
+    assert set(enum) == supported_criteria(policy)
