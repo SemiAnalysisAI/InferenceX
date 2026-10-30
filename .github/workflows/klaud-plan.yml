@@ -92,7 +92,7 @@ jobs:
           fi
           test -f "$python_project/pyproject.toml"
           echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           python-version: '3.12'
           cache-dependency-glob: |
@@ -147,7 +147,7 @@ jobs:
           fi
           test -f "$python_project/pyproject.toml"
           echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           enable-cache: false
           python-version: '3.12'
@@ -169,7 +169,7 @@ jobs:
           --cooldown-hours "$CANDIDATE_COOLDOWN_HOURS"
           --max-candidates-per-run "$MAX_CANDIDATES_PER_RUN"
           --active-sessions "${KLAUD_ACTIVE_SESSIONS:-0}"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: klaud-review-input
           path: |
@@ -195,7 +195,7 @@ jobs:
         id: review
         if: steps.prepare.outputs.has_candidates == 'true'
         continue-on-error: true
-        uses: anthropics/claude-code-action@9171db3e57d6a3140a37ddc2ba92788584e0ead6 # v1.0.234
+        uses: anthropics/claude-code-action@16f9f71ab9c490faf367f94dd294897edc25be33 # v1.0.261
         env:
           GH_TOKEN: ${{ github.token }}
           KLAUD_EVIDENCE: ${{ runner.temp }}/klaud
@@ -293,7 +293,7 @@ jobs:
           fi
           test -f "$python_project/pyproject.toml"
           echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           python-version: '3.12'
           cache-dependency-glob: |
@@ -301,7 +301,7 @@ jobs:
             uv.lock
             inferencex-e2e/pyproject.toml
             inferencex-e2e/uv.lock
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: klaud-review-input
           path: ${{ runner.temp }}/klaud
@@ -324,13 +324,13 @@ jobs:
           KLAUD_REVIEW_OUTCOME: ${{ needs.review.outputs.outcome }}
           KLAUD_ACTIVE_SESSIONS: ${{ needs.recover.outputs.active-sessions }}
         run: uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud select --max-candidates-per-run "$MAX_CANDIDATES_PER_RUN" --active-sessions "${KLAUD_ACTIVE_SESSIONS:-0}" --directory "$RUNNER_TEMP/klaud" --execution-file "$RUNNER_TEMP/review-execution.json"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: klaud-ownership
           path: ${{ runner.temp }}/klaud/ownership.json
           if-no-files-found: error
           retention-days: 90
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: klaud-plan

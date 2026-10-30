@@ -145,7 +145,7 @@ jobs:
       - name: Require the Python launcher
         if: ${{ inputs.ref && inputs.ref != '' }}
         run: python3 -P -m infx.workflows.require_launcher .measured
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
       - id: score
         env:
           RUNNER: ${{ inputs.runner }}
@@ -270,7 +270,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           enable-cache: false
 
@@ -314,7 +314,7 @@ jobs:
 
       - name: Upload AL matrix artifact
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: speedbench-reference-al-${{ inputs.model-prefix }}
           path: ${{ env.INFERENCEX_E2E_ROOT }}/speedbench-reference-al.yaml
@@ -357,7 +357,7 @@ jobs:
 
       - name: Upload server logs
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: speedbench_server_logs-${{ inputs.model-prefix }}
           path: ${{ env.INFERENCEX_E2E_ROOT }}/speedbench_results/server_*.log
@@ -365,7 +365,7 @@ jobs:
 
       - name: Upload detailed benchmark results
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: speedbench_detailed_results-${{ inputs.model-prefix }}
           path: ${{ env.INFERENCEX_E2E_ROOT }}/speedbench_results/speedbench_*
