@@ -1202,6 +1202,25 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark:
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2], srt-recipe: agentic.yaml }
       - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64], srt-recipe: agentic.yaml }
 
+# Single-point TP8 c1 scan of DeepSeek-V4.1-Flash on MI355X with mono decode
+# (--monokernel) on the latest vLLM ROCm 10.0 nightly (2026-10-30), which carries
+# vllm-project/vllm#64101 (mono decode at TP8; earlier builds refuse --monokernel
+# outside TP2/TP4). Kept as its own key so the TP4/TP2 grid above does not rerun.
+dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp8-c1:
+  image: vllm/vllm-openai-rocm:nightly-335dd77b09161c5d63139b4e7ae51bb9928305b1@sha256:3c634cc2c51eda7eb840a236b1f09a5ecf6a4b0cb92c4b8486e2158770507291
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  srt-recipe-dir: dsv41flash/vllm/mi355x-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.60
+      search-space:
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1], srt-recipe: agentic.yaml }
+
 # MiniMax-M3.1-Flash AgentX on MI355X: day-zero vLLM ROCm image from
 # https://vllm.ai/blog/2026-10-23-minimax-m31-flash, verified 2026-10-23.
 # AMD's Quark MXFP4 export (routed experts in MXFP4, W4A4 on the AITER MoE)
