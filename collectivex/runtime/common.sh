@@ -261,8 +261,9 @@ collx_add_efa_host_mounts() {
 COLLX_HOST_VERBS_ROOT=/opt/collectivex/host-verbs
 
 # Some NIC vendors replace the host's rdma-core provider with their own build for an out-of-tree
-# kernel driver (the MI300X/MI325X pools' Broadcom bnxt_re 237.x speaks kernel ABI 8; rdma-core's stock bnxt_re
-# provider, the image's, supports only ABI 1, so libibverbs lists no device). Multi-node shards
+# kernel driver (the MI300X/MI325X pools' Broadcom bnxt_re 237.x speaks kernel ABI 8, and MI355X's AMD
+# Pollara ionic driver speaks ABI 4; rdma-core's stock providers, the image's, support only ABI 1, so
+# libibverbs lists no device and MoRI finds no inter-node transport). Multi-node shards
 # bind the registry-named host provider read-only; backend preparation installs it into the
 # container over the image's file (verbs_provider_prepare in prepare_backend.sh).
 collx_add_host_verbs_provider_mount() {

@@ -210,7 +210,8 @@
       "network": {
         "socket_ifname": "eno0",
         "rdma_devices": "rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7",
-        "ib_gid_index": 1
+        "ib_gid_index": 1,
+        "host_verbs_provider": "/usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so"
       },
       "operator": {
         "partition": "compute",
