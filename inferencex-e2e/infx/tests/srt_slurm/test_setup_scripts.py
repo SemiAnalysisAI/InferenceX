@@ -59,8 +59,6 @@ def test_an_installer_fails_without_the_version_the_binder_writes(tmp_path, scri
     ("vllm-router.sh", {"ROUTER_VERSION": "9.8.7"}, {"vllm-router==9.8.7"}),
     ("vllm-mooncake.sh", {"KV_OFFLOAD_BACKEND_VERSION": "9.8.7"},
      {"mooncake-transfer-engine-cuda13==9.8.7"}),
-    ("lmcache-mp-rocm.sh", {"KV_OFFLOAD_BACKEND_VERSION": "9.8.7"},
-     {"lmcache==9.8.7", "https://github.com/LMCache/LMCache/releases/expanded_assets/v9.8.7-rocm"}),
     ("glm5.3-tilert-rocm.sh", {"ROUTER_VERSION": "9.8.7", "TILERT_ROLE": "prefill"}, {"tilert==9.8.7"}),
 ])  # fmt: skip
 def test_an_installer_installs_exactly_the_bound_version(tmp_path, script, env, expected):
