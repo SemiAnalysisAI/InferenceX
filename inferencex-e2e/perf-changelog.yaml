@@ -11670,3 +11670,11 @@
     - "Retire all MiniMax-M3 and DeepSeek-V4-Pro AgentX serving configurations across NVIDIA and AMD, deleting their unused recipes, setup assets, and launch-policy rows."
     - "Keep MiniMax-M3.1-Flash and DeepSeek-V4.1-Flash benchmark coverage unchanged. Preserve SPEED-Bench collectors, historical golden AL curves, their B300 checkpoint mappings, and the independent CollectiveX communication workload."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4664
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-sglang-agentic-dspark
+  description:
+    - "Add TP4 points at conc 24, 32 and 40 and TP2 points at conc 20 to 40 with DRAM KV offload (L2 HiCache, 180 GB per rank), using shortest-prefill-first scheduling with a prefill-decode interval of 32, 8192-token prefill chunks and stream interval 20."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  scenario-type: [agentic-coding]
+  append-only: true
