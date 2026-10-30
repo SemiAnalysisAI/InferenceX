@@ -11692,3 +11692,11 @@
     - "Retire dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg (nightly-dev-cu13-20261025-65633129, Mooncake external linker) and its disagg-variants.yaml recipe; the hicache key replaces its c2884 and c4096 points and drops c1228."
     - "Move dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg to nightly-dev-cu13-20261029-c10e0e17 (Dynamo 1.7.0.dev20261028), pinned by digest, with the Dynamo 1.7 backend admission limits raised to 10000. The image includes sgl-project/sglang#46404 and bundles sgl-nvidia-mega 54b428921749 (megakernel API 2), so TP4 c1 keeps the NVIDIA megakernel; its 16 explicit megakernel runtime-optimization variables are replaced by SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION=1 (sgl-project/sglang#47105), which also enables the Qwen3.5/EAGLE runtime group. Remove the TP2/EP2 c16 point; TP4 c4/c16 keep their settings."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4595
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-vllm-agentic-dspark
+  description:
+    - "Retune TP4 c8 and c16 with CUDA graph capture sizes, add TP4 c24 and c40 points, and add TP2 c28, c32 and c36 points with CPU KV offload."
+    - "Image and speculative config are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4662
+  scenario-type: [agentic-coding]

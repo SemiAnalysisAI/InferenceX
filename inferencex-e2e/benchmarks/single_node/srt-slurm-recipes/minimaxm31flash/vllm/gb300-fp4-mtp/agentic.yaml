@@ -57,12 +57,133 @@ zip_override_tp4:
       gpus: 4
       args:
         tensor-parallel-size: 4
-        max-num-seqs: [2, 8, 16, 32, 64]
+        max-num-seqs: [2, 8, 64]
         # Golden AL 4.04. FlashInfer PrimiTS drafter, per the vLLM blog's GB300 runs.
         speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:
-      CONC: ['1', '4', '8', '16', '32']
+      CONC: ['1', '4', '32']
+
+# CUDA graphs captured up to max-num-batched-tokens.
+override_tp4_c8_cudagraph:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-seqs: 16
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,4,8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192,200,208,216,224,232,240,248,256,264,272,280,288,296,304,312,320,328,336,344,352,360,368,376,384,392,400,408,416,424,432,440,448,456,464,472,480,488,496,504,512,640,768,896,1024,1152,1280,1408,1536,1664,1792,1920,2048,2304,2560,2816,3072,3328,3584,3840,4096,4608,5120,5632,6144,6656,7168,7680,8192]}'
+  benchmark:
+    env:
+      CONC: '8'
+
+override_tp4_c16_cudagraph:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-seqs: 64
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,4,8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192,200,208,216,224,232,240,248,256,264,272,280,288,296,304,312,320,328,336,344,352,360,368,376,384,392,400,408,416,424,432,440,448,456,464,472,480,488,496,504,512,640,768,896,1024,1152,1280,1408,1536,1664,1792,1920,2048,2304,2560,2816,3072,3328,3584,3840,4096,4608,5120,5632,6144,6656,7168,7680,8192]}'
+  benchmark:
+    env:
+      CONC: '16'
+
+override_tp4_c24_batched32k:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-seqs: 64
+        max-num-batched-tokens: 32768
+        long-prefill-token-threshold: 8192
+        prefill-schedule-interval: 16
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        cudagraph-capture-sizes: [1,2,4,8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192,200,208,216,224,232,240,248,256,272,288,304,320,336,352,368,384,400,416,432,448,464,480,496,512,528,544,560,576,592,608,624,640,656,672,688,704,720,736,752,768,784,800,816,832,848,864,880,896,912,928,944,960,976,992,1008,1024,1280,1536,1792,2048,2304,2560,2816,3072,3328,3584,3840,4096,4608,5120,5632,6144,6656,7168,7680,8192]
+      env:
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '600'
+  benchmark:
+    env:
+      CONC: '24'
+
+override_tp4_c40_batched8k:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-seqs: 64
+        max-num-batched-tokens: 8192
+        long-prefill-token-threshold: 8192
+        gpu-memory-utilization: 0.95
+        watermark: 0.05
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        cudagraph-capture-sizes: [1,2,4,8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192,200,208,216,224,232,240,248,256,272,288,304,320,336,352,368,384,400,416,432,448,464,480,496,512,528,544,560,576,592,608,624,640,656,672,688,704,720,736,752,768,784,800,816,832,848,864,880,896,912,928,944,960,976,992,1008,1024,1280,1536,1792,2048,2304,2560,2816,3072,3328,3584,3840,4096,4608,5120,5632,6144,6656,7168,7680,8192]
+      env:
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '600'
+  benchmark:
+    env:
+      CONC: '40'
+
+override_tp2_c28_cpu_offload:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-num-seqs: 42
+        max-num-batched-tokens: 32768
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,4,8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192,200,208,216,224,232,240,248,256,264,272,280,288,296,304,312,320,328,336,344,352,360,368,376,384,392,400,408,416,424,432,440,448,456,464,472,480,488,496,504,512,640,768,896,1024,1152,1280,1408,1536,1664,1792,1920,2048,2304,2560,2816,3072,3328,3584,3840,4096,4608,5120,5632,6144,6656,7168,7680,8192]}'
+        # Half of the GB300 node's 920,000 MiB CPU DRAM, the matrix's TP2 share.
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":482000000000,"lazy_offload":true}}'
+      env:
+        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '600'
+  benchmark:
+    env:
+      CONC: '28'
+
+override_tp2_c32_cpu_offload:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-num-seqs: 48
+        max-num-batched-tokens: 32768
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,4,8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192,200,208,216,224,232,240,248,256,264,272,280,288,296,304,312,320,328,336,344,352,360,368,376,384,392,400,408,416,424,432,440,448,456,464,472,480,488,496,504,512,640,768,896,1024,1152,1280,1408,1536,1664,1792,1920,2048,2304,2560,2816,3072,3328,3584,3840,4096,4608,5120,5632,6144,6656,7168,7680,8192]}'
+        # Half of the GB300 node's 920,000 MiB CPU DRAM, the matrix's TP2 share.
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":482000000000,"lazy_offload":true}}'
+      env:
+        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '600'
+  benchmark:
+    env:
+      CONC: '32'
+
+override_tp2_c36_cpu_offload:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-num-seqs: 54
+        max-num-batched-tokens: 32768
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,4,8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192,200,208,216,224,232,240,248,256,264,272,280,288,296,304,312,320,328,336,344,352,360,368,376,384,392,400,408,416,424,432,440,448,456,464,472,480,488,496,504,512,640,768,896,1024,1152,1280,1408,1536,1664,1792,1920,2048,2304,2560,2816,3072,3328,3584,3840,4096,4608,5120,5632,6144,6656,7168,7680,8192]}'
+        # Half of the GB300 node's 920,000 MiB CPU DRAM, the matrix's TP2 share.
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":482000000000,"lazy_offload":true}}'
+      env:
+        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '600'
+  benchmark:
+    env:
+      CONC: '36'
 
 zip_override_dep4:
   frontend:
