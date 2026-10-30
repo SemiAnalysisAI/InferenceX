@@ -1,5 +1,5 @@
 diff --git a/src/srtctl/backends/__init__.py b/src/srtctl/backends/__init__.py
-index 4c364cc..79f46e1 100644
+index 4c364cc1..79f46e19 100644
 --- a/src/srtctl/backends/__init__.py
 +++ b/src/srtctl/backends/__init__.py
 @@ -11,6 +11,7 @@ Supported backends:
@@ -36,7 +36,7 @@ index 4c364cc..79f46e1 100644
      "MockerBackend",
      # SGLang
 diff --git a/src/srtctl/backends/base.py b/src/srtctl/backends/base.py
-index 8cf8eb1..3ecd8e1 100644
+index 6cf2eaf3..f4cd1dc9 100644
 --- a/src/srtctl/backends/base.py
 +++ b/src/srtctl/backends/base.py
 @@ -39,6 +39,7 @@ class BackendType(str, Enum):
@@ -49,10 +49,10 @@ index 8cf8eb1..3ecd8e1 100644
  @dataclass
 diff --git a/src/srtctl/backends/layerscale.py b/src/srtctl/backends/layerscale.py
 new file mode 100644
-index 0000000..10dc542
+index 00000000..64534ef5
 --- /dev/null
 +++ b/src/srtctl/backends/layerscale.py
-@@ -0,0 +1,139 @@
+@@ -0,0 +1,141 @@
 +# SPDX-FileCopyrightText: Copyright (c) 2026 LayerScale, Inc. All rights reserved.
 +# SPDX-License-Identifier: Apache-2.0
 +
@@ -69,7 +69,7 @@ index 0000000..10dc542
 +from marshmallow import Schema
 +from marshmallow_dataclass import dataclass
 +
-+from srtctl.backends.base import Backend, BoundRolesField, ProcessGroup, RoleSettings
++from srtctl.backends.base import Backend, BoundRolesField, ProcessGroup, RoleSettings, WorkerMode
 +from srtctl.ports import DYN_SYSTEM_PORT_BASE
 +
 +if TYPE_CHECKING:
@@ -133,6 +133,7 @@ index 0000000..10dc542
 +        gpus_per_node: int,
 +        available_nodes: Sequence[str],
 +        spread_workers: bool = False,
++        gpu_indices_by_mode: Mapping[WorkerMode, Sequence[frozenset[int]]] | None = None,
 +    ) -> list[Endpoint]:
 +        from srtctl.core.topology import allocate_endpoints
 +
@@ -146,6 +147,7 @@ index 0000000..10dc542
 +            gpus_per_node=gpus_per_node,
 +            available_nodes=available_nodes,
 +            spread_workers=spread_workers,
++            gpu_indices_by_mode=gpu_indices_by_mode,
 +        )
 +
 +    def endpoints_to_processes(
@@ -193,7 +195,7 @@ index 0000000..10dc542
 +            *_flag_args(config),
 +        ]
 diff --git a/src/srtctl/core/schema.py b/src/srtctl/core/schema.py
-index 7e0d228..06509ca 100755
+index f844aef9..c12839af 100755
 --- a/src/srtctl/core/schema.py
 +++ b/src/srtctl/core/schema.py
 @@ -41,6 +41,7 @@ from marshmallow_dataclass import dataclass
@@ -204,7 +206,7 @@ index 7e0d228..06509ca 100755
      MockerBackend,
      SGLangBackend,
      TileRTBackend,
-@@ -513,6 +514,7 @@ class BackendConfigField(fields.Field):
+@@ -519,6 +520,7 @@ class BackendConfigField(fields.Field):
          if isinstance(
              value,
              AtomBackend
@@ -212,7 +214,7 @@ index 7e0d228..06509ca 100755
              | SGLangBackend
              | TileRTBackend
              | TokenSpeedBackend
-@@ -540,6 +542,8 @@ class BackendConfigField(fields.Field):
+@@ -546,6 +548,8 @@ class BackendConfigField(fields.Field):
  
          if backend_type == "atom":
              return AtomBackend.Schema().load(value)
@@ -221,7 +223,7 @@ index 7e0d228..06509ca 100755
          elif backend_type == "tilert":
              return TileRTBackend.Schema().load(value)
          elif backend_type == "tokenspeed":
-@@ -558,7 +562,7 @@ class BackendConfigField(fields.Field):
+@@ -564,7 +568,7 @@ class BackendConfigField(fields.Field):
              return schema.load(value)
          else:
              raise ValidationError(
@@ -230,7 +232,7 @@ index 7e0d228..06509ca 100755
              )
  
      def _serialize(self, value: Any | None, attr: str | None, obj: Any, **kwargs) -> Any:
-@@ -573,6 +577,8 @@ class BackendConfigField(fields.Field):
+@@ -579,6 +583,8 @@ class BackendConfigField(fields.Field):
      def _dump(value: Any) -> dict[str, Any]:
          if isinstance(value, AtomBackend):
              return AtomBackend.Schema().dump(value)
@@ -240,7 +242,7 @@ index 7e0d228..06509ca 100755
              return TileRTBackend.Schema().dump(value)
          if isinstance(value, TokenSpeedBackend):
 diff --git a/src/srtctl/frontends/__init__.py b/src/srtctl/frontends/__init__.py
-index 611e15b..d042bde 100644
+index 611e15b4..d042bde4 100644
 --- a/src/srtctl/frontends/__init__.py
 +++ b/src/srtctl/frontends/__init__.py
 @@ -10,6 +10,7 @@ importing it from here is what makes ``frontend.type: <type>`` resolvable.
@@ -269,7 +271,7 @@ index 611e15b..d042bde 100644
      "SMGFrontend",
 diff --git a/src/srtctl/frontends/layerscale.py b/src/srtctl/frontends/layerscale.py
 new file mode 100644
-index 0000000..00d9119
+index 00000000..00d91191
 --- /dev/null
 +++ b/src/srtctl/frontends/layerscale.py
 @@ -0,0 +1,100 @@
