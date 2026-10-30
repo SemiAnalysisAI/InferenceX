@@ -557,6 +557,72 @@ echo "CALLS=$(wc -l < "$ROOT/calls" 2>/dev/null | tr -d ' ' || echo 0)"
         self.assertEqual(fields.get("RC"), "1", proc.stdout + proc.stderr)
 
 
+class SbatchHoldAllocation(unittest.TestCase):
+    """COLLX_ALLOCATION=sbatch holds the nodes with a sleeping batch job instead of salloc, for
+    pools that kill interactive allocations at MessageTimeout while batch jobs run."""
+
+    HARNESS = """
+set -u
+export COLLX_LOG_DIR="$ROOT/logs"
+mkdir -p "$ROOT/bin"
+cat > "$ROOT/bin/sbatch" <<'FAKE'
+#!/bin/bash
+printf '%s\\n' "$@" > "$ROOT/sbatch-args"
+echo "4242;cluster"
+FAKE
+cat > "$ROOT/bin/squeue" <<'FAKE'
+#!/bin/bash
+echo -n "$SQUEUE_STATE"
+FAKE
+cat > "$ROOT/bin/salloc" <<'FAKE'
+#!/bin/bash
+echo salloc >> "$ROOT/salloc-called"
+exit 1
+FAKE
+chmod +x "$ROOT/bin/"*
+export PATH="$ROOT/bin:$PATH"
+JOB_ID=""
+collx_salloc_jobid --nodes=2 --gres=gpu:8 --time=30; echo "RC=$?"
+echo "JOB_ID=$JOB_ID"
+"""
+
+    def _run(self, state: str, allocation: str = "sbatch"):
+        with tempfile.TemporaryDirectory() as root:
+            proc = run_common(self.HARNESS, env={
+                **os.environ, "ROOT": root, "SQUEUE_STATE": state, "COLLX_ALLOCATION": allocation,
+            })
+            args = Path(root, "sbatch-args")
+            sbatch_args = args.read_text().splitlines() if args.exists() else None
+            salloc_called = Path(root, "salloc-called").exists()
+        fields = dict(line.split("=", 1) for line in proc.stdout.splitlines() if "=" in line
+                      and line.split("=", 1)[0] in ("RC", "JOB_ID"))
+        return fields, sbatch_args, salloc_called, proc
+
+    def test_a_running_hold_job_is_the_allocation(self):
+        fields, sbatch_args, salloc_called, proc = self._run("RUNNING")
+        self.assertEqual(fields.get("RC"), "0", proc.stdout + proc.stderr)
+        self.assertEqual(fields.get("JOB_ID"), "4242")
+        self.assertFalse(salloc_called)
+        # The same request salloc would get, plus the job name and the hold itself.
+        self.assertEqual(sbatch_args[:5], [
+            "--parsable", "--job-name=collectivex", "--nodes=2", "--gres=gpu:8", "--time=30"])
+        self.assertIn("exec sleep infinity", sbatch_args)
+        self.assertNotIn("--no-shell", sbatch_args)
+
+    def test_a_hold_job_that_ends_before_running_is_a_failed_allocation(self):
+        for state in ("FAILED", ""):
+            fields, _, _, proc = self._run(state)
+            self.assertEqual(fields.get("RC"), "1", proc.stdout + proc.stderr)
+            self.assertIn("before its allocation was granted", proc.stderr)
+
+    def test_an_unknown_mode_fails_closed(self):
+        _, sbatch_args, salloc_called, proc = self._run("RUNNING", allocation="srun")
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("COLLX_ALLOCATION must be salloc or sbatch", proc.stderr)
+        self.assertIsNone(sbatch_args)
+        self.assertFalse(salloc_called)
+
+
 # config.py case-args encodes each case as a null-delimited argv for the entrypoint its leading
 # --entrypoint pair names; parsing it with that entrypoint's real parser catches a flag one side
 # drops before a GPU allocation does.
