@@ -197,7 +197,7 @@
     "mi355x": {
       "arch": "gfx950",
       "product": "mi355x",
-      "image": "rocm/sgl-dev:v0.5.18-rocm720-mi35x-20260830",
+      "image": "vllm/vllm-openai-rocm:v0.32.0",
       "image_platform": "linux/amd64",
       "gpus_per_node": 8,
       "scale_up_domain": 8,
