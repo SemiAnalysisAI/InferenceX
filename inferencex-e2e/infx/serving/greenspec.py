@@ -62,7 +62,9 @@ BAR_RE = re.compile(
 LOG_RE = re.compile(r"\d\d:\d\d:\d\d\.\d{3} +([A-Z]+) +")
 ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 WITHHELD_LEVELS = ("ERROR", "CRITICAL")
-SERVER_LOG_STUB = "server log withheld: GreenSpec rows are internal and a server log can echo them\n"
+SERVER_LOG_STUB = (
+    "server log withheld: GreenSpec rows are internal and a server log can echo them\n"
+)
 PROGRESS_INTERVAL = 60.0
 
 
@@ -87,7 +89,9 @@ class Settings:
 def normalize(overrides: Mapping[str, Any]) -> Settings:
     """The overrides of a greenspec serving YAML as ``Settings``; one line per problem."""
     if unknown := sorted(set(overrides) - set(OVERRIDES)):
-        raise GreenSpecError(f"overrides: greenspec takes {', '.join(OVERRIDES)}, not {', '.join(unknown)}")
+        raise GreenSpecError(
+            f"overrides: greenspec takes {', '.join(OVERRIDES)}, not {', '.join(unknown)}"
+        )
     subset = overrides.get("subset", "diverse")
     if subset not in SUBSETS:
         raise GreenSpecError(f"overrides.subset: {subset!r} is not one of {', '.join(SUBSETS)}")
@@ -96,14 +100,18 @@ def normalize(overrides: Mapping[str, Any]) -> Settings:
         raise GreenSpecError(f"overrides.lite: true or false, got {lite!r}")
     bucket = overrides.get("bucket")
     if bucket is not None and not (isinstance(bucket, str) and BUCKET.fullmatch(bucket)):
-        raise GreenSpecError(f"overrides.bucket: <category>__<range> like llm_task__16k+, got {bucket!r}")
+        raise GreenSpecError(
+            f"overrides.bucket: <category>__<range> like llm_task__16k+, got {bucket!r}"
+        )
     mode = overrides.get("mode", "target-default")
     if mode not in MODES:
         raise GreenSpecError(f"overrides.mode: {mode!r} is not one of {', '.join(MODES)}")
     max_tokens = overrides.get("max_tokens", DEFAULT_MAX_TOKENS)
     requests = overrides.get("requests")
     for field, value in (("max_tokens", max_tokens), ("requests", requests)):
-        if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < 1):
+        if value is not None and (
+            isinstance(value, bool) or not isinstance(value, int) or value < 1
+        ):
             raise GreenSpecError(f"overrides.{field}: a positive integer, got {value!r}")
     return Settings(subset, lite, bucket, mode, max_tokens, requests)
 
@@ -182,7 +190,9 @@ def write_selection(dataset: Path, chosen: Settings, model: str, out: Path) -> i
         raise GreenSpecError(f"selection {label(chosen)}: no row of the release matches")
     out.parent.mkdir(parents=True, exist_ok=True)
     with open(out, "w", encoding="utf-8") as f:
-        f.writelines(json.dumps(payload(row, model, chosen), ensure_ascii=False) + "\n" for row in rows)
+        f.writelines(
+            json.dumps(payload(row, model, chosen), ensure_ascii=False) + "\n" for row in rows
+        )
     return len(rows)
 
 
@@ -196,8 +206,12 @@ class ConsoleFilter:
     ``interval`` seconds, plus once at 100%.
     """
 
-    def __init__(self, write: Callable[[str], None], interval: float,
-                 clock: Callable[[], float] = time.monotonic) -> None:
+    def __init__(
+        self,
+        write: Callable[[str], None],
+        interval: float,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
         self._write = write
         self._interval = interval
         self._clock = clock
@@ -215,7 +229,7 @@ class ConsoleFilter:
             self._dropping = False  # a bar ends the continuation of an ERROR record
             self._bar(bar)
             # tqdm writes no newline, so a log record can follow on the same line.
-            text = text.lstrip()[bar.end():]
+            text = text.lstrip()[bar.end() :]
             if not text.strip():
                 return
         if self._in_table:
@@ -225,7 +239,7 @@ class ConsoleFilter:
         if log:
             self._dropping = log.group(1) in WITHHELD_LEVELS
             if self._dropping:
-                self._write(f"{text[:log.end()]}<withheld: may echo server error text>")
+                self._write(f"{text[: log.end()]}<withheld: may echo server error text>")
                 return
         elif "Error Summary" in text:
             self._in_table, self._dropping = True, False
@@ -246,7 +260,9 @@ class ConsoleFilter:
             return
         self._bars[desc] = (now, pct)
         count = f" {m['n']}/{m['total']}" if m["n"] else ""
-        self._write(f"GreenSpec progress: {desc}{count} ({pct}%) elapsed {m['elapsed']} eta {m['eta']}")
+        self._write(
+            f"GreenSpec progress: {desc}{count} ({pct}%) elapsed {m['elapsed']} eta {m['eta']}"
+        )
 
     def _table_line(self, text: str) -> None:
         if text.lstrip().startswith(("└", "╰")):
@@ -261,7 +277,9 @@ class ConsoleFilter:
 
     def _report_errors(self) -> None:
         listed = ", ".join(self._errors) or "no rows parsed"
-        self._write(f"GreenSpec: aiperf error summary withheld (messages can echo requests): {listed}")
+        self._write(
+            f"GreenSpec: aiperf error summary withheld (messages can echo requests): {listed}"
+        )
         self._errors = []
 
 
@@ -289,14 +307,18 @@ def filter_console(stream: Any, write: Callable[[str], None], interval: float) -
     console.close()
 
 
-def tee_filtered(argv: Sequence[str], log: Path, env: Mapping[str, str], interval: float = PROGRESS_INTERVAL) -> int:
+def tee_filtered(
+    argv: Sequence[str], log: Path, env: Mapping[str, str], interval: float = PROGRESS_INTERVAL
+) -> int:
     """``argv 2>&1 | filter | tee log``: the job log and ``log`` get the filtered console only."""
     from infx.bench import proc
 
     proc.echo(argv, env)
     with log.open("w", encoding="utf-8") as sink:
         try:
-            child = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env)
+            child = subprocess.Popen(
+                argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env
+            )
         except OSError as error:
             print(f"ERROR: cannot run {argv[0]}: {error}", file=sys.stderr, flush=True)
             return 127
@@ -320,8 +342,13 @@ def _redact_errors(export_path: Path) -> None:
     export_path.write_text(json.dumps(export, indent=2))
 
 
-def guard(dataset: Path, result_dir: Path, uploads: Sequence[Path], server_logs: Sequence[Path],
-          keep_log_dir: Path | None = None) -> list[str]:
+def guard(
+    dataset: Path,
+    result_dir: Path,
+    uploads: Sequence[Path],
+    server_logs: Sequence[Path],
+    keep_log_dir: Path | None = None,
+) -> list[str]:
     """Prune, redact and scan everything a GreenSpec job uploads. Returns the problems.
 
     ``result_dir`` keeps only ``ALLOWLIST``; ``uploads`` (the aggregate result) are scanned as they

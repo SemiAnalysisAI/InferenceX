@@ -30,7 +30,9 @@ DATASET_PATH = ".dataset_path"
 FAILED_REQUEST_THRESHOLD = "0.10"
 COUNT_SOURCE_MARKER = ".token_count"
 SELECTION_DIR = "/tmp/greenspec-selection"  # noqa: S108 -- inside the job container; outside the result dir: request bodies are never uploaded
-PRIVATE_LOGS = ".greenspec-private-logs"  # beside the aggregate, on the node; not in any upload path
+PRIVATE_LOGS = (
+    ".greenspec-private-logs"  # beside the aggregate, on the node; not in any upload path
+)
 PROBE_BODY = {  # the shape agentx sends: streaming, usage requested, ignore_eos injected by the scenario
     "messages": [{"role": "user", "content": "Say OK."}],
     "stream": True,
@@ -223,7 +225,9 @@ def prepare(env: Mapping[str, str], runtime: Runtime) -> int:
             if chosen := greenspec.settings(env):
                 selection = Path(SELECTION_DIR) / "selection.jsonl"
                 count = greenspec.write_selection(path, chosen, served_model(env), selection)
-                print(f"GreenSpec selection {greenspec.label(chosen)}: {count} requests", flush=True)
+                print(
+                    f"GreenSpec selection {greenspec.label(chosen)}: {count} requests", flush=True
+                )
                 path = selection
             (result_dir / DATASET_PATH).write_text(str(path))
         except (DatasetError, greenspec.GreenSpecError) as error:
@@ -294,18 +298,40 @@ def run(env: Mapping[str, str], runtime: Runtime) -> int:
     if env.get("SERVING_SEARCH") == "1":
         return replay_rc or proc.call([python, "-m", "infx.serving.sweep_result"], child)
     aggregate_rc = proc.call([python, "-m", "infx.results.agentic.process_agentic_result"], child)
-    proc.call([python, "-m", "infx.results.agentic.analyze_benchmark_distributions",
-               str(artifacts), "-o", str(result_dir)], child)
-    validate_rc = proc.call([python, "-m", "infx.results.agentic.validate_agentic_result", str(artifacts),
-                             "--failed-request-threshold", FAILED_REQUEST_THRESHOLD], child)
+    proc.call(
+        [
+            python,
+            "-m",
+            "infx.results.agentic.analyze_benchmark_distributions",
+            str(artifacts),
+            "-o",
+            str(result_dir),
+        ],
+        child,
+    )
+    validate_rc = proc.call(
+        [
+            python,
+            "-m",
+            "infx.results.agentic.validate_agentic_result",
+            str(artifacts),
+            "--failed-request-threshold",
+            FAILED_REQUEST_THRESHOLD,
+        ],
+        child,
+    )
     aggregate = output_dir / f"{env['RESULT_FILENAME']}.json"
     label_result(aggregate, env["SERVING_SCENARIO_LABEL"], token_count_source=source)
     guard_rc = 0
     if chosen:
-        spec = specdec.summarize(result_dir / "spec_metrics_before.json", result_dir / "spec_metrics_after.json")
+        spec = specdec.summarize(
+            result_dir / "spec_metrics_before.json", result_dir / "spec_metrics_after.json"
+        )
         if spec is None:
-            print("WARNING no speculative-decoding series on the engine metrics; the result has no spec_decode block",
-                  file=sys.stderr)
+            print(
+                "WARNING no speculative-decoding series on the engine metrics; the result has no spec_decode block",
+                file=sys.stderr,
+            )
         else:
             specdec.merge(aggregate, spec)
         guard_rc = guard(env, result_dir, aggregate, output_dir)
@@ -318,7 +344,10 @@ def guard(env: Mapping[str, str], result_dir: Path, aggregate: Path, output_dir:
 
     shutil.rmtree(SELECTION_DIR, ignore_errors=True)
     problems = greenspec.guard(
-        fetch(env["SERVING_DATASET"]), result_dir, [aggregate], [output_dir / "server.log"],
+        fetch(env["SERVING_DATASET"]),
+        result_dir,
+        [aggregate],
+        [output_dir / "server.log"],
         keep_log_dir=output_dir / PRIVATE_LOGS,
     )
     for problem in problems:
