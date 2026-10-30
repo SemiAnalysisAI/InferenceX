@@ -28,7 +28,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
 
       - name: Install Claude Code 2.1.282
         id: claude_cli
@@ -38,7 +38,7 @@ jobs:
           test "$("$claude_cli" --version)" = "2.1.282 (Claude Code)"
           echo "path=$claude_cli" >> "$GITHUB_OUTPUT"
       - name: PR Review with Claude
-        uses: anthropics/claude-code-action@9171db3e57d6a3140a37ddc2ba92788584e0ead6 # v1.0.234
+        uses: anthropics/claude-code-action@16f9f71ab9c490faf367f94dd294897edc25be33 # v1.0.261
         with:
           path_to_claude_code_executable: ${{ steps.claude_cli.outputs.path }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]

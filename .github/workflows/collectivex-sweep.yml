@@ -67,7 +67,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
       - name: Plan and score shards
         id: plan
         env:
@@ -140,7 +140,7 @@ jobs:
           collectivex/run.sh "$CX_SHARD_SKU" --shard "$CX_SHARD" "${args[@]}"
       - name: Upload results
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: collectivex-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.id }}
           path: collectivex/results/${{ matrix.sku }}/
