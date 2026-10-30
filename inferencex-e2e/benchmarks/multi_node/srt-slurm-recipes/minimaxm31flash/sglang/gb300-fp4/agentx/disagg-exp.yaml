@@ -42,15 +42,13 @@ base:
     - name: otel-collector
       type: otel-collector
       enabled: false
-  # Four Dynamo frontends behind nginx with session affinity, as vLLM's #4631:
-  # one frontend's tokenize, route and stream work saturates a CPU at conc 280+.
+  # One Dynamo frontend on the benchmark client node, as vLLM's #4631 at
+  # c585fa001: engine trays run only engines.
   frontend:
     type: dynamo
-    enable_multiple_frontends: true
-    num_additional_frontends: 3
-    nginx_session_affinity: true
+    enable_multiple_frontends: false
     placement:
-      node: head
+      node: dedicated
     env:
       DYN_ROUTER_TEMPERATURE: "0"
       DYN_ROUTER_QUEUE_THRESHOLD: None
