@@ -1,8 +1,8 @@
 diff --git a/src/srtctl/backends/sglang.py b/src/srtctl/backends/sglang.py
-index a143f022..f6b92ed3 100644
+index a0c5b392..1c81284a 100644
 --- a/src/srtctl/backends/sglang.py
 +++ b/src/srtctl/backends/sglang.py
-@@ -355,6 +355,7 @@ class SGLangBackend(Backend):
+@@ -343,6 +343,7 @@ class SGLangBackend(Backend):
          # Direct frontends run the native server; Dynamo frontends run the registering worker.
          use_sglang = frontend.worker_launch == "direct"
          python_module = "sglang.launch_server" if use_sglang else "dynamo.sglang"
@@ -10,7 +10,7 @@ index a143f022..f6b92ed3 100644
  
          # Get served model name from config
          served_model_name = self.get_served_model_name(runtime.model_path.name)
-@@ -364,11 +365,9 @@ class SGLangBackend(Backend):
+@@ -352,11 +353,9 @@ class SGLangBackend(Backend):
          # Start with nsys prefix if provided
          cmd: list[str] = list(nsys_prefix) if nsys_prefix else []
  
@@ -74,10 +74,10 @@ index c552fbe2..bb725a3f 100644
      ) -> tuple[str, int, str] | None:
 diff --git a/src/srtctl/frontends/infera.py b/src/srtctl/frontends/infera.py
 new file mode 100644
-index 00000000..a04d789d
+index 00000000..4d0fdd81
 --- /dev/null
 +++ b/src/srtctl/frontends/infera.py
-@@ -0,0 +1,249 @@
+@@ -0,0 +1,247 @@
 +# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 +# SPDX-License-Identifier: Apache-2.0
 +
@@ -306,8 +306,6 @@ index 00000000..a04d789d
 +                nodelist=[node],
 +                output=str(log_file),
 +                container_image=config.frontend.container_image or str(runtime.container_image),
-+                reuse_container=runtime.reuse_container,
-+                container_prepare_timeout_seconds=runtime.container_prepare_timeout_seconds,
 +                container_mounts=runtime.container_mounts,
 +                env_to_set=env or None,
 +                bash_preamble=setup_script_preamble(config),
