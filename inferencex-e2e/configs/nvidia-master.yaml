@@ -8926,7 +8926,6 @@ minimaxm31flash-fp4-gb300-sglang-agentic-dspark:
       # Balanced: TP4.
       - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 16, 32], srt-recipe: agentic.yaml }
       # High-Throughput: TP4 + EP4 (MegaMoE).
-      - { tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [32], srt-recipe: agentic.yaml }
       # Low-Latency: MSA-V1 MonoKernel at batch size 1.
       - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: agentic-low-latency.yaml }
     - dram-utilization: 0.80
