@@ -6,7 +6,8 @@ result file per case into `results/` on the cluster that ran it. A second suite,
 [vLLM `swap_blocks` benchmark](docs/swap-blocks.md), measures pinned CPU↔GPU and same-GPU block
 copies through the same matrix and pool launchers.
 
-CollectiveX is run by hand on each pool (see [Running By Hand](#running-by-hand)). Uploading the
+CollectiveX runs through the [CollectiveX Sweep](#running-in-ci) workflow or by hand on each pool
+(see [Running By Hand](#running-by-hand)). Uploading the
 results to the CollectiveX database is the publish step: the dashboard shows the latest stored run.
 Results are not committed to this repository. CollectiveX does not rank, recommend, or select; any
 downstream display or comparison is the consumer's responsibility.
@@ -45,6 +46,15 @@ low-latency adds only runnable cells, so a missing low-latency cell (DeepEP V2 o
 appears nowhere; [docs/methodology.md](docs/methodology.md#backends) gives each reason. The NCCL EP
 contract, row identity and wheel pin are in [docs/nccl-ep.md](docs/nccl-ep.md).
 
+## Running In CI
+
+Dispatch the `CollectiveX Sweep` workflow, choosing a pool (or `all`) and the same filters `run.sh`
+takes. Each shard becomes one job in the InferenceX CI priority queue, scored through
+`inferencex-e2e/configs/ci-priority.yaml`, where `collectivex` ranks above every engine
+benchmark. The job lands on the pool's runner (`runner_label` and `runner_partition` in
+`configs/platform_config.json`), runs `run.sh --shard` and uploads `results/<sku>/` as an artifact
+to publish as below. Hand runs bypass the queue and wait for whatever CI holds the nodes.
+
 ## Running By Hand
 
 Run from the pool's Slurm login node, in a checkout of the commit you want to measure:
@@ -82,8 +92,11 @@ result:
 | `COLLX_ALIGN_SPIN_US` | `2000` | the per-sample rank-alignment spin |
 
 `COLLX_TIME` (allocation minutes: 300 per EP shard and 45 per swap-blocks shard unless set),
-`COLLX_RUN_TIMEOUT` (the per-case hang guard, 5400 s) and `COLLX_IMAGE_REFRESH=1` (re-import the
-image) change only how a shard runs.
+`COLLX_RUN_TIMEOUT` (the per-case hang guard, 5400 s), `COLLX_IMAGE_REFRESH=1` (re-import the
+image) and `COLLX_ALLOCATION=sbatch` change only how a shard runs. `COLLX_ALLOCATION=sbatch` holds
+the nodes with a batch job that only sleeps instead of `salloc`. It is for a pool whose controller
+kills interactive allocations about ten seconds after granting them while batch jobs run; every
+later step already goes through `srun --jobid`.
 
 Results record the commit they were measured at, so `run.sh` refuses to start while tracked files
 under `collectivex/` (outside `results/`) have uncommitted edits. `--allow-dirty` runs anyway and
@@ -136,8 +149,8 @@ needs its own `squash_dir` or `storage_roots` as well: each shard creates its ba
 
 Every non-MNNVL EP16 placement requires `rdma_devices`, the operator-approved scale-out devices.
 The other network fields are `socket_ifname`, `ib_gid_index`, `rdma_service_level`,
-`rdma_traffic_class`, `rail_isolated`, `rdma_fabric`, `rdma_relaxed_ordering`, `rdma_gbs` and
-`single_node_rdma_devices`. Without `socket_ifname` each node's default-route interface carries the
+`rdma_traffic_class`, `rail_isolated`, `rdma_fabric`, `rdma_relaxed_ordering`, `rdma_gbs`,
+`uccl_rdma_recv_tokens` and `single_node_rdma_devices`. Without `socket_ifname` each node's default-route interface carries the
 cross-node sockets (h100-dgxc, h200-dgxc, b300). HCAs are never guessed, and every scale-out node must
 show its socket interface up and an active port on each listed device before backend setup; the
 methodology's [Execution Isolation](docs/methodology.md#execution-isolation) says what each field
