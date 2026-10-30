@@ -11777,6 +11777,6 @@
   description:
     - "Move dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg and dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-hicache to nightly-dev-cu13-20261030-302b78cc (Dynamo 1.7.0.dev20261029, SGLang 0.0.0.dev1+g52604e1d4), pinned by digest."
     - "Retune the dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-hicache points. Add c3615 with 5 prefill workers (decode CUDA graph batch 48, max-running-requests 768), c4370 with 6 (batch 64, 1024) and c5540 with 7 (batch 96, 1536), where the decode batch cap sits at the rank's equilibrium batch so the queue moves to TTFT instead of decode step time."
-    - "Add c5800 with 7 prefill workers and a second c7480 point with 9, both at decode CUDA graph batch 192, max-running-requests 3072 and total_requests DP balancing, so decode takes every request the saturated prefill delivers."
+    - "Add a second c7480 point with 9 prefill workers at decode CUDA graph batch 192, max-running-requests 3072 and total_requests DP balancing, so decode takes every request the saturated prefill delivers."
     - "Drop c4096 with 8 prefill workers; c4370 with 6 takes its place on the curve. The new binding-cap points keep the base disaggregation-decode-extra-slots of 256. c2884 with 5 and c7480 with 9 at batch 160 stay. The agg key is listed so the whole Dynamo + SGLang curve, agg points included, comes from this sweep."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4673
