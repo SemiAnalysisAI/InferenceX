@@ -1018,6 +1018,24 @@ dsv41flash-fp4-mi300x-vllm-agentic-dspark:
       # -13.51 GiB" and refused to start. A 192 GB card cannot hold this
       # checkpoint at TP2 with a usable KV pool; MI325X does it on 256 GB.
 
+# DDR5 power diagnostic (test branch only): TP4/EP1 with and without HiCache at
+# matched concurrency, sampled by the MI325X host-setup BMC hook.
+qwen3.5-fp8-mi325x-sglang-agentic-mtp-memdiag:
+  image: lmsysorg/sglang:v0.5.22-rocm720-mi30x@sha256:58b6bc333f527c88fe5ff1b4bd8d17e82214eabcb3044549117159878967c930
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  runner: cluster:mi325x-amd
+  precision: fp8
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: qwen3.5/sglang/mi325x-fp8-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [8, 16, 32, 48], srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [8, 16, 32, 48], srt-recipe: agentic.yaml }
+
 # GLM-5.2 FP8 full-context AgentX refresh on MI325X. This preserves the TP8
 # GPU-resident-KV c1/c2/c3/c4/c5/c6/c8 curve from Actions run 29657732517
 # and enables EAGLE MTP with the committed thinking-on golden AL.

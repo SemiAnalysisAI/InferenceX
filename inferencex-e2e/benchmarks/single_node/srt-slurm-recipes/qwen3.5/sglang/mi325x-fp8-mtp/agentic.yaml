@@ -133,6 +133,7 @@ override_tp4_ep1_c8:
   benchmark:
     env:
       CONC: '8'
+      KV_OFFLOADING: none
 
 override_tp4_ep1_c16:
   roles:
@@ -148,6 +149,7 @@ override_tp4_ep1_c16:
   benchmark:
     env:
       CONC: '16'
+      KV_OFFLOADING: none
 
 override_tp4_ep1_c32:
   roles:
@@ -163,6 +165,7 @@ override_tp4_ep1_c32:
   benchmark:
     env:
       CONC: '32'
+      KV_OFFLOADING: none
 
 override_tp4_ep1_c40:
   roles:
@@ -193,6 +196,94 @@ override_tp4_ep1_c48:
   benchmark:
     env:
       CONC: '48'
+      KV_OFFLOADING: none
+
+# HiCache arm for the DDR5 power diagnostic, ported from the MI355X TP4 HiCache
+# variants. The 1.5x host tier (~120 GB per rank) stays within the TP4 share of
+# node DRAM and NUMA node 0, where hipHostMalloc pins it.
+override_tp4_ep1_hicache_c8:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs-decode: 8
+        max-running-requests: 16
+        enable-hierarchical-cache: true
+        hicache-ratio: 1.5
+        hicache-write-policy: write_through_selective
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: dram
+
+override_tp4_ep1_hicache_c16:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs-decode: 16
+        max-running-requests: 32
+        enable-hierarchical-cache: true
+        hicache-ratio: 1.5
+        hicache-write-policy: write_through_selective
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: dram
+
+override_tp4_ep1_hicache_c32:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs-decode: 32
+        max-running-requests: 64
+        enable-hierarchical-cache: true
+        hicache-ratio: 1.5
+        hicache-write-policy: write_through_selective
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: dram
+
+override_tp4_ep1_hicache_c48:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        mem-fraction-static: 0.8
+        tokenizer-worker-num: 6
+        cuda-graph-max-bs-decode: 48
+        max-running-requests: 96
+        enable-hierarchical-cache: true
+        hicache-ratio: 1.5
+        hicache-write-policy: write_through_selective
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: dram
 
 override_tp4_ep4_c4:
   roles:
