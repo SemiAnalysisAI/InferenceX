@@ -11670,3 +11670,12 @@
     - "Retire all MiniMax-M3 and DeepSeek-V4-Pro AgentX serving configurations across NVIDIA and AMD, deleting their unused recipes, setup assets, and launch-policy rows."
     - "Keep MiniMax-M3.1-Flash and DeepSeek-V4.1-Flash benchmark coverage unchanged. Preserve SPEED-Bench collectors, historical golden AL curves, their B300 checkpoint mappings, and the independent CollectiveX communication workload."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4664
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp8-c1
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a single-point DeepSeek-V4.1-Flash MI355X vLLM scan at TP8, concurrency 1, with mono decode (--monokernel) on, using the latest ROCm 10.0 nightly: vllm/vllm-openai-rocm:nightly-3966924d566340e971a6da313e790d05492aa505 (2026-10-29, digest sha256:8649354473843f477a96d3aa659d0ae56bcc7df743d2d02d52aaa318178ac881)."
+    - "The new override_tp8_c1 recipe variant mirrors TP4 c1: max-num-seqs 1, max-cudagraph-capture-size 8, max-num-batched-tokens 32768, GPU-resident Engram tables. The DSpark config (5 drafts, probabilistic drafting) is unchanged. The existing TP4/TP2 config is untouched."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
