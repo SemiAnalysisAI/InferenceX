@@ -2,6 +2,7 @@
 # Each entry pins one file at one HF commit; infx/serving/datasets.py downloads it
 # (token: GREENLAB_HF_TOKEN if set) and verifies sha256. `entries` is the dataset's
 # session count, copied into the scenario when a serving YAML picks this dataset.
+# `private: true` marks a repo that needs GREENLAB_HF_TOKEN to read (the runner-setup skill keys off it).
 tau2-cs:
   repo: Green-Lab/customer-service-agent-traces
   revision: 2c793380d8ba45bfde79f9a5c7b5991ed40ab2ea
@@ -50,3 +51,4 @@ greenspec-v1.1.1:
   revision: f7ea173f12917bcf1d3b9926a281a167d2b8243d
   file: greenspec.jsonl
   sha256: 6a26785d07c235446e57ba34463a1ae9e2dcff938fec6246881492e511fb0f43
+  private: true
