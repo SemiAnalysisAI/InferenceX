@@ -48,15 +48,7 @@ _DYNAMO = any_of("dynamo-sglang", "dynamo-trt", "dynamo-vllm")
 
 SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
     ("b200-nscale", LaunchPath.SRT_NATIVE): SrtLane(),
-    ("b200-nscale", LaunchPath.SRT_MULTI): SrtLane(
-        frameworks=_DYNAMO,
-        rejects=(
-            (
-                Match(any_of("dsv4"), frameworks=any_of("dynamo-sglang", "dynamo-trt")),
-                "multinode dsv4 supports only dynamo-vllm",
-            ),
-        ),
-    ),
+    ("b200-nscale", LaunchPath.SRT_MULTI): SrtLane(frameworks=_DYNAMO),
     ("b300-dsxe", LaunchPath.SRT_MULTI): SrtLane(frameworks=_DYNAMO),
     ("gb200-nv", LaunchPath.SRT_MULTI): SrtLane(
         frameworks=any_of("dynamo-sglang", "dynamo-trt", "dynamo-vllm", "llmd-vllm"),
@@ -69,27 +61,16 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
                 world_writable=True,
             ),
         ),
-        shared_run_root=(
-            Match(any_of("minimaxm3", "kimik3", "qwen3.5", "glm5.2")),
-            Match(any_of("dsv4"), frameworks=any_of("dynamo-vllm", "llmd-vllm")),
-            Match(any_of("dsv4"), frameworks=any_of("dynamo-sglang"), agentic=True),
-        ),
+        shared_run_root=(Match(any_of("kimik3", "qwen3.5", "glm5.2")),),
     ),
     ("gb300-nv", LaunchPath.SRT_MULTI): SrtLane(
         real_verification=Match(frameworks=any_of("dynamo-trt"), agentic=True),
-        head_frontend=Match(any_of("dsv4")),
         write_eval_meta=True,
         time_limit="4:00:00",
-        long_time_limit="8:00:00",
-        long_time=Match(
-            any_of("dsv4"), frameworks=any_of("dynamo-sglang", "dynamo-trt"), agentic=True
-        ),
     ),
     ("h200-dgxc", LaunchPath.SRT_MULTI): SrtLane(
         frameworks=any_of("dynamo-sglang", "dynamo-trt", "vllm"),
         time_limit="4:00:00",
-        long_time_limit="8:00:00",
-        long_time=Match(any_of("dsv4"), frameworks=any_of("dynamo-sglang"), agentic=True),
     ),
     ("mi355x-amds", LaunchPath.SRT_MULTI): SrtLane(
         mounts=(
