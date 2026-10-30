@@ -71,15 +71,39 @@ def _env_enabled(name: str) -> bool:
     return bool(value) and value.lower() not in ("0", "false", "off", "no")
 
 
-def _mori_version() -> str:
-    """Installed MoRI build; setuptools-scm stamps an untagged build with its commit."""
-    version = getattr(mori, "__version__", None)
-    if version and version != "unknown":
-        return str(version)
+# vLLM's ROCm images record their build arguments here, MORI_BRANCH among them.
+_IMAGE_BUILD_RECORD = "/app/versions.txt"
+_UNSTAMPED_VERSIONS = ("", "unknown", "0.0.0")
+
+
+def _image_mori_branch() -> str | None:
+    """The MoRI ref the image was built from, per its build record."""
     try:
-        return metadata.version("amd_mori")
-    except metadata.PackageNotFoundError:
-        return "unknown"
+        with open(_IMAGE_BUILD_RECORD, encoding="utf-8") as record:
+            for line in record:
+                key, sep, value = line.partition(":")
+                if sep and key.strip() == "MORI_BRANCH" and value.strip():
+                    return value.strip()
+    except OSError:
+        pass
+    return None
+
+
+def _mori_version() -> str:
+    """Installed MoRI build; setuptools-scm stamps an untagged build with its commit.
+
+    vLLM's ROCm base builds MoRI with `setup.py bdist_wheel`, which skips setuptools-scm and leaves
+    setuptools' default 0.0.0; the image's build record then names the ref it was built from.
+    """
+    version = str(getattr(mori, "__version__", None) or "")
+    if version in _UNSTAMPED_VERSIONS:
+        try:
+            version = metadata.version("amd_mori")
+        except metadata.PackageNotFoundError:
+            version = ""
+    if version in _UNSTAMPED_VERSIONS:
+        return _image_mori_branch() or version or "unknown"
+    return version
 
 
 def _blockwise_codec(fp8_dtype, fp8_max):

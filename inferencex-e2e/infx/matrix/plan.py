@@ -315,6 +315,8 @@ def build_plan(
 
     with ExitStack() as stack:
         parsed_entries = [ChangelogEntry.model_validate(entry) for entry in changelog_data]
+        if any(entry.retired for entry in parsed_entries) and (all_evals or evals_only):
+            raise ValueError("retired entries cannot use all-evals or evals-only modifiers")
         if any(entry.no_evals for entry in parsed_entries) and (all_evals or evals_only):
             raise ValueError("no-evals entries cannot use all-evals or evals-only modifiers")
         has_append_only = any(entry.append_only for entry in parsed_entries)
@@ -384,11 +386,21 @@ def build_plan(
                 raise MatrixGenerationError(command, error) from error
 
         resolved_entries = []
+        base = None
+        base_master = {}
         for entry in parsed_entries:
+            if entry.retired:
+                if base is None:
+                    base = stack.enter_context(snapshot(base_ref))
+                    base_master = load_config_files(base.master_configs, validate=False)
+                retired_configs = get_config_keys_from_master(entry.config_keys, base_master)
+                still_active = sorted(set(retired_configs) & master_config.keys())
+                if still_active:
+                    raise ValueError(f"retired configs still exist in head: {still_active}")
+                continue
             all_configs = get_config_keys_from_master(entry.config_keys, master_config)
             resolved_entries.append((entry, all_configs))
 
-        base = None
         if has_append_only:
             base = stack.enter_context(snapshot(base_ref))
             base_master = load_config_files(base.master_configs, validate=False)
