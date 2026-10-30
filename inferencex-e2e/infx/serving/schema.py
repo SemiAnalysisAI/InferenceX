@@ -371,8 +371,10 @@ def _local_squash_problems(spec: ServingSpec, inventory: RunnerInventory) -> lis
     )
     if local and len(nodes) > 1:
         return [
-            f"{local[0]}: a .sqsh file sits on one node, but runner {spec.runner} spans {', '.join(nodes)}; "
-            "use runner: cluster:<id> of the node that holds the file"
+            (
+                f"{local[0]}: a .sqsh file sits on one node, but runner {spec.runner} spans {', '.join(nodes)}; "
+                "use runner: cluster:<id> of the node that holds the file"
+            )
         ]
     return []
 
