@@ -222,31 +222,3 @@ override_3p4d16:
       gpus: 16
       args:
         data-parallel-size: 16
-override_3p2d8_s200:
-  name: minimaxm31flash-gb300-disagg-mooncake-3p2d8-s200
-  services:
-  - name: etcd
-    type: etcd
-    placement:
-      node: infra
-  - name: nats
-    type: nats
-    placement:
-      node: infra
-    options:
-      max_payload_mb: 32
-  - name: mooncake-master
-    type: mooncake-master
-    preamble: bash /configs/vllm-mooncake.sh
-    args:
-    - --default_kv_lease_ttl=60000
-    - --eviction_high_watermark_ratio=0.95
-    - --eviction_ratio=0.10
-    options:
-      store_config:
-        metadata_server: P2PHANDSHAKE
-        global_segment_size: 200GB
-        local_buffer_size: 4GB
-        protocol: rdma
-        device_name: '@fabric.rdma-devices'
-        enable_offload: false
