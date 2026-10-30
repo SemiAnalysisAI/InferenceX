@@ -48,6 +48,9 @@ base:
         protocol: rdma
         device_name: '@fabric.rdma-devices'
         enable_offload: false
+  - name: otel-collector
+    type: otel-collector
+    enabled: false
   frontend:
     type: dynamo
     enable_multiple_frontends: false
@@ -61,7 +64,7 @@ base:
       DYN_TCP_CONNECT_TIMEOUT: '120'
       DYN_TOKENIZER: fastokens
     placement:
-      node: head
+      node: dedicated
   engine:
     type: vllm
     connector: null
