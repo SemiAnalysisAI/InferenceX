@@ -11670,3 +11670,10 @@
     - "Retire all MiniMax-M3 and DeepSeek-V4-Pro AgentX serving configurations across NVIDIA and AMD, deleting their unused recipes, setup assets, and launch-policy rows."
     - "Keep MiniMax-M3.1-Flash and DeepSeek-V4.1-Flash benchmark coverage unchanged. Preserve SPEED-Bench collectors, historical golden AL curves, their B300 checkpoint mappings, and the independent CollectiveX communication workload."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4664
+
+- config-keys:
+    - dsv41flash-fp4-gb200-sglang-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Update the SGLang image from nightly-dev-cu13-20261025-65633129 to nightly-dev-cu13-20261027-5884e4fe."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4591
