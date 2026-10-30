@@ -16,6 +16,7 @@ from infx.bench.env import BenchError
 
 PYTHON_VERSION = "3.11"
 REQUIREMENTS = Path(__file__).with_name("requirements.txt")
+HARNESS_WHEEL = Path(__file__).with_name("agentx_harness-1.0.9-py3-none-any.whl")
 
 
 @dataclass(frozen=True)
@@ -75,7 +76,11 @@ def bootstrap(runtime: Runtime) -> int:
     if rc:
         return rc
     install = [uv_exe, "pip", "install", "--python", str(runtime.python)]
-    install += ["--no-config", "-r", str(REQUIREMENTS)]
+    if HARNESS_WHEEL.is_file():
+        # Diagnostic branch only: candidate harness wheel built from agentx-harness dac6e19.
+        install += ["--no-config", str(HARNESS_WHEEL), "datasets>=4.7.0"]
+    else:
+        install += ["--no-config", "-r", str(REQUIREMENTS)]
     if proc.call(install, {**env, "UV_HTTP_TIMEOUT": "120", "UV_HTTP_RETRIES": "3"}):
         raise BenchError(
             "benchmark client dependency bootstrap failed; inspect network/package "
