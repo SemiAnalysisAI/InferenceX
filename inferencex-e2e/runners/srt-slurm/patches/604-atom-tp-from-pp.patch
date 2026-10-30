@@ -1,0 +1,60 @@
+From e23ca1bed9aee9a59905fb30b27f09b3ef9e9224 Mon Sep 17 00:00:00 2001
+From: Jasen2201 <yajizhan@amd.com>
+Date: Wed, 14 Oct 2026 04:15:36 +0000
+Subject: [PATCH] fix(atom): size -tp from the worker's GPUs over its PP and
+ PCP stages
+
+ATOM runs a worker on tp x pp x pcp GPUs, but srtctl always passed
+`-tp <worker GPU count>`. A 4-GPU prefill worker with
+`pipeline-parallel-size: 4` therefore launched as
+`-tp 4 --pipeline-parallel-size 4`, and ATOM sized its world to 16 GPUs.
+
+`-tp` is now the worker's GPU count divided by `pipeline-parallel-size`
+and `prefill-context-parallel-size`. Decode context parallelism reuses the
+TP GPUs and does not change it. A split that does not divide the worker's
+GPUs fails before launch.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Signed-off-by: Jasen2201 <yajizhan@amd.com>
+---
+ src/srtctl/backends/atom.py | 20 +++++++++++++++++++-
+ 1 file changed, 19 insertions(+), 1 deletion(-)
+
+diff --git a/src/srtctl/backends/atom.py b/src/srtctl/backends/atom.py
+index edf9a9b7..4e5b836e 100644
+--- a/src/srtctl/backends/atom.py
++++ b/src/srtctl/backends/atom.py
+@@ -155,7 +155,7 @@ class AtomBackend(Backend):
+                 "--server-port",
+                 str(process.http_port),
+                 "-tp",
+-                str(len(process.gpu_indices)),
++                str(_tensor_parallel_size(len(process.gpu_indices), config)),
+             ]
+         )
+         kv_transfer_config = self._kv_transfer_config(process, worker_ip, extra_connectors)
+@@ -183,3 +183,21 @@ def _config_to_cli_args(config: dict[str, Any]) -> list[str]:
+ 
+ def _canonical_arg_key(key: str) -> str:
+     return key.lstrip("-").replace("_", "-")
++
++
++# ATOM sizes a worker as tp x pp x pcp GPUs; decode context parallelism reuses the TP GPUs.
++_GPU_SPLITTING_ARGS = ("pipeline-parallel-size", "prefill-context-parallel-size")
++
++
++def _tensor_parallel_size(gpu_count: int, config: Mapping[str, Any]) -> int:
++    """The worker's GPUs left for tensor parallelism after its pipeline and prefill-context stages."""
++    stages = 1
++    for key, value in config.items():
++        if _canonical_arg_key(key) in _GPU_SPLITTING_ARGS:
++            stages *= int(value)
++    if stages < 1 or gpu_count % stages:
++        raise ValueError(
++            f"ATOM worker has {gpu_count} GPU(s), which its pipeline x prefill-context parallelism of {stages} "
++            "does not divide"
++        )
++    return gpu_count // stages
+-- 
+2.43.0
+

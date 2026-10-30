@@ -59,3 +59,27 @@ if (( after_free > reserved )); then
     echo "Host preparation could not reclaim all unused hugepages" >&2
     exit 1
 fi
+
+# A recipe whose head-node service registers NUMA-bound 2 MiB HugeTLB memory with
+# the NIC (a Mooncake Store owner) sets HEAD_NODE_HUGEPAGES_PER_NUMA; unset, no
+# pages are reserved. The container cannot grow the pool, so it is grown here, 2%
+# above the pages host services hold, and each NUMA node must end with its share
+# free. The recipe's teardown releases them (HUGEPAGES_TARGET=0 hugepage_sanity.sh).
+pages_per_numa="${HEAD_NODE_HUGEPAGES_PER_NUMA:-}"
+if [[ -n "$pages_per_numa" ]]; then
+    launch_ip="${SLURM_LAUNCH_NODE_IPADDR:?srun did not set SLURM_LAUNCH_NODE_IPADDR}"
+    if [[ " $(hostname -I) " == *" $launch_ip "* ]]; then
+        numa_nodes=(/sys/devices/system/node/node[0-9]*)
+        echo "[hugepage] $(hostname -s) is the head node; reserving $pages_per_numa 2 MiB pages on each of ${#numa_nodes[@]} NUMA nodes"
+        held=$(awk '/^HugePages_Total:/ {total = $2} /^HugePages_Free:/ {free = $2} /^HugePages_Rsvd:/ {rsvd = $2} END {print total - free + rsvd}' "$meminfo")
+        HUGEPAGES_TARGET=$(( held + pages_per_numa * ${#numa_nodes[@]} * 102 / 100 )) HUGEPAGE_GROW_TOLERANCE_PCT=1 \
+            bash "$(dirname "${BASH_SOURCE[0]}")/hugepage_sanity.sh"
+        for numa_node in "${numa_nodes[@]}"; do
+            numa_free=$(cat "$numa_node/hugepages/hugepages-2048kB/free_hugepages")
+            echo "[hugepage] ${numa_node##*/}: $numa_free free 2 MiB pages, $pages_per_numa needed"
+            if (( numa_free < pages_per_numa )); then
+                exit 1
+            fi
+        done
+    fi
+fi

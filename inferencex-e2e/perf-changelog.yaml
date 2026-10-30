@@ -11670,3 +11670,14 @@
     - "Retire all MiniMax-M3 and DeepSeek-V4-Pro AgentX serving configurations across NVIDIA and AMD, deleting their unused recipes, setup assets, and launch-policy rows."
     - "Keep MiniMax-M3.1-Flash and DeepSeek-V4.1-Flash benchmark coverage unchanged. Preserve SPEED-Bench collectors, historical golden AL curves, their B300 checkpoint mappings, and the independent CollectiveX communication workload."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4664
+
+- config-keys:
+    - glm5.2-fp4-mi355x-atom-disagg-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GLM-5.2 MXFP4 on MI355X with ATOM prefill/decode disaggregation (AToMesh router, Mooncake transfer, MTP) on rocm/atom-dev:nightly_202610131249."
+    - "Target: MXFP4 routed experts, the other linear layers quantized online to FP8 (ptpc_fp8), the MTP draft in BF16 as shipped; FP8 KV cache."
+    - "One PP4 prefill with a Mooncake Store prefix tier; 1P1D with a DCP4 decode at concurrency 56-128, 1P2D with DCP4 decodes at 56, 1P3D with TP4 decodes at 12-24."
+    - "Patch srt-slurm so ATOM's -tp leaves out the pipeline stages (NVIDIA/srt-slurm#604)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4045
