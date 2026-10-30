@@ -11703,3 +11703,12 @@
     - "Disagg 3 × DEP2 prefill and 1 × DEP16 decode at c1228 (override_3p1d_dep2_dep16_c1228) on nightly-dev-cu13-20261028-586355a8, with the prefill host-DRAM HiCache base recipe and the retired key's c1228 decode sizing: max-running-requests 384, decode CUDA graph batch 24, disaggregation-decode-extra-slots 36."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4679
   append-only: true
+
+- config-keys:
+    - qwen3.8next-fp4-b300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update Qwen3.8-Flash-Next FP4 B300 SGLang AgentX to nvidia/Qwen3.8-Flash-Next-NVFP4 on lmsysorg/sglang:nightly-dev-cu13-20261028-586355a8 (digest-pinned)."
+    - "Update the search space to TP4/EP4 at concurrency 1 and 2, TP1/EP1 at concurrency 1, 2, 12 and 24, and TP1/EP1 with HiCache at concurrency 48 and 80."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4683
