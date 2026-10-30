@@ -26,14 +26,14 @@ from power_model.models.advanced.networking import QM9790NDRInfiniBandSwitch
 
 @pytest.mark.parametrize(
     "state, expected",
-    [("Idle", 160), ("FixedSeqLen", 240), ("Agentic", 300), ("AgenticOffloadingOn", 400)],
+    [("Idle", 160), ("FixedSeqLen", 330), ("Agentic", 360), ("AgenticOffloadingOn", 390)],
 )
 def test_x86_state_selects_fixed_power_for_two_cpus(state, expected):
     result = ComponentGroup(component=X86CPU(state=state), quantity=2).estimate_breakdown()
     assert result.power_w == expected
     assert dict(result.details)["state"] == state
     assert dict(result.details)["architecture"] == "x86"
-    assert result.provenance.kind == "assumed"
+    assert result.provenance.kind == "estimated"
 
 
 @pytest.mark.parametrize(

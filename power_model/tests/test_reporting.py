@@ -18,26 +18,26 @@ from power_model.reporting import format_power_breakdown_per_chassis
             "HopperHGXSystemChassis",
             "├─ HopperHGXBoard 3,696.00 1 3,696.00",
             "│ ├─ ConnectX7NICCard 15.00 8 120.00",
-            "└─ FanPower 162.57 1 162.57",
-            "├─ Power conversion losses 259.46 1 259.46",
+            "└─ FanPower 168.94 1 168.94",
+            "├─ Power conversion losses 263.22 1 263.22",
             "810.00",
-            "10,597.27",
-            "13,776.45",
-            "861.03",
-            "2.1526x",
+            "10,797.51",
+            "14,036.77",
+            "877.30",
+            "2.1932x",
         ),
         (
             "mi300",
             "MI300HGXSystemChassis",
             "├─ MI300UBB 3,296.00 1 3,296.00",
             "│ ├─ Thor2NICCard 20.00 8 160.00",
-            "└─ FanPower 138.79 1 138.79",
-            "├─ Power conversion losses 237.35 1 237.35",
+            "└─ FanPower 144.49 1 144.49",
+            "├─ Power conversion losses 241.04 1 241.04",
             "562.12",
-            "9,537.60",
-            "12,398.88",
-            "774.93",
-            "1.9373x",
+            "9,736.38",
+            "12,657.29",
+            "791.08",
+            "1.9777x",
         ),
     ],
 )
@@ -71,7 +71,7 @@ def test_cli_bom_reports_one_chassis_with_nested_inventory_and_separate_cluster_
     assert "│ ├─ GPUs 400.00 8 3,200.00" in rows
     assert "│ └─ PCIe5x16Retimer 12.00 8 96.00" in rows
     assert nic_row in rows
-    assert "│ ├─ X86CPU 120.00 2 240.00" in rows
+    assert "│ ├─ X86CPU 165.00 2 330.00" in rows
     assert "│ ├─ DDR5DIMM 3.80 32 121.60" in rows
     assert "│ ├─ NVMeDrive 5.00 10 50.00" in rows
     assert "│ ├─ PEX89144PCIeSwitch 45.00 4 180.00" in rows
@@ -103,8 +103,8 @@ def test_cli_b300_bom_nests_active_nics_on_board_and_uses_offloading_component_p
     assert "│ ├─ GPUs 400.00 8 3,200.00" in rows
     assert "│ ├─ BlackwellHGXNVSwitch 200.00 2 400.00" in rows
     assert "│ └─ ConnectX8NICCard 50.00 8 400.00" in rows
-    assert "├─ Generic components 794.00 1 794.00" in rows
-    assert "│ ├─ X86CPU 200.00 2 400.00" in rows
+    assert "├─ Generic components 784.00 1 784.00" in rows
+    assert "│ ├─ X86CPU 195.00 2 390.00" in rows
     assert "│ ├─ DDR5DIMM 7.00 32 224.00" in rows
     assert "│ └─ SystemSide800GTransceiver 15.00 8 120.00" in rows
     assert "PCIe5x16Retimer" not in output
@@ -136,9 +136,9 @@ def test_mixed_system_report_normalizes_each_group_using_its_own_chassis_count()
     rows = [" ".join(line.split()) for line in output.splitlines()]
     assert "HopperHGXSystemChassis — one chassis (configured quantity: 2)" in output
     assert "MI300HGXSystemChassis — one chassis (configured quantity: 3)" in output
-    assert "HopperHGXSystemChassis 2,294.12 1 2,294.12" in rows
-    assert "MI300HGXSystemChassis 1,924.88 1 1,924.88" in rows
+    assert "HopperHGXSystemChassis 2,386.98 1 2,386.98" in rows
+    assert "MI300HGXSystemChassis 2,016.88 1 2,016.88" in rows
     assert rows.count("│ ├─ GPUs 125.00 8 1,000.00") == 2
     assert "Cluster totals (5 chassis, 40 GPUs)" in output
-    assert "IT AC power: 10,362.87 W" in output
-    assert "All in Utility Power: 13,471.73 W" in output
+    assert "IT AC power: 10,824.60 W" in output
+    assert "All in Utility Power: 14,071.98 W" in output
