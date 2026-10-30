@@ -11694,6 +11694,17 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4595
 
 - config-keys:
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-hicache
+  scenario-type: [agentic-coding]
+  description:
+    - "Add back two points to the GB300 DSV4.1-Flash Dynamo + SGLang curve to fill the interactivity/E2EL gap between agg TP4 c16 and disagg 5P1D c2884, on each config's existing image."
+    - "Agg TP2/EP2 c16 (override_tp2_c16) on nightly-dev-cu13-20261029-c10e0e17, with the same per-point settings it had before it was removed: flashmla, decoder SWA bounded replay, prefill CUDA graphs disabled, prefill-decode-interval 96, swa-prefix-tails 1024, max-running-requests 32, Engram host table per rank. It inherits the base Dynamo 1.7 admission limits."
+    - "Disagg 3 × DEP2 prefill and 1 × DEP16 decode at c1228 (override_3p1d_dep2_dep16_c1228) on nightly-dev-cu13-20261028-586355a8, with the prefill host-DRAM HiCache base recipe and the retired key's c1228 decode sizing: max-running-requests 384, decode CUDA graph batch 24, disaggregation-decode-extra-slots 36."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4679
+  append-only: true
+
+- config-keys:
     - glm5.2-fp8-mi355x-sglang-agentic-mtp
   description:
     - "Update SGLang image from v0.5.19-rocm720-mi35x-20260917 to v0.5.22-rocm720-mi35x."
