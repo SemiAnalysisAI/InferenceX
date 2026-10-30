@@ -137,7 +137,9 @@ def checkpoint(tmp_path):
 def checkout(tmp_path):
     """A checkout whose benchmarks/ are copies of the real shims, so staging stays in tmp."""
     root = tmp_path / "checkout"
-    for script in ("check_env.sh", "single_node/srt_eval.sh", "multi_node/srt_eval.sh"):
+    for script in (
+        "check_env.sh", "bench_python.sh", "single_node/srt_eval.sh", "multi_node/srt_eval.sh"
+    ):
         (root / "benchmarks" / script).parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(REPO_ROOT / "benchmarks" / script, root / "benchmarks" / script)
     (root / "infx").symlink_to(REPO_ROOT / "infx")
@@ -414,8 +416,9 @@ def uv_step(argv: list[str]) -> str:
     ("lmsysorg/sglang:latest", False, None, ["install lm-eval[api]", "archive pin"]),
 ])  # fmt: skip
 def test_lm_eval_install_drops_torchvision_on_atom_and_falls_back_to_the_archive(
-    base_env, tmp_path, image, git, failing, expected
+    base_env, tmp_path, monkeypatch, image, git, failing, expected
 ):
+    monkeypatch.setattr(lm_eval, "torch_installed", lambda: True)
     bin_dir = tmp_path / "path"
     bin_dir.mkdir()
     if git:
@@ -427,6 +430,23 @@ def test_lm_eval_install_drops_torchvision_on_atom_and_falls_back_to_the_archive
     lm_eval.install(env)
 
     assert [uv_step(argv) for argv in trace(tmp_path / "uv.jsonl")] == expected
+
+
+def test_lm_eval_install_gives_an_image_without_torch_the_cpu_build_and_transformers(
+    base_env, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(lm_eval, "torch_installed", lambda: False)
+    bin_dir = tmp_path / "path"
+    bin_dir.mkdir()
+
+    lm_eval.install({**base_env, "PATH": str(bin_dir), "IMAGE": "layerscale/layerscale:latest"})
+
+    steps = trace(tmp_path / "uv.jsonl")
+    assert [uv_step(argv) for argv in steps] == [
+        "install torch>=2,<3", "install transformers", "install lm-eval[api]", "archive pin"
+    ]
+    assert steps[0][steps[0].index("--torch-backend") + 1] == "cpu"
+    assert "huggingface-hub>=1.5,<2" in steps[1]
 
 
 def test_lm_eval_install_only_warns_when_uv_is_unavailable(base_env, monkeypatch, capfd):

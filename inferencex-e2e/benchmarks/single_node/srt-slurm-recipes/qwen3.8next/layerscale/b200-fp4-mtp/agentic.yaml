@@ -1,0 +1,65 @@
+base:
+  schema: 2
+  name: qwen3.8next-fp4-b200-layerscale-agentic
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: layerscale
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: layerscale
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 1
+      args:
+        tp: 1
+        ctx: 262144
+        speculative-algorithm: mtp
+        # The checkpoint's MTP head drafts three tokens; the count also selects the golden curve.
+        num-speculative-tokens: 3
+  benchmark:
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'layerscale_'
+
+# Subagent fan-out puts more than CONC requests in flight, so the admission cap is 2x CONC.
+override_c1:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 2
+  benchmark:
+    env:
+      CONC: '1'
+
+override_c4:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 8
+  benchmark:
+    env:
+      CONC: '4'
+
+override_c8:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 16
+  benchmark:
+    env:
+      CONC: '8'
+
+override_c16:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 32
+  benchmark:
+    env:
+      CONC: '16'

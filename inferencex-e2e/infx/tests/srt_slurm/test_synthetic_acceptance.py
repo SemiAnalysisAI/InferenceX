@@ -414,6 +414,22 @@ def test_atom_forces_golden_acceptance_by_server_flag(
     assert "spec-decode-acceptance-length" not in evaluated["roles"]["agg"]["args"]
 
 
+def test_layerscale_forces_golden_acceptance_by_server_flag(golden_dir: Path) -> None:
+    recipe = {
+        "roles": {"agg": {"args": {"speculative-algorithm": "mtp", "num-speculative-tokens": 3}}}
+    }
+    env = {**ENV, "MODEL_PREFIX": "qwen3.5"}
+    result = apply_native(recipe, build_overrides(recipe, "layerscale", env, golden_dir=golden_dir))
+    assert result["roles"]["agg"]["args"]["synthetic-acceptance-length"] == 2.6
+    evaluated = apply_native(
+        result,
+        build_overrides(result, "layerscale", {**env, "EVAL_ONLY": "true"}, golden_dir=golden_dir),
+    )
+    assert "synthetic-acceptance-length" not in evaluated["roles"]["agg"]["args"]
+    with pytest.raises(ValueError, match="speculative-algorithm"):
+        build_overrides({"roles": {"agg": {"args": {}}}}, "layerscale", env, golden_dir=golden_dir)
+
+
 def tilert_recipe() -> dict[str, Any]:
     return {
         "roles": {

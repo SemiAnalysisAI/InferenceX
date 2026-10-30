@@ -12,6 +12,7 @@ trap 'rc=$?; printf "%s\n" "$rc" > "$SRT_EVAL_STATUS_FILE"' EXIT
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "$root/benchmarks/check_env.sh"
+source "$root/benchmarks/bench_python.sh"
 check_env_vars MODEL MODEL_NAME CONC TP EP_SIZE DP_ATTENTION IS_MULTINODE IS_AGENTIC
 # Fixed-sequence evals fit the benchmark context; AgentX evaluates at the native context.
 if [[ "$IS_AGENTIC" != 1 ]]; then
@@ -26,5 +27,6 @@ if [[ -d /model ]]; then
     export MODEL_PATH=/model
 fi
 cd "$root"
+python="$(bench_python)"
 PYTHONSAFEPATH=1 PYTHONPATH="$root${PYTHONPATH:+:$PYTHONPATH}" \
-    python3 -m infx.bench eval --endpoint "$1" --concurrency "$CONC" --stage-to "$root"
+    "$python" -m infx.bench eval --endpoint "$1" --concurrency "$CONC" --stage-to "$root"

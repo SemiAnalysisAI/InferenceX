@@ -1,0 +1,377 @@
+diff --git a/src/srtctl/backends/__init__.py b/src/srtctl/backends/__init__.py
+index 4c364cc1..79f46e19 100644
+--- a/src/srtctl/backends/__init__.py
++++ b/src/srtctl/backends/__init__.py
+@@ -11,6 +11,7 @@ Supported backends:
+ 
+ from .atom import AtomBackend
+ from .base import Backend, BackendType, RoleSettings, SrunConfig
++from .layerscale import LayerScaleBackend
+ from .mocker import MockerBackend
+ from .sglang import MooncakeKVStoreConfig, SGLangBackend
+ from .tilert import TileRTBackend
+@@ -20,7 +21,14 @@ from .vllm import VLLMBackend, VLLMFailoverConfig, VLLMMooncakeKVStoreConfig
+ 
+ # Union type for all backend configs
+ BackendConfig = (
+-    AtomBackend | SGLangBackend | TileRTBackend | TokenSpeedBackend | TRTLLMBackend | VLLMBackend | MockerBackend
++    AtomBackend
++    | LayerScaleBackend
++    | SGLangBackend
++    | TileRTBackend
++    | TokenSpeedBackend
++    | TRTLLMBackend
++    | VLLMBackend
++    | MockerBackend
+ )
+ 
+ __all__ = [
+@@ -30,6 +38,8 @@ __all__ = [
+     "Backend",
+     "BackendConfig",
+     "BackendType",
++    # LayerScale
++    "LayerScaleBackend",
+     # Mocker
+     "MockerBackend",
+     # SGLang
+diff --git a/src/srtctl/backends/base.py b/src/srtctl/backends/base.py
+index 6cf2eaf3..f4cd1dc9 100644
+--- a/src/srtctl/backends/base.py
++++ b/src/srtctl/backends/base.py
+@@ -39,6 +39,7 @@ class BackendType(str, Enum):
+     ATOM = "atom"
+     TILERT = "tilert"
+     TOKENSPEED = "tokenspeed"
++    LAYERSCALE = "layerscale"
+ 
+ 
+ @dataclass
+diff --git a/src/srtctl/backends/layerscale.py b/src/srtctl/backends/layerscale.py
+new file mode 100644
+index 00000000..64534ef5
+--- /dev/null
++++ b/src/srtctl/backends/layerscale.py
+@@ -0,0 +1,141 @@
++# SPDX-FileCopyrightText: Copyright (c) 2026 LayerScale, Inc. All rights reserved.
++# SPDX-License-Identifier: Apache-2.0
++
++"""LayerScale's own OpenAI server for one single-node aggregate worker."""
++
++from __future__ import annotations
++
++import builtins
++from collections.abc import Mapping, Sequence
++from dataclasses import field
++from pathlib import Path
++from typing import TYPE_CHECKING, Any, ClassVar, Literal
++
++from marshmallow import Schema
++from marshmallow_dataclass import dataclass
++
++from srtctl.backends.base import Backend, BoundRolesField, ProcessGroup, RoleSettings, WorkerMode
++from srtctl.ports import DYN_SYSTEM_PORT_BASE
++
++if TYPE_CHECKING:
++    from srtctl.core.runtime import RuntimeContext
++    from srtctl.core.schema import ProfilingConfig
++    from srtctl.core.topology import Endpoint, NodePortAllocator, Process
++
++# The image's ENTRYPOINT; srtctl starts every step with --no-container-entrypoint.
++LOADER = "/app/layerscale-loader"
++
++
++def _flag_args(config: Mapping[str, Any]) -> list[str]:
++    """``--key value`` for each argument: ``True`` is a bare flag, ``False``/``None`` are left out."""
++    args: list[str] = []
++    for key, value in config.items():
++        flag = f"--{key}"
++        if value is True:
++            args.append(flag)
++        elif value is not False and value is not None:
++            for item in value if isinstance(value, list) else [value]:
++                args.extend([flag, str(item)])
++    return args
++
++
++@dataclass(frozen=True)
++class LayerScaleBackend(Backend):
++    """Launch ``layerscale serve`` from the LayerScale image.
++
++    Example YAML:
++        engine: layerscale
++        frontend:
++          type: layerscale
++        roles:
++          agg:
++            args:
++              tp: 1
++              ctx: 262144
++              speculative-algorithm: mtp
++    """
++
++    # Engine type discriminator.
++    type: Literal["layerscale"] = "layerscale"
++    # The loader replaces itself with the engine, whose argv[0] is `layerscale`.
++    process_exporter_groups: ClassVar[tuple[ProcessGroup, ...]] = (
++        ProcessGroup("layerscale", cmdline=(r"^layerscale serve ",)),
++    )
++    # The roles this engine runs (`roles.<role>` of the recipe), bound by SrtConfig and
++    # never written on `engine:`. The agg role's env and args are read from here.
++    roles: Mapping[str, RoleSettings] = field(default_factory=dict, metadata={"marshmallow_field": BoundRolesField()})
++
++    Schema: ClassVar[builtins.type[Schema]] = Schema
++
++    def allocate_endpoints(
++        self,
++        num_prefill: int,
++        num_decode: int,
++        num_agg: int,
++        gpus_per_prefill: int,
++        gpus_per_decode: int,
++        gpus_per_agg: int,
++        gpus_per_node: int,
++        available_nodes: Sequence[str],
++        spread_workers: bool = False,
++        gpu_indices_by_mode: Mapping[WorkerMode, Sequence[frozenset[int]]] | None = None,
++    ) -> list[Endpoint]:
++        from srtctl.core.topology import allocate_endpoints
++
++        return allocate_endpoints(
++            num_prefill=num_prefill,
++            num_decode=num_decode,
++            num_agg=num_agg,
++            gpus_per_prefill=gpus_per_prefill,
++            gpus_per_decode=gpus_per_decode,
++            gpus_per_agg=gpus_per_agg,
++            gpus_per_node=gpus_per_node,
++            available_nodes=available_nodes,
++            spread_workers=spread_workers,
++            gpu_indices_by_mode=gpu_indices_by_mode,
++        )
++
++    def endpoints_to_processes(
++        self,
++        endpoints: list[Endpoint],
++        base_sys_port: int = DYN_SYSTEM_PORT_BASE,
++        port_allocator: NodePortAllocator | None = None,
++        frontend_type: str = "layerscale",
++        dynamo_sidecar: bool = False,
++    ) -> list[Process]:
++        from srtctl.core.topology import endpoints_to_processes
++
++        if dynamo_sidecar:
++            raise ValueError("LayerScale does not support Dynamo sidecars")
++        if any(ep.mode != "agg" or len(ep.nodes) != 1 for ep in endpoints):
++            raise ValueError("LayerScale supports single-node aggregate workers only")
++        return endpoints_to_processes(endpoints, base_sys_port=base_sys_port, port_allocator=port_allocator)
++
++    def build_worker_command(
++        self,
++        process: Process,
++        endpoint_processes: list[Process],
++        runtime: RuntimeContext,
++        frontend_type: str = "layerscale",
++        nsys_prefix: list[str] | None = None,
++        dump_config_path: Path | None = None,
++        profiling: ProfilingConfig | None = None,
++    ) -> list[str]:
++        from srtctl.frontends import get_frontend
++
++        if process.endpoint_mode != "agg" or len({p.node for p in endpoint_processes}) != 1:
++            raise ValueError("LayerScale supports single-node aggregate workers only")
++        config = self.get_config_for_mode("agg")
++        if "model" in config:
++            raise ValueError("srtctl supplies the model; drop roles.agg.args.model")
++        public = get_frontend(frontend_type).worker_api_port("agg") == "public"
++        port = runtime.frontend_port if public else process.http_port
++        return [
++            *(nsys_prefix or []),
++            LOADER,
++            "serve",
++            f"0.0.0.0:{port}",
++            "--model",
++            runtime.worker_model_arg,
++            *_flag_args(config),
++        ]
+diff --git a/src/srtctl/core/schema.py b/src/srtctl/core/schema.py
+index f844aef9..c12839af 100755
+--- a/src/srtctl/core/schema.py
++++ b/src/srtctl/core/schema.py
+@@ -41,6 +41,7 @@ from marshmallow_dataclass import dataclass
+ from srtctl.backends import (
+     AtomBackend,
+     BackendConfig,
++    LayerScaleBackend,
+     MockerBackend,
+     SGLangBackend,
+     TileRTBackend,
+@@ -519,6 +520,7 @@ class BackendConfigField(fields.Field):
+         if isinstance(
+             value,
+             AtomBackend
++            | LayerScaleBackend
+             | SGLangBackend
+             | TileRTBackend
+             | TokenSpeedBackend
+@@ -546,6 +548,8 @@ class BackendConfigField(fields.Field):
+ 
+         if backend_type == "atom":
+             return AtomBackend.Schema().load(value)
++        elif backend_type == "layerscale":
++            return LayerScaleBackend.Schema().load(value)
+         elif backend_type == "tilert":
+             return TileRTBackend.Schema().load(value)
+         elif backend_type == "tokenspeed":
+@@ -564,7 +568,7 @@ class BackendConfigField(fields.Field):
+             return schema.load(value)
+         else:
+             raise ValidationError(
+-                f"Unknown engine type: {backend_type!r}. Supported types: atom, sglang, tilert, tokenspeed, trtllm, vllm, mocker"
++                f"Unknown engine type: {backend_type!r}. Supported types: atom, layerscale, sglang, tilert, tokenspeed, trtllm, vllm, mocker"
+             )
+ 
+     def _serialize(self, value: Any | None, attr: str | None, obj: Any, **kwargs) -> Any:
+@@ -579,6 +583,8 @@ class BackendConfigField(fields.Field):
+     def _dump(value: Any) -> dict[str, Any]:
+         if isinstance(value, AtomBackend):
+             return AtomBackend.Schema().dump(value)
++        if isinstance(value, LayerScaleBackend):
++            return LayerScaleBackend.Schema().dump(value)
+         if isinstance(value, TileRTBackend):
+             return TileRTBackend.Schema().dump(value)
+         if isinstance(value, TokenSpeedBackend):
+diff --git a/src/srtctl/frontends/__init__.py b/src/srtctl/frontends/__init__.py
+index 611e15b4..d042bde4 100644
+--- a/src/srtctl/frontends/__init__.py
++++ b/src/srtctl/frontends/__init__.py
+@@ -10,6 +10,7 @@ importing it from here is what makes ``frontend.type: <type>`` resolvable.
+ 
+ Supported frontend types:
+ - dynamo: Dynamo frontend with NATS/etcd communication
++- layerscale: Direct layerscale serve for a single aggregate worker (no router)
+ - llm-d: llm-d Endpoint Picker behind Envoy, with the P/D sidecar on decode workers
+ - sglang: Direct sglang.launch_server for a single aggregate worker (no router)
+ - sglang-router: SGLang Model Gateway router in front of static workers
+@@ -30,6 +31,7 @@ from srtctl.frontends.base import (
+ )
+ from srtctl.frontends.dynamic_frontend import DynamicFrontend
+ from srtctl.frontends.dynamo import DynamoFrontend
++from srtctl.frontends.layerscale import LayerScaleFrontend
+ from srtctl.frontends.llm_d import LLMDFrontend
+ from srtctl.frontends.sglang import SGLangRouterFrontend
+ from srtctl.frontends.sglang_direct import SGLangFrontend
+@@ -46,6 +48,7 @@ __all__ = [
+     "DynamoFrontend",
+     "Frontend",
+     "LLMDFrontend",
++    "LayerScaleFrontend",
+     "SGLangFrontend",
+     "SGLangRouterFrontend",
+     "SMGFrontend",
+diff --git a/src/srtctl/frontends/layerscale.py b/src/srtctl/frontends/layerscale.py
+new file mode 100644
+index 00000000..00d91191
+--- /dev/null
++++ b/src/srtctl/frontends/layerscale.py
+@@ -0,0 +1,100 @@
++# SPDX-FileCopyrightText: Copyright (c) 2026 LayerScale, Inc. All rights reserved.
++# SPDX-License-Identifier: Apache-2.0
++
++"""Direct LayerScale frontend (`frontend.type: layerscale`).
++
++For one aggregate LayerScale worker the OpenAI-compatible HTTP server is the
++worker process itself (`layerscale serve` bound to the public port). No router
++process starts.
++"""
++
++from __future__ import annotations
++
++import logging
++import threading
++from typing import TYPE_CHECKING, Any, ClassVar, Literal
++
++from srtctl.core.health import WorkerHealthResult, probe_direct_server
++from srtctl.frontends.base import Frontend, agg_leader_nodes, register_frontend
++
++if TYPE_CHECKING:
++    from srtctl.core.processes import ManagedProcess
++    from srtctl.core.runtime import RuntimeContext
++    from srtctl.core.topology import Process
++
++logger = logging.getLogger(__name__)
++
++
++@register_frontend("layerscale")
++class LayerScaleFrontend(Frontend):
++    """Direct LayerScale OpenAI server frontend.
++
++    Exactly one aggregate worker, which binds the public port itself. Readiness
++    is the worker's ``/health`` plus ``/v1/models``.
++    """
++
++    required_backend: ClassVar[str | None] = "layerscale"
++
++    @property
++    def type(self) -> str:
++        return "layerscale"
++
++    def worker_api_port(self, mode: str) -> Literal["public", "allocated"]:
++        """The one ``layerscale serve`` is the endpoint, so it binds the public port."""
++        return "public"
++
++    def worker_metrics_port(self, process: Process, runtime: RuntimeContext) -> int | None:
++        """The aggregate leader serves ``/metrics`` on the public port."""
++        if process.endpoint_mode == "agg" and process.is_leader:
++            return runtime.frontend_port
++        return None
++
++    def worker_endpoint_port(self, process: Process, config: Any, runtime: RuntimeContext) -> int | None:
++        return runtime.frontend_port if process.is_leader else None
++
++    def profiling_control_port(self, process: Process, config: Any, runtime: RuntimeContext) -> int | None:
++        """LayerScale serves no profiler control routes."""
++        return None
++
++    def direct_endpoint_nodes(self, processes: list[Process]) -> list[str]:
++        return agg_leader_nodes(processes)
++
++    def worker_ready_port(self, process: Process) -> int:
++        return process.sys_port
++
++    def probe_ready(
++        self, host: str, port: int, expected_prefill: int, expected_decode: int, config: Any
++    ) -> WorkerHealthResult:
++        """The worker's own /health, then /v1/models must list the model."""
++        return probe_direct_server(host, port)
++
++    def validate(self, config: Any) -> None:
++        """One aggregate ``layerscale serve`` owns the public port; there is no router to balance replicas."""
++        if config.frontend.enable_multiple_frontends:
++            raise ValueError(
++                "frontend.type: layerscale binds layerscale serve directly; set frontend.enable_multiple_frontends: false"
++            )
++        if config.topology.is_disaggregated or config.topology.num_agg != 1:
++            raise ValueError("frontend.type: layerscale supports exactly one aggregate worker")
++        if config.dynamo.sidecar:
++            raise ValueError("frontend.type: layerscale does not support dynamo.sidecar")
++
++    def start_frontends(
++        self,
++        topology: Any,
++        runtime: RuntimeContext,
++        config: Any,
++        backend: Any,
++        backend_processes: list[Process],
++        stop_event: threading.Event | None = None,
++    ) -> list[ManagedProcess]:
++        if topology.uses_nginx or len(topology.frontend_nodes) != 1:
++            raise ValueError(
++                "frontend.type: layerscale binds layerscale serve directly to the public port; "
++                "set frontend.enable_multiple_frontends: false"
++            )
++        logger.info(
++            "frontend.type=layerscale: no separate frontend process; layerscale serve owns port %d",
++            topology.public_port,
++        )
++        return []
