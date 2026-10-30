@@ -7,8 +7,8 @@
 # golden_al_distribution shape. DSpark ships as a separate checkpoint
 # (deepseek-ai/DeepSeek-V4-Pro-DSpark, 960 GB) with the draft baked in, so there is no
 # external draft head and no "model" key in the speculative-config. Every flag that
-# affects drafting is byte-identical to the DSV4 MTP collector so the two AL curves
-# stay comparable.
+# affects drafting matches the DSV4 MTP collector so the two AL curves stay comparable,
+# except the attention config, which follows the newer vLLM image the DSpark recipes use.
 #
 # Dispatch this collector through speedbench-al.yml.
 #
@@ -173,7 +173,9 @@ run_cell() {
         "${EP_ARGS[@]}"
         "${MOE_ARGS[@]}"
         --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
-        --attention_config.use_fp4_indexer_cache True
+        # Same attention config as the 0813 DSpark recipes on the 20ebb28 nightly, which
+        # renamed use_fp4_indexer_cache to indexer_kv_dtype=mxfp4.
+        --attention-config '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"indexer_kv_dtype":"mxfp4"}'
         --tokenizer-mode deepseek_v4
         --tool-call-parser deepseek_v4
         --enable-auto-tool-choice
