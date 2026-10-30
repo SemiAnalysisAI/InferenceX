@@ -11670,3 +11670,10 @@
     - "Retire all MiniMax-M3 and DeepSeek-V4-Pro AgentX serving configurations across NVIDIA and AMD, deleting their unused recipes, setup assets, and launch-policy rows."
     - "Keep MiniMax-M3.1-Flash and DeepSeek-V4.1-Flash benchmark coverage unchanged. Preserve SPEED-Bench collectors, historical golden AL curves, their B300 checkpoint mappings, and the independent CollectiveX communication workload."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4664
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-atom-agentic-mtp
+  description:
+    - "Update the ATOM image from rocm/atom-dev:nightly_202610181506 to nightly_202610291449."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4677
+  scenario-type: [agentic-coding]
