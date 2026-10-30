@@ -1203,10 +1203,11 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark:
       - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64], srt-recipe: agentic.yaml }
 
 # Single-point TP8 c1 scan of DeepSeek-V4.1-Flash on MI355X with mono decode
-# (--monokernel) on the latest vLLM ROCm 10.0 nightly (2026-10-29). Kept as its
-# own key so the TP4/TP2 grid above does not rerun.
+# (--monokernel) on the latest vLLM ROCm 10.0 nightly (2026-10-30), which carries
+# vllm-project/vllm#64101 (mono decode at TP8; earlier builds refuse --monokernel
+# outside TP2/TP4). Kept as its own key so the TP4/TP2 grid above does not rerun.
 dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp8-c1:
-  image: vllm/vllm-openai-rocm:nightly-3966924d566340e971a6da313e790d05492aa505@sha256:8649354473843f477a96d3aa659d0ae56bcc7df743d2d02d52aaa318178ac881
+  image: vllm/vllm-openai-rocm:nightly-335dd77b09161c5d63139b4e7ae51bb9928305b1@sha256:3c634cc2c51eda7eb840a236b1f09a5ecf6a4b0cb92c4b8486e2158770507291
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds
