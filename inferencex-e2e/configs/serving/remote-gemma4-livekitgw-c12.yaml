@@ -1,5 +1,5 @@
 # LiveKit agent gateway (LiveKit Cloud): JWT auth, GitHub secret LIVEKIT_AGENT_GATEWAY_KEY.
-name: remote-gemma4-livekitgw-c20
+name: remote-gemma4-livekitgw-c12
 runner: cluster:hcm-rtx01
 endpoint:
   url: https://agent-gateway.livekit.cloud/v1
@@ -8,4 +8,4 @@ endpoint:
   tokenizer: google/gemma-4-31b-it
 scenario: livekit
 overrides: {warmup_requests_per_lane: 0}
-conc: [20]
+conc: [12]
