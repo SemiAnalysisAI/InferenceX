@@ -11700,6 +11700,6 @@
     - "Use the fastokens frontend tokenizer (DYN_TOKENIZER=fastokens) on every point. The default tokenizer disables its prefix cache for this model, so each turn re-tokenized the full prompt."
     - "Add conc 360 to the 6 DEP2 prefill + DEP16 decode point, next to conc 300."
     - "Run the Dynamo frontend, etcd, nats and the Mooncake master on the benchmark client node and disable the OTel collector on every disagg point."
-    - "Raise the shared MooncakeStore DRAM pool from 160 GB to 200 GB per rank on every disagg point, and add conc 400 to the 6 DEP2 prefill + DEP8 decode point."
+    - "Raise the shared MooncakeStore DRAM pool from 160 GB to 180 GB per rank on every disagg point, and add conc 400 to the 6 DEP2 prefill + DEP8 decode point."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4631
   scenario-type: [agentic-coding]
