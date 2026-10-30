@@ -63,6 +63,7 @@ jobs:
             test-name: ${{ inputs.test-name }}
 
     summary:
+        name: summary
         # One table of every point on the run page: throughput, latency, and for speculative decoding
         # the acceptance length and the speedup over a base arm of the same scenario and concurrency.
         needs: bench
