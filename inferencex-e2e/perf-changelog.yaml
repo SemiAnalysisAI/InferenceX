@@ -11677,7 +11677,7 @@
   description:
     - "Use the fastokens frontend tokenizer (DYN_TOKENIZER=fastokens) on every point. The default tokenizer disables its prefix cache for this model, so each turn re-tokenized the full prompt."
     - "Add conc 360 to the 6 DEP2 prefill + DEP16 decode point, next to conc 300."
-    - "Run 4 Dynamo frontends behind nginx with session affinity and set prefill gpu-memory-utilization to 0.92 on every disagg point."
+    - "Run 4 Dynamo frontends behind nginx with session affinity on every disagg point."
     - "Raise the shared MooncakeStore DRAM pool from 160 GB to 200 GB per rank for the 6 DEP2 prefill + DEP8 decode point at conc 360."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4631
   scenario-type: [agentic-coding]
