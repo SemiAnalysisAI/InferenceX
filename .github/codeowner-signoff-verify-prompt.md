@@ -646,15 +646,17 @@ because they predate the rule.
   the model authors' reference implementation), that default conversion IS the baseline. A patch or setting
   that removes it changes the draft computation and FAILs; its absence is not a
   violation.
-- The framework's default draft KV-cache dtype for that checkpoint, or an
-  upstream-supported KV-cache dtype applied consistently to target and draft (for
-  example FP8 draft KV inherited from an FP8 target), is allowed.
+- The draft KV-cache dtype is NOT restricted. Any upstream-supported draft KV-cache
+  dtype is allowed, including one set independently of the target (for example
+  `--speculative-draft-kv-cache-dtype fp8_e4m3` with a BF16 target KV cache). Do not
+  FAIL or WARN Check 13 because of the draft KV-cache dtype; this check covers draft
+  weight, activation, and computation precision only.
 - Upstream optimizations that ship in the pinned image and run the same draft
   computation faster without lowering weight or activation precision below what ships
   (fused or default lower-precision kernels for that model, scheduling) are allowed.
 
 FAIL when the submission lowers draft precision below the baseline: online or offline
-quantization of draft weights, activations, or computation; dtype or KV-cache dtype
+quantization of draft weights, activations, or computation; weight or compute dtype
 overrides aimed at the draft that go below the framework default; substituting a
 precision-converted or differently quantized draft checkpoint, or a head from a
 different release than the target; patching the pinned image so the draft loads or
@@ -679,8 +681,8 @@ its separate speculative-algorithm/configuration requirements.
   unchanged launch command does not prove unchanged precision.
 - Investigate `--speculative-draft-model-quantization` (both space and `=` forms),
   quantization/dtype fields in `--speculative-config`, `speculative_draft_model_quantization`,
-  `--speculative-draft-model-path`, `--dtype` / `torch_dtype` / draft dtype and
-  KV-cache dtype overrides, and settings such as
+  `--speculative-draft-model-path`, `--dtype` / `torch_dtype` / draft dtype
+  overrides, and settings such as
   `SGLANG_GLM_NEXTN_MOE_PTPC=1`. These are inspection leads, not a string denylist:
   resolve variables and inherited defaults, and determine whether the effective path
   lowers draft precision below the baseline. A draft path or an explicit setting that
