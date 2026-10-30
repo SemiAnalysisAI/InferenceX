@@ -1,19 +1,19 @@
 schema: 2
 
-# Experiment only (not for merge): SGLang PD at half the vLLM GB300 PD scale from
-# PR #4468 (same 3:2 prefill:decode GPU ratio, conc 180 instead of 360), without
-# DP attention. DSpark-MiniMax breaks under DP attention, and MiniMax sparse PD
-# requires matching attention TP on both sides, so both roles use TP2:
-# 3x TP2 prefill and 2x TP2 decode.
+# Experiment only (not for merge): SGLang PD on the exact vLLM GB300 PD topology
+# merged in PR #4468 (6x DEP2 prefill + DEP8 decode at conc 280/320/360, and
+# 6x DEP2 prefill + DEP16 decode at conc 300). lmsysorg/sglang:dev at 52604e1d
+# includes sgl-project/sglang#46851, which fixes the DSpark-MiniMax decode
+# commit_hidden crash under attention DP.
 
 base:
   name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-exp
   identity:
     model: {}
     frameworks:
-      dynamo: "1.6.0.dev20261021"
-      sglang: "0.0.0.dev0+ge7399a46f4"
-  # The image ships ai-dynamo 1.6.0.dev20261021, Mooncake 0.3.13.post1 and NIXL 1.5.0.
+      dynamo: "1.7.0.dev20261029"
+      sglang: "0.0.0.dev0+g52604e1d"
+  # The image ships ai-dynamo 1.7.0.dev20261029, Mooncake 0.3.13.post1 and NIXL 1.5.2.
   dynamo:
     install: false
     request_plane: tcp
@@ -66,11 +66,12 @@ base:
       active-prefill-tokens-threshold-frac: "None"
   engine: sglang
   roles:
-    # TP2 prefill workers, the single-node B300/GB300 TP2 shape. Three workers
-    # leave two GPUs of the second tray idle.
+    # DEP2 prefill: attention DP2 + MoE EP2, as vLLM's TP1 x DP2 + EP2 prefill.
+    # Under attention DP this model runs MegaMoE with DeepGEMM; the
+    # flashinfer_trtllm_routed path needs matching attention TP and EP groups.
     prefill:
-      nodes: 2
-      workers: 3
+      nodes: 3
+      workers: 6
       gpus: 2
       env:
         PYTHONUNBUFFERED: "1"
@@ -80,6 +81,7 @@ base:
         SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "3600"
         SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "3600"
         SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "32768"
         NCCL_MNNVL_ENABLE: "1"
         NCCL_CUMEM_ENABLE: "1"
         MC_FORCE_MNNVL: "1"
@@ -93,12 +95,17 @@ base:
         reasoning-parser: minimax-m3
         tool-call-parser: minimax-m3
         tensor-parallel-size: 2
-        moe-runner-backend: flashinfer_trtllm_routed
+        data-parallel-size: 2
+        expert-parallel-size: 2
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        moe-a2a-backend: megamoe
         disaggregation-transfer-backend: mooncake
         # vLLM caps each request at 4096 prefill tokens per step inside a
         # 32768-token batch; SGLang caps the whole batch, so use a middle value.
         chunked-prefill-size: 8192
-        max-running-requests: 64
+        # 64 per DP rank, as vLLM's prefill max-num-seqs.
+        max-running-requests: 128
         mem-fraction-static: 0.85
         enable-hierarchical-cache: true
         hicache-size: 150
@@ -114,20 +121,21 @@ base:
         enable-metrics: true
         enable-cache-report: true
       kv_events: true
-    # Two TP2 decode workers on one tray; MiniMax sparse PD needs the prefill
-    # attention TP on the decode side too.
+    # DEP8 decode across two trays, as vLLM's TP1 x DP8 + EP8 decode.
     decode:
-      nodes: 1
-      workers: 2
-      gpus: 2
+      nodes: 2
+      workers: 1
+      gpus: 8
       env:
         PYTHONUNBUFFERED: "1"
         PYTHONNOUSERSITE: "1"
         FMHA_SM100_ALLOW_JIT: "1"
         SGLANG_TIMEOUT_KEEP_ALIVE: "1800"
+        DYN_SGL_GATEWAY_WORKERS: "8"
         SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "3600"
         SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "3600"
         SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "16384"
         NCCL_MNNVL_ENABLE: "1"
         NCCL_CUMEM_ENABLE: "1"
         MC_FORCE_MNNVL: "1"
@@ -139,21 +147,23 @@ base:
         trust-remote-code: true
         reasoning-parser: minimax-m3
         tool-call-parser: minimax-m3
-        tensor-parallel-size: 2
-        moe-runner-backend: flashinfer_trtllm_routed
+        tensor-parallel-size: 8
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        moe-a2a-backend: megamoe
         disaggregation-transfer-backend: mooncake
-        # Half of conc 180 per worker plus headroom; the decode graph batch matches it.
-        max-running-requests: 96
-        cuda-graph-max-bs-decode: 96
+        router-mode: round-robin
+        load-balance-method: total_tokens
+        # 48 per DP rank, as vLLM's decode max-num-seqs.
+        max-running-requests: 384
+        cuda-graph-max-bs-decode: 48
         mem-fraction-static: 0.85
         speculative-algorithm: DSPARK
         speculative-dspark-block-size: 7
         speculative-use-block-verification: true
         speculative-draft-kv-cache-dtype: fp8_e4m3
-        # The active-request term dominates KV overlap, so decode picks balance
-        # request counts across the two workers.
-        router-mode: kv
-        router-decode-active-request-weight: "8192"
         watchdog-timeout: 3600
         enable-metrics: true
       kv_events: false
@@ -172,5 +182,19 @@ base:
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
 
-override_3p_tp2_2d_tp2_c180:
-  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-exp-3p-tp2-2d-tp2-c180
+# vLLM override_3p2d8: 6x DEP2 prefill + DEP8 decode at conc 280, 320, 360.
+override_6p_dep2_dep8:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-exp-6p-dep2-dep8
+
+# vLLM override_3p4d16: 6x DEP2 prefill + DEP16 decode at conc 300.
+override_6p_dep2_dep16:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-exp-6p-dep2-dep16
+  roles:
+    decode:
+      nodes: 4
+      gpus: 16
+      args:
+        tensor-parallel-size: 16
+        data-parallel-size: 16
+        expert-parallel-size: 16
+        max-running-requests: 768
