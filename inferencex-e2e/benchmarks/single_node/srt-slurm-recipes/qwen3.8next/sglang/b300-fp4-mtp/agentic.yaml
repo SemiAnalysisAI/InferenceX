@@ -131,8 +131,23 @@ override_tp4_c1:
         TOTAL_CPU_DRAM_GB: '0'
       CONC: '1'
 
-override_c2:
+override_tp4_c2:
   roles:
+    agg:
+      gpus: 4
+      args:
+        <<: *gpu_only_args
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        flashinfer-allreduce-fusion-backend: trtllm
+        max-running-requests: 4
+  benchmark:
+    env:
+      <<: *gpu_only_client
+      CONC: '2'
+
+override_c2:
+  roles: &tp1_low_conc_roles
     agg:
       env:
         # Graphs the speculative post-verify step (sampling, acceptance, Mamba commit); the rest are its fast paths.
@@ -148,6 +163,13 @@ override_c2:
     env:
       <<: *gpu_only_client
       CONC: '2'
+
+override_c1:
+  roles: *tp1_low_conc_roles
+  benchmark:
+    env:
+      <<: *gpu_only_client
+      CONC: '1'
 
 override_c12:
   roles:

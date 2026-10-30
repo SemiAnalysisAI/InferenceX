@@ -11710,5 +11710,5 @@
     - agentic-coding
   description:
     - "Update Qwen3.8-Flash-Next FP4 B300 SGLang AgentX to nvidia/Qwen3.8-Flash-Next-NVFP4 on lmsysorg/sglang:nightly-dev-cu13-20261028-586355a8 (digest-pinned)."
-    - "Update the search space to TP4/EP4 at concurrency 1, TP1/EP1 at concurrency 2, 12 and 24, and TP1/EP1 with HiCache at concurrency 48 and 80."
+    - "Update the search space to TP4/EP4 at concurrency 1 and 2, TP1/EP1 at concurrency 1, 2, 12 and 24, and TP1/EP1 with HiCache at concurrency 48 and 80."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4683
