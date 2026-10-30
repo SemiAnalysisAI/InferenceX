@@ -108,6 +108,20 @@ def test_bad_greenspec_variants_fail_with_one_line(args, message):
         render(*args)
 
 
+def test_warmup_requests_per_lane_override():
+    def profiling(doc):
+        return next(p for p in doc["benchmark"]["phases"] if p.get("kind") == "profiling")
+
+    off = render("livekit", {"warmup_requests_per_lane": 0})
+    assert "warmupRequestsPerLane" not in profiling(off.doc)
+    assert off.label == "custom-agentic-livekit111868-v1.1-warm-nowarmup"
+    on = render("livekit", {"warmup_requests_per_lane": 3})
+    assert profiling(on.doc)["warmupRequestsPerLane"] == 3
+    assert on.label == "custom-agentic-livekit111868-v1.1-warm-warm3"
+    with pytest.raises(ScenarioError, match="overrides.warmup_requests_per_lane"):
+        render("livekit", {"warmup_requests_per_lane": True})
+
+
 def test_families_have_base_files():
     from infx.serving.scenarios import SCENARIOS_DIR
     assert {path.stem for path in SCENARIOS_DIR.glob("*.yaml")} == set(FAMILIES)

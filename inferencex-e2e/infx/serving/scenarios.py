@@ -27,7 +27,14 @@ FAMILIES = (
     "synthetic",
     "greenspec",
 )
-OVERRIDE_KEYS = ("duration", "dataset", "max_context_length", "generation", "trace_idle_gap_cap")
+OVERRIDE_KEYS = (
+    "duration",
+    "dataset",
+    "max_context_length",
+    "generation",
+    "trace_idle_gap_cap",
+    "warmup_requests_per_lane",
+)
 SYNTHETIC_OVERRIDES = ("duration",)
 GENERATION_KEYS = ("top_p", "temperature")
 ISL = {"8k": 8192, "32k": 32768, "64k": 65536, "128k": 131072}
@@ -143,6 +150,22 @@ def _apply(
             raise ScenarioError(f"overrides.trace_idle_gap_cap: seconds >= 0, got {value!r}")
         dataset["traceIdleGapCapSeconds"] = float(value)
         suffixes.append("-nothink" if value == 0 else f"-idle{value:g}")
+    if "warmup_requests_per_lane" in overrides:
+        value = overrides["warmup_requests_per_lane"]
+        phase = _profiling(doc)
+        # 0 removes the key: aiperf's warmup budget is None (only the mandatory
+        # snapshot primers run), for endpoints whose token quota the zero-idle
+        # cache-pressure burst would exceed.
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ScenarioError(
+                f"overrides.warmup_requests_per_lane: 0 to disable or a positive int, got {value!r}"
+            )
+        if value == 0:
+            phase.pop("warmupRequestsPerLane", None)
+            suffixes.append("-nowarmup")
+        else:
+            phase["warmupRequestsPerLane"] = value
+            suffixes.append(f"-warm{value}")
     if "duration" in overrides:
         value = _positive("overrides.duration", overrides["duration"])
         _profiling(doc)["duration"] = value
