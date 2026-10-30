@@ -11709,8 +11709,9 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Add TP4/EP4 points with decode context parallelism (DCP4) at concurrency 16, 24, 40 and 48; the latent KV is striped across the four ranks, so these points run without HiCache, which DSA DCP rejects."
-    - "Keep the EAGLE draft with 5 steps, top-k 1 and 6 draft tokens, FP8 KV, the triton DSA prefill and decode backends, admission at twice the concurrency and a decode graph limit of min(2 x concurrency, 64)."
-    - "Validate decode-context-parallel-size against the matrix DCP size for SGLang recipes as well as vLLM and ATOM."
-    - "Use lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261028 for all three arms; the published nightly includes sgl-project/sglang#43735 and #44322, enabling Triton DSA DCP with FP8 KV and MTP on ROCm."
+    - "Update the image for all three arms (TP4/EP4 HiCache, TP4/EP4 DCP4, TP8/EP1) from lmsysorg/sglang:v0.5.22-rocm720-mi35x (digest-pinned release) to the lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261028 nightly, built from SGLang main e0df901d."
+    - "Add TP4/EP4 points with decode context parallelism (DCP4) at concurrency 16, 24, 40 and 48. The latent KV is striped across the four ranks, so these points keep KV on the GPU without HiCache, which SGLang rejects with DCP."
+    - "DCP4 points keep the base recipe: EAGLE with 5 steps, top-k 1 and 6 draft tokens, an FP8 KV cache and the Triton DSA prefill and decode backends. Admission (max-running-requests) is 32, 48, 80 and 96, twice the concurrency, and the decode CUDA graph limit is 32, 48, 64 and 64."
+    - "The new image adds sgl-project/sglang#44322, which enables DCP on the Triton sparse-MLA backend on ROCm, including FP8 KV writes and MTP draft sharding. It also adds DSA fixes for MTP draft decode (#42565) and GLM-5.2 CUDA-graph side-stream replay (#45349). #43735 (DSA DCP with MTP) was already in v0.5.22."
+    - "Draft data types are unchanged: the MTP layer 78 ships in BF16 and is listed in the checkpoint's Quark exclude list, so SGLang loads it unquantized at both the old and new commits. Its KV cache is FP8, shared with the target."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4064
