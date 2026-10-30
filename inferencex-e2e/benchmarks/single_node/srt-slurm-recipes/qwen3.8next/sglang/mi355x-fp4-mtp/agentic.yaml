@@ -71,6 +71,45 @@ base:
 # default path, admits 2x CONC requests and captures decode graphs up to that
 # admission, so bursts past CONC stay in a graph; mem-fraction-static is used as
 # given instead of the aiter backend's 0.85 scaling.
+override_c1:
+  roles:
+    agg:
+      args:
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+      env:
+        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_c2:
+  roles:
+    agg:
+      args:
+        max-running-requests: 4
+        cuda-graph-max-bs-decode: 4
+      env:
+        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
+  benchmark:
+    env:
+      CONC: '2'
+      KV_OFFLOADING: none
+
+override_c4:
+  roles:
+    agg:
+      args:
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+      env:
+        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
 override_c8:
   roles:
     agg:
