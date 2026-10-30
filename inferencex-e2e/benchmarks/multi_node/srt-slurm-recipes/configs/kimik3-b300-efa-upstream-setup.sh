@@ -3,36 +3,36 @@ set -eo pipefail
 trap 'echo "[kimi-k3-efa] FATAL: setup failed at line $LINENO: $BASH_COMMAND" >&2' ERR
 
 source /infmax-workspace/benchmarks/check_env.sh
-check_env_vars KIMI_EFA_BUILD_CACHE LD_LIBRARY_PATH KV_OFFLOAD_BACKEND_VERSION
+check_env_vars KIMI_EFA_CACHE LD_LIBRARY_PATH KV_OFFLOAD_BACKEND_VERSION
 
 efa_version=1.51.0
 # Same digest as vLLM docker/Dockerfile.efa EFA_INSTALLER_SHA256.
 efa_sha256=83993044fa4df3dc2f8b5c2f7051d61b9689441be023a2c92ea51d3f53f2465c
-mc_rev=b46254dea9515ea6cc05fe4ec220545835582edd  # commit of kvcache-ai/Mooncake tag v0.3.14-pre
+mc_version=0.3.14rc3
+# kvcache-ai/Mooncake v0.3.14-pre-3 release asset; since kvcache-ai/Mooncake#4356 the default wheels carry the
+# EFA transport.
+mc_url="https://github.com/kvcache-ai/Mooncake/releases/download/v0.3.14-pre-3/mooncake_transfer_engine_cuda13-${mc_version}-cp312-cp312-manylinux_2_28_x86_64.whl"
+mc_sha256=e5abb312b8e7c2451f6e0e5b14b0ad729d0aa687a9e00244c6833b23e4dce805
 
-mc_version="0.3.14.dev0+g${mc_rev:0:8}"
 if [[ "$KV_OFFLOAD_BACKEND_VERSION" != "$mc_version" ]]; then
-    echo "[kimi-k3-efa] FATAL: the master config's Mooncake ${KV_OFFLOAD_BACKEND_VERSION} is not the built ${mc_version}" >&2
+    echo "[kimi-k3-efa] FATAL: the master config's Mooncake ${KV_OFFLOAD_BACKEND_VERSION} is not the installed ${mc_version}" >&2
     exit 1
 fi
-cache="$KIMI_EFA_BUILD_CACHE/mooncake-${mc_rev:0:8}-efa${efa_version}-v1"
-echo "[kimi-k3-efa] Mooncake ${mc_version}, cache ${cache}"
+cache="$KIMI_EFA_CACHE/wheels"
+echo "[kimi-k3-efa] Mooncake ${mc_version} wheel, cache ${cache}"
 
 export DEBIAN_FRONTEND=noninteractive
-# Mooncake build dependencies, plus the runtime libraries its wheel leaves to the system
-# (libibverbs, libnuma, libhwloc, libcurl, libnl). libibverbs-dev also brings libnl-3 and
-# libnl-route-3, which the installer's dpkg-only libfabric install needs, and libhwloc15 is the
-# only dependency of the NGC aws-ofi-nccl package. The NVIDIA CUDA apt mirror is intermittently
-# mid-sync (index size mismatch), so both the index update and the install are retried.
+# The libraries the Mooncake wheel leaves to the system (libibverbs with its mlx5 and EFA providers,
+# libnuma, and libcurl, which curl brings), libnl-3 and libnl-route-3 for the installer's dpkg-only
+# libfabric install, and libhwloc15, the only dependency of the NGC aws-ofi-nccl package. The NVIDIA
+# CUDA apt mirror is intermittently mid-sync (index size mismatch), so both the index update and the
+# install are retried.
 apt_ok=0
 for attempt in 1 2 3 4 5; do
     if apt-get update -qq &&
         apt-get install -y -qq --no-install-recommends \
-            build-essential ca-certificates curl git libboost-filesystem-dev libboost-system-dev \
-            libcurl4-openssl-dev libgflags-dev libgoogle-glog-dev libhwloc15 libhwloc-dev libibverbs-dev \
-            libjsoncpp-dev libmsgpack-dev libnuma-dev libprotobuf-dev libssl-dev libxxhash-dev \
-            libyaml-cpp-dev libzstd-dev numactl patchelf pkg-config protobuf-compiler \
-            python-is-python3 cuda-nvml-dev-13-0; then
+            ca-certificates curl ibverbs-providers libhwloc15 libibverbs1 libnl-3-200 \
+            libnl-route-3-200 libnuma1; then
         apt_ok=1
         break
     fi
@@ -51,7 +51,7 @@ task_dir=$(mktemp -d /tmp/kimi-k3-efa.XXXXXX)
 cached_wheel() {
     local url=$1 sha256=$2
     local name=${url##*/}
-    local dir="$KIMI_EFA_BUILD_CACHE/wheels"
+    local dir="$KIMI_EFA_CACHE/wheels"
     mkdir -p "$dir"
     exec 6>"$dir/$name.lock"
     flock 6
@@ -74,7 +74,7 @@ cached_wheel() {
 }
 # The installer tarball is kept in the shared cache once its digest matches. One container downloads it
 # under the lock; the others wait and then find the verified file, which is never replaced afterwards.
-efa_dl="$KIMI_EFA_BUILD_CACHE/dl"
+efa_dl="$KIMI_EFA_CACHE/dl"
 efa_tgz="$efa_dl/aws-efa-installer-${efa_version}.tar.gz"
 mkdir -p "$efa_dl"
 exec 7>"$efa_dl/aws-efa-installer-${efa_version}.lock"
@@ -101,55 +101,18 @@ ldconfig
 # The NGC plugin package has no libnccl-net.so alias; the disaggregated recipe sets NCCL_NET_PLUGIN=none.
 echo "[kimi-k3-efa] /opt/amazon/ofi-nccl/lib: $(ls /opt/amazon/ofi-nccl/lib 2>/dev/null | paste -sd' ' -)"
 
-mkdir -p "$cache"
-exec 9>"$cache/build.lock"
-flock 9
-if [ ! -f "$cache/ready" ]; then
-    python3 -m pip install --no-cache-dir \
-        'cmake==4.4.4' 'build==1.6.1' 'auditwheel==6.8.2' \
-        'wheel==0.48.0' 'setuptools==84.0.0' 'pybind11==3.1.0'
-    git clone https://github.com/kvcache-ai/Mooncake.git "$task_dir/Mooncake"
-    git -C "$task_dir/Mooncake" checkout --detach "$mc_rev"
-    git -C "$task_dir/Mooncake" submodule update --init --recursive
-    (
-        cd "$task_dir/Mooncake"
-        # Since this tag the EFA transport dlopens libfabric at run time, so the build only needs the
-        # installer's headers.
-        cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON '-DCMAKE_INSTALL_RPATH=$ORIGIN' \
-            -DCMAKE_PREFIX_PATH=/opt/amazon/efa \
-            -DPython3_EXECUTABLE="$(command -v python3)" \
-            -DUSE_EFA=ON -DUSE_CUDA=ON -DUSE_ETCD=OFF \
-            -DWITH_STORE_RUST=OFF -DWITH_EP=OFF -DBUILD_UNIT_TESTS=OFF \
-            -DBUILD_BENCHMARK=OFF -DBUILD_EXAMPLES=ON
-        cmake --build build --parallel 12 --target \
-            engine store mooncake_master mooncake_client transfer_engine_bench build_nvlink_allocator
-        sed -i "s/^version = .*/version = \"${mc_version}\"/" mooncake-wheel/pyproject.toml
-        mkdir -p "$task_dir/wheels"
-        EFA_CU13_BUILD=1 OUTPUT_DIR="$task_dir/wheels" bash scripts/build_wheel.sh
-    )
-    # Exactly one wheel, and nothing left over from an earlier failed attempt in this cache.
-    wheels=("$task_dir/wheels/"*.whl)
-    if [[ ${#wheels[@]} -ne 1 || ! -f "${wheels[0]}" ]]; then
-        echo "[kimi-k3-efa] FATAL: expected one wheel, got: ${wheels[*]}" >&2
-        exit 1
-    fi
-    rm -f "$cache/"*.whl
-    cp "${wheels[0]}" "$cache/"
-    touch "$cache/ready"
-fi
-python3 -m pip uninstall -y \
-    mooncake-transfer-engine mooncake-transfer-engine-cuda13 mooncake-transfer-engine-efa-cuda13
-python3 -m pip install --no-deps "$cache/"*.whl
-flock -u 9
-
-nixl_version=1.5.2
 # The cp312 wheel matches the image's Python 3.12.
 py_tag=$(python3 -c 'import sys; print(f"cp{sys.version_info[0]}{sys.version_info[1]}")')
 if [[ "$py_tag" != cp312 ]]; then
-    echo "[kimi-k3-efa] FATAL: Python ${py_tag}, the pinned nixl-cu13 wheel is cp312" >&2
+    echo "[kimi-k3-efa] FATAL: Python ${py_tag}, the pinned Mooncake and nixl-cu13 wheels are cp312" >&2
     exit 1
 fi
+mc_whl=$(cached_wheel "$mc_url" "$mc_sha256")
+python3 -m pip uninstall -y \
+    mooncake-transfer-engine mooncake-transfer-engine-cuda13 mooncake-transfer-engine-efa-cuda13
+python3 -m pip install --no-deps "$mc_whl"
+
+nixl_version=1.5.2
 nixl_whl=$(cached_wheel \
     "https://files.pythonhosted.org/packages/31/90/cfcad1475c05c759a47f14f8edd30ebe77db2b7fae31bcdfa098fa2cfa46/nixl_cu13-${nixl_version}-cp312-cp312-manylinux_2_28_x86_64.whl" \
     591eda3f14b72769590cd71b6b46fc5e483ef1b5a90a29a8ff464310c9cf6af2)
@@ -211,10 +174,11 @@ with open(path, "rb") as lib:
     # libfabric 2.7.0amzn2.0 sets CU_CTX_SYNC_MEMOPS on the primary context when a VMM
     # allocation rejects the pointer attribute; 2.6 had neither the string nor the call.
     assert b"CU_CTX_SYNC_MEMOPS" in lib.read(), f"{path} lacks the CUDA VMM sync-memops fallback"
-installed = importlib.metadata.version("mooncake-transfer-engine-efa-cuda13")
-assert installed == mc_version, f"mooncake-transfer-engine-efa-cuda13 {installed}, expected {mc_version}"
+installed = importlib.metadata.version("mooncake-transfer-engine-cuda13")
+assert installed == mc_version, f"mooncake-transfer-engine-cuda13 {installed}, expected {mc_version}"
 from mooncake.store import MooncakeDistributedStore, ReplicateConfig  # noqa: E402,F401
 import mooncake.engine  # noqa: E402,F401
+assert mooncake.engine.SUPPORT_EFA, "the Mooncake wheel has no EFA transport"
 
 nixl = importlib.metadata.version("nixl-cu13")
 assert nixl == nixl_version, f"nixl-cu13 {nixl}, expected {nixl_version}"

@@ -7007,7 +7007,7 @@ kimik3-fp4-b300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
         kv-offloading: dram
         kv-offload-backend:
           name: mooncake
-          version: 0.3.14.dev0+gb46254de
+          version: 0.3.14rc3
         conc-list:
         - 16
         srt-recipe: disagg-variants.yaml:override_1p3d_specdecode
@@ -7028,7 +7028,7 @@ kimik3-fp4-b300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
         kv-offloading: dram
         kv-offload-backend:
           name: mooncake
-          version: 0.3.14.dev0+gb46254de
+          version: 0.3.14rc3
         conc-list:
         - 24
         - 32
@@ -7050,7 +7050,7 @@ kimik3-fp4-b300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
         kv-offloading: dram
         kv-offload-backend:
           name: mooncake
-          version: 0.3.14.dev0+gb46254de
+          version: 0.3.14rc3
         conc-list:
         - 48
         - 64
@@ -7072,7 +7072,7 @@ kimik3-fp4-b300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
         kv-offloading: dram
         kv-offload-backend:
           name: mooncake
-          version: 0.3.14.dev0+gb46254de
+          version: 0.3.14rc3
         conc-list:
         - 240
         srt-recipe: disagg-variants.yaml:override_3p4d_cap128
@@ -7093,7 +7093,7 @@ kimik3-fp4-b300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
         kv-offloading: dram
         kv-offload-backend:
           name: mooncake
-          version: 0.3.14.dev0+gb46254de
+          version: 0.3.14rc3
         conc-list:
         - 240
         srt-recipe: disagg-variants.yaml:override_2p3d_cap128

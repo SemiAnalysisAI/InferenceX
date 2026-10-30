@@ -16,7 +16,7 @@ base:
   setup_script: kimik3-b300-efa-upstream-setup.sh
 
   environment:
-    KIMI_EFA_BUILD_CACHE: /hf_hub_cache/inferencex/kimi-k3-efa
+    KIMI_EFA_CACHE: /hf_hub_cache/inferencex/kimi-k3-efa
     LD_LIBRARY_PATH: /opt/amazon/efa/lib:/opt/amazon/ofi-nccl/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib64
 
   # srtctl's Tachometer exporters slow these workers, and InferenceX does not read their output.
@@ -54,7 +54,7 @@ base:
     preamble: bash /configs/kimik3-b300-efa-upstream-setup.sh
     cpus_per_task: 16
     env:
-      KIMI_EFA_BUILD_CACHE: /hf_hub_cache/inferencex/kimi-k3-efa
+      KIMI_EFA_CACHE: /hf_hub_cache/inferencex/kimi-k3-efa
       LD_LIBRARY_PATH: /opt/amazon/efa/lib:/opt/amazon/ofi-nccl/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib64
     readiness:
       port: 8700
