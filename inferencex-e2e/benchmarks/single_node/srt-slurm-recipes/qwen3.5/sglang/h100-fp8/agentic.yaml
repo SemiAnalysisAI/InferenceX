@@ -12,8 +12,6 @@ base:
     tachometer:
       enabled: false
   engine: sglang
-  # This release drops cached_tokens_details on the multi-tokenizer path.
-  setup_script: sglang-multi-tokenizer-cached-tokens-details.sh
   roles:
     agg:
       nodes: 1
@@ -54,7 +52,9 @@ override_hicache:
         hicache-size: 100
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
-        hicache-write-policy: write_through_selective
+        # sglang#41520 counts radix hits only at request finish, so selective
+        # write-through no longer backs nodes up during their first request.
+        hicache-write-policy: write_through
   benchmark:
     env:
       KV_OFFLOADING: dram
