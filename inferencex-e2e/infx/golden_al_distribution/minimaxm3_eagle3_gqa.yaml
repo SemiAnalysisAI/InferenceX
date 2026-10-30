@@ -26,3 +26,16 @@ minimax-m3:
     6: 3.76
     7: 3.75
     8: 3.93
+
+# SPEED-Bench client settings of this collection; the acceptance-length gate replays them
+# (README.md#collection-settings).
+collection:
+  concurrency: 16
+  renderer: chat_template
+  modes:
+    thinking_on:
+      chat_template_kwargs: {thinking_mode: enabled}
+      sampling: {temperature: 1.0, top_p: 0.95, top_k: 40, repetition_penalty: 1.0}
+    thinking_off:
+      chat_template_kwargs: {thinking_mode: disabled}
+      sampling: {temperature: 1.0, top_p: 0.95, top_k: 40, repetition_penalty: 1.0}

@@ -251,7 +251,9 @@ def test_the_cpu_request_follows_the_clusters_unit():
 @pytest.mark.skipif(shutil.which("rsync") is None, reason="needs rsync")
 def test_the_staged_workspace_drops_run_artifacts_but_keeps_srt_slurm_sources(tmp_path):
     workspace = tmp_path / "workspace"
-    kept = ["runners/srt-slurm/hooks/common.sh", "benchmarks/multi_node/srt-slurm-recipes/r.yaml"]
+    # The acceptance gate's container reads the run's prepared prompts from the workspace.
+    kept = ["runners/srt-slurm/hooks/common.sh", "benchmarks/multi_node/srt-slurm-recipes/r.yaml",
+            "al_gate_dataset/speedbench_coding.jsonl"]  # fmt: skip
     dropped = ["srt-slurm-1-1-abc/recipe.yaml", "utils/srt-slurm/pyproject.toml", ".venv/bin/python",
                "outputs/42/log", "LOGS/sweep.log", "image.sqsh"]  # fmt: skip
     for name in kept + dropped:

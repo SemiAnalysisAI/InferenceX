@@ -15,3 +15,13 @@ qwen3.8-flash-next-fp8:
     4: 2.47
     5: 2.59
     6: 2.66
+
+# SPEED-Bench client settings of this collection; the acceptance-length gate replays them
+# (README.md#collection-settings).
+collection:
+  concurrency: 64
+  renderer: chat_template
+  modes:
+    thinking_on:
+      chat_template_kwargs: {enable_thinking: true}
+      sampling: {temperature: 1.0, top_p: 0.95, top_k: 20, presence_penalty: 0.0, repetition_penalty: 1.0}

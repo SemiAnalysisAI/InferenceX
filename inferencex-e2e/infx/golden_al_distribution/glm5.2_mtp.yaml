@@ -17,3 +17,13 @@ glm-5.2-fp8:
     6: 3.78
     7: 3.91
     8: 4.06
+
+# SPEED-Bench client settings of this collection; the acceptance-length gate replays them
+# (README.md#collection-settings).
+collection:
+  concurrency: 1
+  renderer: chat_template
+  modes:
+    thinking_on:
+      chat_template_kwargs: {enable_thinking: true}
+      sampling: {temperature: 1.0, top_p: 0.95, repetition_penalty: 1.0}
