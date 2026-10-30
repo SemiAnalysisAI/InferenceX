@@ -117,15 +117,20 @@ def _render_router(spec: ServingSpec, engine_argv: list[str]) -> dict[str, str]:
                 "add a router block running python3 -m dynamo.frontend"
             )
         return {
-            "router-image": "", "router-cmd": "", "router-env": "",
-            "router-profile": "", "router-metrics-port": "",
+            "router-image": "",
+            "router-cmd": "",
+            "router-env": "",
+            "router-profile": "",
+            "router-metrics-port": "",
         }
     prefix_env, argv = _pop_env_prefix(split_serve(spec.router.serve, "router.serve"))
     if not argv:
         raise ServingError("router.serve: empty command")
     is_dynamo_router = _python_module(argv) == "dynamo.frontend"
     if is_dynamo_router and not is_dynamo_engine:
-        raise ServingError("serve: python3 -m dynamo.frontend needs a python3 -m dynamo.sglang engine")
+        raise ServingError(
+            "serve: python3 -m dynamo.frontend needs a python3 -m dynamo.sglang engine"
+        )
     if is_dynamo_engine and not is_dynamo_router:
         raise ServingError(
             "router.serve: a python3 -m dynamo.sglang engine needs python3 -m dynamo.frontend as its router"
@@ -144,7 +149,9 @@ def _render_router(spec: ServingSpec, engine_argv: list[str]) -> dict[str, str]:
         "router-cmd": shlex.join(argv),
         "router-env": "\n".join(f"{key}={value}" for key, value in env.items()),
         "router-profile": "dynamo" if is_dynamo_router else "generic",
-        "router-metrics-port": "" if spec.router.metrics_port is None else str(spec.router.metrics_port),
+        "router-metrics-port": ""
+        if spec.router.metrics_port is None
+        else str(spec.router.metrics_port),
     }
 
 

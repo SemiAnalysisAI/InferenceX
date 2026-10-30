@@ -18,7 +18,16 @@ from infx.serving.datasets import LockEntry, load_lock
 from infx.serving.slo import SLOError, parse_slo
 
 SCENARIOS_DIR = Path(__file__).resolve().parents[2] / "benchmarks/single_node/serving/scenarios"
-FAMILIES = ("agentx", "tau2", "livekit", "shared-prefix-e2", "hidden-prefix-e3", "synthetic", "greenspec", "speedbench")
+FAMILIES = (
+    "agentx",
+    "tau2",
+    "livekit",
+    "shared-prefix-e2",
+    "hidden-prefix-e3",
+    "synthetic",
+    "greenspec",
+    "speedbench",
+)
 OVERRIDE_KEYS = ("duration", "dataset", "max_context_length", "generation", "trace_idle_gap_cap")
 SYNTHETIC_OVERRIDES = ("duration",)
 GENERATION_KEYS = ("top_p", "temperature")
@@ -85,25 +94,32 @@ def _positive(field: str, value: Any) -> float:
     return float(value)
 
 
-def _apply(doc: dict[str, Any], family: str, overrides: dict[str, Any],
-           lock: dict[str, LockEntry]) -> list[str]:
+def _apply(
+    doc: dict[str, Any], family: str, overrides: dict[str, Any], lock: dict[str, LockEntry]
+) -> list[str]:
     """Apply ``overrides`` to ``doc`` in place; return the label suffixes, in a fixed order."""
     if unknown := sorted(set(overrides) - set(OVERRIDE_KEYS)):
-        raise ScenarioError(f"overrides: unknown key(s) {', '.join(unknown)}; allowed: {', '.join(OVERRIDE_KEYS)}")
+        raise ScenarioError(
+            f"overrides: unknown key(s) {', '.join(unknown)}; allowed: {', '.join(OVERRIDE_KEYS)}"
+        )
     dataset = doc["benchmark"]["datasets"][0]
     suffixes: list[str] = []
     if "dataset" in overrides:
         value = overrides["dataset"]
         if dataset["type"] == "public":
             if not (isinstance(value, str) and value.startswith(PUBLIC_DATASET)):
-                raise ScenarioError(f"overrides.dataset: {family} takes a public {PUBLIC_DATASET}* dataset, got {value!r}")
+                raise ScenarioError(
+                    f"overrides.dataset: {family} takes a public {PUBLIC_DATASET}* dataset, got {value!r}"
+                )
             dataset["dataset"] = value
             if value != PUBLIC_DATASET:
                 suffixes.append("-" + value.removeprefix(PUBLIC_DATASET).lstrip("_"))
         else:
             entry = lock.get(value) if isinstance(value, str) else None
             if entry is None:
-                raise ScenarioError(f"overrides.dataset: {value!r} is not in the dataset lock; available: {', '.join(lock)}")
+                raise ScenarioError(
+                    f"overrides.dataset: {value!r} is not in the dataset lock; available: {', '.join(lock)}"
+                )
             if entry.entries is None:
                 raise ScenarioError(f"overrides.dataset: lock entry {value} has no entries count")
             dataset["name"], dataset["entries"] = value, entry.entries
@@ -141,7 +157,9 @@ def _synthetic(point: Point, search: bool, slo: str | None) -> dict[str, Any]:
     if point.osl not in OSL:
         raise ScenarioError(f"workload.osl: {point.osl!r} is not one of {', '.join(OSL)}")
     if point.cache not in CACHE:
-        raise ScenarioError(f"workload.cache: {point.cache!r} is not one of {', '.join(map(str, CACHE))}")
+        raise ScenarioError(
+            f"workload.cache: {point.cache!r} is not one of {', '.join(map(str, CACHE))}"
+        )
     if slo and not search:
         raise ScenarioError("slo: only applies with workload.search: true")
     isl = ISL[point.isl]
@@ -160,10 +178,15 @@ def _synthetic(point: Point, search: bool, slo: str | None) -> dict[str, Any]:
         doc["sweep"] = {
             "type": "adaptive_search",
             "planner": "smooth_isotonic",
-            "objectives": [{"metric": "output_token_throughput", "stat": "avg", "direction": "maximize"}],
-            "search_space": [{"path": "phases.profiling.concurrency", "lo": 1, "hi": 512, "kind": "int"}],
+            "objectives": [
+                {"metric": "output_token_throughput", "stat": "avg", "direction": "maximize"}
+            ],
+            "search_space": [
+                {"path": "phases.profiling.concurrency", "lo": 1, "hi": 512, "kind": "int"}
+            ],
             "sla_filters": [
-                {"metric_tag": s.metric, "stat": s.stat, "op": s.op, "threshold": s.threshold} for s in filters
+                {"metric_tag": s.metric, "stat": s.stat, "op": s.op, "threshold": s.threshold}
+                for s in filters
             ],
             "max_iterations": 16,
             "sla_precision": "normal",  # 1000 requests/probe cap
@@ -171,8 +194,13 @@ def _synthetic(point: Point, search: bool, slo: str | None) -> dict[str, Any]:
     return doc
 
 
-def _greenspec(overrides: dict[str, Any], point: Point | None, search: bool, slo: str | None,
-               lock: dict[str, LockEntry]) -> Rendered:
+def _greenspec(
+    overrides: dict[str, Any],
+    point: Point | None,
+    search: bool,
+    slo: str | None,
+    lock: dict[str, LockEntry],
+) -> Rendered:
     """The greenspec scenario with its selection; the run length is the selection, so there is no duration."""
     if point is not None or search or slo:
         raise ScenarioError("workload/slo: only for scenario synthetic, not greenspec")
@@ -189,8 +217,13 @@ def _greenspec(overrides: dict[str, Any], point: Point | None, search: bool, slo
     return Rendered(doc, greenspec.label(chosen), "file", name, False, 0.0)
 
 
-def _speedbench(overrides: dict[str, Any], point: Point | None, search: bool, slo: str | None,
-                lock: dict[str, LockEntry]) -> Rendered:
+def _speedbench(
+    overrides: dict[str, Any],
+    point: Point | None,
+    search: bool,
+    slo: str | None,
+    lock: dict[str, LockEntry],
+) -> Rendered:
     """The speedbench scenario with its selection; the run length is the selection, so there is no duration."""
     if point is not None or search or slo:
         raise ScenarioError("workload/slo: only for scenario synthetic, not speedbench")
@@ -199,7 +232,9 @@ def _speedbench(overrides: dict[str, Any], point: Point | None, search: bool, sl
     except speedbench.SpeedBenchError as error:
         raise ScenarioError(str(error)) from None
     if chosen.dataset not in lock:
-        raise ScenarioError(f"scenario: dataset {chosen.dataset} of speedbench is not in the dataset lock")
+        raise ScenarioError(
+            f"scenario: dataset {chosen.dataset} of speedbench is not in the dataset lock"
+        )
     doc = load_base("speedbench")
     doc["benchmark"]["datasets"][0]["name"] = chosen.dataset
     if chosen.requests:
@@ -207,9 +242,14 @@ def _speedbench(overrides: dict[str, Any], point: Point | None, search: bool, sl
     return Rendered(doc, speedbench.label(chosen), "file", chosen.dataset, False, 0.0)
 
 
-def render(family: str, overrides: dict[str, Any] | None = None, point: Point | None = None,
-           search: bool = False, slo: str | None = None,
-           lock: dict[str, LockEntry] | None = None) -> Rendered:
+def render(
+    family: str,
+    overrides: dict[str, Any] | None = None,
+    point: Point | None = None,
+    search: bool = False,
+    slo: str | None = None,
+    lock: dict[str, LockEntry] | None = None,
+) -> Rendered:
     """The final AIPerf config of ``family`` with its variant applied."""
     overrides = dict(overrides or {})
     lock = load_lock() if lock is None else lock
@@ -221,7 +261,9 @@ def render(family: str, overrides: dict[str, Any] | None = None, point: Point | 
         if point is None:
             raise ScenarioError("workload: synthetic needs isl, osl and cache")
         if extra := sorted(set(overrides) - set(SYNTHETIC_OVERRIDES)):
-            raise ScenarioError(f"overrides: synthetic only takes {', '.join(SYNTHETIC_OVERRIDES)}, not {', '.join(extra)}")
+            raise ScenarioError(
+                f"overrides: synthetic only takes {', '.join(SYNTHETIC_OVERRIDES)}, not {', '.join(extra)}"
+            )
         doc = _synthetic(point, search, slo)
         suffixes = _apply(doc, family, overrides, lock)
         label = f"{'sweep' if search else 'fixed'}-{point.label}{''.join(suffixes)}"

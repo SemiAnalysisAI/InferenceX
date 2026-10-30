@@ -31,7 +31,9 @@ DATASET_PATH = ".dataset_path"
 FAILED_REQUEST_THRESHOLD = "0.10"
 COUNT_SOURCE_MARKER = ".token_count"
 SELECTION_DIR = "/tmp/greenspec-selection"  # noqa: S108 -- inside the job container; outside the result dir: request bodies are never uploaded
-PRIVATE_LOGS = ".greenspec-private-logs"  # beside the aggregate, on the node; not in any upload path
+PRIVATE_LOGS = (
+    ".greenspec-private-logs"  # beside the aggregate, on the node; not in any upload path
+)
 PROBE_BODY = {  # the shape agentx sends: streaming, usage requested, ignore_eos injected by the scenario
     "messages": [{"role": "user", "content": "Say OK."}],
     "stream": True,
@@ -69,6 +71,11 @@ def authorization(api_key: str) -> str:
 
 
 def agentx_argv(agentx: str, scenario: Path, env: Mapping[str, str]) -> list[str]:
+    """The ``aiperf profile`` argv; ``agentx`` is the venv's ``aiperf`` executable.
+
+    Kept the historical name: the argv (and ``benchmark_command.txt``) is the
+    AgentX-shaped scenario replay; only the binary changed in the aiperf
+    migration."""
     argv = [agentx, "profile", "--config", str(scenario)]
     argv += ["--url", env.get("SERVING_REMOTE_URL") or f"http://localhost:{env['PORT']}"]
     argv += ["--model", served_model(env)]
@@ -232,7 +239,9 @@ def prepare(env: Mapping[str, str], runtime: Runtime) -> int:
                 module, chosen = found
                 selection = Path(SELECTION_DIR) / "selection.jsonl"
                 count = module.write_selection(path, chosen, served_model(env), selection)
-                print(f"{module.TAG} selection {module.label(chosen)}: {count} requests", flush=True)
+                print(
+                    f"{module.TAG} selection {module.label(chosen)}: {count} requests", flush=True
+                )
                 path = selection
             (result_dir / DATASET_PATH).write_text(str(path))
         except (DatasetError, greenspec.GreenSpecError, speedbench.SpeedBenchError) as error:
@@ -259,7 +268,7 @@ def prepare(env: Mapping[str, str], runtime: Runtime) -> int:
                 "hidden reasoning tokens are not counted)",
                 file=sys.stderr,
             )
-        return 0  # no weights to download; agentx fetches an HF tokenizer itself
+        return 0  # no weights to download; aiperf fetches an HF tokenizer itself
     return proc.call([str(runtime.hf), "download", env["MODEL"]], online(env))
 
 
@@ -277,6 +286,7 @@ def run(env: Mapping[str, str], runtime: Runtime) -> int:
     child = online(env) | {
         "AIPERF_DATASET_CONFIGURATION_TIMEOUT": "1800",
         "AIPERF_SERVICE_PROFILE_CONFIGURE_TIMEOUT": "1800",
+        "AIPERF_HTTP_TCP_USER_TIMEOUT": "900000",
         "RESULT_DIR": str(result_dir),
         "AGENTIC_OUTPUT_DIR": str(output_dir),
         "PYTHONPATH": proc.pythonpath(env),
@@ -291,7 +301,7 @@ def run(env: Mapping[str, str], runtime: Runtime) -> int:
             size = sum(1 for _ in selection)
         scenario_yaml = with_requests(scenario_yaml, min(chosen.requests or size, size))
     scenario.write_text(scenario_yaml)
-    argv = agentx_argv(str(runtime.agentx), scenario, env)
+    argv = agentx_argv(str(runtime.aiperf), scenario, env)
     (result_dir / "benchmark_command.txt").write_text(shlex.join(redacted(argv)) + "\n")
     metrics_urls = [url for url in env.get("AIPERF_SERVER_METRICS_URLS", "").split(",") if url]
     if chosen:
@@ -304,18 +314,40 @@ def run(env: Mapping[str, str], runtime: Runtime) -> int:
     if env.get("SERVING_SEARCH") == "1":
         return replay_rc or proc.call([python, "-m", "infx.serving.sweep_result"], child)
     aggregate_rc = proc.call([python, "-m", "infx.results.agentic.process_agentic_result"], child)
-    proc.call([python, "-m", "infx.results.agentic.analyze_benchmark_distributions",
-               str(artifacts), "-o", str(result_dir)], child)
-    validate_rc = proc.call([python, "-m", "infx.results.agentic.validate_agentic_result", str(artifacts),
-                             "--failed-request-threshold", FAILED_REQUEST_THRESHOLD], child)
+    proc.call(
+        [
+            python,
+            "-m",
+            "infx.results.agentic.analyze_benchmark_distributions",
+            str(artifacts),
+            "-o",
+            str(result_dir),
+        ],
+        child,
+    )
+    validate_rc = proc.call(
+        [
+            python,
+            "-m",
+            "infx.results.agentic.validate_agentic_result",
+            str(artifacts),
+            "--failed-request-threshold",
+            FAILED_REQUEST_THRESHOLD,
+        ],
+        child,
+    )
     aggregate = output_dir / f"{env['RESULT_FILENAME']}.json"
     label_result(aggregate, env["SERVING_SCENARIO_LABEL"], token_count_source=source)
     guard_rc = 0
     if chosen:
-        spec = specdec.summarize(result_dir / "spec_metrics_before.json", result_dir / "spec_metrics_after.json")
+        spec = specdec.summarize(
+            result_dir / "spec_metrics_before.json", result_dir / "spec_metrics_after.json"
+        )
         if spec is None:
-            print("WARNING no speculative-decoding series on the engine metrics; the result has no spec_decode block",
-                  file=sys.stderr)
+            print(
+                "WARNING no speculative-decoding series on the engine metrics; the result has no spec_decode block",
+                file=sys.stderr,
+            )
         else:
             specdec.merge(aggregate, spec)
         if internal:
@@ -329,7 +361,10 @@ def guard(env: Mapping[str, str], result_dir: Path, aggregate: Path, output_dir:
 
     shutil.rmtree(SELECTION_DIR, ignore_errors=True)
     problems = greenspec.guard(
-        fetch(env["SERVING_DATASET"]), result_dir, [aggregate], [output_dir / "server.log"],
+        fetch(env["SERVING_DATASET"]),
+        result_dir,
+        [aggregate],
+        [output_dir / "server.log"],
         keep_log_dir=output_dir / PRIVATE_LOGS,
     )
     for problem in problems:

@@ -19,8 +19,10 @@ upstream-format result artifact, which the `result-report` skill turns into a re
 The branch is upstream InferenceX plus one launch path, `serving`. Everything that measures is
 upstream code, unchanged:
 
-- the AgentX harness `agentx-harness==1.0.12` (pinned in `infx/bench/agentic/requirements.txt`),
-  which runs aiperf; its venv comes from `infx.bench.agentic.venv`;
+- upstream aiperf `aiperf==0.13.0.dev20261027` (pinned in `infx/bench/agentic/requirements.txt`;
+  the retired `agentx-harness` wrapper is replaced by the `--scenario inferencex-agentx-mvp`
+  defaults that `infx.bench.agentic.replay` passes explicitly);
+  its venv comes from `infx.bench.agentic.venv`;
 - the result CLIs in `infx.results.agentic` that aggregate and validate a run;
 - the reusable workflow `benchmark-tmpl.yml`, `python -m infx.launch run`, cluster records,
   image staging and Slurm submit/follow/cancel in `SlurmBackend`.
@@ -66,7 +68,7 @@ sequenceDiagram
     E->>E: start N engine replicas, one GPU slice each
     E->>E: infx.bench wait on each replica's /health
     E->>Ro: wait until /v1/models lists the model
-    E->>E: client run: agentx profile (aiperf), upstream result CLIs
+    E->>E: client run: aiperf profile (upstream), upstream result CLIs
     J->>J: EXIT trap stops the sidecar steps
 ```
 

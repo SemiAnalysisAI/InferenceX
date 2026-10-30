@@ -49,6 +49,7 @@ jobs:
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             SERVING_API_KEY: ${{ matrix.api_key_secret && secrets[matrix.api_key_secret] || '' }}
+            GREENLAB_HF_TOKEN: ${{ secrets.GREENLAB_HF_TOKEN }}
         with:
             config: ${{ toJSON(matrix.config) }}
             serving: ${{ matrix.serving }}

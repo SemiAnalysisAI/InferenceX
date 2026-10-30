@@ -26,19 +26,46 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from infx.serving.greenspec import iter_rows  # one jsonl line per row, same as the greenspec release
+from infx.serving.greenspec import (
+    iter_rows,
+)  # one jsonl line per row, same as the greenspec release
 
 FAMILY = "speedbench"
 TAG = "SpeedBench"
 QUALITATIVE = "qualitative"
-THROUGHPUTS = ("throughput_1k", "throughput_2k", "throughput_8k", "throughput_16k", "throughput_32k")
+THROUGHPUTS = (
+    "throughput_1k",
+    "throughput_2k",
+    "throughput_8k",
+    "throughput_16k",
+    "throughput_32k",
+)
 CONFIGS = (QUALITATIVE, *THROUGHPUTS)
 CATEGORIES = {
-    QUALITATIVE: ("coding", "humanities", "math", "multilingual", "qa", "rag", "reasoning", "roleplay", "stem",
-                  "summarization", "writing"),
+    QUALITATIVE: (
+        "coding",
+        "humanities",
+        "math",
+        "multilingual",
+        "qa",
+        "rag",
+        "reasoning",
+        "roleplay",
+        "stem",
+        "summarization",
+        "writing",
+    ),
     **dict.fromkeys(THROUGHPUTS, ("low_entropy", "mixed", "high_entropy")),
 }
-OVERRIDES = ("config", "category", "max_tokens", "temperature", "top_p", "chat_template_kwargs", "requests")
+OVERRIDES = (
+    "config",
+    "category",
+    "max_tokens",
+    "temperature",
+    "top_p",
+    "chat_template_kwargs",
+    "requests",
+)
 DEFAULT_MAX_TOKENS = 4096
 DEFAULT_TEMPERATURE = 1.0
 DEFAULT_TOP_P = 0.95
@@ -55,7 +82,9 @@ class Settings:
     max_tokens: int = DEFAULT_MAX_TOKENS
     temperature: float = DEFAULT_TEMPERATURE
     top_p: float = DEFAULT_TOP_P
-    chat_template_kwargs: tuple[tuple[str, Any], ...] = ()  # sorted items, so Settings stays hashable
+    chat_template_kwargs: tuple[
+        tuple[str, Any], ...
+    ] = ()  # sorted items, so Settings stays hashable
     requests: int | None = None  # None: the whole selection
 
     @property
@@ -64,7 +93,9 @@ class Settings:
         return f"speedbench-{self.config.replace('_', '-')}"
 
 
-def _number(overrides: Mapping[str, Any], key: str, default: float, low: float, high: float) -> float:
+def _number(
+    overrides: Mapping[str, Any], key: str, default: float, low: float, high: float
+) -> float:
     value = overrides.get(key, default)
     if isinstance(value, bool) or not isinstance(value, (int, float)) or not low <= value <= high:
         raise SpeedBenchError(f"overrides.{key}: a number from {low} to {high}, got {value!r}")
@@ -74,26 +105,40 @@ def _number(overrides: Mapping[str, Any], key: str, default: float, low: float, 
 def normalize(overrides: Mapping[str, Any]) -> Settings:
     """The overrides of a speedbench serving YAML as ``Settings``; one line per problem."""
     if unknown := sorted(set(overrides) - set(OVERRIDES)):
-        raise SpeedBenchError(f"overrides: speedbench takes {', '.join(OVERRIDES)}, not {', '.join(unknown)}")
+        raise SpeedBenchError(
+            f"overrides: speedbench takes {', '.join(OVERRIDES)}, not {', '.join(unknown)}"
+        )
     config = overrides.get("config", QUALITATIVE)
     if config not in CONFIGS:
         raise SpeedBenchError(f"overrides.config: {config!r} is not one of {', '.join(CONFIGS)}")
     category = overrides.get("category")
     if category is not None and category not in CATEGORIES[config]:
-        raise SpeedBenchError(f"overrides.category: {category!r} is not one of {', '.join(CATEGORIES[config])} "
-                              f"(the categories of {config})")
-    max_tokens, requests = overrides.get("max_tokens", DEFAULT_MAX_TOKENS), overrides.get("requests")
+        raise SpeedBenchError(
+            f"overrides.category: {category!r} is not one of {', '.join(CATEGORIES[config])} "
+            f"(the categories of {config})"
+        )
+    max_tokens, requests = (
+        overrides.get("max_tokens", DEFAULT_MAX_TOKENS),
+        overrides.get("requests"),
+    )
     for field, value in (("max_tokens", max_tokens), ("requests", requests)):
-        if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < 1):
+        if value is not None and (
+            isinstance(value, bool) or not isinstance(value, int) or value < 1
+        ):
             raise SpeedBenchError(f"overrides.{field}: a positive integer, got {value!r}")
     kwargs = overrides.get("chat_template_kwargs") or {}
     if not isinstance(kwargs, dict) or not all(isinstance(k, str) for k in kwargs):
-        raise SpeedBenchError(f"overrides.chat_template_kwargs: a mapping with string keys, got {kwargs!r}")
+        raise SpeedBenchError(
+            f"overrides.chat_template_kwargs: a mapping with string keys, got {kwargs!r}"
+        )
     return Settings(
-        config, category, max_tokens,
+        config,
+        category,
+        max_tokens,
         _number(overrides, "temperature", DEFAULT_TEMPERATURE, 0.0, 2.0),
         _number(overrides, "top_p", DEFAULT_TOP_P, 0.0, 1.0),
-        tuple(sorted(kwargs.items())), requests,
+        tuple(sorted(kwargs.items())),
+        requests,
     )
 
 
@@ -120,7 +165,9 @@ def label(chosen: Settings) -> str:
     if chosen.category:
         parts.append(chosen.category)
     for key, value in chosen.chat_template_kwargs:
-        parts.append("ctk-" + re.sub(r"[^0-9A-Za-z_.]+", "-", f"{key}-{json.dumps(value)}").strip("-"))
+        parts.append(
+            "ctk-" + re.sub(r"[^0-9A-Za-z_.]+", "-", f"{key}-{json.dumps(value)}").strip("-")
+        )
     if chosen.max_tokens != DEFAULT_MAX_TOKENS:
         parts.append(f"mt{chosen.max_tokens}")
     if chosen.temperature != DEFAULT_TEMPERATURE:
@@ -141,8 +188,11 @@ def prompt(row: dict[str, Any]) -> str:
 
 
 def select(path: Path, chosen: Settings) -> list[dict[str, Any]]:
-    return [row for row in iter_rows(path)
-            if (chosen.category is None or row.get("category") == chosen.category) and prompt(row)]
+    return [
+        row
+        for row in iter_rows(path)
+        if (chosen.category is None or row.get("category") == chosen.category) and prompt(row)
+    ]
 
 
 def payload(row: dict[str, Any], model: str, chosen: Settings) -> dict[str, Any]:
@@ -166,5 +216,7 @@ def write_selection(dataset: Path, chosen: Settings, model: str, out: Path) -> i
         raise SpeedBenchError(f"selection {label(chosen)}: no row of {chosen.config} matches")
     out.parent.mkdir(parents=True, exist_ok=True)
     with open(out, "w", encoding="utf-8") as f:
-        f.writelines(json.dumps(payload(row, model, chosen), ensure_ascii=False) + "\n" for row in rows)
+        f.writelines(
+            json.dumps(payload(row, model, chosen), ensure_ascii=False) + "\n" for row in rows
+        )
     return len(rows)

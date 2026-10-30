@@ -309,7 +309,14 @@ def arm_specs(spec: ServingSpec) -> list[tuple[str | None, ServingSpec]]:
     out = []
     for name, arm in spec.arms.items():
         serve = f"{spec.serve.rstrip()}\n{arm.append}" if spec.serve and arm.append else spec.serve
-        out.append((name, spec.model_copy(update={"serve": serve, "env": {**spec.env, **arm.env}, "arms": None})))
+        out.append(
+            (
+                name,
+                spec.model_copy(
+                    update={"serve": serve, "env": {**spec.env, **arm.env}, "arms": None}
+                ),
+            )
+        )
     return out
 
 
@@ -413,8 +420,10 @@ def _local_squash_problems(spec: ServingSpec, inventory: RunnerInventory) -> lis
     )
     if local and len(nodes) > 1:
         return [
-            f"{local[0]}: a .sqsh file sits on one node, but runner {spec.runner} spans {', '.join(nodes)}; "
-            "use runner: cluster:<id> of the node that holds the file"
+            (
+                f"{local[0]}: a .sqsh file sits on one node, but runner {spec.runner} spans {', '.join(nodes)}; "
+                "use runner: cluster:<id> of the node that holds the file"
+            )
         ]
     return []
 
@@ -483,7 +492,9 @@ def load_serving(text: str, inventory: RunnerInventory | None = None) -> Serving
             raise ServingError("\n".join(missing))
         seen: dict[tuple[str, tuple[tuple[str, str], ...]], str] = {}
         for name, derived in arm_specs(spec):
-            problems += [f"arms.{name}.{line}" if name else line for line in _engine_problems(derived)]
+            problems += [
+                f"arms.{name}.{line}" if name else line for line in _engine_problems(derived)
+            ]
             key = (" ".join(derived.serve.split()), tuple(sorted(derived.env.items())))
             if name and key in seen:
                 problems.append(f"arms.{name}: the same engine command and env as arms.{seen[key]}")

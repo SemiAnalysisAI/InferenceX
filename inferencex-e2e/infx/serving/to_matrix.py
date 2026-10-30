@@ -14,6 +14,7 @@ import json
 import sys
 from pathlib import Path
 
+from infx.clusters import RunnerInventory
 from infx.serving.render import CLIENT_IMAGE, _flag_value, render, render_remote, split_serve
 from infx.serving.scenarios import Rendered
 from infx.serving.schema import ServingError, ServingSpec, arm_specs, load_serving, variants
@@ -33,7 +34,9 @@ def spec_decoding(serve_cmd: str) -> str:
     return "none"
 
 
-def _row(spec: ServingSpec, framework: str, conc: int, duration: int, exp_name: str, serve_cmd: str) -> dict:
+def _row(
+    spec: ServingSpec, framework: str, conc: int, duration: int, exp_name: str, serve_cmd: str
+) -> dict:
     remote = spec.endpoint
     return {
         "image": CLIENT_IMAGE if remote else spec.image, "model": remote.model if remote else spec.model,
@@ -82,7 +85,7 @@ def _secret(spec: ServingSpec) -> str:
     return (spec.endpoint.api_key_secret or "") if spec.endpoint else ""
 
 
-def build(text: str, inventory=None) -> dict:
+def build(text: str, inventory: RunnerInventory | None = None) -> dict:
     spec = load_serving(text, inventory)
     chosen = variants(spec)
     arms = arm_specs(spec)
@@ -98,7 +101,12 @@ def build(text: str, inventory=None) -> dict:
                 else:
                     exp_name = f"{stem}_search" if variant.search else f"{stem}_c{conc}"
                 row = _row(
-                    spec, rendered["framework"], conc, int(variant.duration), exp_name, rendered["serve-cmd"]
+                    spec,
+                    rendered["framework"],
+                    conc,
+                    int(variant.duration),
+                    exp_name,
+                    rendered["serve-cmd"],
                 )
                 points.append(
                     {
@@ -111,7 +119,13 @@ def build(text: str, inventory=None) -> dict:
     if spec.arms:
         what += f" x {len(arms)} arms ({','.join(spec.arms)})"
     durations = {int(variant.duration) for variant in chosen}
-    seconds = "mixed" if len(durations) > 1 else f"{durations.pop()}s" if durations != {0} else "whole selection"  # greenspec has no duration
+    seconds = (
+        "mixed"
+        if len(durations) > 1
+        else f"{durations.pop()}s"
+        if durations != {0}
+        else "whole selection"
+    )  # greenspec has no duration
     concs = ",".join(str(conc) for conc in spec.conc)
     return {
         "points": points,

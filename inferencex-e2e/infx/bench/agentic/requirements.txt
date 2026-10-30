@@ -1,2 +1,2 @@
-agentx-harness==1.0.12
+aiperf==0.13.0.dev20261027
 datasets>=4.7.0

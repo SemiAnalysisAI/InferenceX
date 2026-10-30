@@ -69,11 +69,22 @@ def acceptance(before: dict[str, float], after: dict[str, float]) -> dict[str, A
     """Acceptance over the run from two snapshots, or None when the engine reports no speculative decoding."""
     if not WANTED & {*before, *after}:
         return None
-    delta = {key: round(after.get(name, 0.0) - before.get(name, 0.0)) for key, name in VLLM_COUNTERS.items()}
+    delta = {
+        key: round(after.get(name, 0.0) - before.get(name, 0.0))
+        for key, name in VLLM_COUNTERS.items()
+    }
     result: dict[str, Any] = {f"spec_{key}": value for key, value in delta.items()}
-    result["acceptance_length"] = 1 + delta["accepted_tokens"] / delta["draft_events"] if delta["draft_events"] > 0 else None
-    result["draft_depth"] = round(delta["drafted_tokens"] / delta["draft_events"]) if delta["draft_events"] > 0 else None
-    result["acceptance_rate"] = delta["accepted_tokens"] / delta["drafted_tokens"] if delta["drafted_tokens"] > 0 else None
+    result["acceptance_length"] = (
+        1 + delta["accepted_tokens"] / delta["draft_events"] if delta["draft_events"] > 0 else None
+    )
+    result["draft_depth"] = (
+        round(delta["drafted_tokens"] / delta["draft_events"])
+        if delta["draft_events"] > 0
+        else None
+    )
+    result["acceptance_rate"] = (
+        delta["accepted_tokens"] / delta["drafted_tokens"] if delta["drafted_tokens"] > 0 else None
+    )
     if result["acceptance_length"] is None and SGLANG_ACCEPT_LENGTH in after:
         result["acceptance_length"] = after[SGLANG_ACCEPT_LENGTH]
     return result

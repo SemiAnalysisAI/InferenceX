@@ -10,25 +10,51 @@ from infx.serving.datasets import DatasetError, LockEntry, fetch, load_lock
 def test_lock_pins_greenspec_and_speedbench_without_entries():
     lock = load_lock()
     assert set(lock) == {
-        "tau2-cs", "shared-prefix-e2", "hidden-prefix-e3",
-        "livekit-111868-v1", "livekit-111868-v2", "livekit-111868-v1.1-warm", "greenspec-v1.1.0",
-        "speedbench-qualitative", "speedbench-throughput-1k", "speedbench-throughput-2k",
-        "speedbench-throughput-8k", "speedbench-throughput-16k", "speedbench-throughput-32k",
+        "tau2-cs",
+        "shared-prefix-e2",
+        "hidden-prefix-e3",
+        "livekit-111868-v1",
+        "livekit-111868-v2",
+        "livekit-111868-v1.1-warm",
+        "greenspec-v1.1.0",
+        "speedbench-qualitative",
+        "speedbench-throughput-1k",
+        "speedbench-throughput-2k",
+        "speedbench-throughput-8k",
+        "speedbench-throughput-16k",
+        "speedbench-throughput-32k",
     }
-    assert {e.repo for n, e in lock.items() if n.startswith("speedbench-")} == {"Green-Lab/speed-bench-prepared"}
-    assert lock["speedbench-qualitative"].file == "qualitative.jsonl" and lock["speedbench-qualitative"].entries is None
-    assert lock["greenspec-v1.1.0"].repo == "Green-Lab/GreenSpec" and lock["greenspec-v1.1.0"].entries is None
+    assert {e.repo for n, e in lock.items() if n.startswith("speedbench-")} == {
+        "Green-Lab/speed-bench-prepared"
+    }
+    assert (
+        lock["speedbench-qualitative"].file == "qualitative.jsonl"
+        and lock["speedbench-qualitative"].entries is None
+    )
+    assert (
+        lock["greenspec-v1.1.0"].repo == "Green-Lab/GreenSpec"
+        and lock["greenspec-v1.1.0"].entries is None
+    )
     assert lock["livekit-111868-v1.1-warm"].entries == 671
     assert lock["livekit-111868-v1"].entries == 1217
 
 
-@pytest.mark.parametrize("body, message", [
-    ("x: {repo: a/b}\n", "x needs exactly repo, revision, file, sha256"),
-    ("x: {repo: a/b, revision: abc, file: f, sha256: " + "b" * 64 + "}\n", "x.revision"),
-    # all-digit hashes would load as YAML ints, hence a/b
-    ("x: {repo: a/b, revision: " + "a" * 40 + ", file: f, sha256: " + "b" * 64 + ", entries: 0}\n",
-     "x.entries must be a positive integer"),
-])
+@pytest.mark.parametrize(
+    "body, message",
+    [
+        ("x: {repo: a/b}\n", "x needs exactly repo, revision, file, sha256"),
+        ("x: {repo: a/b, revision: abc, file: f, sha256: " + "b" * 64 + "}\n", "x.revision"),
+        # all-digit hashes would load as YAML ints, hence a/b
+        (
+            "x: {repo: a/b, revision: "
+            + "a" * 40
+            + ", file: f, sha256: "
+            + "b" * 64
+            + ", entries: 0}\n",
+            "x.entries must be a positive integer",
+        ),
+    ],
+)
 def test_bad_lock_is_one_line_error(tmp_path, body, message):
     path = tmp_path / "lock.yaml"
     path.write_text(body)
