@@ -16,6 +16,7 @@ from infx.bench.env import BenchError
 
 PYTHON_VERSION = "3.11"
 REQUIREMENTS = Path(__file__).with_name("requirements.txt")
+HARNESS_WHEEL = Path(__file__).with_name("agentx_harness-1.0.9-py3-none-any.whl")
 
 
 @dataclass(frozen=True)
@@ -75,9 +76,9 @@ def bootstrap(runtime: Runtime) -> int:
     if rc:
         return rc
     install = [uv_exe, "pip", "install", "--python", str(runtime.python)]
-    if ref := os.environ.get("AGENTX_HARNESS_REF", "dac6e191afa5c4c64a85adb7569a89a711b953de"):
-        install += ["--no-config", str(build_harness(runtime, uv_exe, ref, env))]
-        install += ["datasets>=4.7.0"]
+    if HARNESS_WHEEL.is_file():
+        # Diagnostic branch only: candidate harness wheel built from agentx-harness dac6e19.
+        install += ["--no-config", str(HARNESS_WHEEL), "datasets>=4.7.0"]
     else:
         install += ["--no-config", "-r", str(REQUIREMENTS)]
     if proc.call(install, {**env, "UV_HTTP_TIMEOUT": "120", "UV_HTTP_RETRIES": "3"}):
@@ -88,35 +89,6 @@ def bootstrap(runtime: Runtime) -> int:
     if not (_executable(runtime.agentx) and _executable(runtime.hf)):
         raise BenchError(f"isolated AgentX environment is incomplete at {runtime.venv}")
     return 0
-
-
-HARNESS_REPO = "https://github.com/SemiAnalysisAI/agentx-harness.git"
-
-
-def build_harness(runtime: Runtime, uv_exe: Path, ref: str, env: Mapping[str, str]) -> Path:
-    """Build the AgentX wheel from ``ref`` of the harness repository (diagnostic runs only)."""
-    source = runtime.root / "agentx-harness-src"
-    dist = runtime.root / "agentx-harness-dist"
-    shutil.rmtree(source, ignore_errors=True)
-    shutil.rmtree(dist, ignore_errors=True)
-    print(f"Building AgentX harness from {HARNESS_REPO}@{ref}", flush=True)
-    path_env = {**env, "PATH": f"{Path(uv_exe).parent}:{env.get('PATH', '')}"}
-    steps = (
-        ["git", "clone", "--filter=blob:none", "--no-checkout", HARNESS_REPO, str(source)],
-        ["git", "-C", str(source), "checkout", "--detach", ref],
-        [
-            str(uv_exe), "run", "--no-project", "--with", "tomlkit", "--with", "packaging",
-            str(source / "tools" / "build_agentx_release.py"),
-            "--tag", "agentx-v1.0.9", "--out-dir", str(dist),
-        ],
-    )
-    for step in steps:
-        if proc.call(step, path_env):
-            raise BenchError(f"AgentX harness source build failed at: {' '.join(step)}")
-    wheels = sorted(dist.glob("agentx_harness-*.whl"))
-    if len(wheels) != 1:
-        raise BenchError(f"expected one AgentX wheel in {dist}, found {wheels}")
-    return wheels[0]
 
 
 def _executable(path: Path) -> bool:
