@@ -50,7 +50,9 @@ base:
         enable_offload: false
   frontend:
     type: dynamo
-    enable_multiple_frontends: false
+    enable_multiple_frontends: true
+    num_additional_frontends: 3
+    nginx_session_affinity: true
     args:
       router-mode: kv
       router-session-affinity-ttl-secs: 14400
@@ -116,7 +118,7 @@ base:
         dyn-reasoning-parser: minimax_m3
         speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         tensor-parallel-size: 1
-        gpu-memory-utilization: 0.85
+        gpu-memory-utilization: 0.92
         max-num-seqs: 64
         max-num-batched-tokens: 32768
         long-prefill-token-threshold: 4096
@@ -220,3 +222,31 @@ override_3p4d16:
       gpus: 16
       args:
         data-parallel-size: 16
+override_3p2d8_s200:
+  name: minimaxm31flash-gb300-disagg-mooncake-3p2d8-s200
+  services:
+  - name: etcd
+    type: etcd
+    placement:
+      node: infra
+  - name: nats
+    type: nats
+    placement:
+      node: infra
+    options:
+      max_payload_mb: 32
+  - name: mooncake-master
+    type: mooncake-master
+    preamble: bash /configs/vllm-mooncake.sh
+    args:
+    - --default_kv_lease_ttl=60000
+    - --eviction_high_watermark_ratio=0.95
+    - --eviction_ratio=0.10
+    options:
+      store_config:
+        metadata_server: P2PHANDSHAKE
+        global_segment_size: 200GB
+        local_buffer_size: 4GB
+        protocol: rdma
+        device_name: '@fabric.rdma-devices'
+        enable_offload: false
