@@ -11697,7 +11697,7 @@
     - minimaxm31flash-fp4-b300-sglang-agentic-dspark
   description:
     - "Add TP2 points with DRAM KV offload (L2 HiCache) using shortest-prefill-first scheduling: conc 20 to 40 with a prefill-decode interval of 32, conc 48 with 24, and conc 50 with 20."
-    - "Add TP4 points with DRAM KV offload at conc 24, 32 and 40 with shortest-prefill-first and a prefill-decode interval of 32, 8192-token prefill chunks and mem-fraction-static 0.90."
+    - "Add TP4 points with DRAM KV offload at conc 8, 16, 24, 32 and 40 with shortest-prefill-first and a prefill-decode interval of 32, 8192-token prefill chunks and mem-fraction-static 0.90."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4675
   scenario-type: [agentic-coding]
   append-only: true

@@ -7995,6 +7995,8 @@ minimaxm31flash-fp4-b300-sglang-agentic-dspark:
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [24], srt-recipe: 'agentic-tp4-spf.yaml:zip_override_tp4_dram_spf_interval32[0]' }
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32], srt-recipe: 'agentic-tp4-spf.yaml:zip_override_tp4_dram_spf_interval32[1]' }
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [40], srt-recipe: 'agentic-tp4-spf.yaml:zip_override_tp4_dram_spf_interval32[2]' }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [8], srt-recipe: 'agentic-tp4-spf.yaml:zip_override_tp4_dram_spf_interval32[3]' }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16], srt-recipe: 'agentic-tp4-spf.yaml:zip_override_tp4_dram_spf_interval32[4]' }
     - dram-utilization: 1.0
       search-space:
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32, 36, 40, 44, 46, 48], srt-recipe: agentic-tp2.yaml }
