@@ -1412,14 +1412,15 @@ dsr1-fp8-b300-sglang-mtp:
 
 kimik3-fp4-b300-vllm-agentic-dspark:
   # TP8 x DCP8 with Mooncake as the external KV tier. The recipe drafts with
-  # DSpark level 7 at conc <= 8 and stops above it; synthetic acceptance is
-  # pinned to the committed golden AL 3.84 (infx/golden_al_distribution/
+  # DSpark level 7 at conc 1, level 5 at conc 4-8 and level 3 at conc 12-40;
+  # synthetic acceptance is pinned to the committed golden
+  # AL for each level (3.84, 3.62, 3.00; infx/golden_al_distribution/
   # kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml),
   # and EVAL_ONLY switches to real block verification.
   #
-  # Kimi-K3 runtime from vllm-project/vllm @ 3696c772aae308f2420a8f307b0971e6986c4818.
-  # This replaces the unavailable 5894fdf build; new results use a new runtime baseline.
-  image: vllm/vllm-openai:nightly-dev-x86_64-cu13-3696c77
+  # vllm/vllm-openai:nightly-49cb2bbf71cfd36ee5aa33d1e184b1cddff55294 (vllm-project/vllm
+  # @ 49cb2bbf), pinned to its linux/amd64 manifest digest.
+  image: vllm/vllm-openai@sha256:8c1434bfee7d7626eef78ef70600434ffba4a1b8813cb1d1c8707ad25f47035e
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:b300-dsxe
@@ -1430,15 +1431,15 @@ kimik3-fp4-b300-vllm-agentic-dspark:
   scenarios:
     # Agentic-coding only: no fixed-seq-len (1k1k / 8k1k) arms for this recipe.
     agentic-coding:
-      # Sizes the Mooncake segment: this resolves to total-cpu-dram-gb, which
-      # the recipe divides across the 8 TP ranks.
+      # Resolves to TOTAL_CPU_DRAM_GB, which caps the recipe's 8 Mooncake
+      # segments and buffers.
     - dram-utilization: 0.75
       search-space:
       # TP8-only: a ~1.5 TB MXFP4 checkpoint does not fit below 8 GPUs.
-      # One entry for every arm: the recipe drafts at DSpark 7 up to conc 8,
-      # DSpark 3 at conc 16, and not at all above. Keep the concurrencies
-      # disjoint across arms so exp-names stay unique.
-      - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 70], srt-recipe: agentic.yaml }
+      # One entry for every arm: DSpark 7 at conc 1, DSpark 5 at conc 4-8 and
+      # DSpark 3 at conc 12-40.
+      # Keep the concurrencies disjoint across arms so exp-names stay unique.
+      - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [1, 4, 8, 12, 14, 16, 24, 28], srt-recipe: agentic.yaml }
 
 dsr1-fp8-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14

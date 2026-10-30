@@ -11703,3 +11703,12 @@
     - "Disagg 3 × DEP2 prefill and 1 × DEP16 decode at c1228 (override_3p1d_dep2_dep16_c1228) on nightly-dev-cu13-20261028-586355a8, with the prefill host-DRAM HiCache base recipe and the retired key's c1228 decode sizing: max-running-requests 384, decode CUDA graph batch 24, disaggregation-decode-extra-slots 36."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4679
   append-only: true
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update Kimi-K3 B300 vLLM AgentX to concurrency 1, 4, 8, 12, 14, 16, 24 and 28 with DSpark draft lengths 7, 5 and 3 and per-point CUDA graph capture sizes."
+    - "Pin the vLLM nightly-49cb2bbf image digest and use an InfiniBand rail for Mooncake KV offload at 256 GiB per TP rank."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4381
