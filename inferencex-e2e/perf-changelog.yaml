@@ -11782,3 +11782,12 @@
     - "C64 also sets PYTHONHASHSEED=42 and VLLM_ROCM_MINIMAX_M3_SP_PREFILL=1. Sequence-parallel prefill stays off on this checkpoint: at 8d0f05a0c it needs an MXFP8 kernel on layer.quant_method.kernel, which the Quark linear method does not expose, and every rank logs it as off."
     - "Draft data types unchanged: the dspark/ draft loads with its own MXFP8 config (FP8 E4M3 attention and FFN projections with 1x32 UE8M0 scales; BF16 fc, Markov and confidence heads, norms) and an FP8 draft KV cache. Only its length changes, at C16/C32."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4671
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp8-c1
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a single-point DeepSeek-V4.1-Flash MI355X vLLM scan at TP8, concurrency 1, with mono decode (--monokernel) on, using the latest ROCm 10.0 nightly: vllm/vllm-openai-rocm:nightly-3966924d566340e971a6da313e790d05492aa505 (2026-10-29, digest sha256:8649354473843f477a96d3aa659d0ae56bcc7df743d2d02d52aaa318178ac881)."
+    - "The new override_tp8_c1 recipe variant mirrors TP4 c1: max-num-seqs 1, max-cudagraph-capture-size 8, max-num-batched-tokens 32768, GPU-resident Engram tables. The DSpark config (5 drafts, probabilistic drafting) is unchanged. The existing TP4/TP2 config is untouched."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4666
