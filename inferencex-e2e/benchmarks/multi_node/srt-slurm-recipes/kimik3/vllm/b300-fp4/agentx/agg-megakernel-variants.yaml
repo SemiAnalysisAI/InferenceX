@@ -1,0 +1,94 @@
+schema: 2
+base:
+  identity:
+    model: {}
+    container: {}
+    frameworks:
+      vllm: e4a5b5537344b103ed10de7764378ef09604ef3d
+  dynamo:
+    install: false
+
+  # srtctl's Tachometer exporters slow these workers, and InferenceX does not read their output.
+  observability:
+    tachometer:
+      enabled: false
+
+  slurm:
+    time_limit: 04:00:00
+  health_check:
+    max_attempts: 720
+    interval_seconds: 10
+  resources:
+    gpu_type: "b300"
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  engine:
+    type: vllm
+    connector: null
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      env:
+        VLLM_FASTSAFETENSORS_QUEUE_SIZE: '-1'
+        VLLM_ALLREDUCE_USE_FLASHINFER: '1'
+        VLLM_USE_DIRECT_DCP_A2A: '1'
+        VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
+        VLLM_RPC_TIMEOUT: '600000'
+        VLLM_USE_V2_MODEL_RUNNER: '1'
+        VLLM_USE_RUST_FRONTEND: '0'
+        VLLM_PREFIX_CACHE_RETENTION_INTERVAL: '0'
+        VLLM_LOG_STATS_INTERVAL: '1'
+        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+      args:
+        served-model-name: moonshotai/Kimi-K3
+        enable-auto-tool-choice: true
+        tool-call-parser: kimi_k3
+        reasoning-parser: kimi_k3
+        load-format: fastsafetensors
+        kv-cache-dtype: fp8
+        mamba-ssm-cache-dtype: float32
+        gpu-memory-utilization: 0.92
+        tensor-parallel-size: 8
+        decode-context-parallel-size: 8
+        dcp-comm-backend: a2a
+        trust-remote-code: true
+        stream-interval: 10
+        language-model-only: true
+        moe-backend: auto
+        no-enable-flashinfer-autotune: true
+        attention-backend: TOKENSPEED_MLA
+        attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
+        enable-prefix-caching: true
+        prefix-match-unit: 128
+        max-num-seqs: 8
+        max-num-batched-tokens: 16384
+        additional-config: '{"decode_backend":"latency_specialized"}'
+  sbatch_directives:
+    # A hung worker can take its host down; never requeue onto fresh nodes.
+    no-requeue: ""
+    mem: '0'
+    comment: '''{"OccupiedIdleGPUsJobReaper":{"exemptIdleTimeMins":"60","reason":"model_loading","description":"Very large model will take extra loading time."}}'''
+  srun_options:
+    mem: '0'
+    container-remap-root: ''
+  telemetry:
+    collector_join_timeout_seconds: 12
+  benchmark:
+    env:
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+    placement:
+      node: head
+override_tp8_dspark7:
+  roles:
+    agg:
+      args:
+        max-cudagraph-capture-size: 64
+        # Prefill and mixed steps run without CUDA graphs (the aggregated form of eager prefill); pure decode
+        # steps keep full CUDA graphs.
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[7,8,14,16,28,32,56,64]}'
+        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'

@@ -80,6 +80,7 @@ BOUND_ENV = {
 FABRIC_REFERENCE = "@fabric."
 INSTALLERS = {
     "glm5.3-tilert-rocm.sh": ("router", "tilert-pd-router"),
+    "kimik3-b300-efa-upstream-setup.sh": ("kv-offload-backend", "mooncake"),
     "kimik3-b300-mooncake.sh": ("kv-offload-backend", "mooncake"),
     "vllm-mooncake.sh": ("kv-offload-backend", "mooncake"),
     "vllm-router.sh": ("router", "vllm-router"),
