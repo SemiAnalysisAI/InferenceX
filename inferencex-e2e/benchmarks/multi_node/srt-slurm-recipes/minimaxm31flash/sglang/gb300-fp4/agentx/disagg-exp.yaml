@@ -2,18 +2,18 @@ schema: 2
 
 # Experiment only (not for merge): SGLang PD on the exact vLLM GB300 PD topology
 # merged in PR #4468 (6x DEP2 prefill + DEP8 decode at conc 280/320/360, and
-# 6x DEP2 prefill + DEP16 decode at conc 300). lmsysorg/sglang:dev at 52604e1d
-# includes sgl-project/sglang#46851, which fixes the DSpark-MiniMax decode
-# commit_hidden crash under attention DP.
+# 6x DEP2 prefill + DEP16 decode at conc 300). nightly-cu134-20261030 at e371881
+# includes sgl-project/sglang#46851 (DSpark-MiniMax decode commit_hidden fix
+# under attention DP) and the minimax-msa kernels that :dev lacks.
 
 base:
   name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-exp
   identity:
     model: {}
     frameworks:
-      dynamo: "1.7.0.dev20261029"
-      sglang: "0.0.0.dev0+g52604e1d"
-  # The image ships ai-dynamo 1.7.0.dev20261029, Mooncake 0.3.13.post1 and NIXL 1.5.2.
+      dynamo: "1.7.0.dev20261030"
+      sglang: "0.0.0.dev1+ge3718813e"
+  # The image ships ai-dynamo 1.7.0.dev20261030, Mooncake 0.3.13.post1, NIXL 1.5.2 and minimax-msa 0.1.0.
   dynamo:
     install: false
     request_plane: tcp
@@ -42,12 +42,15 @@ base:
     - name: otel-collector
       type: otel-collector
       enabled: false
+  # Four Dynamo frontends behind nginx with session affinity, as vLLM's #4631:
+  # one frontend's tokenize, route and stream work saturates a CPU at conc 280+.
   frontend:
     type: dynamo
-    enable_multiple_frontends: false
-    numa_bind: true
+    enable_multiple_frontends: true
+    num_additional_frontends: 3
+    nginx_session_affinity: true
     placement:
-      node: dedicated
+      node: head
     env:
       DYN_ROUTER_TEMPERATURE: "0"
       DYN_ROUTER_QUEUE_THRESHOLD: None
@@ -108,7 +111,10 @@ base:
         max-running-requests: 128
         mem-fraction-static: 0.85
         enable-hierarchical-cache: true
-        hicache-size: 150
+        # 200 GB per rank (400 of the 482 GB per-worker allowance), as vLLM's
+        # 200GB MooncakeStore segment: at 60 sessions per prefill worker the
+        # working set overflows a 150 GB host pool and the prefix hit rate collapses.
+        hicache-size: 200
         hicache-write-policy: write_back
         speculative-algorithm: DSPARK
         speculative-dspark-block-size: 7
@@ -176,7 +182,6 @@ base:
   benchmark:
     placement:
       node: dedicated
-    colocate_with_frontend: true
     env:
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"

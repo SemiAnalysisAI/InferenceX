@@ -7579,13 +7579,13 @@ minimaxm31flash-fp4-gb300-sglang-agentic-dspark:
 
 # Experiment only (not for merge): SGLang PD on the vLLM GB300 PD topology merged in #4468.
 minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-exp:
-  image: lmsysorg/sglang:dev@sha256:d4b7701dc94d287e4fc135dfb4c1a88df0778a936255021aeb26eb54d396e579
+  image: lmsysorg/sglang:nightly-cu134-20261030-e371881@sha256:a82fff791d7dc1e5cfdfde9022487c60c079286fd54684950d55b787eb2e673a
   model: MiniMaxAI/MiniMax-M3.1-Flash
   model-prefix: minimaxm31flash
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "1.7.0.dev20261029" }
+  router: { name: dynamo-router, version: "1.7.0.dev20261030" }
   kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
