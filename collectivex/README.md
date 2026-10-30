@@ -6,13 +6,13 @@ result file per case into `results/` on the cluster that ran it. A second suite,
 [vLLM `swap_blocks` benchmark](docs/swap-blocks.md), measures pinned CPU↔GPU and same-GPU block
 copies through the same matrix and pool launchers.
 
-CollectiveX is run by hand on each pool (see [Running By Hand](#running-by-hand)). Uploading the
+CollectiveX runs through the [CollectiveX Sweep](#running-in-ci) workflow or by hand on each pool
+(see [Running By Hand](#running-by-hand)). Uploading the
 results to the CollectiveX database is the publish step: the dashboard shows the latest stored run.
 Results are not committed to this repository. CollectiveX does not rank, recommend, or select; any
 downstream display or comparison is the consumer's responsibility.
-[docs/methodology-summary.md](docs/methodology-summary.md) states the measurement rules, including
-each backend's engine contract, and [docs/methodology.md](docs/methodology.md) holds the evidence
-behind them.
+[docs/methodology.md](docs/methodology.md) states the measurement rules in a summary, including
+each backend's engine contract, and holds the evidence behind them.
 
 ## Coverage
 
@@ -24,7 +24,7 @@ behind them.
 
 Physical host count does not determine scope: both GB topologies stay inside one 72-GPU MNNVL
 scale-up domain. `configs/platform_config.json` registers which backend runs where. `normal` mode
-runs the decode and prefill ladders; `low-latency` is decode-only.
+runs the decode and prefill ladders; `low-latency` runs decode, plus prefill for NCCL EP.
 
 | Backend | Engine selector (`maturity`) | `normal` | `low-latency` |
 |---|---|---|---|
@@ -35,9 +35,9 @@ runs the decode and prefill ladders; `low-latency` is decode-only.
 | `flashinfer-ep` | vLLM `--all2all-backend flashinfer_nvlink_one_sided` (`production`) | EP8: H100, H200. EP8, EP16: GB200, GB300 | none |
 
 Every backend runs a BF16 dispatch control and an FP8 dispatch; nccl-ep's FP8 is its internal
-DS_FP8E3M4 recipe, low-latency decode only. Combine is always BF16. Coverage is uniform routing only.
+DS_FP8E3M4 recipe, low-latency prefill and decode. Combine is always BF16. Coverage is uniform routing only.
 
-`results/cases.json` is the committed copy of the full matrix: 250 requested cases, of which 226 are
+`results/cases.json` is the committed copy of the full matrix: 272 requested cases, of which 248 are
 runnable EP cases, 18 are swap-blocks cases (two per pool) and 6 are unsupported EP cells (UCCL-EP
 EP16 on MI355X and FlashInfer EP16 on H100 and H200, once per phase; FlashInfer's MNNVL workspace
 needs every rank inside one NVLink domain).
@@ -45,6 +45,15 @@ A cell is listed as unsupported only when its backend runs on that SKU at anothe
 low-latency adds only runnable cells, so a missing low-latency cell (DeepEP V2 on B300, for example)
 appears nowhere; [docs/methodology.md](docs/methodology.md#backends) gives each reason. The NCCL EP
 contract, row identity and wheel pin are in [docs/nccl-ep.md](docs/nccl-ep.md).
+
+## Running In CI
+
+Dispatch the `CollectiveX Sweep` workflow, choosing a pool (or `all`) and the same filters `run.sh`
+takes. Each shard becomes one job in the InferenceX CI priority queue, scored through
+`inferencex-e2e/configs/ci-priority.yaml`, where `collectivex` ranks above every engine
+benchmark. The job lands on the pool's runner (`runner_label` and `runner_partition` in
+`configs/platform_config.json`), runs `run.sh --shard` and uploads `results/<sku>/` as an artifact
+to publish as below. Hand runs bypass the queue and wait for whatever CI holds the nodes.
 
 ## Running By Hand
 
@@ -79,7 +88,7 @@ result:
 | `COLLX_CUDA_GRAPH=0` | `1` | times graph-capable decode cells eager (`-eager-spin-ar`) |
 | `CX_FP8_CONSUME=dequant` | `native` | stages every FP8 pair inside the chain, a verification hatch |
 | `COLLX_NCCL_LL_LAYOUT=expert-major` | `rank-major` | runs nccl-ep low-latency on its expert-major layout |
-| `COLLX_NCCL_LL_ZERO_COPY=0` | `1` | stages nccl-ep low-latency dispatch, TensorRT-LLM's graphed path (drops `-zc`) |
+| `COLLX_NCCL_LL_ZERO_COPY=0` | `1` | stages nccl-ep low-latency dispatch, TensorRT-LLM's graphed path before #20631 (drops `-zc`; a library row) |
 | `COLLX_ALIGN_SPIN_US` | `2000` | the per-sample rank-alignment spin |
 
 `COLLX_TIME` (allocation minutes: 300 per EP shard and 45 per swap-blocks shard unless set),
@@ -137,8 +146,8 @@ needs its own `squash_dir` or `storage_roots` as well: each shard creates its ba
 
 Every non-MNNVL EP16 placement requires `rdma_devices`, the operator-approved scale-out devices.
 The other network fields are `socket_ifname`, `ib_gid_index`, `rdma_service_level`,
-`rdma_traffic_class`, `rail_isolated`, `rdma_fabric`, `rdma_relaxed_ordering`, `rdma_gbs` and
-`single_node_rdma_devices`. Without `socket_ifname` each node's default-route interface carries the
+`rdma_traffic_class`, `rail_isolated`, `rdma_fabric`, `rdma_relaxed_ordering`, `rdma_gbs`,
+`uccl_rdma_recv_tokens` and `single_node_rdma_devices`. Without `socket_ifname` each node's default-route interface carries the
 cross-node sockets (h100-dgxc, h200-dgxc, b300). HCAs are never guessed, and every scale-out node must
 show its socket interface up and an active port on each listed device before backend setup; the
 methodology's [Execution Isolation](docs/methodology.md#execution-isolation) says what each field
