@@ -1132,6 +1132,10 @@ class ChangelogEntry(BaseModel):
             "every existing generated point, then append them to the latest curve"
         ),
     )
+    retired: bool = Field(
+        default=False,
+        description="Record configs removed from the base revision without scheduling benchmarks",
+    )
     eval_min_prefill_ep: int | None = Field(
         alias="eval-min-prefill-ep",
         default=None,
@@ -1150,7 +1154,16 @@ class ChangelogEntry(BaseModel):
 
     @model_validator(mode="after")
     def validate_append_only_mode(self) -> Self:
-        """Return the entry, raising ValueError if no-evals or append-only selects evals."""
+        """Reject incompatible retirement, append-only, and eval-selection fields."""
+        if self.retired and (
+            self.append_only
+            or self.evals_only
+            or self.all_evals
+            or self.no_evals
+            or self.eval_min_prefill_ep is not None
+            or self.scenario_type is not None
+        ):
+            raise ValueError("retired entries cannot use sweep or scenario selection fields")
         if self.no_evals and (
             self.evals_only or self.all_evals or self.eval_min_prefill_ep is not None
         ):
