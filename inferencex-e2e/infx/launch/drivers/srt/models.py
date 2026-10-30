@@ -51,7 +51,6 @@ OVERRIDES: dict[str, tuple[Override, ...]] = {
         Override(
             Match(any_of("dsr1"), any_of("fp8"), any_of("dynamo-sglang")), entry="deepseek-r1-0528"
         ),
-        Override(Match(any_of("dsv4"), frameworks=any_of("dynamo-vllm")), entry="DeepSeek-V4-Pro"),
         Override(
             Match(any_of("dsr1"), any_of("fp4"), any_of("dynamo-trt")),
             served_name="deepseek-r1-fp4",
@@ -71,7 +70,6 @@ OVERRIDES: dict[str, tuple[Override, ...]] = {
     ),
     "h200-dgxc": (
         Override(Match(model_glob="*/Muse-Spark-Open-816B-A42B-NVFP4"), single_node_staged=True),
-        Override(Match(any_of("dsv4")), require_config=True),
         Override(
             Match(any_of("dsr1"), any_of("fp8"), any_of("dynamo-trt")),
             served_name="DeepSeek-R1-0528",
@@ -189,21 +187,11 @@ def single_node_model_path(cluster: Cluster, request: LaunchRequest) -> str:
 
 SHARED_HF_CACHE_LANES: dict[str, tuple[Match, ...]] = {
     "mi355x-amds": (
-        Match(agentic=True, model_glob="MiniMaxAI/MiniMax-M3*"),
-        Match(agentic=True, model_glob="amd/MiniMax-M3*"),
+        Match(agentic=True, model_glob="MiniMaxAI/MiniMax-M3.1-*"),
+        Match(agentic=True, model_glob="amd/MiniMax-M3.1-*"),
         Match(agentic=True, model_glob="zai-org/GLM-5.2-FP8"),
         Match(agentic=True, model_glob="deepseek-ai/DeepSeek-V4.1-Flash"),
         Match(agentic=True, model_glob="amd/Muse-Spark-Open-*"),
-        Match(
-            frameworks=any_of("vllm", "atom"),
-            agentic=True,
-            model_glob="deepseek-ai/DeepSeek-V4-Pro",
-        ),
-        Match(
-            frameworks=any_of("vllm", "atom"),
-            agentic=True,
-            model_glob="deepseek-ai/DeepSeek-V4-Pro-0813",
-        ),
     ),
 }
 
