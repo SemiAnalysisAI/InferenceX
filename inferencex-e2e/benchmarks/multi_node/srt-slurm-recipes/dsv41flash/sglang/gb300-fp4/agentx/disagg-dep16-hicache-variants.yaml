@@ -238,17 +238,50 @@ override_5p1d_dep2_dep16_c2884:
         cuda-graph-max-bs-decode: 40
         disaggregation-decode-extra-slots: 80
 
-override_8p1d_dep2_dep16_c4096:
-  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep16-hicache-8p1d-dep2-dep16-c4096
+override_5p1d_dep2_dep16_b48_c3615:
+  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep16-hicache-5p1d-dep2-dep16-b48-c3615
   roles:
     prefill:
-      nodes: 4
-      workers: 8
+      nodes: 3
+      workers: 5
+    decode:
+      args:
+        max-running-requests: 768
+        cuda-graph-max-bs-decode: 48
+
+override_6p1d_dep2_dep16_b64_c4370:
+  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep16-hicache-6p1d-dep2-dep16-b64-c4370
+  roles:
+    prefill:
+      nodes: 3
+      workers: 6
     decode:
       args:
         max-running-requests: 1024
         cuda-graph-max-bs-decode: 64
-        disaggregation-decode-extra-slots: 128
+
+override_7p1d_dep2_dep16_b96_c5540:
+  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep16-hicache-7p1d-dep2-dep16-b96-c5540
+  roles:
+    prefill:
+      nodes: 4
+      workers: 7
+    decode:
+      args:
+        max-running-requests: 1536
+        cuda-graph-max-bs-decode: 96
+
+override_7p1d_dep2_dep16_b192_c5800:
+  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep16-hicache-7p1d-dep2-dep16-b192-c5800
+  roles:
+    prefill:
+      nodes: 4
+      workers: 7
+    decode:
+      args:
+        max-running-requests: 3072
+        cuda-graph-max-bs-decode: 192
+        load-balance-method: total_requests
 
 override_9p1d_dep2_dep16_b160_c7480:
   name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep16-hicache-9p1d-dep2-dep16-b160-c7480
@@ -260,3 +293,14 @@ override_9p1d_dep2_dep16_b160_c7480:
       args:
         max-running-requests: 2560
         cuda-graph-max-bs-decode: 160
+
+override_9p1d_dep2_dep16_b192_c7480:
+  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep16-hicache-9p1d-dep2-dep16-b192-c7480
+  roles:
+    prefill:
+      workers: 9
+    decode:
+      args:
+        max-running-requests: 3072
+        cuda-graph-max-bs-decode: 192
+        load-balance-method: total_requests
