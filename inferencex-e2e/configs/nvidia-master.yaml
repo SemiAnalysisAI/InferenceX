@@ -8061,6 +8061,15 @@ dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg:
           tp: 4
           ep: 1
           dp-attn: false
+      - spec-decoding: mtp
+        conc-list: [16]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp2_c16
+        worker:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: false
 
 dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-hicache:
   image: lmsysorg/sglang:nightly-dev-cu13-20261028-586355a8@sha256:b4f09a2ccbcfcc262d49600c3cd7f8581a793ea7d104947257b6a95500953b90
@@ -8078,6 +8087,21 @@ dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-hicache:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
+      - spec-decoding: mtp
+        conc-list: [1228]
+        srt-recipe: disagg-dep16-hicache-variants.yaml:override_3p1d_dep2_dep16_c1228
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 3
+          tp: 2
+          ep: 2
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
       - spec-decoding: mtp
         conc-list: [2884]
         srt-recipe: disagg-dep16-hicache-variants.yaml:override_5p1d_dep2_dep16_c2884

@@ -99,6 +99,26 @@ base:
       # The client splits this value on whitespace, so it has none.
       AIPERF_EXTRA_INPUTS: '{"chat_template_kwargs":{"reasoning_effort":"high","thinking":true},"temperature":1}'
 
+override_tp2_c16:
+  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-agg-tp2ep2-c16
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        dsv4-attn-backend: flashmla
+        enable-decoder-swa-bounded-replay: true
+        cuda-graph-backend-prefill: disabled
+        prefill-decode-interval: 96
+        swa-prefix-tails: 1024
+        max-running-requests: 32
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: "1"
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+        SGLANG_NUMA_BIND_V2: "0"
+
 override_tp4_c1:
   name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-agg-tp4ep1-c1
   roles:
