@@ -11703,3 +11703,12 @@
     - "Disagg 3 × DEP2 prefill and 1 × DEP16 decode at c1228 (override_3p1d_dep2_dep16_c1228) on nightly-dev-cu13-20261028-586355a8, with the prefill host-DRAM HiCache base recipe and the retired key's c1228 decode sizing: max-running-requests 384, decode CUDA graph batch 24, disaggregation-decode-extra-slots 36."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4679
   append-only: true
+
+- config-keys:
+    - qwen3.8next-fp4-b300-sglang-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Add TP1/EP1 concurrency 2 to the B300 Qwen3.8-Flash-Next NEXTN MTP AgentX curve, retaining concurrency 1 and all existing points on the same checkpoint and digest-pinned SGLang image."
+    - "The c2 variant caps admission at 4 requests and decode CUDA graph batch size at 2."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4684
+  append-only: true
