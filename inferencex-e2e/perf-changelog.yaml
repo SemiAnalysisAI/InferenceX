@@ -11680,4 +11680,4 @@
     - "C64 (from #4463): DSpark 3 with DBO at 0.90 memory utilization plus the vLLM SimpleCPUOffloadConnector (eager) with 1349 GB of host memory (dram-utilization 0.9 of the TP4 lane), about 24M tokens beside the 14.2M-token GPU KV cache."
     - "C64 also sets VLLM_ROCM_MINIMAX_M3_SP_PREFILL=1 (sequence-parallel prefill). #4463 reports it does not take effect on the Quark export; that is untested here, so C64 is the first check. C16/C32 keep #4537's recipe without it."
     - "Not taken from #4463: the MiniMaxAI checkpoint, MXFP4 load-time quantization, SP prefill at C32, and C16 mono decode."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4671
