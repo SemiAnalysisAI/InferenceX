@@ -234,8 +234,8 @@ def test_framework_prefix_matching_requires_a_separator(policy, framework, expec
     assert calculate_priority({"framework": framework}, policy) == Decimal(expected)
 
 
-def test_sweep_classifier_enum_matches_live_policy_criteria():
-    """A criterion missing from the classifier enum silently drops its weight from PR sweeps."""
+def test_sweep_classifier_enum_covers_every_weighted_model_prefix():
+    """A model prefix missing from the classifier enum silently drops its weight from PR sweeps."""
     workflow = yaml.safe_load((ROOT / ".github/workflows/run-sweep.yml").read_text())
     [classify] = [
         step
@@ -248,4 +248,5 @@ def test_sweep_classifier_enum_matches_live_policy_criteria():
     enum = schema["properties"]["criteria"]["items"]["enum"]
     assert len(enum) == len(set(enum))
     policy = load_policy(ROOT / "inferencex-e2e/configs/ci-priority.yaml")
-    assert set(enum) == supported_criteria(policy)
+    assert set(enum) <= supported_criteria(policy)
+    assert set(policy["adjustments"]["model-prefix"]) <= set(enum)

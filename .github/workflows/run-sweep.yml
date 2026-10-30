@@ -243,7 +243,7 @@ jobs:
                       --effort low
                       --max-turns 8
                       --allowedTools "Read,Glob,Grep,Bash(git diff:*)"
-                      --json-schema '{"type":"object","properties":{"criteria":{"type":"array","items":{"type":"string","enum":["multi-node","agentic","eval-only","fp4","mtp","draft_model","collectivex","operatorx","sglang","vllm","dynamo-sglang","dynamo-vllm","musespark","dsv41flash","kimik3","glm5.3","glm5.2","dsv4","minimaxm31flash","minimaxm3","qwen3.5","qwen3.8next","dsr1","checklist-complete","patchwork"]},"uniqueItems":true},"reason":{"type":"string"}},"required":["criteria","reason"]}'
+                      --json-schema '{"type":"object","properties":{"criteria":{"type":"array","items":{"type":"string","enum":["multi-node","agentic","eval-only","fp4","mtp","draft_model","sglang","vllm","dynamo-sglang","dynamo-vllm","musespark","dsv41flash","kimik3","glm5.3","glm5.2","dsv4","minimaxm31flash","minimaxm3","qwen3.5","qwen3.8next","dsr1","checklist-complete","patchwork"]},"uniqueItems":true},"reason":{"type":"string"}},"required":["criteria","reason"]}'
                   prompt: |
                       Inspect this pull request's diff against its base branch.
 
@@ -254,7 +254,7 @@ jobs:
                       - eval-only: evaluation without throughput measurement
                       - fp4: FP4 precision
                       - mtp, draft_model: speculative decoding method
-                      - collectivex, operatorx, sglang, vllm, dynamo-sglang, dynamo-vllm: runtime framework
+                      - sglang, vllm, dynamo-sglang, dynamo-vllm: runtime framework
                       - model criterion: the config model-prefix itself (minimaxm31flash, not minimaxm3)
                       - checklist-complete: PR checklist is satisfied
                       - patchwork: modified upstream engine or runtime source
