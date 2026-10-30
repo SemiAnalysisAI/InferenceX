@@ -255,7 +255,6 @@ override_tp4_c40:
         prefill-decode-interval: 64
         stream-interval: 20
         speculative-draft-attention-backend: null
-        speculative-draft-kv-cache-dtype: fp8_e4m3
       env:
         PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '4096'
