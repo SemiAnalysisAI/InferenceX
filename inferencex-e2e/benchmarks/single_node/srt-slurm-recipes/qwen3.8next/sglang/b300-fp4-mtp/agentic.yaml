@@ -57,8 +57,7 @@ base:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
-# One variant per point: admission is 2x CONC and the graph batch is CONC. NEXTN
-# resets an unset admission limit to 48, so it stays explicit.
+# NEXTN resets an unset admission limit to 48, so each point caps it explicitly.
 override_c1:
   roles:
     agg:
@@ -68,6 +67,16 @@ override_c1:
   benchmark:
     env:
       CONC: '1'
+
+override_c2:
+  roles:
+    agg:
+      args:
+        max-running-requests: 4
+        cuda-graph-max-bs-decode: 2
+  benchmark:
+    env:
+      CONC: '2'
 
 override_c4:
   roles:
