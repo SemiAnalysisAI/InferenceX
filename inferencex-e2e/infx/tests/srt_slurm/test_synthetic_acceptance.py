@@ -295,6 +295,16 @@ def test_kimi_curve_requires_an_explicit_supported_sampler(
             },
         ),
         (
+            "infera-sglang",
+            {"speculative-algorithm": "EAGLE", "speculative-num-steps": 3},
+            {},
+            {
+                "SGLANG_SIMULATE_ACC_LEN": "2.4",
+                "SGLANG_SIMULATE_ACC_METHOD": "match-expected",
+                "SGLANG_SIMULATE_ACC_TOKEN_MODE": "real-draft-token",
+            },
+        ),
+        (
             "trt",
             {
                 "speculative_config": {
