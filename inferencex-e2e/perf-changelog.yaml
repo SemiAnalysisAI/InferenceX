@@ -11670,3 +11670,12 @@
     - "Retire all MiniMax-M3 and DeepSeek-V4-Pro AgentX serving configurations across NVIDIA and AMD, deleting their unused recipes, setup assets, and launch-policy rows."
     - "Keep MiniMax-M3.1-Flash and DeepSeek-V4.1-Flash benchmark coverage unchanged. Preserve SPEED-Bench collectors, historical golden AL curves, their B300 checkpoint mappings, and the independent CollectiveX communication workload."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4664
+
+- config-keys:
+    - musespark-fp4-gb200-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Retune the Muse Spark Open GB200 curve and set SGLANG_FLASHINFER_NVFP4_PER_TOKEN_ACTIVATION=0 at every concurrency; run TP4/EP4 at concurrency 1 without KV offload and at concurrency 4, 7, 10, 14, 16, 28, 36, 40 with HiCache, dropping concurrency 2, 6, 8, 20, 24 and 32."
+    - "Use prefill-decode interval 64-256 and stream interval 20 at every HiCache point, shortest-prefill-first except at concurrency 7, request admission 2-6 at concurrency 4-16, 16K chunked prefill at concurrency 28-40, and at concurrency 40 mem-fraction-static 0.93, a 160 GB HiCache pool, CUDA graphs up to 48 and an FP8 draft KV cache."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
