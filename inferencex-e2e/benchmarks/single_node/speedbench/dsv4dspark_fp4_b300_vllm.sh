@@ -81,6 +81,13 @@ else
     if [[ "$SERVE_MODEL" != /* ]]; then hf download "$SERVE_MODEL"; fi
 fi
 
+# Some nodes run another service on the default port; serve on a free one instead.
+if ! python3 -c 'import socket, sys; socket.socket().bind(("0.0.0.0", int(sys.argv[1])))' "$PORT" 2>/dev/null; then
+    busy_port="$PORT"
+    PORT="$(python3 -c 'import socket; s = socket.socket(); s.bind(("0.0.0.0", 0)); print(s.getsockname()[1])')"
+    echo "Port $busy_port is in use on $(hostname); serving on $PORT"
+fi
+
 echo "=== Downloading SPEED-Bench dataset ==="
 # Pin the image's Hugging Face stack: an unconstrained install can pull huggingface-hub 2.x,
 # which transformers 5.x rejects, and then no server starts.
