@@ -1,0 +1,148 @@
+name: CollectiveX Sweep
+
+on:
+  workflow_dispatch:
+    inputs:
+      sku:
+        description: CollectiveX pool to sweep (all = every pool)
+        type: choice
+        default: all
+        options: [all, h100-dgxc, h200-dgxc, b200-nscale, b300, gb200, gb300, mi300x, mi325x, mi355x]
+      suites:
+        description: Comma-separated suites (ep, swap-blocks)
+        type: string
+        default: ep,swap-blocks
+      backend:
+        description: EP backend (all = every backend the pool declares)
+        type: choice
+        default: all
+        options: [all, deepep-v2, mori, uccl-ep, nccl-ep, flashinfer-ep]
+      ep_sizes:
+        description: Comma-separated EP sizes, e.g. 8,16 (blank = all)
+        type: string
+        default: ''
+      modes:
+        description: Comma-separated modes, normal and/or low-latency (blank = all)
+        type: string
+        default: ''
+      precisions:
+        description: Comma-separated precisions, bf16 and/or fp8 (blank = all the backend declares)
+        type: string
+        default: ''
+      swap_profile:
+        description: swap-blocks profile from collectivex/configs/swap_sweep.json
+        type: choice
+        default: smoke
+        options: [smoke, standard, large-blocks]
+  pull_request:
+    paths:
+      - collectivex/configs/**
+      - collectivex/sweep_matrix.py
+      - .github/workflows/collectivex-sweep.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: collectivex-${{ github.event_name }}-${{ github.run_id }}
+  cancel-in-progress: false
+
+env:
+  CX_SKU: ${{ inputs.sku || 'all' }}
+  CX_SUITES: ${{ inputs.suites || 'ep,swap-blocks' }}
+  CX_BACKEND: ${{ inputs.backend || 'all' }}
+  CX_EP_SIZES: ${{ inputs.ep_sizes }}
+  CX_MODES: ${{ inputs.modes }}
+  CX_PRECISIONS: ${{ inputs.precisions }}
+  CX_SWAP_PROFILE: ${{ inputs.swap_profile || 'smoke' }}
+
+jobs:
+  setup:
+    name: Plan CollectiveX shards
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: Plan and score shards
+        id: plan
+        env:
+          PYTHONPATH: inferencex-e2e
+        run: |
+          set -eo pipefail
+          source inferencex-e2e/benchmarks/check_env.sh
+          check_env_vars CX_SKU CX_SUITES CX_BACKEND CX_SWAP_PROFILE GITHUB_RUN_ID GITHUB_RUN_ATTEMPT GITHUB_OUTPUT
+          args=(--suites "$CX_SUITES" --backend "$CX_BACKEND" --swap-profile "$CX_SWAP_PROFILE")
+          [ "$CX_SKU" = all ] || args+=(--only-sku "$CX_SKU")
+          [ -z "$CX_EP_SIZES" ] || args+=(--ep-sizes "$CX_EP_SIZES")
+          [ -z "$CX_MODES" ] || args+=(--modes "$CX_MODES")
+          [ -z "$CX_PRECISIONS" ] || args+=(--precisions "$CX_PRECISIONS")
+          python3 collectivex/sweep_matrix.py "${args[@]}" --out matrix-full.json >/dev/null
+          jq '[.include[] | {id, sku, runner, runner_partition, backend, nodes,
+                             framework: "collectivex", "node-count": .nodes}]' matrix-full.json |
+            uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
+              python -m infx.workflows.ci_priority \
+              --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}" > scored.json
+          [ "$(jq length scored.json)" -gt 0 ] || { echo 'No runnable shards' >&2; exit 1; }
+          echo "matrix=$(jq -c '{include: .}' scored.json)" >> "$GITHUB_OUTPUT"
+          jq -r '.[] | "p\(.priority) \(.runner) \(.runner_partition) nodes:\(.nodes) \(.id)"' scored.json
+
+  sweep:
+    if: github.event_name == 'workflow_dispatch'
+    needs: setup
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
+    runs-on: >- # zizmor: ignore[self-hosted-runner] GPU Slurm runners by design; this job runs only on workflow_dispatch
+      ${{ fromJSON(format('["self-hosted",{0}{1}{2}]',
+        toJSON(matrix.runner),
+        matrix.runner_partition != '' && format(',{0}', toJSON(matrix.runner_partition)) || '',
+        vars.PRIORITY_SCHEDULER_ENABLED == 'true' && format(',{0}{1},{2}',
+          vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' && format('{0},', toJSON(format('nodes:{0}', matrix.nodes))) || '',
+          toJSON(format('ci-job-{0}-{1}', matrix.priority, matrix.queue-token)),
+          toJSON(format('ci-attempt-{0}', github.run_attempt))) || '')) }}
+    name: p${{ matrix.priority }} | CollectiveX ${{ matrix.id }}
+    env:
+      CX_SHARD_SKU: ${{ matrix.sku }}
+      CX_SHARD: ${{ matrix.id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Run shard
+        run: |
+          set -eo pipefail
+          source inferencex-e2e/benchmarks/check_env.sh
+          check_env_vars CX_SHARD_SKU CX_SHARD CX_SUITES CX_BACKEND CX_SWAP_PROFILE RUNNER_TEMP HOME
+          default_config="${XDG_CONFIG_HOME:-$HOME/.config}/inferencex/collectivex.json"
+          case "$CX_SHARD_SKU" in
+            mi300x|mi325x|mi355x) stage="${RUNNER_TEMP%/_temp}/collectivex-stage" ;;
+            b300|h100-dgxc) stage="$HOME/collectivex/stage" ;;
+            gb300) stage="$(dirname "$(jq -r '.platforms.gb300.operator.squash_dir' collectivex/configs/platform_config.json)")/stage" ;;
+            *) stage= ;;
+          esac
+          if [ -n "$stage" ] && [ ! -e "$default_config" ]; then
+            mkdir -p "$stage"
+            export COLLECTIVEX_OPERATOR_CONFIG="$RUNNER_TEMP/collectivex-operator.json"
+            jq -n --arg sku "$CX_SHARD_SKU" --arg stage "$stage" \
+              '{runners: {($sku): {stage_dir: $stage}}}' > "$COLLECTIVEX_OPERATOR_CONFIG"
+          fi
+          args=(--suite "$CX_SUITES" --backend "$CX_BACKEND" --swap-profile "$CX_SWAP_PROFILE")
+          [ -z "$CX_EP_SIZES" ] || args+=(--ep "$CX_EP_SIZES")
+          [ -z "$CX_MODES" ] || args+=(--modes "$CX_MODES")
+          [ -z "$CX_PRECISIONS" ] || args+=(--precisions "$CX_PRECISIONS")
+          collectivex/run.sh "$CX_SHARD_SKU" --shard "$CX_SHARD" "${args[@]}"
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: collectivex-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.id }}
+          path: collectivex/results/${{ matrix.sku }}/
+          if-no-files-found: warn
+          retention-days: 14
