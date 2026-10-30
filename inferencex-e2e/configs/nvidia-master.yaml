@@ -7577,10 +7577,6 @@ minimaxm31flash-fp4-gb300-sglang-agentic-dspark:
       # High-Throughput with L2 HiCache: 175 GB per rank at conc 64 and 128.
       - { tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64, 128], srt-recipe: agentic.yaml }
 
-# Disaggregated SGLang behind Dynamo for the high-throughput end of the GB300
-# AgentX curve: six DEP2 prefill workers with a DEP8 decode at conc 280-360,
-# or a DEP16 decode at conc 300. The cu134 nightly carries the minimax-msa
-# kernels and the DSpark attention-DP decode fix (sgl-project/sglang#46851).
 minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg:
   image: lmsysorg/sglang:nightly-cu134-20261030-e371881@sha256:a82fff791d7dc1e5cfdfde9022487c60c079286fd54684950d55b787eb2e673a
   model: MiniMaxAI/MiniMax-M3.1-Flash
@@ -7601,14 +7597,14 @@ minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         conc-list: [280, 320, 360]
-        srt-recipe: disagg.yaml:override_6p_dep2_dep8
+        srt-recipe: disagg-variants.yaml:override_6p_dep2_dep8
         prefill: { num-worker: 6, tp: 2, ep: 2, dp-attn: true }
         decode: { num-worker: 1, tp: 8, ep: 8, dp-attn: true }
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         conc-list: [300]
-        srt-recipe: disagg.yaml:override_6p_dep2_dep16
+        srt-recipe: disagg-variants.yaml:override_6p_dep2_dep16
         prefill: { num-worker: 6, tp: 2, ep: 2, dp-attn: true }
         decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: true }
 

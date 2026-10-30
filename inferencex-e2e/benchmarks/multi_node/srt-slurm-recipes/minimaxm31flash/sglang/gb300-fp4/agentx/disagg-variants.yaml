@@ -1,10 +1,5 @@
 schema: 2
 
-# MiniMax-M3.1-Flash AgentX on GB300: SGLang prefill and decode behind Dynamo.
-# Six DEP2 prefill workers feed a DEP8 decode (conc 280-360) or a DEP16 decode
-# (conc 300). The cu134 nightly at e371881 carries sgl-project/sglang#46851
-# (DSpark decode under attention DP) and the minimax-msa kernels.
-
 base:
   name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg
   identity:
@@ -12,7 +7,6 @@ base:
     frameworks:
       dynamo: "1.7.0.dev20261030"
       sglang: "0.0.0.dev1+ge3718813e"
-  # The image ships ai-dynamo 1.7.0.dev20261030, Mooncake 0.3.13.post1, NIXL 1.5.2 and minimax-msa 0.1.0.
   dynamo:
     install: false
     request_plane: tcp
@@ -41,7 +35,7 @@ base:
     - name: otel-collector
       type: otel-collector
       enabled: false
-  # One Dynamo frontend on the benchmark client node; engine trays run only engines.
+  # Keeps tokenize, route and stream CPU work off the engine trays.
   frontend:
     type: dynamo
     enable_multiple_frontends: false
@@ -65,9 +59,6 @@ base:
       active-prefill-tokens-threshold-frac: "None"
   engine: sglang
   roles:
-    # DEP2 prefill: attention DP2 + MoE EP2.
-    # Under attention DP this model runs MegaMoE with DeepGEMM; the
-    # flashinfer_trtllm_routed path needs matching attention TP and EP groups.
     prefill:
       nodes: 3
       workers: 6
@@ -88,6 +79,11 @@ base:
         # Some GB300 nodes list a BMC interface with the same address on every node first.
         MC_TCP_BIND_ADDRESS: "{node}"
         WITH_NVIDIA_PEERMEM: "0"
+        # Dynamo 1.7 backend admission rejects turns with 529 once a DP rank is full;
+        # the SGLang scheduler queues them instead.
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: "10000"
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT: "10000"
+        DYN_BACKEND_ADMISSION_REQUEST_QUEUE_LIMIT: "10000"
       args:
         served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
         trust-remote-code: true
@@ -98,6 +94,7 @@ base:
         expert-parallel-size: 2
         enable-dp-attention: true
         enable-dp-lm-head: true
+        # flashinfer_trtllm_routed needs attention TP to match EP, which attention DP breaks.
         moe-a2a-backend: megamoe
         disaggregation-transfer-backend: mooncake
         chunked-prefill-size: 8192
@@ -124,7 +121,6 @@ base:
         enable-metrics: true
         enable-cache-report: true
       kv_events: true
-    # DEP8 decode across two trays.
     decode:
       nodes: 2
       workers: 1
@@ -145,6 +141,9 @@ base:
         MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
         MC_TCP_BIND_ADDRESS: "{node}"
         WITH_NVIDIA_PEERMEM: "0"
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: "10000"
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT: "10000"
+        DYN_BACKEND_ADMISSION_REQUEST_QUEUE_LIMIT: "10000"
       args:
         served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
         trust-remote-code: true
@@ -184,11 +183,9 @@ base:
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
 
-# 6x DEP2 prefill + DEP8 decode at conc 280, 320, 360.
 override_6p_dep2_dep8:
   name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-6p-dep2-dep8
 
-# 6x DEP2 prefill + DEP16 decode at conc 300.
 override_6p_dep2_dep16:
   name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-6p-dep2-dep16
   roles:
