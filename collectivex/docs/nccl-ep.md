@@ -7,15 +7,13 @@ strategy runs NCCL EP's low-latency algorithm with the rank-major layout, and no
 auto-selected after TensorRT-LLM's NVLink one- and two-sided strategies, or forced with
 `TRTLLM_FORCE_COMM_METHOD=NCCL_EP`. Claims below were checked against TensorRT-LLM main
 `a6142c920` (`tensorrt_llm/_torch/moe/fused_moe/`) and nccl-extensions `1ee7136`, the last commit
-before the 2026-10-05 nightly. They have not been rechecked against the pinned 2026-10-13 nightly.
+before the 2026-10-05 nightly. They have not been rechecked against the pinned 2026-10-21 nightly.
 
 | Row | Configuration | `maturity` |
 |---|---|---|
-| `low-latency`, rank-major, BF16, eager inside one scale-up domain (zero-copy) | TensorRT-LLM's `NcclEP` | `production` |
+| `low-latency`, rank-major, BF16, inside one scale-up domain (zero-copy, the default; graphed or eager) | TensorRT-LLM's `NcclEP` (NVIDIA/TensorRT-LLM#20631) | `production` |
 | `low-latency`, rank-major, BF16, scale-out (staged, graphed or eager) | TensorRT-LLM's `NcclEP` | `production` |
-| `low-latency`, rank-major, BF16, graphed inside one scale-up domain (zero-copy, the default) | library | `candidate` |
-| `low-latency`, rank-major, BF16, graphed inside one scale-up domain, `COLLX_NCCL_LL_ZERO_COPY=0` (staged) | TensorRT-LLM's `NcclEP` | `production` |
-| `low-latency`, rank-major, BF16, eager inside one scale-up domain, `COLLX_NCCL_LL_ZERO_COPY=0` (staged) | library | `candidate` |
+| `low-latency`, rank-major, BF16, inside one scale-up domain, `COLLX_NCCL_LL_ZERO_COPY=0` (staged) | library | `candidate` |
 | `low-latency`, rank-major, DS-FP8 | library | `candidate` |
 | `low-latency`, expert-major (`COLLX_NCCL_LL_LAYOUT=expert-major`) | library | `candidate` |
 | `normal` (HT) | library | `candidate` |
@@ -36,24 +34,26 @@ scale-out.
   left to the library, which gives low-latency every SM (`nccl_ep_utils.py:251-257`).
 - **Capacity.** TensorRT-LLM sizes its one group to `min(max_num_tokens, moe_max_num_tokens)`
   (`nccl_ep.py:98-103`, default 8192) and rejects a step above it (`nccl_ep.py:124-129`). Here the
-  capacity is exactly the ladder's top, 512 for decode: the smallest TensorRT-LLM configuration that
+  capacity is exactly the ladder's top, 512 for decode and 8192 for prefill: the smallest TensorRT-LLM configuration that
   admits every rung, so low-latency runs the 512 rung that the other backends' fixed 256-token
   receive drops. Capacity changes what LL measures: each rank-major dispatch resets every routing
   slot of the receive plane, `EP x capacity x top-k` entries (`ll_dispatch_lsa.cuh:652-659`).
 - **Zero-copy wherever the library supports it.** Low-latency dispatch writes a registered NCCL
   window directly, graphed or eager. The window path exists only within one NVLink/MNNVL scale-up
-  domain, for rank-major dispatch without internal quantization (`nccl_ep.cc:4589-4600`), so
-  scale-out, expert-major and DS-FP8 rows stage in both regimes. TensorRT-LLM differs under CUDA
-  graph capture: it dispatches into a plain tensor and the library copies every received token out
-  of its staging buffer (`nccl_ep.py:305-327`, `ll_dispatch_lsa.cuh:484-490`). Graphed zero-copy
-  rows are therefore library rows; eager rows and scale-out rows match TensorRT-LLM. A zero-copy
-  row creates its group with `ZeroCopyMode.ON`, which fails any dispatch that lacks the window, so
-  the `-zc` label cannot name a path that did not run. A staged row uses `OFF`, which equals
-  TensorRT-LLM's default `AUTO` at this pin. Combine always stages in low-latency mode.
+  domain, for rank-major dispatch (`nccl_ep.cc:4589-4600` at the 2026-10-05 source), so scale-out
+  and expert-major rows stage in both regimes. FP8 registers its scale plane alongside the token
+  window and follows the same policy. TensorRT-LLM matches this with NVIDIA/TensorRT-LLM#20631:
+  its dispatch output is a registered window reserved for the context's lifetime, eager and under
+  CUDA graph capture alike, and it hands combine a registered expert-output window. Before #20631
+  it dispatched into a plain tensor under capture and the library copied every received token out
+  of its staging buffer. So in-domain zero-copy rows and scale-out rows carry `engine_contract`
+  `tensorrt-llm` in both regimes. A zero-copy row creates its group with `ZeroCopyMode.ON`, which
+  fails any dispatch that lacks the window, so the `-zc` label cannot name a path that did not
+  run. A staged row uses `OFF`. Here the low-latency combine reads the registered receive window
+  that dispatch wrote, which is the expert output in this harness.
 - **`COLLX_NCCL_LL_ZERO_COPY=0`.** Turns low-latency zero-copy off (default `1`; any other value is
-  rejected), so the graphed in-domain row runs TensorRT-LLM's graphed staged dispatch and carries
-  `engine_contract` `tensorrt-llm`. The same setting makes the eager in-domain row a library row,
-  since TensorRT-LLM zero-copies eager. HT ignores it. The row records it twice: the family loses
+  rejected), so in-domain rows run the staged dispatch TensorRT-LLM used under capture before
+  #20631. Those rows are library rows. HT ignores it. The row records it twice: the family loses
   `-zc`, and `implementation.library_config.ll_zero_copy_opt_out` is `true`. Like
   `COLLX_NCCL_LL_LAYOUT`, it is read from the launching shell's environment, which every rank
   inherits (`srun --export=ALL`), and the `case_id` does not change, so a run with it replaces the
@@ -80,7 +80,7 @@ scales (`QUANT_FWD`), which this suite does not measure.
 
 ## FP8
 
-FP8 uses NCCL EP's internal `DS_FP8E3M4` recipe, for low-latency decode only. TensorRT-LLM never
+FP8 uses NCCL EP's internal `DS_FP8E3M4` recipe, for low-latency prefill and decode. TensorRT-LLM never
 selects it: `NcclEP` sets `uses_internal_fp8_dispatch = False` and transports DeepSeek-FP8
 activations in BF16 (`nccl_ep.py:78-79`), so FP8 rows are library rows. They run in the default
 matrix, like every other backend's FP8.
@@ -92,12 +92,12 @@ matrix, like every other backend's FP8.
 `-fp8-ds-e3m4` on FP8 rows, `-cap<N>-<wheel version>`, and the harness's regime suffix. HT's `-zc`
 is part of its family: HT always takes the window. Examples:
 
-- `nccl-ep-v02-ll-rm-zc-cap512-0.2.0.dev20261013-cudagraph-spin-ar`: graphed low-latency, zero-copy.
-- `nccl-ep-v02-ll-rm-cap512-0.2.0.dev20261013-cudagraph-spin-ar`: graphed low-latency, staged
+- `nccl-ep-v02-ll-rm-zc-cap512-0.2.0.dev20261021-cudagraph-spin-ar`: graphed low-latency, zero-copy.
+- `nccl-ep-v02-ll-rm-cap512-0.2.0.dev20261021-cudagraph-spin-ar`: graphed low-latency, staged
   (scale-out, or `COLLX_NCCL_LL_ZERO_COPY=0`; `library_config.ll_zero_copy_opt_out` tells them apart).
-- `nccl-ep-v02-ht-routed-zc-static-gum1-cap512-0.2.0.dev20261013-cudagraph-spin-ar`: graphed
+- `nccl-ep-v02-ht-routed-zc-static-gum1-cap512-0.2.0.dev20261021-cudagraph-spin-ar`: graphed
   HT decode.
-- `nccl-ep-v02-ht-routed-zc-static-cap8192-0.2.0.dev20261013-eager-spin-ar`: HT prefill.
+- `nccl-ep-v02-ht-routed-zc-static-cap8192-0.2.0.dev20261021-eager-spin-ar`: HT prefill.
 
 `-gum1` appears only on graphed HT rows, the only capture that holds a host collective on this
 communicator (the routing `ncclAllGather`). The communicator runs graph usage mode 1 in every mode,
@@ -114,9 +114,12 @@ resolution: 16 for HT and every SM for low-latency, then `NCCL_EP_COMM_SMS`, the
 
 ## Nightly version
 
-`runtime/common.sh` pins `nccl-extensions[cu13]==0.2.0.dev20261013` alongside
+`runtime/common.sh` pins `nccl-extensions[cu13]==0.2.0.dev20261021` alongside
 `nccl4py[cu13]==0.5.0` and `cuda-core==1.2.1`. Installation uses `--pre --extra-index-url https://pypi.nvidia.com`;
 the package specification keys the backend cache. Each result records the installed
 wheel version verbatim in `implementation.library_version`, including the nightly date, and in
 `kernel_generation`. The value comes from distribution metadata, not the requested pin or native
 library version.
+
+Prefill runs eager; decode remains graph-capable. FP8 zero-copy on the October 15 wheel
+still needs GPU validation. Combine remains BF16 and staged for both LL phases.

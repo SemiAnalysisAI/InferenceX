@@ -7,7 +7,7 @@ GIN (GPU-Initiated Networking) inter-node — with two algorithms selected per c
   normal      -> HIGH_THROUGHPUT (HT), the Hybrid-EP-derived prefill/train path. FLAT recv
                  layout ``[N, hidden]`` (one row per received token, no expert structure) with
                  an unweighted rank-sum combine — identical semantics to deepep-v2 normal.
-  low-latency -> LOW_LATENCY (LL), the rank-major decode path. This uses the pre-reduced
+  low-latency -> LOW_LATENCY (LL), the rank-major prefill/decode path. This uses the pre-reduced
                  contract used by inference frameworks, followed by an unweighted rank-sum combine.
 Both modes use the existing CollectiveX combine oracle.
 
@@ -15,15 +15,16 @@ Engine contract: vLLM and SGLang expose no NCCL EP selector; TensorRT-LLM does. 
 communication strategy (tensorrt_llm/_torch/moe/fused_moe/communication/nccl_ep.py at main
 a6142c920), auto-selected after its NVLink strategies or forced with
 TRTLLM_FORCE_COMM_METHOD=NCCL_EP, runs LL rank-major only and never NCCL EP's internal
-DS_FP8E3M4 quantization: DeepSeek-FP8 activations cross it in BF16. LL rank-major BF16 rows
-zero-copy wherever the library can (one NVLink/MNNVL scale-up domain), graphed or eager, as NCCL EP
-is built to run. TensorRT-LLM stages its dispatch under CUDA graph capture instead, so the rows that
-match its configuration (eager, or scale-out where every path stages) carry its contract; graphed
-zero-copy rows, HT, expert-major LL and DS-FP8 are library (`candidate`) rows.
-COLLX_NCCL_LL_ZERO_COPY=0 stages every LL dispatch, which makes graphed in-domain LL rank-major
-BF16 TensorRT-LLM's graphed configuration (and eager in-domain a library row).
+DS_FP8E3M4 quantization: DeepSeek-FP8 activations cross it in BF16. LL rank-major rows zero-copy
+wherever the library can (one NVLink/MNNVL scale-up domain), graphed or eager, as NCCL EP is built
+to run. TensorRT-LLM does the same with NVIDIA/TensorRT-LLM#20631, which reserves its dispatch output
+as a registered window for the context's lifetime (eager and under CUDA graph capture) and hands
+combine a registered expert-output window, so LL rank-major BF16 rows carry its contract in both
+regimes; HT, expert-major LL and DS-FP8 are library (`candidate`) rows.
+COLLX_NCCL_LL_ZERO_COPY=0 stages every LL dispatch, which is TensorRT-LLM's graphed configuration
+before #20631 (a library row here).
 
-FP8 uses NCCL EP's native DS_FP8E3M4 recipe, for low-latency decode only, and runs in the
+FP8 uses NCCL EP's native DS_FP8E3M4 recipe, for low-latency prefill and decode, and runs in the
 default matrix like every other backend's FP8. Received E4M3 values
 are dequantized into a BF16 staging plane, so the BF16 combine and correctness oracle remain the
 common comparison contract. Normal mode remains BF16-only.
@@ -131,8 +132,8 @@ class NCCLEPBackend(EPBackend):
     name = "nccl-ep"
     # Set per row in __init__: "production" where the row runs the configuration an engine selects
     # (TensorRT-LLM's NcclEP, LL rank-major with BF16 transport, communication_factory.py:254-278
-    # and 438-459, with TensorRT-LLM's zero-copy choice for the regime), "candidate" for every other
-    # row (graphed zero-copy LL, HT, expert-major LL, DS-FP8).
+    # and 438-459, with TensorRT-LLM's zero-copy choice as of NVIDIA/TensorRT-LLM#20631), "candidate"
+    # for every other row (staged in-domain LL, HT, expert-major LL, DS-FP8).
     maturity = "candidate"
     # One library, two algorithms selected by args.mode. kernel_generation and the combine
     # semantics are switched to their LL values in __init__ (mirrors ep_deepep_v2), and
@@ -177,9 +178,8 @@ class NCCLEPBackend(EPBackend):
 
     @property
     def cuda_graph_supported(self) -> bool:
-        # HT replays at decode only, as a captured decode step runs it (engines run prefill
-        # uncaptured); see methodology, CUDA Graph Replay.
-        if self.mode == "normal" and getattr(self.args, "phase", None) != "decode":
+        # Inference engines capture decode and run prefill uncaptured.
+        if getattr(self.args, "phase", None) != "decode":
             return False
         return super().cuda_graph_supported
 
@@ -198,8 +198,8 @@ class NCCLEPBackend(EPBackend):
         self._internode = world_size > int(args.scale_up_domain)
         self._ll = self.mode == "low-latency"
         self._fp8 = getattr(self, "precision", "bf16") == "fp8"
-        if self._fp8 and (not self._ll or args.phase != "decode"):
-            raise ValueError("NCCL EP FP8 is enabled for low-latency decode only")
+        if self._fp8 and not self._ll:
+            raise ValueError("NCCL EP FP8 is enabled for low-latency mode only")
         self.stage_device_work = self._fp8
         # LL layout: rank-major (TensorRT-LLM's NCCL EP contract, the default) or expert-major
         # (DeepEP LL's contract, as vLLM/SGLang decode consume it). Both are native LL layouts.
@@ -207,8 +207,8 @@ class NCCLEPBackend(EPBackend):
         if layout not in ("rank-major", "expert-major"):
             raise ValueError(f"COLLX_NCCL_LL_LAYOUT must be rank-major or expert-major, got {layout!r}")
         self._ll_expert_major = self._ll and layout == "expert-major"
-        # COLLX_NCCL_LL_ZERO_COPY=0 stages every LL dispatch, so the graphed in-domain row can run
-        # TensorRT-LLM's graphed (staged) dispatch. HT ignores it.
+        # COLLX_NCCL_LL_ZERO_COPY=0 stages every LL dispatch, as TensorRT-LLM did under CUDA graph
+        # capture before NVIDIA/TensorRT-LLM#20631. HT ignores it.
         ll_zero_copy = os.environ.get("COLLX_NCCL_LL_ZERO_COPY", "1")
         if ll_zero_copy not in ("0", "1"):
             raise ValueError(f"COLLX_NCCL_LL_ZERO_COPY must be '0' or '1', got {ll_zero_copy!r}")
@@ -216,16 +216,18 @@ class NCCLEPBackend(EPBackend):
         # HT needs its windows in both regimes (`_bind_ht_recv_count`). LL zero-copies wherever the
         # library can, graphed or eager: it zero-copies only NVLink-only, rank-major NONE/FWD
         # dispatch (nccl_ep.cc:4589-4600), so scale-out (EP beyond the scale-up domain, whose GIN
-        # path has no window; an MNNVL domain spanning nodes is not scale-out), expert-major and
-        # DS_FP8E3M4, which generates its scales internally, always stage.
+        # path has no window; an MNNVL domain spanning nodes is not scale-out) and expert-major
+        # always stage. FP8 registers its scale plane too, so DS_FP8E3M4 zero-copies in-domain.
         self.zero_copy = not self._ll or not (
-            self._internode or self._ll_expert_major or self._fp8 or self._ll_zero_copy_opt_out
+            self._internode or self._ll_expert_major or self._ll_zero_copy_opt_out
         )
         # The one configuration an engine runs (module docstring): TensorRT-LLM's LL rank-major
-        # BF16, which dispatches into a registered window eager (where the library can) but into a
-        # plain context-owned tensor under CUDA graph capture (nccl_ep.py:305-327). A row carries
-        # its contract only when its zero-copy choice is TensorRT-LLM's for the regime.
-        trtllm_zero_copy = not self.cuda_graph_enabled and not self._internode
+        # BF16. With NVIDIA/TensorRT-LLM#20631 its dispatch output is a registered window reserved
+        # for the context's lifetime, eager and under CUDA graph capture alike, and the expert
+        # output combine reads is a registered window too. The library zero-copies wherever it
+        # can, so a row carries the contract when its zero-copy choice matches: in-domain rows
+        # zero-copy, scale-out rows stage.
+        trtllm_zero_copy = not self._internode
         self.engine_contract = (
             "tensorrt-llm"
             if self._ll and not self._ll_expert_major and not self._fp8
@@ -464,6 +466,8 @@ class NCCLEPBackend(EPBackend):
             )
             self._ht_disp_counts_t = self._t(self._ht_disp_counts)
 
+        # Register receive windows when zero-copy is selected.
+        self._recv_scales_window = None
         if self.zero_copy:
             self._recv_window = self._comm.register_window(
                 self._recv_x, flags=nccl_core.WindowFlag.COLL_SYMMETRIC
@@ -476,9 +480,26 @@ class NCCLEPBackend(EPBackend):
         else:
             self._recv_window = None
             self._recv_x_t = self._t(self._recv_x)
-            if self._fp8:
+        if self._fp8:
+            if self.zero_copy:
+                self._recv_scales_window = self._comm.register_window(
+                    self._recv_scales, flags=nccl_core.WindowFlag.COLL_SYMMETRIC
+                )
+                if not self._recv_scales_window.is_valid:
+                    self._recv_scales_window.close()
+                    self._recv_scales_window = None
+                    self._recv_window.close()
+                    self._recv_window = None
+                    self._ep_group.destroy()
+                    self._ep_group = None
+                    raise RuntimeError("NCCL-EP zero-copy scale window registration failed")
+                self._recv_scales_t = Tensor(
+                    self._recv_scales, window=self._recv_scales_window, window_offset=0
+                )
+            else:
                 self._recv_scales_t = self._t(self._recv_scales)
-                self._combine_x_t = self._t(self._combine_scratch)
+            # LL combine remains BF16 and staged even when dispatch writes direct windows.
+            self._combine_x_t = self._t(self._combine_scratch)
 
     def _ensure_handle(self, p):
         """Bind the group's single handle to p's routing, creating it on first use.
@@ -826,6 +847,9 @@ class NCCLEPBackend(EPBackend):
         try:
             dist.barrier()
             self._destroy_handles()
+            if self._recv_scales_window is not None:
+                self._recv_scales_window.close()
+                self._recv_scales_window = None
             if self._recv_window is not None:
                 self._recv_window.close()
                 self._recv_window = None
