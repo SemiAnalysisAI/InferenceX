@@ -67,37 +67,14 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
         ),
         error="dcgm-power requires dynamo-sglang or the supported Kimi-K3 AgentX route",
     ),
-    ("b300-dsxe", LaunchPath.SRT_MULTI): PowerLane(
-        rules=(
-            PowerRule(
-                Match(
-                    any_of("dsv4"),
-                    any_of("fp4"),
-                    any_of("dynamo-sglang", "dynamo-vllm"),
-                    agentic=False,
-                ),
-                agentx=False,
-            ),
-        ),
-        error="B300 dcgm-power is limited to fixed-sequence DSV4 FP4 dynamo-sglang/vllm",
-    ),
     ("b200-nscale", LaunchPath.SRT_NATIVE): PowerLane(
         rules=(
             PowerRule(
                 Match(any_of("kimik3"), any_of("fp4"), any_of("dynamo-vllm"), agentic=True),
                 agentx=True,
             ),
-            PowerRule(
-                Match(
-                    any_of("dsv4"),
-                    any_of("fp4"),
-                    any_of("dynamo-sglang", "dynamo-vllm"),
-                    agentic=False,
-                ),
-                agentx=False,
-            ),
         ),
-        error="B200 nscale dcgm-power requires a supported fixed-sequence lane or Kimi-K3 AgentX vLLM",
+        error="B200 nscale dcgm-power requires Kimi-K3 FP4 AgentX dynamo-vllm",
     ),
     ("b200-nscale", LaunchPath.SRT_MULTI): PowerLane(
         rules=(
@@ -105,12 +82,8 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
                 Match(any_of("qwen3.5"), any_of("fp8"), any_of("dynamo-sglang"), agentic=True),
                 agentx=True,
             ),
-            PowerRule(
-                Match(any_of("dsv4"), any_of("fp4"), any_of("dynamo-vllm"), agentic=False),
-                agentx=False,
-            ),
         ),
-        error="B200 Nscale dcgm-power requires fixed-sequence DSV4 FP4 dynamo-vllm or Qwen3.5 FP8 AgentX dynamo-sglang",
+        error="B200 Nscale dcgm-power requires Qwen3.5 FP8 AgentX dynamo-sglang",
     ),
     ("h200-dgxc", LaunchPath.SRT_MULTI): PowerLane(
         rules=(
@@ -118,14 +91,12 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
                 Match(any_of("kimik3"), any_of("fp4"), any_of("vllm"), agentic=True), agentx=True
             ),
             PowerRule(
-                Match(
-                    any_of("glm5.2", "dsv4"), any_of("fp8"), any_of("dynamo-sglang"), agentic=True
-                ),
+                Match(any_of("glm5.2"), any_of("fp8"), any_of("dynamo-sglang"), agentic=True),
                 agentx=False,
                 adapter=True,
             ),
         ),
-        error="H200 dcgm-power requires AgentX dynamo-sglang glm5.2/dsv4 FP8 or Kimi-K3 vLLM FP4",
+        error="H200 dcgm-power requires AgentX dynamo-sglang glm5.2 FP8 or Kimi-K3 vLLM FP4",
     ),
 }
 
