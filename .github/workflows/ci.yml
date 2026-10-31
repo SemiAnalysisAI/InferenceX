@@ -69,7 +69,7 @@ jobs:
       - name: Check CollectiveX coverage manifest
         if: matrix.check == 'Tests'
         run: |
-          python collectivex/sweep_matrix.py --suites ep,swap-blocks --cases-json collectivex/results/cases.json > /dev/null
+          python collectivex/sweep_matrix.py --suites ep,swap-blocks,kv-transfer --cases-json collectivex/results/cases.json > /dev/null
           git diff --exit-code -- collectivex/results/cases.json
 
       - name: Run tests
