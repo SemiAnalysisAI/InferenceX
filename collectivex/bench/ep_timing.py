@@ -197,11 +197,23 @@ class _SpinAlignment:
         self.spin_cycles = None
         self.leads = []
         self._align_token = None
+        # Probe: COLLX_FLUSH_L2=1 writes twice the L2 ahead of every fresh-entry sample, as
+        # DeepEP's bench_kineto does, so the timed op starts with a cold L2.
+        self.flush_l2 = os.environ.get("COLLX_FLUSH_L2") == "1"
+        self._flush_buffer = None
 
     def missed_samples(self):
         """1 per sample of the last timed series whose host outran the spin: that rank's window may
         have opened after the barrier released the others."""
         return [int(lead > self.spin_us) for lead in self.leads]
+
+    def _flush(self):
+        import torch
+
+        if self._flush_buffer is None:
+            l2 = torch.cuda.get_device_properties(self.backend.device).L2_cache_size
+            self._flush_buffer = torch.empty(2 * l2 // 4, dtype=torch.int32, device=self.backend.device)
+        self._flush_buffer.zero_()
 
     def calibrate_spin(self):
         """Size the spin to `spin_us` of wall time: `_sleep` counts SM cycles, not time."""
@@ -249,7 +261,8 @@ class EagerTiming(_SpinAlignment):
 
     @property
     def alignment(self):
-        return {"method": "gpu-spin-then-all-reduce", "spin_us": self.spin_us}
+        return {"method": "gpu-spin-then-all-reduce", "spin_us": self.spin_us,
+                "flush_l2": self.flush_l2}
 
     def host_holds(self):
         """1 per sample of the last timed series whose start waited for this rank's throttled host
@@ -268,6 +281,8 @@ class EagerTiming(_SpinAlignment):
 
         if self.spin_cycles is None:
             self.calibrate_spin()
+        if self.flush_l2:
+            self._flush()
         torch.cuda._sleep(self.spin_cycles)
         self._all_reduce()
 
@@ -518,7 +533,8 @@ class GraphTiming(_SpinAlignment):
 
     @property
     def alignment(self):
-        return {"method": "in-graph-spin-then-all-reduce", "spin_us": self.spin_us}
+        return {"method": "in-graph-spin-then-all-reduce", "spin_us": self.spin_us,
+                "flush_l2": self.flush_l2}
 
     def host_holds(self):
         """No graphed dispatch waits on the host."""
@@ -557,7 +573,11 @@ class GraphTiming(_SpinAlignment):
         combined = handle = None
         # torch's default capture mode, as the engines capture: an API call that is unsafe during
         # capture fails here instead of being recorded into a graph no engine could build.
+        if self.flush_l2:
+            self._flush()  # allocates the buffer outside the capture
         with torch.cuda.graph(graph):
+            if self.flush_l2:
+                self._flush()
             # A separate all-reduce followed by a host-launched graph can let CPU launch
             # delays spread the ranks apart again, inflating the measured communication time.
             # Capture the spin, then the all-reduce and its stream dependencies, so each replay
