@@ -11724,3 +11724,10 @@
     - "Extend the MI355X Qwen3.8-Flash-Next SGLang AgentX sweep to concurrency 1/2/4/8/12/16 on the existing pinned upstream image and default serving path."
     - "Add c1/c2/c4 recipe variants with max-running-requests and cuda-graph-max-bs-decode set to 2/4/8, preserving the existing 2x concurrency sizing and all other serving settings."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4680
+
+- config-keys:
+    - glm5.2-fp8-mi355x-sglang-agentic-mtp
+  description:
+    - "Update SGLang image from v0.5.19-rocm720-mi35x-20260917 to v0.5.22-rocm720-mi35x."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4518
+  scenario-type: [agentic-coding]
