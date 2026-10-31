@@ -11705,6 +11705,27 @@
   append-only: true
 
 - config-keys:
+    - qwen3.8next-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the Qwen3.8-Flash-Next Quark MXFP4 (FP8 attention, FP8 PLE) AgentX recipe on MI355X with SGLang native NEXTN MTP (3 steps, eagle-topk 1, 4 draft tokens) at TP1/EP1 and concurrency 8/12/16, no KV offloading. TP1: the ~116 GiB checkpoint fits on one MI355X."
+    - "Serve amd/Qwen3.8-Flash-Next-Quark-MXFP4-AttnFP8-PLEFP8 (MXFP4 MoE experts including the MTP draft, per-channel FP8 attention, FP8 PLE table) from lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261030@sha256:1ff42c238adfca9a55e8d3d3dc859a4e4e88b23e7f9340e86d17ff042b933bda with quark quantization, the aiter attention backend, page-size 64, kv-cache-dtype auto, mem-fraction-static 0.9, chunked-prefill-size 16384 and mamba-ssm-dtype bfloat16; decode CUDA graphs are on."
+    - "Every point keeps ReplaySSM spec-verify (--enable-linear-replayssm-spec) and the default path, admits 2x CONC requests and captures decode CUDA graphs up to that admission (max-running-requests = cuda-graph-max-bs-decode = 16, 24 and 32 at c8, c12 and c16), and uses mem-fraction-static 0.9 as given (SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION=1), a ~3.45M-token KV pool instead of ~2.78M at the scaled 0.765. Six tokenizer workers (--tokenizer-worker-num 6), AITER_GDR_FLYDSL=1, and integer all-reduce off (ROCM_QUICK_REDUCE_QUANTIZATION=NONE). The FlyDSL monokernel (sgl-amd-mono #29) is not used: the image pins sgl-amd-mono before it."
+    - "Offload the PLE n-gram embedding table to CPU pinned memory (--ple-offload-embedding with ple_embedding_dtype float8_e4m3fn), cutting GPU weight memory from ~130 GB to ~82 GB and growing the KV cache pool from ~2.1M to ~3.7M tokens."
+    - "No patches and no setup_script: the image's SGLang 17e94c4677 and AITER 285579b6 are used as shipped."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4680
+
+- config-keys:
+    - qwen3.8next-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Extend the MI355X Qwen3.8-Flash-Next SGLang AgentX sweep to concurrency 1/2/4/8/12/16 on the existing pinned upstream image and default serving path."
+    - "Add c1/c2/c4 recipe variants with max-running-requests and cuda-graph-max-bs-decode set to 2/4/8, preserving the existing 2x concurrency sizing and all other serving settings."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4680
+
+- config-keys:
     - dsv41flash-fp4-mi355x-vllm-agentic-dspark
   scenario-type: [agentic-coding]
   description:
