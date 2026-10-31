@@ -11735,5 +11735,5 @@
     - "On the four throughput points, switch mamba-ssm-cache-dtype from FP32 to BF16 on prefill and decode, keep four DSpark draft tokens, and raise the prefill-only SimpleCPUOffload budget from 1799 GB to 2399 GB per prefill worker (DRAM utilization 0.6 to 0.8)."
     - "On 1P1D c8, use seven DSpark draft tokens, TP8/DCP8 on both roles, FP32 SSM state, max-num-seqs 1 on prefill and decode, and MoRIIO without CPU offload; decode uses the latency_specialized backend with VLLM_USE_V2_MODEL_RUNNER=1 and FULL_DECODE_ONLY graphs at sizes [1, 8]."
     - "The new image adds Kimi-K3 specialized decode on MI355X (vllm#60683), MoRIIO consumers with specialized decode (vllm#63031), BF16 KDA recurrent state (vllm#58743) and MoRIIO READ completion before the forward (vllm#60808)."
-    - "Draft data types unchanged: the Inferact/Kimi-K3-DSpark draft ships all-BF16 with no quantization_config, the speculative config sets no quantization, so get_draft_quant_config returns None at both vLLM commits and the draft runs BF16 weights with an FP8 KV cache on ROCM_AITER_MLA."
+    - "Keep the DSpark draft's BF16 weights and FP8 KV cache; set VLLM_ROCM_QUICK_REDUCE_MIN_SIZE_BYTES_MB=16 on every prefill and decode worker to exclude draft all-reduces from INT4 QuickReduce."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4391
