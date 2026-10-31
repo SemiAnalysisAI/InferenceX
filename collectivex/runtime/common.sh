@@ -15,6 +15,29 @@ COLLX_DEEPEP_V2_REPO="https://github.com/deepseek-ai/DeepEP"
 # backend cache is keyed on this value.
 COLLX_DEEPEP_V2_COMMIT="01dc3aaac82068020353dce2c302e38153c0bfaa"
 
+# Pools whose registry network block sets deepep_efa_fork (b300) build AWS's EFA fork of the same
+# V2: amazon-contributing/DeepEP main is the pin above plus its EFA commits, chiefly unordered
+# hybrid kernels that need only the weak GIN signals the aws-ofi-nccl proxy provides. Upstream
+# treats EFA as unsupported (deepseek-ai/DeepEP#369).
+COLLX_DEEPEP_V2_EFA_REPO="https://github.com/amazon-contributing/DeepEP"
+COLLX_DEEPEP_V2_EFA_COMMIT="a227152ac29513b1c702860745a1d1e0111ae0dc"
+# ElasticBuffer needs NCCL 2.30.4 (torch pins 2.28.9). The fork sets GIN signal requirements
+# (ginStrongSignalsRequired, ginVaSignalsRequired) that NCCL first declares in 2.32, which is what
+# AWS tests it with. Part of the venv cache key.
+COLLX_DEEPEP_V2_NCCL_SPEC="nvidia-nccl-cu13==2.30.4"
+COLLX_DEEPEP_V2_EFA_NCCL_SPEC="nvidia-nccl-cu13==2.32.3"
+
+# Selects this pool's DeepEP V2 source into COLLX_DEEPEP_V2_REPO/COMMIT/NCCL_SPEC (the venv cache is keyed
+# on the commit, so the two sources never share a build).
+collx_select_deepep_v2_source() {
+  # Opt-in per pool, not per fabric: on h100-dgxc (p5, 32 EFA NICs per node) the fork's
+  # unordered dispatch times out forwarding scale-out tokens, so it keeps upstream there.
+  [ "${COLLX_DEEPEP_EFA_FORK:-}" = 1 ] || return 0
+  COLLX_DEEPEP_V2_REPO="$COLLX_DEEPEP_V2_EFA_REPO"
+  COLLX_DEEPEP_V2_COMMIT="$COLLX_DEEPEP_V2_EFA_COMMIT"
+  COLLX_DEEPEP_V2_NCCL_SPEC="$COLLX_DEEPEP_V2_EFA_NCCL_SPEC"
+}
+
 # Must match the image's CUDA line: the cu12 wheel's r12 host library on cu130 images survives
 # on sm90/sm100 but poisons the CUDA context during symmetric-heap init over MNNVL on sm103
 # (gb300); every CUDA call after buffer creation fails cudaErrorUnknown. Part of the venv cache key.
@@ -136,7 +159,7 @@ collx_load_operator_config() {
   unset COLLX_SOCKET_IFNAME COLLX_RDMA_DEVICES COLLX_IB_GID_INDEX COLLX_RDMA_SERVICE_LEVEL
   unset COLLX_RDMA_TRAFFIC_CLASS COLLX_RAIL_ISOLATED COLLX_SINGLE_NODE_RDMA_DEVICES COLLX_RDMA_FABRIC
   unset COLLX_RDMA_RELAXED_ORDERING COLLX_RDMA_GBS COLLX_HOST_VERBS_PROVIDER
-  unset COLLX_UCCL_RDMA_RECV_TOKENS
+  unset COLLX_UCCL_RDMA_RECV_TOKENS COLLX_DEEPEP_EFA_FORK
   unset MASTER_ADDR MASTER_PORT RANK WORLD_SIZE LOCAL_RANK LOCAL_WORLD_SIZE
   config_path="${COLLECTIVEX_OPERATOR_CONFIG:-${XDG_CONFIG_HOME:-${HOME}/.config}/inferencex/collectivex.json}"
   if [ ! -e "$config_path" ]; then
@@ -768,6 +791,7 @@ collx_prepare_pinned_source() {
 }
 
 collx_prepare_deepep_source() {
+  collx_select_deepep_v2_source
   collx_prepare_pinned_source "$1" deepep-v2 "$COLLX_DEEPEP_V2_REPO" "$COLLX_DEEPEP_V2_COMMIT" \
     DeepEP third-party/fmt
 }

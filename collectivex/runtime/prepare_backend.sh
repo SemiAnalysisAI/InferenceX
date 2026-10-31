@@ -17,6 +17,7 @@ readonly -a RANK_ENV_VARS=(
   PATH VIRTUAL_ENV LD_LIBRARY_PATH LIBRARY_PATH PYTHONPATH CUDA_HOME CPATH NVCC_PREPEND_FLAGS
   NVSHMEM_DIR EP_NCCL_ROOT_DIR EP_NVSHMEM_ROOT_DIR EP_JIT_CACHE_DIR
   EP_REUSE_NCCL_COMM NCCL_CUMEM_ENABLE UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC COLLX_OFI_NCCL_LIB_DIR FLASHINFER_WORKSPACE_BASE
+  COLLX_DEEPEP_SOURCE
 )
 readonly -a DEEPEP_RANK_UNSETS=(EP_SUPPRESS_NCCL_CHECK)
 
@@ -179,11 +180,12 @@ deepep_cache_root() {
   local nvshmem_key="${COLLX_DEEPEP_V2_NVSHMEM_SPEC#nvidia-}"
   nvshmem_key="${nvshmem_key//==/-}"
   local torch_key="${COLLX_DEEPEP_V2_TORCH_SPEC//==/-}"
+  local nccl_key="nccl-${COLLX_DEEPEP_V2_NCCL_SPEC##*==}"
   local build_gen="${COLLX_DEEPEP_V2_BUILD_GEN:?}"
   [[ "$nvshmem_key" =~ ^[A-Za-z0-9._-]+$ && "$torch_key" =~ ^[A-Za-z0-9._-]+$ \
-     && "$build_gen" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+     && "$nccl_key" =~ ^[A-Za-z0-9._-]+$ && "$build_gen" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
   backend_cache_root deepep-v2 "sm${1/./}" "${COLLX_DEEPEP_V2_COMMIT:0:12}" \
-    "$torch_key" "$nvshmem_key" "$build_gen"
+    "$torch_key" "$nvshmem_key" "$nccl_key" "$build_gen"
 }
 
 deepep_ready() { [ -f "$1/.ready" ] && [ -x "$1/venv/bin/python" ] && [ -d "$1/source" ]; }
@@ -283,9 +285,9 @@ deepep_install() {
   "${pip[@]}" --index-url https://download.pytorch.org/whl/cu130 \
     --extra-index-url https://pypi.org/simple "$COLLX_DEEPEP_V2_TORCH_SPEC" >&2 2>&1 \
     || { collx_log "ERROR: $COLLX_DEEPEP_V2_TORCH_SPEC (cu130) installation failed"; return 1; }
-  # Torch pins NCCL 2.28.9; ElasticBuffer requires 2.30.4.
-  "${pip[@]}" --force-reinstall --no-deps "nvidia-nccl-cu13==2.30.4" >&2 2>&1 \
-    || { collx_log "ERROR: NCCL 2.30.4 installation failed"; return 1; }
+  # Torch pins NCCL 2.28.9; see COLLX_DEEPEP_V2_NCCL_SPEC for what each source needs.
+  "${pip[@]}" --force-reinstall --no-deps "$COLLX_DEEPEP_V2_NCCL_SPEC" >&2 2>&1 \
+    || { collx_log "ERROR: $COLLX_DEEPEP_V2_NCCL_SPEC installation failed"; return 1; }
   local toolchain cuda_home cccl
   toolchain="$(cuda_toolchain_paths)" || return 1
   IFS=$'\t' read -r cuda_home cccl <<< "$toolchain"
@@ -321,11 +323,14 @@ deepep_install() {
 
 deepep_prepare() {
   local arch root
+  collx_select_deepep_v2_source
+  # Recorded by the adapter. Its own name: ranks re-source common.sh, which resets the pins.
+  export COLLX_DEEPEP_SOURCE="$COLLX_DEEPEP_V2_REPO@$COLLX_DEEPEP_V2_COMMIT"
   arch="$(cuda_arch)" || return 1
   root="$(deepep_cache_root "$arch")" || return 1
   command -v flock >/dev/null || { collx_log "ERROR: flock is required for DeepEP V2"; return 1; }
   mkdir -p "${root%/*}" || return 1
-  collx_log "DeepEP V2: preparing upstream main ($COLLX_DEEPEP_V2_COMMIT)"
+  collx_log "DeepEP V2: preparing ${COLLX_DEEPEP_V2_REPO#https://github.com/}@$COLLX_DEEPEP_V2_COMMIT"
   if ! with_cache_lock "DeepEP V2" "$root" deepep_ready deepep_install "$arch"; then
     collx_log "ERROR: shared DeepEP V2 environment is incomplete"
     return 1
