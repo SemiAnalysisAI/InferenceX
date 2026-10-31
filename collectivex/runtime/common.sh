@@ -27,7 +27,7 @@ COLLX_DEEPEP_V2_NCCL_SPEC="nvidia-nccl-cu13==2.30.4"
 COLLX_DEEPEP_V2_EFA_NCCL_SPEC="nvidia-nccl-cu13==2.32.3"
 
 # DeepEP V2.5 (deepep-v25): EPBuffer replaces ElasticBuffer, V1 and NVSHMEM are gone, and kernels
-# compile at run time through DeepJIT. EFA pools build AWS's V2.5 port (amazon-contributing/DeepEP#36),
+# compile at run time through DeepJIT. Fork pools (deepep_efa_fork) build AWS's V2.5 port (amazon-contributing/DeepEP#36),
 # which also restores the proxy GIN backend that upstream V2.5 compiles out. Both key the venv cache.
 COLLX_DEEPEP_V25_REPO="https://github.com/deepseek-ai/DeepEP"
 COLLX_DEEPEP_V25_COMMIT="f6aa38fe06cd4a0489e7730365d4e0114970a2f3"
@@ -49,7 +49,7 @@ collx_select_deepep_v2_source() {
 }
 
 collx_select_deepep_v25_source() {
-  if [ "${COLLX_RDMA_FABRIC:-}" = efa ]; then
+  if [ "${COLLX_DEEPEP_EFA_FORK:-}" = 1 ]; then
     COLLX_DEEPEP_V25_REPO="$COLLX_DEEPEP_V25_EFA_REPO"
     COLLX_DEEPEP_V25_COMMIT="$COLLX_DEEPEP_V25_EFA_COMMIT"
   fi

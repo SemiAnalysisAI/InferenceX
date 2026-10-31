@@ -300,10 +300,11 @@ class DeepepSourceSelectionTests(unittest.TestCase):
                 self.assertEqual(stdout[1] == stdout[2], fork == "1")
 
     def test_efa_pools_build_aws_v25_port(self) -> None:
-        for fabric, repo in (("efa", "amazon-contributing/DeepEP"), ("", "deepseek-ai/DeepEP")):
-            with self.subTest(fabric=fabric):
+        for fork, repo in (("1", "amazon-contributing/DeepEP"), ("", "deepseek-ai/DeepEP")):
+            with self.subTest(fork=fork):
                 stdout = run_common(
-                    f"export COLLX_RDMA_FABRIC='{fabric}'; collx_select_deepep_v25_source;"
+                    f"export COLLX_RDMA_FABRIC=efa COLLX_DEEPEP_EFA_FORK='{fork}';"
+                    " collx_select_deepep_v25_source;"
                     ' echo "$COLLX_DEEPEP_V25_REPO"',
                     check=True,
                 ).stdout.strip()

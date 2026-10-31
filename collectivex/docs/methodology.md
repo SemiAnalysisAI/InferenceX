@@ -29,7 +29,7 @@ library only. Details are under [Backends](#backends).
 | Backend | Maturity | Launch | Engine contract |
 |---|---|---|---|
 | deepep-v2 | production | graph; normal prefill eager | vLLM `deepep_v2` and `deepep_low_latency`; LL stops at T=256 |
-| deepep-v25 | candidate | graph; prefill eager | vLLM's `deepep_v2` calls on DeepEP V2.5's `EPBuffer`; normal only; NVIDIA pools |
+| deepep-v25 | candidate | graph; prefill eager | vLLM's `deepep_v2` calls on DeepEP V2.5's `EPBuffer`; normal only; NVIDIA pools except h100 |
 | nccl-ep | production for in-domain zero-copy LL rank-major BF16; library otherwise | graph decode; prefill eager | TensorRT-LLM `NcclEP` with NVIDIA/TensorRT-LLM#20631; HT and FP8 (DS_FP8E3M4) are library rows |
 | uccl-ep | candidate | normal eager; LL graph | vLLM's DeepEP configuration on UCCL's drop-in `deep_ep`; no engine ships its selector |
 | mori | production | graph decode; eager prefill | vLLM's MoRI IntraNode / InterNodeV1, LL EP16 only |
@@ -228,10 +228,10 @@ path. It also removed handle copying, so dispatch passes `do_handle_copy=False`.
 
 Its build differs from V2's. It needs NCCL 2.32.3, with no NVSHMEM. Kernels compile at run time through
 DeepJIT, so the CUDA toolkit stays on the rank environment. DeepJIT also includes elfutils headers that
-the vLLM image lacks, so the build unpacks Ubuntu's `libdw-dev` and `libelf-dev`. On EFA the build uses
+the vLLM image lacks, so the build unpacks Ubuntu's `libdw-dev` and `libelf-dev`. On b300 the build uses
 AWS's V2.5 port ([amazon-contributing/DeepEP#36](https://github.com/amazon-contributing/DeepEP/pull/36)):
 upstream V2.5 compiles out the proxy GIN backend and asserts GPU-initiated GIN, which EFA cannot provide
-on these hosts.
+on these hosts. h100-dgxc does not run it: upstream V2.5 cannot reach its EFA, and the fork fails there.
 
 ### UCCL-EP
 
@@ -623,8 +623,8 @@ cases. `implementation.kernel_generation` names the kernel family plus the regim
 
 | Backend | Families |
 |---|---|
-| deepep-v2 | `v2-elastic-buffer-vllm-nosync`, plus `-relaxed-ordering` on h200 EP16 and `-aws-efa-fork` on EFA; `legacy-buffer-ll-hook`, plus `-ue8m0` for Blackwell FP8 |
-| deepep-v25 | `v25-ep-buffer-vllm-nosync`, plus `-aws-efa-fork` on EFA |
+| deepep-v2 | `v2-elastic-buffer-vllm-nosync`, plus `-relaxed-ordering` on h200 EP16 and `-aws-efa-fork` on b300; `legacy-buffer-ll-hook`, plus `-ue8m0` for Blackwell FP8 |
+| deepep-v25 | `v25-ep-buffer-vllm-nosync`, plus `-aws-efa-fork` on b300 |
 | uccl-ep | `uccl-legacy-buffer-vllm-ht`; `uccl-legacy-buffer-ll-hook`, plus `-ue8m0` for B200 FP8 |
 | mori | `intranode-vllm`, `inter-node-v1-vllm`, `inter-node-v1ll-vllm`, each plus `-sdma` when SDMA was on |
 | nccl-ep | `nccl-ep-v02-ht-routed-zc-static` (plus `-gum1` graphed), `nccl-ep-v02-ll-rm` (plus `-zc` on the window path) or `nccl-ep-v02-ll-em`, then `-fp8-ds-e3m4` and `-cap<N>-<wheel version>` ([nccl-ep.md](nccl-ep.md)) |
