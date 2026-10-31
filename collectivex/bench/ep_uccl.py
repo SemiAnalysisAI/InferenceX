@@ -33,7 +33,9 @@ tight combine gate (COMBINE_REL_TOL = 8*2^-8) is preserved, not loosened.
 """
 from __future__ import annotations
 
+import functools
 import json
+import os
 import sys
 import types
 from importlib import metadata
@@ -43,7 +45,7 @@ import torch
 import torch.distributed as dist
 
 from ep_backend import EPBackend
-from ep_legacy_ll import LegacyBufferLL
+from ep_legacy_ll import LegacyBufferLL, kernel_cast_to_fp8
 
 try:
     # In the isolated UCCL venv `deep_ep` is UCCL's deep_ep_wrapper (a drop-in DeepEP API backed
@@ -185,11 +187,16 @@ class UCCLEPBackend(LegacyBufferLL, EPBackend):
         # BF16 combine sends — real device work, hence a separately-timed stage component.
         self.stage_device_work = self._fp8
         if self._fp8:
-            # Low-latency keeps the eager quantize, whose bits its in-kernel cast matches.
             fnuz = _fp8_e4m3_dtype() == torch.float8_e4m3fnuz
-            self._enable_fp8(
-                "fp8-e4m3fnuz" if fnuz else "fp8-e4m3fn", per_token_cast_to_fp8, per_token_cast_back
-            )
+            quantize = per_token_cast_to_fp8
+            if self.mode == "low-latency":
+                # The kernel quantizes in-kernel, so the oracle models its arithmetic rather than
+                # the vendored helper's (which normal mode sends as the wire format).
+                quantize = functools.partial(
+                    kernel_cast_to_fp8,
+                    fp8_dtype=_fp8_e4m3_dtype(), fp8_max=240.0 if fnuz else 448.0,
+                )
+            self._enable_fp8("fp8-e4m3fnuz" if fnuz else "fp8-e4m3fn", quantize, per_token_cast_back)
         if self.mode == "low-latency":
             self._enable_ll("uccl-legacy-buffer-ll")
         # Normal dispatch polls its receive counters on the host before launching the transfer.
@@ -207,6 +214,19 @@ class UCCLEPBackend(LegacyBufferLL, EPBackend):
         # not vendor-keyed). At EP16 their RDMA send chunks also meet the internode combine kernel's
         # num_max_rdma_chunked_send_tokens >= num_warps_per_forwarder assert.
         self.dispatch_config = Buffer.get_dispatch_config(self.world_size)
+        # A pool whose registry sets uccl_rdma_recv_tokens deepens the internode dispatch RDMA
+        # receive ring past vLLM's default. h200-dgxc needs it: with the default ring, BF16
+        # prefill deadlocks inside UCCL (uccl-project/uccl#1110). The rows say so in
+        # kernel_generation and library_config; nothing else about the launch changes.
+        recv_tokens = int(os.environ.get("COLLX_UCCL_RDMA_RECV_TOKENS") or 0)
+        if self._internode and recv_tokens:
+            c = self.dispatch_config
+            # Config rounds the ring up to a multiple of the send chunk; the label names what ran.
+            self.dispatch_config = Config(
+                c.num_sms, c.num_max_nvl_chunked_send_tokens, c.num_max_nvl_chunked_recv_tokens,
+                c.num_max_rdma_chunked_send_tokens, recv_tokens)
+            realized = self.dispatch_config.num_max_rdma_chunked_recv_tokens
+            self.kernel_generation = f"{type(self).kernel_generation}-rdmarecv{realized}"
         self.combine_config = Buffer.get_combine_config(self.world_size)
         num_rdma_bytes = _VLLM_DEEPEP_BUFFER_BYTES if self._internode else 0
         num_qps_per_rank = _VLLM_HT_NUM_SMS // 2 if self._internode else 1
