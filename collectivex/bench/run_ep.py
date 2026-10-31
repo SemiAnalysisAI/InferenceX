@@ -102,6 +102,17 @@ def main() -> int:
         Backend.init_process_group(dist, rank, world_size, device)
 
     args.runtime = _runtime_info(torch, vendor=vendor)
+    # Probe: where this rank may run, against its GPU's NUMA node.
+    try:
+        cpus = next(line.split(":", 1)[1].strip() for line in open("/proc/self/status")
+                    if line.startswith("Cpus_allowed_list"))
+        props = torch.cuda.get_device_properties(device)
+        bus = f"{props.pci_domain_id:04x}:{props.pci_bus_id:02x}:{props.pci_device_id:02x}.0"
+        numa = open(f"/sys/bus/pci/devices/{bus}/numa_node").read().strip()
+        print(f"[affinity] rank={rank} local={local_rank} cpus={cpus} gpu={bus} gpu_numa={numa} "
+              f"ncpu={len(os.sched_getaffinity(0))}", flush=True)
+    except Exception as exc:
+        print(f"[affinity] rank={rank} unavailable: {exc!r}", flush=True)
 
     # Construct + run inside a try so a backend exception (esp. a new adapter on GPU) prints its
     # FULL traceback to STDOUT — torchrun captures per-rank stdout but only summarizes stderr, so an
