@@ -105,7 +105,7 @@ base:
         max-running-requests: 256
         mem-fraction-static: 0.85
         enable-hierarchical-cache: true
-        # 180 GB per rank: 720 of the node's ~900 GB host allowance, leaving
+        # 180 GB per rank: 720 GB per node, the matrix's 0.80 DRAM share, leaving
         # headroom for the engine, Mooncake and the OS.
         hicache-size: 180
         hicache-write-policy: write_back

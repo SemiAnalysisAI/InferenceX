@@ -5346,7 +5346,7 @@ minimaxm31flash-fp4-gb200-dynamo-sglang-agentic-dspark-disagg:
   srt-recipe-dir: minimaxm31flash/sglang/gb200-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 1.0
+    - dram-utilization: 0.80
       search-space:
       - spec-decoding: mtp
         kv-offloading: dram
