@@ -231,7 +231,7 @@ deepep_activate() {
     PATH="$venv/bin:${PATH#"$venv/bin:"}" \
     PYTHONPATH="$venv_site${PYTHONPATH:+:$PYTHONPATH}" \
     CUDA_HOME="$cuda_home" \
-    CPATH="$cccl:${CPATH:-}${CPATH:+:}$root/cuda-include" \
+    CPATH="$cccl:${CPATH:-}${CPATH:+:}$root/cuda-include:$root/elfutils/usr/include" \
     NVCC_PREPEND_FLAGS="-I$cccl ${NVCC_PREPEND_FLAGS:-}" \
     NVSHMEM_DIR="$overlay" \
     EP_NCCL_ROOT_DIR="$nccl_root" \
@@ -291,6 +291,14 @@ deepep_install() {
   IFS=$'\t' read -r cuda_home cccl <<< "$toolchain"
   deepep_cuda_header_overlay "$root" "$cuda_home" \
     || { collx_log "ERROR: DeepEP V2 CUDA header overlay failed"; return 1; }
+  # DeepJIT (V2.5) includes <elfutils/libdwfl.h> for declarations only (it dlopens libdw for
+  # stack traces), and the vLLM image ships no elfutils headers: unpack them beside the venv.
+  local deb pool="https://archive.ubuntu.com/ubuntu/pool/main/e/elfutils"
+  for deb in libdw-dev libelf-dev; do
+    curl -fsSL --retry 3 -o "$root/$deb.deb" "$pool/${deb}_0.190-1.1ubuntu0.1_amd64.deb" \
+      && dpkg-deb -x "$root/$deb.deb" "$root/elfutils" \
+      || { collx_log "ERROR: elfutils headers ($deb) unavailable"; return 1; }
+  done
   deepep_activate "$root" \
     || { collx_log "ERROR: DeepEP V2 environment activation failed"; return 1; }
   collx_materialize_source "deepep-v2-$COLLX_DEEPEP_V2_COMMIT" "$source_dir" \
