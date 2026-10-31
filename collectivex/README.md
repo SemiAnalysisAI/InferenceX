@@ -37,8 +37,8 @@ runs the decode and prefill ladders; `low-latency` runs decode, plus prefill for
 Every backend runs a BF16 dispatch control and an FP8 dispatch; nccl-ep's FP8 is its internal
 DS_FP8E3M4 recipe, low-latency prefill and decode. Combine is always BF16. Coverage is uniform routing only.
 
-`results/cases.json` is the committed copy of the full matrix: 272 requested cases, of which 248 are
-runnable EP cases, 18 are swap-blocks cases (two per pool) and 6 are unsupported EP cells (UCCL-EP
+`results/cases.json` is the committed copy of the full matrix: 320 requested cases, of which 296 are
+runnable EP cases (48 of them the DeepEP V2.5 library rows), 18 are swap-blocks cases (two per pool) and 6 are unsupported EP cells (UCCL-EP
 EP16 on MI355X and FlashInfer EP16 on H100 and H200, once per phase; FlashInfer's MNNVL workspace
 needs every rank inside one NVLink domain).
 A cell is listed as unsupported only when its backend runs on that SKU at another EP size, and

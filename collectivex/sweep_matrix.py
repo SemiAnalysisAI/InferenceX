@@ -42,6 +42,7 @@ SWEEP_BACKENDS = tuple(dict.fromkeys(
 # A precision the backend does not list is gated out at generation (no case emitted).
 BACKEND_PRECISIONS = {
     "deepep-v2": ("bf16", "fp8"),
+    "deepep-v25": ("bf16", "fp8"),
     "mori": ("bf16", "fp8"),
     "uccl-ep": ("bf16", "fp8"),
     # Native DS_FP8E3M4 dispatch, low-latency prefill and decode (the mode gate below).

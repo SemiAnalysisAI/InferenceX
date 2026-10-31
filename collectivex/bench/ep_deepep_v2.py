@@ -17,7 +17,8 @@ from ep_legacy_ll import LegacyBufferLL
 
 try:
     import deep_ep
-    from deep_ep import ElasticBuffer  # type: ignore
+    # V2.5 (deepep-v25) renamed ElasticBuffer to EPBuffer, keeping every argument used here.
+    ElasticBuffer = getattr(deep_ep, "ElasticBuffer", None) or getattr(deep_ep, "EPBuffer")
 except Exception as exc:  # pragma: no cover - requires the benchmark image
     print(f"ERROR: DeepEP V2 import failed: {exc!r}", file=sys.stderr)
     raise
@@ -114,12 +115,12 @@ def _configure_gin_mode(args, world_size: int) -> bool:
     return allow_hybrid_mode
 
 
-def _require_runtime() -> None:
-    """Capability check only: the loaded deep_ep must expose ElasticBuffer (still
+def _require_runtime(expected: str = "ElasticBuffer") -> None:
+    """Capability check only: the loaded deep_ep must expose the backend's buffer class (still
     catches the b300 image-bundled deep_ep 1.2.1 shadowing the from-source build,
-    which lacks the class)."""
-    if not inspect.isclass(ElasticBuffer) or ElasticBuffer.__name__ != "ElasticBuffer":
-        raise RuntimeError("invalid DeepEP V2 runtime: deep_ep.ElasticBuffer is absent")
+    which lacks it, and a V2 row loading V2.5 or the reverse)."""
+    if not inspect.isclass(ElasticBuffer) or ElasticBuffer.__name__ != expected:
+        raise RuntimeError(f"invalid DeepEP runtime: deep_ep.{expected} is absent")
 
 
 class DeepEPV2Backend(LegacyBufferLL, EPBackend):
@@ -136,6 +137,8 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
     # phases ("-vllm-nosync").
     kernel_generation = "v2-elastic-buffer-vllm-nosync"
     SUPPORTED_MODES = ("normal", "low-latency")
+    _buffer_class = "ElasticBuffer"
+    _handle_copy = True
     SUPPORTED_PRECISIONS = ("bf16", "fp8")
     # Legacy decode kernels are graph compatible; ElasticBuffer normal replays at decode only.
     CUDA_GRAPH_MODES = ("normal", "low-latency")
@@ -232,7 +235,7 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
             self.max_tokens = _LL_BUFFER_CAP
             self._create_ll_buffer(spec)
             return
-        _require_runtime()
+        _require_runtime(self._buffer_class)
         jit_root = Path(os.environ["EP_JIT_CACHE_DIR"])
         # Hybrid exactly where vLLM's VLLM_DEEPEP_V2_ALLOW_HYBRID_MODE=1 autoselects it: DeepEP
         # goes hybrid only when the NVLink (LSA) team is smaller than the world, so passing False
@@ -393,7 +396,7 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
             expert_alignment=1,
             num_sms=self._dispatch_num_sms,  # 0 (DeepEP's model) unless rdma_gbs is set
             async_with_compute_stream=False,
-            do_handle_copy=True,
+            do_handle_copy=self._handle_copy,
             do_cpu_sync=False,
             do_expand=False,
         )

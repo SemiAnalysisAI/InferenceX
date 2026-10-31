@@ -52,6 +52,7 @@ def _runtime_info(torch, *, vendor: str) -> dict:
 # backend name -> (module, class), imported only after torch initializes.
 BACKENDS = {
     "deepep-v2": ("ep_deepep_v2", "DeepEPV2Backend"),
+    "deepep-v25": ("ep_deepep_v25", "DeepEPV25Backend"),
     "mori": ("ep_mori", "MoRIBackend"),
     "uccl-ep": ("ep_uccl", "UCCLEPBackend"),
     "nccl-ep": ("ep_nccl", "NCCLEPBackend"),

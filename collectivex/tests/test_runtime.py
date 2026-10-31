@@ -299,6 +299,16 @@ class DeepepSourceSelectionTests(unittest.TestCase):
                 # The fork is pinned separately, so the venv cache never mixes the two builds.
                 self.assertEqual(stdout[1] == stdout[2], fork == "1")
 
+    def test_efa_pools_build_aws_v25_port(self) -> None:
+        for fabric, repo in (("efa", "amazon-contributing/DeepEP"), ("", "deepseek-ai/DeepEP")):
+            with self.subTest(fabric=fabric):
+                stdout = run_common(
+                    f"export COLLX_RDMA_FABRIC='{fabric}'; collx_select_deepep_v25_source;"
+                    ' echo "$COLLX_DEEPEP_V25_REPO"',
+                    check=True,
+                ).stdout.strip()
+                self.assertEqual(stdout, f"https://github.com/{repo}")
+
 
 class DeepepSourceRecordTests(unittest.TestCase):
     def test_the_recorded_source_survives_the_rank_wrapper(self) -> None:

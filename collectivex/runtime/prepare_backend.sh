@@ -339,6 +339,134 @@ deepep_prepare() {
   collx_log "DeepEP V2 ready ($COLLX_DEEPEP_V2_COMMIT, ElasticBuffer, NCCL Device API; LSA/Gin selected by adapter)"
 }
 
+# DeepEP V2.5 lifecycle
+
+deepep_v25_cache_root() {
+  local torch_key="${COLLX_DEEPEP_V2_TORCH_SPEC//==/-}" nccl_key="nccl-${COLLX_DEEPEP_V25_NCCL_SPEC##*==}"
+  [[ "$torch_key" =~ ^[A-Za-z0-9._-]+$ && "$nccl_key" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+  backend_cache_root deepep-v25 "sm${1/./}" "${COLLX_DEEPEP_V25_COMMIT:0:12}" \
+    "$torch_key" "$nccl_key" "${COLLX_DEEPEP_V25_BUILD_GEN:?}"
+}
+
+deepep_v25_probe() {
+  "$VIRTUAL_ENV/bin/python" - <<'PY'
+import inspect
+import deep_ep
+assert inspect.isclass(deep_ep.EPBuffer)
+PY
+}
+
+deepep_v25_activate() {
+  local root="$1" venv="$1/venv" venv_site nccl_root toolchain cuda_home cccl execution_id
+  [ -x "$venv/bin/python" ] \
+    || { collx_log "ERROR: DeepEP V2.5 venv interpreter is unavailable"; return 1; }
+  for venv_site in "$venv"/lib/python*/site-packages; do break; done
+  [ -d "$venv_site" ] || { collx_log "ERROR: DeepEP V2.5 venv site-packages is unavailable"; return 1; }
+  nccl_root="$(nvidia_package_root "$venv/bin/python" nvidia-nccl-cu13 nccl)" \
+    || { collx_log "ERROR: DeepEP V2.5 NCCL package root is unavailable"; return 1; }
+  toolchain="$(cuda_toolchain_paths)" || return 1
+  IFS=$'\t' read -r cuda_home cccl <<< "$toolchain"
+  [ -n "$cuda_home" ] && [ -n "$cccl" ] || return 1
+  execution_id="${COLLECTIVEX_EXECUTION_ID:-manual}"
+  [[ "$execution_id" =~ ^[A-Za-z0-9._-]+$ ]] \
+    || { collx_log "ERROR: DeepEP V2.5 execution identity is invalid"; return 1; }
+  # DeepJIT compiles kernels at run time, so the toolkit, the NCCL headers and the elfutils
+  # headers stay on the rank environment, not only the build's.
+  export \
+    VIRTUAL_ENV="$venv" \
+    PATH="$venv/bin:${PATH#"$venv/bin:"}" \
+    PYTHONPATH="$venv_site${PYTHONPATH:+:$PYTHONPATH}" \
+    CUDA_HOME="$cuda_home" \
+    CPATH="$cccl:${CPATH:-}${CPATH:+:}$root/cuda-include:$root/elfutils/usr/include" \
+    NVCC_PREPEND_FLAGS="-I$cccl ${NVCC_PREPEND_FLAGS:-}" \
+    EP_NCCL_ROOT_DIR="$nccl_root" \
+    EP_JIT_CACHE_DIR="/tmp/collectivex-deepep-v25-jit-$execution_id" \
+    EP_REUSE_NCCL_COMM=1 \
+    NCCL_CUMEM_ENABLE=1 \
+    LD_LIBRARY_PATH="$nccl_root/lib:${LD_LIBRARY_PATH:-}" \
+    LIBRARY_PATH="$nccl_root/lib${LIBRARY_PATH:+:$LIBRARY_PATH}"
+  unset "${DEEPEP_RANK_UNSETS[@]}"
+  [ ! -L "$EP_JIT_CACHE_DIR" ] || { collx_log "ERROR: DeepEP V2.5 JIT cache path is unsafe"; return 1; }
+  if ! mkdir -p "$EP_JIT_CACHE_DIR" || ! chmod 700 "$EP_JIT_CACHE_DIR"; then
+    collx_log "ERROR: DeepEP V2.5 JIT cache is unavailable"
+    return 1
+  fi
+}
+
+# DeepJIT includes <elfutils/libdwfl.h> for declarations only (it dlopens libdw for stack traces),
+# and the vLLM image ships no elfutils headers: unpack Ubuntu's into <root>/elfutils.
+deepep_v25_elfutils_headers() {
+  local root="$1" arch pool deb
+  arch="$(dpkg --print-architecture)" || return 1
+  case "$arch" in
+    amd64) pool="https://archive.ubuntu.com/ubuntu/pool/main/e/elfutils" ;;
+    arm64) pool="https://ports.ubuntu.com/ubuntu-ports/pool/main/e/elfutils" ;;
+    *) collx_log "ERROR: no elfutils header source for $arch"; return 1 ;;
+  esac
+  for deb in libdw-dev libelf-dev; do
+    curl -fsSL --retry 3 -o "$root/$deb.deb" "$pool/${deb}_0.190-1.1ubuntu0.1_$arch.deb" \
+      && dpkg-deb -x "$root/$deb.deb" "$root/elfutils" \
+      || { collx_log "ERROR: elfutils headers ($deb) unavailable"; return 1; }
+  done
+}
+
+deepep_v25_install() {
+  local root="$1" venv="$1/venv" source_dir="$1/source" toolchain cuda_home cccl
+  local -a pip
+  if [ -e "$root" ] || [ -L "$root" ]; then
+    rm -rf "$root" || { collx_log "ERROR: incomplete DeepEP V2.5 cache-reset failed"; return 1; }
+  fi
+  mkdir -m 700 "$root" || { collx_log "ERROR: DeepEP V2.5 cache-create failed"; return 1; }
+  python3 -m venv "$venv" || { collx_log "ERROR: DeepEP V2.5 venv creation failed"; return 1; }
+  pip=("$venv/bin/python" -m pip install -q --disable-pip-version-check --no-input)
+  "${pip[@]}" "pip==26.1.2" "setuptools==82.0.1" "wheel==0.47.0" "ninja==1.13.0" "numpy==2.2.6" \
+    >&2 2>&1 || { collx_log "ERROR: DeepEP V2.5 build-tool installation failed"; return 1; }
+  "${pip[@]}" --index-url https://download.pytorch.org/whl/cu130 \
+    --extra-index-url https://pypi.org/simple "$COLLX_DEEPEP_V2_TORCH_SPEC" >&2 2>&1 \
+    || { collx_log "ERROR: $COLLX_DEEPEP_V2_TORCH_SPEC (cu130) installation failed"; return 1; }
+  "${pip[@]}" --force-reinstall --no-deps "$COLLX_DEEPEP_V25_NCCL_SPEC" >&2 2>&1 \
+    || { collx_log "ERROR: $COLLX_DEEPEP_V25_NCCL_SPEC installation failed"; return 1; }
+  toolchain="$(cuda_toolchain_paths)" || return 1
+  IFS=$'\t' read -r cuda_home cccl <<< "$toolchain"
+  deepep_cuda_header_overlay "$root" "$cuda_home" \
+    || { collx_log "ERROR: DeepEP V2.5 CUDA header overlay failed"; return 1; }
+  deepep_v25_elfutils_headers "$root" || return 1
+  deepep_v25_activate "$root" || { collx_log "ERROR: DeepEP V2.5 environment activation failed"; return 1; }
+  collx_materialize_source "deepep-v25-$COLLX_DEEPEP_V25_COMMIT" "$source_dir" \
+    || { collx_log "ERROR: DeepEP V2.5 staged source is invalid"; return 1; }
+  # The same GIN window opt-out as V2 (deepep_install); V2.5 registers it in context.cpp.
+  local window_cpp="$source_dir/csrc/kernels/comm/context.cpp"
+  local relaxed='get_env("EP_WIN_RELAXED_ORDERING", 0) ? NCCL_WIN_DEFAULT :'
+  [ "$(grep -c NCCL_WIN_STRICT_ORDERING "$window_cpp")" = 1 ] \
+    && sed -i "s/NCCL_WIN_STRICT_ORDERING/($relaxed &)/" "$window_cpp" \
+    || { collx_log "ERROR: DeepEP V2.5 window-ordering patch failed"; return 1; }
+  # Only the host extension is built here (no device code), so no -gencode is needed.
+  (cd "$source_dir" && MAX_JOBS=16 "$venv/bin/python" -m pip install -q --no-build-isolation \
+    --no-deps --force-reinstall .) >&2 2>&1 \
+    || { collx_log "ERROR: DeepEP V2.5 build failed"; return 1; }
+  deepep_v25_probe || { collx_log "ERROR: DeepEP V2.5 import probe failed"; return 1; }
+  : > "$root/.ready"
+}
+
+deepep_v25_prepare() {
+  local arch root
+  collx_select_deepep_v25_source
+  # Recorded by the adapter as this run's DeepEP source (the same variables the V2 build sets).
+  export COLLX_DEEPEP_V2_REPO="$COLLX_DEEPEP_V25_REPO" COLLX_DEEPEP_V2_COMMIT="$COLLX_DEEPEP_V25_COMMIT"
+  arch="$(cuda_arch)" || return 1
+  root="$(deepep_v25_cache_root "$arch")" || return 1
+  command -v flock >/dev/null || { collx_log "ERROR: flock is required for DeepEP V2.5"; return 1; }
+  mkdir -p "${root%/*}" || return 1
+  collx_log "DeepEP V2.5: preparing ${COLLX_DEEPEP_V25_REPO#https://github.com/}@$COLLX_DEEPEP_V25_COMMIT"
+  if ! with_cache_lock "DeepEP V2.5" "$root" deepep_ready deepep_v25_install; then
+    collx_log "ERROR: shared DeepEP V2.5 environment is incomplete"
+    return 1
+  fi
+  deepep_v25_activate "$root" || return 1
+  deepep_v25_probe || { collx_log "ERROR: DeepEP V2.5 shared runtime probe failed"; return 1; }
+  collx_log "DeepEP V2.5 ready ($COLLX_DEEPEP_V25_COMMIT, EPBuffer, NCCL $COLLX_DEEPEP_V25_NCCL_SPEC)"
+}
+
 # UCCL-EP lifecycle
 
 uccl_rocm_arch() {
@@ -724,7 +852,7 @@ write_rank_env() {
         || { rm -f "$temporary"; return 1; }
     fi
   done
-  if [ "$COLLX_BENCH" = deepep-v2 ]; then
+  if [[ "$COLLX_BENCH" = deepep-v2* ]]; then
     for name in "${DEEPEP_RANK_UNSETS[@]}"; do
       printf 'unset %s\n' "$name" >> "$temporary" \
         || { rm -f "$temporary"; return 1; }
@@ -1025,6 +1153,7 @@ main() {
   ofi_nccl_prepare || return 1
   case "$COLLX_BENCH" in
     deepep-v2) deepep_prepare || return 1 ;;
+    deepep-v25) deepep_v25_prepare || return 1 ;;
     mori)
       python3 -c "import mori" \
         || { collx_log "ERROR: MoRI backend import failed"; return 1; }

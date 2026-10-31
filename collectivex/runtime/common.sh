@@ -26,6 +26,17 @@ COLLX_DEEPEP_V2_EFA_COMMIT="a227152ac29513b1c702860745a1d1e0111ae0dc"
 COLLX_DEEPEP_V2_NCCL_SPEC="nvidia-nccl-cu13==2.30.4"
 COLLX_DEEPEP_V2_EFA_NCCL_SPEC="nvidia-nccl-cu13==2.32.3"
 
+# DeepEP V2.5 (deepep-v25): EPBuffer replaces ElasticBuffer, V1 and NVSHMEM are gone, and kernels
+# compile at run time through DeepJIT. EFA pools build AWS's V2.5 port (amazon-contributing/DeepEP#36),
+# which also restores the proxy GIN backend that upstream V2.5 compiles out. Both key the venv cache.
+COLLX_DEEPEP_V25_REPO="https://github.com/deepseek-ai/DeepEP"
+COLLX_DEEPEP_V25_COMMIT="f6aa38fe06cd4a0489e7730365d4e0114970a2f3"
+COLLX_DEEPEP_V25_EFA_REPO="https://github.com/amazon-contributing/DeepEP"
+COLLX_DEEPEP_V25_EFA_COMMIT="f6fc31dd1f3904af50069c4edc2b936095365c51"
+# V2.5 requires NCCL 2.32.3 (torch pins 2.28.9). Part of the venv cache key.
+COLLX_DEEPEP_V25_NCCL_SPEC="nvidia-nccl-cu13==2.32.3"
+COLLX_DEEPEP_V25_BUILD_GEN="v25-1"
+
 # Selects this pool's DeepEP V2 source into COLLX_DEEPEP_V2_REPO/COMMIT/NCCL_SPEC (the venv cache is keyed
 # on the commit, so the two sources never share a build).
 collx_select_deepep_v2_source() {
@@ -35,6 +46,13 @@ collx_select_deepep_v2_source() {
   COLLX_DEEPEP_V2_REPO="$COLLX_DEEPEP_V2_EFA_REPO"
   COLLX_DEEPEP_V2_COMMIT="$COLLX_DEEPEP_V2_EFA_COMMIT"
   COLLX_DEEPEP_V2_NCCL_SPEC="$COLLX_DEEPEP_V2_EFA_NCCL_SPEC"
+}
+
+collx_select_deepep_v25_source() {
+  if [ "${COLLX_RDMA_FABRIC:-}" = efa ]; then
+    COLLX_DEEPEP_V25_REPO="$COLLX_DEEPEP_V25_EFA_REPO"
+    COLLX_DEEPEP_V25_COMMIT="$COLLX_DEEPEP_V25_EFA_COMMIT"
+  fi
 }
 
 # Must match the image's CUDA line: the cu12 wheel's r12 host library on cu130 images survives
@@ -125,6 +143,8 @@ collx_stage_with_backend_cache() {
   case "$COLLX_BENCH" in
     deepep-v2) collx_prepare_deepep_source "$MOUNT_SRC" \
       || collx_die "cannot stage the pinned DeepEP source" ;;
+    deepep-v25) collx_prepare_deepep_v25_source "$MOUNT_SRC" \
+      || collx_die "cannot stage the pinned DeepEP V2.5 source" ;;
     uccl-ep) collx_prepare_uccl_source "$MOUNT_SRC" \
       || collx_die "cannot stage the pinned UCCL source" ;;
   esac
@@ -779,6 +799,12 @@ collx_prepare_deepep_source() {
   collx_select_deepep_v2_source
   collx_prepare_pinned_source "$1" deepep-v2 "$COLLX_DEEPEP_V2_REPO" "$COLLX_DEEPEP_V2_COMMIT" \
     DeepEP third-party/fmt
+}
+
+collx_prepare_deepep_v25_source() {
+  collx_select_deepep_v25_source
+  collx_prepare_pinned_source "$1" deepep-v25 "$COLLX_DEEPEP_V25_REPO" "$COLLX_DEEPEP_V25_COMMIT" \
+    "DeepEP V2.5" third-party/deep_jit
 }
 
 # Skips the thirdparty submodules (rccl/mscclpp, for other targets) but keeps the whole tree:

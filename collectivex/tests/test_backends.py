@@ -578,6 +578,30 @@ class GinWindowOrdering(unittest.TestCase):
                 self.assertEqual(backend.kernel_generation.endswith("-relaxed-ordering"), suffixed)
 
 
+class DeepEPV25Contract(unittest.TestCase):
+    """deepep-v25 is V2's adapter on EPBuffer: its own series, normal only, no handle copy."""
+
+    def _module(self, *classes):
+        with mock.patch.dict(sys.modules, {**_stub_modules(), "deep_ep": _deep_ep(*classes)}):
+            sys.modules.pop("ep_deepep_v2", None)
+            sys.modules.pop("ep_deepep_v25", None)
+            return importlib.import_module("ep_deepep_v25")
+
+    def test_v25_runs_its_own_series_on_epbuffer(self):
+        cls = self._module("EPBuffer").DeepEPV25Backend
+        self.assertEqual(cls.name, "deepep-v25")
+        self.assertEqual(cls.SUPPORTED_MODES, ("normal",))
+        self.assertTrue(cls.kernel_generation.startswith("v25-"))
+        self.assertFalse(cls._handle_copy)
+        self.assertEqual(cls._buffer_class, "EPBuffer")
+
+    def test_each_backend_fails_closed_on_the_other_library(self):
+        v2 = _import_stubbed("ep_deepep_v2", deep_ep=_deep_ep("EPBuffer"))
+        with self.assertRaises(RuntimeError):
+            v2._require_runtime("ElasticBuffer")
+        v2._require_runtime("EPBuffer")
+
+
 class LowLatencyCapDecoupling(unittest.TestCase):
     """The LL receive size and the measured ladder must stay two numbers -- sizing the receive
     from `max(ladder)` would shift every rung."""
