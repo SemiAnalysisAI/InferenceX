@@ -72,6 +72,19 @@ jobs:
           python collectivex/sweep_matrix.py --suites ep,swap-blocks,kv-transfer --cases-json collectivex/results/cases.json > /dev/null
           git diff --exit-code -- collectivex/results/cases.json
 
+      - name: Check CollectiveX changelog
+        if: matrix.check == 'Tests'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -n "$BASE_REF" ]; then
+            git fetch --no-tags --depth=1 origin "$BASE_REF"
+            python collectivex/changelog.py validate --base-ref FETCH_HEAD --pr-number "$PR_NUMBER"
+          else
+            python collectivex/changelog.py validate
+          fi
+
       - name: Run tests
         if: matrix.check == 'Tests'
         run: |
