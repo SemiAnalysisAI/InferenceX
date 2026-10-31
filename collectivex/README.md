@@ -118,7 +118,8 @@ Every PR that changes what CollectiveX measures appends one entry (or one per sc
 [`perf-changelog.yaml`](perf-changelog.yaml): the date, the PR link, the pools it affects and,
 optionally, the suites, backends, modes, phases, EP sizes and precisions that narrow it, with an
 English and a Chinese description. `python3 collectivex/changelog.py validate` checks the file, and
-CI also checks that existing entries are unchanged and that new entries link the PR adding them.
+CI also checks that existing entries are unchanged and that new entries link the PR adding them,
+name registry pools and select runnable cases with every selector value.
 `changelog.py cases --pr <n>` lists the cases a PR's entries select.
 
 An upload names the merged PRs it publishes: `admin:db:ingest:collectivex --dir <copy>/results --pr

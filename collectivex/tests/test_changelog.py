@@ -23,15 +23,15 @@ ENTRY = b"""- date: 2026-11-01
 """
 
 
-def case(sku, **fields):
-    return {"sku": sku, "case": {"case_id": f"{sku}-{fields.get('backend', 'x')}", **fields}}
+def case(sku, disposition="runnable", **fields):
+    return {"sku": sku, "disposition": disposition,
+            "case": {"case_id": f"{sku}-{fields.get('backend', 'x')}", **fields}}
 
 
 class CommittedChangelog(unittest.TestCase):
-    def test_the_committed_file_parses_and_every_entry_selects_cases(self):
-        entries = changelog.parse(changelog.CHANGELOG.read_bytes())
-        self.assertTrue(entries)
-        changelog.check_coverage(entries, changelog.load_cases(), changelog.registry_pools())
+    def test_the_committed_file_parses(self):
+        # Schema only: history must never fail when a pool or backend later leaves the matrix.
+        self.assertTrue(changelog.parse(changelog.CHANGELOG.read_bytes()))
 
 
 class Schema(unittest.TestCase):
@@ -64,11 +64,24 @@ class Selection(unittest.TestCase):
                  case("h100-dgxc", backend="deepep-v2")]
         self.assertEqual(changelog.selected_cases(entry, cases), ["b300-deepep-v2"])
 
-    def test_an_entry_selecting_nothing_fails_unless_its_pools_retired(self):
+    def test_unsupported_cases_are_never_selected(self):
         (entry,) = changelog.parse(ENTRY)
+        self.assertEqual(changelog.selected_cases(entry, [case("b300", "unsupported", backend="deepep-v2")]), [])
+
+    def test_new_entries_name_registry_pools_and_selector_values_that_match(self):
+        (entry,) = changelog.parse(ENTRY)
+        cases = [case("b300", backend="deepep-v2")]
+        changelog.check_new_entries([entry], cases, {"b300"})
         with self.assertRaises(changelog.ChangelogError):
-            changelog.check_coverage([entry], [case("b300", backend="mori")], {"b300"})
-        changelog.check_coverage([entry], [], {"h100-dgxc"})
+            changelog.check_new_entries([entry], cases, {"h100-dgxc"})  # pool not in the registry
+        with self.assertRaises(changelog.ChangelogError):
+            changelog.check_new_entries([{**entry, "backends": ["deepep-v2", "deepep-v3"]}], cases, {"b300"})
+        with self.assertRaises(changelog.ChangelogError):
+            changelog.check_new_entries([entry], [case("b300", backend="mori")], {"b300"})
+
+    def test_old_entries_that_select_nothing_are_only_reported(self):
+        (entry,) = changelog.parse(ENTRY)
+        self.assertEqual(changelog.stale_entries([entry], []), [entry["pr-link"]])
 
 
 class AppendOnly(unittest.TestCase):
@@ -79,6 +92,14 @@ class AppendOnly(unittest.TestCase):
             changelog.check_append_only(ENTRY, later + ENTRY, 5001)
         with self.assertRaises(changelog.ChangelogError):
             changelog.check_append_only(ENTRY, ENTRY + later, 5002)
+
+    def test_appending_text_that_extends_the_last_entry_is_refused(self):
+        with self.assertRaises(changelog.ChangelogError):
+            changelog.check_append_only(ENTRY, ENTRY + b"  ep: [16]\n", 5000)
+
+    def test_an_unresolvable_base_ref_fails(self):
+        with self.assertRaises(changelog.ChangelogError):
+            changelog.git_show("no-such-ref-xyz", changelog.REPO_PATH)
 
     def test_the_pr_creating_the_file_may_seed_earlier_prs(self):
         self.assertEqual(len(changelog.check_append_only(b"", ENTRY, 4999)), 1)

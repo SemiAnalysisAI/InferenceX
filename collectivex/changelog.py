@@ -89,8 +89,8 @@ def pr_number(entry: dict) -> int:
 
 
 def selects(entry: dict, requested: dict) -> bool:
-    """Whether the entry covers one cases.json requested case."""
-    if requested["sku"] not in entry["pools"]:
+    """Whether the entry covers one runnable cases.json case (unsupported cases never run)."""
+    if requested.get("disposition", "runnable") != "runnable" or requested["sku"] not in entry["pools"]:
         return False
     case = requested["case"]
     return all(case.get(field) in entry[key] for key, field in SELECTORS.items() if key in entry)
@@ -100,20 +100,37 @@ def selected_cases(entry: dict, cases: list[dict]) -> list[str]:
     return [requested["case"]["case_id"] for requested in cases if selects(entry, requested)]
 
 
-def check_coverage(entries: list[dict], cases: list[dict], pools: set[str], label: str = REPO_PATH) -> None:
-    """Every entry selects at least one case, unless all of its pools have left the registry."""
-    for index, entry in enumerate(entries):
-        if not set(entry["pools"]) & pools:
-            continue
+def check_new_entries(entries: list[dict], cases: list[dict], pools: set[str], label: str = REPO_PATH) -> None:
+    """Entries a PR appends name registry pools, and every selector value matches a runnable case.
+
+    Only new entries are held to this: a pool, backend or mode that later leaves the matrix must
+    not make the file's history fail, since existing entries can never be edited.
+    """
+    for entry in entries:
+        where = f"{label} entry {entry['pr-link']}"
+        unknown = sorted(set(entry["pools"]) - pools)
+        if unknown:
+            raise ChangelogError(f"{where}: pools {unknown} are not in the registry")
         if not selected_cases(entry, cases):
-            raise ChangelogError(f"{label} entry {index + 1} ({entry['pr-link']}) selects no case in cases.json")
+            raise ChangelogError(f"{where} selects no runnable case in cases.json")
+        for key, field in SELECTORS.items():
+            for value in entry.get(key, []):
+                narrowed = {**entry, key: [value]}
+                if not selected_cases(narrowed, cases):
+                    raise ChangelogError(f"{where}: {key} value {value!r} matches no runnable case")
+
+
+def stale_entries(entries: list[dict], cases: list[dict]) -> list[str]:
+    """Existing entries that no longer select a runnable case (reported, never an error)."""
+    return [entry["pr-link"] for entry in entries if not selected_cases(entry, cases)]
 
 
 def check_append_only(base: bytes, head: bytes, pr: int | None) -> list[dict]:
     """The head file is the base file plus entries appended at the end; returns the appended ones."""
-    if not head.startswith(base):
-        raise ChangelogError(f"{REPO_PATH}: existing entries changed; only append new entries at the end")
     base_entries, head_entries = parse(base, f"{REPO_PATH} (base)"), parse(head)
+    # Bytes alone are not enough: text appended at the end can extend the last base entry.
+    if not head.startswith(base) or head_entries[:len(base_entries)] != base_entries:
+        raise ChangelogError(f"{REPO_PATH}: existing entries changed; only append new entries at the end")
     appended = head_entries[len(base_entries):]
     # The PR that creates the file seeds it with entries for earlier PRs.
     if pr is not None and base:
@@ -124,10 +141,12 @@ def check_append_only(base: bytes, head: bytes, pr: int | None) -> list[dict]:
 
 
 def git_show(ref: str, path: str) -> bytes:
-    result = subprocess.run(["git", "show", f"{ref}:{path}"], capture_output=True, check=False)
-    if result.returncode != 0:
-        return b""  # the file does not exist at that ref yet
-    return result.stdout
+    """The file at a ref; empty only when the ref is valid and the file does not exist there yet."""
+    if subprocess.run(["git", "cat-file", "-e", f"{ref}^{{commit}}"], capture_output=True).returncode:
+        raise ChangelogError(f"--base-ref {ref} is not a commit")
+    if subprocess.run(["git", "cat-file", "-e", f"{ref}:{path}"], capture_output=True).returncode:
+        return b""
+    return subprocess.run(["git", "show", f"{ref}:{path}"], capture_output=True, check=True).stdout
 
 
 def load_cases() -> list[dict]:
@@ -157,12 +176,15 @@ def main(argv: list[str] | None = None) -> int:
             cases = load_cases()
             print("\n".join(sorted({case for entry in chosen for case in selected_cases(entry, cases)})))
             return 0
-        check_coverage(entries, load_cases(), registry_pools())
+        cases = load_cases()
         if args.base_ref:
             appended = check_append_only(git_show(args.base_ref, REPO_PATH), head, args.pr_number)
+            check_new_entries(appended, cases, registry_pools())
             print(f"{REPO_PATH}: {len(entries)} entries, {len(appended)} appended")
         else:
             print(f"{REPO_PATH}: {len(entries)} entries")
+        for link in stale_entries(entries, cases):
+            print(f"note: {link} no longer selects a runnable case", file=sys.stderr)
     except ChangelogError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
