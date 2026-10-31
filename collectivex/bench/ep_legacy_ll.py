@@ -54,6 +54,25 @@ def ue8m0_cast_to_fp8(x):
     return values, ((exponent + 127) << 23).view(torch.float32)
 
 
+def kernel_cast_to_fp8(x, fp8_dtype, fp8_max):
+    """The low-latency kernels' plain-scale cast, bit for bit (calculate_fp8_scales, round_scale off).
+
+    Per 128-channel block: amax floored at 1e-4, scale = fp8_max / amax as one correctly rounded
+    float32 division, values cast at that scale; the wire scale is amax times the float32
+    reciprocal constant. ``fp8_max / amax`` written with a Python float on the left is
+    ``amax.reciprocal() * fp8_max`` in torch, which rounds twice and lands one ulp off in about a
+    quarter of blocks. On the activation lattice that ulp decides values sitting exactly on an
+    FP8 rounding midpoint (105/126 of 240 is exactly 200, between codes 192 and 208), so the
+    model must divide tensor by tensor, as the kernel does.
+    """
+    m, n = x.shape
+    blocks = x.view(m, n // 128, 128)
+    amax = blocks.abs().float().amax(dim=2).clamp(min=_FP8_MARGIN)
+    scale = torch.full_like(amax, fp8_max) / amax
+    values = (blocks * scale.unsqueeze(2)).to(fp8_dtype).view(m, n)
+    return values, amax * torch.tensor(1.0 / fp8_max, dtype=torch.float32)
+
+
 def _ue8m0_to_fp32(packed):
     """Packed UE8M0 receive scales (int32 [..., hidden/512], four exponent bytes each, column-major
     in the last two dims) as the FP32 powers of two they encode: byte b reads as 2^(b - 127)."""
