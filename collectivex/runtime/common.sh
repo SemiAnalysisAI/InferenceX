@@ -15,9 +15,10 @@ COLLX_DEEPEP_V2_REPO="https://github.com/deepseek-ai/DeepEP"
 # backend cache is keyed on this value.
 COLLX_DEEPEP_V2_COMMIT="01dc3aaac82068020353dce2c302e38153c0bfaa"
 
-# Pools whose registry network block sets deepep_efa_fork (b300) build AWS's EFA fork of the same V2: amazon-contributing/DeepEP main is the pin
-# above plus its EFA commits, chiefly unordered hybrid kernels that need only the weak GIN signals
-# the aws-ofi-nccl proxy provides. Upstream treats EFA as unsupported (deepseek-ai/DeepEP#369).
+# Pools whose registry network block sets deepep_efa_fork (b300) build AWS's EFA fork of the same
+# V2: amazon-contributing/DeepEP main is the pin above plus its EFA commits, chiefly unordered
+# hybrid kernels that need only the weak GIN signals the aws-ofi-nccl proxy provides. Upstream
+# treats EFA as unsupported (deepseek-ai/DeepEP#369).
 COLLX_DEEPEP_V2_EFA_REPO="https://github.com/amazon-contributing/DeepEP"
 COLLX_DEEPEP_V2_EFA_COMMIT="a227152ac29513b1c702860745a1d1e0111ae0dc"
 # ElasticBuffer needs NCCL 2.30.4 (torch pins 2.28.9). The fork sets GIN signal requirements
