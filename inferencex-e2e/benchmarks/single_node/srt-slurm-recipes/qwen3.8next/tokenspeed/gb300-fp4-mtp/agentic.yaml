@@ -1,0 +1,98 @@
+base:
+  schema: 2
+  name: qwen3.8next-fp4-gb300-tokenspeed-agentic-mtp
+  identity:
+    model:
+      revision: fc694b54fb0174e0913e6adf86691ef85a4ead47
+    container: {}
+    frameworks:
+      tokenspeed: 0.1.1.post20261101
+      tokenspeed-kernel: 0.1.4.post20261101
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  slurm:
+    time_limit: '6:00:00'
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  frontend:
+    type: smg
+    enable_multiple_frontends: false
+    args:
+      reasoning-parser: qwen3_thinking
+      health-check-timeout-secs: 610
+  engine: tokenspeed
+  setup_script: tokenspeed-nightly.sh
+  environment:
+    PYTHONNOUSERSITE: '1'
+    PYTHONUNBUFFERED: '1'
+    PYTHONSAFEPATH: '1'
+    NO_COLOR: '1'
+    TOKENSPEED_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-nightly-v0.1.1.post20261101/tokenspeed-0.1.1.post20261101-py3-none-any.whl#sha256=8adf3f6d52fc11db8417ce354a883f2e477155f64998795e2a91ca36423f876d
+    TOKENSPEED_KERNEL_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-nightly-v0.1.4.post20261101-cu130/tokenspeed_kernel-0.1.4.post20261101-cp312-cp312-manylinux_2_28_aarch64.whl#sha256=0d4fcb2beab4f0ba6d3d2db3cae299f138f34177d109c8180ee858355e4e0043
+    TOKENSPEED_SCHEDULER_VERSION: 0.1.46
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 1
+      env:
+        TOKENSPEED_JIT_COMPILE_CHECK: error
+        TOKENSPEED_HEALTH_CHECK_TIMEOUT: '600'
+        TOKENSPEED_QWEN4_EXP_QSA_TOPK_PATH: auto
+        TOKENSPEED_QWEN4_EXP_QSA_MAX_LOGITS_MB: '2048'
+      args:
+        served-model-name: nvidia/Qwen3.8-Flash-Next-NVFP4
+        revision: fc694b54fb0174e0913e6adf86691ef85a4ead47
+        trust-remote-code: true
+        # The checkpoint selects mixed target/draft quantization without conversion.
+        speculative-draft-model-quantization: modelopt_mixed
+        max-model-len: 262144
+        attn-tp-size: 1
+        data-parallel-size: 1
+        ep-size: 1
+        pipeline-parallel-size: 1
+        attention-backend: trtllm
+        drafter-attention-backend: trtllm
+        moe-backend: flashinfer_trtllm
+        draft-moe-backend: flashinfer_trtllm
+        mamba-ssm-dtype: bfloat16
+        kv-cache-dtype: bfloat16
+        gpu-memory-utilization: 0.88
+        max-num-seqs: 96
+        prefix-granularity: 64
+        chunked-prefill-size: 16384
+        max-prefill-tokens: 16384
+        speculative-algorithm: MTP
+        draft-model-path-use-base: true
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+        # The connector selects greedy sampling only for synthetic throughput.
+        sampling-backend: flashinfer
+        enable-replay-ssm: true
+        enable-state-checkpoint-in-forward: true
+        hf-overrides: '{"ple_offload_embedding":true,"index_share_for_mtp_iteration":true}'
+        disable-prefill-graph: true
+        max-cudagraph-capture-size: 96
+        cudagraph-capture-sizes: [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96]
+        enable-prefix-caching: true
+        kvstore-size: 224
+        kvstore-io-backend: kernel
+        kvstore-write-policy: write_back
+        enable-metrics: true
+        metrics-host: 0.0.0.0
+        stream-interval: 20
+        decode-log-interval: 10
+        seed: 35
+  sbatch_directives:
+    mem: '0'
+    exclusive: ''
+  srun_options:
+    mem: '0'
+    container-remap-root: ''
+  benchmark:
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'tokenspeed:'
+      KV_OFFLOADING: dram

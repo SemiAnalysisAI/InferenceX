@@ -11724,3 +11724,13 @@
     - "Extend the MI355X Qwen3.8-Flash-Next SGLang AgentX sweep to concurrency 1/2/4/8/12/16 on the existing pinned upstream image and default serving path."
     - "Add c1/c2/c4 recipe variants with max-running-requests and cuda-graph-max-bs-decode set to 2/4/8, preserving the existing 2x concurrency sizing and all other serving settings."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4680
+
+- config-keys:
+    - qwen3.8next-fp4-gb300-tokenspeed-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Qwen3.8-Flash-Next NVFP4 GB300 TP1/EP1 AgentX with TokenSpeed MTP and a 224 GB Host L2 KV store at concurrency 1, 2, 4, 8, 16, 32, 48, and 64."
+    - "Pin TokenSpeed 0.1.1.post20261101 and its matching CUDA 13 ARM64 kernel wheel by SHA256, the runner image by digest, and the checkpoint revision. Keep BF16 KV/SSM state, in-forward state checkpoints, and Host L2 write-back."
+    - "Bind native TokenSpeed topology and select golden MTP acceptance automatically for throughput; use real verification for evals."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4691

@@ -69,6 +69,43 @@ def test_native_binding_submits_one_point_and_keeps_server_settings(point):
     }
 
 
+def test_tokenspeed_binding_preserves_native_args_and_eval_context(point):
+    path, recipe, env = point
+    recipe["engine"] = "tokenspeed"
+    recipe["roles"]["agg"]["args"] = {
+        "attn-tp-size": 2, "data-parallel-size": 2, "ep-size": 4,
+        "pipeline-parallel-size": 1, "max-model-len": 512,
+        "speculative-algorithm": "MTP", "speculative-num-steps": 3,
+        "speculative-num-draft-tokens": 4, "sampling-backend": "flashinfer",
+        "kvstore-size": 80, "kvstore-write-policy": "write_back",
+    }
+    path.write_text(yaml.safe_dump({"base": recipe}))
+    env = {**env, "FRAMEWORK": "tokenspeed", "EP_SIZE": "4", "DP_ATTENTION": "true",
+           "SPEC_DECODING": "mtp", "EVAL_ONLY": "true", "MAX_MODEL_LEN": "1024"}
+    _, bound = select_recipe(f"{path}:base", env)
+    argv = runtime_arguments(f"{path}:base", env)
+    apply_overrides_to_recipe(bound, parse_overrides(argv[1::2], []))
+    assert bound["roles"]["agg"]["args"] == {
+        "attn-tp-size": 2, "data-parallel-size": 2, "ep-size": 4,
+        "pipeline-parallel-size": 1, "max-model-len": 1024,
+        "speculative-algorithm": "MTP", "speculative-num-steps": 3,
+        "speculative-num-draft-tokens": 4, "sampling-backend": "flashinfer",
+        "kvstore-size": 80, "kvstore-write-policy": "write_back",
+    }
+    assert bound["benchmark"]["env"]["USE_CHAT_TEMPLATE"] == "true"
+    for field, value, message in [
+        ("TP", "2", "attention TP x DP"),
+        ("EP_SIZE", "1", "ep-size"),
+        ("DP_ATTENTION", "false", "DP_ATTENTION"),
+    ]:
+        with pytest.raises(ValueError, match=message):
+            select_recipe(f"{path}:base", {**env, field: value})
+    recipe["roles"]["agg"]["args"]["pipeline-parallel-size"] = 2
+    path.write_text(yaml.safe_dump({"base": recipe}))
+    with pytest.raises(ValueError, match="pipeline-parallel-size"):
+        select_recipe(f"{path}:base", env)
+
+
 @pytest.mark.parametrize("field,value,message", [
     ("TP", "2", "tensor-parallel-size"), ("RUN_EVAL", "yes", "RUN_EVAL"),
     ("PP_SIZE", "2", "PP_SIZE"), ("RESULT_FILENAME", "", "Missing runtime input"),

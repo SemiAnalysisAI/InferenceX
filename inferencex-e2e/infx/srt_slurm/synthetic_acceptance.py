@@ -33,6 +33,7 @@ ENGINES = {
     "atom": "atom",
     "atom-disagg": "atom",
     "tilert": "tilert",
+    "tokenspeed": "tokenspeed",
 }
 SGLANG_VARIABLES = (
     "SGLANG_SIMULATE_ACC_LEN",
@@ -50,6 +51,20 @@ def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
     current token. Raises ValueError on a malformed or conflicting config.
     """
     args = role.get("args", {})
+    if engine == "tokenspeed":
+        if "speculative-config" in args:
+            raise ValueError(
+                "TokenSpeed AgentX requires explicit MTP flags, not speculative-config"
+            )
+        algorithm = str(args.get("speculative-algorithm", "")).lower()
+        if not algorithm:
+            return {}
+        if algorithm != "mtp":
+            raise ValueError("TokenSpeed AgentX currently supports only MTP speculation")
+        return {
+            "method": "mtp",
+            "num_speculative_tokens": args.get("speculative-num-steps"),
+        }
     if engine == "tilert":
         if args.get("with-mtp") is not True:
             return {}
@@ -164,6 +179,19 @@ def _simulated_length(
     ):
         return None
     al = golden_length(environment["MODEL_PREFIX"], spec, environment["THINKING_MODE"], golden_dir)
+    if engine == "tokenspeed":
+        args = generation.get("args", {})
+        drafts = args.get("speculative-num-draft-tokens")
+        if (
+            not isinstance(drafts, int)
+            or isinstance(drafts, bool)
+            or drafts != spec["num_speculative_tokens"] + 1
+        ):
+            raise ValueError(
+                "TokenSpeed speculative-num-draft-tokens must equal speculative-num-steps + 1"
+            )
+        if args.get("speculative-eagle-topk") != 1:
+            raise ValueError("TokenSpeed synthetic acceptance requires speculative-eagle-topk 1")
     if (
         engine == "sglang"
         and environment["MODEL_PREFIX"] == "qwen3.5"
@@ -245,6 +273,16 @@ def build_overrides(
                 "--set",
                 f"{prefix}.args.speculative-config={json.dumps(worker_spec)}",
             ]
+        elif worker_engine == "tokenspeed":
+            key = "synthetic-acceptance-length"
+            if worker_al is not None and worker_spec:
+                overrides += ["--set", f"{prefix}.args.{key}={worker_al:g}"]
+                overrides += ["--set", f'{prefix}.args.sampling-backend="greedy"']
+            else:
+                if key in (role.get("args") or {}):
+                    overrides += ["--unset", f"{prefix}.args.{key}"]
+                if worker_spec:
+                    overrides += ["--set", f'{prefix}.args.sampling-backend="flashinfer"']
         elif worker_engine == "atom":
             key = "spec-decode-acceptance-length"
             if worker_al is not None and worker_spec:
