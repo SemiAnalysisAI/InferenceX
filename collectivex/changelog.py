@@ -1,11 +1,4 @@
 #!/usr/bin/env python3
-"""Validate collectivex/perf-changelog.yaml: one entry per PR that changes what CollectiveX measures.
-
-Each entry selects the cases its PR affects (pools, plus optional suites, backends, modes, phases, EP
-sizes and precisions, matched against results/cases.json); uploads link runs to these entries.
-
-  changelog.py validate [--base-ref REF --pr-number N]
-"""
 from __future__ import annotations
 
 import argparse
