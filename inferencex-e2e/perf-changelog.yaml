@@ -11674,7 +11674,7 @@
 - config-keys:
     - minimaxm31flash-fp4-gb300-sglang-agentic-dspark
   description:
-    - "Add TP4 points at conc 24, 32 and 40 and TP2 points at conc 20 to 40 with DRAM KV offload (L2 HiCache, 180 GB per rank), using shortest-prefill-first scheduling with a prefill-decode interval of 32, 8192-token prefill chunks and stream interval 20."
+    - "Add TP4 points at conc 24, 32 and 40 and TP2 points at conc 20, 24, 28, 36 and 40 with DRAM KV offload (L2 HiCache, 180 GB per rank), using shortest-prefill-first scheduling with a prefill-decode interval of 32, 8192-token prefill chunks and stream interval 20."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4676
   scenario-type: [agentic-coding]
   append-only: true

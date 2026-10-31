@@ -7583,9 +7583,8 @@ minimaxm31flash-fp4-gb300-sglang-agentic-dspark:
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [20], srt-recipe: 'agentic-spf.yaml:zip_override_tp2_hicache_spf_interval32[0]' }
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [24], srt-recipe: 'agentic-spf.yaml:zip_override_tp2_hicache_spf_interval32[1]' }
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [28], srt-recipe: 'agentic-spf.yaml:zip_override_tp2_hicache_spf_interval32[2]' }
-      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32], srt-recipe: 'agentic-spf.yaml:zip_override_tp2_hicache_spf_interval32[3]' }
-      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [36], srt-recipe: 'agentic-spf.yaml:zip_override_tp2_hicache_spf_interval32[4]' }
-      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [40], srt-recipe: 'agentic-spf.yaml:zip_override_tp2_hicache_spf_interval32[5]' }
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [36], srt-recipe: 'agentic-spf.yaml:zip_override_tp2_hicache_spf_interval32[3]' }
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [40], srt-recipe: 'agentic-spf.yaml:zip_override_tp2_hicache_spf_interval32[4]' }
 
 # H200 AgentX arm for DeepSeek-V4.1-Flash. Upstream marks h200 verified and says
 # the GB200 NVL4 TP4 layout becomes TP8 on 8-GPU nodes, so this is TP8.
