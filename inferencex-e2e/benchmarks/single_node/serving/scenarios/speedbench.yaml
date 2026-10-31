@@ -1,0 +1,31 @@
+# SpeedBench family: SPEED-Bench acceptance-length prompts (nvidia/SPEED-Bench, fully resolved copy
+# Green-Lab/speed-bench-prepared; datasets/lock.yaml pins one jsonl per config).
+# infx.serving.speedbench selects the rows (overrides: config, category) and builds one request body per row
+# (first turn only, temperature/top_p/max_tokens/chat_template_kwargs from overrides) and writes them as the
+# raw_payload file IX_CUSTOM_DATASET_FILE points to; AgentX sends each body as is. Every request streams and
+# completes on its own (no ignore_eos): acceptance only means something on natural output. `requests` is the
+# selection size unless overrides.requests lowers it; the client sets it once it has counted the selection,
+# so the 1 below is only a placeholder. The dataset name below is a placeholder too: scenarios.py sets it
+# from overrides.config.
+schemaVersion: "2.0"
+benchmark:
+  unsafeOverride: true
+  endpoint:
+    type: chat
+    path: /v1/chat/completions
+    streaming: true
+    useServerTokenCount: true
+  datasets:
+  - name: speedbench-qualitative
+    type: file
+    format: raw_payload
+    path: ${IX_CUSTOM_DATASET_FILE}
+    sampling: sequential
+    randomSeed: 42
+  phases:
+  - name: profiling
+    kind: profiling
+    type: concurrency
+    requests: 1
+    failedRequestThreshold: 0.1
+randomSeed: 42

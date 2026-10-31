@@ -108,6 +108,30 @@ def test_bad_greenspec_variants_fail_with_one_line(args, message):
         render(*args)
 
 
+def test_speedbench_renders_the_config_dataset_and_has_no_duration():
+    rendered = render("speedbench", {"config": "throughput_8k", "category": "mixed", "requests": 30})
+    dataset = rendered.doc["benchmark"]["datasets"][0]
+    assert (rendered.kind, rendered.dataset, rendered.label) == (
+        "file", "speedbench-throughput-8k", "speedbench-throughput_8k-mixed-n30")
+    assert dataset["name"] == "speedbench-throughput-8k"
+    assert dataset["format"] == "raw_payload" and dataset["path"] == "${IX_CUSTOM_DATASET_FILE}"
+    [phase] = rendered.doc["benchmark"]["phases"]
+    assert phase["requests"] == 30 and "duration" not in phase and rendered.duration == 0.0
+    assert "ignore_eos" not in rendered.doc["benchmark"]["endpoint"].get("extra", {})
+    default = render("speedbench")
+    assert (default.label, default.dataset) == ("speedbench-qualitative", "speedbench-qualitative")
+
+
+@pytest.mark.parametrize("args, message", [
+    (("speedbench", {"category": "mixed"}), "overrides.category"),
+    (("speedbench", {"subset": "diverse"}), "speedbench takes"),
+    (("speedbench", {}, Point("8k", "1k", 0)), "workload/slo: only for scenario synthetic, not speedbench"),
+])
+def test_bad_speedbench_variants_fail_with_one_line(args, message):
+    with pytest.raises(ScenarioError, match=message):
+        render(*args)
+
+
 def test_warmup_requests_per_lane_override():
     def profiling(doc):
         return next(p for p in doc["benchmark"]["phases"] if p.get("kind") == "profiling")

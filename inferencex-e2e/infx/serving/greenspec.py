@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any
 
 FAMILY = "greenspec"
+TAG = "GreenSpec"  # how the family names itself in the job log
 META_KEYS = ("question_id", "category", "bucket", "lite", "isl", "osl", "thinking_src", "recorded")
 MAX_TOKEN_KEYS = ("max_tokens", "max_completion_tokens")
 SUBSETS = ("diverse", "agentic_coding", "agentic_tools", "llm_task")
