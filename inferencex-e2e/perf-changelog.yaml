@@ -11724,3 +11724,10 @@
     - "Extend the MI355X Qwen3.8-Flash-Next SGLang AgentX sweep to concurrency 1/2/4/8/12/16 on the existing pinned upstream image and default serving path."
     - "Add c1/c2/c4 recipe variants with max-running-requests and cuda-graph-max-bs-decode set to 2/4/8, preserving the existing 2x concurrency sizing and all other serving settings."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4680
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp
+  description:
+    - "Update the TensorRT-LLM image from 1.3.0rc28.dev202609210001 to 1.4.0rc2."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4626
+  scenario-type: [agentic-coding]
