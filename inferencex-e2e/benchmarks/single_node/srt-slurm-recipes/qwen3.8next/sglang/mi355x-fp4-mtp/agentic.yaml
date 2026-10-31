@@ -67,16 +67,21 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
 
-# One variant per point. Every point keeps ReplaySSM, the PLE table offload and the
-# default path, admits 2x CONC requests and captures decode graphs up to that
-# admission, so bursts past CONC stay in a graph; mem-fraction-static is used as
-# given instead of the aiter backend's 0.85 scaling.
+# c1, c2, c4 and c8 run the FlyDSL monokernel (--enable-amd-monokernel) for MTP
+# target verify and draft. Its verify writes the per-draft intermediate SSM
+# states, so ReplaySSM is off, and its prelude reads the PLE table on the GPU,
+# so the table is not offloaded. Admission equals the concurrency. c12 and c16
+# keep ReplaySSM, the PLE offload and 2x CONC admission. Every point uses
+# mem-fraction-static as given instead of the aiter backend's 0.85 scaling.
 override_c1:
   roles:
     agg:
       args:
-        max-running-requests: 2
-        cuda-graph-max-bs-decode: 2
+        enable-linear-replayssm-spec: null
+        ple-offload-embedding: null
+        enable-amd-monokernel: true
+        max-running-requests: 1
+        cuda-graph-max-bs-decode: 1
       env:
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
   benchmark:
@@ -88,8 +93,11 @@ override_c2:
   roles:
     agg:
       args:
-        max-running-requests: 4
-        cuda-graph-max-bs-decode: 4
+        enable-linear-replayssm-spec: null
+        ple-offload-embedding: null
+        enable-amd-monokernel: true
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
       env:
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
   benchmark:
@@ -101,8 +109,11 @@ override_c4:
   roles:
     agg:
       args:
-        max-running-requests: 8
-        cuda-graph-max-bs-decode: 8
+        enable-linear-replayssm-spec: null
+        ple-offload-embedding: null
+        enable-amd-monokernel: true
+        max-running-requests: 4
+        cuda-graph-max-bs-decode: 4
       env:
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
   benchmark:
@@ -114,8 +125,11 @@ override_c8:
   roles:
     agg:
       args:
-        max-running-requests: 16
-        cuda-graph-max-bs-decode: 16
+        enable-linear-replayssm-spec: null
+        ple-offload-embedding: null
+        enable-amd-monokernel: true
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
       env:
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
   benchmark:
