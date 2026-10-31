@@ -8983,3 +8983,26 @@ minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg:
         prefill: { num-worker: 6, tp: 2, ep: 2, dp-attn: true }
         decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: true }
 
+
+qwen3.8next-fp4-gb300-tokenspeed-agentic-mtp:
+  image: ghcr.io/lightseekorg/tokenspeed-runner:cu130-torch-2.14.0-flashinfer-0.7.1rc2@sha256:1086943cd27a22b7d414c64ca088bee24f53a971fdae78e231c182c50b4e43d2
+  model: nvidia/Qwen3.8-Flash-Next-NVFP4
+  model-prefix: qwen3.8next
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: tokenspeed
+  multinode: false
+  router: { name: smg, version: 1.13.0.post20261027 }
+  srt-recipe-dir: qwen3.8next/tokenspeed/gb300-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 1.0
+      search-space:
+      - tp: 1
+        ep: 1
+        dp-attn: false
+        spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: kvstore }
+        conc-list: [1, 2, 4, 8, 16, 32, 48, 64]
+        srt-recipe: agentic.yaml:base

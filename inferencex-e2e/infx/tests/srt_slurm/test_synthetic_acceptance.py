@@ -75,6 +75,88 @@ def apply_native(recipe: dict[str, Any], argv: list[str]) -> dict[str, Any]:
     return result
 
 
+def test_tokenspeed_plan_uses_effective_mtp_depth_and_restores_real_sampling(
+    tmp_path: Path, golden_dir: Path
+) -> None:
+    recipe = {
+        "roles": {"agg": {"args": {
+            "speculative-algorithm": "MTP", "speculative-num-steps": 2,
+            "speculative-num-draft-tokens": 3, "speculative-eagle-topk": 1,
+            "synthetic-acceptance-length": 99, "sampling-backend": "flashinfer",
+            "kv-cache-dtype": "bfloat16", "kvstore-size": 80,
+        }, "env": {"KEEP": "worker"}}},
+    }
+    original = copy.deepcopy(recipe)
+    path = tmp_path / "tokenspeed.yaml"
+    path.write_text(yaml.safe_dump(recipe))
+    plans = plan_commands(
+        str(path), "tokenspeed",
+        ["--set", "roles.agg.args.speculative-num-steps=3",
+         "--set", "roles.agg.args.speculative-num-draft-tokens=4"],
+        ENV, golden_dir=golden_dir,
+    )
+    assert len(plans) == 1
+    assert plans[0].acceptance_length == 2.4
+    throughput = apply_native(recipe, plans[0].command)
+    assert throughput["roles"]["agg"]["args"] == {
+        "speculative-algorithm": "MTP", "speculative-num-steps": 3,
+        "speculative-num-draft-tokens": 4, "speculative-eagle-topk": 1,
+        "synthetic-acceptance-length": 2.4, "sampling-backend": "greedy",
+        "kv-cache-dtype": "bfloat16", "kvstore-size": 80,
+    }
+    evaluation = apply_native(throughput, build_overrides(
+        throughput, "tokenspeed", {**ENV, "EVAL_ONLY": "true"},
+        golden_dir=tmp_path / "absent",
+    ))
+    assert "synthetic-acceptance-length" not in evaluation["roles"]["agg"]["args"]
+    assert evaluation["roles"]["agg"]["args"]["sampling-backend"] == "flashinfer"
+    assert evaluation["roles"]["agg"]["env"] == {"KEEP": "worker"}
+    assert recipe == original
+
+
+@pytest.mark.parametrize("environment", [{"IS_AGENTIC": "0"}, {"SPEC_DECODING": "none"}])
+def test_tokenspeed_non_synthetic_runs_remove_forced_acceptance(
+    tmp_path: Path, environment: dict[str, str]
+) -> None:
+    recipe = {"roles": {"agg": {"args": {
+        "speculative-algorithm": "MTP", "synthetic-acceptance-length": 2.5,
+        "sampling-backend": "greedy",
+    }}}}
+    result = apply_native(recipe, build_overrides(
+        recipe, "tokenspeed", {**ENV, **environment}, golden_dir=tmp_path / "absent",
+    ))
+    assert result["roles"]["agg"]["args"] == {
+        "speculative-algorithm": "MTP", "sampling-backend": "flashinfer",
+    }
+
+
+@pytest.mark.parametrize("change,message", [
+    ({"speculative-num-draft-tokens": 3}, "must equal"),
+    ({"speculative-num-draft-tokens": True}, "must equal"),
+    ({"speculative-eagle-topk": 2}, "topk 1"),
+    ({"speculative-algorithm": "DFLASH"}, "only MTP"),
+    ({"speculative-config": {"method": "mtp"}}, "explicit MTP flags"),
+])
+def test_tokenspeed_rejects_unsupported_speculation(golden_dir: Path, change, message) -> None:
+    recipe = {"roles": {"agg": {"args": {
+        "speculative-algorithm": "MTP", "speculative-num-steps": 3,
+        "speculative-num-draft-tokens": 4, "speculative-eagle-topk": 1, **change,
+    }}}}
+    with pytest.raises(ValueError, match=message):
+        build_overrides(recipe, "tokenspeed", ENV, golden_dir=golden_dir)
+
+
+def test_tokenspeed_without_speculation_keeps_the_selected_sampler(tmp_path: Path) -> None:
+    recipe = {"roles": {"agg": {"args": {
+        "sampling-backend": "flashinfer", "synthetic-acceptance-length": 2,
+    }}}}
+    result = apply_native(recipe, build_overrides(
+        recipe, "tokenspeed", {**ENV, "SPEC_DECODING": "none"},
+        golden_dir=tmp_path / "absent",
+    ))
+    assert result["roles"]["agg"]["args"] == {"sampling-backend": "flashinfer"}
+
+
 def vllm_recipe(method: str = "mtp", **extra: Any) -> dict[str, Any]:
     return {
         "roles": {
