@@ -1,0 +1,45 @@
+# custom-agentic family: LiveKit Agents voice-agent traces of customer 111868 on Gemma-4-31B
+# (Green-Lab/2026-10-16-111868-agentic-traces, synthetic text with logged lengths/cache/timing;
+# vmonitor-gateway-datasets spec 0004), 1217 rooms / 12902 requests, V2 = observed cache.
+# No request cap: lanes recycle rooms (fresh cache-bust marker per play) for the whole duration.
+# Smoke variant: 180 s profiling, for bring-up only.
+# Spec: docs/superpowers/specs/2026-10-16-serving-replicas-livekit-design.md
+schemaVersion: "2.0"
+benchmark:
+  scenario: inferencex-agentx-mvp
+  unsafeOverride: true
+  endpoint:
+    type: chat
+    path: /v1/chat/completions
+    streaming: true
+    useServerTokenCount: true
+  datasets:
+  - name: livekit-111868-v2
+    type: file
+    format: mooncake_trace
+    path: ${IX_CUSTOM_DATASET_FILE}
+    entries: 1217
+    randomSeed: 42
+    traceIdleGapCapSeconds: 300.0
+    # mooncake_trace defaults to sequential: lanes would replay room-0001, -0002, ... in file
+    # (chronological) order and a run covers only the first ~150 rooms. Shuffle = seeded random
+    # permutation of all 1217 rooms per pass.
+    sampling: shuffle
+  phases:
+  - name: profiling
+    kind: profiling
+    type: concurrency
+    duration: 180.0
+    gracePeriod: 30.0
+    failedRequestThreshold: 0.1
+    trajectoryStartMinRatio: 0.25
+    trajectoryStartMaxRatio: 0.75
+    warmupRequestsPerLane: 10
+    agenticWarmupGracePeriod: 1800.0
+  artifacts:
+    sliceDuration: 1.0
+  tokenizer:
+    trustRemoteCode: true
+  runtime:
+    statsInterval: 30.0
+randomSeed: 42

@@ -1,0 +1,12 @@
+# Remote endpoint: Gemma-4-31B FP8-block served at 116.118.93.91:8000 (not launched here),
+# LiveKit 111868 v1.1-warm trace (the livekit scenario's default dataset, 1200 s) at CCU 50.
+# Key: GitHub secret REMOTE_GEMMA4_API_KEY. The job takes CPUs only on hcm-hgx01.
+name: remote-gemma4-fp8-livekit
+runner: cluster:hcm-hgx01
+endpoint:
+  url: http://116.118.93.91:8000/v1
+  model: RedHatAI/gemma-4-31B-it-FP8-block
+  api-key-secret: REMOTE_GEMMA4_API_KEY
+  tokenizer: RedHatAI/gemma-4-31B-it-FP8-block
+scenario: livekit
+conc: [50]

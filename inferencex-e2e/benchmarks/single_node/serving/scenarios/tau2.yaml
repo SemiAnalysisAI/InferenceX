@@ -1,0 +1,43 @@
+# custom-agentic family: file-backed agentic traces. tau2 customer-service traces
+# (airline/retail/telecom from Exgentic/agent-llm-traces-v2), 1576 sessions /
+# 16798 turns, pinned in benchmarks/single_node/serving/datasets/lock.yaml (key tau2-cs).
+# infx/serving/client.py downloads + sha256-checks the file (infx/serving/datasets.py).
+# Matches past tau2 runs (e.g. 37920508184): 1200 s, request cap 16798, seed 42.
+# Per-run values (url, model, tokenizer, concurrency, metrics/telemetry URLs,
+# artifact dir) are CLI overrides added by infx/serving/client.py.
+schemaVersion: "2.0"
+benchmark:
+  scenario: inferencex-agentx-mvp
+  unsafeOverride: true
+  endpoint:
+    type: chat
+    path: /v1/chat/completions
+    streaming: true
+    useServerTokenCount: true
+  datasets:
+  - name: tau2-cs
+    type: file
+    format: mooncake_trace
+    path: ${IX_CUSTOM_DATASET_FILE}
+    entries: 1576
+    randomSeed: 42
+    traceIdleGapCapSeconds: 300.0
+  phases:
+  - name: profiling
+    kind: profiling
+    type: concurrency
+    duration: 1200.0
+    requests: 16798
+    gracePeriod: 30.0
+    failedRequestThreshold: 0.1
+    trajectoryStartMinRatio: 0.25
+    trajectoryStartMaxRatio: 0.75
+    warmupRequestsPerLane: 10
+    agenticWarmupGracePeriod: 1800.0
+  artifacts:
+    sliceDuration: 1.0
+  tokenizer:
+    trustRemoteCode: true
+  runtime:
+    statsInterval: 30.0
+randomSeed: 42

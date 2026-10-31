@@ -1,0 +1,102 @@
+{
+ "metrics": {
+  "vllm:external_prefix_cache_hits": {
+   "type": "counter",
+   "series": [
+    {
+     "labels": {
+      "engine": "0",
+      "model_name": "RedHatAI/gemma-4-31B-it-FP8-block"
+     },
+     "stats": {
+      "total": 0.0,
+      "rate": 0.0
+     }
+    }
+   ]
+  },
+  "vllm:external_prefix_cache_queries": {
+   "type": "counter",
+   "series": [
+    {
+     "labels": {
+      "engine": "0",
+      "model_name": "RedHatAI/gemma-4-31B-it-FP8-block"
+     },
+     "stats": {
+      "total": 0.0,
+      "rate": 0.0
+     }
+    }
+   ]
+  },
+  "vllm:prefix_cache_hits": {
+   "type": "counter",
+   "series": [
+    {
+     "labels": {
+      "engine": "0",
+      "model_name": "RedHatAI/gemma-4-31B-it-FP8-block"
+     },
+     "stats": {
+      "total": 1341120.0,
+      "rate": 4336.127917183703
+     }
+    }
+   ]
+  },
+  "vllm:prefix_cache_queries": {
+   "type": "counter",
+   "series": [
+    {
+     "labels": {
+      "engine": "0",
+      "model_name": "RedHatAI/gemma-4-31B-it-FP8-block"
+     },
+     "stats": {
+      "total": 2717874.0,
+      "rate": 8787.468180914266
+     }
+    }
+   ]
+  },
+  "vllm:prompt_tokens_by_source": {
+   "type": "counter",
+   "series": [
+    {
+     "labels": {
+      "engine": "0",
+      "model_name": "RedHatAI/gemma-4-31B-it-FP8-block",
+      "source": "external_kv_transfer"
+     },
+     "stats": {
+      "total": 0.0,
+      "rate": 0.0
+     }
+    },
+    {
+     "labels": {
+      "engine": "0",
+      "model_name": "RedHatAI/gemma-4-31B-it-FP8-block",
+      "source": "local_cache_hit"
+     },
+     "stats": {
+      "total": 1341120.0,
+      "rate": 4336.127917183703
+     }
+    },
+    {
+     "labels": {
+      "engine": "0",
+      "model_name": "RedHatAI/gemma-4-31B-it-FP8-block",
+      "source": "local_compute"
+     },
+     "stats": {
+      "total": 1376754.0,
+      "rate": 4451.340263730563
+     }
+    }
+   ]
+  }
+ }
+}

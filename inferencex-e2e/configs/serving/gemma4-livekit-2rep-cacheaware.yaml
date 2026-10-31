@@ -1,0 +1,37 @@
+# Pattern: replicas behind a router, LiveKit trace. Gemma-4-31B FP8-block, 2 replicas (TP1 each) behind
+# vllm-router cache_aware, as in prod. Uses the scenario's default dataset, livekit-111868-v1.1-warm.
+name: gemma4-livekit-2rep-cacheaware
+runner: cluster:hcm-hgx01
+image: vllm/vllm-openai:v0.25.1
+model: RedHatAI/gemma-4-31B-it-FP8-block
+gpus: 2
+replicas: 2
+precision: fp8
+env:
+  VLLM_DISABLE_COMPILE_CACHE: "1"
+  NCCL_P2P_LEVEL: NVL
+serve: |
+  vllm serve RedHatAI/gemma-4-31B-it-FP8-block
+  --served-model-name RedHatAI/gemma-4-31B-it-FP8-block
+  --tensor-parallel-size 1
+  --gpu-memory-utilization 0.92
+  --max-model-len 262144
+  --max-num-seqs 64
+  --max-num-batched-tokens 16384
+  --enable-chunked-prefill
+  --long-prefill-token-threshold 8192
+  --kv-cache-metrics
+  --enable-prompt-tokens-details
+  --enable-auto-tool-choice
+  --tool-call-parser gemma4
+  --reasoning-parser gemma4
+router:
+  image: vllm/vllm-openai:v0.25.1
+  serve: >-
+    bash -c "python3 -m pip install -q vllm-router==0.1.14
+    && exec vllm-router --host 0.0.0.0 --port {{router_port}}
+    --worker-urls {{engine_urls}} --policy cache_aware
+    --prometheus-host 127.0.0.1 --prometheus-port {{router_metrics_port}}
+    --request-timeout-secs 14400 --disable-retries --worker-startup-timeout-secs 3600"
+scenario: livekit
+conc: [8, 16, 32, 64, 96, 128]

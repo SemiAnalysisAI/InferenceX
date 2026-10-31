@@ -1,0 +1,29 @@
+# GreenSpec family: the internal speculative-decoding bench cut from production chat traffic
+# (Green-Lab/GreenSpec, one flat greenspec.jsonl per release; datasets/lock.yaml pins the release).
+# infx.serving.greenspec selects the rows (overrides: subset, lite, bucket), builds one request body per
+# row and writes them as the raw_payload file IX_CUSTOM_DATASET_FILE points to; AgentX sends each body
+# as is. Every request streams and completes on its own (no ignore_eos): acceptance only means
+# something on natural output. `requests` is the selection size unless overrides.requests lowers it;
+# the client sets it once it has counted the selection, so the 1 below is only a placeholder.
+schemaVersion: "2.0"
+benchmark:
+  unsafeOverride: true
+  endpoint:
+    type: chat
+    path: /v1/chat/completions
+    streaming: true
+    useServerTokenCount: true
+  datasets:
+  - name: greenspec-v1.1.1
+    type: file
+    format: raw_payload
+    path: ${IX_CUSTOM_DATASET_FILE}
+    sampling: sequential
+    randomSeed: 42
+  phases:
+  - name: profiling
+    kind: profiling
+    type: concurrency
+    requests: 1
+    failedRequestThreshold: 0.1
+randomSeed: 42

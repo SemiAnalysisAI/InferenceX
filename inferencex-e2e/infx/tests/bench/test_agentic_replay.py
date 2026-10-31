@@ -34,11 +34,24 @@ def _value(argv: list[str], flag: str) -> str | None:
     return argv[argv.index(flag) + 1] if flag in argv else None
 
 
-def test_default_point_leaves_the_replay_policy_to_the_scenario():
+def test_default_point_replicates_the_retired_agentx_scenario_defaults():
     assert _argv(MAX_MODEL_LEN="131072") == [
-        "/venv/bin/agentx", "profile", "--url", "http://localhost:8000",
+        "/venv/bin/agentx", "profile",
+        "--scenario", "inferencex-agentx-mvp",
+        "--url", "http://localhost:8000",
         "--model", "deepseek-ai/DeepSeek-V4-Pro", "--tokenizer", "deepseek-ai/DeepSeek-V4-Pro",
-        "--concurrency", "8", "--benchmark-duration", "3600", "--tokenizer-trust-remote-code",
+        "--concurrency", "8", "--benchmark-duration", "3600",
+        "--streaming", "--use-server-token-count",
+        "--stats-interval", "30", "--random-seed", "42",
+        "--trace-idle-gap-cap-seconds", "300",
+        "--num-dataset-entries", "393",
+        "--slice-duration", "1.0",
+        "--no-gpu-telemetry",
+        "--trajectory-start-min-ratio", "0.25", "--trajectory-start-max-ratio", "0.75",
+        "--failed-request-threshold", "0.10",
+        "--warmup-requests-per-lane", "10",
+        "--warmup-grace-period", "1800",
+        "--tokenizer-trust-remote-code",
         "--output-artifact-dir", "/results/aiperf_artifacts",
         "--public-dataset", "semianalysis_cc_traces_weka_062126",
     ]  # fmt: skip
@@ -65,10 +78,20 @@ def test_opt_in_inputs_add_their_flags_in_place():
     )
 
     assert argv == [
-        "/venv/bin/agentx", "profile", "--url", "http://localhost:8000",
+        "/venv/bin/agentx", "profile",
+        "--scenario", "inferencex-agentx-mvp",
+        "--url", "http://localhost:8000",
         "--model", "DeepSeek-V4-Pro", "--tokenizer", "deepseek-ai/DeepSeek-V4-Pro",
         "--concurrency", "8", "--benchmark-duration", "3600",
-        "--failed-request-threshold", "0.25", "--warmup-grace-period", "3600",
+        "--streaming", "--use-server-token-count",
+        "--stats-interval", "30", "--random-seed", "42",
+        "--trace-idle-gap-cap-seconds", "300",
+        "--num-dataset-entries", "393",
+        "--slice-duration", "1.0",
+        "--no-gpu-telemetry",
+        "--trajectory-start-min-ratio", "0.25", "--trajectory-start-max-ratio", "0.75",
+        "--failed-request-threshold", "0.25", "--warmup-requests-per-lane", "10",
+        "--warmup-grace-period", "3600",
         "--extra-inputs", "temperature:0.7", "top_p:0.9",
         "--use-dynamo-conv-aware-routing", "--dynamo-session-timeout-seconds", "14400",
         "--tokenizer-trust-remote-code",
@@ -83,8 +106,8 @@ def test_opt_in_inputs_add_their_flags_in_place():
 @pytest.mark.parametrize(
     ("overrides", "duration", "warmup", "unsafe"),
     [
-        ({"DURATION": "899"}, "899", None, True),
-        ({"DURATION": "900"}, "900", None, False),
+        ({"DURATION": "899"}, "899", "10", True),
+        ({"DURATION": "900"}, "900", "10", False),
         ({"AIPERF_EXPERIMENTAL_FAST": "1", "DURATION": "300"}, "1200", "1", False),
     ],
 )

@@ -1,0 +1,47 @@
+# Pattern: Dynamo frontend (KV router) + dynamo.sglang engine. GLM-5.3 W4AFP8 on 8xH200, AgentX (3600 s).
+# 1:1 port of vng-benchmark serving/glm53-w4afp8-dynamo161-memfrac08-c28c32.yaml: identical to
+# glm53-w4afp8-dynamo161-memfrac08-c40.yaml, only the conc ladder changed. Purpose: find the SLO-max CCU of
+# this config. Known rungs: c40 fails the SLO (TTFT avg 4.64s ok, ITL p90 69.2ms > 50ms; vng-benchmark run
+# 41124818237); a linear ITL-vs-CCU estimate puts the 50ms crossing near CCU 29. Both rungs plus the c40
+# failure bracket the boundary in every outcome. See the c40 yaml header for the image/node rationale.
+name: glm53-w4afp8-dynamo161-memfrac08-c28c32
+runner: cluster:hcm-hgx02
+image: nvcr.io/nvidia/ai-dynamo/sglang-runtime:1.6.1  # engine image, bundles SGLang v0.5.21
+model: PhalaCloud/GLM-5.3-W4AFP8
+gpus: 8
+precision: w4afp8
+env:
+  PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+  SGLANG_DP_USE_GATHERV: "1"
+  NCCL_P2P_LEVEL: NVL
+  HF_HUB_OFFLINE: "1"
+  NVSHMEM_REMOTE_TRANSPORT: none
+  SGLANG_ENABLE_METRICS_DP_ATTENTION: "1"
+  SGLANG_ENABLE_METRICS_DEVICE_TIMER: "1"
+serve: |
+  python3 -m dynamo.sglang
+  --model-path=PhalaCloud/GLM-5.3-W4AFP8
+  --served-model-name=zai-org/GLM-5.3
+  --quantization=w4afp8 --tp=8 --dp=8 --ep=8
+  --enable-dp-attention --enable-dp-attention-local-control-broadcast --enable-dp-lm-head
+  --dist-init-addr=127.0.0.1:10888
+  --moe-a2a-backend=deepep --chunked-prefill-size=32768
+  --tool-call-parser=glm47 --reasoning-parser=glm45
+  --mem-fraction-static=0.8 --max-running-requests=256 --context-length=300000
+  --kv-cache-dtype=fp8_e4m3 --dsa-prefill-backend=flashmla_sparse_q8 --allow-auto-truncate
+  --enable-metrics --enable-metrics-for-all-schedulers --enable-cache-report
+  --enable-hierarchical-cache --hicache-size=128 --hicache-io-backend=direct --hicache-write-policy=write_back
+  --speculative-algorithm=EAGLE --speculative-num-steps=3 --speculative-eagle-topk=1 --speculative-num-draft-tokens=4
+  --schedule-policy=dfs-weight --enable-prefill-delayer
+  --kv-events-config='{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:8900"}'
+router:
+  # same image as the engine (see the c40 yaml header): the frontend image lacks the sglang module
+  image: nvcr.io/nvidia/ai-dynamo/sglang-runtime:1.6.1
+  serve: |
+    python3 -m dynamo.frontend
+    --http-host=0.0.0.0 --http-port=8888
+    --router-mode=kv --router-prefill-load-scale=16 --router-min-initial-workers=1
+    --dyn-chat-processor=sglang --dyn-preprocess-workers=8
+    --tool-call-parser=glm47 --reasoning-parser=glm45
+scenario: agentx
+conc: [28, 32]

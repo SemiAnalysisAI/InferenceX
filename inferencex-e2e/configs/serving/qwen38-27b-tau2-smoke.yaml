@@ -1,0 +1,15 @@
+# Pattern: engine only, file dataset. Qwen3.8-27B vLLM, 262144 context, TP1 on one H200. tau2 sends tools,
+# so tool calling must be on (without it vLLM returns 400 and the AgentX warmup aborts the run).
+# tau2 customer-service trace for 180 s. Dispatch: utils/serving/dispatch.sh configs/serving/qwen38-27b-tau2-smoke.yaml
+name: qwen38-27b-tau2-smoke
+runner: cluster:hcm-hgx02
+image: vllm/vllm-openai:v0.29.0
+model: Qwen/Qwen3.8-27B
+gpus: 1
+precision: bf16
+serve: |
+  vllm serve Qwen/Qwen3.8-27B --max-model-len 262144
+  --enable-auto-tool-choice --tool-call-parser qwen3_xml --reasoning-parser qwen3
+scenario: tau2
+overrides: {duration: 180}
+conc: [8]

@@ -1,0 +1,93 @@
+# File datasets for the serving scenarios, keyed by the scenario's datasets[0].name.
+# Each entry pins one file at one HF commit; infx/serving/datasets.py downloads it
+# (token: GREENLAB_HF_TOKEN if set) and verifies sha256. `entries` is the dataset's
+# session count, copied into the scenario when a serving YAML picks this dataset.
+# `private: true` marks a repo that needs GREENLAB_HF_TOKEN to read (the runner-setup skill keys off it).
+tau2-cs:
+  repo: Green-Lab/customer-service-agent-traces
+  revision: 2c793380d8ba45bfde79f9a5c7b5991ed40ab2ea
+  file: trace.tau2.jsonl
+  sha256: 598ab95c793326182175d56599c743dc84d8c6d46623359327813099df05c47e
+  entries: 1576
+# E2 shared-prefix trace: HiCache L2 vs Mooncake L3 A/B.
+shared-prefix-e2:
+  repo: Green-Lab/shared-prefix-e2
+  revision: 02692baf2e3e93baae625a1ee093b7a1679f0952
+  file: trace.shared-prefix-e2.jsonl
+  sha256: e4dbb42007fd6349530b6f16a26e39d2f1465f8bb76691b32db0591567c50c7e
+  entries: 2400
+# E3 hidden-prefix trace: shared tool catalogs the router cannot see.
+hidden-prefix-e3:
+  repo: Green-Lab/hidden-prefix-e3
+  revision: 479ae539a2307ec831a05a416987bd94fdd7f20e
+  file: trace.hidden-prefix-e3.jsonl
+  sha256: e902b741fc20b9396f628431fd4aa9982ce16caa23516ca151f0030616da1cc1
+  entries: 2400
+livekit-111868-v1:
+  repo: Green-Lab/2026-10-16-111868-agentic-traces
+  revision: 002c982432295d1603dcaafd68a09cdf5c37e4ac
+  file: trace.v1-append-ideal.jsonl
+  sha256: 684dc5cb9e845b5e5a01b7e925aabf715869ea7c3f77c97850438f3066dca8f5
+  entries: 1217
+livekit-111868-v2:
+  repo: Green-Lab/2026-10-16-111868-agentic-traces
+  revision: 7e36287967360851a1b05ba05730ff1d256b60c7
+  file: trace.v2-observed.jsonl
+  sha256: 190af677563ea782d060456bbc44f92e802e1d63e4322b147ef0290a49efd4f3
+  entries: 1217
+# V1.1 = V1 with a dial warm-up before each room's first turn, restricted to the 671 rooms
+# with >= 4 real requests. aiperf TTFT includes the 601 warm-up requests (max_tokens 1).
+livekit-111868-v1.1-warm:
+  repo: Green-Lab/2026-10-16-111868-agentic-traces
+  revision: 6e0934c957565a42d52cafac096ec758a4302355
+  file: trace.v1.1-append-ideal-warm.jsonl
+  sha256: e26542392a202764849c05018f2f8ea3f9574277ffa3400615f0b4df23b0eb2f
+  entries: 671
+# GreenSpec v1.1.1: one flat file with every subset (infx.serving.greenspec selects rows from it).
+# Private repo: GREENLAB_HF_TOKEN must be able to read it. The benchmark repo is public, so the
+# greenspec scenario never uploads anything derived from the rows (see infx/serving/greenspec.py).
+greenspec-v1.1.1:
+  repo: Green-Lab/GreenSpec
+  revision: f7ea173f12917bcf1d3b9926a281a167d2b8243d
+  file: greenspec.jsonl
+  sha256: 6a26785d07c235446e57ba34463a1ae9e2dcff938fec6246881492e511fb0f43
+  private: true
+# SPEED-Bench, fully resolved: every row the public release masks is refetched from its source
+# (infx.serving.speedbench selects rows from the config's file). The prompts are public data, but the
+# resolved copy lives in a private repo: GREENLAB_HF_TOKEN must be able to read it.
+speedbench-qualitative:
+  repo: Green-Lab/speed-bench-prepared
+  revision: 184d7ed9fae19efa9d4d4e9959ac83cca83b3415
+  file: qualitative.jsonl
+  sha256: e9bbbe998472b79501ed79ba2bf126e58b63e153a6deef70ce2b63ea7a4de845
+  private: true
+speedbench-throughput-1k:
+  repo: Green-Lab/speed-bench-prepared
+  revision: 184d7ed9fae19efa9d4d4e9959ac83cca83b3415
+  file: throughput_1k.jsonl
+  sha256: 0b5665f61dcbf52dd357d515fd45f9e4c17c68eb902c788c81a4c9271b217377
+  private: true
+speedbench-throughput-2k:
+  repo: Green-Lab/speed-bench-prepared
+  revision: 184d7ed9fae19efa9d4d4e9959ac83cca83b3415
+  file: throughput_2k.jsonl
+  sha256: be247367a3ddd3c74b72d03122818d89c6e2e2fe956e6d66099d7ae0c45402a6
+  private: true
+speedbench-throughput-8k:
+  repo: Green-Lab/speed-bench-prepared
+  revision: 184d7ed9fae19efa9d4d4e9959ac83cca83b3415
+  file: throughput_8k.jsonl
+  sha256: 94f3ab2d3cd456654ee234faf888c459c5451069d6cfab6e051591b288e71739
+  private: true
+speedbench-throughput-16k:
+  repo: Green-Lab/speed-bench-prepared
+  revision: 184d7ed9fae19efa9d4d4e9959ac83cca83b3415
+  file: throughput_16k.jsonl
+  sha256: 77cbee1b4abc6b205ee9ad918bd8e1290a6514f4cf0ff9dc7db497afd1fffca2
+  private: true
+speedbench-throughput-32k:
+  repo: Green-Lab/speed-bench-prepared
+  revision: 184d7ed9fae19efa9d4d4e9959ac83cca83b3415
+  file: throughput_32k.jsonl
+  sha256: 04148f06e19c490856dcb9efc1b1fd4593354d4abd4bf07c6f5dc4ce91348c0b
+  private: true

@@ -1,0 +1,257 @@
+{
+  "config": {
+    "planner": "smooth_isotonic",
+    "objectives": [
+      {
+        "metric": "output_token_throughput",
+        "stat": "avg",
+        "direction": "MAXIMIZE",
+        "threshold": null
+      }
+    ],
+    "outcome_constraints": [],
+    "max_iterations": 16,
+    "n_initial_points": 5,
+    "random_seed": null,
+    "improvement_patience": 10,
+    "plateau_window": 8,
+    "plateau_threshold": 0.01,
+    "search_space": [
+      {
+        "path": "phases.profiling.concurrency",
+        "lo": 1.0,
+        "hi": 512.0,
+        "kind": "int"
+      }
+    ],
+    "sla_filters": [
+      {
+        "metric_tag": "time_to_first_token",
+        "stat": "avg",
+        "op": "lt",
+        "threshold": 8000.0
+      },
+      {
+        "metric_tag": "inter_token_latency",
+        "stat": "p90",
+        "op": "lt",
+        "threshold": 50.0
+      }
+    ]
+  },
+  "iterations": [
+    {
+      "iteration_idx": 0,
+      "variation_values": {
+        "phases.profiling.concurrency": 1
+      },
+      "objective_values": [
+        195.0664677095894
+      ],
+      "feasible": true,
+      "non_monotonic_warning": false
+    },
+    {
+      "iteration_idx": 1,
+      "variation_values": {
+        "phases.profiling.concurrency": 2
+      },
+      "objective_values": [
+        386.34119880865126
+      ],
+      "feasible": true,
+      "non_monotonic_warning": false
+    },
+    {
+      "iteration_idx": 2,
+      "variation_values": {
+        "phases.profiling.concurrency": 4
+      },
+      "objective_values": [
+        759.2835963978614
+      ],
+      "feasible": true,
+      "non_monotonic_warning": false
+    },
+    {
+      "iteration_idx": 3,
+      "variation_values": {
+        "phases.profiling.concurrency": 8
+      },
+      "objective_values": [
+        1462.8189603169742
+      ],
+      "feasible": true,
+      "non_monotonic_warning": false
+    },
+    {
+      "iteration_idx": 4,
+      "variation_values": {
+        "phases.profiling.concurrency": 16
+      },
+      "objective_values": [
+        2727.0072914517605
+      ],
+      "feasible": true,
+      "non_monotonic_warning": false
+    },
+    {
+      "iteration_idx": 5,
+      "variation_values": {
+        "phases.profiling.concurrency": 32
+      },
+      "objective_values": [
+        4769.916630940907
+      ],
+      "feasible": true,
+      "non_monotonic_warning": false
+    },
+    {
+      "iteration_idx": 6,
+      "variation_values": {
+        "phases.profiling.concurrency": 64
+      },
+      "objective_values": [
+        4942.104700390556
+      ],
+      "feasible": true,
+      "non_monotonic_warning": false
+    },
+    {
+      "iteration_idx": 7,
+      "variation_values": {
+        "phases.profiling.concurrency": 128
+      },
+      "objective_values": [
+        4940.557059363171
+      ],
+      "feasible": true,
+      "non_monotonic_warning": false
+    },
+    {
+      "iteration_idx": 8,
+      "variation_values": {
+        "phases.profiling.concurrency": 256
+      },
+      "objective_values": [
+        4957.00780532394
+      ],
+      "feasible": true,
+      "non_monotonic_warning": false
+    },
+    {
+      "iteration_idx": 9,
+      "variation_values": {
+        "phases.profiling.concurrency": 512
+      },
+      "objective_values": [
+        4846.276368310657
+      ],
+      "feasible": false,
+      "non_monotonic_warning": false
+    },
+    {
+      "iteration_idx": 10,
+      "variation_values": {
+        "phases.profiling.concurrency": 320
+      },
+      "objective_values": [
+        4827.220337529857
+      ],
+      "feasible": false,
+      "non_monotonic_warning": false
+    },
+    {
+      "iteration_idx": 11,
+      "variation_values": {
+        "phases.profiling.concurrency": 384
+      },
+      "objective_values": [
+        4831.1597561660965
+      ],
+      "feasible": false,
+      "non_monotonic_warning": false
+    },
+    {
+      "iteration_idx": 12,
+      "variation_values": {
+        "phases.profiling.concurrency": 448
+      },
+      "objective_values": [
+        4900.9558301074
+      ],
+      "feasible": false,
+      "non_monotonic_warning": false
+    },
+    {
+      "iteration_idx": 13,
+      "variation_values": {
+        "phases.profiling.concurrency": 288
+      },
+      "objective_values": [
+        5007.757817513733
+      ],
+      "feasible": false,
+      "non_monotonic_warning": false
+    },
+    {
+      "iteration_idx": 14,
+      "variation_values": {
+        "phases.profiling.concurrency": 272
+      },
+      "objective_values": [
+        4874.2598458808025
+      ],
+      "feasible": false,
+      "non_monotonic_warning": false
+    },
+    {
+      "iteration_idx": 15,
+      "variation_values": {
+        "phases.profiling.concurrency": 264
+      },
+      "objective_values": [
+        4880.621125197288
+      ],
+      "feasible": false,
+      "non_monotonic_warning": false
+    }
+  ],
+  "best_trials": [
+    {
+      "iteration_idx": 8,
+      "objective_values": [
+        4957.00780532394
+      ],
+      "variation_values": {
+        "phases.profiling.concurrency": 256
+      },
+      "feasible": true,
+      "feasible_count": 9,
+      "pareto_rank": 0
+    }
+  ],
+  "boundary_summary": {
+    "swept_dim_path": "phases.profiling.concurrency",
+    "feasible_max": {
+      "value": 256,
+      "iteration_idx": 8,
+      "objective_value": 4957.00780532394
+    },
+    "infeasible_min": {
+      "value": 264,
+      "iteration_idx": 15,
+      "first_breach": {
+        "metric_tag": "inter_token_latency",
+        "stat": "p90",
+        "op": "lt",
+        "threshold": 50.0,
+        "observed": 51.08207694657534
+      }
+    },
+    "boundary_type": "smooth",
+    "binding_constraint": "0:time_to_first_token.avg.lt.8000.0"
+  },
+  "recipe": null,
+  "convergence_reason": "smooth_isotonic_precision_reached"
+}
