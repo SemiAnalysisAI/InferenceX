@@ -13,7 +13,7 @@ COLLX_DEEPEP_V2_REPO="https://github.com/deepseek-ai/DeepEP"
 # LOW_LATENCY_COMBINE_RECV (without it Blackwell low-latency combine corrupts), the system-scope
 # release before the GIN barrier, NCCL Device API compat and pip-wheel SO-name resolution. The
 # backend cache is keyed on this value.
-COLLX_DEEPEP_V2_COMMIT="01dc3aaac82068020353dce2c302e38153c0bfaa"
+COLLX_DEEPEP_V2_COMMIT="f6aa38fe06cd4a0489e7730365d4e0114970a2f3"
 
 # Must match the image's CUDA line: the cu12 wheel's r12 host library on cu130 images survives
 # on sm90/sm100 but poisons the CUDA context during symmetric-heap init over MNNVL on sm103
@@ -290,7 +290,7 @@ collx_add_host_verbs_provider_mount() {
 # Ranks load the plugin build their rank env names (COLLX_OFI_NCCL_LIB_DIR); otherwise the host's.
 collx_apply_efa_profile() {
   local root="$COLLX_EFA_HOST_ROOT" path dir joined=""
-  export NCCL_NET_PLUGIN=ofi NCCL_GIN_TYPE=2
+  export NCCL_NET_PLUGIN=ofi NCCL_GIN_TYPE=2 EP_GIN_PROXY_ENABLE=1
   if [ -n "${COLLX_OFI_NCCL_LIB_DIR:-}" ]; then
     export NCCL_NET_PLUGIN="$COLLX_OFI_NCCL_LIB_DIR/libnccl-net-ofi.so" \
       NCCL_TUNER_PLUGIN="$COLLX_OFI_NCCL_LIB_DIR/libnccl-ofi-tuner.so"
@@ -755,7 +755,7 @@ collx_prepare_pinned_source() {
 
 collx_prepare_deepep_source() {
   collx_prepare_pinned_source "$1" deepep-v2 "$COLLX_DEEPEP_V2_REPO" "$COLLX_DEEPEP_V2_COMMIT" \
-    DeepEP third-party/fmt
+    DeepEP third-party/deep_jit
 }
 
 # Skips the thirdparty submodules (rccl/mscclpp, for other targets) but keeps the whole tree:

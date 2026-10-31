@@ -260,7 +260,7 @@ deepep_probe() {
   "$VIRTUAL_ENV/bin/python" - <<'PY'
 import inspect
 import deep_ep
-assert inspect.isclass(deep_ep.ElasticBuffer)
+assert inspect.isclass(deep_ep.EPBuffer)
 PY
 }
 
@@ -283,9 +283,9 @@ deepep_install() {
   "${pip[@]}" --index-url https://download.pytorch.org/whl/cu130 \
     --extra-index-url https://pypi.org/simple "$COLLX_DEEPEP_V2_TORCH_SPEC" >&2 2>&1 \
     || { collx_log "ERROR: $COLLX_DEEPEP_V2_TORCH_SPEC (cu130) installation failed"; return 1; }
-  # Torch pins NCCL 2.28.9; ElasticBuffer requires 2.30.4.
-  "${pip[@]}" --force-reinstall --no-deps "nvidia-nccl-cu13==2.30.4" >&2 2>&1 \
-    || { collx_log "ERROR: NCCL 2.30.4 installation failed"; return 1; }
+  # Torch pins NCCL 2.28.9; EPBuffer (V2.5) requires 2.32.3.
+  "${pip[@]}" --force-reinstall --no-deps "nvidia-nccl-cu13==2.32.3" >&2 2>&1 \
+    || { collx_log "ERROR: NCCL 2.32.3 installation failed"; return 1; }
   local toolchain cuda_home cccl
   toolchain="$(cuda_toolchain_paths)" || return 1
   IFS=$'\t' read -r cuda_home cccl <<< "$toolchain"
@@ -298,11 +298,18 @@ deepep_install() {
   # Upstream registers the GIN window NCCL_WIN_STRICT_ORDERING, which drops PCIe relaxed ordering
   # whatever NCCL_IB_PCI_RELAXED_ORDERING says; EP_WIN_RELAXED_ORDERING=1 opts a pool out. Unset,
   # the registration is upstream's. A pin that moves or duplicates the flag fails here.
-  local window_cu="$source_dir/csrc/kernels/backend/nccl.cu"
+  local window_cu="$source_dir/csrc/kernels/comm/context.cpp"
   local relaxed='get_env("EP_WIN_RELAXED_ORDERING", 0) ? NCCL_WIN_DEFAULT :'
   [ "$(grep -c NCCL_WIN_STRICT_ORDERING "$window_cu")" = 1 ] \
     && sed -i "s/NCCL_WIN_STRICT_ORDERING/($relaxed &)/" "$window_cu" \
     || { collx_log "ERROR: DeepEP V2 window-ordering patch failed"; return 1; }
+  # V2.5 JIT-compiles kernels with only the GDAKI GIN backend; EFA reaches GIN through the
+  # aws-ofi-nccl proxy (NCCL_GIN_TYPE=2), so EP_GIN_PROXY_ENABLE=1 compiles the proxy backend in.
+  local jit_hpp="$source_dir/csrc/runtime/jit.hpp"
+  local proxy='get_env<int>("EP_GIN_PROXY_ENABLE", 0) ? "-DNCCL_GIN_PROXY_ENABLE=1" : "-DNCCL_GIN_PROXY_ENABLE=0"'
+  [ "$(grep -c '"-DNCCL_GIN_PROXY_ENABLE=0"' "$jit_hpp")" = 1 ] \
+    && sed -i "s|\"-DNCCL_GIN_PROXY_ENABLE=0\"|$proxy|" "$jit_hpp" \
+    || { collx_log "ERROR: DeepEP V2 GIN proxy patch failed"; return 1; }
   # The RDC device-link step (nvcc -dlink) gets no -gencode from the extension build, so nvcc
   # falls back to its default arch (sm_75 on CUDA 13) and links kernels that cannot load on the
   # target GPU (gb300/sm103: cudaErrorUnknown). NVCC_PREPEND_FLAGS reaches the dlink too.
@@ -332,7 +339,7 @@ deepep_prepare() {
   fi
   deepep_activate "$root" || return 1
   deepep_probe || { collx_log "ERROR: DeepEP V2 shared runtime probe failed"; return 1; }
-  collx_log "DeepEP V2 ready ($COLLX_DEEPEP_V2_COMMIT, ElasticBuffer, NCCL Device API; LSA/Gin selected by adapter)"
+  collx_log "DeepEP V2 ready ($COLLX_DEEPEP_V2_COMMIT, EPBuffer, NCCL Device API; LSA/Gin selected by adapter)"
 }
 
 # UCCL-EP lifecycle

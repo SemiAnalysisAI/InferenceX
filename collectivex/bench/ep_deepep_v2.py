@@ -17,7 +17,7 @@ from ep_legacy_ll import LegacyBufferLL
 
 try:
     import deep_ep
-    from deep_ep import ElasticBuffer  # type: ignore
+    from deep_ep import EPBuffer as ElasticBuffer  # type: ignore  # V2.5 rename
 except Exception as exc:  # pragma: no cover - requires the benchmark image
     print(f"ERROR: DeepEP V2 import failed: {exc!r}", file=sys.stderr)
     raise
@@ -27,7 +27,7 @@ except Exception as exc:  # pragma: no cover - requires the benchmark image
 # adapter does not check the wheel's commit tag, only that the loaded deep_ep exposes
 # ElasticBuffer. The pin is mirrored here for `library_version`, since the wheel reports
 # 2.1.0+local (the build patches the tree, so setup.py finds no clean git hash).
-_DEEPEP_COMMIT = "01dc3aaac82068020353dce2c302e38153c0bfaa"
+_DEEPEP_COMMIT = "f6aa38fe06cd4a0489e7730365d4e0114970a2f3"
 
 # vLLM's ElasticBuffer flags: VLLM_DEEPEP_V2_PREFER_OVERLAP and
 # VLLM_DEEPEP_V2_ALLOW_MULTIPLE_REDUCTION both default to 0 (vllm/envs.py) and reach the buffer
@@ -112,7 +112,7 @@ def _require_runtime() -> None:
     """Capability check only: the loaded deep_ep must expose ElasticBuffer (still
     catches the b300 image-bundled deep_ep 1.2.1 shadowing the from-source build,
     which lacks the class)."""
-    if not inspect.isclass(ElasticBuffer) or ElasticBuffer.__name__ != "ElasticBuffer":
+    if not inspect.isclass(ElasticBuffer) or ElasticBuffer.__name__ != "EPBuffer":
         raise RuntimeError("invalid DeepEP V2 runtime: deep_ep.ElasticBuffer is absent")
 
 
