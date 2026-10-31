@@ -94,3 +94,9 @@
   suites: [kv-transfer]
   description:
     - Add the kv-transfer suite on vLLM 0.32.0's DeepSeek-V4 cache layout.
+- date: 2026-11-01
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4693
+  pools: [b300]
+  backends: [deepep-v2]
+  description:
+    - Build AWS's EFA fork of DeepEP V2 (amazon-contributing/DeepEP a227152) on B300; its unordered scale-out kernels need only the EFA proxy's weak GIN signals.
