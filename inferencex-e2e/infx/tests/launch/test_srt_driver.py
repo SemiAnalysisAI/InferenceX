@@ -652,8 +652,8 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
         "infmax_model_prefix": "unknown",
     }  # fmt: skip
     env = lane_env(
-        harness, "gb300-nv", MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="dynamo-trt",
-        MODEL="deepseek-ai/DeepSeek-V4-Pro", IS_AGENTIC="1", SPEC_DECODING="mtp", ISL="0", OSL="0",
+        harness, "gb300-nv", MODEL_PREFIX="glm5.2", PRECISION="fp4", FRAMEWORK="dynamo-trt",
+        MODEL="nvidia/GLM-5.2-NVFP4", IS_AGENTIC="1", SPEC_DECODING="mtp", ISL="0", OSL="0",
         EVAL_ONLY="true", EVAL_SRT_RECIPE=f"{MIRROR}/test/eval.yaml", FAKE_RESULTS="eval",
         EVAL_CONC="4 8", RECIPE_FINGERPRINT="recipe-fixture", FAKE_EVAL_META=json.dumps(staged),
     )  # fmt: skip
@@ -662,12 +662,12 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
     [call] = srtctl_calls(harness.logs)
     argv = call["argv"]
     assert Path(argv[argv.index("--file") + 1]).name == "recipe.yaml"
-    assert "frontend.placement.node=head" in argv
+    assert "frontend.placement.node=head" not in argv
     checkout = Path(call["cwd"])
     assert (checkout / "recipes/test/trtllm/forced.yaml").read_text() == (
         "roles:\n  decode:\n    env:\n      KEEP: 1\n"
     )
-    assert srtslurm(checkout)["default_time_limit"] == "8:00:00"
+    assert srtslurm(checkout)["default_time_limit"] == "4:00:00"
     workspace = harness.workspace
     assert (workspace / "results_gsm8k.json").read_text() == "{}"
     meta = json.loads((workspace / "meta_env.json").read_text())
@@ -677,7 +677,7 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
         "completed_eval_concs": [8], "failed_eval_concs": [4],
     }  # fmt: skip
     assert (meta["infmax_model_prefix"], meta["recipe_fingerprint"], meta["framework"]) == (
-        "dsv4", "recipe-fixture", "dynamo-trt",
+        "glm5.2", "recipe-fixture", "dynamo-trt",
     )
     assert list(workspace.glob("point-identity_*.json")) == []
 
@@ -763,7 +763,6 @@ def test_a_failed_uv_download_fails_the_uv_install(harness):
 
 @pytest.mark.parametrize(("cluster_id", "env", "message"), [
     ("h200-dgxc", dict(MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-vllm"), "Unsupported framework"),
-    ("b200-nscale", dict(MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="dynamo-trt"), "only dynamo-vllm"),
     ("h200-dgxc", dict(MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang",
                        SRT_RECIPE=f"{MIRROR}/test/missing.yaml"), "is not in the recipe mirror"),
 ])  # fmt: skip
