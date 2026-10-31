@@ -33,6 +33,7 @@ tight combine gate (COMBINE_REL_TOL = 8*2^-8) is preserved, not loosened.
 """
 from __future__ import annotations
 
+import functools
 import json
 import os
 import sys
@@ -44,7 +45,7 @@ import torch
 import torch.distributed as dist
 
 from ep_backend import EPBackend
-from ep_legacy_ll import LegacyBufferLL
+from ep_legacy_ll import LegacyBufferLL, kernel_cast_to_fp8
 
 try:
     # In the isolated UCCL venv `deep_ep` is UCCL's deep_ep_wrapper (a drop-in DeepEP API backed
@@ -186,11 +187,16 @@ class UCCLEPBackend(LegacyBufferLL, EPBackend):
         # BF16 combine sends — real device work, hence a separately-timed stage component.
         self.stage_device_work = self._fp8
         if self._fp8:
-            # Low-latency keeps the eager quantize, whose bits its in-kernel cast matches.
             fnuz = _fp8_e4m3_dtype() == torch.float8_e4m3fnuz
-            self._enable_fp8(
-                "fp8-e4m3fnuz" if fnuz else "fp8-e4m3fn", per_token_cast_to_fp8, per_token_cast_back
-            )
+            quantize = per_token_cast_to_fp8
+            if self.mode == "low-latency":
+                # The kernel quantizes in-kernel, so the oracle models its arithmetic rather than
+                # the vendored helper's (which normal mode sends as the wire format).
+                quantize = functools.partial(
+                    kernel_cast_to_fp8,
+                    fp8_dtype=_fp8_e4m3_dtype(), fp8_max=240.0 if fnuz else 448.0,
+                )
+            self._enable_fp8("fp8-e4m3fnuz" if fnuz else "fp8-e4m3fn", quantize, per_token_cast_back)
         if self.mode == "low-latency":
             self._enable_ll("uccl-legacy-buffer-ll")
         # Normal dispatch polls its receive counters on the host before launching the transfer.
