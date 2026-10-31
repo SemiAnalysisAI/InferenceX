@@ -83,8 +83,8 @@ zip_override_tp2_hicache_spf_interval32:
         tensor-parallel-size: 2
         moe-runner-backend: flashinfer_trtllm_routed
         chunked-prefill-size: 8192
-        max-running-requests: [40, 48, 56, 72, 80]
-        cuda-graph-max-bs-decode: [40, 48, 56, 72, 80]
+        max-running-requests: [40, 48, 56, 64, 72, 80]
+        cuda-graph-max-bs-decode: [40, 48, 56, 64, 72, 80]
         mem-fraction-static: 0.87
         enable-hierarchical-cache: true
         hicache-size: 180
@@ -94,5 +94,5 @@ zip_override_tp2_hicache_spf_interval32:
         stream-interval: 20
   benchmark:
     env:
-      CONC: ['20', '24', '28', '36', '40']
+      CONC: ['20', '24', '28', '32', '36', '40']
       KV_OFFLOADING: dram
