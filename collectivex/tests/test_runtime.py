@@ -283,6 +283,20 @@ class RelaxedOrderingProfileTests(unittest.TestCase):
                 self.assertEqual(stdout.strip().splitlines()[-1], expected)
 
 
+class DeepepSourceSelectionTests(unittest.TestCase):
+    def test_only_efa_pools_build_the_aws_fork(self) -> None:
+        for fabric, repo in (("efa", "amazon-contributing/DeepEP"), ("", "deepseek-ai/DeepEP")):
+            with self.subTest(fabric=fabric):
+                stdout = run_common(
+                    f"export COLLX_RDMA_FABRIC='{fabric}'; collx_select_deepep_v2_source;"
+                    ' echo "$COLLX_DEEPEP_V2_REPO $COLLX_DEEPEP_V2_COMMIT $COLLX_DEEPEP_V2_EFA_COMMIT"',
+                    check=True,
+                ).stdout.split()
+                self.assertEqual(stdout[0], f"https://github.com/{repo}")
+                # The fork is pinned separately, so the venv cache never mixes the two builds.
+                self.assertEqual(stdout[1] == stdout[2], fabric == "efa")
+
+
 class EfaPluginProfileTests(unittest.TestCase):
     def test_ranks_load_the_prepared_plugin_and_proxy_gin(self) -> None:
         lib = "/cx-cache/ofi/lib"

@@ -15,6 +15,20 @@ COLLX_DEEPEP_V2_REPO="https://github.com/deepseek-ai/DeepEP"
 # backend cache is keyed on this value.
 COLLX_DEEPEP_V2_COMMIT="01dc3aaac82068020353dce2c302e38153c0bfaa"
 
+# EFA pools build AWS's EFA fork of the same V2 instead: amazon-contributing/DeepEP main is the pin
+# above plus its EFA commits, chiefly unordered hybrid kernels that need only the weak GIN signals
+# the aws-ofi-nccl proxy provides. Upstream treats EFA as unsupported (deepseek-ai/DeepEP#369).
+COLLX_DEEPEP_V2_EFA_REPO="https://github.com/amazon-contributing/DeepEP"
+COLLX_DEEPEP_V2_EFA_COMMIT="a227152ac29513b1c702860745a1d1e0111ae0dc"
+
+# Selects this pool's DeepEP V2 source into COLLX_DEEPEP_V2_REPO/COMMIT (the venv cache is keyed
+# on the commit, so the two sources never share a build).
+collx_select_deepep_v2_source() {
+  [ "${COLLX_RDMA_FABRIC:-}" = efa ] || return 0
+  COLLX_DEEPEP_V2_REPO="$COLLX_DEEPEP_V2_EFA_REPO"
+  COLLX_DEEPEP_V2_COMMIT="$COLLX_DEEPEP_V2_EFA_COMMIT"
+}
+
 # Must match the image's CUDA line: the cu12 wheel's r12 host library on cu130 images survives
 # on sm90/sm100 but poisons the CUDA context during symmetric-heap init over MNNVL on sm103
 # (gb300); every CUDA call after buffer creation fails cudaErrorUnknown. Part of the venv cache key.
@@ -754,6 +768,7 @@ collx_prepare_pinned_source() {
 }
 
 collx_prepare_deepep_source() {
+  collx_select_deepep_v2_source
   collx_prepare_pinned_source "$1" deepep-v2 "$COLLX_DEEPEP_V2_REPO" "$COLLX_DEEPEP_V2_COMMIT" \
     DeepEP third-party/fmt
 }

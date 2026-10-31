@@ -66,7 +66,8 @@ relative). Graphed replays must rewrite poisoned outputs. Any failure makes the 
   multi-node decode on fresh-entry p99.
 - Bandwidth is logical wire payload over latency, never link utilization.
 - FP8 `stage` (the dequant) is excluded from `roundtrip` and `pair_period`; do not sum it in.
-- EFA pools (b300, h100) run EP16 through a CPU proxy, so those rows measure the proxy.
+- EFA pools (b300, h100) run EP16 through a CPU proxy, so those rows measure the proxy. Their
+  deepep-v2 rows build AWS's EFA fork of DeepEP (`-aws-efa-fork`).
 - On GB200/GB300, eager FP8 prefill chains at T=1024 are bound by the Grace host, not the fabric.
 - Vendor tables time kernels in a profiler; compare them with `cross_rank_min_us` or
   `chain_floor_us`.
@@ -168,6 +169,16 @@ The pin in `runtime/common.sh` is upstream `main`, which also carries #630 (pure
 GIN), #640 (NCCL shared-memory mappings) and #642 (the low-latency combine fence). The adapter fails
 closed unless the loaded `deep_ep` exposes `ElasticBuffer`, which also catches an image-bundled
 `deep_ep` shadowing the build.
+
+On the EFA pools (b300, h100-dgxc) the build uses AWS's fork instead,
+[amazon-contributing/DeepEP](https://github.com/amazon-contributing/DeepEP) `main`: the same pin plus
+its EFA commits. Upstream treats EFA as unsupported
+([deepseek-ai/DeepEP#369](https://github.com/deepseek-ai/DeepEP/issues/369)), and its scale-out
+kernels assume writes land in order. The fork's default `unordered` kernels batch each put with an
+in-band header and count completions, which the aws-ofi-nccl proxy's weak signals support; it also
+caps the scale-out GIN contexts at 17. These rows carry the `-aws-efa-fork` series suffix and record
+`deepep_source` and `hybrid_kernel`, so they never pool with upstream rows. The fork is not what vLLM
+ships, so on EFA `normal` keeps vLLM's call configuration on AWS's kernels.
 
 `normal` runs vLLM's `deepep_v2` configuration (`library_config.engine_contract = "vllm"`). With CUDA
 graphs on, vLLM's default, every batch, prefill as well as decode, dispatches with `do_cpu_sync=False`

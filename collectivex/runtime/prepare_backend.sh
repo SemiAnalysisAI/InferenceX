@@ -17,6 +17,7 @@ readonly -a RANK_ENV_VARS=(
   PATH VIRTUAL_ENV LD_LIBRARY_PATH LIBRARY_PATH PYTHONPATH CUDA_HOME CPATH NVCC_PREPEND_FLAGS
   NVSHMEM_DIR EP_NCCL_ROOT_DIR EP_NVSHMEM_ROOT_DIR EP_JIT_CACHE_DIR
   EP_REUSE_NCCL_COMM NCCL_CUMEM_ENABLE UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC COLLX_OFI_NCCL_LIB_DIR FLASHINFER_WORKSPACE_BASE
+  COLLX_DEEPEP_V2_REPO COLLX_DEEPEP_V2_COMMIT
 )
 readonly -a DEEPEP_RANK_UNSETS=(EP_SUPPRESS_NCCL_CHECK)
 
@@ -321,11 +322,13 @@ deepep_install() {
 
 deepep_prepare() {
   local arch root
+  collx_select_deepep_v2_source
+  export COLLX_DEEPEP_V2_REPO COLLX_DEEPEP_V2_COMMIT  # recorded by the adapter
   arch="$(cuda_arch)" || return 1
   root="$(deepep_cache_root "$arch")" || return 1
   command -v flock >/dev/null || { collx_log "ERROR: flock is required for DeepEP V2"; return 1; }
   mkdir -p "${root%/*}" || return 1
-  collx_log "DeepEP V2: preparing upstream main ($COLLX_DEEPEP_V2_COMMIT)"
+  collx_log "DeepEP V2: preparing ${COLLX_DEEPEP_V2_REPO#https://github.com/}@$COLLX_DEEPEP_V2_COMMIT"
   if ! with_cache_lock "DeepEP V2" "$root" deepep_ready deepep_install "$arch"; then
     collx_log "ERROR: shared DeepEP V2 environment is incomplete"
     return 1
