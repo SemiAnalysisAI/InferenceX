@@ -1350,7 +1350,7 @@ musespark-fp4-mi355x-sglang-agentic-dflash:
 
 # Native Kimi-K3 PD with TP8 workers and MoRIIO READ.
 kimik3-fp4-mi355x-vllm-disagg-agentic:
-  image: vllm/vllm-openai-rocm:nightly-335dd77b09161c5d63139b4e7ae51bb9928305b1@sha256:3c634cc2c51eda7eb840a236b1f09a5ecf6a4b0cb92c4b8486e2158770507291
+  image: vllm/vllm-openai-rocm:nightly-2b009fc6d1493a9a1ad19f4d0c7230b7e6b7e63a@sha256:b19ed6450f9d796c584d84d4fc914fd8bd3bae99a9c7ce07ebb29c36e5122264
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:mi355x-amds
