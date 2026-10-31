@@ -11724,3 +11724,12 @@
     - "Extend the MI355X Qwen3.8-Flash-Next SGLang AgentX sweep to concurrency 1/2/4/8/12/16 on the existing pinned upstream image and default serving path."
     - "Add c1/c2/c4 recipe variants with max-running-requests and cuda-graph-max-bs-decode set to 2/4/8, preserving the existing 2x concurrency sizing and all other serving settings."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4680
+
+- config-keys:
+    - musespark-fp4-gb200-sglang-agentic-dflash
+  description:
+    - "Add two-node TP8/EP8 SGLang aggregate configurations for Muse Spark Open GB200 AgentX at concurrency 1 and 24, and run the existing TP4 configurations through the aggregate SRT-Slurm lane."
+    - "Enable the standalone SGLang GB200 multi-node launch and power telemetry routes."
+    - "Request full-node memory and 144 CPUs for each aggregate configuration."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  scenario-type: [agentic-coding]
