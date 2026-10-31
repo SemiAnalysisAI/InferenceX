@@ -1,0 +1,13 @@
+# Remote endpoint (no engine launched): AgentX smoke against an OpenAI-compatible API.
+# The key is the GitHub secret named below (gh secret set OPENAI_API_KEY --repo vngcloud/InferenceX).
+# tokenizer: builtin is tiktoken o200k_base, exact for GPT-4o/GPT-5; use an HF repo id for open models.
+name: remote-openai-agentx-smoke
+runner: cluster:hcm-rtx01
+endpoint:
+  url: https://api.openai.com/v1
+  model: gpt-5
+  api-key-secret: OPENAI_API_KEY
+  tokenizer: builtin
+scenario: agentx
+overrides: {duration: 180}
+conc: [1]

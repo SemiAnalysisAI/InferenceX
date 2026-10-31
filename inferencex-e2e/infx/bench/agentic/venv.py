@@ -1,4 +1,8 @@
-"""The isolated AgentX runtime: a per-job uv venv with the pinned PyPI release."""
+"""The isolated AIPerf runtime: a per-job uv venv with the pinned PyPI nightly.
+
+The nightly (not the 0.13.0 release) is required: released 0.13.0 rejects the
+serving scenarios' ``phases[].concurrency.warmupRequestsPerLane`` and
+``traceIdleGapCapSeconds`` keys."""
 
 from __future__ import annotations
 
@@ -20,7 +24,7 @@ REQUIREMENTS = Path(__file__).with_name("requirements.txt")
 
 @dataclass(frozen=True)
 class Runtime:
-    """Paths of one job's AgentX runtime directory."""
+    """Paths of one job's AIPerf runtime directory."""
 
     root: Path
 
@@ -44,9 +48,9 @@ class Runtime:
         return self.venv / "bin" / "python"
 
     @property
-    def agentx(self) -> Path:
-        """The venv's ``agentx`` executable."""
-        return self.venv / "bin" / "agentx"
+    def aiperf(self) -> Path:
+        """The venv's ``aiperf`` executable."""
+        return self.venv / "bin" / "aiperf"
 
     @property
     def hf(self) -> Path:
@@ -81,8 +85,8 @@ def bootstrap(runtime: Runtime) -> int:
             "benchmark client dependency bootstrap failed; inspect network/package "
             "resolution before recipe repairs"
         )
-    if not (_executable(runtime.agentx) and _executable(runtime.hf)):
-        raise BenchError(f"isolated AgentX environment is incomplete at {runtime.venv}")
+    if not (_executable(runtime.aiperf) and _executable(runtime.hf)):
+        raise BenchError(f"isolated AIPerf environment is incomplete at {runtime.venv}")
     return 0
 
 

@@ -1,0 +1,12 @@
+# Remote endpoint smoke: GreenNode Coding Plan (tokenplan) GLM-5.3, AgentX 180 s at conc 1.
+# Key: GitHub secret REMOTE_API_KEY. GLM is open-weight, so the HF tokenizer gives exact prompt lengths.
+name: remote-glm53-tokenplan-smoke
+runner: cluster:hcm-hgx02
+endpoint:
+  url: https://tokenplan.api.greennode.ai/v1
+  model: z-ai/glm-5.3
+  api-key-secret: REMOTE_API_KEY
+  tokenizer: zai-org/GLM-5.3
+scenario: agentx
+overrides: {duration: 180}
+conc: [1]

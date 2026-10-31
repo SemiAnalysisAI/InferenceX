@@ -1,0 +1,53 @@
+# Gemma-4-31B FP8-block, production engine flags (HCM k8s deployment gemma4-31b-fp8-h200-eagle-a)
+# including MTP speculative decoding (4 tokens, draft google/gemma-4-31B-it-assistant), 1 GPU, no router.
+# Dispatch the full sweep ladder: utils/serving/sweep_dispatch.sh serving/gemma4-31b-fp8-mtp-sweep-1gpu.yaml
+name: gemma4-31b-fp8-mtp-sweep-1gpu
+runner: h200-greennode-slurm-1x_01
+image: vllm/vllm-openai:v0.25.1
+model: RedHatAI/gemma-4-31B-it-FP8-block
+gpus: 1
+precision: fp8
+env:
+  VLLM_DISABLE_COMPILE_CACHE: "1"
+  NCCL_P2P_LEVEL: NVL
+serve: |
+  vllm serve RedHatAI/gemma-4-31B-it-FP8-block
+  --tensor-parallel-size 1
+  --gpu-memory-utilization 0.92
+  --max-model-len 262144
+  --max-num-seqs 64
+  --max-num-batched-tokens 16384
+  --enable-chunked-prefill
+  --long-prefill-token-threshold 8192
+  --kv-cache-metrics
+  --enable-prompt-tokens-details
+  --speculative-config '{"model": "google/gemma-4-31B-it-assistant", "num_speculative_tokens": 4, "method": "mtp"}'
+  --enable-auto-tool-choice
+  --tool-call-parser gemma4
+  --reasoning-parser gemma4
+scenario:
+- sweep-isl128k-osl1k-cache0
+- sweep-isl128k-osl1k-cache50
+- sweep-isl128k-osl1k-cache90
+- sweep-isl128k-osl512-cache0
+- sweep-isl128k-osl512-cache50
+- sweep-isl128k-osl512-cache90
+- sweep-isl32k-osl1k-cache0
+- sweep-isl32k-osl1k-cache50
+- sweep-isl32k-osl1k-cache90
+- sweep-isl32k-osl512-cache0
+- sweep-isl32k-osl512-cache50
+- sweep-isl32k-osl512-cache90
+- sweep-isl64k-osl1k-cache0
+- sweep-isl64k-osl1k-cache50
+- sweep-isl64k-osl1k-cache90
+- sweep-isl64k-osl512-cache0
+- sweep-isl64k-osl512-cache50
+- sweep-isl64k-osl512-cache90
+- sweep-isl8k-osl1k-cache0
+- sweep-isl8k-osl1k-cache50
+- sweep-isl8k-osl1k-cache90
+- sweep-isl8k-osl512-cache0
+- sweep-isl8k-osl512-cache50
+- sweep-isl8k-osl512-cache90
+conc: 1

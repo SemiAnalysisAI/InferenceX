@@ -1,0 +1,72 @@
+# Pattern: storage sidecar. Mooncake master (storage:) starts first, then smg router and SGLang with HiCache L2
+# buffer_only + L3 Mooncake, on the E2 shared-prefix trace (KV reuse across DP groups). GLM-5.3 W4AFP8 on 8xH200.
+# --hicache-size 48 per rank (buffer only); the DRAM it frees goes to Mooncake L3 (MOONCAKE_GLOBAL_SEGMENT_SIZE).
+# NVSHMEM_REMOTE_TRANSPORT=none / IBGDA=0: single-node DeepEP over NVLink only.
+name: glm53-w4afp8-router-mooncake-e2
+runner: cluster:hcm-hgx02
+image: lmsysorg/sglang:v0.5.21
+model: PhalaCloud/GLM-5.3-W4AFP8
+gpus: 8
+precision: w4afp8
+env:
+  PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+  SGLANG_DP_USE_GATHERV: "1"
+  SGLANG_ENABLE_METRICS_DP_ATTENTION: "1"
+  NCCL_P2P_LEVEL: NVL
+  HF_HUB_OFFLINE: "1"
+  NVSHMEM_REMOTE_TRANSPORT: none
+  NVSHMEM_IB_ENABLE_IBGDA: "0"
+  MOONCAKE_MASTER: "127.0.0.1:{{storage_master_port}}"
+  MOONCAKE_TE_META_DATA_SERVER: "http://127.0.0.1:{{storage_meta_port}}/metadata"
+  # sglang divides this by attn_tp_size*pp_size (tp8/dp8 -> 1): 96 GiB mounted per rank, 768 GiB total.
+  # (At dp4 the divisor was 2, so 192 GiB gave the same 96 GiB/rank.)
+  MOONCAKE_GLOBAL_SEGMENT_SIZE: "103079215104"
+  # Buffer-mode anchor locks may pin up to this fraction of the L1 pool (default 0.5). Run 38765755189 c32 and
+  # run 38705612370 c40 crashed with "Prefill out of memory" with every radix node locked (evictable 0).
+  SGLANG_HICACHE_BUFFER_ANCHOR_LOCK_CAP: "0.2"
+  MOONCAKE_PROTOCOL: tcp
+  MOONCAKE_LOCAL_HOSTNAME: 127.0.0.1
+serve: |
+  python3 -m sglang.launch_server
+  --model-path PhalaCloud/GLM-5.3-W4AFP8
+  --quantization w4afp8
+  --tp 8 --dp 8 --ep 8
+  --enable-dp-attention --enable-dp-attention-local-control-broadcast --enable-dp-lm-head
+  --tokenizer-worker-num 8
+  --dist-init-addr 127.0.0.1:10888
+  --moe-a2a-backend deepep
+  --chunked-prefill-size 32768
+  --tool-call-parser glm47 --reasoning-parser glm45
+  --mem-fraction-static 0.75 --max-running-requests 256 --context-length 300000
+  --kv-cache-dtype fp8_e4m3 --dsa-prefill-backend flashmla_sparse_q8
+  --allow-auto-truncate
+  --enable-metrics --enable-metrics-for-all-schedulers --enable-cache-report
+  --enable-hierarchical-cache
+  --hicache-size 48 --hicache-io-backend direct --hicache-write-policy write_through_selective
+  --hicache-host-memory-mode buffer_only
+  --hicache-storage-backend mooncake
+  --speculative-algorithm EAGLE --speculative-num-steps 3 --speculative-eagle-topk 1 --speculative-num-draft-tokens 4
+  --schedule-policy dfs-weight --schedule-conservativeness 3.33 --enable-prefill-delayer
+  --served-model-name zai-org/GLM-5.3
+storage:
+  image: lmsysorg/sglang:v0.5.21
+  serve: |
+    mooncake_master
+    --port={{storage_master_port}}
+    --enable_http_metadata_server=true
+    --http_metadata_server_port={{storage_meta_port}}
+    --eviction_high_watermark_ratio=0.95
+router:
+  image: vcr.vngcloud.vn/60108-backend-worker/portal-external/dev/sglang-router-patched:v0.5.18-slim-noargcanon
+  serve: |
+    /work/target/release/smg launch
+    --host=0.0.0.0 --port={{router_port}} --prometheus-port={{router_metrics_port}}
+    --policy=cache_aware --dp-aware
+    --worker-urls={{engine_url}}
+    --cache-threshold=0.3
+    --balance-abs-threshold=100000 --balance-rel-threshold=2.0
+    --max-tree-size=67108864 --eviction-interval=300
+    --health-check-interval-secs=15 --health-check-timeout-secs=10 --health-failure-threshold=5
+    --request-timeout-secs=900 --retry-max-retries=2
+scenario: shared-prefix-e2
+conc: [24, 32]

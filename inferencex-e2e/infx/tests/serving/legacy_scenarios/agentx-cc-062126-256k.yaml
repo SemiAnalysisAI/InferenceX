@@ -1,0 +1,38 @@
+# AgentX replay of the SemiAnalysis CC traces (062126 corpus) capped at 256k context,
+# for engines whose enforced context window is <= 262144. Identical to agentx-cc-062126.yaml
+# except for the loader (semianalysis_cc_traces_weka_062126_256k) and matching maxContextLength.
+schemaVersion: "2.0"
+benchmark:
+  scenario: inferencex-agentx-mvp
+  unsafeOverride: true
+  endpoint:
+    type: chat
+    path: /v1/chat/completions
+    streaming: true
+    useServerTokenCount: true
+  datasets:
+  - name: main
+    type: public
+    dataset: semianalysis_cc_traces_weka_062126_256k
+    entries: 393
+    randomSeed: 42
+    traceIdleGapCapSeconds: 300.0
+    maxContextLength: 262144
+  phases:
+  - name: profiling
+    kind: profiling
+    type: concurrency
+    duration: 3600.0
+    gracePeriod: 30.0
+    failedRequestThreshold: 0.1
+    trajectoryStartMinRatio: 0.25
+    trajectoryStartMaxRatio: 0.75
+    warmupRequestsPerLane: 10
+    agenticWarmupGracePeriod: 1800.0
+  artifacts:
+    sliceDuration: 1.0
+  tokenizer:
+    trustRemoteCode: true
+  runtime:
+    statsInterval: 30.0
+randomSeed: 42

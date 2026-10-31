@@ -328,6 +328,49 @@ labels:
     - mi355x-amds_07
     - mi355x-amds_08
     - mi355x-amds_09
+  # VNG on-node runners (stackops, systemd), one cluster per node: the runner lives on its GPU
+  # node, and every host path below is node-local. See .agents/skills/serving-runner-setup.
+  cluster:hcm-hgx01:
+    - hcm-hgx01_00
+    - hcm-hgx01_01
+    - hcm-hgx01_02
+    - hcm-hgx01_03
+  cluster:hcm-hgx02:
+    - hcm-hgx02_00
+    - hcm-hgx02_01
+    - hcm-hgx02_02
+    - hcm-hgx02_03
+  cluster:hcm-rtx01:
+    - hcm-rtx01_00
+    - hcm-rtx01_01
+  cluster:hcm-rtx02:
+    - hcm-rtx02_00
+    - hcm-rtx02_01
+  h200-hcm:
+    - hcm-hgx01_00
+    - hcm-hgx01_01
+    - hcm-hgx01_02
+    - hcm-hgx01_03
+    - hcm-hgx02_00
+    - hcm-hgx02_01
+    - hcm-hgx02_02
+    - hcm-hgx02_03
+  rtx6000pro-hcm:
+    - hcm-rtx01_00
+    - hcm-rtx01_01
+    - hcm-rtx02_00
+    - hcm-rtx02_01
+  # HAN 1xH200 nodes (partition test): one slot per node, no /data disk, so caches live on /mnt (on /).
+  cluster:han-h200-01:
+    - han-h200-01_00
+  cluster:han-h200-02:
+    - han-h200-02_00
+  cluster:han-h200-04:
+    - han-h200-04_00
+  h200-han:
+    - han-h200-01_00
+    - han-h200-02_00
+    - han-h200-04_00
 clusters:
   h100-cw:
     gpus-per-node: 8
@@ -822,3 +865,132 @@ clusters:
           visible_devices_env: ROCR_VISIBLE_DEVICES
           default_gpu_exporter: *amd-exporter
           nginx_raise_ulimit: false
+  # VNG research Slurm cluster (test-cluster): cons_tres + CR_CORE_MEMORY, nodes shared with the
+  # team, never --exclusive. salloc-args right-size every job (sbatch gets them too) and pin
+  # it to the runner's own node, whose local disk holds the HF cache and squash files.
+  hcm-hgx01:
+    gpus-per-node: 4  # Slurm gres declares 4 of the 8 H200 (2026-10-25); raise when infra fixes it
+    available-cpu-dram-mib: 2_050_000
+    arch: x86_64
+    scheduler: slurm
+    slurm:
+      partition: hardware-hcm
+      account: greennode  # stackops' only association (Slurm enforces associations since 2026-10-25)
+      exclusive: false
+      gres: "gpu:nvidia_h200:{gpus}"
+      salloc-args: [--nodelist=hgx-h200-01, --cpus-per-gpu=16, --mem-per-gpu=240000M]
+      volumes:
+        hf-hub-cache: {path: /mnt/hf_hub_cache}
+      squash:
+        dir: /mnt/containers
+        visibility: shared
+        import: submit-host
+        single-node-import: true
+  hcm-hgx02:
+    gpus-per-node: 8
+    available-cpu-dram-mib: 2_050_000
+    arch: x86_64
+    scheduler: slurm
+    slurm:
+      partition: hardware-hcm
+      account: greennode  # stackops' only association (Slurm enforces associations since 2026-10-25)
+      exclusive: false
+      gres: "gpu:nvidia_h200:{gpus}"
+      salloc-args: [--nodelist=hgx-h200-02, --cpus-per-gpu=16, --mem-per-gpu=240000M]
+      volumes:
+        hf-hub-cache: {path: /mnt/hf_hub_cache}
+      squash:
+        dir: /mnt/containers
+        visibility: shared
+        import: submit-host
+        single-node-import: true
+  hcm-rtx01:
+    gpus-per-node: 2
+    available-cpu-dram-mib: 241_000
+    arch: x86_64
+    scheduler: slurm
+    slurm:
+      partition: rtx6000pro-hcm
+      account: greennode  # stackops' only association (Slurm enforces associations since 2026-10-25)
+      exclusive: false
+      gres: "gpu:nvidia_rtx6000pro:{gpus}"
+      salloc-args: [--nodelist=hoanq3-rtx6000x2-slurm-1, --cpus-per-gpu=16, --mem-per-gpu=110000M]
+      volumes:
+        hf-hub-cache: {path: /data/hf_hub_cache}
+      squash:
+        dir: /data/containers
+        visibility: shared
+        import: submit-host
+        single-node-import: true
+  hcm-rtx02:
+    gpus-per-node: 2
+    available-cpu-dram-mib: 241_000
+    arch: x86_64
+    scheduler: slurm
+    slurm:
+      partition: rtx6000pro-hcm
+      account: greennode  # stackops' only association (Slurm enforces associations since 2026-10-25)
+      exclusive: false
+      gres: "gpu:nvidia_rtx6000pro:{gpus}"
+      salloc-args: [--nodelist=hoanq3-rtx6000x2-slurm-2, --cpus-per-gpu=16, --mem-per-gpu=110000M]
+      volumes:
+        hf-hub-cache: {path: /data/hf_hub_cache}
+      squash:
+        dir: /data/containers
+        visibility: shared
+        import: submit-host
+        single-node-import: true
+  han-h200-01:
+    gpus-per-node: 1
+    available-cpu-dram-mib: 120_741
+    arch: x86_64
+    scheduler: slurm
+    slurm:
+      partition: test
+      account: greennode  # stackops' only association (Slurm enforces associations since 2026-10-25)
+      exclusive: false
+      gres: "gpu:{gpus}"
+      salloc-args: [--nodelist=hoanq3-h200-1x-han-1, --cpus-per-gpu=16, --mem-per-gpu=110000M]
+      volumes:
+        hf-hub-cache: {path: /mnt/hf_hub_cache}
+      squash:
+        dir: /mnt/containers
+        visibility: shared
+        import: submit-host
+        single-node-import: true
+  han-h200-02:
+    gpus-per-node: 1
+    available-cpu-dram-mib: 120_741
+    arch: x86_64
+    scheduler: slurm
+    slurm:
+      partition: test
+      account: greennode  # stackops' only association (Slurm enforces associations since 2026-10-25)
+      exclusive: false
+      gres: "gpu:{gpus}"
+      salloc-args: [--nodelist=hoanq3-h200-1x-han-2, --cpus-per-gpu=16, --mem-per-gpu=110000M]
+      volumes:
+        hf-hub-cache: {path: /mnt/hf_hub_cache}
+      squash:
+        dir: /mnt/containers
+        visibility: shared
+        import: submit-host
+        single-node-import: true
+  han-h200-04:  # has a /data disk (984G); its HF cache is the existing shared /data/hf-cache
+    gpus-per-node: 1
+    available-cpu-dram-mib: 120_741
+    arch: x86_64
+    scheduler: slurm
+    slurm:
+      partition: test
+      account: greennode  # stackops' only association (Slurm enforces associations since 2026-10-25)
+      exclusive: false
+      gres: "gpu:{gpus}"
+      salloc-args: [--nodelist=hoanq3-h200-1x-han-4, --cpus-per-gpu=16, --mem-per-gpu=110000M]
+      volumes:
+        hf-hub-cache: {path: /data/hf-cache}
+      squash:
+        dir: /data/containers
+        visibility: shared
+        import: submit-host
+        single-node-import: true

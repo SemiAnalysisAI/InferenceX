@@ -1,0 +1,40 @@
+# Smoke variant of agentx-cc-062126.yaml: 180 s profiling, for bring-up only.
+# inferencex-agentx-mvp locks a 900 s minimum; unsafeOverride turns that into a warning.
+# Per-run values (url, model, tokenizer, concurrency, metrics/telemetry URLs,
+# artifact dir) are CLI overrides added by build_replay_cmd_yaml.
+# Equivalence with the CLI form: utils/serving/check_scenario_golden.py.
+schemaVersion: "2.0"
+benchmark:
+  scenario: inferencex-agentx-mvp
+  unsafeOverride: true
+  endpoint:
+    type: chat
+    path: /v1/chat/completions
+    streaming: true
+    useServerTokenCount: true
+  datasets:
+  - name: main
+    type: public
+    dataset: semianalysis_cc_traces_weka_062126
+    entries: 393
+    randomSeed: 42
+    traceIdleGapCapSeconds: 300.0
+    maxContextLength: 262144
+  phases:
+  - name: profiling
+    kind: profiling
+    type: concurrency
+    duration: 180.0
+    gracePeriod: 30.0
+    failedRequestThreshold: 0.1
+    trajectoryStartMinRatio: 0.25
+    trajectoryStartMaxRatio: 0.75
+    warmupRequestsPerLane: 10
+    agenticWarmupGracePeriod: 1800.0
+  artifacts:
+    sliceDuration: 1.0
+  tokenizer:
+    trustRemoteCode: true
+  runtime:
+    statsInterval: 30.0
+randomSeed: 42

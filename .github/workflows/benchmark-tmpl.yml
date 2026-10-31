@@ -4,7 +4,16 @@ on:
     secrets:
       INFERENCEX_OFFICIAL_RO_HF_TOKEN:
         required: true
+      SERVING_API_KEY:
+        required: false
+      GREENLAB_HF_TOKEN:
+        required: false
     inputs:
+      serving:
+        description: "VNG serving point (SERVING_JSON from infx/serving/to_matrix.py); empty for every other caller"
+        required: false
+        type: string
+        default: ""
       config:
         description: "Benchmark configuration as JSON"
         required: true
@@ -91,6 +100,9 @@ on:
         default: ""
 env:
   PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
+  SERVING_JSON: ${{ inputs.serving }}
+  SERVING_API_KEY: ${{ secrets.SERVING_API_KEY }}
+  GREENLAB_HF_TOKEN: ${{ secrets.GREENLAB_HF_TOKEN }}
   INFERENCEX_E2E_ROOT: ${{ github.workspace }}
   PORT: '8888'
   INFMAX_CONTAINER_WORKSPACE: '/workspace'
@@ -302,7 +314,7 @@ jobs:
           fi
 
       - name: Validate agentic result
-        if: ${{ !inputs.eval-only && inputs.scenario-type == 'agentic-coding' }}
+        if: ${{ !inputs.eval-only && inputs.scenario-type == 'agentic-coding' && !(inputs.serving != '' && fromJSON(inputs.serving).search) }}
         env:
           PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
         run: |

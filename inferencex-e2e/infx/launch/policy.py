@@ -60,6 +60,7 @@ class LaunchPath(StrEnum):
     SRT_NATIVE = "srt-native"
     SRT_BATCH = "srt-batch"
     SCRIPT = "script"
+    SERVING = "serving"
 
 
 NATIVE_SRT_LANES: dict[str, tuple[Match, ...]] = {
@@ -82,6 +83,8 @@ def launch_path(cluster_id: str, request: LaunchRequest) -> LaunchPath:
         if any(lane(request) for lane in NATIVE_SRT_LANES.get(cluster_id, ())):
             return LaunchPath.SRT_NATIVE
         return LaunchPath.SRT_MULTI
+    if request.env.get("SERVING_JSON"):  # VNG serving-YAML point (infx/launch/drivers/serving.py)
+        return LaunchPath.SERVING
     wrapped = BATCH_WRAPPED_LANES.get(cluster_id)
     if wrapped is not None and wrapped(request) and not request.batch_reentry:
         return LaunchPath.SRT_BATCH
