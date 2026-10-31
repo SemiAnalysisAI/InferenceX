@@ -171,11 +171,22 @@ def _swap_argv(case: dict, version: object, runner: str) -> list[str]:
         case, "case_id profile layout seed device max_payload_bytes warmup iterations")
 
 
+def _kv_argv(case: dict, version: object, runner: str) -> list[str]:
+    return _flag_pairs(
+        case,
+        "backend workload_name precision fabric isl_ladder batch_sizes ops "
+        "warmup reps trials pool_slack max_burst_tokens seed case_id suite gpus_per_node "
+        "scale_up_domain scale_up_transport topology_class",
+        workload_name="workload", fabric="mode",
+    ) + ["--runner", runner, "--version", str(version)]
+
+
 # suite -> (bench/<entrypoint>.py, argv codec, output flag). The rank wrapper in
 # runtime/common.sh execs the entrypoint the leading --entrypoint pair names.
 _SUITES = {
     "ep-core": ("run_ep", _ep_argv, "--out"),
     "swap-blocks": ("run_swap_blocks", _swap_argv, "--output"),
+    "kv-transfer": ("run_kv", _kv_argv, "--out"),
 }
 
 
