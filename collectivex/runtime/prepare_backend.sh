@@ -180,11 +180,12 @@ deepep_cache_root() {
   local nvshmem_key="${COLLX_DEEPEP_V2_NVSHMEM_SPEC#nvidia-}"
   nvshmem_key="${nvshmem_key//==/-}"
   local torch_key="${COLLX_DEEPEP_V2_TORCH_SPEC//==/-}"
+  local nccl_key="nccl-${COLLX_DEEPEP_V2_NCCL_SPEC##*==}"
   local build_gen="${COLLX_DEEPEP_V2_BUILD_GEN:?}"
   [[ "$nvshmem_key" =~ ^[A-Za-z0-9._-]+$ && "$torch_key" =~ ^[A-Za-z0-9._-]+$ \
-     && "$build_gen" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+     && "$nccl_key" =~ ^[A-Za-z0-9._-]+$ && "$build_gen" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
   backend_cache_root deepep-v2 "sm${1/./}" "${COLLX_DEEPEP_V2_COMMIT:0:12}" \
-    "$torch_key" "$nvshmem_key" "$build_gen"
+    "$torch_key" "$nvshmem_key" "$nccl_key" "$build_gen"
 }
 
 deepep_ready() { [ -f "$1/.ready" ] && [ -x "$1/venv/bin/python" ] && [ -d "$1/source" ]; }

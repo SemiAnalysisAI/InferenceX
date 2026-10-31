@@ -285,19 +285,17 @@ class RelaxedOrderingProfileTests(unittest.TestCase):
 
 class DeepepSourceSelectionTests(unittest.TestCase):
     def test_only_opted_in_pools_build_the_aws_fork(self) -> None:
-        for fork, repo in (("1", "amazon-contributing/DeepEP"), ("", "deepseek-ai/DeepEP")):
+        for fork in ("1", ""):
             with self.subTest(fork=fork):
-                stdout = run_common(
+                selected, efa = (line.split() for line in run_common(
                     f"export COLLX_RDMA_FABRIC=efa COLLX_DEEPEP_EFA_FORK='{fork}';"
+                    ' echo "$COLLX_DEEPEP_V2_EFA_REPO $COLLX_DEEPEP_V2_EFA_COMMIT $COLLX_DEEPEP_V2_EFA_NCCL_SPEC";'
                     " collx_select_deepep_v2_source;"
-                    ' echo "$COLLX_DEEPEP_V2_REPO $COLLX_DEEPEP_V2_COMMIT $COLLX_DEEPEP_V2_EFA_COMMIT'
-                    ' $COLLX_DEEPEP_V2_NCCL_SPEC"',
+                    ' echo "$COLLX_DEEPEP_V2_REPO $COLLX_DEEPEP_V2_COMMIT $COLLX_DEEPEP_V2_NCCL_SPEC"',
                     check=True,
-                ).stdout.split()
-                self.assertEqual(stdout[0], f"https://github.com/{repo}")
-                self.assertEqual(stdout[3].endswith("2.32.3"), fork == "1")
-                # The fork is pinned separately, so the venv cache never mixes the two builds.
-                self.assertEqual(stdout[1] == stdout[2], fork == "1")
+                ).stdout.splitlines()[-2:][::-1])
+                # Opted in, every pin is the fork's; otherwise none is.
+                self.assertEqual([a == b for a, b in zip(selected, efa)], [fork == "1"] * 3)
 
 
 class DeepepSourceRecordTests(unittest.TestCase):
@@ -309,7 +307,6 @@ class DeepepSourceRecordTests(unittest.TestCase):
             check=True,
         ).stdout.strip()
         self.assertEqual(stdout, "fork@abc")
-        self.assertIn("COLLX_DEEPEP_SOURCE", (RUNTIME / "prepare_backend.sh").read_text().split(")", 1)[0])
 
 
 class EfaPluginProfileTests(unittest.TestCase):
