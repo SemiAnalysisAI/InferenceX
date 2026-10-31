@@ -103,7 +103,7 @@ base:
         schedule-policy: shortest-prefill-first
         # 64 per DP rank.
         max-running-requests: 128
-        mem-fraction-static: 0.90
+        mem-fraction-static: 0.85
         enable-hierarchical-cache: true
         # 200 GB per rank (400 of the 482 GB per-worker allowance): at 60
         # sessions per prefill worker a 150 GB host pool thrashes and the prefix
