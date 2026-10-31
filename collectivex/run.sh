@@ -15,7 +15,7 @@ REPO_ROOT="$(cd "$HERE/.." && pwd)"
 usage() {
   cat <<'EOF'
 usage: collectivex/run.sh <sku> [options]
-  --suite LIST         ep, swap-blocks or both (default: ep,swap-blocks)
+  --suite LIST         any of ep, swap-blocks, kv-transfer (default: ep,swap-blocks)
   --backend NAME       one EP backend (default: all)
   --ep LIST            EP sizes, e.g. 8,16 (default: all)
   --modes LIST         normal, low-latency (default: all)
@@ -79,7 +79,7 @@ matrix="$shard_dir/matrix-$SKU.json"
 python3 "$HERE/sweep_matrix.py" "${matrix_args[@]}" --out "$matrix" >/dev/null
 
 # One tab-separated line per selected shard:
-# id launcher backend nodes gpus_per_node scale_up_domain cases image staged_image_dir minutes
+# id launcher backend nodes gpus_per_node scale_up_domain cases image staged_image_dir minutes fabric
 rows=()
 while IFS= read -r row; do rows+=("$row"); done < <(python3 - "$matrix" "${shards[@]}" <<'EOF'
 import json, sys
@@ -95,7 +95,7 @@ for shard in include:
         shard["id"], shard["launcher"], shard["backend"], shard["nodes"],
         shard["gpus_per_node"], shard["scale_up_domain"], len(shard["cases"]),
         shard.get("image") or "-", shard.get("staged_image_dir") or "-",
-        shard.get("allocation_minutes") or "-")))
+        shard.get("allocation_minutes") or "-", shard.get("fabric") or "-")))
 EOF
 )
 [ "${#rows[@]}" -gt 0 ] || { echo "no runnable shards for $SKU" >&2; exit 1; }
@@ -112,7 +112,8 @@ fi
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 rcs=()
 for row in "${rows[@]}"; do
-  IFS=$'\t' read -r id launcher backend nodes gpn domain ncases image staged minutes <<< "$row"
+  IFS=$'\t' read -r id launcher backend nodes gpn domain ncases image staged minutes fabric \
+    <<< "$row"
   # Every shard stages the checkout as it is now, but its results carry the source recorded at
   # start: stop rather than stamp a later shard with a commit it did not run.
   if [ "$dry" = 0 ] && { [ "$(git -C "$REPO_ROOT" rev-parse HEAD)" != "$source_sha" ] ||
@@ -142,6 +143,9 @@ for row in "${rows[@]}"; do
     unset COLLX_IMAGE_OVERRIDE
     [ "$image" = - ] || export COLLX_IMAGE_OVERRIDE="$image"
     [ "$staged" = - ] || export COLLX_STAGED_IMAGE_DIR="$staged"
+    # The fabric a kv-transfer shard claims: its rdma legs on an MNNVL rack leave the NVL domain.
+    unset COLLX_FABRIC
+    [ "$fabric" = - ] || export COLLX_FABRIC="$fabric"
     # The caller's COLLX_TIME wins: a first-time image import can outlast a short shard's ask.
     [ -n "${COLLX_TIME:-}" ] || { [ "$minutes" = - ] && COLLX_TIME=300 || COLLX_TIME="$minutes"; }
     export COLLX_TIME
