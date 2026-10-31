@@ -318,6 +318,15 @@ deepep_install() {
   [ "$(grep -c '"-DNCCL_GIN_PROXY_ENABLE=0"' "$jit_hpp")" = 1 ] \
     && sed -i "s|\"-DNCCL_GIN_PROXY_ENABLE=0\"|$proxy|" "$jit_hpp" \
     || { collx_log "ERROR: DeepEP V2 GIN proxy patch failed"; return 1; }
+  # ...and its host side pins reqs.ginType to GDAKI (asserting support), where V2 let NCCL pick.
+  local on='get_env<int>("EP_GIN_PROXY_ENABLE", 0)'
+  [ "$(grep -c 'props.ginSupport\[NCCL_GIN_TYPE_GDAKI\] and' "$window_cu")" = 1 ] \
+    && [ "$(grep -c 'reqs.ginType = NCCL_GIN_TYPE_GDAKI;' "$window_cu")" = 1 ] \
+    && sed -i -e "s|props.ginSupport\[NCCL_GIN_TYPE_GDAKI\] and|($on or &|" \
+      -e "s|($on or props.ginSupport\[NCCL_GIN_TYPE_GDAKI\] and|($on or props.ginSupport[NCCL_GIN_TYPE_GDAKI]) and|" \
+      -e "s|reqs.ginType = NCCL_GIN_TYPE_GDAKI;|reqs.ginType = $on ? NCCL_GIN_TYPE_PROXY : NCCL_GIN_TYPE_GDAKI;|" \
+      "$window_cu" \
+    || { collx_log "ERROR: DeepEP V2 GIN proxy host patch failed"; return 1; }
   # The RDC device-link step (nvcc -dlink) gets no -gencode from the extension build, so nvcc
   # falls back to its default arch (sm_75 on CUDA 13) and links kernels that cannot load on the
   # target GPU (gb300/sm103: cudaErrorUnknown). NVCC_PREPEND_FLAGS reaches the dlink too.

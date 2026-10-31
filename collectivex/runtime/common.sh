@@ -27,7 +27,7 @@ COLLX_DEEPEP_V2_TORCH_SPEC="torch==2.11.0"
 
 # Build-recipe generation for the DeepEP venv cache key: bump when build flags change without
 # any pin changing, so venvs that already carry .ready are not reused with a stale recipe.
-COLLX_DEEPEP_V2_BUILD_GEN="dlarch2"
+COLLX_DEEPEP_V2_BUILD_GEN="v25proxy1"
 
 COLLX_UCCL_REPO="https://github.com/uccl-project/uccl"
 COLLX_UCCL_COMMIT="df000fd3001da04a397253fd6a2204bde62d32aa"
