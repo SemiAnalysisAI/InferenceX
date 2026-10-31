@@ -4,7 +4,9 @@ CollectiveX is an experimental MoE expert-parallel communication benchmark. It m
 combine and paired roundtrip latency across EP libraries and accelerator systems, and writes one
 result file per case into `results/` on the cluster that ran it. A second suite, the
 [vLLM `swap_blocks` benchmark](docs/swap-blocks.md), measures pinned CPU↔GPU and same-GPU block
-copies through the same matrix and pool launchers.
+copies through the same matrix and pool launchers. A third, the
+[KV-cache transfer benchmark](docs/kv-transfer.md), times one request's prefill-to-decode KV move
+between two nodes through NIXL and Mooncake.
 
 CollectiveX runs through the [CollectiveX Sweep](#running-in-ci) workflow or by hand on each pool
 (see [Running By Hand](#running-by-hand)). Uploading the
@@ -37,10 +39,11 @@ runs the decode and prefill ladders; `low-latency` runs decode, plus prefill for
 Every backend runs a BF16 dispatch control and an FP8 dispatch; nccl-ep's FP8 is its internal
 DS_FP8E3M4 recipe, low-latency prefill and decode. Combine is always BF16. Coverage is uniform routing only.
 
-`results/cases.json` is the committed copy of the full matrix: 272 requested cases, of which 248 are
-runnable EP cases, 18 are swap-blocks cases (two per pool) and 6 are unsupported EP cells (UCCL-EP
-EP16 on MI355X and FlashInfer EP16 on H100 and H200, once per phase; FlashInfer's MNNVL workspace
-needs every rank inside one NVLink domain).
+`results/cases.json` is the committed copy of the full matrix: 284 requested cases, of which 248 are
+runnable EP cases, 18 are swap-blocks cases (two per pool), 12 are kv-transfer cases (one per pool,
+backend and fabric) and 6 are unsupported EP cells (UCCL-EP EP16 on MI355X and FlashInfer EP16 on
+H100 and H200, once per phase; FlashInfer's MNNVL workspace needs every rank inside one NVLink
+domain).
 A cell is listed as unsupported only when its backend runs on that SKU at another EP size, and
 low-latency adds only runnable cells, so a missing low-latency cell (DeepEP V2 on B300, for example)
 appears nowhere; [docs/methodology.md](docs/methodology.md#backends) gives each reason. The NCCL EP
@@ -66,7 +69,8 @@ collectivex/run.sh h200-dgxc --shard h200-dgxc-nccl-ep-bf16-n2   # rerun one fai
 ```
 
 `run.sh` resolves the pool's cases with `sweep_matrix.py` (`--suite`, `--backend`, `--ep`,
-`--modes` and `--precisions` narrow it, and `--swap-profile` picks the swap-blocks grid), gives
+`--modes` and `--precisions` narrow it, `--swap-profile` picks the swap-blocks grid, and
+kv-transfer runs only when `--suite` names it), gives
 each shard (one backend, mode, precision and node count) its own allocation through the pool's
 launcher, and copies every result to `results/<sku>/<case_id>.json`, replacing the previous result
 for that case. A failed shard does not stop the others; the closing summary lists each shard's exit
@@ -91,7 +95,8 @@ result:
 | `COLLX_NCCL_LL_ZERO_COPY=0` | `1` | stages nccl-ep low-latency dispatch, TensorRT-LLM's graphed path before #20631 (drops `-zc`; a library row) |
 | `COLLX_ALIGN_SPIN_US` | `2000` | the per-sample rank-alignment spin |
 
-`COLLX_TIME` (allocation minutes: 300 per EP shard and 45 per swap-blocks shard unless set),
+`COLLX_TIME` (allocation minutes: 300 per EP shard, 45 per swap-blocks shard and 120 per
+kv-transfer shard unless set),
 `COLLX_RUN_TIMEOUT` (the per-case hang guard, 5400 s), `COLLX_IMAGE_REFRESH=1` (re-import the
 image) and `COLLX_ALLOCATION=sbatch` change only how a shard runs. `COLLX_ALLOCATION=sbatch` holds
 the nodes with a batch job that only sleeps instead of `salloc`. It is for a pool whose controller
@@ -111,7 +116,7 @@ address or host-identifying field, and every uploaded file must share one source
 regenerate it whenever they change:
 
 ```bash
-python3 collectivex/sweep_matrix.py --suites ep,swap-blocks --cases-json collectivex/results/cases.json
+python3 collectivex/sweep_matrix.py --suites ep,swap-blocks,kv-transfer --cases-json collectivex/results/cases.json
 ```
 
 ## Runner Configuration
