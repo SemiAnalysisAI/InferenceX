@@ -11724,3 +11724,12 @@
     - "Extend the MI355X Qwen3.8-Flash-Next SGLang AgentX sweep to concurrency 1/2/4/8/12/16 on the existing pinned upstream image and default serving path."
     - "Add c1/c2/c4 recipe variants with max-running-requests and cuda-graph-max-bs-decode set to 2/4/8, preserving the existing 2x concurrency sizing and all other serving settings."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4680
+
+- config-keys:
+    - qwen3.8next-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the MI355X Qwen3.8-Flash-Next SGLang AgentX recipe to lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261031@sha256:3867dc07ba2530f914e1f210ed829f7a572a75286c8c362dbc22cbecf9b5a7e6. This nightly's SGLang pins sgl-amd-mono at b10f3b71 (sglang #47483, the merge of sgl-amd-mono #29), so the checkout setup script is removed and no patch is applied."
+    - "c1, c2, c4 and c8 enable the FlyDSL monokernel (--enable-amd-monokernel) for MTP target verify and draft. The kernel writes the per-draft intermediate SSM states and reads the PLE table on the GPU, so those points drop ReplaySSM and PLE offload and admit CONC requests (max-running-requests = cuda-graph-max-bs-decode = 1, 2, 4 and 8). c12 and c16 stay on the round 03 default path: ReplaySSM, PLE offload, and 2x CONC admission. Integer all-reduce stays off (ROCM_QUICK_REDUCE_QUANTIZATION=NONE)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4542
