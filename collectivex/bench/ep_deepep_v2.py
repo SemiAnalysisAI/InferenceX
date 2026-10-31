@@ -23,14 +23,16 @@ except Exception as exc:  # pragma: no cover - requires the benchmark image
     raise
 
 
-# The source pin in runtime/common.sh is upstream main, which carries #630 and #640; EFA pools
-# build AWS's fork of it instead (collx_select_deepep_v2_source), and backend preparation exports
-# the chosen source. This adapter does not check the wheel's commit tag, only that the loaded
-# deep_ep exposes ElasticBuffer. The commit feeds `library_version`, since the wheel reports
-# 2.1.0+local (the build patches the tree, so setup.py finds no clean git hash).
+# The source pin in runtime/common.sh is upstream main, which carries #630 and #640; pools that opt
+# into AWS's EFA fork build it instead (collx_select_deepep_v2_source), and backend preparation
+# exports the chosen source as COLLX_DEEPEP_SOURCE (repo@commit). This adapter does not check the
+# wheel's commit tag, only that the loaded deep_ep exposes ElasticBuffer. The commit feeds
+# `library_version`, since the wheel reports 2.1.0+local (the build patches the tree, so setup.py
+# finds no clean git hash).
 _UPSTREAM_REPO = "https://github.com/deepseek-ai/DeepEP"
-_DEEPEP_REPO = os.environ.get("COLLX_DEEPEP_V2_REPO") or _UPSTREAM_REPO
-_DEEPEP_COMMIT = os.environ.get("COLLX_DEEPEP_V2_COMMIT") or "01dc3aaac82068020353dce2c302e38153c0bfaa"
+_DEEPEP_REPO, _, _DEEPEP_COMMIT = (
+    os.environ.get("COLLX_DEEPEP_SOURCE") or f"{_UPSTREAM_REPO}@01dc3aaac82068020353dce2c302e38153c0bfaa"
+).rpartition("@")
 _EFA_FORK = _DEEPEP_REPO != _UPSTREAM_REPO
 
 # vLLM's ElasticBuffer flags: VLLM_DEEPEP_V2_PREFER_OVERLAP and

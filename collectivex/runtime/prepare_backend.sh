@@ -17,7 +17,7 @@ readonly -a RANK_ENV_VARS=(
   PATH VIRTUAL_ENV LD_LIBRARY_PATH LIBRARY_PATH PYTHONPATH CUDA_HOME CPATH NVCC_PREPEND_FLAGS
   NVSHMEM_DIR EP_NCCL_ROOT_DIR EP_NVSHMEM_ROOT_DIR EP_JIT_CACHE_DIR
   EP_REUSE_NCCL_COMM NCCL_CUMEM_ENABLE UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC COLLX_OFI_NCCL_LIB_DIR FLASHINFER_WORKSPACE_BASE
-  COLLX_DEEPEP_V2_REPO COLLX_DEEPEP_V2_COMMIT
+  COLLX_DEEPEP_SOURCE
 )
 readonly -a DEEPEP_RANK_UNSETS=(EP_SUPPRESS_NCCL_CHECK)
 
@@ -323,7 +323,8 @@ deepep_install() {
 deepep_prepare() {
   local arch root
   collx_select_deepep_v2_source
-  export COLLX_DEEPEP_V2_REPO COLLX_DEEPEP_V2_COMMIT  # recorded by the adapter
+  # Recorded by the adapter. Its own name: ranks re-source common.sh, which resets the pins.
+  export COLLX_DEEPEP_SOURCE="$COLLX_DEEPEP_V2_REPO@$COLLX_DEEPEP_V2_COMMIT"
   arch="$(cuda_arch)" || return 1
   root="$(deepep_cache_root "$arch")" || return 1
   command -v flock >/dev/null || { collx_log "ERROR: flock is required for DeepEP V2"; return 1; }

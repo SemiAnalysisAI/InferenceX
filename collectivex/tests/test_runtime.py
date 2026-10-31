@@ -300,6 +300,18 @@ class DeepepSourceSelectionTests(unittest.TestCase):
                 self.assertEqual(stdout[1] == stdout[2], fork == "1")
 
 
+class DeepepSourceRecordTests(unittest.TestCase):
+    def test_the_recorded_source_survives_the_rank_wrapper(self) -> None:
+        # Ranks source the per-node env and then common.sh, so the record must survive that.
+        stdout = run_common(
+            f'export COLLX_DEEPEP_SOURCE=fork@abc; source "{RUNTIME / "common.sh"}";'
+            ' echo "$COLLX_DEEPEP_SOURCE"',
+            check=True,
+        ).stdout.strip()
+        self.assertEqual(stdout, "fork@abc")
+        self.assertIn("COLLX_DEEPEP_SOURCE", (RUNTIME / "prepare_backend.sh").read_text().split(")", 1)[0])
+
+
 class EfaPluginProfileTests(unittest.TestCase):
     def test_ranks_load_the_prepared_plugin_and_proxy_gin(self) -> None:
         lib = "/cx-cache/ofi/lib"
