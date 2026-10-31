@@ -11703,3 +11703,11 @@
     - "Disagg 3 × DEP2 prefill and 1 × DEP16 decode at c1228 (override_3p1d_dep2_dep16_c1228) on nightly-dev-cu13-20261028-586355a8, with the prefill host-DRAM HiCache base recipe and the retired key's c1228 decode sizing: max-running-requests 384, decode CUDA graph batch 24, disaggregation-decode-extra-slots 36."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4679
   append-only: true
+
+- config-keys:
+    - musespark-fp4-gb200-sglang-agentic-dflash
+  description:
+    - "Add two-node TP8/EP8 SGLang aggregate configurations for Muse Spark Open GB200 AgentX at concurrency 1 and 24, and run the existing TP4 configurations through the aggregate SRT-Slurm lane."
+    - "Enable the standalone SGLang GB200 multi-node launch and power telemetry routes."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  scenario-type: [agentic-coding]

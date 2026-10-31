@@ -32,6 +32,8 @@ def _multinode(**env):
 
 
 CASES = [
+    ("gb200-nv", MULTI, "1", "musespark", "fp4", "sglang", AGENTX),
+    ("gb200-nv", MULTI, "1", "musespark", "fp8", "sglang", ERR),
     ("gb200-nv", MULTI, "1", "glm5.2", "fp4", "dynamo-sglang", AGENTX),
     ("gb200-nv", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", AGENTX),
     ("gb200-nv", MULTI, "0", "dsr1", "fp8", "dynamo-sglang", DCGM),
@@ -78,7 +80,7 @@ def test_power_eligibility_of_each_cluster_lane(
 def test_gb200_reports_agentic_misses_distinctly():
     request = _multinode(IS_AGENTIC="1", MODEL_PREFIX="dsv4", PRECISION="fp4",
                          FRAMEWORK="dynamo-sglang", CONC="4", CONC_LIST="4", POWER="1")  # fmt: skip
-    with pytest.raises(PowerPolicyError, match="AgentX dcgm-power requires GLM-5.2"):
+    with pytest.raises(PowerPolicyError, match="AgentX dcgm-power requires Muse Spark"):
         decide_power("gb200-nv", MULTI, request)
 
 
