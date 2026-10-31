@@ -11724,3 +11724,10 @@
     - "Extend the MI355X Qwen3.8-Flash-Next SGLang AgentX sweep to concurrency 1/2/4/8/12/16 on the existing pinned upstream image and default serving path."
     - "Add c1/c2/c4 recipe variants with max-running-requests and cuda-graph-max-bs-decode set to 2/4/8, preserving the existing 2x concurrency sizing and all other serving settings."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4680
+
+- config-keys:
+    - dsv41flash-fp4-h100-vllm-agentic-dspark
+  description:
+    - "Update the vLLM image from nightly-e4a5b5537344 to nightly-00b6c4c565a8, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4569
+  scenario-type: [agentic-coding]
