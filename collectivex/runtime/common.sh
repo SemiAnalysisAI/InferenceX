@@ -23,7 +23,7 @@ COLLX_DEEPEP_V2_EFA_COMMIT="a227152ac29513b1c702860745a1d1e0111ae0dc"
 # ElasticBuffer needs NCCL 2.30.4 (torch pins 2.28.9). The fork sets GIN signal requirements
 # (ginStrongSignalsRequired, ginVaSignalsRequired) that NCCL first declares in 2.32, which is what
 # AWS tests it with. Part of the venv cache key through the commit.
-COLLX_DEEPEP_V2_NCCL_SPEC="nvidia-nccl-cu13==2.30.4"
+COLLX_DEEPEP_V2_NCCL_SPEC="nvidia-nccl-cu13==2.32.3"  # PROBE: V2 on NCCL 2.32.3
 COLLX_DEEPEP_V2_EFA_NCCL_SPEC="nvidia-nccl-cu13==2.32.3"
 
 # Selects this pool's DeepEP V2 source into COLLX_DEEPEP_V2_REPO/COMMIT/NCCL_SPEC (the venv cache is keyed
@@ -49,7 +49,7 @@ COLLX_DEEPEP_V2_TORCH_SPEC="torch==2.11.0"
 
 # Build-recipe generation for the DeepEP venv cache key: bump when build flags change without
 # any pin changing, so venvs that already carry .ready are not reused with a stale recipe.
-COLLX_DEEPEP_V2_BUILD_GEN="dlarch2"
+COLLX_DEEPEP_V2_BUILD_GEN="nccl232probe"
 
 COLLX_UCCL_REPO="https://github.com/uccl-project/uccl"
 COLLX_UCCL_COMMIT="df000fd3001da04a397253fd6a2204bde62d32aa"
