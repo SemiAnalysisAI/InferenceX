@@ -382,7 +382,7 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
             expert_alignment=1,
             num_sms=self._dispatch_num_sms,  # 0 (DeepEP's model) unless rdma_gbs is set
             async_with_compute_stream=False,
-            do_handle_copy=True,
+            do_handle_copy=False,  # V2.5 removed handle copying
             do_cpu_sync=False,
             do_expand=False,
         )
