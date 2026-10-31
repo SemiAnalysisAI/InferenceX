@@ -37,7 +37,7 @@ COLLX_UCCL_COMMIT="df000fd3001da04a397253fd6a2204bde62d32aa"
 # low-latency ladder clamp. nccl4py and cuda-core are pinned alongside so a rebuild resolves the
 # same tree. Whitespace-separated pip specs: the install site word-splits this deliberately, and the
 # whole string keys the shared cache dir.
-COLLX_NCCL_EP_SPEC="nccl-extensions[cu13]==0.2.0.dev20261013 nccl4py[cu13]==0.5.0 cuda-core==1.2.1"
+COLLX_NCCL_EP_SPEC="nccl-extensions[cu13]==0.2.0.dev20261021 nccl4py[cu13]==0.5.0 cuda-core==1.2.1"
 # vLLM main's FlashInfer pin and the companions its one-sided all-to-all imports, installed over the
 # image's older FlashInfer. The cubin and jit-cache wheels must match flashinfer-python's version or
 # it refuses to import. jit-cache goes in without deps: its per-arch providers hold no all-to-all
@@ -90,7 +90,10 @@ collx_set_placement() {
   export COLLX_NGPUS="$NGPUS" COLLX_NODES="$NODES"
   export COLLX_GPUS_PER_NODE="$GPN" COLLX_SCALE_UP_DOMAIN="$SCALE_UP_DOMAIN"
   COLLX_TRANSPORT="$4"
-  [ "$4" = mnnvl ] || [ "$NODES" -le 1 ] || COLLX_TRANSPORT="$4-rdma"
+  # A shard that names the rdma fabric on an MNNVL rack (the kv-transfer rdma legs) leaves the
+  # NVL domain, so it takes the same network profile and validation as any other scale-out.
+  { [ "$4" = mnnvl ] && [ "${COLLX_FABRIC:-}" != rdma ]; } || [ "$NODES" -le 1 ] \
+    || COLLX_TRANSPORT="$4-rdma"
   export COLLX_TRANSPORT
 }
 
@@ -133,6 +136,7 @@ collx_load_operator_config() {
   unset COLLX_SOCKET_IFNAME COLLX_RDMA_DEVICES COLLX_IB_GID_INDEX COLLX_RDMA_SERVICE_LEVEL
   unset COLLX_RDMA_TRAFFIC_CLASS COLLX_RAIL_ISOLATED COLLX_SINGLE_NODE_RDMA_DEVICES COLLX_RDMA_FABRIC
   unset COLLX_RDMA_RELAXED_ORDERING COLLX_RDMA_GBS COLLX_HOST_VERBS_PROVIDER
+  unset COLLX_UCCL_RDMA_RECV_TOKENS
   unset MASTER_ADDR MASTER_PORT RANK WORLD_SIZE LOCAL_RANK LOCAL_WORLD_SIZE
   config_path="${COLLECTIVEX_OPERATOR_CONFIG:-${XDG_CONFIG_HOME:-${HOME}/.config}/inferencex/collectivex.json}"
   if [ ! -e "$config_path" ]; then
@@ -224,13 +228,17 @@ COLLX_EFA_HOST_ROOT=/opt/collectivex/host-efa
 # lib<driver>-rdmav<its private ABI>.so, so the host's whole multiarch libdir is bound privately as
 # well: its libibverbs/ providers are symlinks into their parent and resolve there, without the
 # launcher naming the host's ABI. The EFA profile puts all of it first on the loader path.
-collx_efa_host_mounts() {
-  local libdir name mounts
+collx_efa_host_libdir() {
   case "$1" in
-    linux/amd64) libdir=/usr/lib/x86_64-linux-gnu ;;
-    linux/arm64) libdir=/usr/lib/aarch64-linux-gnu ;;
+    linux/amd64) echo /usr/lib/x86_64-linux-gnu ;;
+    linux/arm64) echo /usr/lib/aarch64-linux-gnu ;;
     *) return 1 ;;
   esac
+}
+
+collx_efa_host_mounts() {
+  local libdir name mounts
+  libdir="$(collx_efa_host_libdir "$1")" || return 1
   mounts="/opt/amazon/efa:/opt/amazon/efa:ro,/opt/amazon/ofi-nccl:/opt/amazon/ofi-nccl:ro"
   mounts+=",$libdir:$COLLX_EFA_HOST_ROOT/libdir:ro"
   for name in libibverbs libefa libmlx5; do
@@ -253,6 +261,10 @@ collx_add_efa_host_mounts() {
     mounts+=",/usr/include/infiniband:$COLLX_EFA_HOST_ROOT/include/infiniband:ro"
     mounts+=",/usr/include/rdma:$COLLX_EFA_HOST_ROOT/include/rdma:ro"
   fi
+  # NIXL's LIBFABRIC plugin links libhwloc.so.15, which the vLLM image does not ship; the host's
+  # (the same Ubuntu and glibc as the image) is bound alone into the profile's library dir.
+  [ "${COLLX_BENCH:-}" != nixl ] \
+    || mounts+=",$(collx_efa_host_libdir "${COLLX_IMAGE_PLATFORM:-}")/libhwloc.so.15:$COLLX_EFA_HOST_ROOT/lib/libhwloc.so.15:ro"
   CONTAINER_MOUNTS="$CONTAINER_MOUNTS,$mounts"
 }
 
@@ -514,6 +526,9 @@ collx_allocation_nodes_csv() {
 collx_resolve_slurm_rendezvous() {
   local job_id="$1" master_addr master_port socket_ifname="${COLLX_SOCKET_IFNAME:-}"
   [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || collx_die "invalid rendezvous allocation"
+  # Inside an MNNVL domain the socket interface is never validated (the GB registry names it for
+  # the kv rdma legs only), so rank zero keeps resolving by hostname there.
+  [ "${COLLX_TRANSPORT:-}" != mnnvl ] || socket_ifname=""
   # Relative node zero hosts global rank 0. Prefer the address on the validated socket interface:
   # a short hostname may resolve onto a management network that ranks cannot use.
   if [[ "$socket_ifname" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}$ ]]; then
@@ -570,7 +585,7 @@ export RANK="$SLURM_PROCID" WORLD_SIZE="$SLURM_NTASKS"
 export LOCAL_RANK="$SLURM_LOCALID" LOCAL_WORLD_SIZE="$COLLX_GPUS_PER_NODE"
 # config.py case-args leads every argv with the suite's entrypoint.
 [ "${1:-}" = --entrypoint ] || exit 67
-case "${2:-}" in run_ep|run_swap_blocks) ;; *) exit 67 ;; esac
+case "${2:-}" in run_ep|run_swap_blocks|run_kv) ;; *) exit 67 ;; esac
 entry="$2"; shift 2
 exec python3 "bench/$entry.py" "$@"
 BASH
@@ -605,6 +620,11 @@ collx_salloc_jobid() {
     return 1
   fi
   collx_log "scheduler-request=submit"
+  if [ "${COLLX_ALLOCATION:-salloc}" = sbatch ]; then
+    collx_sbatch_hold_jobid "$log" "$@"
+    return
+  fi
+  [ "${COLLX_ALLOCATION:-salloc}" = salloc ] || collx_die "COLLX_ALLOCATION must be salloc or sbatch"
   # salloc --no-shell does not notice a job that ends between the grant and its own poll (a node
   # prolog that fails the job ten seconds in leaves it waiting forever), so the job is watched
   # here: once Slurm no longer lists the queued job and no grant was logged, salloc is stopped.
@@ -632,6 +652,41 @@ collx_salloc_jobid() {
       's/.*Granted job allocation ([1-9][0-9]*).*/\1/p' "$log" | head -n1)"
   [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || return 1
   JOB_ID="$job_id"
+}
+
+# COLLX_ALLOCATION=sbatch holds the same nodes with a batch job that only sleeps, for pools whose
+# controller fails interactive allocations (salloc granted, then killed at MessageTimeout) while
+# batch jobs run. Every later step already goes through `srun --jobid`, which is unaffected.
+collx_sbatch_hold_jobid() {
+  local log="$1" job_id state
+  shift
+  if ! job_id="$(sbatch --parsable "$@" --output=/dev/null --wrap 'exec sleep infinity' 2>>"$log")"; then
+    collx_log "ERROR: scheduler allocation failed"
+    collx_log_tail "$log"
+    return 1
+  fi
+  job_id="${job_id%%;*}"
+  [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || return 1
+  # Recorded before the wait, so an interrupted launch still cancels the queued job.
+  JOB_ID="$job_id"
+  printf 'Pending job allocation %s (sbatch hold)\n' "$job_id" >> "$log"
+  while :; do
+    if state="$(squeue -h -j "$job_id" -o %T 2>/dev/null)"; then
+      case "$state" in
+        RUNNING) break ;;
+        ""|PENDING|CONFIGURING) ;;
+        *)
+          collx_log "ERROR: scheduled job $job_id ended in state $state before its allocation was granted"
+          return 1 ;;
+      esac
+      if [ -z "$state" ] && collx_job_gone "$job_id"; then
+        collx_log "ERROR: scheduled job $job_id ended before its allocation was granted"
+        return 1
+      fi
+    fi
+    sleep 5
+  done
+  printf 'Granted job allocation %s\n' "$job_id" >> "$log"
 }
 
 # Cancels only this launcher's own allocation, by job id.
