@@ -1453,13 +1453,13 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
         decode: { num-worker: 2, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
 
 kimik3-fp4-mi355x-atom-disagg-agentic:
-  image: rocm/atom-dev:nightly_202610190554@sha256:9765777e2f56c5c17fefc9e141b37c51f1ab2dea009b158bcf1823f10030cea3
+  image: rocm/atom-dev:nightly_202610310756@sha256:1c20b688bc376c335d3ac6ff33da693f3761b3b74bec31bf900c5f22699a97d6
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:mi355x-amds
   precision: fp4
   framework: atom-disagg
-  router: { name: atomesh, version: "daa4f1bb8404be08caa9b61e6930414de9de84a3" }
+  router: { name: atomesh, version: "e281d58ac61b4c0d9fe9fbf0fe43ce04359984e7" }
   kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
