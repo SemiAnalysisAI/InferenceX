@@ -18,6 +18,11 @@ base:
     cpu_power_exporter:
       port: 9405
       source: auto
+  sbatch_directives:
+    cpus-per-task: '144'
+    mem: '0'
+  srun_options:
+    mem: '0'
   engine: sglang
   roles:
     agg:
@@ -256,11 +261,6 @@ override_tp8_c1:
         SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
       gpus: 8
       nodes: 2
-  sbatch_directives:
-    cpus-per-task: '144'
-    mem: '0'
-  srun_options:
-    mem: '0'
 
 override_tp8_c24:
   roles:
@@ -286,8 +286,3 @@ override_tp8_c24:
         SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
       gpus: 8
       nodes: 2
-  sbatch_directives:
-    cpus-per-task: '144'
-    mem: '0'
-  srun_options:
-    mem: '0'
