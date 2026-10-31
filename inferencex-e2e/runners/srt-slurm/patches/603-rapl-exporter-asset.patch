@@ -1,0 +1,50 @@
+diff --git a/Makefile b/Makefile
+index b2aefb1e..fcb08921 100644
+--- a/Makefile
++++ b/Makefile
+@@ -1,4 +1,4 @@
+-.PHONY: lint test test-cov ci check setup cleanup examples docs schema-docs schema-docs-check snapshots snapshots-check tachometer-scraper tachometer-scraper-download cpu-power-exporter cpu-power-exporter-download cpu-power-exporter-setup
++.PHONY: lint test test-cov ci check setup cleanup examples docs schema-docs schema-docs-check snapshots snapshots-check tachometer-scraper tachometer-scraper-download cpu-power-exporter cpu-power-exporter-download cpu-power-exporter-setup cpu-power-exporter-603
+ 
+ NATS_VERSION ?= v2.10.28
+ ETCD_VERSION ?= v3.5.21
+@@ -8,6 +8,10 @@ LOGS_DIR ?= logs
+ ARCH ?= $(shell uname -m)
+ TACHOMETER_RELEASE ?= latest
+ CPU_POWER_EXPORTER_RELEASE ?= latest
++# Interim: x86_64 installs the NVIDIA/srt-slurm#603 build (adds --source rapl) from a
++# pinned fork release until an srt-slurm release ships it; the digest is pinned too.
++CPU_POWER_EXPORTER_603_URL ?= https://github.com/edwingao28/srt-slurm/releases/download/cpu-power-exporter-603-64d5b0ac
++CPU_POWER_EXPORTER_603_SHA256 ?= cebbfcb3399d012a0b5df54614dfbf67a3e8b0d9f0a3ed6c5b5fff1e6f722d34
+ 
+ default: check
+ 
+@@ -121,13 +125,27 @@ cpu-power-exporter-download:
+ 
+ cpu-power-exporter-setup:
+ 	@set -eu; \
+-	if [ "$(CPU_POWER_EXPORTER_RELEASE)" = "latest" ]; then \
++	if [ "$(ARCH)" = x86_64 ]; then \
++		$(MAKE) --no-print-directory cpu-power-exporter-603; \
++	elif [ "$(CPU_POWER_EXPORTER_RELEASE)" = "latest" ]; then \
+ 		$(MAKE) --no-print-directory cpu-power-exporter-download || \
+ 		  echo "Warning: cpu-power-exporter download failed (optional for non-CPU-power recipes)"; \
+ 	else \
+ 		$(MAKE) --no-print-directory cpu-power-exporter-download; \
+ 	fi
+ 
++cpu-power-exporter-603:
++	@set -eu; \
++	asset="cpu-power-exporter-x86_64-unknown-linux-musl"; \
++	tmp_dir=$$(mktemp -d); \
++	trap 'rm -rf "$$tmp_dir"' EXIT; \
++	echo "Downloading $$asset from $(CPU_POWER_EXPORTER_603_URL)"; \
++	curl --fail --location --retry 3 --retry-delay 2 "$(CPU_POWER_EXPORTER_603_URL)/$$asset" --output "$$tmp_dir/$$asset"; \
++	echo "$(CPU_POWER_EXPORTER_603_SHA256)  $$asset" | (cd "$$tmp_dir" && sha256sum --check --strict -); \
++	install -Dm755 "$$tmp_dir/$$asset" bin/cpu-power-exporter; \
++	rm -f bin/.cpu-power-exporter.release; \
++	echo "Installed cpu-power-exporter 603-64d5b0ac at bin/cpu-power-exporter"
++
+ .PHONY: otel-collector-download
+ otel-collector-download:
+ 	@set -eu; \

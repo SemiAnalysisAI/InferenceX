@@ -42,6 +42,7 @@ _POINT_KEYS = (
     ("benchmark", "concurrencies"),
     ("telemetry", "enabled"),
     ("telemetry", "dcgm_exporter", "port"),
+    ("telemetry", "cpu_power_exporter"),
 )
 _FIXED_ENV = ("MODEL", "ISL", "OSL", "CONC", "CONC_LIST", "RANDOM_RANGE_RATIO", "USE_CHAT_TEMPLATE")
 _AGENTIC_ENV = ("CONC", "CONC_LIST", "RESULT_DIR", "AGENTIC_OUTPUT_DIR", "HF_HUB_CACHE",
@@ -190,10 +191,12 @@ def compose_recipe(
     root: Path,
     power_port: int | None = None,
     native_power: bool = False,
+    cpu_power_exporter: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The fragment at ``path`` over its lane's shared block, under ``base`` for bundles.
 
     ``power_port`` adds the DCGM telemetry block with its exporter on that port.
+    ``cpu_power_exporter`` joins whichever telemetry block the point gets, if any.
     """
     raw = yamlio.safe_load(path.read_text())
     if not isinstance(raw, dict):
@@ -205,6 +208,9 @@ def compose_recipe(
     if power_port is not None:
         exporter = {"telemetry": {"dcgm_exporter": {"port": power_port}}}
         shared = merge_blocks(shared, merge_blocks(_block(root / TELEMETRY_BLOCK), exporter))
+    if cpu_power_exporter is not None and (native_power or power_port is not None):
+        cpu = {"telemetry": {"cpu_power_exporter": dict(cpu_power_exporter)}}
+        shared = merge_blocks(shared, cpu)
     if "base" in raw:
         return {**raw, "base": merge_blocks(shared, raw["base"])}
     return merge_blocks(shared, raw)
@@ -355,13 +361,19 @@ def bind_multinode(
     root: Path,
     expand: Callable[..., list[tuple[str | None, dict[str, Any]]]] = selected_recipes,
     power_port: int | None = None,
+    cpu_power_exporter: Mapping[str, Any] | None = None,
     client_env: Mapping[str, str] | None = None,
 ) -> tuple[str | None, dict[str, Any]]:
     """Bind the one variant ``recipe`` (``fragment[:selector]``) selects; return its name too."""
     agentic = environment["IS_AGENTIC"] == "1"
     path, _, selector = recipe.partition(":")
     composed = compose_recipe(
-        Path(path), agentic=agentic, multinode=True, root=root, power_port=power_port
+        Path(path),
+        agentic=agentic,
+        multinode=True,
+        root=root,
+        power_port=power_port,
+        cpu_power_exporter=cpu_power_exporter,
     )
     variants = expand(composed, selector or None)
     if len(variants) != 1:
@@ -410,6 +422,16 @@ def add_fabric_argument(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def add_cpu_power_exporter_argument(parser: argparse.ArgumentParser) -> None:
+    """``--cpu-power-exporter``: the job cluster's ``CpuPowerExporter`` as JSON, if it sets one."""
+    parser.add_argument(
+        "--cpu-power-exporter",
+        type=json.loads,
+        metavar="JSON",
+        help="the cluster's CPU power exporter, merged into the point's telemetry block",
+    )
+
+
 def _assignment(text: str) -> tuple[str, str]:
     """Split a ``NAME=VALUE`` argument, or raise ArgumentTypeError if malformed."""
     name, separator, value = text.partition("=")
@@ -435,6 +457,7 @@ def main(argv: list[str] | None = None) -> None:
         help="a launcher-owned benchmark client setting",
     )
     add_fabric_argument(parser)
+    add_cpu_power_exporter_argument(parser)
     args = parser.parse_args(argv)
     try:
         root = repository_root()
@@ -443,6 +466,7 @@ def main(argv: list[str] | None = None) -> None:
             os.environ,
             root=root,
             power_port=args.power_port,
+            cpu_power_exporter=args.cpu_power_exporter,
             client_env=dict(args.client_env),
         )
         bound = resolve_fabric(bound, args.fabric)

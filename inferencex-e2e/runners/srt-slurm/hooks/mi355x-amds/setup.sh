@@ -9,6 +9,7 @@ bash "$(dirname "${BASH_SOURCE[0]}")/check-rdma.sh"
 # shellcheck source=runners/srt-slurm/hooks/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../common.sh"
 wait_for_amd_gpu_clean
+open_rapl_counters
 
 # Some MI355X experiments reserve large 2 MiB HugeTLB pools and leave the
 # reservation behind after their Slurm allocation exits. Those free hugepages

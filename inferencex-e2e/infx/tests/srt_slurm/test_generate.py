@@ -1,6 +1,8 @@
 """``infx generate``: bound srt-slurm recipes of master-config points, validated by srtctl."""
 
 import json
+import sys
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -11,6 +13,8 @@ from infx.launch.drivers.srt import lanes, power
 from infx.launch.policy import LaunchPath, Match
 
 ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / "utils/srt-slurm/src"))
+import srtctl.core.config as srt_config  # noqa: E402
 FRAGMENT = {
     "base": {
         "schema": 2, "name": "fixture", "engine": "sglang",
@@ -163,6 +167,47 @@ def test_a_label_on_several_clusters_keeps_fabric_references(project, tmp_path):
     assert [r["cluster"] for r in manifest["recipes"]] == [None, None]
     recipe = yaml.safe_load((output / manifest["recipes"][0]["file"]).read_text())
     assert recipe["roles"]["agg"]["env"] == {"NCCL_SOCKET_IFNAME": "@fabric.socket-ifname"}
+
+
+CPU_EXPORTER = {"port": 9777, "source": "acpi"}
+
+
+def test_a_native_point_is_loaded_with_each_clusters_cpu_power_exporter_and_written_without(
+    project, tmp_path, monkeypatch
+):
+    runners = yaml.safe_load((project / "configs/runners.yaml").read_text())
+    runners["labels"] = {
+        "fixture": ["fixture_0", "spare_0"], "cluster:fixture": ["fixture_0"], "cluster:spare": ["spare_0"],
+    }  # fmt: skip
+    runners["clusters"]["spare"] = deepcopy(runners["clusters"]["fixture"])
+    runners["clusters"]["fixture"]["slurm"]["srt-slurm"]["cpu-power-exporter"] = CPU_EXPORTER
+    (project / "configs/runners.yaml").write_text(yaml.safe_dump(runners))
+    loaded = []
+    resolve = srt_config.resolve_config_with_defaults
+    monkeypatch.setattr(
+        srt_config, "resolve_config_with_defaults",
+        lambda recipe, defaults: loaded.append(recipe) or resolve(recipe, defaults),
+    )  # fmt: skip
+    output = tmp_path / "out"
+    assert generate(project, output) == 0
+
+    exporters = [recipe["telemetry"].get("cpu_power_exporter") for recipe in loaded]
+    assert exporters == [CPU_EXPORTER, None, CPU_EXPORTER, None]
+    for _, recipe in written(output):
+        assert "cpu_power_exporter" not in recipe["telemetry"]
+
+
+def test_a_multinode_power_point_takes_its_clusters_cpu_power_exporter(
+    project, power_lane, tmp_path
+):
+    runners = yaml.safe_load((project / "configs/runners.yaml").read_text())
+    runners["clusters"]["fixture"]["slurm"]["srt-slurm"]["cpu-power-exporter"] = CPU_EXPORTER
+    (project / "configs/runners.yaml").write_text(yaml.safe_dump(runners))
+    output = tmp_path / "out"
+    assert generate(project, output, "agentx-multi") == 0
+
+    [(_, recipe)] = written(output)
+    assert recipe["telemetry"]["cpu_power_exporter"] == CPU_EXPORTER
 
 
 def test_a_single_node_agentx_point_gets_the_agentic_client_and_no_sequence_lengths(

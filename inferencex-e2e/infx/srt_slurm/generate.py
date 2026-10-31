@@ -139,12 +139,14 @@ def bound_variant(
     expand: Callable[..., list[tuple[str | None, dict[str, Any]]]] = selected_recipes,
     power_port: int | None = None,
     client_env: Mapping[str, str] | None = None,
+    cpu_power_exporter: Mapping[str, Any] | None = None,
 ) -> tuple[str | None, dict[str, Any]]:
     """The variant the launcher submits for ``point``, composed and bound.
 
-    Multi-node variants get the DCGM telemetry block on ``power_port`` and the client paths
-    ``client_env``, the binder inputs the launcher computes. ``'@fabric.<name>'`` values stay
-    unresolved: recipe fingerprints hash them as written.
+    Multi-node variants get the DCGM telemetry block on ``power_port``, the CPU power exporter
+    ``cpu_power_exporter`` beside it and the client paths ``client_env``, the binder inputs the
+    launcher computes. ``'@fabric.<name>'`` values stay unresolved: recipe fingerprints hash
+    them as written.
     """
     if "prefill" not in point:
         selected, recipe = select_recipe(
@@ -157,6 +159,7 @@ def bound_variant(
         root=root,
         expand=expand,
         power_port=power_port,
+        cpu_power_exporter=cpu_power_exporter,
         client_env=client_env,
     )
 
@@ -169,13 +172,26 @@ def _cluster_fabric(cluster: Cluster) -> dict[str, str | None]:
     return srt.fabric.rendered()
 
 
+def _cluster_cpu_power_exporter(cluster: Cluster) -> dict[str, Any] | None:
+    """``cluster``'s CPU power exporter as the launcher binds it, if it sets one."""
+    srt = slurm_settings(cluster).srt_slurm
+    if srt is None or srt.cpu_power_exporter is None:
+        return None
+    return srt.cpu_power_exporter.model_dump()
+
+
 def _apply_acceptance_and_validate(
     recipe: dict[str, Any],
     environment: Mapping[str, str],
     source: str,
     cluster_defaults: Mapping[str, Any] | None = None,
+    cpu_power_exporter: Mapping[str, Any] | None = None,
 ) -> None:
-    """Apply golden-acceptance cleanup, then load the result as srtctl would."""
+    """Apply golden-acceptance cleanup, then load the result as srtctl would.
+
+    ``cpu_power_exporter`` joins the telemetry of the loaded copy only, as the launcher binds
+    it on that cluster; the recipe stays cluster-independent.
+    """
     from marshmallow import ValidationError
     from srtctl.core.config import expand_engine_config_defaults, resolve_config_with_defaults
     from srtctl.core.overrides import apply_overrides_to_recipe, parse_overrides
@@ -190,8 +206,11 @@ def _apply_acceptance_and_validate(
             [value for flag, value in pairs if flag == "--unset"],
         ),
     )
+    candidate = deepcopy(recipe)
+    if cpu_power_exporter is not None and "telemetry" in candidate:
+        candidate["telemetry"]["cpu_power_exporter"] = dict(cpu_power_exporter)
     resolved = resolve_config_with_defaults(
-        deepcopy(recipe), dict(cluster_defaults) if cluster_defaults else None
+        candidate, dict(cluster_defaults) if cluster_defaults else None
     )
     expand_engine_config_defaults(resolved)
     try:
@@ -205,10 +224,11 @@ def generate_recipes(
 ) -> dict[str, Any]:
     """Bind every srt-slurm point of ``config_keys``; write recipes and a manifest.
 
-    A multi-node point is bound with its cluster's DCGM exporter port and AgentX client
-    paths; the manifest names that cluster, the one its runner label schedules on. A runner
-    label on several clusters leaves ``'@fabric.<name>'`` values as written and the
-    manifest's ``cluster`` null.
+    A multi-node point is bound with its cluster's DCGM exporter port, CPU power exporter and
+    AgentX client paths; the manifest names that cluster, the one its runner label schedules
+    on. A single-node point is loaded with each eligible cluster's exporter defaults and CPU
+    power exporter but written without them. A runner label on several clusters leaves
+    ``'@fabric.<name>'`` values as written and the manifest's ``cluster`` null.
     """
     if output.exists() and (not output.is_dir() or any(output.iterdir())):
         raise ValueError(f"Output directory must be empty: {output}")
@@ -234,9 +254,11 @@ def generate_recipes(
             placement = _placement(inventory, point["runner"])
             power_port, client_env = _binder_inputs(point, environment, placement, root)
             fabric = _cluster_fabric(placement[1]) if placement else None
+            exporter = _cluster_cpu_power_exporter(placement[1]) if placement else None
             variant, recipe = bound_variant(
-                point, environment, root, power_port=power_port, client_env=client_env
-            )
+                point, environment, root, power_port=power_port, client_env=client_env,
+                cpu_power_exporter=exporter,
+            )  # fmt: skip
             if fabric is not None:
                 recipe = resolve_fabric(recipe, fabric)
             check_setup_script(recipe, root / point["srt-recipe"].partition(":")[0], root)
@@ -248,8 +270,9 @@ def generate_recipes(
                 for cluster in clusters.values():
                     srt = slurm_settings(cluster).srt_slurm
                     _apply_acceptance_and_validate(
-                        recipe, environment, point["srt-recipe"], srt.extra if srt else None
-                    )
+                        recipe, environment, point["srt-recipe"], srt.extra if srt else None,
+                        cpu_power_exporter=_cluster_cpu_power_exporter(cluster),
+                    )  # fmt: skip
             else:
                 _apply_acceptance_and_validate(recipe, environment, point["srt-recipe"])
             identity = json.dumps({"point": point, "variant": variant}, sort_keys=True)
