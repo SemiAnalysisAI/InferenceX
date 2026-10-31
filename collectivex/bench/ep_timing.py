@@ -201,6 +201,10 @@ class _SpinAlignment:
         # DeepEP's bench_kineto does, so the timed op starts with a cold L2.
         self.flush_l2 = os.environ.get("COLLX_FLUSH_L2") == "1"
         self._flush_buffer = None
+        # Probe: COLLX_CHAIN_GAP_US spins the GPU that long between dispatch and combine (inside the
+        # pair window) and between pairs (outside it), standing in for the expert GEMM and the
+        # attention that separate them in a model. The period then includes one gap.
+        self.chain_gap_us = float(os.environ.get("COLLX_CHAIN_GAP_US") or 0)
 
     def missed_samples(self):
         """1 per sample of the last timed series whose host outran the spin: that rank's window may
@@ -214,6 +218,14 @@ class _SpinAlignment:
             l2 = torch.cuda.get_device_properties(self.backend.device).L2_cache_size
             self._flush_buffer = torch.empty(2 * l2 // 4, dtype=torch.int32, device=self.backend.device)
         self._flush_buffer.zero_()
+
+    def _gap(self):
+        import torch
+
+        if self.chain_gap_us > 0:
+            if self.spin_cycles is None:
+                self.calibrate_spin()
+            torch.cuda._sleep(max(1, int(self.spin_cycles * self.chain_gap_us / self.spin_us)))
 
     def calibrate_spin(self):
         """Size the spin to `spin_us` of wall time: `_sleep` counts SM cycles, not time."""
@@ -262,7 +274,7 @@ class EagerTiming(_SpinAlignment):
     @property
     def alignment(self):
         return {"method": "gpu-spin-then-all-reduce", "spin_us": self.spin_us,
-                "flush_l2": self.flush_l2}
+                "flush_l2": self.flush_l2, "chain_gap_us": self.chain_gap_us}
 
     def host_holds(self):
         """1 per sample of the last timed series whose start waited for this rank's throttled host
@@ -395,9 +407,11 @@ class EagerTiming(_SpinAlignment):
                     b.stage(problem, handle)
                 else:
                     handle.combine_input = staged
+                self._gap()
                 floors["combine"][0][i].record()
                 b.combine(problem, handle)
                 floors["combine"][1][i].record()
+                self._gap()
 
         def period_chain():
             for i in range(iters):
@@ -407,8 +421,10 @@ class EagerTiming(_SpinAlignment):
                     b.stage(problem, handle)
                 else:
                     handle.combine_input = staged
+                self._gap()
                 out["combined"] = b.combine(problem, handle)
                 pair[1][i].record()
+                self._gap()
 
         gated = b.host_synced_dispatch
         if gated:
@@ -534,7 +550,7 @@ class GraphTiming(_SpinAlignment):
     @property
     def alignment(self):
         return {"method": "in-graph-spin-then-all-reduce", "spin_us": self.spin_us,
-                "flush_l2": self.flush_l2}
+                "flush_l2": self.flush_l2, "chain_gap_us": self.chain_gap_us}
 
     def host_holds(self):
         """No graphed dispatch waits on the host."""
@@ -592,10 +608,12 @@ class GraphTiming(_SpinAlignment):
                 handle = b.dispatch(problem)
                 record("dispatch", 1, i)
                 b.stage_or_reuse(problem, handle, staged)
+                self._gap()
                 record("combine", 0, i)
                 combined = b.combine(problem, handle)
                 record("combine", 1, i)
                 record("pair", 1, i)
+                self._gap()
         torch.cuda.synchronize()
         return graph, stamps, combined, handle
 
