@@ -1,0 +1,39 @@
+# Pattern: synthetic workload at fixed concurrency, engine-bump + mamba-knobs arm. Qwen3.8-27B-FP8 (hybrid GDN),
+# 1xH200. Same as qwen38-fp8-eagle-isl8k-c90-c64-v0523-base plus the GDN state-pool knobs and the H200 cookbook
+# prefill chunk (measured +2.2% on v0.5.19 at conc 64):
+#   - --mamba-ssm-dtype bfloat16: state slot 153.9 MB -> 78.4 MB (~2x slots)
+#   - --mamba-radix-cache-strategy extra_buffer_lazy: S 5 -> 4 slots/request
+#   - --max-mamba-cache-size 256: explicit pin = target conc 64 x S 4 (overrides the ratio)
+#   - --chunked-prefill-size 32768: H200 cookbook recipe chunk
+name: qwen38-fp8-eagle-isl8k-c90-c64-v0523-mambaopt
+runner: h200-hcm
+image: lmsysorg/sglang:v0.5.23
+model: Qwen/Qwen3.8-27B-FP8
+gpus: 1
+precision: fp8
+env:
+  FLASHINFER_CUDA_ARCH_LIST: "12.0f"
+serve: |
+  python3 -m sglang.launch_server
+  --model-path Qwen/Qwen3.8-27B-FP8
+  --trust-remote-code
+  --kv-cache-dtype fp8_e4m3
+  --mem-fraction-static 0.85
+  --attention-backend flashinfer
+  --chunked-prefill-size 32768
+  --max-prefill-tokens 32768
+  --context-length 262144
+  --max-running-requests 64
+  --speculative-algorithm EAGLE --speculative-num-steps 3
+  --speculative-eagle-topk 1 --speculative-num-draft-tokens 4
+  --enable-linear-replayssm-spec
+  --mamba-ssm-dtype bfloat16
+  --mamba-radix-cache-strategy extra_buffer_lazy
+  --max-mamba-cache-size 256
+  --schedule-policy dfs-weight
+  --enable-hierarchical-cache --hicache-size 24
+  --reasoning-parser qwen3 --tool-call-parser qwen3_coder
+  --enable-metrics --enable-cache-report
+scenario: synthetic
+workload: {isl: [8k], osl: [1k], cache: [90], search: false}
+conc: [64]
