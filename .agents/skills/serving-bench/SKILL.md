@@ -30,7 +30,10 @@ router:                             # optional: any router in front of the engin
 storage:                            # optional: a non-GPU sidecar started first (e.g. Mooncake master)
   image: <image>
   serve: mooncake_master --port={{storage_master_port}} --http_metadata_server_port={{storage_meta_port}}
-scenario: agentx                    # agentx | tau2 | livekit | shared-prefix-e2 | hidden-prefix-e3 | synthetic
+arms:                               # optional: engine variants in one run, e.g. base vs speculative (see ARCHITECTURE.md, Arms)
+  base: {}
+  mtp6: {append: "--speculative-config '...'"}
+scenario: agentx                    # agentx | tau2 | livekit | shared-prefix-e2 | hidden-prefix-e3 | synthetic | greenspec
 overrides: {duration: 180}          # optional variant, see the table below
 conc: [4, 8]                        # one benchmark job per value
 ```
@@ -46,6 +49,7 @@ Working examples, one per pattern: `inferencex-e2e/configs/serving/*.yaml`. They
 | `livekit` | LiveKit voice-agent traces, V1.1 warm (dial warm-ups count in TTFT) | 1200 s |
 | `shared-prefix-e2` / `hidden-prefix-e3` | prefix-cache A/B traces (HiCache L2 vs Mooncake L3) | 1800 s |
 | `synthetic` | synthetic ISL/OSL with a shared-prefix cache hit, needs `workload:` | 300 s per point |
+| `greenspec` | speculative-decoding bench from production chat traffic (private; result has `spec_decode.acceptance_length`) | the whole selection, no duration |
 
 Variants (`overrides:`, only these keys):
 
@@ -57,6 +61,7 @@ Variants (`overrides:`, only these keys):
 | sampling instead of greedy | `overrides: {generation: {top_p: 0.95, temperature: 1.0}}` |
 | LiveKit V1 / V2 trace | `overrides: {dataset: livekit-111868-v1}` (or `-v2`) |
 | a different trace idle-gap cap | `overrides: {trace_idle_gap_cap: 1}` |
+| GreenSpec subset, lite, bucket, cap | `scenario: greenspec` + `overrides: {subset: agentic_tools, lite: true, max_tokens: 4096, requests: 200}` (only these keys; no `duration`) |
 
 Synthetic grid, one job per point, all in one run:
 

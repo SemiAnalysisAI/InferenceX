@@ -169,8 +169,10 @@ def replay_argv(cfg: ReplayConfig, cli: str | Path) -> list[str]:
     argv += ["--slice-duration", SLICE_DURATION_S]
     argv += ["--no-gpu-telemetry"]
     argv += [
-        "--trajectory-start-min-ratio", TRAJECTORY_START_MIN_RATIO,
-        "--trajectory-start-max-ratio", TRAJECTORY_START_MAX_RATIO,
+        "--trajectory-start-min-ratio",
+        TRAJECTORY_START_MIN_RATIO,
+        "--trajectory-start-max-ratio",
+        TRAJECTORY_START_MAX_RATIO,
     ]
     argv += [
         "--failed-request-threshold",

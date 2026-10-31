@@ -71,6 +71,7 @@ REMOTE_EXCLUDED = (
     "env",
     "router",
     "storage",
+    "arms",
 )
 
 
@@ -116,6 +117,20 @@ class StorageSpec(BaseModel):
 
     image: str = Field(min_length=1)
     serve: str = Field(min_length=1)
+    env: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("env", mode="before")
+    @classmethod
+    def _env_strings(cls, value: Any) -> Any:
+        return _coerce_env(value)
+
+
+class ArmSpec(BaseModel):
+    """One engine variant of a serving YAML: ``serve:`` plus ``append``, ``env:`` overlaid by ``env``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    append: str = ""
     env: dict[str, str] = Field(default_factory=dict)
 
     @field_validator("env", mode="before")
@@ -205,8 +220,15 @@ class ServingSpec(BaseModel):
     endpoint: EndpointSpec | None = None
     router: RouterSpec | None = None
     storage: StorageSpec | None = None
+    arms: dict[str, ArmSpec] | None = Field(default=None, min_length=1)
     scenario: Literal[
-        "agentx", "tau2", "livekit", "shared-prefix-e2", "hidden-prefix-e3", "synthetic"
+        "agentx",
+        "tau2",
+        "livekit",
+        "shared-prefix-e2",
+        "hidden-prefix-e3",
+        "synthetic",
+        "greenspec",
     ]
     overrides: dict[str, Any] = Field(default_factory=dict)
     workload: Workload | None = None
@@ -222,6 +244,14 @@ class ServingSpec(BaseModel):
     @classmethod
     def _env_strings(cls, value: Any) -> Any:
         return _coerce_env(value)
+
+    @field_validator("arms")
+    @classmethod
+    def _arm_names(cls, value: dict[str, ArmSpec] | None) -> dict[str, ArmSpec] | None:
+        for name in value or {}:
+            if not re.fullmatch(NAME_PATTERN, name):
+                raise ValueError(f"{name!r}: arm names use lowercase letters, digits, . and -")
+        return value
 
 
 def _format_validation_error(error: ValidationError) -> str:
@@ -269,6 +299,24 @@ def runner_gpus(runner: str, inventory: RunnerInventory) -> int:
             raise ServingError(hint)
         gpus.add(cluster.gpus_per_node)
     return min(gpus)
+
+
+def arm_specs(spec: ServingSpec) -> list[tuple[str | None, ServingSpec]]:
+    """The engine configurations of a serving YAML: one per arm (``serve:`` + the arm's append), or just the YAML."""
+    if spec.arms is None:
+        return [(None, spec)]
+    out = []
+    for name, arm in spec.arms.items():
+        serve = f"{spec.serve.rstrip()}\n{arm.append}" if spec.serve and arm.append else spec.serve
+        out.append(
+            (
+                name,
+                spec.model_copy(
+                    update={"serve": serve, "env": {**spec.env, **arm.env}, "arms": None}
+                ),
+            )
+        )
+    return out
 
 
 def variants(spec: ServingSpec) -> list[Rendered]:
@@ -441,7 +489,15 @@ def load_serving(text: str, inventory: RunnerInventory | None = None) -> Serving
         ]
         if missing:
             raise ServingError("\n".join(missing))
-        problems += _engine_problems(spec)
+        seen: dict[tuple[str, tuple[tuple[str, str], ...]], str] = {}
+        for name, derived in arm_specs(spec):
+            problems += [
+                f"arms.{name}.{line}" if name else line for line in _engine_problems(derived)
+            ]
+            key = (" ".join(derived.serve.split()), tuple(sorted(derived.env.items())))
+            if name and key in seen:
+                problems.append(f"arms.{name}: the same engine command and env as arms.{seen[key]}")
+            seen[key] = name or ""
     if len(set(spec.conc)) != len(spec.conc):
         problems.append("conc: duplicate values")
     try:

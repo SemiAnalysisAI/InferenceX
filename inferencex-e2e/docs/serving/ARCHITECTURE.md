@@ -214,7 +214,7 @@ that several nodes need belong in a registry, where every node caches its own sq
 
 ## 6. Scenarios
 
-Six base files in `benchmarks/single_node/serving/scenarios/`:
+Seven base files in `benchmarks/single_node/serving/scenarios/`:
 
 | Family | Workload | Dataset |
 |---|---|---|
@@ -224,6 +224,7 @@ Six base files in `benchmarks/single_node/serving/scenarios/`:
 | `shared-prefix-e2` | requests sharing long prefixes | pinned file, Mooncake trace format |
 | `hidden-prefix-e3` | prefixes reused without being visible to the router | pinned file, Mooncake trace format |
 | `synthetic` | generated ISL/OSL with a shared-prefix share | synthetic |
+| `greenspec` | speculative-decoding bench cut from production chat traffic, one request per row | pinned private file (`Green-Lab/GreenSpec`), `raw_payload` format |
 
 Pinned files are listed in `benchmarks/single_node/serving/datasets/lock.yaml` with their URL and
 sha256; the client downloads and checks them before the run.
@@ -232,6 +233,43 @@ A serving YAML picks a family and may set `overrides`. The keys allowed are `dur
 (same kind only: public to public, lock to lock), `max_context_length` (`null` removes the cap),
 `generation` and `trace_idle_gap_cap`. Any other key fails validation, so cache-bust, warmup and seed
 cannot change without a code review.
+
+`greenspec` takes its own keys instead: `subset` (`diverse`, `agentic_coding`, `agentic_tools`, `llm_task`),
+`lite`, `bucket`, `mode` (`target-default` or `recorded` sampling), `max_tokens` (output cap, default 8192)
+and `requests` (default: the whole selection). It has no duration; the run ends when the selection is sent.
+Three things differ from the other families:
+
+- The dataset is private and the benchmark repo is public, so the client (`infx/serving/greenspec.py`)
+  prints AgentX's console without error text, and before the upload keeps only an allowlist of files in
+  `results/`, strips error messages from the aiperf export, replaces server logs by a stub (the originals
+  stay on the node in `.greenspec-private-logs/`) and fails the job if a `question_id` is still in an
+  upload. The request bodies are written outside `results/` and deleted at the end.
+- The client snapshots the engine's `vllm:spec_decode_*` counters (`sglang:spec_accept_length` on SGLang)
+  before and after the replay and files `spec_decode` (`acceptance_length`, `acceptance_rate`, counts) in
+  the aggregate result (`infx/serving/specdec.py`). A point without speculative decoding has no such block.
+- The runner needs `GREENLAB_HF_TOKEN` in `actions-runner/.env`: the release is not public.
+
+A base arm and a speculative arm are the `arms:` of one serving YAML (below). The `summary` job of
+`gn-benchmark.yml` prints one table of all points of a run on the run page, with the speedup of each
+speculative point over the base point of the same scenario and concurrency.
+
+### Arms
+
+`arms:` runs engine variants of one serving YAML in one run: `serve:` and `env:` are shared, an arm adds
+flags with `append` and overlays `env`. Each arm is its own job on its own engine (the name of the point
+is `<name>-<arm>_c<conc>`), so arms multiply with `conc` and with a workload grid.
+
+```yaml
+serve: vllm serve <model> --tensor-parallel-size 1 ...
+arms:
+  base: {}
+  mtp6:
+    append: |
+      --speculative-config '{"method": "mtp", "model": "<draft>", "num_speculative_tokens": 6}'
+```
+
+Two arms that end up with the same command and env are rejected, and `arms:` does not combine with
+`endpoint:`. The `spec-decoding` field of each point follows its own command (`mtp`, `draft_model` or `none`).
 
 The synthetic family takes `workload:` instead:
 

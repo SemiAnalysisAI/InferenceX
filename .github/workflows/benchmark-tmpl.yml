@@ -6,6 +6,8 @@ on:
         required: true
       SERVING_API_KEY:
         required: false
+      GREENLAB_HF_TOKEN:
+        required: false
     inputs:
       serving:
         description: "VNG serving point (SERVING_JSON from infx/serving/to_matrix.py); empty for every other caller"
@@ -100,6 +102,7 @@ env:
   PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
   SERVING_JSON: ${{ inputs.serving }}
   SERVING_API_KEY: ${{ secrets.SERVING_API_KEY }}
+  GREENLAB_HF_TOKEN: ${{ secrets.GREENLAB_HF_TOKEN }}
   INFERENCEX_E2E_ROOT: ${{ github.workspace }}
   PORT: '8888'
   INFMAX_CONTAINER_WORKSPACE: '/workspace'

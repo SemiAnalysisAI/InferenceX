@@ -15,6 +15,7 @@ from infx.serving.client import (
     online,
     probe,
     redacted,
+    with_requests,
     with_token_source,
 )
 
@@ -265,3 +266,33 @@ def test_datasets_arrow_cache_lives_beside_the_node_hub_cache():
         datasets_cache({"HF_HUB_CACHE": "/mnt/hf", "HF_DATASETS_CACHE": "/x"}) == {}
     )  # caller's choice wins
     assert datasets_cache({}) == {}  # no node cache mounted: keep the library default
+
+
+def test_with_requests_sets_the_profiling_phase_only():
+    scenario = yaml.safe_dump({"benchmark": {"phases": [
+        {"name": "warmup", "kind": "warmup", "requests": 4},
+        {"name": "profiling", "kind": "profiling", "requests": 1},
+    ]}})
+    phases = yaml.safe_load(with_requests(scenario, 777))["benchmark"]["phases"]
+    assert [phase["requests"] for phase in phases] == [4, 777]
+
+
+def test_guard_scans_the_release_and_prunes_the_result_dir(tmp_path, monkeypatch):
+    from infx.serving import client
+
+    release = tmp_path / "greenspec.jsonl"
+    release.write_text(json.dumps({"question_id": "m/secret", "category": "llm_task"}) + "\n")
+    monkeypatch.setattr("infx.serving.datasets.fetch", lambda name: release)
+    monkeypatch.setattr(client, "SELECTION_DIR", str(tmp_path / "selection"))
+    (tmp_path / "selection").mkdir()
+    result_dir, output = tmp_path / "results", tmp_path / "out"
+    result_dir.mkdir(), output.mkdir()
+    (result_dir / "server.log").write_text("engine output")
+    (result_dir / "scenario.yaml").write_text("benchmark: {}")
+    aggregate = output / "agg.json"
+    aggregate.write_text("{}")
+    assert client.guard({"SERVING_DATASET": "greenspec-v1.1.1"}, result_dir, aggregate, output) == 0
+    assert not (tmp_path / "selection").exists() and not (result_dir / "server.log").exists()
+    assert (output / client.PRIVATE_LOGS / "server.log").read_text() == "engine output"
+    aggregate.write_text('{"note": "m/secret"}')
+    assert client.guard({"SERVING_DATASET": "greenspec-v1.1.1"}, result_dir, aggregate, output) == 1

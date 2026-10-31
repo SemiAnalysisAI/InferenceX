@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import shlex
+import shutil
 import ssl
 import sys
 import urllib.error
@@ -22,11 +23,16 @@ from pathlib import Path
 
 from infx.bench import proc
 from infx.bench.agentic.venv import Runtime, bootstrap
+from infx.serving import greenspec, specdec
 
 OFFLINE = ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE", "HF_DATASETS_OFFLINE")
 DATASET_PATH = ".dataset_path"
 FAILED_REQUEST_THRESHOLD = "0.10"
 COUNT_SOURCE_MARKER = ".token_count"
+SELECTION_DIR = "/tmp/greenspec-selection"  # noqa: S108 -- inside the job container; outside the result dir: request bodies are never uploaded
+PRIVATE_LOGS = (
+    ".greenspec-private-logs"  # beside the aggregate, on the node; not in any upload path
+)
 PROBE_BODY = {  # the shape agentx sends: streaming, usage requested, ignore_eos injected by the scenario
     "messages": [{"role": "user", "content": "Say OK."}],
     "stream": True,
@@ -53,6 +59,10 @@ def datasets_cache(env: Mapping[str, str]) -> dict[str, str]:
     return {"HF_DATASETS_CACHE": f"{hub.rstrip('/')}/.datasets-arrow"}
 
 
+def served_model(env: Mapping[str, str]) -> str:
+    return env.get("SERVED_MODEL_NAME") or env["MODEL"]
+
+
 def authorization(api_key: str) -> str:
     """A key with a space is a full header value ("Basic <b64>"): gateways that
     only accept scheme auth reject "Bearer Basic <b64>"."""
@@ -67,7 +77,7 @@ def agentx_argv(agentx: str, scenario: Path, env: Mapping[str, str]) -> list[str
     migration."""
     argv = [agentx, "profile", "--config", str(scenario)]
     argv += ["--url", env.get("SERVING_REMOTE_URL") or f"http://localhost:{env['PORT']}"]
-    argv += ["--model", env.get("SERVED_MODEL_NAME") or env["MODEL"]]
+    argv += ["--model", served_model(env)]
     argv += ["--tokenizer", env.get("SERVING_TOKENIZER") or env["MODEL"]]
     if key := env.get("SERVING_API_KEY"):
         if " " in key:
@@ -183,6 +193,16 @@ def with_token_source(scenario_yaml: str, source: str) -> str:
     return yaml.safe_dump(doc, sort_keys=False)
 
 
+def with_requests(scenario_yaml: str, requests: int) -> str:
+    """The scenario with its profiling phase set to ``requests`` requests (the size of the selection)."""
+    import yaml  # in the AgentX venv
+
+    doc = yaml.safe_load(scenario_yaml)
+    [phase] = [p for p in doc["benchmark"]["phases"] if p.get("kind") == "profiling"]
+    phase["requests"] = requests
+    return yaml.safe_dump(doc, sort_keys=False)
+
+
 def label_result(path: Path, label: str, token_count_source: str | None = None) -> None:
     """File the aggregate under the legacy scenario label result-report reads first."""
     if not path.exists():
@@ -201,8 +221,16 @@ def prepare(env: Mapping[str, str], runtime: Runtime) -> int:
         from infx.serving.datasets import DatasetError, fetch
 
         try:
-            (result_dir / DATASET_PATH).write_text(str(fetch(env["SERVING_DATASET"])))
-        except DatasetError as error:
+            path = fetch(env["SERVING_DATASET"])
+            if chosen := greenspec.settings(env):
+                selection = Path(SELECTION_DIR) / "selection.jsonl"
+                count = greenspec.write_selection(path, chosen, served_model(env), selection)
+                print(
+                    f"GreenSpec selection {greenspec.label(chosen)}: {count} requests", flush=True
+                )
+                path = selection
+            (result_dir / DATASET_PATH).write_text(str(path))
+        except (DatasetError, greenspec.GreenSpecError) as error:
             print(f"ERROR {error}", file=sys.stderr)
             return 1
     if url := env.get("SERVING_REMOTE_URL"):
@@ -237,7 +265,8 @@ def run(env: Mapping[str, str], runtime: Runtime) -> int:
     scenario = result_dir / "scenario.yaml"
     token_marker = result_dir / COUNT_SOURCE_MARKER
     source = token_marker.read_text().strip() if token_marker.exists() else None
-    scenario.write_text(with_token_source(env["SERVING_SCENARIO_YAML"], source or "server"))
+    chosen = greenspec.settings(env)
+    scenario_yaml = with_token_source(env["SERVING_SCENARIO_YAML"], source or "server")
     child = online(env) | {
         "AIPERF_DATASET_CONFIGURATION_TIMEOUT": "1800",
         "AIPERF_SERVICE_PROFILE_CONFIGURE_TIMEOUT": "1800",
@@ -251,9 +280,20 @@ def run(env: Mapping[str, str], runtime: Runtime) -> int:
         child["AIPERF_HTTP_SSL_VERIFY"] = "false"  # aiperf's own switch for self-signed gateways
     if (marker := result_dir / DATASET_PATH).exists():
         child["IX_CUSTOM_DATASET_FILE"] = marker.read_text().strip()
+    if chosen:
+        with open(child["IX_CUSTOM_DATASET_FILE"], encoding="utf-8") as selection:
+            size = sum(1 for _ in selection)
+        scenario_yaml = with_requests(scenario_yaml, min(chosen.requests or size, size))
+    scenario.write_text(scenario_yaml)
     argv = agentx_argv(str(runtime.aiperf), scenario, env)
     (result_dir / "benchmark_command.txt").write_text(shlex.join(redacted(argv)) + "\n")
-    replay_rc = proc.tee(argv, result_dir / "benchmark.log", child)
+    metrics_urls = [url for url in env.get("AIPERF_SERVER_METRICS_URLS", "").split(",") if url]
+    if chosen:
+        specdec.save(result_dir / "spec_metrics_before.json", specdec.snapshot(metrics_urls))
+    replay = greenspec.tee_filtered if chosen else proc.tee
+    replay_rc = replay(argv, result_dir / "benchmark.log", child)
+    if chosen:
+        specdec.save(result_dir / "spec_metrics_after.json", specdec.snapshot(metrics_urls))
     python = str(runtime.python)
     if env.get("SERVING_SEARCH") == "1":
         return replay_rc or proc.call([python, "-m", "infx.serving.sweep_result"], child)
@@ -280,12 +320,39 @@ def run(env: Mapping[str, str], runtime: Runtime) -> int:
         ],
         child,
     )
-    label_result(
-        output_dir / f"{env['RESULT_FILENAME']}.json",
-        env["SERVING_SCENARIO_LABEL"],
-        token_count_source=source,
+    aggregate = output_dir / f"{env['RESULT_FILENAME']}.json"
+    label_result(aggregate, env["SERVING_SCENARIO_LABEL"], token_count_source=source)
+    guard_rc = 0
+    if chosen:
+        spec = specdec.summarize(
+            result_dir / "spec_metrics_before.json", result_dir / "spec_metrics_after.json"
+        )
+        if spec is None:
+            print(
+                "WARNING no speculative-decoding series on the engine metrics; the result has no spec_decode block",
+                file=sys.stderr,
+            )
+        else:
+            specdec.merge(aggregate, spec)
+        guard_rc = guard(env, result_dir, aggregate, output_dir)
+    return replay_rc or aggregate_rc or validate_rc or guard_rc
+
+
+def guard(env: Mapping[str, str], result_dir: Path, aggregate: Path, output_dir: Path) -> int:
+    """Prune, redact and scan what a greenspec job uploads (the benchmark repo is public); 1 on a problem."""
+    from infx.serving.datasets import fetch
+
+    shutil.rmtree(SELECTION_DIR, ignore_errors=True)
+    problems = greenspec.guard(
+        fetch(env["SERVING_DATASET"]),
+        result_dir,
+        [aggregate],
+        [output_dir / "server.log"],
+        keep_log_dir=output_dir / PRIVATE_LOGS,
     )
-    return replay_rc or aggregate_rc or validate_rc
+    for problem in problems:
+        print(f"GreenSpec guard: {problem}", file=sys.stderr)
+    return 1 if problems else 0
 
 
 def main(argv: list[str] | None = None) -> int:

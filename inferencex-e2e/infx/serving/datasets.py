@@ -37,6 +37,7 @@ class LockEntry:
     file: str
     sha256: str
     entries: int | None = None
+    private: bool = False
 
 
 def load_lock(path: Path = LOCK) -> dict[str, LockEntry]:
@@ -50,15 +51,24 @@ def load_lock(path: Path = LOCK) -> dict[str, LockEntry]:
     lock = {}
     for name, entry in raw.items():
         keys = set(entry) if isinstance(entry, dict) else set()
-        if not set(FIELDS) <= keys or keys - {*FIELDS, "entries"}:
-            raise DatasetError(f"lock: {name} needs exactly {', '.join(FIELDS)} (and optional entries)")
+        if not set(FIELDS) <= keys or keys - {*FIELDS, "entries", "private"}:
+            raise DatasetError(
+                f"lock: {name} needs exactly {', '.join(FIELDS)} (and optional entries, private)"
+            )
         for field, pattern in FIELDS.items():
             if not re.fullmatch(pattern, str(entry[field])):
-                raise DatasetError(f"lock: {name}.{field} {entry[field]!r} does not match {pattern}")
+                raise DatasetError(
+                    f"lock: {name}.{field} {entry[field]!r} does not match {pattern}"
+                )
         entries = entry.get("entries")
-        if entries is not None and (isinstance(entries, bool) or not isinstance(entries, int) or entries < 1):
+        if entries is not None and (
+            isinstance(entries, bool) or not isinstance(entries, int) or entries < 1
+        ):
             raise DatasetError(f"lock: {name}.entries must be a positive integer")
-        lock[name] = LockEntry(name, *(str(entry[field]) for field in FIELDS), entries)
+        private = entry.get("private", False)
+        if not isinstance(private, bool):
+            raise DatasetError(f"lock: {name}.private must be true or false")
+        lock[name] = LockEntry(name, *(str(entry[field]) for field in FIELDS), entries, private)
     return lock
 
 
@@ -80,10 +90,19 @@ def fetch(name: str, lock: dict[str, LockEntry] | None = None) -> Path:
     from huggingface_hub.errors import HfHubHTTPError, RepositoryNotFoundError
 
     where = f"{entry.repo}@{entry.revision}"
-    unreadable = f"dataset {name}: {where} not readable; GREENLAB_HF_TOKEN is {'set' if token else 'unset'}"
+    unreadable = (
+        f"dataset {name}: {where} not readable; GREENLAB_HF_TOKEN is {'set' if token else 'unset'}"
+    )
     try:
-        path = Path(hf_hub_download(entry.repo, entry.file, revision=entry.revision,
-                                    repo_type="dataset", token=token or False))
+        path = Path(
+            hf_hub_download(
+                entry.repo,
+                entry.file,
+                revision=entry.revision,
+                repo_type="dataset",
+                token=token or False,
+            )
+        )
     except RepositoryNotFoundError:  # includes GatedRepoError
         raise DatasetError(unreadable) from None
     except HfHubHTTPError as error:
@@ -92,11 +111,14 @@ def fetch(name: str, lock: dict[str, LockEntry] | None = None) -> Path:
         raise
     actual = sha256(path)
     if actual != entry.sha256:
-        raise DatasetError(f"dataset {name}: sha256 mismatch for {where}/{entry.file}: "
-                           f"expected {entry.sha256}, got {actual}")
+        raise DatasetError(
+            f"dataset {name}: sha256 mismatch for {where}/{entry.file}: "
+            f"expected {entry.sha256}, got {actual}"
+        )
     if os.environ.get("RESULT_DIR"):
         Path(os.environ["RESULT_DIR"], "dataset.txt").write_text(
-            f"{name} {where} file={entry.file} sha256={actual} path={path}\n")
+            f"{name} {where} file={entry.file} sha256={actual} path={path}\n"
+        )
     return path
 
 

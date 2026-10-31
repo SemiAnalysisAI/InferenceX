@@ -73,7 +73,7 @@ for d in $BASE/gharunner0*/actions-runner; do (cd "$d" && sudo ./svc.sh install 
 
 The registration token comes from the settings page or `gh api -X POST repos/vngcloud/InferenceX/actions/runners/registration-token --jq .token` (valid exactly 1 hour, not configurable; mint it right before running `setup.sh`). `setup.sh` prints `All runners configured!` even when registration failed: check that every slot printed its own `[<name>] Done.` line.
 
-No runner `.env` is needed for the datasets: every repo in `datasets/lock.yaml` is public on HF (checked 2026-10-25), and `infx/serving/datasets.py` downloads anonymously when `GREENLAB_HF_TOKEN` is unset. Add `GREENLAB_HF_TOKEN=…` to `actions-runner/.env` only if a private dataset is added to the lock.
+Every `datasets/lock.yaml` entry marked `private: true` (GreenSpec) needs `GREENLAB_HF_TOKEN`; the other repos are public. `infx/serving/datasets.py` downloads anonymously when `GREENLAB_HF_TOKEN` is unset, so a runner that is to run `scenario: greenspec` needs `GREENLAB_HF_TOKEN=…` in `actions-runner/.env`. Other scenarios need no `.env`.
 
 ## 3. Add the cluster record
 

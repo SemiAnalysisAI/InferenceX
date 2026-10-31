@@ -214,3 +214,44 @@ def test_engine_yaml_without_image_says_what_is_missing():
     assert "image: required (or use endpoint: for a remote endpoint)" in errors(
         text + "scenario: agentx\nconc: 8\n"
     )
+
+
+ARMS = """\
+arms:
+  base: {}
+  mtp:
+    append: |
+      --speculative-config '{"method": "mtp", "num_speculative_tokens": 4}'
+    env: {X: "1"}
+scenario: agentx
+conc: 4
+"""
+
+
+def test_arms_are_engine_variants_of_the_shared_serve():
+    from infx.serving.schema import arm_specs
+
+    spec = load_serving(yaml_of(ARMS))
+    arms = dict(arm_specs(spec))
+    assert list(arms) == ["base", "mtp"]
+    assert arms["base"].serve == spec.serve and "--speculative-config" not in arms["base"].serve
+    assert arms["mtp"].serve.startswith(spec.serve.rstrip()) and "--speculative-config" in arms["mtp"].serve
+    assert arms["mtp"].env == {"X": "1"} and arms["base"].env == {}
+    assert arm_specs(load_serving(yaml_of("scenario: agentx\nconc: 4\n"))) == [(None, load_serving(yaml_of("scenario: agentx\nconc: 4\n")))]
+
+
+@pytest.mark.parametrize("extra, message", [
+    ("arms: {base: {}, other: {}}\nscenario: agentx\nconc: 4\n", "arms.other: the same engine command and env as arms.base"),
+    ("arms: {Base: {}}\nscenario: agentx\nconc: 4\n", "arm names use lowercase"),
+    ("arms: {base: {extra: 1}}\nscenario: agentx\nconc: 4\n", "unknown key"),
+    ("arms: {}\nscenario: agentx\nconc: 4\n", "arms"),
+    ("arms: {a: {append: --numa-node 0}}\nscenario: agentx\nconc: 4\n", "arms.a.serve: drop --numa-node"),
+])
+def test_bad_arms_fail_with_one_line_each(extra, message):
+    assert message in errors(yaml_of(extra))
+
+
+def test_arms_do_not_combine_with_a_remote_endpoint():
+    text = ("name: r\nrunner: cluster:hcm-hgx01\nendpoint: {url: 'http://h:8000/v1', model: m}\n"
+            "arms: {a: {}}\nscenario: agentx\nconc: 4\n")
+    assert "arms: not used with endpoint:" in errors(text)
