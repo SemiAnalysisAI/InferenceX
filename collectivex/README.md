@@ -112,6 +112,20 @@ InferenceX-app checkout with `DATABASE_COLLECTIVEX_WRITE_URL` set, run
 latest stored run, replacing those cases, and stores the result as a new run. It rejects a file that
 is not a runnable case in `cases.json`, was measured from uncommitted code, or contains an IP
 address or host-identifying field, and every uploaded file must share one source SHA.
+### Changelog
+
+Every PR that changes what CollectiveX measures appends one entry (or one per scope) to the end of
+[`perf-changelog.yaml`](perf-changelog.yaml): the date, the PR link, the pools it affects and,
+optionally, the suites, backends, modes, phases, EP sizes and precisions that narrow it, with an
+English and a Chinese description. `python3 collectivex/changelog.py validate` checks the file, and
+CI also checks that existing entries are unchanged and that new entries link the PR adding them.
+`changelog.py cases --pr <n>` lists the cases a PR's entries select.
+
+An upload names the merged PRs it publishes: `admin:db:ingest:collectivex --dir <copy>/results --pr
+<n>`. The database stores those entries against the new run, so each run records the changes it
+measures and each change the runs that measured it, with the before and after results of every case
+it selects.
+
 `results/cases.json` stays committed; a unit test fails when it no longer matches the configs, so
 regenerate it whenever they change:
 
