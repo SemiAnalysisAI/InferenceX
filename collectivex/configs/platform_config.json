@@ -94,6 +94,7 @@
       "network": {
         "rdma_fabric": "efa",
         "rdma_gbs": 100,
+        "deepep_efa_fork": 1,
         "rdma_devices": "rdmap86s0,rdmap87s0,rdmap101s0,rdmap102s0,rdmap116s0,rdmap117s0,rdmap131s0,rdmap132s0,rdmap146s0,rdmap147s0,rdmap161s0,rdmap162s0,rdmap176s0,rdmap177s0,rdmap191s0,rdmap192s0"
       }
     },
