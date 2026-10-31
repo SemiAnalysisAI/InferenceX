@@ -74,7 +74,7 @@ jobs:
           path: .ci-priority
           persist-credentials: false
 
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
       - id: gen
         name: Generate matrix via script
         run: |
@@ -284,7 +284,7 @@ jobs:
         with: *tooling-inputs
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           enable-cache: false
 
@@ -378,7 +378,7 @@ jobs:
 
       - name: Upload profile as artifact
         if: ${{ steps.run.outputs.trace != '' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: profile_${{ env.RESULT_FILENAME }}
           path: ${{ steps.run.outputs.trace }}
@@ -386,7 +386,7 @@ jobs:
 
       - name: Upload TP-0-DECODE trace as artifact
         if: ${{ steps.run.outputs.tp0_decode != '' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: profile_${{ env.RESULT_FILENAME }}_TP0_DECODE
           path: ${{ steps.run.outputs.tp0_decode }}
@@ -394,7 +394,7 @@ jobs:
 
       - name: Upload TP-0-EXTEND trace as artifact
         if: ${{ steps.run.outputs.tp0_extend != '' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: profile_${{ env.RESULT_FILENAME }}_TP0_EXTEND
           path: ${{ steps.run.outputs.tp0_extend }}
@@ -402,7 +402,7 @@ jobs:
 
       - name: Upload MoE debug log as artifact
         if: ${{ env.MOE_DEBUG == '1' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: moe_debug_${{ env.RESULT_FILENAME }}
           path: ${{ env.INFERENCEX_E2E_ROOT }}/moe_debug.tp0.log
