@@ -7596,17 +7596,10 @@ minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        conc-list: [280, 320, 360]
+        conc-list: [320, 360, 400]
         srt-recipe: disagg-variants.yaml:override_6p_dep2_dep8
         prefill: { num-worker: 6, tp: 2, ep: 2, dp-attn: true }
         decode: { num-worker: 1, tp: 8, ep: 8, dp-attn: true }
-      - spec-decoding: mtp
-        kv-offloading: dram
-        kv-offload-backend: { name: hicache }
-        conc-list: [300]
-        srt-recipe: disagg-variants.yaml:override_6p_dep2_dep16
-        prefill: { num-worker: 6, tp: 2, ep: 2, dp-attn: true }
-        decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: true }
 
 # H200 AgentX arm for DeepSeek-V4.1-Flash. Upstream marks h200 verified and says
 # the GB200 NVL4 TP4 layout becomes TP8 on 8-GPU nodes, so this is TP8.

@@ -161,6 +161,9 @@ base:
         # 48 per DP rank.
         max-running-requests: 384
         cuda-graph-max-bs-decode: 48
+        # Batches token output so the decode scheduler and the Dynamo frontend
+        # stop handling one message per token per request.
+        stream-interval: 30
         mem-fraction-static: 0.85
         speculative-algorithm: DSPARK
         speculative-dspark-block-size: 7
@@ -171,6 +174,7 @@ base:
       kv_events: false
   sbatch_directives:
     mem: "0"
+    cpus-per-task: "144"
     exclusive: ""
   srun_options:
     container-remap-root: ""
