@@ -37,6 +37,8 @@ base:
         method: dspark
         num-speculative-tokens: 5
         tool-call-parser: dsml_v41
+        # uvicorn's 5 s default resets AIPerf's pooled connections at high concurrency.
+        timeout-keep-alive: 900
       env:
         OMP_NUM_THREADS: '4'
         ATOM_NUMA_BIND: '0'
@@ -49,15 +51,19 @@ base:
       AIPERF_TIMING_CANCEL_DRAIN_TIMEOUT: '300'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'atom:'
 
-# One variant per point, on an MXFP8 KV cache. Plain TP everywhere, plus DEP2
-# (DP attention and expert parallelism over the TP group) from concurrency 64.
-# max-num-seqs is ATOM's default except at concurrency 1; decode graphs cover
-# every size through 32 plus 48, 64 and 128 (and 256 on the c256 points).
+# One variant per point, on an MXFP8 KV cache: plain TP through concurrency 32,
+# DTP2 (DP attention, MoE over TP) at 64 and DEP2 (DP attention plus expert
+# parallelism) at 128 and 256. max-num-seqs is ATOM's default except at
+# concurrency 1; decode graphs cover every size through 32 plus 48, 64 and 128
+# (and 256 on the c256 point).
 #
 # Concurrency 1 follows the C1 recipe of ROCm/ATOM#2659: the prefill delayer
 # with a decode interval no step reaches, so a new turn's prefill waits for the
 # running decode instead of interleaving with it, and max-num-seqs 2 (DSpark's
 # block-drafter warmup needs two sequences) with decode graphs at 1 and 2.
+# From concurrency 2 to 32 the delayer runs a decode interval that shrinks as
+# the load grows (192 through c8, 96 at c16, about 32 at c32), so a new prefill
+# does not stall the running decodes, at a small TTFT cost.
 
 override_tp2_c1:
   roles:
@@ -77,6 +83,9 @@ override_tp2_c2:
   roles:
     agg:
       gpus: 2
+      env:
+        ATOM_ENABLE_PREFILL_DELAYER: '1'
+        ATOM_PREFILL_DECODE_INTERVAL: '192'
   benchmark:
     env:
       CONC: '2'
@@ -85,6 +94,9 @@ override_tp2_c4:
   roles:
     agg:
       gpus: 2
+      env:
+        ATOM_ENABLE_PREFILL_DELAYER: '1'
+        ATOM_PREFILL_DECODE_INTERVAL: '192'
   benchmark:
     env:
       CONC: '4'
@@ -93,6 +105,9 @@ override_tp2_c8:
   roles:
     agg:
       gpus: 2
+      env:
+        ATOM_ENABLE_PREFILL_DELAYER: '1'
+        ATOM_PREFILL_DECODE_INTERVAL: '192'
   benchmark:
     env:
       CONC: '8'
@@ -101,6 +116,9 @@ override_tp2_c16:
   roles:
     agg:
       gpus: 2
+      env:
+        ATOM_ENABLE_PREFILL_DELAYER: '1'
+        ATOM_PREFILL_DECODE_INTERVAL: '96'
   benchmark:
     env:
       CONC: '16'
@@ -109,35 +127,12 @@ override_tp2_c32:
   roles:
     agg:
       gpus: 2
+      env:
+        ATOM_ENABLE_PREFILL_DELAYER: '1'
+        ATOM_PREFILL_DECODE_INTERVAL: '30'
   benchmark:
     env:
       CONC: '32'
-
-override_tp2_c64:
-  roles:
-    agg:
-      gpus: 2
-  benchmark:
-    env:
-      CONC: '64'
-
-override_tp2_c128:
-  roles:
-    agg:
-      gpus: 2
-  benchmark:
-    env:
-      CONC: '128'
-
-override_tp2_c256:
-  roles:
-    agg:
-      gpus: 2
-      args:
-        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,48,64,128,256]'
-  benchmark:
-    env:
-      CONC: '256'
 
 override_tp4_c1:
   roles:
@@ -149,29 +144,75 @@ override_tp4_c1:
     env:
       CONC: '1'
 
+override_tp4_c2:
+  roles:
+    agg:
+      gpus: 4
+      env:
+        ATOM_ENABLE_PREFILL_DELAYER: '1'
+        ATOM_PREFILL_DECODE_INTERVAL: '192'
+  benchmark:
+    env:
+      CONC: '2'
+
+override_tp4_c4:
+  roles:
+    agg:
+      gpus: 4
+      env:
+        ATOM_ENABLE_PREFILL_DELAYER: '1'
+        ATOM_PREFILL_DECODE_INTERVAL: '192'
+  benchmark:
+    env:
+      CONC: '4'
+
 override_tp4_c8:
   roles:
     agg:
       gpus: 4
+      env:
+        ATOM_ENABLE_PREFILL_DELAYER: '1'
+        ATOM_PREFILL_DECODE_INTERVAL: '192'
   benchmark:
     env:
       CONC: '8'
 
-# DEP2: the DSv4.1 DEP2 cell of ROCm/ATOM#2784 (DP attention without TBO, which
-# does not support SWA bounded replay, plus expert parallelism). Each AIPerf
-# session stays on one DP rank and at least 10 decode passes run between
+override_tp4_c16:
+  roles:
+    agg:
+      gpus: 4
+      env:
+        ATOM_ENABLE_PREFILL_DELAYER: '1'
+        ATOM_PREFILL_DECODE_INTERVAL: '96'
+  benchmark:
+    env:
+      CONC: '16'
+
+override_tp4_c32:
+  roles:
+    agg:
+      gpus: 4
+      env:
+        ATOM_ENABLE_PREFILL_DELAYER: '1'
+        ATOM_PREFILL_DECODE_INTERVAL: '32'
+  benchmark:
+    env:
+      CONC: '32'
+
+# DTP2 / DEP2: DP attention without TBO (which does not support SWA bounded
+# replay); DEP2 adds expert parallelism, the DEP2 cell of ROCm/ATOM#2784. Each
+# AIPerf session stays on one DP rank and at least 10 decode passes run between
 # prefills.
 
-override_tp2_c64_dep:
+override_tp2_c64_dtp:
   roles:
     agg:
       gpus: 2
       args:
         enable-dp-attention: true
-        enable-expert-parallel: true
         # ATOM_DP_LB_REQ_EQUIV weights in-flight requests under least_tokens.
         dp-load-balance: least_tokens
-      env: &dep_env
+      env: &dp_env
         GPU_MAX_HW_QUEUES: '5'
         ATOM_DP_SESSION_AFFINITY: '1'
         ATOM_DP_LB_REQ_EQUIV: '512'
@@ -191,7 +232,7 @@ override_tp2_c128_dep:
         enable-dp-attention: true
         enable-expert-parallel: true
         dp-load-balance: least_tokens
-      env: *dep_env
+      env: *dp_env
   benchmark:
     env:
       CONC: '128'
@@ -206,7 +247,7 @@ override_tp2_c256_dep:
         enable-expert-parallel: true
         dp-load-balance: least_tokens
         cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,48,64,128,256]'
-      env: *dep_env
+      env: *dp_env
   benchmark:
     env:
       CONC: '256'
