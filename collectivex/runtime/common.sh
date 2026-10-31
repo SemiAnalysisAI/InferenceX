@@ -8,12 +8,12 @@ COLLX_RUNTIME_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 collx_log() { printf '[collectivex] %s\n' "$*" >&2; }
 collx_die() { printf '[collectivex] FATAL: %s\n' "$*" >&2; exit 1; }
 
-COLLX_DEEPEP_V2_REPO="https://github.com/deepseek-ai/DeepEP"
+COLLX_DEEPEP_V2_REPO="https://github.com/amazon-contributing/DeepEP"  # PR #36 (V2.5 EFA port)
 # Upstream DeepEP main: it carries single-node V2 init, the fence.proxy.async in
 # LOW_LATENCY_COMBINE_RECV (without it Blackwell low-latency combine corrupts), the system-scope
 # release before the GIN barrier, NCCL Device API compat and pip-wheel SO-name resolution. The
 # backend cache is keyed on this value.
-COLLX_DEEPEP_V2_COMMIT="f6aa38fe06cd4a0489e7730365d4e0114970a2f3"
+COLLX_DEEPEP_V2_COMMIT="f6fc31dd1f3904af50069c4edc2b936095365c51"
 
 # Must match the image's CUDA line: the cu12 wheel's r12 host library on cu130 images survives
 # on sm90/sm100 but poisons the CUDA context during symmetric-heap init over MNNVL on sm103
@@ -27,7 +27,7 @@ COLLX_DEEPEP_V2_TORCH_SPEC="torch==2.11.0"
 
 # Build-recipe generation for the DeepEP venv cache key: bump when build flags change without
 # any pin changing, so venvs that already carry .ready are not reused with a stale recipe.
-COLLX_DEEPEP_V2_BUILD_GEN="v25proxy1"
+COLLX_DEEPEP_V2_BUILD_GEN="v25aws1"
 
 COLLX_UCCL_REPO="https://github.com/uccl-project/uccl"
 COLLX_UCCL_COMMIT="df000fd3001da04a397253fd6a2204bde62d32aa"

@@ -27,7 +27,7 @@ except Exception as exc:  # pragma: no cover - requires the benchmark image
 # adapter does not check the wheel's commit tag, only that the loaded deep_ep exposes
 # ElasticBuffer. The pin is mirrored here for `library_version`, since the wheel reports
 # 2.1.0+local (the build patches the tree, so setup.py finds no clean git hash).
-_DEEPEP_COMMIT = "f6aa38fe06cd4a0489e7730365d4e0114970a2f3"
+_DEEPEP_COMMIT = "f6fc31dd1f3904af50069c4edc2b936095365c51"  # amazon-contributing/DeepEP#36
 
 # vLLM's ElasticBuffer flags: VLLM_DEEPEP_V2_PREFER_OVERLAP and
 # VLLM_DEEPEP_V2_ALLOW_MULTIPLE_REDUCTION both default to 0 (vllm/envs.py) and reach the buffer

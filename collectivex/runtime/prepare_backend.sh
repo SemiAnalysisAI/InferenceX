@@ -314,6 +314,7 @@ deepep_install() {
   # V2.5 JIT-compiles kernels with only the GDAKI GIN backend; EFA reaches GIN through the
   # aws-ofi-nccl proxy (NCCL_GIN_TYPE=2), so EP_GIN_PROXY_ENABLE=1 compiles the proxy backend in.
   local jit_hpp="$source_dir/csrc/runtime/jit.hpp"
+  if ! grep -q EP_GIN_PROXY_ENABLE "$jit_hpp"; then  # the AWS port already carries both
   local proxy='get_env<int>("EP_GIN_PROXY_ENABLE", 0) ? "-DNCCL_GIN_PROXY_ENABLE=1" : "-DNCCL_GIN_PROXY_ENABLE=0"'
   [ "$(grep -c '"-DNCCL_GIN_PROXY_ENABLE=0"' "$jit_hpp")" = 1 ] \
     && sed -i "s|\"-DNCCL_GIN_PROXY_ENABLE=0\"|$proxy|" "$jit_hpp" \
@@ -327,6 +328,7 @@ deepep_install() {
       -e "s|reqs.ginType = NCCL_GIN_TYPE_GDAKI;|reqs.ginType = $on ? NCCL_GIN_TYPE_PROXY : NCCL_GIN_TYPE_GDAKI;|" \
       "$window_cu" \
     || { collx_log "ERROR: DeepEP V2 GIN proxy host patch failed"; return 1; }
+  fi
   # The RDC device-link step (nvcc -dlink) gets no -gencode from the extension build, so nvcc
   # falls back to its default arch (sm_75 on CUDA 13) and links kernels that cannot load on the
   # target GPU (gb300/sm103: cudaErrorUnknown). NVCC_PREPEND_FLAGS reaches the dlink too.
