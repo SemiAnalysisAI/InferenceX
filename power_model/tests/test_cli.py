@@ -24,39 +24,39 @@ def rack_args(system="gb200-nvl72"):
 @pytest.mark.parametrize(
     "flags, offload, cpu_state, cpu_w, state, memory_w, fan_w, it_w, per_gpu",
     [
-        ([], False, "FixedSeqLen", 480, "idle", 243.2, 109.045912, 5826.055387, 473.367000),
+        ([], False, "FixedSeqLen", 660, "idle", 243.2, 115.093627, 6021.108762, 489.215087),
         (
             ["--workload=fixed-seq-len"],
             False,
             "FixedSeqLen",
-            480,
+            660,
             "idle",
             243.2,
-            109.045912,
-            5826.055387,
-            473.367000,
+            115.093627,
+            6021.108762,
+            489.215087,
         ),
         (
             ["--workload=agentic"],
             False,
             "Agentic",
-            600,
+            720,
             "idle",
             243.2,
-            113.012483,
-            5956.068674,
-            483.930580,
+            117.139021,
+            6086.065327,
+            494.492808,
         ),
         (
             ["--workload=agentic-cpu-offloading"],
             True,
             "AgenticOffloadingOn",
-            800,
+            780,
             "active",
             448,
-            127.100680,
-            6394.029590,
-            519.514904,
+            126.455719,
+            6372.493631,
+            517.765108,
         ),
     ],
 )
@@ -107,8 +107,8 @@ def test_cli_hopper_workloads_select_cpu_and_memory_power_with_air_cooling(
             "Thor2NICCard",
             320,
             480,
-            388.915798,
-            413.989391,
+            404.751221,
+            429.807527,
         ),
         (
             "mi325",
@@ -118,8 +118,8 @@ def test_cli_hopper_workloads_select_cpu_and_memory_power_with_air_cooling(
             "Thor2NICCard",
             320,
             480,
-            400.229637,
-            425.289895,
+            416.045426,
+            441.048261,
         ),
         (
             "mi355",
@@ -129,8 +129,8 @@ def test_cli_hopper_workloads_select_cpu_and_memory_power_with_air_cooling(
             "PollaraNICCard",
             320,
             480,
-            403.919921,
-            429.428243,
+            420.214289,
+            445.476939,
         ),
         (
             "b200",
@@ -140,8 +140,8 @@ def test_cli_hopper_workloads_select_cpu_and_memory_power_with_air_cooling(
             "ConnectX7NICCard",
             240,
             400,
-            469.949645,
-            494.895946,
+            485.468778,
+            510.389697,
         ),
     ],
 )
@@ -213,28 +213,28 @@ def test_cli_selects_each_hgx_family_board_and_nic(
 @pytest.mark.parametrize(
     "state, workload, expected, it_w, fan_w, board_w, nic_w, cpu_w, memory_w",
     [
-        ("idle", "fixed-seq-len", 496.128120, 6106.192251, 95.308226, 3280, 480, 480, 243.2),
-        ("active", "fixed-seq-len", 546.473509, 6725.827799, 102.615940, 3600, 800, 480, 243.2),
+        ("idle", "fixed-seq-len", 512.093932, 6302.694551, 99.378321, 3280, 480, 660, 243.2),
+        ("active", "fixed-seq-len", 562.347142, 6921.195596, 106.894645, 3600, 800, 660, 243.2),
         (
             "idle",
             "agentic-cpu-offloading",
-            542.530850,
-            6677.302765,
-            107.483510,
+            540.771281,
+            6655.646535,
+            107.010183,
             3280,
             480,
-            800,
+            780,
             448,
         ),
         (
             "active",
             "agentic-cpu-offloading",
-            592.608181,
-            7293.639155,
-            115.393343,
+            590.859165,
+            7272.112803,
+            114.901866,
             3600,
             800,
-            800,
+            780,
             448,
         ),
     ],
@@ -368,7 +368,7 @@ def test_cli_accepts_full_class_names_and_the_hyphenated_gpu_flag(capsys):
         ]
     )
     result = json.loads(capsys.readouterr().out)
-    assert result["AllInPower_per_gpu"] == pytest.approx(473.367000)
+    assert result["AllInPower_per_gpu"] == pytest.approx(489.215087)
 
 
 def test_cli_help_lists_models_and_systems(capsys):
