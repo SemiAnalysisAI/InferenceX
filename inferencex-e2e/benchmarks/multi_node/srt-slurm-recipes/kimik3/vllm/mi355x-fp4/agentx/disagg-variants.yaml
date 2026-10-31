@@ -65,14 +65,14 @@ base:
         enable-prefix-caching: true
         prefix-match-unit: 128
         kv-cache-dtype: fp8
-        mamba-ssm-cache-dtype: float32
+        mamba-ssm-cache-dtype: bfloat16
         block-size: 128
         attention-backend: ROCM_AITER_MLA
         attention-config: '{"mla_prefill_backend":"ROCM_AITER_FA","use_prefill_query_quantization":true}'
         # The native srt driver supplies the measured AL for the selected DSpark
         # draft length in throughput runs and keeps real block rejection for eval.
         speculative-config: '{"model":"/models/Inferact-Kimi-K3-DSpark","method":"dspark","num_speculative_tokens":4,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_connector_extra_config":{"connectors":[{"kv_connector":"MoRIIOConnector","kv_role":"kv_producer","kv_load_failure_policy":"fail","kv_connector_extra_config":{"backend":"rdma"}},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1799000000000,"lazy_offload":false}}]}}'
+        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_connector_extra_config":{"connectors":[{"kv_connector":"MoRIIOConnector","kv_role":"kv_producer","kv_load_failure_policy":"fail","kv_connector_extra_config":{"backend":"rdma"}},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":2399000000000,"lazy_offload":false}}]}}'
       env: &common_env
         NCCL_IB_HCA: rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7
         NCCL_SOCKET_IFNAME: eno0
@@ -84,6 +84,7 @@ base:
         VLLM_ROCM_AITER_MLA_ASM_PADDING: asm
         VLLM_ROCM_AITER_MLA_DCP_VERIFY: asm
         VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: INT4
+        VLLM_ROCM_QUICK_REDUCE_MIN_SIZE_BYTES_MB: '16'
         VLLM_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB: '256'
         SAFETENSORS_FAST_GPU: '1'
         VLLM_SSM_CONV_STATE_LAYOUT: DS
@@ -118,22 +119,29 @@ base:
     placement:
       node: head
 
-override_1p3d_c12:
+override_1p1d_c8:
   roles:
     prefill:
       args:
-        max-num-seqs: 24
+        decode-context-parallel-size: 8
+        mamba-ssm-cache-dtype: float32
+        max-num-seqs: 1
         max-num-batched-tokens: 8192
         compilation-config: '{"mode":3,"cudagraph_mode":"NONE","max_cudagraph_capture_size":0,"custom_ops":["+fused_rms_norm_gated","+quant_fp8","+grouped_topk","+sparse_attn_indexer","none"]}'
-      env:
-        HSA_NO_SCRATCH_RECLAIM: '0'
+        speculative-config: &spec_k7 '{"model":"/models/Inferact-Kimi-K3-DSpark","method":"dspark","num_speculative_tokens":7,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        kv-transfer-config: '{"kv_connector":"MoRIIOConnector","kv_role":"kv_producer","kv_load_failure_policy":"fail","kv_connector_extra_config":{"backend":"rdma"}}'
     decode:
-      nodes: 3
-      workers: 3
       args:
-        max-num-seqs: 8
+        decode-context-parallel-size: 8
+        mamba-ssm-cache-dtype: float32
+        max-num-seqs: 1
         max-num-batched-tokens: 512
-        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_DECODE_ONLY","max_cudagraph_capture_size":40,"cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40],"custom_ops":["+fused_rms_norm_gated","+quant_fp8","+grouped_topk","+sparse_attn_indexer","none"]}'
+        additional-config: '{"decode_backend":"latency_specialized"}'
+        speculative-config: *spec_k7
+        # K7 verifies eight tokens for the single active request.
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_DECODE_ONLY","max_cudagraph_capture_size":8,"cudagraph_capture_sizes":[1,8],"custom_ops":["+fused_rms_norm_gated","+quant_fp8","+grouped_topk","+sparse_attn_indexer","none"]}'
+      env:
+        VLLM_USE_V2_MODEL_RUNNER: '1'
 
 override_1p2d_c24: &tp8_c24
   roles: &tp8_c24_roles
@@ -167,8 +175,8 @@ override_1p3d_c24:
 
 override_1p1d_c48: &tp8_c48
   roles: &tp8_c48_roles
-    prefill: &tp8_c48_prefill
-      args: &tp8_c48_prefill_args
+    prefill:
+      args:
         decode-context-parallel-size: 8
         max-num-seqs: 96
         max-num-batched-tokens: 8192
@@ -182,22 +190,6 @@ override_1p1d_c48: &tp8_c48
         max-num-seqs: 96
         max-num-batched-tokens: 512
         compilation-config: '{"mode":3,"cudagraph_mode":"FULL_DECODE_ONLY","max_cudagraph_capture_size":240,"cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,130,140,150,160,170,180,190,200,210,220,230,240],"custom_ops":["+fused_rms_norm_gated","+quant_fp8","+grouped_topk","+sparse_attn_indexer","none"]}'
-
-override_1p1d_c56:
-  <<: *tp8_c48
-  roles:
-    <<: *tp8_c48_roles
-    prefill:
-      <<: *tp8_c48_prefill
-      args:
-        <<: *tp8_c48_prefill_args
-        max-num-seqs: 112
-    decode:
-      <<: *tp8_c48_decode
-      args:
-        <<: *tp8_c48_decode_args
-        max-num-seqs: 112
-        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_DECODE_ONLY","max_cudagraph_capture_size":280,"cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,130,140,150,160,170,180,190,200,210,220,230,240,250,260,270,280],"custom_ops":["+fused_rms_norm_gated","+quant_fp8","+grouped_topk","+sparse_attn_indexer","none"]}'
 
 override_1p2d_c48:
   <<: *tp8_c48
