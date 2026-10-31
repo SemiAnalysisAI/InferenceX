@@ -176,7 +176,8 @@ its EFA commits. Upstream treats EFA as unsupported
 ([deepseek-ai/DeepEP#369](https://github.com/deepseek-ai/DeepEP/issues/369)), and its scale-out
 kernels assume writes land in order. The fork's default `unordered` kernels batch each put with an
 in-band header and count completions, which the aws-ofi-nccl proxy's weak signals support; it also
-caps the scale-out GIN contexts at 17. These rows carry the `-aws-efa-fork` series suffix and record
+caps the scale-out GIN contexts at 17. It builds against NCCL 2.32.3, whose headers declare the GIN
+signal requirements the fork sets. These rows carry the `-aws-efa-fork` series suffix and record
 `deepep_source` and `hybrid_kernel`, so they never pool with upstream rows. The fork is not what vLLM
 ships, so on EFA `normal` keeps vLLM's call configuration on AWS's kernels.
 

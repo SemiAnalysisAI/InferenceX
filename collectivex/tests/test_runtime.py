@@ -289,10 +289,12 @@ class DeepepSourceSelectionTests(unittest.TestCase):
             with self.subTest(fabric=fabric):
                 stdout = run_common(
                     f"export COLLX_RDMA_FABRIC='{fabric}'; collx_select_deepep_v2_source;"
-                    ' echo "$COLLX_DEEPEP_V2_REPO $COLLX_DEEPEP_V2_COMMIT $COLLX_DEEPEP_V2_EFA_COMMIT"',
+                    ' echo "$COLLX_DEEPEP_V2_REPO $COLLX_DEEPEP_V2_COMMIT $COLLX_DEEPEP_V2_EFA_COMMIT'
+                    ' $COLLX_DEEPEP_V2_NCCL_SPEC"',
                     check=True,
                 ).stdout.split()
                 self.assertEqual(stdout[0], f"https://github.com/{repo}")
+                self.assertEqual(stdout[3].endswith("2.32.3"), fabric == "efa")
                 # The fork is pinned separately, so the venv cache never mixes the two builds.
                 self.assertEqual(stdout[1] == stdout[2], fabric == "efa")
 

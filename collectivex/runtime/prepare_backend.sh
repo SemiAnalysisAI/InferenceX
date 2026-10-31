@@ -284,9 +284,9 @@ deepep_install() {
   "${pip[@]}" --index-url https://download.pytorch.org/whl/cu130 \
     --extra-index-url https://pypi.org/simple "$COLLX_DEEPEP_V2_TORCH_SPEC" >&2 2>&1 \
     || { collx_log "ERROR: $COLLX_DEEPEP_V2_TORCH_SPEC (cu130) installation failed"; return 1; }
-  # Torch pins NCCL 2.28.9; ElasticBuffer requires 2.30.4.
-  "${pip[@]}" --force-reinstall --no-deps "nvidia-nccl-cu13==2.30.4" >&2 2>&1 \
-    || { collx_log "ERROR: NCCL 2.30.4 installation failed"; return 1; }
+  # Torch pins NCCL 2.28.9; see COLLX_DEEPEP_V2_NCCL_SPEC for what each source needs.
+  "${pip[@]}" --force-reinstall --no-deps "$COLLX_DEEPEP_V2_NCCL_SPEC" >&2 2>&1 \
+    || { collx_log "ERROR: $COLLX_DEEPEP_V2_NCCL_SPEC installation failed"; return 1; }
   local toolchain cuda_home cccl
   toolchain="$(cuda_toolchain_paths)" || return 1
   IFS=$'\t' read -r cuda_home cccl <<< "$toolchain"
