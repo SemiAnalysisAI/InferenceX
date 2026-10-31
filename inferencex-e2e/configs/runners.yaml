@@ -536,7 +536,13 @@ clusters:
       partition: batch_1
       account: benchmark
       exclusive: true
-      exclude: [dsxe-sa-b300-prd0-gpu-16]
+      # 06, 10, 14, 15: multi-node Mooncake over EFA freezes or fails memory registration; exclude until rebooted.
+      # 16: a foreign 1.63 TB tmpfs allocation holds host memory.
+      # 17: GPU 0 runs at about 62% utilization and loads Kimi-K3 weights about 15x slower than the other nodes.
+      # 13: Mooncake cannot register its per-rank segment over EFA (fi_mr_reg: Cannot allocate memory).
+      exclude: [dsxe-sa-b300-prd0-gpu-06, dsxe-sa-b300-prd0-gpu-10, dsxe-sa-b300-prd0-gpu-13,
+                dsxe-sa-b300-prd0-gpu-14, dsxe-sa-b300-prd0-gpu-15, dsxe-sa-b300-prd0-gpu-16,
+                dsxe-sa-b300-prd0-gpu-17]
       gres: "gpu:{gpus}"
       cpus-per-gpu: 24
       salloc-args: [--mem=0]
@@ -563,6 +569,8 @@ clusters:
                               mlx5_20:1, mlx5_21:1, mlx5_22:1, mlx5_23:1, mlx5_4:1, mlx5_5:1,
                               mlx5_8:1, mlx5_9:1, mlx5_2:1, mlx5_3:1]
         job-tag: b300
+        agentic-volume-mounts:
+          hf-hub-cache: /hf_hub_cache
         single-node-models: staged
         container-aliases: [dynamo-trtllm, dynamo-sglang, dynamo-vllm]
         nginx-aliases: [nginx-sqsh]
