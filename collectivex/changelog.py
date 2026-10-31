@@ -28,7 +28,7 @@ REGISTRY = ROOT / "configs" / "platform_config.json"
 REPO_PATH = "collectivex/perf-changelog.yaml"
 
 PR_LINK = re.compile(r"https://github\.com/SemiAnalysisAI/InferenceX/pull/([1-9][0-9]*)")
-REQUIRED = ("date", "pr-link", "pools", "description", "description-zh")
+REQUIRED = ("date", "pr-link", "pools", "description")
 # Optional selectors, each narrowing the pools to cases whose field is in the list.
 SELECTORS = {"suites": "suite", "backends": "backend", "modes": "mode", "phases": "phase",
              "ep": "ep", "precisions": "precision"}
@@ -76,11 +76,10 @@ def parse(raw: bytes, label: str = REPO_PATH) -> list[dict]:
                 if not isinstance(values, list) or not values or not all(
                         isinstance(value, kind) and not isinstance(value, bool) for value in values):
                     raise ChangelogError(f"{where}: {key} must be a non-empty list of {kind.__name__}")
-        for key in ("description", "description-zh"):
-            lines = entry[key]
-            if not isinstance(lines, list) or not lines or not all(
-                    isinstance(line, str) and line.strip() for line in lines):
-                raise ChangelogError(f"{where}: {key} must be a non-empty list of lines")
+        lines = entry["description"]
+        if not isinstance(lines, list) or not lines or not all(
+                isinstance(line, str) and line.strip() for line in lines):
+            raise ChangelogError(f"{where}: description must be a non-empty list of lines")
     return entries
 
 

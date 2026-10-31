@@ -18,8 +18,6 @@ ENTRY = b"""- date: 2026-11-01
   backends: [deepep-v2]
   description:
     - Build AWS's EFA fork.
-  description-zh:
-    - \xe6\x94\xb9\xe7\x94\xa8 AWS fork\xe3\x80\x82
 """
 
 
@@ -39,11 +37,11 @@ class Schema(unittest.TestCase):
         (entry,) = changelog.parse(ENTRY)
         self.assertEqual(changelog.pr_number(entry), 5000)
 
-    def test_rejects_unknown_keys_bad_links_and_missing_translations(self):
+    def test_rejects_unknown_keys_bad_links_and_missing_descriptions(self):
         for bad in (
             ENTRY.replace(b"backends", b"backend"),
             ENTRY.replace(b"SemiAnalysisAI/InferenceX/pull/5000", b"other/repo/pull/5000"),
-            ENTRY.split(b"  description-zh")[0],
+            ENTRY.split(b"  description")[0],
             ENTRY.replace(b"2026-11-01", b"Nov 1"),
             ENTRY.replace(b"pools: [b300]", b"pools: []"),
         ):
