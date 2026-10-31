@@ -156,7 +156,10 @@ base:
         enable-dp-lm-head: true
         moe-a2a-backend: megamoe
         disaggregation-transfer-backend: mooncake
-        router-mode: round-robin
+        # The frontend picks the decode DP rank; least-loaded sends each request to
+        # the rank with the fewest in flight, where round-robin left the busiest rank
+        # at 1.45x the mean and every DP rank waits for it each step.
+        router-mode: least-loaded
         load-balance-method: total_tokens
         # 48 per DP rank.
         max-running-requests: 384
