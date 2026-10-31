@@ -1,0 +1,96 @@
+- date: 2026-10-27
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4371
+  pools: [h100-dgxc, h200-dgxc, gb200, gb300]
+  backends: [flashinfer-ep]
+  description:
+    - Run flashinfer-ep on FlashInfer 0.7.1.
+- date: 2026-10-27
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4372
+  pools: [h100-dgxc, h200-dgxc, b200-nscale, b300, gb200, gb300]
+  backends: [nccl-ep]
+  description:
+    - Pin nccl-ep to nccl-extensions 0.2.0.dev20261013.
+- date: 2026-10-28
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4581
+  pools: [mi300x, mi325x]
+  description:
+    - Run the MI300X and MI325X pools on the vLLM ROCm image.
+- date: 2026-10-28
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4594
+  pools: [h100-dgxc, h200-dgxc, b200-nscale, b300, gb200, gb300]
+  backends: [nccl-ep]
+  description:
+    - Restore nccl-ep zero-copy under CUDA graphs and put FP8 back in the default matrix.
+- date: 2026-10-28
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4604
+  pools: [h100-dgxc, h200-dgxc]
+  description:
+    - Run H100 and H200 in the vLLM v0.32.0 image.
+- date: 2026-10-28
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4604
+  pools: [h100-dgxc, h200-dgxc, b200-nscale, b300, gb200, gb300, mi300x, mi325x, mi355x]
+  suites: [swap-blocks]
+  description:
+    - Run swap-blocks in the official vLLM v0.32.0 images.
+- date: 2026-10-28
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4615
+  pools: [h200-dgxc]
+  backends: [deepep-v2]
+  ep: [16]
+  description:
+    - Give h200-dgxc DeepEP V2 its RDMA rate from the registry.
+- date: 2026-10-29
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4621
+  pools: [gb200, gb300]
+  description:
+    - Run GB200 and GB300 on the vLLM v0.32.0 image.
+- date: 2026-10-29
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4628
+  pools: [b200-nscale]
+  description:
+    - Run B200 on the vLLM v0.32.0 image.
+- date: 2026-10-29
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4220
+  pools: [h100-dgxc, h200-dgxc, b200-nscale, b300, gb200, gb300]
+  backends: [nccl-ep]
+  modes: [low-latency]
+  description:
+    - Benchmark NCCL EP low-latency prefill and follow TensorRT-LLM#20631 zero-copy.
+- date: 2026-10-29
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4639
+  pools: [b200-nscale]
+  backends: [deepep-v2]
+  ep: [16]
+  description:
+    - Give b200-nscale DeepEP V2 its RDMA rate from the registry.
+- date: 2026-10-30
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4641
+  pools: [b300]
+  description:
+    - Run B300 on the vLLM v0.32.0 image.
+- date: 2026-10-30
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4651
+  pools: [h200-dgxc]
+  backends: [uccl-ep]
+  ep: [16]
+  description:
+    - Run H200 UCCL-EP EP16 on a deeper RDMA receive ring (labelled -rdmarecv1040).
+- date: 2026-10-30
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4668
+  pools: [mi355x]
+  description:
+    - Run MI355X on the vLLM v0.32.0 ROCm image.
+- date: 2026-10-30
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4674
+  pools: [h100-dgxc, h200-dgxc, b200-nscale, mi300x, mi325x]
+  backends: [uccl-ep]
+  modes: [low-latency]
+  precisions: [fp8]
+  description:
+    - Model uccl-ep's in-kernel FP8 cast exactly in low-latency mode (MI300X FP8 now passes the oracle).
+- date: 2026-10-31
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2510
+  pools: [h200-dgxc, b200-nscale, b300, gb200, gb300]
+  suites: [kv-transfer]
+  description:
+    - Add the kv-transfer suite on vLLM 0.32.0's DeepSeek-V4 cache layout.
