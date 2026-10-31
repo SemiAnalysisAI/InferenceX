@@ -15,9 +15,10 @@ COLLX_DEEPEP_V2_REPO="https://github.com/deepseek-ai/DeepEP"
 # backend cache is keyed on this value.
 COLLX_DEEPEP_V2_COMMIT="01dc3aaac82068020353dce2c302e38153c0bfaa"
 
-# Pools whose registry network block sets deepep_efa_fork (b300) build AWS's EFA fork of the same V2: amazon-contributing/DeepEP main is the pin
-# above plus its EFA commits, chiefly unordered hybrid kernels that need only the weak GIN signals
-# the aws-ofi-nccl proxy provides. Upstream treats EFA as unsupported (deepseek-ai/DeepEP#369).
+# Pools whose registry network block sets deepep_efa_fork (b300) build AWS's EFA fork of the same
+# V2: amazon-contributing/DeepEP main is the pin above plus its EFA commits, chiefly unordered
+# hybrid kernels that need only the weak GIN signals the aws-ofi-nccl proxy provides. Upstream
+# treats EFA as unsupported (deepseek-ai/DeepEP#369).
 COLLX_DEEPEP_V2_EFA_REPO="https://github.com/amazon-contributing/DeepEP"
 COLLX_DEEPEP_V2_EFA_COMMIT="a227152ac29513b1c702860745a1d1e0111ae0dc"
 # ElasticBuffer needs NCCL 2.30.4 (torch pins 2.28.9). The fork sets GIN signal requirements
@@ -130,7 +131,10 @@ collx_set_placement() {
   export COLLX_NGPUS="$NGPUS" COLLX_NODES="$NODES"
   export COLLX_GPUS_PER_NODE="$GPN" COLLX_SCALE_UP_DOMAIN="$SCALE_UP_DOMAIN"
   COLLX_TRANSPORT="$4"
-  [ "$4" = mnnvl ] || [ "$NODES" -le 1 ] || COLLX_TRANSPORT="$4-rdma"
+  # A shard that names the rdma fabric on an MNNVL rack (the kv-transfer rdma legs) leaves the
+  # NVL domain, so it takes the same network profile and validation as any other scale-out.
+  { [ "$4" = mnnvl ] && [ "${COLLX_FABRIC:-}" != rdma ]; } || [ "$NODES" -le 1 ] \
+    || COLLX_TRANSPORT="$4-rdma"
   export COLLX_TRANSPORT
 }
 
@@ -267,13 +271,17 @@ COLLX_EFA_HOST_ROOT=/opt/collectivex/host-efa
 # lib<driver>-rdmav<its private ABI>.so, so the host's whole multiarch libdir is bound privately as
 # well: its libibverbs/ providers are symlinks into their parent and resolve there, without the
 # launcher naming the host's ABI. The EFA profile puts all of it first on the loader path.
-collx_efa_host_mounts() {
-  local libdir name mounts
+collx_efa_host_libdir() {
   case "$1" in
-    linux/amd64) libdir=/usr/lib/x86_64-linux-gnu ;;
-    linux/arm64) libdir=/usr/lib/aarch64-linux-gnu ;;
+    linux/amd64) echo /usr/lib/x86_64-linux-gnu ;;
+    linux/arm64) echo /usr/lib/aarch64-linux-gnu ;;
     *) return 1 ;;
   esac
+}
+
+collx_efa_host_mounts() {
+  local libdir name mounts
+  libdir="$(collx_efa_host_libdir "$1")" || return 1
   mounts="/opt/amazon/efa:/opt/amazon/efa:ro,/opt/amazon/ofi-nccl:/opt/amazon/ofi-nccl:ro"
   mounts+=",$libdir:$COLLX_EFA_HOST_ROOT/libdir:ro"
   for name in libibverbs libefa libmlx5; do
@@ -296,6 +304,10 @@ collx_add_efa_host_mounts() {
     mounts+=",/usr/include/infiniband:$COLLX_EFA_HOST_ROOT/include/infiniband:ro"
     mounts+=",/usr/include/rdma:$COLLX_EFA_HOST_ROOT/include/rdma:ro"
   fi
+  # NIXL's LIBFABRIC plugin links libhwloc.so.15, which the vLLM image does not ship; the host's
+  # (the same Ubuntu and glibc as the image) is bound alone into the profile's library dir.
+  [ "${COLLX_BENCH:-}" != nixl ] \
+    || mounts+=",$(collx_efa_host_libdir "${COLLX_IMAGE_PLATFORM:-}")/libhwloc.so.15:$COLLX_EFA_HOST_ROOT/lib/libhwloc.so.15:ro"
   CONTAINER_MOUNTS="$CONTAINER_MOUNTS,$mounts"
 }
 
@@ -557,6 +569,9 @@ collx_allocation_nodes_csv() {
 collx_resolve_slurm_rendezvous() {
   local job_id="$1" master_addr master_port socket_ifname="${COLLX_SOCKET_IFNAME:-}"
   [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || collx_die "invalid rendezvous allocation"
+  # Inside an MNNVL domain the socket interface is never validated (the GB registry names it for
+  # the kv rdma legs only), so rank zero keeps resolving by hostname there.
+  [ "${COLLX_TRANSPORT:-}" != mnnvl ] || socket_ifname=""
   # Relative node zero hosts global rank 0. Prefer the address on the validated socket interface:
   # a short hostname may resolve onto a management network that ranks cannot use.
   if [[ "$socket_ifname" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}$ ]]; then
@@ -613,7 +628,7 @@ export RANK="$SLURM_PROCID" WORLD_SIZE="$SLURM_NTASKS"
 export LOCAL_RANK="$SLURM_LOCALID" LOCAL_WORLD_SIZE="$COLLX_GPUS_PER_NODE"
 # config.py case-args leads every argv with the suite's entrypoint.
 [ "${1:-}" = --entrypoint ] || exit 67
-case "${2:-}" in run_ep|run_swap_blocks) ;; *) exit 67 ;; esac
+case "${2:-}" in run_ep|run_swap_blocks|run_kv) ;; *) exit 67 ;; esac
 entry="$2"; shift 2
 exec python3 "bench/$entry.py" "$@"
 BASH

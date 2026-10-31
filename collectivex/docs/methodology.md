@@ -75,6 +75,10 @@ relative). Graphed replays must rewrite poisoned outputs. Any failure makes the 
 - Limits: no compute between ops, uniform routing, no L2 flush, unlocked clocks (`slow_gpu` flags
   outliers), interior chain pairs unvalidated.
 
+## KV-cache transfer
+
+The `kv-transfer` suite's rules and evidence are in [kv-transfer.md](kv-transfer.md).
+
 # Methodology
 
 CollectiveX runs expert-parallel (EP) communication benchmarks by hand on real accelerator
