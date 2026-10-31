@@ -451,8 +451,8 @@ deepep_v25_install() {
 deepep_v25_prepare() {
   local arch root
   collx_select_deepep_v25_source
-  # Recorded by the adapter as this run's DeepEP source (the same variables the V2 build sets).
-  export COLLX_DEEPEP_V2_REPO="$COLLX_DEEPEP_V25_REPO" COLLX_DEEPEP_V2_COMMIT="$COLLX_DEEPEP_V25_COMMIT"
+  # Recorded by the adapter, as deepep_prepare does.
+  export COLLX_DEEPEP_SOURCE="$COLLX_DEEPEP_V25_REPO@$COLLX_DEEPEP_V25_COMMIT"
   arch="$(cuda_arch)" || return 1
   root="$(deepep_v25_cache_root "$arch")" || return 1
   command -v flock >/dev/null || { collx_log "ERROR: flock is required for DeepEP V2.5"; return 1; }
