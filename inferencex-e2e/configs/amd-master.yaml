@@ -1132,7 +1132,7 @@ glm5.2-fp8-mi355x-sglang-agentic-mtp:
 # depth per point (K3 for C1/C2 and C48, K5 for C4/C8, K4 for C10-C40). The TP8
 # arm stays GPU-resident with no KV offload.
 glm5.2-fp4-mi355x-atom-agentic-mtp:
-  image: rocm/atom-dev:nightly_202610181506
+  image: rocm/atom-dev:nightly_202610301458@sha256:338334d8f56a7604dd4f4e1d63b214e5a11d59601d418f6df42b8abdfb67eb8d
   model: amd/GLM-5.2-MXFP4
   model-prefix: glm5.2
   runner: cluster:mi355x-amds
@@ -1157,7 +1157,7 @@ glm5.2-fp4-mi355x-atom-agentic-mtp:
 # override_tp4_c2 sets ATOM_MONO_ENABLE=1. The changelog entry is evals-only;
 # throughput stays on glm5.2-fp4-mi355x-atom-agentic-mtp.
 glm5.2-fp4-mi355x-atom-agentic-mtp-mono:
-  image: rocm/atom-dev:nightly_202610181506
+  image: rocm/atom-dev:nightly_202610301458@sha256:338334d8f56a7604dd4f4e1d63b214e5a11d59601d418f6df42b8abdfb67eb8d
   model: amd/GLM-5.2-MXFP4
   model-prefix: glm5.2
   runner: cluster:mi355x-amds
