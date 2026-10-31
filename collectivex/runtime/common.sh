@@ -883,8 +883,8 @@ collx_ensure_squash() {
     || { collx_log_tail "$log"; return 1; }
   { exec {lock_fd}>"$locks/${key}.lock"; } 2>> "$log" \
     || { collx_log_tail "$log"; return 1; }
-  # A concurrent leg holds the content-keyed lock for its full import (~18 minutes for the 32 GB
-  # sglang squash on b300), so the wait must outlast an import, and a timeout must log: the
+  # A concurrent leg holds the content-keyed lock for its full import (~18 minutes for a ~30 GB
+  # squash on b300), so the wait must outlast an import, and a timeout must log: the
   # empty import log would otherwise make this a silent launcher death.
   flock -w 2700 "$lock_fd" 2>> "$log" \
     || { collx_log "ERROR: timed out waiting for the container import lock"
@@ -971,7 +971,6 @@ collx_ensure_squash_on_job() {
       --export="$(collx_host_exports)" \
       bash -s -- "$sq" "$lock" "$image" "$COLLX_IMAGE_PLATFORM" "$refresh_epoch" \
       "${COLLX_IMAGE_DIGEST:-}" "$(printf '%s' "$image" | sed 's#[/:@#]#_#g')" \
-      "${COLLX_IMPORT_TMPDIR:-}" \
       > "$log" 2>&1 <<< "$(collx_squash_import_script)" || rc=$?
     [ "$rc" = 0 ] && { printf '%s' "$sq"; return 0; }
     # 13 is the remote block's architecture guard; a platform mismatch never improves on retry.
@@ -1010,13 +1009,7 @@ case "$platform:$machine" in
   linux/amd64:x86_64|linux/amd64:amd64|linux/arm64:aarch64|linux/arm64:arm64) ;;
   *) exit 13 ;;
 esac
-# The caller may select the scratch filesystem used for image-layer conversion.
-if [ -n "$8" ]; then
-  [[ "$8" = /* ]] && [ -d "$8" ] || exit 14
-  compute_home="$(mktemp -d "$8/inferencex-collectivex-home.XXXXXX")"
-else
-  compute_home="$(mktemp -d /tmp/inferencex-collectivex-home.XXXXXX)"
-fi
+compute_home="$(mktemp -d /tmp/inferencex-collectivex-home.XXXXXX)"
 trap 'rm -rf -- "$compute_home"' EXIT
 export HOME="$compute_home" XDG_CACHE_HOME="$compute_home/.cache"
 export ENROOT_TEMP_PATH="$compute_home/enroot-tmp"

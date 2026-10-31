@@ -18,16 +18,13 @@ os.environ["MORI_SHMEM_HEAP_SIZE"] = "6G"
 import torch
 import torch.distributed as dist
 
-from ep_backend import EPBackend
+from ep_backend import FP8_BLOCK, EPBackend, blockwise_fp8_codec
 
 try:
     import mori  # type: ignore
 except Exception as exc:  # pragma: no cover - requires the benchmark image
     print(f"ERROR: mori import failed: {exc!r}", file=sys.stderr)
     raise
-
-# vLLM (block-quantized models) and SGLang quantize FP8 dispatch per 1x128 with FP32 scales.
-_FP8_BLOCK = 128
 
 
 class _Launch(NamedTuple):
@@ -106,24 +103,6 @@ def _mori_version() -> str:
     return version
 
 
-def _blockwise_codec(fp8_dtype, fp8_max):
-    """(quantize, dequantize) for per-1x128 e4m3 with FP32 scales [m, n // 128]."""
-
-    def quantize(x):
-        m, n = x.shape
-        blocks = x.view(m, -1, _FP8_BLOCK)
-        amax = blocks.abs().float().amax(dim=2).view(m, -1).clamp(1e-4)
-        values = (blocks * (fp8_max / amax.unsqueeze(2))).to(fp8_dtype).view(m, n)
-        return values, (amax / fp8_max).view(m, -1)
-
-    def dequantize(values, scales):
-        m, n = values.shape
-        blocks = values.view(m, -1, _FP8_BLOCK).float()
-        return (blocks * scales.view(m, -1, 1)).view(m, n).to(torch.bfloat16)
-
-    return quantize, dequantize
-
-
 class MoRIBackend(EPBackend):
     name = "mori"
     maturity = "production"  # vLLM --all2all-backend mori_*; SGLang --moe-a2a-backend mori
@@ -171,14 +150,14 @@ class MoRIBackend(EPBackend):
         self._inter_node = self.launch.kernel in ("InterNodeV1", "InterNodeV1LL")
         self._fp8_dtype = None
         if self._fp8:
-            if args.hidden % _FP8_BLOCK:
-                raise ValueError(f"MoRI FP8 dispatch needs hidden divisible by {_FP8_BLOCK}, got {args.hidden}")
+            if args.hidden % FP8_BLOCK:
+                raise ValueError(f"MoRI FP8 dispatch needs hidden divisible by {FP8_BLOCK}, got {args.hidden}")
             # vLLM's current_platform.fp8_dtype(): AMD's e4m3fnuz on gfx94x, OCP e4m3fn on gfx950.
             self._fp8_dtype, fp8_max, label = (
                 (torch.float8_e4m3fn, 448.0, "fp8-e4m3fn") if arch == "gfx950"
                 else (torch.float8_e4m3fnuz, 240.0, "fp8-e4m3fnuz")
             )
-            self._enable_fp8(label, *_blockwise_codec(self._fp8_dtype, fp8_max))
+            self._enable_fp8(label, *blockwise_fp8_codec(self._fp8_dtype, fp8_max))
         # External-input kernels consume the dispatch output directly, so stage has no copy of its
         # own; under FP8 it dequantizes the received payload with its scales.
         self.stage_device_work = self._fp8
@@ -217,7 +196,7 @@ class MoRIBackend(EPBackend):
         # MoRI preallocates one communicator buffer for the case's entire ladder, at least the
         # low-latency cap (see `buffer_cap`). Normal mode still takes the larger ladder maximum.
         self._cap = max(self.LL_LADDER_CAP, spec.max_tokens_per_rank)
-        scale_dim = args.hidden // _FP8_BLOCK if self._fp8 else 0
+        scale_dim = args.hidden // FP8_BLOCK if self._fp8 else 0
         scale_type_size = torch.float32.itemsize if self._fp8 else 0
         # The engines' call: the launch tuple lives in the config and dispatch/combine pass no
         # per-call override. The external input buffer (MoRI's default) feeds combine from the

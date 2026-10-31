@@ -15,6 +15,7 @@ sys.path[:0] = [str(ROOT), str(ROOT / "bench"), str(ROOT / "tests")]
 
 import ep_backend  # noqa: E402
 from ep_backend import EPBackend  # noqa: E402
+import _fakes  # noqa: E402
 from _fakes import _ChainBackend  # noqa: E402
 
 
@@ -408,21 +409,13 @@ def _stub_modules():
             self.window = window
             self.window_offset = window_offset
 
-    torch = types.ModuleType("torch")
-    torch.bfloat16 = "bfloat16"
-    torch.float8_e4m3fn = "float8_e4m3fn"
-    torch.int32 = "int32"
-    torch.float32 = "float32"
-    torch.int64 = "int64"
-    torch.empty = lambda *a, **k: StubTorchTensor(a[0] if a else ())
-    torch.empty_like = lambda x, *a, **k: StubTorchTensor(getattr(x, "shape", ()))
-    torch.zeros = lambda *a, **k: types.SimpleNamespace(item=lambda: 7)
-    torch.cuda = types.SimpleNamespace(synchronize=lambda: None)
-    # Import-time decorators (ep_legacy_ll's static dequant) pass through untouched.
-    torch.compile = lambda *a, **k: (lambda fn: fn)
-    dist = types.ModuleType("torch.distributed")
-    dist.group = types.SimpleNamespace(WORLD="world")
-    torch.distributed = dist
+    modules = _fakes.stub_torch(
+        empty=lambda *a, **k: StubTorchTensor(a[0] if a else ()),
+        empty_like=lambda x, *a, **k: StubTorchTensor(getattr(x, "shape", ())),
+        zeros=lambda *a, **k: types.SimpleNamespace(item=lambda: 7),
+        cuda=types.SimpleNamespace(synchronize=lambda: None),
+    )
+    torch = modules["torch"]
 
     ep = types.ModuleType("nccl.ep")
     for name in (
@@ -440,19 +433,12 @@ def _stub_modules():
     core.WindowFlag = types.SimpleNamespace(COLL_SYMMETRIC="symmetric")
     pkg = types.ModuleType("nccl")
     pkg.ep, pkg.core = ep, core
-    return {
-        "torch": torch, "torch.distributed": dist,
-        "nccl": pkg, "nccl.ep": ep, "nccl.core": core,
-    }
+    return {**modules, "nccl": pkg, "nccl.ep": ep, "nccl.core": core}
 
 
 def _import_stubbed(name, **vendor):
-    """A fresh import of adapter `name` against the stubs (plus fake `vendor` modules), which are
-    then withdrawn: a fake torch left in sys.modules makes genuinely torch-dependent modules
-    (test_runtime, test_measurement) error instead of skipping."""
-    with mock.patch.dict(sys.modules, {**_stub_modules(), **vendor}):
-        sys.modules.pop(name, None)
-        return importlib.import_module(name)
+    """A fresh import of adapter `name` against the stubs plus fake `vendor` modules."""
+    return _fakes.fresh_import(name, {**_stub_modules(), **vendor})
 
 
 ep_nccl = _import_stubbed("ep_nccl")
