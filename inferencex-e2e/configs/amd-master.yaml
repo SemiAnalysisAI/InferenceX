@@ -740,20 +740,21 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
 # TP8 only -- the 1.56 TB MXFP4 checkpoint is ~195 GB/GPU and TP4 cannot load,
 # which is also why there is no DP-attention arm.
 # Three serving bands, tracking the ATOM recipe:
-#   interactive (1, 4)        the latency floor, GPU-resident, dcp 1.
+#   interactive (1, 4)        the latency floor, GPU-resident, dcp 1; 1 runs
+#                             mono decode.
 #   mid         (14, 16)      decode is KV-bandwidth-bound over 100k+ token
 #                             contexts, so dcp-size 8 shards the KV read across
 #                             all 8 GPUs and the LMCache DRAM tier backs the
 #                             paged KV.
-#   throughput  (48, 56, 72)  same shape, with the draft model.
+#   throughput  (48, 56, 72)  same shape, with on-demand state checkpoints
+#                             and a 128 GB state cap inside the LMCache pool.
 # Two utilization blocks because the per-rank LMCache pool differs, and the
 # launcher divides the aggregate budget by TP:
-#   0.343 -> 1028 GB aggregate -> 128 GB/rank (conc 14 through 48).
-#   0.513 -> 1538 GB aggregate -> 192 GB/rank (conc 56 and 72), where the
-#            wider in-flight window needs the deeper pool to keep the paged KV
-#            resident.
+#   0.343 -> 1028 GB aggregate -> 128 GB/rank (conc 14 and 16).
+#   0.6   -> 1799 GB aggregate -> 224 GB/rank (conc 48, 56 and 72), so the
+#            paged KV keeps ~96 GB/rank once the state tier reaches its cap.
 kimik3-fp4-mi355x-atom-agentic-mtp:
-  image: rocm/atom-dev:nightly_202610131505
+  image: rocm/atom-dev:nightly_202610310756
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:mi355x-amds
@@ -766,10 +767,10 @@ kimik3-fp4-mi355x-atom-agentic-mtp:
     - dram-utilization: 0.343
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [1, 4], spec-decoding: mtp, srt-recipe: agentic.yaml }
-      - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [14, 16, 48], spec-decoding: mtp, srt-recipe: agentic.yaml }
-    - dram-utilization: 0.513
+      - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [14, 16], spec-decoding: mtp, srt-recipe: agentic.yaml }
+    - dram-utilization: 0.6
       search-space:
-      - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [56, 72], spec-decoding: mtp, srt-recipe: agentic.yaml }
+      - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [48, 56, 72], spec-decoding: mtp, srt-recipe: agentic.yaml }
 
 # Kimi-K3 MXFP4 agentic-coding on MI355X via vLLM with DSpark speculative
 # decoding. Companion to kimik3-fp4-mi355x-atom-agentic-mtp: same checkpoint and

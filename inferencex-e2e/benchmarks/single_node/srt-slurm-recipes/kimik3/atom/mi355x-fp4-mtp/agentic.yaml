@@ -6,7 +6,7 @@ base:
     gpus_per_node: 8
   frontend:
     type: atomesh
-    container_image: rocm/atom-dev@sha256:b78300a6caf6c1fec3b1f27b4f7333326c9d34911bfc7ae229d13d2ebbc43884
+    container_image: rocm/atom-dev@sha256:1c20b688bc376c335d3ac6ff33da693f3761b3b74bec31bf900c5f22699a97d6
     enable_multiple_frontends: false
   observability:
     enabled: false
@@ -56,9 +56,13 @@ base:
         AITER_SITUV2_A4W4: '1'
         AITER_QUICK_REDUCE_QUANTIZATION: INT4
         AITER_FLYDSL_STAGE2_FP8: '1'
+        AITER_FLYDSL_USE_HERD: '1'
+        AITER_FLYDSL_HERD_MIN_M: '64'
         # Anchor-only state checkpointing.
         ATOM_STATE_CHECKPOINT_DEMAND: '0'
         ATOM_GDN_SSM_DTYPE: fp16
+        # ATOM defaults mono decode on; only concurrency 1 opts in.
+        ATOM_MONO_ENABLE: '0'
         # FlyDSL FP8 prefill attention; ATOM defaults it off.
         ATOM_USE_FLYDSL_FP8_PREFILL_ATTN: '1'
   benchmark:
@@ -78,7 +82,19 @@ override_tp8_c1:
   roles:
     agg:
       args:
-        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]'
+        # max-num-seqs 1 fails the DSpark drafter's warmup, which runs two sequences.
+        max-num-seqs: 2
+        cudagraph-capture-sizes: '[1,2]'
+        # Mono loads in_proj, f_b_proj, o_proj and the two shared-expert
+        # projections as plain BF16 and refuses them quantized.
+        online_quant_config: '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","*self_attn.[qkv]_conv1d*","*block_sparse_moe.experts*","*block_sparse_moe.routed_expert_*","*vision_tower*","*mm_projector*","layers.*.self_attn.fused_qkv_a_proj","layers.*.self_attn.q_b_proj","layers.*.self_attn.kv_b_proj","layers.*.self_attn.o_proj","layers.*.mlp.gate_up_proj","layers.*.mlp.down_proj","context_proj","*self_attn.in_proj*","*self_attn.f_b_proj*","*self_attn.o_proj*","*shared_experts.gate_up_proj*","*shared_experts.down_proj*"]}'
+      env:
+        ATOM_MONO_ENABLE: '1'
+        # The mono KDA kernel reads the SSM state pool as fp32 and refuses fp16.
+        ATOM_GDN_SSM_DTYPE: fp32
+        # Holds new prefill while any request decodes, so requests mostly decode
+        # one at a time.
+        ATOM_PREFILL_DECODE_INTERVAL: '1000000'
   benchmark:
     env:
       CONC: '1'
@@ -159,7 +175,11 @@ override_tp8_dcp8_c48_lmcache:
         extra-kv-connectors: *lmcache_offload
       env:
         <<: *lmcache_env
-        LMCACHE_MAX_LOCAL_CPU_SIZE: '128'
+        # On-demand state checkpoints at shared-prefix targets. The state cap
+        # is a limit inside the shared LMCache pool, not a second pool.
+        ATOM_STATE_CHECKPOINT_DEMAND: '1'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '224'
+        OFFLOAD_STATE_CPU_SIZE: '128'
         ATOM_ENABLE_REPLAYSSM: '1'
         ATOM_PREFILL_DECODE_INTERVAL: '4'
         ATOM_PREFILL_DELAYER_MAX_QUEUE_MS: '5000'
@@ -168,7 +188,7 @@ override_tp8_dcp8_c48_lmcache:
       CONC: '48'
       SPEC_DECODING: mtp
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1028'
+      TOTAL_CPU_DRAM_GB: '1799'
 
 override_tp8_dcp8_c56_lmcache:
   roles:
@@ -181,7 +201,9 @@ override_tp8_dcp8_c56_lmcache:
         extra-kv-connectors: *lmcache_offload
       env:
         <<: *lmcache_env
-        LMCACHE_MAX_LOCAL_CPU_SIZE: '192'
+        ATOM_STATE_CHECKPOINT_DEMAND: '1'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '224'
+        OFFLOAD_STATE_CPU_SIZE: '128'
         ATOM_ENABLE_REPLAYSSM: '1'
         AITER_REUSE_IDENTICAL_COMM_GROUPS: '1'
         ATOM_PREFILL_DECODE_INTERVAL: '4'
@@ -191,7 +213,7 @@ override_tp8_dcp8_c56_lmcache:
       CONC: '56'
       SPEC_DECODING: mtp
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1538'
+      TOTAL_CPU_DRAM_GB: '1799'
 
 override_tp8_dcp8_c72_lmcache:
   roles:
@@ -204,7 +226,9 @@ override_tp8_dcp8_c72_lmcache:
         extra-kv-connectors: *lmcache_offload
       env:
         <<: *lmcache_env
-        LMCACHE_MAX_LOCAL_CPU_SIZE: '192'
+        ATOM_STATE_CHECKPOINT_DEMAND: '1'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '224'
+        OFFLOAD_STATE_CPU_SIZE: '128'
         ATOM_ENABLE_REPLAYSSM: '1'
         AITER_REUSE_IDENTICAL_COMM_GROUPS: '1'
         ATOM_PREFILL_DECODE_INTERVAL: '4'
@@ -214,4 +238,4 @@ override_tp8_dcp8_c72_lmcache:
       CONC: '72'
       SPEC_DECODING: mtp
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1538'
+      TOTAL_CPU_DRAM_GB: '1799'

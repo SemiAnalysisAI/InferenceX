@@ -11724,3 +11724,15 @@
     - "Extend the MI355X Qwen3.8-Flash-Next SGLang AgentX sweep to concurrency 1/2/4/8/12/16 on the existing pinned upstream image and default serving path."
     - "Add c1/c2/c4 recipe variants with max-running-requests and cuda-graph-max-bs-decode set to 2/4/8, preserving the existing 2x concurrency sizing and all other serving settings."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4680
+
+- config-keys:
+    - kimik3-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the image from rocm/atom-dev:nightly_202610131505 (ATOM 661ef7661) to rocm/atom-dev:nightly_202610310756 (ATOM e281d58ac), and pin the recipe frontend to that tag's digest sha256:1c20b688bc376c335d3ac6ff33da693f3761b3b74bec31bf900c5f22699a97d6. The new image adds Kimi-K3 mono decode and the one-token f_b_proj fix it depends on (ROCm/ATOM#2626), and widens mono to 16-row steps with K2 on the MLA layers (ROCm/ATOM#2659). Its aiter keeps the tuned Kimi-K3 MXFP4 inline-sort MoE rows when ATOM passes the real row count (ROCm/aiter#7020). It also keeps mono decode on after the fp32 KDA controls (ROCm/ATOM#2841) and holds tool_choice=required to the tools channel (ROCm/ATOM#2849)."
+    - "Serve concurrency 1 with ATOM mono decode (ATOM_MONO_ENABLE=1). Mono requires fp32 SSM state (ATOM_GDN_SSM_DTYPE=fp32) and BF16 in_proj, f_b_proj, o_proj and shared-expert projections, which are added to the online-quant exclude list. Every other point sets ATOM_MONO_ENABLE=0."
+    - "At concurrency 1, run one request at a time: the PrefillDelayer (ATOM_PREFILL_DECODE_INTERVAL=1000000) holds new prefill while a request decodes, with max-num-seqs 2 and CUDA-graph sizes [1, 2] (max-num-seqs 1 fails the DSpark drafter warmup)."
+    - "Set AITER_FLYDSL_USE_HERD=1 and AITER_FLYDSL_HERD_MIN_M=64 at every concurrency."
+    - "At concurrency 48, 56 and 72, enable on-demand state checkpoints (ATOM_STATE_CHECKPOINT_DEMAND=1), raise the per-rank LMCache pool to 224 GB, and cap retained state at 128 GB inside that pool (OFFLOAD_STATE_CPU_SIZE=128). dram-utilization 0.6 gives TOTAL_CPU_DRAM_GB 1799."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4307
