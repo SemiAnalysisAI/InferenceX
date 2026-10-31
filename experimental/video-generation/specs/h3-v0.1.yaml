@@ -1,0 +1,314 @@
+schema_version: 1
+model:
+  id:
+    value: MiniMaxAI/MiniMax-H3
+    source: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:492
+  revision:
+    value: 42ed227ee7df40d41602854ae760620d6eb651fe
+    source: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:493
+generation:
+  aspect_ratio:
+    value: '16:9'
+    source: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:480
+    sent:
+      sglang: true
+      vllm-omni: true
+    checked_on_clip: false
+  audio_channels:
+    value: 2
+    source: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:481
+    sent:
+      sglang: false
+      vllm-omni: false
+    checked_on_clip: true
+  audio_flow_shift:
+    value: 3.0
+    source: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:482
+    sent:
+      sglang: true
+      vllm-omni: true
+    checked_on_clip: false
+  audio_sample_rate_hz:
+    value: 32000
+    source: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:483
+    sent:
+      sglang: false
+      vllm-omni: false
+    checked_on_clip: true
+  duration_seconds:
+    value: 5
+    source: huggingface/diffusers@d8c1b13c756df0059bcdb6e477a1eafcd502098d:src/diffusers/modular_pipelines/minimax_h3/before_denoise.py:198
+    sent:
+      sglang: true
+      vllm-omni: true
+    checked_on_clip: false
+  flow_shift:
+    value: 12.0
+    source: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:485
+    sent:
+      sglang: true
+      vllm-omni: true
+    checked_on_clip: false
+  fps:
+    value: 24
+    source: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:486
+    sent:
+      sglang: false
+      vllm-omni: true
+    checked_on_clip: true
+  frame_count:
+    value: 124
+    source: huggingface/diffusers@d8c1b13c756df0059bcdb6e477a1eafcd502098d:src/diffusers/modular_pipelines/minimax_h3/before_denoise.py:198
+    sent:
+      sglang: false
+      vllm-omni: true
+    checked_on_clip: true
+  height:
+    value: 768
+    source: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:488
+    sent:
+      sglang: false
+      vllm-omni: true
+    checked_on_clip: true
+  num_inference_steps:
+    value: 49
+    source: huggingface/diffusers@d8c1b13c756df0059bcdb6e477a1eafcd502098d:src/diffusers/schedulers/scheduling_minimax_h3.py:142
+    sent:
+      sglang: true
+      vllm-omni: true
+    checked_on_clip: false
+  width:
+    value: 1344
+    source: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:490
+    sent:
+      sglang: false
+      vllm-omni: true
+    checked_on_clip: true
+prompts:
+  ceramic-wheel:
+    text: A single continuous shot of a potter shaping a wet clay bowl on a spinning wheel. The action is visible
+      and the wheel humming and wet hands brushing clay is audible. Fixed camera, no speech, music, subtitles, or
+      cuts.
+    requires_motion: true
+    requires_sound: true
+    source: authored-for-v0.1
+  paper-fold:
+    text: A single continuous shot of hands folding a blue sheet into a paper crane. The action is visible and the
+      paper creasing is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+    source: authored-for-v0.1
+  wind-chimes:
+    text: A single continuous shot of three metal wind chimes swinging on a porch. The action is visible and the
+      chimes ringing is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+    source: authored-for-v0.1
+  coffee-grinder:
+    text: A single continuous shot of a manual coffee grinder turning beside a cup. The action is visible and the
+      grinder rattling is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+    source: authored-for-v0.1
+  dog-shake:
+    text: A single continuous shot of a wet dog shaking water from its fur in a yard. The action is visible and
+      the collar jingling is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+    source: authored-for-v0.1
+  zipper-close:
+    text: A single continuous shot of a hand closing a zipper on a red canvas bag. The action is visible and the
+      zipper sliding is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+    source: authored-for-v0.1
+  rolling-ball:
+    text: A single continuous shot of a glass ball rolling across a wooden table and stopping at a book. The action
+      is visible and the ball tapping the book is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+    source: authored-for-v0.1
+  paint-brush:
+    text: A single continuous shot of a brush painting a yellow stroke across white paper. The action is visible
+      and the brush rubbing the paper is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+    source: authored-for-v0.1
+  kettle-pour:
+    text: A single continuous shot of a kettle pouring hot water into a mug. The action is visible and the water
+      splashing is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+    source: authored-for-v0.1
+  candle-light:
+    text: A single continuous shot of a match lighting a candle wick. The action is visible and the match striking
+      is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+    source: authored-for-v0.1
+  book-pages:
+    text: A single continuous shot of a hand turning three pages of a book. The action is visible and the pages
+      rustling is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+    source: authored-for-v0.1
+  basketball-bounce:
+    text: A single continuous shot of a basketball bouncing three times on an empty court. The action is visible
+      and each ball bounce is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+    source: authored-for-v0.1
+  window-rain:
+    text: A single continuous shot of raindrops sliding down a window. The action is visible and the light rain
+      pattering is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+    source: authored-for-v0.1
+  leaves-rake:
+    text: A single continuous shot of a gardener raking dry leaves into a pile. The action is visible and the leaves
+      scraping is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+    source: authored-for-v0.1
+  sewing-machine:
+    text: A single continuous shot of a sewing machine stitching blue fabric. The action is visible and the motor
+      cycling is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+    source: authored-for-v0.1
+  ping-pong:
+    text: A single continuous shot of two players exchanging three ping-pong hits. The action is visible and each
+      ball contact is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+    source: authored-for-v0.1
+  umbrella-open:
+    text: A single continuous shot of a person opening a folded umbrella on a dry patio. The action is visible and
+      the release clicking is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+    source: authored-for-v0.1
+  shoe-laces:
+    text: A single continuous shot of hands tying the laces of a running shoe. The action is visible and the laces
+      rubbing is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+    source: authored-for-v0.1
+  ice-cubes:
+    text: A single continuous shot of three ice cubes dropping into a clear glass. The action is visible and the
+      cubes clinking is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+    source: authored-for-v0.1
+  station-clock:
+    text: A single continuous shot of an analog clock with a moving second hand. The action is visible and the clock
+      ticking is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+    source: authored-for-v0.1
+  warmup-only:
+    text: A single continuous shot of a hand rotating a metal key in a lock. The action is visible and the lock
+      clicking is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+    source: authored-for-v0.1
+sets:
+  release-v1:
+    plan_id: h3-native-engine-release-v0.1
+    repetitions: 1
+    warmup_runs: 1
+    seed_sources:
+      11: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/campaigns/h3-cross-hardware/formal-8s-plan.json:8
+      23: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/h3-smoke.plan.json:29
+      29: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/campaigns/h3-cross-hardware/formal-8s-plan.json:22
+      47: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/campaigns/h3-cross-hardware/formal-8s-plan.json:29
+      83: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/campaigns/h3-cross-hardware/formal-8s-plan.json:64
+    warmup_case:
+      case_id: warmup-only
+      prompt: warmup-only
+      seed: 11
+    cases:
+    - case_id: ceramic-wheel
+      prompt: ceramic-wheel
+      seed: 11
+    - case_id: paper-fold
+      prompt: paper-fold
+      seed: 23
+    - case_id: wind-chimes
+      prompt: wind-chimes
+      seed: 29
+    - case_id: coffee-grinder
+      prompt: coffee-grinder
+      seed: 47
+    - case_id: dog-shake
+      prompt: dog-shake
+      seed: 83
+    - case_id: zipper-close
+      prompt: zipper-close
+      seed: 11
+    - case_id: rolling-ball
+      prompt: rolling-ball
+      seed: 23
+    - case_id: paint-brush
+      prompt: paint-brush
+      seed: 29
+    - case_id: kettle-pour
+      prompt: kettle-pour
+      seed: 47
+    - case_id: candle-light
+      prompt: candle-light
+      seed: 83
+    - case_id: book-pages
+      prompt: book-pages
+      seed: 11
+    - case_id: basketball-bounce
+      prompt: basketball-bounce
+      seed: 23
+    - case_id: window-rain
+      prompt: window-rain
+      seed: 29
+    - case_id: leaves-rake
+      prompt: leaves-rake
+      seed: 47
+    - case_id: sewing-machine
+      prompt: sewing-machine
+      seed: 83
+    - case_id: ping-pong
+      prompt: ping-pong
+      seed: 11
+    - case_id: umbrella-open
+      prompt: umbrella-open
+      seed: 23
+    - case_id: shoe-laces
+      prompt: shoe-laces
+      seed: 29
+    - case_id: ice-cubes
+      prompt: ice-cubes
+      seed: 47
+    - case_id: station-clock
+      prompt: station-clock
+      seed: 83
+fairness:
+  schedule:
+    sigma_points: 50
+    denoising_updates: 49
+    video_flow_shift: 12.0
+    audio_flow_shift: 3.0
+  encoding:
+    video_codec: libx264
+    preset: ultrafast
+    crf: 18
+    pixel_format: yuv420p
+    audio_codec: aac
+    audio_sample_rate_hz: 32000
+    audio_channels: 2
+  conditioning_cache: disabled_across_requests
+  reference_identity:
+    implementation: official-diffusers-t2va
+    minimax_code_revision: 199b7d0e1fd95e7b3eafa8c15eca692534142427
+    diffusers_revision: d8c1b13c756df0059bcdb6e477a1eafcd502098d
+    model_revision: 42ed227ee7df40d41602854ae760620d6eb651fe
+    rng_policy: cpu_generator_float32_video_then_audio
+reference:
+  status: source_candidate_not_generated
+  note: No reference command, output, dependency lock, or quality result is established by this spec.
