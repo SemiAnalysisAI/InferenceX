@@ -11739,3 +11739,10 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4676
   scenario-type: [agentic-coding]
   append-only: true
+
+- config-keys:
+    - musespark-fp4-gb300-dynamo-sglang-agentic-dflash
+  description:
+    - "Update the SGLang image from dev-muse-spark-open to nightly-dev-20261026-8252e3af, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4561
+  scenario-type: [agentic-coding]
