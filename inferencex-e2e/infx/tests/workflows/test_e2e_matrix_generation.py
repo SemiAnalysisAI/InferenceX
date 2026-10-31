@@ -37,6 +37,7 @@ def run_get_jobs(tmp_path, *, launcher=True, **inputs):
         **os.environ,
         "PATH": os.pathsep.join([str(fake_bin), str(Path(sys.executable).parent), os.environ["PATH"]]),
         "GITHUB_WORKSPACE": str(workspace),
+        "RUNNER_TEMP": str(tmp_path),
         "GITHUB_OUTPUT": str(outputs),
         "GITHUB_EVENT_NAME": "workflow_dispatch",
         "GITHUB_RUN_ID": "1",
