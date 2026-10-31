@@ -754,7 +754,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
 #   0.6   -> 1799 GB aggregate -> 224 GB/rank (conc 48, 56 and 72), so the
 #            paged KV keeps ~96 GB/rank once the state tier reaches its cap.
 kimik3-fp4-mi355x-atom-agentic-mtp:
-  image: rocm/atom-dev:nightly_202610281457
+  image: rocm/atom-dev:nightly_202610310756
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:mi355x-amds
