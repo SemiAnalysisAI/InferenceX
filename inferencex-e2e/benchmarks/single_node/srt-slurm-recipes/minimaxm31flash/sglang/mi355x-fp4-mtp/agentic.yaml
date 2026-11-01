@@ -40,6 +40,9 @@ base:
         fp8-gemm-backend: aiter
       env:
         PYTHONNOUSERSITE: '1'
+        # srtctl pre-downloads the hf: model only when HF_HOME is set; the download fills in
+        # files the shared HF_HUB_CACHE lacks (the processor's preprocessor_config.json)
+        HF_HOME: /tmp/hf_home
         PYTHONUNBUFFERED: '1'
         SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
         SGLANG_USE_AITER: '1'
@@ -139,12 +142,13 @@ override_tp4_c32:
       CONC: '32'
       KV_OFFLOADING: none
 
-# The cookbook's High-Throughput cell (HiCache) crashes on MI355X with this image: the
-# first prefill's HiCache write backup hits a HIP illegal memory access with either a
-# fixed hicache-size or hicache-ratio 1.5. Concurrency 48 and 64 run the Low-Latency
-# cell GPU-resident instead, like the vLLM MI355X recipe's TP4 c64.
+# The cookbook's High-Throughput cell: HiCache keeps evicted prefixes in host memory,
+# 180 GB per rank across the main KV, index K and draft KV pools, written back on GPU
+# eviction. HSA_USERPTR_FOR_PAGED_MEM=0 backs the host pools with hipHostMalloc instead of
+# registering pageable memory (sgl-project/sglang#42553); the registered pools hit a HIP
+# illegal memory access at the first HiCache write on MI355X with this image.
 
-override_tp4_c48:
+override_tp4_hicache_c48:
   roles:
     agg:
       args:
@@ -153,12 +157,17 @@ override_tp4_c48:
         max-running-requests: 96
         cuda-graph-max-bs-decode: 96
         mem-fraction-static: 0.8
+        enable-hierarchical-cache: true
+        hicache-size: 180
+        hicache-write-policy: write_back
+      env:
+        HSA_USERPTR_FOR_PAGED_MEM: '0'
   benchmark:
     env:
       CONC: '48'
-      KV_OFFLOADING: none
+      KV_OFFLOADING: dram
 
-override_tp4_c64:
+override_tp4_hicache_c64:
   roles:
     agg:
       args:
@@ -167,7 +176,12 @@ override_tp4_c64:
         max-running-requests: 128
         cuda-graph-max-bs-decode: 128
         mem-fraction-static: 0.8
+        enable-hierarchical-cache: true
+        hicache-size: 180
+        hicache-write-policy: write_back
+      env:
+        HSA_USERPTR_FOR_PAGED_MEM: '0'
   benchmark:
     env:
       CONC: '64'
-      KV_OFFLOADING: none
+      KV_OFFLOADING: dram
