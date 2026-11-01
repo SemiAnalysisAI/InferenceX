@@ -11771,9 +11771,8 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4686
 
 - config-keys:
-    - glm5.2-fp4-b300-sglang-agentic-mtp
     - glm5.2-fp8-b300-sglang-agentic-mtp
   description:
-    - "Rerun the unchanged FP4 and FP8 configs to collect GPU-board power. Their published curves (2026-10-12 and 2026-10-14) predate B300 single-node power collection and carry no power fields."
+    - "Rerun the unchanged FP8 config to collect GPU-board power. Its published curve (2026-10-14) predates B300 single-node power collection and carries no power fields."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4702
   scenario-type: [agentic-coding]
