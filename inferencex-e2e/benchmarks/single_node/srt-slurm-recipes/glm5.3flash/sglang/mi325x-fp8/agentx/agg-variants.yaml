@@ -80,8 +80,8 @@ base:
     interval_seconds: 10
   benchmark:
     env:
-      HF_HUB_OFFLINE: '0'
-      TRANSFORMERS_OFFLINE: '0'
+      HF_HUB_OFFLINE: ''
+      TRANSFORMERS_OFFLINE: ''
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
