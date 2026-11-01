@@ -90,12 +90,16 @@ def bind_recipe(
     staged: str,
     output: str,
     power_port: int | None,
+    cpu_power_source: str | None,
     client_env: Mapping[str, str],
 ) -> int:
-    """Compose and bind the staged fragment into ``output``, with telemetry if ``power_port``."""
+    """Compose and bind the staged fragment into ``output``, with telemetry if ``power_port``
+    and the Grace CPU exporter if ``cpu_power_source``."""
     bind = [str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.workload", staged, output]
     if power_port is not None:
         bind += ["--power-port", str(power_port)]
+    if cpu_power_source is not None:
+        bind += ["--cpu-power-source", cpu_power_source]
     for name, value in client_env.items():
         bind += ["--client-env", f"{name}={value}"]
     bind += _fabric(run)

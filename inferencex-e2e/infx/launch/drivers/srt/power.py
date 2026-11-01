@@ -109,6 +109,8 @@ class PowerDecision:
     agentx: bool
     adapter: bool = False
     require: bool = False
+    # The point selected cpu-power: the cluster's Grace CPU exporter is bound and expected.
+    cpu: bool = False
 
 
 NO_POWER = PowerDecision(dcgm=False, agentx=False)
@@ -127,7 +129,11 @@ def decide_power(cluster_id: str, path: LaunchPath, request: MultiNodeRequest) -
     for rule in lane.rules:
         if rule.when(request):
             return PowerDecision(
-                dcgm=True, agentx=rule.agentx, adapter=rule.adapter, require=rule.require
+                dcgm=True,
+                agentx=rule.agentx,
+                adapter=rule.adapter,
+                require=rule.require,
+                cpu=request.cpu_power,
             )
     message = lane.agentic_error if request.is_agentic and lane.agentic_error else lane.error
     raise PowerPolicyError(message)

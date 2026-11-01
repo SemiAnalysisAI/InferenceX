@@ -11769,3 +11769,12 @@
     - "6 DEP2 prefill workers with a DEP8 decode at conc 280-400 or a DEP16 decode at conc 300; MegaMoE, DSpark block 7 with fp8 draft KV, Dynamo KV router with fastokens for prefill and least-loaded routing across decode DP ranks."
     - "Prefill: shortest-prefill-first, chunk 8192, mem-fraction-static 0.85, HiCache 200 GB per rank write_back."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4686
+
+- config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Collect ACPI Grace CPU power on the Kimi K3 GB300 aggregate AgentX recipe. The master row sets cpu-power beside power; the binder merges the cluster's cpu-power-exporter record (ACPI on gb200-nv and gb300-nv) into the bound recipe, and make setup pins cpu-power-exporter v2.65.2 for those jobs, matching the srt-slurm v2.65.2 source pin; its aarch64 build links glibc so the NVML module reader loads."
+    - "Integrate each Grace socket total over the formal GPU measurement window and emit cpu_power_valid, avg_cpu_socket_power_w, avg_total_cpu_power_w, and total_cpu_energy_j independently of the GPU power verdict, with the ACPI CPU-only and SysIO rails as separate keys. When the producer writes module_w (CPU samples schema v3), also emit avg_total_module_power_w and total_module_energy_j as a separate NVML superchip module reference rail; the module includes both GPUs and is never added to the CPU totals. Publish validated per-host GPU power so cross-host workers can be modeled as physical trays. Under required power a cpu-power row fails on a missing or invalid CPU leg; other rows keep the best-effort CPU verdict."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3296

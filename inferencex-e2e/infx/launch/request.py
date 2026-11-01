@@ -155,6 +155,7 @@ class MultiNodeRequest(SrtRequest):
     srt_recipe: str = Field(alias="SRT_RECIPE")
     eval_srt_recipe: str | None = Field(None, alias="EVAL_SRT_RECIPE")
     power: OneFlag = Field(False, alias="POWER")
+    cpu_power: OneFlag = Field(False, alias="CPU_POWER")
 
 
 class SingleNodeRequest(SrtRequest):
