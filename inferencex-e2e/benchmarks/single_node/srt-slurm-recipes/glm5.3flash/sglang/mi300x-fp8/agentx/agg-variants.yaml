@@ -47,6 +47,7 @@ base:
         SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
       args:
         served-model-name: zai-org/GLM-5.3-Flash
+        tokenizer-path: /mnt/hf_hub_cache/models--zai-org--GLM-5.3-Flash/snapshots/46a050bec13002ad29ee795c16e61cf4fa3c4a9c
         revision: 46a050bec13002ad29ee795c16e61cf4fa3c4a9c
         trust-remote-code: true
         tensor-parallel-size: 4
