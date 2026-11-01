@@ -522,6 +522,7 @@ clusters:
         GLM-5.2-NVFP4: {root: scratch, dir: GLM-5.2-NVFP4}
         GLM-5.3-NVFP4: {root: scratch, dir: GLM-5.3-NVFP4}
         GLM-5.3-Flash: {root: data-models, dir: GLM-5.3-Flash}
+        GLM-5.3-Flash-NVFP4: {root: data-models, dir: GLM-5.3-Flash-NVFP4}
         Kimi-K3: {root: scratch, dir: Kimi-K3}
         MiniMax-M3: {root: scratch, dir: MiniMax-M3}
         MiniMax-M3-MXFP8: {root: scratch, dir: MiniMax-M3-MXFP8}
