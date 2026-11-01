@@ -8060,6 +8060,8 @@ minimaxm31flash-fp4-b300-sglang-agentic-dspark:
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [48], srt-recipe: 'agentic-tp2-spf-interval.yaml:override_tp2_c48_spf_interval24' }
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [50], srt-recipe: 'agentic-tp2-spf-interval.yaml:override_tp2_c50_spf_interval20' }
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [44], srt-recipe: 'agentic-tp2-spf-extra.yaml:override_tp2_c44_spf_interval32' }
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [52], srt-recipe: 'agentic-tp2-spf-extra.yaml:override_tp2_c52_spf_interval20_kv5850k' }
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [48], srt-recipe: 'agentic-tp2-spf-extra.yaml:override_tp2_c48_spf_interval24_kv5850k' }
 
 # Official SGLang nightly; TP4 C1 uses GPU Engram, other points use host DRAM.
 dsv41flash-fp4-gb300-sglang-agentic-dspark:
