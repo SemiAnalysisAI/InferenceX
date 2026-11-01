@@ -33,6 +33,17 @@ For full config retirement, list the deleted config keys with `retired: true`. T
 
 A PR whose new entries are all retirements has no result artifacts to reuse. After review and required checks, merge it directly rather than through `merge_with_reuse`; no `/use` is required. Merge Ingest validates the retirement plan and uploads its changelog metadata, but skips reuse lookup and database dispatch. Mixed retirement and active entries still require normal sweep reuse. Do not re-append retirement entries for ingest recovery; they have no results to recover.
 
+## Accuracy-sensitive optimizations
+
+Reduced-precision all-reduce or reduce-scatter, online linear-layer quantization,
+non-native cross-indexer sharing, and non-native FP4 KV cache require the
+[qualification in MODELS.md](inferencex-e2e/docs/MODELS.md#accuracy-sensitive-optimization-policy).
+Provide raw logs and full manual reproduction scripts for both baselines and the
+optimized run, covering the entire KVV suite for Kimi or all of Terminal-Bench 4.0,
+HLE, and MMMU Pro Vision for other models (or a recorded core-maintainer-agreed
+substitute set). The same requirement applies to existing and new models.
+The separate draft-model precision restrictions below still apply.
+
 ## Draft-model precision
 
 The rule is simple: **serve the draft as it ships.** A speculative-decoding

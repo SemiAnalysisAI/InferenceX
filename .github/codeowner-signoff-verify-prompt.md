@@ -199,6 +199,10 @@ dispatch. Check the pinned engine's eligibility and fallback guards and the asse
 run's server logs. An eval covers the change only when its logs show that path ran; a
 concurrency label or server argument alone is not proof. FAIL when no eval covers it.
 
+For the accuracy-sensitive optimizations listed in Check 8(c), ordinary Check 2
+coverage is necessary but not sufficient. Independently verify the required suite,
+both baselines, optimized arm, logs, and manual reproduction scripts under Check 8(c).
+
 ## Check 3 — Production-useful recipe linked, MERGED, AND complete
 APPLICABILITY. Read this first. The deciding factor is whether a serving setting
 is useful in a realistic production deployment. The upstream recipe requirement
@@ -407,42 +411,44 @@ and multi-node entries.
 - N/A if the PR adds, changes, or re-enables no benchmark configurations or recipes.
 
 ## Check 8 — No benchmark hacks that change the model architecture
-Verify from the PR diff (server args in `inferencex-e2e/benchmarks/**` and master-config changes)
-that nothing alters the model architecture or reduces its FLOPs. Examples include
-`--hf-overrides` that skip the indexer every N layers on a model that doesn't natively
-support it, trimmed layers/experts/heads, or other ways of skipping computation. The rule: making the
-SAME computation run faster is fair game. Target/verifier FLOPs at lower precision
-are fine when evals pass under Check 2's cohort comparison; this does not permit
-lowering draft precision below what ships (Check 13) or using integer all-reduce
-for new models under (c).
-REMOVING model-architecture FLOPs is not. Optimizations should be ones used in
-production by accuracy-sensitive customers.
+Inspect the PR diff (server args in `inferencex-e2e/benchmarks/**` and master-config
+changes) for architecture changes, including trimmed layers/experts/heads or other
+ways of skipping computation, and assess them under (a)-(c). Making the same
+computation run faster is fair game. Cross-indexer sharing on models without native
+support is a specific exception only when it qualifies under (c); this does not
+permit arbitrary indexer skipping or other architecture-FLOP reductions.
+Target/verifier lower-precision computation remains subject to Check 2 and, for
+the listed accuracy-sensitive optimizations, (c). None of these allowances permits
+lowering draft precision below what ships (Check 13). Optimizations should be ones
+used in production by accuracy-sensitive customers.
 
 ### (a) No architecture FLOP reduction
 Scan for architecture-override knobs: `--hf-overrides`, `hf_overrides`,
 `--json-model-override-args`, config-editing `sed`/`jq` on the model files, etc. If
 present, determine whether the override changes computed FLOPs vs the model's native
-config and whether the model natively supports that mode. FAIL with the exact
-flag/value if architecture FLOPs are reduced without native model support.
+config and whether the model natively supports that mode. Assess non-native
+cross-indexer sharing under (c); do not reject it solely for reducing indexer FLOPs
+if it qualifies there. FAIL with the exact flag/value for other architecture-FLOP
+reductions without native model support.
 
 ### (b) Accuracy-trading levers are covered by evals
 These levers need eval coverage even when the model supports them natively: indexer
-skipping or sharing (`index_topk_freq`, `use_index_cache`, `skip_index`), integer
-all-reduce for grandfathered models only (see (c)), accuracy-affecting `--hf-overrides`,
+skipping or sharing (`index_topk_freq`, `use_index_cache`, `skip_index`),
+reduced-precision all-reduce or reduce-scatter, accuracy-affecting `--hf-overrides`,
 `online_quant_config`, and an FP8 KV cache used only to recover throughput lost to
 another quality trade (judge from the recipe history, sign-off, and changelog). FAIL
 when no Check 2 eval covers a config that uses one. Accuracy loss on covered configs
 fails under Check 2(b). Upstream merge status does not make an accuracy loss acceptable.
+The optimizations listed in (c) also require its additional qualification.
 
-### (c) No integer all-reduce for new models
-Read the "Integer all-reduce policy" in `inferencex-e2e/docs/MODELS.md`. Resolve
-grandfathering against its immutable baseline model-support matrix, not the current
-table or this PR's additions. Existing models retain the exception for recipe/image
-updates; a new release or architecture cannot inherit it by reusing a model prefix.
-For grandfathered models, (c) is exempt, but (a), (b), Check 2, and Check 13 still
-apply. Do not reject their existing integer all-reduce solely under this new rule.
+### (c) Accuracy-sensitive optimizations require reproducible qualification
+Read "Accuracy-sensitive optimization policy" in `inferencex-e2e/docs/MODELS.md`.
+Apply it to reduced-precision all-reduce or reduce-scatter (integer or floating-point),
+online quantization of linear layers, cross-indexer sharing on models without native
+index sharing, and FP4 KV cache on models without native FP4 KV cache. Existing and
+new models have the same evidence requirement; there is no grandfathering exemption.
 
-For every affected non-grandfathered model, including image-only changes and
+For every affected model, including image-only changes, re-enabled configurations, and
 shared-launcher changes, trace the effective worker environment through recipes,
 inheritance, overrides, container defaults, and the pinned engine implementation.
 Check target and draft workers, and prefill/decode roles in disaggregated or Dynamo
@@ -450,24 +456,43 @@ deployments.
 - Explicitly inspect `ROCM_QUICK_REDUCE_QUANTIZATION`,
   `VLLM_ROCM_QUICK_REDUCE_QUANTIZATION`, `AITER_QUICK_REDUCE_QUANTIZATION`, and
   equivalent aliases or controls, including unprefixed `QUICK_REDUCE_QUANTIZATION`
-  where recognized. FAIL any set value other than `0` or `NONE`, including `INT4`,
-  `INT6`, and `INT8`. Do not confuse size thresholds or unrelated quantization flags
-  with all-reduce quantization controls.
-- Accept `0` only when the pinned implementation treats it as disabling integer
-  quantization. An unset control is acceptable only if the effective default is
-  non-integer. An inherited enabling value or integer default still FAILs.
-- For SGLang ROCm, require explicit `ROCM_QUICK_REDUCE_QUANTIZATION=NONE` in the
-  effective environment of every serving worker. Integer-quantized ROCm image defaults
-  make omission unsafe: unset, empty, `0`, or an enabling override FAILs this
-  requirement. A shared environment setting is sufficient if it reaches every
-  worker unchanged. This ROCm-specific setting is not required on non-ROCm paths.
-- Also FAIL integer all-reduce enabled through other flags, code paths, or defaults;
-  passing evals, an upstream recipe, or a patch waiver does not waive this ban.
-  If the effective behavior cannot be verified, FAIL as unverified and name the
-  missing evidence rather than claim integer quantization was proven.
+  where recognized. Inspect reduce-scatter, online linear quantization, index-sharing,
+  and FP4 KV-cache paths too. Determine effective behavior, not merely flag presence.
+  Do not confuse size thresholds with collective-quantization controls.
+- `INT4`, `INT6`, `INT8`, other enabling values, and inherited enabling defaults
+  require qualification, not automatic rejection. Accept `0` or `NONE` as disabled
+  only when the pinned implementation confirms it; omission is not proof of
+  disabling. SGLang ROCm image defaults must be inspected rather than assuming an
+  unset environment disables quantization.
+- For Kimi, require passing evidence for the entire KVV evaluation suite. For
+  other models, require all of Terminal-Bench 4.0, HLE, and MMMU Pro Vision, or a
+  substitute set with recorded agreement from InferenceX core maintainers. Do not
+  accept a subset, different version, or omitted modality without that agreement.
+- Require complete, manually runnable setup/serving/evaluation/scoring scripts and
+  raw logs for three arms: (1) original full-precision weights without reduced-precision
+  communications or the optimization under test, (2) the quantized-weight checkpoint
+  without that optimization, and (3) the same quantized-weight checkpoint with it.
+  Casting quantized weights to a wider dtype does not satisfy arm 1.
+- Verify pinned checkpoints/images and matched evaluation settings across all arms.
+  Check per-evaluation scores and stated pass criteria, the arm 2 versus arm 1
+  checkpoint effect, arm 3 versus arm 2 optimization effect, and arm 3 versus arm 1
+  total effect. Record necessary differences. A combined-optimization comparison
+  cannot establish the effect of an individual optimization without separate evidence.
+  Do not invent a universal numeric tolerance or accept a green job alone.
+- Verify from logs that the optimization ran in arm 3 and was disabled in both
+  baselines. Evidence must cover the effective submitted configuration; unchanged
+  flags do not establish equivalent behavior after an image change. Missing,
+  inaccessible, incomplete, failing, or non-comparable evidence makes (c) FAIL.
+  Name the affected configuration and missing evidence; do not claim a proven
+  accuracy regression when the failure is lack of qualification.
+- PASS (c) when the required evidence demonstrates qualification for every affected
+  use. N/A for (c) only when none of the listed optimizations is used. Native index
+  sharing and native FP4 KV cache alone do not trigger (c), but ordinary evals still
+  apply. Qualification does not waive Check 10 or the separate draft-precision
+  restrictions in Check 13.
 
 Keep this assessment in the single Check 8 row. A failure in any applicable
-subcheck makes Check 8 FAIL; exempting (c) does not make all of Check 8 N/A.
+subcheck makes Check 8 FAIL; N/A for (c) does not make all of Check 8 N/A.
 
 ## Check 9 — Speculative-decoding configs benchmark through chat templates
 If this PR adds or changes a speculative-decoding config (MTP / EAGLE / draft-model
