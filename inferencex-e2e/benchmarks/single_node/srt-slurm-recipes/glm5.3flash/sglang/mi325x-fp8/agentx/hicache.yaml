@@ -1,0 +1,111 @@
+schema: 2
+
+base:
+  identity:
+    model:
+      revision: 46a050bec13002ad29ee795c16e61cf4fa3c4a9c
+    container: {}
+    frameworks:
+      sglang: v0.5.22
+  resources:
+    gpu_type: mi325x
+    gpus_per_node: 8
+  setup_script: stage-hf-checkpoint.sh
+  environment:
+    HF_CHECKPOINT_REPO: zai-org/GLM-5.3-Flash
+    HF_CHECKPOINT_REVISION: 46a050bec13002ad29ee795c16e61cf4fa3c4a9c
+    HF_CHECKPOINT_BUDGET_BYTES: '400000000000'
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env:
+        HF_HUB_OFFLINE: '1'
+        TRANSFORMERS_OFFLINE: '1'
+        PYTHONNOUSERSITE: '1'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        SGLANG_USE_AITER: '1'
+        AITER_ONLINE_TUNE: '0'
+        ROCM_QUICK_REDUCE_QUANTIZATION: 'NONE'
+        SGLANG_DSA_FUSE_TOPK: 'false'
+        SGLANG_OPT_USE_TOPK_V2: 'false'
+        SGLANG_OPT_FUSE_MHC_POST_PRE: '0'
+        SGLANG_GLM_NEXTN_MOE_PTPC: '0'
+        SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
+      args:
+        served-model-name: zai-org/GLM-5.3-Flash
+        revision: 46a050bec13002ad29ee795c16e61cf4fa3c4a9c
+        tokenizer-path: /mnt/hf_hub_cache/models--zai-org--GLM-5.3-Flash/snapshots/46a050bec13002ad29ee795c16e61cf4fa3c4a9c
+        trust-remote-code: true
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        quantization: fp8
+        context-length: 1048576
+        page-size: 64
+        mem-fraction-static: 0.82
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        attention-backend: dsa
+        dsa-prefill-backend: tilelang
+        dsa-decode-backend: tilelang
+        dsa-topk-backend: torch
+        linear-attn-backend: triton
+        linear-attn-verify-backend: triton
+        kv-cache-dtype: bfloat16
+        moe-runner-backend: aiter
+        cuda-graph-backend-prefill: disabled
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 5
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 6
+        speculative-attention-mode: prefill
+        speculative-moe-a2a-backend: none
+        reasoning-parser: glm45
+        tool-call-parser: glm47
+        watchdog-timeout: 1800
+        dist-timeout: 600
+        enable-metrics: true
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 10
+  benchmark:
+    env:
+      HF_HUB_OFFLINE: ''
+      TRANSFORMERS_OFFLINE: ''
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      AIPERF_APPLY_CHAT_TEMPLATE: 'true'
+
+zip_override_off:
+  roles:
+    agg:
+      args:
+        max-running-requests: [24, 32, 48, 64]
+        cuda-graph-max-bs-decode: [24, 32, 48, 64]
+  benchmark:
+    env:
+      CONC: ['12', '16', '24', '32']
+
+zip_override_on:
+  roles:
+    agg:
+      args:
+        max-running-requests: [24, 32, 48, 64]
+        cuda-graph-max-bs-decode: [24, 32, 48, 64]
+        enable-hierarchical-cache: true
+        # Keep size and ratio unset so the combined cgroup-aware guard stays active.
+        hicache-host-memory-fraction: 0.60
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+  benchmark:
+    env:
+      CONC: ['12', '16', '24', '32']
