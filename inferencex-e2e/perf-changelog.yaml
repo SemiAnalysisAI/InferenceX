@@ -11769,3 +11769,12 @@
     - "6 DEP2 prefill workers with a DEP8 decode at conc 280-400 or a DEP16 decode at conc 300; MegaMoE, DSpark block 7 with fp8 draft KV, Dynamo KV router with fastokens for prefill and least-loaded routing across decode DP ranks."
     - "Prefill: shortest-prefill-first, chunk 8192, mem-fraction-static 0.85, HiCache 200 GB per rank write_back."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4686
+
+- config-keys:
+    - glm5.3flash-fp8-mi300x-sglang-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Add native GLM-5.3-Flash FP8 on MI300X with the official digest-pinned SGLang v0.5.21 ROCm 10 MI30x image and TP4/EP4 concurrency 1/2/4/8/12/16."
+    - "Stage the pinned checkpoint in the canonical cache under an exclusive lock and a 400 GB disk budget; retain the full AgentX corpus, 1M context, shared MTP5 acceptance curve and canonical accuracy eval."
+    - "Use gfx942-compatible Torch DSA top-k and disable inherited INT8 QuickReduce; keep embedded NextN draft precision unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4721
