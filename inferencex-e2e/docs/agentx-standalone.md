@@ -73,3 +73,11 @@ export AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID=true
 # Also sends X-Session-ID, if a front-end router needs it.
 export AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID=true
 ```
+
+## Comparing retained results
+
+Match the source run, attempt, effective recipe, and harness version before
+attributing a curve to a current configuration. The
+[GB300 DeepSeek-V4.1-Flash provenance audit](gb300-dsv41flash-provenance.md)
+documents the historical and current-configuration distinction for #4266/#4336,
+including CPU KV metadata and the 70 GiB override on c7480.
