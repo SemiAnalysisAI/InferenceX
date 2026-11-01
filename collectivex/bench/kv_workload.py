@@ -275,11 +275,13 @@ def verify_bulk(dst_words, nbytes: int, src_salt: int, seed: int = 7,
 
 
 def pcts(samples_ms: list[float]) -> dict:
+    """Nearest-rank percentiles, the EP suite's rule (ep_harness.percentile)."""
     ordered = sorted(samples_ms)
     n = len(ordered)
+    rank = lambda q: ordered[max(0, math.ceil(q * n) - 1)]  # noqa: E731
     return {
-        "p50": ordered[n // 2],
-        "p95": ordered[min(n - 1, int(n * 0.95))],
+        "p50": rank(0.50),
+        "p95": rank(0.95),
         "min": ordered[0],
         "max": ordered[-1],
         "n": n,
