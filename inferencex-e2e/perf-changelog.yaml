@@ -11800,3 +11800,25 @@
     - "Run a dedicated GLM-5.3-Flash NVFP4 B300 HiCache-ON c32 canonical GSM8K evaluation so cache-arm grouping cannot drop the ON accuracy check."
     - "Retain the full 1319-example suite, full model context, unchanged checkpoint and shipped draft, and synthetic acceptance disabled through the shared connector."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4729
+
+- config-keys:
+    - glm5.3flash-fp4-b300-sglang-agentic-mtp-hicache-tp4
+  scenario-type: [agentic-coding]
+  no-evals: true
+  description:
+    - "Add a GLM-5.3-Flash NVFP4 B300 TP4/EP1 OFF concurrency-8 anchor and paired OFF/ON concurrency 32/48/64/96 points, keeping admission and decode-graph caps at 96 in both arms."
+    - "Use four active GPUs on the unchanged exclusive eight-GPU node; report active-GPU efficiency separately from reserved-node economics without assuming a second replica or half-node allocation."
+    - "Preserve the official digest-pinned SGLang v0.5.22-cu130 image, EAGLE 5/1/6, shipped draft path, full 1048576-token context, full AgentX workload, and shared measured AL."
+    - "Use native HiCache host-memory-fraction 0.65 only in the dram/hicache arm, with write_through, kernel, and page_first. Nominal dram-utilization 1.0 retains the legacy budget accounting; no explicit cache size/ratio or engine patch."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4736
+
+- config-keys:
+    - glm5.3flash-fp4-b300-sglang-agentic-mtp-hicache-tp4-eval-off
+    - glm5.3flash-fp4-b300-sglang-agentic-mtp-hicache-tp4-eval-on
+  scenario-type: [agentic-coding]
+  evals-only: true
+  all-evals: true
+  description:
+    - "Run fresh canonical GSM8K accuracy checks for B300 NVFP4 TP4 cache OFF at c16 and ON at c32, retaining both rows with distinct evaluation identities."
+    - "Keep all 1319 examples, full model context, the shipped draft, and synthetic acceptance disabled; leave the existing TP8 evaluation unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4736
