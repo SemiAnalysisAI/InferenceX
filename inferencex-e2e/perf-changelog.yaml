@@ -11739,3 +11739,45 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4676
   scenario-type: [agentic-coding]
   append-only: true
+
+
+- config-keys:
+    - qwen3.5-fp4-b200-sglang
+    - qwen3.5-fp4-b200-sglang-mtp
+    - qwen3.5-fp4-b200-trt
+    - qwen3.5-fp4-b200-trt-mtp
+    - qwen3.5-fp4-b300-sglang
+    - qwen3.5-fp4-b300-sglang-mtp
+    - qwen3.5-fp4-gb200-dynamo-sglang-mtp
+    - qwen3.5-fp4-gb300-dynamo-sglang
+    - qwen3.5-fp4-gb300-dynamo-trt
+    - qwen3.5-fp4-gb300-dynamo-trt-mtp
+    - qwen3.5-fp4-mi355x-atom
+    - qwen3.5-fp4-mi355x-sglang
+    - qwen3.5-fp4-mi355x-sglang-disagg
+    - qwen3.5-fp4-mi355x-sglang-mtp
+    - qwen3.5-fp8-b200-sglang
+    - qwen3.5-fp8-b200-sglang-mtp
+    - qwen3.5-fp8-b300-sglang
+    - qwen3.5-fp8-b300-sglang-mtp
+    - qwen3.5-fp8-gb200-dynamo-sglang
+    - qwen3.5-fp8-gb200-dynamo-sglang-mtp
+    - qwen3.5-fp8-gb300-dynamo-sglang
+    - qwen3.5-fp8-gb300-dynamo-sglang-mtp
+    - qwen3.5-fp8-h100-sglang
+    - qwen3.5-fp8-h100-sglang-mtp
+    - qwen3.5-fp8-h200-sglang
+    - qwen3.5-fp8-h200-sglang-mtp
+    - qwen3.5-fp8-mi300x-sglang
+    - qwen3.5-fp8-mi325x-sglang
+    - qwen3.5-fp8-mi325x-sglang-mtp
+    - qwen3.5-fp8-mi355x-atom
+    - qwen3.5-fp8-mi355x-atom-mtp
+    - qwen3.5-fp8-mi355x-sglang
+    - qwen3.5-fp8-mi355x-sglang-disagg
+    - qwen3.5-fp8-mi355x-sglang-mtp
+  retired: true
+  description:
+    - "Retire Qwen3.5 8k1k serving configurations across NVIDIA and AMD and remove their unused recipes."
+    - "Keep Qwen3.5 AgentX coverage, SPEED-Bench collectors, and historical results unchanged."
+  pr-link: "https://github.com/SemiAnalysisAI/InferenceX/pull/XXX"
