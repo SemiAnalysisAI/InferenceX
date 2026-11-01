@@ -105,10 +105,13 @@ def _ll_dequant_static(fp8, scales):
 
 
 class LegacyBufferLL:
-    """Mixin (listed before EPBackend) for the legacy `Buffer` low-latency kernels. The adapter
-    keeps the mode branches of its timed methods inline and calls these `_ll_*` pieces; it provides
-    `_fp8`, `buffer` (from its `_create_ll_buffer`), `max_tokens` and `num_local_experts`, and calls
-    `_enable_ll` from `__init__`."""
+    """Mixin (listed before EPBackend) for the legacy `Buffer` low-latency kernels. It owns the
+    transport contract's public methods and routes each by mode: low-latency to the shared `_ll_*`
+    pieces here, normal to the adapter's `_normal_*` methods (`_normal_create_buffer`,
+    `_normal_dispatch`, `_normal_stage`, `_normal_combine`, `_normal_inspect_dispatch`,
+    `_normal_combine_transformed`, `_normal_recv_tokens`). The adapter builds its low-latency
+    `buffer` in `_create_ll_buffer` (sized by `_ll_geometry`) and calls `_enable_ll` from
+    `__init__`."""
 
     # vLLM's default (non-DBO) path issues each collective as a send kernel plus a receive hook
     # (deepep_ll.py: dispatch always passes return_recv_hook=True; finalize_async, the path the
@@ -118,6 +121,9 @@ class LegacyBufferLL:
     # `_ll_combine` for dispatch and combine to share the contract.
     ll_recv_hook = False
     _ll_ue8m0 = False
+    # Per-rank slots the low-latency receive is pre-allocated with; None sizes it at the ladder cap
+    # (LL_LADDER_CAP). An adapter that keeps the two apart sets it (see deepep-v2).
+    LL_BUFFER_CAP: "int | None" = None
 
     def _enable_ll(self, kernel_generation):
         # A distinct kernel family whose combine multiplies by the gate at the source (weighted),
@@ -152,6 +158,91 @@ class LegacyBufferLL:
                 "fp8_scales": ("ue8m0-packed" if self._ll_ue8m0 else "fp32") if self._fp8 else None,
             })
         return details
+
+    # ---- transport contract, routed by mode ----------------------------------------------
+
+    def create_buffer(self, spec):
+        if self.mode == "low-latency":
+            return self._create_ll_buffer(spec)
+        return self._normal_create_buffer(spec)
+
+    def dispatch(self, p):
+        if self.mode == "low-latency":
+            return self._ll_dispatch(p)
+        return self._normal_dispatch(p)
+
+    def stage(self, p, h):
+        if self.mode == "low-latency":
+            # The timed combine sends the padded per-expert receive back as BF16 (dequant under
+            # FP8). Value correctness is exercised by the oracle's combine_transformed path; this
+            # only has to move the right shape for timing.
+            h.combine_input = self._ll_recv_bf16(h.recv_x)
+            return
+        self._normal_stage(p, h)
+
+    def combine(self, p, h):
+        if self.mode == "low-latency":
+            # The kernel applies topk_weights internally (weighted).
+            return self._ll_combine(p, h, h.combine_input)
+        return self._normal_combine(p, h)
+
+    def inspect_dispatch(self, p, h):
+        if self.mode == "low-latency":
+            return self._expert_major_view(h, self._ll_recv_bf16(h.recv_x), h.recv_count)
+        return self._normal_inspect_dispatch(p, h)
+
+    def combine_transformed(self, p, h, transformed):
+        if self.mode == "low-latency":
+            return self._ll_combine_transformed(p, h, transformed)
+        return self._normal_combine_transformed(p, h, transformed)
+
+    def recv_tokens(self, h):
+        if self.mode == "low-latency":
+            return int(h.recv_count.sum().item())
+        return self._normal_recv_tokens(h)
+
+    @staticmethod
+    def _normal_handle(recv_x, recv_topk_idx, recv_topk_weights, handle):
+        """The per-call handle a normal-mode dispatch returns."""
+        return types.SimpleNamespace(
+            recv_x=recv_x,
+            recv_topk_idx=recv_topk_idx,
+            recv_topk_weights=recv_topk_weights,
+            handle=handle,
+        )
+
+    # ---- shared low-latency pieces --------------------------------------------------------
+
+    def _ll_geometry(self, spec, buffer_cls, label):
+        """Fix the low-latency receive geometry and return the Buffer's RDMA byte count.
+
+        The receive is pre-allocated at a fixed per-rank slot count (LL_BUFFER_CAP, else the ladder
+        cap) and never follows the ladder, so a partial ladder runs the same receive plane as the
+        full one; a ladder that does not fit fails closed. Sets `max_tokens` and
+        `num_local_experts` (LL requires the QP-per-rank count to equal the latter).
+        """
+        args, world_size = self.args, self.world_size
+        cap = self.LL_BUFFER_CAP if self.LL_BUFFER_CAP is not None else self.LL_LADDER_CAP
+        if spec.max_tokens_per_rank > cap:
+            raise RuntimeError(
+                f"low-latency ladder maximum {spec.max_tokens_per_rank} exceeds the LL "
+                f"buffer cap {cap}"
+            )
+        assert args.experts % world_size == 0, (
+            "low-latency EP requires num_experts divisible by the EP size"
+        )
+        self.max_tokens = cap
+        self.num_local_experts = args.experts // world_size
+        if not hasattr(buffer_cls, "low_latency_dispatch") or not hasattr(
+            buffer_cls, "get_low_latency_rdma_size_hint"
+        ):
+            raise RuntimeError(
+                f"invalid {label} LL runtime: Buffer.low_latency_dispatch / "
+                "get_low_latency_rdma_size_hint absent"
+            )
+        return buffer_cls.get_low_latency_rdma_size_hint(
+            self.max_tokens, args.hidden, world_size, args.experts
+        )
 
     def _ll_recv_bf16(self, recv_x):
         """The padded per-expert receive as BF16 `[num_local_experts, cap*num_ranks, hidden]`.
@@ -205,9 +296,6 @@ class LegacyBufferLL:
         if self.ll_recv_hook:
             hook()
         return combined_x[: p.T]
-
-    def _ll_inspect_dispatch(self, p, h):
-        return self._expert_major_view(h, self._ll_recv_bf16(h.recv_x), h.recv_count)
 
     def _ll_combine_transformed(self, p, h, transformed):
         """Scatter the oracle-transformed rows back into a zeroed padded combine buffer at the

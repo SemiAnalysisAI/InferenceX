@@ -43,7 +43,12 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
     ("gb200-nv", LaunchPath.SRT_MULTI): PowerLane(
         rules=(
             PowerRule(
-                Match(any_of("musespark"), any_of("fp4"), any_of("sglang"), agentic=True),
+                Match(
+                    any_of("musespark"),
+                    any_of("fp4"),
+                    any_of("sglang", "dynamo-sglang"),
+                    agentic=True,
+                ),
                 agentx=True,
             ),
             PowerRule(
@@ -59,7 +64,7 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
         ),
         error="dcgm-power requires dynamo-sglang or the supported Kimi-K3 AgentX route",
         agentic_error=(
-            "AgentX dcgm-power requires Muse Spark FP4 sglang, GLM-5.2 FP4 dynamo-sglang "
+            "AgentX dcgm-power requires Muse Spark FP4 sglang or dynamo-sglang, GLM-5.2 FP4 dynamo-sglang "
             "or Kimi-K3 FP4 dynamo-vllm"
         ),
     ),

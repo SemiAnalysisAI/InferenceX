@@ -33,6 +33,8 @@ def _multinode(**env):
 
 CASES = [
     ("gb200-nv", MULTI, "1", "musespark", "fp4", "sglang", AGENTX),
+    ("gb200-nv", MULTI, "1", "musespark", "fp4", "dynamo-sglang", AGENTX),
+    ("gb200-nv", MULTI, "1", "musespark", "fp8", "dynamo-sglang", ERR),
     ("gb200-nv", MULTI, "1", "musespark", "fp8", "sglang", ERR),
     ("gb200-nv", MULTI, "1", "glm5.2", "fp4", "dynamo-sglang", AGENTX),
     ("gb200-nv", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", AGENTX),
