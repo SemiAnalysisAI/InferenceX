@@ -11745,5 +11745,6 @@
   description:
     - "Conc 48 and 64 move to the cookbook's High-Throughput cell: HiCache with 180 GB of host KV per rank written back on eviction (KV_OFFLOADING=dram, 734 GB declared for 4 of 8 GPUs), mem-fraction-static 0.8, default bf16 draft KV."
     - "Back the HiCache host pools with hipHostMalloc (HSA_USERPTR_FOR_PAGED_MEM=0) instead of registered pageable memory, which faulted at the first HiCache write on MI355X."
+    - "Set HF_HOME so srtctl pre-downloads the model into the shared HF cache, which lacked preprocessor_config.json and stopped every MI355X server at startup."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4694
   scenario-type: [agentic-coding]

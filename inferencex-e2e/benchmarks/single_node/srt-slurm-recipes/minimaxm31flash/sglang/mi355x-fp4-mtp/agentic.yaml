@@ -40,6 +40,9 @@ base:
         fp8-gemm-backend: aiter
       env:
         PYTHONNOUSERSITE: '1'
+        # srtctl pre-downloads the hf: model only when HF_HOME is set; the download fills in
+        # files the shared HF_HUB_CACHE lacks (the processor's preprocessor_config.json)
+        HF_HOME: /tmp/hf_home
         PYTHONUNBUFFERED: '1'
         SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
         SGLANG_USE_AITER: '1'
