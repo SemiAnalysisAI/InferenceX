@@ -1,0 +1,149 @@
+base:
+  schema: 2
+  name: glm5.3flash-fp4-b300-sglang-agentic-hicache-tp4
+  identity:
+    model:
+      revision: 1d00738646cbb0c6d0a9eb403dac5f366f1473a7
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        served-model-name: nvidia/GLM-5.3-Flash-NVFP4
+        trust-remote-code: true
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        quantization: modelopt_fp4
+        dsa-prefill-backend: trtllm
+        dsa-decode-backend: trtllm
+        kv-cache-dtype: fp8_e4m3
+        moe-runner-backend: flashinfer_trtllm
+        tool-call-parser: glm47
+        reasoning-parser: glm45
+        context-length: 1048576
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        mem-fraction-static: 0.85
+        max-running-requests: 96
+        cuda-graph-max-bs-decode: 96
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 5
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 6
+        model-loader-extra-config: '{"enable_multithread_load":true}'
+        watchdog-timeout: 1800
+        enable-cache-report: true
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
+        SGLANG_GLM_NEXTN_MOE_PTPC: '0'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+  benchmark:
+    env:
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+override_none_c8:
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
+override_none_c16:
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: none
+
+override_none_c32:
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: none
+
+override_none_c48:
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: none
+
+override_none_c64:
+  benchmark:
+    env:
+      CONC: '64'
+      KV_OFFLOADING: none
+
+override_none_c96:
+  benchmark:
+    env:
+      CONC: '96'
+      KV_OFFLOADING: none
+
+override_hicache_c96:
+  roles:
+    agg:
+      args:
+        enable-hierarchical-cache: true
+        hicache-host-memory-fraction: 0.65
+        hicache-write-policy: write_through
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+  benchmark:
+    env:
+      CONC: '96'
+      KV_OFFLOADING: dram
+
+override_hicache_c32:
+  roles:
+    agg:
+      args:
+        enable-hierarchical-cache: true
+        hicache-host-memory-fraction: 0.65
+        hicache-write-policy: write_through
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: dram
+
+override_hicache_c48:
+  roles:
+    agg:
+      args:
+        enable-hierarchical-cache: true
+        hicache-host-memory-fraction: 0.65
+        hicache-write-policy: write_through
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: dram
+
+override_hicache_c64:
+  roles:
+    agg:
+      args:
+        enable-hierarchical-cache: true
+        hicache-host-memory-fraction: 0.65
+        hicache-write-policy: write_through
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+  benchmark:
+    env:
+      CONC: '64'
+      KV_OFFLOADING: dram
