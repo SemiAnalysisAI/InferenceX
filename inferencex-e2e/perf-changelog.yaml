@@ -11769,3 +11769,13 @@
     - "6 DEP2 prefill workers with a DEP8 decode at conc 280-400 or a DEP16 decode at conc 300; MegaMoE, DSpark block 7 with fp8 draft KV, Dynamo KV router with fastokens for prefill and least-loaded routing across decode DP ranks."
     - "Prefill: shortest-prefill-first, chunk 8192, mem-fraction-static 0.85, HiCache 200 GB per rank write_back."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4686
+
+- config-keys:
+    - glm5.3flash-fp4-b300-sglang-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Add GLM-5.3-Flash NVFP4 B300 AgentX on official digest-pinned SGLang v0.5.22-cu130, TP8/EP1 with EAGLE MTP 5/1/6 and concurrency 1/2/4/8/16/32, retaining canonical evals."
+    - "Serve nvidia/GLM-5.3-Flash-NVFP4 revision 1d00738646cbb0c6d0a9eb403dac5f366f1473a7 with its full 1048576-token hybrid MLA/DSA/KDA context, TRT-LLM DSA, FP8 KV, FlashInfer TRT-LLM MoE, and no KV offloading."
+    - "Use the shared connector's measured glm5.3flash_mtp thinking-on curve from the FP8 vLLM collector; leave the shipped embedded draft to upstream loading and explicitly disable SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE and SGLANG_GLM_NEXTN_MOE_PTPC."
+    - "Map the staged checkpoint to the B300 data-models root without downloading weights. No engine patches or shortened AgentX corpus."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4711
