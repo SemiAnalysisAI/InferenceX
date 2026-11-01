@@ -60,7 +60,6 @@ benchmark:
   env:
     HF_HUB_OFFLINE: '0'
     TRANSFORMERS_OFFLINE: '0'
-    TOKENIZER: /mnt/hf_hub_cache/models--zai-org--GLM-5.3-Flash/snapshots/46a050bec13002ad29ee795c16e61cf4fa3c4a9c
     KV_OFFLOADING: none
     AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
