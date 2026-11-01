@@ -11769,3 +11769,10 @@
     - "6 DEP2 prefill workers with a DEP8 decode at conc 280-400 or a DEP16 decode at conc 300; MegaMoE, DSpark block 7 with fp8 draft KV, Dynamo KV router with fastokens for prefill and least-loaded routing across decode DP ranks."
     - "Prefill: shortest-prefill-first, chunk 8192, mem-fraction-static 0.85, HiCache 200 GB per rank write_back."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4686
+
+- config-keys:
+    - glm5.2-fp8-b200-sglang-agentic-mtp
+  description:
+    - "Update the SGLang image to nightly-dev-20261026-8252e3af and lower c16 mem-fraction-static to 0.83."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4543
+  scenario-type: [agentic-coding]
