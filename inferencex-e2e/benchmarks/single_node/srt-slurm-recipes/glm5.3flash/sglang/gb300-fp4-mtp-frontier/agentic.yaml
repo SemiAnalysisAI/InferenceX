@@ -1,0 +1,83 @@
+base:
+  schema: 2
+  name: glm5.3flash-fp4-gb300-sglang-agentic-frontier
+  identity:
+    model:
+      revision: 1d00738646cbb0c6d0a9eb403dac5f366f1473a7
+    container: {}
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        served-model-name: nvidia/GLM-5.3-Flash-NVFP4
+        trust-remote-code: true
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        quantization: modelopt_fp4
+        dsa-prefill-backend: trtllm
+        dsa-decode-backend: trtllm
+        kv-cache-dtype: fp8_e4m3
+        moe-runner-backend: flashinfer_trtllm
+        reasoning-parser: auto
+        tool-call-parser: auto
+        context-length: 1048576
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        mem-fraction-static: 0.8
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 128
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 5
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 6
+        model-loader-extra-config: '{"enable_multithread_load":true}'
+        weight-loader-prefetch-checkpoints: true
+        watchdog-timeout: 1800
+        enable-cache-report: true
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
+        SGLANG_GLM_NEXTN_MOE_PTPC: '0'
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  benchmark:
+    env:
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+override_gpu_kv:
+  benchmark:
+    env:
+      KV_OFFLOADING: none
+
+override_hicache:
+  roles:
+    agg:
+      args:
+        enable-hierarchical-cache: true
+        hicache-write-policy: write_through
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        # Keep the official combined, cgroup-aware autosizer active.
+        # Explicit hicache-ratio or hicache-size would bypass this budget.
+        hicache-host-memory-fraction: 0.90
+  benchmark:
+    env:
+      KV_OFFLOADING: dram

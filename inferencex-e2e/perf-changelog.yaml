@@ -11777,3 +11777,21 @@
     - "Add GLM-5.3-Flash NVFP4 AgentX on GB300 using official SGLang v0.5.22-cu130, TP4/EP1, EAGLE 5/1/6, TRT-LLM DSA, FP8 KV, and flashinfer_trtllm MoE at concurrency 1, 2, 4, 8, 16, 32, and 64."
     - "Keep the full 1M-token context and canonical corpus; use the shared measured MTP curve for throughput and real verification for evals, with both draft precision-lowering environment switches disabled."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4716
+
+- config-keys:
+    - glm5.3flash-fp4-gb300-sglang-agentic-mtp-frontier
+  scenario-type: [agentic-coding]
+  no-evals: true
+  description:
+    - "Add a separate paired HiCache OFF/ON GB300 NVFP4 frontier at concurrency 32, 40, 48, 64, and 80, preserving TP4/EP1, the 128-request cap, full AgentX workload, official image, and unchanged embedded NextN precision."
+    - "Use stock write_through/kernel/page_first HiCache with automatic host-memory fraction 0.90 and no explicit size or ratio; retain the shared measured MTP acceptance curve for throughput."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4728
+
+- config-keys:
+    - glm5.3flash-fp4-gb300-sglang-agentic-mtp-frontier-hicache-eval
+  scenario-type: [agentic-coding]
+  evals-only: true
+  all-evals: true
+  description:
+    - "Evaluate the dedicated HiCache ON configuration on full canonical GSM8K with real target verification and synthetic acceptance disabled, independently of the paired throughput selector."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4728
