@@ -235,7 +235,15 @@ class EPBackend(abc.ABC):
         """
         if self.mode == "low-latency" and self.ll_quantizes_in_kernel:
             return eager
-        import torch
+        return self.compiled(eager)
+
+    @staticmethod
+    def compiled(eager, torch=None):
+        """`eager` through torch.compile as fused_quantize builds it, unconditionally: for
+        conversions no oracle gate compares bit-for-bit (nccl-ep's received-plane dequant).
+        `torch` is the caller's module when it has one."""
+        if torch is None:
+            import torch
 
         torch._dynamo.config.cache_size_limit = 64
         if hasattr(torch._dynamo.config, "fail_on_recompile_limit_hit"):

@@ -829,7 +829,7 @@ UNAVAILABLE = {
 
 
 class _ValueTensor:
-    """Enough tensor for the reductions run_sweep performs: gather, stack, median/max/min, sub."""
+    """Enough tensor for the reductions run_sweep performs: gather, stack, quantile/max/min, sub."""
 
     def __init__(self, data):
         self.data = data
@@ -856,8 +856,9 @@ class _ValueTensor:
         )
         return SimpleNamespace(values=_ValueTensor([fn(column) for column in columns]))
 
-    def median(self, dim=0):
-        return self._reduce(statistics.median)
+    def quantile(self, q, dim=0):
+        assert q == 0.5
+        return self._reduce(statistics.median).values
 
     def max(self, dim=0):
         return self._reduce(max)

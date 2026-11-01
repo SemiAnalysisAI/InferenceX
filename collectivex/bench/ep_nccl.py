@@ -259,7 +259,8 @@ class NCCLEPBackend(EPBackend):
             self.dispatch_dtype = "fp8-e4m3fn"
             self.dispatch_value_bytes = 1
             self.dispatch_scale_bytes_per_copy = (args.hidden // _FP8_BLOCK_SIZE) * 4
-            self._dequant_into = self.fused_quantize(_blockwise_cast_back_into)
+            # Compiled in both modes: production fuses the dequant, and nothing gates its bits.
+            self._dequant_into = self.compiled(_blockwise_cast_back_into, torch)
         # NCCL EP's handle is explicitly reusable across dispatch/combine cycles (ep_test.py
         # cached mode redispatches and recombines on one handle), so — unlike DeepEP's legacy
         # low-latency Buffer — no timed component needs a fresh dispatch or a draining combine;

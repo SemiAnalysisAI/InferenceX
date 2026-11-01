@@ -140,8 +140,20 @@ def _args(**updates):
     return types.SimpleNamespace(**values)
 
 
+class _Output:
+    """The MoE layer's output that combine copies into, as vLLM's finalize does."""
+
+    def __init__(self):
+        self.value = None
+
+    def copy_(self, value):
+        self.value = value
+        return self
+
+
 def _problem():
-    return types.SimpleNamespace(T=2, dispatch_x="x", weights="w", indices="i", recv_tokens=3)
+    return types.SimpleNamespace(T=2, dispatch_x="x", weights="w", indices="i", recv_tokens=3,
+                                 combine_output=_Output())
 
 
 class MoriContract(unittest.TestCase):
@@ -167,7 +179,9 @@ class MoriContract(unittest.TestCase):
         problem = _problem()
         handle = backend.dispatch(problem)
         handle.combine_input = "staged"
-        return backend.combine(problem, handle)
+        output = backend.combine(problem, handle)
+        assert output is problem.combine_output
+        return output.value
 
     def test_one_node_runs_vllms_intranode_launch_from_the_config_alone(self):
         backend = self.backend()

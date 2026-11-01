@@ -263,8 +263,11 @@ class MoRIBackend(EPBackend):
         return torch.int32
 
     def make_problem(self, T, idx, weights, x):
+        """Adds the MoE layer's output, which vLLM's finalize copies the combined rows into;
+        allocated once per rung, untimed."""
         problem = super().make_problem(T, idx, weights, x)
         problem.indices, problem.weights = problem.topk_idx, problem.topk_weights
+        problem.combine_output = torch.empty((T, self.args.hidden), dtype=torch.bfloat16, device=self.device)
         return problem
 
     def dispatch(self, p):
@@ -306,7 +309,10 @@ class MoRIBackend(EPBackend):
         # kernels reach the gather through dispatch-side metadata instead and do not
         # consume the routing content, which is why EP8 was always clean.
         combined, _weights = self.op.combine(h.combine_input, None, p.indices)
-        return combined[:p.T]
+        # vLLM's finalize copies the result into the MoE layer's output (pf_mori.py), so the copy
+        # is charged here as flashinfer-ep charges its own.
+        p.combine_output.copy_(combined[:p.T])
+        return p.combine_output
 
     def inspect_dispatch(self, p, h):
         count = self.recv_tokens(h)
