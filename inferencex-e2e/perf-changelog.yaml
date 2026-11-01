@@ -11777,3 +11777,21 @@
     - "Add GLM-5.3-Flash NVFP4 AgentX on GB200 with the official SGLang v0.5.22 CUDA 13.0 multiarchitecture image, TP4/EP1, EAGLE MTP 5/1/6, TRT-LLM DSA and FP8 KV cache."
     - "Run concurrency 1, 2, 4, 8, 16, 32 and 64 with the native 1M context and full AgentX corpus, no KV offload, shared measured golden acceptance and real-verification quality evaluations."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4714
+
+- config-keys:
+    - glm5.3flash-fp4-gb200-sglang-agentic-mtp-hicache-frontier
+  scenario-type: [agentic-coding]
+  no-evals: true
+  description:
+    - "Experimental GB200 NVFP4 concurrency study: cache OFF at 24/32/40/48/64 and HiCache ON at 32/48/64, retaining the parent model, image, precision, workload and per-concurrency admission caps."
+    - "Use automatic host-memory fraction 0.75 with write-through kernel HiCache; actual host allocation and real-verification restore correctness remain runtime gates."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4734
+
+- config-keys:
+    - glm5.3flash-fp4-gb200-sglang-agentic-mtp-hicache-quality
+  scenario-type: [agentic-coding]
+  evals-only: true
+  all-evals: true
+  description:
+    - "Run the dedicated GB200 NVFP4 HiCache ON c64 canonical accuracy evaluation with real verification and the full default sample set, independently of performance eval selection."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4734
