@@ -11779,3 +11779,22 @@
     - "Download pinned checkpoint revision 46a050bec13002ad29ee795c16e61cf4fa3c4a9c into the canonical H100 Hugging Face cache with a shared download lock, pinned-file disk accounting, and 400 GB disk budget; serve offline with the pinned server tokenizer and retain the canonical AgentX Hub tokenizer behavior."
     - "Use eager prefill with decode CUDA graphs retained for an H100-only compatibility test after an asynchronous illegal-address failure during long-context replay; full workload and precision remain unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4717
+
+- config-keys:
+    - glm5.3flash-fp8-h100-sglang-agentic-hicache-frontier
+  scenario-type: [agentic-coding]
+  no-evals: true
+  description:
+    - "Compare native H100 FP8 GLM-5.3-Flash AgentX with HiCache off/on at matched concurrency 8, 12, 16, 24, and 32, preserving TP8/EP8, BF16 KV, full corpus, 3600-second profiling, 1M context, and embedded MTP."
+    - "Enable only automatic host fraction 0.60, write-through, kernel I/O, and page-first layout for ON; retain the parent's GPU memory fraction, admission inputs, disabled prefill graphs, decode defaults, and checkpoint/image pins."
+    - "Keep dram-utilization 1.0 as nominal inventory bookkeeping rather than measured cache allocation; live host/cgroup headroom, NUMA, AllocTRES, resolved pools, and host-restore correctness remain runtime gates."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4740
+
+- config-keys:
+    - glm5.3flash-fp8-h100-sglang-agentic-hicache-eval
+  scenario-type: [agentic-coding]
+  evals-only: true
+  all-evals: true
+  description:
+    - "Select plain HiCache-on concurrency-32 canonical GSM8K evaluation with all 1319 examples and synthetic acceptance cleared; retain native parent OFF32 as a reference rather than a fresh child evaluation."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4740
