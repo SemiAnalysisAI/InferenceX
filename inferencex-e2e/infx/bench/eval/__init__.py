@@ -104,6 +104,11 @@ def evaluate(
     meta.build(environ, conc=concurrencies[0], suite="")
     if eval_only and name in vendor.PROVIDERS:
         server.wait_chat_route(base_url, model, server.chat_route_budget(environ))
+    from infx.bench.eval.hicache_prelude import run as run_hicache_prelude
+
+    prelude_code = run_hicache_prelude(base_url, destination, environ)
+    if prelude_code != 0:
+        return prelude_code
     context = functools.partial(
         EvalContext,
         base_url=base_url,

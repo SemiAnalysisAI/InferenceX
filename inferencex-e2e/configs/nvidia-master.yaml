@@ -8859,7 +8859,7 @@ glm5.3flash-fp8-b200-sglang-agentic-frontier-hicache-eval:
     agentic-coding:
     - dram-utilization: 1.0
       search-space:
-      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: {name: hicache}, conc-list: [64], srt-recipe: "frontier.yaml:override_hicache_c64" }
+      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: {name: hicache}, conc-list: [64], srt-recipe: "frontier.yaml:override_hicache_eval_c64" }
 
 glm5.3-fp4-b300-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.20-cu130@sha256:b27fce60bc5494c118c4910702812bcfa8cee67abcdd1ff8b0902f21647552f4

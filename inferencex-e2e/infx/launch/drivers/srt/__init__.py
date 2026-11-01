@@ -72,6 +72,11 @@ def run_single_node(launch: Launch) -> int:
         if rc := submit.bind_point(run, checkout, root / "arguments"):
             return rc
         selected, bound, runtime_args = submit.bound_arguments(root / "arguments")
+        run.env.update(
+            submit.eval_prelude_environment(
+                Path(bound), eval_only=request.eval_only, image=request.image
+            )
+        )
         event.set(recipe=selected.removeprefix(f"{run.workspace}/"))
         containers = {}
         if not request.eval_only:

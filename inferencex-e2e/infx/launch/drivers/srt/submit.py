@@ -66,6 +66,24 @@ def eval_args(env: Mapping[str, str], command: str) -> list[str]:
     ]
 
 
+def eval_prelude_environment(recipe: Path, *, eval_only: bool, image: str) -> dict[str, str]:
+    """Bridge the reviewed opt-in from the bound recipe to post-eval's process."""
+    import yaml
+
+    from infx.bench.env import InputError
+    from infx.bench.eval.hicache_prelude import PINS, recipe_environment
+
+    try:
+        data = yaml.safe_load(recipe.read_text())
+        values = (data.get("benchmark") or {}).get("env") or {}
+        selected = recipe_environment(values, eval_only=eval_only)
+        if selected and selected[PINS[0]] != image:
+            raise InputError("HiCache expected image does not match the actual launch image")
+        return selected
+    except (OSError, ValueError, TypeError, AttributeError, InputError, yaml.YAMLError) as exc:
+        raise LaunchError(f"Invalid evaluation prelude configuration: {exc}") from exc
+
+
 def bind_point(run: SrtRun, checkout: Checkout, arguments: Path) -> int:
     """Bind the single-node recipe variant for this point; the binder writes ``arguments``."""
     prepare = [
