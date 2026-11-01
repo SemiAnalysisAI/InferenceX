@@ -124,6 +124,27 @@ for flag in --speed-bench-category --speed-bench-output-len --chat-template-kwar
 done
 echo "=== Benchmark client flag preflight OK ==="
 
+# Containers share the node's network namespace, so a process left on the node outside
+# Slurm can hold $PORT and every cell then dies with "Address already in use". Report
+# the holder and serve on a free port instead.
+port_in_use() {
+    python3 -c '
+import socket, sys
+s = socket.socket()
+try:
+    s.bind(("0.0.0.0", int(sys.argv[1])))
+except OSError:
+    sys.exit(0)
+sys.exit(1)
+' "$1"
+}
+if port_in_use "$PORT"; then
+    echo "WARNING: port $PORT is already in use on $(hostname); holder:"
+    (ss -ltnp 2>/dev/null || netstat -ltnp 2>/dev/null) | grep -E ":$PORT\b" || echo "  (ss/netstat unavailable)"
+    PORT=$(python3 -c 'import socket; s = socket.socket(); s.bind(("0.0.0.0", 0)); print(s.getsockname()[1])')
+    echo "Serving on free port $PORT instead."
+fi
+
 fetch_metric() {
     local port="$1" name="$2"
     curl -s "http://localhost:${port}/metrics" \
