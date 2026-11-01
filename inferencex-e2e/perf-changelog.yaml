@@ -11777,4 +11777,4 @@
   description:
     - "Update the Muse Spark Open B300 curve to lmsysorg/sglang:nightly-dev-cu13-20261030-302b78cc; run TP8/EP8 at concurrency 1, 4, 7, 16, 20, 24 and TP4/EP4 HiCache at concurrency 16, 28, 32, 38, 48."
     - "Disable prefill CUDA graphs at TP4 with mem-fraction-static 0.92 and keep breakable prefill graphs at TP8; retune request admission, prefill-decode interval and stream interval per concurrency, with 250 GB per-rank HiCache and SWA/full ratio 0.2 at concurrency 32 and 38."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4725
