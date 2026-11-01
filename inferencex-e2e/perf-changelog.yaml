@@ -11780,4 +11780,4 @@
   description:
     - "Retire Qwen3.5 8k1k serving configurations across NVIDIA and AMD and remove their unused recipes."
     - "Keep Qwen3.5 AgentX coverage, SPEED-Bench collectors, and historical results unchanged."
-  pr-link: "https://github.com/SemiAnalysisAI/InferenceX/pull/XXX"
+  pr-link: "https://github.com/SemiAnalysisAI/InferenceX/pull/4697"
