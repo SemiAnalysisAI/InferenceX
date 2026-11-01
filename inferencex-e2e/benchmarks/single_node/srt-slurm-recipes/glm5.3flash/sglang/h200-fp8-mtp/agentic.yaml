@@ -1,0 +1,40 @@
+base:
+  schema: 2
+  name: glm5.3flash-fp8-h200-sglang-agentic
+  resources:
+    gpu_type: h200
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: zai-org/GLM-5.3-Flash
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        mem-fraction-static: 0.75
+        dsa-prefill-backend: tilelang
+        dsa-decode-backend: tilelang
+        kv-cache-dtype: bfloat16
+        moe-runner-backend: deep_gemm
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 5
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 6
+        reasoning-parser: auto
+        tool-call-parser: auto
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
+        SGLANG_GLM_NEXTN_MOE_PTPC: '0'

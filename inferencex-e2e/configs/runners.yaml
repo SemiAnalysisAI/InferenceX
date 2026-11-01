@@ -394,6 +394,7 @@ clusters:
       entries:
         DeepSeek-R1-0528: {root: models, dir: DeepSeek-R1-0528}
         GLM-5.2-FP8: {root: models, dir: GLM-5.2-FP8}
+        GLM-5.3-Flash: {root: models, dir: GLM-5.3-Flash}
         Kimi-K3: {root: hf-hub-cache, dir: Kimi-K3}
         Muse-Spark-Open-816B-A42B-NVFP4: {root: hf-hub-cache, dir: Muse-Spark-Open-816B-A42B-NVFP4}
         Qwen3.5-397B-A17B-FP8: {root: hf-hub-cache, dir: Qwen3.5-397B-A17B-FP8}
