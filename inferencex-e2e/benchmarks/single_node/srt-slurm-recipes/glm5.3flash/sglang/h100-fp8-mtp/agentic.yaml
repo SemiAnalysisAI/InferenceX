@@ -34,6 +34,7 @@ roles:
       reasoning-parser: auto
       tool-call-parser: auto
       context-length: 1048576
+      cuda-graph-backend-prefill: disabled
       dsa-prefill-backend: tilelang
       dsa-decode-backend: tilelang
       kv-cache-dtype: bfloat16
