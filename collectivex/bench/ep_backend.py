@@ -149,6 +149,9 @@ class EPBackend(abc.ABC):
     dispatch_scale_bytes_per_copy = 0
     # (eager quantize, dequantize) of an adopted blockwise FP8 codec; see `_enable_fp8`.
     _fp8_codec = None
+    # Whether this run dispatches FP8; set from args.precision in __init__ (the class default
+    # covers partial adapters that tests build without __init__).
+    _fp8 = False
     # The low-latency dispatch quantises FP8 in-kernel from BF16, so its caller-side quantize only
     # models those bits for the oracle. False where low-latency is caller-prequantized like normal.
     ll_quantizes_in_kernel = True
@@ -307,6 +310,12 @@ class EPBackend(abc.ABC):
             raise ValueError(
                 f"{self.name} does not support precision {self.precision!r}"
             )
+        self._fp8 = self.precision == "fp8"
+        self.experts_per_rank = args.experts // world_size
+        # Every adapter's FP8 stage() dequantizes the received (fp8, scale) payload to the BF16
+        # combine input -- real device work, and so a separately-timed component -- while its BF16
+        # stage() is a pointer hand-off.
+        self.stage_device_work = self._fp8
 
     @staticmethod
     def init_process_group(dist, rank, world_size, device):
