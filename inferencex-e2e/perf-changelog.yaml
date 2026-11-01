@@ -11740,7 +11740,6 @@
   scenario-type: [agentic-coding]
   append-only: true
 
-
 - config-keys:
     - qwen3.5-fp4-b200-sglang
     - qwen3.5-fp4-b200-sglang-mtp
