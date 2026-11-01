@@ -1469,3 +1469,55 @@ glm5.3flash-fp8-mi325x-sglang-agentic-mtp:
       - { tp: 4, ep: 4, conc-list: [8], spec-decoding: mtp, kv-offloading: none, srt-recipe: agentx/agg-variants.yaml:override_tp4_ep4_c8 }
       - { tp: 4, ep: 4, conc-list: [12], spec-decoding: mtp, kv-offloading: none, srt-recipe: agentx/agg-variants.yaml:override_tp4_ep4_c12 }
       - { tp: 4, ep: 4, conc-list: [16], spec-decoding: mtp, kv-offloading: none, srt-recipe: agentx/agg-variants.yaml:override_tp4_ep4_c16 }
+
+glm5.3flash-fp8-mi325x-sglang-agentic-mtp-hicache:
+  image: lmsysorg/sglang:v0.5.22-rocm10-mi30x@sha256:5658cd0d8de0c68de10d2e349296f55ceff98053182fa87b2a7e942e5e7f3c2a
+  model: zai-org/GLM-5.3-Flash
+  model-prefix: glm5.3flash
+  runner: cluster:mi325x-amd
+  precision: fp8
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: glm5.3flash/sglang/mi325x-fp8
+  scenarios:
+    agentic-coding:
+    # Inventory-based GPU-share bookkeeping, not the live HiCache host fraction.
+    - dram-utilization: 1.0
+      search-space:
+      - { tp: 4, ep: 4, conc-list: [12], spec-decoding: mtp, kv-offloading: none, srt-recipe: "agentx/hicache.yaml:zip_override_off[0]" }
+      - { tp: 4, ep: 4, conc-list: [16], spec-decoding: mtp, kv-offloading: none, srt-recipe: "agentx/hicache.yaml:zip_override_off[1]" }
+      - { tp: 4, ep: 4, conc-list: [24], spec-decoding: mtp, kv-offloading: none, srt-recipe: "agentx/hicache.yaml:zip_override_off[2]" }
+      - { tp: 4, ep: 4, conc-list: [32], spec-decoding: mtp, kv-offloading: none, srt-recipe: "agentx/hicache.yaml:zip_override_off[3]" }
+      - { tp: 4, ep: 4, conc-list: [12], spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, srt-recipe: "agentx/hicache.yaml:zip_override_on[0]" }
+      - { tp: 4, ep: 4, conc-list: [16], spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, srt-recipe: "agentx/hicache.yaml:zip_override_on[1]" }
+      - { tp: 4, ep: 4, conc-list: [24], spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, srt-recipe: "agentx/hicache.yaml:zip_override_on[2]" }
+      - { tp: 4, ep: 4, conc-list: [32], spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, srt-recipe: "agentx/hicache.yaml:zip_override_on[3]" }
+
+glm5.3flash-fp8-mi325x-sglang-agentic-mtp-hicache-eval-off:
+  image: lmsysorg/sglang:v0.5.22-rocm10-mi30x@sha256:5658cd0d8de0c68de10d2e349296f55ceff98053182fa87b2a7e942e5e7f3c2a
+  model: zai-org/GLM-5.3-Flash
+  model-prefix: glm5.3flash
+  runner: cluster:mi325x-amd
+  precision: fp8
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: glm5.3flash/sglang/mi325x-fp8
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 4, ep: 4, conc-list: [16], spec-decoding: mtp, kv-offloading: none, srt-recipe: "agentx/hicache.yaml:zip_override_off[1]" }
+
+glm5.3flash-fp8-mi325x-sglang-agentic-mtp-hicache-eval-on:
+  image: lmsysorg/sglang:v0.5.22-rocm10-mi30x@sha256:5658cd0d8de0c68de10d2e349296f55ceff98053182fa87b2a7e942e5e7f3c2a
+  model: zai-org/GLM-5.3-Flash
+  model-prefix: glm5.3flash
+  runner: cluster:mi325x-amd
+  precision: fp8
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: glm5.3flash/sglang/mi325x-fp8
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 1.0
+      search-space:
+      - { tp: 4, ep: 4, conc-list: [32], spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, srt-recipe: "agentx/hicache.yaml:zip_override_on[3]" }
