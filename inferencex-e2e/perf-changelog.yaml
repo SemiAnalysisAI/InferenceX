@@ -11778,3 +11778,23 @@
     - "Sweep concurrency 1, 4, 8, 16, 24, and 32 over the full AgentX workload with canonical evals and shared measured thinking-on acceptance from glm5.3flash_mtp."
     - "Resolve the staged checkpoint from the B200 data-models root without downloading or converting weights; preserve upstream draft precision."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4713
+
+- config-keys:
+    - glm5.3flash-fp8-b200-sglang-agentic-frontier
+  scenario-type: [agentic-coding]
+  no-evals: true
+  description:
+    - "Add matched GLM-5.3-Flash FP8 B200 cache OFF/ON points at concurrency 24, 32, 48, and 64, preserving the full AgentX corpus, native context, TP8, and MTP 5/1/6."
+    - "Use upstream HiCache write_through/kernel/page_first with automatic host-memory fraction 0.70, no explicit size or ratio, and unchanged full-node resources."
+    - "Keep nominal eligible-DRAM metadata separate from actual host allocations; retain parent request-error qualifications and exclude invalid parent C16 power."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4730
+
+- config-keys:
+    - glm5.3flash-fp8-b200-sglang-agentic-frontier-hicache-eval
+  scenario-type: [agentic-coding]
+  evals-only: true
+  all-evals: true
+  description:
+    - "Select a dedicated C64 HiCache-ON canonical evaluation so cache-mode deduplication cannot silently discard the ON accuracy check."
+    - "Disable synthetic acceptance for the full canonical evaluation; a separate real host-restore check remains required before full GPU authorization."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4730
