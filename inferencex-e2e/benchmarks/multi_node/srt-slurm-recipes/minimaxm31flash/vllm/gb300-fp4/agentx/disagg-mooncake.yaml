@@ -43,11 +43,14 @@ base:
     options:
       store_config:
         metadata_server: P2PHANDSHAKE
-        global_segment_size: 160GB
+        global_segment_size: 180GB
         local_buffer_size: 4GB
         protocol: rdma
         device_name: '@fabric.rdma-devices'
         enable_offload: false
+  - name: otel-collector
+    type: otel-collector
+    enabled: false
   frontend:
     type: dynamo
     enable_multiple_frontends: false
@@ -59,8 +62,9 @@ base:
       HF_HOME: /hf_hub_cache
       HF_HUB_CACHE: /hf_hub_cache
       DYN_TCP_CONNECT_TIMEOUT: '120'
+      DYN_TOKENIZER: fastokens
     placement:
-      node: head
+      node: dedicated
   engine:
     type: vllm
     connector: null
