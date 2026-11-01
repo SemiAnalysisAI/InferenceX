@@ -762,6 +762,42 @@ def test_sglang_abbreviated_algorithm_selects_golden(
     }
 
 
+@pytest.mark.parametrize(
+    ("engine", "args", "key", "expected"),
+    [
+        (
+            "sglang",
+            {"speculative-algorithm": "EAGLE", "speculative-num-steps": 3},
+            "SGLANG_SIMULATE_ACC_LEN",
+            "3.603536",
+        ),
+        (
+            "tilert",
+            {"with-mtp": True, "num-mtp": 3},
+            "TILERT_SIMULATE_ACC_LEN",
+            "3.603536",
+        ),
+        (
+            "trt",
+            {"speculative_config": {"decoding_type": "mtp", "max_draft_len": 3}},
+            "TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS",
+            "2.603536",
+        ),
+    ],
+)
+def test_precise_golden_length_survives_native_overrides(
+    golden_dir: Path, engine: str, args: dict[str, Any], key: str, expected: str
+) -> None:
+    (golden_dir / "dsv4_mtp.yaml").write_text(
+        yaml.safe_dump({"deepseek-v4-pro": {"thinking_on": {3: 3.603536}}})
+    )
+    recipe = {"roles": {"decode": {"args": args}}}
+    result = apply_native(
+        recipe, build_overrides(recipe, engine, ENV, golden_dir=golden_dir)
+    )
+    assert result["roles"]["decode"]["env"][key] == expected
+
+
 def test_sglang_conflicting_algorithm_aliases_fail(golden_dir: Path) -> None:
     recipe = {
         "roles": {
