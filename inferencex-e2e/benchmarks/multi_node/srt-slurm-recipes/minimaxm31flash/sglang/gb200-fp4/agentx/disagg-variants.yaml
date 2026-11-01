@@ -103,7 +103,7 @@ base:
         schedule-policy: shortest-prefill-first
         # 64 per DP rank.
         max-running-requests: 256
-        mem-fraction-static: 0.85
+        mem-fraction-static: 0.88
         enable-hierarchical-cache: true
         # 180 GB per rank: 720 GB per node, the matrix's 0.80 DRAM share, leaving
         # headroom for the engine, Mooncake and the OS.
