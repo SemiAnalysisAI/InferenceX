@@ -1,5 +1,15 @@
 schema: 2
 name: glm5.3flash-fp8-h100-sglang-agentic-mtp
+identity:
+  model:
+    revision: 46a050bec13002ad29ee795c16e61cf4fa3c4a9c
+setup_script: stage-hf-checkpoint.sh
+environment:
+  HF_CHECKPOINT_REPO: zai-org/GLM-5.3-Flash
+  HF_CHECKPOINT_REVISION: 46a050bec13002ad29ee795c16e61cf4fa3c4a9c
+  HF_CHECKPOINT_BUDGET_BYTES: '400000000000'
+  HF_HUB_OFFLINE: '0'
+  TRANSFORMERS_OFFLINE: '0'
 resources:
   gpu_type: h100
   gpus_per_node: 8
@@ -18,6 +28,7 @@ roles:
     gpus: 8
     args:
       served-model-name: zai-org/GLM-5.3-Flash
+      revision: 46a050bec13002ad29ee795c16e61cf4fa3c4a9c
       trust-remote-code: true
       tensor-parallel-size: 8
       expert-parallel-size: 8
@@ -41,6 +52,9 @@ roles:
       SGLANG_TIMEOUT_KEEP_ALIVE: '900'
       SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
       SGLANG_GLM_NEXTN_MOE_PTPC: '0'
+health_check:
+  max_attempts: 720
+  interval_seconds: 10
 benchmark:
   env:
     KV_OFFLOADING: none

@@ -11776,4 +11776,5 @@
   description:
     - "Add native GLM-5.3-Flash FP8 AgentX on H100 with the digest-pinned official SGLang v0.5.22-cu130 image, TP8/EP8, BF16 KV, TileLang DSA, DeepGemm MoE, and embedded EAGLE 5/1/6."
     - "Sweep GPU-resident concurrency 1, 2, 4, 8, 12, 16, 24, and 32 with full 1M context, canonical AgentX traces, measured golden acceptance, and standard accuracy evaluation."
+    - "Download pinned checkpoint revision 46a050bec13002ad29ee795c16e61cf4fa3c4a9c into the canonical H100 Hugging Face cache with a shared download lock and 400 GB disk budget."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4717

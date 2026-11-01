@@ -361,7 +361,6 @@ clusters:
     models:
       entries:
         DeepSeek-V4.1-Flash: {root: data-models, dir: DeepSeek-V4.1-Flash}
-        GLM-5.3-Flash: {root: data-models, dir: GLM-5.3-Flash}
         Muse-Spark-Open-816B-A42B-NVFP4: {root: data-models, dir: Muse-Spark-Open-816B-A42B-NVFP4}
         Qwen3.5-397B-A17B-FP8: {root: data-models, dir: Qwen3.5-397B-A17B-FP8}
     scheduler: slurm
