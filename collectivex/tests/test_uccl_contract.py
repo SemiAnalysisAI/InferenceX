@@ -284,12 +284,12 @@ class LowLatencyContract(unittest.TestCase):
         self.assertIs(ll._fp8_codec[0].func, self.module.kernel_cast_to_fp8)
         self.assertEqual(ll._fp8_codec[0].keywords["fp8_max"], 448.0)
 
-    def test_low_latency_replays_at_every_scale_and_normal_does_not(self):
-        # No per-SKU eager exception (b200 FP8 once had one); scale-out LL replays as vLLM
-        # captures it (the proxies busy-poll); normal host-syncs.
+    def test_only_intranode_low_latency_replays(self):
+        # No per-SKU eager exception (b200 FP8 once had one); scale-out LL runs through the CPU
+        # proxy, unvalidated under capture; normal host-syncs.
         intranode = _backend(self.module, mode="low-latency", runner="b200-nscale", precision="fp8")
         self.assertTrue(intranode.cuda_graph_supported)
-        self.assertTrue(_backend(self.module, world_size=16, mode="low-latency").cuda_graph_supported)
+        self.assertFalse(_backend(self.module, world_size=16, mode="low-latency").cuda_graph_supported)
         self.assertFalse(_backend(self.module).cuda_graph_supported)
 
 

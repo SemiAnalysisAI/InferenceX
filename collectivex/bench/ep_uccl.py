@@ -158,15 +158,22 @@ class UCCLEPBackend(LegacyBufferLL, EPBackend):
     SUPPORTED_MODES = ("normal", "low-latency")
     SUPPORTED_PRECISIONS = ("bf16", "fp8")
     # LL's only host state is the double-buffer toggle; captures hold whole pairs, so it returns
-    # to where it started. Normal mode host-syncs on its receive counters. Scale-out LL replays
-    # too, as vLLM's captured decode drives it: the CPU proxies busy-poll the GPU FIFOs (the
-    # adaptive sleeper whose wake call replay skips is off unless UCCL_RDMA_ADAPTIVE_SLEEP=1,
-    # which the network profile scrubs), and UCCL's own SGLang scripts capture multi-node LL.
+    # to where it started. Normal mode host-syncs on its receive counters.
     CUDA_GRAPH_MODES = ("low-latency",)
     # vLLM's default (non-DBO) DeepEP low-latency path issues both collectives as a send kernel plus
     # a receive hook (its modular kernel takes prepare_async/finalize_async), and it drives UCCL's
     # drop-in Buffer the same way; deepep-v2 runs the same split.
     ll_recv_hook = True
+
+    @property
+    def cuda_graph_supported(self) -> bool:
+        # Intranode only: scale-out LL runs through the CPU proxy, unvalidated under capture, whose
+        # adaptive sleeper only a host call that replay skips can wake. Inside one node the proxies
+        # never start, so every intranode LL cell replays, on every SKU and precision, as vLLM's
+        # captured decode step runs it.
+        if self.world_size > int(getattr(self.args, "scale_up_domain", self.world_size)):
+            return False
+        return super().cuda_graph_supported
 
     def __init__(self, args, rank, world_size, local_rank, device):
         super().__init__(args, rank, world_size, local_rank, device)

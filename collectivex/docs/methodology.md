@@ -366,9 +366,7 @@ it, and `COLLX_CUDA_GRAPH=0` restores eager everywhere.
 - **mori** `normal` and `low-latency` decode. ROCm torch before 2.13 rejects external events, so the
   timing events are captured with `hipEventRecordWithFlags(..., hipEventRecordExternal)`.
 - **flashinfer-ep** decode.
-- **uccl-ep** low-latency, intranode and scale-out; `normal` host-syncs and stays eager. The scale-out
-  CPU proxies busy-poll the GPU FIFOs, so replay needs no host call to wake them (UCCL's adaptive
-  sleeper, `UCCL_RDMA_ADAPTIVE_SLEEP=1`, is scrubbed).
+- **uccl-ep** low-latency, intranode only; `normal` host-syncs and stays eager.
 
 Only the launch mechanism changes. Each fresh-entry component captures one pair, with the alignment
 captured ahead of the first timing event (origin `cuda-graph-replay`; `stage` is not timed

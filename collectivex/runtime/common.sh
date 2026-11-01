@@ -362,7 +362,6 @@ collx_apply_network_profile() {
   unset MORI_RDMA_TC MORI_IO_TC MORI_RDMA_SL MORI_IO_SL
   unset UCCL_SOCKET_IFNAME UCCL_IB_HCA UCCL_IB_GID_INDEX UCCL_IB_SL UCCL_IB_TC
   unset UCCL_IB_MAX_INFLIGHT_BYTES UCCL_IB_MAX_INFLIGHT_NORMAL UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC
-  unset UCCL_RDMA_ADAPTIVE_SLEEP
   # Single-node and MNNVL runs need only the scrub above. Single-node low-latency kernels run
   # over NVLink/XGMI (DeepEP allow_nvlink_for_low_latency_mode) and must NOT force IBGDA
   # (/dev/gdrdrv is absent on h200). Exception: a SKU may pin a single-node HCA list.
