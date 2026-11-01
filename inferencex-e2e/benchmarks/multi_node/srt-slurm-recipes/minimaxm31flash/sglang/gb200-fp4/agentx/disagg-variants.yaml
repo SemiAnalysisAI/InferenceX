@@ -97,7 +97,6 @@ base:
         # flashinfer_trtllm_routed needs attention TP to match EP, which attention DP breaks.
         moe-a2a-backend: megamoe
         disaggregation-transfer-backend: mooncake
-        # DP attention divides the chunk by the DP size: 8192 per DEP4 rank.
         chunked-prefill-size: 32768
         # Shortest uncached prefill first: short cached turns stop queueing
         # behind long uncached prompts, which cuts the TTFT tail.
@@ -189,6 +188,13 @@ base:
 override_2p_dep4_dep8:
   name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-2p-dep4-dep8
 
+override_3p_dep4_dep8:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-3p-dep4-dep8
+  roles:
+    prefill:
+      nodes: 3
+      workers: 3
+
 override_3p_dep4_dep16:
   name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-3p-dep4-dep16
   roles:
@@ -203,3 +209,4 @@ override_3p_dep4_dep16:
         data-parallel-size: 16
         expert-parallel-size: 16
         max-running-requests: 768
+        mem-fraction-static: 0.85

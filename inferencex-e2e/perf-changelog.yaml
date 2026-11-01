@@ -11762,10 +11762,12 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
+    - minimaxm31flash-fp4-gb200-dynamo-sglang-agentic-dspark-agg
     - minimaxm31flash-fp4-gb200-dynamo-sglang-agentic-dspark-disagg
   scenario-type: [agentic-coding]
   description:
     - "Add disaggregated SGLang behind Dynamo for MiniMax-M3.1-Flash AgentX on GB200 with lmsysorg/sglang:nightly-cu134-20261030-e371881 (Dynamo 1.7.0.dev20261030, Mooncake transfer, minimax-msa kernels)."
-    - "2 DEP4 prefill workers with a DEP8 decode at conc 224 and 256, or 3 DEP4 prefill workers with a DEP16 decode at conc 320 and 360; MegaMoE, DSpark block 7 with fp8 draft KV, Dynamo KV router with fastokens for prefill and least-loaded routing across decode DP ranks."
-    - "Prefill: shortest-prefill-first, chunk 32768 (8192 per DP rank), mem-fraction-static 0.85, HiCache 180 GB per rank write_back. Decode: mem-fraction-static 0.90."
+    - "2 DEP4 prefill workers with a DEP8 decode at conc 224 and 256, 3 DEP4 prefill workers with a DEP8 decode at conc 256 and 288, or 3 DEP4 prefill workers with a DEP16 decode at conc 280-360; MegaMoE, DSpark block 7 with fp8 draft KV, Dynamo KV router with fastokens for prefill and least-loaded routing across decode DP ranks."
+    - "Prefill: shortest-prefill-first, chunk 32768 (8192 per DP rank), mem-fraction-static 0.85, HiCache 180 GB per rank write_back. Decode: mem-fraction-static 0.90 on DEP8, 0.85 on DEP16."
+    - "Agg: TP4 at conc 1-16, and TP4 with HiCache 180 GB per rank at conc 32-56, behind the same Dynamo frontend."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4695
