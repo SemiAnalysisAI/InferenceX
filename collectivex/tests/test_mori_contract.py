@@ -358,7 +358,7 @@ class BlockwiseCodec(unittest.TestCase):
         x[0, 5], x[0, 200], x[1] = 3.0, -0.5, 1.0
         for dtype, fp8_max in ((torch.float8_e4m3fn, 448.0), (torch.float8_e4m3fnuz, 240.0)):
             with self.subTest(dtype=dtype):
-                quantize, dequantize = module._blockwise_codec(dtype, fp8_max)
+                quantize, dequantize = module.blockwise_fp8_codec(dtype, fp8_max)
                 values, scales = quantize(x)
                 self.assertEqual((values.dtype, tuple(scales.shape)), (dtype, (2, 2)))
                 expected = torch.tensor([[3.0, 0.5], [1.0, 1.0]]) / fp8_max
