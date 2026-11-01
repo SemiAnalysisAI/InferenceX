@@ -7586,6 +7586,75 @@ minimaxm31flash-fp4-gb300-sglang-agentic-dspark:
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [36], srt-recipe: 'agentic-spf.yaml:zip_override_tp2_hicache_spf_interval32[4]' }
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [40], srt-recipe: 'agentic-spf.yaml:zip_override_tp2_hicache_spf_interval32[5]' }
 
+minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-agg:
+  image: lmsysorg/sglang:nightly-cu134-20261030-e371881@sha256:a82fff791d7dc1e5cfdfde9022487c60c079286fd54684950d55b787eb2e673a
+  model: MiniMaxAI/MiniMax-M3.1-Flash
+  model-prefix: minimaxm31flash
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-sglang
+  router: { name: dynamo-router, version: "1.7.0.dev20261030" }
+  multinode: true
+  disagg: false
+  srt-recipe-dir: minimaxm31flash/sglang/gb300-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [1]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp4_c1
+        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [4]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp4_c4
+        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [8]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp4_c8
+        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [16]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp4_c16
+        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [24]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp4_hicache_spf_c24
+        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [40]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp2_hicache_spf_c40
+        worker: { num-worker: 1, tp: 2, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [40]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp2_hicache_c40
+        worker: { num-worker: 1, tp: 2, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [44]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp2_hicache_c44
+        worker: { num-worker: 1, tp: 2, ep: 1, dp-attn: false }
+
 minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg:
   image: lmsysorg/sglang:nightly-cu134-20261030-e371881@sha256:a82fff791d7dc1e5cfdfde9022487c60c079286fd54684950d55b787eb2e673a
   model: MiniMaxAI/MiniMax-M3.1-Flash
@@ -7605,14 +7674,28 @@ minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        conc-list: [280, 320, 360, 400]
+        conc-list: [280, 320, 340, 360, 400]
         srt-recipe: disagg-variants.yaml:override_6p_dep2_dep8
         prefill: { num-worker: 6, tp: 2, ep: 2, dp-attn: true }
         decode: { num-worker: 1, tp: 8, ep: 8, dp-attn: true }
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        conc-list: [300]
+        conc-list: [224, 256]
+        srt-recipe: disagg-variants.yaml:override_4p_dep2_dep8
+        prefill: { num-worker: 4, tp: 2, ep: 2, dp-attn: true }
+        decode: { num-worker: 1, tp: 8, ep: 8, dp-attn: true }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [440, 480]
+        srt-recipe: disagg-variants.yaml:override_8p_dep2_dep8
+        prefill: { num-worker: 8, tp: 2, ep: 2, dp-attn: true }
+        decode: { num-worker: 1, tp: 8, ep: 8, dp-attn: true }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [300, 360, 400]
         srt-recipe: disagg-variants.yaml:override_6p_dep2_dep16
         prefill: { num-worker: 6, tp: 2, ep: 2, dp-attn: true }
         decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: true }

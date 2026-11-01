@@ -11769,3 +11769,12 @@
     - "6 DEP2 prefill workers with a DEP8 decode at conc 280-400 or a DEP16 decode at conc 300; MegaMoE, DSpark block 7 with fp8 draft KV, Dynamo KV router with fastokens for prefill and least-loaded routing across decode DP ranks."
     - "Prefill: shortest-prefill-first, chunk 8192, mem-fraction-static 0.85, HiCache 200 GB per rank write_back."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4686
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-agg
+    - minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg
+  scenario-type: [agentic-coding]
+  description:
+    - "Add aggregated SGLang behind Dynamo for MiniMax-M3.1-Flash AgentX on GB300 with lmsysorg/sglang:nightly-cu134-20261030-e371881: TP4 at conc 1-16; TP4 with HiCache 180 GB per rank, shortest-prefill-first and prefill-decode interval 32 at conc 24; TP2 with HiCache 180 GB per rank at conc 40 (with and without shortest-prefill-first) and 44."
+    - "Disagg prefill chunk 16384 (8192 per DP rank); add 4 DEP2 prefill workers with a DEP8 decode at conc 224 and 256, 8 DEP2 prefill workers with a DEP8 decode at conc 440 and 480, conc 340 on the 6 DEP2 + DEP8 shape, and conc 360 and 400 on the 6 DEP2 + DEP16 shape."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4698
