@@ -23,11 +23,17 @@ except Exception as exc:  # pragma: no cover - requires the benchmark image
     raise
 
 
-# The source pin in runtime/common.sh is upstream main, which carries #630 and #640. This
-# adapter does not check the wheel's commit tag, only that the loaded deep_ep exposes
-# ElasticBuffer. The pin is mirrored here for `library_version`, since the wheel reports
-# 2.1.0+local (the build patches the tree, so setup.py finds no clean git hash).
-_DEEPEP_COMMIT = "01dc3aaac82068020353dce2c302e38153c0bfaa"
+# The source pin in runtime/common.sh is upstream main, which carries #630 and #640; pools that opt
+# into AWS's EFA fork build it instead (collx_select_deepep_v2_source), and backend preparation
+# exports the chosen source as COLLX_DEEPEP_SOURCE (repo@commit). This adapter does not check the
+# wheel's commit tag, only that the loaded deep_ep exposes ElasticBuffer. The commit feeds
+# `library_version`, since the wheel reports 2.1.0+local (the build patches the tree, so setup.py
+# finds no clean git hash).
+_UPSTREAM_REPO = "https://github.com/deepseek-ai/DeepEP"
+_DEEPEP_REPO, _, _DEEPEP_COMMIT = (
+    os.environ.get("COLLX_DEEPEP_SOURCE") or f"{_UPSTREAM_REPO}@01dc3aaac82068020353dce2c302e38153c0bfaa"
+).rpartition("@")
+_EFA_FORK = _DEEPEP_REPO != _UPSTREAM_REPO
 
 # vLLM's ElasticBuffer flags: VLLM_DEEPEP_V2_PREFER_OVERLAP and
 # VLLM_DEEPEP_V2_ALLOW_MULTIPLE_REDUCTION both default to 0 (vllm/envs.py) and reach the buffer
@@ -136,7 +142,7 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
     # vLLM's low-latency send/receive split (see LegacyBufferLL).
     ll_recv_hook = True
     # The num_sms the timed dispatch passes: 0 hands the count to DeepEP's model, as vLLM does;
-    # create_buffer overrides it only on EFA.
+    # create_buffer overrides it where the registry sets rdma_gbs.
     _dispatch_num_sms = 0
 
     @staticmethod
@@ -173,6 +179,8 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
         if (os.environ.get("EP_WIN_RELAXED_ORDERING") == "1" and self.mode == "normal"
                 and world_size > int(args.scale_up_domain)):
             self.kernel_generation += "-relaxed-ordering"  # its own series; see methodology.md
+        if _EFA_FORK and self.mode == "normal":
+            self.kernel_generation += "-aws-efa-fork"  # AWS's EFA kernels; its own series
         if self.mode == "low-latency":
             self._enable_ll("legacy-buffer-ll")  # the legacy Buffer IBGDA decode kernels
 
@@ -310,6 +318,9 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
             "receive_capacity": "next-pow2-of-tokens",
             "buffer_tokens_per_rank": getattr(self, "max_tokens", None),
             "zero_copy": False,
+            "deepep_source": _DEEPEP_REPO.removeprefix("https://github.com/"),
+            # The fork's scale-out kernel pair (unordered by default); upstream has one.
+            "hybrid_kernel": os.environ.get("EP_HYBRID_KERNEL", "unordered") if _EFA_FORK else "ordered",
         })
         return details
 
@@ -380,7 +391,7 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
             num_experts=self.args.experts,
             num_max_tokens_per_rank=self._dispatch_capacity(p.T),
             expert_alignment=1,
-            num_sms=self._dispatch_num_sms,  # 0 (DeepEP's model) except on EFA; see create_buffer
+            num_sms=self._dispatch_num_sms,  # 0 (DeepEP's model) unless rdma_gbs is set
             async_with_compute_stream=False,
             do_handle_copy=True,
             do_cpu_sync=False,

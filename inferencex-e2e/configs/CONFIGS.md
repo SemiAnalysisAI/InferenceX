@@ -287,7 +287,7 @@ schema; unknown keys fail.
   measurement fails the job under `REQUIRE_POWER=1` and otherwise records an invalid
   verdict without energy metrics. NVIDIA clusters run `dcgm-exporter`; AMD clusters use
   srt-slurm's
-  [`kind: custom` schema](https://github.com/NVIDIA/srt-slurm/blob/0b9a8e81f05e9a5d68a3d3ca13be078ed0407a1e/docs/power-telemetry.md#gpu-exporter-labels-and-metrics),
+  [`kind: custom` schema](https://github.com/NVIDIA/srt-slurm/blob/59920ea16a13017a990e449d034a495c0b05bc57/docs/power-telemetry.md#gpu-exporter-labels-and-metrics),
   which requires `gpu_labels` and `gpu_metrics` and rejects unknown keys such as the
   former `power_profile`. The AMD exporter reads
   [`runners/srt-slurm/exporters/amd-power.json`](../runners/srt-slurm/exporters/amd-power.json);
