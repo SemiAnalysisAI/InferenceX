@@ -111,13 +111,19 @@ NVME_BASELINE = Provenance(
 )
 DDR5_BASELINE = Provenance(
     profile_id="ddr5-dimm-offload",
-    version="1",
-    source="User-specified model baseline",
-    kind="assumed",
+    version="2",
+    source="BMC Power_Memory calibration on an MI325X (Quanta) host",
+    kind="estimated",
     input_boundary="One DDR5 system-memory DIMM; excludes CPU and fan power",
     assumptions=(
-        "Idle power is 3.8 W per DIMM.",
-        "Active power during CPU offloading is 7 W per DIMM.",
+        "Power is 2.75 W per DIMM in both states: the 58-61 W node total over 24 DIMMs, "
+        "idle and serving, plus a 10% margin.",
+        "CPU offloading leaves it unchanged: Qwen3.5 HiCache with up to 81% of reused prefix "
+        "tokens from host DRAM (about 1.3 GB/s) stayed within 1 W of idle.",
+        "Host-GPU copies add about 0.21 W per GB/s read and 0.26 W per GB/s written per node, "
+        "so offload traffic of a few GB/s is negligible.",
+        "Measured on 96 GB DDR5-6000 RDIMMs with 2x EPYC 9655; other DIMMs and hosts reuse it.",
+        "The sensor's electrical boundary is undocumented and not validated against wall power.",
         "The model workload_state determines CPU offloading and the state of all DDR5 DIMMs.",
     ),
 )
