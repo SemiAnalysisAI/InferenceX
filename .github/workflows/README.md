@@ -162,7 +162,7 @@ test-config --config-keys dsr1-fp8-h200-sglang --evals-only --all-evals --config
 
 ## PR Sweep Labels
 
-`run-sweep.yml` sweeps only same-repository PRs that change
+`run-sweep.yml` sweeps only same-repository PRs, including stacked PRs, that change
 `inferencex-e2e/perf-changelog.yaml`, using the appended entries as the matrix.
 Apply exactly one primary label, normally `full-sweep-fail-fast`.
 Fork PRs use the [trusted dispatch](#trusted-external-fork-sweep-dispatch-poc).
