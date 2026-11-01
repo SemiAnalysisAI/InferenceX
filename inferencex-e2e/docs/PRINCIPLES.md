@@ -7,4 +7,7 @@
 
 
 ## Anti-Goal
-- Due to having limited GPU time and limited upstream maintainer bandwidth, we are unable to support comparing many inference engines. The core focus of InferenceX is to compare between different AI accelerators. For those that want to compare inference engines, we recommend forking the repo, hooking up self hosted GPU resources to your fork repo and potentially writing your own blog on it similar to [ParaSail Engine](https://www.parasail.io/blog/minimax-m3-1-flash-day-0)
+- Due to having limited GPU time and limited upstream maintainer bandwidth, we are unable to support comparing many inference engines.
+  - The core focus of InferenceX is to compare between different AI accelerators.
+  - We should add another inference engine only when its benefits clearly outweigh the core maintainer time it would take away from supporting an AI accelerator that InferenceX does not yet cover
+  - For those that want to compare inference engines, we recommend forking the repo, hooking up self hosted GPU resources to your fork repo and potentially writing your own blog on it similar to [ParaSail Engine](https://www.parasail.io/blog/minimax-m3-1-flash-day-0)
