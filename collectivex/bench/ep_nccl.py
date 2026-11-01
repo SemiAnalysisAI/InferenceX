@@ -50,7 +50,7 @@ from importlib import metadata
 import torch
 import torch.distributed as dist
 
-from ep_backend import EPBackend
+from ep_backend import EPBackend, blockwise_fp8_codec
 
 try:
     import nccl.core as nccl_core
@@ -104,6 +104,9 @@ def _resolve_num_sms(default: int, device_sms: int, env: dict) -> dict:
     return budgets
 
 
+_QUANTIZE, _ = blockwise_fp8_codec(torch.float8_e4m3fn, 448.0)
+
+
 def _blockwise_cast_to_fp8(x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     """Untimed oracle reference for native DS per-128-channel quantization."""
     if x.dim() != 2 or x.size(1) % _FP8_BLOCK_SIZE:
@@ -111,11 +114,7 @@ def _blockwise_cast_to_fp8(x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]
             "NCCL EP FP8 requires a 2D hidden dimension divisible by "
             f"{_FP8_BLOCK_SIZE}, got {tuple(x.shape)}"
         )
-    rows, hidden = x.shape
-    blocks = x.view(rows, -1, _FP8_BLOCK_SIZE)
-    amax = blocks.abs().float().amax(dim=2).clamp(1e-4)
-    values = (blocks * (448.0 / amax.unsqueeze(2))).to(torch.float8_e4m3fn)
-    return values.view(rows, hidden), (amax / 448.0).view(rows, -1)
+    return _QUANTIZE(x)
 
 
 def _blockwise_cast_back_into(
@@ -260,7 +259,8 @@ class NCCLEPBackend(EPBackend):
             self.dispatch_dtype = "fp8-e4m3fn"
             self.dispatch_value_bytes = 1
             self.dispatch_scale_bytes_per_copy = (args.hidden // _FP8_BLOCK_SIZE) * 4
-            self._dequant_into = self.fused_quantize(_blockwise_cast_back_into)
+            # Compiled in both modes: production fuses the dequant, and nothing gates its bits.
+            self._dequant_into = self.compiled(_blockwise_cast_back_into, torch)
         # NCCL EP's handle is explicitly reusable across dispatch/combine cycles (ep_test.py
         # cached mode redispatches and recombines on one handle), so — unlike DeepEP's legacy
         # low-latency Buffer — no timed component needs a fresh dispatch or a draining combine;
