@@ -248,16 +248,16 @@ def build_overrides(
         elif worker_engine == "atom":
             key = "spec-decode-acceptance-length"
             if worker_al is not None and worker_spec:
-                overrides += ["--set", f"{prefix}.args.{key}={worker_al:g}"]
+                overrides += ["--set", f"{prefix}.args.{key}={worker_al:.15g}"]
             elif key in (role.get("args") or {}):
                 overrides += ["--unset", f"{prefix}.args.{key}"]
         elif worker_al is not None and worker_spec:
             values = (
-                (f"{worker_al:g}", "match-expected", "real-draft-token")
+                (f"{worker_al:.15g}", "match-expected", "real-draft-token")
                 if engine == "sglang"
-                else (f"{worker_al:g}", "match-expected")
+                else (f"{worker_al:.15g}", "match-expected")
                 if engine == "tilert"
-                else (f"{worker_al - 1:g}",)
+                else (f"{worker_al - 1:.15g}",)
             )
             for key, value in zip(variables, values, strict=True):
                 overrides += ["--set", f"{prefix}.env.{key}={json.dumps(value)}"]
