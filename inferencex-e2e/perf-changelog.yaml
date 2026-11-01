@@ -11777,3 +11777,20 @@
     - "Add native SGLang GLM-5.3-Flash FP8 AgentX on GB300 with the official ARM64-capable v0.5.22-cu130 image, TP4/EP1, TRT-LLM DSA, FP8 E4M3 KV cache, and embedded EAGLE MTP 5/1/6."
     - "Run the full AgentX corpus and 1048576-token context at concurrency 1, 2, 4, 8, 12, 16, 24, 32, 48, and 64 with shared measured golden acceptance and canonical real evals."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4715
+
+- config-keys:
+    - glm5.3flash-fp8-gb300-sglang-agentic-hicache-frontier
+  scenario-type: [agentic-coding]
+  no-evals: true
+  description:
+    - "Compare native GLM-5.3-Flash FP8 GB300 SGLang AgentX with HiCache off/on at matched concurrency 40, 48, 56, 64, and 80, retaining the full corpus, context, duration, and embedded MTP."
+    - "Use the builtin 0.90 live-host-memory fraction with write-through, kernel I/O, and page-first layout; preserve parent Slurm resources and distinguish nominal offload-budget metadata from actual allocation."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4732
+
+- config-keys:
+    - glm5.3flash-fp8-gb300-sglang-agentic-hicache-eval
+  scenario-type: [agentic-coding]
+  evals-only: true
+  description:
+    - "Select the HiCache-on GB300 FP8 concurrency-64 canonical evaluation explicitly, with shared synthetic-acceptance cleanup, rather than relying on OFF/ON same-concurrency eval deduplication."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4732
