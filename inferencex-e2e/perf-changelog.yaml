@@ -11769,3 +11769,10 @@
     - "6 DEP2 prefill workers with a DEP8 decode at conc 280-400 or a DEP16 decode at conc 300; MegaMoE, DSpark block 7 with fp8 draft KV, Dynamo KV router with fastokens for prefill and least-loaded routing across decode DP ranks."
     - "Prefill: shortest-prefill-first, chunk 8192, mem-fraction-static 0.85, HiCache 200 GB per rank write_back."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4686
+
+- config-keys:
+    - glm5.3flash-fp8-b300-sglang-agentic-mtp
+  description:
+    - "Add GLM-5.3-Flash FP8 AgentX on B300 with the pinned official SGLang v0.5.22-cu130 image, TP8, and EAGLE MTP5 at concurrency 1/4/8/16/24/32/48/64."
+    - "Use the shared glm5.3flash thinking_on golden-acceptance curve, the full AgentX workload, and canonical GSM8K evaluation; preserve checkpoint-default draft precision and explicitly disable SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4710
