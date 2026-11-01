@@ -39,6 +39,7 @@ base:
         ROCM_QUICK_REDUCE_QUANTIZATION: 'NONE'
         SGLANG_DSA_FUSE_TOPK: 'false'
         SGLANG_OPT_USE_TOPK_V2: 'false'
+        SGLANG_OPT_FUSE_MHC_POST_PRE: '0'
         SGLANG_GLM_NEXTN_MOE_PTPC: '0'
         SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
       args:
