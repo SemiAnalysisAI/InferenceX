@@ -16,8 +16,6 @@ base:
     HF_CHECKPOINT_REVISION: 46a050bec13002ad29ee795c16e61cf4fa3c4a9c
     # The 328 GB checkpoint needs download and metadata headroom.
     HF_CHECKPOINT_BUDGET_BYTES: '400000000000'
-    HF_HUB_OFFLINE: '0'
-    TRANSFORMERS_OFFLINE: '0'
   frontend:
     type: sglang
     enable_multiple_frontends: false
@@ -32,6 +30,8 @@ base:
       workers: 1
       gpus: 4
       env:
+        HF_HUB_OFFLINE: '1'
+        TRANSFORMERS_OFFLINE: '1'
         PYTHONNOUSERSITE: '1'
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
         SGLANG_USE_AITER: '1'
@@ -78,9 +78,12 @@ base:
     interval_seconds: 10
   benchmark:
     env:
+      HF_HUB_OFFLINE: '0'
+      TRANSFORMERS_OFFLINE: '0'
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
+      TOKENIZER: /mnt/hf_hub_cache/models--zai-org--GLM-5.3-Flash/snapshots/46a050bec13002ad29ee795c16e61cf4fa3c4a9c
 
 override_tp4_ep4_c1:
   roles:
