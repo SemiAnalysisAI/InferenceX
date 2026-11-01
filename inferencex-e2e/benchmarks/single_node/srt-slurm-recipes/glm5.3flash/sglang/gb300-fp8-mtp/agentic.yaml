@@ -46,6 +46,5 @@ health_check:
   interval_seconds: 5
 benchmark:
   env:
-    TOKENIZER: /model
     AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
