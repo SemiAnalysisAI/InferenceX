@@ -11794,3 +11794,22 @@
   scenario-type: [agentic-coding]
   evals-only: true
   all-evals: true
+
+- config-keys:
+    - glm5.3flash-fp8-b300-sglang-agentic-mtp-tp4-frontier
+  description:
+    - "Add GLM-5.3-Flash FP8 B300 TP4 plus admission tuning: OFF concurrency 8 anchor and paired HiCache OFF/ON concurrency 48/64/80/96, all with common request/graph cap 96."
+    - "Keep full AgentX context/corpus/duration, measured MTP5 acceptance, parent precision/image, and automatic HiCache host fraction 0.65; reserve eight GPUs with four active and report both cost views."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4738
+  scenario-type: [agentic-coding]
+  no-evals: true
+
+- config-keys:
+    - glm5.3flash-fp8-b300-sglang-agentic-mtp-tp4-frontier-off-eval
+    - glm5.3flash-fp8-b300-sglang-agentic-mtp-tp4-frontier-on-eval
+  description:
+    - "Run fresh full canonical TP4 GSM8K controls with HiCache OFF at concurrency 16 and ON at concurrency 96, without synthetic acceptance in either evaluation."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4738
+  scenario-type: [agentic-coding]
+  evals-only: true
+  all-evals: true
