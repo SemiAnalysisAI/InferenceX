@@ -11798,3 +11798,24 @@
     - "Select a dedicated C64 HiCache-ON canonical evaluation so cache-mode deduplication cannot silently discard the ON accuracy check."
     - "Disable synthetic acceptance for the full canonical evaluation; a separate real host-restore check remains required before full GPU authorization."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4730
+
+- config-keys:
+    - glm5.3flash-fp8-b200-sglang-agentic-tp4-frontier
+  scenario-type: [agentic-coding]
+  no-evals: true
+  description:
+    - "Add GLM-5.3-Flash FP8 B200 TP4 matched HiCache OFF/ON concurrency 24 and 32 plus an OFF concurrency 8 anchor, with common request and decode-graph caps of 64."
+    - "Preserve native precision, FP8 KV, MTP 5/1/6, full AgentX workload and native context; use upstream automatic host-memory fraction 0.70 with nominal DRAM utilization 1.0."
+    - "Treat this as TP4 plus admission tuning; distinguish four active GPUs from the unchanged eight-GPU exclusive reservation, and defer concurrency 48 and 64."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4739
+
+- config-keys:
+    - glm5.3flash-fp8-b200-sglang-agentic-tp4-frontier-eval-off
+    - glm5.3flash-fp8-b200-sglang-agentic-tp4-frontier-eval-on
+  scenario-type: [agentic-coding]
+  evals-only: true
+  all-evals: true
+  description:
+    - "Retain fresh complete TP4 canonical evaluations at OFF concurrency 16 and ON concurrency 32 rather than allowing offload-mode deduplication to drop one."
+    - "Disable synthetic acceptance and leave the bounded TP8 host-restore probe opt-in absent; no extra restore diagnostic is activated by these selectors."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4739
