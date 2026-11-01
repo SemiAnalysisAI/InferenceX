@@ -11777,3 +11777,22 @@
     - "Add GLM-5.3-Flash NVFP4 B200 AgentX with pinned official SGLang v0.5.22-cu130, TP8/EP1, embedded EAGLE MTP 5/1/6, FP8 KV and TRT-LLM DSA."
     - "Retain the full 1048576-token context and canonical evals across concurrency 1, 2, 4, 8, 16 and 32; select measured Flash golden acceptance through the connector and disable draft requantization."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4709
+
+- config-keys:
+    - glm5.3flash-fp4-b200-sglang-agentic-mtp-frontier-none
+    - glm5.3flash-fp4-b200-sglang-agentic-mtp-frontier-hicache
+  scenario-type: [agentic-coding]
+  no-evals: true
+  description:
+    - "Add paired B200 GLM-5.3-Flash NVFP4 HiCache OFF/ON concurrency 16, 32, 48 and 64 controls, retaining the parent image, TP8/EP1, MTP and full AgentX workload."
+    - "Use native automatic HiCache host-memory fraction 0.70 without fixed size or ratio; preserve request/graph limits, full context and shipped draft precision."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4727
+
+- config-keys:
+    - glm5.3flash-fp4-b200-sglang-agentic-mtp-frontier-hicache-eval
+  scenario-type: [agentic-coding]
+  evals-only: true
+  all-evals: true
+  description:
+    - "Run the full canonical B200 NVFP4 HiCache ON evaluation separately at concurrency 64 with synthetic acceptance disabled."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4727
