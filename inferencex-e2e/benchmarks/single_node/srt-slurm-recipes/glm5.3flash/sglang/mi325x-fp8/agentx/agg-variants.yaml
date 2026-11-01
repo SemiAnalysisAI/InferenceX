@@ -1,0 +1,125 @@
+schema: 2
+
+base:
+  identity:
+    model:
+      revision: 46a050bec13002ad29ee795c16e61cf4fa3c4a9c
+    container: {}
+    frameworks:
+      sglang: v0.5.21
+  resources:
+    gpu_type: mi325x
+    gpus_per_node: 8
+  setup_script: stage-hf-checkpoint.sh
+  environment:
+    HF_CHECKPOINT_REPO: zai-org/GLM-5.3-Flash
+    HF_CHECKPOINT_REVISION: 46a050bec13002ad29ee795c16e61cf4fa3c4a9c
+    # The 328 GB checkpoint needs download and metadata headroom.
+    HF_CHECKPOINT_BUDGET_BYTES: '400000000000'
+    HF_HUB_OFFLINE: '0'
+    TRANSFORMERS_OFFLINE: '0'
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env:
+        PYTHONNOUSERSITE: '1'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        SGLANG_USE_AITER: '1'
+        AITER_ONLINE_TUNE: '0'
+        ROCM_QUICK_REDUCE_QUANTIZATION: 'NONE'
+        SGLANG_DSA_FUSE_TOPK: 'false'
+        SGLANG_OPT_USE_TOPK_V2: 'false'
+        SGLANG_GLM_NEXTN_MOE_PTPC: '0'
+        SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
+      args:
+        served-model-name: zai-org/GLM-5.3-Flash
+        revision: 46a050bec13002ad29ee795c16e61cf4fa3c4a9c
+        trust-remote-code: true
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        quantization: fp8
+        context-length: 1048576
+        page-size: 64
+        mem-fraction-static: 0.82
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        attention-backend: dsa
+        dsa-prefill-backend: tilelang
+        dsa-decode-backend: tilelang
+        dsa-topk-backend: torch
+        linear-attn-backend: triton
+        linear-attn-verify-backend: triton
+        kv-cache-dtype: bfloat16
+        moe-runner-backend: aiter
+        cuda-graph-backend-prefill: disabled
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 5
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 6
+        speculative-attention-mode: prefill
+        speculative-moe-a2a-backend: none
+        reasoning-parser: glm45
+        tool-call-parser: glm47
+        watchdog-timeout: 1800
+        dist-timeout: 600
+        enable-metrics: true
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 10
+  benchmark:
+    env:
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      AIPERF_APPLY_CHAT_TEMPLATE: 'true'
+
+override_tp4_ep4_c1:
+  roles:
+    agg:
+      args:
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+
+override_tp4_ep4_c2:
+  roles:
+    agg:
+      args:
+        max-running-requests: 4
+        cuda-graph-max-bs-decode: 4
+
+override_tp4_ep4_c4:
+  roles:
+    agg:
+      args:
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+
+override_tp4_ep4_c8:
+  roles:
+    agg:
+      args:
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+
+override_tp4_ep4_c12:
+  roles:
+    agg:
+      args:
+        max-running-requests: 24
+        cuda-graph-max-bs-decode: 24
+
+override_tp4_ep4_c16:
+  roles:
+    agg:
+      args:
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
