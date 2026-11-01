@@ -3,6 +3,7 @@ import json
 import pytest
 import yaml
 
+from infx.bench import speedbench_al
 from infx.bench.env import BenchError, InputError
 from infx.bench.speedbench_al import levels, read_acceptance, select_category, write_matrix
 
@@ -39,11 +40,44 @@ def test_select_category_preserves_all_matching_prompts(tmp_path):
         [{"role": "user", "content": ["multimodal"]}],
     ],
 )
-def test_select_category_rejects_lossy_conversion(tmp_path, messages):
+def test_select_category_rejects_invalid_first_turn(tmp_path, messages):
     source = tmp_path / "source.jsonl"
     source.write_text(json.dumps({"category": "coding", "messages": messages}))
-    with pytest.raises(BenchError, match="exactly one"):
+    with pytest.raises(BenchError, match="start with"):
         select_category(source, tmp_path / "selected.jsonl", "coding")
+
+
+def test_select_category_preserves_multiturn_rows_for_native_vllm_loader(tmp_path):
+    source = tmp_path / "source.jsonl"
+    row = {
+        "category": "coding",
+        "messages": [
+            {"role": "user", "content": "Write a parser"},
+            {"role": "user", "content": "Add error handling"},
+        ],
+    }
+    source.write_text(json.dumps(row))
+    destination = tmp_path / "selected.jsonl"
+    assert select_category(source, destination, "coding") == 1
+    assert json.loads(destination.read_text()) == row
+
+
+def test_wait_gpu_idle_waits_for_workers(monkeypatch):
+    readings = iter(["15000\n16000\n", "1000\n1900\n"])
+    monkeypatch.setattr(speedbench_al.subprocess, "check_output", lambda *a, **kw: next(readings))
+    waits = []
+    monkeypatch.setattr(speedbench_al.time, "sleep", waits.append)
+    speedbench_al.wait_gpu_idle()
+    assert waits == [3]
+
+
+@pytest.mark.parametrize("output", ["", "3000\n4000\n"])
+def test_wait_gpu_idle_fails_closed(monkeypatch, output):
+    monkeypatch.setattr(speedbench_al.subprocess, "check_output", lambda *a, **kw: output)
+    clock = iter([0, 121])
+    monkeypatch.setattr(speedbench_al.time, "monotonic", lambda: next(clock))
+    with pytest.raises(BenchError, match="did not drain"):
+        speedbench_al.wait_gpu_idle()
 
 
 def test_acceptance_and_matrix(tmp_path):

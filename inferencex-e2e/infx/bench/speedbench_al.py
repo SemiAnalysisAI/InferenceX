@@ -12,6 +12,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.request
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -40,14 +41,14 @@ def select_category(source: Path, destination: Path, category: str) -> int:
             if row.get("category") != category:
                 continue
             messages = row["messages"]
-            # Coding collection is single-turn; do not silently flatten conversations.
+            # vLLM samples the first turn of each row, including multi-turn rows.
             if (
-                len(messages) != 1
+                not messages
                 or messages[0]["role"] != "user"
                 or not isinstance(messages[0]["content"], str)
                 or not messages[0]["content"]
             ):
-                raise env.BenchError("SPEED-Bench row must contain exactly one nonempty user turn")
+                raise env.BenchError("SPEED-Bench row must start with a nonempty text user turn")
             out.write(json.dumps(row) + "\n")
             count += 1
     if count == 0:
@@ -147,6 +148,24 @@ def stop(child: subprocess.Popen[bytes]) -> None:
         with contextlib.suppress(ProcessLookupError):
             os.killpg(child.pid, signal.SIGKILL)
         child.wait()
+    wait_gpu_idle()
+
+
+def wait_gpu_idle() -> None:
+    # Reaping the launcher does not wait for TP workers to release their CUDA contexts.
+    deadline = time.monotonic() + 120
+    while True:
+        output = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
+            text=True,
+            timeout=10,
+        )
+        used = [int(line.strip()) for line in output.splitlines() if line.strip()]
+        if used and max(used) < 2000:
+            return
+        if time.monotonic() >= deadline:
+            raise env.BenchError(f"GPU memory did not drain after server shutdown: {used} MiB")
+        time.sleep(3)
 
 
 def collect_cell(
@@ -296,6 +315,10 @@ def main(argv: list[str]) -> int:
             "verification": "standard (no block or synthetic acceptance flags)",
             "prepare_url": PREPARE_URL,
             "num_prompts": count,
+            "prompt_selection": "upstream vLLM SPEED-Bench: first user turn of each category row",
+            "rows_with_followup_turns": sum(
+                len(json.loads(line)["messages"]) > 1 for line in dataset.read_text().splitlines()
+            ),
             "dataset_sha256": hashlib.sha256(dataset.read_bytes()).hexdigest(),
             "config_sha256": hashlib.sha256((model / "config.json").read_bytes()).hexdigest(),
             "vllm_version": importlib.metadata.version("vllm"),
