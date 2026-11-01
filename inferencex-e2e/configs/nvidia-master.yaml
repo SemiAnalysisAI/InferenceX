@@ -8859,7 +8859,7 @@ glm5.3flash-fp4-b200-sglang-agentic-mtp-frontier-hicache:
   srt-recipe-dir: glm5.3flash/sglang/b200-fp4-frontier
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.70
+    - dram-utilization: 1.0
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 32, 48, 64], srt-recipe: hicache.yaml }
 
@@ -8874,7 +8874,7 @@ glm5.3flash-fp4-b200-sglang-agentic-mtp-frontier-hicache-eval:
   srt-recipe-dir: glm5.3flash/sglang/b200-fp4-frontier
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.70
+    - dram-utilization: 1.0
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64], srt-recipe: hicache.yaml:override_c64 }
 
