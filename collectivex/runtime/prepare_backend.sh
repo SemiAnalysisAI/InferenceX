@@ -244,8 +244,7 @@ deepep_activate() {
     LD_LIBRARY_PATH="$overlay/lib:$nccl_root/lib:$nvshmem_package/lib:${LD_LIBRARY_PATH:-}" \
     LIBRARY_PATH="$nccl_root/lib${LIBRARY_PATH:+:$LIBRARY_PATH}"
   # LIBRARY_PATH: DeepEP links -l:libnccl.so.2 with only an rpath to the wheel, so the link step
-  # needs the wheel's lib directory on the search path. Images with a system NCCL (SGLang's)
-  # resolved it from /usr/lib; vLLM's image has NCCL only as a pip wheel.
+  # needs the wheel's lib directory on the search path: vLLM's image has NCCL only as a pip wheel.
   unset "${DEEPEP_RANK_UNSETS[@]}"
 
   # Shared JIT caches race across nodes; keep this cache node-local. CUMEM is
@@ -361,7 +360,7 @@ readonly UCCL_BUILD_RECORD=collx_uccl_build.json
 uccl_probe() {
   # import torch FIRST so libc10 is resident before the uccl.ep extension dlopens (it links
   # libc10/libtorch); importing deep_ep before torch fails with "libc10.so: cannot open".
-  # DeepSeek's DeepEP, which the sglang images ship, has the same legacy Buffer API, so capability
+  # DeepSeek's DeepEP, which an image may ship, has the same legacy Buffer API, so capability
   # checks cannot tell the two apart. Identity can: UCCL's wrapper re-exports uccl.ep's Config, both
   # must load from this cache, and its build record must name the pinned commit.
   python3 - "$1/site" "$COLLX_UCCL_COMMIT" "$UCCL_BUILD_RECORD" <<'PY'
@@ -439,7 +438,7 @@ uccl_install() {
   fi
   mkdir -m 700 "$root" || { collx_log "ERROR: UCCL cache-create failed"; return 1; }
   collx_log "UCCL-EP: building $COLLX_UCCL_COMMIT from source (${flags[*]})"
-  # Some sglang/rocm images mark the system env externally-managed (PEP 668).
+  # Some images mark the system env externally-managed (PEP 668).
   { python3 -m pip install -q --disable-pip-version-check --no-input nanobind \
       || python3 -m pip install -q --disable-pip-version-check --no-input \
            --break-system-packages nanobind; } >&2 2>&1 \
