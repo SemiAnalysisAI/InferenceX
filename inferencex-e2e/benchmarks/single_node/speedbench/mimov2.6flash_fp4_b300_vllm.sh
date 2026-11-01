@@ -44,6 +44,35 @@ RESULTS_DIR="/workspace/speedbench_results"
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 
 mkdir -p "$RESULTS_DIR"
+
+# `vllm bench serve` os.execv's the CLIENT into the Rust vllm-rs binary whenever the
+# dataset (speed_bench qualifies) and backend are supported, with no opt-out. The
+# Rust flag surface lacks --speed-bench-output-len, --save-detailed and
+# --chat-template-kwargs, so every cell would die at argument parsing. Call the
+# Python entrypoint directly (vllm.benchmarks.serve.main), as the CLI's own Python
+# fallback does. The SERVER keeps the Rust frontend; AL is read from /metrics.
+BENCH_DRIVER="$RESULTS_DIR/bench_serve_python.py"
+cat > "$BENCH_DRIVER" <<'PYEOF'
+# Python-only `vllm bench serve`: bypasses the Rust os.execv delegation in
+# vllm/entrypoints/cli/benchmark/serve.py by importing the benchmark directly.
+from vllm.benchmarks.serve import add_cli_args, main
+
+try:  # import path moved in newer vLLM
+    from vllm.utils.argparse_utils import FlexibleArgumentParser
+except ImportError:
+    from vllm.utils import FlexibleArgumentParser
+
+parser = FlexibleArgumentParser(
+    description="vllm bench serve (Python entrypoint, no Rust delegation)"
+)
+add_cli_args(parser)
+main(parser.parse_args())
+PYEOF
+if [[ ! -s "$BENCH_DRIVER" ]]; then
+    echo "CRITICAL: could not write the benchmark driver to $BENCH_DRIVER — aborting."
+    exit 1
+fi
+
 nvidia-smi
 GPU_NAME="$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)"
 
@@ -81,6 +110,19 @@ if [[ ! -f "$SPEEDBENCH_DIR/qualitative.jsonl" ]]; then
     echo "CRITICAL: SPEED-Bench download failed — $SPEEDBENCH_DIR/qualitative.jsonl not found"
     exit 1
 fi
+
+# Preflight the client flags every cell uses; otherwise a CLI mismatch only shows up
+# as an all-N/A matrix after every server start. --help=all prints every flag group.
+BENCH_HELP="$(python3 "$BENCH_DRIVER" --help=all 2>&1)"
+for flag in --speed-bench-category --speed-bench-output-len --chat-template-kwargs --save-detailed; do
+    if [[ "$BENCH_HELP" != *"$flag"* ]]; then
+        echo "CRITICAL: the Python benchmark entrypoint does not support $flag — aborting."
+        echo "--- python3 $BENCH_DRIVER --help=all ---"
+        echo "$BENCH_HELP"
+        exit 1
+    fi
+done
+echo "=== Benchmark client flag preflight OK ==="
 
 fetch_metric() {
     local port="$1" name="$2"
@@ -162,7 +204,7 @@ run_cell() {
     acc_before=$(fetch_metric "$PORT" "vllm:spec_decode_num_accepted_tokens_total")
     drf_before=$(fetch_metric "$PORT" "vllm:spec_decode_num_drafts_total")
 
-    vllm bench serve \
+    python3 "$BENCH_DRIVER" \
         --model "$SERVE_MODEL" \
         --port "$PORT" \
         --dataset-name speed_bench \
@@ -179,6 +221,10 @@ run_cell() {
         --temperature "$TEMPERATURE" \
         --top-p "$TOP_P" \
         "${think_args[@]}"
+    local bench_rc=$?
+    if [[ $bench_rc -ne 0 ]]; then
+        echo "  -> benchmark client exited rc=$bench_rc (thinking=$mode dflash=$mtp)"
+    fi
 
     acc_after=$(fetch_metric "$PORT" "vllm:spec_decode_num_accepted_tokens_total")
     drf_after=$(fetch_metric "$PORT" "vllm:spec_decode_num_drafts_total")
@@ -206,7 +252,7 @@ done
 emit_mode_block() {
     local mode="$1"
     for mtp in $MTP_LIST; do
-        echo "    $mtp: ${AL_RESULT[${mode}_${mtp}]}"
+        echo "    $mtp: ${AL_RESULT[${mode}_${mtp}]:-N/A}"
     done
 }
 
@@ -236,3 +282,17 @@ echo "=========================================="
 echo "  SPEED-Bench AL matrix written to: $OUT_YAML"
 echo "=========================================="
 cat "$OUT_YAML"
+
+# A matrix where every cell is N/A is a failed collection, not a result: fail the
+# job so it is not mistaken for a curve worth reviewing.
+MEASURED=0
+for mode in $THINKING_MODES; do
+    for mtp in $MTP_LIST; do
+        [[ "${AL_RESULT[${mode}_${mtp}]:-N/A}" != "N/A" ]] && MEASURED=$((MEASURED + 1))
+    done
+done
+if [[ "$MEASURED" -eq 0 ]]; then
+    echo "CRITICAL: no cell produced an AL value — see the server logs and the"
+    echo "benchmark client output above."
+    exit 1
+fi
