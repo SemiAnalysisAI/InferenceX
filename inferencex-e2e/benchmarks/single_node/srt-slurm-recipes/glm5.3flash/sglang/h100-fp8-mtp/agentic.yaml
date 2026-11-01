@@ -8,8 +8,6 @@ environment:
   HF_CHECKPOINT_REPO: zai-org/GLM-5.3-Flash
   HF_CHECKPOINT_REVISION: 46a050bec13002ad29ee795c16e61cf4fa3c4a9c
   HF_CHECKPOINT_BUDGET_BYTES: '400000000000'
-  HF_HUB_OFFLINE: '0'
-  TRANSFORMERS_OFFLINE: '0'
 resources:
   gpu_type: h100
   gpus_per_node: 8
@@ -48,6 +46,8 @@ roles:
       enable-cache-report: true
       enable-metrics: true
     env:
+      HF_HUB_OFFLINE: '1'
+      TRANSFORMERS_OFFLINE: '1'
       PYTHONNOUSERSITE: '1'
       SGLANG_TIMEOUT_KEEP_ALIVE: '900'
       SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
@@ -57,6 +57,9 @@ health_check:
   interval_seconds: 10
 benchmark:
   env:
+    HF_HUB_OFFLINE: '0'
+    TRANSFORMERS_OFFLINE: '0'
+    TOKENIZER: /mnt/hf_hub_cache/models--zai-org--GLM-5.3-Flash/snapshots/46a050bec13002ad29ee795c16e61cf4fa3c4a9c
     KV_OFFLOADING: none
     AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
