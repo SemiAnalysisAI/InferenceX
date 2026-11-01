@@ -14,6 +14,8 @@ from infx import github
     ("gh: Not Found (HTTP 404)\n", 404),
     ("gh: Forbidden (HTTP 403)", 403),
     ("gh: Bad Gateway (HTTP 502)", 502),
+    ('gh: Not Found (HTTP 404)\ngh: This API operation needs the "admin:org" scope. To request '
+     "it, run:  gh auth refresh -h github.com -s admin:org\n", 404),
     ("network timeout mentioning 404 without HTTP status", None),
 ])
 def test_authenticated_api_errors_expose_status_without_guessing(monkeypatch, stderr, status):
@@ -87,8 +89,11 @@ def test_reaction_transport_sends_json_and_handles_empty_delete_response(monkeyp
         api("example/project", "/pulls/7", "token")
 
 
+@pytest.mark.parametrize("collection", ["issues", "pulls"])
 @pytest.mark.parametrize("content", [None, "+1", "-1"])
-def test_reaction_replacement_preserves_humans_and_unmanaged_bot_reactions(monkeypatch, content):
+def test_reaction_replacement_preserves_humans_and_unmanaged_bot_reactions(
+    monkeypatch, content, collection
+):
     reactions = [
         {"id": 11, "content": "+1", "user": {"login": "maintainer"}},
         {"id": 12, "content": "heart", "user": {"login": "github-actions[bot]"}},
@@ -98,6 +103,7 @@ def test_reaction_replacement_preserves_humans_and_unmanaged_bot_reactions(monke
 
     def run(args, **kwargs):
         endpoint = next(arg for arg in args if arg.startswith("repos/"))
+        assert endpoint.startswith(f"repos/example/project/{collection}/comments/7/reactions")
         method = args[args.index("--method") + 1]
         if method == "GET":
             payload = [reactions] if "--slurp" in args else reactions
@@ -110,7 +116,9 @@ def test_reaction_replacement_preserves_humans_and_unmanaged_bot_reactions(monke
         return subprocess.CompletedProcess(args, 0, "{}", "")
 
     monkeypatch.setattr(github.subprocess, "run", run)
-    github.set_comment_reaction("example/project", 7, "token", content, replace=("+1", "-1"))
+    github.set_comment_reaction(
+        "example/project", 7, "token", content, collection=collection, replace=("+1", "-1")
+    )
     expected = [(11, "+1"), (12, "heart")]
     if content is not None:
         expected.append((15, content))

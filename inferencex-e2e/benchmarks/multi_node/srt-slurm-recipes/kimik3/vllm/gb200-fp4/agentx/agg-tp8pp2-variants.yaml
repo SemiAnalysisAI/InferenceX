@@ -33,7 +33,6 @@ base:
       workers: 1
       gpus: 16
       env:
-        VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: "1"
         MC_GID_INDEX: "@fabric.rdma-gid-index"
         MC_STORE_MEMCPY: "1"
         MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
@@ -44,6 +43,7 @@ base:
         VLLM_USE_DIRECT_DCP_A2A: "1"
         VLLM_USE_DIRECT_DCP_Q_GATHER: "1"
         VLLM_USE_DIRECT_DCP_KV_GATHER: "1"
+        VLLM_ENGINE_READY_TIMEOUT_S: "3600"
         VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
         VLLM_USE_V2_MODEL_RUNNER: "1"
         VLLM_SERVER_DEV_MODE: "1"
@@ -68,10 +68,11 @@ base:
         trust-remote-code: true
         load-format: fastsafetensors
         moe-backend: auto
-        gpu-memory-utilization: 0.87
+        gpu-memory-utilization: 0.88
         no-enable-flashinfer-autotune: true
         max-model-len: 1048576
         kv-cache-dtype: fp8
+        mamba-ssm-cache-dtype: bfloat16
         kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}'
         attention-backend: TOKENSPEED_MLA
         attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
@@ -110,18 +111,41 @@ base:
     placement:
       node: head
     env:
-      AIPERF_TRACE_IDLE_GAP_CAP_SECONDS: "300"
       AIPERF_LIVE_FAILED_REQUEST_THRESHOLD: "0.25"
       AIPERF_SERVER_METRICS_URLS: "http://localhost:8000/metrics"
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
 
-override_tp8pp2_c16:
+override_tp8pp2_c1:
   roles:
     agg:
       args:
-        max-num-seqs: 32
+        max-num-seqs: 2
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":7,"method":"dspark","attention_backend":"TOKENSPEED_MLA","draft_sample_method":"probabilistic"}'
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,16,64,128,256,512,1024,2048,4096,8192]}'
+
+override_tp8pp2_c4:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 8
+        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":7,"method":"dspark","attention_backend":"TOKENSPEED_MLA","draft_sample_method":"probabilistic"}'
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,16,24,32,40,48,56,64,128,256,512,1024,2048,4096,8192]}'
+
+override_tp8pp2_c8:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 16
+        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":7,"method":"dspark","attention_backend":"TOKENSPEED_MLA","draft_sample_method":"probabilistic"}'
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,16,24,40,56,64,80,104,128,256,512,1024,2048,4096,8192]}'
+
+override_tp8pp2_c24:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 48
+        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":4,"method":"dspark","attention_backend":"TOKENSPEED_MLA","draft_sample_method":"probabilistic"}'
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,16,24,40,56,64,80,104,128,256,512,1024,2048,4096,8192]}'
 
 override_tp8pp2_c32:
@@ -129,7 +153,7 @@ override_tp8pp2_c32:
     agg:
       args:
         max-num-seqs: 64
-        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":7,"method":"dspark","attention_backend":"TOKENSPEED_MLA","draft_sample_method":"probabilistic"}'
+        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":4,"method":"dspark","attention_backend":"TOKENSPEED_MLA","draft_sample_method":"probabilistic"}'
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,7,18,34,53,64,75,100,128,256,512,1024,2048,4096,8192]}'
 
 override_tp8pp2_c48:
@@ -137,18 +161,13 @@ override_tp8pp2_c48:
     agg:
       args:
         max-num-seqs: 96
+        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":4,"method":"dspark","attention_backend":"TOKENSPEED_MLA","draft_sample_method":"probabilistic"}'
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,7,18,34,53,64,75,100,128,256,512,1024,2048,4096,8192]}'
 
-override_tp8pp2_c72:
+override_tp8pp2_c56:
   roles:
     agg:
       args:
-        max-num-seqs: 144
-        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,7,18,34,53,64,75,100,128,256,512,1024,2048,4096,8192]}'
-
-override_tp8pp2_c96:
-  roles:
-    agg:
-      args:
-        max-num-seqs: 192
+        max-num-seqs: 112
+        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":4,"method":"dspark","attention_backend":"TOKENSPEED_MLA","draft_sample_method":"probabilistic"}'
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,7,18,34,53,64,75,100,128,256,512,1024,2048,4096,8192]}'

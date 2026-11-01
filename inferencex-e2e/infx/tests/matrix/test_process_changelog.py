@@ -648,6 +648,144 @@ def test_invalid_key_after_valid_key_rejects_entire_selection(changelog_run, key
         changelog_run([{"config-keys": keys}])
 
 
+@pytest.mark.parametrize("include_active", [False, True])
+def test_retirement_records_deleted_configs_without_running_them(
+    committed_planning_repo, include_active
+):
+    root, base, head = committed_planning_repo
+    path = root / "configs/nvidia-master.yaml"
+    master = yaml.safe_load(path.read_text())
+    del master["single"]
+    path.write_text(yaml.safe_dump(master))
+    (root / "benchmarks/single_node/srt-slurm-recipes/fixture/recipe.yaml").unlink()
+    entries = [{
+        "config-keys": ["single"], "retired": True, "description": ["Retire single"],
+        "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
+    }]
+    if include_active:
+        entries.append({
+            "config-keys": ["multi"], "description": ["Update multi"],
+            "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
+        })
+
+    result = process_changelog.build_plan(entries, base_ref=base, head_ref=head)
+
+    assert result.single_node == {}
+    assert result.evals == result.agentic_evals == []
+    assert result.changelog_metadata.entries[0].retired is True
+    assert result.changelog_metadata.entries[0].config_keys == ["single"]
+    if include_active:
+        assert result.multi_node["8k1k"][0].conc == [16, 32, 64]
+        assert result.multinode_evals[0].conc == [16, 32, 64]
+    else:
+        assert result.multi_node == {}
+        assert result.multinode_evals == result.multinode_agentic_evals == []
+
+
+@pytest.mark.parametrize(("mode", "expected"), [
+    ("retirement", "true"), ("mixed", "false"), ("empty", None), ("still-active", None),
+])
+def test_merge_ingest_executes_the_plan_before_classifying_retirement(
+    committed_planning_repo, mode, expected, tmp_path
+):
+    import json
+    import os
+    import subprocess
+    import sys
+
+    root, _, base = committed_planning_repo
+    project = Path(__file__).resolve().parents[3]
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "inferencex-e2e").symlink_to(root, target_is_directory=True)
+    (root / "benchmarks/check_env.sh").symlink_to(project / "benchmarks/check_env.sh")
+    entries = []
+    if mode != "empty":
+        entries.append({
+            "config-keys": ["single"], "retired": True, "description": ["Retire single"],
+            "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
+        })
+    if mode == "mixed":
+        entries.append({
+            "config-keys": ["multi"], "description": ["Update multi"],
+            "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
+        })
+    if mode != "still-active":
+        config = root / "configs/nvidia-master.yaml"
+        master = yaml.safe_load(config.read_text())
+        del master["single"]
+        config.write_text(yaml.safe_dump(master))
+    with (root / "perf-changelog.yaml").open("a") as handle:
+        if entries:
+            handle.write(yaml.safe_dump(entries))
+    subprocess.run(["git", "add", "."], cwd=root, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-qm", "retirement"], cwd=root, check=True)
+    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    uv = fake_bin / "uv"
+    uv.write_text(
+        f'#!/bin/sh\nwhile [ "$1" != python ]; do shift; done\nshift\nexec "{sys.executable}" "$@"\n'
+    )
+    uv.chmod(0o755)
+    output = tmp_path / "outputs"
+    workflow = yaml.safe_load((project.parent / ".github/workflows/merge-ingest.yml").read_text())
+    step = next(step for step in workflow["jobs"]["ingest"]["steps"] if step.get("id") == "plan")
+    result = subprocess.run(
+        ["bash", "-e", "-c", step["run"]], capture_output=True, text=True, cwd=workspace,
+        env={
+            **os.environ, "PATH": f"{fake_bin}:{os.environ['PATH']}", "PYTHONPATH": str(project),
+            "GITHUB_WORKSPACE": str(workspace), "GITHUB_OUTPUT": str(output),
+            "RUNNER_TEMP": str(tmp_path), "PUSH_BEFORE": base, "PUSH_AFTER": head,
+        },
+    )
+    if expected is None:
+        assert result.returncode != 0
+        message = "No additions found" if mode == "empty" else "retired configs still exist in head"
+        assert message in result.stderr
+        assert not output.exists()
+    else:
+        assert result.returncode == 0, result.stderr
+        assert f"retirement-only={expected}\n" in output.read_text()
+        metadata = json.loads((workspace / "changelog_metadata.json").read_text())
+        assert [entry["retired"] for entry in metadata["entries"]] == [
+            entry.get("retired", False) for entry in entries
+        ]
+
+
+@pytest.mark.parametrize(("keys", "message"), [
+    (["single"], "retired configs still exist in head"),
+    (["missing"], "not found"),
+    (["missing-*"], "No config keys matched"),
+    (["*"], "retired configs still exist in head"),
+])
+def test_retirement_requires_real_base_keys_absent_from_head(
+    committed_planning_repo, keys, message
+):
+    _, base, head = committed_planning_repo
+    entries = [{
+        "config-keys": keys, "retired": True, "description": ["Retire configs"],
+        "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
+    }]
+    with pytest.raises(ValueError, match=message):
+        process_changelog.build_plan(entries, base_ref=base, head_ref=head)
+
+
+@pytest.mark.parametrize("flags", [
+    {"append-only": True}, {"evals-only": True}, {"all-evals": True}, {"no-evals": True},
+    {"eval-min-prefill-ep": 2}, {"scenario-type": ["agentic-coding"]},
+])
+def test_retirement_rejects_sweep_and_partial_scenario_options(changelog_run, flags):
+    with pytest.raises(ValueError, match="retired entries cannot use sweep or scenario"):
+        changelog_run([{"retired": True, **flags}])
+
+
+@pytest.mark.parametrize("flag", ["--all-evals", "--evals-only"])
+def test_retirement_rejects_eval_modifiers(changelog_run, flag):
+    with pytest.raises(ValueError, match="retired entries cannot use all-evals or evals-only"):
+        changelog_run([{"retired": True}], [flag])
+
+
 @pytest.mark.parametrize("trim", [False, True])
 def test_append_only_main_runs_only_added_points_and_skips_evals(planning_repo, changelog_run, trim):
     root, master, _ = planning_repo
@@ -677,6 +815,40 @@ def test_generation_failure_does_not_publish_a_partial_matrix(planning_repo, cha
     captured = capsys.readouterr()
     assert "Recipe has no worker roles" in captured.out
     assert '\"single_node\":' not in captured.out
+
+
+@pytest.mark.parametrize("key", ["single", "multi"])
+def test_plan_rejects_a_sequence_length_no_sweep_job_runs(planning_repo, changelog_run, key):
+    root, master, _ = planning_repo
+    master[key]["scenarios"]["fixed-seq-len"][0].update(isl=1024, osl=8192)
+    (root / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(master, sort_keys=False))
+
+    with pytest.raises(ValueError, match=r"isl=1024 osl=8192 .*1k1k, 8k1k"):
+        changelog_run([{"config-keys": [key], "scenario-type": ["fixed-seq-len"], "no-evals": True}])
+
+
+def test_a_master_config_key_defined_twice_is_rejected(planning_repo, changelog_run):
+    root, master, _ = planning_repo
+    shadow = {"single": {**master["single"], "image": "example/image:shadow"}}
+    with (root / "configs/nvidia-master.yaml").open("a") as master_file:
+        master_file.write(yaml.safe_dump(shadow, sort_keys=False))
+
+    with pytest.raises(yaml.YAMLError, match="found duplicate key 'single'"):
+        changelog_run([{"scenario-type": ["fixed-seq-len"], "no-evals": True}])
+
+
+def test_a_changelog_addition_with_a_repeated_field_is_rejected(planning_repo, monkeypatch):
+    added = (
+        "- config-keys: [single]\n  config-keys: [multi]\n  description: [Change]\n"
+        "  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1\n"
+    )
+    monkeypatch.setattr(process_changelog, "get_added_lines", lambda *_: added)
+    monkeypatch.setattr(sys, "argv", ["infx.matrix.plan", "--base-ref", "base",
+                        "--head-ref", "head", "--changelog-file", "perf-changelog.yaml"])
+
+    with pytest.raises(yaml.YAMLError, match="found duplicate key 'config-keys'"):
+        process_changelog.main()
+
 
 
 @pytest.mark.parametrize("threshold,expected", [
@@ -804,3 +976,56 @@ def test_changelog_move_preserves_history_and_selects_only_additions(tmp_path, m
     git("commit", "-qam", "append entry")
     monkeypatch.chdir(tmp_path / "inferencex-e2e")
     assert process_changelog.get_added_lines(base, "HEAD", "perf-changelog.yaml") == "new entry"
+
+
+@pytest.fixture
+def commit_changelog(tmp_path, monkeypatch):
+    """Commit ``perf-changelog.yaml`` with the given text in a scratch repo; return the SHA."""
+    monkeypatch.chdir(tmp_path)
+
+    def git(*args):
+        return subprocess.run(
+            ["git", *args], check=True, capture_output=True, text=True,
+        ).stdout.strip()
+
+    git("init", "-q")
+    git("config", "user.name", "Test")
+    git("config", "user.email", "test@example.com")
+
+    def commit(text):
+        (tmp_path / "perf-changelog.yaml").write_text(text)
+        git("add", ".")
+        git("commit", "-qm", "changelog")
+        return git("rev-parse", "HEAD")
+
+    return commit
+
+
+def test_added_lines_report_a_failing_git_diff(commit_changelog, tmp_path, monkeypatch):
+    base = commit_changelog("- old\n")
+    head = commit_changelog("- old\n- new\n")
+    stub = tmp_path / "bin/git"
+    stub.parent.mkdir()
+    stub.write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" = diff ]; then echo "fatal: diff exploded" >&2; exit 128; fi\n'
+        f'exec {shutil.which("git")} "$@"\n'
+    )
+    stub.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{stub.parent}{os.pathsep}{os.environ['PATH']}")
+
+    with pytest.raises(RuntimeError, match="fatal: diff exploded"):
+        process_changelog.get_added_lines(base, head, "perf-changelog.yaml")
+
+
+def test_added_lines_reject_deleting_a_line_that_starts_with_dashes(commit_changelog):
+    base = commit_changelog("- a\n---\n- b\n")
+    head = commit_changelog("- a\n- b\n- c\n")
+    with pytest.raises(ValueError, match="Deletions are not allowed.*Found deleted line: ---"):
+        process_changelog.get_added_lines(base, head, "perf-changelog.yaml")
+
+
+def test_added_lines_keep_an_added_line_that_starts_with_pluses(commit_changelog):
+    base = commit_changelog("- a\n")
+    head = commit_changelog("- a\n++ b\n")
+    assert process_changelog.get_added_lines(base, head, "perf-changelog.yaml") == "++ b"

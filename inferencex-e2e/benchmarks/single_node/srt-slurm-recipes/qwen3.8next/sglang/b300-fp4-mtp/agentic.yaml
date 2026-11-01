@@ -64,7 +64,7 @@ override_c1:
     agg:
       args:
         max-running-requests: 2
-        cuda-graph-max-bs: 1
+        cuda-graph-max-bs-decode: 1
   benchmark:
     env:
       CONC: '1'
@@ -74,7 +74,7 @@ override_c4:
     agg:
       args:
         max-running-requests: 8
-        cuda-graph-max-bs: 4
+        cuda-graph-max-bs-decode: 4
   benchmark:
     env:
       CONC: '4'
@@ -84,7 +84,7 @@ override_c8:
     agg:
       args:
         max-running-requests: 16
-        cuda-graph-max-bs: 8
+        cuda-graph-max-bs-decode: 8
   benchmark:
     env:
       CONC: '8'
@@ -94,7 +94,7 @@ override_c12:
     agg:
       args:
         max-running-requests: 24
-        cuda-graph-max-bs: 12
+        cuda-graph-max-bs-decode: 12
   benchmark:
     env:
       CONC: '12'
@@ -104,7 +104,7 @@ override_c16:
     agg:
       args:
         max-running-requests: 32
-        cuda-graph-max-bs: 16
+        cuda-graph-max-bs-decode: 16
   benchmark:
     env:
       CONC: '16'

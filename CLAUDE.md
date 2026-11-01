@@ -2,4 +2,4 @@
 
 All guidance for working with this repository lives in [AGENTS.md](AGENTS.md). Read that.
 
-Repository skills live canonically under `.agents/skills/`. `.claude/skills/` contains compatibility symlinks. Read and update the `.agents/skills/` targets.
+Model-invoked skills live canonically under `.agents/skills/`; `.claude/skills/` contains compatibility symlinks, so read and update the `.agents/skills/` targets. User-invoked procedures live in `.claude/commands/`.

@@ -17,6 +17,10 @@ VALID = "Verdict format is valid."
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Validate the verdict file named in argv and print the result.
+
+    Returns 0 if valid, 1 if invalid, 2 on usage or read errors.
+    """
     args = sys.argv[1:] if argv is None else argv
     if len(args) != 1:
         print("usage: python -m infx.workflows.signoff_validate <verdict.md>", file=sys.stderr)

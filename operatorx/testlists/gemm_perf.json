@@ -5,11 +5,20 @@
       "m": 1,
       "n": 7168,
       "k": 2048,
-      "dtype_a": "bf16",
-      "dtype_b": "bf16",
-      "dtype_out": "bf16"
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
     },
-    "name": "gemmperf"
+    "sources": [
+      "amd/Kimi-K2.5-MXFP4/o_proj",
+      "moonshotai/Kimi-K2.5/o_proj",
+      "nvidia/Kimi-K2.5-NVFP4/o_proj",
+      "nvidia/Kimi-K2.6-NVFP4/o_proj"
+    ]
   },
   {
     "type": "gemm",
@@ -17,11 +26,20 @@
       "m": 64,
       "n": 7168,
       "k": 2048,
-      "dtype_a": "bf16",
-      "dtype_b": "bf16",
-      "dtype_out": "bf16"
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
     },
-    "name": "gemmperf"
+    "sources": [
+      "amd/Kimi-K2.5-MXFP4/o_proj",
+      "moonshotai/Kimi-K2.5/o_proj",
+      "nvidia/Kimi-K2.5-NVFP4/o_proj",
+      "nvidia/Kimi-K2.6-NVFP4/o_proj"
+    ]
   },
   {
     "type": "gemm",
@@ -29,11 +47,22 @@
       "m": 256,
       "n": 4096,
       "k": 4096,
-      "dtype_a": "bf16",
-      "dtype_b": "bf16",
-      "dtype_out": "bf16"
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
     },
-    "name": "gemmperf"
+    "sources": [
+      "Qwen/Qwen3.5-397B-A17B/o_proj",
+      "Qwen/Qwen3.5-397B-A17B/q_proj",
+      "amd/Qwen3.5-397B-A17B-MXFP4/o_proj",
+      "amd/Qwen3.5-397B-A17B-MXFP4/q_proj",
+      "nvidia/Qwen3.5-397B-A17B-NVFP4/o_proj",
+      "nvidia/Qwen3.5-397B-A17B-NVFP4/q_proj"
+    ]
   },
   {
     "type": "gemm",
@@ -41,11 +70,22 @@
       "m": 1024,
       "n": 1536,
       "k": 7168,
-      "dtype_a": "bf16",
-      "dtype_b": "bf16",
-      "dtype_out": "bf16"
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
     },
-    "name": "gemmperf"
+    "sources": [
+      "amd/Kimi-K2.5-MXFP4/q_a_proj",
+      "moonshotai/Kimi-K2.5/q_a_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_a_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_a_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_a_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_a_proj"
+    ]
   },
   {
     "type": "gemm",
@@ -53,11 +93,22 @@
       "m": 2048,
       "n": 4096,
       "k": 4096,
-      "dtype_a": "bf16",
-      "dtype_b": "bf16",
-      "dtype_out": "bf16"
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
     },
-    "name": "gemmperf"
+    "sources": [
+      "Qwen/Qwen3.5-397B-A17B/o_proj",
+      "Qwen/Qwen3.5-397B-A17B/q_proj",
+      "amd/Qwen3.5-397B-A17B-MXFP4/o_proj",
+      "amd/Qwen3.5-397B-A17B-MXFP4/q_proj",
+      "nvidia/Qwen3.5-397B-A17B-NVFP4/o_proj",
+      "nvidia/Qwen3.5-397B-A17B-NVFP4/q_proj"
+    ]
   },
   {
     "type": "gemm",
@@ -65,11 +116,22 @@
       "m": 4096,
       "n": 4096,
       "k": 4096,
-      "dtype_a": "bf16",
-      "dtype_b": "bf16",
-      "dtype_out": "bf16"
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
     },
-    "name": "gemmperf"
+    "sources": [
+      "Qwen/Qwen3.5-397B-A17B/o_proj",
+      "Qwen/Qwen3.5-397B-A17B/q_proj",
+      "amd/Qwen3.5-397B-A17B-MXFP4/o_proj",
+      "amd/Qwen3.5-397B-A17B-MXFP4/q_proj",
+      "nvidia/Qwen3.5-397B-A17B-NVFP4/o_proj",
+      "nvidia/Qwen3.5-397B-A17B-NVFP4/q_proj"
+    ]
   },
   {
     "type": "gemm",
@@ -77,11 +139,15 @@
       "m": 8192,
       "n": 8192,
       "k": 8192,
-      "dtype_a": "bf16",
-      "dtype_b": "bf16",
-      "dtype_out": "bf16"
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
     },
-    "name": "gemmperf"
+    "sources": []
   },
   {
     "type": "gemm",
@@ -89,11 +155,15 @@
       "m": 16384,
       "n": 8192,
       "k": 8192,
-      "dtype_a": "bf16",
-      "dtype_b": "bf16",
-      "dtype_out": "bf16"
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
     },
-    "name": "gemmperf"
+    "sources": []
   },
   {
     "type": "gemm",
@@ -101,11 +171,20 @@
       "m": 8192,
       "n": 7168,
       "k": 2048,
-      "dtype_a": "bf16",
-      "dtype_b": "bf16",
-      "dtype_out": "bf16"
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
     },
-    "name": "gemmperf"
+    "sources": [
+      "amd/Kimi-K2.5-MXFP4/o_proj",
+      "moonshotai/Kimi-K2.5/o_proj",
+      "nvidia/Kimi-K2.5-NVFP4/o_proj",
+      "nvidia/Kimi-K2.6-NVFP4/o_proj"
+    ]
   },
   {
     "type": "gemm",
@@ -113,11 +192,19 @@
       "m": 32768,
       "n": 2048,
       "k": 7168,
-      "dtype_a": "bf16",
-      "dtype_b": "bf16",
-      "dtype_out": "bf16"
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
     },
-    "name": "gemmperf"
+    "sources": [
+      "deepseek-ai/DeepSeek-V4-Pro-0813/attn.compressor.wkv+wgate",
+      "deepseek-ai/DeepSeek-V4-Pro/attn.compressor.wkv+wgate",
+      "sgl-project/DeepSeek-V4-Pro-FP8/attn.compressor.wkv+wgate"
+    ]
   },
   {
     "type": "gemm",
@@ -125,10 +212,21 @@
       "m": 512,
       "n": 4096,
       "k": 4096,
-      "dtype_a": "bf16",
-      "dtype_b": "bf16",
-      "dtype_out": "bf16"
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
     },
-    "name": "gemmperf"
+    "sources": [
+      "Qwen/Qwen3.5-397B-A17B/o_proj",
+      "Qwen/Qwen3.5-397B-A17B/q_proj",
+      "amd/Qwen3.5-397B-A17B-MXFP4/o_proj",
+      "amd/Qwen3.5-397B-A17B-MXFP4/q_proj",
+      "nvidia/Qwen3.5-397B-A17B-NVFP4/o_proj",
+      "nvidia/Qwen3.5-397B-A17B-NVFP4/q_proj"
+    ]
   }
 ]

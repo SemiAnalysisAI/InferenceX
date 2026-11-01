@@ -6,7 +6,7 @@ Thanks for contributing! PRs are welcome. This page covers the review process ev
 
 Maintain contributor-facing docs in English. Only READMEs retain Chinese translations: keep existing `README_zh.md` files synchronized with their English READMEs and preserve their language switchers. Do not add or recreate Chinese versions of other docs.
 
-PR titles must still include both English and Simplified Chinese, using `<English title> / <中文标题>`. The existing bilingual requirements for issue titles, PR and issue descriptions, human-authored PR comments, and commit bodies remain unchanged; see [AGENTS.md](AGENTS.md).
+PR titles must still include both English and Simplified Chinese, using `<English title> / <中文标题>`. The existing bilingual requirements for issue titles, PR and issue descriptions, and human-authored PR comments remain unchanged; see [AGENTS.md](AGENTS.md).
 
 ## PR descriptions
 
@@ -28,6 +28,10 @@ Every PR description must include an **AI model disclosure** section inside a co
 4. An authorized maintainer posts `/use <run_id>` (see below) and the PR is merged via the reuse path.
 
 **Performance changelog:** A PR that changes what any benchmark runs **MUST** append one new entry covering the affected config keys to the physical end of `inferencex-e2e/perf-changelog.yaml`; `python -m infx.matrix.changed --base origin/main` (run from `inferencex-e2e/`) lists them. A PR that changes no benchmark point adds none. Historical entries **MUST NOT** be edited.
+
+For full config retirement, list the deleted config keys with `retired: true`. The planner verifies that every selected key existed in the base revision and is absent from the current master configs, retains the entry in changelog metadata, and schedules no benchmarks or evals for it. Retirement entries cannot use scenario filters, `append-only`, or eval-selection fields or modifiers; partial scenario retirement uses a regular entry for the surviving config.
+
+A PR whose new entries are all retirements has no result artifacts to reuse. After review and required checks, merge it directly rather than through `merge_with_reuse`; no `/use` is required. Merge Ingest validates the retirement plan and uploads its changelog metadata, but skips reuse lookup and database dispatch. Mixed retirement and active entries still require normal sweep reuse. Do not re-append retirement entries for ingest recovery; they have no results to recover.
 
 ## Draft-model precision
 
@@ -83,15 +87,13 @@ Forbidden (submission-side precision hacking of the draft):
   applied to a BF16 MTP head, `SGLANG_GLM_NEXTN_MOE_PTPC=1`, and an ATOM
   `--online_quant_config` whose `exclude_layer` patterns do not cover the entire draft
   head.
-- Dtype or KV-cache dtype overrides aimed at the draft that lower its precision below
-  the framework's default for that checkpoint.
+- Dtype overrides aimed at the draft that lower its precision below the framework's default for that checkpoint.
 - Substituting a precision-converted or differently quantized draft checkpoint, or a
   draft head taken from a different release than the served target.
 - Patching the pinned image so that it loads or computes the draft at a different
   precision than it does by default, in either direction. The engine-patch rule
   already forbids this; a waiver does not exempt draft precision.
-- Reducing draft FLOPs in ways the checkpoint's authors did not ship, such as
-  pruning draft layers or experts.
+- Reducing draft FLOPs in ways the checkpoint's authors did not ship, such as pruning draft layers or experts.
 
 A quantized target/verifier remains allowed under the existing eval requirements.
 Target quantization is fine as long as it does not also quantize the draft below what
@@ -146,13 +148,14 @@ A friendly reminder. Please follow the latest checklist template **correctly**:
 
   > As a PR reviewer and CODEOWNER, I have reviewed this and have:
 
-  Our CI verification workflow, [`codeowner-signoff-verify.yml`](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/workflows/codeowner-signoff-verify.yml), triggers on exactly this phrase. **If your approval comment omits that phrase, the workflow will not verify the checklist.**
+  Our CI verification workflow, [`codeowner-signoff-verify.yml`](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/workflows/codeowner-signoff-verify.yml), triggers on exactly this phrase. It must open the comment, so a comment that only quotes or mentions it does not start verification. **If your approval comment does not start with that phrase, the workflow will not verify the checklist.**
+- Keep the template's `<details>` block so the checklist items render collapsed. The opening phrase, additional detail section, and signature stay outside it and remain visible.
 - The sign-off can be posted as a regular conversation comment, a review summary, or an inline review comment. All three trigger verification.
 - Submit a new checklist when the PR is open and ready. Editing that checklist triggers verification again. Pushes, reopening, and leaving draft do not trigger verification. If a review event was missed during a merge conflict, retry after resolving it using manual dispatch.
 - Starting Claude requires an eligible human actor with repository write access.
 - Fill in the "Additional detail section" with the links the checklist asks for (validation/eval workflow runs, the corresponding [vLLM recipe](https://github.com/vllm-project/recipes) / [SGLang cookbook](https://github.com/sgl-project/sglang/tree/main/docs/cookbook) PR, and any exception reasoning). Submit new SGLang cookbook PRs to `sgl-project/sglang`, under `docs/cookbook/`, which supplies the published site. The cookbook copy in `sgl-project/sgl-docs` is not the current deployment source; `sgl-project/sgl-cookbook` is archived.
 
-Once the sign-off is posted, CI independently re-verifies the review checklist claims, including CODEOWNER status, a green sweep and evals on a commit in the PR, the linked recipe, the reuse command, use of the latest checklist template, upstream [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) images, no architecture-changing benchmark hacks, chat-template usage for speculative decoding, and unchanged draft-model/head weights and precision. It creates one verdict comment for that sign-off resource, including the SHA actually assessed. Editing the same checklist updates only its associated verdict. A replacement or additional checklist receives a separate verdict, and verdicts associated with older sign-offs remain unchanged. Failing criteria stay visible; passing and N/A criteria appear together in a collapsed section. Checkmarks are not taken on trust, so please only check items you have actually verified.
+Once the sign-off is posted, CI independently re-verifies the review checklist claims, including CODEOWNER status, a green sweep and evals on a commit in the PR, the linked recipe, the reuse command, use of the latest checklist template, upstream [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) images, no architecture-changing benchmark hacks, chat-template usage for speculative decoding, and unchanged draft-model/head weights and precision. While it runs, the bot adds a 👀 reaction to a sign-off posted as a conversation or inline comment and removes it when the verdict is published; review summaries cannot take reactions. It creates one verdict comment for that sign-off resource, including the SHA actually assessed. Editing the same checklist updates only its associated verdict. A replacement or additional checklist receives a separate verdict, and verdicts associated with older sign-offs remain unchanged. Failing criteria stay visible; passing and N/A criteria appear together in a collapsed section. Checkmarks are not taken on trust, so please only check items you have actually verified.
 
 The verdict records only the commit actually assessed; it does not carry approval forward to later commits. To request a new assessment after correcting the existing checklist as needed, an authorized collaborator dispatches `codeowner-signoff-verify.yml` with `pr-number` and its `comment_url` (both must identify the same PR). Manual reassessment updates the verdict associated with that sign-off resource.
 
@@ -160,11 +163,13 @@ The verdict records only the commit actually assessed; it does not carry approva
 
 A full benchmark sweep is expensive GPU time, and the runners are shared by every open PR, so an approved PR's sweep runs only once, for PR validation. `main` never reruns it after merge; the reuse path publishes that PR sweep instead:
 
-- After your PR has an eligible green full sweep, an authorized maintainer (`OWNER`/`MEMBER`/`COLLABORATOR`) comments `/use <run_id>` on the PR to select that run. Keep the command and run ID on the same line.
+- After your PR has an eligible green full sweep, an authorized maintainer (`OWNER`/`MEMBER`/`COLLABORATOR`) comments `/use <run_id>` on the PR to select that run. Keep the command and run ID on the same line. The pinned run may come from any PR; if its commit is not part of this PR, reuse is still accepted but flagged as a warning.
+- External PRs sweep through `trusted-external-sweep.yml`, which dispatches `e2e-tests.yml`; pin that run explicitly with `/use <run_id>`, because automatic selection and `merge_with_reuse` only find `run-sweep.yml` runs.
 - `/reuse-sweep-run <run_id>` remains supported with identical behavior. Bare `/reuse-sweep-run` selects automatically; bare `/use` is rejected.
 - The merge-to-`main` run then validates and ingests the PR sweep's artifacts; `main` never re-runs the sweep itself.
 - **Reuse is mandatory.** A green sweep alone is not enough. The reuse command must be on record (the sign-off verification checks for it), otherwise the `main` run fails and the PR's results are never ingested.
-- Reuse does not require retaining a primary label, but it is rejected while the PR carries `evals-only` or `agentx-fast`, and `merge_with_reuse` refuses a PR with more than one primary label. The bot reacts to the command with 👍 when accepted or 👎 when rejected, with details in the Actions run summary; source artifacts are revalidated at merge.
+- Retirement-only changes are the no-results exception described above: merge directly after review and required checks, without `/use`. Empty or mixed changelogs do not qualify.
+- Reuse does not require retaining a primary label, but it is rejected while the PR carries `evals-only` or `agentx-fast`, and `merge_with_reuse` refuses a PR with more than one primary label. The bot reacts to the command with 👍 when accepted or 👎 when rejected, with details in the Actions run summary, and posts a warning comment when the pinned run's commit is outside the PR; source artifacts are revalidated at merge.
 - A missing authorized reuse command produces a Check 4 **WARN**, not a rejection. The warning stays visible in the sign-off verdict; posting an authorized command is still required to reuse artifacts.
 - From the repository root, `uv run --project inferencex-e2e --extra workflows python -m infx.workflows.merge_with_reuse <pr-number>` is the supported merge path. It posts the command, syncs the branch with `main`, waits for checks, and squash-merges. See the [workflows README](.github/workflows/README.md#reusing-an-approved-pr-full-sweep) for eligibility details.
 
@@ -225,6 +230,41 @@ Error: EACCES: permission denied, rmdir '.../benchmark_logs/logs/slurm_job-<id>'
 3. **Test your teardown path.** Cancel a running benchmark mid-flight and verify no root-owned files remain in the workspace.
 
 If you find a stranded root-owned file blocking runners, the recovery procedure is documented in [`.claude/commands/clean-amd-mi355-runner-root-files.md`](.claude/commands/clean-amd-mi355-runner-root-files.md): SSH into the hop host with `sudo`, scan the `_work` directories, and delete the offending files.
+
+## Test quality
+
+**The one rule: a test must exercise the real implementation with concrete inputs and assert on what it computes, returns, writes, or raises. A test that inspects the code, the repo, or a config file instead of running behavior is not a test and must be deleted.** These rules are mandatory for every test added, modified, or reviewed in this repository. When in doubt, delete the test.
+
+### Forbidden: tests about the code rather than its behavior
+
+Never write, and always delete on sight, a test that does any of the following:
+
+1. **Reads source text and asserts on it.** Opening a `.sh`, `.py`, `.yml`, `.yaml`, `.cjs`, or `.md` file and asserting that a string, flag, regex, command, or line is present or absent, counting occurrences, or checking line order. This includes launchers, workflow files, skill files, and docs. Grepping is not testing.
+2. **Parses source structure.** Using `ast.parse`, `inspect.getsource`, `inspect.signature`, `hasattr`, `callable`, `__doc__`, or import-succeeds checks to assert that a function, class, constant, argument, or flag exists or has a given shape.
+3. **Git-greps the repo.** Asserting which files contain a literal, how many files match, or that a pin appears in exactly N places.
+4. **Pins checked-in config or data.** Asserting the contents of a recipe, master config, `runners.yaml`, `platform_config.json`, a registry dict, an enum, an image tag, a SHA, a port number, or the current count of recipes, SKUs, backends, or models. Validate config through the real validation code with controlled inputs instead.
+5. **Is tautological.** Asserting a constant equals its own literal; asserting a dict or fixture equals what the test just built; asserting only that a mock was called with the arguments the test itself passed; or computing the expected value with the same helper, formula, or algorithm the test is supposed to check.
+6. **Reimplements the code under test.** Any parser, filter, jq/YAML expression, argparse tree, formula, or state machine copied into the test file so the test can run against the copy. This also covers "mirror" parsers and "reference specs" cross-checked against a second in-test implementation.
+7. **Tests the test infrastructure.** Tests of fixtures, conftest helpers, in-test expression evaluators, or "this test has teeth" self-checks.
+8. **Is smoke-only.** Module imports, `--help` exits 0, or "does not raise" with no assertion on output.
+9. **Duplicates a covered path.** Several tests that reach the same branch with trivially different inputs. Keep one, or use `pytest.mark.parametrize` / `subTest`. A second test is justified only by a distinct branch, error path, or boundary.
+
+### Required: what every kept test looks like
+
+- Feeds small, controlled inputs into the real function, CLI, or script and asserts on the computed output, written artifact, exit code, or raised error.
+- Uses expected values worked out independently by hand, never derived by calling the implementation or its helpers.
+- Covers a specific branch, boundary, malformed input, or failure path that no other test already covers.
+- Mocks only external collaborators (network, GitHub, Slurm, clocks, GPUs), never the behavior under test. Shell scripts are tested by running them with stubbed binaries on `PATH` and checking what they produced, not by reading their text.
+- Would fail on a plausible regression in observable behavior, and would not fail on a harmless refactor, a rename, or the addition of a valid recipe or SKU.
+
+### Before adding or approving a test, answer all four
+
+1. Which line of the real implementation does this run, and what bug in it would make the assertion fail?
+2. Would this test still pass if the code were rewritten with identical behavior? If not, it is testing structure and must go.
+3. Would this test fail because someone added a recipe, bumped an image tag, or reworded a comment? If yes, it is pinning config or source and must go.
+4. Does an existing test already reach this branch? If yes, extend it or drop the new one.
+
+Deleting a test that fails these questions needs no replacement. Do not preserve test counts. In timing tests, synchronize on observable readiness, bound waits and cleanup, and keep process termination and artifact writes real when those are the contract. See [Randy Coulman's Tautological Tests](https://randycoulman.com/blog/2016/12/20/tautological-tests/) for the distinction between independent expectations and assertions that repeat the implementation.
 
 ## After merging
 

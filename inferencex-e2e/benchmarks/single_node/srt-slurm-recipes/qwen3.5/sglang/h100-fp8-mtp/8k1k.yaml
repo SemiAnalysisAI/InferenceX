@@ -27,7 +27,7 @@ base:
         chunked-prefill-size: 8192
         decode-log-interval: 1
         mem-fraction-static: 0.75
-        cuda-graph-max-bs: 4
+        cuda-graph-max-bs-decode: 4
         context-length: 9236
         kv-cache-dtype: fp8_e4m3
         quantization: fp8
@@ -50,7 +50,7 @@ zip_override_concurrency:
   roles:
     agg:
       args:
-        cuda-graph-max-bs: [4, 8, 16, 32]
+        cuda-graph-max-bs-decode: [4, 8, 16, 32]
   benchmark:
     env:
       CONC: ['4', '8', '16', '32']

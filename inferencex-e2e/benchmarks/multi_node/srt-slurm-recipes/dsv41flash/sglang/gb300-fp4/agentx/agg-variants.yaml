@@ -5,8 +5,8 @@ base:
   identity:
     model: {}
     frameworks:
-      dynamo: "1.6.0.dev20261014"
-      sglang: "0.0.0.dev1+ga6a8c5601"
+      dynamo: "1.7.0.dev20261028"
+      sglang: "0.0.0.dev1+gc10e0e177"
   dynamo:
     install: false
     request_plane: tcp
@@ -66,6 +66,11 @@ base:
       env:
         PYTHONNOUSERSITE: "1"
         PYTHONUNBUFFERED: "1"
+        # Dynamo 1.7 backend admission rejects turns with 529 once the engine is full;
+        # the SGLang scheduler queues them instead.
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: "10000"
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT: "10000"
+        DYN_BACKEND_ADMISSION_REQUEST_QUEUE_LIMIT: "10000"
       args:
         served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
         trust-remote-code: true
@@ -102,6 +107,7 @@ override_tp2_c16:
       args:
         tensor-parallel-size: 2
         expert-parallel-size: 2
+        dsv4-attn-backend: flashmla
         enable-decoder-swa-bounded-replay: true
         cuda-graph-backend-prefill: disabled
         prefill-decode-interval: 96
@@ -121,10 +127,31 @@ override_tp4_c1:
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
-        prefill-decode-interval: 0
-        max-running-requests: 1
+        mem-fraction-static: 0.91
+        kv-cache-dtype: fp8_e4m3
+        dsv4-attn-backend: flashmla
+        moe-a2a-backend: none
+        enable-nvidia-megakernel: true
+        startup-weight-load-mode: serial
         enable-decoder-swa-bounded-replay: true
-        cuda-graph-backend-prefill: disabled
+        context-length: 1048576
+        max-running-requests: 1
+        cuda-graph-max-bs-decode: 1
+        prefill-decode-interval: 16
+        schedule-policy: lpm
+        swa-prefix-tails: 128
+        tokenizer-backend: fastokens
+        enable-metrics-for-all-schedulers: true
+      env:
+        SGLANG_SPEC_TP_SYNC: rng,-dspark-accept-sample
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: "1"
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+        SGLANG_NVIDIA_MEGAKERNEL_SLOTS: hop_a,moe,gate,attn,embed,two_shot,markov,draft_lm_head,aux_mean_stats,gate_wide,shared_ll,hop_a_batch2,engram,attn_qkv_a,attn_qkv_a_bf16,index_q_mxfp8_in,attn_indexer,hc_prenorm,hop_b,hop_b_wide,early_trigger,hop_b_start_trigger,draft,draft_moe,draft_gate,draft_tail,draft_post,draft_seam,draft_attn,draft_qfront,draft_wo_a,draft_swapab,draft_qkv_a,draft_prenorm,draft_qkv_a_ll,draft_wo_b_ll,sched_ahead,req_pos_once,kv_before_wait,target_lm_head,hop_b_quad_trigger,lm_head_pinned_tactic
+        SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION: "1"
+        SGLANG_SIMULATE_ACC_GREEDY: "0"
+        SGLANG_OPT_DSV41_DSPARK_SIM_DRAW_AHEAD: "1"
+        NCCL_CUMEM_ENABLE: "0"
+        NCCL_MNNVL_ENABLE: "0"
 
 override_tp4_c4:
   name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-agg-tp4ep1-c4
@@ -134,6 +161,7 @@ override_tp4_c4:
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
+        dsv4-attn-backend: flashmla
         prefill-decode-interval: 0
         swa-prefix-tails: 4096
         max-running-requests: 128
@@ -150,6 +178,7 @@ override_tp4_c16:
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
+        dsv4-attn-backend: flashmla
         prefill-decode-interval: 192
         swa-prefix-tails: 4096
         max-running-requests: 128

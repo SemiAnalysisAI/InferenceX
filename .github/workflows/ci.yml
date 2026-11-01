@@ -66,9 +66,27 @@ jobs:
           uv sync --project inferencex-e2e --locked --all-extras --group test --no-editable
           echo "$GITHUB_WORKSPACE/inferencex-e2e/.venv/bin" >> "$GITHUB_PATH"
 
+      - name: Check CollectiveX coverage manifest
+        if: matrix.check == 'Tests'
+        run: |
+          python collectivex/sweep_matrix.py --suites ep,swap-blocks,kv-transfer --cases-json collectivex/results/cases.json > /dev/null
+          git diff --exit-code -- collectivex/results/cases.json
+
+      - name: Check CollectiveX changelog
+        if: matrix.check == 'Tests'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -n "$BASE_REF" ]; then
+            git fetch --no-tags --depth=1 origin "$BASE_REF"
+            python collectivex/changelog.py validate --base-ref FETCH_HEAD --pr-number "$PR_NUMBER"
+          else
+            python collectivex/changelog.py validate
+          fi
+
       - name: Run tests
         if: matrix.check == 'Tests'
         run: |
           python -c "import torch; assert torch.version.cuda is None and torch.version.hip is None"
-          # SRT is initialized for our connector tests; its upstream suite runs in its own CI.
           python -m pytest -c inferencex-e2e/pyproject.toml inferencex-e2e/infx/tests/ inferencex-e2e/utils/ inferencex-e2e/runners/ collectivex/tests/ operatorx/tests/ --ignore=inferencex-e2e/utils/srt-slurm -n 4

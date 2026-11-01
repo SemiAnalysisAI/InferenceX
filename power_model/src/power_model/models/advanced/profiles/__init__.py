@@ -123,14 +123,19 @@ DDR5_BASELINE = Provenance(
 )
 X86_CPU_BASELINE = Provenance(
     profile_id="x86-cpu-state",
-    version="1",
-    source="User-specified model baseline",
-    kind="assumed",
-    input_boundary="One x86 CPU; excludes separately modeled DIMMs and fans",
+    version="2",
+    source="Provisional RAPL package-power calibration on AMD EPYC hosts",
+    kind="estimated",
+    input_boundary="One x86 CPU package; excludes separately modeled DIMMs and fans",
     assumptions=(
-        "Idle power is 80 W per CPU.",
-        "FixedSeqLen power is 120 W per CPU.",
-        "Agentic power is 150 W per CPU, or 200 W with CPU offloading enabled.",
+        "Idle power is 80 W per CPU; idle is not yet calibrated.",
+        "FixedSeqLen power is 165 W per CPU: 8k/1k on 2x EPYC 9655, 162-172 W across c4-c64.",
+        "Agentic power is 180 W per CPU, or 195 W with CPU offloading enabled: "
+        "TP8 c16 on 2x EPYC 9354, 179 / 193 W window means on different nodes.",
+        "Package power varies by about 6% across concurrency, so one value per state is used.",
+        "The offload step is not isolated from node-to-node variation.",
+        "Calibrated on AMD EPYC only; Intel Xeon hosts are not yet measured.",
+        "AMD Zen RAPL is not validated against wall power.",
     ),
 )
 FAN_INPUT = Provenance(
