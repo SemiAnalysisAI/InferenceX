@@ -11778,3 +11778,22 @@
     - "Sweep concurrency 1, 4, 8, 16, 32 and 64 without KV offload, preserving the full 1M-token context, uncapped corpus and canonical evals. Throughput uses the shared Flash golden-AL connector; evals use real acceptance."
     - "Bind the expected staged checkpoint at /mnt/lustre01/models/GLM-5.3-Flash with offline engine loading; keep the embedded draft on the upstream precision path and explicitly disable both prohibited precision switches."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4718
+
+- config-keys:
+    - glm5.3flash-fp8-gb200-sglang-agentic-mtp-hicache
+  scenario-type: [agentic-coding]
+  no-evals: true
+  description:
+    - "Measure native GLM-5.3-Flash FP8 GB200 at cache-off concurrency 24, 32, 40, 48 and 64 and HiCache-on concurrency 32, 48 and 64 with the same pinned official SGLang image and as-shipped NextN precision."
+    - "Match max-running-requests and the decode CUDA graph cap at 64 for both arms from concurrency 32 upward; concurrency 24 uses 48. Preserve the full AgentX corpus, 3600-second profile, 1M context and shared golden acceptance."
+    - "Enable write-through kernel/page-first HiCache with live auto-sized host fraction 0.75 and no explicit size or ratio. Record the existing full nominal DRAM budget separately from actual cache allocation without changing node resources."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4733
+
+- config-keys:
+    - glm5.3flash-fp8-gb200-sglang-agentic-mtp-hicache-eval
+  scenario-type: [agentic-coding]
+  evals-only: true
+  all-evals: true
+  description:
+    - "Run the full canonical GSM8K evaluation at HiCache-on concurrency 64 with real acceptance, separately from the paired performance selector so cache-off eval deduplication cannot remove it."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4733
