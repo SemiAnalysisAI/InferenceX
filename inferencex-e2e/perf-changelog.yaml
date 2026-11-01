@@ -11775,6 +11775,6 @@
   scenario-type: [agentic-coding]
   description:
     - "Add native FP8 GLM-5.3-Flash AgentX on MI355X with official SGLang v0.5.21 ROCm image and checkpoint revision pinned, TP4/EP4 at conc 1, 2, 4, 8, 12, 16, and embedded NextN MTP5 using the shared measured AL 3.603536."
-    - "Stage and verify the pinned native snapshot under a shared-cache lock, budget only missing pinned files plus headroom, keep serving ranks offline after online staging, and pin the benchmark tokenizer to the same snapshot without making clients offline; preserve the canonical corpus, 1M context, accuracy evals, and draft precision as shipped."
+    - "Stage and verify the pinned native snapshot under a shared-cache lock, budget only missing pinned files plus headroom, keep serving ranks offline after online staging, and pin both the serving processor/tokenizer and benchmark tokenizer to the same snapshot without making clients offline; preserve the canonical corpus, 1M context, accuracy evals, and draft precision as shipped."
     - "Disable the ROCm image's inherited integer-quantized QuickReduce with ROCM_QUICK_REDUCE_QUANTIZATION=NONE for the native FP8 baseline."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4720
