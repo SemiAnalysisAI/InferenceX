@@ -198,9 +198,12 @@ override_tp4_ep1_c48:
       CONC: '48'
       KV_OFFLOADING: none
 
-# HiCache arm for the DDR5 power diagnostic, ported from the MI355X TP4 HiCache
-# variants. The 1.5x host tier (~120 GB per rank) stays within the TP4 share of
-# node DRAM and NUMA node 0, where hipHostMalloc pins it.
+# Heavy-offload HiCache arm for the DDR5 power diagnostic. At the default pool,
+# c48 used 30% of the 6.17M-token GPU KV pool, so only 11% of cached tokens came
+# from host. A 2M-token pool, just above the c48 running set, pushes idle
+# prefixes to host. The host tier is 10M KV tokens plus 1280 Mamba slots (~110
+# GB per rank, as in the default-pool run), within NUMA node 0, where
+# hipHostMalloc pins it.
 override_tp4_ep1_hicache_c8:
   roles:
     agg:
@@ -213,8 +216,10 @@ override_tp4_ep1_hicache_c8:
         cuda-graph-max-bs-decode: 8
         max-running-requests: 16
         enable-hierarchical-cache: true
-        hicache-ratio: 1.5
-        hicache-write-policy: write_through_selective
+        max-total-tokens: 2000000
+        max-mamba-cache-size: 256
+        hicache-ratio: 5
+        hicache-write-policy: write_through
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
   benchmark:
@@ -234,8 +239,10 @@ override_tp4_ep1_hicache_c16:
         cuda-graph-max-bs-decode: 16
         max-running-requests: 32
         enable-hierarchical-cache: true
-        hicache-ratio: 1.5
-        hicache-write-policy: write_through_selective
+        max-total-tokens: 2000000
+        max-mamba-cache-size: 256
+        hicache-ratio: 5
+        hicache-write-policy: write_through
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
   benchmark:
@@ -255,8 +262,10 @@ override_tp4_ep1_hicache_c32:
         cuda-graph-max-bs-decode: 32
         max-running-requests: 64
         enable-hierarchical-cache: true
-        hicache-ratio: 1.5
-        hicache-write-policy: write_through_selective
+        max-total-tokens: 2000000
+        max-mamba-cache-size: 256
+        hicache-ratio: 5
+        hicache-write-policy: write_through
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
   benchmark:
@@ -276,8 +285,10 @@ override_tp4_ep1_hicache_c48:
         cuda-graph-max-bs-decode: 48
         max-running-requests: 96
         enable-hierarchical-cache: true
-        hicache-ratio: 1.5
-        hicache-write-policy: write_through_selective
+        max-total-tokens: 2000000
+        max-mamba-cache-size: 256
+        hicache-ratio: 5
+        hicache-write-policy: write_through
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
   benchmark:

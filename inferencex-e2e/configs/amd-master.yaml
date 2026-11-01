@@ -1018,8 +1018,9 @@ dsv41flash-fp4-mi300x-vllm-agentic-dspark:
       # -13.51 GiB" and refused to start. A 192 GB card cannot hold this
       # checkpoint at TP2 with a usable KV pool; MI325X does it on 256 GB.
 
-# DDR5 power diagnostic (test branch only): TP4/EP1 with and without HiCache at
-# matched concurrency, sampled by the MI325X host-setup BMC hook.
+# DDR5 power diagnostic (test branch only): heavy-offload TP4/EP1 HiCache, sampled
+# by the MI325X host-setup BMC hook. The no-offload arm is reused from run
+# 41116448659.
 qwen3.5-fp8-mi325x-sglang-agentic-mtp-memdiag:
   image: lmsysorg/sglang:v0.5.22-rocm720-mi30x@sha256:58b6bc333f527c88fe5ff1b4bd8d17e82214eabcb3044549117159878967c930
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -1033,7 +1034,6 @@ qwen3.5-fp8-mi325x-sglang-agentic-mtp-memdiag:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [8, 16, 32, 48], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [8, 16, 32, 48], srt-recipe: agentic.yaml }
 
 # GLM-5.2 FP8 full-context AgentX refresh on MI325X. This preserves the TP8
