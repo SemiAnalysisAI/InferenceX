@@ -11777,3 +11777,22 @@
     - "Add native GLM-5.3-Flash FP8 AgentX on MI325X with immutable official SGLang v0.5.21 ROCm10 gfx942, TP4/EP4, native MTP5, full 1M context, and concurrency 1, 2, 4, 8, 12, and 16."
     - "Stage checkpoint revision 46a050bec13002ad29ee795c16e61cf4fa3c4a9c in the canonical shared Hugging Face cache with locking and a 400 GB disk budget; use shared golden acceptance for throughput and canonical real-verification accuracy evaluation."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4722
+
+- config-keys:
+    - glm5.3flash-fp8-mi325x-sglang-agentic-mtp-hicache
+  scenario-type: [agentic-coding]
+  description:
+    - "Add paired GLM-5.3-Flash FP8 MI325X cache OFF/ON throughput at concurrency 12, 16, 24, and 32 on immutable official SGLang v0.5.22 ROCm10 mi30x, preserving TP4/EP4, BF16 KV, native MTP5, full 1M context, and the canonical AgentX workload."
+    - "Use native HiCache automatic host-memory fraction 0.60 without an explicit size or ratio; preserve whole-node exclusive resources and distinguish nominal DRAM metadata from actual host-pool allocation."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4735
+  no-evals: true
+
+- config-keys:
+    - glm5.3flash-fp8-mi325x-sglang-agentic-mtp-hicache-eval-off
+    - glm5.3flash-fp8-mi325x-sglang-agentic-mtp-hicache-eval-on
+  scenario-type: [agentic-coding]
+  description:
+    - "Run fresh canonical GLM-5.3-Flash FP8 MI325X accuracy controls on the child image with cache OFF at concurrency 16 and ON at concurrency 32, without synthetic acceptance."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4735
+  evals-only: true
+  all-evals: true
