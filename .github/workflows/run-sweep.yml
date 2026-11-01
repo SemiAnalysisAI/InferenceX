@@ -316,6 +316,7 @@ jobs:
         name: canary-select
         needs: setup
         if: >-
+            !cancelled() && needs.setup.result == 'success' &&
             (
               contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
               contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast')
@@ -366,7 +367,7 @@ jobs:
 
     canary-sweep:
         needs: canary-select
-        if: ${{ needs.canary-select.outputs.canary-config != '' && needs.canary-select.outputs.canary-config != '[]' }}
+        if: ${{ !cancelled() && needs.canary-select.result == 'success' && needs.canary-select.outputs.canary-config != '' && needs.canary-select.outputs.canary-config != '[]' }}
         uses: $/.github/workflows/benchmark-tmpl.yml
         name: canary /
         strategy:
@@ -390,7 +391,7 @@ jobs:
 
     canary-multi-node-sweep:
         needs: canary-select
-        if: ${{ needs.canary-select.outputs.multi-node-canary-config != '' && needs.canary-select.outputs.multi-node-canary-config != '[]' }}
+        if: ${{ !cancelled() && needs.canary-select.result == 'success' && needs.canary-select.outputs.multi-node-canary-config != '' && needs.canary-select.outputs.multi-node-canary-config != '[]' }}
         uses: $/.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node canary /
         strategy:
