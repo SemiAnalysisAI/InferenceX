@@ -11672,6 +11672,96 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4664
 
 - config-keys:
+    - musespark-fp4-mi355x-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump to lmsysorg/sglang-rocm:muse-spark-open-1027."
+    - "Concurrency 1, 4, 8 and 13: TP8/EP8 with the AMD monokernel backend and GPU-only KV; 10 to 40: TP4/EP4 with a 253 to 310 GB-per-rank HiCache DRAM tier."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4606
+
+- config-keys:
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-hicache
+  scenario-type: [agentic-coding]
+  description:
+    - "Add dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-hicache on nightly-dev-cu13-20261028-586355a8 (Dynamo 1.7.0.dev20261027), pinned by digest: DEP2 prefill and one DEP16 decode at c2884 with 5 prefill workers (decode CUDA graph batch 40), c4096 with 8 prefill workers (batch 64) and c7480 with 9 prefill workers (batch 160, max-running-requests 2560). The image includes sgl-project/sglang#46404 (DSpark simulated-acceptance bonus drawn at the simulated row)."
+    - "Prefill keeps evicted prefixes in a local host-DRAM HiCache tier (ratio 1.2, write-back, direct I/O, mem-fraction-static 0.85) instead of the Mooncake external linker, whose layer-wise L3 reads block the forward pass and stall prefill after the client's turn burst. Decode runs at mem-fraction-static 0.75 and admits transferred requests every step (SGLang's default disaggregation-decode-polling-interval of 1)."
+    - "Dynamo 1.7 backend admission limits are raised to 10000 so waiting turns queue in the prefill scheduler instead of failing with 529."
+    - "Compared with the retired dspark-disagg recipe, both roles set SGLANG_DSV4_KV_LAYOUT=v41_new, prefill also sets SGLANG_OPT_DSV41_BF16_INDEX_LOGITS=1, and decode sets enable-fp32-lm-head and reads Engram rows from peer shards (SGLANG_OPT_DSV41_ENGRAM_PEER_SHARDS=1) instead of a host table."
+    - "Retire dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg (nightly-dev-cu13-20261025-65633129, Mooncake external linker) and its disagg-variants.yaml recipe; the hicache key replaces its c2884 and c4096 points and drops c1228."
+    - "Move dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg to nightly-dev-cu13-20261029-c10e0e17 (Dynamo 1.7.0.dev20261028), pinned by digest, with the Dynamo 1.7 backend admission limits raised to 10000. The image includes sgl-project/sglang#46404 and bundles sgl-nvidia-mega 54b428921749 (megakernel API 2), so TP4 c1 keeps the NVIDIA megakernel; its 16 explicit megakernel runtime-optimization variables are replaced by SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION=1 (sgl-project/sglang#47105), which also enables the Qwen3.5/EAGLE runtime group. Remove the TP2/EP2 c16 point; TP4 c4/c16 keep their settings."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4595
+
+- config-keys:
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-hicache
+  scenario-type: [agentic-coding]
+  description:
+    - "Add back two points to the GB300 DSV4.1-Flash Dynamo + SGLang curve to fill the interactivity/E2EL gap between agg TP4 c16 and disagg 5P1D c2884, on each config's existing image."
+    - "Agg TP2/EP2 c16 (override_tp2_c16) on nightly-dev-cu13-20261029-c10e0e17, with the same per-point settings it had before it was removed: flashmla, decoder SWA bounded replay, prefill CUDA graphs disabled, prefill-decode-interval 96, swa-prefix-tails 1024, max-running-requests 32, Engram host table per rank. It inherits the base Dynamo 1.7 admission limits."
+    - "Disagg 3 × DEP2 prefill and 1 × DEP16 decode at c1228 (override_3p1d_dep2_dep16_c1228) on nightly-dev-cu13-20261028-586355a8, with the prefill host-DRAM HiCache base recipe and the retired key's c1228 decode sizing: max-running-requests 384, decode CUDA graph batch 24, disaggregation-decode-extra-slots 36."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4679
+  append-only: true
+
+- config-keys:
+    - qwen3.8next-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the Qwen3.8-Flash-Next Quark MXFP4 (FP8 attention, FP8 PLE) AgentX recipe on MI355X with SGLang native NEXTN MTP (3 steps, eagle-topk 1, 4 draft tokens) at TP1/EP1 and concurrency 8/12/16, no KV offloading. TP1: the ~116 GiB checkpoint fits on one MI355X."
+    - "Serve amd/Qwen3.8-Flash-Next-Quark-MXFP4-AttnFP8-PLEFP8 (MXFP4 MoE experts including the MTP draft, per-channel FP8 attention, FP8 PLE table) from lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261030@sha256:1ff42c238adfca9a55e8d3d3dc859a4e4e88b23e7f9340e86d17ff042b933bda with quark quantization, the aiter attention backend, page-size 64, kv-cache-dtype auto, mem-fraction-static 0.9, chunked-prefill-size 16384 and mamba-ssm-dtype bfloat16; decode CUDA graphs are on."
+    - "Every point keeps ReplaySSM spec-verify (--enable-linear-replayssm-spec) and the default path, admits 2x CONC requests and captures decode CUDA graphs up to that admission (max-running-requests = cuda-graph-max-bs-decode = 16, 24 and 32 at c8, c12 and c16), and uses mem-fraction-static 0.9 as given (SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION=1), a ~3.45M-token KV pool instead of ~2.78M at the scaled 0.765. Six tokenizer workers (--tokenizer-worker-num 6), AITER_GDR_FLYDSL=1, and integer all-reduce off (ROCM_QUICK_REDUCE_QUANTIZATION=NONE). The FlyDSL monokernel (sgl-amd-mono #29) is not used: the image pins sgl-amd-mono before it."
+    - "Offload the PLE n-gram embedding table to CPU pinned memory (--ple-offload-embedding with ple_embedding_dtype float8_e4m3fn), cutting GPU weight memory from ~130 GB to ~82 GB and growing the KV cache pool from ~2.1M to ~3.7M tokens."
+    - "No patches and no setup_script: the image's SGLang 17e94c4677 and AITER 285579b6 are used as shipped."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4680
+
+- config-keys:
+    - qwen3.8next-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Extend the MI355X Qwen3.8-Flash-Next SGLang AgentX sweep to concurrency 1/2/4/8/12/16 on the existing pinned upstream image and default serving path."
+    - "Add c1/c2/c4 recipe variants with max-running-requests and cuda-graph-max-bs-decode set to 2/4/8, preserving the existing 2x concurrency sizing and all other serving settings."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4680
+
+- config-keys:
+    - minimaxm31flash-fp4-b300-sglang-agentic-dspark
+  description:
+    - "Add TP2 points with DRAM KV offload (L2 HiCache) using shortest-prefill-first scheduling: conc 20 to 40 with a prefill-decode interval of 32, conc 48 with 24, and conc 50 with 20."
+    - "Add TP4 points with DRAM KV offload at conc 8, 16, 24, 32 and 40 with shortest-prefill-first and a prefill-decode interval of 32, 8192-token prefill chunks and mem-fraction-static 0.90."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4675
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-sglang-agentic-dspark
+  description:
+    - "Add TP4 points at conc 24, 32 and 40 and TP2 points at conc 20, 24, 28, 36 and 40 with DRAM KV offload (L2 HiCache, 180 GB per rank), using shortest-prefill-first scheduling with a prefill-decode interval of 32, 8192-token prefill chunks and stream interval 20."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4676
+  scenario-type: [agentic-coding]
+  append-only: true
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg
+    - minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
+  description:
+    - "Use the fastokens frontend tokenizer (DYN_TOKENIZER=fastokens) on every point. The default tokenizer disables its prefix cache for this model, so each turn re-tokenized the full prompt."
+    - "Add conc 360 to the 6 DEP2 prefill + DEP16 decode point, next to conc 300."
+    - "Run the Dynamo frontend, etcd, nats and the Mooncake master on the benchmark client node and disable the OTel collector on every disagg point."
+    - "Raise the shared MooncakeStore DRAM pool from 160 GB to 180 GB per rank on every disagg point, and add conc 400 to the 6 DEP2 prefill + DEP8 decode point."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4631
+
+- config-keys:
+    - minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-agg
+    - minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-disagg
+  description:
+    - "Use the fastokens frontend tokenizer (DYN_TOKENIZER=fastokens) on every point. The default tokenizer disables its prefix cache for this model, so each turn re-tokenized the full prompt."
+    - "Raise the shared MooncakeStore DRAM pool from 150 GB to 190 GB per rank, and add 3 DEP4 prefill + DEP8 decode at conc 288 and 3 DEP4 prefill + DEP16 decode at conc 320."
+    - "Set prefill gpu-memory-utilization to 0.92 on every disagg point, add 3 DEP4 prefill + DEP16 decode at conc 360 and 2 DEP4 prefill + DEP8 decode at conc 224 and 256, and drop the unused VLLM_MAX_ASYNC_KV_ADMITS_PER_STEP decode env."
+    - "Run the Dynamo frontend, etcd, nats and the Mooncake master on the benchmark client node and disable the OTel collector on every disagg point."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4632
+  scenario-type: [agentic-coding]
+
+- config-keys:
     - dsv41flash-fp4-gb300-sglang-agentic-dspark
   description:
     - "Update the SGLang image from nightly-dev-cu13-20261021-c1c287a4 to nightly-dev-cu13-20261030-302b78cc, pinned by digest. The image includes sgl-project/sglang#46404 (DSpark simulated-acceptance bonus drawn at the simulated row), #46840 (simulated acceptance keeps the real verify accept cost), #46891 (no host sync in DSpark draft-block metadata) and sgl-nvidia-mega 54b428921749 (megakernel API 2, sgl-project/sglang#47145)."
