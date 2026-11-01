@@ -35,13 +35,15 @@ A PR whose new entries are all retirements has no result artifacts to reuse. Aft
 
 ## Accuracy-sensitive optimizations
 
-On upstream official InferenceX, reduced-precision all-reduce or reduce-scatter, online linear-layer quantization,
-non-native cross-indexer sharing, and non-native FP4 KV cache require the
+On upstream official InferenceX, reduced-precision all-reduce or reduce-scatter,
+online linear-layer quantization, non-native cross-indexer sharing, non-native FP4
+KV cache, and SSM/KDA/Mamba state-cache dtypes below FP32 require the
 [qualification in MODELS.md](inferencex-e2e/docs/MODELS.md#accuracy-sensitive-optimization-policy).
 Provide raw logs and full manual reproduction scripts for both baselines and the
 optimized run, covering the entire KVV suite for Kimi or all of Terminal-Bench 4.0,
 HLE, and MMMU Pro Vision for other models (or a recorded core-maintainer-agreed
 substitute set). The same requirement applies to existing and new models.
+For state-cache precision reductions, both baselines must use FP32 state caches.
 The separate draft-model precision restrictions below still apply.
 
 ## Draft-model precision

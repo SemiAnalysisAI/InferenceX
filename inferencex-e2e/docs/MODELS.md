@@ -30,6 +30,7 @@ On upstream official InferenceX, the following optimizations are accepted if and
 - Online quantization of linear layers.
 - Cross-indexer sharing on models that do not natively support index sharing.
 - FP4 KV cache on models that do not natively support FP4 KV cache.
+- Reducing the SSM/KDA/Mamba state-cache dtype below FP32.
 
 This evidence requirement applies to submissions for both existing and new models, including recipe updates, image-only updates, and re-enabled configurations. Existing models have no grandfathered exemption. Historical results are unchanged. Native index sharing and native FP4 KV cache remain subject to the ordinary eval requirements; they do not require this additional qualification solely because they use those native features.
 
@@ -48,11 +49,13 @@ The evaluation scripts must reproduce all three arms on the same evaluation suit
 2. The quantized-weight checkpoint, with the optimization under test disabled.
 3. The same quantized-weight checkpoint as arm 2, with the optimization under test enabled.
 
+When testing a reduction in SSM/KDA/Mamba state-cache precision, both baseline arms must use FP32 state caches, and arm 3 must use the proposed lower-precision state-cache dtype. Record and verify the effective state-cache dtype in each arm separately from weight and KV-cache precision.
+
 Keep the evaluation data, harness, prompts, sampling settings, context limits, and other serving settings matched, apart from the intended differences between arms. Record any necessary differences. Compare arm 2 with arm 1 to expose checkpoint-quantization effects, arm 3 with arm 2 to isolate the optimization's effect on non-trivial accuracy, and arm 3 with arm 1 to show the total effect. If multiple optimizations are submitted together, identify the combination under test and do not attribute its effect to an individual optimization without a separate comparison.
 
 Provide complete setup, model-download, serving, evaluation, and scoring commands, pinned checkpoint revisions and engine images/commits, the effective configuration for each arm, and raw serving/evaluation logs with per-evaluation results. The scripts must allow a reviewer to reproduce all three arms manually, without relying on an undocumented CI environment. Logs must establish that the tested optimization actually ran in arm 3 and was disabled in the baselines; a flag alone does not prove runtime dispatch.
 
-Trace effective settings through inherited environment, launcher overrides, container defaults, and the pinned engine implementation, including target/draft workers and prefill/decode roles. Inspect `ROCM_QUICK_REDUCE_QUANTIZATION`, `VLLM_ROCM_QUICK_REDUCE_QUANTIZATION`, `AITER_QUICK_REDUCE_QUANTIZATION`, and equivalent controls, as well as reduce-scatter, online-quantization, index-sharing, and KV-cache settings. An unset control does not prove an optimization is disabled; `0` or `NONE` counts as disabled only when the pinned implementation confirms it. Enabling values and image defaults require the same qualification as explicit recipe settings.
+Trace effective settings through inherited environment, launcher overrides, container defaults, and the pinned engine implementation, including target/draft workers and prefill/decode roles. Inspect `ROCM_QUICK_REDUCE_QUANTIZATION`, `VLLM_ROCM_QUICK_REDUCE_QUANTIZATION`, `AITER_QUICK_REDUCE_QUANTIZATION`, and equivalent controls, as well as reduce-scatter, online-quantization, index-sharing, KV-cache, and SSM/KDA/Mamba state-cache dtype settings. An unset control does not prove an optimization is disabled; `0` or `NONE` counts as disabled only when the pinned implementation confirms it. Enabling values and image defaults require the same qualification as explicit recipe settings.
 
 This policy permits qualified cross-indexer sharing despite the general architecture-FLOP restriction. It does not permit unrelated layer, expert, or head pruning, waive engine-patch requirements, or override the separate [draft-model precision policy](../../CONTRIBUTING.md#draft-model-precision).
 

@@ -446,7 +446,8 @@ Read "Accuracy-sensitive optimization policy" in `inferencex-e2e/docs/MODELS.md`
 For upstream official InferenceX submissions, apply it to reduced-precision
 all-reduce or reduce-scatter (integer or floating-point),
 online quantization of linear layers, cross-indexer sharing on models without native
-index sharing, and FP4 KV cache on models without native FP4 KV cache. Existing and
+index sharing, FP4 KV cache on models without native FP4 KV cache, and reductions
+in SSM/KDA/Mamba state-cache dtype below FP32. Existing and
 new models have the same evidence requirement; there is no grandfathering exemption.
 
 For every affected model, including image-only changes, re-enabled configurations, and
@@ -458,7 +459,8 @@ deployments.
   `VLLM_ROCM_QUICK_REDUCE_QUANTIZATION`, `AITER_QUICK_REDUCE_QUANTIZATION`, and
   equivalent aliases or controls, including unprefixed `QUICK_REDUCE_QUANTIZATION`
   where recognized. Inspect reduce-scatter, online linear quantization, index-sharing,
-  and FP4 KV-cache paths too. Determine effective behavior, not merely flag presence.
+  FP4 KV-cache paths, and SSM/KDA/Mamba state-cache dtype controls too.
+  Determine effective behavior, not merely flag presence.
   Do not confuse size thresholds with collective-quantization controls.
 - `INT4`, `INT6`, `INT8`, other enabling values, and inherited enabling defaults
   require qualification, not automatic rejection. Accept `0` or `NONE` as disabled
@@ -474,6 +476,10 @@ deployments.
   communications or the optimization under test, (2) the quantized-weight checkpoint
   without that optimization, and (3) the same quantized-weight checkpoint with it.
   Casting quantized weights to a wider dtype does not satisfy arm 1.
+- For SSM/KDA/Mamba state-cache precision reductions, require FP32 state caches in
+  both baselines and the proposed lower-precision state-cache dtype in arm 3.
+  Verify the effective state-cache dtype separately from weight and KV-cache
+  precision, including inherited and image-default settings.
 - Verify pinned checkpoints/images and matched evaluation settings across all arms.
   Check per-evaluation scores and stated pass criteria, the arm 2 versus arm 1
   checkpoint effect, arm 3 versus arm 2 optimization effect, and arm 3 versus arm 1
