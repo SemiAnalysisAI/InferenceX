@@ -681,10 +681,19 @@ ofi_nccl_prepare() {
   unset COLLX_OFI_NCCL_LIB_DIR
   [ "${COLLX_RDMA_FABRIC:-}" = efa ] && [ "${COLLX_NODES:-1}" -gt 1 ] || return 0
   # ncclGinPlugin_v14 (the EFA GDA op table) first shipped in 1.21.0: such a host plugin already has
-  # the worker signal path (b300's 1.21.1, EFA installer 1.50.0).
-  if grep -qF ncclGinPlugin_v14 /opt/amazon/ofi-nccl/lib/libnccl-net-ofi.so; then
-    collx_log "aws-ofi-nccl: using the host plugin"
-    return 0
+  # the worker signal path (b300's 1.21.1, EFA installer 1.50.0). It must also load in this image: the
+  # host build links libhwloc.so.15, which the vLLM images lack. NCCL does not fail on a plugin it
+  # cannot dlopen; it falls back to its internal IB transport on the hosts' CX-7 ports, so the build
+  # below (static hwloc) stands in.
+  local host=/opt/amazon/ofi-nccl/lib/libnccl-net-ofi.so missing
+  if grep -qF ncclGinPlugin_v14 "$host"; then
+    missing="$(LD_LIBRARY_PATH="/opt/amazon/efa/lib:${COLLX_EFA_HOST_ROOT:-/nonexistent}/lib:${LD_LIBRARY_PATH:-}" \
+      ldd "$host" 2>&1 | awk '/not found/ {print $1}' | paste -sd, -)"
+    if [ -z "$missing" ]; then
+      collx_log "aws-ofi-nccl: using the host plugin"
+      return 0
+    fi
+    collx_log "aws-ofi-nccl: the host plugin cannot load in this image (missing $missing); building it"
   fi
   # A plugin built on the bundled hwloc keys its own cache, so a change to that build replaces it.
   local variant="$COLLX_OFI_NCCL_VERSION"

@@ -66,6 +66,12 @@ jobs:
           uv sync --project inferencex-e2e --locked --all-extras --group test --no-editable
           echo "$GITHUB_WORKSPACE/inferencex-e2e/.venv/bin" >> "$GITHUB_PATH"
 
+      - name: Check CollectiveX coverage manifest
+        if: matrix.check == 'Tests'
+        run: |
+          python collectivex/sweep_matrix.py --suites ep,swap-blocks --cases-json collectivex/results/cases.json > /dev/null
+          git diff --exit-code -- collectivex/results/cases.json
+
       - name: Run tests
         if: matrix.check == 'Tests'
         run: |
