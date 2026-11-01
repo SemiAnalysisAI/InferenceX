@@ -19,13 +19,19 @@ on: # zizmor: ignore[concurrency-limits]
         type: string
         default: 'dsv4'
       framework:
-        description: "Serving framework; selects the <model-prefix>_fp4_b300_<framework>[_<collector-variant>].sh collector"
+        description: "Serving framework; selects the <model-prefix>_<precision>_b300_<framework>[_<collector-variant>].sh collector"
         required: false
         type: choice
         options: [vllm, sglang]
         default: 'vllm'
+      precision:
+        description: "Checkpoint precision; selects the collector and queue metadata"
+        required: false
+        type: choice
+        options: [fp4, fp8, bf16]
+        default: 'fp4'
       collector-variant:
-        description: "Collector variant suffix; non-empty selects <model-prefix>_fp4_b300_<framework>_<collector-variant>.sh (e.g. probabilistic_sample_method_block_rejection_sample_method)"
+        description: "Collector variant suffix; non-empty selects <model-prefix>_<precision>_b300_<framework>_<collector-variant>.sh"
         required: false
         type: string
         default: ''
@@ -97,7 +103,7 @@ env:
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
   MODEL: ${{ inputs.model }}
   MODEL_PREFIX: ${{ inputs.model-prefix }}
-  PRECISION: fp4
+  PRECISION: ${{ inputs.precision }}
   FRAMEWORK: ${{ inputs.framework }}
   EXP_NAME: ${{ inputs.model-prefix }}_speedbench
   IMAGE: ${{ inputs.image }}
@@ -155,11 +161,12 @@ jobs:
             --arg runner "$RUNNER" \
             --arg model_prefix "$MODEL_PREFIX" \
             --arg framework "$FRAMEWORK" \
+            --arg precision "$PRECISION" \
             '[{
               runner: $runner,
               framework: $framework,
               "model-prefix": $model_prefix,
-              precision: "fp4",
+              precision: $precision,
               "spec-decoding": "mtp"
             }]')
           scored=$(printf '%s' "$entry" |
@@ -250,7 +257,7 @@ jobs:
         run: |
           if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           collector_dir=benchmarks/single_node/speedbench
-          collector="${MODEL_PREFIX}_fp4_b300_${FRAMEWORK}"
+          collector="${MODEL_PREFIX}_${PRECISION}_b300_${FRAMEWORK}"
           if [[ -n "$COLLECTOR_VARIANT" ]]; then
             collector+="_${COLLECTOR_VARIANT}"
           fi
