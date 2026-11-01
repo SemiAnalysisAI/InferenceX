@@ -16,6 +16,7 @@ sys.path[:0] = [str(ROOT), str(ROOT / "bench")]
 
 # Imported before any stubbed load so the adapter binds the real shared base, which stays loaded.
 import ep_backend  # noqa: E402,F401
+import _fakes  # noqa: E402
 import ep_oracle  # noqa: E402
 
 try:
@@ -86,23 +87,12 @@ class _LegacyBuffer:
         return list(range(8)), None, self._hook("combine")
 
 
-def _stub_torch():
-    torch = types.ModuleType("torch")
-    torch.bfloat16, torch.float32, torch.int32, torch.int64 = "bfloat16", "float32", "int32", "int64"
-    torch.compile = lambda fn=None, **_: fn if fn is not None else (lambda inner: inner)
-    torch._dynamo = types.SimpleNamespace(config=types.SimpleNamespace(cache_size_limit=8))
-    dist = types.ModuleType("torch.distributed")
-    dist.group = types.SimpleNamespace(WORLD="world")
-    torch.distributed = dist
-    return {"torch": torch, "torch.distributed": dist}
-
-
 def _adapter(ue8m0=False):
     """A fresh ep_deepep_v2 against the stubs, with the Blackwell/UE8M0 decision fixed."""
     deep_ep = types.ModuleType("deep_ep")
     deep_ep.ElasticBuffer, deep_ep.Buffer = _ElasticBuffer, _LegacyBuffer
     deep_ep.topk_idx_t, deep_ep.__version__ = "int64", "2.1.0"
-    with mock.patch.dict(sys.modules, {**_stub_torch(), "deep_ep": deep_ep}):
+    with mock.patch.dict(sys.modules, {**_fakes.stub_torch(), "deep_ep": deep_ep}):
         for name in ("ep_legacy_ll", "ep_deepep_v2"):
             sys.modules.pop(name, None)
         module = importlib.import_module("ep_deepep_v2")
