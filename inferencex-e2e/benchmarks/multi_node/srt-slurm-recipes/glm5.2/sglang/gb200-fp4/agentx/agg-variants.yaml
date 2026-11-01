@@ -6,13 +6,17 @@ base:
     model: {}
     container: {}
     frameworks:
-      dynamo: 1.6.0.dev20261019
-      sglang: 0.0.0.dev1+gab580b2e0
+      dynamo: 1.6.0
+      sglang: 0.0.0.dev1+g586355a83
   resources:
     gpu_type: gb200
     gpus_per_node: 4
+  # Dynamo a789babbe37a made frontend /health omit instances, which srtctl's
+  # readiness check needs; pin its parent until srtctl asks for them.
   dynamo:
-    install: false
+    install: true
+    source:
+      rev: 68c35a1ce41b035d1a79fff4be97aa1c43de62c3
   # Tachometer's per-node exporters slow decode steps and add host memory;
   # InferenceX does not read its output.
   observability:
@@ -40,6 +44,11 @@ base:
         PIP_BREAK_SYSTEM_PACKAGES: '1'
         DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        # Dynamo 5df849a06a (#14369) caps each worker at max-running-requests plus a
+        # 2x queue and rejects the rest with 529; keep its pre-engine-report limits.
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: '10000'
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT: '10000'
+        DYN_BACKEND_ADMISSION_REQUEST_QUEUE_LIMIT: '20000'
       args:
         served-model-name: nvidia/GLM-5.2-NVFP4
         trust-remote-code: true
