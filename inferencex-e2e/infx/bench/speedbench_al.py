@@ -40,7 +40,7 @@ def select_category(source: Path, destination: Path, category: str) -> int:
             if row.get("category") != category:
                 continue
             messages = row["messages"]
-            # SGLang's loader consumes only the first user turn; reject lossy conversion.
+            # Coding collection is single-turn; do not silently flatten conversations.
             if (
                 len(messages) != 1
                 or messages[0]["role"] != "user"
@@ -48,7 +48,7 @@ def select_category(source: Path, destination: Path, category: str) -> int:
                 or not messages[0]["content"]
             ):
                 raise env.BenchError("SPEED-Bench row must contain exactly one nonempty user turn")
-            out.write(json.dumps({"turns": [messages[0]["content"]]}) + "\n")
+            out.write(json.dumps(row) + "\n")
             count += 1
     if count == 0:
         raise env.BenchError(f"No SPEED-Bench rows for category {category!r}")
@@ -56,13 +56,17 @@ def select_category(source: Path, destination: Path, category: str) -> int:
 
 
 def read_acceptance(path: Path, *, expected: int, mtp: int) -> float:
-    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
-    if len(rows) != 1:
-        raise env.BenchError(f"Expected one benchmark result in {path}, got {len(rows)}")
-    result = rows[0]
-    if result.get("completed") != expected or result.get("total_output_tokens", 0) <= 0:
+    try:
+        result = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        raise env.BenchError(f"Expected one benchmark result in {path}") from error
+    if (
+        result.get("completed") != expected
+        or result.get("failed", 0) != 0
+        or result.get("total_output_tokens", 0) <= 0
+    ):
         raise env.BenchError(f"Incomplete SPEED-Bench result: {result.get('completed')}/{expected}")
-    value = result.get("accept_length")
+    value = result.get("spec_decode_acceptance_length")
     if (
         isinstance(value, bool)
         or not isinstance(value, (int, float))
@@ -70,6 +74,16 @@ def read_acceptance(path: Path, *, expected: int, mtp: int) -> float:
         or not 1 <= value <= mtp + 1
     ):
         raise env.BenchError(f"Invalid acceptance length for MTP={mtp}: {value!r}")
+    drafts = result.get("spec_decode_num_drafts")
+    accepted = result.get("spec_decode_accepted_tokens")
+    if (
+        type(drafts) is not int
+        or drafts <= 0
+        or type(accepted) is not int
+        or not 0 <= accepted <= mtp * drafts
+        or not math.isclose(value, 1 + accepted / drafts, rel_tol=1e-9)
+    ):
+        raise env.BenchError("Missing or inconsistent speculative decoding counter deltas")
     return float(value)
 
 
@@ -100,7 +114,10 @@ def prepare_dataset(directory: Path, category: str) -> tuple[Path, int]:
         prepare.write_bytes(response.read())
     run([sys.executable, str(prepare), "--config", "qualitative", "--output_dir", str(directory)])
     selected = directory / "selected.jsonl"
-    return selected, select_category(directory / "qualitative.jsonl", selected, category)
+    dataset = directory / "qualitative.jsonl"
+    count = select_category(dataset, selected, category)
+    selected.replace(dataset)
+    return dataset, count
 
 
 def run(command: Sequence[str]) -> None:
@@ -144,27 +161,19 @@ def collect_cell(
     args: argparse.Namespace,
 ) -> float:
     command = [
-        sys.executable,
-        "-m",
-        "sglang.launch_server",
-        "--model-path",
+        "vllm",
+        "serve",
         model_path,
         "--host",
         "127.0.0.1",
         "--port",
         str(port),
         *args.server_args,
-        "--speculative-algorithm",
-        "EAGLE",
-        "--speculative-num-steps",
-        str(mtp),
-        "--speculative-eagle-topk",
-        "1",
-        "--speculative-num-draft-tokens",
-        str(mtp + 1),
+        "--speculative-config",
+        json.dumps({"method": "mtp", "num_speculative_tokens": mtp}),
     ]
     log = results / f"server_on_mtp{mtp}.log"
-    result = results / f"speedbench_on_mtp{mtp}.jsonl"
+    result = results / f"speedbench_on_mtp{mtp}.json"
     result.unlink(missing_ok=True)
     proc.echo(command)
     with log.open("wb") as sink:
@@ -175,11 +184,11 @@ def collect_cell(
             server.wait_ready(f"http://127.0.0.1:{port}/health", pid=child.pid, log=log)
             run(
                 [
-                    sys.executable,
-                    "-m",
-                    "sglang.bench_serving",
+                    "vllm",
+                    "bench",
+                    "serve",
                     "--backend",
-                    "sglang",
+                    "vllm",
                     "--host",
                     "127.0.0.1",
                     "--port",
@@ -187,28 +196,35 @@ def collect_cell(
                     "--model",
                     model_path,
                     "--dataset-name",
-                    "speed-bench",
+                    "speed_bench",
                     "--dataset-path",
-                    str(dataset),
+                    str(dataset.parent),
                     "--speed-bench-output-len",
                     str(output_len),
                     "--num-prompts",
-                    str(count),
+                    "-1",
                     "--max-concurrency",
                     str(args.concurrency),
                     "--temperature",
                     str(args.temperature),
                     "--top-p",
                     str(args.top_p),
-                    # No warmup generations may contaminate server-wide acceptance counters.
-                    "--warmup-requests",
+                    "--chat-template-kwargs",
+                    os.environ["CHAT_TEMPLATE_KWARGS_ON"],
+                    "--trust-remote-code",
+                    # vLLM records counter deltas around the formal request window.
+                    "--num-warmups",
+                    "0",
+                    "--ready-check-timeout-sec",
                     "0",
                     "--seed",
                     "42",
-                    "--disable-ignore-eos",
-                    "--output-file",
-                    str(result),
-                    "--output-details",
+                    "--save-result",
+                    "--save-detailed",
+                    "--result-dir",
+                    str(results),
+                    "--result-filename",
+                    result.name,
                 ]
             )
             return read_acceptance(result, expected=count, mtp=mtp)
@@ -246,10 +262,13 @@ def main(argv: list[str]) -> int:
         "SPEEDBENCH_OUTPUT_LEN",
         "THINKING_MODES",
     )
-    # The upstream SPEED-Bench loader cannot forward chat-template kwargs.
-    if inputs["THINKING_MODES"] != "on" or json.loads(inputs["CHAT_TEMPLATE_KWARGS_ON"]) != {}:
+    # GLM-5.3-Flash always thinks; enable_thinking=false does not disable it.
+    if inputs["THINKING_MODES"] != "on" or json.loads(inputs["CHAT_TEMPLATE_KWARGS_ON"]) not in (
+        {},
+        {"reasoning_effort": "max"},
+    ):
         raise env.InputError(
-            "SGLang SPEED-Bench requires THINKING_MODES=on and CHAT_TEMPLATE_KWARGS_ON={}"
+            "GLM-5.3-Flash collection requires THINKING_MODES=on and max reasoning effort"
         )
     mtp_levels = levels(inputs["MTP_LIST"])
     output_len = env.positive_int("SPEEDBENCH_OUTPUT_LEN")
@@ -272,14 +291,15 @@ def main(argv: list[str]) -> int:
             "concurrency": args.concurrency,
             "temperature": args.temperature,
             "top_p": args.top_p,
-            "thinking": "chat template default; reasoning_effort=max for GLM-5.3-Flash",
+            "thinking": "reasoning_effort=max for GLM-5.3-Flash",
             "draft": "embedded MTP, upstream checkpoint-default precision",
             "verification": "standard (no block or synthetic acceptance flags)",
             "prepare_url": PREPARE_URL,
             "num_prompts": count,
             "dataset_sha256": hashlib.sha256(dataset.read_bytes()).hexdigest(),
             "config_sha256": hashlib.sha256((model / "config.json").read_bytes()).hexdigest(),
-            "sglang_version": importlib.metadata.version("sglang"),
+            "vllm_version": importlib.metadata.version("vllm"),
+            "frontend": os.environ.get("VLLM_USE_RUST_FRONTEND"),
             "complete": False,
         }
         metadata.write_text(json.dumps(provenance, indent=2) + "\n", encoding="utf-8")

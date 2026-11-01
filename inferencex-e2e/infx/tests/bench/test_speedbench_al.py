@@ -23,8 +23,8 @@ def test_select_category_preserves_all_matching_prompts(tmp_path):
     destination = tmp_path / "selected.jsonl"
     assert select_category(source, destination, "coding") == 2
     assert [json.loads(row) for row in destination.read_text().splitlines()] == [
-        {"turns": ["one"]},
-        {"turns": ["three"]},
+        {"category": "coding", "messages": [{"role": "user", "content": "one"}]},
+        {"category": "coding", "messages": [{"role": "user", "content": "three"}]},
     ]
     with pytest.raises(BenchError, match="No SPEED-Bench"):
         select_category(source, destination, "missing")
@@ -47,9 +47,17 @@ def test_select_category_rejects_lossy_conversion(tmp_path, messages):
 
 
 def test_acceptance_and_matrix(tmp_path):
-    result = tmp_path / "result.jsonl"
+    result = tmp_path / "result.json"
     result.write_text(
-        json.dumps({"completed": 20, "total_output_tokens": 100, "accept_length": 2.3456789})
+        json.dumps(
+            {
+                "completed": 20,
+                "total_output_tokens": 100,
+                "spec_decode_acceptance_length": 2.3456789,
+                "spec_decode_num_drafts": 10000000,
+                "spec_decode_accepted_tokens": 13456789,
+            }
+        )
     )
     value = read_acceptance(result, expected=20, mtp=3)
     matrix = tmp_path / "matrix.yaml"
@@ -62,19 +70,33 @@ def test_acceptance_and_matrix(tmp_path):
     [
         {"completed": 19},
         {"total_output_tokens": 0},
-        {"accept_length": None},
-        {"accept_length": "N/A"},
-        {"accept_length": float("nan")},
-        {"accept_length": float("inf")},
-        {"accept_length": True},
-        {"accept_length": 0.99},
-        {"accept_length": 4.01},
+        {"failed": 1},
+        {"spec_decode_acceptance_length": None},
+        {"spec_decode_acceptance_length": "N/A"},
+        {"spec_decode_acceptance_length": float("nan")},
+        {"spec_decode_acceptance_length": float("inf")},
+        {"spec_decode_acceptance_length": True},
+        {"spec_decode_acceptance_length": 0.99},
+        {"spec_decode_acceptance_length": 4.01},
+        {"spec_decode_num_drafts": 0},
+        {"spec_decode_num_drafts": None},
+        {"spec_decode_accepted_tokens": -1},
+        {"spec_decode_accepted_tokens": 301},
     ],
 )
 def test_reject_incomplete_or_invalid_measurements(tmp_path, updates):
-    result = tmp_path / "result.jsonl"
+    result = tmp_path / "result.json"
     result.write_text(
-        json.dumps({"completed": 20, "total_output_tokens": 100, "accept_length": 2.5} | updates)
+        json.dumps(
+            {
+                "completed": 20,
+                "total_output_tokens": 100,
+                "spec_decode_acceptance_length": 2.5,
+                "spec_decode_num_drafts": 200,
+                "spec_decode_accepted_tokens": 300,
+            }
+            | updates
+        )
     )
     with pytest.raises(BenchError):
         read_acceptance(result, expected=20, mtp=3)
