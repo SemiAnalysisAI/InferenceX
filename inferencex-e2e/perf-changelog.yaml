@@ -11778,5 +11778,6 @@
     - "Enable the standalone SGLang GB200 multi-node launch and power telemetry routes."
     - "Request full-node memory and 144 CPUs for each aggregate configuration."
     - "Add Dynamo-SGLang aggregate configurations with TP8 and TP4 workers, DFlash2, and Dynamo KV routing."
+    - "Require the shared GPU power telemetry for the aggregate configurations."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4689
   scenario-type: [agentic-coding]

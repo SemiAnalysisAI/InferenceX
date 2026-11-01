@@ -35,7 +35,6 @@ base:
     tachometer:
       enabled: false
   telemetry:
-    required: false
     startup_timeout_seconds: 300
     cpu_power_exporter:
       port: 9405
