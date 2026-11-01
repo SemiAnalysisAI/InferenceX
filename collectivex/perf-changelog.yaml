@@ -100,3 +100,40 @@
   backends: [deepep-v2]
   description:
     - Build AWS's EFA fork of DeepEP V2 (amazon-contributing/DeepEP a227152) on B300; its unordered scale-out kernels need only the EFA proxy's weak GIN signals.
+- date: 2026-11-01
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4700
+  pools: [mi300x, mi325x, mi355x]
+  backends: [mori]
+  description:
+    - Charge vLLM's finalize copy in MoRI combine (the result is copied into the MoE layer's output, as flashinfer-ep already did).
+- date: 2026-11-01
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4700
+  pools: [h100-dgxc, h200-dgxc, b200-nscale, b300, gb200, gb300]
+  backends: [nccl-ep]
+  modes: [low-latency]
+  precisions: [fp8]
+  description:
+    - Compile nccl-ep's low-latency FP8 dequant; only the stage component moves.
+- date: 2026-11-01
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4700
+  pools: [h100-dgxc, h200-dgxc, b200-nscale, b300, gb200, gb300, mi300x, mi325x, mi355x]
+  suites: [ep-core]
+  description:
+    - Publish the true cross-rank median for pair_period (torch.median took the lower middle rank).
+- date: 2026-11-01
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4700
+  pools: [mi325x]
+  description:
+    - Allocate mi325x nodes exclusively, as every other pool.
+- date: 2026-11-01
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4700
+  pools: [h200-dgxc, b200-nscale, b300, gb200, gb300]
+  suites: [kv-transfer]
+  description:
+    - Compute kv-transfer percentiles with the EP suite's nearest-rank rule.
+- date: 2026-11-01
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4700
+  pools: [h100-dgxc, h200-dgxc, b200-nscale, b300, gb200, gb300, mi300x, mi325x, mi355x]
+  suites: [swap-blocks]
+  description:
+    - Take 100 iterations per swap-blocks point, so p99 is no longer the slowest of 20 samples.
