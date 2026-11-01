@@ -66,12 +66,17 @@ relative). Graphed replays must rewrite poisoned outputs. Any failure makes the 
   multi-node decode on fresh-entry p99.
 - Bandwidth is logical wire payload over latency, never link utilization.
 - FP8 `stage` (the dequant) is excluded from `roundtrip` and `pair_period`; do not sum it in.
-- EFA pools (b300, h100) run EP16 through a CPU proxy, so those rows measure the proxy.
+- EFA pools (b300, h100) run EP16 through a CPU proxy, so those rows measure the proxy. b300's
+  deepep-v2 rows build AWS's EFA fork of DeepEP (`-aws-efa-fork`).
 - On GB200/GB300, eager FP8 prefill chains at T=1024 are bound by the Grace host, not the fabric.
 - Vendor tables time kernels in a profiler; compare them with `cross_rank_min_us` or
   `chain_floor_us`.
 - Limits: no compute between ops, uniform routing, no L2 flush, unlocked clocks (`slow_gpu` flags
   outliers), interior chain pairs unvalidated.
+
+## KV-cache transfer
+
+The `kv-transfer` suite's rules and evidence are in [kv-transfer.md](kv-transfer.md).
 
 # Methodology
 
@@ -169,6 +174,18 @@ GIN), #640 (NCCL shared-memory mappings) and #642 (the low-latency combine fence
 closed unless the loaded `deep_ep` exposes `ElasticBuffer`, which also catches an image-bundled
 `deep_ep` shadowing the build.
 
+On b300 (registry `deepep_efa_fork`) the build uses AWS's fork instead,
+[amazon-contributing/DeepEP](https://github.com/amazon-contributing/DeepEP) `main`: the same pin plus
+its EFA commits. Upstream treats EFA as unsupported
+([deepseek-ai/DeepEP#369](https://github.com/deepseek-ai/DeepEP/issues/369)), and its scale-out
+kernels assume writes land in order. The fork's default `unordered` kernels batch each put with an
+in-band header and count completions, which the aws-ofi-nccl proxy's weak signals support; it also
+caps the scale-out GIN contexts at 17. It builds against NCCL 2.32.3, whose headers declare the GIN
+signal requirements the fork sets. These rows carry the `-aws-efa-fork` series suffix and record
+`deepep_source` and `hybrid_kernel`, so they never pool with upstream rows. The fork is not what vLLM
+ships, so there `normal` keeps vLLM's call configuration on AWS's kernels. h100-dgxc stays on upstream:
+on its p5 nodes (32 EFA NICs each) the fork's unordered dispatch times out forwarding scale-out tokens.
+
 `normal` runs vLLM's `deepep_v2` configuration (`library_config.engine_contract = "vllm"`). With CUDA
 graphs on, vLLM's default, every batch, prefill as well as decode, dispatches with `do_cpu_sync=False`
 and `do_expand=False` into a receive bounded at the next power of two of T, with
@@ -221,6 +238,15 @@ as DeepEP V2 (send kernel plus receive hook) with vLLM's 256-token receive; at E
 keeps it on NVLink. UCCL-EP is built from source at its pin with UCCL's drop-in flags
 `USE_DMABUF=1 PER_EXPERT_BATCHING=1`; `implementation.library_version` names the commit and flags,
 and the import probe rejects any other `deep_ep`.
+
+**h200-dgxc EP16 runs a deeper RDMA receive ring than vLLM.** With vLLM's dispatch config (RDMA
+chunks send 20 / receive 140), BF16 prefill deadlocks inside UCCL on every attempt: the sender
+coordinator waits for a full chunk the senders cannot prepare, and the receiver for tokens that are
+never delivered ([uccl-project/uccl#1110](https://github.com/uccl-project/uccl/issues/1110)). A
+receive ring of 1040 tokens (a multiple of the send chunk) is deep enough that no prefill stream
+wraps, and every rung passes the oracle. The registry's `network.uccl_rdma_recv_tokens` sets it for
+h200-dgxc only; those rows carry `-rdmarecv1040` in `kernel_generation` and the realized config in
+`library_config`, so they are library rows rather than vLLM's configuration until UCCL is fixed.
 
 UCCL-EP EP16 is not registered on mi355x: its CPU-proxy RDMA works over the Pollara fabric but runs
 about 13x under UCCL's documented bandwidth, unchanged by registration mode or traffic class (an
@@ -619,7 +645,9 @@ inside the container. NCCL GIN rides the plugin's CPU-proxy GIN (`NCCL_GIN_TYPE=
 GDRCopy 2.5+ on the node. The type is pinned because the plugin's GPU-initiated EFA backend has only
 weak signals, which nccl.ep and DeepEP cannot use. Where the host plugin predates 1.21 (h100's 1.20),
 shards build aws-ofi-nccl 1.21.1 into the backend cache, since 1.20's proxy applies every signal with
-an inline GPU read-modify-write (1.3-4.5x slower on b300 EP16). Proxy GIN still bounds these rows
+an inline GPU read-modify-write (1.3-4.5x slower on b300 EP16). They also build it where the host
+plugin cannot load in the image (b300's links libhwloc.so.15, which the vLLM image lacks): NCCL does
+not fail on such a plugin but falls back to its internal IB transport on the hosts' CX-7 ports. Proxy GIN still bounds these rows
 well below the IB pools.
 
 The single-slurm pools (H100, H200, B200, B300) reject an allocation holding a GPU with an active
