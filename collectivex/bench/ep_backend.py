@@ -63,6 +63,32 @@ class WorkloadSpec:
     points: dict = field(default_factory=dict)
 
 
+# FP8 block size: the DeepSeek-V3 per-1x128 recipe every FP8 backend here uses.
+FP8_BLOCK = 128
+
+
+def blockwise_fp8_codec(fp8_dtype, fp8_max):
+    """(quantize, dequantize) for per-1x128 FP8 with row-major FP32 scales [m, n // 128]: vLLM's
+    `per_token_group_quant_fp8(x, 128)` layout: flashinfer-ep and mori quantize with it, and
+    nccl-ep's oracle models its kernel with it. deepep-v2 and uccl-ep keep copies that match their
+    own kernels' bits."""
+    import torch
+
+    def quantize(x):
+        m, n = x.shape
+        blocks = x.view(m, -1, FP8_BLOCK)
+        amax = blocks.abs().float().amax(dim=2).view(m, -1).clamp(1e-4)
+        values = (blocks * (fp8_max / amax.unsqueeze(2))).to(fp8_dtype).view(m, n)
+        return values, (amax / fp8_max).view(m, -1)
+
+    def dequantize(values, scales):
+        m, n = values.shape
+        blocks = values.view(m, -1, FP8_BLOCK).float()
+        return (blocks * scales.view(m, -1, 1)).view(m, n).to(torch.bfloat16)
+
+    return quantize, dequantize
+
+
 class EPBackend(abc.ABC):
     """One expert-parallel dispatch/combine transport under a fixed benchmark contract.
 
@@ -209,7 +235,15 @@ class EPBackend(abc.ABC):
         """
         if self.mode == "low-latency" and self.ll_quantizes_in_kernel:
             return eager
-        import torch
+        return self.compiled(eager)
+
+    @staticmethod
+    def compiled(eager, torch=None):
+        """`eager` through torch.compile as fused_quantize builds it, unconditionally: for
+        conversions no oracle gate compares bit-for-bit (nccl-ep's received-plane dequant).
+        `torch` is the caller's module when it has one."""
+        if torch is None:
+            import torch
 
         torch._dynamo.config.cache_size_limit = 64
         if hasattr(torch._dynamo.config, "fail_on_recompile_limit_hit"):
