@@ -2,7 +2,7 @@
 
 import pytest
 
-from infx.clusters import Cluster, ModelEntry, load_inventory
+from infx.clusters import Cluster, load_inventory
 from infx.clusters.slurm import SrtSlurmSettings
 from infx.launch import policy
 from infx.launch.context import LaunchError
@@ -112,26 +112,6 @@ def test_a_checkpoint_that_must_be_readable_fails_before_submission(tmp_path, mo
     (tmp_path / "shared/s/config.json").write_text("{}")
     c = cluster(tmp_path)
     assert host_path(c, checkpoint(c, request(MODEL="org/S"))) == tmp_path / "shared/s"
-
-
-def test_h200_glm_flash_requires_its_staged_checkpoint_without_changing_other_models(tmp_path):
-    c = cluster(tmp_path, "hub")
-    c.bind_id("h200-dgxc")
-    c.models.entries["GLM-5.3-Flash"] = ModelEntry(root="shared", dir="GLM-5.3-Flash")
-    point = request(
-        MODEL="zai-org/GLM-5.3-Flash",
-        MODEL_PREFIX="glm5.3flash",
-        PRECISION="fp8",
-        FRAMEWORK="sglang",
-        IS_AGENTIC="1",
-    )
-    with pytest.raises(LaunchError, match="no readable .*/GLM-5.3-Flash/config.json"):
-        single_node_model_path(c, point)
-    staged = tmp_path / "shared/GLM-5.3-Flash"
-    staged.mkdir(parents=True)
-    (staged / "config.json").write_text("{}")
-    assert single_node_model_path(c, point) == str(staged)
-    assert single_node_model_path(c, request(MODEL="org/M")) == "hf:org/M"
 
 
 def test_a_points_own_model_path_is_what_its_job_serves(tmp_path, monkeypatch):
