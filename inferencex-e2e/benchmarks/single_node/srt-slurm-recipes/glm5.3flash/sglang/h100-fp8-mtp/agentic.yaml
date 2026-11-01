@@ -1,0 +1,66 @@
+schema: 2
+name: glm5.3flash-fp8-h100-sglang-agentic-mtp
+identity:
+  model:
+    revision: 46a050bec13002ad29ee795c16e61cf4fa3c4a9c
+setup_script: stage-hf-checkpoint.sh
+environment:
+  HF_CHECKPOINT_REPO: zai-org/GLM-5.3-Flash
+  HF_CHECKPOINT_REVISION: 46a050bec13002ad29ee795c16e61cf4fa3c4a9c
+  HF_CHECKPOINT_BUDGET_BYTES: '400000000000'
+resources:
+  gpu_type: h100
+  gpus_per_node: 8
+frontend:
+  type: sglang
+  enable_multiple_frontends: false
+observability:
+  enabled: false
+  tachometer:
+    enabled: false
+engine: sglang
+roles:
+  agg:
+    nodes: 1
+    workers: 1
+    gpus: 8
+    args:
+      served-model-name: zai-org/GLM-5.3-Flash
+      revision: 46a050bec13002ad29ee795c16e61cf4fa3c4a9c
+      tokenizer-path: /mnt/hf_hub_cache/models--zai-org--GLM-5.3-Flash/snapshots/46a050bec13002ad29ee795c16e61cf4fa3c4a9c
+      trust-remote-code: true
+      tensor-parallel-size: 8
+      expert-parallel-size: 8
+      reasoning-parser: auto
+      tool-call-parser: auto
+      context-length: 1048576
+      cuda-graph-backend-prefill: disabled
+      dsa-prefill-backend: tilelang
+      dsa-decode-backend: tilelang
+      kv-cache-dtype: bfloat16
+      moe-runner-backend: deep_gemm
+      mem-fraction-static: 0.70
+      speculative-algorithm: EAGLE
+      speculative-num-steps: 5
+      speculative-eagle-topk: 1
+      speculative-num-draft-tokens: 6
+      watchdog-timeout: 1800
+      enable-cache-report: true
+      enable-metrics: true
+    env:
+      HF_HUB_OFFLINE: '1'
+      TRANSFORMERS_OFFLINE: '1'
+      PYTHONNOUSERSITE: '1'
+      SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+      SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
+      SGLANG_GLM_NEXTN_MOE_PTPC: '0'
+health_check:
+  max_attempts: 720
+  interval_seconds: 10
+benchmark:
+  env:
+    HF_HUB_OFFLINE: ''
+    TRANSFORMERS_OFFLINE: ''
+    KV_OFFLOADING: none
+    AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
