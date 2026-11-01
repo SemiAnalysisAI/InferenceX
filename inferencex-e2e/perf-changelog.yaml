@@ -11771,10 +11771,9 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4686
 
 - config-keys:
-    - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
-    - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
+    - glm5.3-fp4-gb300-dynamo-sglang-agentic-agg
   description:
-    - "Collect GPU-board power for the two aggregated and six disaggregated GLM-5.2 GB300 Dynamo-SGLang AgentX points, which currently publish no power."
-    - "Route GLM-5.2 FP4 AgentX dynamo-sglang on the GB300 srt-multi lane to AgentX power instead of DCGM-only power."
+    - "Add the GLM-5.3 NVFP4 GB300 Dynamo-SGLang aggregated AgentX recipe at TP4 and TP8 (conc 1), ported from GLM-5.2 GB300 with NEXTN K=3 MTP; weights load from /data/models at the pinned revision."
+    - "Collect DCGM power with AgentX adaptation; the GB300 power rule now names GLM-5.3 FP4 Dynamo-SGLang instead of GLM-5.2, whose NVFP4 weights left the cluster."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4706
   scenario-type: [agentic-coding]

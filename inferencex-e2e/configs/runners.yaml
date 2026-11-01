@@ -633,6 +633,7 @@ clusters:
         DeepSeek-R1-0528: {root: scratch, dir: DeepSeek-R1-0528}
         DeepSeek-R1-0528-NVFP4-v2: {root: scratch, dir: DeepSeek-R1-0528-NVFP4-v2}
         GLM-5.2-NVFP4: {root: scratch, dir: GLM-5.2-NVFP4}
+        GLM-5.3-NVFP4: {root: data-models, dir: GLM-5.3-NVFP4}
         Kimi-K3: {root: scratch, dir: Kimi-K3}
         MiniMax-M3.1-Flash: {root: data-models, dir: MiniMax-M3.1-Flash}
         Muse-Spark-Open-816B-A42B-NVFP4: {root: data-models, dir: Muse-Spark-Open-816B-A42B-NVFP4}

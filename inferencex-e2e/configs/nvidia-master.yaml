@@ -6277,7 +6277,6 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-agg:
     - dram-utilization: 0.80
       search-space:
       - spec-decoding: mtp
-        power: true
         conc-list: [1]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -6289,7 +6288,6 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-agg:
           ep: 1
           dp-attn: false
       - spec-decoding: mtp
-        power: true
         conc-list: [1]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -6317,7 +6315,6 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
     - dram-utilization: 0.85
       search-space:
       - spec-decoding: mtp
-        power: true
         conc-list: [30]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -6335,7 +6332,6 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
           ep: 1
           dp-attn: false
       - spec-decoding: mtp
-        power: true
         conc-list: [40]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -6353,7 +6349,6 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
           ep: 1
           dp-attn: false
       - spec-decoding: mtp
-        power: true
         conc-list: [56]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -6371,7 +6366,6 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
           ep: 8
           dp-attn: true
       - spec-decoding: mtp
-        power: true
         conc-list: [216]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -6389,7 +6383,6 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
           ep: 8
           dp-attn: true
       - spec-decoding: mtp
-        power: true
         conc-list: [264]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -6407,7 +6400,6 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
           ep: 8
           dp-attn: true
       - spec-decoding: mtp
-        power: true
         conc-list: [256]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -8844,6 +8836,46 @@ glm5.3-fp4-b300-sglang-agentic-mtp:
     - dram-utilization: 1.0
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [22, 24, 25, 28], srt-recipe: agentic.yaml }
+
+glm5.3-fp4-gb300-dynamo-sglang-agentic-agg:
+  image: lmsysorg/sglang:nightly-dev-20261021-c1c287a4@sha256:b0473834763b2753e069cb96c1acaf235ba7fd632ccd9bbeb44da809c437fdeb
+  model: nvidia/GLM-5.3-NVFP4
+  model-prefix: glm5.3
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-sglang
+  router: { name: dynamo-router, version: "1.6.0.dev20261015" }
+  multinode: true
+  disagg: false
+  srt-recipe-dir: glm5.3/sglang/gb300-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: mtp
+        power: true
+        conc-list: [1]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp4_c1
+        worker:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        power: true
+        conc-list: [1]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        num-nodes: 2
+        srt-recipe: agg-variants.yaml:override_tp8_c1
+        worker:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
 
 minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-agg:
   image: vllm/vllm-openai:minimax-m31-flash-arm64-cu134@sha256:5d76347628973fb80519a919a2f2740b6645b62cba3fe2bd87b25f111bd0e948
