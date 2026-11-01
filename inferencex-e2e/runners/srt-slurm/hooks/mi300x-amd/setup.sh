@@ -10,3 +10,7 @@ if [[ -z "$firmware" || "$firmware" -lt "$minimum" ]]; then
     exit 1
 fi
 echo "[$(hostname -s)] MEC firmware $firmware"
+
+# shellcheck source=runners/srt-slurm/hooks/common.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../common.sh"
+open_rapl_counters

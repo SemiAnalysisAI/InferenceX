@@ -265,7 +265,8 @@ schema; unknown keys fail.
   volumes every job mounts to container paths, `mounts` does the same for host
   paths outside the volumes (devices), `agentic-volume-mounts` adds world-writable
   volumes for multi-node AgentX jobs, `power-exporter-port` is the DCGM exporter port
-  of power points, `env` is the environment of the srt-slurm
+  of power points, `cpu-power-exporter` (`port`, `source`) is the CPU power exporter
+  their telemetry adds, `env` is the environment of the srt-slurm
   launch, `container-aliases` and `nginx-aliases` name the recipe containers that
   resolve to the main image and to the staged nginx, and `outputs`,
   `shared-run-root` and `uv-cache-root` are the directories the srt-slurm launcher

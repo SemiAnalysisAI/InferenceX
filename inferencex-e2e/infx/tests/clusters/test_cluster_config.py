@@ -162,6 +162,7 @@ def test_inventory_rejects_inconsistent_labels(runner_config, message):
         ("slurm.srt-slurm.host-setup", {"script": "setup.sh", "env": {"IBDEVICES": "@fabric.rdma-devices"}},
          "host-setup.env.IBDEVICES: this cluster sets no srt-slurm.fabric.rdma-devices"),
         ("slurm.srt-slurm.host-setup", {"script": "/opt/setup.sh"}, "repository-relative"),
+        ("slurm.srt-slurm.cpu-power-exporter", {"source": "foo"}, "'acpi', 'dcgm' or 'rapl'"),
         ("partition", "batch", "Extra inputs"),
     ],
 )
