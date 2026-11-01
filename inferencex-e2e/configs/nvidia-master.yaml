@@ -6277,6 +6277,7 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-agg:
     - dram-utilization: 0.80
       search-space:
       - spec-decoding: mtp
+        power: true
         conc-list: [1]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -6288,6 +6289,7 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-agg:
           ep: 1
           dp-attn: false
       - spec-decoding: mtp
+        power: true
         conc-list: [1]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -6315,6 +6317,7 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
     - dram-utilization: 0.85
       search-space:
       - spec-decoding: mtp
+        power: true
         conc-list: [30]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -6332,6 +6335,7 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
           ep: 1
           dp-attn: false
       - spec-decoding: mtp
+        power: true
         conc-list: [40]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -6349,6 +6353,7 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
           ep: 1
           dp-attn: false
       - spec-decoding: mtp
+        power: true
         conc-list: [56]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -6366,6 +6371,7 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
           ep: 8
           dp-attn: true
       - spec-decoding: mtp
+        power: true
         conc-list: [216]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -6383,6 +6389,7 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
           ep: 8
           dp-attn: true
       - spec-decoding: mtp
+        power: true
         conc-list: [264]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -6400,6 +6407,7 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
           ep: 8
           dp-attn: true
       - spec-decoding: mtp
+        power: true
         conc-list: [256]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }

@@ -63,6 +63,10 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
                 agentx=True,
                 require=True,
             ),
+            PowerRule(
+                Match(any_of("glm5.2"), any_of("fp4"), any_of("dynamo-sglang"), agentic=True),
+                agentx=True,
+            ),
             PowerRule(Match(frameworks=any_of("dynamo-sglang")), agentx=False),
         ),
         error="dcgm-power requires dynamo-sglang or the supported Kimi-K3 AgentX route",
