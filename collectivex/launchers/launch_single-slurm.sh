@@ -26,7 +26,7 @@ case "$RUNNER" in
     ;;
   b200-nscale)
     # Bare-metal B200 (nsc): native IB rails + gdrdrv make the deepep low-latency EP16 rows
-    # dispatchable, unlike the virtualized dgxc pool. 45 min covers first-run backend builds.
+    # dispatchable. 45 min covers first-run backend builds.
     DEFAULT_TIME=45; REQUIRE_ACCOUNT=1
     ALLOC_EXTRA=(--mem=0)
     ;;
@@ -47,7 +47,7 @@ collx_set_placement 1 8 8 nvlink
 TIME_MIN="${COLLX_TIME:-$DEFAULT_TIME}"
 IMAGE="$COLLX_IMAGE"
 case "$COLLX_BENCH" in
-  deepep-v2 | uccl-ep | nccl-ep | flashinfer-ep | swap-blocks) ;;
+  deepep-v2 | uccl-ep | nccl-ep | flashinfer-ep | swap-blocks | nixl | mooncake) ;;
   *) collx_die "unsupported $RUNNER backend: $COLLX_BENCH" ;;
 esac
 
