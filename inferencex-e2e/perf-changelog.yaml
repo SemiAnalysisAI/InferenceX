@@ -11762,6 +11762,15 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
+    - minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg
+  scenario-type: [agentic-coding]
+  description:
+    - "Add disaggregated SGLang behind Dynamo for MiniMax-M3.1-Flash AgentX on GB300 with lmsysorg/sglang:nightly-cu134-20261030-e371881 (Dynamo 1.7.0.dev20261030, Mooncake transfer, minimax-msa kernels)."
+    - "6 DEP2 prefill workers with a DEP8 decode at conc 280-400 or a DEP16 decode at conc 300; MegaMoE, DSpark block 7 with fp8 draft KV, Dynamo KV router with fastokens for prefill and least-loaded routing across decode DP ranks."
+    - "Prefill: shortest-prefill-first, chunk 8192, mem-fraction-static 0.85, HiCache 200 GB per rank write_back."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4686
+
+- config-keys:
     - minimaxm31flash-fp4-gb200-dynamo-sglang-agentic-dspark-agg
     - minimaxm31flash-fp4-gb200-dynamo-sglang-agentic-dspark-disagg
   scenario-type: [agentic-coding]
