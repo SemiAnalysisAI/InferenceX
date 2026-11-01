@@ -574,6 +574,7 @@ clusters:
     arch: aarch64
     models:
       entries:
+        GLM-5.3-Flash: {root: lustre-models, dir: GLM-5.3-Flash}
         deepseek-r1-0528: {root: lustre-models, dir: deepseek-r1-0528}
         deepseek-r1-0528-fp4-v2: {root: lustre-models, dir: deepseek-r1-0528-fp4-v2}
         MiniMax-M3.1-Flash: {root: lustre-models, dir: MiniMax-M3.1-Flash}

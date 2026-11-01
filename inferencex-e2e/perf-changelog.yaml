@@ -11769,3 +11769,12 @@
     - "6 DEP2 prefill workers with a DEP8 decode at conc 280-400 or a DEP16 decode at conc 300; MegaMoE, DSpark block 7 with fp8 draft KV, Dynamo KV router with fastokens for prefill and least-loaded routing across decode DP ranks."
     - "Prefill: shortest-prefill-first, chunk 8192, mem-fraction-static 0.85, HiCache 200 GB per rank write_back."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4686
+
+- config-keys:
+    - glm5.3flash-fp8-gb200-sglang-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Add native zai-org/GLM-5.3-Flash FP8 AgentX on one GB200 node with pinned SGLang v0.5.22-cu130, TP4/EP1, EAGLE MTP 5/1/6, FP8 KV, TRT-LLM DSA and FlashInfer TRT-LLM MoE."
+    - "Sweep concurrency 1, 4, 8, 16, 32 and 64 without KV offload, preserving the full 1M-token context, uncapped corpus and canonical evals. Throughput uses the shared Flash golden-AL connector; evals use real acceptance."
+    - "Bind the expected staged checkpoint at /mnt/lustre01/models/GLM-5.3-Flash with offline engine loading; keep the embedded draft on the upstream precision path and explicitly disable both prohibited precision switches."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4718
