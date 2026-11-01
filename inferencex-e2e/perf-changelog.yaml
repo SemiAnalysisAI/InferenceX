@@ -11776,3 +11776,21 @@
     - "Add GLM-5.3-Flash FP8 AgentX on B300 with the pinned official SGLang v0.5.22-cu130 image, TP8, and EAGLE MTP5 at concurrency 1/4/8/16/24/32/48/64."
     - "Use the shared glm5.3flash thinking_on golden-acceptance curve, the full AgentX workload, and canonical GSM8K evaluation; preserve checkpoint-default draft precision and explicitly disable SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4710
+
+- config-keys:
+    - glm5.3flash-fp8-b300-sglang-agentic-mtp-frontier
+  description:
+    - "Pair GLM-5.3-Flash FP8 B300 AgentX concurrency 48/64/80/96 with HiCache OFF/ON using the unchanged parent image, matched caps, and automatic host-memory fraction 0.65."
+    - "Preserve the full AgentX workload, measured MTP5 acceptance, and checkpoint-default draft precision; use separate none/dram metadata with the HiCache backend."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4731
+  scenario-type: [agentic-coding]
+  no-evals: true
+
+- config-keys:
+    - glm5.3flash-fp8-b300-sglang-agentic-mtp-frontier-eval
+  description:
+    - "Run the full canonical HiCache ON GSM8K evaluation at concurrency 96 without synthetic acceptance; retain the passed parent OFF evaluation as historical evidence."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4731
+  scenario-type: [agentic-coding]
+  evals-only: true
+  all-evals: true
