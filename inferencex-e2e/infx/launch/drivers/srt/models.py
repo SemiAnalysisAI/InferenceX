@@ -190,6 +190,7 @@ SHARED_HF_CACHE_LANES: dict[str, tuple[Match, ...]] = {
         Match(agentic=True, model_glob="MiniMaxAI/MiniMax-M3.1-*"),
         Match(agentic=True, model_glob="amd/MiniMax-M3.1-*"),
         Match(agentic=True, model_glob="zai-org/GLM-5.2-FP8"),
+        Match(agentic=True, model_glob="zai-org/GLM-5.3-Flash"),
         Match(agentic=True, model_glob="deepseek-ai/DeepSeek-V4.1-Flash"),
         Match(agentic=True, model_glob="amd/Muse-Spark-Open-*"),
     ),

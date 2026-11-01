@@ -166,6 +166,15 @@ def test_minimax_shared_cache_keeps_m31_but_excludes_retired_m3(tmp_path, model,
     assert single_node_hf_cache(c, request(MODEL=model, IS_AGENTIC="1")) == tmp_path / directory
 
 
+@pytest.mark.parametrize(("agentic", "directory"), [("1", "shared-hub"), ("0", "hub")])
+def test_unstaged_flash_agentx_downloads_to_the_shared_cache(tmp_path, agentic, directory):
+    c = cluster(tmp_path)
+    c.bind_id("mi355x-amds")
+    point = request(MODEL="zai-org/GLM-5.3-Flash", IS_AGENTIC=agentic)
+    assert single_node_hf_cache(c, point) == tmp_path / directory
+    assert single_node_model_path(c, point) == "hf:zai-org/GLM-5.3-Flash"
+
+
 BUMP = TimeBump(Match(agentic=True), min_conc=64, minutes=1440)
 LANE = SrtLane(time_limit="4:00:00", long_time_limit="8:00:00", long_time=Match(any_of("dsv4"), agentic=True))
 BUMPED = dict(IS_AGENTIC="1", CONC="64")
