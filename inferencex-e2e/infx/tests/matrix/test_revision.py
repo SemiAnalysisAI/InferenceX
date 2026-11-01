@@ -212,6 +212,49 @@ def test_historical_generation_from_nested_project(generation_repo, monkeypatch,
     assert [(row["model"], row["conc"]) for row in rows] == [expected]
 
 
+@pytest.mark.parametrize("nested,package_in_project", [(False, True), (True, False), (True, True)])
+def test_snapshot_generates_from_frozen_video_specs(generation_repo, monkeypatch, nested, package_in_project):
+    root, git = generation_repo
+    git("restore", ".")
+    project = root
+    if nested:
+        project = root / "inferencex-e2e"
+        project.mkdir()
+        git("mv", "infx", "configs", "benchmarks", "inferencex-e2e/")
+    generator = project / "infx/matrix/generate.py"
+    generator.write_text(
+        "import json\nfrom pathlib import Path\n"
+        "root = Path(__file__).resolve().parents[2]\n"
+        "package = root / 'experimental/video-generation'\n"
+        "if not package.is_dir():\n    package = root.parent / 'experimental/video-generation'\n"
+        "plan = json.loads((package / 'specs/frozen.json').read_text())\n"
+        "print(json.dumps([{'scenario-type': 'video-generation', **plan}]))\n"
+    )
+    package = (project if package_in_project else root) / "experimental/video-generation"
+    spec = package / "specs/frozen.json"
+    spec.parent.mkdir(parents=True)
+    plan = {"model": "fixture/video", "model_revision": "a" * 40, "conc-list": [1, 2, 4]}
+    spec.write_text(json.dumps(plan))
+    if nested and package_in_project:
+        decoy = root / "experimental/video-generation/specs/frozen.json"
+        decoy.parent.mkdir(parents=True)
+        decoy.write_text("root package must not override project package\n")
+    git("add", ".")
+    git("commit", "-qm", "freeze video workload")
+    base = git("rev-parse", "HEAD")
+    spec.write_text(json.dumps({**plan, "model_revision": "b" * 40, "conc-list": [8]}))
+    git("commit", "-qam", "change video workload")
+    spec.write_text("uncommitted workload must not be read\n")
+    monkeypatch.chdir(project)
+
+    with revision.snapshot(base) as producer:
+        assert producer.generate(["fixture"], ["--no-evals"]) == [
+            {"scenario-type": "video-generation", **plan},
+        ]
+    with revision.snapshot("HEAD") as producer:
+        assert producer.generate(["fixture"], ["--no-evals"])[0]["model_revision"] == "b" * 40
+
+
 LEGACY_GENERATOR = """\
 import argparse, json
 import yaml
