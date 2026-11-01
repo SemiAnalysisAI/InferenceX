@@ -1,0 +1,81 @@
+base:
+  schema: 2
+  name: glm5.3flash-fp4-b200-sglang-tp4-frontier-hicache
+  identity:
+    model:
+      revision: 1d00738646cbb0c6d0a9eb403dac5f366f1473a7
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        served-model-name: nvidia/GLM-5.3-Flash-NVFP4
+        trust-remote-code: true
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        quantization: modelopt_fp4
+        dsa-prefill-backend: trtllm
+        dsa-decode-backend: trtllm
+        kv-cache-dtype: fp8_e4m3
+        moe-runner-backend: flashinfer_trtllm
+        tool-call-parser: glm47
+        reasoning-parser: glm45
+        context-length: 1048576
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        mem-fraction-static: 0.85
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 64
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 5
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 6
+        enable-hierarchical-cache: true
+        hicache-host-memory-fraction: 0.70
+        hicache-write-policy: write_through
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        watchdog-timeout: 1800
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
+        SGLANG_GLM_NEXTN_MOE_PTPC: '0'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+  benchmark:
+    env:
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      KV_OFFLOADING: dram
+
+override_c16:
+  benchmark:
+    env:
+      CONC: '16'
+
+override_c32:
+  benchmark:
+    env:
+      CONC: '32'
+
+override_c48:
+  benchmark:
+    env:
+      CONC: '48'
+
+override_c64:
+  benchmark:
+    env:
+      CONC: '64'

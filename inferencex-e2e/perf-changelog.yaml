@@ -11796,3 +11796,23 @@
   description:
     - "Run the full canonical B200 NVFP4 HiCache ON evaluation separately at concurrency 64 with synthetic acceptance disabled."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4727
+
+- config-keys:
+    - glm5.3flash-fp4-b200-sglang-agentic-mtp-tp4-frontier-none
+    - glm5.3flash-fp4-b200-sglang-agentic-mtp-tp4-frontier-hicache
+  scenario-type: [agentic-coding]
+  no-evals: true
+  description:
+    - "Add B200 GLM-5.3-Flash NVFP4 TP4 OFF concurrency 8 plus paired HiCache OFF/ON concurrency 16, 32, 48 and 64, retaining full AgentX context, corpus and duration."
+    - "Keep request/graph limits 64 and native HiCache fraction 0.70; four active GPU ranks retain the existing exclusive eight-GPU node reservation."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4737
+
+- config-keys:
+    - glm5.3flash-fp4-b200-sglang-agentic-mtp-tp4-frontier-none-eval
+    - glm5.3flash-fp4-b200-sglang-agentic-mtp-tp4-frontier-hicache-eval
+  scenario-type: [agentic-coding]
+  evals-only: true
+  all-evals: true
+  description:
+    - "Run fresh full canonical B200 NVFP4 TP4 accuracy controls at OFF16 and HiCache ON64, both with synthetic acceptance disabled."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4737
