@@ -1,0 +1,13 @@
+# Source GitHub Actions run: https://github.com/SemiAnalysisAI/InferenceX/actions/runs/41288481245
+# SPEED-Bench coding, 80 first-user-turn prompts, concurrency 1, max reasoning effort.
+# vLLM B300 TP8, temperature 1.0, top_p 0.95, natural EOS, output cap 4096.
+glm-5.3-flash:
+  thinking_on:
+    1: 1.858382
+    2: 2.518506
+    3: 3.004589
+    4: 3.349344
+    5: 3.603536
+    6: 3.790803
+    7: 3.925358
+    8: 3.992497
