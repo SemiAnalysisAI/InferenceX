@@ -11779,3 +11779,24 @@
     - "Use the shared connector's measured glm5.3flash_mtp thinking-on curve from the FP8 vLLM collector; leave the shipped embedded draft to upstream loading and explicitly disable SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE and SGLANG_GLM_NEXTN_MOE_PTPC."
     - "Map the staged checkpoint to the B300 data-models root without downloading weights. No engine patches or shortened AgentX corpus."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4711
+
+- config-keys:
+    - glm5.3flash-fp4-b300-sglang-agentic-mtp-hicache
+  scenario-type: [agentic-coding]
+  no-evals: true
+  description:
+    - "Add paired GLM-5.3-Flash NVFP4 B300 AgentX cache OFF/ON points at concurrency 32/48/64/96 on the parent's digest-pinned SGLang v0.5.22-cu130 image."
+    - "Use the same admission and decode-graph caps of 96 in both arms, increased from the parent's 64, while preserving TP8/EP1, EAGLE 5/1/6, full 1048576-token context, the unfiltered AgentX corpus, and measured golden AL."
+    - "Enable HiCache only for the dram/hicache arm with native host-memory-fraction 0.65, write_through, kernel, and page_first; no explicit size/ratio, custom memory guard, or engine patch."
+    - "Keep physical Slurm resources unchanged. ON dram-utilization 1.0 is existing nominal DRAM accounting under the legacy cap, not measured pool allocation. Serve the draft as shipped and keep both precision-conversion flags disabled."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4729
+
+- config-keys:
+    - glm5.3flash-fp4-b300-sglang-agentic-mtp-hicache-eval
+  scenario-type: [agentic-coding]
+  evals-only: true
+  all-evals: true
+  description:
+    - "Run a dedicated GLM-5.3-Flash NVFP4 B300 HiCache-ON c32 canonical GSM8K evaluation so cache-arm grouping cannot drop the ON accuracy check."
+    - "Retain the full 1319-example suite, full model context, unchanged checkpoint and shipped draft, and synthetic acceptance disabled through the shared connector."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4729
