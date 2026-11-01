@@ -97,7 +97,8 @@ base:
         # flashinfer_trtllm_routed needs attention TP to match EP, which attention DP breaks.
         moe-a2a-backend: megamoe
         disaggregation-transfer-backend: mooncake
-        chunked-prefill-size: 8192
+        # DP attention divides the chunk by the DP size: 8192 per DEP4 rank.
+        chunked-prefill-size: 32768
         # Shortest uncached prefill first: short cached turns stop queueing
         # behind long uncached prompts, which cuts the TTFT tail.
         schedule-policy: shortest-prefill-first
@@ -163,7 +164,7 @@ base:
         # 48 per DP rank.
         max-running-requests: 384
         cuda-graph-max-bs-decode: 48
-        mem-fraction-static: 0.85
+        mem-fraction-static: 0.90
         speculative-algorithm: DSPARK
         speculative-dspark-block-size: 7
         speculative-use-block-verification: true
