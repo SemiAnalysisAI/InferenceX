@@ -11769,3 +11769,12 @@
     - "6 DEP2 prefill workers with a DEP8 decode at conc 280-400 or a DEP16 decode at conc 300; MegaMoE, DSpark block 7 with fp8 draft KV, Dynamo KV router with fastokens for prefill and least-loaded routing across decode DP ranks."
     - "Prefill: shortest-prefill-first, chunk 8192, mem-fraction-static 0.85, HiCache 200 GB per rank write_back."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4686
+
+- config-keys:
+    - musespark-fp4-gb300-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the Muse Spark Open GB300 curve to lmsysorg/sglang:nightly-dev-cu13-20261030-302b78cc and retune request admission, prefill-decode interval, scheduling and host cache per concurrency."
+    - "Add TP4/EP4 concurrency 4 and 40; drop concurrency 5, 28 and 34."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
