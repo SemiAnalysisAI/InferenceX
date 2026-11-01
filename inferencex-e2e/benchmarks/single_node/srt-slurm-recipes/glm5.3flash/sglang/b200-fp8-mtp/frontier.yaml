@@ -1,0 +1,146 @@
+base:
+  schema: 2
+  name: glm5.3flash-fp8-b200-sglang-agentic-frontier
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: zai-org/GLM-5.3-Flash
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        kv-cache-dtype: fp8_e4m3
+        dsa-prefill-backend: trtllm
+        dsa-decode-backend: trtllm
+        moe-runner-backend: flashinfer_trtllm
+        reasoning-parser: auto
+        tool-call-parser: auto
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 5
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 6
+        chunked-prefill-size: 16384
+        max-prefill-tokens: 16384
+        mem-fraction-static: 0.85
+        tokenizer-worker-num: 6
+        watchdog-timeout: 1800
+        enable-metrics: true
+        enable-cache-report: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        TORCH_CUDA_ARCH_LIST: '10.0'
+        SGLANG_CACHE_DIR: /tmp/sglang-cache
+        SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+        SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
+        SGLANG_GLM_NEXTN_MOE_PTPC: '0'
+  benchmark:
+    env:
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      AIPERF_EXTRA_INPUTS: '{"chat_template_kwargs":{"reasoning_effort":"max"}}'
+      KV_OFFLOADING: none
+
+override_c24:
+  roles:
+    agg:
+      args:
+        max-running-requests: 48
+        cuda-graph-max-bs-decode: 48
+  benchmark:
+    env:
+      CONC: '24'
+
+override_c32:
+  roles:
+    agg:
+      args:
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 64
+  benchmark:
+    env:
+      CONC: '32'
+
+override_c48:
+  roles:
+    agg:
+      args:
+        max-running-requests: 96
+        cuda-graph-max-bs-decode: 96
+  benchmark:
+    env:
+      CONC: '48'
+
+override_c64:
+  roles:
+    agg:
+      args:
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 128
+  benchmark:
+    env:
+      CONC: '64'
+
+override_hicache_c24:
+  roles:
+    agg:
+      args: &hicache_args
+        enable-hierarchical-cache: true
+        hicache-write-policy: write_through
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        hicache-host-memory-fraction: 0.70
+        max-running-requests: 48
+        cuda-graph-max-bs-decode: 48
+  benchmark:
+    env:
+      KV_OFFLOADING: dram
+      CONC: '24'
+
+override_hicache_c32:
+  roles:
+    agg:
+      args:
+        <<: *hicache_args
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 64
+  benchmark:
+    env:
+      KV_OFFLOADING: dram
+      CONC: '32'
+
+override_hicache_c48:
+  roles:
+    agg:
+      args:
+        <<: *hicache_args
+        max-running-requests: 96
+        cuda-graph-max-bs-decode: 96
+  benchmark:
+    env:
+      KV_OFFLOADING: dram
+      CONC: '48'
+
+override_hicache_c64:
+  roles:
+    agg:
+      args:
+        <<: *hicache_args
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 128
+  benchmark:
+    env:
+      KV_OFFLOADING: dram
+      CONC: '64'
