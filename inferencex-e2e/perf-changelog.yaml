@@ -11769,3 +11769,11 @@
     - "6 DEP2 prefill workers with a DEP8 decode at conc 280-400 or a DEP16 decode at conc 300; MegaMoE, DSpark block 7 with fp8 draft KV, Dynamo KV router with fastokens for prefill and least-loaded routing across decode DP ranks."
     - "Prefill: shortest-prefill-first, chunk 8192, mem-fraction-static 0.85, HiCache 200 GB per rank write_back."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4686
+
+- config-keys:
+    - qwen3.5-fp8-h100-sglang-agentic
+    - qwen3.5-fp8-h100-sglang-agentic-mtp
+  description:
+    - "Update the Qwen3.5 FP8 H100 SGLang AgentX image to lmsysorg/sglang:v0.5.22-cu130 with HiCache write_through."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4634
+  scenario-type: [agentic-coding]
