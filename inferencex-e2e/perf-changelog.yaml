@@ -11726,6 +11726,51 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4680
 
 - config-keys:
+    - minimaxm31flash-fp4-b300-sglang-agentic-dspark
+  description:
+    - "Add TP2 points with DRAM KV offload (L2 HiCache) using shortest-prefill-first scheduling: conc 20 to 40 with a prefill-decode interval of 32, conc 48 with 24, and conc 50 with 20."
+    - "Add TP4 points with DRAM KV offload at conc 8, 16, 24, 32 and 40 with shortest-prefill-first and a prefill-decode interval of 32, 8192-token prefill chunks and mem-fraction-static 0.90."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4675
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-sglang-agentic-dspark
+  description:
+    - "Add TP4 points at conc 24, 32 and 40 and TP2 points at conc 20, 24, 28, 36 and 40 with DRAM KV offload (L2 HiCache, 180 GB per rank), using shortest-prefill-first scheduling with a prefill-decode interval of 32, 8192-token prefill chunks and stream interval 20."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4676
+  scenario-type: [agentic-coding]
+  append-only: true
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg
+    - minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
+  description:
+    - "Use the fastokens frontend tokenizer (DYN_TOKENIZER=fastokens) on every point. The default tokenizer disables its prefix cache for this model, so each turn re-tokenized the full prompt."
+    - "Add conc 360 to the 6 DEP2 prefill + DEP16 decode point, next to conc 300."
+    - "Run the Dynamo frontend, etcd, nats and the Mooncake master on the benchmark client node and disable the OTel collector on every disagg point."
+    - "Raise the shared MooncakeStore DRAM pool from 160 GB to 180 GB per rank on every disagg point, and add conc 400 to the 6 DEP2 prefill + DEP8 decode point."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4631
+
+- config-keys:
+    - minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-agg
+    - minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-disagg
+  description:
+    - "Use the fastokens frontend tokenizer (DYN_TOKENIZER=fastokens) on every point. The default tokenizer disables its prefix cache for this model, so each turn re-tokenized the full prompt."
+    - "Raise the shared MooncakeStore DRAM pool from 150 GB to 190 GB per rank, and add 3 DEP4 prefill + DEP8 decode at conc 288 and 3 DEP4 prefill + DEP16 decode at conc 320."
+    - "Set prefill gpu-memory-utilization to 0.92 on every disagg point, add 3 DEP4 prefill + DEP16 decode at conc 360 and 2 DEP4 prefill + DEP8 decode at conc 224 and 256, and drop the unused VLLM_MAX_ASYNC_KV_ADMITS_PER_STEP decode env."
+    - "Run the Dynamo frontend, etcd, nats and the Mooncake master on the benchmark client node and disable the OTel collector on every disagg point."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4632
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg
+  scenario-type: [agentic-coding]
+  description:
+    - "Add disaggregated SGLang behind Dynamo for MiniMax-M3.1-Flash AgentX on GB300 with lmsysorg/sglang:nightly-cu134-20261030-e371881 (Dynamo 1.7.0.dev20261030, Mooncake transfer, minimax-msa kernels)."
+    - "6 DEP2 prefill workers with a DEP8 decode at conc 280-400 or a DEP16 decode at conc 300; MegaMoE, DSpark block 7 with fp8 draft KV, Dynamo KV router with fastokens for prefill and least-loaded routing across decode DP ranks."
+    - "Prefill: shortest-prefill-first, chunk 8192, mem-fraction-static 0.85, HiCache 200 GB per rank write_back."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4686
+
+- config-keys:
     - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
   description:
     - "Update the SGLang image from v0.5.22-cu130 to nightly-dev-cu13-20261025-65633129, pinned by digest."
