@@ -74,6 +74,7 @@ class LaunchRequest(BaseModel):
     spec_decoding: str | None = Field(None, alias="SPEC_DECODING")
     is_multinode: TrueFlag = Field(False, alias="IS_MULTINODE")
     is_agentic: OneFlag = Field(False, alias="IS_AGENTIC")
+    scenario_type: str | None = Field(None, alias="SCENARIO_TYPE")
     bench_script_override: str | None = Field(None, alias="BENCH_SCRIPT_OVERRIDE")
     batch_reentry: OneFlag = Field(False, alias=BATCH_REENTRY_ENV)
     conc: int | None = Field(None, alias="CONC")
@@ -173,6 +174,24 @@ class SingleNodeRequest(SrtRequest):
     isl: int = Field(alias="ISL")
     osl: int = Field(alias="OSL")
     random_range_ratio: str = Field(alias="RANDOM_RANGE_RATIO")
+    hf_hub_cache: str = Field(alias="HF_HUB_CACHE")
+    salloc_time_limit: int = Field(alias="SALLOC_TIME_LIMIT")
+
+
+class VideoRequest(SrtRequest):
+    """One native video-generation job: one server, every CONC_LIST concurrency in turn.
+
+    The H3 client and server come from ``experimental/video-generation`` (``H3_SPEC`` names
+    the YAML workload under its ``specs/`` and ``H3_SET`` its selected set); the model is
+    served from the HF hub cache.
+    """
+
+    srt_recipe: str = Field(alias="SRT_RECIPE")
+    model: str = Field(alias="MODEL")
+    gpu_count: int = Field(alias="GPU_COUNT", gt=0)
+    conc_list: IntList = Field(alias="CONC_LIST", min_length=1)
+    h3_spec: str = Field(alias="H3_SPEC", min_length=1)
+    h3_set: str = Field(alias="H3_SET", min_length=1)
     hf_hub_cache: str = Field(alias="HF_HUB_CACHE")
     salloc_time_limit: int = Field(alias="SALLOC_TIME_LIMIT")
 

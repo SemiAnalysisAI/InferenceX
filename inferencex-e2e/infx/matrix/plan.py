@@ -27,7 +27,7 @@ from .validation import (
     load_runner_file,
 )
 
-SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding")
+SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding", "video-generation")
 
 
 def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
@@ -148,6 +148,8 @@ def _matrix_visual_series_key(entry: dict) -> tuple:
 
 def _matrix_concurrencies(entry: dict) -> tuple[int, ...]:
     """Return a row's concurrencies as a tuple, or raise ValueError if they are not ints."""
+    if entry.get("scenario-type") == "video-generation":
+        raise ValueError("video-generation requires a regular sweep; append-only is not supported")
     conc = entry.get("conc")
     if isinstance(conc, int):
         return (conc,)
@@ -471,14 +473,16 @@ def build_plan(
             node_type = "multi_node" if result.get("prefill") is not None else "single_node"
             if result.get("scenario-type") == "agentic-coding":
                 scenario = "agentic"
+            elif result.get("scenario-type") == "video-generation":
+                scenario = "video"
             else:
                 scenario = seq_len_itos.get((result["isl"], result["osl"]))
-            if scenario is None:
-                raise ValueError(
-                    f"{result['exp-name']}: fixed-sequence isl={result['isl']} "
-                    f"osl={result['osl']} has no sweep job; supported: "
-                    f"{', '.join(seq_len_itos.values())}"
-                )
+                if scenario is None:
+                    raise ValueError(
+                        f"{result['exp-name']}: fixed-sequence isl={result['isl']} "
+                        f"osl={result['osl']} has no sweep job; supported: "
+                        f"{', '.join(seq_len_itos.values())}"
+                    )
             final_results[node_type][scenario].append(result)
 
         all_eval_results = [

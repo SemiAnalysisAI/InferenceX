@@ -203,7 +203,7 @@ prompts:
   station-clock:
     text: A single continuous shot of an analog clock with a moving second hand. The action is visible and the clock
       ticking is audible. Fixed camera, no speech, music, subtitles, or cuts.
-    requires_motion: true
+    requires_motion: false
     requires_sound: true
     source: authored-for-v0.1
   warmup-only:

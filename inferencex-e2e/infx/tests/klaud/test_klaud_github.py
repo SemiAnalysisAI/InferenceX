@@ -3652,6 +3652,11 @@ def test_producer_regenerates_the_curve_keys_its_revision_defines(tmp_path, monk
 @pytest.mark.parametrize("from_repository_root", [False, True])
 def test_live_families_preserve_public_identity_after_move(tmp_path, family_configs, from_repository_root):
     master, runners = family_configs
+    master["video"] = {
+        **master["fixture"], "runner": "cluster:fixture",
+        "scenarios": {"video-generation": [{"spec": "clip.yaml", "set": "shared-v1", "search-space": [
+            {"gpus": 2, "conc-list": [1, 4], "srt-recipe": "recipe.yaml"}]}]},
+    }
     project = tmp_path / "inferencex-e2e"
     configs = project / "configs"
     configs.mkdir(parents=True)

@@ -25,6 +25,7 @@ from .validation import (
     srt_recipe_path,
     validate_agentic_matrix_entry,
     validate_matrix_entry,
+    validate_video_matrix_entry,
 )
 
 seq_len_stoi = {"1k1k": (1024, 1024), "8k1k": (8192, 1024)}
@@ -83,6 +84,10 @@ def trim_conc(entries: list[dict]) -> list[dict]:
 
     for source_entry in entries:
         entry = source_entry
+        if entry.get(Fields.SCENARIO_TYPE.value) == "video-generation":
+            # One job serves every listed concurrency; a smoke keeps the lowest.
+            out.append({**entry, Fields.CONC_LIST.value: [min(entry[Fields.CONC_LIST.value])]})
+            continue
         conc = entry.get("conc")
         if entry.get("prefill") is not None and isinstance(conc, list) and conc:
             minimum_conc = min(conc)
@@ -295,7 +300,11 @@ def recipe_node_count(root: Path, srt_recipe: str) -> int | None:
             0 if role["nodes"] == "colocate" else int(role["nodes"]) for role in roles.values()
         )
         return worker_nodes + recipe_auxiliary_node_count(recipe)
-    raise ValueError(f"Recipe has no worker roles: {recipe_path}")
+    # Services-only recipes (frontend.type: none, services[].nodes) have no engine roles.
+    auxiliary = recipe_auxiliary_node_count(recipe)
+    if auxiliary:
+        return auxiliary
+    raise ValueError(f"Recipe has no worker roles or service pools: {recipe_path}")
 
 
 def _label_fabrics(label: str, runner_data: dict) -> dict[str, Fabric]:
@@ -1191,6 +1200,51 @@ def _agentic_entries(
     return entries
 
 
+def _video_entries(
+    config: dict,
+    scenario: dict,
+    benchmark: dict,
+    runners: list[str],
+    conc_filter: list[int] | None = None,
+) -> list[dict]:
+    """One job per deployment: every listed concurrency runs against the same video server."""
+    if config.get(Fields.MULTINODE.value, False):
+        raise ValueError("video-generation scenarios run on one node; multinode is not supported")
+    concurrencies = [
+        conc
+        for conc in benchmark[Fields.CONC_LIST.value]
+        if conc_filter is None or conc in conc_filter
+    ]
+    if not concurrencies:
+        return []
+    model_code = config[Fields.MODEL_PREFIX.value]
+    spec = scenario[Fields.SPEC.value]
+    gpus = benchmark[Fields.GPUS.value]
+    entries = []
+    for runner in runners:
+        entry = {
+            Fields.IMAGE.value: config[Fields.IMAGE.value],
+            Fields.MODEL.value: config[Fields.MODEL.value],
+            Fields.MODEL_PREFIX.value: model_code,
+            Fields.PRECISION.value: config[Fields.PRECISION.value],
+            Fields.FRAMEWORK.value: config[Fields.FRAMEWORK.value],
+            Fields.RUNNER.value: runner,
+            Fields.SPEC.value: spec,
+            "set": scenario["set"],
+            Fields.GPUS.value: gpus,
+            Fields.CONC_LIST.value: list(concurrencies),
+            **srt_recipe_fields(config, benchmark),
+            Fields.EXP_NAME.value: f"{model_code}_video_{Path(spec).stem}_{scenario['set']}_g{gpus}",
+            Fields.SCENARIO_TYPE.value: "video-generation",
+            Fields.SPEC_DECODING.value: "none",
+            Fields.DISAGG.value: False,
+            Fields.DP_ATTN.value: False,
+            Fields.RUN_EVAL.value: False,
+        }
+        entries.append(validate_video_matrix_entry(entry))
+    return entries
+
+
 @dataclass(frozen=True)
 class FullSweepOptions:
     model_prefix: list[str] | None = None
@@ -1530,6 +1584,16 @@ def _expand_configs(
                         root=root,
                     )
                 )
+        video = (
+            config[Fields.SCENARIOS.value].get(Fields.VIDEO_GENERATION.value, [])
+            if not scenario_types or "video-generation" in scenario_types
+            else []
+        )
+        for scenario in video:
+            for benchmark in scenario[Fields.SEARCH_SPACE.value]:
+                rows.extend(
+                    _video_entries(config, scenario, benchmark, runners, conc_filter=concurrencies)
+                )
     if root is not None:
         selected = {
             (row[field.value], row[Fields.RUNNER.value])
@@ -1676,6 +1740,8 @@ def with_fingerprints(rows: list[dict], root: Path) -> list[dict]:
         try:
             fingerprint = recipe_fingerprint(row, root)
         except ValueError as error:
+            if row.get("scenario-type") == "video-generation":
+                raise
             print(f"WARNING: no recipe fingerprint: {error}", file=sys.stderr)
             fingerprinted.append(row)
         else:
@@ -1737,7 +1803,7 @@ def main() -> list[dict]:
     parent_parser.add_argument(
         "--scenario-type",
         nargs="+",
-        choices=["fixed-seq-len", "agentic-coding"],
+        choices=["fixed-seq-len", "agentic-coding", "video-generation"],
         required=False,
         help="Scenario type(s) to include. If not specified, all scenario types are generated.",
     )

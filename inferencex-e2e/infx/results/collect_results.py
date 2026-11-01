@@ -14,6 +14,10 @@ def main() -> None:
             result = json.load(f)
         agg_results.append(result)
 
+    if not agg_results:
+        print("No benchmark JSON artifacts to aggregate.")
+        return
+
     with open(f"agg_{exp_name}.json", "w") as f:
         json.dump(agg_results, f, indent=2)
 
