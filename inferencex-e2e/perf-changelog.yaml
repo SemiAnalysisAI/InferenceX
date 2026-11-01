@@ -11769,9 +11769,9 @@
     - "6 DEP2 prefill workers with a DEP8 decode at conc 280-400 or a DEP16 decode at conc 300; MegaMoE, DSpark block 7 with fp8 draft KV, Dynamo KV router with fastokens for prefill and least-loaded routing across decode DP ranks."
     - "Prefill: shortest-prefill-first, chunk 8192, mem-fraction-static 0.85, HiCache 200 GB per rank write_back."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4686
-- date: "2026-11-01"
-  model: "glm5.3flash"
-  config-keys:
+- config-keys:
     - "glm5.3flash-fp8-h200-sglang-agentic-mtp"
-  description: "Add native FP8 GLM-5.3-Flash on H200 using the official pinned SGLang v0.5.22 image, Hopper TP8/EP8 TileLang DSA and DeepGemm MoE, embedded EAGLE MTP 5/1/6, and the full AgentX concurrency sweep."
+  scenario-type: [agentic-coding]
+  description:
+    - "Add native FP8 GLM-5.3-Flash on H200 using the official pinned SGLang v0.5.22 image, Hopper TP8/EP8 TileLang DSA and DeepGemm MoE, embedded EAGLE MTP 5/1/6, and the full AgentX concurrency sweep."
   pr-link: "https://github.com/SemiAnalysisAI/InferenceX/pull/4719"
