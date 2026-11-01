@@ -7398,15 +7398,27 @@ musespark-fp4-gb200-sglang-agentic-dflash:
   runner: cluster:gb200-nv
   precision: fp4
   framework: sglang
-  multinode: false
-  srt-recipe-dir: musespark/sglang/gb200-fp4-mtp
+  multinode: true
+  disagg: false
+  srt-recipe-dir: musespark/sglang/gb200-fp4/agentx
   scenarios:
     agentic-coding:
     - search-space:
-      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: draft_model, conc-list: [1], srt-recipe: agentic.yaml }
+      - { spec-decoding: draft_model, kv-offloading: none, conc-list: [1], num-nodes: 1, power: true, srt-recipe: agg-variants.yaml:override_tp4_c1, worker: { num-worker: 1, tp: 4, ep: 4, dp-attn: false } }
+      - { spec-decoding: draft_model, kv-offloading: none, conc-list: [1], num-nodes: 2, power: true, srt-recipe: agg-variants.yaml:override_tp8_c1, worker: { num-worker: 1, tp: 8, ep: 8, dp-attn: false } }
     - dram-utilization: 0.80
       search-space:
-      - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [2, 4, 6, 8, 10, 16, 20, 24, 28, 32], srt-recipe: agentic.yaml }
+      - { spec-decoding: draft_model, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [2], num-nodes: 1, power: true, srt-recipe: agg-variants.yaml:override_tp4_c2, worker: { num-worker: 1, tp: 4, ep: 4, dp-attn: false } }
+      - { spec-decoding: draft_model, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [4], num-nodes: 1, power: true, srt-recipe: agg-variants.yaml:override_tp4_c4, worker: { num-worker: 1, tp: 4, ep: 4, dp-attn: false } }
+      - { spec-decoding: draft_model, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [6], num-nodes: 1, power: true, srt-recipe: agg-variants.yaml:override_tp4_c6, worker: { num-worker: 1, tp: 4, ep: 4, dp-attn: false } }
+      - { spec-decoding: draft_model, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [8], num-nodes: 1, power: true, srt-recipe: agg-variants.yaml:override_tp4_c8, worker: { num-worker: 1, tp: 4, ep: 4, dp-attn: false } }
+      - { spec-decoding: draft_model, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [10], num-nodes: 1, power: true, srt-recipe: agg-variants.yaml:override_tp4_c10, worker: { num-worker: 1, tp: 4, ep: 4, dp-attn: false } }
+      - { spec-decoding: draft_model, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16], num-nodes: 1, power: true, srt-recipe: agg-variants.yaml:override_tp4_c16, worker: { num-worker: 1, tp: 4, ep: 4, dp-attn: false } }
+      - { spec-decoding: draft_model, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [20], num-nodes: 1, power: true, srt-recipe: agg-variants.yaml:override_tp4_c20, worker: { num-worker: 1, tp: 4, ep: 4, dp-attn: false } }
+      - { spec-decoding: draft_model, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [24], num-nodes: 1, power: true, srt-recipe: agg-variants.yaml:override_tp4_c24, worker: { num-worker: 1, tp: 4, ep: 4, dp-attn: false } }
+      - { spec-decoding: draft_model, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [28], num-nodes: 1, power: true, srt-recipe: agg-variants.yaml:override_tp4_c28, worker: { num-worker: 1, tp: 4, ep: 4, dp-attn: false } }
+      - { spec-decoding: draft_model, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32], num-nodes: 1, power: true, srt-recipe: agg-variants.yaml:override_tp4_c32, worker: { num-worker: 1, tp: 4, ep: 4, dp-attn: false } }
+      - { spec-decoding: draft_model, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [24], num-nodes: 2, power: true, srt-recipe: agg-variants.yaml:override_tp8_c24, worker: { num-worker: 1, tp: 8, ep: 8, dp-attn: false } }
 
 musespark-fp4-b200-sglang-agentic-dflash:
   image: lmsysorg/sglang:nightly-dev-20261021-c1c287a4
@@ -7439,6 +7451,30 @@ musespark-fp4-h200-sglang-agentic-dflash:
     - dram-utilization: 0.80
       search-space:
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [1, 2, 4, 8, 16, 24, 32, 48, 64], srt-recipe: agentic.yaml }
+
+musespark-fp4-gb200-dynamo-sglang-agentic-dflash:
+  image: lmsysorg/sglang:nightly-dev-20261026-8252e3af@sha256:b4e4abb9e1dc038f7e14c85805be97e4f74abb46e541bd4edd31401d50a2e593
+  model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+  model-prefix: musespark
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: dynamo-sglang
+  router: { name: dynamo-router, version: "1.7.0.dev20261025" }
+  multinode: true
+  disagg: false
+  srt-recipe-dir: musespark/sglang/gb200-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { spec-decoding: draft_model, kv-offloading: none, conc-list: [1], num-nodes: 2, power: true, srt-recipe: agg-dynamo-variants.yaml:override_tp8_c1, worker: { num-worker: 1, tp: 8, ep: 8, dp-attn: false } }
+      - { spec-decoding: draft_model, kv-offloading: none, conc-list: [10], num-nodes: 2, power: true, srt-recipe: agg-dynamo-variants.yaml:override_tp8_c10, worker: { num-worker: 1, tp: 8, ep: 8, dp-attn: false } }
+    - dram-utilization: 0.80
+      search-space:
+      - { spec-decoding: draft_model, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [20], num-nodes: 2, power: true, srt-recipe: agg-dynamo-variants.yaml:override_tp8_c20, worker: { num-worker: 1, tp: 8, ep: 8, dp-attn: false } }
+      - { spec-decoding: draft_model, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [24], num-nodes: 2, power: true, srt-recipe: agg-dynamo-variants.yaml:override_tp8_c24, worker: { num-worker: 1, tp: 8, ep: 8, dp-attn: false } }
+      - { spec-decoding: draft_model, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [40], num-nodes: 2, power: true, srt-recipe: agg-dynamo-variants.yaml:override_tp8_c40, worker: { num-worker: 1, tp: 8, ep: 8, dp-attn: false } }
+      - { spec-decoding: draft_model, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [24], num-nodes: 1, power: true, srt-recipe: agg-dynamo-variants.yaml:override_tp4_c24, worker: { num-worker: 1, tp: 4, ep: 4, dp-attn: false } }
+      - { spec-decoding: draft_model, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [26], num-nodes: 1, power: true, srt-recipe: agg-dynamo-variants.yaml:override_tp4_c26, worker: { num-worker: 1, tp: 4, ep: 4, dp-attn: false } }
 
 dsv41flash-fp4-b300-vllm-agentic-dspark:
   image: vllm/vllm-openai:cu134-nightly-x86_64-dev-20261019-mk@sha256:2b9fc4b18d0aaabe4d5cad020d9270106472ebe65f5d3bc02c50526b8d9fd280

@@ -11769,3 +11769,15 @@
     - "6 DEP2 prefill workers with a DEP8 decode at conc 280-400 or a DEP16 decode at conc 300; MegaMoE, DSpark block 7 with fp8 draft KV, Dynamo KV router with fastokens for prefill and least-loaded routing across decode DP ranks."
     - "Prefill: shortest-prefill-first, chunk 8192, mem-fraction-static 0.85, HiCache 200 GB per rank write_back."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4686
+
+- config-keys:
+    - musespark-fp4-gb200-sglang-agentic-dflash
+    - musespark-fp4-gb200-dynamo-sglang-agentic-dflash
+  description:
+    - "Add two-node TP8/EP8 SGLang aggregate configurations for Muse Spark Open GB200 AgentX at concurrency 1 and 24, and run the existing TP4 configurations through the aggregate SRT-Slurm lane."
+    - "Enable the standalone SGLang GB200 multi-node launch and power telemetry routes."
+    - "Request full-node memory and 144 CPUs for each aggregate configuration."
+    - "Add Dynamo-SGLang aggregate configurations with TP8 and TP4 workers, DFlash2, and Dynamo KV routing."
+    - "Require the shared GPU power telemetry for the aggregate configurations."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4689
+  scenario-type: [agentic-coding]

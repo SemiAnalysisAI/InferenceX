@@ -1,0 +1,195 @@
+schema: 2
+
+base:
+  name: musespark-fp4-gb200-dynamo-sglang-agentx-agg
+  identity:
+    model: {}
+    container: {}
+    frameworks:
+      dynamo: 1.7.0.dev20261025
+      sglang: 0.0.0.dev1+g8252e3af6
+  resources:
+    gpu_type: gb200
+    gpus_per_node: 4
+  dynamo:
+    install: false
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+    args:
+      router-mode: kv
+      router-session-affinity-ttl-secs: '3600'
+      active-decode-blocks-threshold: None
+      active-prefill-tokens-threshold: None
+      active-prefill-tokens-threshold-frac: None
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+    - name: otel-collector
+      type: otel-collector
+      enabled: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  telemetry:
+    startup_timeout_seconds: 300
+    cpu_power_exporter:
+      port: 9405
+      source: auto
+  engine: sglang
+  roles:
+    agg:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        quantization: modelopt_fp4
+        moe-runner-backend: flashinfer_trtllm
+        kv-cache-dtype: fp8_e4m3
+        enable-layernorm-sp: true
+        enable-megamoe-for-layernorm-sp: true
+        mem-fraction-static: 0.8
+        swa-full-tokens-ratio: 0.1
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: RadixArk/Muse-Spark-Open-DFlash2
+        speculative-draft-model-revision: 46c90f412549c472941a68382d91a99e5e6372a0
+        speculative-num-draft-tokens: 8
+        mm-feature-transport: cpu
+        enable-hierarchical-cache: true
+        hicache-size: 120
+        reasoning-parser: muse
+        tool-call-parser: muse
+        kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:5557"}'
+        preferred-sampling-params: '{"temperature":1.0,"top_p":1.0,"top_k":64}'
+        custom-jinja-template: /model/chat_template.jinja
+        watchdog-timeout: 3600
+        enable-metrics: true
+        cuda-graph-backend-prefill: breakable
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        schedule-policy: shortest-prefill-first
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        HF_HUB_OFFLINE: '1'
+        HF_HUB_CACHE: /hf_hub_cache
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '2048'
+        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
+        NCCL_MNNVL_ENABLE: '1'
+        NCCL_CUMEM_ENABLE: '1'
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+        DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: '10000'
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT: '10000'
+        DYN_BACKEND_ADMISSION_REQUEST_QUEUE_LIMIT: '10000'
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  sbatch_directives:
+    mem: '0'
+    cpus-per-task: '144'
+  srun_options:
+    mem: '0'
+  benchmark:
+    env:
+      TOKENIZER: /model
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp8_c1:
+  roles:
+    agg:
+      args:
+        max-running-requests: 1
+        cuda-graph-max-bs-decode: 1
+        swa-full-tokens-ratio: 0.3
+        speculative-draft-attention-backend: fa4
+        enable-hierarchical-cache: null
+        hicache-size: null
+        schedule-policy: null
+
+override_tp8_c10:
+  roles:
+    agg:
+      args:
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+        prefill-decode-interval: 64
+        swa-full-tokens-ratio: 0.3
+        page-size: 128
+        enable-cache-report: true
+        enable-hierarchical-cache: null
+        hicache-size: null
+      env:
+        OMP_NUM_THREADS: '8'
+        SGLANG_DFLASH_EAGER_DRAFT_SAMPLER: '1'
+        SGLANG_FLASHINFER_NVFP4_PER_TOKEN_ACTIVATION: '0'
+
+override_tp8_c20:
+  roles:
+    agg:
+      args:
+        max-running-requests: 6
+        cuda-graph-max-bs-decode: 6
+        prefill-decode-interval: 64
+
+override_tp8_c24:
+  roles:
+    agg:
+      args:
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+        prefill-decode-interval: 64
+
+override_tp8_c40:
+  roles:
+    agg:
+      args:
+        max-running-requests: 80
+        cuda-graph-max-bs-decode: 80
+        prefill-decode-interval: 24
+
+override_tp4_c24:
+  roles:
+    agg:
+      nodes: 1
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        mem-fraction-static: 0.95
+        max-running-requests: 48
+        cuda-graph-max-bs-decode: 48
+        prefill-decode-interval: 32
+      env:
+        NCCL_MNNVL_ENABLE: null
+        NCCL_CUMEM_ENABLE: null
+        PYTORCH_CUDA_ALLOC_CONF: null
+
+override_tp4_c26:
+  roles:
+    agg:
+      nodes: 1
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        mem-fraction-static: 0.95
+        max-running-requests: 52
+        cuda-graph-max-bs-decode: 52
+        prefill-decode-interval: 32
+      env:
+        NCCL_MNNVL_ENABLE: null
+        NCCL_CUMEM_ENABLE: null
+        PYTORCH_CUDA_ALLOC_CONF: null
