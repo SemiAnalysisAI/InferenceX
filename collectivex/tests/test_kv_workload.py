@@ -201,6 +201,9 @@ class Percentiles(unittest.TestCase):
     def test_pcts(self):
         stats = kv_workload.pcts([5.0, 1.0, 3.0, 2.0, 4.0])
         self.assertEqual(stats["p50"], 3.0)
+        # Nearest-rank, as the EP suite: an even count takes the lower middle, p95 the 19th of 20.
+        self.assertEqual(kv_workload.pcts([4.0, 1.0, 3.0, 2.0])["p50"], 2.0)
+        self.assertEqual(kv_workload.pcts([float(i) for i in range(1, 21)])["p95"], 19.0)
         self.assertEqual(stats["min"], 1.0)
         self.assertEqual(stats["max"], 5.0)
         self.assertEqual(stats["n"], 5)
