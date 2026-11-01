@@ -1,0 +1,195 @@
+schema: 2
+
+base:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-agg
+  identity:
+    model: {}
+    frameworks:
+      dynamo: "1.7.0.dev20261030"
+      sglang: "0.0.0.dev1+ge3718813e"
+  dynamo:
+    install: false
+    request_plane: tcp
+    event_plane: zmq
+  environment:
+    HF_HUB_CACHE: /hf_hub_cache
+  observability:
+    tachometer:
+      enabled: false
+  slurm:
+    time_limit: "4:00:00"
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 10
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+    - name: otel-collector
+      type: otel-collector
+      enabled: false
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+    env:
+      DYN_ROUTER_TEMPERATURE: "0"
+      DYN_ROUTER_QUEUE_THRESHOLD: None
+      DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: "3600"
+      DYN_TCP_CONNECT_TIMEOUT: "120"
+      DYN_TOKENIZER: "fastokens"
+      DYN_TOKENIZER_CACHE: "1"
+      DYN_TOKENIZER_CACHE_BYTES: "8000000000"
+    args:
+      router-mode: kv
+      router-session-affinity-ttl-secs: "14400"
+      active-decode-blocks-threshold: "None"
+      active-prefill-tokens-threshold: "None"
+      active-prefill-tokens-threshold-frac: "None"
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env:
+        PYTHONUNBUFFERED: "1"
+        PYTHONNOUSERSITE: "1"
+        FMHA_SM100_ALLOW_JIT: "1"
+        SGLANG_TIMEOUT_KEEP_ALIVE: "1800"
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: "10000"
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT: "10000"
+        DYN_BACKEND_ADMISSION_REQUEST_QUEUE_LIMIT: "10000"
+      args:
+        served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
+        trust-remote-code: true
+        reasoning-parser: minimax-m3
+        tool-call-parser: minimax-m3
+        moe-runner-backend: flashinfer_trtllm_routed
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 7
+        speculative-use-block-verification: true
+        speculative-draft-kv-cache-dtype: fp8_e4m3
+        cuda-graph-backend-prefill: breakable
+        router-mode: kv
+        router-session-affinity-ttl-secs: "14400"
+        watchdog-timeout: 3600
+        enable-metrics: true
+      kv_events: true
+  benchmark:
+    env:
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
+
+override_tp4_c1:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-agg-tp4-c1
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 4
+        chunked-prefill-size: 32768
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+        mem-fraction-static: 0.8
+
+override_tp4_c4:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-agg-tp4-c4
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 4
+        chunked-prefill-size: 32768
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+        mem-fraction-static: 0.8
+
+override_tp4_c8:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-agg-tp4-c8
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 4
+        chunked-prefill-size: 32768
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+        mem-fraction-static: 0.8
+
+override_tp4_c16:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-agg-tp4-c16
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 4
+        chunked-prefill-size: 32768
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+        mem-fraction-static: 0.8
+
+override_tp4_hicache_spf_c24:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-agg-tp4-hicache-spf-c24
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 4
+        chunked-prefill-size: 8192
+        max-running-requests: 48
+        cuda-graph-max-bs-decode: 48
+        mem-fraction-static: 0.87
+        enable-hierarchical-cache: true
+        hicache-size: 180
+        hicache-write-policy: write_back
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 32
+        stream-interval: 20
+
+override_tp2_hicache_spf_c40:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-agg-tp2-hicache-spf-c40
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        chunked-prefill-size: 8192
+        max-running-requests: 80
+        cuda-graph-max-bs-decode: 80
+        mem-fraction-static: 0.87
+        enable-hierarchical-cache: true
+        hicache-size: 180
+        hicache-write-policy: write_back
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 32
+        stream-interval: 20
+
+override_tp2_hicache_c40:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-agg-tp2-hicache-c40
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        chunked-prefill-size: 32768
+        max-running-requests: 80
+        cuda-graph-max-bs-decode: 80
+        mem-fraction-static: 0.87
+        enable-hierarchical-cache: true
+        hicache-size: 180
+        hicache-write-policy: write_back
+
+override_tp2_hicache_c44:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-agg-tp2-hicache-c44
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        chunked-prefill-size: 32768
+        max-running-requests: 88
+        cuda-graph-max-bs-decode: 88
+        mem-fraction-static: 0.87
+        enable-hierarchical-cache: true
+        hicache-size: 180
+        hicache-write-policy: write_back

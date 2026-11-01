@@ -97,7 +97,7 @@ base:
         # flashinfer_trtllm_routed needs attention TP to match EP, which attention DP breaks.
         moe-a2a-backend: megamoe
         disaggregation-transfer-backend: mooncake
-        chunked-prefill-size: 8192
+        chunked-prefill-size: 16384
         # Shortest uncached prefill first: short cached turns stop queueing
         # behind long uncached prompts, which cuts the TTFT tail.
         schedule-policy: shortest-prefill-first
@@ -185,6 +185,20 @@ base:
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
+
+override_4p_dep2_dep8:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-4p-dep2-dep8
+  roles:
+    prefill:
+      nodes: 2
+      workers: 4
+
+override_8p_dep2_dep8:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-8p-dep2-dep8
+  roles:
+    prefill:
+      nodes: 4
+      workers: 8
 
 override_6p_dep2_dep8:
   name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-6p-dep2-dep8
