@@ -98,6 +98,7 @@ The table also records both the agreed plan-of-record (PoR) draft-model mapping 
 |---|---|---|---|---|
 | Kimi-K3 (`kimik3`) | native/upstream vLLM engine | `Inferact/Kimi-K3-DSpark` | None | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
 | GLM-5.2 (`glm5.2`) | native/upstream SGLang engine | native MTP | None | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
+| GLM-5.3-Flash (`glm5.3flash`) | native/upstream SGLang engine | native MTP | None | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
 | Qwen3.5-397B-A17B (`qwen3.5`) | native/upstream SGLang engine | native MTP | None | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
 | Qwen3.8-Flash-Next (`qwen3.8next`) | native/upstream SGLang engine | TBD | native MTP (built-in 4B multi-step module; golden AL collector: [`qwen3.8next_fp4_b300_vllm.sh`](../benchmarks/single_node/speedbench/qwen3.8next_fp4_b300_vllm.sh)) | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
 
@@ -124,6 +125,7 @@ Other offloading tiers, including NVMe KV cache offloading, are outside the init
 
 | Model architecture class | Prefix | Date added | Active scenarios | Deprecated scenarios |
 |---|---|---|---|---|
+| GLM-5.3-Flash | `glm5.3flash` | 2026-11-01 | Agentic coding (native SGLang FP8 on GB300, embedded MTP; golden AL curve `glm5.3flash_mtp.yaml`) | |
 | MiniMax-M3.1-Flash | `minimaxm31flash` | 2026-10-23 | Agentic coding (vLLM DSpark; golden AL curve `minimaxm31flash_dspark.yaml`) | |
 | Muse Spark Open 816B-A42B | `musespark` | 2026-10-15 | Agentic coding (SGLang and GB300 TensorRT-LLM with DFlash2 draft `RadixArk/Muse-Spark-Open-DFlash2`; golden AL curve `musespark_dflash.yaml`) | |
 | DeepSeek-V4.1-Flash | `dsv41flash` | 2026-09-10 | Agentic coding (vLLM: DSpark, Engram UVA offload; SGLang: DSpark arms added per SKU from 2026-09-17; ATOM: MI355X TP2/TP4 DSpark added 2026-09-23, removed in #3463, restored on srt-slurm 2026-09-30; GPU validation pending) | |
