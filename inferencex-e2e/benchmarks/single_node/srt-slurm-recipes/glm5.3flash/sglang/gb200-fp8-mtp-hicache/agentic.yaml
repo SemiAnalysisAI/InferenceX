@@ -1,0 +1,136 @@
+base:
+  schema: 2
+  name: glm5.3flash-fp8-gb200-sglang-agentic-hicache
+  resources:
+    gpu_type: gb200
+    gpus_per_node: 4
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        served-model-name: zai-org/GLM-5.3-Flash
+        trust-remote-code: true
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        reasoning-parser: glm45
+        tool-call-parser: glm47
+        context-length: 1048576
+        dsa-prefill-backend: trtllm
+        dsa-decode-backend: trtllm
+        kv-cache-dtype: fp8_e4m3
+        moe-runner-backend: flashinfer_trtllm
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 5
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 6
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        mem-fraction-static: 0.85
+        # Match the upper-point caps across cache arms.
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 64
+        watchdog-timeout: 1800
+        enable-cache-report: true
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        HF_HUB_OFFLINE: '1'
+        TRANSFORMERS_OFFLINE: '1'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
+        SGLANG_GLM_NEXTN_MOE_PTPC: '0'
+  benchmark:
+    env:
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      KV_OFFLOADING: none
+      TOTAL_CPU_DRAM_GB: '0'
+
+override_none_c24:
+  roles:
+    agg:
+      args:
+        max-running-requests: 48
+        cuda-graph-max-bs-decode: 48
+  benchmark:
+    env:
+      CONC: '24'
+
+override_none_c32:
+  benchmark:
+    env:
+      CONC: '32'
+
+override_none_c40:
+  benchmark:
+    env:
+      CONC: '40'
+
+override_none_c48:
+  benchmark:
+    env:
+      CONC: '48'
+
+override_none_c64:
+  benchmark:
+    env:
+      CONC: '64'
+
+override_dram_c32:
+  roles:
+    agg:
+      args:
+        enable-hierarchical-cache: true
+        # Leave size/ratio unset so the upstream aggregate host budget remains active.
+        hicache-host-memory-fraction: 0.75
+        hicache-write-policy: write_through
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '901'
+
+override_dram_c48:
+  roles:
+    agg:
+      args:
+        enable-hierarchical-cache: true
+        hicache-host-memory-fraction: 0.75
+        hicache-write-policy: write_through
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '901'
+
+override_dram_c64:
+  roles:
+    agg:
+      args:
+        enable-hierarchical-cache: true
+        hicache-host-memory-fraction: 0.75
+        hicache-write-policy: write_through
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+  benchmark:
+    env:
+      CONC: '64'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '901'
