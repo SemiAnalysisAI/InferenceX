@@ -8834,6 +8834,37 @@ glm5.3flash-fp8-gb300-sglang-agentic-mtp:
     - search-space:
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64], srt-recipe: agentic.yaml }
 
+glm5.3flash-fp8-gb300-sglang-agentic-hicache-frontier:
+  image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
+  model: zai-org/GLM-5.3-Flash
+  model-prefix: glm5.3flash
+  runner: cluster:gb300-nv
+  precision: fp8
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: glm5.3flash/sglang/gb300-fp8-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 1.0
+      search-space:
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [40, 48, 56, 64, 80], srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: {name: hicache}, conc-list: [40, 48, 56, 64, 80], srt-recipe: agentic-hicache.yaml }
+
+glm5.3flash-fp8-gb300-sglang-agentic-hicache-eval:
+  image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
+  model: zai-org/GLM-5.3-Flash
+  model-prefix: glm5.3flash
+  runner: cluster:gb300-nv
+  precision: fp8
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: glm5.3flash/sglang/gb300-fp8-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 1.0
+      search-space:
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: {name: hicache}, conc-list: [64], srt-recipe: agentic-hicache.yaml }
+
 glm5.3-fp4-b300-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.20-cu130@sha256:b27fce60bc5494c118c4910702812bcfa8cee67abcdd1ff8b0902f21647552f4
   model: nvidia/GLM-5.3-NVFP4

@@ -1,0 +1,55 @@
+schema: 2
+name: glm5.3flash-fp8-gb300-sglang-agentic-mtp-hicache
+resources:
+  gpu_type: gb300
+  gpus_per_node: 4
+slurm:
+  time_limit: '4:00:00'
+frontend:
+  type: sglang
+  enable_multiple_frontends: false
+observability:
+  enabled: false
+  tachometer:
+    enabled: false
+engine: sglang
+roles:
+  agg:
+    nodes: 1
+    workers: 1
+    gpus: 4
+    args:
+      served-model-name: zai-org/GLM-5.3-Flash
+      trust-remote-code: true
+      tensor-parallel-size: 4
+      expert-parallel-size: 1
+      context-length: 1048576
+      dsa-prefill-backend: trtllm
+      dsa-decode-backend: trtllm
+      kv-cache-dtype: fp8_e4m3
+      moe-runner-backend: flashinfer_trtllm
+      speculative-algorithm: EAGLE
+      speculative-num-steps: 5
+      speculative-eagle-topk: 1
+      speculative-num-draft-tokens: 6
+      reasoning-parser: auto
+      tool-call-parser: auto
+      watchdog-timeout: 3600
+      enable-metrics: true
+      enable-hierarchical-cache: true
+      hicache-host-memory-fraction: 0.90
+      hicache-write-policy: write_through
+      hicache-io-backend: kernel
+      hicache-mem-layout: page_first
+    env:
+      PYTHONNOUSERSITE: '1'
+      PYTHONUNBUFFERED: '1'
+      HF_HUB_OFFLINE: '1'
+      SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+health_check:
+  max_attempts: 1440
+  interval_seconds: 5
+benchmark:
+  env:
+    AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
