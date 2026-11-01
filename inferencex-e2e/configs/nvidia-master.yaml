@@ -8861,6 +8861,31 @@ glm5.3flash-fp8-b200-sglang-agentic-frontier-hicache-eval:
       search-space:
       - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: {name: hicache}, conc-list: [64], srt-recipe: "frontier.yaml:override_hicache_eval_c64" }
 
+glm5.3flash-fp8-b200-sglang-agentic-tp4-frontier: &glm53flash_fp8_b200_tp4_frontier
+  <<: *glm53flash_fp8_b200_frontier
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 1.0
+      search-space:
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [8, 24, 32], srt-recipe: tp4-frontier.yaml }
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: {name: hicache}, conc-list: [24], srt-recipe: "tp4-frontier.yaml:override_hicache_c24" }
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: {name: hicache}, conc-list: [32], srt-recipe: "tp4-frontier.yaml:override_hicache_c32" }
+
+glm5.3flash-fp8-b200-sglang-agentic-tp4-frontier-eval-off:
+  <<: *glm53flash_fp8_b200_tp4_frontier
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [16], srt-recipe: "tp4-frontier.yaml:override_c16" }
+
+glm5.3flash-fp8-b200-sglang-agentic-tp4-frontier-eval-on:
+  <<: *glm53flash_fp8_b200_tp4_frontier
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 1.0
+      search-space:
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: {name: hicache}, conc-list: [32], srt-recipe: "tp4-frontier.yaml:override_hicache_c32" }
+
 glm5.3-fp4-b300-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.20-cu130@sha256:b27fce60bc5494c118c4910702812bcfa8cee67abcdd1ff8b0902f21647552f4
   model: nvidia/GLM-5.3-NVFP4
