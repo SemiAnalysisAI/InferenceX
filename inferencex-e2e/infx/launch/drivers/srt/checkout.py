@@ -23,7 +23,7 @@ from infx.launch.drivers.srt.run import SrtRun, require
 SUBMODULE = Path("utils/srt-slurm")
 # The cpu-power-exporter release asset ``make setup`` installs for a job that scrapes Grace CPU
 # power; it ships with the srt-slurm release the submodule pins, so bump both together.
-CPU_POWER_EXPORTER_RELEASE = "v2.59.3"
+CPU_POWER_EXPORTER_RELEASE = "v2.65.2"
 PATCHES = Path("runners/srt-slurm/patches")
 SETUP_LOG = "srt-setup.log"
 SETUP_ATTEMPTS = 5
