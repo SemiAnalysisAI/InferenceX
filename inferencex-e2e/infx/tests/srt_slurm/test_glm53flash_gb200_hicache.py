@@ -28,7 +28,7 @@ def test_gb200_hicache_frontier_and_real_verification_eval(monkeypatch):
     assert settings is not None
     common = {
         "description": ["Experimental GB200 NVFP4 child plan validation"],
-        "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/4714",
+        "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/4734",
         "scenario-type": ["agentic-coding"],
     }
     plan = build_plan(
