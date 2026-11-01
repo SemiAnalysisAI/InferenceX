@@ -8820,6 +8820,43 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-disagg:
           dp-attn: false
         decode: { num-worker: 1, tp: 16, dcp-size: 16, ep: 1, dp-attn: false }
 
+glm5.3flash-fp4-gb200-sglang-agentic-mtp-hicache-frontier:
+  image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
+  model: nvidia/GLM-5.3-Flash-NVFP4
+  model-prefix: glm5.3flash
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: glm5.3flash/sglang/gb200-fp4-mtp-hicache
+  scenarios:
+    agentic-coding:
+    # Preserve the full-node inventory budget; the runtime cache fraction is
+    # separate and does not change the inherited scheduler resource binding.
+    - dram-utilization: 1.0
+      search-space:
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [24, 32, 40, 48, 64], srt-recipe: agentic.yaml }
+    - dram-utilization: 1.0
+      search-space:
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32, 48, 64], srt-recipe: agentic.yaml }
+
+# Separate selector prevents automatic model-level eval deduplication from
+# selecting only the no-offload arm. The changelog requests evals-only.
+glm5.3flash-fp4-gb200-sglang-agentic-mtp-hicache-quality:
+  image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
+  model: nvidia/GLM-5.3-Flash-NVFP4
+  model-prefix: glm5.3flash
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: glm5.3flash/sglang/gb200-fp4-mtp-hicache
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 1.0
+      search-space:
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64], srt-recipe: agentic.yaml }
+
 glm5.3flash-fp4-gb200-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
   model: nvidia/GLM-5.3-Flash-NVFP4

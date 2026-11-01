@@ -1,0 +1,163 @@
+base:
+  schema: 2
+  name: glm5.3flash-fp4-gb200-sglang-agentic-hicache-frontier
+  identity:
+    model:
+      revision: 1d00738646cbb0c6d0a9eb403dac5f366f1473a7
+    container: {}
+  resources:
+    gpu_type: gb200
+    gpus_per_node: 4
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        served-model-name: nvidia/GLM-5.3-Flash-NVFP4
+        revision: 1d00738646cbb0c6d0a9eb403dac5f366f1473a7
+        speculative-draft-model-revision: 1d00738646cbb0c6d0a9eb403dac5f366f1473a7
+        trust-remote-code: true
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        quantization: modelopt_fp4
+        context-length: 1048576
+        dsa-prefill-backend: trtllm
+        dsa-decode-backend: trtllm
+        kv-cache-dtype: fp8_e4m3
+        moe-runner-backend: flashinfer_trtllm
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 5
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 6
+        reasoning-parser: auto
+        tool-call-parser: auto
+        mem-fraction-static: 0.85
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        watchdog-timeout: 1800
+        enable-cache-report: true
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+        SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
+        SGLANG_GLM_NEXTN_MOE_PTPC: '0'
+  benchmark:
+    env:
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      KV_OFFLOADING: none
+
+# Preserve the parent's admission and decode graph caps in both arms.
+override_c24_none:
+  roles:
+    agg:
+      args:
+        max-running-requests: 48
+        cuda-graph-max-bs-decode: 48
+  benchmark:
+    env:
+      CONC: '24'
+
+override_c32_none:
+  roles:
+    agg:
+      args:
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 64
+  benchmark:
+    env:
+      CONC: '32'
+
+override_c40_none:
+  roles:
+    agg:
+      args:
+        max-running-requests: 80
+        cuda-graph-max-bs-decode: 80
+  benchmark:
+    env:
+      CONC: '40'
+
+override_c48_none:
+  roles:
+    agg:
+      args:
+        max-running-requests: 96
+        cuda-graph-max-bs-decode: 96
+  benchmark:
+    env:
+      CONC: '48'
+
+override_c64_none:
+  roles:
+    agg:
+      args:
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 128
+  benchmark:
+    env:
+      CONC: '64'
+
+# Automatic sizing accounts for the dependent DSA index pool in the shared
+# host budget. Do not add an explicit hicache-size or hicache-ratio.
+override_c32_hicache:
+  roles:
+    agg:
+      args:
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 64
+        enable-hierarchical-cache: true
+        hicache-host-memory-fraction: 0.75
+        hicache-write-policy: write_through
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: dram
+
+override_c48_hicache:
+  roles:
+    agg:
+      args:
+        max-running-requests: 96
+        cuda-graph-max-bs-decode: 96
+        enable-hierarchical-cache: true
+        hicache-host-memory-fraction: 0.75
+        hicache-write-policy: write_through
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: dram
+
+override_c64_hicache:
+  roles:
+    agg:
+      args:
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 128
+        enable-hierarchical-cache: true
+        hicache-host-memory-fraction: 0.75
+        hicache-write-policy: write_through
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+  benchmark:
+    env:
+      CONC: '64'
+      KV_OFFLOADING: dram
