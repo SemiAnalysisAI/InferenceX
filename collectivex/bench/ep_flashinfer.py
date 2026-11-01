@@ -134,18 +134,14 @@ class FlashInferEPBackend(EPBackend):
 
     def __init__(self, args, rank, world_size, local_rank, device):
         super().__init__(args, rank, world_size, local_rank, device)
-        self._fp8 = self.precision == "fp8"
         if self._fp8:
             # The codec, bytes and block size of deepep-v2/uccl-ep, so the same label.
             self._enable_fp8("fp8-e4m3fn", _blockwise_cast_to_fp8, _blockwise_cast_back)
-        # BF16 stage() is a pointer hand-off, so only the FP8 dequant is device work to hoist.
-        self.stage_device_work = self._fp8
         self._a2a = None
         self._max_tokens = None
         self._workspace_sizing = {}
         # Which of vLLM's two combine calls this wheel takes; resolved in create_buffer.
         self._combine_takes_output = False
-        self.experts_per_rank = args.experts // world_size
 
     # ---- setup -------------------------------------------------------------------------------
 
