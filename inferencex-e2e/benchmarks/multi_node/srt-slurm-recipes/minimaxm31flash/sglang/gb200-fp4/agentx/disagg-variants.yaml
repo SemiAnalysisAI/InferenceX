@@ -107,7 +107,7 @@ base:
         enable-hierarchical-cache: true
         # 180 GB per rank: 720 GB per node, the matrix's 0.80 DRAM share, leaving
         # headroom for the engine, Mooncake and the OS.
-        hicache-size: 180
+        hicache-size: 200
         hicache-write-policy: write_back
         speculative-algorithm: DSPARK
         speculative-dspark-block-size: 7
