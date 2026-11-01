@@ -76,10 +76,10 @@ def test_nic_state_selects_fixed_power_without_changing_capacity_metadata(
     assert active_group.provenance.kind == "assumed"
 
 
-@pytest.mark.parametrize("state, expected", [("idle", 121.6), ("active", 224)])
-def test_ddr5_state_selects_power_for_32_dimms(state, expected):
+@pytest.mark.parametrize("state", ["idle", "active"])
+def test_ddr5_power_is_the_same_idle_or_offloading_for_32_dimms(state):
     result = ComponentGroup(component=DDR5DIMM(state=state), quantity=32).estimate_breakdown()
-    assert result.power_w == pytest.approx(expected)
+    assert result.power_w == pytest.approx(88)
     assert dict(result.details)["state"] == state
     assert dict(result.details)["capacity_gb_per_dimm"] == 64
 
