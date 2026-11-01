@@ -443,7 +443,8 @@ The optimizations listed in (c) also require its additional qualification.
 
 ### (c) Accuracy-sensitive optimizations require reproducible qualification
 Read "Accuracy-sensitive optimization policy" in `inferencex-e2e/docs/MODELS.md`.
-Apply it to reduced-precision all-reduce or reduce-scatter (integer or floating-point),
+For upstream official InferenceX submissions, apply it to reduced-precision
+all-reduce or reduce-scatter (integer or floating-point),
 online quantization of linear layers, cross-indexer sharing on models without native
 index sharing, and FP4 KV cache on models without native FP4 KV cache. Existing and
 new models have the same evidence requirement; there is no grandfathering exemption.

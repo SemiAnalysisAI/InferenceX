@@ -24,7 +24,7 @@ In general, we should be benchmarking free & ~open engines that is used in produ
 
 ## Accuracy-sensitive optimization policy
 
-The following optimizations are accepted if and only if passing the evaluations below is demonstrated with logs and complete, manually runnable reproduction scripts:
+On upstream official InferenceX, the following optimizations are accepted if and only if passing the evaluations below is demonstrated with logs and complete, manually runnable reproduction scripts:
 
 - Reduced-precision all-reduce or reduce-scatter, including integer and floating-point quantization.
 - Online quantization of linear layers.
