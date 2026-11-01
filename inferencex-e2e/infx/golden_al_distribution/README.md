@@ -146,6 +146,7 @@ Before accepting an updated curve, reviewers should verify:
 | GLM-5.3 | MTP (provisional, K=3 copied from GLM-5.2) | [`glm5.3_mtp.yaml`](glm5.3_mtp.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479) (GLM-5.2) |
 | Qwen3.8-Flash-Next | MTP (native) | [`qwen3.8next_mtp.yaml`](qwen3.8next_mtp.yaml) | [33034290269](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/33034290269) |
 | Muse Spark Open | DFlash2 | [`musespark_dflash.yaml`](musespark_dflash.yaml) | [38808046215](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/38808046215) |
+| MiMo-V2.6-Flash | DFlash | [`mimov2.6flash_dflash.yaml`](mimov2.6flash_dflash.yaml) | [41346734342](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/41346734342) |
 
 ## Using golden curves in srt-slurm runs
 
