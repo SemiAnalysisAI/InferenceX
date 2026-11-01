@@ -35,12 +35,37 @@ class IncorrectError(Exception):
 
 SAMPLE = re.compile(
     r"^([a-zA-Z_:][a-zA-Z0-9_:]*)(?:\{(.*?)\})?\s+"
-    r"([-+]?(?:[0-9]*\.)?[0-9]+(?:[eE][-+]?[0-9]+)?)"
+    r"([-+]?(?:(?:[0-9]*\.)?[0-9]+(?:[eE][-+]?[0-9]+)?|Inf)|NaN)"
     r"(?:\s+[0-9]+)?$"
 )
 LABEL = re.compile(r'([a-zA-Z_][a-zA-Z0-9_]*)="((?:\\.|[^"\\])*)"')
 PREFIX = "sglang:"
 MetricMap = dict[tuple[str, tuple[tuple[str, str], ...]], float]
+PINNED_SOURCE = "baa9befa381511cd4d56f83980951e5a45fffc6d"
+LAZY_LOAD_METRICS = {
+    "load_back_tokens_total": ("load_back_tokens", "counter"),
+    "load_back_bytes_total": ("load_back_bytes", "counter"),
+    "load_back_duration_seconds_count": ("load_back_duration_seconds", "histogram"),
+}
+WATCHED_METRICS = (
+    set(LAZY_LOAD_METRICS)
+    | {
+        "hicache_backup_tokens_total",
+        "hicache_backup_bytes_total",
+        "hicache_backup_duration_seconds_count",
+        "hicache_dropped_tokens_total",
+        "evicted_tokens_total",
+        "prefill_effective_tokens_total",
+    }
+    | {
+        f"{pool}_{state}_tokens"
+        for pool in ("kv", "mamba")
+        for state in ("available", "used", "evictable")
+    }
+)
+WATCHED_FAMILIES = WATCHED_METRICS | {
+    name.removesuffix("_total").removesuffix("_count") for name in WATCHED_METRICS
+}
 
 
 class Metrics(dict):
@@ -54,6 +79,8 @@ def parse_metrics(text: str) -> Metrics:
     for line in text.splitlines():
         if line.startswith("# TYPE "):
             _, _, name, kind = line.split()
+            if name.removeprefix(PREFIX) in WATCHED_FAMILIES and name in result.registered:
+                raise InconclusiveError(f"{name}: duplicate metric TYPE declaration")
             result.registered[name] = kind
             if kind == "histogram":
                 result.registered[name + "_count"] = kind
@@ -63,15 +90,122 @@ def parse_metrics(text: str) -> Metrics:
             continue
         match = SAMPLE.fullmatch(line)
         if not match:
+            raw_name = re.match(r"^([a-zA-Z_:][a-zA-Z0-9_:]*)", line)
+            if raw_name and raw_name[1].removeprefix(PREFIX) in WATCHED_METRICS:
+                raise InconclusiveError(f"{raw_name[1]}: malformed metric sample")
             continue
         name, labels, value = match.groups()
+        if name.removeprefix(PREFIX) in WATCHED_METRICS and (labels or "").strip():
+            label_list = rf"\s*(?:{LABEL.pattern})(?:\s*,\s*(?:{LABEL.pattern}))*\s*,?\s*"
+            if not re.fullmatch(label_list, labels):
+                raise InconclusiveError(f"{name}: malformed metric labels")
         parsed = tuple(
             sorted((key, json.loads('"' + val + '"')) for key, val in LABEL.findall(labels or ""))
         )
         number = float(value)
+        if name.removeprefix(PREFIX) in WATCHED_METRICS:
+            if len({key for key, _ in parsed}) != len(parsed):
+                raise InconclusiveError(f"{name}: duplicate metric label")
+            if not math.isfinite(number):
+                raise InconclusiveError(f"{name}: nonfinite metric sample")
+            if number < 0 and name.endswith(("_total", "_count")):
+                raise InconclusiveError(f"{name}: negative metric sample")
+            if (name, parsed) in result:
+                raise InconclusiveError(f"{name}: duplicate metric sample")
         if math.isfinite(number):
             result[name, parsed] = number
     return result
+
+
+def retain_metric_snapshot(history: list, stage: str, text: str, labels: dict) -> None:
+    """Bounded raw selected families, including two other-rank examples per name."""
+    snapshot = {"stage": stage, "selected_labels": labels, "raw_lines": []}
+    history.append(snapshot)
+    if len(history) > 24:
+        raise InconclusiveError("metric snapshot count exceeds diagnostic bound")
+    others: dict[str, int] = {}
+    for line in text.splitlines():
+        if line.startswith("# TYPE "):
+            parts = line.split()
+            wanted = len(parts) >= 3 and parts[2].removeprefix(PREFIX) in WATCHED_FAMILIES
+        else:
+            match = SAMPLE.fullmatch(line)
+            if not match:
+                malformed = re.match(r"^([a-zA-Z_:][a-zA-Z0-9_:]*)", line)
+                if not malformed or malformed[1].removeprefix(PREFIX) not in WATCHED_METRICS:
+                    continue
+                raw_name, raw_labels = malformed[1], ""
+            else:
+                raw_name, raw_labels, _ = match.groups()
+            name = raw_name.removeprefix(PREFIX)
+            if name not in WATCHED_METRICS:
+                continue
+            sample_labels = dict(LABEL.findall(raw_labels or ""))
+            wanted = not match or all(sample_labels.get(k) == v for k, v in labels.items())
+            if not wanted:
+                others[name] = others.get(name, 0) + 1
+                wanted = others[name] <= 2
+        if wanted:
+            snapshot["raw_lines"].append(line[:4096])
+            if len(line) > 4096 or len(snapshot["raw_lines"]) > 128:
+                snapshot["truncated"] = True
+                snapshot["raw_lines"] = snapshot["raw_lines"][:128]
+                raise InconclusiveError("selected metric snapshot exceeds diagnostic bound")
+    snapshot["other_rank_samples_seen"] = others
+
+
+def lazy_load_identity(before: Metrics, after: Metrics, name: str, labels: dict) -> tuple:
+    """Exact baa9 lazy schema plus positive same-identity L2 backup evidence."""
+    pool = labels.get("pool")
+    if name not in LAZY_LOAD_METRICS or pool not in (None, "kv", "mamba"):
+        raise InconclusiveError(f"{name}: not a pinned lazy-load schema")
+    family, kind = LAZY_LOAD_METRICS[name]
+    base_selectors = {k: v for k, v in labels.items() if k != "pool"}
+    identities = []
+    for snapshot in (before, after):
+        registered = getattr(snapshot, "registered", {})
+        declared = {
+            registered[PREFIX + alias] for alias in (family, name) if PREFIX + alias in registered
+        }
+        if declared - {kind}:
+            raise InconclusiveError(f"{name}: wrong metric family type")
+        witness = []
+        for metric, extra in (
+            ("hicache_backup_tokens_total", {"pool": pool or "kv"}),
+            ("hicache_backup_bytes_total", {}),
+            ("hicache_backup_duration_seconds_count", {}),
+        ):
+            values = series(snapshot, metric, {**base_selectors, **extra})
+            if len(values) != 1 or next(iter(values.values())) <= 0:
+                raise InconclusiveError(f"{name}: missing positive same-rank backup witness")
+            metric_family = metric.removesuffix("_total").removesuffix("_count")
+            expected_type = "histogram" if metric.endswith("_count") else "counter"
+            types = {
+                registered[PREFIX + alias]
+                for alias in (metric_family, metric)
+                if PREFIX + alias in registered
+            }
+            if types != {expected_type}:
+                raise InconclusiveError(f"{name}: backup metric schema is missing or wrong")
+            key, value = next(iter(values.items()))
+            base = {k: v for k, v in key[1] if k != "pool"}
+            if (
+                set(base) != {"cache_type", "tp_rank", "pp_rank", "dp_rank"}
+                or base["cache_type"] != "UnifiedRadixCache"
+            ):
+                raise InconclusiveError(f"{name}: unexpected backup label schema")
+            witness.append((tuple(sorted(base.items())), value))
+        if len({base for base, _ in witness}) != 1:
+            raise InconclusiveError(f"{name}: inconsistent backup identities")
+        identities.append(witness)
+    if identities[0][0][0] != identities[1][0][0] or any(
+        new[1] < old[1] for old, new in zip(identities[0], identities[1], strict=True)
+    ):
+        raise InconclusiveError(f"{name}: backup identity changed or counter reset")
+    target = dict(identities[0][0][0])
+    if pool is not None:
+        target["pool"] = pool
+    return tuple(sorted(target.items()))
 
 
 def series(metrics: MetricMap, name: str, labels: dict[str, str]) -> MetricMap:
@@ -83,16 +217,34 @@ def series(metrics: MetricMap, name: str, labels: dict[str, str]) -> MetricMap:
 
 
 def delta(
-    before: MetricMap, after: MetricMap, name: str, labels: dict[str, str], *, required: bool = True
+    before: MetricMap,
+    after: MetricMap,
+    name: str,
+    labels: dict[str, str],
+    *,
+    required: bool = True,
+    allow_lazy_zero: bool = False,
+    lazy_source: str | None = None,
 ) -> float | None:
     """Single logical series only: never multiply logical counts by TP ranks."""
     a = series(before, name, labels)
     b = series(after, name, labels)
     if not a and not b and not required:
         return None
+    if not a and ((allow_lazy_zero and not b) or len(b) == 1) and name in LAZY_LOAD_METRICS:
+        if lazy_source != PINNED_SOURCE:
+            raise InconclusiveError(f"{name}: lazy schema source is not verified")
+        identity = lazy_load_identity(before, after, name, labels)
+        if not b:
+            return 0.0
+        if next(iter(b))[1] != identity:
+            raise InconclusiveError(f"{name}: load/backup label identities differ")
+        a = {next(iter(b)): 0.0}
     if (
         not a
         and len(b) == 1
+        and name not in LAZY_LOAD_METRICS
+        and name != "prefill_effective_tokens_total"
         and getattr(before, "registered", {}).get(PREFIX + name) in ("counter", "histogram")
     ):
         # Prometheus labeled counters create their first child lazily. The
@@ -289,6 +441,9 @@ class HTTP:
         self.url = url.rstrip("/")
         self.metrics_url = metrics_url or self.url + "/metrics"
         self.deadline, self.timeout = deadline, timeout
+        self.metric_snapshots: list = []
+        self.metric_labels: dict = {}
+        self.metric_stage = "initial"
 
     def request(self, url: str, payload: dict[str, Any] | None = None) -> str:
         remaining = self.deadline - time.monotonic()
@@ -309,7 +464,9 @@ class HTTP:
             raise InconclusiveError(f"HTTP transport failure: {exc}") from exc
 
     def metrics(self) -> Metrics:
-        return parse_metrics(self.request(self.metrics_url))
+        raw = self.request(self.metrics_url)
+        retain_metric_snapshot(self.metric_snapshots, self.metric_stage, raw, self.metric_labels)
+        return parse_metrics(raw)
 
     def chat(self, payload: dict[str, Any]) -> dict[str, Any]:
         return json.loads(self.request(self.url + "/v1/chat/completions", payload))
@@ -415,6 +572,12 @@ class Probe:
     prompt_tokens: int = 0
     pressure_requests: int = 0
     plan: dict | None = None
+    lazy_source: str | None = None
+
+    def read_metrics(self, stage: str) -> Metrics:
+        self.http.metric_stage = stage
+        self.http.metric_labels = self.metric_labels
+        return self.http.metrics()
 
     def chat(self, prompt: str, stage: str, max_tokens: int) -> dict[str, Any]:
         if self.requests >= self.limits.max_requests:
@@ -533,27 +696,38 @@ class Probe:
         cold = self.facts(prompt, expected, "cold")
         cold["expected_markers"] = expected
         cold["marker_entry_positions"] = selected
-        before = self.http.metrics()
+        before = self.read_metrics("cold")
         warm = self.facts(prompt, expected, "device_hit")
-        after = self.http.metrics()
+        after = self.read_metrics("device")
         warm_cached = (warm["usage"].get("prompt_tokens_details") or {}).get("cached_tokens", 0)
         warm_details = warm["sglext"].get("cached_tokens_details") or {}
+        cold_details = cold["sglext"].get("cached_tokens_details") or {}
         required = self.limits.min_prefix_fraction * cold["usage"]["prompt_tokens"]
         if (
             warm_cached < required
             or warm_details.get("device", 0) < required
-            or warm_details.get("host", 0)
+            or warm_details.get("host") != 0
             or warm_details.get("storage", 0)
+            or (cold["usage"].get("prompt_tokens_details") or {}).get("cached_tokens") != 0
+            or cold_details.get("host", 0)
+            or cold_details.get("storage", 0)
         ):
             raise InconclusiveError("device-hit control lacks a pure device-resident prefix")
         if (
-            delta(before, after, "load_back_tokens_total", {**self.metric_labels, "pool": "kv"})
+            delta(
+                before,
+                after,
+                "load_back_tokens_total",
+                {**self.metric_labels, "pool": "kv"},
+                allow_lazy_zero=True,
+                lazy_source=self.lazy_source,
+            )
             != 0
         ):
             raise InconclusiveError("device-hit control unexpectedly restored host tokens")
         completed = 0
         batch = self.limits.pressure_batch
-        baseline = self.http.metrics()
+        baseline = self.read_metrics("pressure_baseline")
         while completed < self.limits.restore_rounds:
             start_tokens, batch_count = self.prompt_tokens, 0
             target_tokens = self.plan["pressure_tokens_per_round"] if self.plan else None
@@ -569,20 +743,37 @@ class Probe:
                 self.chat(self.pressure_prompt(), "pressure", 8)
                 self.pressure_requests += 1
                 batch_count += 1
-            before = self.http.metrics()
+            before = self.read_metrics(f"pre_restore_{completed + 1}")
             result = self.facts(prompt, expected, f"restore_candidate_{completed + 1}")
-            after = self.http.metrics()
+            after = self.read_metrics(f"post_restore_{completed + 1}")
             kv = delta(
-                before, after, "load_back_tokens_total", {**self.metric_labels, "pool": "kv"}
+                before,
+                after,
+                "load_back_tokens_total",
+                {**self.metric_labels, "pool": "kv"},
+                lazy_source=self.lazy_source,
             )
-            duration = delta(before, after, "load_back_duration_seconds_count", self.metric_labels)
-            byte_count = delta(before, after, "load_back_bytes_total", self.metric_labels)
+            duration = delta(
+                before,
+                after,
+                "load_back_duration_seconds_count",
+                self.metric_labels,
+                lazy_source=self.lazy_source,
+            )
+            byte_count = delta(
+                before,
+                after,
+                "load_back_bytes_total",
+                self.metric_labels,
+                lazy_source=self.lazy_source,
+            )
             mamba = delta(
                 before,
                 after,
                 "load_back_tokens_total",
                 {**self.metric_labels, "pool": "mamba"},
                 required=False,
+                lazy_source=self.lazy_source,
             )
             host_hit = delta(
                 before,
@@ -679,6 +870,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     report = {"diagnostic": "glm53flash-forced-host-restore", "status": "INCONCLUSIVE"}
     probe = None
+    http = None
     exit_code = 2
     previous_alarm = None
     try:
@@ -721,6 +913,7 @@ def main(argv: list[str] | None = None) -> int:
             time.monotonic() + limits.max_seconds,
             limits.request_timeout,
         )
+        http.metric_labels = labels
         config_path = args.model_config
         if config_path is None and args.expected_model.startswith("/"):
             config_path = Path(args.expected_model) / "config.json"
@@ -754,10 +947,18 @@ def main(argv: list[str] | None = None) -> int:
             args.server_boot_log.read_text(),
             limits,
         )
-        report["status"] = "PLAN_ONLY"
+        report["status"] = "INCONCLUSIVE" if args.execute else "PLAN_ONLY"
         args.output.write_text(json.dumps(report, indent=2) + "\n")
         if args.execute:
-            probe = Probe(http, args.model, limits, labels, plan=report["capacity_plan"])
+            report["status"] = "INCONCLUSIVE"
+            probe = Probe(
+                http,
+                args.model,
+                limits,
+                labels,
+                plan=report["capacity_plan"],
+                lazy_source=args.expected_source,
+            )
             report["result"] = probe.run()
             report["status"] = "DIAGNOSTIC_PASS"
         exit_code = 0
@@ -765,7 +966,7 @@ def main(argv: list[str] | None = None) -> int:
         report.update(status="DIAGNOSTIC_FAIL", reason=str(exc))
         exit_code = 1
     except (InconclusiveError, OSError, ValueError, KeyError, TypeError) as exc:
-        report["reason"] = str(exc)
+        report.update(status="INCONCLUSIVE", reason=str(exc))
     finally:
         if previous_alarm is not None:
             signal.setitimer(signal.ITIMER_REAL, 0)
@@ -777,10 +978,16 @@ def main(argv: list[str] | None = None) -> int:
                 prompt_tokens=probe.prompt_tokens,
                 pressure_requests=probe.pressure_requests,
             )
+        report["execution_requested"] = args.execute
+        report["metric_snapshots"] = getattr(http, "metric_snapshots", [])
         args.output.write_text(json.dumps(report, indent=2) + "\n")
     print(
         json.dumps(
-            {"status": report["status"], "output": str(args.output), "reason": report.get("reason")}
+            {
+                "status": report["status"],
+                "output": str(args.output),
+                "reason": report.get("reason"),
+            }
         )
     )
     return exit_code
