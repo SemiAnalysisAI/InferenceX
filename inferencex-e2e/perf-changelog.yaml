@@ -11771,6 +11771,27 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4686
 
 - config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image for all three arms (TP4/EP4 HiCache, TP4/EP4 DCP4, TP8/EP1) from lmsysorg/sglang:v0.5.22-rocm720-mi35x (digest-pinned release) to the lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261028 nightly, built from SGLang main e0df901d."
+    - "Add TP4/EP4 points with decode context parallelism (DCP4) at concurrency 16, 24, 40 and 48. The latent KV is striped across the four ranks, so these points keep KV on the GPU without HiCache, which SGLang rejects with DCP."
+    - "DCP4 points keep the base recipe: EAGLE with 5 steps, top-k 1 and 6 draft tokens, an FP8 KV cache and the Triton DSA prefill and decode backends. Admission (max-running-requests) is 32, 48, 80 and 96, twice the concurrency, and the decode CUDA graph limit is 32, 48, 64 and 64."
+    - "The new image adds sgl-project/sglang#44322, which enables DCP on the Triton sparse-MLA backend on ROCm, including FP8 KV writes and MTP draft sharding. It also adds DSA fixes for MTP draft decode (#42565) and GLM-5.2 CUDA-graph side-stream replay (#45349). #43735 (DSA DCP with MTP) was already in v0.5.22."
+    - "Draft data types are unchanged: the MTP layer 78 ships in BF16 and is listed in the checkpoint's Quark exclude list, so SGLang loads it unquantized at both the old and new commits. Its KV cache is FP8, shared with the target."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4064
+
+- config-keys:
+    - minimaxm31flash-fp4-mi355x-sglang-agentic-dspark
+  description:
+    - "Conc 48 and 64 move to the cookbook's High-Throughput cell: HiCache with 180 GB of host KV per rank written back on eviction (KV_OFFLOADING=dram, 734 GB declared for 4 of 8 GPUs), mem-fraction-static 0.8, default bf16 draft KV."
+    - "Back the HiCache host pools with hipHostMalloc (HSA_USERPTR_FOR_PAGED_MEM=0) instead of registered pageable memory, which faulted at the first HiCache write on MI355X."
+    - "Set HF_HOME so srtctl pre-downloads the model into the shared HF cache, which lacked preprocessor_config.json and stopped every MI355X server at startup."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4694
+  scenario-type: [agentic-coding]
+
+- config-keys:
     - minimaxm31flash-fp4-mi355x-vllm-agentic-dspark
   scenario-type: [agentic-coding]
   description:
@@ -11782,6 +11803,15 @@
     - "C64 also sets PYTHONHASHSEED=42 and VLLM_ROCM_MINIMAX_M3_SP_PREFILL=1. Sequence-parallel prefill stays off on this checkpoint: at 8d0f05a0c it needs an MXFP8 kernel on layer.quant_method.kernel, which the Quark linear method does not expose, and every rank logs it as off."
     - "Draft data types unchanged: the dspark/ draft loads with its own MXFP8 config (FP8 E4M3 attention and FFN projections with 1x32 UE8M0 scales; BF16 fc, Markov and confidence heads, norms) and an FP8 draft KV cache. Only its length changes, at C16/C32."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4671
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-agg
+    - minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg
+  scenario-type: [agentic-coding]
+  description:
+    - "Add aggregated SGLang behind Dynamo for MiniMax-M3.1-Flash AgentX on GB300 with lmsysorg/sglang:nightly-cu134-20261030-e371881: TP4 at conc 1-16; TP4 with HiCache 180 GB per rank, shortest-prefill-first and prefill-decode interval 32 at conc 24; TP2 with HiCache 180 GB per rank at conc 40 (with and without shortest-prefill-first) and 44."
+    - "Disagg prefill chunk 16384 (8192 per DP rank); add 4 DEP2 prefill workers with a DEP8 decode at conc 224 and 256, 8 DEP2 prefill workers with a DEP8 decode at conc 440 and 480, conc 340 on the 6 DEP2 + DEP8 shape, and conc 360 and 400 on the 6 DEP2 + DEP16 shape."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4698
 
 - config-keys:
     - dsv41flash-fp4-mi355x-vllm-agentic-dspark
