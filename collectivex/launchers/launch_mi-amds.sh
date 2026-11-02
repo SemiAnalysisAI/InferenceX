@@ -58,9 +58,8 @@ command -v salloc >/dev/null || collx_die "salloc not found on this runner"
 allocation=(--partition="$PARTITION" --nodes="$NODES" --gres=gpu:"$GPN"
   --time="$TIME_MIN" --ntasks-per-node="$GPN")
 [ -z "$CPUS_PER_NODE" ] || allocation+=(--cpus-per-task="$((CPUS_PER_NODE / GPN))")
-case "$RUNNER" in
-  mi300x|mi355x) allocation+=(--exclusive) ;;
-esac
+# Every pool runs alone on its nodes, as every other launcher allocates.
+allocation+=(--exclusive)
 excluded_nodes="$EXCLUDE_NODES"
 for allocation_attempt in 1 2 3; do
   attempt_allocation=("${allocation[@]}")

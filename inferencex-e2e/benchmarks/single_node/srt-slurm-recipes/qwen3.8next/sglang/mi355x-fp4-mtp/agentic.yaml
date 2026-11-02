@@ -1,0 +1,150 @@
+# Qwen3.8-Flash-Next Quark MXFP4 MoE (MTP experts included), FP8 attention and
+# FP8 PLE, AgentX on MI355X via SGLang with native NEXTN MTP. The ~116 GiB
+# checkpoint fits on one MI355X, so TP1. The upstream image is used unpatched.
+base:
+  schema: 2
+  name: qwen3.8next-fp4-mi355x-sglang-agentic
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 1
+      args:
+        served-model-name: amd/Qwen3.8-Flash-Next-Quark-MXFP4-AttnFP8-PLEFP8
+        tokenizer-path: amd/Qwen3.8-Flash-Next-Quark-MXFP4-AttnFP8-PLEFP8
+        trust-remote-code: true
+        tensor-parallel-size: 1
+        data-parallel-size: 1
+        expert-parallel-size: 1
+        quantization: quark
+        attention-backend: aiter
+        page-size: 64
+        kv-cache-dtype: auto
+        mem-fraction-static: 0.9
+        model-loader-extra-config: '{"enable_multithread_load": true}'
+        watchdog-timeout: 1200
+        chunked-prefill-size: 16384
+        mamba-ssm-dtype: bfloat16
+        # PLE n-gram table in CPU pinned memory; offload needs the fp8 storage
+        # declared up front instead of switched to at load.
+        ple-offload-embedding: true
+        json-model-override-args: '{"text_config": {"ple_embedding_dtype": "float8_e4m3fn"}}'
+        scheduler-recv-interval: 10
+        stream-interval: 50
+        reasoning-parser: qwen3
+        default-chat-template-kwargs: '{"enable_thinking": false}'
+        tool-call-parser: qwen3_coder
+        speculative-algorithm: NEXTN
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+        # GDN target verify folds each commit through a raw-input window instead
+        # of per-draft state snapshots; needs the linear draft chain (topk 1).
+        enable-linear-replayssm-spec: true
+        tokenizer-worker-num: 6
+        enable-metrics: true
+        enable-cache-report: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        ROCM_QUICK_REDUCE_QUANTIZATION: NONE
+        # Outlast AIPerf's 300 s client connection pool.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+        SGLANG_ENABLE_SPEC_V2: '1'
+        AITER_GDR_FLYDSL: '1'
+  benchmark:
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      AIPERF_APPLY_CHAT_TEMPLATE: 'true'
+
+# One variant per point. Every point keeps ReplaySSM, the PLE table offload and the
+# default path, admits 2x CONC requests and captures decode graphs up to that
+# admission, so bursts past CONC stay in a graph; mem-fraction-static is used as
+# given instead of the aiter backend's 0.85 scaling.
+override_c1:
+  roles:
+    agg:
+      args:
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+      env:
+        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_c2:
+  roles:
+    agg:
+      args:
+        max-running-requests: 4
+        cuda-graph-max-bs-decode: 4
+      env:
+        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
+  benchmark:
+    env:
+      CONC: '2'
+      KV_OFFLOADING: none
+
+override_c4:
+  roles:
+    agg:
+      args:
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+      env:
+        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_c8:
+  roles:
+    agg:
+      args:
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+      env:
+        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
+override_c12:
+  roles:
+    agg:
+      args:
+        max-running-requests: 24
+        cuda-graph-max-bs-decode: 24
+      env:
+        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
+  benchmark:
+    env:
+      CONC: '12'
+      KV_OFFLOADING: none
+
+override_c16:
+  roles:
+    agg:
+      args:
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+      env:
+        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: none
