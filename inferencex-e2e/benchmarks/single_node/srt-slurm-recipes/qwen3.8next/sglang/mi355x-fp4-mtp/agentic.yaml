@@ -95,24 +95,26 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
 
-# One variant per point. c1, c2, c4 and c8 run the FlyDSL monokernel for MTP
-# target verify and draft (up to 8 requests): its verify writes the per-draft
-# intermediate SSM states, so ReplaySSM is off, admission equals the decode graph
+# One variant per point. c1, c2, c4 and c8 run the FlyDSL monokernel
+# (--enable-amd-monokernel, built into the image) for MTP target verify and draft
+# (up to 8 requests, 3 steps / 4 draft tokens): its verify writes the per-draft
+# intermediate SSM states, so ReplaySSM is off, and its prelude reads the PLE table
+# on the GPU, so the table is not offloaded. Admission equals the decode graph
 # batch, and mem-fraction-static is used as given instead of the aiter backend's
-# 0.85 scaling. c8 drafts one token per step (2 verify tokens). c12 and c16 keep
-# ReplaySSM, 2x CONC admission and the default path. c12 and c16 capture decode
-# graphs up to their admission, so bursts past CONC stay in a graph, and use
-# mem-fraction-static 0.9 as given (a larger KV pool than the scaled 0.765).
+# 0.85 scaling. c12 and c16 keep ReplaySSM, the PLE offload, 2x CONC admission and
+# the default path. c12 and c16 capture decode graphs up to their admission, so
+# bursts past CONC stay in a graph, and use mem-fraction-static 0.9 as given (a
+# larger KV pool than the scaled 0.765).
 override_c1:
   roles:
     agg:
       args:
         enable-linear-replayssm-spec: null
+        ple-offload-embedding: null
+        enable-amd-monokernel: true
         max-running-requests: 1
         cuda-graph-max-bs-decode: 1
       env:
-        SGLANG_ENABLE_QWEN4_MONOKERNEL: '1'
-        SGLANG_ENABLE_QWEN4_MTP_MONOKERNEL: '1'
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
   benchmark:
     env:
@@ -124,11 +126,11 @@ override_c2:
     agg:
       args:
         enable-linear-replayssm-spec: null
+        ple-offload-embedding: null
+        enable-amd-monokernel: true
         max-running-requests: 2
         cuda-graph-max-bs-decode: 2
       env:
-        SGLANG_ENABLE_QWEN4_MONOKERNEL: '1'
-        SGLANG_ENABLE_QWEN4_MTP_MONOKERNEL: '1'
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
   benchmark:
     env:
@@ -140,11 +142,11 @@ override_c4:
     agg:
       args:
         enable-linear-replayssm-spec: null
+        ple-offload-embedding: null
+        enable-amd-monokernel: true
         max-running-requests: 4
         cuda-graph-max-bs-decode: 4
       env:
-        SGLANG_ENABLE_QWEN4_MONOKERNEL: '1'
-        SGLANG_ENABLE_QWEN4_MTP_MONOKERNEL: '1'
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
   benchmark:
     env:
@@ -156,13 +158,11 @@ override_c8:
     agg:
       args:
         enable-linear-replayssm-spec: null
+        ple-offload-embedding: null
+        enable-amd-monokernel: true
         max-running-requests: 8
         cuda-graph-max-bs-decode: 8
-        speculative-num-steps: 1
-        speculative-num-draft-tokens: 2
       env:
-        SGLANG_ENABLE_QWEN4_MONOKERNEL: '1'
-        SGLANG_ENABLE_QWEN4_MTP_MONOKERNEL: '1'
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
   benchmark:
     env:
