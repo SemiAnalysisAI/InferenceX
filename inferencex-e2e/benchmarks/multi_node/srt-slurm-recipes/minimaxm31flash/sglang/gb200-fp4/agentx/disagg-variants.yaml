@@ -172,7 +172,8 @@ base:
         # 180 GB per rank: 720 GB per node, the matrix's 0.80 DRAM share, leaving
         # headroom for the engine, Mooncake and the OS.
         hicache-size: 80
-        hicache-write-policy: write_back
+        hicache-host-memory-mode: buffer_only
+        hicache-write-policy: write_through
         hicache-storage-backend: mooncake
         hicache-storage-backend-extra-config: '{"enable_group_semantics":true}'
         speculative-algorithm: DSPARK
