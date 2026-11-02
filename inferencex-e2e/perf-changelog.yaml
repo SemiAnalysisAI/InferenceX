@@ -10953,3 +10953,10 @@
     - "Preserve the AMD image, P64/D128, graph512, allocator0.92, GMU0.9, MoRIIO/UMBP, standard warmup and full3600 profiling; reuse the validated AMD Dynamo READ handoff adapter."
   scenario-type: [agentic-coding]
   no-evals: true
+
+- config-keys:
+    - kimik3-fp4-mi355x-dynamo-vllm-disagg-agentic-umbp-c176-mori810
+  description:
+    - "Rebuild MoRI c4399a8 in the original Kimi-K3 image and cap UMBP host registrations at 512 GiB; preserve the Dynamo 2P3D c176 benchmark configuration."
+  scenario-type: [agentic-coding]
+  no-evals: true

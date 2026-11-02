@@ -1752,7 +1752,7 @@ kimik3-fp4-mi355x-vllm-disagg-agentic-umbp-scale:
         prefill: { num-worker: 2, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
         decode: { num-worker: 3, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
 
-kimik3-fp4-mi355x-dynamo-vllm-disagg-agentic-umbp-c176:
+kimik3-fp4-mi355x-dynamo-vllm-disagg-agentic-umbp-c176-mori810:
   image: yukiozzz/vllm-openai-rocm:k3-umbp-pr-stack-83d42f09-runtime@sha256:7b6ed1d61b1237c616acbd111ee5f76cb747f7cf27f5f53fa3a7010727e5a8fc
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
