@@ -11805,6 +11805,5 @@
     - minimaxm31flash-fp4-mi355x-sglang-agentic-dspark
   scenario-type: [agentic-coding]
   description:
-    - "Opt into custom all-reduce on MI355X SGLang MiniMax-M3.1-Flash AgentX (SGLANG_M3_ALLOW_CUSTOM_AR=1): MiniMax-M3 on ROCm otherwise disables it and runs the decode all-reduces on RCCL."
-    - "Keep the all-reduce full precision: ROCM_QUICK_REDUCE_QUANTIZATION=NONE and SGLANG_ENABLE_MINIMAX_M3_AMD_QUICK_REDUCE_INT4=0, so the opt-in does not turn on the image's INT8/INT4 quick reduce."
+    - "Opt MI355X SGLang MiniMax-M3.1-Flash AgentX into custom all-reduce (SGLANG_M3_ALLOW_CUSTOM_AR=1), which MiniMax-M3 on ROCm otherwise disables, at full precision (ROCM_QUICK_REDUCE_QUANTIZATION=NONE)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4745
