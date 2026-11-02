@@ -11791,3 +11791,14 @@
     - "C64 also sets PYTHONHASHSEED=42 and VLLM_ROCM_MINIMAX_M3_SP_PREFILL=1. Sequence-parallel prefill stays off on this checkpoint: at 8d0f05a0c it needs an MXFP8 kernel on layer.quant_method.kernel, which the Quark linear method does not expose, and every rank logs it as off."
     - "Draft data types unchanged: the dspark/ draft loads with its own MXFP8 config (FP8 E4M3 attention and FFN projections with 1x32 UE8M0 scales; BF16 fc, Markov and confidence heads, norms) and an FP8 draft KV cache. Only its length changes, at C16/C32."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4671
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add MiniMax-M3.1-Flash GB300 AgentX on Dynamo + SGLang (KV router, session affinity, DFLASH with the RadixArk DFlash2 draft) with TP4 points at concurrency 8, 16, 24 and 32 and TP2 points with 180 GB per-rank HiCache at concurrency 24, 28, 36 and 40."
+    - "Use the fastokens frontend tokenizer (DYN_TOKENIZER=fastokens) on every point."
+    - "Set per-point admission and decode graph batch at twice the concurrency; prefill is admitted without a prefill-decode interval, which keeps p90 TTFT at 0.2-0.7 s."
+    - "Store the DFlash2 draft KV cache in FP8 (speculative-draft-kv-cache-dtype fp8_e4m3) on every point, as the DSpark recipes do; the pool budget turns the saving into about 9-11 % more target KV tokens."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4744

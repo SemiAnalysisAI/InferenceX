@@ -1,0 +1,193 @@
+schema: 2
+
+base:
+  name: "minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-agg"
+  identity:
+    model: {}
+    container: {}
+  dynamo:
+    # The image ships ai-dynamo 1.7.0.dev20261027: TCP request plane, KV events over ZMQ, etcd discovery.
+    install: false
+    request_plane: tcp
+  environment:
+    HF_HUB_OFFLINE: "1"
+    HF_HUB_CACHE: /hf_hub_cache
+  slurm:
+    time_limit: "4:00:00"
+  # Cold loads of the 250 GB checkpoint plus JIT MSA kernel builds and graph capture outlast the default.
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  resources:
+    gpu_type: "gb300"
+    gpus_per_node: 4
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+    args:
+      router-mode: "kv"
+      router-session-affinity-ttl-secs: "3600"
+      active-decode-blocks-threshold: "None"
+      active-prefill-tokens-threshold: "None"
+      active-prefill-tokens-threshold-frac: "None"
+      # The worker's page size.
+      kv-cache-block-size: "128"
+    env:
+      # ai-dynamo's --tokenizer: the fastokens BPE backend instead of the HuggingFace one.
+      DYN_TOKENIZER: fastokens
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      env:
+        PYTHONNOUSERSITE: "1"
+        PYTHONUNBUFFERED: "1"
+        SGLANG_TIMEOUT_KEEP_ALIVE: "1800"
+        FMHA_SM100_ALLOW_JIT: "1"
+      # Serve flags follow the cookbook's GB300 DFlash cells at
+      # https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1. Dynamo 1.7 makes its tool-call parser
+      # exclusive with SGLang's, so the tool parser is Dynamo's; the reasoning parsers pair.
+      args:
+        served-model-name: "MiniMaxAI/MiniMax-M3.1-Flash"
+        trust-remote-code: true
+        reasoning-parser: minimax-m3
+        dyn-reasoning-parser: minimax_m3
+        dyn-tool-call-parser: minimax_m3
+        # DFlash2 verifies 8 tokens per step (K = 7). Throughput runs switch to synthetic acceptance at the golden
+        # acceptance length.
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: "RadixArk/Minimax-M3.1-Flash-Dflash2"
+        speculative-draft-model-revision: "923bf1d4b567d5ccb71b0488c6e61b5e4794e92a"
+        speculative-num-draft-tokens: 8
+        speculative-use-block-verification: true
+        # The draft KV in FP8, as the DSpark recipes keep it; the pool budget converts the saving into target KV.
+        speculative-draft-kv-cache-dtype: fp8_e4m3
+        cuda-graph-backend-prefill: breakable
+        chunked-prefill-size: 32768
+        kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:5557"}'
+        watchdog-timeout: 3600
+        enable-metrics: true
+  sbatch_directives:
+    mem: "0"
+  srun_options:
+    mem: "0"
+  benchmark:
+    env:
+      TOKENIZER: /model
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: "900000"
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+      AGENTIC_WARMUP_GRACE_PERIOD: "3600"
+
+# TP4 Balanced (TRT-LLM routed MoE), GPU-resident KV. Admission is 2x CONC (subagent fan-out); the decode graph batch
+# matches it. Prefill runs as soon as it is admitted (no prefill-decode interval), which keeps p90 TTFT at 0.2-0.7 s.
+
+override_tp4_c8:
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 4
+        moe-runner-backend: flashinfer_trtllm_routed
+        mem-fraction-static: 0.8
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+
+override_tp4_c16:
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 4
+        moe-runner-backend: flashinfer_trtllm_routed
+        mem-fraction-static: 0.8
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+
+override_tp4_c24:
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 4
+        moe-runner-backend: flashinfer_trtllm_routed
+        mem-fraction-static: 0.8
+        max-running-requests: 48
+        cuda-graph-max-bs-decode: 48
+
+override_tp4_c32:
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 4
+        moe-runner-backend: flashinfer_trtllm_routed
+        mem-fraction-static: 0.8
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 64
+
+# TP2 with L2 HiCache: a two-GPU engine at 180 GB per rank (write_back), inside its half of the tray's CPU DRAM.
+
+override_tp2_c24:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        moe-runner-backend: flashinfer_trtllm_routed
+        mem-fraction-static: 0.87
+        max-running-requests: 48
+        cuda-graph-max-bs-decode: 48
+        enable-hierarchical-cache: true
+        hicache-size: 180
+        hicache-write-policy: write_back
+
+override_tp2_c28:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        moe-runner-backend: flashinfer_trtllm_routed
+        mem-fraction-static: 0.87
+        max-running-requests: 56
+        cuda-graph-max-bs-decode: 56
+        enable-hierarchical-cache: true
+        hicache-size: 180
+        hicache-write-policy: write_back
+
+override_tp2_c36:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        moe-runner-backend: flashinfer_trtllm_routed
+        mem-fraction-static: 0.87
+        max-running-requests: 72
+        cuda-graph-max-bs-decode: 72
+        enable-hierarchical-cache: true
+        hicache-size: 180
+        hicache-write-policy: write_back
+
+override_tp2_c40:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        moe-runner-backend: flashinfer_trtllm_routed
+        mem-fraction-static: 0.87
+        max-running-requests: 80
+        cuda-graph-max-bs-decode: 80
+        enable-hierarchical-cache: true
+        hicache-size: 180
+        hicache-write-policy: write_back
