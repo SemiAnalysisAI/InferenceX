@@ -301,14 +301,22 @@ pushes a synchronization commit, waits for checks, then merges.
 
 At merge, `merge-ingest.yml` ("Merge Ingest") publishes the reused sweep. It
 runs on pushes to `main` that change `inferencex-e2e/perf-changelog.yaml`. Its
-single `ingest` job resolves the merge commit's PR, reuse command, and source
-run with `infx.workflows.reuse`, computes the changelog delta with
-`infx.matrix.plan`, and fails before uploading or dispatching anything unless
-reuse is validly authorized. It then uploads merge-time `changelog-metadata`
+single `ingest` job first computes the changelog delta with `infx.matrix.plan`.
+For entries with results, it resolves the merge commit's PR, reuse command, and
+source run with `infx.workflows.reuse`, and fails before uploading or dispatching
+anything unless reuse is validly authorized. It then uploads merge-time `changelog-metadata`
 and sends one `repository_dispatch` to InferenceX-app: `ingest-agentic-results`
 (with `database-target: production`) when the delta has agentic entries,
 otherwise `ingest-results`. The payload's `source-run-id` is the reused PR
 `run-sweep.yml` run and its `merge-run-id` is the Merge Ingest run.
+
+For a nonempty delta consisting entirely of `retired: true` entries, the planner
+verifies that the selected configs existed in the base and are absent from the
+head. There are no result artifacts to reuse: merge these PRs directly after
+review and required checks, without `/use` or `merge_with_reuse`. Merge Ingest
+uploads the validated changelog metadata but skips reuse lookup and database
+dispatch. Empty or mixed deltas do not receive this exception. Ingest recovery
+excludes retired entries from mixed changes and rejects retirement-only changes.
 
 The app downloads source artifacts, keeps the newest upload for each exact
 artifact name, and ingests them with changelog metadata from the merge run. The
