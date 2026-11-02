@@ -37,11 +37,21 @@ runs:
           env:
               HEAD_REF: ${{ inputs.head-ref }}
               BASE_REF: ${{ inputs.base-ref }}
+              SCOPE: ${{ inputs.scope }}
               DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           run: |
+              if [ "$SCOPE" != "full" ] && [ "$SCOPE" != "patchwork" ]; then
+                  echo "::error::scope must be full or patchwork, got '$SCOPE'" >&2
+                  exit 1
+              fi
               head=$(git rev-parse --verify "${HEAD_REF}^{commit}")
               base="$BASE_REF"
               if [ -z "$base" ]; then
+                  if [ "$(git rev-parse --is-shallow-repository)" = "true" ] ||
+                     ! git rev-parse --verify -q "origin/${DEFAULT_BRANCH}" >/dev/null; then
+                      echo "::error::classify-priority needs a full-history checkout (fetch-depth: 0) with origin/${DEFAULT_BRANCH}" >&2
+                      exit 1
+                  fi
                   if git merge-base --is-ancestor "$head" "origin/${DEFAULT_BRANCH}"; then
                       echo "Head $head is already on ${DEFAULT_BRANCH}; skipping priority classification."
                       exit 0
