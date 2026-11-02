@@ -42,9 +42,9 @@ class X86CPU(CPU):
     provenance: Provenance = X86_CPU_BASELINE
     _state_power_w: ClassVar[dict[str, float]] = {
         "Idle": 80.0,
-        "FixedSeqLen": 120.0,
-        "Agentic": 150.0,
-        "AgenticOffloadingOn": 200.0,
+        "FixedSeqLen": 165.0,
+        "Agentic": 180.0,
+        "AgenticOffloadingOn": 195.0,
     }
 
     @classmethod

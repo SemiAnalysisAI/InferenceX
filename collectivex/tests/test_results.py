@@ -15,7 +15,7 @@ import sweep_matrix  # noqa: E402
 
 RESULTS = ROOT / "results"
 CASES = RESULTS / "cases.json"
-SUITES = "ep,swap-blocks"
+SUITES = "ep,swap-blocks,kv-transfer"
 
 
 class CasesJson(unittest.TestCase):
