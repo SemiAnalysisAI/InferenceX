@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Literal
 
 from infx.bench import env as inputs, proc, server
+from infx.bench.agentic import reuse
 from infx.bench.agentic.replay import (
     REQUIRED as REPLAY_REQUIRED,
     ReplayConfig,
@@ -111,8 +112,18 @@ def _power_mode(switches: Mapping[str, str], env: Mapping[str, str]) -> PowerMod
     return "window" if env.get("SRT_MEASUREMENT_WINDOW_DIR") else "missing"
 
 
-def execute(plan: Plan, runtime: Runtime, environ: Mapping[str, str]) -> int:
-    """Run ``plan`` with ``runtime``'s tools; ``environ`` seeds every child's environment."""
+def execute(
+    plan: Plan,
+    runtime: Runtime,
+    environ: Mapping[str, str],
+    *,
+    client_exit_timeout: float | None = None,
+) -> int:
+    """Run ``plan`` with ``runtime``'s tools; ``environ`` seeds every child's environment.
+
+    With ``client_exit_timeout``, the replay runs in its own session and ``BenchError``
+    is raised unless every client process exits within that many seconds of the replay.
+    """
     cfg = plan.replay
     python = str(runtime.python)
     env = {
@@ -138,7 +149,12 @@ def execute(plan: Plan, runtime: Runtime, environ: Mapping[str, str]) -> int:
     (plan.result_dir / "benchmark_command.txt").write_text(f"{shlex.join(argv)}\n")
     log = plan.result_dir / "benchmark.log"
     with proc.DeferSignals() as signals:
-        replay_rc = 0 if signals.received else proc.tee(argv, log, env)
+        if signals.received:
+            replay_rc = 0
+        elif client_exit_timeout is None:
+            replay_rc = proc.tee(argv, log, env)
+        else:
+            replay_rc = proc.tee(argv, log, env, session=signals, exit_timeout=client_exit_timeout)
     if signals.received:
         return 128 + signals.received
     return _score(plan, python, env, replay_rc)
@@ -250,7 +266,9 @@ def main(argv: list[str]) -> int:
         prog="python3 -m infx.bench agentic",
         description="Replay AgentX traces at one concurrency against a ready server.",
     ).parse_args(argv)
-    plan = Plan.from_env(os.environ)
+    group = reuse.Group.from_env(os.environ) if reuse.enabled(os.environ) else None
+    plans = [Plan.from_env(point) for point in group.points] if group else []
+    plan = plans[0] if group else Plan.from_env(os.environ)
     runtime = Runtime.for_job(os.environ)
     if not runtime.active():
         print(f"Preparing the AgentX runtime in {runtime.venv}", flush=True)
@@ -259,4 +277,6 @@ def main(argv: list[str]) -> int:
             return rc
         environ = {**os.environ, "PYTHONPATH": proc.pythonpath(), "PYTHONSAFEPATH": "1"}
         runtime.exec_python(["-m", "infx.bench", "agentic", *argv], environ)
+    if group:
+        return reuse.run(group, plans, runtime, execute)
     return execute(plan, runtime, os.environ)

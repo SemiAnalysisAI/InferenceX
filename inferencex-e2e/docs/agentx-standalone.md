@@ -56,8 +56,10 @@ or pass `--random-seed 123` to use a different seed.
 
 Allow additional time for dataset preparation, warmup, and draining requests.
 To sweep, restart the server for every `CONC` value and use a fresh output
-directory. Do not flush caches or reuse a live server across concurrency points. Match the target
-recipe's duration and warmup settings when reproducing a result.
+directory. Do not flush caches or reuse a live server across concurrency points by hand; the
+wrapper's opt-in [server reuse](agentx-server-reuse.md) is the only supported way, and it
+enforces a drained, reset boundary between points. Match the target recipe's duration and
+warmup settings when reproducing a result.
 
 Add `--server-metrics "${SERVER_URL}/metrics"` if the server exposes metrics.
 
