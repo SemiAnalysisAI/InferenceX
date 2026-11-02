@@ -1,0 +1,69 @@
+diff --git a/python/sglang/srt/models/qwen4_exp.py b/python/sglang/srt/models/qwen4_exp.py
+index 541fc56c4d..7855fa3e26 100644
+--- a/python/sglang/srt/models/qwen4_exp.py
++++ b/python/sglang/srt/models/qwen4_exp.py
+@@ -165,10 +165,24 @@ def _ple_table_is_fp8(
+     return False
+ 
+ 
++def _num_rows(hidden_states: Union[torch.Tensor, PerTokenFp8Activation]) -> int:
++    # A shared-quantized activation is a struct of tensors with no .shape.
++    if isinstance(hidden_states, PerTokenFp8Activation):
++        return hidden_states.num_tokens
++    return hidden_states.shape[0]
++
++
+ @eager_on_graph(True)
+-def _breakable_qsa_indexer(layer, hidden_states, positions, output):
++def _breakable_qsa_indexer(
++    layer, hidden_states, positions, output, hidden_states_scale=None
++):
+     """Writes the top-k into ``output``, the caller's rows of the layer's bridge;
+-    allocates a new bridge when ``output`` is None."""
++    allocates a new bridge when ``output`` is None. A shared-quantized activation
++    arrives as its two tensors, which the graph holds weakly, and is rebuilt here."""
++    if hidden_states_scale is not None:
++        hidden_states = PerTokenFp8Activation(
++            data=hidden_states, scale=hidden_states_scale
++        )
+     # Read the live batch on every replay of this eager break.
+     forward_batch = get_tc_piecewise_forward_context().forward_batch
+     topk = layer._compute_qsa_topk_indices_eager(
+@@ -180,7 +194,7 @@ def _breakable_qsa_indexer(layer, hidden_states, positions, output):
+         # Separate buffers cost up to buckets * max_tokens * block_topk * 4B * QSA
+         # layers. For 8 buckets / 16K tokens / topk512 / 12 layers: 3 GiB -> 384 MiB
+         # shared. Graphs captured on a smaller bridge keep writing and reading it.
+-        output = topk.new_empty((hidden_states.shape[0], topk.shape[1]))
++        output = topk.new_empty((_num_rows(hidden_states), topk.shape[1]))
+         layer._qsa_prefill_topk_bridges.insert(0, output)
+     output.fill_(0)
+     output[: topk.shape[0]].copy_(topk)
+@@ -1893,7 +1907,7 @@ class Qwen4ExpAttentionDecoderLayer(
+         forward_batch: ForwardBatch,
+     ) -> torch.Tensor:
+         if is_in_breakable_cuda_graph() and forward_batch.forward_mode.is_extend():
+-            rows = hidden_states.shape[0]
++            rows = _num_rows(hidden_states)
+             bridges = self._qsa_prefill_topk_bridges
+             output = (
+                 bridges[0][:rows] if bridges and bridges[0].shape[0] >= rows else None
+@@ -1903,11 +1917,18 @@ class Qwen4ExpAttentionDecoderLayer(
+             assert output is not None or _current_capture_var.get() is None, (
+                 "qsa top-k bridge not allocated before capture"
+             )
++            if isinstance(hidden_states, PerTokenFp8Activation):
++                indexer_inputs = dict(
++                    hidden_states=hidden_states.data,
++                    hidden_states_scale=hidden_states.scale,
++                )
++            else:
++                indexer_inputs = dict(hidden_states=hidden_states)
+             _breakable_qsa_indexer(
+                 layer=self,
+-                hidden_states=hidden_states,
+                 positions=positions,
+                 output=output,
++                **indexer_inputs,
+             )
+             if output is None:  # first run: the break allocated the bridge
+                 output = bridges[0][:rows]

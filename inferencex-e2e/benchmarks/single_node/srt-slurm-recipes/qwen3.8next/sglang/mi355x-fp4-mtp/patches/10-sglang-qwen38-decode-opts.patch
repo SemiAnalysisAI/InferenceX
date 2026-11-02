@@ -1,36 +1,8 @@
-From 48ddac276c34819ca8ab436d3d51f686e80e213a Mon Sep 17 00:00:00 2001
-From: Christian Gilli <272772515+amd-cgilli@users.noreply.github.com>
-Date: Mon, 19 Oct 2026 11:11:37 +0000
-Subject: [PATCH] [AMD][Qwen3.8] Opt-in decode optimizations for Qwen3.8
-
-Off by default:
-- SGLANG_OPT_QWEN4_SHARED_ATTN_QUANT: per-token FP8-quantize hidden_states
-  once for QSA qkv_proj and the indexer's index_qk_proj (bit-exact).
-- SGLANG_OPT_QWEN4_FUSED_GDN_NORM_QUANT: fuse GDN's gated RMSNorm with
-  out_proj's per-token FP8 quant (AITER gated_rmsnorm_fp8_per_token_quant).
-- SGLANG_OPT_QWEN_MOE_FUSED_SHARED_TOPK: fold shared_expert_gate into the
-  router GEMM and let AITER topk_gating write the shared slot.
-- SGLANG_OPT_AITER_LM_HEAD_GEMM: BF16 lm_head through AITER tgemm.
-
-From amd-nprotaso/sglang qwen_3_8_improvement: 6c6300f49f.
----
- python/sglang/srt/environ.py                  |  12 +
- .../srt/layers/attention/qsa/qsa_indexer.py   |  24 +-
- python/sglang/srt/layers/logits_processor.py  |  16 ++
- python/sglang/srt/layers/moe/topk.py          | 101 ++++++++-
- .../srt/layers/quantization/fp8_utils.py      | 185 ++++++++++-----
- .../srt/layers/quantization/quark/quark.py    |  13 ++
- .../quark/schemes/quark_w8a8_fp8.py           |  25 +-
- python/sglang/srt/models/qwen2_moe.py         | 213 +++++++++++++++++-
- python/sglang/srt/models/qwen3_5.py           |  97 +++++++-
- python/sglang/srt/models/qwen4_exp.py         |  18 +-
- 10 files changed, 617 insertions(+), 87 deletions(-)
-
 diff --git a/python/sglang/srt/environ.py b/python/sglang/srt/environ.py
-index fc39d9db5a..aca9f95cc9 100644
+index 4c0cf68f80..67a3c3669b 100644
 --- a/python/sglang/srt/environ.py
 +++ b/python/sglang/srt/environ.py
-@@ -927,6 +927,12 @@ class Envs:
+@@ -1062,6 +1062,12 @@ class Envs:
      # "fused" instead runs the whole chunked prefill as one FlyDSL kernel
      # (state kept on chip, l2norm and track snapshot in-kernel).
      SGLANG_AITER_GDN_PREFILL_H = EnvStr("triton")
@@ -41,12 +13,12 @@ index fc39d9db5a..aca9f95cc9 100644
 +    # indexer's index_qk_proj (both Quark dynamic FP8); bit-exact.
 +    SGLANG_OPT_QWEN4_SHARED_ATTN_QUANT = EnvBool(False)
      SGLANG_USE_AITER_AG = EnvBool(True)
-     # Use reduce_scatter (instead of all_reduce + dp_scatter) for the equal-chunk
-     # MAX_LEN DP-MoE combine. Default ON for ROCm/HIP (uses the aiter custom
-@@ -981,6 +987,12 @@ class Envs:
-     SGLANG_ROCM_FUSED_DECODE_MLA = EnvBool(False)
-     # Route Qwen3.8's 512-expert softmax router through aiter `topk_gating`.
-     SGLANG_ROCM_USE_AITER_TOPK_GATING = EnvBool(True)
+     # The gfx950 TP4 JIT quick all-reduce (quick_all_reduce_hip) runs an INT4 request below this
+     # many MiB in INT8, which is as fast at decode sizes with about 1/16 of INT4's error; 0 runs
+@@ -1137,6 +1143,12 @@ class Envs:
+     # Set this to 1 to stop sglang from clearing an inherited
+     # ROCPROFILER_REGISTER_LIBRARY.
+     SGLANG_ROCM_KEEP_INHERITED_ROCPROFILER_REGISTER = EnvBool(False)
 +    # Fold shared_expert_gate into the router GEMM and let aiter topk_gating write
 +    # the shared slot; not bit-exact (N=528 GEMM, sigmoid of a bf16 logit).
 +    SGLANG_OPT_QWEN_MOE_FUSED_SHARED_TOPK = EnvBool(False)
@@ -57,10 +29,10 @@ index fc39d9db5a..aca9f95cc9 100644
      USE_ROCM_AITER_ROPE_BACKEND = EnvStr("0")
      # Enable dual-stream MoE (shared experts vs routed experts) on the
 diff --git a/python/sglang/srt/layers/attention/qsa/qsa_indexer.py b/python/sglang/srt/layers/attention/qsa/qsa_indexer.py
-index 73d4386b14..6ccf1cdf78 100644
+index f9cb4f09d6..f64a237c4a 100644
 --- a/python/sglang/srt/layers/attention/qsa/qsa_indexer.py
 +++ b/python/sglang/srt/layers/attention/qsa/qsa_indexer.py
-@@ -26,6 +26,7 @@ from sglang.srt.layers.cp.utils import (
+@@ -32,6 +32,7 @@ from sglang.srt.layers.cp.utils import (
  )
  from sglang.srt.layers.layernorm import GemmaRMSNorm
  from sglang.srt.layers.linear import ReplicatedLinear
@@ -68,7 +40,7 @@ index 73d4386b14..6ccf1cdf78 100644
  from sglang.srt.layers.rotary_embedding.utils import apply_rotary_emb
  from sglang.srt.layers.utils.multi_platform import MultiPlatformOp
  from sglang.srt.model_executor.runner import get_is_capture_mode
-@@ -168,7 +169,7 @@ class QSAIndexer(MultiPlatformOp):
+@@ -174,7 +175,7 @@ class QSAIndexer(MultiPlatformOp):
  
      def project_qk(
          self,
@@ -77,7 +49,7 @@ index 73d4386b14..6ccf1cdf78 100644
          positions: torch.Tensor,
          pool=None,
          cache_loc: torch.Tensor | None = None,
-@@ -635,7 +636,7 @@ class QSAIndexer(MultiPlatformOp):
+@@ -695,7 +696,7 @@ class QSAIndexer(MultiPlatformOp):
  
      def _forward_impl(
          self,
@@ -86,7 +58,7 @@ index 73d4386b14..6ccf1cdf78 100644
          positions: torch.Tensor,
          forward_batch,
          indexer_metadata,
-@@ -678,10 +679,15 @@ class QSAIndexer(MultiPlatformOp):
+@@ -738,10 +739,15 @@ class QSAIndexer(MultiPlatformOp):
                  "QSA logical positions are shorter than the request mapping: "
                  f"positions={logical_positions.numel()}, mapping={num_valid_tokens}"
              )
@@ -104,7 +76,7 @@ index 73d4386b14..6ccf1cdf78 100644
              )
          position_tokens = (
              positions.shape[-1] if positions.ndim == 2 else positions.numel()
-@@ -693,7 +699,11 @@ class QSAIndexer(MultiPlatformOp):
+@@ -753,7 +759,11 @@ class QSAIndexer(MultiPlatformOp):
              )
  
          logical_positions = logical_positions[:num_valid_tokens]
@@ -117,7 +89,7 @@ index 73d4386b14..6ccf1cdf78 100644
          positions = (
              positions[:, :num_valid_tokens]
              if positions.ndim == 2
-@@ -759,7 +769,7 @@ class QSAIndexer(MultiPlatformOp):
+@@ -822,7 +832,7 @@ class QSAIndexer(MultiPlatformOp):
  
      def forward_cuda(
          self,
@@ -126,7 +98,7 @@ index 73d4386b14..6ccf1cdf78 100644
          positions: torch.Tensor,
          forward_batch,
          indexer_metadata,
-@@ -775,7 +785,7 @@ class QSAIndexer(MultiPlatformOp):
+@@ -838,7 +848,7 @@ class QSAIndexer(MultiPlatformOp):
  
      def forward_xpu(
          self,
@@ -136,20 +108,12 @@ index 73d4386b14..6ccf1cdf78 100644
          forward_batch,
          indexer_metadata,
 diff --git a/python/sglang/srt/layers/logits_processor.py b/python/sglang/srt/layers/logits_processor.py
-index f35efc4575..b6efe7408b 100644
+index ede078b6c7..84178c096d 100644
 --- a/python/sglang/srt/layers/logits_processor.py
 +++ b/python/sglang/srt/layers/logits_processor.py
-@@ -65,6 +65,7 @@ from sglang.srt.runtime_context import (
- )
- from sglang.srt.utils.common import (
-     is_cpu,
-+    is_hip,
-     is_npu,
-     is_pin_memory_available,
-     use_intel_amx_backend,
-@@ -485,6 +486,11 @@ class LogitsProcessor(nn.Module):
-         self.return_full_logits = return_full_logits
-         self.enable_mis = get_exec().features.enable_mis
+@@ -568,6 +568,11 @@ class LogitsProcessor(nn.Module):
+         )
+         self._aux_hidden_states_checked = False
          self.rl_on_policy_target = get_exec().deterministic.rl_on_policy_target
 +        self.use_aiter_lm_head_gemm = (
 +            envs.SGLANG_OPT_AITER_LM_HEAD_GEMM.get()
@@ -159,10 +123,10 @@ index f35efc4575..b6efe7408b 100644
  
          self._logits_gatherer = triton_symm_mem_ag.MultimemAllGatherer(
              max_tokens=triton_symm_mem_ag.recommended_max_tokens(
-@@ -1013,6 +1019,16 @@ class LogitsProcessor(nn.Module):
-                 logits = torch.matmul(
-                     hidden_states.bfloat16(), lm_head.weight.T.bfloat16()
+@@ -1252,6 +1257,16 @@ class LogitsProcessor(nn.Module):
                  )
+             elif _aiter_lm_head_ok(hidden_states, lm_head.weight):
+                 logits = tgemm.mm(hidden_states, lm_head.weight)
 +            elif (
 +                self.use_aiter_lm_head_gemm
 +                and lm_head.weight.dtype == torch.bfloat16
@@ -177,67 +141,67 @@ index f35efc4575..b6efe7408b 100644
                  logits = torch.matmul(
                      hidden_states.to(lm_head.weight.dtype), lm_head.weight.T
 diff --git a/python/sglang/srt/layers/moe/topk.py b/python/sglang/srt/layers/moe/topk.py
-index 9ee0f93095..5a80096a86 100644
+index 75cf27546d..a8a80882cf 100644
 --- a/python/sglang/srt/layers/moe/topk.py
 +++ b/python/sglang/srt/layers/moe/topk.py
-@@ -17,6 +17,7 @@ from __future__ import annotations
- import inspect
+@@ -16,6 +16,7 @@ from __future__ import annotations
+ 
  import logging
  import math
 +import os
  from dataclasses import dataclass, field
  from enum import IntEnum, auto
- from functools import lru_cache
-@@ -200,12 +201,12 @@ def _aiter_topk_gating_renormalizes_softmax() -> bool:
-         return False
+ from typing import (
+@@ -199,6 +200,27 @@ _use_aiter_topk_gating = not envs.SGLANG_ROCM_DISABLE_AITER_TOPK_GATING.get()
+ _AITER_TOPK_GATING_MAX_ROWS = 4096
  
  
--def _use_aiter_topk_gating_softmax(
--    hidden_states: torch.Tensor,
--    gating_output: torch.Tensor,
--    correction_bias: Optional[torch.Tensor],
--    num_fused_shared_experts: int,
--    packed_out: Optional[torch.Tensor],
 +def _aiter_topk_gating_softmax_eligible(
 +    *,
 +    hidden_size: int,
 +    hidden_dtype: torch.dtype,
 +    num_routed_experts: int,
 +    gating_dtype: torch.dtype,
- ) -> bool:
-     # fused_topk has no ASM router for (512, 10); topk_gating has an E=512
-     # kernel since aiter#5334. Hidden sizes 8192 (Qwen3.8) and 2560
-@@ -214,16 +215,92 @@ def _use_aiter_topk_gating_softmax(
-         _use_aiter
-         and _use_aiter_topk_gating
-         and _is_gfx95
--        and hidden_states.shape[1] in (2560, 8192)
--        and hidden_states.dtype == torch.bfloat16
--        and gating_output.shape[1] == 512
--        and gating_output.dtype == torch.bfloat16
--        and gating_output.is_contiguous()
++) -> bool:
++    # fused_topk has no ASM router for (512, 10); topk_gating has an E=512
++    # kernel since aiter#5334. Hidden sizes 8192 (Qwen3.8) and 2560
++    # (Qwen3.8-Flash-Next) limit this to those two models.
++    return (
++        _use_aiter
++        and _use_aiter_topk_gating
++        and _is_gfx95
 +        and hidden_size in (2560, 8192)
 +        and hidden_dtype == torch.bfloat16
 +        and num_routed_experts == 512
 +        and gating_dtype == torch.bfloat16
-+        and _aiter_topk_gating_renormalizes_softmax()
 +    )
 +
 +
-+def _use_aiter_topk_gating_softmax(
-+    hidden_states: torch.Tensor,
-+    gating_output: torch.Tensor,
-+    correction_bias: Optional[torch.Tensor],
-+    num_fused_shared_experts: int,
-+    packed_out: Optional[torch.Tensor],
-+) -> bool:
-+    return (
-+        gating_output.is_contiguous()
+ def _use_aiter_topk_gating_softmax(
+     hidden_states: torch.Tensor,
+     gating_output: torch.Tensor,
+@@ -207,23 +229,78 @@ def _use_aiter_topk_gating_softmax(
+     num_fused_shared_experts: int,
+     packed_out: Optional[torch.Tensor],
+ ) -> bool:
+-    # fused_topk has no ASM router for (512, 10); topk_gating has an E=512
+-    # kernel since aiter#5334. Hidden sizes 8192 (Qwen3.8) and 2560
+-    # (Qwen3.8-Flash-Next) limit this to those two models.
+     return (
+-        _use_aiter
+-        and _use_aiter_topk_gating
+-        and _is_gfx95
+-        and hidden_states.shape[1] in (2560, 8192)
+-        and hidden_states.dtype == torch.bfloat16
+-        and gating_output.shape[1] == 512
+-        and gating_output.dtype == torch.bfloat16
+-        and topk == 10
++        topk == 10
+         and gating_output.is_contiguous()
          and gating_output.shape[0] <= _AITER_TOPK_GATING_MAX_ROWS
          and correction_bias is None
          and num_fused_shared_experts == 0
          and packed_out is None
--        and _aiter_topk_gating_renormalizes_softmax()
 +        and _aiter_topk_gating_softmax_eligible(
 +            hidden_size=hidden_states.shape[1],
 +            hidden_dtype=hidden_states.dtype,
@@ -307,7 +271,7 @@ index 9ee0f93095..5a80096a86 100644
  
  
 diff --git a/python/sglang/srt/layers/quantization/fp8_utils.py b/python/sglang/srt/layers/quantization/fp8_utils.py
-index 6fa480b3b8..39ab9a4dcb 100755
+index 9457090f25..d4db5bf58b 100755
 --- a/python/sglang/srt/layers/quantization/fp8_utils.py
 +++ b/python/sglang/srt/layers/quantization/fp8_utils.py
 @@ -5,6 +5,7 @@ from enum import Enum
@@ -318,7 +282,7 @@ index 6fa480b3b8..39ab9a4dcb 100755
  import torch
  
  from sglang.kernels.ops.gemm.fp8_kernel import (
-@@ -2237,6 +2238,114 @@ def use_aiter_bpreshuffle_gemm(output_size: int) -> bool:
+@@ -2481,6 +2482,114 @@ def use_aiter_bpreshuffle_gemm(output_size: int) -> bool:
      return _use_aiter and output_size % 64 == 0
  
  
@@ -433,7 +397,7 @@ index 6fa480b3b8..39ab9a4dcb 100755
  def apply_fp8_linear_bmm_flashinfer(
      input: torch.Tensor,
      weight: torch.Tensor,
-@@ -2377,22 +2486,17 @@ def apply_fp8_linear(
+@@ -2621,22 +2730,17 @@ def apply_fp8_linear(
              )
          else:
              # default use per-token quantization if dynamic
@@ -466,7 +430,7 @@ index 6fa480b3b8..39ab9a4dcb 100755
  
      if channelwise_cutlass:
          # A tuned config exists only for shapes where tuned Triton beat the
-@@ -2454,48 +2558,15 @@ def apply_fp8_linear(
+@@ -2708,48 +2812,15 @@ def apply_fp8_linear(
          # into this sector means use dynamic per-token-per-channel quant
          # per-token scale quant for input matrix, every row(one token) have one scale factor
          # per-channel scale quant for weight matrix, every col(one channel) have one scale factor
@@ -525,10 +489,10 @@ index 6fa480b3b8..39ab9a4dcb 100755
      if per_tensor_weights and per_tensor_activations:
          # Fused GEMM_DQ; _scaled_mm with torch.compile requires len(weight_scale.shape) == len(x_scale.shape)
 diff --git a/python/sglang/srt/layers/quantization/quark/quark.py b/python/sglang/srt/layers/quantization/quark/quark.py
-index 19effc3dbd..5324f42730 100644
+index e4dad52793..e593d554fc 100644
 --- a/python/sglang/srt/layers/quantization/quark/quark.py
 +++ b/python/sglang/srt/layers/quantization/quark/quark.py
-@@ -1145,6 +1145,19 @@ class QuarkLinearMethod(LinearMethodBase):
+@@ -1373,6 +1373,19 @@ class QuarkLinearMethod(LinearMethodBase):
          return scheme.apply_weights(layer, x, bias=bias)
  
  
@@ -610,10 +574,10 @@ index eb0d05aeb0..107eadc393 100644
          # [N, 1]) is gated off the aiter fused RMSNorm+quant kernel upstream by
          # _is_block_scale_fp8, so the per-token quant happens in apply_fp8_linear.
 diff --git a/python/sglang/srt/models/qwen2_moe.py b/python/sglang/srt/models/qwen2_moe.py
-index bb1719595e..baa2135680 100644
+index d53e1321d5..972e35acc4 100644
 --- a/python/sglang/srt/models/qwen2_moe.py
 +++ b/python/sglang/srt/models/qwen2_moe.py
-@@ -63,10 +63,20 @@ from sglang.srt.layers.linear import (
+@@ -62,10 +62,20 @@ from sglang.srt.layers.linear import (
      RowParallelLinear,
  )
  from sglang.srt.layers.logits_processor import LogitsProcessor
@@ -636,7 +600,7 @@ index bb1719595e..baa2135680 100644
  from sglang.srt.layers.moe.utils import (
      RoutingMethodType,
      filter_moe_weight_param_global_expert,
-@@ -92,11 +102,17 @@ from sglang.srt.model_executor.runner import get_is_capture_mode
+@@ -91,11 +101,17 @@ from sglang.srt.model_executor.runner import get_is_capture_mode
  from sglang.srt.model_executor.runner_backend_utils.breakable_cuda_graph.context import (
      is_in_breakable_cuda_graph,
  )
@@ -654,7 +618,7 @@ index bb1719595e..baa2135680 100644
  )
  from sglang.srt.utils import (
      add_prefix,
-@@ -107,6 +123,7 @@ from sglang.srt.utils import (
+@@ -106,6 +122,7 @@ from sglang.srt.utils import (
      is_hip,
      is_npu,
      make_pp_layers,
@@ -662,7 +626,7 @@ index bb1719595e..baa2135680 100644
      use_intel_amx_backend,
  )
  from sglang.srt.utils.hf_transformers_utils import get_rope_config
-@@ -252,6 +269,113 @@ class Qwen2MoeMLP(nn.Module):
+@@ -251,6 +268,113 @@ class Qwen2MoeMLP(nn.Module):
          return x
  
  
@@ -776,7 +740,7 @@ index bb1719595e..baa2135680 100644
  class Qwen2MoeSparseMoeBlock(nn.Module):
      def __init__(
          self,
-@@ -388,6 +512,7 @@ class Qwen2MoeSparseMoeBlock(nn.Module):
+@@ -392,6 +516,7 @@ class Qwen2MoeSparseMoeBlock(nn.Module):
              )
          else:
              self.shared_expert_gate = torch.nn.Linear(config.hidden_size, 1, bias=False)
@@ -784,7 +748,7 @@ index bb1719595e..baa2135680 100644
  
          if (
              get_moe_a2a_backend().is_deepep()
-@@ -404,6 +529,87 @@ class Qwen2MoeSparseMoeBlock(nn.Module):
+@@ -409,6 +534,87 @@ class Qwen2MoeSparseMoeBlock(nn.Module):
          self._mega_intermediate_size = config.moe_intermediate_size
          self._mega_hidden_size = config.hidden_size
  
@@ -872,7 +836,7 @@ index bb1719595e..baa2135680 100644
      def get_moe_weights(self):
          return [
              x.data
-@@ -709,6 +915,9 @@ class Qwen2MoeSparseMoeBlock(nn.Module):
+@@ -696,6 +902,9 @@ class Qwen2MoeSparseMoeBlock(nn.Module):
          *,
          defer_finalize: bool = False,
      ):
@@ -883,10 +847,10 @@ index bb1719595e..baa2135680 100644
              from sglang.kernels.ops.moe.smallm_router_gfx950 import qwen_moe_topk_output
  
 diff --git a/python/sglang/srt/models/qwen3_5.py b/python/sglang/srt/models/qwen3_5.py
-index 207b95a56a..273b514619 100644
+index 085662be85..9954bd521d 100644
 --- a/python/sglang/srt/models/qwen3_5.py
 +++ b/python/sglang/srt/models/qwen3_5.py
-@@ -94,6 +94,10 @@ from sglang.srt.layers.parameter import (
+@@ -95,6 +95,10 @@ from sglang.srt.layers.parameter import (
      PerTensorScaleParameter,
  )
  from sglang.srt.layers.quantization.base_config import QuantizationConfig
@@ -897,7 +861,7 @@ index 207b95a56a..273b514619 100644
  from sglang.srt.layers.quantization.unquant import (
      UnquantizedLinearMethod,
      bf16_gemm_dispatch,
-@@ -146,6 +150,7 @@ from sglang.srt.utils import (
+@@ -147,6 +151,7 @@ from sglang.srt.utils import (
      is_cpu,
      is_cuda,
      is_gfx95_supported,
@@ -905,7 +869,7 @@ index 207b95a56a..273b514619 100644
      is_hip,
      is_npu,
      is_xpu,
-@@ -186,8 +191,22 @@ _gdn_hip_prefill_views = _use_aiter and get_bool_env_var(
+@@ -187,13 +192,27 @@ _gdn_hip_prefill_views = _use_aiter and get_bool_env_var(
      "SGLANG_GDN_HIP_PREFILL_VIEWS", "False"
  )
  _gdn_decode_fused_proj_conv = (
@@ -918,6 +882,11 @@ index 207b95a56a..273b514619 100644
 +    and not is_gfx1250_supported()
 +    and envs.SGLANG_OPT_QWEN4_FUSED_GDN_NORM_QUANT.get()
  )
+ _gdn_online_mxfp4 = (
+     ("in_proj_qkvz", "out_proj")
+     if envs.SGLANG_ROCM_GDN_ONLINE_MXFP4.get() and _use_aiter and _is_gfx95
+     else ()
+ )
 +if _gdn_fused_norm_quant:
 +    from aiter.ops.gated_rmsnorm_fp8_per_token_quant import (
 +        gated_rmsnorm_fp8_per_token_quant,
@@ -929,7 +898,7 @@ index 207b95a56a..273b514619 100644
  _is_amx_available = cpu_has_amx_support()
  _is_xpu = is_xpu()
  
-@@ -356,6 +375,25 @@ if _is_npu:
+@@ -365,6 +384,25 @@ if _is_npu:
      )
  
  
@@ -955,7 +924,7 @@ index 207b95a56a..273b514619 100644
  class Qwen3_5GatedDeltaNet(nn.Module):
      def __init__(
          self,
-@@ -528,6 +566,14 @@ class Qwen3_5GatedDeltaNet(nn.Module):
+@@ -537,6 +575,14 @@ class Qwen3_5GatedDeltaNet(nn.Module):
              parallel_group=parallel_group,
              prefix=add_prefix("out_proj", prefix),
          )
@@ -968,21 +937,9 @@ index 207b95a56a..273b514619 100644
 +            )
 +        )
  
-     @staticmethod
-     def _override_weight_loader(param, loader):
-@@ -1035,9 +1081,8 @@ class Qwen3_5GatedDeltaNet(nn.Module):
-                 num_k_heads_tp = triton.cdiv(self.num_k_heads, self.attn_tp_size)
-                 num_v_heads_tp = triton.cdiv(self.num_v_heads, self.attn_tp_size)
-             use_strided_prefill_z = (
--                (_is_cuda or _gdn_hip_prefill_views)
--                and forward_batch.forward_mode.is_extend_without_speculative()
--            )
-+                _is_cuda or _gdn_hip_prefill_views
-+            ) and forward_batch.forward_mode.is_extend_without_speculative()
-             split_fn = (
-                 qwen3_5_gdn_prefill_projection_views
-                 if use_strided_prefill_z
-@@ -1094,6 +1139,17 @@ class Qwen3_5GatedDeltaNet(nn.Module):
+         if _gdn_online_mxfp4 and config.model_type in _QWEN3_5_ROCM_PACKED_MODEL_TYPES:
+             from sglang.srt.layers.quantization.quark.schemes.quark_w4a4_mxfp4 import (
+@@ -1121,6 +1167,17 @@ class Qwen3_5GatedDeltaNet(nn.Module):
              core_attn_out_pad[: core_attn_out.shape[0], :] = core_attn_out
              core_attn_out = core_attn_out_pad
  
@@ -1000,7 +957,7 @@ index 207b95a56a..273b514619 100644
          nv = self.num_v_heads // self.attn_tp_size
          if not use_strided_prefill_z and _fp8_tuple_input(self.out_proj, len(z) // nv):
              fp8, _, _ = _layer_norm_fwd(
-@@ -1118,6 +1174,34 @@ class Qwen3_5GatedDeltaNet(nn.Module):
+@@ -1145,6 +1202,34 @@ class Qwen3_5GatedDeltaNet(nn.Module):
          output, _ = self.out_proj(core_attn_out)
          return output
  
@@ -1035,7 +992,7 @@ index 207b95a56a..273b514619 100644
  
  class Qwen3_5LinearDecoderLayer(nn.Module):
      """Qwen3.5 Decoder Layer with Linear Attention (GatedDeltaNet)."""
-@@ -1460,7 +1544,8 @@ class Qwen3_5AttentionDecoderLayer(nn.Module):
+@@ -1515,7 +1600,8 @@ class Qwen3_5AttentionDecoderLayer(nn.Module):
              has_gate=self.attn_output_gate,
              mrope_axis_map=(self.rotary_emb.axis_map if positions.dim() == 2 else None),
          )
@@ -1045,7 +1002,7 @@ index 207b95a56a..273b514619 100644
          q = q_out.view(seq_len, -1)
          k = k_out.view(seq_len, -1)
          gate = gate_out.view(seq_len, -1) if gate_out is not None else None
-@@ -1543,7 +1628,7 @@ class Qwen3_5AttentionDecoderLayer(nn.Module):
+@@ -1622,7 +1708,7 @@ class Qwen3_5AttentionDecoderLayer(nn.Module):
      def _prepare_qkv_gate(
          self,
          positions: torch.Tensor,
@@ -1055,7 +1012,7 @@ index 207b95a56a..273b514619 100644
      ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
          if (_is_cuda or _is_hip) and self.attn_output_gate:
 diff --git a/python/sglang/srt/models/qwen4_exp.py b/python/sglang/srt/models/qwen4_exp.py
-index ee1a1d2919..c8466633c2 100644
+index 87c225ea31..541fc56c4d 100644
 --- a/python/sglang/srt/models/qwen4_exp.py
 +++ b/python/sglang/srt/models/qwen4_exp.py
 @@ -59,9 +59,16 @@ from sglang.srt.layers.logits_processor import LogitsProcessorOutput
@@ -1075,7 +1032,7 @@ index ee1a1d2919..c8466633c2 100644
  from sglang.srt.layers.quantization.unquant import UnquantizedEmbeddingMethod
  from sglang.srt.layers.utils import PPMissingLayer, get_layer_id
  from sglang.srt.layers.vocab_parallel_embedding import VocabParallelEmbedding
-@@ -1840,11 +1847,17 @@ class Qwen4ExpAttentionDecoderLayer(
+@@ -1871,11 +1878,17 @@ class Qwen4ExpAttentionDecoderLayer(
                  prefix=f"{prefix}.indexer" if prefix else "indexer",
                  rotary_emb=self.rotary_emb,
              )
@@ -1094,7 +1051,7 @@ index ee1a1d2919..c8466633c2 100644
          positions: torch.Tensor,
          forward_batch: ForwardBatch,
      ) -> torch.Tensor:
-@@ -1931,6 +1944,9 @@ class Qwen4ExpAttentionDecoderLayer(
+@@ -1969,6 +1982,9 @@ class Qwen4ExpAttentionDecoderLayer(
              and hidden_states.shape[0] < _QSA_INDEXER_OVERLAP_TOKEN_THRESHOLD
          )
          attention_kwargs = {}
@@ -1104,6 +1061,3 @@ index ee1a1d2919..c8466633c2 100644
          if overlap_indexer:
              # Safe to overlap: the indexer reads only hidden_states/positions,
              # and writes QSA-private pool buffers.
--- 
-2.34.1
-

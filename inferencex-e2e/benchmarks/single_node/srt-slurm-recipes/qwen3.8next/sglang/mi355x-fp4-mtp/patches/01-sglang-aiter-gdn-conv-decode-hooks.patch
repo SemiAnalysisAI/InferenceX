@@ -1,19 +1,5 @@
-From 6ae72188d07a2b92dd648d6ee6959d471c5c7790 Mon Sep 17 00:00:00 2001
-From: Chang Liu <cliu1004@amd.com>
-Date: Thu, 15 Oct 2026 09:43:39 +0000
-Subject: [PATCH 1/2] [AMD] Opt-in AITER FlyDSL causal conv1d prefill and GDN
- decode (sglang#41879)
-
-Port of sgl-project/sglang#41879 onto bab9c81f. Upstream moved the prefill
-convolution into GDNAttnBackend._convolve_prefill; the AITER dispatch now
-runs there whenever no conv block table is set (the table is CUDA-only).
----
- .../layers/attention/linear/gdn_backend.py    | 60 +++++++++++-
- .../attention/linear/kernels/gdn_triton.py    | 92 +++++++++++++++++++
- 2 files changed, 150 insertions(+), 2 deletions(-)
-
 diff --git a/python/sglang/srt/layers/attention/linear/gdn_backend.py b/python/sglang/srt/layers/attention/linear/gdn_backend.py
-index 75782942ff..bdd93319c4 100644
+index e4e4cc01c3..4d4501a176 100644
 --- a/python/sglang/srt/layers/attention/linear/gdn_backend.py
 +++ b/python/sglang/srt/layers/attention/linear/gdn_backend.py
 @@ -1,3 +1,4 @@
@@ -21,9 +7,9 @@ index 75782942ff..bdd93319c4 100644
  from typing import Optional, Tuple, Union
  
  import msgspec
-@@ -26,7 +27,13 @@ from sglang.srt.model_executor.forward_batch_info import ForwardBatch, ForwardMo
- from sglang.srt.model_executor.model_runner import ModelRunner
- from sglang.srt.runtime_context import get_exec, get_memory, get_schedule
+@@ -49,7 +50,13 @@ from sglang.srt.runtime_context import (
+     mamba_cache_chunk_size,
+ )
  from sglang.srt.utils import is_cpu, is_cuda, is_hip, is_npu, is_xpu
 -from sglang.srt.utils.common import is_pin_memory_available, rank0_log
 +from sglang.srt.utils.common import (
@@ -36,7 +22,7 @@ index 75782942ff..bdd93319c4 100644
  
  _is_hip = is_hip()
  
-@@ -249,6 +256,54 @@ def _validate_gdn_linear_attn_backends(backends: LinearAttnBackends) -> None:
+@@ -273,6 +280,54 @@ def _validate_gdn_linear_attn_backends(backends: LinearAttnBackends) -> None:
          )
  
  
@@ -91,7 +77,7 @@ index 75782942ff..bdd93319c4 100644
  class GDNKernelDispatcher:
      """Dispatches GDN kernel calls to the appropriate backend per mode."""
  
-@@ -927,7 +982,8 @@ class GDNAttnBackend(MambaAttnBackendBase):
+@@ -1086,7 +1141,8 @@ class GDNAttnBackend(MambaAttnBackendBase):
      ) -> torch.Tensor:
          block_table = self.forward_metadata.conv_block_table
          conv_kwargs = {"block_table": block_table} if block_table is not None else {}
@@ -102,7 +88,7 @@ index 75782942ff..bdd93319c4 100644
              layer.conv_weights,
              layer.bias,
 diff --git a/python/sglang/srt/layers/attention/linear/kernels/gdn_triton.py b/python/sglang/srt/layers/attention/linear/kernels/gdn_triton.py
-index 0e5c0e10ca..4a0558b79a 100644
+index 433e2704b4..d6089ac320 100644
 --- a/python/sglang/srt/layers/attention/linear/kernels/gdn_triton.py
 +++ b/python/sglang/srt/layers/attention/linear/kernels/gdn_triton.py
 @@ -1,9 +1,14 @@
@@ -199,7 +185,7 @@ index 0e5c0e10ca..4a0558b79a 100644
          return fused_sigmoid_gating_delta_rule_update(
              A_log=A_log,
              dt_bias=dt_bias,
-@@ -233,6 +303,28 @@ class TritonGDNKernel(LinearAttnKernelBase):
+@@ -241,6 +311,28 @@ class TritonGDNKernel(LinearAttnKernelBase):
          retrieve_parent_token: torch.Tensor,
          **kwargs,
      ) -> torch.Tensor:
@@ -228,6 +214,3 @@ index 0e5c0e10ca..4a0558b79a 100644
          return fused_sigmoid_gating_delta_rule_update(
              A_log=A_log,
              dt_bias=dt_bias,
--- 
-2.34.1
-

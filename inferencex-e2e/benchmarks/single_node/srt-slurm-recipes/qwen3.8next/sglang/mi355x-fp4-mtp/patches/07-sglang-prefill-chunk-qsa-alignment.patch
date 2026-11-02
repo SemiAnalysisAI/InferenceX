@@ -1,27 +1,8 @@
-From 9d33d45f86cf6b2e3dcf7566ee8c6fa916761d23 Mon Sep 17 00:00:00 2001
-From: Nikolai Protasov <nprotaso@amd.com>
-Date: Thu, 15 Oct 2026 19:38:17 +0000
-Subject: [PATCH] [AMD][Qwen3.8] Align unfinished prefill chunks to the QSA
- page
-
-Exact chunk fill is a compute optimization and must not split QSA compression
-groups: unfinished chunks now end on a multiple of the KV pool's
-prefill_chunk_alignment (the QSA page size), combined with the truncation and
-KV-shard alignments. Final chunks may still end at any token.
-
-From amd-nprotaso/sglang qwen_3_8_improvement: d309df65df.
----
- python/sglang/srt/managers/schedule_policy.py | 45 ++++++++--
- python/sglang/srt/managers/scheduler.py       |  5 ++
- python/sglang/srt/mem_cache/qsa_kv_pool.py    |  4 +
- .../unit/managers/test_prefill_adder.py       | 83 +++++++++++++++++++
- 4 files changed, 131 insertions(+), 6 deletions(-)
-
 diff --git a/python/sglang/srt/managers/schedule_policy.py b/python/sglang/srt/managers/schedule_policy.py
-index 9f6d152173..07c4a33eda 100644
+index 89661d243c..0064621589 100644
 --- a/python/sglang/srt/managers/schedule_policy.py
 +++ b/python/sglang/srt/managers/schedule_policy.py
-@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
+@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
  # ==============================================================================
  """Request scheduler policy"""
  
@@ -29,18 +10,23 @@ index 9f6d152173..07c4a33eda 100644
  import os
  import random
  from collections import Counter
-@@ -597,8 +598,10 @@ class PrefillAdder:
+@@ -625,6 +626,7 @@ class PrefillAdder:
          dllm_config: Optional[DllmConfig] = None,
          waiting_queue_len: int = 0,
          prefill_tile_block_m: int = 64,
 +        prefill_chunk_alignment: int = 1,
      ):
          self.page_size = page_size
+         # DCP donates a checkpoint only on the kernel chunk grid. A cut off
+@@ -632,6 +634,7 @@ class PrefillAdder:
+         # Without DCP the prefix-relative depth rule already donates, and
+         # rounding would only shorten the chunk.
+         self.mamba_chunk_grid = mamba_prefill_chunk_grid()
 +        self.prefill_chunk_alignment = prefill_chunk_alignment
          self.prefill_tile_block_m = prefill_tile_block_m
          self.tree_cache = tree_cache
          self.token_to_kv_pool_allocator = token_to_kv_pool_allocator
-@@ -1089,6 +1092,25 @@ class PrefillAdder:
+@@ -1119,6 +1122,25 @@ class PrefillAdder:
              else AddReqResult.CONTINUE
          )
  
@@ -66,10 +52,10 @@ index 9f6d152173..07c4a33eda 100644
      def add_chunked_req(self, req: Req):
          if self.dllm_config is not None:
              _rem_tokens = self._get_dllm_remain_tokens(req)
-@@ -1132,6 +1154,10 @@ class PrefillAdder:
-             return req
-         truncated = cand_extend_input_len > _rem_tokens
-         new_len = min(cand_extend_input_len, _rem_tokens)
+@@ -1168,6 +1190,10 @@ class PrefillAdder:
+         new_len = self.floor_chunked_tokens(
+             min(cand_extend_input_len, _rem_tokens), cand_extend_input_len
+         )
 +        if truncated:
 +            new_len = self._align_prefill_chunk(req.prefix_len, new_len)
 +            if new_len <= 0:
@@ -77,20 +63,17 @@ index 9f6d152173..07c4a33eda 100644
          request_slot_reserve = self._request_slot_reserve_for_req(
              req, extend_input_len=new_len
          )
-@@ -1306,7 +1332,11 @@ class PrefillAdder:
-                 return AddReqResult.OTHER
- 
-             # Chunked prefill
--            trunc_len = self.rem_chunk_tokens
-+            trunc_len = self._align_prefill_chunk(
-+                req.prefix_len, self.rem_chunk_tokens
-+            )
+@@ -1348,6 +1374,9 @@ class PrefillAdder:
+             trunc_len = self.floor_chunked_tokens(
+                 self.rem_chunk_tokens, cand_extend_input_len
+             )
++            trunc_len = self._align_prefill_chunk(req.prefix_len, trunc_len)
 +            if trunc_len <= 0:
 +                return AddReqResult.OTHER
  
              if (tile_stop := self._check_prefill_tile_budget(trunc_len)) is not None:
                  return tile_stop
-@@ -1554,11 +1584,11 @@ class PrefillAdder:
+@@ -1655,11 +1684,11 @@ class PrefillAdder:
                  # Only one unfinished chunked request can be tracked.
                  return AddReqResult.OTHER
              if self.exact_chunk_fill:
@@ -107,7 +90,7 @@ index 9f6d152173..07c4a33eda 100644
                  extend_len = chunk_tokens_limit
                  if truncation_align_size is not None:
                      extend_len = (
-@@ -1572,6 +1602,9 @@ class PrefillAdder:
+@@ -1673,6 +1702,9 @@ class PrefillAdder:
                      )
                  end = (prefix_len + extend_len) // self.page_size * self.page_size
                  extend_len = end - prefix_len
@@ -118,10 +101,10 @@ index 9f6d152173..07c4a33eda 100644
                  return AddReqResult.OTHER
              is_chunked = True
 diff --git a/python/sglang/srt/managers/scheduler.py b/python/sglang/srt/managers/scheduler.py
-index 79efa0bacc..845f03b2fc 100644
+index 57aec7ceb9..4839cbe50e 100644
 --- a/python/sglang/srt/managers/scheduler.py
 +++ b/python/sglang/srt/managers/scheduler.py
-@@ -4048,6 +4048,11 @@ class Scheduler(
+@@ -4363,6 +4363,11 @@ class Scheduler(
              dllm_config=self.dllm_config,
              waiting_queue_len=len(self.waiting_queue),
              prefill_tile_block_m=prefill_tile_block_m,
@@ -134,10 +117,10 @@ index 79efa0bacc..845f03b2fc 100644
  
          if self.chunked_req is not None:
 diff --git a/python/sglang/srt/mem_cache/qsa_kv_pool.py b/python/sglang/srt/mem_cache/qsa_kv_pool.py
-index 4a21488be7..103ae52de7 100644
+index 77eee28ba8..5988424ef1 100644
 --- a/python/sglang/srt/mem_cache/qsa_kv_pool.py
 +++ b/python/sglang/srt/mem_cache/qsa_kv_pool.py
-@@ -55,6 +55,10 @@ class QSATokenToKVPool(HybridLinearKVPool):
+@@ -77,6 +77,10 @@ class QSATokenToKVPool(HybridLinearKVPool):
      # Pending-ring dtype: the raw keys are averaged from here, so it stays bf16.
      index_state_dtype = torch.bfloat16
  
@@ -149,10 +132,10 @@ index 4a21488be7..103ae52de7 100644
      def qsa_bytes_per_token(
          cls,
 diff --git a/test/registered/unit/managers/test_prefill_adder.py b/test/registered/unit/managers/test_prefill_adder.py
-index 702140ff4b..0c59a3f30f 100644
+index 2bbd037a5c..592cb3cc67 100644
 --- a/test/registered/unit/managers/test_prefill_adder.py
 +++ b/test/registered/unit/managers/test_prefill_adder.py
-@@ -1775,6 +1775,89 @@ class TestPrefillAdder(CustomTestCase):
+@@ -1920,6 +1920,89 @@ class TestPrefillAdder(CustomTestCase):
          req.sampling_params.ignore_eos = False
          return req
  
@@ -242,6 +225,3 @@ index 702140ff4b..0c59a3f30f 100644
      def test_add_chunked_req_non_hybrid_no_swa_reservation(self):
          # Non-hybrid path: the SWA-pool reservation must NOT apply, otherwise
          # the fix would regress non-SWA models.
--- 
-2.34.1
-

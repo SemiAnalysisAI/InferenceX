@@ -1,26 +1,5 @@
-From e0512f9be9bd4025be2c55312d0093e7d43d25a5 Mon Sep 17 00:00:00 2001
-From: Nikolai Protasov <nprotaso@amd.com>
-Date: Mon, 19 Oct 2026 11:03:15 +0000
-Subject: [PATCH] [AMD][Qwen3.8] GDN fused decode proj+conv on HIP and prefill
- opt-ins
-
-Enable the fused decode projection + conv1d path (SGLANG_ENABLE_GDN_DECODE_FUSED_PROJ_CONV)
-on HIP, forward prepare_before_cuda_graph_capture from Qwen4Exp, and add
-off-by-default HIP opt-ins: SGLANG_GDN_FUSED_QKV_NORM (normalize Q/K in the
-prefill QKV prepare kernel), SGLANG_GDN_WIDE_QKV_SPLIT, SGLANG_GDN_PACKED_QWEN4
-and SGLANG_GDN_HIP_PREFILL_VIEWS.
-
-From amd-nprotaso/sglang qwen_3_8_improvement: 0c3cedfc32.
----
- .../sglang/kernels/ops/attention/fla/chunk.py | 25 ++++++++++++++++++-
- .../kernels/ops/attention/fla/l2norm.py       | 23 +++++++++++++++--
- .../layers/attention/linear/gdn_backend.py    | 17 +++++++++++--
- python/sglang/srt/models/qwen3_5.py           | 16 +++++++++---
- python/sglang/srt/models/qwen4_exp.py         |  3 +++
- 5 files changed, 76 insertions(+), 8 deletions(-)
-
 diff --git a/python/sglang/kernels/ops/attention/fla/chunk.py b/python/sglang/kernels/ops/attention/fla/chunk.py
-index f4b892f68b..cc375a9d47 100644
+index 918d3bcd8d..9803bc64ec 100644
 --- a/python/sglang/kernels/ops/attention/fla/chunk.py
 +++ b/python/sglang/kernels/ops/attention/fla/chunk.py
 @@ -14,13 +14,16 @@ from sglang.kernels.ops.attention.fla.cumsum import chunk_local_cumsum
@@ -41,7 +20,7 @@ index f4b892f68b..cc375a9d47 100644
  
  if is_intel:
      from sglang.srt.hardware_backend.xpu.kernels.fla.chunk_delta_h import (
-@@ -251,6 +254,26 @@ def chunk_gated_delta_rule(
+@@ -261,6 +264,26 @@ def chunk_gated_delta_rule(
              )
      if scale is None:
          scale = k.shape[-1] ** -0.5
@@ -135,10 +114,10 @@ index 30b445d3c1..fa8912e3f2 100644
  
  
 diff --git a/python/sglang/srt/layers/attention/linear/gdn_backend.py b/python/sglang/srt/layers/attention/linear/gdn_backend.py
-index 18b492c424..ffd7abc8c2 100644
+index d7ecff1cc9..275c936a6a 100644
 --- a/python/sglang/srt/layers/attention/linear/gdn_backend.py
 +++ b/python/sglang/srt/layers/attention/linear/gdn_backend.py
-@@ -50,7 +50,9 @@ if is_cuda() or is_hip() or is_xpu():
+@@ -73,7 +73,9 @@ if is_cuda() or is_hip() or is_xpu():
          fused_qkvzba_split_reshape_cat_contiguous,
      )
  
@@ -149,7 +128,7 @@ index 18b492c424..ffd7abc8c2 100644
  _fused_decode_proj_conv_logged = False
  _fused_decode_proj_conv_fallback_logged = False
  _fused_decode_proj_conv_layers_logged: set[int] = set()
-@@ -1137,6 +1139,13 @@ class GDNAttnBackend(MambaAttnBackendBase):
+@@ -1387,6 +1389,13 @@ class GDNAttnBackend(MambaAttnBackendBase):
          if (
              (is_cuda() or is_hip() or is_xpu())
              and qkv_dim <= MAX_FUSED_QKV_SPLIT_DIM
@@ -163,7 +142,7 @@ index 18b492c424..ffd7abc8c2 100644
              and not self._use_strided_target_verify_qkv
          ):
              query, key, value = fused_qkv_split_gdn_prefill(
-@@ -1384,7 +1393,11 @@ class GDNAttnBackend(MambaAttnBackendBase):
+@@ -1634,7 +1643,11 @@ class GDNAttnBackend(MambaAttnBackendBase):
          ).transpose(0, 1)
  
          qkv_dim = layer.q_dim + layer.k_dim + layer.v_dim
@@ -177,10 +156,10 @@ index 18b492c424..ffd7abc8c2 100644
                  mixed_qkv,
                  layer.num_q_heads,
 diff --git a/python/sglang/srt/models/qwen3_5.py b/python/sglang/srt/models/qwen3_5.py
-index b24e6f18be..207b95a56a 100644
+index 6c7dbdbaf8..085662be85 100644
 --- a/python/sglang/srt/models/qwen3_5.py
 +++ b/python/sglang/srt/models/qwen3_5.py
-@@ -180,8 +180,13 @@ _gdn_use_alt_stream = _is_cuda or (
+@@ -181,8 +181,13 @@ _gdn_use_alt_stream = _is_cuda or (
  _qknorm_use_alt_stream = _is_cuda or (
      get_bool_env_var("SGLANG_QK_NORM_ALT_STREAM", "False") and _hip_use_alt_stream
  )
@@ -193,9 +172,9 @@ index b24e6f18be..207b95a56a 100644
 -    _is_cuda and envs.SGLANG_ENABLE_GDN_DECODE_FUSED_PROJ_CONV.get()
 +    (_is_cuda or _is_hip) and envs.SGLANG_ENABLE_GDN_DECODE_FUSED_PROJ_CONV.get()
  )
- _is_amx_available = cpu_has_amx_support()
- _is_xpu = is_xpu()
-@@ -701,6 +706,7 @@ class Qwen3_5GatedDeltaNet(nn.Module):
+ _gdn_online_mxfp4 = (
+     ("in_proj_qkvz", "out_proj")
+@@ -726,6 +731,7 @@ class Qwen3_5GatedDeltaNet(nn.Module):
          if (
              _use_aiter
              and self.config.model_type not in _QWEN3_5_ROCM_PACKED_MODEL_TYPES
@@ -203,17 +182,16 @@ index b24e6f18be..207b95a56a 100644
          ):
              return
          if get_lora().enable_lora or get_lora().lora_paths:
-@@ -1029,7 +1035,8 @@ class Qwen3_5GatedDeltaNet(nn.Module):
-                 num_k_heads_tp = triton.cdiv(self.num_k_heads, self.attn_tp_size)
-                 num_v_heads_tp = triton.cdiv(self.num_v_heads, self.attn_tp_size)
+@@ -1056,7 +1062,7 @@ class Qwen3_5GatedDeltaNet(nn.Module):
+             # The strided views feed only prefill GDN; DP-relabeled decode rows
+             # run the decode kernels, so pick the layout from the logical mode.
              use_strided_prefill_z = (
--                _is_cuda and forward_batch.forward_mode.is_extend_without_speculative()
+-                _is_cuda
 +                (_is_cuda or _gdn_hip_prefill_views)
-+                and forward_batch.forward_mode.is_extend_without_speculative()
+                 and forward_batch.logical_forward_mode.is_extend_without_speculative()
              )
              split_fn = (
-                 qwen3_5_gdn_prefill_projection_views
-@@ -1823,7 +1830,10 @@ class Qwen3_5ForCausalLM(nn.Module):
+@@ -1901,7 +1907,10 @@ class Qwen3_5ForCausalLM(nn.Module):
          return self.embed_tokens
  
      def prepare_before_cuda_graph_capture(self, model_runner) -> None:
@@ -223,13 +201,13 @@ index b24e6f18be..207b95a56a 100644
 +            or (_gdn_packed_qwen4 and self.config.model_type == "qwen4_exp_text")
 +        ):
              packed = 0
+             mxfp4 = 0
              for module in self.modules():
-                 if isinstance(module, Qwen3_5GatedDeltaNet):
 diff --git a/python/sglang/srt/models/qwen4_exp.py b/python/sglang/srt/models/qwen4_exp.py
-index 982ae5f810..ee1a1d2919 100644
+index abf51c827b..87c225ea31 100644
 --- a/python/sglang/srt/models/qwen4_exp.py
 +++ b/python/sglang/srt/models/qwen4_exp.py
-@@ -2689,6 +2689,9 @@ class Qwen4ExpForConditionalGeneration(Qwen3VLForConditionalGeneration):
+@@ -2739,6 +2739,9 @@ class Qwen4ExpForConditionalGeneration(Qwen3VLForConditionalGeneration):
  
          return loaded_params
  
@@ -239,6 +217,3 @@ index 982ae5f810..ee1a1d2919 100644
      def precompile_kernels_after_loading(self) -> None:
          from sglang.srt.layers.quantization.unquant import precompile_splitk_tactics
  
--- 
-2.34.1
-

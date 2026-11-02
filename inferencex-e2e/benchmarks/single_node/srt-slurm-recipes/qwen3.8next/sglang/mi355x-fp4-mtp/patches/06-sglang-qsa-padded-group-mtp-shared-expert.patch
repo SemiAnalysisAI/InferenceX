@@ -1,33 +1,8 @@
-From 733cb0df300a8cf855bf3805ba3a609a1184cd58 Mon Sep 17 00:00:00 2001
-From: Nikolai Protasov <nprotaso@amd.com>
-Date: Thu, 15 Oct 2026 19:37:55 +0000
-Subject: [PATCH] [AMD][Qwen3.8] Mask padded QSA group sources; strict MTP
- shared-expert loading
-
-A short extend can have fewer token rows than one QSA compression group, so the
-fixed-capacity write plan's padding entries must read the inert source slot 0.
-Exact chunk fill (gfx95) can also end a chunk off the tree page; use the absolute
-mamba checkpoint grid for such prefixes. Map separate shared-expert checkpoint
-tensors into the fused MoE slot and fail loudly if an MTP shared expert is not
-loaded.
-
-From amd-nprotaso/sglang qwen_3_8_improvement: 7e3eb83f97.
----
- .../srt/layers/attention/qsa/qsa_indexer.py   |  14 +
- python/sglang/srt/managers/schedule_batch.py  |   4 +-
- python/sglang/srt/models/qwen3_5_mtp.py       |  45 ++-
- python/sglang/srt/models/qwen4_exp.py         |  50 ++-
- .../ops/attention/qsa/test_qsa_rocm.py        |  55 ++++
- .../managers/test_mamba_checkpoint_depth.py   |  17 +-
- ...t_qwen4_exp_shared_expert_weight_loader.py | 309 ++++++++++++++++++
- 7 files changed, 472 insertions(+), 22 deletions(-)
- create mode 100644 test/registered/unit/models/test_qwen4_exp_shared_expert_weight_loader.py
-
 diff --git a/python/sglang/srt/layers/attention/qsa/qsa_indexer.py b/python/sglang/srt/layers/attention/qsa/qsa_indexer.py
-index 883671944c..73d4386b14 100644
+index a550ff7d70..f9cb4f09d6 100644
 --- a/python/sglang/srt/layers/attention/qsa/qsa_indexer.py
 +++ b/python/sglang/srt/layers/attention/qsa/qsa_indexer.py
-@@ -45,6 +45,15 @@ def _qsa_prefill_row_chunk_size(rows: int, keys: int, heads: int) -> int:
+@@ -51,6 +51,15 @@ def _qsa_prefill_row_chunk_size(rows: int, keys: int, heads: int) -> int:
      return min(rows, max_padded_rows)
  
  
@@ -43,7 +18,7 @@ index 883671944c..73d4386b14 100644
  class QSAIndexer(MultiPlatformOp):
      """Config-driven fused-QK, weight-free sparse-attention indexer."""
  
-@@ -349,6 +358,11 @@ class QSAIndexer(MultiPlatformOp):
+@@ -358,6 +367,11 @@ class QSAIndexer(MultiPlatformOp):
                  )
              source_keys = pool.get_qsa_key_state_buffer(self.layer_id)
              source_rope = pool.qsa_rope_position_buffer
@@ -56,10 +31,10 @@ index 883671944c..73d4386b14 100644
              self._fused_compress_store(
                  pool,
 diff --git a/python/sglang/srt/managers/schedule_batch.py b/python/sglang/srt/managers/schedule_batch.py
-index e100386662..f8358bdd32 100755
+index e4be7a2ef8..ad23864c93 100644
 --- a/python/sglang/srt/managers/schedule_batch.py
 +++ b/python/sglang/srt/managers/schedule_batch.py
-@@ -3041,7 +3041,9 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
+@@ -3340,7 +3340,9 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
  
          prefix_len = req.prefix_len
          seq_end = req.extend_end
@@ -191,10 +166,10 @@ index e3450be475..b3803b4a3c 100644
  
  
 diff --git a/python/sglang/srt/models/qwen4_exp.py b/python/sglang/srt/models/qwen4_exp.py
-index ab9fc38d6f..982ae5f810 100644
+index e7f770834e..abf51c827b 100644
 --- a/python/sglang/srt/models/qwen4_exp.py
 +++ b/python/sglang/srt/models/qwen4_exp.py
-@@ -106,6 +106,33 @@ _use_aiter = get_bool_env_var("SGLANG_USE_AITER") and is_hip()
+@@ -112,6 +112,33 @@ _use_aiter = get_bool_env_var("SGLANG_USE_AITER") and is_hip()
  # bound and serializing them on one stream is faster than contending.
  _QSA_INDEXER_OVERLAP_TOKEN_THRESHOLD = 1024
  
@@ -228,7 +203,7 @@ index ab9fc38d6f..982ae5f810 100644
  
  def _ple_table_is_fp8(
      config: Qwen4ExpTextConfig,
-@@ -2435,9 +2462,10 @@ class Qwen4ExpForConditionalGeneration(Qwen3VLForConditionalGeneration):
+@@ -2485,9 +2512,10 @@ class Qwen4ExpForConditionalGeneration(Qwen3VLForConditionalGeneration):
          params_dict = dict(self.named_parameters(remove_duplicate=False))
          buffers = dict(self.named_buffers())
  
@@ -240,7 +215,7 @@ index ab9fc38d6f..982ae5f810 100644
              if isinstance(mod, Qwen4ExpNGramEmbedding)
          }
          text_config = getattr(self.config, "text_config", self.config)
-@@ -2522,6 +2550,26 @@ class Qwen4ExpForConditionalGeneration(Qwen3VLForConditionalGeneration):
+@@ -2572,6 +2600,26 @@ class Qwen4ExpForConditionalGeneration(Qwen3VLForConditionalGeneration):
                  "experts.gate_up_proj" in name or "experts.down_proj" in name
              )
  
@@ -347,10 +322,10 @@ index d15edee630..5c7356c76c 100644
  if __name__ == "__main__":
      sys.exit(pytest.main([__file__, "-v"]))
 diff --git a/test/registered/unit/managers/test_mamba_checkpoint_depth.py b/test/registered/unit/managers/test_mamba_checkpoint_depth.py
-index addb5d90ea..6fdd06578f 100644
+index e5df068696..0ecd024a16 100644
 --- a/test/registered/unit/managers/test_mamba_checkpoint_depth.py
 +++ b/test/registered/unit/managers/test_mamba_checkpoint_depth.py
-@@ -119,10 +119,23 @@ class TestMambaCheckpointDepth(unittest.TestCase):
+@@ -128,10 +128,23 @@ class TestMambaCheckpointDepth(unittest.TestCase):
          # Active requests can stop off the absolute grid between prefill chunks.
          # Keep donating their prefix-relative snapshots when DCP is disabled.
          self.assertEqual(
@@ -374,8 +349,8 @@ index addb5d90ea..6fdd06578f 100644
 +                self.assertTrue(depth is None or depth % tree_page == 0)
 +
  
- class TestMambaTrackGrid(unittest.TestCase):
-     def _grid(self, *, interval: int, tree_page: int, chunk: int = CHUNK) -> int:
+ class TestChunkedPrefillStaysOnTheChunkGrid(unittest.TestCase):
+     """The scheduler side of the same constraint.
 diff --git a/test/registered/unit/models/test_qwen4_exp_shared_expert_weight_loader.py b/test/registered/unit/models/test_qwen4_exp_shared_expert_weight_loader.py
 new file mode 100644
 index 0000000000..e7be9f0c43
@@ -691,6 +666,3 @@ index 0000000000..e7be9f0c43
 +            model,
 +            [("mtp.layers.0.mlp.shared_expert.gate_proj.weight", torch.tensor(1.0))],
 +        )
--- 
-2.34.1
-

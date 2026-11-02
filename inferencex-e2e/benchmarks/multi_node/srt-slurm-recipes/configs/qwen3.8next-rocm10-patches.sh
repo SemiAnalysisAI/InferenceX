@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
-# Qwen3.8-Flash-Next kernels on lmsysorg/sglang-rocm:v0.5.22-rocm10-mi35x-20261018,
-# applied to its editable AITER and SGLang checkouts. Already in the image and not
-# patched: AITER topk_gating router (sglang#40708), ratio-3 GDN packing (sglang#44302),
-# the 128-row hc_mix, and ROCm/aiter#6225, #5804, #6050:
+# Qwen3.8-Flash-Next kernels on lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261102,
+# applied to its editable AITER (285579b6) and SGLang (1ced9a9eb0) checkouts. The
+# image already has the monokernel (--enable-amd-monokernel), the AITER topk_gating
+# router (sglang#40708), ratio-3 GDN packing (sglang#44302), the 128-row hc_mix
+# (sglang#41880) and ROCm/aiter#6225, #5804, #6050, so none of them is patched.
 #   - ROCm/aiter#5992: FlyDSL causal conv1d prefill and GDN decode/verify
 #   - sgl-project/sglang#41879: opt-in SGLANG_AITER_GDN_CONV/_DECODE hooks
 #   - fused Triton QK Gemma-RMSNorm + M-RoPE + gate on HIP
-#   - FlyDSL hc_mix gates and the single-kernel hc_combine on ROCm
-#     (SGLANG_HC_COMBINE_SPLIT=0); hc_mix itself (sglang#41880, up to 128 rows) is in the image
+#   - ROCm/aiter#5993 FlyDSL hc_mix gates and the single-kernel hc_combine on ROCm
+#     (SGLANG_HC_COMBINE_SPLIT=0)
 #   - opt-in FlyDSL paged decode for QSA attention (SGLANG_AITER_QSA_PA_DECODE) on
-#     the image's AITER pa_decode
+#     AITER mainline pa_decode
 #   - fused FlyDSL QSA sparse decode that reads KV from the pool
 #     (SGLANG_ENABLE_QSA_FLYDSL_DECODE, default on, tried before the paged decode)
 #   - fused GDN decode projection + conv1d on HIP and off-by-default GDN prefill
 #     opt-ins (SGLANG_GDN_FUSED_QKV_NORM, _WIDE_QKV_SPLIT, _PACKED_QWEN4,
 #     _HIP_PREFILL_VIEWS)
-#   - tuned BF16 / A8W8 bpreshuffle GEMM tables for Qwen3.8 on gfx950, added to the
-#     image's gfx942 ones (AITER loads model_configs/ by default)
+#   - tuned BF16 / A8W8 bpreshuffle GEMM tables for Qwen3.8 on gfx950 (ROCm/aiter#6769)
 #   - off-by-default decode optimizations: shared per-token FP8 attention input
 #     quant, fused GDN gated norm + out_proj quant, shared-expert gate folded into
 #     the router, BF16 lm_head through tgemm (SGLANG_OPT_QWEN4_SHARED_ATTN_QUANT,
@@ -32,7 +32,9 @@
 #   - opt-in fused HC for decode-sized rows (SGLANG_OPT_QWEN4_FUSED_HC): the
 #     per-branch norm and the combine's inject GEMV fold into the FlyDSL HC mix
 #   - sgl-project/sglang#46329: breakable prefill graphs replay multimodal batches
-#     when speculative decoding is off (--cuda-graph-backend-prefill breakable)
+#     (--cuda-graph-backend-prefill breakable), and a shared-quantized attention
+#     input (SGLANG_OPT_QWEN4_SHARED_ATTN_QUANT) goes through the QSA indexer break
+#     as its two tensors instead of crashing the prefill graph capture
 #   - fused decode MoE route-sort + MXFP4 activation quant (ROCm/aiter#6165, #6467),
 #     instantiated for Qwen3.8-Flash-Next's 513 experts / top-11 / hidden 2560
 # All but the upstream PRs come from amd-nprotaso/{aiter,sglang} qwen_3_8_improvement.
@@ -61,27 +63,27 @@ apply() {
     echo "qwen3.8next patch applied: $2"
 }
 
-apply /sgl-workspace/aiter aiter-flydsl-gdn-conv-decode.patch
-apply /sgl-workspace/aiter aiter-flydsl-hc-mix.patch
-apply /sgl-workspace/aiter aiter-flydsl-gdn-fused-prefill.patch
-apply /sgl-workspace/aiter aiter-flydsl-gdn-decode-verify-perf.patch
-apply /sgl-workspace/aiter aiter-qwen38-tuned-gemm-tables.patch
-apply /sgl-workspace/aiter aiter-moe-sort-quant-2560.patch
+apply /sgl-workspace/aiter 01-aiter-flydsl-gdn-conv-decode.patch
+apply /sgl-workspace/aiter 02-aiter-flydsl-hc-mix.patch
+apply /sgl-workspace/aiter 03-aiter-flydsl-gdn-fused-prefill.patch
+apply /sgl-workspace/aiter 04-aiter-flydsl-gdn-decode-verify-perf.patch
+apply /sgl-workspace/aiter 05-aiter-qwen38-tuned-gemm-tables.patch
+apply /sgl-workspace/aiter 06-aiter-moe-sort-quant-2560.patch
 rm -rf /sgl-workspace/aiter/aiter/jit/module_moe_sorting_opus.so \
     /sgl-workspace/aiter/aiter/jit/build/module_moe_sorting_opus
-apply /sgl-workspace/sglang sglang-aiter-gdn-conv-decode-hooks.patch
-apply /sgl-workspace/sglang sglang-fused-qk-rope-gate-hip.patch
-apply /sgl-workspace/sglang sglang-flydsl-hc-mix.patch
-apply /sgl-workspace/sglang sglang-flydsl-qsa-pa-decode.patch
-apply /sgl-workspace/sglang sglang-aiter-gdn-prefill.patch
-apply /sgl-workspace/sglang sglang-qsa-padded-group-mtp-shared-expert.patch
-apply /sgl-workspace/sglang sglang-prefill-chunk-qsa-alignment.patch
-apply /sgl-workspace/sglang sglang-qsa-flydsl-sparse-decode.patch
-apply /sgl-workspace/sglang sglang-gdn-hip-fused-proj-conv.patch
-apply /sgl-workspace/sglang sglang-qsa-pa-decode-mainline.patch
-apply /sgl-workspace/sglang sglang-qwen38-decode-opts.patch
-apply /sgl-workspace/sglang sglang-mtp-quant-resolve.patch
-apply /sgl-workspace/sglang sglang-qwen38-fused-hc.patch
-apply /sgl-workspace/sglang sglang-prefill-breakable-multimodal.patch
+apply /sgl-workspace/sglang 01-sglang-aiter-gdn-conv-decode-hooks.patch
+apply /sgl-workspace/sglang 02-sglang-fused-qk-rope-gate-hip.patch
+apply /sgl-workspace/sglang 03-sglang-hc-mix-env-gates.patch
+apply /sgl-workspace/sglang 04-sglang-qsa-pa-decode.patch
+apply /sgl-workspace/sglang 05-sglang-aiter-gdn-prefill.patch
+apply /sgl-workspace/sglang 06-sglang-qsa-padded-group-mtp-shared-expert.patch
+apply /sgl-workspace/sglang 07-sglang-prefill-chunk-qsa-alignment.patch
+apply /sgl-workspace/sglang 08-sglang-qsa-flydsl-sparse-decode.patch
+apply /sgl-workspace/sglang 09-sglang-gdn-hip-fused-proj-conv.patch
+apply /sgl-workspace/sglang 10-sglang-qwen38-decode-opts.patch
+apply /sgl-workspace/sglang 11-sglang-mtp-quant-resolve.patch
+apply /sgl-workspace/sglang 12-sglang-qwen38-fused-hc.patch
+apply /sgl-workspace/sglang 13-sglang-prefill-breakable-multimodal.patch
+apply /sgl-workspace/sglang 14-sglang-qsa-breakable-shared-quant.patch
 
 echo "$digest" > "$marker"

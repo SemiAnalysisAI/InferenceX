@@ -1,31 +1,8 @@
-From 7424601f001e903ec1522aaa24197fd4011e5969 Mon Sep 17 00:00:00 2001
-From: Nikolai Protasov <nprotaso@amd.com>
-Date: Thu, 15 Oct 2026 13:52:29 +0000
-Subject: [PATCH 6/8] [AMD] Opt-in AITER GDN chunked prefill for
- Qwen3.5/Qwen3.8
-
-SGLANG_AITER_GDN_PREFILL=1 (with SGLANG_USE_AITER) replaces the Triton FLA
-chunked-prefill kernels with AITER: SGLANG_AITER_GDN_PREFILL_H=fused runs the
-whole chunk loop as one FlyDSL kernel that keeps the state on chip and writes
-the tracked chunk-boundary state itself; triton/hip/flydsl select the opt_vk
-stages' hidden-state kernel. A missing AITER entry point falls back to Triton.
-
-From amd-nprotaso/sglang qwen_3_8_improvement: fdf1245aeb. The fused mode
-needs the AITER GDN fused prefill kernel; the opt_vk modes need an AITER
-newer than e7d2453f (gated_delta_net prefill metadata).
----
- python/sglang/srt/environ.py                  |  10 +
- .../layers/attention/linear/gdn_backend.py    |   1 +
- .../linear/kernels/gdn_aiter_prefill.py       | 209 ++++++++++++++++++
- .../attention/linear/kernels/gdn_triton.py    | 131 ++++++++++-
- 4 files changed, 350 insertions(+), 1 deletion(-)
- create mode 100644 python/sglang/srt/layers/attention/linear/kernels/gdn_aiter_prefill.py
-
 diff --git a/python/sglang/srt/environ.py b/python/sglang/srt/environ.py
-index e5d814d39a..b93ce11067 100644
+index ad7c246418..8ec078ba9d 100644
 --- a/python/sglang/srt/environ.py
 +++ b/python/sglang/srt/environ.py
-@@ -912,6 +912,16 @@ class Envs:
+@@ -1047,6 +1047,16 @@ class Envs:
      # concurrency the grid is only num_seqs * num_kv_heads * splits CTAs, so a
      # larger value may be worth forcing.
      SGLANG_AITER_QSA_PA_DECODE_SPLITS = EnvInt(0)
@@ -40,13 +17,13 @@ index e5d814d39a..b93ce11067 100644
 +    # (state kept on chip, l2norm and track snapshot in-kernel).
 +    SGLANG_AITER_GDN_PREFILL_H = EnvStr("triton")
      SGLANG_USE_AITER_AG = EnvBool(True)
-     # Use reduce_scatter (instead of all_reduce + dp_scatter) for the equal-chunk
-     # MAX_LEN DP-MoE combine. Default ON for ROCm/HIP (uses the aiter custom
+     # The gfx950 TP4 JIT quick all-reduce (quick_all_reduce_hip) runs an INT4 request below this
+     # many MiB in INT8, which is as fast at decode sizes with about 1/16 of INT4's error; 0 runs
 diff --git a/python/sglang/srt/layers/attention/linear/gdn_backend.py b/python/sglang/srt/layers/attention/linear/gdn_backend.py
-index bdd93319c4..18b492c424 100644
+index 4d4501a176..d7ecff1cc9 100644
 --- a/python/sglang/srt/layers/attention/linear/gdn_backend.py
 +++ b/python/sglang/srt/layers/attention/linear/gdn_backend.py
-@@ -1253,6 +1253,7 @@ class GDNAttnBackend(MambaAttnBackendBase):
+@@ -1503,6 +1503,7 @@ class GDNAttnBackend(MambaAttnBackendBase):
                  output=kwargs.get("linear_attn_output"),
                  layer_id=layer.layer_id,
                  extend_prefix_lens=forward_batch.extend_prefix_lens,
@@ -270,7 +247,7 @@ index 0000000000..e78681a343
 +        )
 +        return o, h
 diff --git a/python/sglang/srt/layers/attention/linear/kernels/gdn_triton.py b/python/sglang/srt/layers/attention/linear/kernels/gdn_triton.py
-index 4a0558b79a..44ed2042e6 100644
+index d6089ac320..fe947c512b 100644
 --- a/python/sglang/srt/layers/attention/linear/kernels/gdn_triton.py
 +++ b/python/sglang/srt/layers/attention/linear/kernels/gdn_triton.py
 @@ -2,14 +2,20 @@ import logging
@@ -416,7 +393,7 @@ index 4a0558b79a..44ed2042e6 100644
      ) -> tuple:
          recurrent_state = ssm_states
          recurrent_state_indices_args = {"initial_state_indices": cache_indices}
-@@ -269,6 +374,30 @@ class TritonGDNKernel(LinearAttnKernelBase):
+@@ -276,6 +381,30 @@ class TritonGDNKernel(LinearAttnKernelBase):
              # The external NPU kernel does not expose the optional write-back
              # control. Its existing behavior is equivalent to True.
              inplace_update_args = {}
@@ -447,6 +424,3 @@ index 4a0558b79a..44ed2042e6 100644
  
          return chunk_gated_delta_rule(
              q=q,
--- 
-2.34.1
-

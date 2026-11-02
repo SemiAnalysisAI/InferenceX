@@ -541,10 +541,10 @@ index 0000000000..9643630d90
 +    _launch_inject(h, y, g, out, ss, m, k, g.shape[1], torch.cuda.current_stream(h.device))
 +    return out, ss
 diff --git a/python/sglang/srt/environ.py b/python/sglang/srt/environ.py
-index 3ce121fbe3..c976e78040 100644
+index 67a3c3669b..d058c02f64 100644
 --- a/python/sglang/srt/environ.py
 +++ b/python/sglang/srt/environ.py
-@@ -919,6 +919,9 @@ class Envs:
+@@ -1024,6 +1024,9 @@ class Envs:
      SGLANG_M3_USE_AITER_FUSED_QKNORM = EnvBool(True)
      # Use gfx950 BF16 Qwen HC mix when AITER FlyDSL hc_mix is available.
      SGLANG_AITER_HC_MIX = EnvBool(True)
@@ -555,7 +555,7 @@ index 3ce121fbe3..c976e78040 100644
      # CTAs than the one-CTA-per-row fused kernel, at the price of a second
      # dispatch. Default OFF for ROCm/HIP, where that dispatch is the whole cost:
 diff --git a/python/sglang/srt/layers/hyperconnection.py b/python/sglang/srt/layers/hyperconnection.py
-index 46cd17cd1d..275ff3c23e 100644
+index fb94025b99..f3fb416872 100644
 --- a/python/sglang/srt/layers/hyperconnection.py
 +++ b/python/sglang/srt/layers/hyperconnection.py
 @@ -1,5 +1,5 @@

@@ -16,8 +16,8 @@ base:
       enabled: false
   engine: sglang
   # Qwen3.8 AITER/FlyDSL kernels and SGLang dispatch (GDN conv/decode/prefill,
-  # fused QK-norm/RoPE/gate, hc_mix, QSA paged decode, topk gating, ratio-3
-  # packing) and exact-chunk-fill / shared-expert loading fixes, patched into
+  # fused QK-norm/RoPE/gate, hc_mix, QSA paged decode) and exact-chunk-fill /
+  # shared-expert loading fixes, patched into
   # the upstream ROCm 10 image. The patch files are in patches/ next to this
   # recipe.
   setup_script: qwen3.8next-rocm10-patches.sh
@@ -59,11 +59,6 @@ base:
         # of per-draft state snapshots; needs the linear draft chain (topk 1).
         enable-linear-replayssm-spec: true
         tokenizer-worker-num: 6
-        # Breakable prefill CUDA graphs on the buckets of this workload's prefill
-        # sizes; sgl-project/sglang#46329 (patched in) lets multimodal batches
-        # replay too when speculative decoding is off.
-        cuda-graph-backend-prefill: breakable
-        cuda-graph-bs-prefill: [256, 512, 768, 1024, 1280, 1408, 2560, 2752, 3840, 4096, 5376]
         enable-metrics: true
         enable-cache-report: true
       env:
@@ -104,7 +99,9 @@ base:
 # 0.85 scaling. c12 and c16 keep ReplaySSM, the PLE offload, 2x CONC admission and
 # the default path. c12 and c16 capture decode graphs up to their admission, so
 # bursts past CONC stay in a graph, and use mem-fraction-static 0.9 as given (a
-# larger KV pool than the scaled 0.765).
+# larger KV pool than the scaled 0.765). c12 and c16 also run breakable prefill CUDA
+# graphs on the buckets of this workload's prefill sizes (sgl-project/sglang#46329,
+# patched in, lets multimodal batches replay too).
 override_c1:
   roles:
     agg:
@@ -176,6 +173,8 @@ override_c12:
         max-running-requests: 24
         cuda-graph-max-bs-decode: 24
         mem-fraction-static: 0.9
+        cuda-graph-backend-prefill: breakable
+        cuda-graph-bs-prefill: [256, 512, 768, 1024, 1280, 1408, 2560, 2752, 3840, 4096, 5376]
       env:
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
   benchmark:
@@ -190,6 +189,8 @@ override_c16:
         max-running-requests: 32
         cuda-graph-max-bs-decode: 32
         mem-fraction-static: 0.9
+        cuda-graph-backend-prefill: breakable
+        cuda-graph-bs-prefill: [256, 512, 768, 1024, 1280, 1408, 2560, 2752, 3840, 4096, 5376]
       env:
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
   benchmark:

@@ -1,19 +1,3 @@
-From c12137dee0a8c34a6599b528fb3004d6c30eafdb Mon Sep 17 00:00:00 2001
-From: Chang Liu <cliu1004@amd.com>
-Date: Thu, 15 Oct 2026 09:44:26 +0000
-Subject: [PATCH 2/2] [AMD] Use the fused Triton QK-norm + RoPE + gate kernel
- on HIP for Qwen3.5/Qwen3.8
-
-_prepare_qkv_gate sends HIP to forward_prepare_cuda_fused (one Triton kernel
-for Gemma RMSNorm, NeoX/M-RoPE and the gate split) instead of the
-norm-with-gate kernel plus a separate rotary_emb. The fused path accepts the
-AITER fused all-reduce tuple input like the other prepare paths, and PDL stays
-off on ROCm, where get_device_capability reports 9.x on gfx950.
----
- .../ops/attention/fused_qk_rmsnorm_rope_gate.py        |  2 +-
- python/sglang/srt/models/qwen3_5.py                    | 10 +++++++---
- 2 files changed, 8 insertions(+), 4 deletions(-)
-
 diff --git a/python/sglang/kernels/ops/attention/fused_qk_rmsnorm_rope_gate.py b/python/sglang/kernels/ops/attention/fused_qk_rmsnorm_rope_gate.py
 index 3648bd557c..9fa0777b4a 100644
 --- a/python/sglang/kernels/ops/attention/fused_qk_rmsnorm_rope_gate.py
@@ -28,10 +12,10 @@ index 3648bd557c..9fa0777b4a 100644
      try:
          major, _ = torch.cuda.get_device_capability()
 diff --git a/python/sglang/srt/models/qwen3_5.py b/python/sglang/srt/models/qwen3_5.py
-index def6a402d5..9056608f3f 100644
+index 855dff6233..6c7dbdbaf8 100644
 --- a/python/sglang/srt/models/qwen3_5.py
 +++ b/python/sglang/srt/models/qwen3_5.py
-@@ -274,7 +274,7 @@ def _qwen3_5_stage_facts(
+@@ -280,7 +280,7 @@ def _qwen3_5_stage_facts(
      )
  
  
@@ -40,7 +24,7 @@ index def6a402d5..9056608f3f 100644
      from sglang.kernels.ops.attention.fused_qk_rmsnorm_rope_gate import (
          fused_qk_gemma_rmsnorm_rope_gate,
      )
-@@ -1427,6 +1427,10 @@ class Qwen3_5AttentionDecoderLayer(nn.Module):
+@@ -1483,6 +1483,10 @@ class Qwen3_5AttentionDecoderLayer(nn.Module):
  
      def forward_prepare_cuda_fused(self, positions, hidden_states):
          """Fused QK GemmaRMSNorm + NeoX RoPE + gate deinterleave."""
@@ -51,7 +35,7 @@ index def6a402d5..9056608f3f 100644
          qkv, _ = self.qkv_proj(hidden_states)
          if self.attn_output_gate:
              q_gate, k, v = qkv.split(
-@@ -1535,12 +1539,12 @@ class Qwen3_5AttentionDecoderLayer(nn.Module):
+@@ -1615,12 +1619,12 @@ class Qwen3_5AttentionDecoderLayer(nn.Module):
          hidden_states: torch.Tensor,
          forward_batch: ForwardBatch,
      ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
@@ -66,6 +50,3 @@ index def6a402d5..9056608f3f 100644
              return self.forward_prepare_fused_gate(
                  positions=positions,
                  hidden_states=hidden_states,
--- 
-2.34.1
-

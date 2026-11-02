@@ -1,42 +1,8 @@
-From c604aad32652606d36d790be8279fd4939252b85 Mon Sep 17 00:00:00 2001
-From: Nikolai Protasov <nprotaso@amd.com>
-Date: Mon, 19 Oct 2026 11:03:15 +0000
-Subject: [PATCH] [AMD][Qwen3.8] Fused FlyDSL QSA sparse decode on gfx950
-
-SGLANG_ENABLE_QSA_FLYDSL_DECODE (default on, gfx950 only) serves QSA
-decode/verify with a fused FlyDSL kernel that reads the selected KV
-straight from the pool, with no gather pass, and splits each row across
-CTAs. It is tried before the FlyDSL paged decode path.
-
-From amd-nprotaso/sglang qwen_3_8_improvement: 0c3cedfc32.
----
- .../sglang/kernels/ops/attention/__init__.py  |   6 +
- .../ops/attention/qsa_flydsl/__init__.py      |  19 +
- .../attention/qsa_flydsl/kernels/__init__.py  |   0
- .../qsa_flydsl/kernels/sparse_decode_attn.py  | 446 ++++++++++++++++++
- .../kernels/sparse_decode_reduce.py           | 100 ++++
- .../attention/qsa_flydsl/qsa_sparse_decode.py | 204 ++++++++
- python/sglang/srt/environ.py                  |   5 +
- .../attention/qwen_sparse_attn_backend.py     |  98 ++++
- .../attention/bench_qsa_sparse_decode.py      | 146 ++++++
- .../ops/attention/qsa_flydsl/__init__.py      |   0
- .../qsa_flydsl/test_qsa_sparse_decode.py      | 236 +++++++++
- .../unit/kernels/test_kernels_namespace.py    |   1 +
- 12 files changed, 1261 insertions(+)
- create mode 100644 python/sglang/kernels/ops/attention/qsa_flydsl/__init__.py
- create mode 100644 python/sglang/kernels/ops/attention/qsa_flydsl/kernels/__init__.py
- create mode 100644 python/sglang/kernels/ops/attention/qsa_flydsl/kernels/sparse_decode_attn.py
- create mode 100644 python/sglang/kernels/ops/attention/qsa_flydsl/kernels/sparse_decode_reduce.py
- create mode 100644 python/sglang/kernels/ops/attention/qsa_flydsl/qsa_sparse_decode.py
- create mode 100644 test/registered/kernels/benchmark/attention/bench_qsa_sparse_decode.py
- create mode 100644 test/registered/kernels/ops/attention/qsa_flydsl/__init__.py
- create mode 100644 test/registered/kernels/ops/attention/qsa_flydsl/test_qsa_sparse_decode.py
-
 diff --git a/python/sglang/kernels/ops/attention/__init__.py b/python/sglang/kernels/ops/attention/__init__.py
-index 588d290ce2..d027f92b3b 100644
+index a525a562fb..78eb7c6719 100644
 --- a/python/sglang/kernels/ops/attention/__init__.py
 +++ b/python/sglang/kernels/ops/attention/__init__.py
-@@ -277,6 +277,12 @@ for _mod, _fn, _backend, _device in [
+@@ -268,6 +268,12 @@ for _mod, _fn, _backend, _device in [
          KernelBackend.FLYDSL,
          CapabilityRequirement.HIP,
      ),
@@ -846,10 +812,10 @@ index 0000000000..eaa14a3876
 +        )
 +    return out
 diff --git a/python/sglang/srt/environ.py b/python/sglang/srt/environ.py
-index c8d8c976e7..fc39d9db5a 100644
+index 8ec078ba9d..4c0cf68f80 100644
 --- a/python/sglang/srt/environ.py
 +++ b/python/sglang/srt/environ.py
-@@ -912,6 +912,11 @@ class Envs:
+@@ -1047,6 +1047,11 @@ class Envs:
      # concurrency the grid is only num_seqs * num_kv_heads * splits CTAs, so a
      # larger value may be worth forcing.
      SGLANG_AITER_QSA_PA_DECODE_SPLITS = EnvInt(0)
@@ -862,10 +828,10 @@ index c8d8c976e7..fc39d9db5a 100644
      # tuned hidden-state kernel) instead of the Triton FLA chunk path. Requires
      # SGLANG_USE_AITER. Measured on MI355X: 1.4x on the chunk stage, GSM8K unchanged.
 diff --git a/python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py b/python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py
-index 3a8001e79c..67b278c999 100644
+index 30046d844b..95607d4cd1 100644
 --- a/python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py
 +++ b/python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py
-@@ -85,6 +85,19 @@ def _resolve_trtllm_sparse_decode():
+@@ -84,6 +84,19 @@ def _resolve_trtllm_sparse_decode():
      return trtllm_batch_decode_with_kv_cache
  
  
@@ -885,7 +851,7 @@ index 3a8001e79c..67b278c999 100644
  @lru_cache(maxsize=1)
  def _resolve_flash_attn_varlen_func():
      from sglang.srt.utils import is_hip, is_sm121
-@@ -260,6 +273,7 @@ class QwenSparseAttnBackend(AttentionBackend):
+@@ -275,6 +288,7 @@ class QwenSparseAttnBackend(AttentionBackend):
          self._trtllm_workspace = None
          self._trtllm_counters = {}
          self._flydsl_partials = {}
@@ -893,7 +859,7 @@ index 3a8001e79c..67b278c999 100644
          self._graph_extend_lens = None
          self._graph_extend_lens_pin = None
          self._verify_mask = None
-@@ -1848,6 +1862,75 @@ class QwenSparseAttnBackend(AttentionBackend):
+@@ -1924,6 +1938,75 @@ class QwenSparseAttnBackend(AttentionBackend):
              self._flydsl_partials[key] = cached
          return cached
  
@@ -969,7 +935,7 @@ index 3a8001e79c..67b278c999 100644
      def _forward_flydsl_sparse(
          self,
          q: torch.Tensor,
-@@ -2023,6 +2106,21 @@ class QwenSparseAttnBackend(AttentionBackend):
+@@ -2089,6 +2172,21 @@ class QwenSparseAttnBackend(AttentionBackend):
                  trtllm_decode,
              )
  
@@ -1389,17 +1355,14 @@ index 0000000000..9d648b6fcb
 +
 +    sys.exit(pytest.main([__file__, "-v"]))
 diff --git a/test/registered/unit/kernels/test_kernels_namespace.py b/test/registered/unit/kernels/test_kernels_namespace.py
-index 41f47e9a19..e5043b979c 100644
+index 973b6e137b..8fb34b9e9e 100644
 --- a/test/registered/unit/kernels/test_kernels_namespace.py
 +++ b/test/registered/unit/kernels/test_kernels_namespace.py
-@@ -197,6 +197,7 @@ def test_import_stays_metadata_only():
+@@ -334,6 +334,7 @@ def test_import_stays_metadata_only():
+         ("elementwise.kimi_k3_mla_output_gate", KernelBackend.JIT, "cuda"),
          ("attention.fused_kda_decode_mtp_dspark", KernelBackend.CUTE_DSL, "cuda"),
-         ("attention.flydsl_kimi_k3_kda_decode", KernelBackend.FLYDSL, "hip"),
          ("attention.flydsl_kimi_k3_kda_decode_with_f_b", KernelBackend.FLYDSL, "hip"),
 +        ("attention.flydsl_qsa_sparse_decode", KernelBackend.FLYDSL, "hip"),
          ("communication.all_reduce_push_res", KernelBackend.JIT, "cuda"),
          ("communication.gemm_ag_up_proj", KernelBackend.JIT, "cuda"),
          ("communication.reduce_scatter_res", KernelBackend.JIT, "cuda"),
--- 
-2.34.1
-

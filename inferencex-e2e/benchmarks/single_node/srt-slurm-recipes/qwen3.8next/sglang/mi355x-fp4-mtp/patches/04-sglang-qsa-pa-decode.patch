@@ -1,32 +1,8 @@
-From bbe63c688b9d94325327e6f94795ca59c75bc66f Mon Sep 17 00:00:00 2001
-From: Nikolai Protasov <nprotaso@amd.com>
-Date: Thu, 15 Oct 2026 13:51:58 +0000
-Subject: [PATCH 5/8] [AMD] Opt-in FlyDSL paged decode for Qwen3.8 QSA
- post-gather attention
-
-On ROCm the post-gather QSA attention runs CK's group-mode varlen prefill
-kernel, where a length-one decode query fills 1 of 128 MFMA rows.
-SGLANG_AITER_QSA_PA_DECODE=1 serves decode with AITER's FlyDSL BF16 paged
-decode instead, gathering the selected KV straight into its vectorized
-paged layout; SGLANG_AITER_QSA_PA_DECODE_SPLITS pins the KV split count
-(0 asks AITER once at the captured maximum batch). Off by default: it is
-not bit-exact with CK.
-
-From amd-nprotaso/sglang qwen_3_8_improvement: 966dde9ebb and 0e4c96f885
-(00217ca3ae is already upstream). Needs the AITER QSA paged-decode kernel.
----
- python/sglang/srt/environ.py                  |  15 ++
- .../layers/attention/qsa/pa_decode_flydsl.py  | 104 ++++++++++++
- .../srt/layers/attention/qsa/sparse_attn.py   | 155 +++++++++++++++++
- .../attention/qwen_sparse_attn_backend.py     | 158 ++++++++++++++++++
- 4 files changed, 432 insertions(+)
- create mode 100644 python/sglang/srt/layers/attention/qsa/pa_decode_flydsl.py
-
 diff --git a/python/sglang/srt/environ.py b/python/sglang/srt/environ.py
-index 48c4149b5e..e5d814d39a 100644
+index 81235d1e01..ad7c246418 100644
 --- a/python/sglang/srt/environ.py
 +++ b/python/sglang/srt/environ.py
-@@ -897,6 +897,21 @@ class Envs:
+@@ -1032,6 +1032,21 @@ class Envs:
      # one CTA streams well inside a single launch. Default ON elsewhere, where
      # launches are cheaper and the split was tuned.
      SGLANG_HC_COMBINE_SPLIT = EnvBool(lambda: not _default_hip())
@@ -46,14 +22,14 @@ index 48c4149b5e..e5d814d39a 100644
 +    # larger value may be worth forcing.
 +    SGLANG_AITER_QSA_PA_DECODE_SPLITS = EnvInt(0)
      SGLANG_USE_AITER_AG = EnvBool(True)
-     # Use reduce_scatter (instead of all_reduce + dp_scatter) for the equal-chunk
-     # MAX_LEN DP-MoE combine. Default ON for ROCm/HIP (uses the aiter custom
+     # The gfx950 TP4 JIT quick all-reduce (quick_all_reduce_hip) runs an INT4 request below this
+     # many MiB in INT8, which is as fast at decode sizes with about 1/16 of INT4's error; 0 runs
 diff --git a/python/sglang/srt/layers/attention/qsa/pa_decode_flydsl.py b/python/sglang/srt/layers/attention/qsa/pa_decode_flydsl.py
 new file mode 100644
-index 0000000000..e48f96a1eb
+index 0000000000..d837bc3ab5
 --- /dev/null
 +++ b/python/sglang/srt/layers/attention/qsa/pa_decode_flydsl.py
-@@ -0,0 +1,104 @@
+@@ -0,0 +1,108 @@
 +"""Optional gfx942/gfx950 QSA paged decode using AITER's FlyDSL pa_decode_tile.
 +
 +The post-gather QSA attention currently runs through ``flash_attn_varlen_func``,
@@ -124,13 +100,17 @@ index 0000000000..e48f96a1eb
 +    if not _aiter_pa_decode_available():
 +        return False
 +
-+    from aiter.ops.flydsl.pa_decode import flydsl_pa_decode_supported
++    from aiter.jit.utils.chip_info import get_gfx_runtime
 +
-+    # Probe with the cache shape the backend will actually build, not the pool's.
-+    probe_key = k_buffer.new_empty(
-+        (1, k_buffer.shape[1], head_dim // vec, page_size, vec)
++    return (
++        get_gfx_runtime() in ("gfx942", "gfx950")
++        and page_size in (16, 64, 128)
++        and 64 <= head_dim <= 1024
++        and head_dim % 64 == 0
++        and q.shape[2] == head_dim
++        and k_buffer.shape[1] > 0
++        and q.shape[1] % k_buffer.shape[1] == 0
 +    )
-+    return flydsl_pa_decode_supported(q, probe_key, block_size=page_size)
 +
 +
 +def paged_cache_views(
@@ -159,10 +139,10 @@ index 0000000000..e48f96a1eb
 +    )
 +    return key_cache, value_cache
 diff --git a/python/sglang/srt/layers/attention/qsa/sparse_attn.py b/python/sglang/srt/layers/attention/qsa/sparse_attn.py
-index 2aca96d711..b6574093b8 100644
+index ec86b8f130..c286078b9a 100644
 --- a/python/sglang/srt/layers/attention/qsa/sparse_attn.py
 +++ b/python/sglang/srt/layers/attention/qsa/sparse_attn.py
-@@ -590,6 +590,160 @@ def _compact_kv(
+@@ -724,6 +724,160 @@ def _compact_kv(
      )
  
  
@@ -323,7 +303,7 @@ index 2aca96d711..b6574093b8 100644
  def qwen_sparse_valid_counts_triton(seq_lens, indices, counts, batch, topk):
      """Valid-count pass alone, without the packed cu_seqlens prefix sum."""
      _fa2_valid_counts[(batch,)](
-@@ -665,6 +819,7 @@ __all__ = [
+@@ -799,6 +953,7 @@ __all__ = [
      "qwen_sparse_fa2_cu_seqlens_triton",
      "qwen_sparse_valid_counts_triton",
      "qwen_sparse_kv_extraction_compact_triton",
@@ -332,7 +312,7 @@ index 2aca96d711..b6574093b8 100644
      "sparse_gqa_fwd_interface_triton_ck",
      "sparse_gqa_packed_decode_triton",
 diff --git a/python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py b/python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py
-index 31db21423f..3a8001e79c 100644
+index 9ff9ee4abc..30046d844b 100644
 --- a/python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py
 +++ b/python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py
 @@ -16,6 +16,7 @@ import msgspec
@@ -359,7 +339,7 @@ index 31db21423f..3a8001e79c 100644
      qwen_sparse_valid_counts_triton,
      sparse_gqa_fwd_interface_triton,
      sparse_gqa_fwd_interface_triton_ck,
-@@ -253,6 +259,7 @@ class QwenSparseAttnBackend(AttentionBackend):
+@@ -268,6 +274,7 @@ class QwenSparseAttnBackend(AttentionBackend):
          self._mtp_shared_sparse_indices = None
          self._trtllm_workspace = None
          self._trtllm_counters = {}
@@ -367,33 +347,34 @@ index 31db21423f..3a8001e79c 100644
          self._graph_extend_lens = None
          self._graph_extend_lens_pin = None
          self._verify_mask = None
-@@ -1814,6 +1821,152 @@ class QwenSparseAttnBackend(AttentionBackend):
+@@ -1889,6 +1896,143 @@ class QwenSparseAttnBackend(AttentionBackend):
          )
          return output.reshape(q.shape[0], -1)
  
-+    def _get_flydsl_partials(
-+        self, capacity_rows, num_kv_heads, splits, group_size, head_dim, dtype, device
++    def _get_flydsl_workspace(
++        self, batch, num_kv_heads, splits, group_size, head_dim, dtype, device
 +    ):
-+        """Split-KV partials for the FlyDSL paged decode, cached per shape.
++        """Cache mainline PA work metadata and partials for graph replay."""
++        from aiter.ops.flydsl.kernels.pa_decode_plan import PADecodePlan
 +
-+        Allocated at the captured maximum batch and sliced per call: the kernel
-+        refuses to allocate mid-capture, and `num_partitions` is one of its
-+        compile-time constants, so neither may vary once a graph is recorded.
-+        """
-+        key = (capacity_rows, num_kv_heads, splits, group_size, head_dim, dtype, device)
++        key = (batch, num_kv_heads, splits, group_size, head_dim, dtype, device)
 +        cached = self._flydsl_partials.get(key)
 +        if cached is None:
-+            from aiter.ops.flydsl.pa_decode import flydsl_pa_decode_partials
-+
-+            cached = flydsl_pa_decode_partials(
-+                capacity_rows,
++            num_cu = torch.cuda.get_device_properties(device).multi_processor_count
++            max_parts = splits or num_cu
++            capacity = min(batch * max_parts, max(batch, (2 * num_cu + num_kv_heads - 1) // num_kv_heads))
++            plan = PADecodePlan(
++                torch.empty((capacity, 4), dtype=torch.int32, device=device),
++                torch.empty((batch, 2), dtype=torch.int32, device=device),
 +                num_kv_heads,
-+                splits,
-+                1,  # query_length: every QSA row is its own length-one sequence
-+                group_size,
-+                head_dim,
-+                dtype=dtype,
-+                device=device,
++                max_parts,
++            )
++            shape = (num_kv_heads, capacity, group_size)
++            cached = (
++                plan,
++                torch.empty(shape, dtype=torch.float32, device=device),
++                torch.empty(shape, dtype=torch.float32, device=device),
++                torch.empty((*shape, head_dim), dtype=dtype, device=device),
 +            )
 +            self._flydsl_partials[key] = cached
 +        return cached
@@ -417,10 +398,7 @@ index 31db21423f..3a8001e79c 100644
 +        this holds for speculative verify rows too, which arrive here one row per
 +        draft token.
 +        """
-+        from aiter.ops.flydsl.pa_decode import (
-+            flydsl_pa_decode,
-+            flydsl_pa_decode_recommended_splits,
-+        )
++        from aiter.ops.flydsl.pa_decode import pa_decode, plan_pa_decode
 +
 +        batch, topk = topk_indices.shape
 +        page = _TRTLLM_SPARSE_PAGE_SIZE
@@ -484,43 +462,36 @@ index 31db21423f..3a8001e79c 100644
 +            page,
 +            stride,
 +        )
-+        # Pinned so a captured graph and its replays agree; 0 means "ask once".
-+        splits = envs.SGLANG_AITER_QSA_PA_DECODE_SPLITS.get() or (
-+            flydsl_pa_decode_recommended_splits(
-+                max(capacity_rows, batch), num_kv_heads, page
-+            )
++        splits = envs.SGLANG_AITER_QSA_PA_DECODE_SPLITS.get()
++        plan, pmax, psum, pout = self._get_flydsl_workspace(
++            batch, num_kv_heads, splits, group_size, head_dim, q.dtype, device
 +        )
-+        pmax, psum, pout = self._get_flydsl_partials(
-+            max(capacity_rows, batch),
-+            num_kv_heads,
-+            splits,
-+            group_size,
-+            head_dim,
-+            q.dtype,
-+            device,
-+        )
++        # Refresh selected lengths on the current stream, including graph replay.
++        plan_pa_decode(valid_counts, num_kv_heads, plan=plan)
 +        output = torch.empty(
 +            (batch, q.shape[1], head_dim), dtype=q.dtype, device=device
 +        )
-+        flydsl_pa_decode(
++        pa_decode(
 +            output,
 +            q.contiguous(),
 +            key_cache,
 +            value_cache,
-+            block_tables,
 +            valid_counts,
++            block_tables,
 +            layer.scaling,
-+            num_partitions=splits,
-+            pmax=pmax[:batch],
-+            psum=psum[:batch],
-+            pout=pout[:batch],
++            1,  # Each sparse query row has independently selected KV.
++            work_plan=plan,
++            max_context_length=stride,
++            max_logits=pmax,
++            exp_sums=psum,
++            temporary_output=pout,
 +        )
 +        return output.reshape(q.shape[0], -1)
 +
      def forward_decode(
          self,
          q: torch.Tensor,
-@@ -1870,6 +2023,11 @@ class QwenSparseAttnBackend(AttentionBackend):
+@@ -1945,6 +2089,11 @@ class QwenSparseAttnBackend(AttentionBackend):
                  trtllm_decode,
              )
  
@@ -532,6 +503,3 @@ index 31db21423f..3a8001e79c 100644
          batch, topk = topk_indices.shape
          sequence_lens = metadata.sequence_lengths
          if metadata.is_cuda_graph:
--- 
-2.34.1
-

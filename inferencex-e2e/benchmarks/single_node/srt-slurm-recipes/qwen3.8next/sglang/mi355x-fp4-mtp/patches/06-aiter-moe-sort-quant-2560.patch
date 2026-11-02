@@ -1,0 +1,812 @@
+From 901e39c9bc750f9650091ceb6badaf649d8ef00d Mon Sep 17 00:00:00 2001
+From: Christian Gilli <272772515+amd-cgilli@users.noreply.github.com>
+Date: Mon, 19 Oct 2026 10:50:14 +0000
+Subject: [PATCH 3/3] Add fused MoE sort + quant for hidden size 2560
+
+(cherry picked from commit ee5f7a8225c09be211f2e3a7da51dbd7a37230d7)
+---
+ aiter/fused_moe.py                            |  22 +-
+ aiter/ops/moe_sorting_opus.py                 |  13 +-
+ csrc/include/moe_sorting_opus.h               |   7 +-
+ csrc/py_itfs_cu/moe_sorting_opus_kernels.cu   |  64 +++---
+ .../hip/bench_mxfp4_moe_sort_quant.py         |  90 ++++++--
+ op_tests/test_moe_sorting_mxfp4.py            | 214 ++++++++++++++----
+ 6 files changed, 307 insertions(+), 103 deletions(-)
+
+diff --git a/aiter/fused_moe.py b/aiter/fused_moe.py
+index 23647039..b1918fbb 100644
+--- a/aiter/fused_moe.py
++++ b/aiter/fused_moe.py
+@@ -105,9 +105,13 @@ def _aux_uses_opus(output_aux, block_size, routed_rows=None, num_experts=None):
+ _ACT_TYPE_DISABLED_KEY = "__ignore__"
+ _SWIGLU_MXFP4_BF16_BOUND = int(os.environ.get("GPTOSS_SWIGLU_MXFP4_BF16_BOUND", "256"))
+ _MOE_A8W4_BYPASS_QUANT = os.environ.get("AITER_MOE_A8W4_BYPASS_QUANT", "0") == "1"
+-# (num_experts, topk) pairs the HIP kernel is instantiated for; must stay in
+-# sync with AITER_MXFP4_SORT_QUANT_ROUTES in moe_sorting_opus_kernels.cu.
+-_FUSED_DECODE_SORT_QUANT_ROUTES = {(512, 10), (513, 11)}
++# (num_experts, topk, hidden) shapes the HIP kernel is instantiated for; must
++# stay in sync with AITER_MXFP4_SORT_QUANT_ROUTES in moe_sorting_opus_kernels.cu.
++_FUSED_DECODE_SORT_QUANT_ROUTES = {
++    (512, 10, 4096),
++    (513, 11, 4096),
++    (513, 11, 2560),
++}
+ _FUSED_DECODE_SORT_QUANT_MAX_M = 128
+ 
+ # Internal benchmark/test hook (not a public switch): set True to force the
+@@ -139,10 +143,10 @@ def _is_fused_decode_sort_quant_enabled(
+ ) -> bool:
+     """Gate the direct-scale HIP route-sort/quant kernel to supported decode.
+ 
+-    The shape bounds mirror the kernel's own contract (``model_dim=4096``,
+-    ``block_m=32``, ``M`` in ``[1, 128]``, an instantiated ``(E, topk)``
+-    route). The remaining conditions are integration requirements: they
+-    describe the stage-1 path whose activation quantization this kernel
++    The shape bounds mirror the kernel's own contract (``block_m=32``,
++    ``M`` in ``[1, 128]``, an instantiated ``(E, topk, model_dim)`` route).
++    The remaining conditions are integration requirements: they describe
++    the stage-1 path whose activation quantization this kernel
+     replaces. The fused path is selected automatically whenever every
+     condition matches; it falls back to the generic sort + quant otherwise.
+     """
+@@ -154,14 +158,14 @@ def _is_fused_decode_sort_quant_enabled(
+         return False
+     tokens = hidden_states.shape[0] if hidden_states.ndim == 2 else 0
+     topk = topk_ids.shape[1] if topk_ids.ndim == 2 else 0
++    hidden = hidden_states.shape[1] if hidden_states.ndim == 2 else 0
+     return (
+         runtime_is_gfx950
+         and hidden_states.dtype == dtypes.bf16
+         and 1 <= tokens <= _FUSED_DECODE_SORT_QUANT_MAX_M
+-        and hidden_states.shape[1] == 4096
+         and hidden_states.is_contiguous()
+         and topk_ids.dtype == dtypes.i32
+-        and (global_experts, topk) in _FUSED_DECODE_SORT_QUANT_ROUTES
++        and (global_experts, topk, hidden) in _FUSED_DECODE_SORT_QUANT_ROUTES
+         and topk_ids.shape[0] == tokens
+         and topk_ids.is_contiguous()
+         and topk_weights.dtype == dtypes.fp32
+diff --git a/aiter/ops/moe_sorting_opus.py b/aiter/ops/moe_sorting_opus.py
+index a340b021..64105f6b 100644
+--- a/aiter/ops/moe_sorting_opus.py
++++ b/aiter/ops/moe_sorting_opus.py
+@@ -55,7 +55,14 @@ def mxfp4_moe_sort_quant_fwd(
+ ) -> None:
+     """Fused route sort + compact MXFP4 activation quantization.
+ 
+-    gfx950 only, ``model_dim=4096``, ``block_m=32``, ``M`` in ``[1, 128]``.
+-    ``(num_experts, topk)`` must be one of ``(512, 10)`` or ``(513, 11)``
+-    -- the expert histogram is a kernel template parameter.
++    gfx950 only, ``block_m=32``, ``M`` in ``[1, 128]``, BF16 contiguous
++    ``hidden_states`` of shape ``[M, H]``. ``(num_experts, topk, H)`` must be
++    one of ``(512, 10, 4096)``, ``(513, 11, 4096)`` or ``(513, 11, 2560)`` --
++    the expert histogram and the hidden size are kernel template parameters.
++
++    Outputs: ``activation_quant`` is ``[M, H // 2]`` packed fp4,
++    ``activation_scale_token`` is ``[M, H // 32]`` compact per-token e8m0
++    (expand with ``mxfp4_moe_sort_fwd(..., cols=H)`` for the sorted-row
++    layout), and ``moe_buf`` is either empty or at least ``M * H`` BF16/FP16
++    elements, whose first ``M * H`` elements are zeroed.
+     """
+diff --git a/csrc/include/moe_sorting_opus.h b/csrc/include/moe_sorting_opus.h
+index e1038147..1c74714e 100644
+--- a/csrc/include/moe_sorting_opus.h
++++ b/csrc/include/moe_sorting_opus.h
+@@ -30,9 +30,10 @@ void moe_sorting_opus_fwd(aiter_tensor_t& topk_ids,
+                           std::optional<aiter_tensor_t> reverse_sorted   = std::nullopt);
+ 
+ // Narrow gfx950 decode helper. It fuses route sorting, BF16->MXFP4 activation
+-// quantization and routed-output zeroing for H=4096, block_m=32 batches of
+-// M in [1, 128]. (num_experts, topk) must be one of (512,10) or
+-// (513,11) -- the expert histogram is a template parameter. Emits compact
++// quantization and routed-output zeroing for block_m=32 batches of M in
++// [1, 128]. (num_experts, topk, H) must be one of (512,10,4096),
++// (513,11,4096) or (513,11,2560) -- the expert histogram and the hidden size
++// are template parameters. Emits compact
+ // per-token E8M0 scales, which FlyDSL GEMM1 can consume directly; callers that
+ // need the sorted-row layout run the conventional conversion afterwards.
+ void mxfp4_moe_sort_quant_fwd(aiter_tensor_t& hidden_states,
+diff --git a/csrc/py_itfs_cu/moe_sorting_opus_kernels.cu b/csrc/py_itfs_cu/moe_sorting_opus_kernels.cu
+index e026c7db..dceeb3ee 100644
+--- a/csrc/py_itfs_cu/moe_sorting_opus_kernels.cu
++++ b/csrc/py_itfs_cu/moe_sorting_opus_kernels.cu
+@@ -97,18 +97,20 @@ void moe_sorting_opus_fwd(aiter_tensor_t& topk_ids,
+ 
+ namespace aiter::mxfp4_moe {
+ 
+-constexpr int kHiddenSize    = 4096;
+ constexpr int kBlockM        = 32;
+ constexpr int kThreads       = 1024;
+ constexpr int kSortQuantCtas = 16;
+-constexpr int kScaleCols     = kHiddenSize / 32;
++constexpr int kMxGroupSize   = 32;
+ 
+-// Routed-MoE shapes the sort kernel is instantiated for. NumExperts and TopK
+-// are template parameters (the expert histogram lives in LDS), so widening the
+-// support surface means adding a row here.
++// (NumExperts, TopK, HiddenSize) shapes the kernel is instantiated for. All
++// three are template parameters (the expert histogram lives in LDS and the
++// hidden size fixes the per-token group count), so widening the support
++// surface means adding a row here and to _FUSED_DECODE_SORT_QUANT_ROUTES in
++// aiter/fused_moe.py.
+ #define AITER_MXFP4_SORT_QUANT_ROUTES(_) \
+-    _(512, 10)                           \
+-    _(513, 11)
++    _(512, 10, 4096)                     \
++    _(513, 11, 4096)                     \
++    _(513, 11, 2560)
+ 
+ __device__ __forceinline__ int pack_token_topk_id(int token_id, int topk_id)
+ {
+@@ -136,13 +138,16 @@ __device__ __forceinline__ int dpp_inclusive_scan_wave(int value)
+     return value + tmp;
+ }
+ 
+-template <int NumCtas>
++template <int NumCtas, int HiddenSize>
+ __device__ __forceinline__ void zero_moe_output(void* output, int tokens)
+ {
++    // A BF16/FP16 row must split into whole int4 stores.
++    static_assert((HiddenSize * 2) % sizeof(int4) == 0,
++                  "moe_buf rows must be whole int4 vectors");
+     if(output == nullptr)
+         return;
+ 
+-    constexpr long long row_bytes = static_cast<long long>(kHiddenSize) * 2;
++    constexpr long long row_bytes = static_cast<long long>(HiddenSize) * 2;
+     const long long total_vecs = (static_cast<long long>(tokens) * row_bytes) / sizeof(int4);
+     const long long global_thread =
+         static_cast<long long>(blockIdx.x) * blockDim.x + threadIdx.x;
+@@ -255,7 +260,7 @@ __device__ __forceinline__ void build_sorted_metadata(
+     }
+ }
+ 
+-template <int QuantCtas>
++template <int QuantCtas, int HiddenSize>
+ __device__ __forceinline__ void quantize_activations_compact(
+     const hip_bfloat16* hidden_states,
+     uint8_t* activation_quant,
+@@ -263,7 +268,11 @@ __device__ __forceinline__ void quantize_activations_compact(
+     int tokens)
+ {
+     using bf16x2_t = __bf16 __attribute__((ext_vector_type(2)));
+-    constexpr int groups_per_token = kHiddenSize / 32;
++    // Groups are numbered flat across [tokens, HiddenSize / 32], so the
++    // payload and scale offsets below are row-major for any whole-group H.
++    static_assert(HiddenSize % kMxGroupSize == 0,
++                  "hidden size must be a whole number of MX groups");
++    constexpr int groups_per_token = HiddenSize / kMxGroupSize;
+     constexpr int groups_per_wave = 16;
+     constexpr int groups_per_cta = (kThreads / 64) * groups_per_wave;
+ 
+@@ -335,7 +344,7 @@ __device__ __forceinline__ void quantize_activations_compact(
+     }
+ }
+ 
+-template <int NumExperts, int TopK>
++template <int NumExperts, int TopK, int HiddenSize>
+ __global__ void __launch_bounds__(kThreads) moe_sort_quant_kernel(
+     const hip_bfloat16* hidden_states,
+     const int32_t* topk_ids,
+@@ -349,7 +358,7 @@ __global__ void __launch_bounds__(kThreads) moe_sort_quant_kernel(
+     uint8_t* activation_scale_token,
+     int tokens)
+ {
+-    zero_moe_output<kSortQuantCtas>(moe_buf, tokens);
++    zero_moe_output<kSortQuantCtas, HiddenSize>(moe_buf, tokens);
+     if(blockIdx.x == 0)
+     {
+         build_sorted_metadata<NumExperts, TopK>(
+@@ -363,7 +372,7 @@ __global__ void __launch_bounds__(kThreads) moe_sort_quant_kernel(
+     }
+     else
+     {
+-        quantize_activations_compact<kSortQuantCtas - 1>(
++        quantize_activations_compact<kSortQuantCtas - 1, HiddenSize>(
+             hidden_states, activation_quant, activation_scale_token, tokens);
+     }
+ }
+@@ -448,19 +457,19 @@ void mxfp4_moe_sort_quant_fwd(aiter_tensor_t& hidden_states,
+                 ": expected int32 sorted_token_ids, fp32 sorted_weights, int32 "
+                 "sorted_expert_ids, and int32 num_valid_ids");
+     const int topk = topk_ids.dim() == 2 ? static_cast<int>(topk_ids.size(1)) : 0;
++    const int hidden = hidden_states.dim() == 2 ? static_cast<int>(hidden_states.size(1)) : 0;
+ 
+-#define AITER_MXFP4_SORT_QUANT_MATCH(NUM_EXPERTS, TOPK) \
+-    || (num_experts == (NUM_EXPERTS) && topk == (TOPK))
++#define AITER_MXFP4_SORT_QUANT_MATCH(NUM_EXPERTS, TOPK, HIDDEN) \
++    || (num_experts == (NUM_EXPERTS) && topk == (TOPK) && hidden == (HIDDEN))
+     const bool route_supported =
+         false AITER_MXFP4_SORT_QUANT_ROUTES(AITER_MXFP4_SORT_QUANT_MATCH);
+ #undef AITER_MXFP4_SORT_QUANT_MATCH
+ 
+-    AITER_CHECK(hidden_states.dim() == 2 && hidden_states.size(1) == kHiddenSize &&
+-                    topk_ids.dim() == 2 && topk_ids.size(0) == hidden_states.size(0) &&
+-                    route_supported,
++    AITER_CHECK(hidden_states.dim() == 2 && topk_ids.dim() == 2 &&
++                    topk_ids.size(0) == hidden_states.size(0) && route_supported,
+                 __func__,
+-                ": only H=4096 with (num_experts, topk) in "
+-                "{(512,10), (513,11)} is supported");
++                ": only (num_experts, topk, H) in "
++                "{(512,10,4096), (513,11,4096), (513,11,2560)} is supported");
+     AITER_CHECK(hidden_states.is_contiguous() && topk_ids.is_contiguous() &&
+                     topk_weights.is_contiguous() && sorted_token_ids.is_contiguous() &&
+                     sorted_weights.is_contiguous() && sorted_expert_ids.is_contiguous() &&
+@@ -492,17 +501,16 @@ void mxfp4_moe_sort_quant_fwd(aiter_tensor_t& hidden_states,
+     AITER_CHECK(topk_weights.numel() == topk_ids.numel() &&
+                     activation_quant.numel() == hidden_states.numel() / 2 &&
+                     activation_scale_token.numel() ==
+-                        hidden_states.size(0) * kScaleCols &&
++                        hidden_states.size(0) * (hidden / kMxGroupSize) &&
+                     num_valid_ids.numel() >= 2,
+                 __func__,
+                 ": incompatible fused sort/quant tensor sizes");
+     AITER_CHECK(moe_buf.numel() == 0 ||
+                     ((moe_buf.dtype() == AITER_DTYPE_bf16 ||
+                       moe_buf.dtype() == AITER_DTYPE_fp16) &&
+-                     moe_buf.numel() >=
+-                         static_cast<int64_t>(tokens) * kHiddenSize),
++                     moe_buf.numel() >= static_cast<int64_t>(tokens) * hidden),
+                 __func__,
+-                ": moe_buf must be empty or contain at least M*4096 BF16/FP16 elements");
++                ": moe_buf must be empty or contain at least M*H BF16/FP16 elements");
+ 
+     AITER_CHECK(sorted_token_ids.numel() >= required_sorted &&
+                     sorted_weights.numel() >= required_sorted &&
+@@ -525,10 +533,10 @@ void mxfp4_moe_sort_quant_fwd(aiter_tensor_t& hidden_states,
+     uint8_t* activation_quant_ptr = static_cast<uint8_t*>(activation_quant.data_ptr());
+     uint8_t* activation_scale_token_ptr =
+         static_cast<uint8_t*>(activation_scale_token.data_ptr());
+-#define AITER_MXFP4_SORT_QUANT_LAUNCH(NUM_EXPERTS, TOPK)                            \
+-    if(num_experts == (NUM_EXPERTS) && topk == (TOPK))                              \
++#define AITER_MXFP4_SORT_QUANT_LAUNCH(NUM_EXPERTS, TOPK, HIDDEN)                    \
++    if(num_experts == (NUM_EXPERTS) && topk == (TOPK) && hidden == (HIDDEN))        \
+     {                                                                               \
+-        aiter::mxfp4_moe::moe_sort_quant_kernel<(NUM_EXPERTS), (TOPK)>              \
++        aiter::mxfp4_moe::moe_sort_quant_kernel<(NUM_EXPERTS), (TOPK), (HIDDEN)>    \
+             <<<dim3(kSortQuantCtas), dim3(kThreads), 0, stream>>>(                  \
+                 hidden_ptr,                                                         \
+                 topk_ids_ptr,                                                       \
+diff --git a/op_tests/op_benchmarks/hip/bench_mxfp4_moe_sort_quant.py b/op_tests/op_benchmarks/hip/bench_mxfp4_moe_sort_quant.py
+index e02fe38f..3fabc57b 100755
+--- a/op_tests/op_benchmarks/hip/bench_mxfp4_moe_sort_quant.py
++++ b/op_tests/op_benchmarks/hip/bench_mxfp4_moe_sort_quant.py
+@@ -15,13 +15,19 @@ conventional two-launch sequence against the fused kernel:
+ Each variant is CUDA-graph captured and replayed, so the numbers are launch
+ cost inclusive and free of Python overhead.
+ 
+-Default shape is the Qwen3.5 MXFP4 MoE decode config: model_dim=4096, with the
+-two instantiated routes (num_experts, topk) in {(512, 10), (513, 11)}.
++By default every instantiated (num_experts, topk, model_dim) shape is swept:
++the Qwen3.5 MXFP4 MoE decode config (model_dim=4096, (512, 10) and (513, 11))
++and Qwen3.8-Flash-Next (model_dim=2560, (513, 11) with the shared expert fused
++as expert 512). --routes / --model-dim narrow the sweep; combinations the
++kernel is not instantiated for are skipped.
+ 
+ Usage:
+-    # Run with default parameters (Qwen3.5 decode shape)
++    # Run every instantiated shape
+     python bench_mxfp4_moe_sort_quant.py
+ 
++    # Qwen3.8-Flash-Next decode: MTP draft (M=16) and target verify (M=64)
++    python bench_mxfp4_moe_sort_quant.py --routes 513,11 --model-dim 2560 -t 16 64
++
+     # Run a single route variant at selected token counts
+     python bench_mxfp4_moe_sort_quant.py --routes 512,10 -t 1 8 32
+ 
+@@ -39,6 +45,7 @@ import torch
+ import aiter
+ from aiter import dtypes
+ from aiter.fused_moe import (
++    _FUSED_DECODE_SORT_QUANT_ROUTES,
+     _USE_CK_MOE_SORTING,
+     _USE_FLYDSL_MOE_SORTING,
+     moe_sorting,
+@@ -47,11 +54,8 @@ from aiter.ops.quant import fused_dynamic_mxfp4_quant_moe_sort, mxfp4_moe_sort_f
+ 
+ DEVICE = "cuda"
+ 
+-# Default sweep parameters (Qwen3.5 397B MXFP4 MoE decode shard)
+-MODEL_DIM = 4096
+ BLOCK_M = 32
+ TOKENS = [1, 2, 4, 8, 16, 32, 64, 128]
+-ROUTES = [(512, 10), (513, 11)]
+ # The last expert of this route is a fused shared expert every token is routed
+ # to; the other route dispatches its shared expert separately.
+ FUSED_SHARED_ROUTE = (513, 11)
+@@ -122,7 +126,7 @@ def bench_sort_quant_latency(
+     tokens: int,
+     experts: int,
+     topk: int,
+-    model_dim: int = MODEL_DIM,
++    model_dim: int,
+     block_m: int = BLOCK_M,
+     iters: int = 300,
+     warmup: int = 30,
+@@ -152,6 +156,8 @@ def bench_sort_quant_latency(
+             topk=topk,
+             block_size=block_m,
+             sorted_weights=weights,
++            # fused_moe_2stages bounds the quant grid by the routed expert count.
++            num_experts_upper_bound=experts,
+         )
+ 
+     # Output buffers for the fused kernel, laid out as aiter.fused_moe allocates them.
+@@ -210,15 +216,48 @@ def bench_sort_quant_latency(
+     )
+ 
+ 
++def select_shapes(routes, model_dims) -> list[tuple[int, int, int]]:
++    """Instantiated (experts, topk, model_dim) shapes matching the filters.
++
++    The default sweep is every shape in _FUSED_DECODE_SORT_QUANT_ROUTES: the
++    Qwen3.5 397B (H=4096) and Qwen3.8-Flash-Next (H=2560) MXFP4 MoE decode
++    shards. ``None`` leaves a filter open; requested combinations the kernel is not
++    instantiated for are reported and skipped (the op would abort on them).
++    """
++    instantiated = sorted(_FUSED_DECODE_SORT_QUANT_ROUTES, key=lambda s: (-s[2], s))
++    if routes is None:
++        routes = list(dict.fromkeys((e, k) for e, k, _ in instantiated))
++    shapes = []
++    for experts, topk in routes:
++        dims = model_dims or [
++            h for e, k, h in instantiated if (e, k) == (experts, topk)
++        ]
++        if not dims:
++            print(
++                f"skip E={experts} topk={topk}: "
++                "no instantiated fused sort+quant shape"
++            )
++            continue
++        for model_dim in dims:
++            if (experts, topk, model_dim) in _FUSED_DECODE_SORT_QUANT_ROUTES:
++                shapes.append((experts, topk, model_dim))
++            else:
++                print(
++                    f"skip E={experts} topk={topk} model_dim={model_dim}: "
++                    "not an instantiated fused sort+quant shape"
++                )
++    return shapes
++
++
+ def run_benchmark(args):
+-    """Run the plumbing benchmark across every route variant and token count."""
++    """Run the plumbing benchmark across every selected shape and token count."""
+     print(f"arch: {torch.cuda.get_device_properties(0).gcnArchName}")
+     print(f"flydsl_sorting={_USE_FLYDSL_MOE_SORTING} ck_sorting={_USE_CK_MOE_SORTING}")
+ 
+     results = []
+-    for experts, topk in args.routes:
++    for experts, topk, model_dim in select_shapes(args.routes, args.model_dim):
+         print(
+-            f"\n=== E={experts} topk={topk} model_dim={args.model_dim} "
++            f"\n=== E={experts} topk={topk} model_dim={model_dim} "
+             f"block_m={args.block_m} (us) ==="
+         )
+         header = (
+@@ -233,13 +272,15 @@ def run_benchmark(args):
+                 tokens,
+                 experts,
+                 topk,
+-                model_dim=args.model_dim,
++                model_dim=model_dim,
+                 block_m=args.block_m,
+                 iters=args.iters,
+                 warmup=args.warmup,
+                 reps=args.reps,
+             )
+-            results.append((experts, topk, tokens, sort_us, base_us, fused_us, ss_us))
++            results.append(
++                (experts, topk, model_dim, tokens, sort_us, base_us, fused_us, ss_us)
++            )
+             print(
+                 f"{tokens:>8} {sort_us:>10.2f} {base_us:>12.2f} {fused_us:>10.2f} "
+                 f"{ss_us:>10.2f} {base_us / fused_us:>7.2f}x "
+@@ -255,14 +296,23 @@ def _save_results_csv(filepath: str, results: list):
+     path = Path(filepath)
+     with open(path, "w") as f:
+         f.write(
+-            "experts,topk,tokens,sort_us,baseline_sort_quant_us,fused_us,"
++            "experts,topk,model_dim,tokens,sort_us,baseline_sort_quant_us,fused_us,"
+             "fused_sorted_scale_us,speedup_fused,speedup_fused_sorted_scale\n"
+         )
+         f.writelines(
+-            f"{experts},{topk},{tokens},{sort_us:.4f},{base_us:.4f},"
++            f"{experts},{topk},{model_dim},{tokens},{sort_us:.4f},{base_us:.4f},"
+             f"{fused_us:.4f},{ss_us:.4f},"
+             f"{base_us / fused_us:.4f},{base_us / ss_us:.4f}\n"
+-            for experts, topk, tokens, sort_us, base_us, fused_us, ss_us in results
++            for (
++                experts,
++                topk,
++                model_dim,
++                tokens,
++                sort_us,
++                base_us,
++                fused_us,
++                ss_us,
++            ) in results
+         )
+     print(f"\nResults saved to {path.resolve()}")
+ 
+@@ -294,15 +344,17 @@ def parse_args():
+         type=_route,
+         nargs="+",
+         metavar="E,TOPK",
+-        default=ROUTES,
+-        help="Route variants as comma-separated expert/topk pairs.",
++        default=None,
++        help="Route variants as comma-separated expert/topk pairs "
++        "(default: every instantiated route).",
+     )
+     parser.add_argument(
+         "--model-dim",
+         type=int,
++        nargs="+",
+         dest="model_dim",
+-        default=MODEL_DIM,
+-        help="Model hidden dimension.",
++        default=None,
++        help="Model hidden dimensions (default: every instantiated one per route).",
+     )
+     parser.add_argument(
+         "--block-m",
+diff --git a/op_tests/test_moe_sorting_mxfp4.py b/op_tests/test_moe_sorting_mxfp4.py
+index 6c001cae..da21bb6c 100644
+--- a/op_tests/test_moe_sorting_mxfp4.py
++++ b/op_tests/test_moe_sorting_mxfp4.py
+@@ -35,6 +35,7 @@ from aiter.ops.quant import (
+     fused_dynamic_mxfp4_quant_moe_sort as hip_fused_mxfp4_quant_moe_sort,
+ )
+ from aiter.ops.quant import (
++    mxfp4_moe_sort_fwd,
+     per_1x32_f4_quant_hip,
+     per_1x32_f8_scale_f8_quant,
+     per_1x32_mx_quant_hip,
+@@ -485,18 +486,23 @@ aiter.logger.info("moe_%s_quant_sort_stage2 summary (markdown):\n%s", _label, df
+ #
+ # `mxfp4_moe_sort_quant_fwd` fuses Opus route sorting, BF16->MXFP4 activation
+ # quant (per-token E8M0 scales), and routed-output zeroing into one launch.
+-# It is instantiated only for model_dim=4096, block_m=32, M in [1, 128], and
+-# the two routes (num_experts, topk) in {(512, 10), (513, 11)}, and is selected
+-# automatically by the fused_moe gate -- there is no enable switch.
++# It is instantiated only for block_m=32, M in [1, 128], and the shapes
++# (num_experts, topk, model_dim) in {(512, 10, 4096), (513, 11, 4096),
++# (513, 11, 2560)}, and is selected automatically by the fused_moe gate --
++# there is no enable switch.
+ # ---------------------------------------------------------------------------
+-_FUSED_HIDDEN = 4096
+ # The last expert of (513, 11) is a fused shared expert every token routes to;
+ # (512, 10) dispatches its shared expert separately.
+ _FUSED_SHARED_ROUTE = (513, 11)
+-_FUSED_ROUTES = ((513, 11), (512, 10))
++# (num_experts, topk, model_dim): Qwen3.5 (H=4096) and Qwen3.8-Flash-Next
++# (H=2560, shared expert fused as expert 512).
++_FUSED_ROUTES = ((513, 11, 4096), (512, 10, 4096), (513, 11, 2560))
+ # Non-power-of-2 counts included on purpose: the contract is M in [1, 128], not
+ # a whitelist, and partial 32-row tail blocks take a different path.
+ _FUSED_TOKEN_COUNTS = [1, 2, 3, 4, 8, 16, 17, 32, 64, 100, 127, 128]
++# Decode shapes checked byte-for-byte against the generic sort + quant path:
++# M=16 / M=64 are the MTP-draft / target-verify batches, the rest are edges.
++_FUSED_EXACT_TOKEN_COUNTS = [1, 16, 17, 64, 128]
+ # Keyword gate inputs shared by the contract checks below.
+ _FUSED_GATE_KWARGS = {
+     "block_m": 32,
+@@ -530,9 +536,9 @@ def _running_on_gfx950():
+         return False
+ 
+ 
+-def _make_fused_inputs(tokens, experts, topk):
++def _make_fused_inputs(tokens, experts, topk, model_dim):
+     torch.manual_seed(1000 + tokens)
+-    hidden = torch.randn((tokens, _FUSED_HIDDEN), dtype=torch.bfloat16, device="cuda")
++    hidden = torch.randn((tokens, model_dim), dtype=torch.bfloat16, device="cuda")
+     if (experts, topk) != _FUSED_SHARED_ROUTE:
+         topk_ids = torch.stack(
+             [
+@@ -585,8 +591,8 @@ def _canonical_entries(sorted_ids, sorted_weights, sorted_experts, num_valid_ids
+     return sorted(entries)
+ 
+ 
+-def _run_fused(hidden, topk_ids, topk_weights, experts, bm):
+-    tokens = hidden.shape[0]
++def _run_fused(hidden, topk_ids, topk_weights, experts, bm, moe_buf=None):
++    tokens, model_dim = hidden.shape
+     route_count = topk_ids.numel()
+     active_experts = min(experts, route_count)
+     max_sorted = (route_count + active_experts * (bm - 1) + bm - 1) // bm * bm
+@@ -596,12 +602,13 @@ def _run_fused(hidden, topk_ids, topk_weights, experts, bm):
+         (max_sorted + bm - 1) // bm, dtype=torch.int32, device="cuda"
+     )
+     num_valid_ids = torch.empty(2, dtype=torch.int32, device="cuda")
+-    moe_buf = torch.empty((tokens, _FUSED_HIDDEN), dtype=torch.bfloat16, device="cuda")
++    if moe_buf is None:
++        moe_buf = torch.empty((tokens, model_dim), dtype=torch.bfloat16, device="cuda")
+     activation_quant = torch.empty(
+-        (tokens, _FUSED_HIDDEN // 2), dtype=dtypes.fp4x2, device="cuda"
++        (tokens, model_dim // 2), dtype=dtypes.fp4x2, device="cuda"
+     )
+     activation_scale_token = torch.empty(
+-        (tokens, _FUSED_HIDDEN // 32), dtype=dtypes.fp8_e8m0, device="cuda"
++        (tokens, model_dim // 32), dtype=dtypes.fp8_e8m0, device="cuda"
+     )
+     aiter.mxfp4_moe_sort_quant_fwd(
+         hidden,
+@@ -628,16 +635,16 @@ def _run_fused(hidden, topk_ids, topk_weights, experts, bm):
+ 
+ 
+ @benchmark()
+-def test_mxfp4_fused_sort_quant(dtype, token_num, E, topk, block_size):
++def test_mxfp4_fused_sort_quant(dtype, token_num, E, topk, model_dim, block_size):
+     """Fused sort+quant vs Opus sort + generic MXFP4 quant, plus its latency.
+ 
+     Records the kernel latency and the byte-level quant/scale diffs; the sort
+     layout, valid counts, and output zeroing are exact contracts and assert.
+     """
+-    hidden, topk_ids, topk_weights = _make_fused_inputs(token_num, E, topk)
++    hidden, topk_ids, topk_weights = _make_fused_inputs(token_num, E, topk, model_dim)
+ 
+     ref_ids, ref_weights, ref_experts, ref_valid, _ = moe_sorting(
+-        topk_ids, topk_weights, E, _FUSED_HIDDEN, dtypes.bf16, block_size
++        topk_ids, topk_weights, E, model_dim, dtypes.bf16, block_size
+     )
+     ref_quant, _ = hip_fused_mxfp4_quant_moe_sort(
+         hidden,
+@@ -681,33 +688,147 @@ def test_mxfp4_fused_sort_quant(dtype, token_num, E, topk, block_size):
+ 
+ def _check_fused_decode_sort_quant_wrapper():
+     """`_fused_decode_sort_quant` returns sorted (default) and compact scales."""
+-    for tokens in (2, 4):
+-        hidden, topk_ids, topk_weights = _make_fused_inputs(tokens, 512, 10)
++    for (experts, topk, model_dim), tokens in itertools.product(_FUSED_ROUTES, (2, 4)):
++        hidden, topk_ids, topk_weights = _make_fused_inputs(
++            tokens, experts, topk, model_dim
++        )
+         result = _fused_decode_sort_quant(
+             hidden,
+             topk_ids,
+             topk_weights,
+-            model_dim=_FUSED_HIDDEN,
+-            global_experts=512,
++            model_dim=model_dim,
++            global_experts=experts,
+             block_m=32,
+             moebuf_dtype=torch.bfloat16,
+             accumulate=True,
+         )
+         sorted_scale = result[-1]
+         assert sorted_scale.shape[0] == result[0].shape[0]
+-        assert sorted_scale.shape[1] == _FUSED_HIDDEN // 32
++        # H/32 scale columns are already a multiple of 8 for every instance.
++        assert sorted_scale.shape[1] == model_dim // 32
++        assert result[4].shape == (tokens, model_dim)
++        assert result[5].shape == (tokens, model_dim // 2)
+         compact = _fused_decode_sort_quant(
+             hidden,
+             topk_ids,
+             topk_weights,
+-            model_dim=_FUSED_HIDDEN,
+-            global_experts=512,
++            model_dim=model_dim,
++            global_experts=experts,
+             block_m=32,
+             moebuf_dtype=torch.bfloat16,
+             accumulate=True,
+             compact_scale=True,
+         )
+-        assert compact[-1].shape == (tokens, _FUSED_HIDDEN // 32)
++        assert compact[-1].shape == (tokens, model_dim // 32)
++
++
++def _unshuffle_sorted_scale(sorted_scale, rows):
++    """Invert `mx_scale_shuffle_idx`: tiled e8m0 bytes -> [rows, scaleN]."""
++    sm, sn = sorted_scale.shape
++    tiles = sorted_scale.view(torch.uint8).view(sm // 32, sn // 8, 4, 16, 2, 2)
++    return tiles.permute(0, 5, 3, 1, 4, 2).reshape(sm, sn)[:rows]
++
++
++def _per_route_scale_rows(sorted_scale, sorted_ids, num_valid_ids, tokens):
++    """Map each valid sorted row to (token, topk slot) -> its e8m0 bytes.
++
++    Row order inside an expert block differs between the Opus sort and the
++    fused kernel (atomic cursors), so rows are keyed by the route they carry.
++    Padding rows are skipped: neither path defines their scale bytes.
++    """
++    valid = int(num_valid_ids[0].item())
++    rows = _unshuffle_sorted_scale(sorted_scale, valid).cpu()
++    packed = sorted_ids[:valid].cpu().tolist()
++    by_route = {}
++    for row, value in enumerate(packed):
++        token = value & 0x00FFFFFF
++        if token < tokens:
++            by_route[(token, (value >> 24) & 0xFF)] = rows[row]
++    return by_route
++
++
++def _check_fused_matches_generic_path(
++    experts, topk, model_dim, tokens, zero_token=None
++):
++    """Byte-exact equality with the path the fused kernel replaces.
++
++    The generic path is Opus `moe_sorting` + `fused_dynamic_mxfp4_quant_moe_sort`
++    exactly as `fused_moe_2stages` calls it; the fused path is the kernel plus
++    the `mxfp4_moe_sort_fwd` scale expand, as `_fused_decode_sort_quant` runs it.
++    Compared: the fp4 a1 payload, every valid route's sorted+shuffled e8m0
++    scale row, and full zeroing of a poisoned `moe_buf`.
++
++    Two scale-byte cases are outside the bit-exact contract (the fp4 payload
++    is 0 in both, so the dequantized values agree):
++    - an all-zero 32-element group: the generic absMax floor is 1e-10, the
++      fused bf16 bit-max is 0, so the e8m0 bytes differ. `zero_token` zeroes
++      one token row (a CUDA-graph padded decode row) and its scale bytes are
++      skipped; every group with nonzero amax is still compared.
++    - a route with sorted weight 0: the generic kernel zeroes that row and its
++      scale, the fused kernel quantizes it. The inputs never produce one.
++    """
++    block_m = 32
++    hidden, topk_ids, topk_weights = _make_fused_inputs(
++        tokens, experts, topk, model_dim
++    )
++    if zero_token is not None:
++        hidden[zero_token].zero_()
++    group_live = hidden.view(tokens, -1, 32).abs().amax(dim=-1).ne(0).cpu()
++    ref_ids, ref_weights, _ref_experts, ref_valid, _ = moe_sorting(
++        topk_ids, topk_weights, experts, model_dim, dtypes.bf16, block_m
++    )
++    ref_a1, ref_scale = hip_fused_mxfp4_quant_moe_sort(
++        hidden,
++        sorted_ids=ref_ids,
++        num_valid_ids=ref_valid,
++        token_num=tokens,
++        topk=topk,
++        block_size=block_m,
++        sorted_weights=ref_weights,
++        num_experts_upper_bound=experts,
++    )
++
++    poisoned_buf = torch.full(
++        (tokens, model_dim), float("nan"), dtype=torch.bfloat16, device="cuda"
++    )
++    f_ids, _f_weights, _f_experts, f_valid, _f_buf, f_a1, f_scale_token = _run_fused(
++        hidden, topk_ids, topk_weights, experts, block_m, poisoned_buf
++    )
++    assert torch.equal(
++        poisoned_buf.view(torch.int16), torch.zeros_like(poisoned_buf.view(torch.int16))
++    ), (experts, topk, model_dim, tokens, "moe_buf not fully zeroed")
++    f_scale = mxfp4_moe_sort_fwd(
++        f_scale_token,
++        sorted_ids=f_ids,
++        num_valid_ids=f_valid,
++        token_num=tokens,
++        cols=model_dim,
++    )
++    torch.cuda.synchronize()
++
++    assert f_scale.shape[1] == ref_scale.shape[1] == model_dim // 32
++    assert torch.equal(f_valid, ref_valid), (experts, topk, model_dim, tokens)
++    assert torch.equal(f_a1.view(torch.uint8), ref_a1.view(torch.uint8)), (
++        experts,
++        topk,
++        model_dim,
++        tokens,
++        "fp4 a1 payload differs",
++    )
++    ref_rows = _per_route_scale_rows(ref_scale, ref_ids, ref_valid, tokens)
++    fused_rows = _per_route_scale_rows(f_scale, f_ids, f_valid, tokens)
++    assert ref_rows.keys() == fused_rows.keys()
++    assert len(ref_rows) == tokens * topk
++    for route, ref_row in ref_rows.items():
++        live = group_live[route[0]]
++        assert torch.equal(ref_row[live], fused_rows[route][live]), (
++            experts,
++            topk,
++            model_dim,
++            tokens,
++            route,
++            "sorted e8m0 scale row differs",
++        )
+ 
+ 
+ def _check_fused_gate():
+@@ -717,13 +838,18 @@ def _check_fused_gate():
+     reaching the op is fatal -- this gate is the only guard.
+     """
+     table = [
+-        (512, 10, 100, True),  # non power-of-2 M accepted
+-        (513, 11, 8, True),  # fused-shared route accepted
+-        (512, 8, 8, False),  # uninstantiated topk
+-        (256, 10, 8, False),  # uninstantiated experts
+-        (512, 10, 129, False),  # M above kernel contract
++        (512, 10, 4096, 100, True),  # non power-of-2 M accepted
++        (513, 11, 4096, 8, True),  # fused-shared route accepted
++        (513, 11, 2560, 16, True),  # Qwen3.8 MTP-draft decode
++        (513, 11, 2560, 64, True),  # Qwen3.8 target-verify decode
++        (512, 8, 4096, 8, False),  # uninstantiated topk
++        (256, 10, 4096, 8, False),  # uninstantiated experts
++        (512, 10, 2560, 8, False),  # uninstantiated (E, topk) at H=2560
++        (513, 11, 3072, 8, False),  # uninstantiated hidden size
++        (512, 10, 4096, 129, False),  # M above kernel contract
++        (513, 11, 2560, 129, False),  # M above kernel contract
+     ]
+-    for experts, topk, tokens, expected in table:
++    for experts, topk, model_dim, tokens, expected in table:
+         pool = min(experts, 512)
+         topk_ids = torch.stack(
+             [
+@@ -732,9 +858,7 @@ def _check_fused_gate():
+             ]
+         )
+         topk_weights = torch.rand((tokens, topk), dtype=torch.float32, device="cuda")
+-        hidden = torch.randn(
+-            (tokens, _FUSED_HIDDEN), dtype=torch.bfloat16, device="cuda"
+-        )
++        hidden = torch.randn((tokens, model_dim), dtype=torch.bfloat16, device="cuda")
+         assert (
+             _is_fused_decode_sort_quant_enabled(
+                 hidden,
+@@ -744,12 +868,12 @@ def _check_fused_gate():
+                 **_FUSED_GATE_KWARGS,
+             )
+             is expected
+-        ), (experts, topk, tokens)
++        ), (experts, topk, model_dim, tokens)
+ 
+ 
+ def _check_fused_gate_uses_runtime_arch():
+     """Runtime dispatch must ignore a potentially different build target."""
+-    hidden, topk_ids, topk_weights = _make_fused_inputs(8, 512, 10)
++    hidden, topk_ids, topk_weights = _make_fused_inputs(8, 512, 10, 4096)
+     original = fused_moe.get_gfx_runtime
+     for arch in ("gfx942", None):
+ 
+@@ -773,7 +897,7 @@ def _check_fused_gate_uses_runtime_arch():
+ 
+ def _check_fused_disable_toggle():
+     """The internal base-vs-head hook forces the generic path when set."""
+-    hidden, topk_ids, topk_weights = _make_fused_inputs(8, 512, 10)
++    hidden, topk_ids, topk_weights = _make_fused_inputs(8, 512, 10, 4096)
+     assert _is_fused_decode_sort_quant_enabled(
+         hidden, topk_ids, topk_weights, global_experts=512, **_FUSED_GATE_KWARGS
+     )
+@@ -786,8 +910,8 @@ def _check_fused_disable_toggle():
+         fused_moe._fused_decode_sort_quant_disabled = False
+ 
+ 
+-def _check_fused_cuda_graph_replay_safe(experts, topk, block_size):
+-    hidden, topk_ids, topk_weights = _make_fused_inputs(4, experts, topk)
++def _check_fused_cuda_graph_replay_safe(experts, topk, model_dim, block_size):
++    hidden, topk_ids, topk_weights = _make_fused_inputs(4, experts, topk, model_dim)
+     # Compile/warm up before capture: the graph only records the fixed-address
+     # launch; every buffer is preallocated.
+     _run_fused(hidden, topk_ids, topk_weights, experts, block_size)
+@@ -809,14 +933,22 @@ if _running_on_gfx950():
+     _check_fused_gate_uses_runtime_arch()
+     _check_fused_disable_toggle()
+     _check_fused_decode_sort_quant_wrapper()
++    for (E, topk, model_dim), m in itertools.product(
++        _FUSED_ROUTES, _FUSED_EXACT_TOKEN_COUNTS
++    ):
++        _check_fused_matches_generic_path(E, topk, model_dim, m)
++    for E, topk, model_dim in _FUSED_ROUTES:
++        _check_fused_matches_generic_path(E, topk, model_dim, 16, zero_token=3)
+ 
+     df = []
+     for dtype in args.dtype:
+-        for (E, topk), m in itertools.product(_FUSED_ROUTES, _FUSED_TOKEN_COUNTS):
+-            df.append(test_mxfp4_fused_sort_quant(dtype, m, E, topk, 32))
++        for (E, topk, model_dim), m in itertools.product(
++            _FUSED_ROUTES, _FUSED_TOKEN_COUNTS
++        ):
++            df.append(test_mxfp4_fused_sort_quant(dtype, m, E, topk, model_dim, 32))
+     df = pd.DataFrame(df)
+     df_md = df.to_markdown(index=False)
+     aiter.logger.info("mxfp4_fused_sort_quant summary (markdown):\n%s", df_md)
+ 
+-    for E, topk in _FUSED_ROUTES:
+-        _check_fused_cuda_graph_replay_safe(E, topk, 32)
++    for E, topk, model_dim in _FUSED_ROUTES:
++        _check_fused_cuda_graph_replay_safe(E, topk, model_dim, 32)
+-- 
+2.34.1
+

@@ -1,8 +1,8 @@
 diff --git a/python/sglang/srt/model_loader/loader.py b/python/sglang/srt/model_loader/loader.py
-index a7130ec8d5..44c6b74e4d 100644
+index edda2a7618..b28d87ac2d 100644
 --- a/python/sglang/srt/model_loader/loader.py
 +++ b/python/sglang/srt/model_loader/loader.py
-@@ -824,6 +824,36 @@ class DefaultModelLoader(BaseModelLoader):
+@@ -826,6 +826,36 @@ class DefaultModelLoader(BaseModelLoader):
          )
          return _prefetch_all_checkpoints(weight_files, num_threads=num_threads)
  
@@ -39,7 +39,7 @@ index a7130ec8d5..44c6b74e4d 100644
      def initialize_model_for_startup(
          self,
          *,
-@@ -832,7 +862,7 @@ class DefaultModelLoader(BaseModelLoader):
+@@ -834,7 +864,7 @@ class DefaultModelLoader(BaseModelLoader):
      ) -> nn.Module:
          """Build the final model structure and GPU parameter storage."""
          target_device = torch.device(device_config.device)
@@ -48,7 +48,7 @@ index a7130ec8d5..44c6b74e4d 100644
          with set_default_torch_dtype(model_config.dtype):
              with target_device:
                  model = _initialize_model(
-@@ -1006,7 +1036,7 @@ class DefaultModelLoader(BaseModelLoader):
+@@ -1008,7 +1038,7 @@ class DefaultModelLoader(BaseModelLoader):
              return model.eval()
  
          target_device = torch.device(device_config.device)
@@ -110,7 +110,7 @@ index b3803b4a3c..6e0cb77344 100644
      def shared_experts_fusion_disable_reason(hf_config, quant_config):
          return Qwen3_5ForCausalLM.shared_experts_fusion_disable_reason(
 diff --git a/test/registered/unit/models/test_qwen3_5_mtp_quant_config.py b/test/registered/unit/models/test_qwen3_5_mtp_quant_config.py
-index 86bccd7ee8..80b9415364 100644
+index 886bee0277..768ffad4b8 100644
 --- a/test/registered/unit/models/test_qwen3_5_mtp_quant_config.py
 +++ b/test/registered/unit/models/test_qwen3_5_mtp_quant_config.py
 @@ -1,4 +1,9 @@
