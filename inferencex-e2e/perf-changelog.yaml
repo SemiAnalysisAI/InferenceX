@@ -11853,3 +11853,15 @@
     - "Retire Qwen3.5 8k1k serving configurations across NVIDIA and AMD and remove their unused recipes."
     - "Keep Qwen3.5 AgentX coverage, SPEED-Bench collectors, and historical results unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4697
+
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the image and native KV-offload backend from nvcr.io/nvidia/tensorrt-llm/release:1.3.0a0.dev202610151219 to release:1.4.0rc3.dev202611020007. Dynamo stays on the 1.6.0.dev20261010 wheel."
+    - "Replace the search space with ten points: 1P1D TEP4/TEP16 at conc 8 (b1) and 16 (b4), 1P1D TEP4/TEP8 at conc 28 (b6), 1P2D TEP4/TEP8 at conc 128 (b16), 2P1D TEP2/TEP8 at conc 224 (b64), 2P2D TEP2/TEP8 at conc 176 (b32), 2P2D TEP4/TEP8 at conc 264 (b32), 3P1D TEP2/TEP8 at conc 352 and 392 (b128) and 3P2D DEP4/DEP4 at conc 720 (b36)."
+    - "Select the Qwen3.5 SM103 engine profiles with TRTLLM_Q35_PROFILE=ctx on prefill and gen on decode, set OMP_NUM_THREADS=1, UCX_CUDA_COPY_MAX_POLL/UCX_CUDA_IPC_MAX_POLL=inf and MPI UCX transports on both roles, add SRPT context scheduling and in-forward Mamba snapshots on prefill, and add the disaggregated-generation and spec-sampler fast paths on decode; TEP2/TEP8 points add per-shape cuBLAS FP8, MoE GEMM and context-parallel tuning on decode."
+    - "TEP prefill uses MTP with max_draft_len 1, max_num_tokens 16384, TWOSHOT allreduce, Mamba branch snapshots and piecewise CUDA graphs to 16384 tokens; DEP prefill keeps max_num_tokens 8192 and sets SRPT aging (age cap 2048, 8 s). TEP decode uses the TRTLLM MoE backend with MoE TP2."
+    - "Launch workers under numactl --cpunodebind/--preferred on the GPU's NUMA node (numa_cpu_bind with numa_memory_bind: preferred, srt-slurm v2.65.2) with TLLM_NUMA_AWARE_WORKER_AFFINITY=1, serve the model as Qwen3.5-397B-A17B-NVFP4-V2, send token IDs as bytes from the Dynamo frontend (DYN_TOKEN_IDS_AS_BYTES=1), place the frontend on the first decode node, and route prefill by KV with 14400 s session affinity and decode by least-loaded."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
