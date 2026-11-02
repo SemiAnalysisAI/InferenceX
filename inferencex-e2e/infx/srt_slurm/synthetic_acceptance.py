@@ -41,6 +41,9 @@ SGLANG_VARIABLES = (
 )
 TRT_VARIABLE = "TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS"
 TILERT_VARIABLES = ("TILERT_SIMULATE_ACC_LEN", "TILERT_SIMULATE_ACC_METHOD")
+# TileRT drafts with the checkpoint's own draft head. Its method per TileRT model profile (the
+# decode role's `model` argument) when that head is not MTP; any other profile is mtp.
+TILERT_DRAFT_METHODS = {"dsv41": "dspark"}
 
 
 def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
@@ -53,7 +56,10 @@ def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
     if engine == "tilert":
         if args.get("with-mtp") is not True:
             return {}
-        return {"method": "mtp", "num_speculative_tokens": args.get("num-mtp")}
+        return {
+            "method": TILERT_DRAFT_METHODS.get(str(args.get("model", "")), "mtp"),
+            "num_speculative_tokens": args.get("num-mtp"),
+        }
     if engine == "atom":
         method = args.get("method")
         if not method:

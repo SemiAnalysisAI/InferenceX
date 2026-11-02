@@ -52,6 +52,7 @@ def golden_dir(tmp_path: Path) -> Path:
         ("minimaxm3_eagle3.yaml", "minimax-m3", 2.5),
         ("minimaxm3_eagle3_gqa.yaml", "minimax-m3", 2.6),
         ("glm5.3_mtp.yaml", "glm-5.3", 3.2),
+        ("dsv41flash_dspark.yaml", "deepseek-v4.1-flash", 3.3),
         ("musespark_dflash.yaml", "muse-spark-open", 3.4),
     ]:
         (directory / filename).write_text(
@@ -464,6 +465,21 @@ def test_tilert_plan_uses_caller_decode_depth_and_keeps_prefill_real(
         "method": "mtp",
         "num_speculative_tokens": 1,
     }
+
+
+def test_tilert_dsv41_profile_selects_the_dspark_curve(tmp_path: Path, golden_dir: Path) -> None:
+    recipe = tilert_recipe()
+    recipe["roles"]["decode"]["args"]["model"] = "dsv41"
+    path = tmp_path / "tilert.yaml"
+    path.write_text(yaml.safe_dump(recipe))
+    commands = plan_commands(
+        str(path), "tilert", [], {**ENV, "MODEL_PREFIX": "dsv41flash"}, golden_dir=golden_dir
+    )
+    assert len(commands) == 1
+    assert commands[0].acceptance_length == 3.3
+    result = apply_native(recipe, commands[0].command)
+    assert result["roles"]["decode"]["env"]["TILERT_SIMULATE_ACC_LEN"] == "3.3"
+    assert result["roles"]["decode"]["env"]["TILERT_SIMULATE_ACC_METHOD"] == "match-expected"
 
 
 @pytest.mark.parametrize(
