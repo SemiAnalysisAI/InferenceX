@@ -1,0 +1,241 @@
+base:
+  schema: 2
+  name: mimov2.6flash-fp4-b200-vllm-agentic-dflash
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  # Stages the pinned snapshot so the dflash/ draft path below exists.
+  setup_script: mimov2.6flash-dflash-draft.sh
+  # The engine may take the full VLLM_ENGINE_READY_TIMEOUT_S to become ready.
+  health_check:
+    interval_seconds: 10
+    max_attempts: 720
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: XiaomiMiMo/MiMo-V2.6-Flash-RL
+        # Pinned so the target and the draft path come from the same snapshot.
+        revision: f657ba2f7d24c9adc5730675baaa2d34de878a49
+        trust-remote-code: true
+        gpu-memory-utilization: 0.95
+        # Largest context the KV pool holds; the uncapped AgentX corpus needs it.
+        max-model-len: auto
+        max-num-batched-tokens: 16384
+        # vLLM's DFlash recipe for this checkpoint captures decode graphs only.
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
+        reasoning-parser: mimo
+        tool-call-parser: mimo
+        enable-auto-tool-choice: true
+        stream-interval: 20
+        disable-uvicorn-access-log: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+        # Outlast AIPerf's pooled-connection idle gaps.
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '600'
+  benchmark:
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+
+# One variant per point. Admission is 2x CONC for subagent fan-out, and decode CUDA
+# graphs cover CONC requests of 1 + num_speculative_tokens tokens each. The draft is
+# the checkpoint's BF16 dflash/ subfolder; the connector applies the golden AL from
+# infx/golden_al_distribution/mimov2.6flash_dflash.yaml (thinking_on: 4.08 at 7 draft
+# tokens, 2.97 at 3). Seven draft tokens up to CONC 16 at TP4 and CONC 8 at TP2, three
+# above, where verification compute dominates. TP8 replicates each of the four KV heads
+# across two ranks.
+
+override_tp8_c1:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        max-num-seqs: 2
+        max-cudagraph-capture-size: 8
+        speculative-config: '{"method":"dflash","model":"/mnt/hf_hub_cache/models--XiaomiMiMo--MiMo-V2.6-Flash-RL/snapshots/f657ba2f7d24c9adc5730675baaa2d34de878a49/dflash","num_speculative_tokens":7}'
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp8_c4:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        max-num-seqs: 8
+        max-cudagraph-capture-size: 32
+        speculative-config: '{"method":"dflash","model":"/mnt/hf_hub_cache/models--XiaomiMiMo--MiMo-V2.6-Flash-RL/snapshots/f657ba2f7d24c9adc5730675baaa2d34de878a49/dflash","num_speculative_tokens":7}'
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp4_c1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-seqs: 2
+        max-cudagraph-capture-size: 8
+        speculative-config: '{"method":"dflash","model":"/mnt/hf_hub_cache/models--XiaomiMiMo--MiMo-V2.6-Flash-RL/snapshots/f657ba2f7d24c9adc5730675baaa2d34de878a49/dflash","num_speculative_tokens":7}'
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp4_c4:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-seqs: 8
+        max-cudagraph-capture-size: 32
+        speculative-config: '{"method":"dflash","model":"/mnt/hf_hub_cache/models--XiaomiMiMo--MiMo-V2.6-Flash-RL/snapshots/f657ba2f7d24c9adc5730675baaa2d34de878a49/dflash","num_speculative_tokens":7}'
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp4_c8:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-seqs: 16
+        max-cudagraph-capture-size: 64
+        speculative-config: '{"method":"dflash","model":"/mnt/hf_hub_cache/models--XiaomiMiMo--MiMo-V2.6-Flash-RL/snapshots/f657ba2f7d24c9adc5730675baaa2d34de878a49/dflash","num_speculative_tokens":7}'
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
+override_tp4_c16:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-seqs: 32
+        max-cudagraph-capture-size: 128
+        speculative-config: '{"method":"dflash","model":"/mnt/hf_hub_cache/models--XiaomiMiMo--MiMo-V2.6-Flash-RL/snapshots/f657ba2f7d24c9adc5730675baaa2d34de878a49/dflash","num_speculative_tokens":7}'
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: none
+
+override_tp4_c32:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-seqs: 64
+        max-cudagraph-capture-size: 128
+        speculative-config: '{"method":"dflash","model":"/mnt/hf_hub_cache/models--XiaomiMiMo--MiMo-V2.6-Flash-RL/snapshots/f657ba2f7d24c9adc5730675baaa2d34de878a49/dflash","num_speculative_tokens":3}'
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: none
+
+override_tp4_c64:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-seqs: 128
+        max-cudagraph-capture-size: 256
+        speculative-config: '{"method":"dflash","model":"/mnt/hf_hub_cache/models--XiaomiMiMo--MiMo-V2.6-Flash-RL/snapshots/f657ba2f7d24c9adc5730675baaa2d34de878a49/dflash","num_speculative_tokens":3}'
+  benchmark:
+    env:
+      CONC: '64'
+      KV_OFFLOADING: none
+
+override_tp2_c1:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-num-seqs: 2
+        max-cudagraph-capture-size: 8
+        speculative-config: '{"method":"dflash","model":"/mnt/hf_hub_cache/models--XiaomiMiMo--MiMo-V2.6-Flash-RL/snapshots/f657ba2f7d24c9adc5730675baaa2d34de878a49/dflash","num_speculative_tokens":7}'
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp2_c4:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-num-seqs: 8
+        max-cudagraph-capture-size: 32
+        speculative-config: '{"method":"dflash","model":"/mnt/hf_hub_cache/models--XiaomiMiMo--MiMo-V2.6-Flash-RL/snapshots/f657ba2f7d24c9adc5730675baaa2d34de878a49/dflash","num_speculative_tokens":7}'
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp2_c8:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-num-seqs: 16
+        max-cudagraph-capture-size: 64
+        speculative-config: '{"method":"dflash","model":"/mnt/hf_hub_cache/models--XiaomiMiMo--MiMo-V2.6-Flash-RL/snapshots/f657ba2f7d24c9adc5730675baaa2d34de878a49/dflash","num_speculative_tokens":7}'
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
+override_tp2_c16:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-num-seqs: 32
+        max-cudagraph-capture-size: 64
+        speculative-config: '{"method":"dflash","model":"/mnt/hf_hub_cache/models--XiaomiMiMo--MiMo-V2.6-Flash-RL/snapshots/f657ba2f7d24c9adc5730675baaa2d34de878a49/dflash","num_speculative_tokens":3}'
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: none
+
+override_tp2_c32:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-num-seqs: 64
+        max-cudagraph-capture-size: 128
+        speculative-config: '{"method":"dflash","model":"/mnt/hf_hub_cache/models--XiaomiMiMo--MiMo-V2.6-Flash-RL/snapshots/f657ba2f7d24c9adc5730675baaa2d34de878a49/dflash","num_speculative_tokens":3}'
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: none
