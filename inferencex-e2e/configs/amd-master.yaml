@@ -468,7 +468,7 @@ qwen3.5-fp4-mi355x-sglang-agentic-mtp:
 # FP8 PLE, AgentX on MI355X via SGLang with native NEXTN MTP (3 steps,
 # eagle-topk 1, 4 draft tokens). TP1: the ~116 GiB checkpoint fits on one MI355X.
 qwen3.8next-fp4-mi355x-sglang-agentic-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.22-rocm10-mi35x-20261018@sha256:9dc8237cf0fe52d29e0d9c2f920f4a932f2b8614505020b94b550ee6db73711c
+  image: lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261102@sha256:acf1fee05096c6eb757d4642e3b87c36766bce1334277e49b917afc2f06c7b5a
   model: amd/Qwen3.8-Flash-Next-Quark-MXFP4-AttnFP8-PLEFP8
   model-prefix: qwen3.8next
   runner: cluster:mi355x-amds
