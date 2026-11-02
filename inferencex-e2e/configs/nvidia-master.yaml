@@ -8132,21 +8132,6 @@ dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-hicache:
     - dram-utilization: 0.80
       search-space:
       - spec-decoding: mtp
-        conc-list: [1024]
-        srt-recipe: disagg-dep16-hicache-variants.yaml:override_3p1d_dep2_dep16_b20_c1024
-        kv-offloading: dram
-        kv-offload-backend: { name: hicache }
-        prefill:
-          num-worker: 3
-          tp: 2
-          ep: 2
-          dp-attn: true
-        decode:
-          num-worker: 1
-          tp: 16
-          ep: 16
-          dp-attn: true
-      - spec-decoding: mtp
         conc-list: [1228]
         srt-recipe: disagg-dep16-hicache-variants.yaml:override_3p1d_dep2_dep16_c1228
         kv-offloading: dram
@@ -8164,21 +8149,6 @@ dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-hicache:
       - spec-decoding: mtp
         conc-list: [2884]
         srt-recipe: disagg-dep16-hicache-variants.yaml:override_5p1d_dep2_dep16_c2884
-        kv-offloading: dram
-        kv-offload-backend: { name: hicache }
-        prefill:
-          num-worker: 5
-          tp: 2
-          ep: 2
-          dp-attn: true
-        decode:
-          num-worker: 1
-          tp: 16
-          ep: 16
-          dp-attn: true
-      - spec-decoding: mtp
-        conc-list: [3615]
-        srt-recipe: disagg-dep16-hicache-variants.yaml:override_5p1d_dep2_dep16_b48_c3615
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         prefill:
@@ -8213,21 +8183,6 @@ dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-hicache:
         kv-offload-backend: { name: hicache }
         prefill:
           num-worker: 7
-          tp: 2
-          ep: 2
-          dp-attn: true
-        decode:
-          num-worker: 1
-          tp: 16
-          ep: 16
-          dp-attn: true
-      - spec-decoding: mtp
-        conc-list: [7480]
-        srt-recipe: disagg-dep16-hicache-variants.yaml:override_9p1d_dep2_dep16_b160_c7480
-        kv-offloading: dram
-        kv-offload-backend: { name: hicache }
-        prefill:
-          num-worker: 9
           tp: 2
           ep: 2
           dp-attn: true
