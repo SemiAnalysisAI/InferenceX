@@ -174,7 +174,7 @@ base:
         hicache-size: 80
         hicache-write-policy: write_back
         hicache-storage-backend: mooncake
-        hicache-storage-backend-extra-config: '{"enable_group_semantics":false}'
+        hicache-storage-backend-extra-config: '{"enable_group_semantics":true}'
         speculative-algorithm: DSPARK
         speculative-dspark-block-size: 7
         speculative-use-block-verification: true
