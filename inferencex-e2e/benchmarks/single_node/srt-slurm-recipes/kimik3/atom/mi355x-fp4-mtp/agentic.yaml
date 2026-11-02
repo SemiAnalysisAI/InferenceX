@@ -6,7 +6,7 @@ base:
     gpus_per_node: 8
   frontend:
     type: atomesh
-    container_image: rocm/atom-dev@sha256:1c20b688bc376c335d3ac6ff33da693f3761b3b74bec31bf900c5f22699a97d6
+    container_image: rocm/atom-dev@sha256:b0029ebfa2f7fa67f7b65791c999e610b624676ee723e528ef7c07e40ca5b374
     enable_multiple_frontends: false
   observability:
     enabled: false
@@ -103,7 +103,14 @@ override_tp8_c4:
   roles:
     agg:
       args:
+        # ROCm/ATOM#2871: mono serves up to 64 rows; 8 sequences x 8 rows (DSpark k=7) fit.
+        max-num-seqs: 8
+        # Same mono exclude list as C1.
+        online_quant_config: '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","*self_attn.[qkv]_conv1d*","*block_sparse_moe.experts*","*block_sparse_moe.routed_expert_*","*vision_tower*","*mm_projector*","layers.*.self_attn.fused_qkv_a_proj","layers.*.self_attn.q_b_proj","layers.*.self_attn.kv_b_proj","layers.*.self_attn.o_proj","layers.*.mlp.gate_up_proj","layers.*.mlp.down_proj","context_proj","*self_attn.in_proj*","*self_attn.f_b_proj*","*self_attn.o_proj*","*shared_experts.gate_up_proj*","*shared_experts.down_proj*"]}'
         cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64]'
+      env:
+        ATOM_MONO_ENABLE: '1'
+        ATOM_GDN_SSM_DTYPE: fp32
   benchmark:
     env:
       CONC: '4'
