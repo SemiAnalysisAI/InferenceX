@@ -349,5 +349,52 @@ class SingleReductionOracle(unittest.TestCase):
         self.assertEqual(torch.tensor(single).to(torch.bfloat16).item(), domain)
 
 
+class GinWindowOrdering(unittest.TestCase):
+    """Relaxed-ordering rows must not merge into the strict-ordered series they would replace."""
+
+    def test_only_relaxed_scale_out_rows_carry_the_suffix(self):
+        module = _adapter()
+        relaxed = {"EP_WIN_RELAXED_ORDERING": "1"}
+        for world_size, env, suffixed in ((16, relaxed, True), (16, {}, False), (8, relaxed, False)):
+            with self.subTest(world_size=world_size, env=env), \
+                    mock.patch.dict(os.environ, env, clear=True):
+                backend = module.DeepEPV2Backend(_args(), 0, world_size, 0, "cpu")
+                self.assertEqual(backend.kernel_generation.endswith("-relaxed-ordering"), suffixed)
+
+
+class LowLatencyCapDecoupling(unittest.TestCase):
+    """The LL receive size and the measured ladder must stay two numbers -- sizing the receive
+    from `max(ladder)` would shift every rung."""
+
+    def test_ladder_cap_drops_only_oversized_measurement_points(self):
+        module = _adapter()
+        backend = module.DeepEPV2Backend.__new__(module.DeepEPV2Backend)
+        backend.mode = "low-latency"
+        backend.world_size = 8
+        backend._build_rank_inputs = mock.Mock(return_value=None)
+        args = types.SimpleNamespace(experts=256, tokens_ladder="32 64 128")
+        with mock.patch.object(module.DeepEPV2Backend, "LL_LADDER_CAP", 64):
+            spec = backend.make_inputs(args)
+        self.assertEqual(spec.ladder, [32, 64])
+        self.assertEqual(spec.dropped, [128])
+
+    def test_the_receive_is_sized_from_the_buffer_cap_not_the_ladder(self):
+        module = _adapter()
+        backend = module.DeepEPV2Backend.__new__(module.DeepEPV2Backend)
+        backend.mode, backend.world_size, backend.group = "low-latency", 8, object()
+        backend.args = types.SimpleNamespace(experts=256, hidden=16)
+        vendor_buffer = mock.Mock()
+        vendor_buffer.get_low_latency_rdma_size_hint.return_value = 4096
+        with mock.patch.object(module.deep_ep, "Buffer", vendor_buffer), \
+                mock.patch.object(module.DeepEPV2Backend, "LL_BUFFER_CAP", 128), \
+                mock.patch.object(module.DeepEPV2Backend, "LL_LADDER_CAP", 64):
+            for ladder_max in (16, 64):
+                backend.create_buffer(types.SimpleNamespace(max_tokens_per_rank=ladder_max))
+                vendor_buffer.get_low_latency_rdma_size_hint.assert_called_with(128, 16, 8, 256)
+                self.assertEqual(vendor_buffer.call_args.kwargs["num_rdma_bytes"], 4096)
+            with self.assertRaisesRegex(RuntimeError, "exceeds"):
+                backend.create_buffer(types.SimpleNamespace(max_tokens_per_rank=129))
+
+
 if __name__ == "__main__":
     unittest.main()

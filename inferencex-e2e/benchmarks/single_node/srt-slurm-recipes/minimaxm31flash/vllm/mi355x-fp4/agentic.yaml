@@ -36,7 +36,8 @@ base:
       args:
         served-model-name: amd/MiniMax-M3.1-Flash-Quark-MXFP4
         tensor-parallel-size: 4
-        gpu-memory-utilization: 0.9
+        # Reserve headroom for DBO prefill and allocations after memory profiling.
+        gpu-memory-utilization: 0.85
         language-model-only: true
         trust-remote-code: true
         reasoning-parser: minimax_m3
@@ -115,14 +116,39 @@ zip_override_tp4_dspark7_mono:
     env:
       CONC: ['1', '2', '4', '8']
 
-# c16-c64: DSpark 3 (the blog's MI355X draft length from c8) on the NVFP4 KV
-# cache with DBO.
-zip_override_tp4_dspark3:
+# c16-c32: DSpark 7 on the NVFP4 KV cache with DBO, at the base 0.85 memory
+# budget (headroom for DBO prefill). Admission is 2x CONC.
+zip_override_tp4_dspark7:
   roles:
     agg:
       args:
-        speculative-config: '{"method":"dspark","num_speculative_tokens":3,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-        max-num-seqs: [32, 64, 128]
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        max-num-seqs: [32, 64]
   benchmark:
     env:
-      CONC: ['16', '32', '64']
+      CONC: ['16', '32']
+
+# c64: DSpark 3 (the blog's MI355X draft length from c8) on the NVFP4 KV cache
+# with DBO, sequence-parallel prefill, 0.90 memory utilization, and a CPU KV tier. The c64 working set
+# outgrows the 14.2M-token GPU KV cache; SimpleCPUOffloadConnector (eager)
+# holds about 24M tokens in 1349 GB of host memory (dram-utilization 0.9 of the
+# TP4 lane) and serves the misses.
+override_tp4_dspark3_c64_offload:
+  roles:
+    agg:
+      args:
+        gpu-memory-utilization: 0.9
+        speculative-config: '{"method":"dspark","num_speculative_tokens":3,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        max-num-seqs: 128
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1349000000000,"lazy_offload":false}}'
+      env:
+        # Sequence-parallel prefill, from #4463. Upstream (vllm#63491) supports
+        # the MXFP4 W4A4 MoE; whether the Quark export's dense layers reach its
+        # MXFP8 kernel is untested, so this arm is the first check.
+        VLLM_ROCM_MINIMAX_M3_SP_PREFILL: '1'
+        PYTHONHASHSEED: '42'
+  benchmark:
+    env:
+      CONC: '64'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '1349'
