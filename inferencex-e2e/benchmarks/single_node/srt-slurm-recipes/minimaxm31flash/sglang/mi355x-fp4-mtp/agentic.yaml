@@ -49,6 +49,13 @@ base:
         # Recompute the sparse index top-k in every layer (SGLang's ROCm default 2 shares
         # one selection across each pair of sparse layers).
         SGLANG_MINIMAX_M3_INDEX_TOPK_FREQ: '1'
+        # MiniMax-M3 on ROCm disables custom all-reduce unless opted in, leaving the small
+        # decode all-reduces on RCCL.
+        SGLANG_M3_ALLOW_CUSTOM_AR: '1'
+        # Keep it full precision: with custom all-reduce on, the image otherwise quantizes
+        # it through quick reduce, raised to INT4 for MiniMax-M3.1 by default.
+        ROCM_QUICK_REDUCE_QUANTIZATION: 'NONE'
+        SGLANG_ENABLE_MINIMAX_M3_AMD_QUICK_REDUCE_INT4: '0'
   benchmark:
     env:
       # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
