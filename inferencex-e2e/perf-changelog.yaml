@@ -11771,6 +11771,28 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4686
 
 - config-keys:
+    - minimaxm31flash-fp4-mi355x-sglang-agentic-dspark
+  description:
+    - "Conc 48 and 64 move to the cookbook's High-Throughput cell: HiCache with 180 GB of host KV per rank written back on eviction (KV_OFFLOADING=dram, 734 GB declared for 4 of 8 GPUs), mem-fraction-static 0.8, default bf16 draft KV."
+    - "Back the HiCache host pools with hipHostMalloc (HSA_USERPTR_FOR_PAGED_MEM=0) instead of registered pageable memory, which faulted at the first HiCache write on MI355X."
+    - "Set HF_HOME so srtctl pre-downloads the model into the shared HF cache, which lacked preprocessor_config.json and stopped every MI355X server at startup."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4694
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm31flash-fp4-mi355x-vllm-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Image unchanged: vllm/vllm-openai-rocm:minimax-m31-flash (vLLM 0.32.0rc1.dev364+g8d0f05a0c) on amd/MiniMax-M3.1-Flash-Quark-MXFP4, so no upstream framework change."
+    - "Search space: TP4 c1-c32 without KV offloading, and c64 moves to a new TP4 point with host-DRAM KV offload (vllm-simple, agentic.yaml:override_tp4_dspark3_c64_offload); dram-utilization 0.80 -> 0.90."
+    - "C1-C8 are unchanged (DSpark 7, mono decode, FP8 KV and indexer caches, 0.85 memory utilization)."
+    - "C16/C32 (from #4537): DSpark 3 -> 7 on the NVFP4 KV cache with DBO, max-num-seqs 32/64; the base gpu-memory-utilization drops 0.9 -> 0.85 for DBO prefill headroom. Throughput runs use the minimaxm31flash_dspark golden AL, which covers 7 drafts."
+    - "C64 (from #4463): DSpark 3 at 0.9 memory utilization, max-num-seqs 128, plus SimpleCPUOffloadConnector (eager, cpu_bytes_to_use 1349 GB): 185,025 CPU blocks (about 23.7M tokens) beside the 14.6M-token GPU KV cache in run 41003224750."
+    - "C64 also sets PYTHONHASHSEED=42 and VLLM_ROCM_MINIMAX_M3_SP_PREFILL=1. Sequence-parallel prefill stays off on this checkpoint: at 8d0f05a0c it needs an MXFP8 kernel on layer.quant_method.kernel, which the Quark linear method does not expose, and every rank logs it as off."
+    - "Draft data types unchanged: the dspark/ draft loads with its own MXFP8 config (FP8 E4M3 attention and FFN projections with 1x32 UE8M0 scales; BF16 fc, Markov and confidence heads, norms) and an FP8 draft KV cache. Only its length changes, at C16/C32."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4671
+
+- config-keys:
     - musespark-fp4-b200-sglang-agentic-dflash
   scenario-type:
     - agentic-coding
