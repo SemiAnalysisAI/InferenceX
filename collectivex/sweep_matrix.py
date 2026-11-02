@@ -253,7 +253,6 @@ def _kv_shards(sku: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
 def resolve_matrix(
     backend: str = "all",
     only_sku: str = "",
-    exclude_skus: str = "",
     ep_sizes: str = "",
     precisions: str = "",
     modes: str = "",
@@ -281,9 +280,6 @@ def resolve_matrix(
 
     if only_sku and only_sku not in PLATFORMS:
         raise SystemExit(f"unknown --only-sku {only_sku!r}; have {sorted(PLATFORMS)}")
-    excluded = _comma_subset("exclude-skus", exclude_skus, PLATFORMS)
-    if only_sku in excluded:
-        raise SystemExit("--only-sku and --exclude-skus select disjoint pools")
 
     timing = SWEEP["timing"]
     # Passed through as an object keyed by the sweep.json names. runtime/config.py maps each
@@ -308,7 +304,7 @@ def resolve_matrix(
 
     selected_skus = [
         sku for sku in sorted(PLATFORMS)
-        if not (only_sku and sku != only_sku) and sku not in excluded
+        if not (only_sku and sku != only_sku)
     ]
     for sku in selected_skus if "ep" in selected_suites else ():
         platform = PLATFORMS[sku]
@@ -436,7 +432,6 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="CollectiveX matrix resolver")
     parser.add_argument("--backend", default="all")
     parser.add_argument("--only-sku", "--sku", dest="only_sku", default="")
-    parser.add_argument("--exclude-skus", default="")
     parser.add_argument("--ep-sizes", default="")
     parser.add_argument("--precisions", default="",
                         help="comma-separated subset of configs/sweep.json precisions")
@@ -465,7 +460,6 @@ def main() -> int:
     matrix = resolve_matrix(
         backend=args.backend,
         only_sku=args.only_sku,
-        exclude_skus=args.exclude_skus,
         ep_sizes=args.ep_sizes,
         precisions=args.precisions,
         modes=args.modes,
