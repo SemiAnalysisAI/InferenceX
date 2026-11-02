@@ -33,10 +33,10 @@ tight combine gate (COMBINE_REL_TOL = 8*2^-8) is preserved, not loosened.
 """
 from __future__ import annotations
 
+import functools
 import json
 import os
 import sys
-import types
 from importlib import metadata
 from pathlib import Path
 
@@ -44,7 +44,7 @@ import torch
 import torch.distributed as dist
 
 from ep_backend import EPBackend
-from ep_legacy_ll import LegacyBufferLL
+from ep_legacy_ll import LegacyBufferLL, kernel_cast_to_fp8
 
 try:
     # In the isolated UCCL venv `deep_ep` is UCCL's deep_ep_wrapper (a drop-in DeepEP API backed
@@ -177,20 +177,20 @@ class UCCLEPBackend(LegacyBufferLL, EPBackend):
     def __init__(self, args, rank, world_size, local_rank, device):
         super().__init__(args, rank, world_size, local_rank, device)
         self.group = dist.group.WORLD
-        self.experts_per_rank = args.experts // world_size
         self._internode = world_size > int(args.scale_up_domain)
-        self._fp8 = self.precision == "fp8"
         self.library_version = _library_version()
         self._library_config = {}
-        # FP8 dispatch dequantizes the received (e4m3, per-128-block scale) payload back to the
-        # BF16 combine sends — real device work, hence a separately-timed stage component.
-        self.stage_device_work = self._fp8
         if self._fp8:
-            # Low-latency keeps the eager quantize, whose bits its in-kernel cast matches.
             fnuz = _fp8_e4m3_dtype() == torch.float8_e4m3fnuz
-            self._enable_fp8(
-                "fp8-e4m3fnuz" if fnuz else "fp8-e4m3fn", per_token_cast_to_fp8, per_token_cast_back
-            )
+            quantize = per_token_cast_to_fp8
+            if self.mode == "low-latency":
+                # The kernel quantizes in-kernel, so the oracle models its arithmetic rather than
+                # the vendored helper's (which normal mode sends as the wire format).
+                quantize = functools.partial(
+                    kernel_cast_to_fp8,
+                    fp8_dtype=_fp8_e4m3_dtype(), fp8_max=240.0 if fnuz else 448.0,
+                )
+            self._enable_fp8("fp8-e4m3fnuz" if fnuz else "fp8-e4m3fn", quantize, per_token_cast_back)
         if self.mode == "low-latency":
             self._enable_ll("uccl-legacy-buffer-ll")
         # Normal dispatch polls its receive counters on the host before launching the transfer.
@@ -198,10 +198,7 @@ class UCCLEPBackend(LegacyBufferLL, EPBackend):
 
     # ---- buffer construction ---------------------------------------------------------------
 
-    def create_buffer(self, spec):
-        if self.mode == "low-latency":
-            self._create_ll_buffer(spec)
-            return
+    def _normal_create_buffer(self, spec):
         self.max_tokens = spec.max_tokens_per_rank
         # vLLM's deepep_ht resolves both configs from the EP size alone, on Buffer.num_sms left at
         # UCCL's default: one 20-SM budget at EP8 and EP16, on CUDA and HIP alike (the default is
@@ -254,29 +251,9 @@ class UCCLEPBackend(LegacyBufferLL, EPBackend):
         same receive plane as the full one. It does NOT force the proxy path: `is_intranode` is
         passed below, so at EP8 UCCL leaves the proxies stopped and the kernel takes its IPC branch.
         """
-        args, world_size = self.args, self.world_size
-        assert args.experts % world_size == 0, (
-            "low-latency EP requires num_experts divisible by the EP size"
-        )
-        if spec.max_tokens_per_rank > self.LL_LADDER_CAP:
-            raise RuntimeError(
-                f"low-latency ladder maximum {spec.max_tokens_per_rank} exceeds the LL "
-                f"buffer cap {self.LL_LADDER_CAP}"
-            )
-        self.max_tokens = self.LL_LADDER_CAP
-        self.num_local_experts = args.experts // world_size
+        num_rdma_bytes = self._ll_geometry(spec, Buffer, "UCCL-EP")
         # LL requires the QP-per-rank count to equal the number of local experts.
         num_qps_per_rank = self.num_local_experts
-        if not hasattr(Buffer, "low_latency_dispatch") or not hasattr(
-            Buffer, "get_low_latency_rdma_size_hint"
-        ):
-            raise RuntimeError(
-                "invalid UCCL-EP LL runtime: Buffer.low_latency_dispatch / "
-                "get_low_latency_rdma_size_hint absent"
-            )
-        num_rdma_bytes = Buffer.get_low_latency_rdma_size_hint(
-            self.max_tokens, args.hidden, world_size, args.experts
-        )
         # vLLM also passes enable_shrink=False, which this pin's Buffer does not accept (UCCL #1043
         # adds it); False is UCCL's behaviour either way.
         self.buffer = Buffer(
@@ -308,11 +285,9 @@ class UCCLEPBackend(LegacyBufferLL, EPBackend):
         # On top of the shared low-latency keys (ep_legacy_ll), which name the same values the same.
         return {**super().implementation_details(), **self._library_config}
 
-    # ---- transport contract (the shared low-latency pieces live in ep_legacy_ll) ---------
+    # ---- normal-mode transport (LegacyBufferLL routes by mode; low-latency lives there) ----
 
-    def dispatch(self, p):
-        if self.mode == "low-latency":
-            return self._ll_dispatch(p)
+    def _normal_dispatch(self, p):
         # Legacy normal dispatch, as vLLM's deepep_ht prepare runs it: compute the layout, then
         # scatter tokens to their experts. num_tokens_per_rdma_rank is None intranode (EP8) and
         # populated internode (EP16); pass it through so the same call serves both scopes.
@@ -333,27 +308,15 @@ class UCCLEPBackend(LegacyBufferLL, EPBackend):
             config=self.dispatch_config,
             async_finish=False,
         )
-        return types.SimpleNamespace(
-            recv_x=recv_x,
-            recv_topk_idx=recv_topk_idx,
-            recv_topk_weights=recv_topk_weights,
-            handle=handle,
-        )
+        return self._normal_handle(recv_x, recv_topk_idx, recv_topk_weights, handle)
 
-    def stage(self, p, h):
-        if self.mode == "low-latency":
-            # The timed combine sends the padded per-expert receive back as BF16 (dequant under
-            # FP8). Value correctness is exercised by the oracle's combine_transformed path.
-            h.combine_input = self._ll_recv_bf16(h.recv_x)
-            return
+    def _normal_stage(self, p, h):
         if self._fp8:
             h.combine_input = per_token_cast_back(h.recv_x[0], h.recv_x[1])
         else:
             h.combine_input = h.recv_x
 
-    def combine(self, p, h):
-        if self.mode == "low-latency":
-            return self._ll_combine(p, h, h.combine_input)
+    def _normal_combine(self, p, h):
         # Normal combine is the activation-only unweighted rank-sum: topk_weights are intentionally
         # NOT passed so the kernel sums the per-token expert aggregates across ranks without
         # applying the gate (matches combine_weight_semantics and the two-level oracle).
@@ -367,9 +330,7 @@ class UCCLEPBackend(LegacyBufferLL, EPBackend):
 
     # ---- correctness-oracle views ----------------------------------------------------------
 
-    def inspect_dispatch(self, p, h):
-        if self.mode == "low-latency":
-            return self._ll_inspect_dispatch(p, h)
+    def _normal_inspect_dispatch(self, p, h):
         # Legacy normal recv: recv_x is [num_recv, hidden] (each received token once) and
         # recv_topk_idx/recv_topk_weights are [num_recv, topk] — the oracle's per-received-token
         # 2-D contract (it sorts each row over the topk axis and sums the per-expert transforms,
@@ -381,9 +342,7 @@ class UCCLEPBackend(LegacyBufferLL, EPBackend):
             payload, h.recv_topk_idx, h.recv_topk_weights, self.experts_per_rank
         )
 
-    def combine_transformed(self, p, h, transformed):
-        if self.mode == "low-latency":
-            return self._ll_combine_transformed(p, h, transformed)
+    def _normal_combine_transformed(self, p, h, transformed):
         # `transformed` is the oracle's per-received-token combine input [num_recv, hidden]
         # (already summed over the top-k axis) — exactly the per-token buffer legacy combine
         # consumes; combine then sums those per-token aggregates across ranks (unweighted).
@@ -395,8 +354,6 @@ class UCCLEPBackend(LegacyBufferLL, EPBackend):
         )
         return combined
 
-    def recv_tokens(self, h):
-        if self.mode == "low-latency":
-            return int(h.recv_count.sum().item())
+    def _normal_recv_tokens(self, h):
         recv = h.recv_x[0] if self._fp8 else h.recv_x
         return int(recv.shape[0])

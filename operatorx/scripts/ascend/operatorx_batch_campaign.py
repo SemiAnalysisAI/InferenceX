@@ -467,6 +467,7 @@ def run_locked(args):
     names = {
         "unquantized": "operatorx_ascend_worker.py",
         "fp8": "operatorx_fp8_block_worker.py",
+        "ue8m0": "operatorx_mxfp8_128_triton_queued_worker.py",
     }
     if (
         plan.get("kind") not in names
@@ -474,10 +475,13 @@ def run_locked(args):
     ):
         raise ValueError("Select the packaged worker matching the plan kind")
     dependencies = plan.get("dependency_hashes", {})
-    if set(dependencies) != {
+    expected_dependencies = {
         "operatorx_queued_timing.py",
         "operatorx_ascend_worker.py",
-    }:
+    }
+    if plan["kind"] == "ue8m0":
+        expected_dependencies.add("operatorx_ue8m0_quant_triton.py")
+    if set(dependencies) != expected_dependencies:
         raise ValueError(
             "Plan lacks the timing/reference dependency fingerprint; prepare a new plan"
         )
