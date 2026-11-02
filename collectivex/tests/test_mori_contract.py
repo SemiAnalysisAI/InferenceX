@@ -140,8 +140,20 @@ def _args(**updates):
     return types.SimpleNamespace(**values)
 
 
+class _Output:
+    """The MoE layer's output that combine copies into, as vLLM's finalize does."""
+
+    def __init__(self):
+        self.value = None
+
+    def copy_(self, value):
+        self.value = value
+        return self
+
+
 def _problem():
-    return types.SimpleNamespace(T=2, dispatch_x="x", weights="w", indices="i", recv_tokens=3)
+    return types.SimpleNamespace(T=2, dispatch_x="x", weights="w", indices="i", recv_tokens=3,
+                                 combine_output=_Output())
 
 
 class MoriContract(unittest.TestCase):
@@ -167,7 +179,9 @@ class MoriContract(unittest.TestCase):
         problem = _problem()
         handle = backend.dispatch(problem)
         handle.combine_input = "staged"
-        return backend.combine(problem, handle)
+        output = backend.combine(problem, handle)
+        assert output is problem.combine_output
+        return output.value
 
     def test_one_node_runs_vllms_intranode_launch_from_the_config_alone(self):
         backend = self.backend()
@@ -344,7 +358,7 @@ class BlockwiseCodec(unittest.TestCase):
         x[0, 5], x[0, 200], x[1] = 3.0, -0.5, 1.0
         for dtype, fp8_max in ((torch.float8_e4m3fn, 448.0), (torch.float8_e4m3fnuz, 240.0)):
             with self.subTest(dtype=dtype):
-                quantize, dequantize = module._blockwise_codec(dtype, fp8_max)
+                quantize, dequantize = module.blockwise_fp8_codec(dtype, fp8_max)
                 values, scales = quantize(x)
                 self.assertEqual((values.dtype, tuple(scales.shape)), (dtype, (2, 2)))
                 expected = torch.tensor([[3.0, 0.5], [1.0, 1.0]]) / fp8_max
