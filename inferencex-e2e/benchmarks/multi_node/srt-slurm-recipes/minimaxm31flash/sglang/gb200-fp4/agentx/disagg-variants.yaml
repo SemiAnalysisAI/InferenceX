@@ -33,6 +33,22 @@ base:
         node: infra
     - name: mooncake-master
       type: mooncake-master
+      preamble: |
+        export PATH="$(dirname "$(python3 -c 'import sys; print(sys.executable)')"):$PATH"
+        if ! command -v mooncake_master >/dev/null; then
+          MC_DIR=$(python3 -c 'import mooncake, os; print(os.path.dirname(mooncake.__file__))')
+          if [ -x "$MC_DIR/mooncake_master" ]; then
+            export PATH="$MC_DIR:$PATH"
+          else
+            pip_install=(python3 -m pip install)
+            if python3 -m pip install --help 2>/dev/null | grep -q -- --break-system-packages; then
+              pip_install+=(--break-system-packages)
+            fi
+            "${pip_install[@]}" --quiet --no-cache-dir --no-deps --force-reinstall \
+              "mooncake-transfer-engine-cuda13==$(python3 -c 'import importlib.metadata as m; print(m.version("mooncake-transfer-engine-cuda13"))')"
+          fi
+        fi
+        command -v mooncake_master
       args:
         - --default_kv_lease_ttl=120000
         - --eviction_high_watermark_ratio=0.90
@@ -41,6 +57,7 @@ base:
     - &decode-store
       name: store-decode-0
       type: mooncake-store
+      command: ["python3", "-m", "mooncake.mooncake_store_service"]
       placement:
         node: decode
       args: ["--port", "8800"]
