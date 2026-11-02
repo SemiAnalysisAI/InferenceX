@@ -28,7 +28,7 @@ library only. Details are under [Backends](#backends).
 
 | Backend | Maturity | Launch | Engine contract |
 |---|---|---|---|
-| deepep-v2 | production | graph; normal prefill eager | vLLM `deepep_v2` and `deepep_low_latency`; LL stops at T=256 |
+| deepep-v2 | production | graph; normal prefill eager | vLLM `deepep_v2` and `deepep_low_latency` (MNNVL opt-in on GB pools); LL stops at T=256 |
 | nccl-ep | production for in-domain zero-copy LL rank-major BF16; library otherwise | graph decode; prefill eager | TensorRT-LLM `NcclEP` with NVIDIA/TensorRT-LLM#20631; HT and FP8 (DS_FP8E3M4) are library rows |
 | uccl-ep | candidate | normal eager; LL graph | vLLM's DeepEP configuration on UCCL's drop-in `deep_ep`; no engine ships its selector |
 | mori | production | graph decode; eager prefill | vLLM's MoRI IntraNode / InterNodeV1, LL EP16 only |
