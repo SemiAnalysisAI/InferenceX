@@ -43,7 +43,6 @@ base:
         scheduler-recv-interval: 10
         stream-interval: 50
         reasoning-parser: qwen3
-        default-chat-template-kwargs: '{"enable_thinking": false}'
         tool-call-parser: qwen3_coder
         speculative-algorithm: NEXTN
         speculative-num-steps: 3
@@ -70,9 +69,11 @@ base:
 # c1, c2, c4 and c8 run the FlyDSL monokernel (--enable-amd-monokernel) for MTP
 # target verify and draft. Its verify writes the per-draft intermediate SSM
 # states, so ReplaySSM is off, and its prelude reads the PLE table on the GPU,
-# so the table is not offloaded. Admission equals the concurrency. c12 and c16
-# keep ReplaySSM, the PLE offload and 2x CONC admission. Every point uses
-# mem-fraction-static as given instead of the aiter backend's 0.85 scaling.
+# so the table is not offloaded. Admission equals the concurrency. These points
+# also set SGLANG_USE_AITER, which the monokernel requires (the image sets it
+# too), so they form their own GSM8K eval group. c12 and c16 keep ReplaySSM,
+# the PLE offload and 2x CONC admission. Every point uses mem-fraction-static
+# as given instead of the aiter backend's 0.85 scaling.
 override_c1:
   roles:
     agg:
@@ -84,6 +85,7 @@ override_c1:
         cuda-graph-max-bs-decode: 1
       env:
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
+        SGLANG_USE_AITER: '1'
   benchmark:
     env:
       CONC: '1'
@@ -100,6 +102,7 @@ override_c2:
         cuda-graph-max-bs-decode: 2
       env:
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
+        SGLANG_USE_AITER: '1'
   benchmark:
     env:
       CONC: '2'
@@ -116,6 +119,7 @@ override_c4:
         cuda-graph-max-bs-decode: 4
       env:
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
+        SGLANG_USE_AITER: '1'
   benchmark:
     env:
       CONC: '4'
@@ -132,6 +136,7 @@ override_c8:
         cuda-graph-max-bs-decode: 8
       env:
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
+        SGLANG_USE_AITER: '1'
   benchmark:
     env:
       CONC: '8'
