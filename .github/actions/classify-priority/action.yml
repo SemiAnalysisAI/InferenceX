@@ -16,11 +16,15 @@ inputs:
         description: "full returns every criterion; patchwork returns only the patchwork verdict"
         required: false
         default: full
+    pr-number:
+        description: Pull request whose description decides checklist-complete; empty never returns it
+        required: false
+        default: ""
     anthropic-api-key:
         description: Anthropic API key for the classifier
         required: true
     github-token:
-        description: GitHub token for claude-code-action
+        description: GitHub token for claude-code-action and reading the PR description
         required: true
 
 outputs:
@@ -74,8 +78,23 @@ runs:
                 uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
                 python -P -m infx.workflows.ci_priority \
                 --policy "$E2E_ROOT/configs/ci-priority.yaml" --list-criteria)
-              schema=$(jq -c '{type:"object",properties:{criteria:{type:"array",items:{type:"string",enum:.},uniqueItems:true},reason:{type:"string"}},required:["criteria","reason"]}' <<<"$criteria")
+              schema=$(jq -c 'map(select(. != "checklist-complete")) | {type:"object",properties:{criteria:{type:"array",items:{type:"string",enum:.},uniqueItems:true},reason:{type:"string"}},required:["criteria","reason"]}' <<<"$criteria")
               echo "json=$schema" >> "$GITHUB_OUTPUT"
+
+        - name: Check PR checklist
+          id: checklist
+          if: steps.range.outputs.head != '' && inputs.pr-number != ''
+          continue-on-error: true
+          shell: bash
+          env:
+              GH_TOKEN: ${{ inputs.github-token }}
+              PR_NUMBER: ${{ inputs.pr-number }}
+              E2E_ROOT: ${{ github.action_path }}/../../../inferencex-e2e
+          run: |
+              complete=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '.body // ""' |
+                env PYTHONPATH="$E2E_ROOT" uv run --no-project --exclude-newer PT12H --python 3.12 \
+                python -P -m infx.workflows.pr_checklist)
+              echo "complete=$complete" >> "$GITHUB_OUTPUT"
 
         - name: Install Claude Code 2.1.282
           id: claude_cli
@@ -117,7 +136,6 @@ runs:
                   - mtp, draft_model: speculative decoding method
                   - sglang, vllm, dynamo-sglang, dynamo-vllm: runtime framework
                   - model criterion: the config model-prefix itself (minimaxm31flash, not minimaxm3)
-                  - checklist-complete: PR checklist is satisfied
                   - patchwork: modified upstream engine or runtime source
 
                   Patchwork includes patch files, git apply, source mutation,
@@ -133,12 +151,17 @@ runs:
           env:
               OUTPUT: ${{ steps.classify.outputs.structured_output || '{}' }}
               SCOPE: ${{ inputs.scope }}
+              CHECKLIST_COMPLETE: ${{ steps.checklist.outputs.complete }}
           run: |
               if jq -e 'type == "object" and (.criteria | type == "array")' \
                 >/dev/null <<<"$OUTPUT"; then
                   criteria=$(jq -c '.criteria' <<<"$OUTPUT")
               else
                   criteria='["patchwork"]'
+              fi
+              criteria=$(jq -c 'map(select(. != "checklist-complete"))' <<<"$criteria")
+              if [ "$CHECKLIST_COMPLETE" = "true" ]; then
+                  criteria=$(jq -c '. + ["checklist-complete"]' <<<"$criteria")
               fi
               if [ "$SCOPE" = "patchwork" ]; then
                   if jq -e 'index("patchwork")' >/dev/null <<<"$criteria"; then
