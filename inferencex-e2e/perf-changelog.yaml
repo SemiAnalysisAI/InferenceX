@@ -11791,3 +11791,12 @@
     - "C64 also sets PYTHONHASHSEED=42 and VLLM_ROCM_MINIMAX_M3_SP_PREFILL=1. Sequence-parallel prefill stays off on this checkpoint: at 8d0f05a0c it needs an MXFP8 kernel on layer.quant_method.kernel, which the Quark linear method does not expose, and every rank logs it as off."
     - "Draft data types unchanged: the dspark/ draft loads with its own MXFP8 config (FP8 E4M3 attention and FFN projections with 1x32 UE8M0 scales; BF16 fc, Markov and confidence heads, norms) and an FP8 draft KV cache. Only its length changes, at C16/C32."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4671
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-agg
+    - minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg
+  scenario-type: [agentic-coding]
+  description:
+    - "Add aggregated SGLang behind Dynamo for MiniMax-M3.1-Flash AgentX on GB300 with lmsysorg/sglang:nightly-cu134-20261030-e371881: TP4 at conc 1-16; TP4 with HiCache 180 GB per rank, shortest-prefill-first and prefill-decode interval 32 at conc 24; TP2 with HiCache 180 GB per rank at conc 40 (with and without shortest-prefill-first) and 44."
+    - "Disagg prefill chunk 16384 (8192 per DP rank); add 4 DEP2 prefill workers with a DEP8 decode at conc 224 and 256, 8 DEP2 prefill workers with a DEP8 decode at conc 440 and 480, conc 340 on the 6 DEP2 + DEP8 shape, and conc 360 and 400 on the 6 DEP2 + DEP16 shape."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4698
