@@ -11797,6 +11797,6 @@
     - glm5.3-fp4-gb300-dynamo-sglang-agentic-disagg
   description:
     - "Add the GLM-5.3 NVFP4 GB300 Dynamo-SGLang AgentX aggregated recipe (TP4 and TP8 at conc 1) and disaggregated recipe (six PP4-prefill points at conc 30 to 264), ported from GLM-5.2 GB300 with NEXTN K=3 MTP and weights loaded from /data/models at the pinned revision."
-    - "Collect DCGM power with AgentX adaptation; the GB300 power rule now names GLM-5.3 FP4 Dynamo-SGLang instead of GLM-5.2, whose NVFP4 weights left the cluster."
+    - "Collect DCGM power with AgentX adaptation through a new GB300 power rule for GLM-5.3 FP4 Dynamo-SGLang AgentX."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4706
   scenario-type: [agentic-coding]
