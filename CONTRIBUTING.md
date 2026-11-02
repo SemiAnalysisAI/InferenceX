@@ -36,7 +36,8 @@ A PR whose new entries are all retirements has no result artifacts to reuse. Aft
 ## Accuracy-sensitive optimizations
 
 On upstream official InferenceX, reduced-precision all-reduce or reduce-scatter,
-online linear-layer quantization, non-native cross-indexer sharing, non-native FP4
+online linear-layer quantization, shared-expert quantization,
+non-native cross-indexer sharing, non-native FP4
 KV cache, and SSM/KDA/Mamba state-cache dtypes below FP32 require the
 [qualification in MODELS.md](inferencex-e2e/docs/MODELS.md#accuracy-sensitive-optimization-policy).
 Provide raw logs and full manual reproduction scripts for both baselines and the

@@ -445,7 +445,8 @@ The optimizations listed in (c) also require its additional qualification.
 Read "Accuracy-sensitive optimization policy" in `inferencex-e2e/docs/MODELS.md`.
 For upstream official InferenceX submissions, apply it to reduced-precision
 all-reduce or reduce-scatter (integer or floating-point),
-online quantization of linear layers, cross-indexer sharing on models without native
+online quantization of linear layers, quantization of shared experts,
+cross-indexer sharing on models without native
 index sharing, FP4 KV cache on models without native FP4 KV cache, and reductions
 in SSM/KDA/Mamba state-cache dtype below FP32. Existing and
 new models have the same evidence requirement; there is no grandfathering exemption.
@@ -458,7 +459,8 @@ deployments.
 - Explicitly inspect `ROCM_QUICK_REDUCE_QUANTIZATION`,
   `VLLM_ROCM_QUICK_REDUCE_QUANTIZATION`, `AITER_QUICK_REDUCE_QUANTIZATION`, and
   equivalent aliases or controls, including unprefixed `QUICK_REDUCE_QUANTIZATION`
-  where recognized. Inspect reduce-scatter, online linear quantization, index-sharing,
+  where recognized. Inspect reduce-scatter, online linear quantization,
+  shared-expert quantization, index-sharing,
   FP4 KV-cache paths, and SSM/KDA/Mamba state-cache dtype controls too.
   Determine effective behavior, not merely flag presence.
   Do not confuse size thresholds with collective-quantization controls.

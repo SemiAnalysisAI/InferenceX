@@ -28,6 +28,7 @@ On upstream official InferenceX, the following optimizations are accepted if and
 
 - Reduced-precision all-reduce or reduce-scatter, including integer and floating-point quantization.
 - Online quantization of linear layers.
+- Quantization of shared experts.
 - Cross-indexer sharing on models that do not natively support index sharing.
 - FP4 KV cache on models that do not natively support FP4 KV cache.
 - Reducing the SSM/KDA/Mamba state-cache dtype below FP32.
@@ -55,7 +56,7 @@ Keep the evaluation data, harness, prompts, sampling settings, context limits, a
 
 Provide complete setup, model-download, serving, evaluation, and scoring commands, pinned checkpoint revisions and engine images/commits, the effective configuration for each arm, and raw serving/evaluation logs with per-evaluation results. The scripts must allow a reviewer to reproduce all three arms manually, without relying on an undocumented CI environment. Logs must establish that the tested optimization actually ran in arm 3 and was disabled in the baselines; a flag alone does not prove runtime dispatch.
 
-Trace effective settings through inherited environment, launcher overrides, container defaults, and the pinned engine implementation, including target/draft workers and prefill/decode roles. Inspect `ROCM_QUICK_REDUCE_QUANTIZATION`, `VLLM_ROCM_QUICK_REDUCE_QUANTIZATION`, `AITER_QUICK_REDUCE_QUANTIZATION`, and equivalent controls, as well as reduce-scatter, online-quantization, index-sharing, KV-cache, and SSM/KDA/Mamba state-cache dtype settings. An unset control does not prove an optimization is disabled; `0` or `NONE` counts as disabled only when the pinned implementation confirms it. Enabling values and image defaults require the same qualification as explicit recipe settings.
+Trace effective settings through inherited environment, launcher overrides, container defaults, and the pinned engine implementation, including target/draft workers and prefill/decode roles. Inspect `ROCM_QUICK_REDUCE_QUANTIZATION`, `VLLM_ROCM_QUICK_REDUCE_QUANTIZATION`, `AITER_QUICK_REDUCE_QUANTIZATION`, and equivalent controls, as well as reduce-scatter, online-quantization, shared-expert quantization, index-sharing, KV-cache, and SSM/KDA/Mamba state-cache dtype settings. An unset control does not prove an optimization is disabled; `0` or `NONE` counts as disabled only when the pinned implementation confirms it. Enabling values and image defaults require the same qualification as explicit recipe settings.
 
 This policy permits qualified cross-indexer sharing despite the general architecture-FLOP restriction. It does not permit unrelated layer, expert, or head pruning, waive engine-patch requirements, or override the separate [draft-model precision policy](../../CONTRIBUTING.md#draft-model-precision).
 
