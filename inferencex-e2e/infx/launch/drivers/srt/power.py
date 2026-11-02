@@ -59,13 +59,17 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
     ("gb300-nv", LaunchPath.SRT_MULTI): PowerLane(
         rules=(
             PowerRule(
+                Match(any_of("minimaxm31flash"), any_of("fp4"), any_of("dynamo-trt"), agentic=True),
+                agentx=True,
+            ),
+            PowerRule(
                 Match(any_of("kimik3"), any_of("fp4"), any_of("dynamo-vllm"), agentic=True),
                 agentx=True,
                 require=True,
             ),
             PowerRule(Match(frameworks=any_of("dynamo-sglang")), agentx=False),
         ),
-        error="dcgm-power requires dynamo-sglang or the supported Kimi-K3 AgentX route",
+        error="dcgm-power requires dynamo-sglang or a supported AgentX route",
     ),
     ("b200-nscale", LaunchPath.SRT_NATIVE): PowerLane(
         rules=(

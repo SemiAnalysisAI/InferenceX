@@ -197,6 +197,11 @@ base:
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
       WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
     colocate_with_frontend: true
+  telemetry:
+    startup_timeout_seconds: 180
+    cpu_power_exporter:
+      port: 9405
+      source: auto
   observability:
     enabled: false
     enable_otel: false
