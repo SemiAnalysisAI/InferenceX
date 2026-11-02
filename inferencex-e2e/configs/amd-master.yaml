@@ -784,16 +784,19 @@ dsv41flash-fp4-mi325x-vllm-agentic-dspark:
       - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32], srt-recipe: agentic.yaml }
 
 # GLM-5.2 FP4 agentic-coding benchmark on MI355X via SGLang with MTP speculative
-# decoding. Two arms:
+# decoding. Three arms:
 # (1) TP4/EP4 with HiCache KV offloading to DRAM at concurrency [4, 8, 10, 12, 14, 16];
 #     serves the high-concurrency, throughput-dominant regime.
-# (2) TP8/EP1 without KV offloading, concurrency sweep [1, 2, 4];
+# (2) TP4/EP4 with DCP4 at concurrency [16, 24, 40, 48]; striping the latent KV
+#     across the four ranks holds the working set on device without HiCache,
+#     which DSA DCP rejects.
+# (3) TP8/EP1 without KV offloading, concurrency sweep [1, 2, 4];
 #     EP=1 eliminates the MoE all-to-all collective, reducing ITL at low-to-mid
 #     concurrency; GPU-resident KV keeps latency independent of DRAM bandwidth.
-#     c4 intentionally overlaps both arms to compare the topology crossover.
+#     c4 intentionally overlaps arms (1) and (3) to compare the topology crossover.
 # SA selects the Pareto-optimal arm per concurrency point.
 glm5.2-fp4-mi355x-sglang-agentic-mtp:
-  image: lmsysorg/sglang:v0.5.22-rocm720-mi35x@sha256:c4b61360b251d62bb17da63f175d571ab22479eb46a144548d79f3ed3998ea11
+  image: lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261028
   model: amd/GLM-5.2-MXFP4
   model-prefix: glm5.2
   runner: cluster:mi355x-amds
@@ -806,6 +809,7 @@ glm5.2-fp4-mi355x-sglang-agentic-mtp:
     - dram-utilization: 0.85
       search-space:
       - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [4, 8, 10, 12, 14, 16], spec-decoding: mtp, srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 4, dcp-size: 4, kv-offloading: none, conc-list: [16, 24, 40, 48], spec-decoding: mtp, srt-recipe: agentic.yaml }
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4], spec-decoding: mtp, srt-recipe: agentic.yaml }
 
 # GLM-5.2 FP8 agentic-coding benchmark on MI355X via SGLang with MTP speculative
@@ -920,8 +924,8 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark:
 # https://vllm.ai/blog/2026-10-23-minimax-m31-flash, verified 2026-10-23.
 # AMD's Quark MXFP4 export (routed experts in MXFP4, W4A4 on the AITER MoE)
 # at TP4 with native DSpark: 7 drafts, mono decode and an FP8 KV cache at
-# c1-c8; 3 drafts, an NVFP4 KV cache and DBO from c16. Throughput runs use the
-# minimaxm31flash_dspark golden AL.
+# c1-c8; 7 drafts, an NVFP4 KV cache and DBO at c16-c32; 3 drafts, DBO and a
+# CPU KV tier at c64. Throughput runs use the minimaxm31flash_dspark golden AL.
 minimaxm31flash-fp4-mi355x-vllm-agentic-dspark:
   image: vllm/vllm-openai-rocm:minimax-m31-flash@sha256:ae8681212aa5291d8c27f06e90016435e3fca144a68fd5c439231f6475f74569
   model: amd/MiniMax-M3.1-Flash-Quark-MXFP4
@@ -933,9 +937,10 @@ minimaxm31flash-fp4-mi355x-vllm-agentic-dspark:
   srt-recipe-dir: minimaxm31flash/vllm/mi355x-fp4
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    - dram-utilization: 0.90
       search-space:
-      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64], srt-recipe: agentic.yaml }
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32], srt-recipe: agentic.yaml }
+      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [64], srt-recipe: agentic.yaml:override_tp4_dspark3_c64_offload }
 
 # MiniMax-M3.1-Flash AgentX on MI355X with SGLang: day-zero image from the SGLang
 # cookbook (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1),
@@ -957,7 +962,11 @@ minimaxm31flash-fp4-mi355x-sglang-agentic-dspark:
     agentic-coding:
     - search-space:
       # Low-Latency: TP4, GPU-resident.
-      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 48, 64], srt-recipe: agentic.yaml }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32], srt-recipe: agentic.yaml }
+    - dram-utilization: 0.49
+      search-space:
+      # High-Throughput: TP4 + HiCache, 180 GB of host KV per rank (720 of 735 GB).
+      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [48, 64], srt-recipe: agentic.yaml }
 
 # DeepSeek-V4.1-Flash on ATOM, following the upstream TP2 / TP4 AgentX recipe.
 # Five-token DSpark uses golden AL 3.51 for throughput and real acceptance for eval.
