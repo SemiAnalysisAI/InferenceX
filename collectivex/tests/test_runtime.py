@@ -283,6 +283,32 @@ class RelaxedOrderingProfileTests(unittest.TestCase):
                 self.assertEqual(stdout.strip().splitlines()[-1], expected)
 
 
+class DeepepSourceSelectionTests(unittest.TestCase):
+    def test_only_opted_in_pools_build_the_aws_fork(self) -> None:
+        for fork in ("1", ""):
+            with self.subTest(fork=fork):
+                selected, efa = (line.split() for line in run_common(
+                    f"export COLLX_RDMA_FABRIC=efa COLLX_DEEPEP_EFA_FORK='{fork}';"
+                    ' echo "$COLLX_DEEPEP_V2_EFA_REPO $COLLX_DEEPEP_V2_EFA_COMMIT $COLLX_DEEPEP_V2_EFA_NCCL_SPEC";'
+                    " collx_select_deepep_v2_source;"
+                    ' echo "$COLLX_DEEPEP_V2_REPO $COLLX_DEEPEP_V2_COMMIT $COLLX_DEEPEP_V2_NCCL_SPEC"',
+                    check=True,
+                ).stdout.splitlines()[-2:][::-1])
+                # Opted in, every pin is the fork's; otherwise none is.
+                self.assertEqual([a == b for a, b in zip(selected, efa)], [fork == "1"] * 3)
+
+
+class DeepepSourceRecordTests(unittest.TestCase):
+    def test_the_recorded_source_survives_the_rank_wrapper(self) -> None:
+        # Ranks source the per-node env and then common.sh, so the record must survive that.
+        stdout = run_common(
+            f'export COLLX_DEEPEP_SOURCE=fork@abc; source "{RUNTIME / "common.sh"}";'
+            ' echo "$COLLX_DEEPEP_SOURCE"',
+            check=True,
+        ).stdout.strip()
+        self.assertEqual(stdout, "fork@abc")
+
+
 class EfaPluginProfileTests(unittest.TestCase):
     def test_ranks_load_the_prepared_plugin_and_proxy_gin(self) -> None:
         lib = "/cx-cache/ofi/lib"
