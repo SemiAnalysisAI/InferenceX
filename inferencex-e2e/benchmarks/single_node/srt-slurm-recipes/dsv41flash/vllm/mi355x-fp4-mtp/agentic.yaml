@@ -54,9 +54,8 @@ base:
       env:
         VLLM_ROCM_USE_AITER: '1'
         VLLM_ROCM_USE_AITER_MOE: '1'
-        # INT4 quick all-reduce above its size threshold
-        # (vllm-project/recipes#1061).
-        VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: INT4
+        # Disable integer QuickReduce for every variant, including TP8.
+        VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: NONE
         AITER_TRITON_LOG_LEVEL: ERROR
         VLLM_ROCM_USE_AITER_TRITON_SPARSE_MLA: 'True'
         # DeepseekV41ForCausalLM is not torch-compiled upstream; breakable

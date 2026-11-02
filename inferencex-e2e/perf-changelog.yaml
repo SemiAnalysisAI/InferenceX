@@ -11794,3 +11794,12 @@
     - "The image carries vllm-project/vllm#64101, which lets the mono decode kernels run at TP8 on gfx950 (each rank's 8 heads are padded into one 16-head MFMA tile); earlier nightlies stop at startup with --monokernel outside TP2/TP4. Compared with e68efc685 it also includes #63885 (SWA decode metadata in one launch), #60154 (inverse RoPE and MXFP8 quant fused into the AITER sparse MLA), #63179 and #63915 (MXFP8 activation quant fused into small-M linears), #63576 and #63689 (mono decode fixes), and #63047 (prefill memory budget)."
     - "Draft data types unchanged: the DSpark draft (mtp.0-2 in the target checkpoint) loads with the checkpoint's FP8 config, as shipped (FP8 E4M3 with 32x32 UE8M0 scales for attention, shared experts and main_proj, MXFP4 routed experts, BF16 gate, norms and heads), inherits the target fp8_ds_mla KV cache, and the mono draft kernels read those weights in place."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4666
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp8-c1
+  scenario-type: [agentic-coding]
+  description:
+    - "Disable integer QuickReduce in the shared DeepSeek-V4.1-Flash MI355X vLLM recipe by setting VLLM_ROCM_QUICK_REDUCE_QUANTIZATION to NONE instead of INT4."
+    - "This supersedes the preceding entry's INT4 setting and TP8-only sweep scope: rerun both the existing TP4/TP2 grid and the new TP8 c1 point with integer QuickReduce disabled. Images, search spaces and draft precision are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4666
