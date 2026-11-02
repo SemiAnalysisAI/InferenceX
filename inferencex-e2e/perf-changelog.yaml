@@ -11812,3 +11812,44 @@
     - "Add aggregated SGLang behind Dynamo for MiniMax-M3.1-Flash AgentX on GB300 with lmsysorg/sglang:nightly-cu134-20261030-e371881: TP4 at conc 1-16; TP4 with HiCache 180 GB per rank, shortest-prefill-first and prefill-decode interval 32 at conc 24; TP2 with HiCache 180 GB per rank at conc 40 (with and without shortest-prefill-first) and 44."
     - "Disagg prefill chunk 16384 (8192 per DP rank); add 4 DEP2 prefill workers with a DEP8 decode at conc 224 and 256, 8 DEP2 prefill workers with a DEP8 decode at conc 440 and 480, conc 340 on the 6 DEP2 + DEP8 shape, and conc 360 and 400 on the 6 DEP2 + DEP16 shape."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4698
+
+- config-keys:
+    - qwen3.5-fp4-b200-sglang
+    - qwen3.5-fp4-b200-sglang-mtp
+    - qwen3.5-fp4-b200-trt
+    - qwen3.5-fp4-b200-trt-mtp
+    - qwen3.5-fp4-b300-sglang
+    - qwen3.5-fp4-b300-sglang-mtp
+    - qwen3.5-fp4-gb200-dynamo-sglang-mtp
+    - qwen3.5-fp4-gb300-dynamo-sglang
+    - qwen3.5-fp4-gb300-dynamo-trt
+    - qwen3.5-fp4-gb300-dynamo-trt-mtp
+    - qwen3.5-fp4-mi355x-atom
+    - qwen3.5-fp4-mi355x-sglang
+    - qwen3.5-fp4-mi355x-sglang-disagg
+    - qwen3.5-fp4-mi355x-sglang-mtp
+    - qwen3.5-fp8-b200-sglang
+    - qwen3.5-fp8-b200-sglang-mtp
+    - qwen3.5-fp8-b300-sglang
+    - qwen3.5-fp8-b300-sglang-mtp
+    - qwen3.5-fp8-gb200-dynamo-sglang
+    - qwen3.5-fp8-gb200-dynamo-sglang-mtp
+    - qwen3.5-fp8-gb300-dynamo-sglang
+    - qwen3.5-fp8-gb300-dynamo-sglang-mtp
+    - qwen3.5-fp8-h100-sglang
+    - qwen3.5-fp8-h100-sglang-mtp
+    - qwen3.5-fp8-h200-sglang
+    - qwen3.5-fp8-h200-sglang-mtp
+    - qwen3.5-fp8-mi300x-sglang
+    - qwen3.5-fp8-mi325x-sglang
+    - qwen3.5-fp8-mi325x-sglang-mtp
+    - qwen3.5-fp8-mi355x-atom
+    - qwen3.5-fp8-mi355x-atom-mtp
+    - qwen3.5-fp8-mi355x-sglang
+    - qwen3.5-fp8-mi355x-sglang-disagg
+    - qwen3.5-fp8-mi355x-sglang-mtp
+  retired: true
+  description:
+    - "Retire Qwen3.5 8k1k serving configurations across NVIDIA and AMD and remove their unused recipes."
+    - "Keep Qwen3.5 AgentX coverage, SPEED-Bench collectors, and historical results unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4697
