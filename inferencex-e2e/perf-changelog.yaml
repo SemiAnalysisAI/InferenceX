@@ -11779,4 +11779,4 @@
     - "Synthetic acceptance follows the new golden curve infx/golden_al_distribution/mimov2.6flash_dflash.yaml (SPEED-Bench coding, B300, run 41346734342): thinking_on AL 4.08 at 7 draft tokens and 2.97 at 3."
     - "Seven draft tokens at TP8 concurrency 1 and 4, TP4 concurrency 1, 4, 8 and 16 and TP2 concurrency 1, 4 and 8; three draft tokens at TP4 concurrency 32 and 64 and TP2 concurrency 16 and 32. GPU-resident KV throughout. Server flags otherwise match the non-speculative vLLM recipe: gpu-memory-utilization 0.95, max-model-len auto, max-num-batched-tokens 16384 and the mimo reasoning and tool-call parsers."
     - "The target is pinned to revision f657ba2f7d24c9adc5730675baaa2d34de878a49, and a setup script stages that snapshot in the shared hub cache so the draft's local dflash/ path exists before vLLM starts."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4742
