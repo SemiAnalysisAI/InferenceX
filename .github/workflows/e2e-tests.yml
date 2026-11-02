@@ -99,6 +99,8 @@ on: # zizmor: ignore[concurrency-limits]
         secrets:
           INFERENCEX_OFFICIAL_RO_HF_TOKEN:
             required: true
+          ANTHROPIC_API_KEY:
+            required: false
         inputs:
             generate-cli-command:
                 description: "Command passed to generate matrix script"
@@ -196,6 +198,9 @@ jobs:
     get-jobs:
         name: get-jobs
         runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            pull-requests: read # Read the external PR description for checklist-complete.
         outputs:
             benchmark-ref: ${{ steps.checkout-ref.outputs.commit || steps.checkout-default.outputs.commit }}
             tooling-ref: ${{ steps.tooling.outputs.result }}
@@ -223,6 +228,7 @@ jobs:
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                 ref: ${{ github.sha }}
+                fetch-depth: 0
                 persist-credentials: false
             - name: Resolve workflow tooling
               id: tooling
@@ -249,6 +255,17 @@ jobs:
                 persist-credentials: false
 
             - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+            - name: Classify priority criteria
+              id: priority-criteria
+              if: vars.PRIORITY_SCHEDULER_ENABLED == 'true' && !inputs.klaud-run
+              uses: $/.github/actions/classify-priority
+              with:
+                  base-ref: ${{ inputs.changelog-base-ref }}
+                  head-ref: ${{ inputs.changelog-head-ref || 'HEAD' }}
+                  scope: ${{ inputs.changelog-head-ref != '' && 'full' || 'patchwork' }}
+                  pr-number: ${{ inputs.source-pr-number }}
+                  anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
+                  github-token: ${{ github.token }}
             - id: get-jobs
               env:
                   GENERATE_COMMAND: ${{ inputs.generate-cli-command || github.event.inputs.generate-cli-command }}
@@ -257,6 +274,7 @@ jobs:
                   TRIM_CONC: ${{ inputs.trim-conc }}
                   ALL_EVALS: ${{ inputs.all-evals }}
                   EVALS_ONLY: ${{ inputs.evals-only }}
+                  PRIORITY_CRITERIA: ${{ steps.priority-criteria.outputs.criteria }}
               run: |
                   if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
                   MEASURED_ROOT="$PWD"
@@ -322,7 +340,8 @@ jobs:
                       python -P -m infx.workflows.ci_priority \
                       --policy "${PRIORITY_ROOT}/configs/ci-priority.yaml" \
                       --event-name "${GITHUB_EVENT_NAME}" \
-                      --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}:${family}"
+                      --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}:${family}" \
+                      --criteria-json "$PRIORITY_CRITERIA"
                   }
                   AGENTIC=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' not in x and not x.get('eval-only', False)]))" | score_matrix agentic)
                   AGENTIC_EVAL=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' not in x and x.get('run-eval', False)]))" | score_matrix agentic-eval)

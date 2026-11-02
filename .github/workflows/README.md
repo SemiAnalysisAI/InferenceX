@@ -186,8 +186,16 @@ Labels authorize same-repository sweeps on draft or ready PRs. Marking ready
 does not dispatch a sweep. Changing a recognized primary or modifier label
 cancels the active sweep; another starts only if a primary label remains.
 To retrigger an already-labeled PR, remove and reapply its primary label.
-Merge conflicts block sweeps. Queue priority comes from the PR diff and
-review state, not priority labels.
+Merge conflicts block sweeps. Queue priority comes from the PR diff and the
+PR description's checklist, not priority labels. A PR gets a small bonus when
+every item under its `Checklist` heading is checked, except conditional items
+("If ...", "Before merging ...") that do not apply yet. The checklist is read
+when the sweep starts, so later edits count from the next sweep. Trusted
+external sweeps classify the approved PR diff the same way. Manual
+`e2e-tests.yml` and `profile.yml` dispatches of a revision not yet on `main`
+classify its diff from the merge
+base only for patchwork, so engine-patching branches still run last. Klaud runs
+and revisions already on `main` keep unclassified scoring.
 
 The canary is the lowest-concurrency non-eval candidate among single-node
 fixed-sequence 1k/1k, 8k/1k, or AgentX entries, falling back to multi-node AgentX.

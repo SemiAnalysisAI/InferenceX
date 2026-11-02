@@ -252,9 +252,17 @@ def main() -> int:
         type=Path,
         help="Read matrix JSON from this file instead of stdin",
     )
+    parser.add_argument(
+        "--list-criteria",
+        action="store_true",
+        help="Print the policy's supported criteria as a JSON array and exit",
+    )
     args = parser.parse_args()
 
     policy = load_policy(args.policy)
+    if args.list_criteria:
+        print(json.dumps(sorted(supported_criteria(policy))))
+        return 0
     context = PriorityContext(
         event_name=args.event_name,
         queue_namespace=args.queue_namespace,
