@@ -1,0 +1,215 @@
+base:
+  schema: 2
+  name: mimov2.6flash-fp4-b200-vllm-agentic
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  # The engine may take the full VLLM_ENGINE_READY_TIMEOUT_S to become ready.
+  health_check:
+    interval_seconds: 10
+    max_attempts: 720
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: XiaomiMiMo/MiMo-V2.6-Flash-RL
+        trust-remote-code: true
+        gpu-memory-utilization: 0.95
+        # Largest context the KV pool holds; the uncapped AgentX corpus needs it.
+        max-model-len: auto
+        max-num-batched-tokens: 16384
+        reasoning-parser: mimo
+        tool-call-parser: mimo
+        enable-auto-tool-choice: true
+        stream-interval: 20
+        disable-uvicorn-access-log: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+  benchmark:
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+
+# One variant per point. Admission is 2x CONC for subagent fan-out and decode
+# CUDA graphs cover CONC. TP8 replicates each of the four KV heads across two ranks.
+
+override_tp8_c1:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        max-num-seqs: 2
+        max-cudagraph-capture-size: 1
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp8_c4:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        max-num-seqs: 8
+        max-cudagraph-capture-size: 4
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp4_c1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-seqs: 2
+        max-cudagraph-capture-size: 1
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp4_c4:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-seqs: 8
+        max-cudagraph-capture-size: 4
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp4_c8:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-seqs: 16
+        max-cudagraph-capture-size: 8
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
+override_tp4_c16:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-seqs: 32
+        max-cudagraph-capture-size: 16
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: none
+
+override_tp4_c32:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-seqs: 64
+        max-cudagraph-capture-size: 32
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: none
+
+override_tp4_c64:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-seqs: 128
+        max-cudagraph-capture-size: 64
+  benchmark:
+    env:
+      CONC: '64'
+      KV_OFFLOADING: none
+
+override_tp2_c1:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-num-seqs: 2
+        max-cudagraph-capture-size: 1
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp2_c4:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-num-seqs: 8
+        max-cudagraph-capture-size: 4
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp2_c8:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-num-seqs: 16
+        max-cudagraph-capture-size: 8
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
+override_tp2_c16:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-num-seqs: 32
+        max-cudagraph-capture-size: 16
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: none
+
+override_tp2_c32:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-num-seqs: 64
+        max-cudagraph-capture-size: 32
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: none

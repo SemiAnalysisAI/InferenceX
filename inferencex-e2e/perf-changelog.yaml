@@ -11769,3 +11769,16 @@
     - "6 DEP2 prefill workers with a DEP8 decode at conc 280-400 or a DEP16 decode at conc 300; MegaMoE, DSpark block 7 with fp8 draft KV, Dynamo KV router with fastokens for prefill and least-loaded routing across decode DP ranks."
     - "Prefill: shortest-prefill-first, chunk 8192, mem-fraction-static 0.85, HiCache 200 GB per rank write_back."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4686
+
+- config-keys:
+    - mimov2.6flash-fp4-b200-sglang-agentic
+    - mimov2.6flash-fp4-b200-vllm-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add XiaomiMiMo/MiMo-V2.6-Flash-RL (MiMoV2, 309B total / 15B active, FP8 dense with MXFP4 routed experts) AgentX on B200 with upstream SGLang lmsysorg/sglang:v0.5.21-cu130, following the SGLang MiMo-V2.5 cookbook, and upstream vLLM vllm/vllm-openai:v0.31.0, following the vLLM MiMo-V2.6-Flash-RL recipe."
+    - "SGLang serves with the fa4 attention and vision-encoder backends (v0.5.21 rejects language-model-only for MiMoV2), the flashinfer_mxfp4 MoE runner for the packed MXFP4 experts, chunked-prefill-size 16384, mem-fraction-static 0.85 and the mimo reasoning and tool-call parsers; thinking stays on per the chat template default."
+    - "SGLang sweeps TP4 at concurrency 1, 4, 8, 16, 32 and 64 and TP2 at 1, 4, 8, 16 and 32 with GPU-resident KV; attention TP must divide the checkpoint's TP4-interleaved fused QKV, so TP8 without DP attention is not valid."
+    - "vLLM serves with gpu-memory-utilization 0.95, max-model-len auto, max-num-batched-tokens 16384 and the mimo reasoning and tool-call parsers, and sweeps TP8 at concurrency 1 and 4, TP4 at 1, 4, 8, 16, 32 and 64 and TP2 at 1, 4, 8, 16 and 32 with GPU-resident KV; vLLM regroups the fused QKV per rank, so TP8 replicates KV heads."
+    - "No speculative decoding: there is no committed MiMo golden acceptance-length curve yet."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4330
