@@ -22,13 +22,43 @@ In general, we should be benchmarking free & ~open engines that is used in produ
 - **No separate A/B tracks for new models:** [`infx/golden_al_distribution/`](../infx/golden_al_distribution) pins speculative AgentX runs to one measured acceptance-length curve, so spec-decode results are comparable on their own. New models, including Kimi-K3, do not need a non-spec-decode baseline from day 0.
 - **Publish the best Pareto points, with or without speculative decoding.** Recipes may disable MTP, EAGLE/EAGLE3, DSpark, or another draft method when that gives a better operating point. Valid non-spec-decode results stay eligible under the [North-star Pareto policy](#north-star-pareto-policy), so a frontier may mix both.
 
-## all-reduce policy
+## Accuracy-sensitive optimization policy
 
-New models must not use integer-quantized all-reduce, including INT4, INT6, and INT8. This restriction addresses accuracy regressions in 800k+ long-context evaluations and quality drops observed by teams deploying it in end-user production workloads. 
+On upstream official InferenceX, the following optimizations are accepted if and only if passing the evaluations below is demonstrated with logs and complete, manually runnable reproduction scripts:
 
-Existing models listed in the [model support matrix at the policy baseline](https://github.com/SemiAnalysisAI/InferenceX/blob/2a45791dab6ade3dd855a67eb3ee923389124af8/inferencex-e2e/docs/MODELS.md#model-support-matrix) are grandfathered, including subsequent recipe and image updates for those models. The exception does not extend to new model releases or architectures added later, even if they reuse a prefix. Existing eval, draft-precision, and deprecation rules still apply; historical results are unchanged.
+- Reduced-precision all-reduce or reduce-scatter, including integer and floating-point quantization.
+- Online quantization of linear layers.
+- Quantization of shared experts.
+- Cross-indexer sharing on models that do not natively support index sharing.
+- FP4 KV cache on models that do not natively support FP4 KV cache.
+- Reducing the SSM/KDA/Mamba state-cache dtype below FP32.
 
-For non-grandfathered models, `ROCM_QUICK_REDUCE_QUANTIZATION`, `VLLM_ROCM_QUICK_REDUCE_QUANTIZATION`, `AITER_QUICK_REDUCE_QUANTIZATION`, and equivalent controls must not be set to values other than `0` or `NONE`. An unset control is acceptable only when the pinned engine's effective default disables integer quantization; `0` is acceptable only where the engine interprets it as disabled. SGLang ROCm serving workers must explicitly set `ROCM_QUICK_REDUCE_QUANTIZATION=NONE` to override integer-quantized image defaults, such as the `INT8` setting in the [ROCm Dockerfile](https://github.com/sgl-project/sglang/blob/f1a36c4789e6a4e766e00a902728ebd37a9df604/docker/rocm.Dockerfile); unset or `0` does not satisfy this SGLang requirement. Check inherited environment, container defaults, and every serving role, not just the recipe's visible flags.
+This evidence requirement applies to submissions for both existing and new models, including recipe updates, image-only updates, and re-enabled configurations. Existing models have no grandfathered exemption. Historical results are unchanged. Native index sharing and native FP4 KV cache remain subject to the ordinary eval requirements; they do not require this additional qualification solely because they use those native features.
+
+### Required evaluations
+
+- Kimi models must pass the entire KVV evaluation suite.
+- Other models must pass all of Terminal-Bench 4.0, HLE, and MMMU Pro Vision, or a set of substitutes agreed upon with InferenceX core maintainers and recorded in the PR. A subset, a different benchmark version, or an omitted modality is not a substitute without that agreement.
+
+The PR must state the pass criteria and report results for every required evaluation and every comparison arm below. Reviewers must assess the accuracy changes against both baselines, not just a green job or one aggregate score. Missing or unverifiable evidence does not qualify an optimization. The ordinary eval and cohort-comparison requirements still apply; this policy does not prescribe a new universal numeric accuracy tolerance.
+
+### Baselines and reproduction evidence
+
+The evaluation scripts must reproduce all three arms on the same evaluation suite:
+
+1. Full-precision weights, without reduced-precision communications and with the optimization under test disabled. Use the original full-precision checkpoint, not a quantized checkpoint cast back to a wider dtype.
+2. The quantized-weight checkpoint, with the optimization under test disabled.
+3. The same quantized-weight checkpoint as arm 2, with the optimization under test enabled.
+
+When testing a reduction in SSM/KDA/Mamba state-cache precision, both baseline arms must use FP32 state caches, and arm 3 must use the proposed lower-precision state-cache dtype. Record and verify the effective state-cache dtype in each arm separately from weight and KV-cache precision.
+
+Keep the evaluation data, harness, prompts, sampling settings, context limits, and other serving settings matched, apart from the intended differences between arms. Record any necessary differences. Compare arm 2 with arm 1 to expose checkpoint-quantization effects, arm 3 with arm 2 to isolate the optimization's effect on non-trivial accuracy, and arm 3 with arm 1 to show the total effect. If multiple optimizations are submitted together, identify the combination under test and do not attribute its effect to an individual optimization without a separate comparison.
+
+Provide complete setup, model-download, serving, evaluation, and scoring commands, pinned checkpoint revisions and engine images/commits, the effective configuration for each arm, and raw serving/evaluation logs with per-evaluation results. The scripts must allow a reviewer to reproduce all three arms manually, without relying on an undocumented CI environment. Logs must establish that the tested optimization actually ran in arm 3 and was disabled in the baselines; a flag alone does not prove runtime dispatch.
+
+Trace effective settings through inherited environment, launcher overrides, container defaults, and the pinned engine implementation, including target/draft workers and prefill/decode roles. Inspect `ROCM_QUICK_REDUCE_QUANTIZATION`, `VLLM_ROCM_QUICK_REDUCE_QUANTIZATION`, `AITER_QUICK_REDUCE_QUANTIZATION`, and equivalent controls, as well as reduce-scatter, online-quantization, shared-expert quantization, index-sharing, KV-cache, and SSM/KDA/Mamba state-cache dtype settings. An unset control does not prove an optimization is disabled; `0` or `NONE` counts as disabled only when the pinned implementation confirms it. Enabling values and image defaults require the same qualification as explicit recipe settings.
+
+This policy permits qualified cross-indexer sharing despite the general architecture-FLOP restriction. It does not permit unrelated layer, expert, or head pruning, waive engine-patch requirements, or override the separate [draft-model precision policy](../../CONTRIBUTING.md#draft-model-precision).
 
 ## Scenarios
 
