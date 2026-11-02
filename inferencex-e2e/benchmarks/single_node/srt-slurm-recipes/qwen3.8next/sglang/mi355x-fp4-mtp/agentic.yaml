@@ -59,6 +59,11 @@ base:
         # of per-draft state snapshots; needs the linear draft chain (topk 1).
         enable-linear-replayssm-spec: true
         tokenizer-worker-num: 6
+        # Breakable prefill CUDA graphs on the buckets of this workload's prefill
+        # sizes; sgl-project/sglang#46329 (patched in) lets multimodal batches
+        # replay too when speculative decoding is off.
+        cuda-graph-backend-prefill: breakable
+        cuda-graph-bs-prefill: [256, 512, 768, 1024, 1280, 1408, 2560, 2752, 3840, 4096, 5376]
         enable-metrics: true
         enable-cache-report: true
       env:

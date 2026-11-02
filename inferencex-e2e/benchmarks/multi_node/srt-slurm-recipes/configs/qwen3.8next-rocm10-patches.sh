@@ -35,6 +35,8 @@
 #     intermediate SSM states, which --enable-linear-replayssm-spec drops
 #   - opt-in fused HC for decode-sized rows (SGLANG_OPT_QWEN4_FUSED_HC): the
 #     per-branch norm and the combine's inject GEMV fold into the FlyDSL HC mix
+#   - sgl-project/sglang#46329: breakable prefill graphs replay multimodal batches
+#     when speculative decoding is off (--cuda-graph-backend-prefill breakable)
 #   - fused decode MoE route-sort + MXFP4 activation quant (ROCm/aiter#6165, #6467),
 #     instantiated for Qwen3.8-Flash-Next's 513 experts / top-11 / hidden 2560
 #   - ROCm/aiter#6225, #5804 and #6050, which the branch's fused_moe.py carries
@@ -90,5 +92,6 @@ apply /sgl-workspace/sglang sglang-qwen38-decode-opts.patch
 apply /sgl-workspace/sglang sglang-mtp-quant-resolve.patch
 apply /sgl-workspace/sglang sglang-qwen38-monokernel.patch
 apply /sgl-workspace/sglang sglang-qwen38-fused-hc.patch
+apply /sgl-workspace/sglang sglang-prefill-breakable-multimodal.patch
 
 echo "$digest" > "$marker"
