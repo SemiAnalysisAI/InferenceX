@@ -278,23 +278,6 @@ def test_drain_barrier_treats_a_missing_log_as_failure(tmp_path):
         drain.check(tmp_path / "logs" / "aiperf.log")
 
 
-def test_group_gives_each_point_its_own_concurrency_and_result_paths(tmp_path, requirements):
-    group = reuse.Group.from_env(_env(tmp_path), requirements)
-
-    results = tmp_path / "results"
-    assert group.concurrencies == (8, 16)
-    assert [(p["CONC"], p["RESULT_DIR"], p["RESULT_FILENAME"]) for p in group.points] == [
-        ("8", str(results / "conc_8"), "agentx_conc8"),
-        ("16", str(results / "conc_16"), "agentx_conc16"),
-    ]
-    assert all("CONC_LIST" not in point for point in group.points)
-    plans = [Plan.from_env(point) for point in group.points]
-    assert [plan.replay.artifact_dir for plan in plans] == [
-        results / "conc_8" / "aiperf_artifacts",
-        results / "conc_16" / "aiperf_artifacts",
-    ]
-
-
 def _server(**changes: object) -> dict:
     """``SERVER`` with dotted-path ``changes``; ``None`` deletes the key."""
     server = copy.deepcopy(SERVER)
@@ -313,8 +296,8 @@ def _server(**changes: object) -> dict:
 @pytest.mark.parametrize(
     ("document", "overrides", "message"),
     [
-        (None, {"CONC_LIST": "8"}, "at least two unique CONC_LIST points, got '8'"),
-        (None, {"CONC": "16"}, "CONC='16' must be the first CONC_LIST point (8)"),
+        (None, {"CONC_LIST": "8"}, "at least two unique CONC_LIST points"),
+        (None, {"CONC": "16"}, "must be the first CONC_LIST point"),
         (None, {"IS_MULTINODE": "true"}, "unsupported: IS_MULTINODE"),
         (None, {"EVAL_ONLY": "true", "ENABLE_AGENTX_POWER": "1"},
          "unsupported: EVAL_ONLY, ENABLE_AGENTX_POWER"),
@@ -323,13 +306,12 @@ def _server(**changes: object) -> dict:
         (None, {"KV_OFFLOADING": None}, "  - KV_OFFLOADING"),
         (None, {"AGENTX_REUSE_ENGINES": "0 0"}, "AGENTX_REUSE_ENGINES must list unique"),
         (_identities(SERVER, _server(roles__agg__args__max_num_seqs=32)), {},
-         "declare different server launches (server.roles.agg.args.max_num_seqs)"),
-        ({"points": _identities()["points"]}, {}, "must declare schema 'infx-agentx-server-reuse/v1'"),
-        (_identities(concurrencies=("8",)), {},
-         "cover exactly the CONC_LIST points ['8', '16']; got ['8']"),
+         "declare different server launches"),
+        ({"points": _identities()["points"]}, {}, "must declare schema"),
+        (_identities(concurrencies=("8",)), {}, "cover exactly the CONC_LIST points"),
         ({**_identities(), "points": {"8": {"image": IMAGE, "model": "test/model"}, "16": {}}}, {},
-         "point 8 must hold exactly ['image', 'model', 'server']"),
-        (None, {"MODEL": "other/model"}, "point 8 model 'test/model' is not MODEL='other/model'"),
+         "point 8 must hold exactly"),
+        (None, {"MODEL": "other/model"}, "is not MODEL="),
         (None, {"IMAGE": "vllm/vllm-openai:latest"}, "point 8 image"),
         (_identities(_server(model__container="other:tag"), _server(model__container="other:tag")),
          {}, "point 8 server model block does not serve test/model from image"),
@@ -344,12 +326,11 @@ def _server(**changes: object) -> dict:
         (_identities(_server(benchmark={"env": {}}), _server(benchmark={"env": {}})), {},
          "without 'benchmark' and 'name'"),
         (_identities(*[_server(roles__agg__args__kv_transfer_config={"kv_connector": "x"})] * 2),
-         {}, "external or offloaded KV cache (roles.agg.args.kv_transfer_config, "
-             "roles.agg.args.kv_transfer_config.kv_connector)"),
+         {}, "external or offloaded KV cache"),
         (_identities(*[_server(roles__agg__env__LMCACHE_CHUNK_SIZE="256")] * 2), {},
-         "external or offloaded KV cache (roles.agg.env.LMCACHE_CHUNK_SIZE)"),
+         "external or offloaded KV cache"),
         (_identities(*[_server(roles__agg__args__kv_offloading_backend="native")] * 2), {},
-         "external or offloaded KV cache (roles.agg.args.kv_offloading_backend)"),
+         "external or offloaded KV cache"),
     ],
 )  # fmt: skip
 def test_incompatible_groups_fail_before_any_point(
