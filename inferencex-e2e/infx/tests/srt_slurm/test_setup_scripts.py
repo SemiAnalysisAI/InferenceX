@@ -60,9 +60,22 @@ def test_an_installer_fails_without_the_version_the_binder_writes(tmp_path, scri
     ("vllm-mooncake.sh", {"KV_OFFLOAD_BACKEND_VERSION": "9.8.7"},
      {"mooncake-transfer-engine-cuda13==9.8.7"}),
     ("glm5.3-tilert-rocm.sh", {"ROUTER_VERSION": "9.8.7", "TILERT_ROLE": "prefill"}, {"tilert==9.8.7"}),
+    ("infera-sglang.sh", {"ROUTER_VERSION": "9.8.7", "INFERA_SGLANG_PATCHES": "0"},
+     {"--no-deps", "amd-infera==9.8.7", "https://github.com/AMD-AGI/Infera/releases/expanded_assets/v9.8.7"}),
 ])  # fmt: skip
 def test_an_installer_installs_exactly_the_bound_version(tmp_path, script, env, expected):
     result, installs = run(tmp_path, script, env)
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert expected <= set(installs[0])
+
+
+def test_infera_sglang_fails_when_the_sglang_fixes_do_not_apply(tmp_path):
+    """The installer patches SGLang after installing Infera and never skips it silently:
+    without an SGLang tree the patch step, and so the setup script, fails."""
+    result, installs = run(tmp_path, "infera-sglang.sh",
+                           {"ROUTER_VERSION": "9.8.7", "SGLANG_DIR": str(tmp_path / "no-sglang")})
+
+    assert result.returncode != 0
+    assert "[infera-sglang-patches] B1" in result.stdout
+    assert "amd-infera==9.8.7" in installs[0]

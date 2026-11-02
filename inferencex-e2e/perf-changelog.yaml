@@ -11769,3 +11769,12 @@
     - "6 DEP2 prefill workers with a DEP8 decode at conc 280-400 or a DEP16 decode at conc 300; MegaMoE, DSpark block 7 with fp8 draft KV, Dynamo KV router with fastokens for prefill and least-loaded routing across decode DP ranks."
     - "Prefill: shortest-prefill-first, chunk 8192, mem-fraction-static 0.85, HiCache 200 GB per rank write_back."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4686
+
+- config-keys:
+    - glm5.2-fp4-mi355x-infera-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GLM-5.2 MXFP4 AgentX on MI355X with stock SGLang (lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261018) prefill/decode disaggregation behind the Infera router (framework infera-sglang, infera-router 0.3.3 installed by infera-sglang.sh). Workers start through infera.engine.sglang and register in etcd; the router routes kv-aware with prefill session affinity and decode input demand."
+    - "Prefill TP1 x PP4 (layers 20/20/20/18) with write-back HiCache at 250 GB per stage; decode TP + DP attention; EAGLE MTP 5/1/6 on both roles; Mooncake KV transfer. Shapes: 1P1D with an 8-GPU decode at concurrency 32, 48, 64, 88 (decode request weight 1,000,000); 1P1D with a 4-GPU decode at 64, 80; 2P1D at 176."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
