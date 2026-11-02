@@ -141,18 +141,24 @@ index ede078b6c7..84178c096d 100644
                  logits = torch.matmul(
                      hidden_states.to(lm_head.weight.dtype), lm_head.weight.T
 diff --git a/python/sglang/srt/layers/moe/topk.py b/python/sglang/srt/layers/moe/topk.py
-index 75cf27546d..a8a80882cf 100644
+index 75cf27546d..89fd156674 100644
 --- a/python/sglang/srt/layers/moe/topk.py
 +++ b/python/sglang/srt/layers/moe/topk.py
-@@ -16,6 +16,7 @@ from __future__ import annotations
+@@ -14,10 +14,13 @@
  
+ from __future__ import annotations
+ 
++import inspect
  import logging
  import math
 +import os
  from dataclasses import dataclass, field
  from enum import IntEnum, auto
++from functools import lru_cache
  from typing import (
-@@ -199,6 +200,27 @@ _use_aiter_topk_gating = not envs.SGLANG_ROCM_DISABLE_AITER_TOPK_GATING.get()
+     TYPE_CHECKING,
+     Callable,
+@@ -199,6 +202,27 @@ _use_aiter_topk_gating = not envs.SGLANG_ROCM_DISABLE_AITER_TOPK_GATING.get()
  _AITER_TOPK_GATING_MAX_ROWS = 4096
  
  
@@ -180,7 +186,7 @@ index 75cf27546d..a8a80882cf 100644
  def _use_aiter_topk_gating_softmax(
      hidden_states: torch.Tensor,
      gating_output: torch.Tensor,
-@@ -207,23 +229,78 @@ def _use_aiter_topk_gating_softmax(
+@@ -207,23 +231,78 @@ def _use_aiter_topk_gating_softmax(
      num_fused_shared_experts: int,
      packed_out: Optional[torch.Tensor],
  ) -> bool:

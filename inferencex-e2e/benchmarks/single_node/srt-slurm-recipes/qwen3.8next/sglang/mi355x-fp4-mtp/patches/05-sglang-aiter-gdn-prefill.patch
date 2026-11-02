@@ -247,7 +247,7 @@ index 0000000000..e78681a343
 +        )
 +        return o, h
 diff --git a/python/sglang/srt/layers/attention/linear/kernels/gdn_triton.py b/python/sglang/srt/layers/attention/linear/kernels/gdn_triton.py
-index d6089ac320..fe947c512b 100644
+index d6089ac320..51a3eaa5c5 100644
 --- a/python/sglang/srt/layers/attention/linear/kernels/gdn_triton.py
 +++ b/python/sglang/srt/layers/attention/linear/kernels/gdn_triton.py
 @@ -2,14 +2,20 @@ import logging
@@ -348,14 +348,14 @@ index d6089ac320..fe947c512b 100644
      def packed_decode(
          self,
          mixed_qkv: torch.Tensor,
-@@ -248,7 +316,44 @@ class TritonGDNKernel(LinearAttnKernelBase):
+@@ -248,6 +316,45 @@ class TritonGDNKernel(LinearAttnKernelBase):
          cache_indices: torch.Tensor,
          query_start_loc: torch.Tensor,
          inplace_update: bool = True,
 +        seq_lens_cpu: list[int] | None = None,
 +        track_state: torch.Tensor | None = None,
 +        track_chunk_idx: torch.Tensor | None = None,
-         **kwargs,
++        **kwargs,
 +    ) -> tuple:
 +        o, last_state, h = self._extend(
 +            q,
@@ -370,6 +370,7 @@ index d6089ac320..fe947c512b 100644
 +            seq_lens_cpu=seq_lens_cpu,
 +            track_state=track_state,
 +            track_chunk_idx=track_chunk_idx,
++            **kwargs,
 +        )
 +        if track_state is not None and h is not None:
 +            _fill_track_state_from_h(h, track_state, track_chunk_idx, query_start_loc)
@@ -390,10 +391,10 @@ index d6089ac320..fe947c512b 100644
 +        seq_lens_cpu: list[int] | None,
 +        track_state: torch.Tensor | None,
 +        track_chunk_idx: torch.Tensor | None,
+         **kwargs,
      ) -> tuple:
          recurrent_state = ssm_states
-         recurrent_state_indices_args = {"initial_state_indices": cache_indices}
-@@ -276,6 +381,30 @@ class TritonGDNKernel(LinearAttnKernelBase):
+@@ -276,6 +383,30 @@ class TritonGDNKernel(LinearAttnKernelBase):
              # The external NPU kernel does not expose the optional write-back
              # control. Its existing behavior is equivalent to True.
              inplace_update_args = {}
