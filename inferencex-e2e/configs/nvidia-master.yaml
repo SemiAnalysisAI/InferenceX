@@ -7858,3 +7858,98 @@ minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg:
         prefill: { num-worker: 6, tp: 2, ep: 2, dp-attn: true }
         decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: true }
 
+minimaxm31flash-fp4-gb300-dynamo-trt-agentic-dspark-agg:
+  image: nvcr.io/nvidia/tensorrt-llm/release:feat-m31-flash-perf1-1.4.0a0.dev202611010306
+  model: MiniMaxAI/MiniMax-M3.1-Flash
+  model-prefix: minimaxm31flash
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-trt
+  router: {name: dynamo-router, version: 1.7.0.dev20261028}
+  multinode: true
+  disagg: false
+  srt-recipe-dir: minimaxm31flash/trtllm/gb300-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.738060993
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: {name: native, version: 1.4.0a0.dev202611010306}
+        conc-list: [22]
+        power: false
+        srt-recipe: agg-variants.yaml:override_agg_tp2_mtp7_c22
+        num-nodes: 1
+        worker: {num-worker: 1, tp: 2, ep: 1, dp-attn: false}
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: {name: native, version: 1.4.0a0.dev202611010306}
+        conc-list: [32]
+        power: false
+        srt-recipe: agg-variants.yaml:override_agg_tp2_mtp7_c32
+        num-nodes: 1
+        worker: {num-worker: 1, tp: 2, ep: 1, dp-attn: false}
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: {name: native, version: 1.4.0a0.dev202611010306}
+        conc-list: [44]
+        power: false
+        srt-recipe: agg-variants.yaml:override_agg_tp2_mtp7_c44
+        num-nodes: 1
+        worker: {num-worker: 1, tp: 2, ep: 1, dp-attn: false}
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: {name: native, version: 1.4.0a0.dev202611010306}
+        conc-list: [48]
+        power: false
+        srt-recipe: agg-variants.yaml:override_agg_tp2_mtp7_c48
+        num-nodes: 1
+        worker: {num-worker: 1, tp: 2, ep: 1, dp-attn: false}
+minimaxm31flash-fp4-gb300-dynamo-trt-agentic-dspark-disagg:
+  image: nvcr.io/nvidia/tensorrt-llm/release:feat-m31-flash-perf1-1.4.0a0.dev202611010306
+  model: MiniMaxAI/MiniMax-M3.1-Flash
+  model-prefix: minimaxm31flash
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-trt
+  router: {name: dynamo-router, version: 1.7.0.dev20261028}
+  multinode: true
+  disagg: true
+  srt-recipe-dir: minimaxm31flash/trtllm/gb300-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.704889713
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: {name: native, version: 1.4.0a0.dev202611010306}
+        conc-list: [32]
+        power: false
+        srt-recipe: disagg-variants.yaml:override_disagg_1p2d_tp2_tp2_mtp7_c32
+        prefill: {num-worker: 1, tp: 2, ep: 1, dp-attn: false}
+        decode: {num-worker: 2, tp: 2, ep: 1, dp-attn: false}
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: {name: native, version: 1.4.0a0.dev202611010306}
+        conc-list: [40]
+        power: false
+        srt-recipe: disagg-variants.yaml:override_disagg_1p2d_tp4_tp4_mtp7_c40
+        prefill: {num-worker: 1, tp: 4, ep: 1, dp-attn: false}
+        decode: {num-worker: 2, tp: 4, ep: 1, dp-attn: false}
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: {name: native, version: 1.4.0a0.dev202611010306}
+        conc-list: [36]
+        power: false
+        srt-recipe: disagg-variants.yaml:override_disagg_1p3d_tp2_tp2_mtp7_c36
+        prefill: {num-worker: 1, tp: 2, ep: 1, dp-attn: false}
+        decode: {num-worker: 3, tp: 2, ep: 1, dp-attn: false}
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: {name: native, version: 1.4.0a0.dev202611010306}
+        conc-list: [40]
+        power: false
+        srt-recipe: disagg-variants.yaml:override_disagg_1p3d_tp4_tp4_mtp7_c40
+        prefill: {num-worker: 1, tp: 4, ep: 1, dp-attn: false}
+        decode: {num-worker: 3, tp: 4, ep: 1, dp-attn: false}
+  kv-p2p-transfer: nixl

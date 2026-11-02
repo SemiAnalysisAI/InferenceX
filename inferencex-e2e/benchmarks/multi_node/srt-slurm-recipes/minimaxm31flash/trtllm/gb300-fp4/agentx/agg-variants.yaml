@@ -1,0 +1,317 @@
+schema: 2
+base:
+  environment:
+    DYN_TOKEN_IDS_AS_BYTES: '1'
+    DYN_REQUEST_PLANE_CODEC: msgpack
+    DYN_LIFECYCLE_TRACE_ENABLED: '0'
+    OTEL_EXPORT_ENABLED: '0'
+    PIP_CONFIG_FILE: /dev/null
+    PIP_INDEX_URL: https://pypi.org/simple
+    PIP_EXTRA_INDEX_URL: https://pypi.nvidia.com
+  services:
+  - name: otel-collector
+    type: otel-collector
+    enabled: false
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  engine:
+    type: trtllm
+    served_model_name: MiniMaxAI/MiniMax-M3.1-Flash
+    publish_metrics: true
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 2
+      env:
+        TLLM_LOG_LEVEL: INFO
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+        TRTLLM_ENABLE_PDL: '1'
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        PYTHONNOUSERSITE: '1'
+        TQDM_DISABLE: '1'
+        HF_HUB_OFFLINE: '1'
+        TRANSFORMERS_OFFLINE: '1'
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+        TRTLLM_M3_MSA_V1_DECODE: '1'
+        MINIMAX_MSA_Q8KV4_V_SCALE_LAYOUT: quad4
+        TORCH_EXTENSIONS_DIR: /tmp/m31-msa-jit
+        TRTLLM_KV_LAYERWISE_ONBOARD: '0'
+        TRTLLM_M31_NO_MIX: '1'
+        TRTLLM_M31_NO_MIX_DECODE_INTERVAL: '1'
+        TRTLLM_M31_FAST_SAMPLER: '1'
+        TRTLLM_M31_PREFILL: '1'
+        TRTLLM_M31_PREFILL2: '1'
+        TRTLLM_M31_DECODE_FUSION: '1'
+        TRTLLM_M31_SM103_TP2_TARGET: '1'
+        TRTLLM_M31_DISABLE_TOPP_DET: '1'
+        TRTLLM_M31_DISABLE_SOFTMAX_MC: '1'
+        TRTLLM_M31_DISABLE_REJ_MC: '1'
+        TRTLLM_M31_DISABLE_REJ_SLOTS: '1'
+        DYN_ROUTER_MODE: kv
+        DYN_ROUTER_SESSION_AFFINITY_TTL_SECS: '14400'
+        DYN_REASONING_PARSER: minimax_m3
+        DYN_TOOL_CALL_PARSER: minimax_m3
+        DYN_CUSTOM_JINJA_TEMPLATE: /model/chat_template.jinja
+      args:
+        modeling_v2: auto
+        trust_remote_code: true
+        tensor_parallel_size: 2
+        moe_expert_parallel_size: 1
+        enable_attention_dp: false
+        max_num_tokens: 16384
+        max_seq_len: 1048576
+        attn_backend: TRTLLM
+        enable_chunked_prefill: true
+        disable_overlap_scheduler: false
+        prefill_cuda_graph_backend: breakable
+        prefill_capture_num_tokens:
+        - 1
+        - 2
+        - 4
+        - 8
+        - 16
+        - 32
+        - 64
+        - 128
+        - 256
+        - 512
+        - 768
+        - 1024
+        - 1280
+        - 1536
+        - 1792
+        - 2048
+        - 2304
+        - 2560
+        - 2816
+        - 3072
+        allreduce_strategy: AUTO
+        moe_config:
+          backend: TRTLLM
+          use_low_precision_moe_combine: true
+        sparse_attention_config:
+          algorithm: minimax_m3
+          implementation: msa
+          indexer_kv_dtype: nvfp4
+          sparse_disable_index_value: true
+          fuse_qkv_index_projection: true
+        kv_cache_config:
+          iteration_stats_interval: 20
+          dtype: nvfp4
+          tokens_per_block: 128
+          use_kv_cache_manager_v2: true
+          free_gpu_memory_fraction: 0.94
+          enable_block_reuse: true
+          block_reuse_config:
+            policy: per_conversation
+          host_cache_size: 178000000000
+        cuda_graph_config:
+          enable_padding: true
+        speculative_config:
+          decoding_type: DSpark
+          max_draft_len: 7
+          block_size: 7
+          use_rejection_sampling: true
+          advanced_sampling_mode: no_topk
+          attention_backend: TRTLLM
+          speculative_model: /model/dspark
+        enable_autotuner: true
+        enable_tokenization_cache: true
+        stream_interval: 20
+        reasoning_parser: minimax_m3
+        print_iter_log: false
+        enable_iter_perf_stats: true
+        iter_perf_stats_interval: 20
+        return_perf_metrics: true
+        backend: pytorch
+        gpus_per_node: 4
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+    placement:
+      node: head
+    args:
+      router-mode: kv
+    env:
+      ETCD_LEASE_TTL: '120'
+      DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: '3600'
+      DYN_TOKENIZER_CACHE_BYTES: '8589934592'
+      DYN_REQUEST_PLANE: tcp
+      DYN_FRONTEND_ENABLE_KV_EVENTS: '0'
+  health_check:
+    interval_seconds: 5
+    max_attempts: 720
+  srun_options:
+    gpus-per-node: '2'
+  benchmark:
+    placement:
+      node: head
+    env:
+      SERVED_MODEL_NAME: MiniMaxAI/MiniMax-M3.1-Flash
+      TOKENIZER: /model
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: trtllm_kv_cache_utilization
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: '14400'
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
+    colocate_with_frontend: true
+  observability:
+    enabled: false
+    enable_otel: false
+    tachometer:
+      enabled: false
+  sbatch_directives:
+    exclusive: ''
+    mem: '0'
+    no-requeue: ''
+  dynamo:
+    install: true
+    source:
+      wheel: 1.7.0.dev20261028
+    request_plane: tcp
+  identity:
+    frameworks:
+      tensorrt_llm: 1.4.0a0.dev202611010306
+      dynamo: 1.7.0.dev20261028
+override_agg_tp2_mtp7_c22:
+  name: m31f-gb300-23c67f2-agg-tp2-mtp7-c22
+  roles:
+    agg:
+      env:
+        TRTLLM_M31_AR_NVFP4: '1'
+        TRTLLM_M31_MOE_AR: '1'
+        TRTLLM_M31_LOWM_GEMM: '1'
+      args:
+        max_batch_size: 44
+        cuda_graph_config:
+          batch_sizes:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
+          - 10
+          - 12
+          - 14
+          - 16
+          - 18
+          - 20
+          - 22
+          - 24
+          - 26
+          - 28
+          - 30
+          - 32
+          - 40
+          - 44
+override_agg_tp2_mtp7_c32:
+  name: m31f-gb300-23c67f2-agg-tp2-mtp7-c32
+  roles:
+    agg:
+      env:
+        TRTLLM_M31_AR_NVFP4: '1'
+        TRTLLM_M31_MOE_AR: '1'
+        TRTLLM_M31_LOWM_GEMM: '1'
+      args:
+        max_batch_size: 64
+        cuda_graph_config:
+          batch_sizes:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
+          - 10
+          - 12
+          - 14
+          - 16
+          - 18
+          - 20
+          - 22
+          - 24
+          - 26
+          - 28
+          - 30
+          - 32
+          - 40
+          - 48
+          - 56
+          - 64
+override_agg_tp2_mtp7_c44:
+  name: m31f-gb300-23c67f2-agg-tp2-mtp7-c44
+  roles:
+    agg:
+      env:
+        TRTLLM_M31_AR_NVFP4: '1'
+        TRTLLM_M31_MOE_AR: '1'
+        TRTLLM_M31_LOWM_GEMM: '1'
+      args:
+        max_batch_size: 88
+        cuda_graph_config:
+          batch_sizes:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
+          - 10
+          - 12
+          - 14
+          - 16
+          - 18
+          - 20
+          - 22
+          - 24
+          - 26
+          - 28
+          - 30
+          - 32
+          - 40
+          - 48
+          - 56
+          - 64
+          - 72
+          - 80
+          - 88
+override_agg_tp2_mtp7_c48:
+  name: m31f-gb300-23c67f2-agg-tp2-mtp7-c48
+  roles:
+    agg:
+      args:
+        max_batch_size: 48
+        cuda_graph_config:
+          batch_sizes:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
+          - 10
+          - 12
+          - 14
+          - 16
+          - 18
+          - 20
+          - 22
+          - 24
+          - 26
+          - 28
+          - 30
+          - 32
+          - 40
+          - 48
