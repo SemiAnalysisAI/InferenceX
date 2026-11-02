@@ -11779,4 +11779,4 @@
     - "Use the fastokens frontend tokenizer (DYN_TOKENIZER=fastokens) on every point."
     - "Set per-point admission and decode graph batch at twice the concurrency; prefill is admitted without a prefill-decode interval, which keeps p90 TTFT at 0.2-0.7 s."
     - "Store the DFlash2 draft KV cache in FP8 (speculative-draft-kv-cache-dtype fp8_e4m3) on every point, as the DSpark recipes do; the pool budget turns the saving into about 9-11 % more target KV tokens."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4744
