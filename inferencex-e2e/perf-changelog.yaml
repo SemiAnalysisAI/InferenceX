@@ -12855,3 +12855,13 @@
     - "The new ATOM brings DeepSeek-V4.1 DP attention (ROCm/ATOM#2376), the V4.1 MXFP8 KV cache with DSpark on an FP8 cache (ROCm/ATOM#2725), DP-attention prefill balancing and graph replay (ROCm/ATOM#2551, #2696, #2697) and the default HIP Mega-MHC kernel on gfx950 (ROCm/ATOM#2568)."
     - "No change to the DSpark draft's weight precision: ATOM loads the checkpoint's mtp.0-2 layers as shipped (FP8 E4M3 attention, shared experts and main_proj with 32x32 UE8M0 scales, MXFP4 routed experts, BF16 router, norms and heads) at both images. The draft shares the target's KV pool, so its KV cache follows the target from BF16 to MXFP8."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3965
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  description:
+    - "Use the SGLang ROCm 7.2.0 MI35x 20261111 daily image for GLM-5.2 MXFP4 MI355X AgentX MTP."
+    - "Use Gluon target MoE only for TP8/EP1 at concurrency 1 and 2; preserve the checkpoint BF16 draft experts with the auto speculative MoE backend."
+    - "Restore 32k prefill chunks for TP8/EP1 concurrency 1 and 2 with the Gluon FP32 partial-store fix from sgl-project/sglang#48397."
+    - "Drop the TP8/EP1 concurrency 4 point; concurrency 4 runs on the TP4/EP4 HiCache arm, which delivers more throughput per GPU."
+    - "Keep TP4/EP4 HiCache and DCP4 settings unchanged and evaluate every point so the Gluon path receives accuracy coverage."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4748
