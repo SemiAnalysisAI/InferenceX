@@ -56,9 +56,15 @@ def golden_dir(tmp_path: Path) -> Path:
             "kimi-k3",
             2.9,
         ),
+        (
+            "kimi-k3__dspark__kimi-k3-dspark__probabilistic-default.yaml",
+            "kimi-k3",
+            3.0,
+        ),
         ("minimax-m3__eagle3__minimax-m3-eagle3__default-default.yaml", "minimax-m3", 2.5),
         ("minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default.yaml", "minimax-m3", 2.6),
-        ("glm-5.3-fp8__mtp__native__default-default.yaml", "glm-5.3", 3.2),
+        ("minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-block.yaml", "minimax-m3", 2.7),
+        ("glm-5.3-nvfp4__mtp__native__default-default.yaml", "glm-5.3", 3.2),
         (
             "muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml",
             "muse-spark-open",
@@ -106,9 +112,15 @@ def vllm_recipe(method: str = "mtp", **extra: Any) -> dict[str, Any]:
         ("dsv4", "mtp", {}, 2.4),
         ("dsv4", "dspark", {}, 2.7),
         ("kimik3", "dspark", {"draft_sample_method": "greedy"}, 2.8),
-        ("kimik3", "dspark", {"draft_sample_method": "probabilistic"}, 2.9),
+        ("kimik3", "dspark", {"draft_sample_method": "probabilistic"}, 3.0),
         ("minimaxm3", "eagle3", {"model": "Inferact/MiniMax-M3-EAGLE3"}, 2.5),
         ("minimaxm3", "eagle3", {"model": "Inferact/MiniMax-M3-EAGLE3-GQA"}, 2.6),
+        (
+            "minimaxm3",
+            "eagle3",
+            {"model": "Inferact/MiniMax-M3-EAGLE3-GQA", "rejection_sample_method": "block"},
+            2.7,
+        ),
     ],
 )
 def test_automatic_curve_selection_preserves_json(

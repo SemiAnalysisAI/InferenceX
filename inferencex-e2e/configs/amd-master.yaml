@@ -938,8 +938,8 @@ dsv41flash-fp4-mi355x-atom-agentic-dspark:
       - { tp: 2, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 6, 8, 16, 32, 64], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 8, 32], srt-recipe: agentic.yaml }
 
-# The golden acceptance curve remains the provisional GLM-5.2-derived curve
-# documented in infx/golden_al_distribution/glm-5.3-fp8__mtp__native__default-default.yaml.
+# The golden acceptance curve is the GLM-5.3 NVFP4 SGLang curve in
+# infx/golden_al_distribution/glm-5.3-nvfp4__mtp__native__default-default.yaml.
 glm5.3-fp8-mi355x-tilert-agentic:
   image: ghcr.io/tile-ai/tilert-rocm-decode:0.1.6
   model: zai-org/GLM-5.3

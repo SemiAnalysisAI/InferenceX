@@ -106,9 +106,22 @@ def test_same_engine_defaults_agree_but_cross_engine_defaults_are_unverified() -
 
 def test_verifier_mismatch_is_reported() -> None:
     spec = {"method": "dspark", "num_speculative_tokens": 4, "draft_sample_method": "probabilistic"}
-    findings = audit("kimik3", _role(**{"speculative-config": spec, "kv-cache-dtype": "fp8"}), "vllm")
-    assert findings["curve"] == "kimi-k3__dspark__kimi-k3-dspark__probabilistic-block"
+    findings = audit("dsv41flash", _role(**{"speculative-config": spec}), "vllm")
+    assert findings["curve"] == "deepseek-v4.1-flash__dspark__native__probabilistic-block"
     assert ["mismatch", "verify", "standard (documented)", "block (explicit)"] in findings["findings"]
+
+
+def test_verifier_specific_curve_wins() -> None:
+    spec = {"method": "dspark", "num_speculative_tokens": 4, "draft_sample_method": "probabilistic"}
+    role = _role(**{"speculative-config": spec, "kv-cache-dtype": "fp8"})
+    findings = audit("kimik3", role, "vllm")
+    assert findings["curve"] == "kimi-k3__dspark__kimi-k3-dspark__probabilistic-default"
+    assert [f for f in findings["findings"] if f[1] == "verify"] == []
+    block = {**spec, "rejection_sample_method": "block"}
+    role = _role(**{"speculative-config": block, "kv-cache-dtype": "fp8"})
+    assert audit("kimik3", role, "vllm")["curve"] == (
+        "kimi-k3__dspark__kimi-k3-dspark__probabilistic-block"
+    )
 
 
 def test_sglang_block_verification_and_topk() -> None:
