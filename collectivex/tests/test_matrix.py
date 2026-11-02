@@ -131,8 +131,6 @@ class MatrixTests(unittest.TestCase):
 
     def test_invalid_filters_fail_closed(self):
         for options in (
-            {"exclude_skus": "unknown"},
-            {"only_sku": "b300", "exclude_skus": "b300"},
             {"ep_sizes": "0"},
             {"ep_sizes": "eight"},
             {"precisions": "fp4"},
@@ -204,10 +202,10 @@ class SwapSuiteTests(unittest.TestCase):
         )
 
     def test_sku_selection_and_bad_requests_fail_closed(self):
-        self.assertEqual([s["sku"] for s in self._swap(exclude_skus="amd-test")["include"]],
+        self.assertEqual([s["sku"] for s in self._swap(only_sku="cuda-test")["include"]],
                          ["cuda-test"])
         for options in (
-            {"swap_profile": "huge"}, {"only_sku": "missing"}, {"exclude_skus": "missing"},
+            {"swap_profile": "huge"}, {"only_sku": "missing"},
             {"modes": "normal"}, {"ep_sizes": "8"}, {"backend": "mori"},
         ):
             with self.subTest(options=options), self.assertRaises(SystemExit):
