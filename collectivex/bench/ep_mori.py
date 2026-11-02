@@ -18,16 +18,13 @@ os.environ["MORI_SHMEM_HEAP_SIZE"] = "6G"
 import torch
 import torch.distributed as dist
 
-from ep_backend import EPBackend
+from ep_backend import FP8_BLOCK, EPBackend, blockwise_fp8_codec
 
 try:
     import mori  # type: ignore
 except Exception as exc:  # pragma: no cover - requires the benchmark image
     print(f"ERROR: mori import failed: {exc!r}", file=sys.stderr)
     raise
-
-# vLLM (block-quantized models) and SGLang quantize FP8 dispatch per 1x128 with FP32 scales.
-_FP8_BLOCK = 128
 
 
 class _Launch(NamedTuple):
@@ -71,33 +68,39 @@ def _env_enabled(name: str) -> bool:
     return bool(value) and value.lower() not in ("0", "false", "off", "no")
 
 
-def _mori_version() -> str:
-    """Installed MoRI build; setuptools-scm stamps an untagged build with its commit."""
-    version = getattr(mori, "__version__", None)
-    if version and version != "unknown":
-        return str(version)
+# vLLM's ROCm images record their build arguments here, MORI_BRANCH among them.
+_IMAGE_BUILD_RECORD = "/app/versions.txt"
+_UNSTAMPED_VERSIONS = ("", "unknown", "0.0.0")
+
+
+def _image_mori_branch() -> str | None:
+    """The MoRI ref the image was built from, per its build record."""
     try:
-        return metadata.version("amd_mori")
-    except metadata.PackageNotFoundError:
-        return "unknown"
+        with open(_IMAGE_BUILD_RECORD, encoding="utf-8") as record:
+            for line in record:
+                key, sep, value = line.partition(":")
+                if sep and key.strip() == "MORI_BRANCH" and value.strip():
+                    return value.strip()
+    except OSError:
+        pass
+    return None
 
 
-def _blockwise_codec(fp8_dtype, fp8_max):
-    """(quantize, dequantize) for per-1x128 e4m3 with FP32 scales [m, n // 128]."""
+def _mori_version() -> str:
+    """Installed MoRI build; setuptools-scm stamps an untagged build with its commit.
 
-    def quantize(x):
-        m, n = x.shape
-        blocks = x.view(m, -1, _FP8_BLOCK)
-        amax = blocks.abs().float().amax(dim=2).view(m, -1).clamp(1e-4)
-        values = (blocks * (fp8_max / amax.unsqueeze(2))).to(fp8_dtype).view(m, n)
-        return values, (amax / fp8_max).view(m, -1)
-
-    def dequantize(values, scales):
-        m, n = values.shape
-        blocks = values.view(m, -1, _FP8_BLOCK).float()
-        return (blocks * scales.view(m, -1, 1)).view(m, n).to(torch.bfloat16)
-
-    return quantize, dequantize
+    vLLM's ROCm base builds MoRI with `setup.py bdist_wheel`, which skips setuptools-scm and leaves
+    setuptools' default 0.0.0; the image's build record then names the ref it was built from.
+    """
+    version = str(getattr(mori, "__version__", None) or "")
+    if version in _UNSTAMPED_VERSIONS:
+        try:
+            version = metadata.version("amd_mori")
+        except metadata.PackageNotFoundError:
+            version = ""
+    if version in _UNSTAMPED_VERSIONS:
+        return _image_mori_branch() or version or "unknown"
+    return version
 
 
 class MoRIBackend(EPBackend):
@@ -123,8 +126,6 @@ class MoRIBackend(EPBackend):
 
     def __init__(self, args, rank, world_size, local_rank, device):
         super().__init__(args, rank, world_size, local_rank, device)
-        self._fp8 = self.precision == "fp8"
-        self.experts_per_rank = args.experts // world_size
         arch = _gfx_arch(device)
         scale_out = args.scope == "scale-out"
         if self.mode == "low-latency":
@@ -147,17 +148,16 @@ class MoRIBackend(EPBackend):
         self._inter_node = self.launch.kernel in ("InterNodeV1", "InterNodeV1LL")
         self._fp8_dtype = None
         if self._fp8:
-            if args.hidden % _FP8_BLOCK:
-                raise ValueError(f"MoRI FP8 dispatch needs hidden divisible by {_FP8_BLOCK}, got {args.hidden}")
+            if args.hidden % FP8_BLOCK:
+                raise ValueError(f"MoRI FP8 dispatch needs hidden divisible by {FP8_BLOCK}, got {args.hidden}")
             # vLLM's current_platform.fp8_dtype(): AMD's e4m3fnuz on gfx94x, OCP e4m3fn on gfx950.
             self._fp8_dtype, fp8_max, label = (
                 (torch.float8_e4m3fn, 448.0, "fp8-e4m3fn") if arch == "gfx950"
                 else (torch.float8_e4m3fnuz, 240.0, "fp8-e4m3fnuz")
             )
-            self._enable_fp8(label, *_blockwise_codec(self._fp8_dtype, fp8_max))
+            self._enable_fp8(label, *blockwise_fp8_codec(self._fp8_dtype, fp8_max))
         # External-input kernels consume the dispatch output directly, so stage has no copy of its
-        # own; under FP8 it dequantizes the received payload with its scales.
-        self.stage_device_work = self._fp8
+        # own; under FP8 it dequantizes the received payload with its scales (stage_device_work).
         self._library_config = {}
 
     def create_buffer(self, spec):
@@ -193,7 +193,7 @@ class MoRIBackend(EPBackend):
         # MoRI preallocates one communicator buffer for the case's entire ladder, at least the
         # low-latency cap (see `buffer_cap`). Normal mode still takes the larger ladder maximum.
         self._cap = max(self.LL_LADDER_CAP, spec.max_tokens_per_rank)
-        scale_dim = args.hidden // _FP8_BLOCK if self._fp8 else 0
+        scale_dim = args.hidden // FP8_BLOCK if self._fp8 else 0
         scale_type_size = torch.float32.itemsize if self._fp8 else 0
         # The engines' call: the launch tuple lives in the config and dispatch/combine pass no
         # per-call override. The external input buffer (MoRI's default) feeds combine from the
@@ -260,8 +260,11 @@ class MoRIBackend(EPBackend):
         return torch.int32
 
     def make_problem(self, T, idx, weights, x):
+        """Adds the MoE layer's output, which vLLM's finalize copies the combined rows into;
+        allocated once per rung, untimed."""
         problem = super().make_problem(T, idx, weights, x)
         problem.indices, problem.weights = problem.topk_idx, problem.topk_weights
+        problem.combine_output = torch.empty((T, self.args.hidden), dtype=torch.bfloat16, device=self.device)
         return problem
 
     def dispatch(self, p):
@@ -303,7 +306,10 @@ class MoRIBackend(EPBackend):
         # kernels reach the gather through dispatch-side metadata instead and do not
         # consume the routing content, which is why EP8 was always clean.
         combined, _weights = self.op.combine(h.combine_input, None, p.indices)
-        return combined[:p.T]
+        # vLLM's finalize copies the result into the MoE layer's output (pf_mori.py), so the copy
+        # is charged here as flashinfer-ep charges its own.
+        p.combine_output.copy_(combined[:p.T])
+        return p.combine_output
 
     def inspect_dispatch(self, p, h):
         count = self.recv_tokens(h)

@@ -1,13 +1,21 @@
+import json
+import shlex
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
+import yaml
 
 from infx.workflows.ci_priority import (
     PriorityContext,
     annotate_jobs,
     calculate_priority,
+    load_policy,
     queue_token,
+    supported_criteria,
 )
+
+ROOT = Path(__file__).resolve().parents[4]
 
 
 @pytest.fixture
@@ -30,6 +38,19 @@ def policy():
         },
         "patchwork-score": -5,
     }
+
+
+@pytest.mark.parametrize(("misspell", "unknown"), [
+    (lambda p: p["adjustments"].update({"multinode": p["adjustments"].pop("multi-node")}),
+     "adjustments.multinode"),
+    (lambda p: p.update({"patchwork_score": p.pop("patchwork-score")}), "patchwork_score"),
+])
+def test_load_policy_rejects_misspelled_keys(policy, tmp_path, misspell, unknown):
+    misspell(policy)
+    path = tmp_path / "ci-priority.yaml"
+    path.write_text(yaml.safe_dump(policy))
+    with pytest.raises(ValueError, match=f"^Unknown CI priority policy keys: {unknown}$"):
+        load_policy(path)
 
 
 def test_combined_signals_add_their_configured_weights(policy):
@@ -211,3 +232,21 @@ def test_queue_tokens_are_stable_for_reordered_keys_but_distinct_for_duplicate_j
 @pytest.mark.parametrize("framework,expected", [("vllm", "15"), ("vllm-disagg", "15"), ("vllmish", "10")])
 def test_framework_prefix_matching_requires_a_separator(policy, framework, expected):
     assert calculate_priority({"framework": framework}, policy) == Decimal(expected)
+
+
+def test_sweep_classifier_enum_covers_every_weighted_model_prefix():
+    """A model prefix missing from the classifier enum silently drops its weight from PR sweeps."""
+    workflow = yaml.safe_load((ROOT / ".github/workflows/run-sweep.yml").read_text())
+    [classify] = [
+        step
+        for job in workflow["jobs"].values()
+        for step in job.get("steps", [])
+        if step.get("name") == "Classify priority criteria"
+    ]
+    args = shlex.split(classify["with"]["claude_args"])
+    schema = json.loads(args[args.index("--json-schema") + 1])
+    enum = schema["properties"]["criteria"]["items"]["enum"]
+    assert len(enum) == len(set(enum))
+    policy = load_policy(ROOT / "inferencex-e2e/configs/ci-priority.yaml")
+    assert set(enum) <= supported_criteria(policy)
+    assert set(policy["adjustments"]["model-prefix"]) <= set(enum)

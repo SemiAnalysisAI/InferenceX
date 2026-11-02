@@ -1,0 +1,5 @@
+[
+  {"type":"gemm","args":{"m":128,"n":512,"k":512,"a":{"dtype":"bf16"},"b":{"dtype":"bf16"},"out":"bf16"},"sources":[]},
+  {"type":"gemm","args":{"m":128,"n":128,"k":128,"a":{"dtype":"bf16"},"b":{"dtype":"bf16"},"out":"fp32"},"sources":[]},
+  {"type":"gemm","args":{"m":49152,"n":7168,"k":6144,"a":{"dtype":"bf16"},"b":{"dtype":"bf16"},"out":"bf16"},"sources":[]}
+]

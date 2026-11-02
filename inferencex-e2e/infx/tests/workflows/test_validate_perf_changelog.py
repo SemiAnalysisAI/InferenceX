@@ -43,6 +43,14 @@ def test_parse_changelog_rejects_missing_final_newline() -> None:
         parse_changelog(raw, "test changelog")
 
 
+@pytest.mark.parametrize("line_break", ["\x85", "\u2028", "\u2029"])
+def test_parse_changelog_rejects_line_breaks_other_than_newline(line_break: str) -> None:
+    raw = render([entry("config-a")]) + line_break.encode() + render([entry("config-b")])
+
+    with pytest.raises(ChangelogValidationError, match="line break"):
+        parse_changelog(raw, "test changelog")
+
+
 def test_parse_changelog_rejects_malformed_nested_entry() -> None:
     raw = b"""- config-keys:
     - config-a
@@ -72,6 +80,11 @@ def test_parse_changelog_rejects_duplicate_mapping_keys() -> None:
 
     with pytest.raises(ChangelogValidationError, match="duplicate key"):
         parse_changelog(raw, "test changelog")
+
+
+def test_parse_changelog_reports_a_tagged_non_mapping_entry_as_invalid_yaml() -> None:
+    with pytest.raises(ChangelogValidationError, match="expected a mapping node, but found scalar"):
+        parse_changelog(b"- !!map config-a\n", "test changelog")
 
 
 def test_compare_entries_allows_appended_pr_entry() -> None:
@@ -174,13 +187,14 @@ def test_raw_append_requires_exact_separator_and_final_newline() -> None:
             corrections=0,
         )
 
-    with pytest.raises(ChangelogValidationError, match="end with one newline"):
-        validate_raw_change(
-            base,
-            base + b"\n" + first + b"\n",
-            additions=1,
-            corrections=0,
-        )
+    for trailing in (b"\n", b"\n \n", b" \n"):
+        with pytest.raises(ChangelogValidationError, match="end with one newline"):
+            validate_raw_change(
+                base,
+                base + b"\n" + first + trailing,
+                additions=1,
+                corrections=0,
+            )
 
 
 def test_raw_correction_rejects_whitespace_only_history_change() -> None:

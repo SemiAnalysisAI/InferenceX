@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from typing_extensions import Self
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-_SECRET_NAME = re.compile(r"TOKEN|SECRET", re.IGNORECASE)
+_SECRET_NAME = re.compile(r"TOKEN(?!S|IZER)|SECRET|API_?KEY|PASSWORD", re.IGNORECASE)
 
 
 def status(returncode: int) -> int:
@@ -27,7 +27,10 @@ def status(returncode: int) -> int:
 
 
 def echo(argv: Sequence[str | os.PathLike[str]], env: Mapping[str, str] | None = None) -> None:
-    """Print ``+ <argv>`` to stderr, masking the values of ``*TOKEN*`` and ``*SECRET*`` variables."""
+    """Print ``+ <argv>`` to stderr, masking the values of credential variables.
+
+    Names like ``TOKENS`` and ``TOKENIZER`` hold counts and paths, so they are not masked.
+    """
     text = shlex.join(map(os.fspath, argv))
     secrets = {
         value
@@ -63,17 +66,22 @@ def call(
 
 
 def tee(argv: Sequence[str], log: Path, env: Mapping[str, str] | None = None) -> int:
-    """``argv 2>&1 | tee log``; return argv's status."""
+    """``argv 2>&1 | tee log``; return argv's status, 127 if it cannot start."""
     echo(argv, env)
-    with (
-        log.open("wb") as sink,
-        subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env) as child,
-    ):
-        output = cast("io.BufferedReader", child.stdout)
-        while chunk := output.read1(1 << 16):
-            for stream in (sys.stdout.buffer, sink):
-                stream.write(chunk)
-                stream.flush()
+    with log.open("wb") as sink:
+        try:
+            child = subprocess.Popen(
+                argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env
+            )
+        except OSError as error:
+            print(f"ERROR: cannot run {argv[0]}: {error}", file=sys.stderr, flush=True)
+            return 127
+        with child:
+            output = cast("io.BufferedReader", child.stdout)
+            while chunk := output.read1(1 << 16):
+                for stream in (sys.stdout.buffer, sink):
+                    stream.write(chunk)
+                    stream.flush()
     return status(child.returncode)
 
 
@@ -93,19 +101,23 @@ class _Signals:
     """Handle ``SIGNALS`` for the ``with`` block and remember the first one received."""
 
     def __init__(self) -> None:
+        """Start with no signal received and no saved handlers."""
         self.received: int | None = None
         self._previous: dict[int, Any] = {}
 
     def __enter__(self) -> Self:
+        """Install ``_handle`` for every signal in ``SIGNALS`` and return self."""
         for signum in SIGNALS:
             self._previous[signum] = signal.signal(signum, self._handle)
         return self
 
     def __exit__(self, *_: object) -> None:
+        """Restore the handlers that were in place before the block."""
         for signum, handler in self._previous.items():
             signal.signal(signum, handler)
 
     def _handle(self, signum: int, _frame: FrameType | None) -> None:
+        """Record ``signum`` unless an earlier signal was already recorded."""
         self.received = self.received or signum
 
 
@@ -117,10 +129,12 @@ class RelaySignals(_Signals):
     """Run commands one at a time, relaying signals; after one, nothing new starts."""
 
     def __init__(self) -> None:
+        """Start with no running child."""
         super().__init__()
         self._child: subprocess.Popen[bytes] | None = None
 
     def _handle(self, signum: int, frame: FrameType | None) -> None:
+        """Record ``signum`` and forward it to the running child, if any."""
         super()._handle(signum, frame)
         if self._child is not None:
             self._child.send_signal(signum)
