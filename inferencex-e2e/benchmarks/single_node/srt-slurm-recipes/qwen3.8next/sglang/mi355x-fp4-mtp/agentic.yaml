@@ -63,10 +63,7 @@ base:
         enable-cache-report: true
       env:
         PYTHONNOUSERSITE: '1'
-        SGLANG_USE_AITER: '1'
-        SGLANG_USE_AITER_UNIFIED_ATTN: '1'
-        AITER_FLYDSL_FORCE: '1'
-        ROCM_QUICK_REDUCE_QUANTIZATION: INT8
+        ROCM_QUICK_REDUCE_QUANTIZATION: NONE
         # Outlast AIPerf's 300 s client connection pool.
         SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
         SGLANG_ENABLE_SPEC_V2: '1'
