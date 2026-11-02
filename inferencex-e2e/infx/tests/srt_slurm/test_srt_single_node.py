@@ -96,6 +96,40 @@ def test_agentx_fragments_are_composed_and_bound_to_the_point(point):
         select_recipe(f"{path}:base", agentic)
 
 
+@pytest.mark.parametrize("eval_only", [False, True])
+@pytest.mark.parametrize("admission_cap", [4, 8, 16])
+def test_agentx_admission_override_survives_runtime_binding_independently_of_client_concurrency(
+    point, eval_only, admission_cap
+):
+    path, recipe, env = point
+    recipe["roles"]["agg"]["args"]["cuda-graph-max-bs-decode"] = 8
+    path.write_text(yaml.safe_dump({
+        "base": recipe,
+        "override_c8": {
+            "roles": {"agg": {"args": {"max-running-requests": admission_cap}}},
+            "benchmark": {"env": {"CONC": "8"}},
+        },
+    }))
+    agentic = {
+        **env, "IS_AGENTIC": "1", "CONC": "8", "DURATION": "3600",
+        "RUN_EVAL": str(eval_only).lower(), "EVAL_ONLY": str(eval_only).lower(),
+    }
+    selected, bound = select_recipe(f"{path}:override_c8", agentic)
+    argv = runtime_arguments(selected, agentic)
+    apply_overrides_to_recipe(bound, parse_overrides(argv[1::2], []))
+
+    assert bound["roles"]["agg"]["args"] == {
+        "tensor-parallel-size": 4, "data-parallel-size": 1,
+        "max-running-requests": admission_cap, "cuda-graph-max-bs-decode": 8,
+    }
+    if eval_only:
+        assert "concurrencies" not in bound["benchmark"]
+    else:
+        assert bound["benchmark"]["concurrencies"] == [8]
+    assert bound["benchmark"]["env"]["CONC"] == "8"
+    assert bound["benchmark"]["env"]["EVAL_ONLY"] == str(eval_only).lower()
+
+
 def test_a_variant_with_another_dram_budget_is_rejected(point):
     path, recipe, env = point
     path.write_text(yaml.safe_dump({"base": recipe, "override_c2_dram": {"benchmark": {"env": {

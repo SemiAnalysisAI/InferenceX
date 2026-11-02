@@ -85,7 +85,7 @@ override_off_c96:
   roles:
     agg:
       args:
-        max-running-requests: 192
+        max-running-requests: 96
         cuda-graph-max-bs-decode: 96
   benchmark:
     env:
@@ -144,7 +144,7 @@ override_on_c96:
   roles:
     agg:
       args:
-        max-running-requests: 192
+        max-running-requests: 96
         cuda-graph-max-bs-decode: 96
         enable-hierarchical-cache: true
         hicache-host-memory-fraction: 0.65
