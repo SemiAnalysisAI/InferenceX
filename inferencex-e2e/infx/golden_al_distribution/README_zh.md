@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-本目录包含今后用于在 InferenceX 中标准化推测解码的黄金接受长度（Acceptance Length，AL）曲线。每个 YAML 按模型、思考模式和草稿长度（`num_speculative_tokens`），记录在 SPEED-Bench Qualitative split 的 **coding** 类别上测得的平均 AL。
+本目录包含今后用于在 InferenceX 中标准化投机解码的黄金接受长度（Acceptance Length，AL）曲线。每个 YAML 按模型、思考模式和草稿长度（`num_speculative_tokens`），记录在 SPEED-Bench Qualitative split 的 **coding** 类别上测得的平均 AL，并记录产生这些数值的[收集设置](#收集设置)。
 
 ## 为什么选择 SPEED-Bench
 
@@ -91,9 +91,28 @@ python -m atom.entrypoints.openai_server \
    其中 `1` 是目标模型保证生成的验证 token。结果四舍五入到小数点后两位。
 6. 收集脚本生成 YAML 矩阵。工作流将其发布到 GitHub Actions step summary，并上传为 `speedbench-reference-al-<model-prefix>` artifact。
 7. 工作流保留服务日志和逐请求详细结果，以便审阅者确认输出合理、思考模式正确，并且没有静默的服务或聊天模板故障。
-8. 审阅完成后，将矩阵连同准确的采样元数据和源 Actions run URL 一并提交到本目录。设置 `open-pr=true` 和 `golden-curve=<曲线文件名>`（例如 `dsv4_mtp`）时，工作流会写入本目录下的 `<曲线文件名>.yaml`，首行为源 run URL，再通过 `python -m infx.golden_al_distribution show` 加载校验，然后开启 PR。它会替换整个文件，因此本次未收集的格子会被删除。
+8. 审阅完成后，将矩阵连同准确的采样元数据、[收集设置](#收集设置)和源 Actions run URL 一并提交到本目录。设置 `open-pr=true` 和 `golden-curve=<曲线文件名>`（例如 `dsv4_mtp`）时，工作流会写入本目录下的 `<曲线文件名>.yaml`，首行为源 run URL，再通过 `python -m infx.golden_al_distribution show` 加载校验，然后开启 PR。它会替换整个文件，因此本次未收集的格子会被删除。
 
 收集过程仅通过测量真实草稿头质量来建立黄金曲线。之后，AgentX 对所有可比较提交使用该已提交曲线作为合成接受目标。
+
+## 收集设置
+
+每个曲线 YAML 在模型键旁的保留顶层键 `collection` 中记录该次收集使用的 SPEED-Bench 客户端设置，`load_curve(name).collection` 会返回这些设置（没有该块的曲线返回 `None`）。在 `run-sweep.yml` 的 PR 扫描中，仅作报告的接受长度门禁会以真实验证对每个投机解码 AgentX 部署重放这些设置，并将测得的 AL 与黄金 AL 比较，详见[投机解码接受门禁](../../../.github/workflows/README.md#speculative-acceptance-gate)。
+
+```yaml
+collection:
+  concurrency: 1           # 最大并发请求数（--max-concurrency）
+  renderer: chat_template  # 或 deepseek_v4
+  modes:                   # 曲线中有 AL 数值的每个思考模式各一项
+    thinking_on:
+      chat_template_kwargs: {enable_thinking: true}  # 收集脚本未传入任何参数时为 null
+      sampling: {temperature: 0.6, top_p: 0.95, top_k: 20, presence_penalty: 0.0, repetition_penalty: 1.0}
+```
+
+- `renderer` 表示客户端如何把每个提示词渲染成文本。`chat_template` 对一条用户消息应用所服务模型的 Hugging Face 聊天模板，并带上生成提示和 `chat_template_kwargs`。`deepseek_v4` 是 vLLM 中同名的 tokenizer 模式；门禁使用本仓库中等效的[编码器](../bench_serving/encoding_dsv4.py)，并把 `chat_template_kwargs` 作为其思考选项。
+- `sampling` 列出请求携带的全部采样参数，其中包括 `vllm bench serve` 附加的 `repetition_penalty: 1.0`。未列出的参数即未发送，服务端使用了自身的默认值。
+- 其余设置对所有收集都相同：SPEED-Bench Qualitative `coding` 类别的 80 条提示词，按 vLLM 加载器的发送顺序，以流式 `/v1/completions` 请求发送，`max_tokens` 为 4096，且不设置 `ignore_eos`。
+- 新曲线必须包含该块。目前有两条曲线没有该块，门禁会把它们的点列为未解析（unresolved）。[`dsv41flash_dspark.yaml`](dsv41flash_dspark.yaml) 需要等 DeepSeek V4.1 渲染器落地后，门禁才能渲染其提示词。[`musespark_dflash.yaml`](musespark_dflash.yaml) 使用 SGLang 的 `bench_serving` 客户端在其原生 `/generate` 端点上收集，门禁的 `/v1/completions` 重放无法复现该方式。[`glm5.3_mtp.yaml`](glm5.3_mtp.yaml) 是临时曲线，沿用 GLM-5.2 的设置。
 
 ## 复现一次收集
 
@@ -120,6 +139,7 @@ gh workflow run speedbench-al.yml \
 - 详细输出内容连贯，并使用预期的思考模式。
 - 服务日志中没有回退、禁用草稿或聊天模板错误。
 - YAML 元数据与触发时使用的镜像、采样设置、模型和推测方法一致。
+- `collection` 块与收集脚本的并发数、提示词渲染方式和各模式设置一致。
 - YAML 第一行链接了源 Actions run。
 - 提交的数值与工作流 artifact 完全一致。
 

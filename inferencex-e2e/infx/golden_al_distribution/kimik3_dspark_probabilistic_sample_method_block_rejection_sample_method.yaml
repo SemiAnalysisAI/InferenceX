@@ -17,3 +17,13 @@ kimi-k3:
     6: 3.75
     7: 3.84
     8: 4.00
+
+# SPEED-Bench client settings of this collection; the acceptance-length gate replays them
+# (README.md#collection-settings).
+collection:
+  concurrency: 64
+  renderer: chat_template
+  modes:
+    thinking_on:
+      chat_template_kwargs: {thinking: true}
+      sampling: {temperature: 1.0, top_p: 0.95, repetition_penalty: 1.0}

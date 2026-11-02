@@ -74,7 +74,7 @@ def run_single_node(launch: Launch) -> int:
         selected, bound, runtime_args = submit.bound_arguments(root / "arguments")
         event.set(recipe=selected.removeprefix(f"{run.workspace}/"))
         containers = {}
-        if not request.eval_only:
+        if not request.eval_only and not request.al_gate:
             image, reference = config.stage_gpu_exporter(run, single_node=True)
             containers[image] = reference
         job_config = config.SrtJob(
@@ -100,7 +100,8 @@ def run_single_node(launch: Launch) -> int:
     submitted = submit.Submitted(manifest=run.workspace / submit.SINGLE_NODE_SUBMISSION)
     run.life.callback(collect.finish_single_node, run, submitted, fetched)
     eval_args = submit.eval_args(run.env, submit.SINGLE_NODE_EVAL_COMMAND)
-    arguments = ["--json", "--yes", "--output", str(root / "outputs"), *runtime_args, *eval_args]
+    client_args = submit.gate_args(request) if request.al_gate else eval_args
+    arguments = ["--json", "--yes", "--output", str(root / "outputs"), *runtime_args, *client_args]
     applied = submit.apply(run, checkout, bound, arguments, stdout=submitted.manifest)
     if applied.returncode:
         sys.stderr.write(applied.stdout)
@@ -113,7 +114,7 @@ def run_single_node(launch: Launch) -> int:
     status = run.backend.state(job)
     with event.stage("collect"):
         logs = run.backend.fetch_outputs(job, fetched) / "logs"
-        if not request.eval_only:
+        if not request.eval_only and not request.al_gate:
             (logs / "power").mkdir(parents=True, exist_ok=True)
             (logs / "power/native-job-status.txt").write_text(f"{job.id}|{status.raw}\n")
         rc = collect.finalize_single_node_results(run, logs, checkout.commit)

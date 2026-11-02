@@ -13,6 +13,7 @@ import yaml
 
 from infx.srt_slurm.synthetic_acceptance import (
     acceptance_length,
+    ENGINES,
     build_overrides,
     plan_commands,
     selected_recipes,
@@ -391,6 +392,120 @@ def test_real_runs_clear_synthetic_without_a_curve(
         assert not any(key.startswith("SGLANG_SIMULATE_ACC_") for key in result["environment"])
     assert role["env"]["KEEP"] == "yes"
     assert result["environment"]["KEEP"] == "yes"
+
+
+GOLDEN_SGLANG_PINS = {
+    "SGLANG_SIMULATE_ACC_LEN": "2.4",
+    "SGLANG_SIMULATE_ACC_METHOD": "match-expected",
+    "SGLANG_SIMULATE_ACC_TOKEN_MODE": "real-draft-token",
+}
+SGLANG_EAGLE = {"speculative-algorithm": "EAGLE", "speculative-num-steps": 3}
+VLLM_FORCED = {"method": "mtp", "num_speculative_tokens": 3, "rejection_sample_method": "synthetic"}
+
+
+def backend_layout_recipe(engine: str, args: dict[str, Any], **environment: str) -> dict:
+    """An aggregated recipe in srt-slurm's older backend layout (no roles)."""
+    return {
+        "backend": {
+            "type": engine,
+            f"{engine}_config": {"aggregated": args},
+            "aggregated_environment": {"KEEP": "yes", **environment},
+        }
+    }
+
+
+def test_real_verification_strips_pins_from_the_backend_layout(tmp_path: Path) -> None:
+    pins = {**GOLDEN_SGLANG_PINS, "SGLANG_SIMULATE_ACC_GREEDY": "0"}
+    recipe = backend_layout_recipe("sglang", SGLANG_EAGLE, **pins)
+    env = {**ENV, "EVAL_ONLY": "true"}
+    overrides = build_overrides(recipe, "dynamo-sglang", env, golden_dir=tmp_path / "absent")
+    assert apply_native(recipe, overrides) == backend_layout_recipe("sglang", SGLANG_EAGLE)
+
+
+@pytest.mark.parametrize(
+    ("framework", "args", "pins"),
+    [
+        ("dynamo-sglang", SGLANG_EAGLE, GOLDEN_SGLANG_PINS),
+        # TRT-LLM counts accepted drafts: golden 2.4 without the bonus token.
+        (
+            "trt",
+            {"speculative_config": {"decoding_type": "MTP", "max_draft_len": 3}},
+            {"TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS": "1.4"},
+        ),
+        # ATOM's rate is per draft token: (2.4 - 1) / 3.
+        (
+            "atom",
+            {"method": "mtp", "num-speculative-tokens": 3, "spec-decode-acceptance-rate": 0.466667},
+            {},
+        ),
+        (
+            "vllm",
+            {"speculative-config": json.dumps({**VLLM_FORCED, "synthetic_acceptance_length": 2.4})},
+            {},
+        ),
+    ],
+    ids=["sglang", "trt", "atom", "vllm"],
+)
+def test_throughput_runs_the_golden_pin_of_a_backend_layout(
+    golden_dir: Path, framework: str, args: dict[str, Any], pins: dict[str, str]
+) -> None:
+    # Without roles there is nowhere to inject golden, so the checked pin is what runs.
+    recipe = backend_layout_recipe(ENGINES[framework], args, **pins)
+    assert build_overrides(recipe, framework, ENV, golden_dir=golden_dir) == []
+
+
+@pytest.mark.parametrize(
+    ("pins", "error"),
+    [
+        ({**GOLDEN_SGLANG_PINS, "SGLANG_SIMULATE_ACC_LEN": "3"}, "_LEN='3' differs from golden"),
+        ({**GOLDEN_SGLANG_PINS, "SGLANG_SIMULATE_ACC_METHOD": "x"}, "_METHOD='x' differs"),
+        # Choosing how to simulate does not pin a length.
+        ({"SGLANG_SIMULATE_ACC_METHOD": "match-expected"}, "pins no golden length"),
+    ],
+)
+def test_throughput_rejects_a_backend_layout_without_the_golden_pin(
+    golden_dir: Path, pins: dict[str, str], error: str
+) -> None:
+    recipe = backend_layout_recipe("sglang", SGLANG_EAGLE, **pins)
+    with pytest.raises(ValueError, match=error):
+        build_overrides(recipe, "dynamo-sglang", ENV, golden_dir=golden_dir)
+
+
+@pytest.mark.parametrize("eval_only", ["false", "true"])
+def test_pins_outside_the_roles_never_reach_the_engine(golden_dir: Path, eval_only: str) -> None:
+    recipe = {
+        "roles": {"decode": {"args": SGLANG_EAGLE, "env": {"SGLANG_SIMULATE_ACC_GREEDY": "0"}}},
+        "backend": {"decode_environment": {"KEEP": "yes", "SGLANG_SIMULATE_ACC_LEN": "9"}},
+    }
+    env = {**ENV, "EVAL_ONLY": eval_only}
+    overrides = build_overrides(recipe, "dynamo-sglang", env, golden_dir=golden_dir)
+    result = apply_native(recipe, overrides)
+    assert result["backend"] == {"decode_environment": {"KEEP": "yes"}}
+    if eval_only == "true":
+        assert result["roles"]["decode"]["env"] == {}
+    else:
+        # Golden replaces the stray length; the simulation option is the recipe's choice.
+        expected = {"SGLANG_SIMULATE_ACC_GREEDY": "0", **GOLDEN_SGLANG_PINS}
+        assert result["roles"]["decode"]["env"] == expected
+
+
+def test_a_pin_without_speculative_parameters_fails_throughput(golden_dir: Path) -> None:
+    recipe = {
+        "roles": {"agg": {"args": {"tensor-parallel-size": 8}}},
+        "backend": {"aggregated_environment": {"SGLANG_SIMULATE_ACC_LEN": "2.4"}},
+    }
+    with pytest.raises(ValueError, match="_LEN forces acceptance, but generation does not"):
+        build_overrides(recipe, "sglang", ENV, golden_dir=golden_dir)
+
+
+def test_atom_rate_pin_gives_way_to_the_golden_length(golden_dir: Path) -> None:
+    args = {"method": "mtp", "num-speculative-tokens": 3}
+    recipe = {"roles": {"agg": {"args": {**args, "spec-decode-acceptance-rate": 0.9}}}}
+    forced = apply_native(recipe, build_overrides(recipe, "atom", ENV, golden_dir=golden_dir))
+    assert forced["roles"]["agg"]["args"] == {**args, "spec-decode-acceptance-length": 2.4}
+    env = {**ENV, "EVAL_ONLY": "true"}
+    real = apply_native(recipe, build_overrides(recipe, "atom", env, golden_dir=golden_dir))
+    assert real["roles"]["agg"]["args"] == args
 
 
 @pytest.mark.parametrize(
@@ -850,3 +965,38 @@ def test_qwen_real_verification_does_not_require_mtp_window(
         ),
     )
     assert result["roles"]["agg"]["env"] == {"KEEP": "worker"}
+GATE = {"AL_GATE": "true", "AL_GATE_CURVE": "dsv4_mtp", "AL_GATE_DRAFT_TOKENS": "3"}
+
+
+def test_the_acceptance_gate_verifies_for_real(tmp_path: Path) -> None:
+    forced = json.dumps({**VLLM_FORCED, "synthetic_acceptance_length": 8})
+    recipe = backend_layout_recipe("vllm", {"speculative-config": forced})
+    # No golden lookup: the gate measures acceptance instead of forcing it.
+    env = {**ENV, **GATE}
+    overrides = build_overrides(recipe, "dynamo-vllm", env, golden_dir=tmp_path / "absent")
+    real = apply_native(recipe, overrides)["backend"]["vllm_config"]["aggregated"]
+    expected = {"method": "mtp", "num_speculative_tokens": 3, "rejection_sample_method": "block"}
+    assert json.loads(real["speculative-config"]) == expected
+
+
+MTP3 = {"speculative-config": json.dumps({"method": "mtp", "num_speculative_tokens": 3})}
+
+
+@pytest.mark.parametrize(
+    ("framework", "args", "gate", "error"),
+    [
+        ("vllm", MTP3, {"AL_GATE_CURVE": "x"}, r"drafts \('dsv4_mtp', 3\), .* measures \('x', 3\)"),
+        ("vllm", MTP3, {"AL_GATE_DRAFT_TOKENS": "2"}, r"gate measures \('dsv4_mtp', 2\)"),
+        ("vllm", {"tensor-parallel-size": 8}, {}, "the recipe drafts None"),
+        ("unknown", MTP3, {}, "cannot read unknown's drafting settings"),
+    ],
+    ids=["other-curve", "other-draft-length", "no-drafting", "unknown-framework"],
+)
+def test_the_acceptance_gate_rejects_a_recipe_drafting_otherwise(
+    tmp_path: Path, framework: str, args: dict[str, Any], gate: dict[str, str], error: str
+) -> None:
+    recipe = tmp_path / "recipe.yaml"
+    recipe.write_text(yaml.safe_dump({"roles": {"agg": {"args": args}}}))
+    environment = {**ENV, **GATE, **gate}
+    with pytest.raises(ValueError, match=error):
+        plan_commands(str(recipe), framework, ["-f", str(recipe)], environment, golden_dir=tmp_path)

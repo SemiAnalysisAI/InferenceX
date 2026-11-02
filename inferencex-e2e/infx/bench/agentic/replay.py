@@ -72,7 +72,7 @@ class ReplayConfig:
         )
         extra_inputs = inputs.optional("AIPERF_EXTRA_INPUTS", env) or ""
         return cls(
-            url=_server_url(env),
+            url=server_url(env),
             model=inputs.optional("SERVED_MODEL_NAME", env) or values["MODEL"],
             tokenizer=inputs.optional("TOKENIZER", env) or values["MODEL"],
             concurrency=inputs.parse_positive_int("CONC", values["CONC"]),
@@ -91,7 +91,7 @@ class ReplayConfig:
                 if max_context
                 else None
             ),
-            server_metrics_urls=_server_metrics_urls(env),
+            server_metrics_urls=metrics_urls(env),
             artifact_dir=result_dir / "aiperf_artifacts",
             unsafe_override=duration < MIN_SCENARIO_DURATION_S,
             loader=loader,
@@ -101,7 +101,7 @@ class ReplayConfig:
         )
 
 
-def _server_url(env: Mapping[str, str]) -> str:
+def server_url(env: Mapping[str, str]) -> str:
     """srt-slurm's frontend, else ``AIPERF_SERVER_URL``, else ``http://localhost:$PORT``."""
     host = inputs.optional("SRT_FRONTEND_HOST", env)
     if host:
@@ -111,8 +111,11 @@ def _server_url(env: Mapping[str, str]) -> str:
     )
 
 
-def _server_metrics_urls(env: Mapping[str, str]) -> tuple[str, ...]:
-    """Every Prometheus endpoint AIPerf scrapes; it keeps ``endpoint_url`` per series."""
+def metrics_urls(env: Mapping[str, str], path: str = "/metrics") -> tuple[str, ...]:
+    """Every Prometheus endpoint AIPerf scrapes; it keeps ``endpoint_url`` per series.
+
+    ``path`` is the workers' Prometheus route when the endpoints come from ``SRT_*``.
+    """
     urls = inputs.optional("AIPERF_SERVER_METRICS_URLS", env)
     if not urls and env.get("SRTCTL_FRONTEND_TYPE") != "dynamo":
         prefill = env.get("SRT_PREFILL_ENDPOINTS")
@@ -121,7 +124,7 @@ def _server_metrics_urls(env: Mapping[str, str]) -> tuple[str, ...]:
         )
         endpoints = endpoints.removesuffix(",")
         if endpoints:
-            urls = ",".join(f"http://{e}/metrics" if e else "" for e in endpoints.split(","))
+            urls = ",".join(f"http://{e}{path}" if e else "" for e in endpoints.split(","))
     if not urls:
         return ()
     parts = urls.split(",")

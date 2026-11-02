@@ -25,3 +25,16 @@ deepseek-v4-pro:
     6: 3.16
     7: 3.00
     8: 3.11
+
+# SPEED-Bench client settings of this collection; the acceptance-length gate replays them
+# (README.md#collection-settings).
+collection:
+  concurrency: 1
+  renderer: deepseek_v4
+  modes:
+    thinking_on:
+      chat_template_kwargs: {thinking: true, reasoning_effort: high}
+      sampling: {temperature: 1.0, repetition_penalty: 1.0}
+    thinking_off:
+      chat_template_kwargs: null
+      sampling: {temperature: 1.0, repetition_penalty: 1.0}

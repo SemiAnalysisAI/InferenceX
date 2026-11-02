@@ -15,3 +15,11 @@ minimax-m3.1-flash:
     5: 3.46
     6: 3.81
     7: 4.04
+
+collection:
+  concurrency: 64
+  renderer: chat_template
+  modes:
+    thinking_on:
+      chat_template_kwargs: null
+      sampling: {temperature: 1.0, top_p: 0.95, repetition_penalty: 1.0}
