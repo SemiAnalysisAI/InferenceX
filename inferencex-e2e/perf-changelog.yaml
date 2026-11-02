@@ -11853,3 +11853,12 @@
     - "Retire Qwen3.5 8k1k serving configurations across NVIDIA and AMD and remove their unused recipes."
     - "Keep Qwen3.5 AgentX coverage, SPEED-Bench collectors, and historical results unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4697
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  all-evals: true
+  description:
+    - "Use the SGLang ROCm 7.2.0 MI35x 20261102 daily image for GLM-5.2 MXFP4 MI355X AgentX MTP."
+    - "Use Gluon target MoE only for TP8/EP1 at concurrency 1, 2, and 4; preserve the checkpoint BF16 draft experts with the auto speculative MoE backend."
+    - "Keep TP4/EP4 HiCache and DCP4 settings unchanged and evaluate every point so the Gluon path receives accuracy coverage."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PLACEHOLDER

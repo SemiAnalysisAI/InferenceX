@@ -220,6 +220,8 @@ override_tp8_c1:
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 1
+        moe-runner-backend: gluon
+        speculative-moe-runner-backend: auto
         max-running-requests: 2
         cuda-graph-max-bs-decode: 2
   benchmark:
@@ -234,6 +236,8 @@ override_tp8_c2:
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 1
+        moe-runner-backend: gluon
+        speculative-moe-runner-backend: auto
         max-running-requests: 4
         cuda-graph-max-bs-decode: 4
   benchmark:
@@ -248,6 +252,8 @@ override_tp8_c4:
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 1
+        moe-runner-backend: gluon
+        speculative-moe-runner-backend: auto
         max-running-requests: 8
         cuda-graph-max-bs-decode: 8
   benchmark:
