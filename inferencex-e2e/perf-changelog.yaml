@@ -11769,3 +11769,13 @@
     - "6 DEP2 prefill workers with a DEP8 decode at conc 280-400 or a DEP16 decode at conc 300; MegaMoE, DSpark block 7 with fp8 draft KV, Dynamo KV router with fastokens for prefill and least-loaded routing across decode DP ranks."
     - "Prefill: shortest-prefill-first, chunk 8192, mem-fraction-static 0.85, HiCache 200 GB per rank write_back."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4686
+
+- config-keys:
+    - minimaxm31flash-fp4-b300-sglang-agentic-dspark
+  description:
+    - "Add TP4 points with DRAM KV offload at conc 20, 44, 52 and 60, and a TP4 point without offload at conc 16, using shortest-prefill-first with a prefill-decode interval of 32."
+    - "Add a TP2 point with DRAM KV offload at conc 44 using shortest-prefill-first with a prefill-decode interval of 32."
+    - "Add TP2 points with DRAM KV offload and a 5.85M-token HBM KV pool (mem-fraction-static 0.94) at conc 52 with a prefill-decode interval of 20 and conc 48 with 24, using shortest-prefill-first."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4726
+  scenario-type: [agentic-coding]
+  append-only: true
