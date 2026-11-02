@@ -1,9 +1,37 @@
 """Shared test doubles. Import after the caller has put collectivex/bench on sys.path."""
 from __future__ import annotations
 
+import importlib
+import sys
 import types
+from unittest import mock
 
 import ep_backend
+
+
+def stub_torch(**attrs):
+    """Just enough torch for an adapter to import: dtype names as strings, `torch.compile` passing
+    the function through (as a decorator or a call), and a WORLD group. `attrs` add or override."""
+    torch = types.ModuleType("torch")
+    for name in ("bfloat16", "float32", "int32", "int64", "float8_e4m3fn", "float8_e4m3fnuz"):
+        setattr(torch, name, name)
+    torch.compile = lambda fn=None, **_: fn if fn is not None else (lambda inner: inner)
+    torch._dynamo = types.SimpleNamespace(config=types.SimpleNamespace(cache_size_limit=8))
+    dist = types.ModuleType("torch.distributed")
+    dist.group = types.SimpleNamespace(WORLD="world")
+    torch.distributed = dist
+    for name, value in attrs.items():
+        setattr(torch, name, value)
+    return {"torch": torch, "torch.distributed": dist}
+
+
+def fresh_import(name, modules, also_pop=()):
+    """A fresh import of `name` against the fake `modules`, which are withdrawn afterwards: a fake
+    torch left in sys.modules makes genuinely torch-dependent tests error instead of skipping."""
+    with mock.patch.dict(sys.modules, modules):
+        for module in (*also_pop, name):
+            sys.modules.pop(module, None)
+        return importlib.import_module(name)
 
 
 # Per-operation device cost in the stub clock (ms). Distinct primes so that any window
