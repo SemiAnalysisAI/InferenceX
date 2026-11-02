@@ -30,8 +30,9 @@ def _load_config(name: str) -> dict[str, Any]:
 
 SWEEP = _load_config("sweep.json")
 SWAP_SWEEP = _load_config("swap_sweep.json")
+KV_SWEEP = _load_config("kv_sweep.json")
 PLATFORMS = _load_config("platform_config.json")["platforms"]
-SUITES = ("ep", "swap-blocks")
+SUITES = ("ep", "swap-blocks", "kv-transfer")
 
 
 SWEEP_BACKENDS = tuple(dict.fromkeys(
@@ -147,8 +148,11 @@ def _shard(sku: str, shard_id: str, backend: str, cases: list[dict[str, Any]],
     return {
         "id": shard_id,
         "sku": sku,
-        # runs-on label: the SKU unless the registry names the pool's runners.
+        # runs-on labels: the SKU unless the registry names the pool's runners, plus the partition
+        # label on pools whose runners are split by Slurm partition.
         "runner": PLATFORMS[sku].get("runner_label", sku),
+        "runner_partition": (f"partition:{PLATFORMS[sku]['runner_partition']}"
+                             if "runner_partition" in PLATFORMS[sku] else ""),
         "backend": backend,
         "launcher": PLATFORMS[sku]["launcher"],
         **{field: first[field] for field in ("nodes", "gpus_per_node", "scale_up_domain")},
@@ -200,10 +204,55 @@ def _swap_shard(sku: str, profile_name: str) -> tuple[list[dict[str, Any]], dict
     return _runnable(sku, cases), shard
 
 
+def _kv_shards(sku: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """The kv-transfer shards one pool runs: one 2-node x 1-GPU shard per (backend, fabric) in
+    its registry ``kv_backends``; ops come per backend from kv_sweep.json (Mooncake only pushes)."""
+    platform = PLATFORMS[sku]
+    timing = KV_SWEEP["timing"]
+    minutes = KV_SWEEP["allocation_minutes"]
+    requested, shards = [], []
+    for backend, fabrics in sorted(platform.get("kv_backends", {}).items()):
+        for fabric in fabrics:
+            cases = []
+            for workload, workload_precisions in KV_SWEEP["workloads"].items():
+                for precision in workload_precisions:
+                    case = {
+                        "suite": KV_SWEEP["suite"],
+                        "workload": workload,
+                        "backend": backend,
+                        "routing": "paged",
+                        "precision": precision,
+                        "phase": "xfer",
+                        "ep": 2,
+                        "mode": fabric,
+                        "isl_ladder": " ".join(map(str, KV_SWEEP["isl_ladder"])),
+                        "batch_sizes": " ".join(map(str, KV_SWEEP["batch_sizes"])),
+                        "ops": " ".join(KV_SWEEP["ops"][backend]),
+                        "pool_slack": KV_SWEEP["pool_slack"],
+                        "max_burst_tokens": KV_SWEEP["max_burst_tokens"],
+                        "seed": KV_SWEEP["seed"],
+                        "warmup": timing["warmup_per_trial"],
+                        "reps": timing["reps_per_trial"],
+                        "trials": timing["trials_per_point"],
+                        "nodes": 2,
+                        "gpus_per_node": 1,
+                        "scale_up_domain": platform["scale_up_domain"],
+                        "scale_up_transport": platform["scale_up_transport"],
+                        "scale_out_transport": "rdma" if fabric == "rdma" else None,
+                        "topology_class": f"{platform['product']}-kv-{fabric}",
+                    }
+                    case["case_id"] = ep_harness.case_id(sku, case)
+                    cases.append(case)
+            requested += _runnable(sku, cases)
+            shards.append(_shard(
+                sku, f"{sku}-kv-{backend}-{fabric}", backend, cases,
+                suite=KV_SWEEP["suite"], fabric=fabric, allocation_minutes=minutes))
+    return requested, shards
+
+
 def resolve_matrix(
     backend: str = "all",
     only_sku: str = "",
-    exclude_skus: str = "",
     ep_sizes: str = "",
     precisions: str = "",
     modes: str = "",
@@ -231,9 +280,6 @@ def resolve_matrix(
 
     if only_sku and only_sku not in PLATFORMS:
         raise SystemExit(f"unknown --only-sku {only_sku!r}; have {sorted(PLATFORMS)}")
-    excluded = _comma_subset("exclude-skus", exclude_skus, PLATFORMS)
-    if only_sku in excluded:
-        raise SystemExit("--only-sku and --exclude-skus select disjoint pools")
 
     timing = SWEEP["timing"]
     # Passed through as an object keyed by the sweep.json names. runtime/config.py maps each
@@ -258,7 +304,7 @@ def resolve_matrix(
 
     selected_skus = [
         sku for sku in sorted(PLATFORMS)
-        if not (only_sku and sku != only_sku) and sku not in excluded
+        if not (only_sku and sku != only_sku)
     ]
     for sku in selected_skus if "ep" in selected_suites else ():
         platform = PLATFORMS[sku]
@@ -348,6 +394,12 @@ def resolve_matrix(
             requested, shard = _swap_shard(sku, swap_profile)
             requested_cases += requested
             shards_by_sku.setdefault(sku, []).append(shard)
+    if "kv-transfer" in selected_suites:
+        for sku in selected_skus:
+            requested, kv_shards = _kv_shards(sku)
+            requested_cases += requested
+            if kv_shards:
+                shards_by_sku.setdefault(sku, []).extend(kv_shards)
     include = [
         shards_by_sku[sku][index]
         for index in range(max(map(len, shards_by_sku.values()), default=0))
@@ -380,7 +432,6 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="CollectiveX matrix resolver")
     parser.add_argument("--backend", default="all")
     parser.add_argument("--only-sku", "--sku", dest="only_sku", default="")
-    parser.add_argument("--exclude-skus", default="")
     parser.add_argument("--ep-sizes", default="")
     parser.add_argument("--precisions", default="",
                         help="comma-separated subset of configs/sweep.json precisions")
@@ -409,7 +460,6 @@ def main() -> int:
     matrix = resolve_matrix(
         backend=args.backend,
         only_sku=args.only_sku,
-        exclude_skus=args.exclude_skus,
         ep_sizes=args.ep_sizes,
         precisions=args.precisions,
         modes=args.modes,

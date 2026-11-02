@@ -131,8 +131,6 @@ class MatrixTests(unittest.TestCase):
 
     def test_invalid_filters_fail_closed(self):
         for options in (
-            {"exclude_skus": "unknown"},
-            {"only_sku": "b300", "exclude_skus": "b300"},
             {"ep_sizes": "0"},
             {"ep_sizes": "eight"},
             {"precisions": "fp4"},
@@ -161,7 +159,7 @@ class SwapSuiteTests(unittest.TestCase):
     PLATFORMS = {
         "amd-test": {"arch": "gfx942", "launcher": "mi-amds"},
         "cuda-test": {"arch": "sm100", "launcher": "single-slurm",
-                      "runner_label": "cluster:cuda-pool"},
+                      "runner_label": "cluster:cuda-pool", "runner_partition": "batch_1"},
     }
 
     def _swap(self, **options):
@@ -173,8 +171,10 @@ class SwapSuiteTests(unittest.TestCase):
         self.assertEqual(set(shards), {"amd-test", "cuda-test"})
         amd, cuda = shards["amd-test"], shards["cuda-test"]
         self.assertEqual((amd["launcher"], cuda["launcher"]), ("mi-amds", "single-slurm"))
-        # runs-on: the registry's runner_label where it names one, else the SKU.
+        # runs-on: the registry's runner_label where it names one, else the SKU, plus its partition.
         self.assertEqual((amd["runner"], cuda["runner"]), ("amd-test", "cluster:cuda-pool"))
+        self.assertEqual((amd["runner_partition"], cuda["runner_partition"]),
+                         ("", "partition:batch_1"))
         self.assertEqual(amd["image"], sweep_matrix.SWAP_SWEEP["images"]["amd"])
         self.assertEqual(cuda["image"], sweep_matrix.SWAP_SWEEP["images"]["nvidia"])
         for shard in shards.values():
@@ -202,10 +202,10 @@ class SwapSuiteTests(unittest.TestCase):
         )
 
     def test_sku_selection_and_bad_requests_fail_closed(self):
-        self.assertEqual([s["sku"] for s in self._swap(exclude_skus="amd-test")["include"]],
+        self.assertEqual([s["sku"] for s in self._swap(only_sku="cuda-test")["include"]],
                          ["cuda-test"])
         for options in (
-            {"swap_profile": "huge"}, {"only_sku": "missing"}, {"exclude_skus": "missing"},
+            {"swap_profile": "huge"}, {"only_sku": "missing"},
             {"modes": "normal"}, {"ep_sizes": "8"}, {"backend": "mori"},
         ):
             with self.subTest(options=options), self.assertRaises(SystemExit):
