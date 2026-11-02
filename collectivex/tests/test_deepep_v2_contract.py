@@ -16,6 +16,7 @@ sys.path[:0] = [str(ROOT), str(ROOT / "bench")]
 
 # Imported before any stubbed load so the adapter binds the real shared base, which stays loaded.
 import ep_backend  # noqa: E402,F401
+import _fakes  # noqa: E402
 import ep_oracle  # noqa: E402
 
 try:
@@ -86,23 +87,12 @@ class _LegacyBuffer:
         return list(range(8)), None, self._hook("combine")
 
 
-def _stub_torch():
-    torch = types.ModuleType("torch")
-    torch.bfloat16, torch.float32, torch.int32, torch.int64 = "bfloat16", "float32", "int32", "int64"
-    torch.compile = lambda fn=None, **_: fn if fn is not None else (lambda inner: inner)
-    torch._dynamo = types.SimpleNamespace(config=types.SimpleNamespace(cache_size_limit=8))
-    dist = types.ModuleType("torch.distributed")
-    dist.group = types.SimpleNamespace(WORLD="world")
-    torch.distributed = dist
-    return {"torch": torch, "torch.distributed": dist}
-
-
 def _adapter(ue8m0=False):
     """A fresh ep_deepep_v2 against the stubs, with the Blackwell/UE8M0 decision fixed."""
     deep_ep = types.ModuleType("deep_ep")
     deep_ep.ElasticBuffer, deep_ep.Buffer = _ElasticBuffer, _LegacyBuffer
     deep_ep.topk_idx_t, deep_ep.__version__ = "int64", "2.1.0"
-    with mock.patch.dict(sys.modules, {**_stub_torch(), "deep_ep": deep_ep}):
+    with mock.patch.dict(sys.modules, {**_fakes.stub_torch(), "deep_ep": deep_ep}):
         for name in ("ep_legacy_ll", "ep_deepep_v2"):
             sys.modules.pop(name, None)
         module = importlib.import_module("ep_deepep_v2")
@@ -357,6 +347,53 @@ class SingleReductionOracle(unittest.TestCase):
         single = self._reduce(ep_oracle.RankFP32(), destination, rows, 8)
         domain = self._reduce(ep_oracle.DomainFP32(), destination, rows, 8)
         self.assertEqual(torch.tensor(single).to(torch.bfloat16).item(), domain)
+
+
+class GinWindowOrdering(unittest.TestCase):
+    """Relaxed-ordering rows must not merge into the strict-ordered series they would replace."""
+
+    def test_only_relaxed_scale_out_rows_carry_the_suffix(self):
+        module = _adapter()
+        relaxed = {"EP_WIN_RELAXED_ORDERING": "1"}
+        for world_size, env, suffixed in ((16, relaxed, True), (16, {}, False), (8, relaxed, False)):
+            with self.subTest(world_size=world_size, env=env), \
+                    mock.patch.dict(os.environ, env, clear=True):
+                backend = module.DeepEPV2Backend(_args(), 0, world_size, 0, "cpu")
+                self.assertEqual(backend.kernel_generation.endswith("-relaxed-ordering"), suffixed)
+
+
+class LowLatencyCapDecoupling(unittest.TestCase):
+    """The LL receive size and the measured ladder must stay two numbers -- sizing the receive
+    from `max(ladder)` would shift every rung."""
+
+    def test_ladder_cap_drops_only_oversized_measurement_points(self):
+        module = _adapter()
+        backend = module.DeepEPV2Backend.__new__(module.DeepEPV2Backend)
+        backend.mode = "low-latency"
+        backend.world_size = 8
+        backend._build_rank_inputs = mock.Mock(return_value=None)
+        args = types.SimpleNamespace(experts=256, tokens_ladder="32 64 128")
+        with mock.patch.object(module.DeepEPV2Backend, "LL_LADDER_CAP", 64):
+            spec = backend.make_inputs(args)
+        self.assertEqual(spec.ladder, [32, 64])
+        self.assertEqual(spec.dropped, [128])
+
+    def test_the_receive_is_sized_from_the_buffer_cap_not_the_ladder(self):
+        module = _adapter()
+        backend = module.DeepEPV2Backend.__new__(module.DeepEPV2Backend)
+        backend.mode, backend.world_size, backend.group = "low-latency", 8, object()
+        backend.args = types.SimpleNamespace(experts=256, hidden=16)
+        vendor_buffer = mock.Mock()
+        vendor_buffer.get_low_latency_rdma_size_hint.return_value = 4096
+        with mock.patch.object(module.deep_ep, "Buffer", vendor_buffer), \
+                mock.patch.object(module.DeepEPV2Backend, "LL_BUFFER_CAP", 128), \
+                mock.patch.object(module.DeepEPV2Backend, "LL_LADDER_CAP", 64):
+            for ladder_max in (16, 64):
+                backend.create_buffer(types.SimpleNamespace(max_tokens_per_rank=ladder_max))
+                vendor_buffer.get_low_latency_rdma_size_hint.assert_called_with(128, 16, 8, 256)
+                self.assertEqual(vendor_buffer.call_args.kwargs["num_rdma_bytes"], 4096)
+            with self.assertRaisesRegex(RuntimeError, "exceeds"):
+                backend.create_buffer(types.SimpleNamespace(max_tokens_per_rank=129))
 
 
 if __name__ == "__main__":
