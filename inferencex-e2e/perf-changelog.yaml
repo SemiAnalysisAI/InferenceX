@@ -11859,6 +11859,6 @@
     - minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-agg
   description:
     - "Add 6P DEP2 + DEP16 points at conc 220, 240 and 260, and a TP4 MonoKernel point at conc 1."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4750
   scenario-type: [agentic-coding]
   append-only: true
