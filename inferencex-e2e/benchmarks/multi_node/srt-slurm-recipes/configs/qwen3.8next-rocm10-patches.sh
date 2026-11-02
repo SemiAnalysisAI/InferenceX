@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Qwen3.8-Flash-Next kernels on lmsysorg/sglang-rocm:v0.5.22-rocm10-mi35x-20261018,
-# applied to its editable AITER (2bb54910) and SGLang (8dee3f6b) checkouts:
+# applied to its editable AITER and SGLang checkouts. Already in the image and not
+# patched: AITER topk_gating router (sglang#40708), ratio-3 GDN packing (sglang#44302),
+# the 128-row hc_mix, and ROCm/aiter#6225, #5804, #6050:
 #   - ROCm/aiter#5992: FlyDSL causal conv1d prefill and GDN decode/verify
 #   - sgl-project/sglang#41879: opt-in SGLANG_AITER_GDN_CONV/_DECODE hooks
 #   - fused Triton QK Gemma-RMSNorm + M-RoPE + gate on HIP
-#   - FlyDSL hc_mix for the hyper-connection mix up to 128 rows (SGLANG_AITER_HC_MIX,
-#     default on) and the single-kernel hc_combine on ROCm (SGLANG_HC_COMBINE_SPLIT=0)
+#   - FlyDSL hc_mix gates and the single-kernel hc_combine on ROCm
+#     (SGLANG_HC_COMBINE_SPLIT=0); hc_mix itself (sglang#41880, up to 128 rows) is in the image
 #   - opt-in FlyDSL paged decode for QSA attention (SGLANG_AITER_QSA_PA_DECODE) on
 #     the image's AITER pa_decode
 #   - fused FlyDSL QSA sparse decode that reads KV from the pool
@@ -21,9 +23,6 @@
 #     _QWEN4_FUSED_GDN_NORM_QUANT, _QWEN_MOE_FUSED_SHARED_TOPK, _AITER_LM_HEAD_GEMM)
 #   - opt-in AITER GDN chunked prefill (SGLANG_AITER_GDN_PREFILL; only
 #     SGLANG_AITER_GDN_PREFILL_H=fused works on this AITER)
-#   - AITER topk_gating for the 512-expert router (SGLANG_ROCM_USE_AITER_TOPK_GATING,
-#     default on)
-#   - sgl-project/sglang#44302: fused QKVZ/BA packing for head ratio 3
 #   - faster FlyDSL GDN decode/verify (used with SGLANG_AITER_GDN_DECODE)
 #   - exact chunk fill (default on for gfx95) fixes: unfinished prefill chunks end
 #     on a QSA page, padded QSA group writes read an inert source, and off-page
@@ -36,7 +35,6 @@
 #     when speculative decoding is off (--cuda-graph-backend-prefill breakable)
 #   - fused decode MoE route-sort + MXFP4 activation quant (ROCm/aiter#6165, #6467),
 #     instantiated for Qwen3.8-Flash-Next's 513 experts / top-11 / hidden 2560
-#   - ROCm/aiter#6225, #5804 and #6050, which the branch's fused_moe.py carries
 # All but the upstream PRs come from amd-nprotaso/{aiter,sglang} qwen_3_8_improvement.
 # All Python except the MoE sort + quant, whose prebuilt module is removed so AITER's
 # JIT rebuilds it on first use. A patch that no longer applies fails the worker.
@@ -69,7 +67,6 @@ apply /sgl-workspace/aiter aiter-flydsl-gdn-fused-prefill.patch
 apply /sgl-workspace/aiter aiter-flydsl-gdn-decode-verify-perf.patch
 apply /sgl-workspace/aiter aiter-qwen38-tuned-gemm-tables.patch
 apply /sgl-workspace/aiter aiter-moe-sort-quant-2560.patch
-apply /sgl-workspace/aiter aiter-moe-mainline-sync.patch
 rm -rf /sgl-workspace/aiter/aiter/jit/module_moe_sorting_opus.so \
     /sgl-workspace/aiter/aiter/jit/build/module_moe_sorting_opus
 apply /sgl-workspace/sglang sglang-aiter-gdn-conv-decode-hooks.patch
@@ -77,14 +74,11 @@ apply /sgl-workspace/sglang sglang-fused-qk-rope-gate-hip.patch
 apply /sgl-workspace/sglang sglang-flydsl-hc-mix.patch
 apply /sgl-workspace/sglang sglang-flydsl-qsa-pa-decode.patch
 apply /sgl-workspace/sglang sglang-aiter-gdn-prefill.patch
-apply /sgl-workspace/sglang sglang-aiter-topk-gating.patch
-apply /sgl-workspace/sglang sglang-gdn-ratio3-packing.patch
 apply /sgl-workspace/sglang sglang-qsa-padded-group-mtp-shared-expert.patch
 apply /sgl-workspace/sglang sglang-prefill-chunk-qsa-alignment.patch
 apply /sgl-workspace/sglang sglang-qsa-flydsl-sparse-decode.patch
 apply /sgl-workspace/sglang sglang-gdn-hip-fused-proj-conv.patch
 apply /sgl-workspace/sglang sglang-qsa-pa-decode-mainline.patch
-apply /sgl-workspace/sglang sglang-flydsl-hc-mix-128-rows.patch
 apply /sgl-workspace/sglang sglang-qwen38-decode-opts.patch
 apply /sgl-workspace/sglang sglang-mtp-quant-resolve.patch
 apply /sgl-workspace/sglang sglang-qwen38-fused-hc.patch
