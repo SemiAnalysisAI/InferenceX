@@ -63,6 +63,20 @@ runs:
                   echo "head=$head"
               } >> "$GITHUB_OUTPUT"
 
+        - name: Load supported criteria
+          id: schema
+          if: steps.range.outputs.head != ''
+          shell: bash
+          env:
+              E2E_ROOT: ${{ github.action_path }}/../../../inferencex-e2e
+          run: |
+              criteria=$(env PYTHONPATH="$E2E_ROOT" \
+                uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
+                python -P -m infx.workflows.ci_priority \
+                --policy "$E2E_ROOT/configs/ci-priority.yaml" --list-criteria)
+              schema=$(jq -c '{type:"object",properties:{criteria:{type:"array",items:{type:"string",enum:.},uniqueItems:true},reason:{type:"string"}},required:["criteria","reason"]}' <<<"$criteria")
+              echo "json=$schema" >> "$GITHUB_OUTPUT"
+
         - name: Install Claude Code 2.1.282
           id: claude_cli
           if: steps.range.outputs.head != ''
@@ -90,7 +104,7 @@ runs:
                   --effort low
                   --max-turns 8
                   --allowedTools "Read,Glob,Grep,Bash(git diff:*)"
-                  --json-schema '{"type":"object","properties":{"criteria":{"type":"array","items":{"type":"string","enum":["multi-node","agentic","eval-only","fp4","mtp","draft_model","sglang","vllm","dynamo-sglang","dynamo-vllm","musespark","dsv41flash","kimik3","glm5.3","glm5.2","dsv4","minimaxm31flash","minimaxm3","qwen3.5","qwen3.8next","dsr1","checklist-complete","patchwork"]},"uniqueItems":true},"reason":{"type":"string"}},"required":["criteria","reason"]}'
+                  --json-schema '${{ steps.schema.outputs.json }}'
               prompt: |
                   Inspect the diff `git diff ${{ steps.range.outputs.base }}...${{ steps.range.outputs.head }}`.
 
