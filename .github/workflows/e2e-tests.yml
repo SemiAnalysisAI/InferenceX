@@ -198,6 +198,9 @@ jobs:
     get-jobs:
         name: get-jobs
         runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            pull-requests: read # Read the external PR description for checklist-complete.
         outputs:
             benchmark-ref: ${{ steps.checkout-ref.outputs.commit || steps.checkout-default.outputs.commit }}
             tooling-ref: ${{ steps.tooling.outputs.result }}
@@ -260,6 +263,7 @@ jobs:
                   base-ref: ${{ inputs.changelog-base-ref }}
                   head-ref: ${{ inputs.changelog-head-ref || 'HEAD' }}
                   scope: ${{ inputs.changelog-head-ref != '' && 'full' || 'patchwork' }}
+                  pr-number: ${{ inputs.source-pr-number }}
                   anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
                   github-token: ${{ github.token }}
             - id: get-jobs

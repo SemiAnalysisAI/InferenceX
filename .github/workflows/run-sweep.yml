@@ -225,6 +225,7 @@ jobs:
               with:
                   base-ref: origin/${{ github.base_ref }}
                   head-ref: ${{ github.event.pull_request.head.sha }}
+                  pr-number: ${{ github.event.pull_request.number }}
                   anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
                   github-token: ${{ github.token }}
 
