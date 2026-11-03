@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "inferencex-h3-video-ci"
+version = "0.1.0"
+description = "Controlled H3 runtime regression measurements for InferenceX CI"
+requires-python = ">=3.12"
+dependencies = ["av==16.1.0", "numpy==2.3.5", "pyyaml==6.0.3"]
+
+[project.optional-dependencies]
+dev = ["pytest==8.4.2"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["evaluator*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "tests"]
