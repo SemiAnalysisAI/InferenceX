@@ -294,8 +294,9 @@ def test_append_only_scope_allows_additive_top_level_restructuring(tmp_path):
         scenario_type=["fixed-seq-len"],
         runner_node_filter=None,
     )
-    base_rows = generate_test_config_sweep(args, base)
-    head_rows = generate_test_config_sweep(args, head)
+    runners = {"clusters": {"b200": {"gpus-per-node": 8}}}
+    base_rows = generate_test_config_sweep(args, base, runners)
+    head_rows = generate_test_config_sweep(args, head, runners)
 
     process_changelog.validate_append_only_scope(
         base, head, {"test-config": {"fixed-seq-len"}}
