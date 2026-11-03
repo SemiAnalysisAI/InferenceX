@@ -11927,6 +11927,16 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
+    - qwen3.8next-fp4-b300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update Qwen3.8-Flash-Next FP4 B300 SGLang AgentX to nvidia/Qwen3.8-Flash-Next-NVFP4 on lmsysorg/sglang:nightly-dev-cu13-20261028-586355a8 (digest-pinned)."
+    - "Update the search space to TP4/EP4 at concurrency 1 and 2, TP1/EP1 at concurrency 1, 2, 12 and 24, and TP1/EP1 with HiCache at concurrency 48 and 80."
+    - "Switch the target and draft KV caches from BF16 to FP8 E4M3 at concurrency 12, 24, 48 and 80."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4683
+
+- config-keys:
     - dsv41flash-fp4-gb300-sglang-agentic-dspark
   description:
     - "Update the SGLang image from nightly-dev-cu13-20261021-c1c287a4 to nightly-dev-cu13-20261030-302b78cc, pinned by digest. The image includes sgl-project/sglang#46404 (DSpark simulated-acceptance bonus drawn at the simulated row), #46840 (simulated acceptance keeps the real verify accept cost), #46891 (no host sync in DSpark draft-block metadata) and sgl-nvidia-mega 54b428921749 (megakernel API 2, sgl-project/sglang#47145)."
