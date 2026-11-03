@@ -796,7 +796,7 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
     (mirror / "trtllm/forced.yaml").write_text(
         "roles:\n  decode:\n    env:\n      TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS: 2\n      KEEP: 1\n"
     )
-    (mirror / "eval.yaml").write_text(LANE_FRAGMENT.replace("gpus: 8", "gpus: 4"))
+    (mirror / "eval.yaml").write_text(LANE_FRAGMENT.replace("    nodes: 1\n", "").replace("gpus: 8", "gpus: 4"))
     staged = {
         "eval_suite": "kimi_tool_call_schema", "recipe_fingerprint": "", "conc": 4,
         "eval_concs": [4, 8], "completed_eval_concs": [8], "failed_eval_concs": [4],
@@ -833,7 +833,7 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
     assert list(workspace.glob("point-identity_*.json")) == []
 
 
-def test_bundle_variants_take_lane_edits_and_master_resource_requests(harness, monkeypatch):
+def test_bundle_variants_preserve_node_reservations_and_map_master_workers(harness, monkeypatch):
     monkeypatch.setitem(lanes.SRT_LANES, ("lab-a", LaunchPath.SRT_MULTI), LABS["lab-a"]["lane"])
     bundle = "base:\n" + "".join(f"  {line}\n" for line in LANE_FRAGMENT.splitlines())
     env = lane_env(
@@ -850,7 +850,7 @@ def test_bundle_variants_take_lane_edits_and_master_resource_requests(harness, m
     assert bound["roles"] == {
         role: {"nodes": nodes, "workers": 1, "gpus": 8, "args": args,
                "srun_options": {"mem": "8000M"}}
-        for role, nodes in (("prefill", 1), ("decode", 1))
+        for role, nodes in (("prefill", 1), ("decode", 3))
     }
 
 

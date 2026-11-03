@@ -385,3 +385,52 @@ def test_snapshot_generates_with_its_pinned_srt_source(generation_repo):
 
     assert len(rows) == 1
     assert rows[0]["node-count"] == 2
+
+
+@pytest.mark.parametrize("initialized", [True, False])
+def test_snapshot_fetches_its_exact_srt_pin_without_changing_checkout(
+    generation_repo, tmp_path_factory, initialized
+):
+    root, git = generation_repo
+    origin = tmp_path_factory.mktemp("srt-origin")
+    remote_git = git_in(origin)
+    remote_git("init", "-q")
+    remote_git("config", "user.name", "Test")
+    remote_git("config", "user.email", "test@example.com")
+    (origin / "src").mkdir()
+    probe = origin / "src/pin_probe.py"
+    probe.write_text("print('original')\n")
+    remote_git("add", ".")
+    remote_git("commit", "-qm", "original source")
+    original = remote_git("rev-parse", "HEAD")
+    git("-c", "protocol.file.allow=always", "submodule", "add", "--quiet", str(origin), "utils/srt-slurm")
+    git("add", ".gitmodules", "utils/srt-slurm")
+    git("commit", "-qm", "original SRT pin")
+
+    probe.write_text("print('requested pin')\n")
+    remote_git("commit", "-qam", "requested source")
+    requested = remote_git("rev-parse", "HEAD")
+    git("update-index", "--cacheinfo", f"160000,{requested},utils/srt-slurm")
+    git("commit", "-qm", "pin remote source")
+    probe.write_text("print('later source')\n")
+    remote_git("commit", "-qam", "later source")
+    submodule = root / "utils/srt-slurm"
+    assert subprocess.run(
+        ["git", "cat-file", "-e", requested], cwd=submodule, capture_output=True
+    ).returncode != 0
+    if not initialized:
+        git("submodule", "deinit", "-f", "utils/srt-slurm")
+        with pytest.raises(ValueError, match="initialize the submodule"):
+            with revision.snapshot("HEAD"):
+                pytest.fail("an uninitialized submodule must not use the parent Git repository")
+        return
+
+    with revision.snapshot("HEAD") as inputs:
+        result = subprocess.run(
+            [sys.executable, str(inputs.root / "utils/srt-slurm/src/pin_probe.py")],
+            capture_output=True, text=True, check=True,
+        )
+
+    assert result.stdout == "requested pin\n"
+    assert git_in(submodule)("rev-parse", "HEAD") == original
+    assert (submodule / "src/pin_probe.py").read_text() == "print('original')\n"

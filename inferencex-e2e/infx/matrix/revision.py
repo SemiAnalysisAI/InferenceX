@@ -354,6 +354,21 @@ def snapshot(ref: str) -> Iterator[Revision]:
     with tempfile.TemporaryDirectory(prefix="infx-revision-") as temp_dir:
         if submodule is not None:
             source = project_root(repository) / SRT_PATH
+            if not (source / ".git").exists():
+                raise ValueError(
+                    f"No initialized srt-slurm checkout at {source}; initialize the submodule"
+                )
+            available = subprocess.run(
+                ["git", "-C", str(source), "cat-file", "-e", f"{submodule}^{{commit}}"],
+                capture_output=True,
+                check=False,
+            )
+            if available.returncode:
+                subprocess.run(
+                    ["git", "-C", str(source), "fetch", "--no-tags", "origin", submodule],
+                    capture_output=True,
+                    check=True,
+                )
             archive = subprocess.run(
                 ["git", "-C", str(source), "archive", submodule, "src"],
                 capture_output=True,
