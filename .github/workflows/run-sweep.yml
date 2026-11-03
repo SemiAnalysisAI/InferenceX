@@ -389,6 +389,7 @@ jobs:
         permissions:
             actions: read # Read workflow runs and artifacts.
             contents: read
+            pull-requests: read # Read PR metadata.
         outputs:
             single-node-config: ${{ steps.prompts.outcome == 'success' && steps.select.outputs.single-node-config || '' }}
             multi-node-config: ${{ steps.prompts.outcome == 'success' && steps.select.outputs.multi-node-config || '' }}
@@ -409,6 +410,7 @@ jobs:
                   SEARCH_SPACE: ${{ needs.setup.outputs.search-space-config }}
                   PRIORITY_CRITERIA: ${{ needs.setup.outputs.priority-criteria }}
                   GH_TOKEN: ${{ github.token }}
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
               run: |
                   cd "$GITHUB_WORKSPACE/inferencex-e2e"
                   git submodule update --init --depth 1 utils/srt-slurm
@@ -427,7 +429,7 @@ jobs:
                   uv run --no-project --exclude-newer PT12H --python 3.12 \
                     python -m infx.workflows.al_gate_reuse "$RUNNER_TEMP/al-gate-plan.json" \
                     --code-version "$(git rev-parse HEAD:./infx HEAD:./benchmarks/srt_al_gate.sh HEAD:./utils/srt-slurm | tr '\n' ' ')" \
-                    --repo "$GITHUB_REPOSITORY" --branch "$GITHUB_HEAD_REF" \
+                    --repo "$GITHUB_REPOSITORY" --branch "$GITHUB_HEAD_REF" --pr-number "$PR_NUMBER" \
                     --output "$RUNNER_TEMP/al-gate-gates.json" --results "$RUNNER_TEMP/al_gate_reused"
                   jq -r '"gates=\(.single_node + .multi_node | length > 0)", "single-node-config=\(.single_node | tojson)", "multi-node-config=\(.multi_node | tojson)"' "$RUNNER_TEMP/al-gate-gates.json" >> "$GITHUB_OUTPUT"
 

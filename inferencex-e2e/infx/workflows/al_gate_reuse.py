@@ -1,4 +1,4 @@
-"""Skip acceptance gates an earlier run-sweep run on the same PR branch already measured."""
+"""Skip acceptance gates an earlier run-sweep run of the same PR already measured."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import hashlib
 import io
 import json
 import os
+import subprocess
 import sys
 import zipfile
 from pathlib import Path
@@ -18,6 +19,13 @@ from infx.workflows import sweep_runs
 
 KINDS = ("single_node", "multi_node")
 LOOKBACK_RUNS = 30
+LOOKUP_ERRORS = (
+    github.APIError,
+    github.ListingError,
+    subprocess.TimeoutExpired,
+    zipfile.BadZipFile,
+    ValueError,
+)
 
 
 def gate_key(gate: dict[str, Any], code_version: str) -> str:
@@ -26,10 +34,17 @@ def gate_key(gate: dict[str, Any], code_version: str) -> str:
     return hashlib.sha256(json.dumps(identity).encode()).hexdigest()[:16]
 
 
-def measured(repo: str, branch: str, keys: set[str], token: str) -> dict[str, dict[str, Any]]:
-    """The newest non-error result of each key among the branch's recent completed runs."""
+def measured(
+    repo: str, branch: str, pr_number: int, keys: set[str], token: str
+) -> dict[str, dict[str, Any]]:
+    """The newest non-error result of each key among this PR's recent completed runs."""
     found: dict[str, dict[str, Any]] = {}
-    runs = sweep_runs.completed_pr_runs(repo, "run-sweep.yml", branch, token)
+    shas = sweep_runs.pr_commit_shas(repo, pr_number, token)
+    runs = [
+        run
+        for run in sweep_runs.completed_pr_runs(repo, "run-sweep.yml", branch, token)
+        if run.get("head_sha") in shas
+    ]
     for run in sorted(runs, key=lambda run: run["created_at"], reverse=True)[:LOOKBACK_RUNS]:
         if found.keys() == keys:
             break
@@ -44,7 +59,7 @@ def measured(repo: str, branch: str, keys: set[str], token: str) -> dict[str, di
             with zipfile.ZipFile(io.BytesIO(archive)) as bundle:
                 for name in fnmatch.filter(bundle.namelist(), "al_gate_*.json"):
                     result = json.loads(bundle.read(name))
-                    if result.get("status") != "error":
+                    if result.get("status") != "error" and "result_filename" in result:
                         found[key] = result
     return found
 
@@ -55,6 +70,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--code-version", required=True)
     parser.add_argument("--repo", required=True)
     parser.add_argument("--branch", required=True)
+    parser.add_argument("--pr-number", type=int, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--results", type=Path, required=True)
     args = parser.parse_args(argv)
@@ -64,8 +80,9 @@ def main(argv: list[str] | None = None) -> int:
         gate["al-gate"]["key"] = gate_key(gate, args.code_version)
     keys = {gate["al-gate"]["key"] for gate in gates}
     try:
-        found = measured(args.repo, args.branch, keys, os.environ["GH_TOKEN"]) if keys else {}
-    except (github.APIError, github.ListingError) as error:
+        token = os.environ["GH_TOKEN"]
+        found = measured(args.repo, args.branch, args.pr_number, keys, token) if keys else {}
+    except LOOKUP_ERRORS as error:
         print(f"::warning title=Acceptance gate reuse::{error}", file=sys.stderr)
         found = {}
     for key, result in found.items():

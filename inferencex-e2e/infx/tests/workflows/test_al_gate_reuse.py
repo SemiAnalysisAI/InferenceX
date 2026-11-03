@@ -25,7 +25,8 @@ def run_reuse(tmp_path: Path, plan: dict) -> tuple[dict, dict[str, dict]]:
     (tmp_path / "plan.json").write_text(json.dumps(plan))
     argv = [
         str(tmp_path / "plan.json"), "--code-version", "abc", "--repo", "o/r", "--branch", "feat/x",
-        "--output", str(tmp_path / "gates.json"), "--results", str(tmp_path / "reused"),
+        "--pr-number", "7", "--output", str(tmp_path / "gates.json"),
+        "--results", str(tmp_path / "reused"),
     ]  # fmt: skip
     assert al_gate_reuse.main(argv) == 0
     reused = {
@@ -35,7 +36,7 @@ def run_reuse(tmp_path: Path, plan: dict) -> tuple[dict, dict[str, dict]]:
     return json.loads((tmp_path / "gates.json").read_text()), reused
 
 
-def test_the_newest_measured_result_of_each_gate_is_reused(tmp_path, monkeypatch):
+def test_the_newest_measured_result_of_each_gate_in_this_pr_is_reused(tmp_path, monkeypatch):
     monkeypatch.setenv("GH_TOKEN", "token")
     plan = {"single_node": [gate("a"), gate("b")], "multi_node": [gate("c")], "unresolved": []}
     key = {g["al-gate"]["id"]: al_gate_reuse.gate_key(g, "abc") for g in
@@ -48,15 +49,19 @@ def test_the_newest_measured_result_of_each_gate_is_reused(tmp_path, monkeypatch
         "old-b": {"result_filename": "b", "status": "pass"},
     }
     artifacts = {
+        3: [{"id": "new-c", "name": f"algate_{key['c']}"}],
         2: [{"id": "new-a", "name": f"algate_{key['a']}"}, {"id": "new-b", "name": f"algate_{key['b']}"},
             {"id": "new-c", "name": f"algate_{key['c']}", "expired": True}],
         1: [{"id": "old-a", "name": f"algate_{key['a']}"}, {"id": "old-b", "name": f"algate_{key['b']}"},
             {"id": "plan", "name": "algate_plan"}],
     }  # fmt: skip
-    monkeypatch.setattr(
-        sweep_runs, "completed_pr_runs",
-        lambda *_: [{"id": 1, "created_at": "2026-10-01"}, {"id": 2, "created_at": "2026-10-02"}],
-    )  # fmt: skip
+    runs = [
+        {"id": 1, "created_at": "2026-10-01", "head_sha": "s1"},
+        {"id": 2, "created_at": "2026-10-02", "head_sha": "s2"},
+        {"id": 3, "created_at": "2026-10-03", "head_sha": "another-pr"},
+    ]
+    monkeypatch.setattr(sweep_runs, "pr_commit_shas", lambda *_: {"s1", "s2"})
+    monkeypatch.setattr(sweep_runs, "completed_pr_runs", lambda *_: runs)
     monkeypatch.setattr(
         github, "paginate", lambda repo, path, *_: artifacts[int(path.split("/")[3])]
     )
@@ -79,7 +84,7 @@ def test_a_failed_lookup_reruns_every_gate(tmp_path, monkeypatch):
     def unavailable(*_):
         raise github.APIError("/actions/workflows", "HTTP 502 (HTTP 502)")
 
-    monkeypatch.setattr(sweep_runs, "completed_pr_runs", unavailable)
+    monkeypatch.setattr(sweep_runs, "pr_commit_shas", unavailable)
     plan = {"single_node": [gate("a")], "multi_node": [], "unresolved": []}
     gates, reused = run_reuse(tmp_path, plan)
     assert (len(gates["single_node"]), reused) == (1, {})
