@@ -146,8 +146,7 @@
         "partition": "batch_1",
         "account": "benchmark",
         "squash_dir": "/data/home/sa-shared/collectivex/containers",
-        "enroot_cache_path": "/data/home/sa-shared/collectivex/enroot-cache",
-        "exclude_nodes": "im-gb300-r01-c003,im-gb300-r01-c005"
+        "enroot_cache_path": "/data/home/sa-shared/collectivex/enroot-cache"
       },
       "network": {
         "socket_ifname": "enP22s22f0np0",
