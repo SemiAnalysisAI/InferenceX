@@ -126,7 +126,7 @@ def _measure(
         "--tokenizer", values["MODEL"], "--tokenizer-trust-remote-code",
         "--custom-dataset-type", "single_turn", "--input-file", str(raw / "prompts.jsonl"),
         "--dataset-sampling-strategy", "sequential", "--request-count", str(len(prompts)),
-        "--concurrency", str(collection["concurrency"]),
+        "--concurrency", str(speedbench.REPLAY_CONCURRENCY),
         # JSON keeps each value's type; AIPerf guesses the types of key:value pairs.
         "--extra-inputs", json.dumps(mode["sampling"]),
         "--server-metrics", *metrics_urls, "--output-artifact-dir", str(raw / "aiperf_artifacts"),

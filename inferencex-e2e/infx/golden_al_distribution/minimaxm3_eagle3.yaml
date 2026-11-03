@@ -30,7 +30,6 @@ minimax-m3:
 # SPEED-Bench client settings of this collection; the acceptance-length gate replays them
 # (README.md#collection-settings).
 collection:
-  concurrency: 1
   renderer: chat_template
   modes:
     thinking_on:

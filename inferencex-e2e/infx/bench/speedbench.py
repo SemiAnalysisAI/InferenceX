@@ -33,6 +33,7 @@ SPEED_BENCH_REVISION = "454f88454792dfa3ccfd7ef15fff248efde44cd1"
 # ``digest`` of the 80 coding prompts, in dataset order.
 PROMPTS_SHA256 = "6f1845452f1cfbc1930ea779ba6c3d5b437a9d5853eca199dd9b7619b20a0c18"
 PROMPTS_FILE = "speedbench_coding.jsonl"
+REPLAY_CONCURRENCY = 64
 # prepare.py runs as this importable module: datasets fingerprints its functions by reference.
 MODULE = "infx_speedbench_prepare"
 

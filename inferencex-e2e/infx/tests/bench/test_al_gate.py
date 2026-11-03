@@ -24,7 +24,6 @@ testmodel:
   thinking_on:
     3: 3.2
 collection:
-  concurrency: 2
   renderer: chat_template
   modes:
     thinking_on:
@@ -134,7 +133,7 @@ def test_the_gate_replays_the_golden_collection_and_reports_the_verdict(gate, af
     replay = {flag: argv[argv.index(flag) + 1] for flag in ("--request-count", "--concurrency",
               "--extra-inputs", "--dataset-sampling-strategy")}  # fmt: skip
     assert replay == {
-        "--request-count": "3", "--concurrency": "2",
+        "--request-count": "3", "--concurrency": "64",
         "--extra-inputs": '{"temperature": 0.6, "top_k": 20}',
         "--dataset-sampling-strategy": "sequential",
     }  # fmt: skip

@@ -17,7 +17,6 @@ minimax-m3.1-flash:
     7: 4.04
 
 collection:
-  concurrency: 64
   renderer: chat_template
   modes:
     thinking_on:

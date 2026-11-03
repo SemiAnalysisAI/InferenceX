@@ -30,7 +30,6 @@ qwen3.5-397b-a17b-nvfp4:
 # SPEED-Bench client settings of this collection; the acceptance-length gate replays them
 # (README.md#collection-settings).
 collection:
-  concurrency: 1
   renderer: chat_template
   modes:
     thinking_on:

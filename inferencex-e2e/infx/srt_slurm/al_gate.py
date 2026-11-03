@@ -12,6 +12,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from infx.bench.speedbench import REPLAY_CONCURRENCY
 from infx.clusters import CLUSTER_LABEL_PREFIX, load_clusters
 from infx.golden_al_distribution import GOLDEN_DIR, curve_name, golden_length, load_curve
 from infx.launch.request import AL_GATE_EXEMPT_FRAMEWORKS
@@ -88,8 +89,7 @@ def _gate(
         return LEADER_ONLY_METRICS
     curve = curve_name(row["model-prefix"], spec)
     golden = golden_length(row["model-prefix"], spec, thinking_mode, golden_dir)
-    collection = load_curve(curve, golden_dir).collection
-    if collection is None:
+    if load_curve(curve, golden_dir).collection is None:
         return f"golden curve {curve} records no collection settings to replay"
     key = json.dumps([deployment_key(row), [spec.get(field) for field in SPEC_FIELDS]])
     return {
@@ -97,7 +97,6 @@ def _gate(
         "curve": curve,
         "draft-tokens": spec["num_speculative_tokens"],
         "golden-acceptance-length": golden,
-        "concurrency": collection["concurrency"],
     }
 
 
@@ -124,8 +123,7 @@ def plan(
     gates: dict[str, list[dict[str, Any]]] = {"single_node": [], "multi_node": []}
     for gate, kind, rows in groups.values():
         rows.sort(key=_concurrency)
-        # The smallest point at or above the golden collection concurrency, else the largest.
-        chosen = next((row for row in rows if _concurrency(row) >= gate["concurrency"]), rows[-1])
+        chosen = next((row for row in rows if _concurrency(row) >= REPLAY_CONCURRENCY), rows[-1])
         gates[kind].append({**chosen, "al-gate": {**gate, "covers": [row["conc"] for row in rows]}})
     return {**gates, "unresolved": unresolved}
 

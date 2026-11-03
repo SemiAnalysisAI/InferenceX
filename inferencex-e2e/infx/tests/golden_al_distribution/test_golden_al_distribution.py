@@ -33,7 +33,6 @@ def test_every_committed_curve_is_valid() -> None:
 
 def test_collection_settings_sit_beside_the_model(tmp_path: Path) -> None:
     collection = {
-        "concurrency": 32,
         "renderer": "deepseek_v4",
         "modes": {"thinking_on": {"chat_template_kwargs": None, "sampling": {"temperature": 1.0}}},
     }

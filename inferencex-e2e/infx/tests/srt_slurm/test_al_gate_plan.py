@@ -10,6 +10,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "utils/srt-slurm/src"))
 
+import infx.srt_slurm.al_gate as al_gate  # noqa: E402
 from infx.srt_slurm.al_gate import plan, summarize  # noqa: E402
 
 EAGLE = {"speculative-algorithm": "EAGLE"}
@@ -24,10 +25,10 @@ def shared_workload(tmp_path: Path) -> None:
     (shared / "telemetry-native.yaml").write_text("{}\n")
 
 
-def write_golden(directory: Path, concurrency: int | None = 2) -> Path:
+def write_golden(directory: Path, collection: bool = True) -> Path:
     curve: dict[str, Any] = {"deepseek-v4-pro": {"thinking_on": {2: 2.0, 3: 2.4}}}
-    if concurrency is not None:
-        curve["collection"] = {"concurrency": concurrency, "renderer": "chat_template"}
+    if collection:
+        curve["collection"] = {"renderer": "chat_template"}
     directory.mkdir(exist_ok=True)
     (directory / "dsv4_mtp.yaml").write_text(yaml.safe_dump(curve))
     return directory
@@ -86,11 +87,12 @@ def plan_multi_node(rows: list[dict[str, Any]], workspace: Path, golden_dir: Pat
     return plan({"multi_node": {"agentic": rows}}, workspace, "thinking_on", golden_dir=golden_dir)
 
 
-@pytest.mark.parametrize(("golden_concurrency", "representative"), [(2, 2), (64, 4)])
+@pytest.mark.parametrize(("replay_concurrency", "representative"), [(2, 2), (64, 4)])
 def test_gates_split_by_topology_and_draft_length(
-    tmp_path: Path, golden_concurrency: int, representative: int
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, replay_concurrency: int, representative: int
 ) -> None:
-    golden_dir = write_golden(tmp_path / "golden", golden_concurrency)
+    monkeypatch.setattr(al_gate, "REPLAY_CONCURRENCY", replay_concurrency)
+    golden_dir = write_golden(tmp_path / "golden")
     recipe = single_node_recipe({1: 3, 2: 3, 4: 3, 8: 2, 16: None})
     (tmp_path / "recipe.yaml").write_text(yaml.safe_dump(recipe))
     c16, c32, wide = (write_recipe(tmp_path, f"{n}.yaml", sglang_decode(3)) for n in "abc")
@@ -104,14 +106,13 @@ def test_gates_split_by_topology_and_draft_length(
     # The non-drafting concurrency-16 point needs no gate.
     three, two = sorted(gates["single_node"], key=lambda gate: -gate["al-gate"]["draft-tokens"])
     gate_id = three["al-gate"].pop("id")
-    # The smallest point at or above the golden concurrency represents its group, else the
+    # The smallest point at or above the replay concurrency represents its group, else the
     # largest one.
     assert three["conc"] == representative
     assert three["al-gate"] == {
         "curve": "dsv4_mtp",
         "draft-tokens": 3,
         "golden-acceptance-length": 2.4,
-        "concurrency": golden_concurrency,
         "covers": [1, 2, 4],
     }
     assert (two["conc"], two["al-gate"]["covers"]) == (8, [8])
@@ -135,16 +136,16 @@ def test_gates_split_by_topology_and_draft_length(
 
 
 @pytest.mark.parametrize(
-    ("tokens", "concurrency", "reason"),
+    ("tokens", "collection", "reason"),
     [
-        (5, 2, "planning error: ValueError: No golden acceptance for dsv4_mtp/thinking_on/5"),
-        (3, None, "golden curve dsv4_mtp records no collection settings to replay"),
+        (5, True, "planning error: ValueError: No golden acceptance for dsv4_mtp/thinking_on/5"),
+        (3, False, "golden curve dsv4_mtp records no collection settings to replay"),
     ],
 )
 def test_points_the_gate_cannot_replay_are_unresolved(
-    tmp_path: Path, tokens: int, concurrency: int | None, reason: str
+    tmp_path: Path, tokens: int, collection: bool, reason: str
 ) -> None:
-    golden_dir = write_golden(tmp_path / "golden", concurrency)
+    golden_dir = write_golden(tmp_path / "golden", collection)
     row = multi_node_row(16, 8, write_recipe(tmp_path, "k.yaml", sglang_decode(tokens)))
     gates = plan_multi_node([row], tmp_path, golden_dir)
     [entry] = gates["unresolved"]
