@@ -9,6 +9,7 @@
 #   - fused Triton QK Gemma-RMSNorm + M-RoPE + gate on HIP
 #   - ROCm/aiter#5993: FlyDSL hc_mix kernels, used by the image's sglang#41880
 #     once they are present
+#   - SGLANG_HC_COMBINE_SPLIT gate: single-kernel hc_combine on HIP (default off there)
 #   - opt-in FlyDSL paged decode for QSA attention (SGLANG_AITER_QSA_PA_DECODE) on
 #     AITER mainline pa_decode
 #   - fused FlyDSL QSA sparse decode that reads KV from the pool
@@ -75,5 +76,6 @@ apply /sgl-workspace/sglang 10-sglang-qwen38-decode-opts.patch
 apply /sgl-workspace/sglang 11-sglang-mtp-quant-resolve.patch
 apply /sgl-workspace/sglang 13-sglang-prefill-breakable-multimodal.patch
 apply /sgl-workspace/sglang 14-sglang-qsa-breakable-shared-quant.patch
+apply /sgl-workspace/sglang 15-sglang-hc-combine-split-gate.patch
 
 echo "$digest" > "$marker"

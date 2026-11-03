@@ -82,6 +82,8 @@ base:
         SGLANG_OPT_QWEN4_FUSED_GDN_NORM_QUANT: '1'
         SGLANG_OPT_QWEN_MOE_FUSED_SHARED_TOPK: '1'
         SGLANG_OPT_AITER_LM_HEAD_GEMM: '1'
+        # Single-kernel hc_combine (the split pair costs a second launch on gfx950).
+        SGLANG_HC_COMBINE_SPLIT: '0'
   benchmark:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
