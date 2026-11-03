@@ -185,13 +185,13 @@ override_tp2_c64:
       AGENTIC_WARMUP_GRACE_PERIOD: '3600'
 
 override_tp2_c32_dp:
+  setup_script: smg.sh
   frontend:
-    type: sglang-router
+    type: smg
     args:
       policy: cache_aware
       request-id-headers: x-correlation-id
       dp-aware: true
-      connect-timeout-secs: 900
       request-timeout-secs: 14400
       disable-health-check: true
       disable-retries: true
@@ -227,13 +227,13 @@ override_tp2_c32_dp:
       AGENTIC_WARMUP_GRACE_PERIOD: '3600'
 
 override_tp2_c64_dp:
+  setup_script: smg.sh
   frontend:
-    type: sglang-router
+    type: smg
     args:
       policy: cache_aware
       request-id-headers: x-correlation-id
       dp-aware: true
-      connect-timeout-secs: 900
       request-timeout-secs: 14400
       disable-health-check: true
       disable-retries: true

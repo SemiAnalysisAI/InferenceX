@@ -1054,7 +1054,7 @@ dsv41flash-fp4-mi355x-sglang-agentic-dspark:
       search-space:
       - { tp: 2, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16], srt-recipe: agentic.yaml }
-      - { tp: 2, ep: 1, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [32, 64], srt-recipe: agentic.yaml }
+      - { tp: 2, ep: 1, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [32, 64], router: { name: smg, version: "1.11.0" }, srt-recipe: agentic.yaml }
 
 musespark-fp4-mi355x-sglang-agentic-dflash:
   image: lmsysorg/sglang-rocm:muse-spark-open-1027@sha256:7184d3ae2bfdc75a5bb8eb497b768e370ef7b213879cb4d97fbaaa3e8e5f5040
