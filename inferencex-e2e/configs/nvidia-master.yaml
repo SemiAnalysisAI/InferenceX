@@ -7604,25 +7604,25 @@ minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dflash:
         conc-list: [8]
         kv-offloading: none
         num-nodes: 1
-        srt-recipe: agg-variants.yaml:override_tp4_c8
+        srt-recipe: agg-dflash-variants.yaml:override_tp4_c8
         worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
       - spec-decoding: draft_model
         conc-list: [16]
         kv-offloading: none
         num-nodes: 1
-        srt-recipe: agg-variants.yaml:override_tp4_c16
+        srt-recipe: agg-dflash-variants.yaml:override_tp4_c16
         worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
       - spec-decoding: draft_model
         conc-list: [24]
         kv-offloading: none
         num-nodes: 1
-        srt-recipe: agg-variants.yaml:override_tp4_c24
+        srt-recipe: agg-dflash-variants.yaml:override_tp4_c24
         worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
       - spec-decoding: draft_model
         conc-list: [32]
         kv-offloading: none
         num-nodes: 1
-        srt-recipe: agg-variants.yaml:override_tp4_c32
+        srt-recipe: agg-dflash-variants.yaml:override_tp4_c32
         worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
     - dram-utilization: 0.80
       search-space:
@@ -7631,28 +7631,28 @@ minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dflash:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         num-nodes: 1
-        srt-recipe: agg-variants.yaml:override_tp2_c24
+        srt-recipe: agg-dflash-variants.yaml:override_tp2_c24
         worker: { num-worker: 1, tp: 2, ep: 1, dp-attn: false }
       - spec-decoding: draft_model
         conc-list: [28]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         num-nodes: 1
-        srt-recipe: agg-variants.yaml:override_tp2_c28
+        srt-recipe: agg-dflash-variants.yaml:override_tp2_c28
         worker: { num-worker: 1, tp: 2, ep: 1, dp-attn: false }
       - spec-decoding: draft_model
         conc-list: [36]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         num-nodes: 1
-        srt-recipe: agg-variants.yaml:override_tp2_c36
+        srt-recipe: agg-dflash-variants.yaml:override_tp2_c36
         worker: { num-worker: 1, tp: 2, ep: 1, dp-attn: false }
       - spec-decoding: draft_model
         conc-list: [40]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         num-nodes: 1
-        srt-recipe: agg-variants.yaml:override_tp2_c40
+        srt-recipe: agg-dflash-variants.yaml:override_tp2_c40
         worker: { num-worker: 1, tp: 2, ep: 1, dp-attn: false }
 
 minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg:

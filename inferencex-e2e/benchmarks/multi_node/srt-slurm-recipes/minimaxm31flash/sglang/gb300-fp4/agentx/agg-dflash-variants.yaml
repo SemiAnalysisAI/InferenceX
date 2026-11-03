@@ -1,7 +1,7 @@
 schema: 2
 
 base:
-  name: "minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-agg"
+  name: "minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-agg-dflash"
   identity:
     model: {}
     container: {}
