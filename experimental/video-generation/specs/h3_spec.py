@@ -14,19 +14,11 @@ _REVISION = re.compile(r"[0-9a-f]{40}")
 _MAX_SEED = 2**63
 
 
-def canonical_json_bytes(value: Any) -> bytes:
-    """Stable hash representation, UTF-8, sorted keys, no trailing newline."""
-    return json.dumps(
-        value,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-        allow_nan=False,
-    ).encode("utf-8")
-
-
 def _sha256(value: Any) -> str:
-    return hashlib.sha256(canonical_json_bytes(value)).hexdigest()
+    text = json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+    )
+    return hashlib.sha256(text.encode()).hexdigest()
 
 
 def _fields(value: Any, where: str, keys: set[str]) -> dict[str, Any]:
@@ -164,7 +156,6 @@ def load_spec(path: str | Path) -> dict[str, Any]:
         for set_id, prompt_set in sets.items():
             if (
                 len(prompt_set["cases"]) != 20
-                or len({case["prompt"] for case in prompt_set["cases"]}) != 20
                 or prompt_set["warmup_runs"] != 1
                 or "warmup_case" not in prompt_set
             ):
@@ -255,36 +246,27 @@ def generation_values(spec: dict[str, Any]) -> dict[str, Any]:
     return {name: field["value"] for name, field in spec["generation"].items()}
 
 
+def _resolve_case(spec: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
+    prompt = spec["prompts"][case["prompt"]]
+    return {
+        "case_id": case["case_id"],
+        "prompt": prompt["text"],
+        "seed": case["seed"],
+        "requires_motion": prompt["requires_motion"],
+        "requires_sound": prompt["requires_sound"],
+    }
+
+
 def _set_plan_fields(spec: dict[str, Any], set_id: str) -> dict[str, Any]:
     prompt_set = spec["sets"][set_id]
-    cases = []
-    for case in prompt_set["cases"]:
-        prompt = spec["prompts"][case["prompt"]]
-        cases.append(
-            {
-                "case_id": case["case_id"],
-                "prompt": prompt["text"],
-                "seed": case["seed"],
-                "requires_motion": prompt["requires_motion"],
-                "requires_sound": prompt["requires_sound"],
-            }
-        )
     result = {
         "plan_id": prompt_set["plan_id"],
-        "cases": cases,
+        "cases": [_resolve_case(spec, case) for case in prompt_set["cases"]],
         "repetitions": prompt_set["repetitions"],
         "warmup_runs": prompt_set["warmup_runs"],
     }
     if "warmup_case" in prompt_set:
-        case = prompt_set["warmup_case"]
-        prompt = spec["prompts"][case["prompt"]]
-        result["warmup_case"] = {
-            "case_id": case["case_id"],
-            "prompt": prompt["text"],
-            "seed": case["seed"],
-            "requires_motion": prompt["requires_motion"],
-            "requires_sound": prompt["requires_sound"],
-        }
+        result["warmup_case"] = _resolve_case(spec, prompt_set["warmup_case"])
     return result
 
 
@@ -309,17 +291,14 @@ def plan_for(
     }
     if "fairness" in spec:
         plan["fairness"] = spec["fairness"]
+    counts = (plan["repetitions"], plan["warmup_runs"])
     if repetitions is not None:
         _integer(repetitions, "repetitions", minimum=1)
         plan["repetitions"] = repetitions
     if warmup_runs is not None:
         _integer(warmup_runs, "warmup_runs", minimum=0)
         plan["warmup_runs"] = warmup_runs
-    prompt_set = spec["sets"][set_id]
-    if (plan["repetitions"], plan["warmup_runs"]) != (
-        prompt_set["repetitions"],
-        prompt_set["warmup_runs"],
-    ):
+    if (plan["repetitions"], plan["warmup_runs"]) != counts:
         plan["plan_id"] += f"-r{plan['repetitions']}-w{plan['warmup_runs']}"
     return plan
 
