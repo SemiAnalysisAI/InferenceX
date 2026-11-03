@@ -92,7 +92,19 @@ base:
       AGENTIC_WARMUP_GRACE_PERIOD: "3600"
 
 # TP4 Balanced (TRT-LLM routed MoE), GPU-resident KV. Admission is 2x CONC (subagent fan-out); the decode graph batch
-# matches it. Prefill runs as soon as it is admitted (no prefill-decode interval), which keeps p90 TTFT at 0.2-0.7 s.
+# matches it. Prefill waits for a prefill-decode interval of 64-128 decode rounds, which lowers P90 inter-token latency
+# while p90 TTFT stays at 0.4-2 s.
+
+override_tp4_c4:
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 4
+        moe-runner-backend: flashinfer_trtllm_routed
+        mem-fraction-static: 0.8
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+        prefill-decode-interval: 64
 
 override_tp4_c8:
   roles:
@@ -103,6 +115,7 @@ override_tp4_c8:
         mem-fraction-static: 0.8
         max-running-requests: 16
         cuda-graph-max-bs-decode: 16
+        prefill-decode-interval: 64
 
 override_tp4_c16:
   roles:
@@ -113,6 +126,18 @@ override_tp4_c16:
         mem-fraction-static: 0.8
         max-running-requests: 32
         cuda-graph-max-bs-decode: 32
+        prefill-decode-interval: 128
+
+override_tp4_c20:
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 4
+        moe-runner-backend: flashinfer_trtllm_routed
+        mem-fraction-static: 0.8
+        max-running-requests: 40
+        cuda-graph-max-bs-decode: 40
+        prefill-decode-interval: 96
 
 override_tp4_c24:
   roles:
@@ -123,71 +148,4 @@ override_tp4_c24:
         mem-fraction-static: 0.8
         max-running-requests: 48
         cuda-graph-max-bs-decode: 48
-
-override_tp4_c32:
-  roles:
-    agg:
-      args:
-        tensor-parallel-size: 4
-        moe-runner-backend: flashinfer_trtllm_routed
-        mem-fraction-static: 0.8
-        max-running-requests: 64
-        cuda-graph-max-bs-decode: 64
-
-# TP2 with L2 HiCache: a two-GPU engine at 180 GB per rank (write_back), inside its half of the tray's CPU DRAM.
-
-override_tp2_c24:
-  roles:
-    agg:
-      gpus: 2
-      args:
-        tensor-parallel-size: 2
-        moe-runner-backend: flashinfer_trtllm_routed
-        mem-fraction-static: 0.87
-        max-running-requests: 48
-        cuda-graph-max-bs-decode: 48
-        enable-hierarchical-cache: true
-        hicache-size: 180
-        hicache-write-policy: write_back
-
-override_tp2_c28:
-  roles:
-    agg:
-      gpus: 2
-      args:
-        tensor-parallel-size: 2
-        moe-runner-backend: flashinfer_trtllm_routed
-        mem-fraction-static: 0.87
-        max-running-requests: 56
-        cuda-graph-max-bs-decode: 56
-        enable-hierarchical-cache: true
-        hicache-size: 180
-        hicache-write-policy: write_back
-
-override_tp2_c36:
-  roles:
-    agg:
-      gpus: 2
-      args:
-        tensor-parallel-size: 2
-        moe-runner-backend: flashinfer_trtllm_routed
-        mem-fraction-static: 0.87
-        max-running-requests: 72
-        cuda-graph-max-bs-decode: 72
-        enable-hierarchical-cache: true
-        hicache-size: 180
-        hicache-write-policy: write_back
-
-override_tp2_c40:
-  roles:
-    agg:
-      gpus: 2
-      args:
-        tensor-parallel-size: 2
-        moe-runner-backend: flashinfer_trtllm_routed
-        mem-fraction-static: 0.87
-        max-running-requests: 80
-        cuda-graph-max-bs-decode: 80
-        enable-hierarchical-cache: true
-        hicache-size: 180
-        hicache-write-policy: write_back
+        prefill-decode-interval: 128

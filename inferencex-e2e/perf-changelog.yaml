@@ -11950,8 +11950,8 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Add MiniMax-M3.1-Flash GB300 AgentX on Dynamo + SGLang (KV router, session affinity, DFLASH with the RadixArk DFlash2 draft) with TP4 points at concurrency 8, 16, 24 and 32 and TP2 points with 180 GB per-rank HiCache at concurrency 24, 28, 36 and 40."
+    - "Add MiniMax-M3.1-Flash GB300 AgentX on Dynamo + SGLang (KV router, session affinity, DFLASH with the RadixArk DFlash2 draft) with TP4 points at concurrency 4, 8, 16, 20 and 24, in agg-dflash-variants.yaml."
     - "Use the fastokens frontend tokenizer (DYN_TOKENIZER=fastokens) on every point."
-    - "Set per-point admission and decode graph batch at twice the concurrency; prefill is admitted without a prefill-decode interval, which keeps p90 TTFT at 0.2-0.7 s."
+    - "Set per-point admission and decode graph batch at twice the concurrency, and a prefill-decode interval of 64-128 decode rounds per point, which lowers P90 inter-token latency while p90 TTFT stays at 0.4-2 s."
     - "Store the DFlash2 draft KV cache in FP8 (speculative-draft-kv-cache-dtype fp8_e4m3) on every point, as the DSpark recipes do; the pool budget turns the saving into about 9-11 % more target KV tokens."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4744
