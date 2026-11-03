@@ -85,6 +85,28 @@ def memory_groups(pid=None):
     return result
 
 
+def pressure_method(groups, expected, target=0, swap_total=None):
+    # A v1 memsw ceiling includes resident and swapped pages. When it equals
+    # the RAM ceiling, ordinary anonymous writes cannot escape by swapping.
+    limits = {}
+    for name in ('memory.limit_in_bytes', 'memory.memsw.limit_in_bytes'):
+        values = [
+            int(value)
+            for group in groups if group['version'] == 1
+            for value in [group['files'].get(name, '')]
+            if value.isdigit() and 0 < int(value) < 2**60
+        ]
+        limits[name] = min(values) if values else None
+    if all(value == expected for value in limits.values()):
+        return 'anonymous-writes'
+    # Even an unlimited cgroup swap allowance cannot consume more than all
+    # physical swap. Exceeding RAM plus that whole-node bound still forces OOM.
+    if isinstance(swap_total, int) and not isinstance(swap_total, bool) and swap_total >= 0:
+        if target > expected + swap_total:
+            return 'anonymous-writes'
+    return 'mlock2-MLOCK_ONFAULT'
+
+
 def run_probe():
     expected = int(os.environ['INFX_OOM_EXPECTED_MIB']) * 2**20
     delay = int(os.environ['INFX_OOM_DELAY_S'])
@@ -136,44 +158,49 @@ def run_probe():
     time.sleep(delay)
     chunk = 64 * 2**20
     target = ((expected * 11 // 10 + chunk - 1) // chunk) * chunk
-    memlock_soft, memlock_hard = resource.getrlimit(resource.RLIMIT_MEMLOCK)
+    method = pressure_method(groups, expected, target, meminfo['SwapTotal'])
     status = dict(line.split(':', 1) for line in Path('/proc/self/status').read_text().splitlines() if ':' in line)
     already_locked = int(status['VmLck'].split()[0]) * 1024
-    original_memlock_soft = memlock_soft
     required_memlock = target + already_locked
     if required_memlock > meminfo['MemTotal'] * 55 // 100:
-        raise RuntimeError('bounded locked-memory target plus existing locks exceeds55% of node RAM')
-    if memlock_soft != resource.RLIM_INFINITY and memlock_soft < required_memlock:
-        if memlock_hard != resource.RLIM_INFINITY and memlock_hard < required_memlock:
-            raise RuntimeError(f'RLIMIT_MEMLOCK hard limit {memlock_hard} cannot lock {required_memlock}')
-        resource.setrlimit(resource.RLIMIT_MEMLOCK, (required_memlock, memlock_hard))
+        raise RuntimeError('bounded pressure target plus existing locks exceeds55% of node RAM')
+    lock_on_fault = None
+    if method == 'mlock2-MLOCK_ONFAULT':
         memlock_soft, memlock_hard = resource.getrlimit(resource.RLIMIT_MEMLOCK)
-    libc = ctypes.CDLL(None, use_errno=True)
-    lock_on_fault = libc.mlock2
-    lock_on_fault.argtypes = [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_uint]
-    lock_on_fault.restype = ctypes.c_int
-    emit('locking-config', method='mlock2-MLOCK_ONFAULT', original_memlock_soft=original_memlock_soft, memlock_soft=memlock_soft, memlock_hard=memlock_hard, already_locked_bytes=already_locked, target_bytes=target)
+        original_memlock_soft = memlock_soft
+        if memlock_soft != resource.RLIM_INFINITY and memlock_soft < required_memlock:
+            if memlock_hard != resource.RLIM_INFINITY and memlock_hard < required_memlock:
+                raise RuntimeError(f'RLIMIT_MEMLOCK hard limit {memlock_hard} cannot lock {required_memlock}')
+            resource.setrlimit(resource.RLIMIT_MEMLOCK, (required_memlock, memlock_hard))
+            memlock_soft, memlock_hard = resource.getrlimit(resource.RLIMIT_MEMLOCK)
+        libc = ctypes.CDLL(None, use_errno=True)
+        lock_on_fault = libc.mlock2
+        lock_on_fault.argtypes = [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_uint]
+        lock_on_fault.restype = ctypes.c_int
+        emit('locking-config', method=method, original_memlock_soft=original_memlock_soft, memlock_soft=memlock_soft, memlock_hard=memlock_hard, already_locked_bytes=already_locked, target_bytes=target)
+    emit('pressure-config', method=method, already_locked_bytes=already_locked, target_bytes=target, swap_total_bytes=meminfo['SwapTotal'])
     Path('/proc/self/oom_score_adj').write_text('1000')
     slab = b'\xa5' * chunk
     regions = []
     touched = 0
     started = time.monotonic()
-    emit('pressure-start', target_bytes=target, memory_groups=memory_groups())
+    emit('pressure-start', method=method, target_bytes=target, memory_groups=memory_groups())
     while touched < target:
         if time.monotonic() - started > 600:
             emit('pressure-timeout', touched_bytes=touched)
             os._exit(87)
         region = mmap.mmap(-1, chunk, flags=mmap.MAP_PRIVATE | mmap.MAP_ANONYMOUS)
-        address = ctypes.addressof(ctypes.c_char.from_buffer(region))
-        if lock_on_fault(address, chunk, 1) != 0:
-            error_number = ctypes.get_errno()
-            emit('locking-failed', errno=error_number, message=os.strerror(error_number), touched_bytes=touched)
-            raise OSError(error_number, 'mlock2(MLOCK_ONFAULT) failed before touching pages')
+        if lock_on_fault is not None:
+            address = ctypes.addressof(ctypes.c_char.from_buffer(region))
+            if lock_on_fault(address, chunk, 1) != 0:
+                error_number = ctypes.get_errno()
+                emit('locking-failed', errno=error_number, message=os.strerror(error_number), touched_bytes=touched)
+                raise OSError(error_number, 'mlock2(MLOCK_ONFAULT) failed before touching pages')
         region.write(slab)
         regions.append(region)
         touched += chunk
         if touched % (4 * 2**30) == 0:
-            emit('pressure-progress', touched_bytes=touched, locked_bytes=touched)
+            emit('pressure-progress', method=method, touched_bytes=touched, locked_bytes=touched if lock_on_fault is not None else 0)
     emit('over-limit-survived', touched_bytes=touched, memory_groups=memory_groups())
     os._exit(86)
 
