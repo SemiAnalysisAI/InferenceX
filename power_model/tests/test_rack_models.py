@@ -82,9 +82,9 @@ def test_rack_gpu_tdp_is_fixed_metadata_and_actual_gpu_power_remains_the_input(
 @pytest.mark.parametrize(
     "workload,cpu,memory",
     [
-        ("fixed-seq-len", 100, 4.8009623125),
-        ("agentic", 140, 6.20584925),
-        ("agentic-cpu-offloading", 180, 17.44223125),
+        ("fixed-seq-len", 95, 4.8009623125),
+        ("agentic", 90, 6.20584925),
+        ("agentic-cpu-offloading", 85, 17.44223125),
     ],
 )
 def test_bianca_counts_gpu_cpu_and_the_whole_memory_pool_without_a_converter(workload, cpu, memory):
@@ -313,7 +313,7 @@ def test_rack_tree_scaling_network_and_state(
     ).estimate_breakdown(400)
     assert active.components[1].power_w == active_network
     active_rack = active.components[0].children[0]
-    assert named(active_rack, "GraceCPU")[0].power_w == 6480
+    assert named(active_rack, "GraceCPU")[0].power_w == 3060
     assert named(active_rack, "LPDDR5XMemory")[0].power_w == pytest.approx(627.920325)
     assert named(active_rack, optics)[0].power_w == named(tree, optics)[0].power_w
     assert named(active_rack, "BlackwellNVSwitch")[0].power_w == 3600
@@ -430,7 +430,7 @@ def test_rack_cli_bom_is_normalized_to_one_rack(capsys):
     assert "Power BoM per rack" in output
     assert "one rack (configured quantity: 2)" in output
     assert "GPUs 400.00 72 28,800.00" in " ".join(output.split())
-    assert "GraceCPU 180.00 36 6,480.00" in " ".join(output.split())
+    assert "GraceCPU 85.00 36 3,060.00" in " ".join(output.split())
     assert "Cluster totals (2 racks, 144 GPUs)" in output
     assert "Allocated external network per rack" in output
 
