@@ -18,7 +18,7 @@ The optional `fairness` plan field seals the schedule, requested libx264 ultrafa
   The runner checks the clip's duration against `frame_count / fps` (107 / 24 = 4.458 s), so `duration_seconds` itself is not checked.
 - `prompts` defines each prompt once with its motion and sound requirements.
   Each entry in `sets` lists cases that pair a prompt with a seed, and its `seed_sources` cites every seed.
-- `reference` records the SGLang reference run. It is informational, and no code reads or hashes it.
+- `reference` records the SGLang reference run.
   The run used workflow commit f7c7f58, whose spec, `mvp_runner.py`, and `mvp_media.py` match 0cb4c847d byte for byte.
 
 ## Hash contract
