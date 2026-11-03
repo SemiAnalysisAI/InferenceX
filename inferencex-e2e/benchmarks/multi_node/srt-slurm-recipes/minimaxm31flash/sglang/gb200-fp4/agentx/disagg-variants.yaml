@@ -203,7 +203,7 @@ override_1p_dep8_dep8:
         expert-parallel-size: 8
         chunked-prefill-size: 65536
         max-running-requests: 512
-        mem-fraction-static: 0.90
+        mem-fraction-static: 0.88
 
 override_3p_dep4_dep8:
   name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-3p-dep4-dep8
