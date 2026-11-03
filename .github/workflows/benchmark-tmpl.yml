@@ -275,6 +275,7 @@ jobs:
       - name: Launch job script
         continue-on-error: ${{ inputs.al-gate }}
         env:
+          MEMORY_OOM_TEST: ${{ startsWith(inputs.test-name, 'PR4754 worker OOM ') }}
           RUNNER_NAME: ${{ runner.name }}
           RUNNER_TYPE: ${{ inputs.runner }}
           JOB_CHECK_RUN_ID: ${{ job.check_run_id }}
@@ -293,11 +294,24 @@ jobs:
           echo "RESULT_FILENAME=${RESULT_FILENAME}" >> "$GITHUB_ENV"
 
           source benchmarks/runtime_settings.sh
+          monitor_args=()
+          if [[ "$MEMORY_OOM_TEST" == "true" ]]; then
+            [[ "$MODEL_PREFIX" == "qwen3.8next" && "$TP" == "1" ]]
+            case "$RUNNER_TYPE" in
+              cluster:mi355x-amds) expected_mib=384924; delay_seconds=300 ;;
+              cluster:gb300-nv) expected_mib=230000; delay_seconds=30 ;;
+              *) echo "Unexpected OOM probe cluster" >&2; exit 1 ;;
+            esac
+            "$INFERENCEX_LAUNCH_PYTHON" "$GITHUB_WORKSPACE/../.result-tooling/inferencex-e2e/infx/tests/oom_probe/overlay_recipe.py" \
+              "$GITHUB_WORKSPACE/${SRT_RECIPE%%:*}" --workspace "$GITHUB_WORKSPACE" \
+              --expected-mib "$expected_mib" --delay-seconds "$delay_seconds"
+            monitor_args+=(--oom-watch)
+          fi
           monitor_output="$GITHUB_WORKSPACE/memory-evidence"
           monitor_stop="$RUNNER_TEMP/memory-monitor-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.stop"
           "$INFERENCEX_RESULTS_PYTHON" "$GITHUB_WORKSPACE/../.result-tooling/inferencex-e2e/infx/tests/monitor_memory.py" \
             --output "$monitor_output" --workspace "$GITHUB_WORKSPACE" \
-            --runner "$RUNNER_NAME" --stop-file "$monitor_stop" \
+            --runner "$RUNNER_NAME" --stop-file "$monitor_stop" "${monitor_args[@]}" \
             > "$monitor_output.log" 2>&1 &
           monitor_pid=$!
           trap 'touch "$monitor_stop"; wait "$monitor_pid" || true' EXIT
