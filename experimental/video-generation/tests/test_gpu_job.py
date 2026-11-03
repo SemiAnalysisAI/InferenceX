@@ -113,11 +113,8 @@ def comparison(spec, status="pass"):
             "overall_status": status, "measurement": {"performance_mode": "same_configuration_class_regression"}}
 
 
-@pytest.mark.parametrize("field,value", [
-    ("gpu_uuids", [GPU, GPU]),
-], ids=['gpu_uuids-value1'])
-def test_invalid_topology_fails_closed(spec, field, value):
-    spec[field] = value
+def test_invalid_topology_fails_closed(spec):
+    spec["gpu_uuids"] = [GPU, GPU]
     with pytest.raises(ValueError):
         gpu.validate_gpu_job(spec)
 
@@ -195,7 +192,7 @@ def test_runtime_env_does_not_inherit_secrets_or_perf_overrides(tmp_path, monkey
 @pytest.mark.parametrize("visible", [
     [GPU, "GPU-11111111-1111-1111-1111-111111111111"],
     ["GPU-11111111-1111-1111-1111-111111111111", GPU],
-], ids=['visible0', 'visible2'])
+])
 def test_runtime_launcher_verifies_gpu_mapping_before_model_import(monkeypatch, visible):
     calls = []
     expected = [GPU, "GPU-11111111-1111-1111-1111-111111111111"]
@@ -292,11 +289,8 @@ def test_sampler_retains_actual_idle_prelaunch_power(tmp_path):
     assert sampler.samples == [retained]
 
 
-@pytest.mark.parametrize("gpu_row", [
-    f"0, {GPU}, X, 100, 0, 0, d, 1, 1, Enabled\n",
-], ids=['0, GPU-12345678-abcd-abcd-abcd-123456789abc, X, 100, 0, 0, d, 1, 1, Enabled\n'])
-def test_incomplete_or_mig_gpu_metrics_fail_closed(monkeypatch, gpu_row):
-    monkeypatch.setattr(gpu, "_command", lambda *a, **k: gpu_row.encode())
+def test_incomplete_or_mig_gpu_metrics_fail_closed(monkeypatch):
+    monkeypatch.setattr(gpu, "_command", lambda *a, **k: f"0, {GPU}, X, 100, 0, 0, d, 1, 1, Enabled\n".encode())
     with pytest.raises((ValueError, RuntimeError)):
         gpu.GpuProbe([GPU], 0.1).snapshot()
 
@@ -321,11 +315,8 @@ def sampler_fixture(tmp_path, *, owner=True, error=False):
     return sampler
 
 
-@pytest.mark.parametrize("owner,error", [
-    (True, True),
-], ids=['True-True'])
-def test_foreign_compute_and_missing_telemetry_cannot_qualify(tmp_path, owner, error):
-    sampler = sampler_fixture(tmp_path, owner=owner, error=error)
+def test_foreign_compute_and_missing_telemetry_cannot_qualify(tmp_path):
+    sampler = sampler_fixture(tmp_path, error=True)
     assert sampler.failed.is_set()
     assert sampler.summary()["qualified"] is False
     assert sampler.summary()["errors"]
@@ -449,46 +440,16 @@ def test_signal_cancels_submission_and_restores_handlers():
     assert signal.getsignal(signal.SIGTERM) is previous
 
 
-@pytest.mark.parametrize("change", [
-    "incomplete",
-], ids=['incomplete'])
-def test_no_false_green_when_required_evidence_changes(spec, monkeypatch, change):
+def test_no_false_green_when_required_evidence_changes(spec, monkeypatch):
     spec["allocation"]["mode"] = "dedicated_ci"
     monkeypatch.setattr(gpu, "_calibration", lambda *args, **kwargs: (True, "CPU fake"))
     receipt, compared = controlled_receipt(spec), comparison(spec)
     assert gpu._gate(spec, receipt, compared, verified_evidence={})["ci_accepted"] is True
-    role = receipt["roles"]["candidate"]
-    if change in {"fixture", "imported"}:
-        compared["evidence_kind"] = "fixture" if change == "fixture" else "imported_media"
-    elif change == "hardware":
-        role["telemetry_summary"]["gpu_identity"][0]["uuid"] = "wrong-device"
-    elif change == "descriptive":
-        compared["measurement"]["performance_mode"] = "descriptive_only"
-    elif change == "cleanup":
-        role["cleanup"]["status"] = "failed"
-    elif change == "telemetry":
-        role["telemetry_summary"]["qualified"] = False
-    elif change == "source":
-        role["source_identity"]["source_sha256"] = "d" * 64
-    elif change == "incomplete":
-        receipt["measurement_status"] = "incomplete"
-    elif change == "mixed_dependencies":
-        role["source_identity"]["packages"]["torch"] = "different"
+    receipt["measurement_status"] = "incomplete"
     result = gpu._gate(spec, receipt, compared, verified_evidence={})
     assert result["ci_accepted"] is False
     assert result["regression_status"] == "inconclusive"
-    reason = {
-        "fixture": "comparison evidence is fixture/imported/mixed",
-        "imported": "comparison evidence is fixture/imported/mixed",
-        "hardware": "observed GPUs do not match selected UUIDs",
-        "descriptive": "performance comparison is descriptive or incomparable",
-        "cleanup": "cleanup or observed GPU telemetry requirements did not qualify",
-        "telemetry": "cleanup or observed GPU telemetry requirements did not qualify",
-        "source": "observed source identity does not match pinned role",
-        "incomplete": "controlled GPU measurement is incomplete",
-        "mixed_dependencies": "baseline/candidate runtime dependency packages differs",
-    }[change]
-    assert any(reason in item for item in result["acceptance_reasons"])
+    assert any("controlled GPU measurement is incomplete" in item for item in result["acceptance_reasons"])
 
 
 def test_memory_regression_is_observed_and_never_hidden_by_uncalibrated_policy(spec):
@@ -641,7 +602,7 @@ def test_saved_known_media_regression_yields_fail_not_inconclusive(spec, tmp_pat
     "pid",
     "missing_slot",
     "comparison_link",
-], ids=['artifact', 'pid', 'missing_slot', 'comparison_link'])
+])
 def test_saved_corrupt_or_incomplete_evidence_cannot_qualify(spec, tmp_path, mutation):
     directory = saved_job(spec, tmp_path / "bad")
     receipt = gpu._read(directory / "gpu-job.json")
@@ -650,15 +611,8 @@ def test_saved_corrupt_or_incomplete_evidence_cannot_qualify(spec, tmp_path, mut
     run = gpu._read(run_path)
     if mutation == "artifact":
         (run_path.parent / run["records"][1]["artifact_path"]).write_bytes(b"changed")
-    elif mutation == "run_hash":
-        role["run_sha256"] = "0" * 64
-    elif mutation in {"stage_timing", "missing_slot", "denominator"}:
-        if mutation == "stage_timing":
-            run["records"][1].pop("submit_to_terminal_seconds")
-        elif mutation == "missing_slot":
-            run["records"].pop()
-        else:
-            run["summary"]["failed"] = 9000
+    elif mutation == "missing_slot":
+        run["records"].pop()
         gpu._write(run_path, run)
         role["run_sha256"] = gpu._hash(run_path)
     elif mutation == "comparison_link":
@@ -669,10 +623,7 @@ def test_saved_corrupt_or_incomplete_evidence_cannot_qualify(spec, tmp_path, mut
     else:
         telemetry = directory / role["telemetry_path"]
         samples = [json.loads(line) for line in telemetry.read_text().splitlines()]
-        if mutation == "pid":
-            samples[0]["owned_compute_apps"][0]["process_identity"]["pgid"] = 999999
-        else:
-            samples[-1]["monotonic_seconds"] = 999
+        samples[0]["owned_compute_apps"][0]["process_identity"]["pgid"] = 999999
         telemetry.write_bytes(b"".join(gpu.canonical_json_bytes(sample)+b"\n" for sample in samples))
         role["telemetry_sha256"] = gpu._hash(telemetry)
     gpu._write(directory / "gpu-job.json", receipt)
@@ -704,44 +655,33 @@ def test_calibrated_ci_pass_has_verified_nonrecursive_prior_evidence(spec, tmp_p
     "duplicate",
     "future",
     "different_build",
-], ids=['duplicate', 'future', 'different_build'])
+])
 def test_bad_calibration_never_becomes_green(spec, tmp_path, mutation):
     current, first, second = calibrated_jobs(spec, tmp_path)
     prior_path = first / "gpu-job.json"
     prior = gpu._read(prior_path)
-    if mutation == "raw_media":
-        (first / "baseline/artifacts/1.mp4").write_bytes(b"changed")
-    elif mutation == "future":
+    if mutation == "future":
         prior["finished_at"] = "2026-08-04T00:00:00Z"
         gpu._write(prior_path, prior)
     elif mutation == "duplicate":
         prior["execution_id"] = gpu._read(second / "gpu-job.json")["execution_id"]
         gpu._write(prior_path, prior)
-    elif mutation == "different_build":
+    else:
         prior_spec = copy.deepcopy(spec)
         prior_spec["baseline"]["revision"] = prior_spec["candidate"]["revision"] = "d" * 40
         first = saved_job(prior_spec, tmp_path / "different-build", day=1)
         prior_path = first / "gpu-job.json"
-    elif mutation == "different_cell":
-        prior_spec = gpu._read(first / "spec.json")
-        prior_spec["server"]["performance_mode"] = "memory"
-        gpu._write(first / "spec.json", prior_spec)
-        prior["spec_sha256"] = gpu._digest(prior_spec)
-        gpu._write(prior_path, prior)
-    else:
-        prior_path.unlink()
-    if mutation != "missing_prior":
-        current_spec = gpu._read(current / "spec.json")
-        current_spec["policy"]["calibration_evidence"][0]["job_path"] = str(prior_path)
-        current_spec["policy"]["calibration_evidence"][0]["sha256"] = gpu._hash(prior_path)
-        gpu._write(current / "spec.json", current_spec)
-        receipt = gpu._read(current / "gpu-job.json")
-        receipt["spec_sha256"] = gpu._digest(current_spec)
-        compared = gpu._read(current / "comparison.json")
-        compared["policy"] = current_spec["policy"]
-        gpu._write(current / "comparison.json", compared)
-        receipt["comparison_sha256"] = gpu._hash(current / "comparison.json")
-        gpu._write(current / "gpu-job.json", receipt)
+    current_spec = gpu._read(current / "spec.json")
+    current_spec["policy"]["calibration_evidence"][0]["job_path"] = str(prior_path)
+    current_spec["policy"]["calibration_evidence"][0]["sha256"] = gpu._hash(prior_path)
+    gpu._write(current / "spec.json", current_spec)
+    receipt = gpu._read(current / "gpu-job.json")
+    receipt["spec_sha256"] = gpu._digest(current_spec)
+    compared = gpu._read(current / "comparison.json")
+    compared["policy"] = current_spec["policy"]
+    gpu._write(current / "comparison.json", compared)
+    receipt["comparison_sha256"] = gpu._hash(current / "comparison.json")
+    gpu._write(current / "gpu-job.json", receipt)
     result = gpu.evaluate_gpu_job(current)
     assert result["ci_accepted"] is False
     assert result["regression_status"] == "inconclusive"
@@ -767,7 +707,7 @@ def test_occupied_gpu_preflight_never_spawns_a_runtime(spec, tmp_path, monkeypat
     (None, True),
     ({"pid": 123, "pgid": 999, "session_id": 999, "start_ticks": 300, "state": "R"}, True),
     (None, False),
-], ids=['None-True', 'current2-True', 'None-False'])
+])
 def test_cleanup_waits_for_recorded_driver_process_release_without_adopting_reused_pid(monkeypatch, current, recorded):
     process = {"pid": 123, "pgid": 100, "session_id": 100, "start_ticks": 200}
     sampler = SimpleNamespace(samples=[{"owned_compute_apps": [{"gpu_uuid": GPU, "pid": 123, "process_identity": process}]}],
@@ -916,28 +856,10 @@ def test_calibration_preflight_verifies_known_cell_before_gpu_work(spec, tmp_pat
         preflight_calibration(frozen, current, started_at="2026-08-03T00:00:00Z", execution_id="not-yet-run", deadline=time.monotonic()+5)
 
 
-@pytest.mark.parametrize("bad", [
-    "raw_artifact",
-], ids=['raw_artifact'])
-def test_bad_calibration_run_preflight_never_reaches_weights_gpu_or_lease(spec, tmp_path, monkeypatch, bad):
+def test_bad_calibration_run_preflight_never_reaches_weights_gpu_or_lease(spec, tmp_path, monkeypatch):
     current, first, second = calibrated_jobs(spec, tmp_path)
     frozen = gpu._read(current / "spec.json")
-    references = frozen["policy"]["calibration_evidence"]
-    if bad == "missing":
-        references[0]["job_path"] = str(tmp_path / "does-not-exist/gpu-job.json")
-    elif bad == "malformed":
-        references[0] = {"bad": "not a reference"}
-    elif bad == "raw_artifact":
-        (first / "baseline/artifacts/1.mp4").write_bytes(b"changed after prior receipt")
-    elif bad == "wrong_cell":
-        frozen["server"]["performance_mode"] = "memory"
-    elif bad == "future":
-        receipt = gpu._read(first / "gpu-job.json")
-        receipt["finished_at"] = "2099-01-01T00:00:00Z"
-        gpu._write(first / "gpu-job.json", receipt)
-        references[0]["sha256"] = gpu._hash(first / "gpu-job.json")
-    else:
-        references[1] = copy.deepcopy(references[0])
+    (first / "baseline/artifacts/1.mp4").write_bytes(b"changed after prior receipt")
     monkeypatch.setattr(gpu, "_require_linux", lambda: None)
     monkeypatch.setattr(gpu, "_model_manifest", lambda *a, **k: pytest.fail("bad calibration reached current weights"))
     monkeypatch.setattr(gpu, "GpuProbe", lambda *a, **k: pytest.fail("bad calibration constructed a GPU probe"))

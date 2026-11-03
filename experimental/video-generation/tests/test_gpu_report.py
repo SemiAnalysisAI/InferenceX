@@ -108,11 +108,8 @@ def render(tmp_path, job):
     return report, output, (output / "index.html").read_text()
 
 
-@pytest.mark.parametrize("evidence", [
-    "imported_media",
-], ids=['imported_media'])
-def test_fixture_and_imported_media_cannot_masquerade_as_gpu_timing(tmp_path, evidence):
-    job, _, _ = fixture_job(tmp_path, evidence=evidence, receipt_kind="controlled_h3_gpu")
+def test_fixture_and_imported_media_cannot_masquerade_as_gpu_timing(tmp_path):
+    job, _, _ = fixture_job(tmp_path, evidence="imported_media", receipt_kind="controlled_h3_gpu")
     result, output, page = render(tmp_path, job)
     role = result["roles"]["candidate"]
     assert role["summary"]["latency_median_seconds"] is None
@@ -182,7 +179,7 @@ def test_malformed_warmup_case_withholds_the_schedule(tmp_path):
 @pytest.mark.parametrize("unsafe", [
     "/outside.mp4",
     "artifacts/../outside.mp4",
-], ids=['/outside.mp4', 'artifacts/../outside.mp4'])
+])
 def test_media_path_traversal_is_never_read(tmp_path, unsafe):
     job, _, receipt = fixture_job(tmp_path)
     outside = tmp_path / "outside.mp4"
@@ -195,21 +192,10 @@ def test_media_path_traversal_is_never_read(tmp_path, unsafe):
     assert not any(path.read_bytes() == b"SENSITIVE OUTSIDE DATA" for path in (output / "assets").iterdir())
 
 
-@pytest.mark.parametrize("directory", [
-    True,
-], ids=['True'])
-def test_media_symlinks_are_rejected_even_when_target_inside_job(tmp_path, directory):
+def test_media_symlinks_are_rejected_even_when_target_inside_job(tmp_path):
     job, _, receipt = fixture_job(tmp_path)
-    if directory:
-        (job / "candidate" / "link").symlink_to(job / "candidate" / "artifacts", target_is_directory=True)
-        change_run(job, receipt, "candidate", lambda run: run["records"][1].update(artifact_path="link/measurement-r001-c001.mp4"))
-    else:
-        target = job / "candidate" / "artifacts" / "measurement-r001-c001.mp4"
-        data = target.read_bytes()
-        original = job / "candidate" / "original.mp4"
-        original.write_bytes(data)
-        target.unlink()
-        target.symlink_to(original)
+    (job / "candidate" / "link").symlink_to(job / "candidate" / "artifacts", target_is_directory=True)
+    change_run(job, receipt, "candidate", lambda run: run["records"][1].update(artifact_path="link/measurement-r001-c001.mp4"))
     result, _, _ = render(tmp_path, job)
     assert result["roles"]["candidate"]["observations"][0]["artifact_path"] is None
 
@@ -270,24 +256,18 @@ def test_unknown_slots_cannot_qualify_timing_population(tmp_path):
     assert "duplicate" in page
 
 
-@pytest.mark.parametrize("field,value", [
-    ("source_sha256", "0" * 64),
-], ids=['source_sha256-0000000000000000000000000000000000000000000000000000000000000000'])
-def test_gpu_label_requires_matching_observed_runtime_pins(tmp_path, field, value):
+def test_gpu_label_requires_matching_observed_runtime_pins(tmp_path):
     job, _, receipt = fixture_job(tmp_path, evidence="operator_endpoint", receipt_kind="controlled_h3_gpu")
-    receipt["roles"]["candidate"]["source_identity"][field] = value
+    receipt["roles"]["candidate"]["source_identity"]["source_sha256"] = "0" * 64
     write_json(job / "gpu-job.json", receipt)
     result, _, page = render(tmp_path, job)
     assert result["roles"]["candidate"]["gpu_timing_presented"] is False
     assert "Observed source/Python identity does not match" in page
 
 
-@pytest.mark.parametrize("field,value", [
-    ("pgid", 12),
-], ids=['pgid-12'])
-def test_gpu_label_requires_plausible_owned_process_receipt(tmp_path, field, value):
+def test_gpu_label_requires_plausible_owned_process_receipt(tmp_path):
     job, _, receipt = fixture_job(tmp_path, evidence="operator_endpoint", receipt_kind="controlled_h3_gpu")
-    receipt["roles"]["candidate"]["process_identity"][field] = value
+    receipt["roles"]["candidate"]["process_identity"]["pgid"] = 12
     write_json(job / "gpu-job.json", receipt)
     result, _, page = render(tmp_path, job)
     assert result["roles"]["candidate"]["gpu_timing_presented"] is False
@@ -297,7 +277,7 @@ def test_gpu_label_requires_plausible_owned_process_receipt(tmp_path, field, val
 @pytest.mark.parametrize("defect", [
     "overlap",
     "wrong_pid",
-], ids=['overlap', 'wrong_pid'])
+])
 def test_telemetry_ownership_partition_rejects_mismatched_observations(tmp_path, defect):
     job, _, receipt = fixture_job(tmp_path, evidence="operator_endpoint", receipt_kind="controlled_h3_gpu")
     role = receipt["roles"]["candidate"]
@@ -305,17 +285,10 @@ def test_telemetry_ownership_partition_rejects_mismatched_observations(tmp_path,
     samples = [json.loads(line) for line in telemetry.read_text().splitlines()]
     sample = samples[0]
     app = sample["owned_compute_apps"][0]
-    if defect == "missing":
-        sample["owned_compute_apps"] = []
-    elif defect == "overlap":
+    if defect == "overlap":
         sample["unowned_compute_apps"] = [dict(app, ownership_observation="not_owned")]
-    elif defect == "duplicate":
-        sample["compute_apps"].append(dict(app, pid=124))
-        sample["owned_compute_apps"].append(dict(app))
-    elif defect == "wrong_pid":
-        app["pid"] = 124
     else:
-        app["memory_used_mib"] += 1
+        app["pid"] = 124
     telemetry.write_text("\n".join(json.dumps(sample) for sample in samples) + "\n")
     role["telemetry_sha256"] = hashlib.sha256(telemetry.read_bytes()).hexdigest()
     write_json(job / "gpu-job.json", receipt)
@@ -343,24 +316,16 @@ def test_gpu_label_requires_owned_compute_during_measurement(tmp_path):
     assert "do not establish owned compute" in page
 
 
-@pytest.mark.parametrize("field", [
-    "gpu_identity",
-], ids=['gpu_identity'])
-def test_gpu_label_requires_summary_to_match_raw_telemetry(tmp_path, field):
+def test_gpu_label_requires_summary_to_match_raw_telemetry(tmp_path):
     job, _, receipt = fixture_job(tmp_path, evidence="operator_endpoint", receipt_kind="controlled_h3_gpu")
-    summary = receipt["roles"]["candidate"]["telemetry_summary"]
-    if field == "gpu_identity":
-        summary[field][0]["uuid"] = "GPU-OTHER-SYNTHETIC"
-    else:
-        summary[field] = {"GPU-SYNTHETIC-TEST-ONLY": 1}
+    receipt["roles"]["candidate"]["telemetry_summary"]["gpu_identity"][0]["uuid"] = "GPU-OTHER-SYNTHETIC"
     write_json(job / "gpu-job.json", receipt)
     result, _, page = render(tmp_path, job)
     assert result["roles"]["candidate"]["gpu_timing_presented"] is False
     assert "does not match its hash-verified samples" in page
-    if field == "gpu_identity":
-        assert result["same_gpu_uuid_set"] is None
-        assert "GPU identity missing" in page
-        assert "Cross-GPU results are descriptive" in page
+    assert result["same_gpu_uuid_set"] is None
+    assert "GPU identity missing" in page
+    assert "Cross-GPU results are descriptive" in page
 
 
 def test_recorded_failed_ci_verdict_is_not_overwritten_as_inconclusive(tmp_path):
@@ -411,7 +376,7 @@ def qualified_fixture_job(tmp_path):
 @pytest.mark.parametrize("changes", [
     {"cleanup_status": "failed"},
     {"finished_at": None},
-], ids=['changes5', 'changes7'])
+])
 def test_otherwise_qualified_ci_pass_requires_finalized_clean_success(tmp_path, changes):
     job, receipt = qualified_fixture_job(tmp_path)
     receipt.update(changes)
@@ -424,19 +389,10 @@ def test_otherwise_qualified_ci_pass_requires_finalized_clean_success(tmp_path, 
     assert "recorded pass is not shown as passing" in page
 
 
-@pytest.mark.parametrize("condition", [
-    "cooperative_shared",
-], ids=['cooperative_shared'])
-def test_otherwise_qualified_receipt_cannot_promote_shared_or_uncalibrated_job(tmp_path, condition):
+def test_otherwise_qualified_receipt_cannot_promote_shared_or_uncalibrated_job(tmp_path):
     job, receipt = qualified_fixture_job(tmp_path)
     spec = json.loads((job / "spec.json").read_text())
-    if condition == "cooperative_shared":
-        spec["allocation"]["mode"] = condition
-    else:
-        spec["policy"]["calibration_status"] = condition
-        comparison = json.loads((job / "comparison.json").read_text())
-        comparison["policy"] = spec["policy"]
-        receipt["comparison_sha256"] = write_json(job / "comparison.json", comparison)
+    spec["allocation"]["mode"] = "cooperative_shared"
     write_json(job / "spec.json", spec)
     receipt["spec_sha256"] = digest(spec)
     write_json(job / "gpu-job.json", receipt)
