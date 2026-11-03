@@ -28,15 +28,20 @@ if TYPE_CHECKING:
     from infx.launch.drivers.srt.power import PowerDecision
     from infx.launch.drivers.srt.run import SrtRun
     from infx.launch.request import SrtRequest
+    from infx.srt_slurm.workload import CpuPowerSource
 
 NGINX_IMAGE = "nginx:1.27.4"
 EXPORTER_PROVENANCE = "exporter-image.sha256"
 HEALTH_CHECK = {"max_attempts": HEALTH_ATTEMPTS, "interval_seconds": 10}
 # energy_uj is root-only (CVE-2020-8694); the glob matches only the top-level package zones.
+# A failed grant warns and continues: it costs the CPU leg, whose verdict enforces required
+# power, not the benchmark. A cancelled job skips teardown, so the CI account keeps read
+# access until the next RAPL job's teardown; that account already has sudo on these hosts.
 RAPL_COUNTERS = "/sys/class/powercap/intel-rapl/intel-rapl:*/energy_uj"
 RAPL_GRANT = (
     f"for zone in {RAPL_COUNTERS}; do"
-    ' test -r "$zone" || sudo -n chown "$(id -un)" "$zone" || exit 1; done'
+    ' test -r "$zone" || sudo -n chown "$(id -un)" "$zone"'
+    ' || echo "cannot read $zone; CPU power will be missing" >&2; done'
 )
 RAPL_RESTORE = f"sudo -n chown root {RAPL_COUNTERS}"
 
@@ -57,7 +62,7 @@ class SrtJob:
     single_node: bool = False
     account: str | None = None
     mem_mib: int | None = None
-    cpu_power_source: str | None = None
+    cpu_power_source: CpuPowerSource | None = None
 
 
 def pyxis_spelling(image: str) -> str:
@@ -169,7 +174,7 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
     if job.cpu_power_source == "rapl":
         host_setup = config.setdefault("default_host_setup", {"commands": []})
         host_setup["commands"].append(RAPL_GRANT)
-        host_setup["teardown"] = [RAPL_RESTORE]
+        host_setup.setdefault("teardown", []).append(RAPL_RESTORE)
     if shadowed := sorted(config.keys() & srt.extra.keys()):
         raise LaunchError(f"cluster {cluster.id!r} srt-slurm.extra sets rendered keys {shadowed}")
     config.update(srt.extra)
@@ -268,7 +273,9 @@ def agentic_client_env(
     return env
 
 
-def cpu_power_source(cluster: Cluster, srt: SrtSlurmSettings, cpu_power: bool) -> str | None:
+def cpu_power_source(
+    cluster: Cluster, srt: SrtSlurmSettings, cpu_power: bool
+) -> CpuPowerSource | None:
     """The cluster's CPU power exporter source when the point selected cpu-power, else None."""
     if not cpu_power:
         return None

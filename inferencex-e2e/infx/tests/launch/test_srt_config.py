@@ -1,10 +1,12 @@
 """srtslurm.yaml rendering from controlled cluster records."""
 
+import getpass
+import os
 import shutil
 import subprocess
 import sys
-from types import SimpleNamespace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -118,20 +120,58 @@ def test_rendered_exporter_defaults_resolve_for_native_telemetry(exporter):
     assert resolve_config_with_defaults(recipe, config)["telemetry"]["dcgm_exporter"]["port"] == exporter["port"]
 
 
-RAPL = "/sys/class/powercap/intel-rapl/intel-rapl:*/energy_uj"
 HOOK = {"host-setup": {"script": "runners/hooks/setup.sh", "timeout-s": 1200}}
 
 
 @pytest.mark.parametrize(("srt", "hook"), [(HOOK, ["bash /ws/runners/hooks/setup.sh"]), ({}, [])])
-def test_a_rapl_cpu_exporter_grants_the_job_user_the_rapl_counters_until_teardown(srt, hook):
+def test_a_rapl_cpu_exporter_grants_after_the_cluster_hook_and_restores_at_teardown(srt, hook):
     config = render(cluster(srt=srt), job(single_node=True, cpu_power_source="rapl"))
     ClusterConfig.Schema().load(config)
-    host_setup = config["default_host_setup"]
-    assert host_setup["commands"] == [
-        *hook,
-        f'for zone in {RAPL}; do test -r "$zone" || sudo -n chown "$(id -un)" "$zone" || exit 1; done',
-    ]
-    assert host_setup["teardown"] == [f"sudo -n chown root {RAPL}"]
+    resolved = resolve_config_with_defaults({"schema": 2, "name": "point"}, config)["host_setup"]
+    assert resolved["commands"][: len(hook)] == hook
+    assert len(resolved["commands"]) == len(hook) + 1
+    assert resolved["teardown"] == ["sudo -n chown root /sys/class/powercap/intel-rapl/intel-rapl:*/energy_uj"]
+    assert not resolved.get("ignore_failure")
+
+
+@pytest.fixture
+def run_rapl_grant(tmp_path):
+    """Run the rendered grant under bash against counters in ``tmp_path`` with a fake sudo."""
+    sudo = tmp_path / "bin" / "sudo"
+    sudo.parent.mkdir()
+    sudo.write_text(f'#!/bin/sh\necho "$@" >> {tmp_path / "sudo.log"}\nexit "$SUDO_RC"\n')
+    sudo.chmod(0o755)
+    root = tmp_path / "powercap"
+
+    def run(counters: dict[str, int], sudo_rc: int = 0):
+        for zone, mode in counters.items():
+            counter = root / "intel-rapl" / zone / "energy_uj"
+            counter.parent.mkdir(parents=True)
+            counter.write_text("1")
+            counter.chmod(mode)
+        (grant,) = render(cluster(), job(cpu_power_source="rapl"))["default_host_setup"]["commands"]
+        env = {"PATH": f"{sudo.parent}:/usr/bin:/bin", "SUDO_RC": str(sudo_rc)}
+        script = grant.replace("/sys/class/powercap", str(root))
+        result = subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True)
+        log = tmp_path / "sudo.log"
+        return result, log.read_text().splitlines() if log.exists() else []
+
+    return run
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads mode-000 counters")
+def test_the_rapl_grant_chowns_only_unreadable_package_counters(run_rapl_grant, tmp_path):
+    result, calls = run_rapl_grant({"intel-rapl:0": 0o444, "intel-rapl:1": 0o000, "intel-rapl:1/intel-rapl:1:0": 0o000})
+    counter = tmp_path / "powercap/intel-rapl/intel-rapl:1/energy_uj"
+    assert (result.returncode, calls) == (0, [f"-n chown {getpass.getuser()} {counter}"])
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads mode-000 counters")
+@pytest.mark.parametrize("counters", [{"intel-rapl:0": 0o000}, {}], ids=["sudo-refused", "no-rapl"])
+def test_a_failed_rapl_grant_warns_without_failing_the_job(run_rapl_grant, counters):
+    result, _ = run_rapl_grant(counters, sudo_rc=1)
+    assert result.returncode == 0
+    assert "CPU power will be missing" in result.stderr
 
 
 @pytest.mark.parametrize("source", [None, "acpi"])
