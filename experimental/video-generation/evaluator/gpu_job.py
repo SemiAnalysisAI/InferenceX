@@ -574,9 +574,6 @@ class OwnedProcess:
         if any(path.stat().st_size > 128 * 1024 * 1024 for path in self.log_paths):
             raise RuntimeError("owned process output exceeded the 128 MiB per-stream safety limit")
 
-    def owns(self, pid: int) -> bool:
-        return self.observe(pid) is not None
-
     def observe(self, pid: int) -> dict | None:
         current = _proc_identity(pid)
         return current if current and current["pgid"] == self.identity["pgid"] and current["session_id"] == self.identity["session_id"] else None
