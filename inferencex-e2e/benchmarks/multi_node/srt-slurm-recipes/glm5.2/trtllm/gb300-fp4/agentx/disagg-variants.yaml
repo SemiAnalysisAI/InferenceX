@@ -20,7 +20,6 @@ base:
     publish_metrics: true
   roles:
     prefill:
-      gpus: 4
       env:
         HF_HUB_OFFLINE: "1"
         TRANSFORMERS_OFFLINE: "1"
@@ -96,7 +95,6 @@ base:
           max_draft_len: 5
         tensor_parallel_size: 4
     decode:
-      workers: 1
       env:
         HF_HUB_OFFLINE: "1"
         TRANSFORMERS_OFFLINE: "1"
@@ -202,14 +200,12 @@ override_1p1d_tp8_c1_b1_mtp5:
   roles:
     prefill:
       nodes: 1
-      workers: 1
       args:
         disable_overlap_scheduler: true
         scheduler_config:
           context_chunking_policy: EQUAL_PROGRESS
     decode:
       nodes: 2
-      gpus: 8
       args:
         cuda_graph_config:
           batch_sizes:
@@ -228,10 +224,8 @@ override_1p1d_tep8_c20_b5_mtp5:
   roles:
     prefill:
       nodes: 1
-      workers: 1
     decode:
       nodes: 2
-      gpus: 8
       args:
         cuda_graph_config:
           batch_sizes:
@@ -253,11 +247,8 @@ override_1p4d_tep4_c30_b2_mtp5:
   roles:
     prefill:
       nodes: 1
-      workers: 1
     decode:
       nodes: 4
-      workers: 4
-      gpus: 4
       args:
         cuda_graph_config:
           batch_sizes:
@@ -277,11 +268,8 @@ override_3p4d_tep4_c60_b5_mtp5:
   roles:
     prefill:
       nodes: 3
-      workers: 3
     decode:
       nodes: 4
-      workers: 4
-      gpus: 4
       args:
         cuda_graph_config:
           batch_sizes:
@@ -303,13 +291,11 @@ override_4p1d_dep8_c227_b16_mtp3:
   roles:
     prefill:
       nodes: 4
-      workers: 4
       args:
         speculative_config:
           max_draft_len: 3
     decode:
       nodes: 2
-      gpus: 8
       args:
         cuda_graph_config:
           batch_sizes:
@@ -339,13 +325,11 @@ override_5p1d_dep16_c260_b16_mtp3:
   roles:
     prefill:
       nodes: 5
-      workers: 5
       args:
         speculative_config:
           max_draft_len: 3
     decode:
       nodes: 4
-      gpus: 16
       args:
         cuda_graph_config:
           batch_sizes:

@@ -15,7 +15,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
       args:
         served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
         trust-remote-code: true
@@ -60,7 +59,6 @@ base:
 override_tp2_c16:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         expert-parallel-size: 2
@@ -88,7 +86,6 @@ override_tp2_c16:
 override_tp2_c32:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         expert-parallel-size: 2
@@ -117,7 +114,6 @@ override_dep2_c64:
       disable-retries: true
   roles:
     agg:
-      gpus: 2
       args:
         <<: &dep2_args
           tensor-parallel-size: 2
@@ -152,7 +148,6 @@ override_dep2_c128:
   frontend: *dep2_frontend
   roles:
     agg:
-      gpus: 2
       args:
         <<: *dep2_args
         prefill-decode-interval: 16
@@ -169,7 +164,6 @@ override_dep2_c160:
   frontend: *dep2_frontend
   roles:
     agg:
-      gpus: 2
       args:
         <<: *dep2_args
         prefill-decode-interval: 8
@@ -186,7 +180,6 @@ override_dep2_c160:
 override_tp4_c1:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
@@ -223,7 +216,6 @@ override_tp4_c1:
 override_tp4_c4:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
@@ -245,7 +237,6 @@ override_tp4_c4:
 override_tp4_c16:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1

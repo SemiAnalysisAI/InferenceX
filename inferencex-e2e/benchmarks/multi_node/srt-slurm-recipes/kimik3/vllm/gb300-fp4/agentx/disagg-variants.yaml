@@ -71,8 +71,6 @@ base:
   roles:
     prefill:
       nodes: 2
-      workers: 1
-      gpus: 8
       env:
         <<: &kimi_env
           DYN_TCP_REQUEST_TIMEOUT: "120"
@@ -139,8 +137,6 @@ base:
       kv_events: true
     decode:
       nodes: 2
-      workers: 1
-      gpus: 8
       env:
         <<: *kimi_env
         VLLM_ENABLE_GEMM_RS: '0'
@@ -197,7 +193,6 @@ override_1p3d_specdecode:
   roles:
     prefill: &override_1p3d_specdecode_prefill
       nodes: 2
-      workers: 1
       args: &override_1p3d_specdecode_prefill_args
         mamba-ssm-cache-dtype: "float32"
         cp-kv-cache-interleave-size: 1
@@ -205,7 +200,6 @@ override_1p3d_specdecode:
         no-enable-flashinfer-autotune: true
     decode: &override_1p3d_specdecode_decode
       nodes: 6
-      workers: 3
       args: &override_1p3d_specdecode_decode_args
         mamba-ssm-cache-dtype: "float32"
         cp-kv-cache-interleave-size: 1
@@ -240,12 +234,10 @@ override_1p2d_specdecode:
   roles:
     prefill: &override_1p2d_specdecode_prefill
       nodes: 2
-      workers: 1
       args: &override_1p2d_specdecode_prefill_args
         <<: *override_1p3d_specdecode_prefill_args
     decode: &override_1p2d_specdecode_decode
       nodes: 4
-      workers: 2
       args: &override_1p2d_specdecode_decode_args
         <<: *override_1p3d_specdecode_decode_args
 
@@ -274,11 +266,9 @@ override_1p2d_cap128:
   roles:
     prefill: &override_1p2d_cap128_prefill
       nodes: 2
-      workers: 1
       args: &override_1p2d_cap128_prefill_args {}
     decode: &override_1p2d_cap128_decode
       nodes: 4
-      workers: 2
       args: &override_1p2d_cap128_decode_args
         max-num-seqs: 128
         use-replayssm: true
@@ -306,11 +296,9 @@ override_3p4d_cap128:
   roles:
     prefill: &override_3p4d_cap128_prefill
       nodes: 6
-      workers: 3
       args: &override_3p4d_cap128_prefill_args {}
     decode: &override_3p4d_cap128_decode
       nodes: 8
-      workers: 4
       args: &override_3p4d_cap128_decode_args
         max-num-seqs: 128
         use-replayssm: true
@@ -338,11 +326,9 @@ override_2p3d_cap128:
   roles:
     prefill: &override_2p3d_cap128_prefill
       nodes: 4
-      workers: 2
       args: &override_2p3d_cap128_prefill_args {}
     decode: &override_2p3d_cap128_decode
       nodes: 6
-      workers: 3
       args: &override_2p3d_cap128_decode_args
         max-num-seqs: 128
         use-replayssm: true

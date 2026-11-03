@@ -34,8 +34,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 4
       env:
         TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
         PYTHONUNBUFFERED: '1'
@@ -113,7 +111,6 @@ override_tp8_c1:
   name: glm52-b200-agg-tp8-c1-mtp
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         # Fan-out subagents queue instead of widening the decode batch past 2.
@@ -157,7 +154,6 @@ override_tp8_dp8attn_c32:
   name: glm52-b200-agg-tp8-dp8attn-c32-mtp
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         data-parallel-size: 8

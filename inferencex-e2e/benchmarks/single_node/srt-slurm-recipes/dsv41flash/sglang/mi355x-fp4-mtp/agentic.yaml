@@ -15,8 +15,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 2
       args:
         served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
         trust-remote-code: true
@@ -67,7 +65,6 @@ base:
 override_tp2_c1:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         mem-fraction-static: 0.70
@@ -84,7 +81,6 @@ override_tp2_c1:
 override_tp2_c2:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         mem-fraction-static: 0.70
@@ -101,7 +97,6 @@ override_tp2_c2:
 override_tp2_c4:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         mem-fraction-static: 0.70
@@ -118,7 +113,6 @@ override_tp2_c4:
 override_tp2_c8:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         mem-fraction-static: 0.70
@@ -135,7 +129,6 @@ override_tp2_c8:
 override_tp2_c16:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         mem-fraction-static: 0.80
@@ -151,7 +144,6 @@ override_tp2_c16:
 override_tp2_c32:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         mem-fraction-static: 0.80
@@ -170,7 +162,6 @@ override_tp2_c32:
 override_tp2_c64:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         mem-fraction-static: 0.85
@@ -197,7 +188,6 @@ override_tp2_c32_dp:
       disable-retries: true
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         data-parallel-size: 2
@@ -239,7 +229,6 @@ override_tp2_c64_dp:
       disable-retries: true
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         data-parallel-size: 2
@@ -271,7 +260,6 @@ override_tp2_c64_dp:
 override_tp4_c1:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         mem-fraction-static: 0.70
@@ -288,7 +276,6 @@ override_tp4_c1:
 override_tp4_c2:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         mem-fraction-static: 0.70
@@ -305,7 +292,6 @@ override_tp4_c2:
 override_tp4_c4:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         mem-fraction-static: 0.70
@@ -322,7 +308,6 @@ override_tp4_c4:
 override_tp4_c8:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         mem-fraction-static: 0.70
@@ -339,7 +324,6 @@ override_tp4_c8:
 override_tp4_c16:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         mem-fraction-static: 0.70

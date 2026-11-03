@@ -73,8 +73,6 @@ base:
     prefill:
       kv_events: true
       nodes: 3
-      workers: 6
-      gpus: 2
       env:
         HF_HOME: /hf_hub_cache
         HF_HUB_CACHE: /hf_hub_cache
@@ -131,8 +129,6 @@ base:
         data-parallel-size: 2
     decode:
       nodes: 2
-      workers: 1
-      gpus: 8
       env:
         HF_HOME: /hf_hub_cache
         HF_HUB_CACHE: /hf_hub_cache
@@ -220,6 +216,5 @@ override_3p4d16:
   roles:
     decode:
       nodes: 4
-      gpus: 16
       args:
         data-parallel-size: 16

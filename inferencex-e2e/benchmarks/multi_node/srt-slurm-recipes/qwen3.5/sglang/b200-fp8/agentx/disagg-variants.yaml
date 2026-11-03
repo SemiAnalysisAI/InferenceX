@@ -32,8 +32,6 @@ base:
   roles:
     prefill:
       nodes: 1
-      workers: 1
-      gpus: 4
       env:
         PYTHONUNBUFFERED: '1'
         PIP_BREAK_SYSTEM_PACKAGES: '1'
@@ -81,8 +79,6 @@ base:
         hicache-mem-layout: page_first
     decode:
       nodes: colocate
-      workers: 1
-      gpus: 4
       env:
         PYTHONUNBUFFERED: '1'
         PIP_BREAK_SYSTEM_PACKAGES: '1'

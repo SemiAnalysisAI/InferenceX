@@ -49,8 +49,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 4
       kv_events: true
       env:
         HF_HOME: /hf_hub_cache

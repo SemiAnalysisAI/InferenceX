@@ -44,8 +44,6 @@ base:
   roles:
     prefill:
       nodes: 1
-      workers: 1
-      gpus: 8
       args: &common_args
         served-model-name: moonshotai/Kimi-K3
         trust-remote-code: true
@@ -108,8 +106,6 @@ base:
         MORI_IO_TC_DISABLE: '0'
     decode:
       nodes: 1
-      workers: 1
-      gpus: 8
       args:
         <<: *common_args
         kv-transfer-config: '{"kv_connector":"MoRIIOConnector","kv_role":"kv_consumer","kv_load_failure_policy":"fail","kv_connector_extra_config":{"backend":"rdma"}}'
@@ -129,7 +125,6 @@ override_1p3d_c12:
         HSA_NO_SCRATCH_RECLAIM: '0'
     decode:
       nodes: 3
-      workers: 3
       args:
         max-num-seqs: 8
         max-num-batched-tokens: 512
@@ -145,7 +140,6 @@ override_1p2d_c24: &tp8_c24
         compilation-config: '{"mode":3,"cudagraph_mode":"NONE","max_cudagraph_capture_size":0,"custom_ops":["+fused_rms_norm_gated","+quant_fp8","+grouped_topk","+sparse_attn_indexer","none"]}'
     decode: &tp8_c24_decode
       nodes: 2
-      workers: 2
       args: &tp8_c24_decode_args
         decode-context-parallel-size: 8
         max-num-seqs: 24
@@ -160,7 +154,6 @@ override_1p3d_c24:
     decode:
       <<: *tp8_c24_decode
       nodes: 3
-      workers: 3
       args:
         <<: *tp8_c24_decode_args
         max-num-seqs: 16
@@ -206,7 +199,6 @@ override_1p2d_c48:
     decode:
       <<: *tp8_c48_decode
       nodes: 2
-      workers: 2
       args:
         <<: *tp8_c48_decode_args
         max-num-seqs: 48

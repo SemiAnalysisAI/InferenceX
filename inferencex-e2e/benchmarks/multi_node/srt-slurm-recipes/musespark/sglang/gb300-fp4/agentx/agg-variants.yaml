@@ -52,7 +52,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
       env:
         HF_HUB_OFFLINE: "1"
         PYTHONNOUSERSITE: "1"

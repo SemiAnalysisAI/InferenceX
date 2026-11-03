@@ -21,7 +21,6 @@ engine: sglang
 roles:
   prefill:
     nodes: 6
-    workers: 6
     env:
       TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
       PYTHONUNBUFFERED: "1"
@@ -80,7 +79,6 @@ roles:
 
   decode:
     nodes: 12
-    workers: 1
     env:
       TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
       PYTHONUNBUFFERED: "1"

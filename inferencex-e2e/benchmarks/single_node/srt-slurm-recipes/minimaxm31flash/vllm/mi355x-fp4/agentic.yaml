@@ -31,8 +31,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 4
       args:
         served-model-name: amd/MiniMax-M3.1-Flash-Quark-MXFP4
         tensor-parallel-size: 4

@@ -12,7 +12,6 @@ base:
 
   roles:
     prefill:
-      gpus: 8
       env:
         TLLM_LOG_LEVEL: "INFO"
         TRTLLM_SERVER_DISABLE_GC: "1"
@@ -95,15 +94,12 @@ override_3p1d_dep8_b64_mtp3_c666:
   roles:
     prefill:
       nodes: 6
-      workers: 3
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
       nodes: 2
-      workers: 1
-      gpus: 8
       args:
         cuda_graph_config:
           batch_sizes:
@@ -136,15 +132,12 @@ override_5p1d_dep16_b32_mtp3_c666:
   roles:
     prefill:
       nodes: 10
-      workers: 5
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
       nodes: 4
-      workers: 1
-      gpus: 16
       args:
         cuda_graph_config:
           batch_sizes:
@@ -173,15 +166,12 @@ override_3p1d_dep16_b16_mtp3_c333:
   roles:
     prefill:
       nodes: 6
-      workers: 3
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
       nodes: 4
-      workers: 1
-      gpus: 16
       args:
         cuda_graph_config:
           batch_sizes:
@@ -208,15 +198,12 @@ override_4p1d_dep32_b8_mtp3_c333:
   roles:
     prefill:
       nodes: 8
-      workers: 4
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
       nodes: 8
-      workers: 1
-      gpus: 32
       args:
         cuda_graph_config:
           batch_sizes:
@@ -242,15 +229,12 @@ override_2p1d_dep32_b2_mtp3_c90:
   roles:
     prefill:
       nodes: 4
-      workers: 2
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
       nodes: 8
-      workers: 1
-      gpus: 32
       args:
         cuda_graph_config:
           batch_sizes:
@@ -275,15 +259,12 @@ override_1p3d_tep8_b4_mtp3_c15:
   roles:
     prefill:
       nodes: 2
-      workers: 1
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
       nodes: 6
-      workers: 3
-      gpus: 8
       args:
         allreduce_strategy: MNNVL
         cuda_graph_config:
@@ -309,15 +290,12 @@ override_1p3d_tep8_b2_mtp3_c6:
   roles:
     prefill:
       nodes: 2
-      workers: 1
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
       nodes: 6
-      workers: 3
-      gpus: 8
       args:
         allreduce_strategy: MNNVL
         cuda_graph_config:
@@ -343,11 +321,8 @@ override_5p1d_dep16_b64_mtp0_c1229:
   roles:
     prefill:
       nodes: 10
-      workers: 5
     decode:
       nodes: 4
-      workers: 1
-      gpus: 16
       args:
         cuda_graph_config:
           batch_sizes:
@@ -377,11 +352,8 @@ override_4p1d_dep32_b16_mtp0_c666:
   roles:
     prefill:
       nodes: 8
-      workers: 4
     decode:
       nodes: 8
-      workers: 1
-      gpus: 32
       args:
         cuda_graph_config:
           batch_sizes:
@@ -405,11 +377,8 @@ override_3p1d_dep16_b32_mtp0_c615:
   roles:
     prefill:
       nodes: 6
-      workers: 3
     decode:
       nodes: 4
-      workers: 1
-      gpus: 16
       args:
         cuda_graph_config:
           batch_sizes:
@@ -435,11 +404,8 @@ override_2p1d_dep32_b8_mtp0_c333:
   roles:
     prefill:
       nodes: 4
-      workers: 2
     decode:
       nodes: 8
-      workers: 1
-      gpus: 32
       args:
         cuda_graph_config:
           batch_sizes:
@@ -462,11 +428,8 @@ override_1p3d_tep8_b16_mtp0_c63:
   roles:
     prefill:
       nodes: 2
-      workers: 1
     decode:
       nodes: 6
-      workers: 3
-      gpus: 8
       args:
         allreduce_strategy: MNNVL
         cuda_graph_config:
@@ -491,11 +454,8 @@ override_1p3d_tep8_b4_mtp0_c18:
   roles:
     prefill:
       nodes: 2
-      workers: 1
     decode:
       nodes: 6
-      workers: 3
-      gpus: 8
       args:
         allreduce_strategy: MNNVL
         cuda_graph_config:
@@ -518,11 +478,8 @@ override_1p3d_tep8_b1_mtp0_c6:
   roles:
     prefill:
       nodes: 2
-      workers: 1
     decode:
       nodes: 6
-      workers: 3
-      gpus: 8
       args:
         allreduce_strategy: MNNVL
         cuda_graph_config:

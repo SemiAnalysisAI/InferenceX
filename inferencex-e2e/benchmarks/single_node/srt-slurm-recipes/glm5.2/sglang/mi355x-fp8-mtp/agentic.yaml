@@ -15,7 +15,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
       args:
         served-model-name: zai-org/GLM-5.2-FP8
         trust-remote-code: true
@@ -53,7 +52,6 @@ base:
 override_tp8_c1:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 1
@@ -67,7 +65,6 @@ override_tp8_c1:
 override_tp8_c2:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 1
@@ -81,7 +78,6 @@ override_tp8_c2:
 override_tp8_c4:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 1
@@ -95,7 +91,6 @@ override_tp8_c4:
 override_tp8_c10:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 1
@@ -109,7 +104,6 @@ override_tp8_c10:
 override_tp8_c8_hicache:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 1
@@ -128,7 +122,6 @@ override_tp8_c8_hicache:
 override_tp8_c12_hicache:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 1
@@ -147,7 +140,6 @@ override_tp8_c12_hicache:
 override_tp8_c16_hicache:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 1

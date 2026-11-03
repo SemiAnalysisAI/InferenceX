@@ -15,8 +15,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 8
       args:
         tensor-parallel-size: 8
         data-parallel-size: 1

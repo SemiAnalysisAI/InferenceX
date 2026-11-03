@@ -53,8 +53,6 @@ base:
   roles:
     agg:
       nodes: 4
-      workers: 1
-      gpus: 16
       env:
         HF_HUB_CACHE: "/hf_hub_cache"
         HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"

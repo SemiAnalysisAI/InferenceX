@@ -20,10 +20,9 @@ base:
   engine: sglang
   roles:
     prefill:
+
+
       nodes: 2
-      workers: 1
-
-
       env:
         TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
         PYTHONUNBUFFERED: "1"
@@ -116,6 +115,5 @@ zip_override_lowlat:
         chunked-prefill-size: [8192, 16384, 32768]
     decode:
       nodes: [14, 14, 6]
-      workers: [7, 7, 3]
       args:
         max-running-requests: [1, 4, 16]

@@ -30,10 +30,8 @@ engine:
   connector:
 roles:
   agg:
-    nodes: 4
-    workers: 1
-    gpus: 32
 
+    nodes: 4
     env:
       CUDA_LAUNCH_BLOCKING: "1"
       GLOO_SOCKET_IFNAME: "@fabric.socket-ifname"

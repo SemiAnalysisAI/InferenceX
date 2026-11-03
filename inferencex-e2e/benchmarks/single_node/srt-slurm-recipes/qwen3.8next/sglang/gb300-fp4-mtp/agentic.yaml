@@ -20,8 +20,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 1
       env:
         PYTHONNOUSERSITE: '1'
         PYTHONUNBUFFERED: '1'

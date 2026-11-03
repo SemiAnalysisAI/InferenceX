@@ -20,7 +20,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
       args:
         served-model-name: Qwen/Qwen3.5-397B-A17B-FP8
         tokenizer-path: Qwen/Qwen3.5-397B-A17B-FP8
@@ -65,7 +64,6 @@ base:
 override_tp2_ep2_c1:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         expert-parallel-size: 2
@@ -79,7 +77,6 @@ override_tp2_ep2_c1:
 override_tp2_ep2_c4:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         expert-parallel-size: 2
@@ -93,7 +90,6 @@ override_tp2_ep2_c4:
 override_tp2_ep2_c6:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         expert-parallel-size: 2
@@ -107,7 +103,6 @@ override_tp2_ep2_c6:
 override_tp4_ep1_c1:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
@@ -122,7 +117,6 @@ override_tp4_ep1_c1:
 override_tp4_ep1_c8:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
@@ -137,7 +131,6 @@ override_tp4_ep1_c8:
 override_tp4_ep1_c16:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
@@ -152,7 +145,6 @@ override_tp4_ep1_c16:
 override_tp4_ep1_c32:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
@@ -167,7 +159,6 @@ override_tp4_ep1_c32:
 override_tp4_ep1_c40:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
@@ -182,7 +173,6 @@ override_tp4_ep1_c40:
 override_tp4_ep1_c48:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
@@ -197,7 +187,6 @@ override_tp4_ep1_c48:
 override_tp4_ep4_c4:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
@@ -212,7 +201,6 @@ override_tp4_ep4_c4:
 override_tp4_ep4_c16:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
@@ -227,7 +215,6 @@ override_tp4_ep4_c16:
 override_tp4_ep4_c32:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
@@ -242,7 +229,6 @@ override_tp4_ep4_c32:
 override_tp4_ep4_c40:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
@@ -257,7 +243,6 @@ override_tp4_ep4_c40:
 override_tp4_ep4_c48:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
@@ -272,7 +257,6 @@ override_tp4_ep4_c48:
 override_tp8_ep1_c1:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 1
@@ -287,7 +271,6 @@ override_tp8_ep1_c1:
 override_tp8_ep1_c4:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 1
@@ -302,7 +285,6 @@ override_tp8_ep1_c4:
 override_tp8_ep1_c8:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 1
@@ -317,7 +299,6 @@ override_tp8_ep1_c8:
 override_tp8_ep1_c12:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 1
@@ -332,7 +313,6 @@ override_tp8_ep1_c12:
 override_tp8_ep1_c16:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 1
@@ -347,7 +327,6 @@ override_tp8_ep1_c16:
 override_tp8_ep1_c24:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 1
@@ -362,7 +341,6 @@ override_tp8_ep1_c24:
 override_tp8_ep1_c32:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 1
@@ -377,7 +355,6 @@ override_tp8_ep1_c32:
 override_tp8_ep1_c40:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 1
@@ -392,7 +369,6 @@ override_tp8_ep1_c40:
 override_tp8_ep1_c48:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 1
@@ -407,7 +383,6 @@ override_tp8_ep1_c48:
 override_tp8_ep1_c64:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 1
@@ -422,7 +397,6 @@ override_tp8_ep1_c64:
 override_tp8_ep1_c80:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 1
@@ -437,7 +411,6 @@ override_tp8_ep1_c80:
 override_tp8_ep8_c4:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 8
@@ -452,7 +425,6 @@ override_tp8_ep8_c4:
 override_tp8_ep8_c16:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 8
@@ -467,7 +439,6 @@ override_tp8_ep8_c16:
 override_tp8_ep8_c24:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 8
@@ -482,7 +453,6 @@ override_tp8_ep8_c24:
 override_tp8_ep8_c32:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 8
@@ -497,7 +467,6 @@ override_tp8_ep8_c32:
 override_tp8_ep8_c40:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 8
@@ -512,7 +481,6 @@ override_tp8_ep8_c40:
 override_tp8_ep8_c48:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 8
@@ -527,7 +495,6 @@ override_tp8_ep8_c48:
 override_tp8_ep8_c64:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 8

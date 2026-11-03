@@ -16,7 +16,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
       args:
         served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
         trust-remote-code: true
@@ -55,56 +54,49 @@ base:
 
 override_tp2_c1:
   roles:
-    agg:
-      gpus: 2
+    agg: {}
   benchmark:
     env:
       CONC: '1'
 
 override_tp2_c2:
   roles:
-    agg:
-      gpus: 2
+    agg: {}
   benchmark:
     env:
       CONC: '2'
 
 override_tp2_c4:
   roles:
-    agg:
-      gpus: 2
+    agg: {}
   benchmark:
     env:
       CONC: '4'
 
 override_tp2_c6:
   roles:
-    agg:
-      gpus: 2
+    agg: {}
   benchmark:
     env:
       CONC: '6'
 
 override_tp2_c8:
   roles:
-    agg:
-      gpus: 2
+    agg: {}
   benchmark:
     env:
       CONC: '8'
 
 override_tp2_c16:
   roles:
-    agg:
-      gpus: 2
+    agg: {}
   benchmark:
     env:
       CONC: '16'
 
 override_tp2_c32:
   roles:
-    agg:
-      gpus: 2
+    agg: {}
   benchmark:
     env:
       CONC: '32'
@@ -112,7 +104,6 @@ override_tp2_c32:
 override_tp2_c64:
   roles:
     agg:
-      gpus: 2
       # Run at least 4 decode passes after each prefill and batch the prefills
       # that arrive meanwhile; at this load the batching also raises throughput.
       env:
@@ -123,16 +114,14 @@ override_tp2_c64:
 
 override_tp4_c1:
   roles:
-    agg:
-      gpus: 4
+    agg: {}
   benchmark:
     env:
       CONC: '1'
 
 override_tp4_c8:
   roles:
-    agg:
-      gpus: 4
+    agg: {}
   benchmark:
     env:
       CONC: '8'
@@ -140,7 +129,6 @@ override_tp4_c8:
 override_tp4_c32:
   roles:
     agg:
-      gpus: 4
       # Run at least 16 decode passes after each prefill and batch the prefills
       # that arrive meanwhile, so new turns stall decode less often.
       env:

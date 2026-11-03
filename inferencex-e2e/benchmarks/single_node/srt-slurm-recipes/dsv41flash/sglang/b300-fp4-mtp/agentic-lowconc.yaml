@@ -22,7 +22,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
       args:
         served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
         trust-remote-code: true
@@ -62,7 +61,6 @@ base:
 override_tp4_c1:
   roles:
     agg:
-      gpus: 4
       args:
         cuda-graph-max-bs-decode: 1
         expert-parallel-size: 1
@@ -79,7 +77,6 @@ override_tp4_c1:
 override_tp4_c4:
   roles:
     agg:
-      gpus: 4
       args:
         expert-parallel-size: 1
         max-running-requests: 8

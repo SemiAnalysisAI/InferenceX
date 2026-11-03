@@ -21,7 +21,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
       args:
         served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
         language-model-only: true
@@ -57,7 +56,6 @@ base:
 zip_override_tp4:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-num-seqs: [2, 8, 16, 32]
@@ -73,7 +71,6 @@ zip_override_tp4:
 override_tp4_c24:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-num-seqs: 48
@@ -88,7 +85,6 @@ override_tp4_c24:
 zip_override_tp4_dram:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-num-seqs: [64, 64, 96]
@@ -103,7 +99,6 @@ zip_override_tp4_dram:
 override_tp4_c32:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-num-seqs: 64
@@ -119,7 +114,6 @@ override_tp4_c32:
 zip_override_tp2:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         max-num-seqs: [48, 48, 60, 72]

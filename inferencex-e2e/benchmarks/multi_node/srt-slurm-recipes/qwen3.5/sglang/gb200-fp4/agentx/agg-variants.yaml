@@ -32,7 +32,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
       env:
         PYTHONNOUSERSITE: "1"
         NCCL_CUMEM_ENABLE: "1"
@@ -87,7 +86,6 @@ override_tp4:
   name: qwen35-gb200-dynsg-agentic-mtp-agg-tp4-k5
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
@@ -101,7 +99,6 @@ override_tp4_parity:
   name: qwen35-gb200-dynsg-agentic-mtp-agg-tp4-k5-parity
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
@@ -117,7 +114,6 @@ override_tp4_no_symm:
   name: qwen35-gb200-dynsg-agentic-mtp-agg-tp4-k5-no-symm
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
@@ -130,7 +126,6 @@ override_tp2ep2_hicache:
   name: qwen35-gb200-dynsg-agentic-mtp-agg-tp2ep2-hicache-k5
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         pipeline-parallel-size: 1
@@ -158,7 +153,6 @@ override_tp2ep2_hicache_cap48:
   name: qwen35-gb200-dynsg-agentic-mtp-agg-tp2ep2-hicache-cap48
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         pipeline-parallel-size: 1
@@ -188,7 +182,6 @@ override_tp2ep2_hicache_k3_baseline:
   name: qwen35-gb200-dynsg-agentic-mtp-agg-tp2ep2-hicache-k3-baseline
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         pipeline-parallel-size: 1

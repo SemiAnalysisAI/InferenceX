@@ -51,7 +51,6 @@ base:
 
   roles:
     prefill:
-      gpus: 4
       env:
         PYTHONOPTIMIZE: '1'
         PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
@@ -142,7 +141,6 @@ base:
         cuda-graph-max-bs-prefill: 32768
         enable-request-time-stats-logging: true
     decode:
-      gpus: 4
       env:
         SGLANG_USE_SYMM_MEM_DP_SYNC: 'true'
         SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '4'
@@ -243,34 +241,23 @@ override_5p3d_pp4_dep4_c1000:
   roles:
     prefill:
       nodes: 5
-      workers: 5
     decode:
       nodes: 3
-      workers: 3
-
 override_3p2d_pp4_dep4_c600:
   roles:
     prefill:
       nodes: 3
-      workers: 3
     decode:
       nodes: 2
-      workers: 2
-
 override_1p1d_pp4_dep4_c200:
   roles:
     prefill:
       nodes: 1
-      workers: 1
     decode:
       nodes: 1
-      workers: 1
-
 override_1p1d_pp4_dep4_c100:
   roles:
     prefill:
       nodes: 1
-      workers: 1
     decode:
       nodes: 1
-      workers: 1

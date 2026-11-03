@@ -21,7 +21,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
       args:
         served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
         language-model-only: true
@@ -59,7 +58,6 @@ base:
 zip_override_tp4:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":true,"use_thp":true}'
@@ -89,7 +87,6 @@ zip_override_dep2:
   setup_script: vllm-router.sh
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 1
         data-parallel-size: 2
@@ -119,7 +116,6 @@ zip_override_dep4:
   setup_script: vllm-router.sh
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 1
         data-parallel-size: 4

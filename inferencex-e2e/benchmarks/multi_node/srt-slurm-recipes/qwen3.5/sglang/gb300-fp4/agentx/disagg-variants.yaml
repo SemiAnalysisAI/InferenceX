@@ -43,8 +43,6 @@ base:
   roles:
     prefill:
       nodes: 1
-      workers: 1
-      gpus: 4
       env:
         FLASHINFER_DISABLE_VERSION_CHECK: '1'
         FLASHINFER_WORKSPACE_BASE: /configs/flashinfer-cache
@@ -106,8 +104,6 @@ base:
         hicache-ratio: 0.9
     decode:
       nodes: 1
-      workers: 1
-      gpus: 4
       env:
         FLASHINFER_DISABLE_VERSION_CHECK: '1'
         FLASHINFER_WORKSPACE_BASE: /configs/flashinfer-cache
@@ -241,7 +237,6 @@ override_tp2_tp2_c72:
     gpus_per_node: 2
   roles:
     prefill:
-      gpus: 2
       args:
         speculative-algorithm: NEXTN
         speculative-num-steps: 3
@@ -251,7 +246,6 @@ override_tp2_tp2_c72:
         max-mamba-cache-size: 320
         mamba-max-states-per-path: 1
     decode:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         max-mamba-cache-size: 80

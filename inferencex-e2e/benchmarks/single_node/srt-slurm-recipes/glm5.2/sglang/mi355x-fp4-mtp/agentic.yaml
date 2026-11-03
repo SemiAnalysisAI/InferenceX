@@ -15,7 +15,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
       args:
         served-model-name: amd/GLM-5.2-MXFP4
         trust-remote-code: true
@@ -53,7 +52,6 @@ base:
 override_tp4_c4_hicache:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
@@ -70,7 +68,6 @@ override_tp4_c4_hicache:
 override_tp4_c8_hicache:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
@@ -87,7 +84,6 @@ override_tp4_c8_hicache:
 override_tp4_c10_hicache:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
@@ -104,7 +100,6 @@ override_tp4_c10_hicache:
 override_tp4_c12_hicache:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
@@ -121,7 +116,6 @@ override_tp4_c12_hicache:
 override_tp4_c14_hicache:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
@@ -138,7 +132,6 @@ override_tp4_c14_hicache:
 override_tp4_c16_hicache:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
@@ -156,7 +149,6 @@ override_tp4_c16_hicache:
 override_tp4_dcp4_c16:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
@@ -171,7 +163,6 @@ override_tp4_dcp4_c16:
 override_tp4_dcp4_c24:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
@@ -186,7 +177,6 @@ override_tp4_dcp4_c24:
 override_tp4_dcp4_c40:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
@@ -201,7 +191,6 @@ override_tp4_dcp4_c40:
 override_tp4_dcp4_c48:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
@@ -216,7 +205,6 @@ override_tp4_dcp4_c48:
 override_tp8_c1:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 1
@@ -230,7 +218,6 @@ override_tp8_c1:
 override_tp8_c2:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 1
@@ -244,7 +231,6 @@ override_tp8_c2:
 override_tp8_c4:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 1

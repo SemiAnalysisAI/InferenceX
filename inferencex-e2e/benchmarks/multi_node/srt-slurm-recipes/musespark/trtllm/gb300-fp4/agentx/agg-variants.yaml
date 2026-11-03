@@ -16,8 +16,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 4
       env:
         HF_HUB_CACHE: /hf_hub_cache
         HF_HUB_OFFLINE: '1'
@@ -112,7 +110,6 @@ override_tep8_c1:
   roles:
     agg:
       nodes: 2
-      gpus: 8
       env:
         TRTLLM_DFLASH_WINDOWED_CTX_ARENA: null
         MUSESPARK_OPEN_LL_QKV_WEIGHT_LAYOUT: '0'

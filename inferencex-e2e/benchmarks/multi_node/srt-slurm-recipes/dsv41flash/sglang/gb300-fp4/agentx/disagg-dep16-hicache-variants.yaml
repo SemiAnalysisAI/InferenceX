@@ -62,7 +62,6 @@ base:
   roles:
     prefill:
       nodes: 5
-      gpus: 2
       env:
         PYTHONUNBUFFERED: "1"
         SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: "1"
@@ -132,8 +131,6 @@ base:
       kv_events: true
     decode:
       nodes: 4
-      workers: 1
-      gpus: 16
       env:
         PYTHONUNBUFFERED: "1"
         SGLANG_OPT_DSV41_ENGRAM_PEER_SHARDS: "1"
@@ -217,9 +214,7 @@ override_3p1d_dep2_dep16_c1228:
   name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep16-hicache-3p1d-dep2-dep16-c1228
   roles:
     prefill:
-      # Three DEP2 workers leave two GPUs of the second node idle.
       nodes: 2
-      workers: 3
     decode:
       args:
         max-running-requests: 384
@@ -231,7 +226,6 @@ override_5p1d_dep2_dep16_c2884:
   roles:
     prefill:
       nodes: 3
-      workers: 5
     decode:
       args:
         max-running-requests: 640
@@ -243,7 +237,6 @@ override_8p1d_dep2_dep16_c4096:
   roles:
     prefill:
       nodes: 4
-      workers: 8
     decode:
       args:
         max-running-requests: 1024
@@ -253,9 +246,7 @@ override_8p1d_dep2_dep16_c4096:
 override_9p1d_dep2_dep16_b160_c7480:
   name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep16-hicache-9p1d-dep2-dep16-b160-c7480
   roles:
-    prefill:
-      # Nine DEP2 workers leave two GPUs of the fifth node idle.
-      workers: 9
+    prefill: {}
     decode:
       args:
         max-running-requests: 2560

@@ -22,8 +22,6 @@ base:
   roles:
     prefill:
       nodes: 1
-      workers: 1
-      gpus: 4
       env:
         TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
         PYTHONUNBUFFERED: "1"
@@ -74,7 +72,6 @@ base:
 
     decode:
       nodes: 1
-      workers: 1
       env:
         TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
         PYTHONUNBUFFERED: "1"
@@ -151,10 +148,8 @@ zip_override_stp_lowlat:
   roles:
     prefill:
       nodes: [1, 1, 2]
-      workers: [1, 1, 2]
     decode:
       nodes: [1, 5, 5]
-      workers: [1, 5, 5]
 
 
 override_stp_maxtpt_7p2d:
@@ -163,7 +158,6 @@ override_stp_maxtpt_7p2d:
   roles:
     prefill:
       nodes: 7
-      workers: 7
       args:
         max-prefill-tokens: 65536
         chunked-prefill-size: 65536
@@ -171,7 +165,6 @@ override_stp_maxtpt_7p2d:
         fp4-gemm-backend: "flashinfer_cutlass"
     decode:
       nodes: 2
-      workers: 2
       env:
         SGLANG_MOE_NVFP4_DISPATCH: "1"
       args:

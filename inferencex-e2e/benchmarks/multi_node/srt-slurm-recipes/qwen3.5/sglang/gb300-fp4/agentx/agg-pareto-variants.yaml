@@ -17,8 +17,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 2
       env:
         SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '1'
         PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
@@ -152,7 +150,6 @@ override_tp8_c7_b1:
   roles:
     agg:
       nodes: 2
-      gpus: 8
       env:
         SGLANG_DG_CACHE_DIR: /tmp/agentx-pareto-v2/c7-mrr1/deepgemm-cache
         FLASHINFER_WORKSPACE_BASE: /tmp/agentx-pareto-v2/c7-mrr1/flashinfer-cache

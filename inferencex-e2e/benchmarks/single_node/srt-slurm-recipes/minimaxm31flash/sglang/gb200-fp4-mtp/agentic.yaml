@@ -18,11 +18,9 @@ base:
     interval_seconds: 5
   roles:
     agg:
-      nodes: 1
-      workers: 1
-      gpus: 4
       # Serve flags follow the cookbook's GB300 (no GB200 cell) cells at
       # https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1.
+      nodes: 1
       args:
         served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
         trust-remote-code: true

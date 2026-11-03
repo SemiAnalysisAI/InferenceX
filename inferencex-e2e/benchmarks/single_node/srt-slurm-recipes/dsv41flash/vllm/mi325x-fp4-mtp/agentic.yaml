@@ -21,7 +21,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
       args:
         served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
         language-model-only: true
@@ -71,7 +70,6 @@ base:
 override_tp8_c1:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         engram-config: '{"cpu_offload":false}'
@@ -82,7 +80,6 @@ override_tp8_c1:
 override_tp8_c2:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         engram-config: '{"cpu_offload":false}'
@@ -93,7 +90,6 @@ override_tp8_c2:
 override_tp8_c4:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         engram-config: '{"cpu_offload":false}'
@@ -104,7 +100,6 @@ override_tp8_c4:
 override_tp8_c8:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         engram-config: '{"cpu_offload":false}'
@@ -115,7 +110,6 @@ override_tp8_c8:
 override_tp8_c16:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         engram-config: '{"cpu_offload":false}'
@@ -126,7 +120,6 @@ override_tp8_c16:
 override_tp8_c32:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         engram-config: '{"cpu_offload":false}'
@@ -137,7 +130,6 @@ override_tp8_c32:
 override_tp4_c1:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":true}'
@@ -148,7 +140,6 @@ override_tp4_c1:
 override_tp4_c2:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":true}'
@@ -159,7 +150,6 @@ override_tp4_c2:
 override_tp4_c4:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":true}'
@@ -170,7 +160,6 @@ override_tp4_c4:
 override_tp4_c8:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":true}'
@@ -181,7 +170,6 @@ override_tp4_c8:
 override_tp4_c16:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":true}'
@@ -192,7 +180,6 @@ override_tp4_c16:
 override_tp4_c32:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":true}'
@@ -203,7 +190,6 @@ override_tp4_c32:
 override_tp2_c1:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         engram-config: '{"cpu_offload":true}'
@@ -217,7 +203,6 @@ override_tp2_c1:
 override_tp2_c2:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         engram-config: '{"cpu_offload":true}'
@@ -231,7 +216,6 @@ override_tp2_c2:
 override_tp2_c4:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         engram-config: '{"cpu_offload":true}'
@@ -245,7 +229,6 @@ override_tp2_c4:
 override_tp2_c8:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         engram-config: '{"cpu_offload":true}'
@@ -259,7 +242,6 @@ override_tp2_c8:
 override_tp2_c16:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         engram-config: '{"cpu_offload":true}'
@@ -273,7 +255,6 @@ override_tp2_c16:
 override_tp2_c32:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         engram-config: '{"cpu_offload":true}'
