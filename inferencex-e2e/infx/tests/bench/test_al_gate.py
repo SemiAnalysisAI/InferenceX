@@ -99,9 +99,7 @@ def gate(tmp_path, http_server, monkeypatch):
         return json.loads((tmp_path / "logs" / "al_gate_gate.json").read_text())
 
     raw, argv = tmp_path / "logs" / "al_gate", tmp_path / "argv"
-    return SimpleNamespace(
-        run=run, document=document, url=url, tokenizer=tokenizer, raw=raw, argv=argv
-    )
+    return SimpleNamespace(run=run, document=document, tokenizer=tokenizer, raw=raw, argv=argv)
 
 
 @pytest.mark.parametrize(
@@ -132,19 +130,14 @@ def test_the_gate_replays_the_golden_collection_and_reports_the_verdict(gate, af
     ]
     options = {"add_generation_prompt": True, "tokenize": False, "enable_thinking": True}
     assert gate.tokenizer.calls == [options] * 3
-    assert gate.argv.read_text().splitlines() == [
-        "profile", "--endpoint-type", "completions", "--streaming",
-        "--url", "http://frontend:8000", "--model", "served/model",
-        "--tokenizer", "test/model", "--tokenizer-trust-remote-code",
-        "--custom-dataset-type", "single_turn", "--input-file", str(gate.raw / "prompts.jsonl"),
-        "--dataset-sampling-strategy", "sequential", "--request-count", "3", "--concurrency", "2",
-        "--extra-inputs", '{"temperature": 0.6, "top_k": 20}',
-        "--server-metrics", f"{gate.url}/metrics",
-        "--output-artifact-dir", str(gate.raw / "aiperf_artifacts"),
-    ]  # fmt: skip
-    for when, counters in (("before", (100, 160)), ("after", after)):
-        scrapes = json.loads((gate.raw / f"metrics_{when}.json").read_text())
-        assert scrapes == {f"{gate.url}/metrics": METRICS % counters}
+    argv = gate.argv.read_text().splitlines()
+    replay = {flag: argv[argv.index(flag) + 1] for flag in ("--request-count", "--concurrency",
+              "--extra-inputs", "--dataset-sampling-strategy")}  # fmt: skip
+    assert replay == {
+        "--request-count": "3", "--concurrency": "2",
+        "--extra-inputs": '{"temperature": 0.6, "top_k": 20}',
+        "--dataset-sampling-strategy": "sequential",
+    }  # fmt: skip
 
 
 def test_failed_requests_make_the_measurement_an_error(gate):

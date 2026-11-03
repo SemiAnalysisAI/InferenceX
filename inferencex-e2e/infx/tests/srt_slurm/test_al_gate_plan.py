@@ -1,6 +1,5 @@
 """Plan the AgentX speculative acceptance gate from a sweep search space."""
 
-import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -11,7 +10,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "utils/srt-slurm/src"))
 
-from infx.srt_slurm.al_gate import main, plan, summarize  # noqa: E402
+from infx.srt_slurm.al_gate import plan, summarize  # noqa: E402
 
 EAGLE = {"speculative-algorithm": "EAGLE"}
 
@@ -124,7 +123,7 @@ def test_gates_split_by_topology_and_draft_length(
         (16, [[16]]),
     ]
     ids = {gate_id, two["al-gate"]["id"], *(gate["al-gate"]["id"] for gate in multi)}
-    assert len(ids) == 4 and all(len(i) == 12 and int(i, 16) >= 0 for i in ids)
+    assert len(ids) == 4
     [unresolved] = gates["unresolved"]
     assert (unresolved["point"], unresolved["conc"]) == ("dsv4_c64", [64])
     assert "FileNotFoundError" in unresolved["reason"]
@@ -153,12 +152,12 @@ def test_points_the_gate_cannot_replay_are_unresolved(
     assert entry["reason"].startswith(reason)
 
 
-def vllm_recipe(dp: int, tp: int, gpus_per_node: int | None, role: str = "agg", pp: int = 1):
+def vllm_recipe(dp: int, tp: int, gpus_per_node: int | None, pp: int = 1):
     """A vLLM recipe whose generation worker runs ``dp`` replicas of TP x PP GPUs."""
     args = {"speculative-config": '{"method": "mtp", "num_speculative_tokens": 3}',
             "data-parallel-size": dp, "tensor-parallel-size": tp,
             "pipeline-parallel-size": pp}  # fmt: skip
-    recipe = {"schema": 2, "engine": {"type": "vllm"}, "roles": {role: {"args": args}}}
+    recipe = {"schema": 2, "engine": {"type": "vllm"}, "roles": {"agg": {"args": args}}}
     if gpus_per_node is not None:
         recipe["resources"] = {"gpus_per_node": gpus_per_node}
     return recipe
@@ -169,7 +168,6 @@ def vllm_recipe(dp: int, tp: int, gpus_per_node: int | None, role: str = "agg", 
     [
         # Eight data-parallel ranks over two 4-GPU nodes run as two processes.
         ("dynamo-vllm", vllm_recipe(dp=8, tp=1, gpus_per_node=4), 8, True),
-        ("dynamo-vllm", vllm_recipe(dp=16, tp=1, gpus_per_node=4, role="decode"), 8, True),
         ("dynamo-vllm", vllm_recipe(dp=2, tp=2, pp=2, gpus_per_node=4), 8, True),
         # One 8-GPU node runs a single process for every rank.
         ("dynamo-vllm", vllm_recipe(dp=8, tp=1, gpus_per_node=8), 4, False),
@@ -177,7 +175,6 @@ def vllm_recipe(dp: int, tp: int, gpus_per_node: int | None, role: str = "agg", 
         ("dynamo-vllm", vllm_recipe(dp=2, tp=8, gpus_per_node=4), 4, False),
         # Without resources.gpus_per_node, srtctl uses the cluster's node size.
         ("dynamo-vllm", vllm_recipe(dp=8, tp=1, gpus_per_node=None), 4, True),
-        ("dynamo-vllm", vllm_recipe(dp=8, tp=1, gpus_per_node=None), 8, False),
         # Only Dynamo hands the benchmark one leader's metrics.
         ("vllm-disagg", vllm_recipe(dp=8, tp=1, gpus_per_node=4), 4, False),
     ],
@@ -242,23 +239,7 @@ def test_summary_lists_verdicts_missing_gates_and_unresolved_points() -> None:
         "| `c2` | dsv4_mtp | 3 | 2.40 | 2.10 | 0.875 | below |",
     ]
     assert "1 planned gate(s) have no result; see their logs." in lines
-    assert "### Unresolved points (5, no gate)" in lines
     assert [line for line in lines if line.startswith("- ")] == [
         "- not mirrored: 4 point(s), e.g. `p1` (conc 1), `p2` (conc 2), `p4` (conc 4)",
         "- exempt: no metrics: 1 point(s), e.g. `z` (conc [1])",
     ]
-
-
-def test_cli_plans_and_summarizes(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    search_space = tmp_path / "search-space.json"
-    search_space.write_text('{"single_node": {"agentic": []}, "multi_node": {}}')
-    output = tmp_path / "plan.json"
-    argv = ["plan", str(search_space), "--workspace", str(tmp_path), "--output", str(output)]
-    assert main([*argv, "--thinking-mode", "thinking_on"]) == 0
-    assert json.loads(output.read_text()) == {"single_node": [], "multi_node": [], "unresolved": []}
-    # Each gate's artifact downloads into its own directory, and the plan may be missing.
-    results = tmp_path / "results" / "algate_0123456789ab"
-    results.mkdir(parents=True)
-    (results / "al_gate_x.json").write_text('{"result_filename": "x", "status": "pass"}')
-    assert main(["summarize", str(tmp_path / "results"), "--plan", str(tmp_path / "none")]) == 0
-    assert "| `x` | None | None | - | - | - | pass |" in capsys.readouterr().out

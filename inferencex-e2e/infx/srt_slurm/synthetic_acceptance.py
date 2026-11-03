@@ -6,7 +6,6 @@ import argparse
 import copy
 import fnmatch
 import json
-import math
 import os
 import subprocess
 import sys
@@ -42,16 +41,6 @@ SGLANG_VARIABLES = (
 )
 TRT_VARIABLE = "TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS"
 TILERT_VARIABLES = ("TILERT_SIMULATE_ACC_LEN", "TILERT_SIMULATE_ACC_METHOD")
-ATOM_ARGUMENTS = ("spec-decode-acceptance-length", "spec-decode-acceptance-rate")
-# Settings that force acceptance; other SIMULATE_ACC options only shape a forced run.
-FORCING_SETTINGS = frozenset((*SGLANG_VARIABLES, TRT_VARIABLE, *TILERT_VARIABLES, *ATOM_ARGUMENTS))
-SIMULATION_PREFIXES = ("SGLANG_SIMULATE_ACC_", "TILERT_SIMULATE_ACC_")
-# Forcing settings that select how, not how much, acceptance is simulated, and their golden value.
-GOLDEN_METHODS = {
-    "SGLANG_SIMULATE_ACC_METHOD": "match-expected",
-    "SGLANG_SIMULATE_ACC_TOKEN_MODE": "real-draft-token",
-    "TILERT_SIMULATE_ACC_METHOD": "match-expected",
-}
 
 
 def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
@@ -160,18 +149,14 @@ def _simulated_length(
         return None
     roles = recipe.get("roles", {})
     synthetic = is_synthetic(environment)
-    generation = generation_role(recipe, engine)
+    generation = generation_role(recipe)
     spec = spec_parameters(generation, engine)
     if not (synthetic and spec):
         return None
-    if (
-        engine == "vllm"
-        and roles
-        and all(
-            spec_parameters(role, engine).get("enable_adaptive_verification") is True
-            for name, role in roles.items()
-            if name in ("agg", "prefill", "decode") and spec_parameters(role, engine)
-        )
+    if engine == "vllm" and all(
+        spec_parameters(role, engine).get("enable_adaptive_verification") is True
+        for name, role in roles.items()
+        if name in ("agg", "prefill", "decode") and spec_parameters(role, engine)
     ):
         return None
     al = golden_length(environment["MODEL_PREFIX"], spec, environment["THINKING_MODE"], golden_dir)
@@ -214,97 +199,10 @@ def check_gate(spec: Mapping[str, Any], environment: Mapping[str, str]) -> None:
         raise ValueError(f"the recipe drafts {drafted}, but the acceptance gate measures {gate}")
 
 
-def generation_role(recipe: Mapping[str, Any], engine: str) -> Mapping[str, Any]:
-    """The worker whose drafts are verified: decode, otherwise the aggregated worker.
-
-    Prefill may have a different MTP depth; generation defines the AL target. srt-slurm's
-    older layout keeps worker arguments under ``backend.<engine>_config``.
-    """
-    if roles := recipe.get("roles"):
-        return roles.get("decode", roles.get("agg", {}))
-    config = (recipe.get("backend") or {}).get(f"{engine}_config") or {}
-    return {"args": config.get("decode") or config.get("aggregated") or {}}
-
-
-def _forcing_vllm_spec(value: Any) -> dict[str, Any] | None:
-    """A vLLM speculative config that forces acceptance, otherwise None."""
-    spec = json.loads(value) if isinstance(value, str) else value
-    forcing = isinstance(spec, Mapping) and (
-        spec.get("rejection_sample_method") == "synthetic" or "synthetic_acceptance_length" in spec
-    )
-    return dict(spec) if forcing else None
-
-
-def forcing_settings(node: Any, prefix: str = "") -> list[tuple[str, str, Any]]:
-    """Every acceptance-simulation setting in a resolved recipe: (path, name, value)."""
-    if not isinstance(node, Mapping):
-        return []
-    found = []
-    for key, value in node.items():
-        name = str(key)
-        forcing = name in FORCING_SETTINGS or name.startswith(SIMULATION_PREFIXES)
-        if forcing or (name == "speculative-config" and _forcing_vllm_spec(value)):
-            found.append((prefix + name, name, value))
-        else:
-            found += forcing_settings(value, f"{prefix}{name}.")
-    return found
-
-
-def _pins_golden(name: str, value: Any, al: float, spec: Mapping[str, Any]) -> bool:
-    """Whether a forcing setting carries golden acceptance ``al`` as the roles receive it."""
-    if name in GOLDEN_METHODS:
-        return value == GOLDEN_METHODS[name]
-    if name == "speculative-config":
-        forced = _forcing_vllm_spec(value) or {}
-        synthetic = forced.get("rejection_sample_method") == "synthetic"
-        value = forced.get("synthetic_acceptance_length") if synthetic else None
-    # TRT-LLM counts accepted drafts without the bonus token; ATOM's rate is per draft token.
-    rate = (al - 1) / spec["num_speculative_tokens"]
-    expected = {TRT_VARIABLE: al - 1, "spec-decode-acceptance-rate": rate}.get(name, al)
-    try:
-        return math.isclose(float(value), expected, abs_tol=1e-6)
-    except (TypeError, ValueError):
-        return False
-
-
-def residual_overrides(
-    recipe: Mapping[str, Any],
-    planned: list[str],
-    synthetic: bool,
-    al: float | None,
-    spec: Mapping[str, Any],
-) -> list[str]:
-    """Handle forcing settings outside the locations ``build_overrides`` plans.
-
-    Real runs remove them and golden injected into the roles replaces them. A synthetic run
-    without roles (srt-slurm's older layout) cannot receive golden, so its recipe must pin it.
-    """
-    handled = {item.partition("=")[0] for item in planned[1::2]}
-    must_pin = synthetic and not (recipe.get("roles") and al is not None)
-    overrides: list[str] = []
-    pinned = False
-    for path, name, value in forcing_settings(recipe):
-        option = name not in FORCING_SETTINGS and name != "speculative-config"
-        if path in handled or (synthetic and option):
-            continue  # options such as SGLANG_SIMULATE_ACC_GREEDY only shape a forced run
-        if must_pin:
-            if al is None:
-                raise ValueError(f"{path} forces acceptance, but generation does not speculate")
-            if not _pins_golden(name, value, al, spec):
-                raise ValueError(f"{path}={value!r} differs from golden acceptance {al:g}")
-            pinned = pinned or name not in GOLDEN_METHODS
-        elif name == "speculative-config":
-            real = {**_forcing_vllm_spec(value), "rejection_sample_method": "block"}
-            real.pop("synthetic_acceptance_length", None)
-            overrides += ["--set", f"{path}={json.dumps(real)}"]
-        else:
-            overrides += ["--unset", path]
-    if must_pin and al is not None and not pinned:
-        raise ValueError(
-            "Recipe has no roles to receive golden acceptance and pins no golden length; "
-            "migrate it to srt-slurm roles"
-        )
-    return overrides
+def generation_role(recipe: Mapping[str, Any]) -> Mapping[str, Any]:
+    """The worker whose drafts are verified: decode, otherwise the aggregated worker."""
+    roles = recipe.get("roles", {})
+    return roles.get("decode", roles.get("agg", {}))
 
 
 def build_overrides(
@@ -319,10 +217,8 @@ def build_overrides(
     if engine is None:
         return []
     roles = recipe.get("roles", {})
-    synthetic = is_synthetic(environment)
-    spec = spec_parameters(generation_role(recipe, engine), engine)
     if is_gate(environment):
-        check_gate(spec, environment)
+        check_gate(spec_parameters(generation_role(recipe), engine), environment)
     al = _simulated_length(recipe, framework, environment, golden_dir=golden_dir)
     overrides = []
     variables = {
@@ -397,7 +293,7 @@ def build_overrides(
             for key in variables:
                 if key in (role.get("env") or {}):
                     overrides += ["--unset", f"{prefix}.env.{key}"]
-    return [*overrides, *residual_overrides(recipe, overrides, synthetic, al, spec)]
+    return overrides
 
 
 def selected_recipes(
@@ -456,8 +352,6 @@ def plan_commands(
     """Build native arguments for every selected variant before submitting jobs."""
     command = ["srtctl", "apply", *arguments]
     if framework not in ENGINES:
-        if is_gate(environment):
-            raise ValueError(f"the acceptance gate cannot read {framework}'s drafting settings")
         return [Planned([*command, "--file", config], None)]
     from srtctl.core.overrides import apply_overrides_to_recipe, parse_overrides
 

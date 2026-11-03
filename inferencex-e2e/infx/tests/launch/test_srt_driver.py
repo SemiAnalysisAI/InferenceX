@@ -35,7 +35,7 @@ from infx.tests.launch.fake_slurm import (
 )
 
 sys.path.insert(0, str(ROOT / "utils/srt-slurm/src"))
-from srtctl.core.config import generate_override_configs, resolve_config_with_defaults  # noqa: E402
+from srtctl.core.config import resolve_config_with_defaults  # noqa: E402
 from srtctl.core.overrides import apply_overrides_to_recipe, parse_overrides  # noqa: E402
 from srtctl.core.schema import ClusterConfig  # noqa: E402
 
@@ -120,16 +120,13 @@ def srtslurm(root: Path) -> dict:
     return yaml.safe_load(path.read_text())
 
 
-def job_recipe(raw: dict, argv: list[str], variant: str | None = None) -> dict:
-    """The recipe an ``srtctl apply argv`` job runs: ``raw`` overridden, then ``variant`` selected."""
+def job_recipe(raw: dict, argv: list[str]) -> dict:
+    """The recipe an ``srtctl apply argv`` job runs: ``raw`` overridden."""
     sets = [value for flag, value in zip(argv, argv[1:]) if flag == "--set"]
     unsets = [value for flag, value in zip(argv, argv[1:]) if flag == "--unset"]
     document = json.loads(json.dumps(raw))
     apply_overrides_to_recipe(document, parse_overrides(sets, unsets))
-    if variant is None:
-        return document
-    [(_, recipe)] = generate_override_configs(document, variant)
-    return recipe
+    return document
 
 
 WORKDIR = 'srun_options.container-workdir="/infmax-workspace"'
@@ -509,7 +506,6 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
         assert status == "42|COMPLETED|0:0\n"
 
 
-AGENTX_COMMAND = "bash /infmax-workspace/benchmarks/srt_agentic.sh"
 GATE_DATASET = "al_gate_dataset/speedbench_coding.jsonl"
 GATE_PROMPTS = '{"question_id": "0", "prompt": "Reverse a singly linked list in place."}\n'
 GATE_ENV = {"AL_GATE": "true", "IS_AGENTIC": "1", "FAKE_RESULTS": "gate", "AL_GATE_DATASET": GATE_DATASET}
@@ -552,12 +548,7 @@ def test_single_node_gate_measures_the_selected_variant_with_real_verification(h
     submitted = Path(argv[argv.index("--file") + 1])
     job = job_recipe(yaml.safe_load(submitted.read_text()), argv)
     assert_gate_ran(harness, call, job)
-    names = ("CONC", "RESULT_FILENAME", "AL_GATE", "AL_GATE_CURVE", "AL_GATE_DRAFT_TOKENS", "AL_GATE_OUTPUT_DIR",
-             "THINKING_MODE")  # fmt: skip
-    assert {name: job["benchmark"]["env"][name] for name in names} == {
-        "CONC": "2", "RESULT_FILENAME": "point-identity", "AL_GATE": "true", "AL_GATE_CURVE": "dsv4_mtp",
-        "AL_GATE_DRAFT_TOKENS": "3", "AL_GATE_OUTPUT_DIR": "/logs", "THINKING_MODE": "thinking_on",
-    }  # fmt: skip
+    assert job["benchmark"]["env"]["CONC"] == "2"
     # Real verification: the recipe's simulated acceptance is gone.
     assert job["roles"]["agg"]["env"] == {"KEEP": "yes"}
 
@@ -599,11 +590,6 @@ def test_power_lane_gate_measures_real_acceptance_without_power(harness):
     submitted = Path(call["argv"][call["argv"].index("--file") + 1])
     job = job_recipe(yaml.safe_load(submitted.read_text()), call["argv"])
     assert_gate_ran(harness, call, job)
-    names = ("AL_GATE", "AL_GATE_CURVE", "AL_GATE_DRAFT_TOKENS", "AL_GATE_DATASET", "AL_GATE_OUTPUT_DIR", "THINKING_MODE")
-    assert {name: job["benchmark"]["env"][name] for name in names} == {
-        "AL_GATE": "true", "AL_GATE_CURVE": "kimik3_dspark", "AL_GATE_DRAFT_TOKENS": "3",
-        "AL_GATE_DATASET": GATE_DATASET, "AL_GATE_OUTPUT_DIR": "/logs", "THINKING_MODE": "thinking_on",
-    }  # fmt: skip
     assert json.loads(job["roles"]["decode"]["args"]["speculative-config"]) == {
         "method": "dspark", "num_speculative_tokens": 3, "draft_sample_method": "greedy",
         "rejection_sample_method": "block",

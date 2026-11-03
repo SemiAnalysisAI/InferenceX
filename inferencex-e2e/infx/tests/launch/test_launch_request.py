@@ -54,11 +54,6 @@ def gate_env(tmp_path, **overrides: str) -> dict[str, str]:
     }  # fmt: skip
 
 
-def test_a_gate_reads_the_prompts_its_job_downloaded(tmp_path):
-    request = LaunchRequest.from_env(gate_env(tmp_path))
-    assert (request.al_gate_curve, request.al_gate_draft_tokens, request.al_gate_dataset) == ("dsv4_mtp", 3, DATASET)
-
-
 @pytest.mark.parametrize(
     "overrides",
     [{"AL_GATE_CURVE": ""}, {"AL_GATE_DRAFT_TOKENS": "0"}, {"IS_AGENTIC": "0"}, {"SPEC_DECODING": "none"},

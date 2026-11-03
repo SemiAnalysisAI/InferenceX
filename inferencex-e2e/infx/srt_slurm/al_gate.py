@@ -80,7 +80,7 @@ def _gate(
         return f"exempt: {reason}"
     recipe = point_recipe(row, workspace)
     engine = ENGINES[row["framework"]]
-    role = generation_role(recipe, engine)
+    role = generation_role(recipe)
     spec = spec_parameters(role, engine)
     if not spec:
         return None

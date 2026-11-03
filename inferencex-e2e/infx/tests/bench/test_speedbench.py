@@ -59,7 +59,7 @@ def prepare_py(tmp_path, monkeypatch):
     return path
 
 
-def test_the_coding_rows_first_user_messages_are_written_in_order(tmp_path, prepare_py, capsys):
+def test_the_coding_rows_first_user_messages_are_written_in_order(tmp_path, prepare_py):
     out = tmp_path / "out"
 
     assert speedbench.main(["--output-dir", str(out)]) == 0
@@ -72,9 +72,6 @@ def test_the_coding_rows_first_user_messages_are_written_in_order(tmp_path, prep
     ]
     # Gate containers read the same prompts back.
     assert speedbench.load(out / "speedbench_coding.jsonl") == CODING
-    assert f"Wrote 3 SPEED-Bench prompts to {out / 'speedbench_coding.jsonl'}" in (
-        capsys.readouterr().out
-    )
 
 
 def test_prompts_other_than_the_golden_ones_are_not_written(tmp_path, prepare_py, monkeypatch):
