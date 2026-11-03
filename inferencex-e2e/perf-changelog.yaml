@@ -11853,3 +11853,11 @@
     - "Retire Qwen3.5 8k1k serving configurations across NVIDIA and AMD and remove their unused recipes."
     - "Keep Qwen3.5 AgentX coverage, SPEED-Bench collectors, and historical results unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4697
+
+- config-keys:
+    - glm5.2-fp4-b200-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Temporary entry to run the report-only speculative acceptance gate on GLM-5.2 FP4 B200 SGLang AgentX, whose golden curve was collected at concurrency 1, at the gate's fixed replay concurrency of 64. Serving configuration, image and throughput are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4654
