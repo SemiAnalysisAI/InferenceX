@@ -11954,3 +11954,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4726
   scenario-type: [agentic-coding]
   append-only: true
+
+- config-keys:
+    - dsv41flash-fp4-b300-dynamo-vllm-agentic-dspark-agg
+    - dsv41flash-fp4-b300-dynamo-vllm-agentic-dspark-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add B300 DeepSeek-V4.1-Flash FP4 Dynamo + vLLM AgentX aggregated and disaggregated recipes with DSpark."
+    - "Use the vLLM EFA image without an EFA dependency setup script."
+    - "Configure EFA-backed NIXL transfers and host KV offloading for disaggregated workers."
+    - "Place the B300 Dynamo + vLLM AgentX frontend on the allocation head for eval-only jobs."
+    - "Capture DSpark step sizes at multiples of five and six through 40 for aggregated TP4 concurrency 1."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4585
