@@ -1,0 +1,109 @@
+schema: 2
+name: dsv41flash-mi355x-tilert-agentx
+slurm:
+  time_limit: "08:00:00"
+resources:
+  gpu_type: mi355x
+  gpus_per_node: 8
+setup_script: glm5.3-tilert-rocm.sh
+environment:
+  RDMAV_FORK_SAFE: "1"
+  NCCL_SOCKET_IFNAME: "@fabric.socket-ifname"
+  GLOO_SOCKET_IFNAME: "@fabric.socket-ifname"
+  NCCL_IB_HCA: "@fabric.rdma-devices"
+roles:
+  prefill:
+    engine:
+      type: vllm
+      set_visible_devices: true
+    # The validated MI355X DeepSeek-V4.1-Flash vLLM image; the setup script adds the
+    # tilert release (--no-deps) for the TileRT KV connector.
+    container: vllm/vllm-openai-rocm:nightly-e68efc685ab1e6f1eda004ced7157e3ca411da2f@sha256:520e098f54ec96837228aaddea0a833cbf6374dbdffd480c1d65f26ffab7701b
+    nodes: 1
+    workers: 1
+    gpus: 4
+    env:
+      TILERT_ROLE: prefill
+      VLLM_ROCM_USE_AITER: "1"
+      VLLM_ROCM_USE_AITER_MOE: "1"
+      VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: NONE
+      AITER_TRITON_LOG_LEVEL: ERROR
+      VLLM_USE_BREAKABLE_CUDAGRAPH: "1"
+      OMP_NUM_THREADS: "1"
+      PYTHONUNBUFFERED: "1"
+      VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+      # Register the VRAM staging buffer with the ionic HCAs through dmabuf.
+      MOONCAKE_DISABLE_HIP_DMABUF: "0"
+    args:
+      served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+      tensor-parallel-size: 4
+      language-model-only: true
+      tokenizer-mode: deepseek_v41
+      # The router reads the first token id from the prefill's logprobs.
+      return-tokens-as-token-ids: true
+      moe-backend: aiter
+      gpu-memory-utilization: 0.85
+      attention-config: '{"indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
+      block-size: 128
+      # The DSpark draft runs on the prefill too, so the decode receives its window state.
+      speculative-config: '{"method":"dspark","num_speculative_tokens":3,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
+      max-model-len: 131072
+      max-num-batched-tokens: 32768
+      max-num-seqs: 1
+      engram-config: '{"cpu_offload":false}'
+      enable-prefix-caching: true
+      # The KV connector has only been exercised with eager prefill.
+      enforce-eager: true
+      kv-transfer-config: >-
+        {"kv_connector":"DsV41TileRTConnector","kv_connector_module_path":"tilert.pd_vllm.dsv41_prefill_connector",
+         "kv_role":"kv_producer","kv_connector_extra_config":{
+           "tilert_model":"dsv41","tilert_max_seq_len":131072,"tilert_transport":"mooncake"}}
+  decode:
+    engine: tilert
+    container: ghcr.io/tile-ai/tilert-rocm-decode:0.1.6
+    nodes: 1
+    workers: 1
+    gpus: 8
+    env:
+      TILERT_ROLE: decode
+      TILERT_DSV41_TP: "8"
+      # The dsv41 profile lands the whole prompt KV in one receive buffer.
+      TILERT_PD_SHARDS: "1"
+    args:
+      model: dsv41
+      # TileRT reads the Hugging Face checkpoint directly; no converted weights.
+      model-weights-dir: /model
+      max-seq-len: 131072
+      transport: mooncake
+      with-mtp: true
+      num-mtp: 3
+frontend:
+  type: tilert-router
+  container_image: ghcr.io/tile-ai/tilert-rocm-decode:0.1.6
+  enable_multiple_frontends: false
+  env:
+    TILERT_ROLE: router
+  args:
+    parser: none
+    model-path: /model
+    queue-timeout: 1800
+sbatch_directives:
+  cpus-per-task: "128"
+  mem: "0"
+srun_options:
+  mem: "0"
+  container-writable: ""
+  container-remap-root: ""
+health_check:
+  max_attempts: 2160
+  interval_seconds: 5
+benchmark:
+  env:
+    TOKENIZER: /model
+    SERVED_MODEL_NAME: deepseek-ai/DeepSeek-V4.1-Flash
+    AIPERF_MAX_CONTEXT_LENGTH: "131072"
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
+    HF_HOME: /logs/hf_cache
+    HF_HUB_OFFLINE: ""
+    TRANSFORMERS_VERBOSITY: error
+    TOKENIZERS_PARALLELISM: "false"
