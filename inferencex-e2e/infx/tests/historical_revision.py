@@ -23,11 +23,11 @@ MASTER = {KEY: {
     "image": "example/image:stable", "model": "example/model", "model-prefix": "dsr1",
     "precision": "fp8", "framework": "sglang", "runner": "fixture", "multinode": False,
     "scenarios": {"fixed-seq-len": [{
-        "isl": 8192, "osl": 1024, "search-space": [{"tp": 1, "conc-list": [2, 6]}],
+        "isl": 8192, "osl": 1024, "search-space": [{"gpus-per-worker": 1, "tp": 1, "conc-list": [2, 6]}],
     }]},
 }}
 AGENTX_MASTER = {KEY: {**MASTER[KEY], "scenarios": {"agentic-coding": [{
-    "search-space": [{"tp": 1, "kv-offloading": "none", "conc-list": [2, 6]}],
+    "search-space": [{"gpus-per-worker": 1, "tp": 1, "kv-offloading": "none", "conc-list": [2, 6]}],
 }]}}}
 POINTS = [("example/model", 2, "example/image:stable"), ("example/model", 6, "example/image:stable")]
 
@@ -61,6 +61,7 @@ def rows(config_keys, config_files, runner_config):
                         "image": entry["image"], "model": entry["model"],
                         "model-prefix": entry["model-prefix"], "precision": entry["precision"],
                         "framework": entry["framework"], "runner": entry["runner"],
+                        "gpus-per-worker": space["gpus-per-worker"],
                         "isl": scenario["isl"], "osl": scenario["osl"], "tp": space["tp"],
                         "pp": 1, "dcp-size": 1, "pcp-size": 1, "conc": conc,
                         "max-model-len": scenario["isl"] + scenario["osl"] + 256, "ep": 1,
@@ -77,6 +78,7 @@ def rows(config_keys, config_files, runner_config):
                         "image": entry["image"], "model": entry["model"],
                         "model-prefix": entry["model-prefix"], "precision": entry["precision"],
                         "framework": entry["framework"], "runner": entry["runner"],
+                        "gpus-per-worker": space["gpus-per-worker"],
                         "tp": space["tp"], "pp": 1, "dcp-size": 1, "pcp-size": 1, "ep": 1,
                         "dp-attn": False, "spec-decoding": "none", "conc": conc,
                         "kv-offloading": space["kv-offloading"],

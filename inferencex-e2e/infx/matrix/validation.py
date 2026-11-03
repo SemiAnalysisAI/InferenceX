@@ -74,6 +74,7 @@ class Fields(Enum):
     KV_P2P_TRANSFER = "kv-p2p-transfer"
     AVAILABLE_CPU_DRAM_MIB = "available-cpu-dram-mib"
     GPUS_PER_NODE = "gpus-per-node"
+    GPUS_PER_WORKER = "gpus-per-worker"
     NUM_NODES = "num-nodes"
     NODE_COUNT = "node-count"
     DURATION = "duration"
@@ -145,6 +146,8 @@ def _validate_tp_context_topology(self: Any) -> Any:
 class SingleNodeMatrixEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    gpus_per_worker: int = Field(alias=Fields.GPUS_PER_WORKER.value, gt=0, strict=True)
+
     image: str
     srt_recipe: str | None = Field(default=None, alias=Fields.SRT_RECIPE.value, min_length=1)
     model: str
@@ -186,7 +189,9 @@ class SingleNodeMatrixEntry(BaseModel):
 class WorkerConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    num_worker: int = Field(alias=Fields.NUM_WORKER.value)
+    gpus_per_worker: int = Field(alias=Fields.GPUS_PER_WORKER.value, gt=0, strict=True)
+
+    num_worker: int = Field(alias=Fields.NUM_WORKER.value, ge=0, strict=True)
     tp: int = Field(gt=0)
     pp: int = Field(default=1, gt=0, strict=True)
     dcp_size: int = Field(default=1, alias=Fields.DCP_SIZE.value, gt=0, strict=True)
@@ -215,6 +220,8 @@ class WorkerConfig(BaseModel):
 
 class AggregateWorkerConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+    gpus_per_worker: int = Field(alias=Fields.GPUS_PER_WORKER.value, gt=0, strict=True)
 
     num_worker: int = Field(default=1, alias=Fields.NUM_WORKER.value, gt=0, strict=True)
     tp: int = Field(gt=0)
@@ -303,6 +310,8 @@ class MultiNodeMatrixEntry(BaseModel):
 
 class SingleNodeAgenticMatrixEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+    gpus_per_worker: int = Field(alias=Fields.GPUS_PER_WORKER.value, gt=0, strict=True)
 
     image: str
     require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
@@ -640,6 +649,8 @@ RecipeReference = Annotated[str, AfterValidator(_recipe_reference)]
 class SingleNodeSearchSpaceEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    gpus_per_worker: int = Field(alias=Fields.GPUS_PER_WORKER.value, gt=0, strict=True)
+
     tp: int = Field(gt=0)
     srt_recipe: RecipeReference | None = Field(default=None, alias=Fields.SRT_RECIPE.value)
     pp: int = Field(default=1, gt=0, strict=True)
@@ -748,6 +759,9 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
 
     require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     tp: int | None = Field(default=None, gt=0)
+    gpus_per_worker: int | None = Field(
+        default=None, alias=Fields.GPUS_PER_WORKER.value, gt=0, strict=True
+    )
     srt_recipe: RecipeReference | None = Field(default=None, alias=Fields.SRT_RECIPE.value)
     eval_srt_recipe: RecipeReference | None = Field(
         default=None, alias=Fields.EVAL_SRT_RECIPE.value
@@ -810,6 +824,8 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
                 "worker, or both prefill and decode"
             )
         if has_single_node:
+            if self.gpus_per_worker is None:
+                raise ValueError("Single-node entries must specify gpus-per-worker")
             if self.kv_offloading is None:
                 raise ValueError(
                     f"Single-node agentic search-space entries must specify "
@@ -826,6 +842,7 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
                 "pp",
                 "dcp_size",
                 "pcp_size",
+                "gpus_per_worker",
             } & self.model_fields_set
             if explicitly_single_node_fields:
                 field_names = ", ".join(
@@ -835,6 +852,7 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
                         Fields.DCP_SIZE.value,
                         Fields.PCP_SIZE.value,
                         Fields.DWDP_SIZE.value,
+                        Fields.GPUS_PER_WORKER.value,
                     )
                 )
                 raise ValueError(

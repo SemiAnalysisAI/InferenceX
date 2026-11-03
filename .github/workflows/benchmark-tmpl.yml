@@ -117,6 +117,7 @@ env:
   IMAGE: ${{ fromJSON(inputs.config).image }}
   FRAMEWORK: ${{ fromJSON(inputs.config).framework }}
   PRECISION: ${{ fromJSON(inputs.config).precision }}
+  GPU_COUNT: ${{ fromJSON(inputs.config)['gpus-per-worker'] }}
   TP: ${{ fromJSON(inputs.config).tp }}
   PP_SIZE: ${{ fromJSON(inputs.config).pp }}
   DCP_SIZE: ${{ fromJSON(inputs.config).dcp-size }}
@@ -289,10 +290,8 @@ jobs:
             export GPU_COUNT="$VIDEO_GPUS"
             export CONC_LIST="$VIDEO_CONC_LIST"
             echo "CONC_LIST=${CONC_LIST}" >> "$GITHUB_ENV"
-          else
-            export GPU_COUNT=$((TP * PP_SIZE * PCP_SIZE))
+            echo "GPU_COUNT=${GPU_COUNT}" >> "$GITHUB_ENV"
           fi
-          echo "GPU_COUNT=${GPU_COUNT}" >> "$GITHUB_ENV"
 
           echo "RESULT_FILENAME=${RESULT_FILENAME}" >> "$GITHUB_ENV"
 

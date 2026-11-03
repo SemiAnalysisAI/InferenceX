@@ -49,7 +49,7 @@ def valid_single_node_matrix_entry():
         "runner": "mi355x",
         "isl": 1024,
         "osl": 1024,
-        "tp": 8,
+        "gpus-per-worker": 8, "tp": 8,
         "pp": 1,
         "dcp-size": 1,
         "pcp-size": 1,
@@ -80,7 +80,7 @@ def valid_multinode_matrix_entry():
         "prefill": {
             "hardware": "gb200",
             "num-worker": 5,
-            "tp": 4,
+            "gpus-per-worker": 4, "tp": 4,
             "ep": 4,
             "dp-attn": True,
             "additional-settings": [
@@ -91,7 +91,7 @@ def valid_multinode_matrix_entry():
         "decode": {
             "hardware": "h100",
             "num-worker": 1,
-            "tp": 8,
+            "gpus-per-worker": 8, "tp": 8,
             "ep": 8,
             "dp-attn": True,
             "additional-settings": [
@@ -129,7 +129,7 @@ def valid_single_node_master_config():
                     "isl": 1024,
                     "osl": 1024,
                     "search-space": [
-                        {"tp": 8, "conc-start": 4, "conc-end": 64, "srt-recipe": "recipe.yaml"}
+                        {"gpus-per-worker": 8, "tp": 8, "conc-start": 4, "conc-end": 64, "srt-recipe": "recipe.yaml"}
                     ]
                 }
             ]
@@ -163,7 +163,7 @@ def valid_multinode_master_config():
                             "prefill": {
                                 "hardware": "gb200",
                                 "num-worker": 5,
-                                "tp": 4,
+                                "gpus-per-worker": 4, "tp": 4,
                                 "ep": 4,
                                 "dp-attn": True,
                                 "additional-settings": [
@@ -174,7 +174,7 @@ def valid_multinode_master_config():
                             "decode": {
                                 "hardware": "h100",
                                 "num-worker": 1,
-                                "tp": 8,
+                                "gpus-per-worker": 8, "tp": 8,
                                 "ep": 8,
                                 "dp-attn": True,
                                 "additional-settings": [
@@ -210,7 +210,7 @@ def recipe_root(tmp_path):
 class TestWorkerConfig:
     def test_rejects_decode_dwdp(self, valid_multinode_matrix_entry):
         row = copy.deepcopy(valid_multinode_matrix_entry)
-        row["decode"].update({"tp": 1, "ep": 1, "dp-attn": False, "dwdp-size": 8})
+        row["decode"].update({"gpus-per-worker": 8, "tp": 1, "ep": 1, "dp-attn": False, "dwdp-size": 8})
         with pytest.raises(ValidationError, match="only on prefill"):
             MultiNodeMatrixEntry.model_validate(row)
 
@@ -220,7 +220,7 @@ class TestWorkerConfig:
         with pytest.raises(ValidationError, match="greater than 0"):
             WorkerConfig(**{
                 "num-worker": 2,
-                "tp": 4,
+                "gpus-per-worker": 4, "tp": 4,
                 field: 0,
                 "ep": 1,
                 "dp-attn": False,
@@ -230,7 +230,7 @@ class TestWorkerConfig:
         with pytest.raises(ValidationError, match="must be divisible"):
             WorkerConfig(**{
                 "num-worker": 2,
-                "tp": 4,
+                "gpus-per-worker": 4, "tp": 4,
                 "dcp-size": 3,
                 "ep": 1,
                 "dp-attn": False,
@@ -240,14 +240,14 @@ class TestWorkerConfig:
         with pytest.raises(ValidationError):
             WorkerConfig(**{
                 "num-worker": 2,
-                "tp": 4,
+                "gpus-per-worker": 4, "tp": 4,
             })
 
     def test_worker_config_extra_field_forbidden(self):
         with pytest.raises(ValidationError):
             WorkerConfig(**{
                 "num-worker": 2,
-                "tp": 4,
+                "gpus-per-worker": 4, "tp": 4,
                 "ep": 1,
                 "dp-attn": False,
                 "unknown-field": "value",
@@ -290,7 +290,7 @@ class TestAgenticMatrixEntries:
             "precision": "fp4",
             "framework": "vllm",
             "runner": "cluster:b200-nscale",
-            "tp": 8,
+            "gpus-per-worker": 8, "tp": 8,
             "pp": 1,
             "dcp-size": 1,
             "pcp-size": 1,
@@ -309,7 +309,7 @@ class TestAgenticMatrixEntries:
 
     def test_arbitrary_backend_is_valid_for_agentic_search_space(self):
         entry = AgenticCodingSearchSpaceEntry(**{
-            "tp": 8,
+            "gpus-per-worker": 8, "tp": 8,
             "kv-offloading": "dram",
             "kv-offload-backend": {"name": "future-backend"},
             "router": {"name": "vllm-router", "version": "0.1.14"},
@@ -325,7 +325,7 @@ class TestAgenticMatrixEntries:
 
     def test_router_metadata_is_optional_for_fixed_sequence_search_space(self):
         entry = SingleNodeSearchSpaceEntry(**{
-            "tp": 8,
+            "gpus-per-worker": 8, "tp": 8,
             "router": {"name": "vllm-router", "version": "0.1.14"},
             "conc-list": [1, 2],
         })
@@ -341,7 +341,7 @@ class TestAgenticMatrixEntries:
     def test_component_metadata_requires_exact_non_empty_fields(self, metadata):
         with pytest.raises(ValidationError):
             AgenticCodingSearchSpaceEntry(**{
-                "tp": 8,
+                "gpus-per-worker": 8, "tp": 8,
                 "kv-offloading": "none",
                 "router": metadata,
                 "conc-list": [1, 2],
@@ -352,10 +352,10 @@ class TestAgenticMatrixEntries:
         with pytest.raises(ValidationError):
             MultiNodeSearchSpaceEntry(**{
                 "prefill": {
-                    "num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False,
+                    "num-worker": 1, "gpus-per-worker": 8, "tp": 8, "ep": 1, "dp-attn": False,
                 },
                 "decode": {
-                    "num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False,
+                    "num-worker": 1, "gpus-per-worker": 8, "tp": 8, "ep": 1, "dp-attn": False,
                 },
                 "kv-p2p-transfer": value,
                 "conc-list": [1],
@@ -373,7 +373,7 @@ class TestAgenticMatrixEntries:
 
     def test_kv_offload_backend_accepts_optional_version(self):
         entry = AgenticCodingSearchSpaceEntry(**{
-            "tp": 8,
+            "gpus-per-worker": 8, "tp": 8,
             "kv-offloading": "dram",
             "kv-offload-backend": {"name": "lmcache", "version": "0.5.1"},
             "conc-list": [1],
@@ -385,7 +385,7 @@ class TestAgenticMatrixEntries:
     def test_kv_offload_backend_rejects_unknown_metadata(self):
         with pytest.raises(ValidationError):
             AgenticCodingSearchSpaceEntry(**{
-                "tp": 8,
+                "gpus-per-worker": 8, "tp": 8,
                 "kv-offloading": "dram",
                 "kv-offload-backend": {"name": "lmcache", "mode": "cpu"},
                 "conc-list": [1],
@@ -394,7 +394,7 @@ class TestAgenticMatrixEntries:
     def test_kv_offload_backend_rejects_image_as_version(self):
         with pytest.raises(ValidationError, match="not an image reference"):
             AgenticCodingSearchSpaceEntry(**{
-                "tp": 8,
+                "gpus-per-worker": 8, "tp": 8,
                 "kv-offloading": "dram",
                 "kv-offload-backend": {
                     "name": "lmcache",
@@ -406,7 +406,7 @@ class TestAgenticMatrixEntries:
     def test_kv_offload_backend_requires_dram_mode(self):
         with pytest.raises(ValidationError, match="kv-offload-backend"):
             AgenticCodingSearchSpaceEntry(**{
-                "tp": 8,
+                "gpus-per-worker": 8, "tp": 8,
                 "kv-offloading": "none",
                 "kv-offload-backend": {"name": "lmcache"},
                 "conc-list": [1, 2],
@@ -415,7 +415,7 @@ class TestAgenticMatrixEntries:
     def test_dram_kv_offload_requires_backend(self):
         with pytest.raises(ValidationError, match="kv-offload-backend"):
             AgenticCodingSearchSpaceEntry(**{
-                "tp": 8,
+                "gpus-per-worker": 8, "tp": 8,
                 "kv-offloading": "dram",
                 "conc-list": [1, 2],
             })
@@ -423,7 +423,7 @@ class TestAgenticMatrixEntries:
     def test_single_node_agentic_requires_explicit_kv_offloading(self):
         with pytest.raises(ValidationError, match="kv-offloading"):
             AgenticCodingSearchSpaceEntry(**{
-                "tp": 8,
+                "gpus-per-worker": 8, "tp": 8,
                 "conc-list": [1, 2],
             })
 
@@ -433,8 +433,8 @@ class TestAgenticMatrixEntries:
                 "search-space": [{
                     "kv-offloading": "dram",
                     "kv-offload-backend": {"name": "mooncake"},
-                    "prefill": {"hardware": "gb200", "num-worker": 1, "tp": 4, "ep": 1, "dp-attn": False},
-                    "decode": {"hardware": "b200", "num-worker": 1, "tp": 4, "ep": 1, "dp-attn": False},
+                    "prefill": {"hardware": "gb200", "num-worker": 1, "gpus-per-worker": 4, "tp": 4, "ep": 1, "dp-attn": False},
+                    "decode": {"hardware": "b200", "num-worker": 1, "gpus-per-worker": 4, "tp": 4, "ep": 1, "dp-attn": False},
                     "conc-list": [16],
                 }],
             })
@@ -442,7 +442,7 @@ class TestAgenticMatrixEntries:
     def test_agentic_search_space_rejects_total_cpu_dram_gb(self):
         with pytest.raises(ValidationError, match="total-cpu-dram-gb"):
             AgenticCodingSearchSpaceEntry(**{
-                "tp": 8,
+                "gpus-per-worker": 8, "tp": 8,
                 "kv-offloading": "dram",
                 "kv-offload-backend": {"name": "native"},
                 "total-cpu-dram-gb": 1000,
@@ -454,7 +454,7 @@ class TestAgenticMatrixEntries:
             AgenticCodingConfig(**{
                 "gpus-per-node": 8,
                 "search-space": [{
-                    "tp": 4,
+                    "gpus-per-worker": 4, "tp": 4,
                     "kv-offloading": "dram",
                     "kv-offload-backend": {"name": "native"},
                     "conc-list": [16],
@@ -466,7 +466,7 @@ class TestAgenticMatrixEntries:
             AgenticCodingConfig(**{
                 "available-cpu-dram-mib": 2964436,
                 "search-space": [{
-                    "tp": 4,
+                    "gpus-per-worker": 4, "tp": 4,
                     "kv-offloading": "dram",
                     "kv-offload-backend": {"name": "native"},
                     "conc-list": [16],
@@ -478,7 +478,7 @@ class TestAgenticMatrixEntries:
             AgenticCodingConfig(**{
                 "duration": 1800,
                 "search-space": [{
-                    "tp": 8,
+                    "gpus-per-worker": 8, "tp": 8,
                     "kv-offloading": "none",
                     "conc-list": [16],
                 }],
@@ -554,7 +554,7 @@ class TestSingleNodeSearchSpaceEntry:
     def test_pp_must_be_positive_integer(self):
         with pytest.raises(ValidationError, match="greater than 0"):
             SingleNodeSearchSpaceEntry(**{
-                "tp": 4,
+                "gpus-per-worker": 1, "tp": 4,
                 "pp": 0,
                 "conc-list": [4],
             })
@@ -562,7 +562,7 @@ class TestSingleNodeSearchSpaceEntry:
     def test_dcp_size_must_divide_tp(self):
         with pytest.raises(ValidationError, match="must be divisible"):
             SingleNodeSearchSpaceEntry(**{
-                "tp": 8,
+                "gpus-per-worker": 16, "tp": 8,
                 "dcp-size": 3,
                 "pcp-size": 2,
                 "conc-list": [4],
@@ -571,7 +571,7 @@ class TestSingleNodeSearchSpaceEntry:
     def test_cannot_have_both_range_and_list(self):
         with pytest.raises(ValidationError) as exc_info:
             SingleNodeSearchSpaceEntry(**{
-                "tp": 4,
+                "gpus-per-worker": 4, "tp": 4,
                 "conc-start": 4,
                 "conc-end": 64,
                 "conc-list": [4, 8, 16],
@@ -581,14 +581,14 @@ class TestSingleNodeSearchSpaceEntry:
     def test_must_have_range_or_list(self):
         with pytest.raises(ValidationError) as exc_info:
             SingleNodeSearchSpaceEntry(**{
-                "tp": 8,
+                "gpus-per-worker": 8, "tp": 8,
             })
         assert "Must specify either" in str(exc_info.value)
 
     def test_conc_start_must_be_lte_conc_end(self):
         with pytest.raises(ValidationError) as exc_info:
             SingleNodeSearchSpaceEntry(**{
-                "tp": 8,
+                "gpus-per-worker": 8, "tp": 8,
                 "conc-start": 64,
                 "conc-end": 4,
             })
@@ -601,7 +601,7 @@ class TestSingleNodeSearchSpaceEntry:
     def test_conc_range_values_must_be_positive(self, conc_start, conc_end):
         with pytest.raises(ValidationError) as exc_info:
             SingleNodeSearchSpaceEntry(**{
-                "tp": 4,
+                "gpus-per-worker": 4, "tp": 4,
                 "conc-start": conc_start,
                 "conc-end": conc_end,
             })
@@ -611,7 +611,7 @@ class TestSingleNodeSearchSpaceEntry:
     def test_conc_list_values_must_be_positive(self):
         with pytest.raises(ValidationError) as exc_info:
             SingleNodeSearchSpaceEntry(**{
-                "tp": 4,
+                "gpus-per-worker": 4, "tp": 4,
                 "conc-list": [4, 0, 16],
             })
         assert "must be greater than 0" in str(exc_info.value)
@@ -619,7 +619,7 @@ class TestSingleNodeSearchSpaceEntry:
     def test_conc_list_values_must_be_unique(self):
         with pytest.raises(ValidationError, match="must not repeat"):
             SingleNodeSearchSpaceEntry(**{
-                "tp": 4,
+                "gpus-per-worker": 4, "tp": 4,
                 "conc-list": [4, 8, 4],
             })
 
@@ -627,18 +627,18 @@ class TestSingleNodeSearchSpaceEntry:
     def test_conc_list_rejects_a_lone_range_bound(self, bound):
         with pytest.raises(ValidationError, match="Cannot specify both"):
             SingleNodeSearchSpaceEntry(**{
-                "tp": 4,
+                "gpus-per-worker": 4, "tp": 4,
                 "conc-list": [4],
                 bound: 1,
             })
 
 
 @pytest.mark.parametrize(("schema", "entry"), [
-    (SingleNodeSearchSpaceEntry, {"tp": 0, "conc-list": [4]}),
-    (AgenticCodingSearchSpaceEntry, {"tp": -2, "kv-offloading": "none", "conc-list": [4]}),
-    (WorkerConfig, {"num-worker": 1, "tp": 0, "ep": 1, "dp-attn": False}),
+    (SingleNodeSearchSpaceEntry, {"gpus-per-worker": 1, "tp": 0, "conc-list": [4]}),
+    (AgenticCodingSearchSpaceEntry, {"gpus-per-worker": 1, "tp": -2, "kv-offloading": "none", "conc-list": [4]}),
+    (WorkerConfig, {"num-worker": 1, "gpus-per-worker": 1, "tp": 0, "ep": 1, "dp-attn": False}),
     (MultiNodeSearchSpaceEntry,
-     {"worker": {"tp": 0, "ep": 1, "dp-attn": False}, "num-nodes": 1, "conc-list": [4]}),
+     {"worker": {"gpus-per-worker": 1, "tp": 0, "ep": 1, "dp-attn": False}, "num-nodes": 1, "conc-list": [4]}),
 ])  # fmt: skip
 def test_tensor_parallelism_must_be_positive(schema, entry):
     with pytest.raises(ValidationError, match="greater than 0"):
@@ -651,7 +651,7 @@ class TestMultiNodeSearchSpaceEntry:
         """An aggregate entry has one worker rather than serving roles."""
         entry = MultiNodeSearchSpaceEntry(**{
             "worker": {
-                "tp": 8,
+                "gpus-per-worker": 16, "tp": 8,
                 "pp": 2,
                 "ep": 1,
                 "dp-attn": False,
@@ -676,13 +676,13 @@ class TestMultiNodeSearchSpaceEntry:
             MultiNodeSearchSpaceEntry(**{
                 "prefill": {
                     "num-worker": 2,
-                    "tp": 4,
+                    "gpus-per-worker": 4, "tp": 4,
                     "ep": 4,
                     "dp-attn": False,
                 },
                 "decode": {
                     "num-worker": 2,
-                    "tp": 4,
+                    "gpus-per-worker": 4, "tp": 4,
                     "ep": 4,
                     "dp-attn": False,
                 },
@@ -975,7 +975,7 @@ class TestMasterConfigEntries:
                 "agentic-coding": [
                     {
                         "search-space": [
-                            {"tp": 8, "conc-list": [1], "kv-offloading": "none",
+                            {"gpus-per-worker": 8, "tp": 8, "conc-list": [1], "kv-offloading": "none",
                              "srt-recipe": "recipe.yaml"}
                         ],
                     }
@@ -1013,14 +1013,14 @@ class TestMasterConfigEntries:
                                 "prefill": {
                                     "hardware": "b200",
                                     "num-worker": 1,
-                                    "tp": 4,
+                                    "gpus-per-worker": 4, "tp": 4,
                                     "ep": 4,
                                     "dp-attn": True,
                                 },
                                 "decode": {
                                     "hardware": "b200",
                                     "num-worker": 1,
-                                    "tp": 8,
+                                    "gpus-per-worker": 8, "tp": 8,
                                     "ep": 8,
                                     "dp-attn": False,
                                 },
@@ -1083,7 +1083,7 @@ class TestValidateMasterConfig:
         config = valid_single_node_master_config
         config["runner"] = "cluster:b200-nscale"
         config["scenarios"] = {"agentic-coding": [{"search-space": [{
-            "tp": 8, "conc-list": [1], "kv-offloading": "none",
+            "gpus-per-worker": 8, "tp": 8, "conc-list": [1], "kv-offloading": "none",
             "srt-recipe": "recipe.yaml", "eval-srt-recipe": "recipe.yaml",
         }]}]}
         with pytest.raises(ValidationError, match="eval-srt-recipe is only valid for multinode"):
@@ -1095,7 +1095,7 @@ class TestValidateMasterConfig:
     ])
     def test_recipe_references_are_relative_paths_with_one_variant(self, reference):
         with pytest.raises(ValidationError, match="srt-recipe"):
-            SingleNodeSearchSpaceEntry(**{"tp": 8, "conc-list": [1], "srt-recipe": reference})
+            SingleNodeSearchSpaceEntry(**{"gpus-per-worker": 8, "tp": 8, "conc-list": [1], "srt-recipe": reference})
 
     @pytest.mark.parametrize(("field", "reference", "error"), [
         ("srt-recipe", "bundle.yaml", None),
@@ -1182,7 +1182,7 @@ class TestChangelogEntry:
 AGENTIC_EVAL_ROW = {
     "image": "vllm/vllm-openai:nightly", "model": "deepseek-ai/DeepSeek-V4-Pro",
     "model-prefix": "dsv4", "precision": "fp4", "framework": "vllm",
-    "runner": "cluster:b300-nv", "tp": 8, "pp": 1, "dcp-size": 1,
+    "runner": "cluster:b300-nv", "gpus-per-worker": 8, "tp": 8, "pp": 1, "dcp-size": 1,
     "pcp-size": 1, "ep": 8, "dp-attn": True, "spec-decoding": "mtp",
     "conc": 224, "kv-offloading": "none",
     "duration": 3600, "exp-name": "dsv4_tp8_conc224_kvnone_spec-mtp",
@@ -1194,8 +1194,8 @@ MULTINODE_AGENTIC_EVAL_ROW = {
     "model-prefix": "dsv4", "precision": "fp4", "framework": "sglang-disagg",
     "spec-decoding": "none", "runner": "cluster:mi355x-amds",
     "node-count": 2,
-    "prefill": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
-    "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+    "prefill": {"num-worker": 1, "gpus-per-worker": 8, "tp": 8, "ep": 1, "dp-attn": False},
+    "decode": {"num-worker": 1, "gpus-per-worker": 8, "tp": 8, "ep": 1, "dp-attn": False},
     "conc": [32], "kv-offloading": "dram",
     "kv-offload-backend": {"name": "hicache"}, "kv-p2p-transfer": "mori",
     "duration": 3600,
@@ -1506,8 +1506,8 @@ labels:
 
 
 @pytest.mark.parametrize(("topology", "accepted"), [
-    ({"worker": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False}}, True),
-    ({"tp": 8, "kv-offloading": "none"}, False),
+    ({"worker": {"num-worker": 1, "gpus-per-worker": 8, "tp": 8, "ep": 1, "dp-attn": False}}, True),
+    ({"gpus-per-worker": 8, "tp": 8, "kv-offloading": "none"}, False),
 ])  # fmt: skip
 def test_only_multinode_agentic_rows_measure_power(topology, accepted):
     row = {"srt-recipe": "r.yaml", "conc-list": [4], "power": True, **topology}
@@ -1519,8 +1519,33 @@ def test_only_multinode_agentic_rows_measure_power(topology, accepted):
 
 
 def test_agentic_cpu_power_rides_on_power():
-    worker = {"worker": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False}}
+    worker = {"worker": {"num-worker": 1, "gpus-per-worker": 8, "tp": 8, "ep": 1, "dp-attn": False}}
     row = {"srt-recipe": "r.yaml", "conc-list": [4], "cpu-power": True, **worker}
     with pytest.raises(ValidationError, match="cpu-power requires power"):
         AgenticCodingSearchSpaceEntry(**row)
     assert AgenticCodingSearchSpaceEntry(**{**row, "power": True}).cpu_power is True
+
+
+@pytest.mark.parametrize("value", [0, -1, True, "4", 4.0, None])
+def test_worker_gpu_requirement_is_a_positive_strict_integer(value):
+    with pytest.raises(ValidationError, match="gpus-per-worker"):
+        SingleNodeSearchSpaceEntry.model_validate(
+            {"tp": 4, "gpus-per-worker": value, "conc-list": [1]}
+        )
+
+
+def test_single_node_resource_request_is_required():
+    with pytest.raises(ValidationError, match="gpus-per-worker"):
+        SingleNodeSearchSpaceEntry.model_validate({"tp": 4, "conc-list": [1]})
+    with pytest.raises(ValidationError, match="gpus-per-worker"):
+        AgenticCodingSearchSpaceEntry.model_validate(
+            {"tp": 4, "kv-offloading": "none", "conc-list": [1]}
+        )
+
+
+def test_multinode_resources_belong_to_worker_objects():
+    with pytest.raises(ValidationError, match="gpus-per-worker"):
+        AgenticCodingSearchSpaceEntry.model_validate({
+            "gpus-per-worker": 8, "conc-list": [1],
+            "worker": {"gpus-per-worker": 8, "tp": 8, "ep": 1, "dp-attn": False},
+        })

@@ -62,7 +62,7 @@ class SrtJob:
     mounts: Sequence[tuple[str, str]] = ()
     single_node: bool = False
     account: str | None = None
-    mem_mib: int | None = None
+    mem_mib: int | None = 0
     cpu_power_source: CpuPowerSource | None = None
 
 
@@ -201,6 +201,8 @@ def srun_options(settings: SlurmSettings) -> str | None:
     options = {}
     for arg in settings.srun_args:
         name, _, value = arg.removeprefix("--").partition("=")
+        if name in {"mem", "mem-per-cpu", "mem-per-gpu"}:
+            raise LaunchError("worker memory is derived from the cluster's available DRAM")
         options[name] = value
     return json.dumps(options) if options else None
 
