@@ -6985,7 +6985,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
           dp-attn: false
 
 kimik3-fp4-b300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
-  image: vllm/vllm-openai:nightly-e4a5b5537344b103ed10de7764378ef09604ef3d@sha256:6b90105076216e861cd30fae8828efef9263a0399137b894289f3b6a685bf4ff
+  image: vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:b300-dsxe
@@ -7110,9 +7110,75 @@ kimik3-fp4-b300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
           dcp-size: 8
           ep: 1
           dp-attn: false
+      # Larger decode batches (max-num-seqs 256): stalled on the decode side with the earlier nightly image;
+      # re-tested here on v0.33.0.
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend:
+          name: mooncake
+          version: 0.3.14rc3
+        conc-list:
+        - 336
+        srt-recipe: disagg-variants.yaml:override_2p2d_cap256
+        eval-srt-recipe: disagg-variants.yaml:override_2p2d_cap256_eval
+        prefill:
+          num-worker: 2
+          tp: 8
+          dcp-size: 8
+          ep: 8
+          dp-attn: false
+        decode:
+          num-worker: 2
+          tp: 8
+          dcp-size: 8
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend:
+          name: mooncake
+          version: 0.3.14rc3
+        conc-list:
+        - 336
+        srt-recipe: disagg-variants.yaml:override_3p2d_cap256
+        eval-srt-recipe: disagg-variants.yaml:override_3p2d_cap256_eval
+        prefill:
+          num-worker: 3
+          tp: 8
+          dcp-size: 8
+          ep: 8
+          dp-attn: false
+        decode:
+          num-worker: 2
+          tp: 8
+          dcp-size: 8
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend:
+          name: mooncake
+          version: 0.3.14rc3
+        conc-list:
+        - 336
+        - 384
+        srt-recipe: disagg-variants.yaml:override_3p3d_cap256_sparse
+        eval-srt-recipe: disagg-variants.yaml:override_3p3d_cap256_sparse_eval
+        prefill:
+          num-worker: 3
+          tp: 8
+          dcp-size: 8
+          ep: 8
+          dp-attn: false
+        decode:
+          num-worker: 3
+          tp: 8
+          dcp-size: 8
+          ep: 1
+          dp-attn: false
 
 kimik3-fp4-b300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
-  image: vllm/vllm-openai:nightly-e4a5b5537344b103ed10de7764378ef09604ef3d@sha256:6b90105076216e861cd30fae8828efef9263a0399137b894289f3b6a685bf4ff
+  image: vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:b300-dsxe

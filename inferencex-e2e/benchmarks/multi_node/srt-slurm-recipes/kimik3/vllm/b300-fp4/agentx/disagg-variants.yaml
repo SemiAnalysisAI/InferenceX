@@ -5,7 +5,7 @@ base:
     model: {}
     container: {}
     frameworks:
-      vllm: "e4a5b5537344b103ed10de7764378ef09604ef3d"
+      vllm: "4ba787ec9959e566d3b587a796dff07673324da5"
       dynamo: "a0de541ea8c861d5ac01d15953ca529bea68637b"
 
   dynamo:
@@ -403,6 +403,111 @@ override_2p3d_cap128_eval:
       <<: *override_2p3d_cap128_decode
       args:
         <<: *override_2p3d_cap128_decode_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+
+# 2P2D at conc 336 with eager prefill and a large decode batch: max-num-seqs 256 with CUDA graph capture sizes
+# up to 1024. Stalled on the decode side with the earlier nightly image; re-tested on v0.33.0.
+override_2p2d_cap256:
+  roles:
+    prefill: &override_2p2d_cap256_prefill
+      nodes: 2
+      workers: 2
+      args: &override_2p2d_cap256_prefill_args {}
+    decode: &override_2p2d_cap256_decode
+      nodes: 2
+      workers: 2
+      args: &override_2p2d_cap256_decode_args
+        max-num-seqs: 256
+        max-cudagraph-capture-size: 1024
+        use-replayssm: true
+
+override_2p2d_cap256_eval:
+  roles:
+    prefill:
+      <<: *override_2p2d_cap256_prefill
+      args:
+        <<: *override_2p2d_cap256_prefill_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+    decode:
+      <<: *override_2p2d_cap256_decode
+      args:
+        <<: *override_2p2d_cap256_decode_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+
+# 3P2D at conc 336, same decode settings as override_2p2d_cap256 (stalled on the decode side with the earlier
+# nightly image; re-tested on v0.33.0).
+override_3p2d_cap256:
+  roles:
+    prefill: &override_3p2d_cap256_prefill
+      nodes: 3
+      workers: 3
+      args: &override_3p2d_cap256_prefill_args {}
+    decode: &override_3p2d_cap256_decode
+      nodes: 2
+      workers: 2
+      args: &override_3p2d_cap256_decode_args
+        max-num-seqs: 256
+        max-cudagraph-capture-size: 1024
+        use-replayssm: true
+
+override_3p2d_cap256_eval:
+  roles:
+    prefill:
+      <<: *override_3p2d_cap256_prefill
+      args:
+        <<: *override_3p2d_cap256_prefill_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+    decode:
+      <<: *override_3p2d_cap256_decode
+      args:
+        <<: *override_3p2d_cap256_decode_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+
+# 3P3D at conc 336/384 with a sparse decode CUDA graph capture list (19 sizes up to 640) and max-num-seqs 256.
+override_3p3d_cap256_sparse:
+  roles:
+    prefill: &override_3p3d_cap256_sparse_prefill
+      nodes: 3
+      workers: 3
+      args: &override_3p3d_cap256_sparse_prefill_args {}
+    decode: &override_3p3d_cap256_sparse_decode
+      nodes: 3
+      workers: 3
+      args: &override_3p3d_cap256_sparse_decode_args
+        max-num-seqs: 256
+        max-cudagraph-capture-size: 640
+        compilation-config: '{"cudagraph_capture_sizes":[5,10,20,40,80,120,160,200,240,280,320,360,400,440,480,520,560,600,640]}'
+        use-replayssm: true
+
+override_3p3d_cap256_sparse_eval:
+  roles:
+    prefill:
+      <<: *override_3p3d_cap256_sparse_prefill
+      args:
+        <<: *override_3p3d_cap256_sparse_prefill_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+    decode:
+      <<: *override_3p3d_cap256_sparse_decode
+      args:
+        <<: *override_3p3d_cap256_sparse_decode_args
         reasoning-parser: kimi_k3
         dyn-tool-call-parser: kimi_k3
         dyn-reasoning-parser: kimi_k3

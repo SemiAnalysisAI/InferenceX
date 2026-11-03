@@ -540,7 +540,9 @@ clusters:
       # 16: a foreign 1.63 TB tmpfs allocation holds host memory.
       # 17: GPU 0 runs at about 62% utilization and loads Kimi-K3 weights about 15x slower than the other nodes.
       # 13: Mooncake cannot register its per-rank segment over EFA (fi_mr_reg: Cannot allocate memory).
-      exclude: [dsxe-sa-b300-prd0-gpu-06, dsxe-sa-b300-prd0-gpu-10, dsxe-sa-b300-prd0-gpu-13,
+      # 00, 01: same registration failure on 2026-11-03 (segment not backed by transparent huge pages).
+      exclude: [dsxe-sa-b300-prd0-gpu-00, dsxe-sa-b300-prd0-gpu-01,
+                dsxe-sa-b300-prd0-gpu-06, dsxe-sa-b300-prd0-gpu-10, dsxe-sa-b300-prd0-gpu-13,
                 dsxe-sa-b300-prd0-gpu-14, dsxe-sa-b300-prd0-gpu-15, dsxe-sa-b300-prd0-gpu-16,
                 dsxe-sa-b300-prd0-gpu-17]
       gres: "gpu:{gpus}"
