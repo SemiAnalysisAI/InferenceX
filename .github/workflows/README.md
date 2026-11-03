@@ -366,6 +366,8 @@ The system validates **both ends** of the configuration pipeline:
 1. **Input Validation (Master Configs)**: Validates the structure of `inferencex-e2e/configs/*.yaml` files before any processing occurs
 2. **Output Validation (Matrix Entries)**: Validates the generated matrix entries that are passed to workflow templates
 
+The `Validate master configs` workflow runs both on every ready-for-review PR that changes a master config: it generates the full sweep and passes the matrix through `infx.workflows.benchmark_schema`.
+
 This dual-validation approach ensures:
 - No malformed configurations enter the pipeline
 - No invalid parameters reach the benchmark workflows

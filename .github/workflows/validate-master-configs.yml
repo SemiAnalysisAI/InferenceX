@@ -1,0 +1,38 @@
+name: Validate master configs
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'inferencex-e2e/configs/*-master.yaml'
+      - '.github/workflows/validate-master-configs.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-master-configs-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate master configs
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        shell: bash
+        working-directory: inferencex-e2e
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: Generate and validate the full sweep
+        run: |
+          uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+            python -m infx.matrix.generate full-sweep --config-files configs/*-master.yaml \
+            > "$RUNNER_TEMP/matrix.json"
+          uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+            python -m infx.workflows.benchmark_schema < "$RUNNER_TEMP/matrix.json" > /dev/null
