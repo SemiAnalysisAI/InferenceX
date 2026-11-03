@@ -57,38 +57,6 @@ def _engine_command(raw: list[str]) -> list[str]:
 
 def _mvp_command(arguments: argparse.Namespace) -> int:
     try:
-        if arguments.command == "gpu-manifest":
-            from .gpu_manifest import write_gpu_manifest
-
-            result = write_gpu_manifest(
-                arguments.kind, arguments.directory, arguments.output,
-                model_revision=arguments.model_revision, timeout_seconds=arguments.timeout_seconds,
-            )
-            print(json.dumps({key: value for key, value in result.items() if key != "files"},
-                             indent=2, sort_keys=True, allow_nan=False))
-            return 0
-
-        if arguments.command == "gpu-job":
-            from .gpu_job import preview_gpu_job, run_gpu_job
-
-            spec = _load_mvp_object(arguments.spec)
-            if not arguments.execute:
-                result = preview_gpu_job(spec)
-                print(json.dumps(result, indent=2, sort_keys=True, allow_nan=False))
-                return 0
-            if arguments.output is None:
-                raise ValueError("gpu-job --execute requires --output")
-            result = run_gpu_job(spec, arguments.output)
-            print(json.dumps(result, indent=2, sort_keys=True, allow_nan=False))
-            if (result.get("ci_accepted") is True and result.get("status") == "complete"
-                    and result.get("measurement_status") == "complete"
-                    and result.get("regression_status") == "pass" and result.get("cleanup_status") == "clean"):
-                return 0
-            if (result.get("regression_status") == "fail" or result.get("status") in {"failed", "aborted"}
-                    or result.get("cleanup_status") == "failed"):
-                return 1
-            return 2
-
         if arguments.command == "srt-yaml-serve":
             from .srt_selected import selected_plan, serve
 
@@ -127,15 +95,6 @@ def _mvp_command(arguments: argparse.Namespace) -> int:
             )
             print(json.dumps(result, indent=2, sort_keys=True, allow_nan=False))
             return 0 if result["status"] == "complete" else 1
-
-        if arguments.command == "gpu-report":
-            from .gpu_report import write_gpu_report
-
-            result = write_gpu_report(arguments.job, arguments.output)
-            print(json.dumps(result, indent=2, sort_keys=True, allow_nan=False))
-            # Successfully rendering an incomplete/failed run is not acceptance
-            # of that run. The GPU job's separate exit code remains authoritative.
-            return 0
 
         if arguments.command == "run":
             from .runner import preview_plan, run_plan
@@ -200,22 +159,6 @@ def _mvp_command(arguments: argparse.Namespace) -> int:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="vgbench")
     subparsers = parser.add_subparsers(dest="command", required=True)
-
-    gpu_manifest = subparsers.add_parser("gpu-manifest", help="hash staged runtime/model files; no GPU work or downloads")
-    gpu_manifest.add_argument("kind", choices=("runtime", "model"))
-    gpu_manifest.add_argument("directory", type=Path)
-    gpu_manifest.add_argument("--model-revision", help="immutable model revision, required for a model inventory")
-    gpu_manifest.add_argument("--timeout-seconds", type=float, default=600)
-    gpu_manifest.add_argument("--output", required=True, type=Path, help="new manifest file outside the inventoried tree")
-
-    gpu_job = subparsers.add_parser("gpu-job", help="preview a bounded controlled GPU job; --execute requires authorization")
-    gpu_job.add_argument("spec", type=Path)
-    gpu_job.add_argument("--execute", action="store_true")
-    gpu_job.add_argument("--output", type=Path, help="new evidence directory; no overwrites")
-
-    gpu_report = subparsers.add_parser("gpu-report", help="render recorded GPU job evidence, including incomplete runs")
-    gpu_report.add_argument("job", type=Path)
-    gpu_report.add_argument("--output", required=True, type=Path, help="new report directory")
 
     selected_server = subparsers.add_parser("srt-yaml-serve", help="serve a selected YAML video workload")
     selected_server.add_argument("--spec", required=True, type=Path)

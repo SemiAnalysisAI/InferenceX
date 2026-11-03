@@ -10,7 +10,7 @@ import yaml
 PACKAGE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PACKAGE))
 
-from evaluator import cli, gpu_job, srt_selected  # noqa: E402
+from evaluator import cli, srt_selected  # noqa: E402
 from specs import h3_spec  # noqa: E402
 
 
@@ -54,7 +54,7 @@ def test_selected_server_executes_recipe_command_and_records_selected_environmen
     plan = h3_spec.plan_for(h3_spec.load_spec(PACKAGE / "specs/h3.yaml"), "release-v1")
     model = _snapshot(tmp_path / "model")
     uuids = ["GPU-1", "GPU-2"]
-    monkeypatch.setattr(gpu_job, "cuda_devices", lambda: uuids)
+    monkeypatch.setattr(srt_selected, "cuda_devices", lambda: uuids)
     executed = []
     monkeypatch.setattr(srt_selected.os, "execvpe", lambda file, argv, env: executed.append((file, argv, env)))
     monkeypatch.setenv("HF_HUB_OFFLINE", "0")
@@ -98,7 +98,7 @@ def test_selected_server_requires_snapshot_argument_and_explicit_view(tmp_path, 
     plan = h3_spec.plan_for(h3_spec.load_spec(PACKAGE / "specs/h3.yaml"), "release-v1")
     model = tmp_path / "model"
     model.mkdir()
-    monkeypatch.setattr(gpu_job, "cuda_devices", lambda: ["GPU-1", "GPU-2"])
+    monkeypatch.setattr(srt_selected, "cuda_devices", lambda: ["GPU-1", "GPU-2"])
     with pytest.raises(ValueError, match="model snapshot"):
         srt_selected.serve(plan, runtime="sglang", runtime_revision="a" * 40,
             model_path=model, port=30283, gpus=2, output=tmp_path / "server",
@@ -128,7 +128,7 @@ def test_v01_vllm_four_gpu_server_records_sealed_launch(tmp_path, monkeypatch):
     plan = h3_spec.plan_for(h3_spec.load_spec(PACKAGE / "specs/h3-v0.1.yaml"), "release-v1")
     model = _snapshot(tmp_path / "model")
     uuids = [f"GPU-{index}" for index in range(4)]
-    monkeypatch.setattr(gpu_job, "cuda_devices", lambda: uuids)
+    monkeypatch.setattr(srt_selected, "cuda_devices", lambda: uuids)
     monkeypatch.setenv("VLLM_OMNI_SERVER_STORAGE__PATH", str(tmp_path / "storage"))
     monkeypatch.setenv("H3_CONTAINER_IMAGE", "example/vllm:v0.30.0@sha256:" + "a" * 64)
     monkeypatch.setenv("H3_RECIPE_ENV_KEYS", '["VLLM_OMNI_SERVER_STORAGE__PATH"]')
@@ -206,7 +206,7 @@ def test_vllm_view_checks_snapshot_before_creating_runtime_directories(tmp_path,
     output = tmp_path / "server"
     monkeypatch.setenv("VLLM_OMNI_SERVER_STORAGE__PATH", str(storage))
     monkeypatch.setenv("H3_RECIPE_ENV_KEYS", '["VLLM_OMNI_SERVER_STORAGE__PATH"]')
-    monkeypatch.setattr(gpu_job, "cuda_devices", lambda: ["GPU-1", "GPU-2"])
+    monkeypatch.setattr(srt_selected, "cuda_devices", lambda: ["GPU-1", "GPU-2"])
     with pytest.raises(ValueError, match="snapshot lacks"):
         srt_selected.serve(plan, runtime="vllm-omni", runtime_revision="a" * 40,
             model_path=model, port=30283, gpus=2, output=output,
@@ -221,7 +221,7 @@ def test_selected_cli_forwards_engine_command_after_separator(tmp_path, monkeypa
     model = tmp_path / "model"
     model.mkdir()
     output = tmp_path / "server"
-    monkeypatch.setattr(gpu_job, "cuda_devices", lambda: ["GPU-1", "GPU-2"])
+    monkeypatch.setattr(srt_selected, "cuda_devices", lambda: ["GPU-1", "GPU-2"])
     monkeypatch.setattr(srt_selected.os, "execvpe", lambda *args: None)
     command = ["python3", "-m", "engine", "--model-path", str(model), "--tp-size", "3"]
     assert cli.main(["srt-yaml-serve", "--spec", str(path), "--set", "release-v1",
@@ -235,6 +235,6 @@ def test_selected_cli_forwards_engine_command_after_separator(tmp_path, monkeypa
 
 def test_sglang_child_rechecks_uuid_order_before_import(monkeypatch):
     monkeypatch.setenv("VGBENCH_GPU_UUIDS", "GPU-1,GPU-2")
-    monkeypatch.setattr(gpu_job, "cuda_devices", lambda: ["GPU-2", "GPU-1"])
+    monkeypatch.setattr(srt_selected, "cuda_devices", lambda: ["GPU-2", "GPU-1"])
     with pytest.raises(RuntimeError, match="UUIDs differ"):
         srt_selected._sglang_main()

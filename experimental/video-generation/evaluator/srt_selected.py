@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import ctypes
 import hashlib
 import json
 import math
 import os
 import re
 import time
+import uuid
 from pathlib import Path
 
 from specs import h3_spec
@@ -25,6 +27,25 @@ _CREDENTIAL_ENV = re.compile(
     r"API_KEY|ACCESS_KEY|PRIVATE_KEY|SSH_KEY)(?:_|$)",
     re.IGNORECASE,
 )
+
+
+def cuda_devices() -> list[str]:
+    # Resolve the current mask through the driver without creating a CUDA context;
+    # nvidia-smi ordinals alone do not establish CUDA device identity.
+    cuda = ctypes.CDLL("libcuda.so.1")
+    def ok(code):
+        if code != 0:
+            raise RuntimeError("CUDA driver inventory failed: " + str(code))
+    ok(cuda.cuInit(0))
+    count = ctypes.c_int()
+    ok(cuda.cuDeviceGetCount(ctypes.byref(count)))
+    values = []
+    for ordinal in range(count.value):
+        device, raw = ctypes.c_int(), (ctypes.c_ubyte * 16)()
+        ok(cuda.cuDeviceGet(ctypes.byref(device), ordinal))
+        ok(cuda.cuDeviceGetUuid(ctypes.byref(raw), device))
+        values.append("GPU-" + str(uuid.UUID(bytes=bytes(raw))))
+    return values
 
 
 def _recipe_environment(env: dict[str, str]) -> dict[str, str]:
@@ -128,7 +149,6 @@ def serve(
     snapshot = str(model_path)
     if command.count(snapshot) != 1:
         raise ValueError("the engine command must contain the model snapshot path exactly once")
-    from .gpu_job import cuda_devices
 
     uuids = cuda_devices()
     if len(uuids) != gpus:
@@ -179,7 +199,6 @@ def serve(
 
 def _sglang_main() -> None:
     """Check the assigned device order before importing the engine in the child."""
-    from .gpu_job import cuda_devices
 
     expected = os.environ.get("VGBENCH_GPU_UUIDS")
     if not expected:
