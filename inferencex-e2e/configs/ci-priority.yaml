@@ -29,7 +29,6 @@ adjustments:
     dynamo-vllm: 1.5
   model-prefix:
     dsv41flash: 0.5
-    kimik3: 0.5
     glm5.3: 0.5
     glm5.2: 0.5
     minimaxm31flash: 0.3

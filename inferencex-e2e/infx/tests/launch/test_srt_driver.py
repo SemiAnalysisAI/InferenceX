@@ -459,13 +459,13 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
     assert outputs.exists() is not outputs.is_relative_to(checkout)
 
 
-@pytest.mark.parametrize(("model_prefix", "precision", "framework", "model", "require_power", "lane"), [
-    ("kimik3", "fp4", "vllm", "moonshotai/Kimi-K3", "0", "agentx"),
-    ("glm5.2", "fp8", "dynamo-sglang", "zai-org/GLM-5.2-FP8", "1", "adapter"),
-    ("glm5.2", "fp8", "dynamo-sglang", "zai-org/GLM-5.2-FP8", "0", "adapter"),
+@pytest.mark.parametrize(("cluster", "precision", "model", "require_power", "lane"), [
+    ("gb200-nv", "fp4", "zai-org/GLM-5.2", "0", "agentx"),
+    ("h200-dgxc", "fp8", "zai-org/GLM-5.2-FP8", "1", "adapter"),
+    ("h200-dgxc", "fp8", "zai-org/GLM-5.2-FP8", "0", "adapter"),
 ])  # fmt: skip
 def test_power_lane_stages_provenance_and_validates_each_concurrency(
-    harness, model_prefix, precision, framework, model, require_power, lane
+    harness, cluster, precision, model, require_power, lane
 ):
     adapter = harness.tmp / "results-python"
     adapter.write_text(
@@ -473,8 +473,8 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     )
     adapter.chmod(0o755)
     env = lane_env(
-        harness, "h200-dgxc", LANE_FRAGMENT + POWER_TELEMETRY,
-        MODEL_PREFIX=model_prefix, PRECISION=precision, FRAMEWORK=framework, MODEL=model,
+        harness, cluster, LANE_FRAGMENT + POWER_TELEMETRY,
+        MODEL_PREFIX="glm5.2", PRECISION=precision, FRAMEWORK="dynamo-sglang", MODEL=model,
         IS_AGENTIC="1", ISL="0", OSL="0", CONC="4", CONC_LIST="4", FAKE_RESULTS="agentic",
         REQUIRE_POWER=require_power, INFERENCEX_RESULTS_PYTHON=str(adapter), POWER="1",
     )  # fmt: skip
