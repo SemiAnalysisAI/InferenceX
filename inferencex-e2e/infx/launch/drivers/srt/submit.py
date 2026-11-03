@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from infx.launch.drivers.srt.lanes import SrtLane
     from infx.launch.drivers.srt.run import SrtRun
     from infx.launch.request import SrtRequest
+    from infx.srt_slurm.workload import CpuPowerSource
 
 SINGLE_NODE_SUBMISSION = "srt-single-node-submission.json"
 MULTINODE_SUBMISSION = "srt-submission.json"
@@ -89,7 +90,7 @@ def gate_args(request: SrtRequest) -> list[str]:
 
 
 def bind_point(
-    run: SrtRun, checkout: Checkout, arguments: Path, cpu_power_source: str | None
+    run: SrtRun, checkout: Checkout, arguments: Path, cpu_power_source: CpuPowerSource | None
 ) -> int:
     """Bind the single-node recipe variant for this point; the binder writes ``arguments``.
 
@@ -119,7 +120,7 @@ def bind_recipe(
     staged: str,
     output: str,
     power_port: int | None,
-    cpu_power_source: str | None,
+    cpu_power_source: CpuPowerSource | None,
     client_env: Mapping[str, str],
 ) -> int:
     """Compose and bind the staged fragment into ``output``, with telemetry if ``power_port``

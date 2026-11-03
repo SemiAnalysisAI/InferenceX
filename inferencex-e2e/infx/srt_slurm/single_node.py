@@ -16,6 +16,7 @@ from infx.config import repository_root
 from infx.srt_slurm.synthetic_acceptance import ENGINES, selected_recipes, spec_parameters
 from infx.srt_slurm.workload import (
     BOUND_RECIPE,
+    CpuPowerSource,
     add_cpu_power_source_argument,
     add_fabric_argument,
     bind_workload,
@@ -75,7 +76,7 @@ def select_recipe(
     *,
     root: Path | None = None,
     expand: Callable[..., list[tuple[str | None, dict[str, Any]]]] = selected_recipes,
-    cpu_power_source: str | None = None,
+    cpu_power_source: CpuPowerSource | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """Resolve a matrix point to one native variant, never submit an entire sweep.
 

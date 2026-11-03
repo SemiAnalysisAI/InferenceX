@@ -23,7 +23,12 @@ from infx.matrix.generate import expand_config_keys, generate_config_matrix
 from infx.matrix.validation import config_root, load_config_files, load_runner_file
 from infx.srt_slurm.single_node import select_recipe
 from infx.srt_slurm.synthetic_acceptance import build_overrides, selected_recipes
-from infx.srt_slurm.workload import bind_multinode, check_setup_script, resolve_fabric
+from infx.srt_slurm.workload import (
+    CpuPowerSource,
+    bind_multinode,
+    check_setup_script,
+    resolve_fabric,
+)
 
 if TYPE_CHECKING:
     from infx.clusters import Cluster, RunnerInventory
@@ -147,7 +152,7 @@ def bound_variant(
     *,
     expand: Callable[..., list[tuple[str | None, dict[str, Any]]]] = selected_recipes,
     power_port: int | None = None,
-    cpu_power_source: str | None = None,
+    cpu_power_source: CpuPowerSource | None = None,
     client_env: Mapping[str, str] | None = None,
 ) -> tuple[str | None, dict[str, Any]]:
     """The variant the launcher submits for ``point``, composed and bound.

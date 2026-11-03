@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 from pydantic import AfterValidator, Field, PlainSerializer, field_validator, model_validator
 
 from infx.clusters.base import Record, SchedulerSettings, Visibility, Volume
-from infx.srt_slurm.workload import resolve_fabric
+from infx.srt_slurm.workload import CpuPowerSource, resolve_fabric
 
 if TYPE_CHECKING:
     from infx.clusters import Cluster
@@ -181,7 +181,7 @@ class CpuPowerExporter(Record):
     CPU leg integrates.
     """
 
-    source: Literal["acpi", "rapl"]
+    source: CpuPowerSource
 
 
 class SrtSlurmSettings(Record):
