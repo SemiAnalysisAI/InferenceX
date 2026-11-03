@@ -54,10 +54,6 @@ def _hash(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _digest(value: Any) -> str:
-    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-
-
 def _iso(unix: float) -> str:
     return datetime.fromtimestamp(unix, timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
 
