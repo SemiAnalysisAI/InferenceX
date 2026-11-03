@@ -23,7 +23,7 @@ The optional `fairness` plan field seals the schedule, requested libx264 ultrafa
 
 ## Hash contract
 
-`canonical_json_bytes` is a byte-for-byte copy of the function in #2916's `evaluator/mvp_runner.py`.
+`_sha256` hashes the same canonical JSON as `canonical_json_bytes` in #2916's `evaluator/mvp_runner.py`.
 It serializes with sorted keys, compact separators, UTF-8, and no NaN.
 
 - `plan_sha256(plan_for(spec, set_id))` equals the `plan_sha256` that #2916's runner records for the same plan.
