@@ -1,0 +1,81 @@
+base:
+  schema: 2
+  name: qwen3.8next-fp4-gb10-sglang-agentic
+  resources:
+    gpu_type: gb10
+    gpus_per_node: 1
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  # Tachometer takes 3 GB of unified memory.
+  observability:
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 1
+      args:
+        served-model-name: nvidia/Qwen3.8-Flash-Next-NVFP4
+        tensor-parallel-size: 1
+        revision: fc694b54fb0174e0913e6adf86691ef85a4ead47
+        speculative-draft-model-revision: fc694b54fb0174e0913e6adf86691ef85a4ead47
+        quantization: modelopt_mixed
+        moe-runner-backend: flashinfer_cutlass
+        page-size: 64
+        chunked-prefill-size: 4096
+        context-length: 262144
+        speculative-algorithm: NEXTN
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+        reasoning-parser: qwen3
+        # AgentX requests reach 256k tokens, and FP8 fits two of them plus their prefill chunks in
+        # this memory. Otherwise SGLang sizes the pool from the memory free after loading, which
+        # varies by boot. This fraction leaves enough for that pool on every boot.
+        mem-fraction-static: 0.90
+        max-total-tokens: 532480
+        kv-cache-dtype: fp8_e4m3
+        speculative-draft-kv-cache-dtype: fp8_e4m3
+        enable-metrics: true
+        # SGLang supports offloading the N-gram table to SSD, which is necessary for GB10's
+        # limited memory pool size.
+        ple-offload-embedding: true
+        ple-offload-backend: file
+        # Not /tmp, which in the container is a tmpfs in unified memory.
+        ple-offload-dir: /var/tmp/ple
+        # AgentX's parallel subagent requests past these four wait at the server. As on GB300,
+        # lazy buffers and bfloat16 state fit 20 state slots in the memory of 10, leaving room
+        # for cached prefixes.
+        max-running-requests: 4
+        max-mamba-cache-size: 20
+        mamba-radix-cache-strategy: extra_buffer_lazy
+        mamba-ssm-dtype: bfloat16
+      env:
+        # Outlast AIPerf's 300 s client connection pool.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+        # Sign-off prohibits this: it makes the draft head cheaper by lowering its precision.
+        SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
+        # Necessary for N-gram SSD offloading.
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+  benchmark:
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      # Let responses still running when the window ends finish, for up to 30 minutes.
+      # No new requests start in that time.
+      AIPERF_BENCHMARK_GRACE_PERIOD: '1800'
+
+override_c1:
+  benchmark:
+    env:
+      CONC: '1'
+
+override_c2:
+  benchmark:
+    env:
+      CONC: '2'

@@ -229,6 +229,16 @@ Runner leases account for GitHub-managed work only. Slurm remains the final
 capacity authority for external users, reservations, offline compute nodes,
 and allocations submitted outside this admission path.
 
+## DGX Spark
+
+A DGX Spark (`gb10-spark`) runs the setup above with `munge`, `slurmctld` and `slurmd` on the host
+beside its runner. The host hangs rather than OOM-killing when its 121 GiB of unified memory runs
+out, so cap jobs at 116 GiB with `MemSpecLimit`. That cap doesn't count GPU allocations, so recipes
+must also leave room. Enroot's `/tmp` is a tmpfs in that memory, so the
+[cluster profile](../../configs/runners.yaml) points `TMPDIR` at `/var/tmp`. Load Pyxis with
+`container_scope=job` so a job's root filesystem is removed when it ends. On Ubuntu 24.04,
+`enroot-nsenter` needs the AppArmor profile the enroot package installs to create user namespaces.
+
 ## Storage layout
 
 ### GB300: one cluster, two allocation partitions

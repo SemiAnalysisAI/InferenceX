@@ -219,6 +219,19 @@ qwen3.5-397b-a17b-nvfp4__mtp__native__default-default:
     draft_kv_cache_dtype: {value: null, source: default}
     kv_cache_dtype: {value: fp8, source: explicit}
 
+qwen3.8-27b-nvfp4__mtp__native__default-default:
+  select: {model_prefixes: [qwen3.827b], method: mtp}
+  collection:
+    engine: vllm
+    draft: native
+    draft_sample: {value: null, source: default}
+    verify: {value: standard, source: documented}
+    adaptive: {value: false, source: documented}
+    topology: {value: chain, source: documented}
+    draft_precision: {value: null, source: default}
+    draft_kv_cache_dtype: {value: null, source: default}
+    kv_cache_dtype: {value: fp8, source: explicit}
+
 qwen3.8-flash-next-fp8__mtp__native__default-default:
   select: {model_prefixes: [qwen3.8next], method: mtp}
   collection:

@@ -1,0 +1,58 @@
+base:
+  schema: 2
+  name: qwen3.827b-fp4-gb10-vllm-agentic
+  resources:
+    gpu_type: gb10
+    gpus_per_node: 1
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  # Tachometer takes 3 GB of unified memory.
+  observability:
+    tachometer:
+      enabled: false
+  engine: vllm
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 1
+      args:
+        served-model-name: nvidia/Qwen3.8-27B-NVFP4
+        tensor-parallel-size: 1
+        kv-cache-dtype: fp8
+        gpu-memory-utilization: 0.7
+        max-model-len: 262144
+        max-num-seqs: 8
+        max-num-batched-tokens: 8192
+        enable-chunked-prefill: true
+        async-scheduling: true
+        enable-prefix-caching: true
+        language-model-only: true
+        load-format: fastsafetensors
+        # More draft tokens add no throughput on this hardware.
+        speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
+        enable-auto-tool-choice: true
+        tool-call-parser: qwen3_coder
+        reasoning-parser: qwen3
+  benchmark:
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+      # Let responses still running when the window ends finish, for up to 30 minutes.
+      # No new requests start in that time.
+      AIPERF_BENCHMARK_GRACE_PERIOD: '1800'
+
+override_c1:
+  benchmark:
+    env:
+      CONC: '1'
+
+override_c2:
+  benchmark:
+    env:
+      CONC: '2'
+
+override_c4:
+  benchmark:
+    env:
+      CONC: '4'

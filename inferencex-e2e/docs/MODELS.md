@@ -101,6 +101,7 @@ The table also records both the agreed plan-of-record (PoR) draft-model mapping 
 | GLM-5.3-Flash (`glm5.3flash`) | native/upstream SGLang engine | native MTP | None | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
 | Qwen3.5-397B-A17B (`qwen3.5`) | native/upstream SGLang engine | native MTP | None | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
 | Qwen3.8-Flash-Next (`qwen3.8next`) | native/upstream SGLang engine | TBD | native MTP (built-in 4B multi-step module; golden AL collector: [`qwen3.8next_fp4_b300_vllm.sh`](../benchmarks/single_node/speedbench/qwen3.8next_fp4_b300_vllm.sh)) | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
+| Qwen3.8-27B (`qwen3.827b`) | native/upstream vLLM engine | TBD | native MTP (golden AL collector: [`qwen3.827b_fp4_b300_vllm.sh`](../benchmarks/single_node/speedbench/qwen3.827b_fp4_b300_vllm.sh)) | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
 
 ### KV cache offloading policy
 
@@ -151,6 +152,7 @@ Agreed by the vLLM and SGLang communities for week-1 official AgentX results. "N
 |---|---|---|---|---|
 | GLM-5.3-Flash | `glm5.3flash` | 2026-11-05 ([#4708](https://github.com/SemiAnalysisAI/InferenceX/pull/4708)) | Agentic coding (SGLang MTP; golden AL curve `glm-5.3-flash__mtp__native__default-default.yaml`) | |
 | Kimi-K3.1-Pro | `kimik3.1` | 2026-11-04 ([#4795](https://github.com/SemiAnalysisAI/InferenceX/pull/4795)) | Agentic coding (vLLM and SGLang DSpark; golden AL curve `kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark-preview__probabilistic-block.yaml`; [week-1 precision policy](#kimi-k31-pro-week-1-precision-policy)) | |
+| Qwen3.8-27B | `qwen3.827b` | 2026-10-27 | Agentic coding (vLLM native MTP; golden AL curve `qwen3.8-27b-nvfp4__mtp__native__default-default.yaml`) | |
 | MiniMax-M3.1-Flash | `minimaxm31flash` | 2026-10-23 | Agentic coding (vLLM DSpark; golden AL curve `minimax-m3.1-flash__dspark__native__probabilistic-block.yaml`) | |
 | Muse Spark Open 816B-A42B | `musespark` | 2026-10-15 | Agentic coding (SGLang and GB300 TensorRT-LLM with DFlash2 draft `RadixArk/Muse-Spark-Open-DFlash2`; golden AL curve `muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml`) | |
 | DeepSeek-V4.1-Flash | `dsv41flash` | 2026-09-10 | Agentic coding (vLLM: DSpark, Engram UVA offload; SGLang: DSpark arms added per SKU from 2026-09-17; ATOM: MI355X TP2/TP4 DSpark added 2026-09-23, removed in #3463, restored on srt-slurm 2026-09-30; GPU validation pending) | |

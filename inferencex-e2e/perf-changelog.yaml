@@ -12224,3 +12224,12 @@
     - "GPU-resident KV at concurrency 2-16; HiCache with SGLang's default auto-sized host tier (~119 GiB, 127 GB per rank; ~1,020 GB per node) at concurrency 20, 24, 28 and 32."
     - "Prefill CUDA graphs are disabled after a CUDA misaligned-address fault during ~336k-token single-request replay at concurrency 1."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4719
+
+- config-keys:
+    - qwen3.827b-fp4-gb10-vllm-agentic-mtp
+    - qwen3.8next-fp4-gb10-sglang-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Add Qwen3.8-27B NVFP4 AgentX on a DGX Spark (GB10) with vLLM MTP at 3 draft tokens at conc 1, 2 and 4."
+    - "Add Qwen3.8-Flash-Next NVFP4 AgentX on a DGX Spark with SGLang MTP and an FP8 KV cache at conc 1 and 2, with its N-gram table file-backed on the NVMe."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

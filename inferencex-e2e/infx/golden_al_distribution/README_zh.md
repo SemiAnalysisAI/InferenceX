@@ -168,6 +168,7 @@ gh workflow run speedbench-al.yml \
 | GLM-5.2 | MTP | [`glm-5.2-fp8__mtp__native__default-default.yaml`](glm-5.2-fp8__mtp__native__default-default.yaml) |
 | GLM-5.3 | MTP（SGLang） | [`glm-5.3-nvfp4__mtp__native__default-default.yaml`](glm-5.3-nvfp4__mtp__native__default-default.yaml) |
 | Qwen3.8-Flash-Next | MTP (native) | [`qwen3.8-flash-next-fp8__mtp__native__default-default.yaml`](qwen3.8-flash-next-fp8__mtp__native__default-default.yaml) |
+| Qwen3.8-27B | MTP (native) | [`qwen3.8-27b-nvfp4__mtp__native__default-default.yaml`](qwen3.8-27b-nvfp4__mtp__native__default-default.yaml)（[占位](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/0)） |
 | Muse Spark Open | DFlash2 | [`muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml`](muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml) |
 
 ## 在 srt-slurm 运行中使用黄金曲线
