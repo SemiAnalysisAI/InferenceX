@@ -4,7 +4,6 @@ on:
   pull_request:
     paths: &h3-video-paths
       - 'experimental/video-generation/**'
-      - 'inferencex-e2e/benchmarks/h3/**'
       - 'inferencex-e2e/infx/results/power/**'
       - '.github/workflows/test-h3-spec.yml'
   push:
