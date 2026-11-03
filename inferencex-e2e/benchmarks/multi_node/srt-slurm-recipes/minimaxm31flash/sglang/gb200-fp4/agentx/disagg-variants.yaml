@@ -158,7 +158,9 @@ base:
         # The frontend picks the decode DP rank; least-loaded sends each request to
         # the rank with the fewest in flight, where round-robin left the busiest rank
         # at 1.45x the mean and every DP rank waits for it each step.
-        router-mode: least-loaded
+        router-mode: kv
+        router-session-affinity-ttl-secs: "14400"
+        disaggregation-decode-enable-radix-cache: true
         load-balance-method: total_tokens
         # 48 per DP rank.
         max-running-requests: 384
@@ -170,7 +172,7 @@ base:
         speculative-draft-kv-cache-dtype: fp8_e4m3
         watchdog-timeout: 3600
         enable-metrics: true
-      kv_events: false
+      kv_events: true
   sbatch_directives:
     mem: "0"
     exclusive: ""
