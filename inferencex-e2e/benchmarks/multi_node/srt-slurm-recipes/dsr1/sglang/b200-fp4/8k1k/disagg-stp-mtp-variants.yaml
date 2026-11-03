@@ -143,11 +143,6 @@ zip_override_stp_lowlat:
     - "b200-fp4-stp-low-latency-dep4-1p-tep8-5d"
     - "b200-fp4-stp-low-latency-dep4-2p-tep8-5d"
   resources: {}
-  roles:
-    prefill:
-      nodes: [1, 1, 2]
-    decode:
-      nodes: [1, 5, 5]
 
 
 override_stp_maxtpt_7p2d:
