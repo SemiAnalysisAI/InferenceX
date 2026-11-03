@@ -304,6 +304,7 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     image: str
+    require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     srt_recipe: str | None = Field(default=None, alias=Fields.SRT_RECIPE.value, min_length=1)
     model: str
     model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value)
@@ -354,6 +355,7 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     image: str
+    require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     model: str
     model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value)
     precision: str
@@ -659,6 +661,7 @@ class MultiNodeSeqLenConfig(BaseModel):
 class AgenticCodingSearchSpaceEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
+    require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     tp: int | None = Field(default=None, gt=0)
     srt_recipe: RecipeReference | None = Field(default=None, alias=Fields.SRT_RECIPE.value)
     eval_srt_recipe: RecipeReference | None = Field(

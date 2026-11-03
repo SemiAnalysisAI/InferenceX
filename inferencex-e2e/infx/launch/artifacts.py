@@ -129,6 +129,20 @@ def copy_agentic_results(source_dir: Path, workspace: Path, result_filename: str
     _say(f"Copied {len(files)} agentic result file(s)")
 
 
+def copy_gate_results(logs_dir: Path, workspace: Path, result_filename: str) -> None:
+    """Copy the acceptance gate's raw ``al_gate/`` files, then its verdict, which must exist."""
+    raw = logs_dir / "al_gate"
+    try:
+        if raw.is_dir():
+            shutil.copytree(raw, workspace / raw.name, symlinks=True, dirs_exist_ok=True)
+    except OSError as error:
+        raise ArtifactError(f"failed to stage {raw}: {error}") from error
+    verdict = logs_dir / f"al_gate_{result_filename}.json"
+    if not verdict.is_file() or verdict.stat().st_size == 0:
+        raise ArtifactError(f"acceptance gate result {verdict} is missing or empty")
+    copy_to_workspace(verdict, workspace / verdict.name)
+
+
 def copy_eval_artifacts(eval_dir: Path, workspace: Path) -> None:
     """Copy every top-level file of ``eval_dir``; a missing directory only warns."""
     if not eval_dir.is_dir():
