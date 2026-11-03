@@ -14,7 +14,10 @@ Respond = Callable[[str, str], tuple[int, object]]
 
 @pytest.fixture
 def http_server() -> Iterator[Callable[[Respond], str]]:
-    """Start local servers answering with ``respond(method, path) -> (status, json_body)``."""
+    """Start local servers answering with ``respond(method, path) -> (status, body)``.
+
+    A ``str`` body is sent as plain text, anything else as JSON.
+    """
     started: list[ThreadingHTTPServer] = []
 
     def start(respond: Respond) -> str:
@@ -27,9 +30,10 @@ def http_server() -> Iterator[Callable[[Respond], str]]:
                 self._reply(*respond("POST", self.path))
 
             def _reply(self, status: int, body: object) -> None:
-                payload = json.dumps(body).encode()
+                text = isinstance(body, str)
+                payload = (body if text else json.dumps(body)).encode()
                 self.send_response(status)
-                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Type", "text/plain" if text else "application/json")
                 self.send_header("Content-Length", str(len(payload)))
                 self.end_headers()
                 self.wfile.write(payload)
