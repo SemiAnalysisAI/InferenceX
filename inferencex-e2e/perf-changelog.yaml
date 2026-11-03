@@ -11891,6 +11891,6 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Add DeepSeek-V4.1-Flash FP4 AgentX on MI355X with a disaggregated TileRT setup at concurrency 1: one vLLM ROCm prefill (vllm/vllm-openai-rocm:nightly-e68efc68, the validated MI355X DeepSeek-V4.1-Flash image; TP4, eager) sends the prompt KV over Mooncake to one TileRT decode (ghcr.io/tile-ai/tilert-rocm-decode:0.1.6 with tilert 0.1.7; TP8, three drafts from the checkpoint's own DSpark head) behind the TileRT PD router."
-    - "Throughput runs simulate the dsv41flash_dspark golden AL at three drafts (2.90): a TileRT decode now takes its draft method from its model profile, and the dsv41 profile maps to dspark."
+    - "Add DeepSeek-V4.1-Flash FP4 AgentX on MI355X with a disaggregated TileRT setup at concurrency 1: one vLLM ROCm prefill (vllm/vllm-openai-rocm:nightly-e68efc68, the validated MI355X DeepSeek-V4.1-Flash image; TP4, eager) sends the prompt KV over Mooncake to one TileRT decode (ghcr.io/tile-ai/tilert-rocm-decode:0.1.6 with tilert 0.1.7; TP8, five drafts from the checkpoint's own DSpark head) behind the TileRT PD router, with the full 1M context on both ranks and no context cap on the replay."
+    - "Throughput runs simulate the dsv41flash_dspark golden AL at five drafts (3.51): a TileRT decode now takes its draft method from its model profile, and the dsv41 profile maps to dspark."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4755

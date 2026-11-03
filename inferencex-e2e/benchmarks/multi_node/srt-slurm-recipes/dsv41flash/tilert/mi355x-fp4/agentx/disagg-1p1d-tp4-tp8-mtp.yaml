@@ -46,8 +46,8 @@ roles:
       attention-config: '{"indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
       block-size: 128
       # The DSpark draft runs on the prefill too, so the decode receives its window state.
-      speculative-config: '{"method":"dspark","num_speculative_tokens":3,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
-      max-model-len: 131072
+      speculative-config: '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
+      max-model-len: 1048576
       max-num-batched-tokens: 32768
       max-num-seqs: 1
       engram-config: '{"cpu_offload":false}'
@@ -57,7 +57,7 @@ roles:
       kv-transfer-config: >-
         {"kv_connector":"DsV41TileRTConnector","kv_connector_module_path":"tilert.pd_vllm.dsv41_prefill_connector",
          "kv_role":"kv_producer","kv_connector_extra_config":{
-           "tilert_model":"dsv41","tilert_max_seq_len":131072,"tilert_transport":"mooncake"}}
+           "tilert_model":"dsv41","tilert_max_seq_len":1048576,"tilert_transport":"mooncake"}}
   decode:
     engine: tilert
     container: ghcr.io/tile-ai/tilert-rocm-decode:0.1.6
@@ -73,10 +73,10 @@ roles:
       model: dsv41
       # TileRT reads the Hugging Face checkpoint directly; no converted weights.
       model-weights-dir: /model
-      max-seq-len: 131072
+      max-seq-len: 1048576
       transport: mooncake
       with-mtp: true
-      num-mtp: 3
+      num-mtp: 5
 frontend:
   type: tilert-router
   container_image: ghcr.io/tile-ai/tilert-rocm-decode:0.1.6
@@ -101,7 +101,6 @@ benchmark:
   env:
     TOKENIZER: /model
     SERVED_MODEL_NAME: deepseek-ai/DeepSeek-V4.1-Flash
-    AIPERF_MAX_CONTEXT_LENGTH: "131072"
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
     HF_HOME: /logs/hf_cache
     HF_HUB_OFFLINE: ""

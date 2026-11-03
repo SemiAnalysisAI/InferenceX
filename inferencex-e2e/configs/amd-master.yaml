@@ -1038,9 +1038,9 @@ glm5.3-fp8-mi355x-tilert-agentic:
           dp-attn: false
 
 # DeepSeek-V4.1-Flash AgentX on MI355X: vLLM ROCm prefill (the validated MI355X
-# DeepSeek-V4.1-Flash nightly, TP4) feeding a TileRT decode (TP8, three DSpark
-# drafts from the checkpoint's own head) over Mooncake; throughput runs use the
-# dsv41flash_dspark golden AL.
+# DeepSeek-V4.1-Flash nightly, TP4) feeding a TileRT decode (TP8, five DSpark
+# drafts from the checkpoint's own head) over Mooncake, full 1M context; throughput
+# runs use the dsv41flash_dspark golden AL.
 dsv41flash-fp4-mi355x-tilert-agentic-dspark:
   image: ghcr.io/tile-ai/tilert-rocm-decode:0.1.6
   model: deepseek-ai/DeepSeek-V4.1-Flash
