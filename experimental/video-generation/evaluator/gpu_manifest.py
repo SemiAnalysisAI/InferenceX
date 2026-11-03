@@ -14,38 +14,17 @@ import os
 import re
 import stat
 import time
-from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .gpu_job import source_file_manifest
+from .gpu_job import open_beneath, source_file_manifest
 from .runner import canonical_json_bytes
 
 
 def _deadline_check(deadline: float) -> None:
     if time.monotonic() >= deadline:
         raise TimeoutError("file inventory exceeded its read-only preparation deadline")
-
-
-@contextmanager
-def _open_regular(path: Path):
-    """Resolve the already-approved absolute path without following new links."""
-    descriptors = []
-    try:
-        current = os.open(path.anchor, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-        descriptors.append(current)
-        for part in path.parts[1:-1]:
-            current = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=current)
-            descriptors.append(current)
-        descriptor = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=current)
-        with os.fdopen(descriptor, "rb") as stream:
-            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
-                raise ValueError("model inventory accepts only regular files")
-            yield stream
-    finally:
-        for descriptor in reversed(descriptors):
-            os.close(descriptor)
 
 
 def _model_inventory(root: Path, revision: str, deadline: float) -> dict[str, Any]:
@@ -85,8 +64,10 @@ def _model_inventory(root: Path, revision: str, deadline: float) -> dict[str, An
             raise ValueError("model inventory accepts only regular files")
         digest = hashlib.sha256()
         count = 0
-        with _open_regular(target) as stream:
+        with open_beneath(target.anchor, target.parts[1:]) as stream:
             opened = os.fstat(stream.fileno())
+            if not stat.S_ISREG(opened.st_mode):
+                raise ValueError("model inventory accepts only regular files")
             if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns) != (
                 opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns
             ):

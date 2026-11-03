@@ -20,7 +20,8 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterator
 
-from .runner import _slots
+from .gpu_job import open_beneath
+from .runner import _slots, canonical_json_bytes
 
 
 MAX_JSON_BYTES = 8 * 1024 * 1024
@@ -52,10 +53,6 @@ def _text(value: Any, limit: int = 2000) -> str:
 
 def _escape(value: Any) -> str:
     return html.escape(_text(value, 32000), quote=True)
-
-
-def _canonical(value: Any) -> bytes:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode()
 
 
 def _is_digest(value: Any) -> bool:
@@ -90,25 +87,13 @@ class _Tree:
 
     @contextmanager
     def open(self, relative: str, maximum: int) -> Iterator[Any]:
-        parts = _relative(relative).parts
-        descriptors = []
-        try:
-            current = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-            descriptors.append(current)
-            for part in parts[:-1]:
-                current = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=current)
-                descriptors.append(current)
-            descriptor = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=current)
-            with os.fdopen(descriptor, "rb") as stream:
-                metadata = os.fstat(stream.fileno())
-                if not stat.S_ISREG(metadata.st_mode):
-                    raise _InvalidEvidence("Input must be a regular file")
-                if metadata.st_size > maximum:
-                    raise _InvalidEvidence("Input exceeds the viewer byte limit")
-                yield stream
-        finally:
-            for descriptor in reversed(descriptors):
-                os.close(descriptor)
+        with open_beneath(self.root, _relative(relative).parts) as stream:
+            metadata = os.fstat(stream.fileno())
+            if not stat.S_ISREG(metadata.st_mode):
+                raise _InvalidEvidence("Input must be a regular file")
+            if metadata.st_size > maximum:
+                raise _InvalidEvidence("Input exceeds the viewer byte limit")
+            yield stream
 
 
 def _pairs(pairs: list[tuple[str, Any]]) -> dict:
@@ -134,7 +119,7 @@ def _document(tree: _Tree, relative: str, issues: list[dict], *, expected: Any =
         value = json.loads(data, object_pairs_hook=_pairs, parse_constant=_reject_constant)
         if not isinstance(value, dict):
             raise _InvalidEvidence("JSON document must be an object")
-        canonical = _canonical(value)  # also rejects overflow-to-infinity numbers
+        canonical = canonical_json_bytes(value)  # also rejects overflow-to-infinity numbers
         digest = hashlib.sha256(canonical if canonical_hash else data).hexdigest()
         if expected is not None and (not _is_digest(expected) or expected != digest):
             raise _InvalidEvidence("Document SHA256 does not match its receipt")
@@ -281,7 +266,7 @@ def _verify_telemetry(tree: _Tree, metadata: dict, issues: list[dict], label: st
             if not line or len(line) > 1024 * 1024:
                 raise _InvalidEvidence("Empty or oversized telemetry sample")
             sample = json.loads(line, object_pairs_hook=_pairs, parse_constant=_reject_constant)
-            _canonical(sample)
+            canonical_json_bytes(sample)
             if not isinstance(sample, dict) or sample.get("phase") not in {"startup", "measurement", "cleanup"}:
                 raise _InvalidEvidence("Telemetry sample has an invalid phase or shape")
             monotonic = sample.get("monotonic_seconds")
@@ -406,7 +391,7 @@ def _role(tree: _Tree, label: str, metadata: Any, spec: dict, controlled: bool,
         if run.get("bundle_type") != "mvp_run" or run.get("bundle_version") != "0.1.0":
             _issue(issues, label, "Unsupported run bundle type or version")
             run = None
-        elif not isinstance(run.get("plan"), dict) or hashlib.sha256(_canonical(run["plan"])).hexdigest() != run.get("plan_sha256"):
+        elif not isinstance(run.get("plan"), dict) or hashlib.sha256(canonical_json_bytes(run["plan"])).hexdigest() != run.get("plan_sha256"):
             _issue(issues, label, "Run plan hash mismatch")
             run = None
         elif plan != run.get("plan"):
@@ -420,7 +405,7 @@ def _role(tree: _Tree, label: str, metadata: Any, spec: dict, controlled: bool,
             configuration = {}
         unsigned = {key: value for key, value in configuration.items() if key != "configuration_sha256"}
         declared = [value for value in (run.get("configuration_sha256"), configuration.get("configuration_sha256")) if value is not None]
-        config_hash = hashlib.sha256(_canonical(unsigned)).hexdigest()
+        config_hash = hashlib.sha256(canonical_json_bytes(unsigned)).hexdigest()
         config_valid = bool(declared) and all(_is_digest(value) and value == config_hash for value in declared)
         if not config_valid:
             _issue(issues, label, "Run configuration hash is absent or mismatched")

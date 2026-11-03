@@ -30,9 +30,10 @@ import sys
 import threading
 import time
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO, Iterator
 
 from .runner import canonical_json_bytes, preview_plan, validate_plan
 
@@ -136,6 +137,23 @@ def _read(path: Path, limit: int = 32 * 1024 * 1024) -> dict:
     if not isinstance(result, dict):
         raise ValueError("JSON evidence must be an object")
     return result
+
+
+@contextmanager
+def open_beneath(base: Path | str, parts: tuple[str, ...]) -> Iterator[BinaryIO]:
+    descriptors = []
+    try:
+        current = os.open(base, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        descriptors.append(current)
+        for part in parts[:-1]:
+            current = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=current)
+            descriptors.append(current)
+        descriptor = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=current)
+        with os.fdopen(descriptor, "rb") as stream:
+            yield stream
+    finally:
+        for descriptor in reversed(descriptors):
+            os.close(descriptor)
 
 
 def _keys(value: Any, expected: set[str], label: str, optional: set[str] | None = None) -> None:
