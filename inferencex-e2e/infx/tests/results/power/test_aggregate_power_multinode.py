@@ -11,10 +11,13 @@ import csv
 import json
 import shutil
 from pathlib import Path
+from typing import get_args
 
 import pytest
 
 from infx.results.power import multinode as apm
+from infx.results.power.cpu_side import SOCKET_METERS
+from infx.srt_slurm.workload import CpuPowerSource
 
 PRODUCER_SHA = "a" * 40
 WINDOW_START = 1000.0
@@ -1069,3 +1072,14 @@ class TestCpuSidePower:
         assert cpu["cpu_power_valid"] is False
         assert reason in cpu["reason_codes"]
         assert pkg.sidecar()["power_valid"] is True
+
+
+def test_each_cluster_cpu_source_reads_the_socket_meter_srt_slurm_writes(monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[4] / "utils/srt-slurm/src"))
+    from srtctl.core.power.cpu_rails import SENSOR_SUFFIXES
+    from srtctl.core.power.cpu_sample import PRIMARY_KIND_BY_SOURCE
+
+    sources = get_args(CpuPowerSource)
+    assert set(SOCKET_METERS) == set(sources)
+    for source in sources:
+        assert SOCKET_METERS[source].sensor_suffix == SENSOR_SUFFIXES[PRIMARY_KIND_BY_SOURCE[source]]
