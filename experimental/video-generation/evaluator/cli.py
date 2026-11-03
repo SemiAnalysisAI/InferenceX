@@ -1,4 +1,4 @@
-"""Controlled H3 CI, full-stream comparison, and portable evidence reports."""
+"""Controlled H3 runs and media inspection."""
 
 from __future__ import annotations
 
@@ -93,19 +93,6 @@ def _mvp_command(arguments: argparse.Namespace) -> int:
             print(json.dumps(receipt, indent=2, sort_keys=True, allow_nan=False))
             return 0 if result.get("status") == "complete" else 1
 
-        if arguments.command == "compare":
-            from .compare import compare_runs
-            from .report import write_report
-
-            result = compare_runs(
-                arguments.baseline, arguments.candidate,
-                policy=_load_mvp_object(arguments.policy),
-            )
-            if arguments.report is not None:
-                write_report(result, arguments.report)
-            print(json.dumps(result, indent=2, sort_keys=True, allow_nan=False))
-            return {"pass": 0, "fail": 1, "inconclusive": 2}[result["overall_status"]]
-
         if arguments.command == "inspect-media":
             from .media import analyze_media
 
@@ -139,12 +126,6 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--api-key-env", help="name of an environment variable containing a bearer token")
     run.add_argument("--serving-concurrency", type=int, help="opt into closed-loop delivery load with 1-32 concurrent requests; validation is separate")
     run.add_argument("--delivery-deadline-seconds", type=float, help="optional submit-to-downloaded-media deadline for technical goodput; not an attempt timeout")
-
-    compare = subparsers.add_parser("compare", help="compare paired run bundles and return a CI exit code")
-    compare.add_argument("baseline", type=Path)
-    compare.add_argument("candidate", type=Path)
-    compare.add_argument("--policy", required=True, type=Path)
-    compare.add_argument("--report", type=Path, help="new portable HTML report plus a local media-assets directory")
 
     inspect = subparsers.add_parser("inspect-media", help="fully decode a file and measure technical media integrity")
     inspect.add_argument("media", type=Path)

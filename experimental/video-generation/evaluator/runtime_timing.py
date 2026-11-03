@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from functools import lru_cache
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -18,12 +17,6 @@ import time
 
 
 VERSION = "1.0.0"
-BASE_REVISION = "71de97b264b04dcd514cf904003028aefe9775c8"
-PATCH = Path(__file__).parents[1] / "runtime-patches/sglang-71de97b-h3-server-timing.patch"
-PATCHED_FILES = {
-    "python/sglang/multimodal_gen/runtime/entrypoints/openai/video_api.py": "27c4c13ad1417161d0b3f9f9cfaa4a259c86bdc3614450a43e8e07f87c37ed05",
-    "python/sglang/multimodal_gen/runtime/managers/scheduler.py": "1cfb5d6db81dd8cfb1eea7444971f92140639fc98bb8b4a882a2ab2ba65cab6b",
-}
 STAGES = ("http_received", "http_accepted", "scheduler_dispatch", "forward_finished", "media_ready")
 DURATIONS = {
     "prequeue_seconds": ("http_received", "http_accepted"),
@@ -34,19 +27,6 @@ DURATIONS = {
 }
 _SAFE_ID = re.compile(r"[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,199}")
 _MAX_BYTES = 4 * 1024 * 1024
-
-
-def identity() -> dict:
-    return {"schema_version": VERSION, "base_runtime_revision": BASE_REVISION,
-            "patch_sha256": hashlib.sha256(PATCH.read_bytes()).hexdigest(),
-            "helper_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-            "patched_runtime_files": dict(PATCHED_FILES)}
-
-
-def validate_source(source: Path) -> None:
-    for name, expected in PATCHED_FILES.items():
-        if hashlib.sha256((source / name).read_bytes()).hexdigest() != expected:
-            raise ValueError("server timing requires the exact committed H3 instrumentation patch")
 
 
 @lru_cache(maxsize=1)
@@ -152,34 +132,3 @@ def collect(request_id: str | None) -> dict | None:
         # Preserve the video outcome. The independent evidence verifier rejects
         # malformed timing rather than making generation appear to have failed.
         return {"schema_version": VERSION, "status": "invalid", "request_id": request_id}
-
-
-def verify_evidence(directory: Path, role: dict, run: dict, *, required: bool = False) -> None:
-    evidence = role.get("server_timing_evidence")
-    if not evidence:
-        if required or any(record.get("server_timings") is not None for record in run["records"]):
-            raise ValueError("server timings lack a supervisor-owned evidence ledger")
-        return
-    if (evidence.get("schema_version") != VERSION or evidence.get("base_runtime_revision") != BASE_REVISION
-            or evidence.get("patch_sha256") != hashlib.sha256(PATCH.read_bytes()).hexdigest()
-            or evidence.get("patched_runtime_files") != PATCHED_FILES
-            or any(not isinstance(evidence.get(key), str) or not re.fullmatch(r"[0-9a-f]{64}", evidence[key])
-                   for key in ("patch_sha256", "helper_sha256"))
-            or evidence.get("instance_id") != role.get("process_identity", {}).get("launch_nonce")):
-        raise ValueError("server timing instrumentation identity is missing or inconsistent")
-    raw = evidence.get("path")
-    if (not isinstance(raw, str) or Path(raw).is_absolute() or ".." in Path(raw).parts
-            or "\\" in raw):
-        raise ValueError("invalid server timing ledger path")
-    path = (directory / raw).resolve(strict=True)
-    if not path.is_relative_to(directory.resolve()):
-        raise ValueError("server timing ledger escapes its job directory")
-    events = read_events(path)
-    if path.stat().st_size > _MAX_BYTES or hashlib.sha256(path.read_bytes()).hexdigest() != evidence.get("sha256"):
-        raise ValueError("server timing ledger hash mismatch")
-    for record in run["records"]:
-        expected = derive(events, record.get("job_id"), evidence["instance_id"])
-        if record.get("server_timings") != expected:
-            raise ValueError("server timings differ from request-correlated raw events")
-        if required and record.get("status") == "succeeded" and (expected or {}).get("status") != "complete":
-            raise ValueError("successful request lacks complete server timing evidence")

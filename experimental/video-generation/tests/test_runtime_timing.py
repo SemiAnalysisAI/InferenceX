@@ -1,7 +1,5 @@
 """CPU event/transport checks; these do not establish H3 timing overhead."""
 
-from copy import deepcopy
-import hashlib
 import json
 from types import SimpleNamespace
 
@@ -109,19 +107,3 @@ def test_serving_summary_requires_full_valid_population_for_percentiles():
     assert incomplete["queue_delay_seconds"]["missing_count"] == 1
     assert incomplete["queue_delay_seconds"]["p90"] is None
     assert incomplete["observed_batch_sizes"] is None
-
-
-def test_offline_verification_binds_ledger_hash_instance_and_request(ledger, tmp_path):
-    complete_request("a")
-    run = {"records": [{"job_id": "a", "status": "succeeded", "server_timings": timing.collect("a")}]}
-    role = {"process_identity": {"launch_nonce": "cpu-fixture-instance"}, "server_timing_evidence": {
-        **timing.identity(), "path": ledger.name, "instance_id": "cpu-fixture-instance",
-        "sha256": hashlib.sha256(ledger.read_bytes()).hexdigest()}}
-    timing.verify_evidence(tmp_path, role, run, required=True)
-    changed = deepcopy(run)
-    changed["records"][0]["server_timings"]["queue_delay_seconds"] = 99
-    with pytest.raises(ValueError, match="raw events"):
-        timing.verify_evidence(tmp_path, role, changed, required=True)
-    ledger.write_text(ledger.read_text() + "{}\n")
-    with pytest.raises(ValueError, match="hash mismatch"):
-        timing.verify_evidence(tmp_path, role, run, required=True)
