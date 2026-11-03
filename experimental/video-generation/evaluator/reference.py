@@ -269,7 +269,6 @@ def generate(args: argparse.Namespace, plan: dict, cases: list[dict], identity: 
                     ).hexdigest(),
                 }
             )
-            record["status"] = "generating"
             receipt.write_text(json.dumps(record, indent=2) + "\n")
         record["status"] = "selection_complete"
     except (Exception, KeyboardInterrupt) as error:
