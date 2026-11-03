@@ -11975,5 +11975,5 @@
   description:
     - "Retire all Kimi-K3 serving benchmarks and remove unused recipes and launch routing."
     - "Keep historical results, SPEED-Bench collectors, golden AL curves, vendor evals and OperatorX shapes."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4762
   retired: true

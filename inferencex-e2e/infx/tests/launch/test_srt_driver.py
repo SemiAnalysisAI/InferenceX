@@ -483,7 +483,8 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     workspace = harness.workspace
     commit = harness.env["FAKE_SRT_COMMIT"]
     assert (workspace / "power-producer-sha.txt").read_text() == commit + "\n"
-    [checkout] = workspace.glob("srt-slurm-9001-*")
+    [call] = srtctl_calls(harness.logs)
+    checkout = Path(call["cwd"]).resolve()
     exporter = srtslurm(checkout)["containers"]["dcgm-exporter"]
     provenance = (workspace / "exporter-image.sha256").read_text()
     assert provenance.endswith(f"  {exporter}\n")
