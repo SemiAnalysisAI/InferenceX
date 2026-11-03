@@ -5,11 +5,16 @@ from __future__ import annotations
 import io
 import json
 import re
+import tempfile
 import urllib.parse
 import zipfile
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from infx import github
+from infx.klaud.github import download_files
+from infx.results.video_artifacts import VIDEO_ARTIFACT, validate_video_artifacts
 
 # trusted-external-sweep.yml dispatches e2e-tests.yml on main with this title.
 TRUSTED_EXTERNAL_PATH = ".github/workflows/e2e-tests.yml"
@@ -23,6 +28,10 @@ REUSABLE_AGGREGATE_ARTIFACTS = {
     "results_bmk",
     "eval_results_all",
 }
+
+
+class VideoValidationError(RuntimeError):
+    """A candidate run's native video artifacts could not be validated."""
 
 
 def completed_pr_runs(
@@ -139,8 +148,13 @@ def run_pr_number(repo: str, run: dict[str, Any], token: str) -> int | None:
 
 def has_reusable_result_artifacts(names: set[str]) -> bool:
     """Return whether a run produced ingest-relevant result artifacts."""
-    return bool(names & REUSABLE_AGGREGATE_ARTIFACTS) or any(
-        name.startswith("bmk_agentic_") for name in names
+    return (
+        bool(names & REUSABLE_AGGREGATE_ARTIFACTS)
+        or any(name.startswith("bmk_agentic_") for name in names)
+        or (
+            "video-sweep-manifest" in names
+            and any(VIDEO_ARTIFACT.fullmatch(name) for name in names)
+        )
     )
 
 
@@ -159,3 +173,64 @@ def artifact_names(repo: str, run_id: int, token: str) -> set[str]:
         and artifact.get("name")
         and not artifact.get("expired", False)
     }
+
+
+def validate_video_run(repo: str, run: dict, token: str, names: set[str]) -> None:
+    """Validate retained video bytes before any reuse or staging admission."""
+    video = {name for name in names if name.startswith("h3-results-")}
+    if not video and "video-sweep-manifest" not in names:
+        return
+    run_id, attempt, head = run.get("id"), run.get("run_attempt"), run.get("head_sha")
+    try:
+        if (
+            type(run_id) is not int
+            or run_id <= 0
+            or type(attempt) is not int
+            or attempt <= 0
+            or not isinstance(head, str)
+            or not re.fullmatch(r"[0-9a-f]{40}", head)
+        ):
+            raise ValueError("missing trusted video run/head/attempt identity")
+        if "video-sweep-manifest" not in names or not video:
+            raise ValueError("video source requires a full sweep manifest and result bundles")
+        if any(not VIDEO_ARTIFACT.fullmatch(name) for name in video):
+            raise ValueError("invalid native video artifact name")
+        selected = {name for name in video if name.startswith(f"h3-results-{run_id}-{attempt}-")}
+        selected.add("video-sweep-manifest")
+        started = _video_timestamp(run.get("run_started_at"))
+        artifacts = github.paginate(repo, f"/actions/runs/{run_id}/artifacts", token, "artifacts")
+        retained = [
+            item
+            for item in artifacts
+            if item.get("name") in selected
+            and not item.get("expired", False)
+            and (
+                item["name"] != "video-sweep-manifest"
+                or _video_timestamp(item.get("created_at")) >= started
+            )
+        ]
+        if len(retained) != len(selected) or {item["name"] for item in retained} != selected:
+            raise ValueError("missing or duplicate native video artifacts")
+        with tempfile.TemporaryDirectory(prefix="infx-video-reuse-") as temporary:
+            root = Path(temporary)
+            for artifact in retained:
+                download_files(repo, artifact, root / artifact["name"], token=token)
+            try:
+                validate_video_artifacts(
+                    root, run_id=str(run_id), run_attempt=str(attempt), head_sha=head
+                )
+            except OSError as error:
+                raise ValueError(f"incomplete downloaded video evidence: {error}") from error
+    except (KeyError, TypeError, ValueError) as error:
+        raise VideoValidationError(
+            f"Reusable source run {run_id} has invalid native video artifacts: {error}"
+        ) from error
+
+
+def _video_timestamp(value: object) -> datetime:
+    if not isinstance(value, str):
+        raise ValueError("missing video artifact/attempt timestamp")
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        raise ValueError("video artifact/attempt timestamp requires a timezone")
+    return parsed

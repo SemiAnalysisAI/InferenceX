@@ -38,12 +38,14 @@ TOOLS = {"generate": GENERATOR, "plan": PLANNER}
 FINGERPRINTER = "infx.matrix.fingerprint"
 CONFIG_DIRS = ("configs", ".github/configs")
 NESTED_PROJECT = "inferencex-e2e/"
+VIDEO_SPECS = "experimental/video-generation/specs"
 SNAPSHOT_PATHS = (
     "infx",
     "utils/matrix_logic",
     *CONFIG_DIRS,
     "benchmarks/single_node/srt-slurm-recipes",
     "benchmarks/multi_node/srt-slurm-recipes",
+    VIDEO_SPECS,
 )
 INHERITED_ENV = ("PATH", "HOME", "LANG", "TMPDIR")
 _FORK_REPLY = "infx-fork-exit "
@@ -328,11 +330,12 @@ def snapshot(ref: str) -> Iterator[Revision]:
     for entry in listing.split(b"\0")[:-1]:
         metadata, path = entry.split(b"\t", 1)
         objects[os.fsdecode(path)] = metadata.split()[2]
-    if any(path.startswith(NESTED_PROJECT) for path in objects):
+    nested = any(path.startswith(NESTED_PROJECT) for path in objects)
+    if nested:
         objects = {
-            path.removeprefix(NESTED_PROJECT): oid
+            path: oid
             for path, oid in objects.items()
-            if path.startswith(NESTED_PROJECT)
+            if path.startswith((NESTED_PROJECT, VIDEO_SPECS + "/"))
         }
     blobs = io.BytesIO(
         subprocess.run(
@@ -354,7 +357,7 @@ def snapshot(ref: str) -> Iterator[Revision]:
             destination = Path(temp_dir, path)
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(content)
-        revision = Revision(Path(temp_dir))
+        revision = Revision(Path(temp_dir) / NESTED_PROJECT if nested else Path(temp_dir))
         inputs = [*revision.master_configs, revision.runner_config]
         if missing := [
             Path(path).relative_to(revision.root).as_posix()
