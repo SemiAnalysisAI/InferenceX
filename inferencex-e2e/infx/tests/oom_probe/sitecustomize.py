@@ -37,10 +37,10 @@ def memory_groups(pid=None):
                 directory = Path(mount) / group.removeprefix(root).lstrip('/')
                 mapping = 'relative-to-mount-root'
             elif '..' in Path(root).parts:
-                # Enroot keeps the host controller mount while rebasing cgroup
-                # paths to the worker's namespace. Each '..' in its mount root
-                # is an ancestor between that root and namespace '/'. Slurm's
-                # task cgroup is five levels deep on MI355X, not two.
+                # Namespaced mounts may expose the full host hierarchy (MI355X)
+                # or a bind-mounted step subtree (B200). Mountinfo can still
+                # describe hidden ancestors, so its depth is an upper bound.
+                # Locate this PID's actual membership before trusting any limit.
                 root_parts = Path(root).parts[1:]
                 group_parts = Path(group).parts[1:]
                 if any(part != '..' for part in root_parts) or '..' in group_parts:
@@ -48,7 +48,14 @@ def memory_groups(pid=None):
                 depth = len(root_parts) + len(group_parts)
                 if not 1 <= depth <= 32:
                     raise RuntimeError(f'unsafe cgroup namespace depth: {depth}')
-                candidates = Path(mount).glob('/'.join(['*'] * depth))
+                candidates = (
+                    candidate
+                    for search_depth in range(depth + 1)
+                    for candidate in (
+                        [Path(mount)] if search_depth == 0
+                        else Path(mount).glob('/'.join(['*'] * search_depth))
+                    )
+                )
                 directory = None
                 for candidate in candidates:
                     try:
