@@ -7,6 +7,10 @@ from collections.abc import Iterable
 from infx import github
 from infx.clusters import CLUSTER_LABEL_PREFIX, load_clusters
 
+# run-sweep's report-only acceptance-gate jobs. A gate whose deployment fails can still conclude
+# success, so their conclusions say nothing about the hardware.
+GATE_JOB_PREFIXES = ("al-gate /", "multi-node al-gate /")
+
 
 def load_hardware_labels() -> list[str]:
     """Return the run-stats hardware buckets: every cluster id in runners.yaml."""
@@ -57,6 +61,8 @@ def calculate_hardware_success_rates() -> dict[str, dict[str, int]]:
     )
     success_rates = {hardware: {"n_success": 0, "total": 0} for hardware in hardware_labels}
     for job in jobs:
+        if job["name"].startswith(GATE_JOB_PREFIXES):
+            continue
         hardware = extract_hardware_from_name(job["name"], patterns)
         if hardware and job["conclusion"] != "skipped":
             success_rates[hardware]["total"] += 1
