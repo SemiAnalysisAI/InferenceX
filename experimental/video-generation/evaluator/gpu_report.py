@@ -20,6 +20,8 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterator
 
+from .runner import _slots
+
 
 MAX_JSON_BYTES = 8 * 1024 * 1024
 MAX_MEDIA_BYTES = 512 * 1024 * 1024
@@ -153,20 +155,16 @@ def _planned(plan: Any, issues: list[dict], context: str) -> list[dict]:
             or type(warmups) is not int or warmups < 0 or len(cases) * repetitions + warmups > MAX_SLOTS):
         _issue(issues, context, "Frozen schedule is missing or exceeds the supported slot limit")
         return []
+    warmup_case = plan.get("warmup_case")
+    frozen = cases if warmup_case is None else [*cases, warmup_case]
     if any(not isinstance(case, dict) or not isinstance(case.get("case_id"), str)
-           or not isinstance(case.get("prompt"), str) or type(case.get("seed")) is not int for case in cases):
+           or not isinstance(case.get("prompt"), str) or type(case.get("seed")) is not int for case in frozen):
         _issue(issues, context, "Frozen cases require case_id, prompt, and integer seed")
         return []
     if len({case["case_id"] for case in cases}) != len(cases):
         _issue(issues, context, "Frozen case identifiers are not unique")
         return []
-    result = []
-    for index in range(1, warmups + 1):
-        result.append({**cases[(index - 1) % len(cases)], "phase": "warmup", "repetition": 0, "slot_id": f"warmup-{index:03d}"})
-    for repetition in range(1, repetitions + 1):
-        for index, case in enumerate(cases, 1):
-            result.append({**case, "phase": "measurement", "repetition": repetition, "slot_id": f"measurement-r{repetition:03d}-c{index:03d}"})
-    return result
+    return _slots(plan)
 
 
 def _copy_media(tree: _Tree, relative: str, digest: Any, assets: Path, budget: list[int]) -> str:

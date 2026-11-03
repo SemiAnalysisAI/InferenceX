@@ -19,7 +19,7 @@ def write_json(path, value):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def fixture_job(tmp_path, *, evidence="fixture", receipt_kind="no_gpu_measurement", failed=False):
+def fixture_job(tmp_path, *, evidence="fixture", receipt_kind="no_gpu_measurement", failed=False, warmup_case=None):
     """Deliberately fake media/identity, explicitly labeled unit-test fixtures."""
     job = tmp_path / "job"
     job.mkdir()
@@ -29,6 +29,8 @@ def fixture_job(tmp_path, *, evidence="fixture", receipt_kind="no_gpu_measuremen
         "cases": [{"case_id": f"fixture-{index}", "prompt": f"SYNTHETIC TEST ONLY {index}", "seed": index, "requires_motion": True, "requires_sound": True} for index in (1, 2, 3)],
         "repetitions": 1, "warmup_runs": 1,
     }
+    if warmup_case is not None:
+        plan["warmup_case"] = warmup_case
     spec = {
         "schema_version": "0.1.0", "job_id": "harness-only-schema-fixture",
         "allocation": {"mode": "cooperative_shared", "label": "FAKE TEST DEVICE"},
@@ -53,7 +55,7 @@ def fixture_job(tmp_path, *, evidence="fixture", receipt_kind="no_gpu_measuremen
         (directory / "artifacts").mkdir(parents=True)
         config = {"runtime": "fixture-runtime", "runtime_revision": spec[label]["revision"], "model_id": "fixture/no-model", "model_revision": "f" * 40, "hardware_label": "FAKE TEST DEVICE", "identity_verification": "synthetic_fixture"}
         records = []
-        slots = [dict(plan["cases"][0], slot_id="warmup-001", phase="warmup", repetition=0)]
+        slots = [dict(warmup_case or plan["cases"][0], slot_id="warmup-001", phase="warmup", repetition=0)]
         slots += [dict(case, slot_id=f"measurement-r001-c{index:03d}", phase="measurement", repetition=1) for index, case in enumerate(plan["cases"], 1)]
         for index, slot in enumerate(slots):
             relative = f"artifacts/{slot['slot_id']}.mp4"
@@ -158,6 +160,23 @@ def test_spec_hash_mismatch_disables_gpu_timing(tmp_path):
     write_json(job / "spec.json", spec)
     result, _, _ = render(tmp_path, job)
     assert not result["roles"]["candidate"]["gpu_timing_presented"]
+
+
+def test_warmup_slot_uses_the_frozen_warmup_case(tmp_path):
+    warmup = {"case_id": "fixture-warmup", "prompt": "SYNTHETIC WARMUP ONLY", "seed": 0, "requires_motion": True, "requires_sound": True}
+    job, _, _ = fixture_job(tmp_path, warmup_case=warmup)
+    result, _, _ = render(tmp_path, job)
+    for role in result["roles"].values():
+        assert [row["case_id"] for row in role["warmups"]] == ["fixture-warmup"]
+        assert role["summary"]["warmups_valid"] == 1
+    assert not any("frozen slot" in issue["message"] for issue in result["issues"])
+
+
+def test_malformed_warmup_case_withholds_the_schedule(tmp_path):
+    job, _, _ = fixture_job(tmp_path, warmup_case={"case_id": "fixture-warmup"})
+    result, _, _ = render(tmp_path, job)
+    assert result["roles"]["candidate"]["summary"]["scheduled"] is None
+    assert any("Frozen cases require" in issue["message"] for issue in result["issues"])
 
 
 @pytest.mark.parametrize("unsafe", [
