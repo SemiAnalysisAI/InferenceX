@@ -11,11 +11,15 @@ import subprocess
 import time
 
 PROBE = r'''
-import json, os, sys
+import json, os, posixpath, sys
 from pathlib import Path
 pid = int(sys.argv[1])
 p = Path('/proc') / str(pid)
 r = {'pid': pid, 'host': os.uname().nodename, 'cgroup': p.joinpath('cgroup').read_text(), 'limits': []}
+host_cgroup = sys.argv[2] if len(sys.argv) > 2 else ''
+namespace_cgroup = sys.argv[3] if len(sys.argv) > 3 else ''
+def group_for(text, controllers):
+    return next((row.split(':', 2)[2] for row in text.splitlines() if row.split(':', 2)[1] == controllers), None)
 try:
     env = dict(x.split(b'=', 1) for x in p.joinpath('environ').read_bytes().split(b'\0') if b'=' in x)
     r['devices'] = {k: env[k.encode()].decode(errors='replace') for k in ('CUDA_VISIBLE_DEVICES', 'ROCR_VISIBLE_DEVICES', 'HIP_VISIBLE_DEVICES') if k.encode() in env}
@@ -31,8 +35,18 @@ for row in r['cgroup'].splitlines():
         if fs[0] != ('cgroup2' if v2 else 'cgroup'): continue
         if not v2 and 'memory' not in fs[2].split(','): continue
         root, target = fields[3:5]
-        if group != root and not group.startswith(root.rstrip('/') + '/'): continue
-        directory = Path(target) / group.removeprefix(root).lstrip('/')
+        if group == root or group.startswith(root.rstrip('/') + '/'):
+            relative = group.removeprefix(root).lstrip('/')
+        elif root == '/..' or root.startswith('/../'):
+            host_group, namespace_group = group_for(host_cgroup, controllers), group_for(namespace_cgroup, controllers)
+            if host_group is None or namespace_group is None: continue
+            host_root = posixpath.normpath(namespace_group.rstrip('/') + '/' + root.lstrip('/'))
+            if host_group != host_root and not host_group.startswith(host_root.rstrip('/') + '/'): continue
+            relative = host_group.removeprefix(host_root).lstrip('/')
+            r['namespace_mapping'] = {'mount_root': root, 'host_mount_root': host_root, 'host_target': host_group}
+        else: continue
+        if '..' in Path(relative).parts: continue
+        directory = Path(target) / relative
         while True:
             entry = {'path': str(directory), 'values': {}}
             names = ('memory.max', 'memory.current', 'memory.peak', 'memory.events') if v2 else ('memory.limit_in_bytes', 'memory.usage_in_bytes', 'memory.max_usage_in_bytes', 'memory.failcnt')
@@ -67,6 +81,7 @@ if result is not None:
 job_pattern = re.compile(r'(?:^|/)job[_-]' + re.escape(job) + r'(?:/|$)')
 worker_pattern = re.compile(r'(?:sglang|vllm|trtllm|tensorrt_llm|SGLANG)', re.I)
 workers = []
+job_processes = []
 for proc in Path('/proc').iterdir():
     if not proc.name.isdigit(): continue
     try:
@@ -74,21 +89,29 @@ for proc in Path('/proc').iterdir():
         if not job_pattern.search(cg): continue
         argv = proc.joinpath('cmdline').read_bytes().split(b'\0')
         executable = os.path.basename(argv[0].decode(errors='replace')) if argv else ''
-        if not ('python' in executable.lower() or worker_pattern.search(executable)): continue
         command = b' '.join(argv).decode(errors='replace')
+        candidate = {'pid': int(proc.name), 'mount_namespace': os.readlink(proc/'ns/mnt'), 'executable': executable, 'command_sha256': hashlib.sha256(command.encode()).hexdigest()}
+        job_processes.append(candidate)
+        if not ('python' in executable.lower() or worker_pattern.search(executable)): continue
         match = worker_pattern.search(command)
         if not match: continue
         if any(part in command for part in ('pip install', 'pip download', '-m infx.', '-m srtctl.')): continue
         workers.append({'pid': int(proc.name), 'mount_namespace': os.readlink(proc/'ns/mnt'), 'executable': executable, 'engine_marker': match.group(), 'command_sha256': hashlib.sha256(command.encode()).hexdigest()})
     except (OSError, ValueError): pass
 for name, pid in containers:
-    key = str(pid)
-    if key in skip: continue
-    try: namespace = os.readlink('/proc/%s/ns/mnt' % pid)
+    try:
+        namespace = os.readlink('/proc/%s/ns/mnt' % pid)
+        namespace_cgroup = Path('/proc/%s/cgroup' % pid).read_text()
     except OSError: continue
     members = [w for w in workers if w['mount_namespace'] == namespace]
+    kind = 'worker' if members else 'helper'
+    if str(pid) + ':' + kind in skip: continue
+    if not members:
+        helpers = [w for w in job_processes if w['mount_namespace'] == namespace]
+        helpers.sort(key=lambda w: (w['executable'] in ('bash', 'sh', 'dash'), w['pid'] != pid, w['pid']))
+        members = helpers[:1]
     if not members: continue
-    record = {'name': name, 'container_pid': pid, 'mount_namespace': namespace, 'workers': []}
+    record = {'name': name, 'container_pid': pid, 'mount_namespace': namespace, 'kind': kind, 'workers': []}
     # Each process in one Slurm step inherits its cgroup; retain one representative per path.
     seen = set()
     for worker in members:
@@ -96,8 +119,8 @@ for name, pid in containers:
         except OSError: continue
         if cg in seen: continue
         seen.add(cg)
-        evidence = dict(worker)
-        for label, argv in [('host', ['python3', '-c', PROBE, str(worker['pid'])]), ('container', ['enroot', 'exec', str(pid), 'python3', '-c', PROBE, str(worker['pid'])])]:
+        evidence = {**worker, 'kind': kind}
+        for label, argv in [('host', ['python3', '-c', PROBE, str(worker['pid'])]), ('container', ['enroot', 'exec', str(pid), 'python3', '-c', PROBE, str(worker['pid']), cg, namespace_cgroup])]:
             try:
                 result = subprocess.run(argv, capture_output=True, text=True, timeout=20)
                 if result.returncode:
@@ -174,16 +197,16 @@ def main():
                         child.stdin.write(WATCH)
                         child.stdin.close()
                         watchers[prefix] = (child, stream, errors)
-                    skip = [key[2] for key, state in seen.items() if key[:2] == prefix and (state['count'] >= 2 or now - state['first'] < args.later_seconds)]
+                    skip = [key[2] + ':' + key[3] for key, state in seen.items() if key[:2] == prefix and (state['count'] >= 2 or now - state['first'] < args.later_seconds)]
                     remote_command = shlex.join(['python3', '-', job, json.dumps(skip)])
                     text = command(['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', node, remote_command], input=REMOTE)
                     report = json.loads(text)
                     report.update(job_id=job, observed_epoch=now, workdir=str(workdir), measured_git_sha=metadata['measured_git_sha'], job_details=details, step_details=steps.stdout)
                     for container in report['containers']:
-                        key = (*prefix, str(container['container_pid']))
+                        key = (*prefix, str(container['container_pid']), container['kind'])
                         state = seen.setdefault(key, {'first': now, 'count': 0})
                         state['count'] += 1
-                        filename = '%s-%s-pid%s-%s.json' % (job, re.sub(r'[^A-Za-z0-9_.-]', '_', node), key[2], state['count'])
+                        filename = '%s-%s-pid%s-%s-%s.json' % (job, re.sub(r'[^A-Za-z0-9_.-]', '_', node), key[2], key[3], state['count'])
                         (args.output/filename).write_text(json.dumps({**report, 'containers': [container]}, indent=2))
                     (args.output/('%s-%s-status.json' % (job, node))).write_text(json.dumps({k: v for k,v in report.items() if k != 'containers'}, indent=2))
         except (OSError, ValueError, subprocess.SubprocessError) as exc:
@@ -202,7 +225,7 @@ def main():
             child.wait()
         stream.close()
         errors.close()
-    (args.output/'completed.json').write_text(json.dumps({'finished_epoch': time.time(), 'containers': [{'job': k[0], 'node': k[1], 'pid': k[2], **v} for k,v in seen.items()]}, indent=2))
+    (args.output/'completed.json').write_text(json.dumps({'finished_epoch': time.time(), 'containers': [{'job': k[0], 'node': k[1], 'pid': k[2], 'kind': k[3], **v} for k,v in seen.items()]}, indent=2))
 
 
 if __name__ == '__main__':
