@@ -11962,3 +11962,11 @@
     - "Image and speculative config are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4662
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm31flash-fp4-gb200-vllm-agentic-dspark
+  description:
+    - "Try SMG 1.11.0 instead of vllm-router 0.1.14 for the single-node DP4/EP4 points at concurrency 64 and 128, using SMG's consistent_hashing policy."
+    - "Expose one vLLM HTTP server per DP rank with data-parallel-external-lb so SMG routes across all four ranks; leave the serving image, speculative settings and TP-only points unchanged."
+  pr-link: XXX
+  scenario-type: [agentic-coding]
