@@ -17,7 +17,6 @@ base:
 
   environment:
     KIMI_EFA_CACHE: /hf_hub_cache/inferencex/kimi-k3-efa
-    LD_LIBRARY_PATH: /opt/amazon/efa/lib:/opt/amazon/ofi-nccl/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib64
 
   # srtctl's Tachometer exporters slow these workers, and InferenceX does not read their output.
   observability:
@@ -55,7 +54,6 @@ base:
     cpus_per_task: 16
     env:
       KIMI_EFA_CACHE: /hf_hub_cache/inferencex/kimi-k3-efa
-      LD_LIBRARY_PATH: /opt/amazon/efa/lib:/opt/amazon/ofi-nccl/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib64
     readiness:
       port: 8700
       timeout_seconds: 3600

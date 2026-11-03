@@ -3,16 +3,16 @@ set -eo pipefail
 trap 'echo "[kimi-k3-efa] FATAL: setup failed at line $LINENO: $BASH_COMMAND" >&2' ERR
 
 source /infmax-workspace/benchmarks/check_env.sh
-check_env_vars KIMI_EFA_CACHE LD_LIBRARY_PATH KV_OFFLOAD_BACKEND_VERSION
+check_env_vars KIMI_EFA_CACHE KV_OFFLOAD_BACKEND_VERSION
 
 efa_version=1.51.0
 # Same digest as vLLM docker/Dockerfile.efa EFA_INSTALLER_SHA256.
 efa_sha256=83993044fa4df3dc2f8b5c2f7051d61b9689441be023a2c92ea51d3f53f2465c
-mc_version=0.3.14rc3
-# kvcache-ai/Mooncake v0.3.14-pre-3 release asset; since kvcache-ai/Mooncake#4356 the default wheels carry the
-# EFA transport.
-mc_url="https://github.com/kvcache-ai/Mooncake/releases/download/v0.3.14-pre-3/mooncake_transfer_engine_cuda13-${mc_version}-cp312-cp312-manylinux_2_28_x86_64.whl"
-mc_sha256=e5abb312b8e7c2451f6e0e5b14b0ad729d0aa687a9e00244c6833b23e4dce805
+mc_version=0.3.14
+# The released kvcache-ai/Mooncake 0.3.14 wheel from PyPI; since kvcache-ai/Mooncake#4356 the default wheels carry
+# the EFA transport.
+mc_url="https://files.pythonhosted.org/packages/b9/bf/a117c9c9f892e86893caf0dd8b5bfae1d11edbfb0173dcd30108a7168fc3/mooncake_transfer_engine_cuda13-${mc_version}-cp312-cp312-manylinux_2_28_x86_64.whl"
+mc_sha256=74fa5f0684b143167503e33f85cccb9ca687d3f9843d4b594dbd5342c7df3e17
 
 if [[ "$KV_OFFLOAD_BACKEND_VERSION" != "$mc_version" ]]; then
     echo "[kimi-k3-efa] FATAL: the master config's Mooncake ${KV_OFFLOAD_BACKEND_VERSION} is not the installed ${mc_version}" >&2
@@ -97,6 +97,8 @@ tar -xzf "$efa_tgz" -C "$task_dir"
     cd "$task_dir/aws-efa-installer"
     ./efa_installer.sh --skip-mpi --skip-rdma-core --build-ngc
 )
+# The installer's libfabric and aws-ofi-nccl tuner (NCCL_TUNER_PLUGIN=ofi) go first on the linker path.
+printf '%s\n' /opt/amazon/efa/lib /opt/amazon/ofi-nccl/lib >/etc/ld.so.conf.d/000-kimi-k3-efa.conf
 ldconfig
 # The NGC plugin package has no libnccl-net.so alias; the disaggregated recipe sets NCCL_NET_PLUGIN=none.
 echo "[kimi-k3-efa] /opt/amazon/ofi-nccl/lib: $(ls /opt/amazon/ofi-nccl/lib 2>/dev/null | paste -sd' ' -)"
