@@ -311,32 +311,6 @@ def test_a_recipe_the_binder_rejects_fails_the_point_with_the_binders_error(harn
     assert srtctl_calls(harness.logs) == []
 
 
-@pytest.mark.parametrize(("dram", "exclusive", "step", "job"), [
-    (8000, True, {}, {"mem": "0"}),
-    (8000, False, {"mem": "4000M"}, {"mem": "4000M"}),
-    (None, True, {}, {}),
-])  # fmt: skip
-def test_single_node_jobs_cap_dram_only_on_shared_nodes(harness, dram, exclusive, step, job):
-    slurm = {
-        "partition": "p", "exclusive": True, "srun-args": ["--container-remap-root"],
-        "volumes": {"hf-hub-cache": {"path": str(harness.tmp / "hf")}},
-        "srt-slurm": {
-            "network-interface": "", "single-node-exclusive": exclusive,
-            "extra": {"default_gpu_exporter": {"container_image": "exporter:tag", "port": 9400}},
-        },
-    }  # fmt: skip
-    cluster = {"gpus-per-node": 8, "arch": "x86_64", "scheduler": "slurm", "slurm": slurm}
-    if dram is not None:
-        cluster["available-cpu-dram-mib"] = dram
-    config = harness.tmp / "dram-runners.yaml"
-    config.write_text(yaml.safe_dump({"labels": {"cluster:lab": ["lab_00"]}, "clusters": {"lab": cluster}}))
-    env = single_node_env(harness, "lab", RUNNER_NAME="lab_00", GPU_COUNT="4")
-    assert_ok(launch(env, config, harness.workspace))
-
-    [call] = srtctl_calls(harness.logs)
-    assert json.loads(call["env"]["SRT_SRUN_OPTIONS"]) == {"container-remap-root": "", **step}
-    assert srtslurm(harness.workspace).get("default_sbatch_directives", {}) == job
-
 
 LABS = {
     "lab-a": dict(

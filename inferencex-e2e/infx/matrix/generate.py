@@ -6,7 +6,6 @@ import re
 import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
-from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal
 
@@ -35,9 +34,6 @@ AUTOMATIC_AGENTIC_VENDOR_EVALS = {
     "kimik3": ("kimi-vendor", "kimi_tool_call_schema_full"),
     "minimaxm3": ("minimax-vendor", "minimax_m3_full"),
 }
-BYTES_PER_MIB = 1024 * 1024
-BYTES_PER_GB = 1_000_000_000
-MAX_AGENTIC_AVAILABLE_CPU_DRAM_MIB = 2_861_022
 
 seq_len_itos = {v: k for k, v in seq_len_stoi.items()}
 
@@ -179,11 +175,6 @@ def runner_hardware_int(runner: str, runner_data: dict, field: str) -> int:
             f"in runner hardware metadata. Available hardware keys: {available}"
         )
     return value
-
-
-def runner_available_cpu_dram_mib(runner: str, runner_data: dict) -> int:
-    """Return the CPU DRAM in MiB available to ``runner``."""
-    return runner_hardware_int(runner, runner_data, Fields.AVAILABLE_CPU_DRAM_MIB.value)
 
 
 def runner_gpus_per_node(runner: str, runner_data: dict) -> int:
@@ -472,40 +463,18 @@ def worker_gpus_per_node(worker: dict, gpus_per_node: int, role: str = "worker")
     return gpus_per_replica
 
 
-def agentic_dram_offload_gb(
-    agentic_config: dict, benchmark: dict, runner: str, runner_data: dict
-) -> tuple[int, int]:
-    """Return the CPU DRAM offload in GB for the prefill and decode sides of an agentic point.
-
-    Both are 0 without DRAM offload. Raise ValueError when the workers do not fit the nodes.
-    """
-    kv_offloading = benchmark.get(Fields.KV_OFFLOADING.value, "none")
-    if kv_offloading != "dram":
-        return 0, 0
-
-    available_mib = min(
-        runner_available_cpu_dram_mib(runner, runner_data),
-        MAX_AGENTIC_AVAILABLE_CPU_DRAM_MIB,
-    )
-    utilization = Decimal(str(agentic_config[Fields.DRAM_UTILIZATION.value]))
+def validate_agentic_worker_shapes(benchmark: dict, runner: str, runner_data: dict) -> None:
+    """Reject DRAM workers whose GPUs cannot fit evenly on the selected nodes."""
+    if benchmark.get(Fields.KV_OFFLOADING.value, "none") != "dram":
+        return
     gpus_per_node = runner_gpus_per_node(runner, runner_data)
-
-    def share_gb(gpu_count: int) -> int:
-        """Return the GB of offload DRAM that ``gpu_count`` GPUs get as their share of a node."""
-        proportional_bytes = (
-            Decimal(available_mib) * BYTES_PER_MIB * utilization * gpu_count / gpus_per_node
-        )
-        return int(proportional_bytes / BYTES_PER_GB)
-
     if Fields.WORKER.value in benchmark:
-        return share_gb(worker_gpus_per_node(benchmark[Fields.WORKER.value], gpus_per_node)), 0
+        worker_gpus_per_node(benchmark[Fields.WORKER.value], gpus_per_node)
+        return
     if Fields.PREFILL.value in benchmark:
-        return (
-            share_gb(
-                worker_gpus_per_node(benchmark[Fields.PREFILL.value], gpus_per_node, "prefill")
-            ),
-            share_gb(worker_gpus_per_node(benchmark[Fields.DECODE.value], gpus_per_node, "decode")),
-        )
+        worker_gpus_per_node(benchmark[Fields.PREFILL.value], gpus_per_node, "prefill")
+        worker_gpus_per_node(benchmark[Fields.DECODE.value], gpus_per_node, "decode")
+        return
     gpu_count = effective_gpu_count(benchmark)
     if gpu_count > gpus_per_node:
         raise ValueError(
@@ -515,7 +484,6 @@ def agentic_dram_offload_gb(
             f"requires {gpu_count} GPUs and exceeds "
             f"{Fields.GPUS_PER_NODE.value}={gpus_per_node} for runner '{runner}'"
         )
-    return share_gb(gpu_count), 0
 
 
 def agentic_kv_offload_suffix(
@@ -1068,7 +1036,6 @@ def _fixed_sequence_entries(
 def _agentic_entries(
     config: dict,
     benchmark: dict,
-    scenario: dict,
     runners: list[str],
     runner_data: dict,
     *,
@@ -1095,9 +1062,7 @@ def _agentic_entries(
         kv_offloading = benchmark[Fields.KV_OFFLOADING.value]
     spec_decoding = benchmark.get(Fields.SPEC_DECODING.value, "none")
     kv_offload_backend = benchmark.get(Fields.KV_OFFLOAD_BACKEND.value)
-    total_cpu_dram_gb, decode_cpu_dram_gb = agentic_dram_offload_gb(
-        scenario, benchmark, config[Fields.RUNNER.value], runner_data
-    )
+    validate_agentic_worker_shapes(benchmark, config[Fields.RUNNER.value], runner_data)
 
     conc_values = benchmark.get(Fields.CONC_LIST.value)
     if not conc_values:
@@ -1172,14 +1137,11 @@ def _agentic_entries(
         entry.update(
             {
                 Fields.KV_OFFLOADING.value: kv_offloading,
-                Fields.TOTAL_CPU_DRAM_GB.value: total_cpu_dram_gb,
                 Fields.DURATION.value: DEFAULT_AGENTIC_DURATION_SECONDS,
                 Fields.EXP_NAME.value: exp_name,
             }
         )
         if is_multinode:
-            if decode_cpu_dram_gb:
-                entry[Fields.DECODE_CPU_DRAM_GB.value] = decode_cpu_dram_gb
             entry[Fields.DISAGG.value] = disagg
         entry[Fields.SCENARIO_TYPE.value] = "agentic-coding"
         if kv_offload_backend is not None:
@@ -1522,7 +1484,6 @@ def _expand_configs(
                     _agentic_entries(
                         config,
                         benchmark,
-                        scenario,
                         runners,
                         runner_data,
                         step_size=full_sweep.step_size if full_sweep is not None else 2,

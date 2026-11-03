@@ -69,10 +69,7 @@ class Fields(Enum):
     KV_OFFLOAD_BACKEND = "kv-offload-backend"
     ROUTER = "router"
     KV_P2P_TRANSFER = "kv-p2p-transfer"
-    TOTAL_CPU_DRAM_GB = "total-cpu-dram-gb"
-    DECODE_CPU_DRAM_GB = "decode-cpu-dram-gb"
     AVAILABLE_CPU_DRAM_MIB = "available-cpu-dram-mib"
-    DRAM_UTILIZATION = "dram-utilization"
     GPUS_PER_NODE = "gpus-per-node"
     NUM_NODES = "num-nodes"
     NODE_COUNT = "node-count"
@@ -324,7 +321,6 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
         default=None, alias=Fields.KV_OFFLOAD_BACKEND.value
     )
     router: ComponentMetadata | None = None
-    total_cpu_dram_gb: int = Field(alias=Fields.TOTAL_CPU_DRAM_GB.value, ge=0)
     duration: int = Field(alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
@@ -377,8 +373,6 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     kv_p2p_transfer: str | None = Field(
         default=None, alias=Fields.KV_P2P_TRANSFER.value, min_length=1
     )
-    total_cpu_dram_gb: int = Field(alias=Fields.TOTAL_CPU_DRAM_GB.value, ge=0)
-    decode_cpu_dram_gb: int = Field(default=0, alias=Fields.DECODE_CPU_DRAM_GB.value, ge=0)
     duration: int = Field(alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
@@ -747,21 +741,13 @@ class AgenticCodingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     search_space: list[AgenticCodingSearchSpaceEntry] = Field(alias=Fields.SEARCH_SPACE.value)
-    dram_utilization: float | None = Field(
-        default=None, alias=Fields.DRAM_UTILIZATION.value, gt=0, le=1
-    )
 
     @model_validator(mode="after")
-    def validate_dram_offload_capacity(self) -> Self:
-        """Return the config, raising ValueError for DRAM offload it cannot size."""
+    def validate_dram_offload_hardware(self) -> Self:
+        """Return the config, raising ValueError for unsupported heterogeneous DRAM offload."""
         for entry in self.search_space:
             if entry.kv_offloading != "dram":
                 continue
-            if self.dram_utilization is None:
-                raise ValueError(
-                    f"{Fields.KV_OFFLOADING.value}='dram' requires "
-                    f"{Fields.DRAM_UTILIZATION.value} with runner hardware metadata"
-                )
             if entry.prefill is not None and entry.prefill.hardware is not None:
                 raise ValueError(
                     f"{Fields.KV_OFFLOADING.value}='dram' does not support per-worker "

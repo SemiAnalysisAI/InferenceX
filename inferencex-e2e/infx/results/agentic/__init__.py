@@ -202,14 +202,11 @@ def build_result(
         "dp_attention": dp_attention,
         "kv_offloading": kv_offloading,
         "kv_offload_backend": kv_offload_backend,
-        "allocated_cpu_dram_gb": _env_int(env, "TOTAL_CPU_DRAM_GB"),
         "num_requests_total": request_accounting["records_total"],
         "num_requests_successful": len(records),
         "request_accounting": request_accounting,
     }
     agg.update(multinode_fields)
-    if decode_cpu_dram_gb := _env_int(env, "DECODE_CPU_DRAM_GB", 0):
-        agg["decode_allocated_cpu_dram_gb"] = decode_cpu_dram_gb
 
     router = _optional_component_metadata(env, "ROUTER_METADATA")
     if router is not None:

@@ -126,7 +126,6 @@ override_tp8_dcp8_c14_lmcache:
     env:
       CONC: '14'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1028'
 
 override_tp8_dcp8_c16_lmcache:
   roles:
@@ -146,7 +145,6 @@ override_tp8_dcp8_c16_lmcache:
     env:
       CONC: '16'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1028'
 
 override_tp8_dcp8_c48_lmcache:
   roles:
@@ -168,7 +166,6 @@ override_tp8_dcp8_c48_lmcache:
       CONC: '48'
       SPEC_DECODING: mtp
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1028'
 
 override_tp8_dcp8_c56_lmcache:
   roles:
@@ -191,7 +188,6 @@ override_tp8_dcp8_c56_lmcache:
       CONC: '56'
       SPEC_DECODING: mtp
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1538'
 
 override_tp8_dcp8_c72_lmcache:
   roles:
@@ -214,4 +210,3 @@ override_tp8_dcp8_c72_lmcache:
       CONC: '72'
       SPEC_DECODING: mtp
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1538'

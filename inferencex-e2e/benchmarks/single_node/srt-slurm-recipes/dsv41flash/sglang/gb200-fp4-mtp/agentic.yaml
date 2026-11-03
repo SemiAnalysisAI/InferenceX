@@ -202,7 +202,6 @@ override_dep4_hicache_c64:
       AGENTIC_WARMUP_GRACE_PERIOD: '3600'
       AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '721'
 
 override_dep4_hicache_c96:
   frontend:
@@ -253,7 +252,6 @@ override_dep4_hicache_c96:
       AGENTIC_WARMUP_GRACE_PERIOD: '3600'
       AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '721'
 
 override_dep4_hicache_c128:
   frontend:
@@ -304,7 +302,6 @@ override_dep4_hicache_c128:
       AGENTIC_WARMUP_GRACE_PERIOD: '3600'
       AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '721'
 
 override_dep4_hicache_c160:
   frontend:
@@ -355,7 +352,6 @@ override_dep4_hicache_c160:
       AGENTIC_WARMUP_GRACE_PERIOD: '3600'
       AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '721'
 
 override_dep4_hicache_c256:
   frontend:
@@ -407,4 +403,3 @@ override_dep4_hicache_c256:
       AGENTIC_WARMUP_GRACE_PERIOD: '3600'
       AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '721'

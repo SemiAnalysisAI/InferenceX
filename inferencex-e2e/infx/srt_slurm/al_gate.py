@@ -27,7 +27,7 @@ from infx.srt_slurm.synthetic_acceptance import (
 POINT_FIELDS = frozenset((
     "conc", "exp-name", "recipe-fingerprint", "priority", "queue-token", "run-eval", "eval-only",
     "eval-conc", "eval-framework", "eval-suite", "kv-offloading", "kv-offload-backend",
-    "total-cpu-dram-gb", "srt-recipe", "eval-srt-recipe",
+    "srt-recipe", "eval-srt-recipe",
 ))  # fmt: skip
 SPEC_FIELDS = (
     "method", "num_speculative_tokens", "model", "draft_sample_method", "rejection_sample_method"

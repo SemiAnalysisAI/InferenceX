@@ -18,10 +18,7 @@ base:
   health_check:
     interval_seconds: 10
     max_attempts: 360
-  # Embedded Mooncake: each TP rank contributes TOTAL_CPU_DRAM_GB / 8 GB. The
-  # setup script installs the master config's Mooncake and fills in the node's
-  # active RDMA rail. DSXE rails are InfiniBand without a netdev, so the transfer
-  # engine picks its own GID (a RoCE v2 index 3 does not exist).
+  # DSXE rails are InfiniBand without a netdev; the transfer engine selects its GID.
   setup_script: kimik3-b300-mooncake.sh
   services:
     - name: mooncake-master
@@ -93,7 +90,6 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '2249'
 
 # One variant per point. Admission is 2x CONC; CONC 56 and 70 keep more memory
 # headroom. Graphs capture (1 + drafts) x 1..min(2x CONC, 128) tokens, then the

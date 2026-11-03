@@ -128,11 +128,6 @@ zip_override_tp4_dspark7:
     env:
       CONC: ['16', '32']
 
-# c64: DSpark 3 (the blog's MI355X draft length from c8) on the NVFP4 KV cache
-# with DBO, sequence-parallel prefill, 0.90 memory utilization, and a CPU KV tier. The c64 working set
-# outgrows the 14.2M-token GPU KV cache; SimpleCPUOffloadConnector (eager)
-# holds about 24M tokens in 1349 GB of host memory (dram-utilization 0.9 of the
-# TP4 lane) and serves the misses.
 override_tp4_dspark3_c64_offload:
   roles:
     agg:
@@ -151,4 +146,3 @@ override_tp4_dspark3_c64_offload:
     env:
       CONC: '64'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1349'

@@ -132,14 +132,10 @@ def _events(tmp_path: Path) -> list[str]:
             "  - RESULT_FILENAME\n  - AIPERF_EXPERIMENTAL_FAST",
         ),
         ({"KV_OFFLOAD_BACKEND": "lmcache"}, "KV_OFFLOAD_BACKEND must be empty"),
-        ({"KV_OFFLOADING": "dram", "TOTAL_CPU_DRAM_GB": "2400"}, "KV_OFFLOAD_BACKEND is required"),
+        ({"KV_OFFLOADING": "dram"}, "KV_OFFLOAD_BACKEND is required"),
         (
-            {"KV_OFFLOADING": "dram", "KV_OFFLOAD_BACKEND": "none", "TOTAL_CPU_DRAM_GB": "2400"},
+            {"KV_OFFLOADING": "dram", "KV_OFFLOAD_BACKEND": "none"},
             "KV_OFFLOAD_BACKEND is required",
-        ),
-        (
-            {"KV_OFFLOADING": "dram", "KV_OFFLOAD_BACKEND": "lmcache", "TOTAL_CPU_DRAM_GB": "0"},
-            "TOTAL_CPU_DRAM_GB must be a positive integer",
         ),
         ({"KV_OFFLOADING": "cpu"}, "unsupported KV_OFFLOADING value 'cpu'"),
         ({"KV_OFFLOADING": None}, "  - KV_OFFLOADING"),
@@ -203,7 +199,7 @@ def test_single_node_native_power_records_windows_without_local_sampler(tmp_path
         ),
         pytest.param(
             {**WINDOW, "ENABLE_AGENTX_POWER": "0", "KV_OFFLOADING": "dram",
-             "KV_OFFLOAD_BACKEND": "lmcache", "TOTAL_CPU_DRAM_GB": "2400"},
+             "KV_OFFLOAD_BACKEND": "lmcache"},
             0,
             ["replay", "aggregate agentx_conc8", "analyze", "validate"],
             {f"conc_8/{name}" for name in REPLAYED},
