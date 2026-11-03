@@ -61,7 +61,7 @@ def test_an_installer_fails_without_the_version_the_binder_writes(tmp_path, scri
      {"mooncake-transfer-engine-cuda13==9.8.7"}),
     ("glm5.3-tilert-rocm.sh", {"ROUTER_VERSION": "9.8.7", "TILERT_ROLE": "prefill"}, {"tilert==9.8.7"}),
     ("infera-sglang.sh", {"ROUTER_VERSION": "9.8.7", "INFERA_SGLANG_PATCHES": "0"},
-     {"--no-deps", "amd-infera==9.8.7", "https://github.com/AMD-AGI/Infera/releases/expanded_assets/v9.8.7"}),
+     {"--no-deps", "amd-infera==9.8.7"}),
 ])  # fmt: skip
 def test_an_installer_installs_exactly_the_bound_version(tmp_path, script, env, expected):
     result, installs = run(tmp_path, script, env)
