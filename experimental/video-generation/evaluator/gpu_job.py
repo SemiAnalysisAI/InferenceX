@@ -84,6 +84,11 @@ def _check_deadline(deadline: float | None) -> None:
         raise TimeoutError("supervised operation exceeded its deadline")
 
 
+def _budget(timeout: float, deadline: float | None) -> float:
+    _check_deadline(deadline)
+    return timeout if deadline is None else min(timeout, max(0.001, deadline - time.monotonic()))
+
+
 def _hash(path: Path, deadline: float | None = None, cancelled: threading.Event | None = None) -> str:
     digest = hashlib.sha256()
     _check_deadline(deadline)
@@ -747,10 +752,8 @@ class GpuProbe:
         fields = "uuid,power.limit,enforced.power.limit,power.default_limit,power.max_limit"
         result = {"observed_at": _now(), "query": fields, "status": "unavailable", "gpus": []}
         try:
-            _check_deadline(deadline)
-            timeout = self.timeout if deadline is None else min(self.timeout, max(0.001, deadline - time.monotonic()))
             raw = _command(["nvidia-smi", "--query-gpu=" + fields, "--format=csv,noheader,nounits",
-                            "--id=" + ",".join(self.devices)], timeout=timeout).decode()
+                            "--id=" + ",".join(self.devices)], timeout=_budget(self.timeout, deadline)).decode()
             result["raw"] = raw
             for row in csv.reader(io.StringIO(raw)):
                 if len(row) != 5:
@@ -771,13 +774,10 @@ class GpuProbe:
         return result
 
     def snapshot(self, *, deadline: float | None = None) -> dict:
-        def budget():
-            _check_deadline(deadline)
-            return self.timeout if deadline is None else min(self.timeout, max(0.001, deadline - time.monotonic()))
         fields = "index,uuid,name,memory.total,memory.used,utilization.gpu,driver_version,power.draw,temperature.gpu,mig.mode.current"
         query_start = time.monotonic()
         query_utc = _now()
-        raw = _command(["nvidia-smi", "--query-gpu=" + fields, "--format=csv,noheader,nounits", "--id=" + ",".join(self.devices)], timeout=budget())
+        raw = _command(["nvidia-smi", "--query-gpu=" + fields, "--format=csv,noheader,nounits", "--id=" + ",".join(self.devices)], timeout=_budget(self.timeout, deadline))
         query_end = time.monotonic()
         rows = list(csv.reader(io.StringIO(raw.decode())))
         gpus = []
@@ -797,7 +797,7 @@ class GpuProbe:
             gpus.append(device)
         if sorted(item["uuid"] for item in gpus) != sorted(self.devices):
             raise RuntimeError("observed GPU UUID inventory does not match leased devices")
-        raw = _command(["nvidia-smi", "--query-compute-apps=gpu_uuid,pid,used_memory", "--format=csv,noheader,nounits", "--id=" + ",".join(self.devices)], timeout=budget())
+        raw = _command(["nvidia-smi", "--query-compute-apps=gpu_uuid,pid,used_memory", "--format=csv,noheader,nounits", "--id=" + ",".join(self.devices)], timeout=_budget(self.timeout, deadline))
         apps = []
         for row in csv.reader(io.StringIO(raw.decode())):
             row = [item.strip() for item in row]

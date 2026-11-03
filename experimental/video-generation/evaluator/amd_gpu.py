@@ -10,7 +10,7 @@ from pathlib import Path
 import re
 import time
 
-from .gpu_job import _check_deadline, _command, _now, _proc_identity
+from .gpu_job import _budget, _command, _now, _proc_identity
 
 
 def monitor_process(pid: int) -> dict:
@@ -153,9 +153,7 @@ class AmdGpuProbe:
                 raise RuntimeError("AMD device identity changed or unsupported GPU model")
 
     def power_configuration(self, *, deadline: float | None = None) -> dict:
-        _check_deadline(deadline)
-        timeout = self.timeout if deadline is None else min(self.timeout, max(0.001, deadline - time.monotonic()))
-        rows = {row["gpu"]: row for row in smi("static", timeout)}
+        rows = {row["gpu"]: row for row in smi("static", _budget(self.timeout, deadline))}
         gpus = []
         for key in self.devices:
             limits = rows[self.identity[key]["gpu"]]["limit"]
@@ -172,9 +170,7 @@ class AmdGpuProbe:
 
     def snapshot(self, *, deadline: float | None = None) -> dict:
         def query(option):
-            _check_deadline(deadline)
-            timeout = self.timeout if deadline is None else min(self.timeout, max(0.001, deadline - time.monotonic()))
-            return smi(option, timeout)
+            return smi(option, _budget(self.timeout, deadline))
         observed = inventory(query("list"))
         if any(observed.get(key) != self.identity[key] for key in self.devices):
             raise RuntimeError("AMD GPU inventory changed during measurement")
