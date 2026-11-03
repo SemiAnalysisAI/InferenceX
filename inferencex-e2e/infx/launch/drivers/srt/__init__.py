@@ -64,10 +64,7 @@ def run_single_node(launch: Launch) -> int:
         root = Path(tempfile.mkdtemp(prefix="srt-single.", dir=run.workspace))
         checkout = prepare_checkout(run, root / "checkout", power=not request.eval_only)
         install_srtctl(run, checkout)
-        step_mib = job_mib = config.gpu_share_mib(run.cluster, request.gpu_count)
-        if run.srt.single_node_exclusive and job_mib is not None:
-            step_mib, job_mib = None, 0
-        if (options := config.srun_options(run.backend.settings, step_mib)) is not None:
+        if (options := config.srun_options(run.backend.settings)) is not None:
             run.env["SRT_SRUN_OPTIONS"] = options
         if rc := submit.bind_point(run, checkout, root / "arguments"):
             return rc
@@ -89,7 +86,6 @@ def run_single_node(launch: Launch) -> int:
             mounts=[(str(hf_cache), request.hf_hub_cache)],
             single_node=True,
             account=run.account,
-            mem_mib=job_mib,
         )
         config.create_volume_mounts(run)
         config.write(checkout.root / "srtslurm.yaml", config.render(run.cluster, job_config))
@@ -140,9 +136,15 @@ def run_batch(launch: Launch) -> int:
     with os.fdopen(descriptor, "w") as handle:
         handle.write(f"#!/usr/bin/env bash\nexport {BATCH_REENTRY_ENV}=1\nexec {command}\n")
     log = script.with_suffix(".log")
+    available = launch.cluster.available_cpu_dram_mib
+    if available is None:
+        raise LaunchError(f"cluster {launch.cluster.id!r} must declare available-cpu-dram-mib")
+    memory_mib = available * request.gpu_count // launch.cluster.gpus_per_node
     with event.stage("submit"):
         try:
-            job = backend.submit_batch(script, gpus=request.gpu_count, time_min=minutes, log=log)
+            job = backend.submit_batch(
+                script, gpus=request.gpu_count, time_min=minutes, log=log, mem_mib=memory_mib
+            )
         except BackendError as error:
             message = f"batch allocation unavailable: {error}"
             event.fail(type(error).__name__, message, retriable=error.retriable)

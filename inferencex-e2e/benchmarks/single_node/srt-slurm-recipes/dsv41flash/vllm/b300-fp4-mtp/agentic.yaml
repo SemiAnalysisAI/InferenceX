@@ -145,4 +145,3 @@ zip_override_dep2_offload:
     env:
       CONC: ['128', '192']
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '599'

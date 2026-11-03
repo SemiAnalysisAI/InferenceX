@@ -298,7 +298,6 @@ class TestAgenticMatrixEntries:
             "conc": 1,
             "kv-offloading": "dram",
             "kv-offload-backend": {"name": "future-backend"},
-            "total-cpu-dram-gb": 2949,
             "duration": 3600,
             "exp-name": "dsv4_tp8_conc1_kvdram-future-backend",
             "scenario-type": "agentic-coding",
@@ -417,21 +416,9 @@ class TestAgenticMatrixEntries:
                 "conc-list": [1, 2],
             })
 
-    def test_dram_kv_offload_requires_dram_utilization(self):
-        with pytest.raises(ValidationError, match="dram-utilization"):
-            AgenticCodingConfig(**{
-                "search-space": [{
-                    "tp": 4,
-                    "kv-offloading": "dram",
-                    "kv-offload-backend": {"name": "native"},
-                    "conc-list": [16],
-                }],
-            })
-
     def test_dram_kv_offload_rejects_per_worker_hardware(self):
         with pytest.raises(ValidationError, match="per-worker 'hardware'"):
             AgenticCodingConfig(**{
-                "dram-utilization": 0.80,
                 "search-space": [{
                     "kv-offloading": "dram",
                     "kv-offload-backend": {"name": "mooncake"},
@@ -451,9 +438,8 @@ class TestAgenticMatrixEntries:
                 "conc-list": [1, 2],
             })
 
-    def test_dram_kv_offload_accepts_scaled_capacity(self):
+    def test_dram_kv_offload_needs_no_explicit_capacity(self):
         config = AgenticCodingConfig(**{
-            "dram-utilization": 0.80,
             "search-space": [{
                 "tp": 4,
                 "kv-offloading": "dram",
@@ -461,12 +447,11 @@ class TestAgenticMatrixEntries:
                 "conc-list": [16],
             }],
         })
-        assert config.dram_utilization == 0.80
+        assert config.search_space[0].kv_offloading == "dram"
 
     def test_gpus_per_node_is_not_a_master_config_field(self):
         with pytest.raises(ValidationError, match="gpus-per-node"):
             AgenticCodingConfig(**{
-                "dram-utilization": 0.80,
                 "gpus-per-node": 8,
                 "search-space": [{
                     "tp": 4,
@@ -480,7 +465,6 @@ class TestAgenticMatrixEntries:
         with pytest.raises(ValidationError, match="available-cpu-dram-mib"):
             AgenticCodingConfig(**{
                 "available-cpu-dram-mib": 2964436,
-                "dram-utilization": 0.80,
                 "search-space": [{
                     "tp": 4,
                     "kv-offloading": "dram",
@@ -1192,7 +1176,7 @@ AGENTIC_EVAL_ROW = {
     "model-prefix": "dsv4", "precision": "fp4", "framework": "vllm",
     "runner": "cluster:b300-nv", "tp": 8, "pp": 1, "dcp-size": 1,
     "pcp-size": 1, "ep": 8, "dp-attn": True, "spec-decoding": "mtp",
-    "conc": 224, "kv-offloading": "none", "total-cpu-dram-gb": 0,
+    "conc": 224, "kv-offloading": "none",
     "duration": 3600, "exp-name": "dsv4_tp8_conc224_kvnone_spec-mtp",
     "scenario-type": "agentic-coding", "run-eval": True, "eval-only": True,
 }
@@ -1206,7 +1190,7 @@ MULTINODE_AGENTIC_EVAL_ROW = {
     "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
     "conc": [32], "kv-offloading": "dram",
     "kv-offload-backend": {"name": "hicache"}, "kv-p2p-transfer": "mori",
-    "total-cpu-dram-gb": 2399, "duration": 3600,
+    "duration": 3600,
     "exp-name": "dsv4_p1x8_d1x8_conc32_kvdram-hicache", "disagg": True,
     "scenario-type": "agentic-coding", "run-eval": True, "eval-only": True,
     "eval-conc": 32,

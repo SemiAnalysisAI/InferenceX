@@ -22,6 +22,7 @@ from infx import yamlio
 from infx.config import repository_root
 from infx.fastcopy import deepcopy
 from infx.results.metadata import parse_component_metadata
+from infx.srt_slurm.memory import bind_memory
 from infx.srt_slurm.synthetic_acceptance import selected_recipes, spec_parameters
 
 SHARED_BLOCKS = {
@@ -52,7 +53,7 @@ _WORKFLOW_ENV = (
     "POWER", "REQUIRE_POWER", "IS_AGENTIC", "SCENARIO_TYPE", "RUN_EVAL", "EVAL_ONLY",
 )  # fmt: skip
 _MULTINODE_ENV = (
-    "SPEC_DECODING", "KV_OFFLOADING", "TOTAL_CPU_DRAM_GB", "DECODE_CPU_DRAM_GB", "PREFILL_DWDP_SIZE",
+    "SPEC_DECODING", "KV_OFFLOADING", "PREFILL_DWDP_SIZE",
     *(f"{role}_{field}" for role in ("PREFILL", "DECODE")
       for field in ("NUM_WORKERS", "TP", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "EP", "DP_ATTN")),
 )  # fmt: skip
@@ -435,6 +436,8 @@ def main(argv: list[str] | None = None) -> None:
         help="a launcher-owned benchmark client setting",
     )
     add_fabric_argument(parser)
+    parser.add_argument("--available-memory-mib", type=int, required=True)
+    parser.add_argument("--gpus-per-node", type=int, required=True)
     args = parser.parse_args(argv)
     try:
         root = repository_root()
@@ -446,6 +449,7 @@ def main(argv: list[str] | None = None) -> None:
             client_env=dict(args.client_env),
         )
         bound = resolve_fabric(bound, args.fabric)
+        bind_memory(bound, args.available_memory_mib, args.gpus_per_node)
         check_setup_script(bound, Path(args.recipe.partition(":")[0]), root)
     except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as error:
         parser.error(str(error))

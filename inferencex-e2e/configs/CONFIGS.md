@@ -35,8 +35,7 @@ entry-name:
       - ...
     - ...
     agentic-coding:  # optional
-    - dram-utilization: float  # required by kv-offloading: dram
-      search-space:
+    - search-space:
       - tp: int
         kv-offloading: dram
         kv-offload-backend: { name: string, version: string } # version optional
@@ -118,7 +117,6 @@ The below list describes what each field is:
       - For single-node entries, set `pp`, `dcp-size`, and `pcp-size` directly in the search-space entry.
       - For multinode entries, set them independently inside each `prefill` and `decode` worker block. A worker pool allocates `num-worker * tp * pp * pcp-size` GPUs.
   - `agentic-coding`: Agentic trace replay benchmarks using real conversation traces. Each entry has:
-    - (Optional) `dram-utilization`: The fraction of each node's available CPU DRAM that DRAM KV offloading may use, greater than 0 and at most 1. It is required when any search-space entry sets `kv-offloading: dram`.
     - `search-space`: Same structure as `fixed-seq-len` search-space entries, plus `kv-offloading` (`none` or `dram`, required for single-node entries) and the optional `kv-offload-backend`.
 
 `router` and `kv-p2p-transfer` may be omitted independently. Router metadata
@@ -208,22 +206,23 @@ schema; unknown keys fail.
 - `labels` maps each schedulable label to concrete runner names. Every runner is in
   exactly one `cluster:<id>` label, and every such label has a `clusters.<id>` record;
   `python -m infx.launch` resolves its cluster from `RUNNER_NAME` this way.
-- Matrix generation reads `gpus-per-node` and `available-cpu-dram-mib` from the cluster a
-  master config's `cluster:<id>` label names; broad SKU labels use the GPU family when its
-  clusters agree. Agentic master configs must use a `cluster:<id>` label; their DRAM
-  KV-offload matrices combine both fields with `dram-utilization` into per-node caps:
-  `total-cpu-dram-gb` for each node a single-node, aggregate, or prefill server occupies, and
-  `decode-cpu-dram-gb` (omitted when 0) for each node a decode server occupies. Each is the
-  node's share held by that server's GPUs on it; a server spanning nodes gets a full node's
-  share on each. Servers must tile their nodes, and per-worker `hardware` is not supported.
-  Results record them as `allocated_cpu_dram_gb` and `decode_allocated_cpu_dram_gb`.
+- Matrix generation reads `gpus-per-node` from the cluster a master config's
+  `cluster:<id>` label names; broad SKU labels use the GPU family when its clusters agree.
+  Agentic master configs must use a `cluster:<id>` label. Servers must tile their nodes,
+  and per-worker `hardware` is not supported.
 - `available-cpu-dram-mib` is the host DRAM a benchmark job can use on a node: the lower of
   Slurm's `RealMemory - MemSpecLimit` and `MemTotal` less 16 GiB for the OS, over the
-  cluster's GPU nodes; omit it where unmeasured. With `slurm.srt-slurm.single-node-exclusive`
-  (the default), a single-node srt-slurm job requests `--mem=0`, all the memory Slurm has,
-  so its host KV pools must fit the node. Otherwise the job and its srun step get the serving
-  GPUs' share, `available-cpu-dram-mib / gpus-per-node * GPU_COUNT` MiB, which the pools and
-  server processes must fit; Slurm rejects a share above what it can allocate.
+  cluster's GPU nodes. Inference workers automatically receive
+  `available-cpu-dram-mib * worker GPUs on the node / gpus-per-node` MiB through
+  `roles.<role>.srun_options.mem`. Four GPUs on an eight-GPU node receive half the node's
+  available DRAM, including when the job has exclusive access. A worker spanning whole
+  nodes receives the full available amount on each node; colocated roles receive their
+  own shares. Frontends, benchmark clients, telemetry, and services do not inherit worker
+  limits. Slurm must be configured to enforce job-step memory limits.
+  Native engine cache sizes remain recipe settings: the offload pool and all other server
+  allocations must fit within the worker's limit. The memory allocation does not reserve
+  the entire amount for KV cache. Results record the total assigned worker capacity in
+  `allocated_cpu_dram_gb`.
 - `env` is the workload environment of every launch on the cluster. Like
   `slurm.srt-slurm.env`, it overrides the runner's own environment but never a name the
   point's additional-settings set. Values cannot contain commas: Slurm hands them to jobs

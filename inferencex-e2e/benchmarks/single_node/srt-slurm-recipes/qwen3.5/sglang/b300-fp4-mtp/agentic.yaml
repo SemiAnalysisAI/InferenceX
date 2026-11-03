@@ -444,7 +444,6 @@ override_tp2_c36_hicache:
     env:
       CONC: '36'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '599'
 
 override_tp2_c44_hicache:
   roles:
@@ -465,7 +464,6 @@ override_tp2_c44_hicache:
     env:
       CONC: '44'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '599'
 
 override_tp2_c52_hicache:
   roles:
@@ -486,4 +484,3 @@ override_tp2_c52_hicache:
     env:
       CONC: '52'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '599'

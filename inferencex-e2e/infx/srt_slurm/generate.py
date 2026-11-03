@@ -21,6 +21,7 @@ from infx.launch.policy import launch_path
 from infx.launch.request import MultiNodeRequest
 from infx.matrix.generate import expand_config_keys, generate_config_matrix
 from infx.matrix.validation import config_root, load_config_files, load_runner_file
+from infx.srt_slurm.memory import bind_memory
 from infx.srt_slurm.single_node import select_recipe
 from infx.srt_slurm.synthetic_acceptance import build_overrides, selected_recipes
 from infx.srt_slurm.workload import bind_multinode, check_setup_script, resolve_fabric
@@ -56,7 +57,6 @@ def point_environment(point: Mapping[str, Any]) -> dict[str, str]:
             if agentic and point.get("kv-offload-backend")
             else ""
         ),
-        "TOTAL_CPU_DRAM_GB": str(point.get("total-cpu-dram-gb", 0)),
     }
     if agentic:
         environment["KV_OFFLOADING"] = str(point["kv-offloading"])
@@ -66,7 +66,6 @@ def point_environment(point: Mapping[str, Any]) -> dict[str, str]:
             SRT_RECIPE=point["srt-recipe"],
             POWER="1" if point.get("power") else "0",
             CONC_LIST=" ".join(map(str, point["conc"])),
-            DECODE_CPU_DRAM_GB=str(point.get("decode-cpu-dram-gb", 0)),
         )
         if agentic:
             environment["CONC"] = str(point["conc"][0])
@@ -239,6 +238,10 @@ def generate_recipes(
             )
             if fabric is not None:
                 recipe = resolve_fabric(recipe, fabric)
+                cluster = placement[1]
+                if cluster.available_cpu_dram_mib is None:
+                    raise ValueError(f"cluster {cluster.id!r} must declare available-cpu-dram-mib")
+                bind_memory(recipe, cluster.available_cpu_dram_mib, cluster.gpus_per_node)
             check_setup_script(recipe, root / point["srt-recipe"].partition(":")[0], root)
             if "prefill" not in point:
                 clusters = {

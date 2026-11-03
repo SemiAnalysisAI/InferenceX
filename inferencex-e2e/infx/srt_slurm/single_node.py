@@ -13,6 +13,7 @@ from typing import Any
 import yaml
 
 from infx.config import repository_root
+from infx.srt_slurm.memory import bind_memory
 from infx.srt_slurm.synthetic_acceptance import ENGINES, selected_recipes, spec_parameters
 from infx.srt_slurm.workload import (
     BOUND_RECIPE,
@@ -142,7 +143,7 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
         ),
         "AgentX client": (benchmark.get("command", "").endswith("srt_agentic.sh"), agentic),
     }
-    for name in ("CONC", "KV_OFFLOADING", "TOTAL_CPU_DRAM_GB"):
+    for name in ("CONC", "KV_OFFLOADING"):
         if name in workload:
             expected[name] = (str(workload[name]), environment[name])
     if engine == "atom":
@@ -222,6 +223,8 @@ def main() -> None:
     prepare.add_argument("recipe")
     prepare.add_argument("output", type=Path)
     add_fabric_argument(prepare)
+    prepare.add_argument("--available-memory-mib", type=int, required=True)
+    prepare.add_argument("--gpus-per-node", type=int, required=True)
     submitted = commands.add_parser("submission")
     submitted.add_argument("manifest", type=Path)
     parsed = parser.parse_args()
@@ -231,6 +234,7 @@ def main() -> None:
         if parsed.command == "prepare":
             selected, recipe = select_recipe(parsed.recipe, os.environ)
             recipe = resolve_fabric(recipe, parsed.fabric)
+            bind_memory(recipe, parsed.available_memory_mib, parsed.gpus_per_node)
             check_setup_script(recipe, Path(parsed.recipe.partition(":")[0]), repository_root())
             arguments = runtime_arguments(parsed.recipe, os.environ)
             config = parsed.output.with_name(BOUND_RECIPE)
