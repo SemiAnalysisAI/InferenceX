@@ -25,9 +25,11 @@ def invoke(tmp_path):
     return run
 
 
-@pytest.mark.parametrize('payload,expected', [
+@pytest.mark.parametrize("payload,expected", [
     (None, None),
-], ids=['None-None'])
+    ('{"value": 3}', [{"value": 3}]),
+    ('[{"value": 3}, {"value": 4}]', [[{"value": 3}, {"value": 4}]]),
+])
 def test_collector_preserves_nested_json_and_empty_inputs(invoke, tmp_path, payload, expected):
     inputs = tmp_path / "inputs" / "nested"
     inputs.mkdir(parents=True)

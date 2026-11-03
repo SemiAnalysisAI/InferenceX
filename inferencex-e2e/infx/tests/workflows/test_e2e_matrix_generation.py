@@ -64,9 +64,11 @@ def run_get_jobs(tmp_path, *, launcher=True, **inputs):
     return result, jobs
 
 
-@pytest.mark.parametrize('inputs', [
+@pytest.mark.parametrize("inputs", [
     {"CHANGELOG_BASE_REF": "{base}", "CHANGELOG_HEAD_REF": "{head}"},
-], ids=['changelog-dispatch'])
+    {"GENERATE_COMMAND": "test-config --config-keys fixture --config-files "
+                         "configs/amd-master.yaml configs/nvidia-master.yaml"},
+], ids=["changelog-dispatch", "generate-command"])
 def test_get_jobs_runs_the_measured_revisions_own_tooling(tmp_path, inputs):
     result, jobs = run_get_jobs(tmp_path, **inputs)
 
