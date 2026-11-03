@@ -33,6 +33,8 @@ base:
         speculative-algorithm: DSPARK
         speculative-dspark-block-size: 7
         speculative-use-block-verification: true
+        # FP8 draft KV, as vLLM's DSpark drafter uses; bf16 costs ~10 GB of HBM per rank.
+        speculative-draft-kv-cache-dtype: fp8_e4m3
         cuda-graph-backend-prefill: breakable
         tokenizer-worker-num: 8
         watchdog-timeout: 3600

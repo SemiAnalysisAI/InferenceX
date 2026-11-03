@@ -11,6 +11,7 @@ from typing import Any
 WORKERS = {
     "unquantized": "operatorx_ascend_worker",
     "fp8": "operatorx_fp8_block_worker",
+    "ue8m0": "operatorx_mxfp8_128_triton_queued_worker",
 }
 
 
@@ -100,6 +101,7 @@ def make_plan(entries: list[dict[str, Any]], kind: str, budget: int) -> dict[str
                 Path(__file__).with_name(name).read_bytes()
             ).hexdigest()
             for name in ("operatorx_queued_timing.py", "operatorx_ascend_worker.py")
+            + (("operatorx_ue8m0_quant_triton.py",) if kind == "ue8m0" else ())
         },
     }
 

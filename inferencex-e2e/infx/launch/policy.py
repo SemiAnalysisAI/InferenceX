@@ -64,8 +64,7 @@ class LaunchPath(StrEnum):
 
 NATIVE_SRT_LANES: dict[str, tuple[Match, ...]] = {
     "b200-nscale": (
-        Match(any_of("dsv4", "kimik3", "glm5.2"), any_of("fp4"), any_of("dynamo-vllm")),
-        Match(any_of("dsv4"), any_of("fp4"), any_of("dynamo-sglang"), specs=any_of("none", "mtp")),
+        Match(any_of("kimik3", "glm5.2"), any_of("fp4"), any_of("dynamo-vllm")),
         Match(any_of("glm5.2"), any_of("fp4"), any_of("dynamo-sglang"), specs=any_of("mtp")),
     ),
 }
