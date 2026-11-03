@@ -3732,7 +3732,7 @@ def test_choose_needs_node_demand_on_every_target_cluster_and_skips_unresolved_r
         "wide": {**fixture, "runner": "cluster:h100-dsxe", "multinode": True, "scenarios": {
             "agentic-coding": [{"search-space": [
                 {"worker": {**worker, "num-worker": nodes},
-                 "kv-offloading": "none", "conc-list": [4], "srt-recipe": "wide.yaml"}
+                 "kv-offloading": "none", "conc-list": [4], "srt-recipe": f"wide-{nodes}.yaml"}
                 for nodes in (2, 4, 3)
             ]}],
         }},
@@ -3751,9 +3751,12 @@ def test_choose_needs_node_demand_on_every_target_cluster_and_skips_unresolved_r
     (configs / "nvidia-master.yaml").write_text(yaml.safe_dump(master))
     (configs / "runners.yaml").write_text(yaml.safe_dump(runners))
     write_fixture_recipe(tmp_path)
-    recipe = tmp_path / "benchmarks/multi_node/srt-slurm-recipes/fixture/wide.yaml"
-    recipe.parent.mkdir(parents=True)
-    recipe.write_text("schema: 2\nroles: {agg: {}}\n")
+    recipes = tmp_path / "benchmarks/multi_node/srt-slurm-recipes/fixture"
+    recipes.mkdir(parents=True)
+    for nodes in (2, 4, 3):
+        (recipes / f"wide-{nodes}.yaml").write_text(
+            f"schema: 2\nroles: {{agg: {{nodes: {nodes}}}}}\n"
+        )
 
     families = klaud.live_families(tmp_path)
 

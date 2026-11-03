@@ -451,7 +451,7 @@ def test_recovery_plans_with_the_checkouts_own_planner_and_recipes(
     ] = "recovery-fixture.yaml"
     master_path.write_text(yaml.safe_dump(master, sort_keys=False))
     recipe = root / "benchmarks/multi_node/srt-slurm-recipes/fixture/recovery-fixture.yaml"
-    recipe.write_text("schema: 2\nroles:\n  prefill: {}\n  decode: {}\nservices: [{name: pool, type: custom, nodes: 5}]\n")
+    recipe.write_text("schema: 2\nroles:\n  prefill: {nodes: 1}\n  decode: {nodes: 1}\nservices: [{name: pool, type: custom, nodes: 5}]\n")
     changelog = root / "perf-changelog.yaml"
     entries = yaml.safe_load(changelog.read_text())
     entries[0]["config-keys"] = ["multi"]
@@ -493,7 +493,7 @@ def test_historical_generator_uses_snapshot_recipes_not_inherited_recovery_root(
     ] = "snapshot.yaml"
     (root / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(master, sort_keys=False))
     recipe = root / "benchmarks/multi_node/srt-slurm-recipes/fixture/snapshot.yaml"
-    recipe.write_text("schema: 2\nroles:\n  prefill: {}\n  decode: {}\nservices: [{name: pool, type: custom, nodes: 5}]\n")
+    recipe.write_text("schema: 2\nroles:\n  prefill: {nodes: 1}\n  decode: {nodes: 1}\nservices: [{name: pool, type: custom, nodes: 5}]\n")
     if nested_layout:
         project = root / "inferencex-e2e"
         project.mkdir()
@@ -508,7 +508,7 @@ def test_historical_generator_uses_snapshot_recipes_not_inherited_recovery_root(
         ["commit", "-qm", "committed recipe allocation"],
     ):
         subprocess.run(["git", *command], cwd=root, check=True)
-    recipe.write_text("schema: 2\nroles:\n  prefill: {}\n  decode: {}\nservices: [{name: pool, type: custom, nodes: 48}]\n")
+    recipe.write_text("schema: 2\nroles:\n  prefill: {nodes: 1}\n  decode: {nodes: 1}\nservices: [{name: pool, type: custom, nodes: 48}]\n")
     unrelated = root / "other-revision"
     unrelated.mkdir()
     monkeypatch.setenv("INFERENCEX_REPOSITORY_ROOT", str(unrelated))
@@ -814,7 +814,7 @@ def test_generation_failure_does_not_publish_a_partial_matrix(planning_repo, cha
     with pytest.raises(subprocess.CalledProcessError):
         changelog_run([{"config-keys": ["single", "multi"]}])
     captured = capsys.readouterr()
-    assert "Recipe roles must match the requested inference workers" in captured.out
+    assert "Recipe has no worker roles" in captured.out
     assert '\"single_node\":' not in captured.out
 
 
