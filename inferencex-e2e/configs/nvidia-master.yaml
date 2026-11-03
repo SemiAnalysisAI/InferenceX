@@ -6058,7 +6058,7 @@ dsv41flash-fp4-h100-sglang-agentic-dspark-dpa:
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [4, 8, 16, 20], srt-recipe: agentic.yaml }
 
 dsv41flash-fp4-gb200-vllm-agentic-dspark:
-  image: vllm/vllm-openai:nightly-dev-arm64-cu130-ac9126e58aa7
+  image: vllm/vllm-openai:cu134-nightly-40941f2c4ba96fba0a7e282a5355e89cd74d9ac5@sha256:13e92fcd97268013d13d07fb97d80803227cf0beae0161f8dce95a8200eaafb0
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:gb200-nv
@@ -6071,12 +6071,10 @@ dsv41flash-fp4-gb200-vllm-agentic-dspark:
     - dram-utilization: 0.80
       search-space:
       # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
-      # TP4 covers low concurrency with FlashInfer attention and THP Engram tables.
-      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 32], srt-recipe: agentic.yaml }
-      # DEP2 is native TP1 x DP2 + EP2 with MegaMoE and adaptive verification behind a consistent-hash vLLM Router.
-      - { tp: 2, ep: 2, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [8, 16, 32], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
-      # DEP4 is native TP1 x DP4 + EP4 with the same settings.
-      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [64, 128], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
+      # TP4 covers low concurrency with FlashInfer sparse MLA, THP Engram tables and an active-request cap.
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [4, 10, 16], srt-recipe: agentic.yaml }
+      # DEP4 is native TP1 x DP4 + EP4 with MegaMoE and FlashMLA mega-attention behind a consistent-hash vLLM Router.
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [64, 100, 136, 170, 256], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
 
 # SGLang arm for DeepSeek-V4.1-Flash AgentX on GB200, from the SGLang cookbook
 # (https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1).
