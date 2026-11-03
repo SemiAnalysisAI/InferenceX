@@ -192,14 +192,14 @@ def test_psu_rejects_invalid_efficiency(efficiency):
 @pytest.mark.parametrize(
     "system, tdp, design_heat, design_host, expected_fan, expected_ac, network_w, per_gpu",
     [
-        ("hopper", 700, 7214, 1614, 427.676295, 7987.533560, 473.625, 1374.938266),
-        ("h100", 700, 7214, 1614, 427.676295, 7987.533560, 473.625, 1374.938266),
-        ("h200", 700, 7214, 1614, 427.676295, 7987.533560, 473.625, 1374.938266),
-        ("b200", 1000, 9614, 1614, 569.958400, 10591.331612, 473.625, 1798.055450),
-        ("b300", 1200, 11194, 1594, 663.627453, 12466.440507, 697.5, 2139.140332),
-        ("mi300", 750, 7254, 1254, 430.047663, 8009.881151, 348.75, 1358.277562),
-        ("mi325", 1000, 9254, 1254, 548.616084, 10297.769650, 348.75, 1730.059443),
-        ("mi355", 1400, 12454, 1254, 738.325558, 13838.283772, 348.75, 2305.392988),
+        ("hopper", 700, 7204, 1604, 427.083453, 7976.746774, 473.625, 1373.185413),
+        ("h100", 700, 7204, 1604, 427.083453, 7976.746774, 473.625, 1373.185413),
+        ("h200", 700, 7204, 1604, 427.083453, 7976.746774, 473.625, 1373.185413),
+        ("b200", 1000, 9604, 1604, 569.365558, 10580.190713, 473.625, 1796.245053),
+        ("b300", 1200, 11184, 1584, 663.034611, 12455.527974, 697.5, 2137.367046),
+        ("mi300", 750, 7244, 1244, 429.454821, 7999.153182, 348.75, 1356.534267),
+        ("mi325", 1000, 9244, 1244, 548.023242, 10286.874315, 348.75, 1728.288951),
+        ("mi355", 1400, 12444, 1244, 737.732716, 13827.420568, 348.75, 2303.627717),
     ],
 )
 def test_cli_sizes_fans_from_system_tdp_and_host_inventory_before_psu_and_pue(
@@ -244,13 +244,13 @@ def test_workload_and_actual_gpu_watts_change_draw_without_resizing_fan_capacity
         OperatingState(workload_state="agentic-cpu-offloading", using_scale_out=True),
     ]
     draws = []
-    for state, heat in zip(states, (2191.6, 2271.6, 2614), strict=True):
+    for state, heat in zip(states, (2191.6, 2361.6, 2604), strict=True):
         result = hardware.estimate_it_power(125, operating_state=state)
         fan = result.children[-1]
         details = dict(fan.details)
         assert details["non_fan_power_w_per_system"] == pytest.approx(heat)
-        assert details["full_cooling_load_w"] == 7214
-        assert details["electrical_nameplate_w"] == pytest.approx(835.305263158)
+        assert details["full_cooling_load_w"] == 7204
+        assert details["electrical_nameplate_w"] == pytest.approx(834.147368421)
         draws.append(fan.power_w)
     assert draws[0] < draws[1] < draws[2]
 
@@ -258,9 +258,9 @@ def test_workload_and_actual_gpu_watts_change_draw_without_resizing_fan_capacity
     above_tdp = hardware.estimate_it_power(800)
     assert above_tdp.children[0].children[0].power_w == 6400
     fan = above_tdp.children[-1]
-    assert dict(fan.details)["non_fan_power_w_per_system"] == pytest.approx(7671.6)
-    assert dict(fan.details)["full_cooling_load_w"] == 7214
-    assert fan.power_w == pytest.approx(427.676294737)
+    assert dict(fan.details)["non_fan_power_w_per_system"] == pytest.approx(7761.6)
+    assert dict(fan.details)["full_cooling_load_w"] == 7204
+    assert fan.power_w == pytest.approx(427.083452632)
 
 
 def test_optional_components_resize_design_heat_but_system_quantity_does_not():
@@ -270,10 +270,10 @@ def test_optional_components_resize_design_heat_but_system_quantity_does_not():
     result = SystemGroup(system=hardware, quantity=2).estimate_it_power(125)
     fan = result.children[-1]
     details = dict(fan.details)
-    assert details["full_cooling_load_w"] == 7314
-    assert details["design_non_gpu_power_w"] == 1714
-    assert details["non_fan_power_w_per_system"] == pytest.approx(2371.6)
-    assert fan.power_w == pytest.approx(115.093569585)
+    assert details["full_cooling_load_w"] == 7304
+    assert details["design_non_gpu_power_w"] == 1704
+    assert details["non_fan_power_w_per_system"] == pytest.approx(2461.6)
+    assert fan.power_w == pytest.approx(121.306854530)
 
 
 def test_psu_converts_fans_and_components_before_pue_and_quantity_scaling():
@@ -295,16 +295,16 @@ def test_psu_converts_fans_and_components_before_pue_and_quantity_scaling():
     result = model.estimate_breakdown(125)
     chassis = result.components[0].children[0]
     losses, fan = chassis.children[-2:]
-    # One chassis: 2351.6 W components and a 7214 W cooling design.
+    # One chassis: 2441.6 W components and a 7204 W cooling design.
     # The controlled cubic profile adds 24.988378672 W of fans; 80% PSU
     # efficiency adds 594.147094668 W before quantity scaling and PUE.
-    assert fan.power_w == pytest.approx(49.976757343640)
-    assert losses.power_w == pytest.approx(1188.294189335910)
-    assert result.it_power_w == pytest.approx(5941.470946679549)
-    assert result.facility_power_w == pytest.approx(7723.912230683414)
-    assert result.AllInPower_per_gpu == pytest.approx(482.744514417713)
-    assert dict(fan.details)["non_fan_power_w_per_system"] == pytest.approx(2351.6)
-    assert dict(losses.details)["dc_load_w_per_system"] == pytest.approx(2376.588378671820)
+    assert fan.power_w == pytest.approx(56.09267301718)
+    assert losses.power_w == pytest.approx(1234.82316825429)
+    assert result.it_power_w == pytest.approx(6174.115841271475)
+    assert result.facility_power_w == pytest.approx(8026.350593652917)
+    assert result.AllInPower_per_gpu == pytest.approx(501.646912103307)
+    assert dict(fan.details)["non_fan_power_w_per_system"] == pytest.approx(2441.6)
+    assert dict(losses.details)["dc_load_w_per_system"] == pytest.approx(2469.64633650859)
     assert dict(losses.details)["efficiency"] == 0.8
 
 
