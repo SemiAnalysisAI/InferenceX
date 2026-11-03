@@ -36,8 +36,29 @@ jobs:
 
             - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
+            - name: Extract changelog metadata
+              id: plan
+              env:
+                  PUSH_BEFORE: ${{ github.event.before }}
+                  PUSH_AFTER: ${{ github.event.after }}
+              run: |
+                  source "$GITHUB_WORKSPACE/inferencex-e2e/benchmarks/check_env.sh"
+                  check_env_vars GITHUB_WORKSPACE RUNNER_TEMP GITHUB_OUTPUT PUSH_BEFORE PUSH_AFTER
+                  cd "$GITHUB_WORKSPACE/inferencex-e2e"
+                  uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+                    python -m infx.matrix.plan \
+                    --changelog-file perf-changelog.yaml \
+                    --base-ref "$PUSH_BEFORE" \
+                    --head-ref "$PUSH_AFTER" > "$RUNNER_TEMP/plan.json"
+                  jq -c '.changelog_metadata' "$RUNNER_TEMP/plan.json" > "$GITHUB_WORKSPACE/changelog_metadata.json"
+                  agentic=$(jq '((.single_node.agentic // []) + (.multi_node.agentic // [])) | length > 0' "$RUNNER_TEMP/plan.json")
+                  retirement_only=$(jq '.changelog_metadata.entries | length > 0 and all(.[]; .retired == true)' "$RUNNER_TEMP/plan.json")
+                  echo "agentic=$agentic" >> "$GITHUB_OUTPUT"
+                  echo "retirement-only=$retirement_only" >> "$GITHUB_OUTPUT"
+
             - name: Resolve reused sweep
               id: reuse
+              if: steps.plan.outputs.retirement-only != 'true'
               env:
                   GH_TOKEN: ${{ github.token }}
               run: |
@@ -49,12 +70,13 @@ jobs:
                     --workflow-id "run-sweep.yml"
 
             - name: Require sweep reuse
-              if: steps.reuse.outputs.reuse-enabled != 'true'
+              if: steps.plan.outputs.retirement-only != 'true' && steps.reuse.outputs.reuse-enabled != 'true'
               run: |
                   echo "::error::Pushes to main never run sweeps. Post an authorized /use <run_id> reuse command on the PR before merging."
                   exit 1
 
             - name: Summarize reused source
+              if: steps.plan.outputs.retirement-only != 'true'
               uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
               env:
                   SOURCE_RUN_URL: ${{ steps.reuse.outputs.reuse-source-run-url }}
@@ -68,22 +90,6 @@ jobs:
                         ['Reused benchmark source', process.env.SOURCE_SHA],
                       ]).write();
 
-            - name: Extract changelog metadata
-              id: plan
-              env:
-                  PUSH_BEFORE: ${{ github.event.before }}
-                  PUSH_AFTER: ${{ github.event.after }}
-              run: |
-                  cd "$GITHUB_WORKSPACE/inferencex-e2e"
-                  uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-                    python -m infx.matrix.plan \
-                    --changelog-file perf-changelog.yaml \
-                    --base-ref "$PUSH_BEFORE" \
-                    --head-ref "$PUSH_AFTER" > "$RUNNER_TEMP/plan.json"
-                  jq -c '.changelog_metadata' "$RUNNER_TEMP/plan.json" > "$GITHUB_WORKSPACE/changelog_metadata.json"
-                  agentic=$(jq '((.single_node.agentic // []) + (.multi_node.agentic // [])) | length > 0' "$RUNNER_TEMP/plan.json")
-                  echo "agentic=$agentic" >> "$GITHUB_OUTPUT"
-
             - name: Upload changelog artifact
               uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:
@@ -92,6 +98,7 @@ jobs:
                   if-no-files-found: error
 
             - name: Trigger database ingest
+              if: steps.plan.outputs.retirement-only != 'true'
               uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
               env:
                   AGENTIC: ${{ steps.plan.outputs.agentic }}

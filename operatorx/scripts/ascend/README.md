@@ -109,3 +109,56 @@ python -m pytest operatorx/tests/test_ascend_plan.py \
 ```
 
 The guard fixture is captured host tiling data, not a vendor device binary. Tests compile the guard on the CPU and exercise real decoder and launch-hook behavior against a mock runtime. Native preflight is still required to establish Linux symbol interception on each installed stack.
+
+## UE8M0 group-128 GEMM (v6)
+
+`--kind ue8m0` uses a flat-address Triton activation quantizer followed by
+CANN `npu_quant_matmul`. It supports E4M3 A with dynamic UE8M0 `[1,128]`
+scales, E4M3 W with static UE8M0 `[128,128]` scales, BF16 output and K
+multiples of 128. BF16 and FP32-scale FP8 keep their separate workers.
+
+The measured stack is **950PR_9579, CANN 9.2.1, torch 2.10.0,
+torch_npu 2.10.0.post4, triton-ascend 3.2.2** on x86 Linux. Load that CANN
+environment before using the commands below. This path does not use the
+CANN 9.1 FP32-scale kernel or its ABI-specific preload guard.
+
+The quantizer follows the [pinned vLLM scale recipe](https://github.com/vllm-project/vllm/blob/cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3/vllm/model_executor/layers/quantization/utils/fp8_utils.py):
+`eps=1e-10`, power-of-two scales, and E4M3 round-to-nearest-even. It processes
+64 groups per tile using int64 flat offsets and group-uniform masks. The
+paired scale storage is expanded by exact byte repetition to CANN's native
+32-element groups. No payload requantization occurs during expansion.
+
+**Timing includes dynamic activation quantization, activation scale expansion,
+output allocation and GEMM.** Static weight generation and scale expansion
+are outside timing. Ten eager event samples are queued before synchronization;
+the upper median is reported. This does not claim CUDA graph, launch-shield,
+cache-eviction, RNG-byte or instruction equivalence. Every case checks all
+quantized activation elements and output finiteness, plus sampled FP64 full-K
+dots from the actual decoded operands, before and after timing. Allocation
+is bounded by the requested budget and available memory minus 8 GiB.
+
+```bash
+python "$ASCEND_SCRIPTS/prepare.py" \
+  --input "$ASCEND_SCRIPTS/examples/ue8m0.json" --kind ue8m0 \
+  --memory-budget-bytes 103079215104 --output "$ASCEND_RESULTS/ue8m0-plan.json"
+
+python "$ASCEND_SCRIPTS/operatorx_batch_campaign.py" run \
+  --plan "$ASCEND_RESULTS/ue8m0-plan.json" --run-dir "$ASCEND_RESULTS/ue8m0" \
+  --worker-script "$ASCEND_SCRIPTS/operatorx_mxfp8_128_triton_queued_worker.py" \
+  --phase smoke --device 0 --board-id 0 --chip-id 0 --expected-name 950PR \
+  --warmups 5 --warmup-ms 25 --samples 10 --seed 20261023 \
+  --timeout-seconds 300 --cpu-threads 4
+```
+
+Use the actual board/chip IDs for the instance. Repeat with `--phase all-ready`
+to run the rest of a supplied testlist. The plan fingerprints the quantizer,
+worker, numerical helper and timing helper; changing any dependency requires a
+new plan and result directory. The NPU health and idle checks remain mandatory.
+
+The originating v6 sweep passed **506/506 cases**, the quantizer's finite-BF16
+and exponent-boundary checks, and a 4,294,967,296-element addressing check.
+Its [published raw run](https://inferencex.semianalysis.com/api/v1/operatorx/runs/external-ascend950pr-20261030-ue8m0-128-flat-triton-cann921-queued-v1)
+contains the original source hashes, samples, hardware/software identities and
+numerical evidence. The packaged source uses the existing repository's shared
+helpers; source formatting and removal of the standalone research CLI change
+file hashes without changing the measured quantization arithmetic.

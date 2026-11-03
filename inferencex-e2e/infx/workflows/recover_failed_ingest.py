@@ -546,7 +546,7 @@ def without_link(entry: dict[str, Any]) -> str:
 
 
 def extract_original_entries(base_raw: bytes, merge_raw: bytes, pr_number: int) -> bytes:
-    """Return the exact entry bytes the original merge appended for its own PR."""
+    """Return the original PR's ingest entries, excluding retirements with no results."""
     if not merge_raw.startswith(base_raw):
         raise RecoveryError(
             "original merge did not preserve its parent changelog byte-for-byte; "
@@ -561,6 +561,11 @@ def extract_original_entries(base_raw: bytes, merge_raw: bytes, pr_number: int) 
     links = [str(entry.get("pr-link") or "") for entry in entries]
     if not entries or any(link != pr_url(pr_number) for link in links):
         raise RecoveryError(f"original merge entries must all link {pr_url(pr_number)}: {links}")
+    active = [entry for entry in entries if entry.get("retired") is not True]
+    if not active:
+        raise RecoveryError("retirement-only merges have no result artifacts to recover")
+    if len(active) != len(entries):
+        return yaml.safe_dump(active, sort_keys=False).encode()
     return appended
 
 

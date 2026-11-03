@@ -220,9 +220,10 @@ class _Collectives:
     def median_spread(self, vals):
         """Per-element cross-rank (MEDIAN, MAX-MIN) from one all_gather. The pair period is a rate:
         MAX would publish whichever rank hiccuped, while the median is the agreed cadence and a
-        large spread marks a paced rank. Rank-ordered, so every rank writes the same artifact."""
+        large spread marks a paced rank. Rank-ordered, so every rank writes the same artifact. The
+        true median: torch.median returns the lower middle value, and EP sizes are even."""
         stacked = self.torch.stack(self._gather(self.torch.tensor(vals, device=self.device, dtype=self.torch.float64)))
-        median = stacked.median(dim=0).values
+        median = stacked.quantile(0.5, dim=0)
         spread = stacked.max(dim=0).values - stacked.min(dim=0).values
         return [float(x) for x in median.tolist()], [float(x) for x in spread.tolist()]
 

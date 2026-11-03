@@ -829,7 +829,7 @@ UNAVAILABLE = {
 
 
 class _ValueTensor:
-    """Enough tensor for the reductions run_sweep performs: gather, stack, median/max/min, sub."""
+    """Enough tensor for the reductions run_sweep performs: gather, stack, quantile/max/min, sub."""
 
     def __init__(self, data):
         self.data = data
@@ -856,8 +856,9 @@ class _ValueTensor:
         )
         return SimpleNamespace(values=_ValueTensor([fn(column) for column in columns]))
 
-    def median(self, dim=0):
-        return self._reduce(statistics.median)
+    def quantile(self, q, dim=0):
+        assert q == 0.5
+        return self._reduce(statistics.median).values
 
     def max(self, dim=0):
         return self._reduce(max)
@@ -1174,6 +1175,29 @@ def _sweep(fail_indices, error_indices, chain_error, backend_factory=None,
     )
 
 
+def _alignment(missed=0, held=None, stalled=None):
+    """A row's expected rank_alignment: `missed` roundtrips; `held`/`stalled` as (dispatch,
+    roundtrip) counts for host-gated series, None where nothing waits on the host."""
+    row = {"host_held_fraction": None, "host_held_samples": None,
+           "host_stalled_fraction": None, "host_stalled_samples": None,
+           "missed_fraction": float(bool(missed)),
+           "missed_samples": {"combine": 0, "dispatch": 0, "roundtrip": missed}}
+    for name, counts in (("held", held), ("stalled", stalled)):
+        if counts is not None:
+            row[f"host_{name}_fraction"] = float(any(counts))
+            row[f"host_{name}_samples"] = dict(zip(("dispatch", "roundtrip"), counts))
+    return row
+
+
+def _assert_tails_withheld(test, block, p50=None):
+    tails = block["percentiles_us"]
+    if p50 is None:
+        test.assertIsNotNone(tails["p50"])
+    else:
+        test.assertEqual(tails["p50"], p50)
+    test.assertEqual([tails[k] for k in ("p90", "p95", "p99")], [None] * 3)
+
+
 def drive(*, fail_phases=(), chain_error=0.0, backend_factory=None, chain_output_ok=True):
     """Run the sweep, optionally failing every oracle of a given pass; a clean probe run first
     learns the oracle call count, so failures are selected by phase rather than by hardcoded index."""
@@ -1360,14 +1384,7 @@ class AlignmentMissPublication(unittest.TestCase):
                          {"method": "gpu-spin-then-all-reduce", "spin_us": 2000.0})
         for row in swept.rows:
             with self.subTest(tokens=row["tokens_per_rank"]):
-                self.assertEqual(row["rank_alignment"], {
-                    "host_held_fraction": None,
-                    "host_held_samples": None,
-                    "host_stalled_fraction": None,
-                    "host_stalled_samples": None,
-                    "missed_fraction": 0.0,
-                    "missed_samples": {"combine": 0, "dispatch": 0, "roundtrip": 0},
-                })
+                self.assertEqual(row["rank_alignment"], _alignment())
                 self.assertIsNotNone(row["components"]["roundtrip"]["percentiles_us"]["p99"])
 
     def test_missed_roundtrips_withhold_the_row_tails(self):
@@ -1375,19 +1392,10 @@ class AlignmentMissPublication(unittest.TestCase):
         self.assertEqual(swept.rc, 0)
         for row in swept.rows:
             with self.subTest(tokens=row["tokens_per_rank"]):
-                self.assertEqual(row["rank_alignment"], {
-                    "host_held_fraction": None,
-                    "host_held_samples": None,
-                    "host_stalled_fraction": None,
-                    "host_stalled_samples": None,
-                    "missed_fraction": 1.0,
-                    "missed_samples": {"combine": 0, "dispatch": 0, "roundtrip": 8},
-                })
+                self.assertEqual(row["rank_alignment"], _alignment(missed=8))
                 for block in (row["components"]["roundtrip"], row["components"]["dispatch"],
                               row["cross_rank_min_us"]["roundtrip"]):
-                    tails = block["percentiles_us"]
-                    self.assertEqual(tails["p50"], 10.0)
-                    self.assertEqual([tails[k] for k in ("p90", "p95", "p99")], [None] * 3)
+                    _assert_tails_withheld(self, block, p50=10.0)
                 self.assertIsNone(row["token_rate_at_latency_percentile"]["p99"])
                 # The chained family aligns once per sibling and keeps its tails.
                 self.assertIsNotNone(row["components"]["pair_period"]["percentiles_us"]["p99"])
@@ -1399,19 +1407,10 @@ class AlignmentMissPublication(unittest.TestCase):
         self.assertEqual(swept.rc, 0)
         for row in swept.rows:
             with self.subTest(tokens=row["tokens_per_rank"]):
-                self.assertEqual(row["rank_alignment"], {
-                    "host_held_fraction": 0.0,
-                    "host_held_samples": {"dispatch": 0, "roundtrip": 0},
-                    "host_stalled_fraction": 1.0,
-                    "host_stalled_samples": {"dispatch": 8, "roundtrip": 0},
-                    "missed_fraction": 0.0,
-                    "missed_samples": {"combine": 0, "dispatch": 0, "roundtrip": 0},
-                })
+                self.assertEqual(row["rank_alignment"], _alignment(held=(0, 0), stalled=(8, 0)))
                 for block in (row["components"]["roundtrip"], row["components"]["dispatch"],
                               row["cross_rank_min_us"]["dispatch"]):
-                    tails = block["percentiles_us"]
-                    self.assertEqual(tails["p50"], 10.0)
-                    self.assertEqual([tails[k] for k in ("p90", "p95", "p99")], [None] * 3)
+                    _assert_tails_withheld(self, block, p50=10.0)
                 self.assertIsNone(row["token_rate_at_latency_percentile"]["p99"])
                 self.assertIsNotNone(row["components"]["pair_period"]["percentiles_us"]["p99"])
         self.assertIn("missed=0.00% held=0.00% stalled=100.00% correct=True", swept.stdout)
@@ -1423,14 +1422,7 @@ class AlignmentMissPublication(unittest.TestCase):
         self.assertEqual(swept.rc, 0)
         for row in swept.rows:
             with self.subTest(tokens=row["tokens_per_rank"]):
-                self.assertEqual(row["rank_alignment"], {
-                    "host_held_fraction": 1.0,
-                    "host_held_samples": {"dispatch": 8, "roundtrip": 8},
-                    "host_stalled_fraction": 0.0,
-                    "host_stalled_samples": {"dispatch": 0, "roundtrip": 0},
-                    "missed_fraction": 0.0,
-                    "missed_samples": {"combine": 0, "dispatch": 0, "roundtrip": 0},
-                })
+                self.assertEqual(row["rank_alignment"], _alignment(held=(8, 8), stalled=(0, 0)))
                 for block in (row["components"]["roundtrip"], row["components"]["dispatch"],
                               row["cross_rank_min_us"]["roundtrip"]):
                     self.assertIsNotNone(block["percentiles_us"]["p99"])
@@ -1448,9 +1440,7 @@ class AlignmentMissPublication(unittest.TestCase):
                                  {"combine": 0, "dispatch": 0, "roundtrip": 8})
                 for block in (row["components"]["roundtrip"], row["components"]["dispatch"],
                               row["cross_rank_min_us"]["roundtrip"]):
-                    tails = block["percentiles_us"]
-                    self.assertIsNotNone(tails["p50"])
-                    self.assertEqual([tails[k] for k in ("p90", "p95", "p99")], [None] * 3)
+                    _assert_tails_withheld(self, block)
                 self.assertIsNotNone(row["components"]["pair_period"]["percentiles_us"]["p99"])
         self.assertIn("missed=100.00%", swept.stdout)
 
@@ -1547,14 +1537,7 @@ class CudaGraphPublication(unittest.TestCase):
                 self.assertIsNotNone(row["cross_rank_min_us"]["roundtrip"]["percentiles_us"]["p99"])
                 self.assertIsNotNone(row["token_rate_at_latency_percentile"]["p99"])
                 self.assertIsNotNone(row["components"]["pair_period"]["percentiles_us"]["p99"])
-                self.assertEqual(row["rank_alignment"], {
-                    "host_held_fraction": None,
-                    "host_held_samples": None,
-                    "host_stalled_fraction": None,
-                    "host_stalled_samples": None,
-                    "missed_fraction": 0.0,
-                    "missed_samples": {"combine": 0, "dispatch": 0, "roundtrip": 0},
-                })
+                self.assertEqual(row["rank_alignment"], _alignment())
         checked = [event[1] for event in self.swept.events if event[0] == "graph-value-check"]
         self.assertEqual(sorted(checked), sorted(LADDER))
 

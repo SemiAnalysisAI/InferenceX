@@ -16,8 +16,15 @@ from pathlib import Path
 from typing import ClassVar
 from unittest import mock
 
+try:
+    import torch as _torch
+except Exception:  # torch is absent in the plain CPU test image; the math checks run on CI
+    _torch = None
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "bench")]
+
+import _fakes  # noqa: E402
 
 PREPARE = ROOT / "runtime" / "prepare_backend.sh"
 PIN = "df000fd3001da04a397253fd6a2204bde62d32aa"
@@ -91,18 +98,12 @@ class FakeBuffer:
 
 
 def _stubs(*, hip=None, foreign_config=False):
-    torch = types.ModuleType("torch")
-    torch.version = types.SimpleNamespace(cuda=None if hip else "13.0", hip=hip)
-    # Hopper: the shared low-latency path keys its Blackwell-only FP8 scale format on this.
-    torch.cuda = types.SimpleNamespace(get_device_capability=lambda device=None: (9, 0))
-    torch.float8_e4m3fn, torch.float8_e4m3fnuz = "e4m3fn", "e4m3fnuz"
-    torch.bfloat16, torch.float32, torch.int64, torch.int = "bfloat16", "float32", "int64", "int"
-    # `@torch.compile(dynamic=False)` and `torch.compile(fn, dynamic=False)` both pass fn through.
-    torch.compile = lambda fn=None, **kwargs: fn if fn is not None else (lambda inner: inner)
-    torch._dynamo = types.SimpleNamespace(config=types.SimpleNamespace(cache_size_limit=8))
-    dist = types.ModuleType("torch.distributed")
-    dist.group = types.SimpleNamespace(WORLD="world")
-    torch.distributed = dist
+    modules = _fakes.stub_torch(
+        version=types.SimpleNamespace(cuda=None if hip else "13.0", hip=hip),
+        # Hopper: the shared low-latency path keys its Blackwell-only FP8 scale format on this.
+        cuda=types.SimpleNamespace(get_device_capability=lambda device=None: (9, 0)),
+        float8_e4m3fn="e4m3fn", float8_e4m3fnuz="e4m3fnuz", int="int",
+    )
     uccl, uccl_ep = types.ModuleType("uccl"), types.ModuleType("uccl.ep")
     uccl_ep.Config = FakeConfig
     uccl.ep = uccl_ep
@@ -110,15 +111,11 @@ def _stubs(*, hip=None, foreign_config=False):
     # UCCL's wrapper re-exports uccl.ep's Config; DeepSeek's DeepEP brings its own.
     deep_ep.Buffer = FakeBuffer
     deep_ep.Config = type("Config", (), {}) if foreign_config else FakeConfig
-    return {"torch": torch, "torch.distributed": dist, "uccl": uccl, "uccl.ep": uccl_ep,
-            "deep_ep": deep_ep}
+    return {**modules, "uccl": uccl, "uccl.ep": uccl_ep, "deep_ep": deep_ep}
 
 
 def _load(**stub_options):
-    with mock.patch.dict(sys.modules, _stubs(**stub_options)):
-        for name in ("ep_uccl", "ep_legacy_ll"):
-            sys.modules.pop(name, None)
-        return importlib.import_module("ep_uccl")
+    return _fakes.fresh_import("ep_uccl", _stubs(**stub_options), also_pop=("ep_legacy_ll",))
 
 
 def _args(**updates):
@@ -197,6 +194,21 @@ class NormalModeLaunchConfig(unittest.TestCase):
         self.assertEqual(list(details["combine_config"].values()), [20, 4, 288, 12, 132])
         self.assertEqual((details["is_intranode"], details["cpu_proxy_threads"]), (False, 4))
 
+    def test_a_registry_receive_ring_deepens_only_the_internode_dispatch_and_labels_the_row(self):
+        with mock.patch.dict(os.environ, {"COLLX_UCCL_RDMA_RECV_TOKENS": "1024"}):
+            backend, _ = _built(self.module, world_size=16)
+            intranode, _ = _built(self.module, world_size=8)
+        details = backend.implementation_details()
+        # 1024 rounds up to 1040, the next multiple of the 20-token send chunk.
+        self.assertEqual(list(details["dispatch_config"].values()), [20, 36, 288, 20, 1040])
+        self.assertEqual(list(details["combine_config"].values()), [20, 4, 288, 12, 132])
+        self.assertEqual(backend.kernel_generation, "uccl-legacy-buffer-vllm-ht-rdmarecv1040")
+        self.assertEqual(intranode.kernel_generation, "uccl-legacy-buffer-vllm-ht")
+        self.assertEqual(list(intranode.implementation_details()["dispatch_config"].values()),
+                         [20, 6, 256, 6, 132])
+        unset, _ = _built(self.module, world_size=16)
+        self.assertEqual(unset.kernel_generation, "uccl-legacy-buffer-vllm-ht")
+
     def test_one_sm_budget_at_ep8_and_ep16_on_cuda_and_hip(self):
         budgets = set()
         for module in (self.module, _load(hip="7.2")):
@@ -263,6 +275,14 @@ class LowLatencyContract(unittest.TestCase):
                 self.assertEqual((kwargs["return_recv_hook"], kwargs["async_finish"]), (True, False))
         self.assertIs(buffer.calls[2][1]["zero_copy"], False)
         self.assertIs(backend.implementation_details()["return_recv_hook"], True)
+
+    def test_only_low_latency_models_the_in_kernel_cast(self):
+        # Normal mode sends the vendored helper's output; low-latency's kernel quantizes itself.
+        normal = _backend(self.module, precision="fp8")
+        self.assertIs(normal._fp8_codec[0], self.module.per_token_cast_to_fp8)
+        ll = _backend(self.module, precision="fp8", mode="low-latency")
+        self.assertIs(ll._fp8_codec[0].func, self.module.kernel_cast_to_fp8)
+        self.assertEqual(ll._fp8_codec[0].keywords["fp8_max"], 448.0)
 
     def test_only_intranode_low_latency_replays(self):
         # No per-SKU eager exception (b200 FP8 once had one); scale-out LL runs through the CPU
@@ -364,6 +384,33 @@ class ImportProbe(unittest.TestCase):
 
     def test_a_record_for_another_commit_fails(self):
         self.assertIn("build record is stale", self._probe(commit="0" * 40).stderr)
+
+
+@unittest.skipUnless(_torch is not None, "FP8 cast checks require torch")
+class LowLatencyKernelCast(unittest.TestCase):
+    """Low-latency FP8 is quantized in the kernel, and the payload compare is bit-exact, so the
+    oracle's cast must be the kernel's: one correctly rounded fp8_max / amax per block."""
+
+    def setUp(self):
+        # Not imported under patch.dict: restoring sys.modules would drop torch's lazy submodules.
+        self.legacy = importlib.import_module("ep_legacy_ll")
+
+    def test_rounding_midpoints_land_where_the_kernel_puts_them(self):
+        torch = _torch
+        # Activation-lattice values (k/64). 105/126 and 99/110 of 240 are exactly 200 and 216, the
+        # midpoints of 192|208 and 208|224, so round-to-nearest-even must pick 192 and 224 -- what
+        # MI300X's kernel produced. amax.reciprocal() * 240 lands one ulp above 200 and picks 208.
+        x = torch.zeros(2, 256, dtype=torch.bfloat16)
+        x[0, 0], x[0, 1] = 126 / 64, 105 / 64
+        x[1, 128], x[1, 129] = 110 / 64, 99 / 64
+        x[1, 0] = 1.0
+        values, scales = self.legacy.kernel_cast_to_fp8(x, torch.float8_e4m3fnuz, 240.0)
+        self.assertEqual(values.dtype, torch.float8_e4m3fnuz)
+        self.assertEqual(float(values[0, 1].float()), 192.0)
+        self.assertEqual(float(values[1, 129].float()), 224.0)
+        self.assertEqual(float(values[0, 0].float()), 240.0)
+        amax = torch.tensor([[126 / 64, 0.0], [1.0, 110 / 64]]).clamp(min=1e-4)
+        self.assertTrue(torch.equal(scales, amax * torch.tensor(1 / 240.0, dtype=torch.float32)))
 
 
 if __name__ == "__main__":
