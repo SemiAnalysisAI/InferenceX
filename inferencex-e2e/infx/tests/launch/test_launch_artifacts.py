@@ -12,6 +12,7 @@ from infx.launch.artifacts import (
     collect_agentic_power_results,
     copy_agentic_results,
     copy_fixed_sequence_results,
+    copy_gate_results,
     copy_to_workspace,
 )
 from infx.launch.backends.base import JobState, JobStatus
@@ -63,6 +64,17 @@ def test_agentic_results_require_a_match(tmp_path):
     (tmp_path / "src" / "other_conc4.json").write_text("{}")
     with pytest.raises(ArtifactError):
         copy_agentic_results(tmp_path / "src", tmp_path, "point")
+
+
+def test_gate_raw_files_are_staged_even_without_a_verdict(tmp_path):
+    logs, workspace = tmp_path / "logs", tmp_path / "ws"
+    (logs / "al_gate" / "scrapes").mkdir(parents=True)
+    (logs / "al_gate" / "scrapes" / "before.prom").write_text("vllm:spec_decode_num_drafts_total 7\n")
+    (logs / "al_gate_point.json").write_text("")
+    workspace.mkdir()
+    with pytest.raises(ArtifactError, match="al_gate_point.json is missing or empty"):
+        copy_gate_results(logs, workspace, "point")
+    assert (workspace / "al_gate/scrapes/before.prom").read_text() == "vllm:spec_decode_num_drafts_total 7\n"
 
 
 def test_bundle_skips_empty_logs_and_archives_contents(tmp_path):

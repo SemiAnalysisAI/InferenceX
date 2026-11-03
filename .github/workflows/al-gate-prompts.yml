@@ -1,0 +1,67 @@
+name: AL Gate Prompts Cache
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - inferencex-e2e/infx/bench/speedbench.py
+      - .github/workflows/al-gate-prompts.yml
+  schedule:
+    - cron: '41 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: al-gate-prompts
+  cancel-in-progress: false
+
+jobs:
+  warm:
+    name: warm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Look up cached prompts
+        id: cached
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/al_gate_dataset
+          key: al-gate-speedbench-${{ hashFiles('inferencex-e2e/infx/bench/speedbench.py') }}
+          lookup-only: true
+
+      - name: Free hosted-runner disk for SPEED-Bench
+        if: ${{ steps.cached.outputs.cache-hit != 'true' }}
+        run: |
+          sudo rm -rf -- /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+            /usr/local/.ghcup /usr/local/swift /opt/hostedtoolcache/CodeQL
+          df -h / /mnt
+
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        if: ${{ steps.cached.outputs.cache-hit != 'true' }}
+        with:
+          enable-cache: false
+
+      - name: Prepare gate prompts
+        if: ${{ steps.cached.outputs.cache-hit != 'true' }}
+        env:
+          HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }} # zizmor: ignore[secrets-outside-env]
+          HF_HOME: /mnt/al-gate-hf-home
+        run: |
+          cd "$GITHUB_WORKSPACE/inferencex-e2e"
+          sudo install -d -o "$(id -u)" -g "$(id -g)" "$HF_HOME"
+          uv run --no-project --exclude-newer 2026-10-27T00:00:00Z --python 3.12 \
+            --with datasets --with numpy --with pandas --with tiktoken \
+            python -m infx.bench.speedbench --output-dir "$RUNNER_TEMP/al_gate_dataset"
+
+      - name: Cache gate prompts
+        if: ${{ steps.cached.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/al_gate_dataset
+          key: al-gate-speedbench-${{ hashFiles('inferencex-e2e/infx/bench/speedbench.py') }}

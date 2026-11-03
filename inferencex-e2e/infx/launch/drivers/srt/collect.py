@@ -23,6 +23,7 @@ from infx.launch.artifacts import (
     copy_agentic_results,
     copy_eval_artifacts,
     copy_fixed_sequence_results,
+    copy_gate_results,
     copy_to_workspace,
     run_power_adapter,
     validate_agentic_power,
@@ -66,8 +67,17 @@ def finish_single_node(run: SrtRun, submitted: Submitted, fetched: Path) -> int:
             return 0
         rc = 0
         logs = output / "logs"
-        power_rc = 0 if run.request.eval_only else _stage_power_package(run, logs)
+        power_rc = (
+            0 if run.request.eval_only or run.request.al_gate else _stage_power_package(run, logs)
+        )
         bundle_server_logs(output, run.workspace / SINGLE_NODE_LOGS)
+        if run.request.al_gate:
+            try:
+                copy_gate_results(logs, run.workspace, run.request.result_filename)
+            except ArtifactError as error:
+                event.error(error)
+                return 1
+            return 0
         result = logs / f"{run.request.result_filename}.json"
         if result.is_file():
             try:
@@ -107,11 +117,12 @@ def finalize_single_node_results(run: SrtRun, logs: Path, producer_sha: str) -> 
     A single-node point publishes the fixed-sequence bundle shape: the validation
     sidecar sits beside the result, named after it, and the audit names that file.
 
-    srt-slurm treats a failed post-benchmark eval as non-fatal; InferenceX does not.
+    srt-slurm treats a failed post-benchmark eval as non-fatal; InferenceX does not. The
+    acceptance gate's verdict is checked when ``finish_single_node`` stages it.
     """
     request, event = run.request, run.life.event
     power_rc = 0
-    if request.is_agentic and not request.eval_only:
+    if request.is_agentic and not request.eval_only and not request.al_gate:
         require(request, "INFERENCEX_RESULTS_PYTHON")
         sidecar = f"power_validation_{request.result_filename}.json"
         power_rc = run_power_adapter(
@@ -127,7 +138,7 @@ def finalize_single_node_results(run: SrtRun, logs: Path, producer_sha: str) -> 
         if not exit_file.is_file() or exit_file.read_text().rstrip("\n") != "0":
             event.fail("EvalFailed", f"eval did not succeed (see {exit_file})")
             return 1
-    if not request.eval_only:
+    if not request.eval_only and not request.al_gate:
         result = logs / f"{request.result_filename}.json"
         if not result.is_file() or result.stat().st_size == 0:
             event.fail("ResultMissing", f"benchmark result {result} is missing or empty")
@@ -207,7 +218,9 @@ def collect(
             print("EVAL_ONLY=true: Skipping benchmark result collection", flush=True)
         else:
             try:
-                if not request.is_agentic:
+                if request.al_gate:
+                    copy_gate_results(logs, run.workspace, request.result_filename)
+                elif not request.is_agentic:
                     copy_fixed_sequence_results(logs, run.workspace, request.result_filename)
                 elif not power.agentx:
                     copy_agentic_results(infmax, run.workspace, request.result_filename)

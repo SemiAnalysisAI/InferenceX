@@ -17,7 +17,7 @@ import yaml
 
 from infx import yamlio
 from infx.bench.proc import status
-from infx.golden_al_distribution import GOLDEN_DIR, golden_length
+from infx.golden_al_distribution import GOLDEN_DIR, curve_name, golden_length
 from infx.srt_slurm.variants import ZIP_VARIANT, without_nulls
 
 ENGINES = {
@@ -148,12 +148,8 @@ def _simulated_length(
     if engine is None:
         return None
     roles = recipe.get("roles", {})
-    synthetic = (
-        environment["EVAL_ONLY"].lower() != "true"
-        and environment["IS_AGENTIC"].lower() in ("1", "true")
-        and environment["SPEC_DECODING"] != "none"
-    )
-    generation = roles.get("decode", roles.get("agg", {}))
+    synthetic = is_synthetic(environment)
+    generation = generation_role(recipe)
     spec = spec_parameters(generation, engine)
     if not (synthetic and spec):
         return None
@@ -179,6 +175,36 @@ def _simulated_length(
     return al
 
 
+def is_gate(environment: Mapping[str, str]) -> bool:
+    """Whether the run is the acceptance gate, which measures real AgentX acceptance."""
+    return environment.get("AL_GATE") == "true"
+
+
+def is_synthetic(environment: Mapping[str, str]) -> bool:
+    """AgentX speculative throughput forces golden acceptance; evals and the gate verify."""
+    return (
+        not is_gate(environment)
+        and environment["EVAL_ONLY"].lower() != "true"
+        and environment["IS_AGENTIC"].lower() in ("1", "true")
+        and environment["SPEC_DECODING"] != "none"
+    )
+
+
+def check_gate(spec: Mapping[str, Any], environment: Mapping[str, str]) -> None:
+    """Fail unless the generation worker drafts the golden curve and length the gate uses."""
+    tokens = spec.get("num_speculative_tokens")
+    drafted = (curve_name(environment["MODEL_PREFIX"], spec), tokens) if spec else None
+    gate = (environment["AL_GATE_CURVE"], int(environment["AL_GATE_DRAFT_TOKENS"]))
+    if drafted != gate:
+        raise ValueError(f"the recipe drafts {drafted}, but the acceptance gate measures {gate}")
+
+
+def generation_role(recipe: Mapping[str, Any]) -> Mapping[str, Any]:
+    """The worker whose drafts are verified: decode, otherwise the aggregated worker."""
+    roles = recipe.get("roles", {})
+    return roles.get("decode", roles.get("agg", {}))
+
+
 def build_overrides(
     recipe: Mapping[str, Any],
     framework: str,
@@ -191,6 +217,8 @@ def build_overrides(
     if engine is None:
         return []
     roles = recipe.get("roles", {})
+    if is_gate(environment):
+        check_gate(spec_parameters(generation_role(recipe), engine), environment)
     al = _simulated_length(recipe, framework, environment, golden_dir=golden_dir)
     overrides = []
     variables = {
