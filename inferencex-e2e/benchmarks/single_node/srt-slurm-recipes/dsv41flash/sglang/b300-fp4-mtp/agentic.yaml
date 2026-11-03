@@ -6,7 +6,7 @@ base:
       revision: dba1be0a40aa45a94ad051997016db3960a90277
     container: {}
     frameworks:
-      sglang: 0.0.0.dev1+g684fea8af
+      sglang: 0.0.0.dev1+gab580b2e0
       sglang-router: 0.3.2
   resources:
     gpu_type: b300
@@ -58,39 +58,6 @@ base:
       # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
-
-override_tp4_c1:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        cuda-graph-max-bs-decode: 1
-        expert-parallel-size: 1
-        max-running-requests: 1
-        mem-fraction-static: 0.7
-        schedule-policy: lpm
-        swa-prefix-tails: 128
-        tensor-parallel-size: 4
-  benchmark:
-    env:
-      CONC: '1'
-      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
-
-override_tp4_c4:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        expert-parallel-size: 1
-        max-running-requests: 8
-        mem-fraction-static: 0.7
-        prefill-decode-interval: 192
-        swa-prefix-tails: 256
-        tensor-parallel-size: 4
-  benchmark:
-    env:
-      CONC: '4'
-      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
 
 override_tp4_c8:
   roles:
@@ -170,6 +137,8 @@ override_tp2_c32:
     agg:
       gpus: 2
       args:
+        dsv4-attn-backend: trtllm
+        enable-decoder-swa-bounded-replay: true
         expert-parallel-size: 1
         max-running-requests: 64
         mem-fraction-static: 0.85
@@ -242,6 +211,8 @@ override_dep2_c64:
         tensor-parallel-size: 2
         tokenizer-worker-num: 8
       env:
+        # Keep bounded-replay tail rows of eager prefill steps eager, without tail graphs.
+        SGLANG_DSV4_DECODER_TAIL_GRAPH_MAX_ROWS: '0'
         SGLANG_ENABLE_DP_SPEC_PREFILL_COORDINATION: '1'
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '16384'
         SGLANG_RAGGED_VERIFY_MODE: static
@@ -291,55 +262,8 @@ override_dep2_c256:
         tensor-parallel-size: 2
         tokenizer-worker-num: 8
       env:
-        SGLANG_ENABLE_DP_SPEC_PREFILL_COORDINATION: '1'
-        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '16384'
-        SGLANG_RAGGED_VERIFY_MODE: static
-  benchmark:
-    env:
-      CONC: '256'
-      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
-      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
-
-override_dep4_c256:
-  frontend:
-    type: sglang-router
-    enable_multiple_frontends: false
-    args:
-      policy: consistent_hashing
-      request-id-headers: x-correlation-id
-      dp-aware: true
-      connect-timeout-secs: 900
-      request-timeout-secs: 14400
-      disable-health-check: true
-      disable-retries: true
-  roles:
-    agg:
-      gpus: 4
-      args:
-        chunked-prefill-size: 65536
-        data-parallel-size: 4
-        disable-prefill-cuda-graph: true
-        dsv4-attn-backend: trtllm
-        enable-dp-attention: true
-        enable-dp-attention-local-control-broadcast: true
-        enable-dp-lm-head: true
-        enable-hierarchical-cache: true
-        expert-parallel-size: 4
-        hicache-io-backend: direct
-        hicache-mem-layout: page_first_direct
-        hicache-ratio: 2
-        hicache-write-policy: write_back
-        load-balance-method: total_requests
-        max-running-requests: 256
-        mem-fraction-static: 0.8
-        moe-a2a-backend: megamoe
-        moe-runner-backend: flashinfer_mxfp4
-        prefill-decode-interval: 32
-        schedule-policy: shortest-prefill-first
-        swa-prefix-tails: 3072
-        tensor-parallel-size: 4
-        tokenizer-worker-num: 8
-      env:
+        # Keep bounded-replay tail rows of eager prefill steps eager, without tail graphs.
+        SGLANG_DSV4_DECODER_TAIL_GRAPH_MAX_ROWS: '0'
         SGLANG_ENABLE_DP_SPEC_PREFILL_COORDINATION: '1'
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '16384'
         SGLANG_RAGGED_VERIFY_MODE: static

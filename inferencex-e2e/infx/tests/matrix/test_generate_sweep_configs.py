@@ -2362,7 +2362,7 @@ class TestCommandLine:
             for row in result
         ] == [('narrow.yaml', [2], True, 2), ('wide.yaml', [2], False, None)]
 
-    def test_trimmed_agentic_eval_without_a_framework_still_claims_its_app_eval(self):
+    def test_trimmed_agentic_eval_without_a_framework_still_claims_its_app_eval(self, tmp_path):
         # dense.yaml's eval moves from conc 64 to its conc-16 row; sparse.yaml evaluates conc 16.
         shape = {
             'scenario-type': 'agentic-coding', 'model': 'm', 'model-prefix': 'm',
@@ -2376,7 +2376,9 @@ class TestCommandLine:
             {**shape, 'srt-recipe': 'sparse.yaml', 'conc': [16]},
         ]
 
-        result = generate_sweep_configs.select_matrix_evals(rows, mode='default', trim=True)
+        result = generate_sweep_configs.select_matrix_evals(
+            rows, mode='default', trim=True, root=tmp_path,
+        )
 
         assert [
             (row['srt-recipe'], row['conc'], row['run-eval'], row.get('eval-framework'))
@@ -2644,6 +2646,24 @@ def agentic_config(request, sample_single_node_config):
 
 
 class TestAgenticGeneration:
+    @pytest.mark.parametrize("power_key", ["require-power", "require_power"])
+    def test_required_power_reaches_benchmarks_but_not_evals(
+        self, power_key, agentic_config, sample_runner_config, generate_agentic_sweep,
+    ):
+        from infx.matrix.generate import select_matrix_evals
+        from infx.matrix.validation import AgenticCodingSearchSpaceEntry
+
+        config, benchmark = agentic_config
+        benchmark["conc-list"] = [1, 4, 8]
+        before = generate_agentic_sweep(config, sample_runner_config)
+        benchmark[power_key] = True
+        AgenticCodingSearchSpaceEntry.model_validate(benchmark)
+        after = generate_agentic_sweep(config, sample_runner_config)
+        assert after == [{**row, "require-power": True} for row in before]
+        evals = select_matrix_evals(copy.deepcopy(after), mode="all")
+        assert evals
+        assert all("require-power" not in row for row in evals)
+
     def test_point_order_and_input_preservation(
         self, agentic_config, sample_runner_config, generate_agentic_sweep,
     ):

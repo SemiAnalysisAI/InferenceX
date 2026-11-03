@@ -302,6 +302,7 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     image: str
+    require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     srt_recipe: str | None = Field(default=None, alias=Fields.SRT_RECIPE.value, min_length=1)
     model: str
     model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value)
@@ -352,6 +353,7 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     image: str
+    require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     model: str
     model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value)
     precision: str
@@ -644,6 +646,7 @@ class MultiNodeSeqLenConfig(BaseModel):
 class AgenticCodingSearchSpaceEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
+    require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     tp: int | None = Field(default=None, gt=0)
     srt_recipe: RecipeReference | None = Field(default=None, alias=Fields.SRT_RECIPE.value)
     eval_srt_recipe: RecipeReference | None = Field(
@@ -1132,6 +1135,10 @@ class ChangelogEntry(BaseModel):
             "every existing generated point, then append them to the latest curve"
         ),
     )
+    retired: bool = Field(
+        default=False,
+        description="Record configs removed from the base revision without scheduling benchmarks",
+    )
     eval_min_prefill_ep: int | None = Field(
         alias="eval-min-prefill-ep",
         default=None,
@@ -1150,7 +1157,16 @@ class ChangelogEntry(BaseModel):
 
     @model_validator(mode="after")
     def validate_append_only_mode(self) -> Self:
-        """Return the entry, raising ValueError if no-evals or append-only selects evals."""
+        """Reject incompatible retirement, append-only, and eval-selection fields."""
+        if self.retired and (
+            self.append_only
+            or self.evals_only
+            or self.all_evals
+            or self.no_evals
+            or self.eval_min_prefill_ep is not None
+            or self.scenario_type is not None
+        ):
+            raise ValueError("retired entries cannot use sweep or scenario selection fields")
         if self.no_evals and (
             self.evals_only or self.all_evals or self.eval_min_prefill_ep is not None
         ):

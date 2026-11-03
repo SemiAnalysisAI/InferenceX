@@ -20,6 +20,7 @@ RECIPE_EXCLUDED = (
     ("benchmark", "env", "CONC"),
     ("telemetry", "dcgm_exporter", "port"),
 )
+BIND_ERRORS = (OSError, KeyError, TypeError, ValueError, yaml.YAMLError)
 EXPORTER_PORT = 0
 
 
@@ -71,10 +72,34 @@ def recipe_fingerprint(entry: Mapping[str, Any], root: Path) -> str:
         return row_fingerprint(entry)
     try:
         recipes = _concrete_recipes(entry, root)
-    except (OSError, KeyError, TypeError, ValueError, yaml.YAMLError) as error:
+    except BIND_ERRORS as error:
         point = f"{entry.get('exp-name')} conc {entry.get('conc')}"
         raise ValueError(f"{entry['srt-recipe']} ({point}): {error}") from error
     return _digest({"row": _row_identity(entry), "recipe": recipes})
+
+
+def engine_environment(entry: Mapping[str, Any], root: Path) -> str:
+    """Return the env the row's bound srt recipe gives its engine processes, as canonical JSON.
+
+    That is the recipe-wide ``environment`` and every role's ``env``; frontend and benchmark env
+    do not reach the engine. A row without an srt recipe returns "". Raise ValueError naming the
+    recipe and point when the recipe cannot be bound.
+    """
+    if not entry.get("srt-recipe"):
+        return ""
+    try:
+        _, recipe = bound_variant(entry, point_environment(entry), root, expand=expand_variants)
+    except BIND_ERRORS as error:
+        point = f"{entry.get('exp-name')} conc {entry.get('conc')}"
+        raise ValueError(f"{entry['srt-recipe']} ({point}): {error}") from error
+    roles = recipe.get("roles") or {}
+    return json.dumps(
+        {
+            "environment": recipe.get("environment") or {},
+            "roles": {name: (role or {}).get("env") or {} for name, role in roles.items()},
+        },
+        sort_keys=True,
+    )
 
 
 def main() -> None:

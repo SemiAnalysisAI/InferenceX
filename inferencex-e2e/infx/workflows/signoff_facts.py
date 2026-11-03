@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import io
+import itertools
 import json
 import math
 import re
@@ -287,8 +288,29 @@ def _dominates(a: dict, b: dict) -> bool:
     return a[x] >= b[x] and a[y] >= b[y] and (a[x] > b[x] or a[y] > b[y])
 
 
+def _cover(point: dict, others: list[dict]) -> str | None:
+    """What covers a removed point: a dominating point, or the frontier segment over it.
+
+    The segment is the straight line between the two adjacent non-dominated points that
+    bracket the point's interactivity. Nothing covers a point outside their range.
+    """
+    cover = next((other for other in others if _dominates(other, point)), None)
+    if cover:
+        return cover["label"]
+    x, y = "mean_intvty", "tput_per_gpu"
+    frontier = sorted(
+        (other for other in others if not any(_dominates(o, other) for o in others)),
+        key=lambda other: other[x],
+    )
+    for low, high in itertools.pairwise(frontier):
+        if low[x] < point[x] < high[x]:
+            line = low[y] + (high[y] - low[y]) * (point[x] - low[x]) / (high[x] - low[x])
+            return f"between {low['label']} and {high['label']}" if line >= point[y] else None
+    return None
+
+
 def dominance(before: list[dict], after: list[dict]) -> dict[str, Any]:
-    """Removed points must be dominated by an after point; shared points report deltas."""
+    """Removed points must lie under the after frontier; shared points report deltas."""
     for point in (*before, *after):
         if not isinstance(point.get("label"), str) or not all(
             isinstance(point.get(metric), int | float)
@@ -304,8 +326,7 @@ def dominance(before: list[dict], after: list[dict]) -> dict[str, Any]:
     for point in before:
         if point["label"] in after_by_label:
             continue
-        cover = next((other for other in after if _dominates(other, point)), None)
-        removed.append({"label": point["label"], "dominated_by": cover and cover["label"]})
+        removed.append({"label": point["label"], "dominated_by": _cover(point, after)})
     deltas = [
         {
             "label": point["label"],
@@ -424,7 +445,7 @@ def points_diff(base: dict, head: dict, ingested: list[Any], new_run: list[Any])
 
     Points match measurements by recipe fingerprint and concurrency. Base points use the
     ingested curve; head points prefer the PR's validated sweep, then the ingested curve.
-    A removed point passes only when a measured head point dominates it.
+    A removed point passes only when the measured head frontier covers it.
     """
     from infx.matrix.changed import compare
 
@@ -441,18 +462,16 @@ def points_diff(base: dict, head: dict, ingested: list[Any], new_run: list[Any])
             measured(point, after) for point in head.get(change["config-key"], ({}, []))[0].values()
         ]
         added = [measured(point, after) for point in change["added"]]
+        covers = [
+            other["measured"] | {"label": other["label"]}
+            for other in head_points
+            if other["measured"]
+        ]
         removed = []
         for point in change["removed"]:
             item = measured(point, before)
             if item["measured"]:
-                item["dominated_by"] = next(
-                    (
-                        other["label"]
-                        for other in head_points
-                        if other["measured"] and _dominates(other["measured"], item["measured"])
-                    ),
-                    None,
-                )
+                item["dominated_by"] = _cover(item["measured"], covers)
             removed.append(item)
         added_labels = {item["label"] for item in added}
         replaced = {item["label"]: item for item in added if item["measured"]}

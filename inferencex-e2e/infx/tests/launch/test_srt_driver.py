@@ -120,6 +120,15 @@ def srtslurm(root: Path) -> dict:
     return yaml.safe_load(path.read_text())
 
 
+def job_recipe(raw: dict, argv: list[str]) -> dict:
+    """The recipe an ``srtctl apply argv`` job runs: ``raw`` overridden."""
+    sets = [value for flag, value in zip(argv, argv[1:]) if flag == "--set"]
+    unsets = [value for flag, value in zip(argv, argv[1:]) if flag == "--unset"]
+    document = json.loads(json.dumps(raw))
+    apply_overrides_to_recipe(document, parse_overrides(sets, unsets))
+    return document
+
+
 WORKDIR = 'srun_options.container-workdir="/infmax-workspace"'
 
 
@@ -497,6 +506,111 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
         assert status == "42|COMPLETED|0:0\n"
 
 
+GATE_DATASET = "al_gate_dataset/speedbench_coding.jsonl"
+GATE_PROMPTS = '{"question_id": "0", "prompt": "Reverse a singly linked list in place."}\n'
+GATE_ENV = {"AL_GATE": "true", "IS_AGENTIC": "1", "FAKE_RESULTS": "gate", "AL_GATE_DATASET": GATE_DATASET}
+
+
+def download_gate_prompts(workspace: Path) -> None:
+    """What the gate job's download step leaves in the workspace."""
+    (workspace / GATE_DATASET).parent.mkdir(parents=True)
+    (workspace / GATE_DATASET).write_text(GATE_PROMPTS)
+
+
+def assert_gate_ran(harness, call: dict, job: dict) -> None:
+    """The job ran the gate client on the downloaded prompts, and its outputs were staged."""
+    assert job["benchmark"]["command"] == "bash /infmax-workspace/benchmarks/srt_al_gate.sh"
+    assert "post_eval" not in job
+    # The container resolves AL_GATE_DATASET in INFMAX_WORKSPACE, its /infmax-workspace mount.
+    prompts = Path(call["env"]["INFMAX_WORKSPACE"]) / job["benchmark"]["env"]["AL_GATE_DATASET"]
+    assert prompts.read_text() == GATE_PROMPTS
+    verdict = json.loads((harness.workspace / "al_gate_point-identity.json").read_text())
+    assert verdict == {"status": "below", "result_filename": "point-identity"}
+    assert (harness.workspace / "al_gate/aiperf_artifacts/server_metrics_export.json").read_text() == "{}"
+
+
+def test_single_node_gate_measures_the_selected_variant_with_real_verification(harness):
+    recipe = json.loads(json.dumps(POINT_RECIPE))
+    recipe["roles"]["agg"]["args"].update({"speculative-algorithm": "EAGLE", "speculative-num-steps": 3})
+    recipe["roles"]["agg"]["env"] = {"KEEP": "yes", "SGLANG_SIMULATE_ACC_LEN": "2.5"}
+    raw = {"base": recipe, "zip_override_conc": {"benchmark": {"env": {"CONC": ["2", "4"]}}}}
+    workspace = harness.workspace
+    (workspace / "recipe.yaml").write_text(yaml.safe_dump(raw))
+    env = {
+        **harness.env, **POINT_ENV, **GATE_ENV, "RUNNER_NAME": runner_for("h200-dgxc"), "MODEL_PREFIX": "dsv4",
+        "SPEC_DECODING": "mtp", "DURATION": "600", "AL_GATE_CURVE": "dsv4_mtp", "AL_GATE_DRAFT_TOKENS": "3",
+    }  # fmt: skip
+    download_gate_prompts(workspace)
+    assert_ok(launch(env, harness.config, workspace))
+
+    [call] = srtctl_calls(harness.logs)
+    argv = call["argv"]
+    submitted = Path(argv[argv.index("--file") + 1])
+    job = job_recipe(yaml.safe_load(submitted.read_text()), argv)
+    assert_gate_ran(harness, call, job)
+    assert job["benchmark"]["env"]["CONC"] == "2"
+    # Real verification: the recipe's simulated acceptance is gone.
+    assert job["roles"]["agg"]["env"] == {"KEEP": "yes"}
+
+    # A job that leaves no verdict fails, and a throughput result is never staged in its place.
+    result = launch({**env, "FAKE_RESULTS": "single"}, harness.config, workspace)
+    assert result.returncode == 1
+    assert "al_gate_point-identity.json is missing or empty" in result.stderr
+    assert not (workspace / "point-identity.json").exists()
+
+
+AGENTX_LANE_RECIPE = """name: "fixture"
+roles:
+  prefill:
+    args:
+      tensor-parallel-size: 8
+  decode:
+    args:
+      tensor-parallel-size: 8
+      speculative-config: '{"method": "dspark", "num_speculative_tokens": 3, "draft_sample_method": "greedy", "rejection_sample_method": "synthetic", "synthetic_acceptance_length": 2.5}'
+"""
+
+
+def lane_gate_env(harness) -> dict[str, str]:
+    """The gate of a multi-node speculative AgentX point on a power lane."""
+    return lane_env(
+        harness, "h200-dgxc", AGENTX_LANE_RECIPE + POWER_TELEMETRY, **GATE_ENV,
+        MODEL_PREFIX="kimik3", PRECISION="fp4", FRAMEWORK="vllm", MODEL="moonshotai/Kimi-K3", ISL="0", OSL="0",
+        CONC="4", SPEC_DECODING="dspark", AL_GATE_CURVE="kimik3_dspark", AL_GATE_DRAFT_TOKENS="3",
+    )  # fmt: skip
+
+
+def test_power_lane_gate_measures_real_acceptance_without_power(harness):
+    workspace = harness.workspace
+    download_gate_prompts(workspace)
+    assert_ok(launch(lane_gate_env(harness), harness.config, workspace))
+
+    [call] = srtctl_calls(harness.logs)
+    checkout = Path(call["cwd"])
+    submitted = Path(call["argv"][call["argv"].index("--file") + 1])
+    job = job_recipe(yaml.safe_load(submitted.read_text()), call["argv"])
+    assert_gate_ran(harness, call, job)
+    assert json.loads(job["roles"]["decode"]["args"]["speculative-config"]) == {
+        "method": "dspark", "num_speculative_tokens": 3, "draft_sample_method": "greedy",
+        "rejection_sample_method": "block",
+    }  # fmt: skip
+    # Without the gate this lane measures AgentX power; the gate measures and stages none.
+    assert "telemetry" not in job
+    assert "dcgm-exporter" not in srtslurm(checkout)["containers"]
+    assert not (workspace / "power-producer-sha.txt").exists()
+
+
+def test_a_gate_without_its_prompts_fails_before_any_work(harness):
+    result = launch(lane_gate_env(harness), harness.config, harness.workspace)
+
+    assert result.returncode == 1
+    error = f"AL_GATE_DATASET {GATE_DATASET} is not a file in {harness.workspace.resolve()}"
+    assert f"ERROR: {error}\n" in result.stderr
+    # Nothing was cloned, imported or submitted.
+    assert [lines(harness.logs, name) for name in ("git", "enroot", "sbatch")] == [[], [], []]
+    assert srtctl_calls(harness.logs) == []
+
+
 @pytest.mark.parametrize("shape", ["single", "multi"])
 def test_submission_failure_code_propagates_and_cancels_the_job(harness, shape):
     active = harness.tmp / "active"
@@ -652,8 +766,8 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
         "infmax_model_prefix": "unknown",
     }  # fmt: skip
     env = lane_env(
-        harness, "gb300-nv", MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="dynamo-trt",
-        MODEL="deepseek-ai/DeepSeek-V4-Pro", IS_AGENTIC="1", SPEC_DECODING="mtp", ISL="0", OSL="0",
+        harness, "gb300-nv", MODEL_PREFIX="glm5.2", PRECISION="fp4", FRAMEWORK="dynamo-trt",
+        MODEL="nvidia/GLM-5.2-NVFP4", IS_AGENTIC="1", SPEC_DECODING="mtp", ISL="0", OSL="0",
         EVAL_ONLY="true", EVAL_SRT_RECIPE=f"{MIRROR}/test/eval.yaml", FAKE_RESULTS="eval",
         EVAL_CONC="4 8", RECIPE_FINGERPRINT="recipe-fixture", FAKE_EVAL_META=json.dumps(staged),
     )  # fmt: skip
@@ -662,12 +776,12 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
     [call] = srtctl_calls(harness.logs)
     argv = call["argv"]
     assert Path(argv[argv.index("--file") + 1]).name == "recipe.yaml"
-    assert "frontend.placement.node=head" in argv
+    assert "frontend.placement.node=head" not in argv
     checkout = Path(call["cwd"])
     assert (checkout / "recipes/test/trtllm/forced.yaml").read_text() == (
         "roles:\n  decode:\n    env:\n      KEEP: 1\n"
     )
-    assert srtslurm(checkout)["default_time_limit"] == "8:00:00"
+    assert srtslurm(checkout)["default_time_limit"] == "4:00:00"
     workspace = harness.workspace
     assert (workspace / "results_gsm8k.json").read_text() == "{}"
     meta = json.loads((workspace / "meta_env.json").read_text())
@@ -677,7 +791,7 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
         "completed_eval_concs": [8], "failed_eval_concs": [4],
     }  # fmt: skip
     assert (meta["infmax_model_prefix"], meta["recipe_fingerprint"], meta["framework"]) == (
-        "dsv4", "recipe-fixture", "dynamo-trt",
+        "glm5.2", "recipe-fixture", "dynamo-trt",
     )
     assert list(workspace.glob("point-identity_*.json")) == []
 
@@ -763,7 +877,6 @@ def test_a_failed_uv_download_fails_the_uv_install(harness):
 
 @pytest.mark.parametrize(("cluster_id", "env", "message"), [
     ("h200-dgxc", dict(MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-vllm"), "Unsupported framework"),
-    ("b200-nscale", dict(MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="dynamo-trt"), "only dynamo-vllm"),
     ("h200-dgxc", dict(MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang",
                        SRT_RECIPE=f"{MIRROR}/test/missing.yaml"), "is not in the recipe mirror"),
 ])  # fmt: skip

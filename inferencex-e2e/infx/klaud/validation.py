@@ -102,11 +102,11 @@ def canonical_matrix(repository: str, head: str, family: str) -> dict:
         fingerprinted = [
             {**row, "recipe-fingerprint": recipe_fingerprint(row, root)} for row in entries
         ]
-    evals = [
-        dict(row, **{"eval-only": True})
-        for row in mark_eval_entries(deepcopy(entries))
-        if row.get("run-eval")
-    ]
+        evals = [
+            dict(row, **{"eval-only": True})
+            for row in mark_eval_entries(deepcopy(entries), root)
+            if row.get("run-eval")
+        ]
     return {"single_node": {"all": fingerprinted}, "evals": evals}
 
 
@@ -342,21 +342,29 @@ def check_coverage(
     found_evals = {row[:-1] for row in eval_rows}
     errors += artifacts.validate_identity_set("eval", expected_evals(matrix), found_evals)
     if errors:
-        point_labels = {
-            (entry["recipe-fingerprint"], int(conc), entry["image"]): f"{entry['exp-name']} c{conc}"
-            for entry in benchmark_entries(matrix)
-            for conc in (entry["conc"] if isinstance(entry["conc"], list) else [entry["conc"]])
-        }
-        eval_labels = {
-            key: f"{entry['exp-name']} {entry.get('eval-suite') or 'gsm8k'} c{conc}"
-            for key, entry, conc in eval_identities(matrix)
-        }
         raise VerificationError(
             "Full-sweep result coverage or consistency failed; "
-            + coverage_summary("benchmark point", point_labels, set(actual))
+            + coverage_summary("benchmark point", point_labels(canonical), set(actual))
             + "; "
-            + coverage_summary("eval", eval_labels, found_evals)
+            + coverage_summary("eval", eval_labels(canonical), found_evals)
         )
+
+
+def point_labels(matrix: dict) -> dict[tuple, str]:
+    """Each benchmark point identity of ``matrix`` with its experiment name and concurrency."""
+    return {
+        (entry["recipe-fingerprint"], int(conc), entry["image"]): f"{entry['exp-name']} c{conc}"
+        for entry in benchmark_entries(matrix)
+        for conc in (entry["conc"] if isinstance(entry["conc"], list) else [entry["conc"]])
+    }
+
+
+def eval_labels(matrix: dict) -> dict[tuple, str]:
+    """Each default eval identity of ``matrix`` with its experiment name, suite and concurrency."""
+    return {
+        key: f"{entry['exp-name']} {entry.get('eval-suite') or 'gsm8k'} c{conc}"
+        for key, entry, conc in eval_identities(matrix)
+    }
 
 
 COVERAGE_LABELS = 5

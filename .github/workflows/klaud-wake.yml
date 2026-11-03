@@ -1,15 +1,31 @@
 name: Klaud Cold wake on run end
-run-name: Klaud Cold wake on run end - ${{ github.event.workflow_run.display_title }}
+run-name: >-
+  ${{ github.event_name == 'workflow_dispatch'
+  && format('Klaud Cold wake at {0} - {1}', inputs.not-before, inputs.candidate)
+  || format('Klaud Cold wake on run end - {0}', github.event.workflow_run.display_title) }}
 
 # A parked Klaud session resumes only after recovery sees its owned runs end. Rather than wait
-# for the hourly :30 wake, start a recovery-only planner pass as soon as a Klaud-owned
-# targeted run (e2e Test - klaud-*) or PR sweep (klaud/auto-* branch) completes, unless another
-# run of that candidate is still active and will wake recovery when it ends. No checkout and no
-# event data reaches a shell: the event gates the job and the pinned script reads it as data.
+# for the hourly :47 wake, start a recovery-only planner pass for the candidate as soon as a
+# Klaud-owned targeted run (e2e Test - klaud-*) or PR sweep (klaud/auto-* branch) completes,
+# unless its session's agent is still running and sees the end itself, or another of its runs is still
+# active and will wake recovery when it ends. Recovery dispatches this workflow for a rerun it
+# holds until a set time (a parked infrastructure rerun, or a preempted run's grace period); that
+# run sleeps until then and wakes recovery for the candidate. No checkout and no event data
+# reaches a shell: the event gates the job and the pinned script reads it as data.
 on: # zizmor: ignore[concurrency-limits]
   workflow_run: # zizmor: ignore[dangerous-triggers] runs no code from the triggering run
     workflows: [End-to-End Tests, Run Sweep]
     types: [completed]
+  workflow_dispatch:
+    inputs:
+      candidate:
+        description: Candidate whose recovery wakes at not-before
+        type: string
+        required: true
+      not-before:
+        description: When to wake recovery, an ISO 8601 time at most 4 hours ahead
+        type: string
+        required: true
 
 permissions: {}
 
@@ -17,13 +33,14 @@ jobs:
   wake:
     name: Wake Klaud recovery
     if: >-
-      github.event.workflow_run.head_repository.full_name == github.repository
+      github.event_name == 'workflow_run'
+      && github.event.workflow_run.head_repository.full_name == github.repository
       && github.event.workflow_run.conclusion != 'skipped'
       && (startsWith(github.event.workflow_run.display_title, 'e2e Test - klaud-')
       || startsWith(github.event.workflow_run.head_branch, 'klaud/auto-'))
     runs-on: ubuntu-latest
     permissions:
-      actions: write # Read the candidate's runs and dispatch the planner's recovery-only wake.
+      actions: write # Read the candidate's runs and jobs and dispatch the planner's recovery-only wake.
     steps:
       - name: Dispatch a recovery-only planner pass
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -35,20 +52,23 @@ jobs:
               new RegExp(`^klaud/auto-(${id})$`).exec(ended.head_branch ?? '')
               ?? new RegExp(`^e2e Test - klaud-\\d+-(${id})$`).exec(ended.display_title)
             )?.[1];
+            const inputs = { wake: 'true' };
             if (candidate) {
               const branch = `klaud/auto-${candidate}`;
               const title = new RegExp(`^e2e Test - klaud-\\d+-${candidate}$`);
+              const statuses = ['requested', 'waiting', 'pending', 'queued', 'in_progress'];
               const runs = (workflow, filters) => github.paginate(
                 github.rest.actions.listWorkflowRuns,
                 { ...context.repo, workflow_id: workflow, per_page: 100, ...filters },
               );
-              const [targeted, sweeps] = await Promise.all([
-                Promise.all(['requested', 'waiting', 'pending', 'queued', 'in_progress'].map(
+              const [targeted, sweeps, plans] = await Promise.all([
+                Promise.all(statuses.map(
                   (status) => runs('e2e-tests.yml', {
                     actor: 'Klaud-Cold', event: 'workflow_dispatch', status,
                   }),
                 )),
                 runs('run-sweep.yml', { branch }),
+                Promise.all(statuses.map((status) => runs('klaud-plan.yml', { status }))),
               ]);
               const active = [
                 ...targeted.flat().filter((run) => title.test(run.display_title)),
@@ -58,7 +78,63 @@ jobs:
                 core.info(`Run ${active.id} of candidate ${candidate} is still active; its end wakes recovery.`);
                 return;
               }
+              const jobs = await Promise.all(plans.flat().map((run) => github.paginate(
+                github.rest.actions.listJobsForWorkflowRun,
+                { ...context.repo, run_id: run.id, per_page: 100 },
+              )));
+              const running = jobs.flat().filter(
+                (job) => job.name.startsWith(`Run candidate ${candidate}`) && job.status !== 'completed',
+              );
+              const agent = running.find((job) => !(job.steps ?? []).some(
+                (step) => step.name === 'Let Klaud Cold own the candidate PR' && step.status === 'completed',
+              ));
+              if (agent) {
+                core.info(`Session job ${agent.id} of candidate ${candidate} is still running its agent; it sees the run end.`);
+                return;
+              }
+              // Recovery skips a session whose job still runs, so let its cleanup steps finish first (up to 10 minutes).
+              for (const job of running) {
+                for (let poll = 0; poll < 40; poll += 1) {
+                  await new Promise((resolve) => setTimeout(resolve, 15000));
+                  const { data } = await github.rest.actions.getJobForWorkflowRun({ ...context.repo, job_id: job.id });
+                  if (data.status === 'completed') break;
+                }
+              }
+              inputs['wake-candidate'] = candidate;
             }
             await github.rest.actions.createWorkflowDispatch({
-              ...context.repo, workflow_id: 'klaud-plan.yml', ref: 'main', inputs: { wake: 'true' },
+              ...context.repo, workflow_id: 'klaud-plan.yml', ref: 'main', inputs,
+            });
+
+  due:
+    name: Wake Klaud recovery when a rerun is due
+    if: >-
+      github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+      && github.actor == 'Klaud-Cold'
+    runs-on: ubuntu-latest
+    timeout-minutes: 250
+    # Every pass that holds the same rerun asks for the same wake; keep only the newest.
+    concurrency:
+      group: klaud-due-wake-${{ inputs.candidate }}-${{ inputs.not-before }}
+      cancel-in-progress: true
+    permissions:
+      actions: write # Dispatch the planner's recovery-only wake.
+    steps:
+      - name: Dispatch a recovery-only planner pass at not-before
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          CANDIDATE: ${{ inputs.candidate }}
+          NOT_BEFORE: ${{ inputs.not-before }}
+        with:
+          script: |
+            const { CANDIDATE: candidate, NOT_BEFORE: notBefore } = process.env;
+            const wait = Date.parse(notBefore) - Date.now();
+            if (!/^[0-9a-f]{16}-[0-9a-f]{16}$/.test(candidate) || !(wait <= 4 * 60 * 60 * 1000)) {
+              core.setFailed(`No wake for candidate ${candidate} at ${notBefore}: invalid or over 4 hours ahead.`);
+              return;
+            }
+            await new Promise((resolve) => setTimeout(resolve, Math.max(wait, 0)));
+            await github.rest.actions.createWorkflowDispatch({
+              ...context.repo, workflow_id: 'klaud-plan.yml', ref: 'main',
+              inputs: { wake: 'true', 'wake-candidate': candidate },
             });

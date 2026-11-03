@@ -141,7 +141,7 @@ jobs:
                 }]}],
                 "PostToolUse": [{"hooks": [{
                   "type": "command",
-                  "command": "cd \"$GITHUB_WORKSPACE\" && uv run --project \"$INFERENCEX_TOOLING_PROJECT\" --locked python -P -m infx.klaud check-deadline"
+                  "command": "s=\"${KLAUD_SESSION_STARTED:-}\"; [ -n \"$s\" ] || exit 0; e=$(($(date +%s) - s)); [ \"$e\" -ge 18000 ] || exit 0; m=$(((19800 - e) / 60)); [ \"$m\" -ge 0 ] || m=0; printf '{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"About %s minutes remain in this session. Publish attempt reports for owned runs now, then run park, or finish if the outcome is terminal, and end with StructuredOutput.\"}}\\n' \"$m\""
                 }]}]
               }
             }
@@ -163,7 +163,7 @@ jobs:
           KLAUD_EXECUTION: ${{ steps.claude.outputs.execution_file }}
         run: |
           execution="${KLAUD_EXECUTION:-$RUNNER_TEMP/claude-execution-output.json}"
-          used=false
+          used=true
           if [[ -f "$execution" ]]; then
             used=$(jq 'any(.[]?; .type == "assistant" and any(.message.content[]?; .type == "tool_use"))' "$execution")
           fi

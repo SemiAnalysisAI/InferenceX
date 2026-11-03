@@ -38,7 +38,6 @@ def test_the_job_names_the_run_and_gives_each_watchdog_role_the_dist_timeout(tmp
     ("b300-dsxe", "dsv41flash", "dynamo-sglang", "1", "true", []),
     ("b300-dsxe", "kimik3", "dynamo-vllm", "1", "true", []),
     ("b300-dsxe", "dsv41flash", "dynamo-vllm", "0", "true", []),
-    ("gb300-nv", "dsv4", "dynamo-trt", "1", "true", ["--set", "frontend.placement.node=head"]),
     ("gb300-nv", "dsv4", "dynamo-vllm", "1", "true", []),
 ])  # fmt: skip
 def test_eval_frontend_overrides_preserve_benchmark_and_other_workloads(
