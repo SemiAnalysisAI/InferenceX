@@ -12125,6 +12125,6 @@
   - qwen3.8next-fp4-mi355x-sglang-agentic-mtp
   - qwen3.8next-fp8-h200-sglang-agentic-mtp
   description:
-  - Limit inference worker DRAM in proportion to the accelerators used on each node, including exclusive jobs. Preserve existing job allocations and helper memory settings.
+  - Limit inference worker DRAM in proportion to the accelerators used on each node, including exclusive jobs. Keep helper step memory settings and request full node memory for native jobs so scheduler defaults cannot undercut worker limits.
   - Remove manual CPU DRAM budgets and the 3 TB ceiling; derive reported capacity from per-worker Slurm memory limits. Existing engine cache pools must fit those limits.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4754

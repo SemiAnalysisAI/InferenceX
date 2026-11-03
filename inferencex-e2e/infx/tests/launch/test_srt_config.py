@@ -103,7 +103,7 @@ def test_the_profile_renders_its_facts_and_mounts_a_volume_at_a_second_target():
         "nodes": "all",
     }
     assert config["output_dir"] == "/share/outputs"
-    assert config["default_sbatch_directives"] == {"cpus-per-task": "128"}
+    assert config["default_sbatch_directives"] == {"cpus-per-task": "128", "mem": "0"}
     assert "model_paths" not in config
     assert (config["visible_devices_env"], config["default_gpu_exporter"]) == ("ROCR_VISIBLE_DEVICES", None)
     assert (config["network_interface"], config["use_exclusive_sbatch_directive"]) == ("eno0", True)
@@ -137,7 +137,7 @@ def test_node_exclusions_cpus_and_image_aliases_are_rendered():
         srt={"container-aliases": ["dynamo-sglang", "dynamo-vllm"], "nginx-aliases": ["nginx-sqsh"]},
     )  # fmt: skip
     config = render(record, job())
-    assert config["default_sbatch_directives"] == {"exclude": "node-1,node-2", "cpus-per-task": "192"}
+    assert config["default_sbatch_directives"] == {"exclude": "node-1,node-2", "cpus-per-task": "192", "mem": "0"}
     assert config["containers"] == {
         "dynamo-sglang": "/sq/image.sqsh",
         "dynamo-vllm": "/sq/image.sqsh",
@@ -239,11 +239,12 @@ def test_single_node_jobs_skip_the_segment_and_typed_gres_replaces_gpus_per_node
     assert render(shared, job(single_node=True))["use_exclusive_sbatch_directive"] is False
     multi = render(cluster(slurm={"exclusive": False}, srt={"segment-directive": True}), job())
     assert (multi["use_segment_sbatch_directive"], multi["use_exclusive_sbatch_directive"]) == (True, False)
-    assert "use_gpus_per_node_directive" not in multi and "default_sbatch_directives" not in multi
+    assert "use_gpus_per_node_directive" not in multi
+    assert multi["default_sbatch_directives"] == {"mem": "0"}
 
 
 def test_the_cpu_request_follows_the_clusters_unit():
-    assert render(cluster(slurm={"cpus-per-gpu": 24}), job())["default_sbatch_directives"] == {"cpus-per-gpu": "24"}
+    assert render(cluster(slurm={"cpus-per-gpu": 24}), job())["default_sbatch_directives"] == {"cpus-per-gpu": "24", "mem": "0"}
     with pytest.raises(ValueError, match="not both"):
         cluster(slurm={"cpus-per-task": 192, "cpus-per-gpu": 24})
 

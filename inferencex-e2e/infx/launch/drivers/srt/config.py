@@ -49,7 +49,7 @@ class SrtJob:
     mounts: Sequence[tuple[str, str]] = ()
     single_node: bool = False
     account: str | None = None
-    mem_mib: int | None = None
+    mem_mib: int | None = 0
 
 
 def pyxis_spelling(image: str) -> str:

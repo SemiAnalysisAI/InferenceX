@@ -218,10 +218,12 @@ schema; unknown keys fail.
   available DRAM, including when the job has exclusive access. A worker spanning whole
   nodes receives the full available amount on each node; colocated roles receive their
   own shares. The proportional policy is scheduler independent; the Slurm adapter applies
-  it to inference-worker steps. Frontends, benchmark clients, telemetry, services, and job
-  allocations retain their existing memory settings. These are worker ceilings, not dedicated
-  reservations: workers and helpers still share the enclosing job's memory budget. Slurm
-  must be configured to enforce job-step memory limits.
+  it to inference-worker steps. Frontends, benchmark clients, telemetry, and services retain
+  their existing step memory settings. Native multi-node jobs and exclusive single-node jobs
+  request all node memory with `--mem=0` so scheduler defaults cannot undercut worker ceilings;
+  shared single-node jobs request their GPUs' proportional share. These are worker ceilings,
+  not dedicated reservations: workers and helpers still share the enclosing job's memory budget.
+  Slurm must be configured to enforce job-step memory limits.
   Native engine cache sizes remain recipe settings: the offload pool and all other server
   allocations must fit within the worker's limit. The memory allocation does not reserve
   the entire amount for KV cache. Results record the total assigned worker capacity in
