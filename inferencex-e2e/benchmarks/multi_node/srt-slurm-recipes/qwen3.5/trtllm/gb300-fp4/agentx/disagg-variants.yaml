@@ -214,7 +214,6 @@ base:
           capacity_scheduler_policy: GUARANTEED_NO_EVICT
         speculative_config:
           decoding_type: MTP
-          draft_lm_head_dtype: mxfp8
           max_draft_len: 6
         stream_interval: 20
         tensor_parallel_size: 8
@@ -579,7 +578,5 @@ override_3p2d_dep4_dep4_c720:
         max_num_tokens: 252
         moe_config:
           backend: CUTEDSL
-        speculative_config:
-          draft_lm_head_dtype:
         tensor_parallel_size: 4
         moe_tensor_parallel_size:
