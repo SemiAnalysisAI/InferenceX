@@ -345,6 +345,7 @@ jobs:
             queue-token: ${{ matrix.config['queue-token'] }}
             dp-attn: ${{ matrix.config.dp-attn }}
             run-eval: false
+            require-power: ${{ matrix.config['require-power'] == true }}
             scenario-type: ${{ matrix.config['scenario-type'] || 'fixed-seq-len' }}
             duration: ${{ matrix.config.duration || '3600' }}
             agentx-fast: ${{ contains(github.event.pull_request.labels.*.name, 'agentx-fast') }}
@@ -372,6 +373,7 @@ jobs:
             conc: ${{ matrix.config.conc[0] }}
             duration: ${{ matrix.config.duration }}
             run-eval: false
+            require-power: ${{ matrix.config['require-power'] == true }}
             scenario-type: agentic-coding
             agentx-fast: ${{ contains(github.event.pull_request.labels.*.name, 'agentx-fast') }}
 
@@ -719,6 +721,7 @@ jobs:
             dp-attn: ${{ matrix.config.dp-attn }}
             duration: ${{ matrix.config.duration }}
             run-eval: false
+            require-power: ${{ matrix.config['require-power'] == true }}
             scenario-type: agentic-coding
             agentx-fast: ${{ contains(github.event.pull_request.labels.*.name, 'agentx-fast') }}
 
@@ -783,6 +786,7 @@ jobs:
             conc: ${{ matrix.config.conc[0] }}
             duration: ${{ matrix.config.duration }}
             run-eval: false
+            require-power: ${{ matrix.config['require-power'] == true }}
             scenario-type: agentic-coding
             agentx-fast: ${{ contains(github.event.pull_request.labels.*.name, 'agentx-fast') }}
 
