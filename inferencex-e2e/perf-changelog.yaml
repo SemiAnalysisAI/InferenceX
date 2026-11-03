@@ -11887,6 +11887,46 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4542
 
 - config-keys:
+    - minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg
+    - minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-agg
+  description:
+    - "Add 6P DEP2 + DEP16 points at conc 220, 240 and 260, and a TP4 MonoKernel point at conc 1."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4750
+  scenario-type: [agentic-coding]
+  append-only: true
+
+- config-keys:
+    - glm5.2-fp8-b300-sglang-agentic-mtp
+  description:
+    - "Rerun the unchanged FP8 config to collect GPU-board power. Its published curve (2026-10-14) predates B300 single-node power collection and carries no power fields."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4702
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-atom-agentic-dspark
+  description:
+    - "Rerun the unchanged config to collect GPU-board power. Its published curve (2026-10-13) predates MI355X ATOM power collection and carries no power fields."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4703
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-disagg
+  description:
+    - "Collect GPU-board power for the six aggregated and two disaggregated GLM-5.2 B200 Dynamo-SGLang AgentX points, which currently publish no power."
+    - "Move the disaggregated key from the pruned lmsysorg/sglang:nightly-dev-20260910-00840301 tag (Docker Hub 404) to the digest-pinned v0.5.22-cu130 image the aggregated key already serves."
+    - "Concurrency points and evaluation coverage are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4656
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - qwen3.8next-fp4-gb300-sglang-agentic-mtp
+  description:
+    - "Require valid measured GPU power for the Qwen3.8 GB300 AgentX sweep."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4552
+  scenario-type: [agentic-coding]
+
+- config-keys:
     - qwen3.5-fp8-mi300x-sglang-agentic-mtp
   description:
     - "Update the SGLang image from v0.5.16-rocm720-mi30x-20260730 to v0.5.22-rocm720-mi30x-20261024, pinned by digest."
