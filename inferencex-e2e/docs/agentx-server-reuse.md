@@ -4,11 +4,15 @@
 with a local prefix-cache reset between points. Without it, AgentX still runs one
 concurrency per deployment. Recipes and generators do not enable reuse automatically.
 
-Use it only for identical single-node vLLM launches with local KV cache and
-`agentx-harness==1.0.12`. Direct traffic and one consistent-hash vLLM Router are
-supported. Multiple frontends, connectors, offloading, eval-only runs and power
-windows are rejected. Launch vLLM with `VLLM_SERVER_DEV_MODE=1` to expose the reset
-endpoint.
+Use it only for identical single-node vLLM launches with local KV cache. Direct
+traffic and one consistent-hash vLLM Router are supported. Multiple frontends,
+connectors, offloading, eval-only runs and power windows are rejected. Launch vLLM
+with `VLLM_SERVER_DEV_MODE=1` to expose the reset endpoint.
+
+`requirements.txt` selects the client release. The drain barrier parses that
+release's log lines, so reuse also requires the pinned and the installed
+`agentx-harness` to be one of the versions in `drain.VALIDATED`. A client bump
+fails before traffic until the parser is revalidated and the version added there.
 
 ## Run a group
 
@@ -72,6 +76,23 @@ stop admission, forward to the active client session, and return `128 + signal`.
 Each point keeps `RESULT_DIR/conc_<C>` and `<RESULT_FILENAME>_conc<C>` results.
 `RESULT_DIR/server_reuse.json` records progress, launch identity, exit codes,
 drain evidence and boundary metrics. SIGKILL leaves the last saved step.
+
+## Engine backends
+
+`reuse.py` owns the engine-independent parts: group validation, launch identity,
+point order, the client drain barrier, the idle/reset/idle sequence, signals and
+the receipt. Engine knowledge sits behind one entry in `reuse.BACKENDS`, keyed by
+the bound recipe's `engine.type`: the recipe and frontend rules, which frontends
+are routers, and a control object that probes the reset route, scrapes per-engine
+metrics, decides idleness and resets. `reuse_vllm.py` is the only backend. Any
+other engine type is refused. Adding an engine means adding a backend, then
+qualifying its reset and metrics semantics on GPUs.
+
+srt-slurm owns server launch, readiness and teardown, and runs one benchmark
+command per job; its own sweeps loop over concurrencies inside that command.
+Point sequencing stays in this wrapper because only it sees the client log and
+process group. If srt-slurm later exposes a per-engine reset or idle hook, a
+backend can call it without changing the sequence.
 
 Reset clears local prefix lookup state, not every part of a fresh process.
 Prefix counters remain cumulative, so compare deltas between boundaries.

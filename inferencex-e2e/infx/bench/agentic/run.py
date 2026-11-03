@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Literal
 
 from infx.bench import env as inputs, proc, server
-from infx.bench.agentic import reuse
+from infx.bench.agentic import drain, reuse
 from infx.bench.agentic.replay import (
     REQUIRED as REPLAY_REQUIRED,
     ReplayConfig,
@@ -278,5 +278,6 @@ def main(argv: list[str]) -> int:
         environ = {**os.environ, "PYTHONPATH": proc.pythonpath(), "PYTHONSAFEPATH": "1"}
         runtime.exec_python(["-m", "infx.bench", "agentic", *argv], environ)
     if group:
+        drain.require_installed()
         return reuse.run(group, plans, runtime, execute)
     return execute(plan, runtime, os.environ)

@@ -1,27 +1,45 @@
-"""Fail-closed proof that every request an ``agentx-harness==1.0.12`` run issued came back clean.
-
-The phase lifecycle lines parsed here are the 1.0.12 wheel's
-``aiperf/timing/phase/runner.py`` and ``credit_counter.py`` log formats; another client
-release needs this parser revalidated, so ``HARNESS`` names the only supported pin.
-"""
+"""Fail-closed proof that every request an AgentX client run issued came back clean."""
 
 from __future__ import annotations
 
 import hashlib
+import importlib.metadata
 import json
 import math
 import os
 import re
+import sys
 from pathlib import Path
 
-from infx.bench.env import BenchError
+from infx.bench.env import BenchError, InputError
 
-HARNESS = "agentx-harness==1.0.12"
+CLIENT = "agentx-harness"
+# Releases whose aiperf/timing/phase/runner.py and credit_counter.py log lines this parser
+# was checked against; another release must be revalidated before it is added here.
+VALIDATED = frozenset({"1.0.12"})
 LOG = Path("logs") / "aiperf.log"
 
 
 class DrainError(BenchError):
     """The log does not prove a clean drain, so the server may not be reused."""
+
+
+def require_validated(version: str | None, where: str) -> None:
+    """Raise ``InputError`` unless ``where``'s ``CLIENT`` ``version`` is in ``VALIDATED``."""
+    if version not in VALIDATED:
+        raise InputError(
+            f"server reuse validates the drain barrier only for {CLIENT} "
+            f"{', '.join(sorted(VALIDATED))}, but {where} has {version or 'no exact version'}"
+        )
+
+
+def require_installed() -> None:
+    """Raise ``InputError`` unless this interpreter's installed ``CLIENT`` is validated."""
+    try:
+        version = importlib.metadata.version(CLIENT)
+    except importlib.metadata.PackageNotFoundError:
+        version = None
+    require_validated(version, sys.executable)
 
 
 _ANSI = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\))")

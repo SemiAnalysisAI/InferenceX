@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import copy
+import dataclasses
 import json
 import os
 import re
@@ -16,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from infx.bench.agentic import drain, reuse, run
+from infx.bench.agentic import drain, reuse, reuse_vllm, run
 from infx.bench.agentic.run import Plan, execute
 from infx.bench.agentic.venv import Runtime
 from infx.bench.env import BenchError, InputError
@@ -130,7 +131,7 @@ def _metrics(engines: dict[str, tuple[int, int, int, int]]) -> str:
     ]
     for engine, values in engines.items():
         labels = f'engine="{engine}",model_name="test/model"'
-        names = (reuse.RUNNING, reuse.WAITING, reuse.QUERIES, reuse.HITS)
+        names = (reuse_vllm.RUNNING, reuse_vllm.WAITING, reuse_vllm.QUERIES, reuse_vllm.HITS)
         lines += [f"{name}{{{labels}}} {value}.0" for name, value in zip(names, values)]
     return "\n".join(lines) + "\n"
 
@@ -149,7 +150,7 @@ def _identities(*servers: dict, concurrencies: tuple[str, ...] = ("8", "16")) ->
 @pytest.fixture
 def requirements(tmp_path: Path) -> Path:
     path = tmp_path / "requirements.txt"
-    path.write_text("agentx-harness==1.0.12\ndatasets>=4.7.0\n")
+    path.write_text(f"{drain.CLIENT}=={min(drain.VALIDATED)}\ndatasets>=4.7.0\n")
     return path
 
 
@@ -174,12 +175,23 @@ def _env(tmp_path: Path, document: object = None, **overrides: str | None) -> di
     return {name: value for name, value in env.items() if value is not None}
 
 
-def _runtime(tmp_path: Path, *, real_python: bool = False) -> Runtime:
-    """A job runtime with stub clients; ``real_python`` makes its python a real bare venv."""
+def _runtime(tmp_path: Path, *, real_python: bool = False, client: str = "") -> Runtime:
+    """A job runtime with stub clients.
+
+    ``real_python`` makes its python a real bare venv that has the client distribution
+    installed at version ``client``, else at a validated one.
+    """
     runtime = Runtime(tmp_path / "runtime")
     if real_python:
         command = [sys.executable, "-m", "venv", "--without-pip", str(runtime.venv)]
         subprocess.run(command, check=True)
+        version = client or min(drain.VALIDATED)
+        site = runtime.venv / "lib" / f"python{sys.version_info[0]}.{sys.version_info[1]}"
+        dist = site / "site-packages" / f"agentx_harness-{version}.dist-info"
+        dist.mkdir(parents=True)
+        (dist / "METADATA").write_text(
+            f"Metadata-Version: 2.1\nName: {drain.CLIENT}\nVersion: {version}\n"
+        )
     else:
         runtime.python.parent.mkdir(parents=True)
         executable(runtime.python, FAKE_PYTHON)
@@ -208,7 +220,7 @@ def _vllm(
             with (tmp_path / "events.log").open("a") as events:
                 events.write(f"POST {path}\n")
             return reset if path == RESET else (404, {})
-        if path == reuse.DEV_PROBE_PATH:
+        if path == reuse_vllm.DEV_PROBE_PATH:
             return dev
         if path != "/metrics":
             return 404, {}
@@ -321,6 +333,8 @@ def _server(**changes: object) -> dict:
          "point 8 server engine must be vllm"),
         (_identities(*[_server(engine__connector="nixl")] * 2), {},
          "point 8 server engine uses connector 'nixl'"),
+        (_identities(*[_server(frontend__type="sglang-router")] * 2), {},
+         "point 8 server frontend must be vllm or vllm-router"),
         (_identities(*[_server(frontend__type="vllm-router")] * 2), {},
          "point 8 vllm-router reuse requires consistent_hash and disable-retries true"),
         (_identities(_server(benchmark={"env": {}}), _server(benchmark={"env": {}})), {},
@@ -340,11 +354,75 @@ def test_incompatible_groups_fail_before_any_point(
         reuse.Group.from_env(_env(tmp_path, document, **overrides), requirements)
 
 
-def test_reuse_refuses_a_client_release_whose_log_barrier_is_unvalidated(tmp_path, requirements):
-    requirements.write_text("aiperf @ https://example.invalid/aiperf.tar.gz\n")
+@pytest.mark.parametrize(
+    ("pins", "selected"),
+    [
+        ("agentx-harness==0.0.0\n", "0.0.0"),
+        ("agentx-harness>=1.0\n", "no exact version"),
+        ("aiperf @ https://example.invalid/aiperf.tar.gz\n", "no exact version"),
+    ],
+)
+def test_reuse_refuses_a_selected_client_whose_log_barrier_is_unvalidated(
+    tmp_path, requirements, pins, selected
+):
+    requirements.write_text(pins)
 
-    with pytest.raises(InputError, match="validates the drain barrier only for agentx-harness"):
+    with pytest.raises(InputError, match=f"only for agentx-harness .*has {selected}$"):
         reuse.Group.from_env(_env(tmp_path), requirements)
+
+
+def test_a_comment_does_not_change_the_selected_validated_client(tmp_path, requirements):
+    requirements.write_text(requirements.read_text().replace("\n", "  # selected client\n", 1))
+
+    group = reuse.Group.from_env(_env(tmp_path), requirements)
+
+    assert group.concurrencies == (8, 16)
+
+
+def test_the_point_sequence_runs_through_the_selected_backend(tmp_path, requirements):
+    events = tmp_path / "events.log"
+
+    class Recorder:
+        base = "http://control.invalid"
+
+        def __init__(self, base_url, engines):
+            self.calls = 0
+
+        def _log(self, event):
+            with events.open("a") as stream:
+                stream.write(f"{event}\n")
+
+        def require_reset_route(self):
+            self._log("probe")
+
+        def snapshot(self):
+            self.calls += 1
+            return {"0": {"busy": float(self.calls == 1)}}
+
+        def idle(self, snapshot):
+            return not snapshot["0"]["busy"]
+
+        def reset(self):
+            self._log("reset")
+            return "done"
+
+    env = _env(tmp_path, AIPERF_SERVER_URL="http://127.0.0.1:1")
+    group = reuse.Group.from_env(env, requirements)
+    backend = dataclasses.replace(group.backend, control=Recorder)
+    group = dataclasses.replace(group, backend=backend)
+    plans = [Plan.from_env(point) for point in group.points]
+
+    assert reuse.run(group, plans, _runtime(tmp_path), execute) == 0
+
+    assert _events(tmp_path) == [
+        "probe",
+        "replay c8", "aggregate agentx_conc8", "validate",
+        "reset",
+        "replay c16", "aggregate agentx_conc16", "validate",
+    ]  # fmt: skip
+    receipt = _receipt(tmp_path)
+    assert (receipt["status"], receipt["control_url"]) == ("passed", Recorder.base)
+    assert receipt["points"][0]["reset_response"] == "done"
 
 
 def test_reuse_refuses_result_paths_left_by_an_earlier_run(tmp_path, requirements):
@@ -376,7 +454,7 @@ def test_clean_points_are_separated_by_one_reset(tmp_path, http_server, requirem
     assert receipt["status"] == "passed"
     assert [point["concurrency"] for point in receipt["points"]] == [8, 16]
     assert receipt["points"][0]["reset_response"] == '{"success": true}'
-    assert receipt["points"][0]["engines_after_reset"]["1"][reuse.QUERIES] == 8000
+    assert receipt["points"][0]["engines_after_reset"]["1"][reuse_vllm.QUERIES] == 8000
     assert "reset_response" not in receipt["points"][1]
     for conc in (8, 16):
         log = tmp_path / "results" / f"conc_{conc}" / "aiperf_artifacts" / drain.LOG
@@ -569,6 +647,24 @@ def _alive(pid: int) -> bool:
         return False
     out = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True)
     return not out.stdout.strip().startswith("Z")
+
+
+def test_the_installed_client_is_checked_inside_the_runtime_before_traffic(tmp_path, http_server):
+    runtime = _runtime(tmp_path, real_python=True, client="0.0.0")
+    env = _env(
+        tmp_path,
+        AIPERF_SERVER_URL=_vllm(tmp_path, http_server),
+        AIPERF_RUNTIME_DIR=str(runtime.root),
+        PYTHONPATH=str(REPO_ROOT),
+    )
+    command = [str(runtime.python), "-m", "infx.bench", "agentic"]
+
+    out = subprocess.run(command, env=env, capture_output=True, text=True, timeout=60, check=False)
+
+    assert out.returncode == 1, out
+    assert f"but {runtime.python} has 0.0.0" in out.stderr
+    assert _events(tmp_path) == []
+    assert not (tmp_path / "results").exists()
 
 
 def _signal_entry_point(tmp_path: Path, env: dict[str, str], ready: str, signum: int):
