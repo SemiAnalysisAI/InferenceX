@@ -31,6 +31,7 @@ base:
 
   roles:
     prefill:
+      nodes: 1
       env:
         PYTHONUNBUFFERED: '1'
         PIP_BREAK_SYSTEM_PACKAGES: '1'

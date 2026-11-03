@@ -20,6 +20,7 @@ base:
     max_attempts: 720
   roles:
     agg:
+      nodes: 1
       args:
         served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
         language-model-only: true

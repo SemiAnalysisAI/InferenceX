@@ -47,6 +47,7 @@ base:
   roles:
     agg:
       kv_events: true
+      nodes: 1
       env:
         HF_HOME: /hf_hub_cache
         HF_HUB_CACHE: /hf_hub_cache

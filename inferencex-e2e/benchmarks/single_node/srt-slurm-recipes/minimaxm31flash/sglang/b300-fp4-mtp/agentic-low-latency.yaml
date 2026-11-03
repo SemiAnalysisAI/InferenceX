@@ -20,6 +20,7 @@ base:
     agg:
       # The MSA-V1 MonoKernel serves batch-size-1 DSpark steps; larger batches take
       # the standard path.
+      nodes: 1
       args:
         served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
         trust-remote-code: true

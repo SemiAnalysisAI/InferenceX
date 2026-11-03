@@ -44,6 +44,7 @@ base:
   engine: sglang
   roles:
     prefill:
+      nodes: 3
       env:
         # The 0831 image contains the PP+spec runtime merged by SGLang #35758,
         # but still carries the pre-merge PP+spec assert in validation_hook.py.
@@ -234,6 +235,7 @@ override_3p4d_c565:
         speculative-num-steps: 4
         speculative-num-draft-tokens: 5
     decode:
+      nodes: 4
       env:
         SGLANG_DG_CACHE_DIR: /tmp/agentx-followup/c565-cutedsl-g3072/decode-deepgemm-cache
         FLASHINFER_WORKSPACE_BASE: /tmp/agentx-followup/c565-cutedsl-g3072/decode-flashinfer-cache
@@ -254,6 +256,7 @@ override_3p2d_c704:
         speculative-num-steps: 5
         speculative-num-draft-tokens: 6
     decode:
+      nodes: 2
       env:
         SGLANG_DG_CACHE_DIR: /tmp/agentx-upstream-main/decode-deepgemm-cache
         FLASHINFER_WORKSPACE_BASE: /tmp/agentx-upstream-main/decode-flashinfer-cache

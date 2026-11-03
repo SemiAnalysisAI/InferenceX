@@ -239,17 +239,25 @@ base:
 
 override_5p3d_pp4_dep4_c1000:
   roles:
-    prefill: {}
-    decode: {}
+    prefill:
+      nodes: 5
+    decode:
+      nodes: 3
 override_3p2d_pp4_dep4_c600:
   roles:
-    prefill: {}
-    decode: {}
+    prefill:
+      nodes: 3
+    decode:
+      nodes: 2
 override_1p1d_pp4_dep4_c200:
   roles:
-    prefill: {}
-    decode: {}
+    prefill:
+      nodes: 1
+    decode:
+      nodes: 1
 override_1p1d_pp4_dep4_c100:
   roles:
-    prefill: {}
-    decode: {}
+    prefill:
+      nodes: 1
+    decode:
+      nodes: 1

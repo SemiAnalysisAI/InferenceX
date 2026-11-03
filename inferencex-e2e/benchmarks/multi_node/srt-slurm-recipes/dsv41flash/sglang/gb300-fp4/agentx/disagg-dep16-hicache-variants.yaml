@@ -61,6 +61,7 @@ base:
   engine: sglang
   roles:
     prefill:
+      nodes: 5
       env:
         PYTHONUNBUFFERED: "1"
         SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: "1"
@@ -129,6 +130,7 @@ base:
         model-loader-extra-config: '{"enable_multithread_load":true}'
       kv_events: true
     decode:
+      nodes: 4
       env:
         PYTHONUNBUFFERED: "1"
         SGLANG_OPT_DSV41_ENGRAM_PEER_SHARDS: "1"
@@ -211,7 +213,8 @@ base:
 override_3p1d_dep2_dep16_c1228:
   name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep16-hicache-3p1d-dep2-dep16-c1228
   roles:
-    prefill: {}
+    prefill:
+      nodes: 2
     decode:
       args:
         max-running-requests: 384
@@ -221,7 +224,8 @@ override_3p1d_dep2_dep16_c1228:
 override_5p1d_dep2_dep16_c2884:
   name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep16-hicache-5p1d-dep2-dep16-c2884
   roles:
-    prefill: {}
+    prefill:
+      nodes: 3
     decode:
       args:
         max-running-requests: 640
@@ -231,7 +235,8 @@ override_5p1d_dep2_dep16_c2884:
 override_8p1d_dep2_dep16_c4096:
   name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep16-hicache-8p1d-dep2-dep16-c4096
   roles:
-    prefill: {}
+    prefill:
+      nodes: 4
     decode:
       args:
         max-running-requests: 1024

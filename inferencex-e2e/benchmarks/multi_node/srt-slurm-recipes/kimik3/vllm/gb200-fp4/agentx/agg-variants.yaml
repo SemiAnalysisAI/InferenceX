@@ -52,6 +52,7 @@ base:
     connector:
   roles:
     agg:
+      nodes: 4
       env:
         HF_HUB_CACHE: "/hf_hub_cache"
         HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"

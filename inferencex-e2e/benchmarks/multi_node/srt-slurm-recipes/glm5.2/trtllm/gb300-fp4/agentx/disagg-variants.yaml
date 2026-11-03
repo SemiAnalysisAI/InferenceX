@@ -199,11 +199,13 @@ override_1p1d_tp8_c1_b1_mtp5:
       wheel: 1.6.0.dev20261010
   roles:
     prefill:
+      nodes: 1
       args:
         disable_overlap_scheduler: true
         scheduler_config:
           context_chunking_policy: EQUAL_PROGRESS
     decode:
+      nodes: 2
       args:
         cuda_graph_config:
           batch_sizes:
@@ -220,8 +222,10 @@ override_1p1d_tep8_c20_b5_mtp5:
     source:
       wheel: 1.6.0.dev20261010
   roles:
-    prefill: {}
+    prefill:
+      nodes: 1
     decode:
+      nodes: 2
       args:
         cuda_graph_config:
           batch_sizes:
@@ -241,8 +245,10 @@ override_1p4d_tep4_c30_b2_mtp5:
     source:
       wheel: 1.6.0.dev20261010
   roles:
-    prefill: {}
+    prefill:
+      nodes: 1
     decode:
+      nodes: 4
       args:
         cuda_graph_config:
           batch_sizes:
@@ -260,8 +266,10 @@ override_3p4d_tep4_c60_b5_mtp5:
     source:
       wheel: 1.6.0.dev20261010
   roles:
-    prefill: {}
+    prefill:
+      nodes: 3
     decode:
+      nodes: 4
       args:
         cuda_graph_config:
           batch_sizes:
@@ -282,10 +290,12 @@ override_4p1d_dep8_c227_b16_mtp3:
       wheel: 1.6.0.dev20261010
   roles:
     prefill:
+      nodes: 4
       args:
         speculative_config:
           max_draft_len: 3
     decode:
+      nodes: 2
       args:
         cuda_graph_config:
           batch_sizes:
@@ -314,10 +324,12 @@ override_5p1d_dep16_c260_b16_mtp3:
       wheel: 1.6.0.dev20261010
   roles:
     prefill:
+      nodes: 5
       args:
         speculative_config:
           max_draft_len: 3
     decode:
+      nodes: 4
       args:
         cuda_graph_config:
           batch_sizes:

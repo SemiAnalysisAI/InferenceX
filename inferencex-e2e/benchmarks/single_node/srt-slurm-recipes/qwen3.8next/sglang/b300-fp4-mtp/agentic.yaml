@@ -23,6 +23,7 @@ base:
   engine: sglang
   roles:
     agg:
+      nodes: 1
       env:
         PYTHONNOUSERSITE: '1'
         PYTHONUNBUFFERED: '1'

@@ -15,6 +15,7 @@ base:
   engine: sglang
   roles:
     agg:
+      nodes: 1
       env:
         NCCL_NVLS_ENABLE: '1'
         PYTHONNOUSERSITE: '1'

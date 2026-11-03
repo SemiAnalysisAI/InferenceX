@@ -41,6 +41,7 @@ frontend:
 engine: sglang
 roles:
   prefill:
+    nodes: 2
     env:
       HF_HOME: "/hf_hub_cache"
       HF_HUB_CACHE: "/hf_hub_cache"
@@ -82,6 +83,7 @@ roles:
 
   decode:
 
+    nodes: 2
     env:
       HF_HOME: "/hf_hub_cache"
       HF_HUB_CACHE: "/hf_hub_cache"

@@ -61,6 +61,7 @@ base:
     dp_launch_mode: per_node
   roles:
     agg:
+      nodes: 1
       kv_events: true
       env:
         HF_HUB_CACHE: "/hf_hub_cache"

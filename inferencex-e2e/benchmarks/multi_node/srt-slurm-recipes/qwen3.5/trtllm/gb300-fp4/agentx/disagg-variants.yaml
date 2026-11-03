@@ -27,6 +27,7 @@ base:
     TRTLLM_SERVER_DISABLE_GC: '1'
   roles:
     prefill:
+      nodes: 1
       env:
         CUDA_SCALE_LAUNCH_QUEUES: 4x
         ENROOT_ALLOW_DEV: 'yes'
@@ -277,6 +278,7 @@ override_1p2d_tep4_tep8_c48_b4:
             - 16384
             - 32768
     decode:
+      nodes: 4
       args:
         cuda_graph_config:
           batch_sizes: &b4_batch_sizes
@@ -293,6 +295,7 @@ override_1p4d_tep4_tep8_c38_b1:
   roles:
     prefill: *tep4_prefill
     decode:
+      nodes: 8
       args:
         cuda_graph_config:
           batch_sizes: *b4_batch_sizes
@@ -306,6 +309,7 @@ override_1p4d_tep4_tep8_c38_b4:
   roles:
     prefill: *tep4_prefill
     decode:
+      nodes: 8
       args:
         cuda_graph_config:
           batch_sizes: *b4_batch_sizes
@@ -319,7 +323,9 @@ override_2p3d_tep4_tep8_c136_b4:
   roles:
     prefill:
       <<: *tep4_prefill
+      nodes: 2
     decode:
+      nodes: 6
       args:
         cuda_graph_config:
           batch_sizes: *b4_batch_sizes
@@ -332,10 +338,12 @@ override_3p1d_dep4_dep16_c565_b8:
   name: disagg-gb300-3p1d-dep4-dep16-c565-b8-mtp-kvoffload
   roles:
     prefill: &dep4_prefill
+      nodes: 3
       args:
         moe_expert_parallel_size: 4
         tensor_parallel_size: 4
     decode:
+      nodes: 4
       args:
         cuda_graph_config:
           batch_sizes:
@@ -355,6 +363,7 @@ override_3p2d_dep4_dep4_c704_b32:
   roles:
     prefill: *dep4_prefill
     decode:
+      nodes: 2
       args:
         cuda_graph_config:
           batch_sizes:

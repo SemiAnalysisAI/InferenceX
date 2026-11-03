@@ -36,6 +36,7 @@ base:
   engine: sglang
   roles:
     prefill:
+      nodes: 1
       env:
         TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
@@ -163,6 +164,7 @@ override_1p5d_pp4_tp4_c30:
         active-prefill-tokens-threshold: None
         active-prefill-tokens-threshold-frac: None
     decode:
+      nodes: 5
       args:
         tensor-parallel-size: 4
         disaggregation-decode-enable-radix-cache: true
@@ -179,6 +181,7 @@ override_1p3d_pp4_tp4_c40:
         active-prefill-tokens-threshold: None
         active-prefill-tokens-threshold-frac: None
     decode:
+      nodes: 3
       args:
         tensor-parallel-size: 4
         disaggregation-decode-enable-radix-cache: true
@@ -194,6 +197,7 @@ override_1p1d_pp4_dep8_c56:
         max-prefill-tokens: 8192
         mem-fraction-static: 0.75
     decode:
+      nodes: 2
       args:
         tensor-parallel-size: 8
         data-parallel-size: 8
@@ -212,10 +216,12 @@ override_3p1d_pp4_dep8_c216:
   name: glm5.2-fp4-gb300-dynamo-sglang-agentx-disagg-3p1d-pp4-dep8-c216
   roles:
     prefill:
+      nodes: 3
       env:
         # The default 19,19,20,20 split also gives the last stage the LM head and MTP draft layer.
         SGLANG_PP_LAYER_PARTITION: 20,20,20,18
     decode:
+      nodes: 2
       args:
         tensor-parallel-size: 8
         data-parallel-size: 8
@@ -233,6 +239,7 @@ override_3p1d_pp4_dep8_c264:
   name: glm5.2-fp4-gb300-dynamo-sglang-agentx-disagg-3p1d-pp4-dep8-hicache185-c264
   roles:
     prefill:
+      nodes: 3
       env:
         SGLANG_PP_LAYER_PARTITION: 20,20,20,18
       args:
@@ -241,6 +248,7 @@ override_3p1d_pp4_dep8_c264:
         mem-fraction-static: 0.88
         hicache-size: 185
     decode:
+      nodes: 2
       args:
         tensor-parallel-size: 8
         data-parallel-size: 8
@@ -258,8 +266,10 @@ override_3p1d_pp4_dep8_c264:
 override_4p1d_pp4_dep16_c256:
   name: glm5.2-fp4-gb300-dynamo-sglang-agentx-disagg-4p1d-pp4-dep16-c256
   roles:
-    prefill: {}
+    prefill:
+      nodes: 4
     decode:
+      nodes: 4
       args:
         tensor-parallel-size: 16
         data-parallel-size: 16

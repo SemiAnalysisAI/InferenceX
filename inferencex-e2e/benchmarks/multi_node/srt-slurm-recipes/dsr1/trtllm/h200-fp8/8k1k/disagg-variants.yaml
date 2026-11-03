@@ -91,11 +91,13 @@ base:
 override_1p7d_tep8_b1_mtp3_c9:
   roles:
     prefill:
+      nodes: 1
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
+      nodes: 7
       args:
         enable_attention_dp: false
         max_batch_size: 1
@@ -109,11 +111,13 @@ override_1p7d_tep8_b1_mtp3_c9:
 override_1p7d_tep8_b32_mtp3_c28:
   roles:
     prefill:
+      nodes: 1
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
+      nodes: 7
       args:
         enable_attention_dp: false
         max_batch_size: 32
@@ -127,11 +131,13 @@ override_1p7d_tep8_b32_mtp3_c28:
 override_1p6d_tep8_b32_mtp3_c48:
   roles:
     prefill:
+      nodes: 1
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
+      nodes: 6
       args:
         enable_attention_dp: false
         max_batch_size: 32
@@ -145,11 +151,13 @@ override_1p6d_tep8_b32_mtp3_c48:
 override_1p3d_tep8_b32_mtp2_c48:
   roles:
     prefill:
+      nodes: 1
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 2
     decode:
+      nodes: 3
       args:
         enable_attention_dp: false
         max_batch_size: 32
@@ -163,11 +171,13 @@ override_1p3d_tep8_b32_mtp2_c48:
 override_3p5d_tep8_b32_mtp3_c160:
   roles:
     prefill:
+      nodes: 3
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
+      nodes: 5
       args:
         enable_attention_dp: false
         max_batch_size: 32
@@ -181,11 +191,13 @@ override_3p5d_tep8_b32_mtp3_c160:
 override_1p1d_dep8_b32_mtp2_c64:
   roles:
     prefill:
+      nodes: 1
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 2
     decode:
+      nodes: 1
       args:
         enable_attention_dp: true
         max_batch_size: 32
@@ -199,11 +211,13 @@ override_1p1d_dep8_b32_mtp2_c64:
 override_2p1d_dep8_b32_mtp2_c128:
   roles:
     prefill:
+      nodes: 2
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 2
     decode:
+      nodes: 1
       args:
         enable_attention_dp: true
         max_batch_size: 32
@@ -217,11 +231,13 @@ override_2p1d_dep8_b32_mtp2_c128:
 override_3p1d_dep8_b32_mtp2_c256:
   roles:
     prefill:
+      nodes: 3
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 2
     decode:
+      nodes: 1
       args:
         enable_attention_dp: true
         max_batch_size: 32
@@ -235,11 +251,13 @@ override_3p1d_dep8_b32_mtp2_c256:
 override_3p1d_dep8_b64_mtp1_c512:
   roles:
     prefill:
+      nodes: 3
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 1
     decode:
+      nodes: 1
       args:
         enable_attention_dp: true
         max_batch_size: 64
@@ -252,8 +270,10 @@ override_3p1d_dep8_b64_mtp1_c512:
 
 override_1p7d_tep8_b1_mtp0_c9:
   roles:
-    prefill: {}
+    prefill:
+      nodes: 1
     decode:
+      nodes: 7
       args:
         enable_attention_dp: false
         max_batch_size: 1
@@ -263,8 +283,10 @@ override_1p7d_tep8_b1_mtp0_c9:
 
 override_1p7d_tep8_b32_mtp0_c28:
   roles:
-    prefill: {}
+    prefill:
+      nodes: 1
     decode:
+      nodes: 7
       args:
         enable_attention_dp: false
         max_batch_size: 32
@@ -274,8 +296,10 @@ override_1p7d_tep8_b32_mtp0_c28:
 
 override_1p6d_tep8_b16_mtp0_c48:
   roles:
-    prefill: {}
+    prefill:
+      nodes: 1
     decode:
+      nodes: 6
       args:
         enable_attention_dp: false
         max_batch_size: 16
@@ -285,8 +309,10 @@ override_1p6d_tep8_b16_mtp0_c48:
 
 override_1p3d_tep8_b32_mtp0_c48:
   roles:
-    prefill: {}
+    prefill:
+      nodes: 1
     decode:
+      nodes: 3
       args:
         enable_attention_dp: false
         max_batch_size: 32
@@ -296,8 +322,10 @@ override_1p3d_tep8_b32_mtp0_c48:
 
 override_2p5d_tep8_b128_mtp0_c160:
   roles:
-    prefill: {}
+    prefill:
+      nodes: 2
     decode:
+      nodes: 5
       args:
         enable_attention_dp: false
         max_batch_size: 128
@@ -307,8 +335,10 @@ override_2p5d_tep8_b128_mtp0_c160:
 
 override_2p3d_dep8_b128_mtp0_c192:
   roles:
-    prefill: {}
+    prefill:
+      nodes: 2
     decode:
+      nodes: 3
       args:
         enable_attention_dp: true
         max_batch_size: 128
@@ -318,8 +348,10 @@ override_2p3d_dep8_b128_mtp0_c192:
 
 override_1p1d_dep8_b256_mtp0_c128:
   roles:
-    prefill: {}
+    prefill:
+      nodes: 1
     decode:
+      nodes: 1
       args:
         enable_attention_dp: true
         max_batch_size: 256
@@ -329,8 +361,10 @@ override_1p1d_dep8_b256_mtp0_c128:
 
 override_5p3d_dep8_b256_mtp0_c768:
   roles:
-    prefill: {}
+    prefill:
+      nodes: 5
     decode:
+      nodes: 3
       args:
         enable_attention_dp: true
         max_batch_size: 256
@@ -340,8 +374,10 @@ override_5p3d_dep8_b256_mtp0_c768:
 
 override_3p1d_dep8_b512_mtp0_c512:
   roles:
-    prefill: {}
+    prefill:
+      nodes: 3
     decode:
+      nodes: 1
       args:
         enable_attention_dp: true
         max_batch_size: 512

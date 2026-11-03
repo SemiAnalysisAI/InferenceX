@@ -72,6 +72,7 @@ base:
   roles:
     prefill:
       kv_events: true
+      nodes: 3
       env:
         HF_HOME: /hf_hub_cache
         HF_HUB_CACHE: /hf_hub_cache
@@ -127,6 +128,7 @@ base:
         kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["UCX"],"enforce_handshake_compat":false,"kv_lease_duration":120}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}]}}'
         data-parallel-size: 2
     decode:
+      nodes: 2
       env:
         HF_HOME: /hf_hub_cache
         HF_HUB_CACHE: /hf_hub_cache
@@ -213,5 +215,6 @@ override_3p4d16:
   name: minimaxm31flash-gb300-disagg-mooncake-3p4d16
   roles:
     decode:
+      nodes: 4
       args:
         data-parallel-size: 16

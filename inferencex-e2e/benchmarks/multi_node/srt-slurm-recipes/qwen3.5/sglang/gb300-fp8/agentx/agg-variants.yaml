@@ -112,6 +112,7 @@ base:
 override_tp4_c44_b4:
   roles:
     agg:
+      nodes: 1
       args:
         tensor-parallel-size: 4
         moe-dense-tp-size: 4
@@ -122,6 +123,7 @@ override_tp4_c44_b4:
 override_tp4_c44_b2:
   roles:
     agg:
+      nodes: 1
       args:
         tensor-parallel-size: 4
         moe-dense-tp-size: 4
@@ -132,6 +134,7 @@ override_tp4_c44_b2:
 override_tp4_c44_b1:
   roles:
     agg:
+      nodes: 1
       args:
         tensor-parallel-size: 4
         moe-dense-tp-size: 4
@@ -142,6 +145,7 @@ override_tp4_c44_b1:
 override_tp4_c1_b1:
   roles:
     agg:
+      nodes: 1
       args:
         tensor-parallel-size: 4
         moe-dense-tp-size: 4
@@ -152,6 +156,7 @@ override_tp4_c1_b1:
 override_tp8_c1_b1:
   roles:
     agg:
+      nodes: 2
       args:
         tensor-parallel-size: 8
         moe-dense-tp-size: 8

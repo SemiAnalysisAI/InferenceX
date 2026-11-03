@@ -21,6 +21,7 @@ base:
       # The cookbook's GB300 Low-Latency cell at
       # https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1: the MSA-V1
       # MonoKernel serves batch-size-1 DSpark steps; larger batches take the standard path.
+      nodes: 1
       args:
         served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
         trust-remote-code: true

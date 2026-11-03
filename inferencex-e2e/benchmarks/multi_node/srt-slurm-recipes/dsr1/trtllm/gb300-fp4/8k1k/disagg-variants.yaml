@@ -97,11 +97,13 @@ base:
 override_1p3d_tep8_b8_eplb0_mtp3:
   roles:
     prefill:
+      nodes: 1
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
+      nodes: 6
       args:
         tensor_parallel_size: 8
         moe_expert_parallel_size: 8
@@ -127,11 +129,13 @@ override_1p3d_tep8_b8_eplb0_mtp3:
 override_1p4d_tep8_b1_eplb0_mtp3:
   roles:
     prefill:
+      nodes: 1
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
+      nodes: 8
       args:
         tensor_parallel_size: 8
         moe_expert_parallel_size: 8
@@ -154,11 +158,13 @@ override_1p4d_tep8_b1_eplb0_mtp3:
 override_1p4d_tep8_b4_eplb0_mtp3:
   roles:
     prefill:
+      nodes: 1
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
+      nodes: 8
       args:
         tensor_parallel_size: 8
         moe_expert_parallel_size: 8
@@ -184,11 +190,13 @@ override_1p4d_tep8_b4_eplb0_mtp3:
 override_4p1d_dep32_b4_eplb0_mtp3:
   roles:
     prefill:
+      nodes: 2
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
+      nodes: 8
       args:
         tensor_parallel_size: 32
         moe_expert_parallel_size: 32
@@ -212,11 +220,13 @@ override_4p1d_dep32_b4_eplb0_mtp3:
 override_8p1d_dep32_b8_eplb0_mtp3:
   roles:
     prefill:
+      nodes: 4
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
+      nodes: 8
       args:
         tensor_parallel_size: 32
         moe_expert_parallel_size: 32
@@ -241,11 +251,13 @@ override_8p1d_dep32_b8_eplb0_mtp3:
 override_10p1d_dep8_b256_eplb0_mtp1:
   roles:
     prefill:
+      nodes: 5
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 1
     decode:
+      nodes: 2
       args:
         tensor_parallel_size: 8
         moe_expert_parallel_size: 8
@@ -301,11 +313,13 @@ override_10p1d_dep8_b256_eplb0_mtp1:
 override_10p1d_dep16_b32_eplb0_mtp3:
   roles:
     prefill:
+      nodes: 5
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
+      nodes: 4
       args:
         tensor_parallel_size: 16
         moe_expert_parallel_size: 16
@@ -333,11 +347,13 @@ override_10p1d_dep16_b32_eplb0_mtp3:
 override_13p1d_dep16_b64_eplb256_mtp3:
   roles:
     prefill:
+      nodes: 7
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
+      nodes: 4
       args:
         tensor_parallel_size: 16
         moe_expert_parallel_size: 16
@@ -371,8 +387,10 @@ override_13p1d_dep16_b64_eplb256_mtp3:
 
 override_1p3d_tep8_b16_eplb0_mtp0:
   roles:
-    prefill: {}
+    prefill:
+      nodes: 1
     decode:
+      nodes: 6
       args:
         tensor_parallel_size: 8
         moe_expert_parallel_size: 8
@@ -395,8 +413,10 @@ override_1p3d_tep8_b16_eplb0_mtp0:
 
 override_1p4d_tep8_b1_eplb0_mtp0:
   roles:
-    prefill: {}
+    prefill:
+      nodes: 1
     decode:
+      nodes: 8
       args:
         tensor_parallel_size: 8
         moe_expert_parallel_size: 8
@@ -415,8 +435,10 @@ override_1p4d_tep8_b1_eplb0_mtp0:
 
 override_1p4d_tep8_b2_eplb0_mtp0:
   roles:
-    prefill: {}
+    prefill:
+      nodes: 1
     decode:
+      nodes: 8
       args:
         tensor_parallel_size: 8
         moe_expert_parallel_size: 8
@@ -436,8 +458,10 @@ override_1p4d_tep8_b2_eplb0_mtp0:
 
 override_1p5d_tep4_b4_eplb0_mtp0:
   roles:
-    prefill: {}
+    prefill:
+      nodes: 1
     decode:
+      nodes: 5
       args:
         tensor_parallel_size: 4
         moe_expert_parallel_size: 4
@@ -457,8 +481,10 @@ override_1p5d_tep4_b4_eplb0_mtp0:
 
 override_7p1d_dep32_b16_eplb0_mtp0:
   roles:
-    prefill: {}
+    prefill:
+      nodes: 4
     decode:
+      nodes: 8
       args:
         tensor_parallel_size: 32
         moe_expert_parallel_size: 32
@@ -480,8 +506,10 @@ override_7p1d_dep32_b16_eplb0_mtp0:
 
 override_9p1d_dep16_b64_eplb0_mtp0:
   roles:
-    prefill: {}
+    prefill:
+      nodes: 5
     decode:
+      nodes: 4
       args:
         tensor_parallel_size: 16
         moe_expert_parallel_size: 16
@@ -509,8 +537,10 @@ override_9p1d_dep16_b64_eplb0_mtp0:
 
 override_11p3d_dep4_b256_eplb0_mtp0:
   roles:
-    prefill: {}
+    prefill:
+      nodes: 6
     decode:
+      nodes: 3
       args:
         tensor_parallel_size: 4
         moe_expert_parallel_size: 4
@@ -562,8 +592,10 @@ override_11p3d_dep4_b256_eplb0_mtp0:
 
 override_14p1d_dep16_b128_eplb0_mtp0:
   roles:
-    prefill: {}
+    prefill:
+      nodes: 7
     decode:
+      nodes: 4
       args:
         tensor_parallel_size: 16
         moe_expert_parallel_size: 16

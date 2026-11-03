@@ -30,6 +30,7 @@ base:
   engine: sglang
   roles:
     prefill:
+      nodes: 1
       env:
         TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
         PYTHONUNBUFFERED: '1'
@@ -168,6 +169,7 @@ override_1p4d_tp4_c48:
       args:
         max-prefill-tokens: 16384
     decode:
+      nodes: 2
       env:
         SGLANG_DISAGGREGATION_ENGINE_INIT_TIMEOUT: '3600'
       args:
@@ -190,6 +192,7 @@ override_1p1d_c64:
       args:
         max-prefill-tokens: 8192
     decode:
+      nodes: 1
       env:
         SGLANG_DISAGGREGATION_ENGINE_INIT_TIMEOUT: '1800'
       args:

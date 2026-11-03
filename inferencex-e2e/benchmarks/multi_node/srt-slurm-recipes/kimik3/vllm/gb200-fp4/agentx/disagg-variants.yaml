@@ -65,6 +65,7 @@ base:
     dp_launch_mode: per_node
   roles:
     prefill:
+      nodes: 4
       env: &kimi_env
         VLLM_USE_DIRECT_DCP_A2A: "1"
         VLLM_USE_DIRECT_DCP_Q_GATHER: "1"
@@ -123,6 +124,7 @@ base:
       kv_events: true
     decode:
 
+      nodes: 4
       env:
         <<: *kimi_env
       args:

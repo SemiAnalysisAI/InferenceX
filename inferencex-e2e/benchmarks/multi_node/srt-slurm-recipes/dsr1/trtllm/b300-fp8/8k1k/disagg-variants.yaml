@@ -104,6 +104,7 @@ base:
 override_1p2d_tp8_b16_mtp3_c40:
   roles:
     prefill:
+      nodes: 1
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -111,6 +112,7 @@ override_1p2d_tp8_b16_mtp3_c40:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
+      nodes: 2
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -127,6 +129,7 @@ override_1p2d_tp8_b16_mtp3_c40:
 override_1p4d_tp8_b1_mtp3_c8:
   roles:
     prefill:
+      nodes: 1
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -134,6 +137,7 @@ override_1p4d_tp8_b1_mtp3_c8:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
+      nodes: 4
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -150,6 +154,7 @@ override_1p4d_tp8_b1_mtp3_c8:
 override_1p4d_tp8_b4_mtp3_c20:
   roles:
     prefill:
+      nodes: 1
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -157,6 +162,7 @@ override_1p4d_tp8_b4_mtp3_c20:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
+      nodes: 4
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -173,6 +179,7 @@ override_1p4d_tp8_b4_mtp3_c20:
 override_1p1d_dp8_b8_mtp3_c72:
   roles:
     prefill:
+      nodes: 1
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -180,6 +187,7 @@ override_1p1d_dp8_b8_mtp3_c72:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
+      nodes: 1
       args:
         cuda_graph_config:
           max_batch_size: 8
@@ -194,6 +202,7 @@ override_1p1d_dp8_b8_mtp3_c72:
 override_2p1d_dp8_b16_mtp3_c144:
   roles:
     prefill:
+      nodes: 1
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -201,6 +210,7 @@ override_2p1d_dp8_b16_mtp3_c144:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
+      nodes: 1
       args:
         cuda_graph_config:
           max_batch_size: 16
@@ -215,6 +225,7 @@ override_2p1d_dp8_b16_mtp3_c144:
 override_4p1d_dp8_b64_mtp2_c512:
   roles:
     prefill:
+      nodes: 2
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -222,6 +233,7 @@ override_4p1d_dp8_b64_mtp2_c512:
           decoding_type: MTP
           num_nextn_predict_layers: 2
     decode:
+      nodes: 1
       args:
         cuda_graph_config:
           max_batch_size: 64
@@ -236,9 +248,11 @@ override_4p1d_dp8_b64_mtp2_c512:
 override_1p4d_tp8_b16_mtp0_c64:
   roles:
     prefill:
+      nodes: 1
       env:
         TRTLLM_ENABLE_PDL: "1"
     decode:
+      nodes: 4
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -252,9 +266,11 @@ override_1p4d_tp8_b16_mtp0_c64:
 override_1p8d_tp8_b1_mtp0_c16:
   roles:
     prefill:
+      nodes: 1
       env:
         TRTLLM_ENABLE_PDL: "1"
     decode:
+      nodes: 8
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -268,9 +284,11 @@ override_1p8d_tp8_b1_mtp0_c16:
 override_2p1d_dp8_b32_mtp0_c256:
   roles:
     prefill:
+      nodes: 1
       env:
         TRTLLM_ENABLE_PDL: "1"
     decode:
+      nodes: 1
       args:
         cuda_graph_config:
           max_batch_size: 32
@@ -282,9 +300,11 @@ override_2p1d_dp8_b32_mtp0_c256:
 override_3p1d_dp8_b64_mtp0_c512:
   roles:
     prefill:
+      nodes: 2
       env:
         TRTLLM_ENABLE_PDL: "1"
     decode:
+      nodes: 1
       args:
         cuda_graph_config:
           max_batch_size: 64
@@ -296,9 +316,11 @@ override_3p1d_dp8_b64_mtp0_c512:
 override_3p5d_tp8_b64_mtp0_c256:
   roles:
     prefill:
+      nodes: 2
       env:
         TRTLLM_ENABLE_PDL: "1"
     decode:
+      nodes: 5
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -311,8 +333,10 @@ override_3p5d_tp8_b64_mtp0_c256:
 
 override_5p1d_dp8_b128_mtp0_c1075:
   roles:
-    prefill: {}
+    prefill:
+      nodes: 3
     decode:
+      nodes: 1
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -326,9 +350,11 @@ override_5p1d_dp8_b128_mtp0_c1075:
 override_7p1d_dep8_b384_mtp0_c3072:
   roles:
     prefill:
+      nodes: 4
       env:
         TRTLLM_ENABLE_PDL: "1"
     decode:
+      nodes: 1
       args:
         cuda_graph_config:
           max_batch_size: 384

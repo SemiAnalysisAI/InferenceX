@@ -20,6 +20,7 @@ resources:
 engine: sglang
 roles:
   prefill:
+    nodes: 6
     env:
       TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
       PYTHONUNBUFFERED: "1"
@@ -77,6 +78,7 @@ roles:
       ep-size: 1
 
   decode:
+    nodes: 12
     env:
       TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
       PYTHONUNBUFFERED: "1"

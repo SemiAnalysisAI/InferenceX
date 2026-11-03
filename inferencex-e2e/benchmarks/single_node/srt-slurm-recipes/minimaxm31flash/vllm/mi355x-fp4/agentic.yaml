@@ -30,6 +30,7 @@ base:
     max_attempts: 720
   roles:
     agg:
+      nodes: 1
       args:
         served-model-name: amd/MiniMax-M3.1-Flash-Quark-MXFP4
         tensor-parallel-size: 4

@@ -94,6 +94,7 @@ override_tp4_c1:
   name: glm5.2-fp4-gb200-dynamo-sglang-agentx-agg-tp4-c1-mtp5
   roles:
     agg:
+      nodes: 1
       args:
         tensor-parallel-size: 4
         bf16-gemm-backend: cutedsl
@@ -109,6 +110,7 @@ override_tp8_c1:
   name: glm5.2-fp4-gb200-dynamo-sglang-agentx-agg-tp8-c1-mtp5
   roles:
     agg:
+      nodes: 2
       env:
         MC_TE_METRIC: 'true'
         MC_FORCE_MNNVL: '1'

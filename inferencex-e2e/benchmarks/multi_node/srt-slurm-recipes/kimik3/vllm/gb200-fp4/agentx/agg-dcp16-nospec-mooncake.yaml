@@ -68,6 +68,7 @@ engine:
 roles:
   agg:
 
+    nodes: 4
     env:
       VLLM_ALLREDUCE_USE_FLASHINFER: "1"
       VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: "1"

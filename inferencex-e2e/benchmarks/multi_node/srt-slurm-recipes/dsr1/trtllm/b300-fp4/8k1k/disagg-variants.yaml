@@ -92,11 +92,13 @@ base:
 override_10p1d_dep8_b256_mtp1:
   roles:
     prefill:
+      nodes: 3
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 1
     decode:
+      nodes: 1
       args:
         tensor_parallel_size: 8
         moe_expert_parallel_size: 8
@@ -126,11 +128,13 @@ override_10p1d_dep8_b256_mtp1:
 override_1p4d_tep4_b8_mtp3:
   roles:
     prefill:
+      nodes: 1
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
+      nodes: 2
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -159,11 +163,13 @@ override_1p4d_tep4_b8_mtp3:
 override_1p4d_tep8_b1_mtp3:
   roles:
     prefill:
+      nodes: 1
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
+      nodes: 4
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -188,11 +194,13 @@ override_1p4d_tep8_b1_mtp3:
 override_1p4d_tep8_b4_mtp3:
   roles:
     prefill:
+      nodes: 1
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
+      nodes: 4
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -220,11 +228,13 @@ override_1p4d_tep8_b4_mtp3:
 override_3p1d_dep8_b16_mtp3:
   roles:
     prefill:
+      nodes: 1
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
+      nodes: 1
       args:
         tensor_parallel_size: 8
         moe_expert_parallel_size: 8
@@ -250,11 +260,13 @@ override_3p1d_dep8_b16_mtp3:
 override_9p1d_dep8_b128_mtp1:
   roles:
     prefill:
+      nodes: 3
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 1
     decode:
+      nodes: 1
       args:
         tensor_parallel_size: 8
         moe_expert_parallel_size: 8
@@ -282,8 +294,10 @@ override_9p1d_dep8_b128_mtp1:
 
 override_1p3d_tep4_b32_mtp0:
   roles:
-    prefill: {}
+    prefill:
+      nodes: 1
     decode:
+      nodes: 2
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -309,8 +323,10 @@ override_1p3d_tep4_b32_mtp0:
 
 override_1p3d_tep8_b16_mtp0:
   roles:
-    prefill: {}
+    prefill:
+      nodes: 1
     decode:
+      nodes: 3
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -335,8 +351,10 @@ override_1p3d_tep8_b16_mtp0:
 
 override_1p3d_tep8_b1_mtp0:
   roles:
-    prefill: {}
+    prefill:
+      nodes: 1
     decode:
+      nodes: 3
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -370,8 +388,10 @@ override_1p3d_tep8_b1_mtp0:
 
 override_1p4d_tep4_b2_mtp0:
   roles:
-    prefill: {}
+    prefill:
+      nodes: 1
     decode:
+      nodes: 2
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -393,8 +413,10 @@ override_1p4d_tep4_b2_mtp0:
 
 override_5p2d_dep8_b32_mtp0:
   roles:
-    prefill: {}
+    prefill:
+      nodes: 2
     decode:
+      nodes: 2
       args:
         tensor_parallel_size: 8
         moe_expert_parallel_size: 8
@@ -417,8 +439,10 @@ override_5p2d_dep8_b32_mtp0:
 
 override_6p1d_dep8_b128_mtp0:
   roles:
-    prefill: {}
+    prefill:
+      nodes: 2
     decode:
+      nodes: 1
       args:
         tensor_parallel_size: 8
         moe_expert_parallel_size: 8
@@ -449,8 +473,10 @@ override_6p1d_dep8_b128_mtp0:
 
 override_8p1d_dep8_b256_mtp0:
   roles:
-    prefill: {}
+    prefill:
+      nodes: 2
     decode:
+      nodes: 1
       args:
         tensor_parallel_size: 8
         moe_expert_parallel_size: 8

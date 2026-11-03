@@ -17,6 +17,7 @@ base:
   engine: sglang
   roles:
     agg:
+      nodes: 1
       args:
         served-model-name: nvidia/GLM-5.3-NVFP4
         trust-remote-code: true

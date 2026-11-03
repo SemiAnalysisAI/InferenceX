@@ -29,6 +29,7 @@ base:
 
   roles:
     agg:
+      nodes: 4
       env:
         MC_GID_INDEX: "@fabric.rdma-gid-index"
         MC_STORE_MEMCPY: "1"

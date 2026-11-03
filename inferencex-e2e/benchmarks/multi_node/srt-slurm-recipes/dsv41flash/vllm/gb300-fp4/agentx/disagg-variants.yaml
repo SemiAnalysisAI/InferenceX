@@ -127,6 +127,7 @@ base:
         prefix-cache-retention-interval: 32768
         numa-bind: true
     decode:
+      nodes: 4
       env:
         HF_HUB_CACHE: "/hf_hub_cache"
         HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
@@ -192,8 +193,10 @@ base:
 override_16p1d_dep2_dep32_c10888:
   name: "dsv41flash-fp4-gb300-dynamo-vllm-agentx-disagg-16p1d-dep2-dep32-c10888"
   roles:
-    prefill: {}
+    prefill:
+      nodes: 8
     decode:
+      nodes: 8
       env:
         VLLM_MAX_ASYNC_KV_ADMITS_PER_STEP: "5"
       args:
@@ -206,8 +209,10 @@ override_16p1d_dep2_dep32_c10888:
 override_6p1d_dep2_dep32_c3018:
   name: "dsv41flash-fp4-gb300-dynamo-vllm-agentx-disagg-6p1d-dep2-dep32-c3018"
   roles:
-    prefill: {}
+    prefill:
+      nodes: 3
     decode:
+      nodes: 8
       env:
         VLLM_MAX_ASYNC_KV_ADMITS_PER_STEP: "2"
       args:
@@ -221,6 +226,7 @@ override_9p1d_dep2_dep16_c7480:
   name: "dsv41flash-fp4-gb300-dynamo-vllm-agentx-disagg-9p1d-dep2-dep16-c7480"
   roles:
     prefill:
+      nodes: 5
       args:
         kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_connector_module_path":"vllm.distributed.kv_transfer.kv_connector.v1.nixl.push_as_nixl","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["UCX"],"enforce_handshake_compat":false,"kv_lease_duration":120}},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":75161927680,"lazy_offload":true}}]}}'
     decode:

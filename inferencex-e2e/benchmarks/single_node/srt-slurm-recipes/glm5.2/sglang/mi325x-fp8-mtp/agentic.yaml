@@ -19,6 +19,7 @@ base:
     max_attempts: 360
   roles:
     agg:
+      nodes: 1
       args:
         served-model-name: zai-org/GLM-5.2-FP8
         trust-remote-code: true

@@ -60,6 +60,7 @@ base:
   engine: sglang
   roles:
     prefill:
+      nodes: 3
       env:
         PYTHONUNBUFFERED: "1"
         PYTHONNOUSERSITE: "1"
@@ -119,6 +120,7 @@ base:
         enable-cache-report: true
       kv_events: true
     decode:
+      nodes: 2
       env:
         PYTHONUNBUFFERED: "1"
         PYTHONNOUSERSITE: "1"
@@ -183,11 +185,13 @@ base:
 override_4p_dep2_dep8:
   name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-4p-dep2-dep8
   roles:
-    prefill: {}
+    prefill:
+      nodes: 2
 override_8p_dep2_dep8:
   name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-8p-dep2-dep8
   roles:
-    prefill: {}
+    prefill:
+      nodes: 4
 override_6p_dep2_dep8:
   name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-6p-dep2-dep8
 
@@ -195,6 +199,7 @@ override_6p_dep2_dep16:
   name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-6p-dep2-dep16
   roles:
     decode:
+      nodes: 4
       args:
         tensor-parallel-size: 16
         data-parallel-size: 16

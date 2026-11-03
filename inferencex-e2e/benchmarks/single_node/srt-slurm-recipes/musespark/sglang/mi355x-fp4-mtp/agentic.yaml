@@ -14,6 +14,7 @@ base:
   engine: sglang
   roles:
     agg:
+      nodes: 1
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 8

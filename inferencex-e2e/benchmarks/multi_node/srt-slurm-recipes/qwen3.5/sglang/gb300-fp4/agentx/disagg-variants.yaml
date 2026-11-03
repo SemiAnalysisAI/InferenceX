@@ -42,6 +42,7 @@ base:
   engine: sglang
   roles:
     prefill:
+      nodes: 1
       env:
         FLASHINFER_DISABLE_VERSION_CHECK: '1'
         FLASHINFER_WORKSPACE_BASE: /configs/flashinfer-cache
@@ -102,6 +103,7 @@ base:
         hicache-mem-layout: page_first_direct
         hicache-ratio: 0.9
     decode:
+      nodes: 1
       env:
         FLASHINFER_DISABLE_VERSION_CHECK: '1'
         FLASHINFER_WORKSPACE_BASE: /configs/flashinfer-cache

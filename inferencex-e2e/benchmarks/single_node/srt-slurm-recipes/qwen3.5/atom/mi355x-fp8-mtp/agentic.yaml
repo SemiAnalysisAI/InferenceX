@@ -15,6 +15,7 @@ base:
   engine: atom
   roles:
     agg:
+      nodes: 1
       args:
         served-model-name: Qwen/Qwen3.5-397B-A17B-FP8
         # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.

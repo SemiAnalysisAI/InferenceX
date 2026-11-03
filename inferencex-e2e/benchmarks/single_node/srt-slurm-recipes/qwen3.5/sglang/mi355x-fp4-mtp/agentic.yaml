@@ -14,6 +14,7 @@ base:
   engine: sglang
   roles:
     agg:
+      nodes: 1
       args:
         served-model-name: amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2
         tokenizer-path: amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2

@@ -29,6 +29,7 @@ base:
 
   roles:
     agg:
+      nodes: 2
       env:
         VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: "1"
         MC_GID_INDEX: "@fabric.rdma-gid-index"

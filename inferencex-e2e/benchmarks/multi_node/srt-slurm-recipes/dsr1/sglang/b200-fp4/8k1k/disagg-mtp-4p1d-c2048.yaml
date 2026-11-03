@@ -12,6 +12,7 @@ dynamo:
 engine: sglang
 roles:
   prefill:
+    nodes: 2
     env: &env
       TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
       PYTHONUNBUFFERED: '1'
@@ -61,6 +62,7 @@ roles:
       stream-interval: 100
       watchdog-timeout: 1000000
   decode:
+    nodes: 1
     env: *env
     args:
       served-model-name: deepseek-ai/DeepSeek-R1

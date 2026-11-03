@@ -36,6 +36,7 @@ base:
           enable_offload: false
   roles:
     agg:
+      nodes: 1
       args:
         served-model-name: moonshotai/Kimi-K3
         tensor-parallel-size: 8
