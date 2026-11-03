@@ -7,8 +7,8 @@
 #   - ROCm/aiter#5992: FlyDSL causal conv1d prefill and GDN decode/verify
 #   - sgl-project/sglang#41879: opt-in SGLANG_AITER_GDN_CONV/_DECODE hooks
 #   - fused Triton QK Gemma-RMSNorm + M-RoPE + gate on HIP
-#   - ROCm/aiter#5993 FlyDSL hc_mix gates and the single-kernel hc_combine on ROCm
-#     (SGLANG_HC_COMBINE_SPLIT=0)
+#   - ROCm/aiter#5993: FlyDSL hc_mix kernels, used by the image's sglang#41880
+#     once they are present
 #   - opt-in FlyDSL paged decode for QSA attention (SGLANG_AITER_QSA_PA_DECODE) on
 #     AITER mainline pa_decode
 #   - fused FlyDSL QSA sparse decode that reads KV from the pool
@@ -65,7 +65,6 @@ apply /sgl-workspace/aiter 04-aiter-flydsl-gdn-decode-verify-perf.patch
 apply /sgl-workspace/aiter 05-aiter-qwen38-tuned-gemm-tables.patch
 apply /sgl-workspace/sglang 01-sglang-aiter-gdn-conv-decode-hooks.patch
 apply /sgl-workspace/sglang 02-sglang-fused-qk-rope-gate-hip.patch
-apply /sgl-workspace/sglang 03-sglang-hc-mix-env-gates.patch
 apply /sgl-workspace/sglang 04-sglang-qsa-pa-decode.patch
 apply /sgl-workspace/sglang 05-sglang-aiter-gdn-prefill.patch
 apply /sgl-workspace/sglang 06-sglang-qsa-padded-group-mtp-shared-expert.patch

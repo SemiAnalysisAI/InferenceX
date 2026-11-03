@@ -1,8 +1,8 @@
 diff --git a/python/sglang/srt/environ.py b/python/sglang/srt/environ.py
-index 4c0cf68f80..67a3c3669b 100644
+index a750e35822..51103bfb24 100644
 --- a/python/sglang/srt/environ.py
 +++ b/python/sglang/srt/environ.py
-@@ -1062,6 +1062,12 @@ class Envs:
+@@ -1052,6 +1052,12 @@ class Envs:
      # "fused" instead runs the whole chunked prefill as one FlyDSL kernel
      # (state kept on chip, l2norm and track snapshot in-kernel).
      SGLANG_AITER_GDN_PREFILL_H = EnvStr("triton")
@@ -15,7 +15,7 @@ index 4c0cf68f80..67a3c3669b 100644
      SGLANG_USE_AITER_AG = EnvBool(True)
      # The gfx950 TP4 JIT quick all-reduce (quick_all_reduce_hip) runs an INT4 request below this
      # many MiB in INT8, which is as fast at decode sizes with about 1/16 of INT4's error; 0 runs
-@@ -1137,6 +1143,12 @@ class Envs:
+@@ -1127,6 +1133,12 @@ class Envs:
      # Set this to 1 to stop sglang from clearing an inherited
      # ROCPROFILER_REGISTER_LIBRARY.
      SGLANG_ROCM_KEEP_INHERITED_ROCPROFILER_REGISTER = EnvBool(False)

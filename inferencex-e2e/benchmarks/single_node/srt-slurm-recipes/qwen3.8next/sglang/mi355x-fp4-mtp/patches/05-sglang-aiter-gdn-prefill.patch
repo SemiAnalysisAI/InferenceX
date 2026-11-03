@@ -1,8 +1,8 @@
 diff --git a/python/sglang/srt/environ.py b/python/sglang/srt/environ.py
-index ad7c246418..8ec078ba9d 100644
+index e91062720f..468a0a6dbc 100644
 --- a/python/sglang/srt/environ.py
 +++ b/python/sglang/srt/environ.py
-@@ -1047,6 +1047,16 @@ class Envs:
+@@ -1037,6 +1037,16 @@ class Envs:
      # concurrency the grid is only num_seqs * num_kv_heads * splits CTAs, so a
      # larger value may be worth forcing.
      SGLANG_AITER_QSA_PA_DECODE_SPLITS = EnvInt(0)

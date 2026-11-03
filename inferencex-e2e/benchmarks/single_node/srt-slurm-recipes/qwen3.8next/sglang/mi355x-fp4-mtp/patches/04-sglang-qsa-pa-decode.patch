@@ -1,11 +1,11 @@
 diff --git a/python/sglang/srt/environ.py b/python/sglang/srt/environ.py
-index 81235d1e01..ad7c246418 100644
+index 24eb383d96..e91062720f 100644
 --- a/python/sglang/srt/environ.py
 +++ b/python/sglang/srt/environ.py
-@@ -1032,6 +1032,21 @@ class Envs:
-     # one CTA streams well inside a single launch. Default ON elsewhere, where
-     # launches are cheaper and the split was tuned.
-     SGLANG_HC_COMBINE_SPLIT = EnvBool(lambda: not _default_hip())
+@@ -1022,6 +1022,21 @@ class Envs:
+     # insertion. Requires an AITER build with the fp8_e4m3_unit cache contract.
+     # Enabled by default for supported configurations; set to 0 to disable.
+     SGLANG_M3_USE_AITER_FUSED_QKNORM = EnvBool(True)
 +    # Serve the post-gather QSA attention with AITER's FlyDSL BF16 paged decode
 +    # instead of the CK varlen fallback. CK runs a prefill-shaped kernel here: its
 +    # TileFmhaShape puts only seqlen_q on the MFMA M axis, so a length-one decode
