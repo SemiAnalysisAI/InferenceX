@@ -22,13 +22,11 @@ from infx.matrix.generate import (
     generate_test_config_sweep,
     mark_all_eval_entries,
     mark_eval_entries,
-    multinode_node_count,
     multinode_worker_pair,
     seq_len_to_str,
     trim_conc,
 )
 from infx.matrix.validation import validate_runner_config
-from infx.launch.resources import WorkerResources
 
 
 
@@ -47,7 +45,8 @@ def fixture_recipes(configs, project):
                     point["srt-recipe"] = f"{key}.yaml"
                     path = project / "benchmarks/multi_node/srt-slurm-recipes/fixture" / point["srt-recipe"]
                     path.parent.mkdir(parents=True, exist_ok=True)
-                    roles = {"prefill": {}, "decode": {}} if config.get("disagg") else {"agg": {}}
+                    roles = ({"prefill": {"nodes": 8}, "decode": {"nodes": 8}}
+                             if config.get("disagg") else {"agg": {"nodes": 8}})
                     path.write_text(yaml.safe_dump({"schema": 2, "roles": roles}))
     return configured
 
@@ -59,33 +58,16 @@ def generate_matrix(generate, args, configs, runners, *, root=None):
         return generate(args, fixture_recipes(configs, project), runners, root=project)
 
 
-def test_aggregated_multinode_node_count_comes_from_worker_resources(tmp_path, multinode_recipe):
-    entry = {
-        "runner": "cluster:test",
-        "disagg": False,
-        "prefill": {"num-worker": 1, "gpus-per-worker": 16},
-        "decode": {"num-worker": 0, "gpus-per-worker": 16},
-    }
-    inventory = {"clusters": {"test": {"gpus-per-node": 8}}}
-
-    entry["srt-recipe"] = multinode_recipe({"schema": 2, "roles": {"agg": {}}})
-    add_multinode_node_count(entry, inventory, root=tmp_path)
-
-    assert entry["node-count"] == 2
+def test_multinode_node_count_reads_the_recipe_reservation(tmp_path, multinode_recipe):
+    entry = {"srt-recipe": multinode_recipe({"schema": 2, "roles": {"agg": {"nodes": 3}}})}
+    add_multinode_node_count(entry, root=tmp_path)
+    assert entry["node-count"] == 3
 
 
-
-def test_disaggregated_multinode_node_count_requires_hardware_inventory(tmp_path, multinode_recipe):
-    entry = {
-        "runner": "cluster:unknown",
-        "disagg": True,
-        "prefill": {"num-worker": 1, "gpus-per-worker": 8, "tp": 8},
-        "decode": {"num-worker": 1, "gpus-per-worker": 8, "tp": 8},
-    }
-
-    entry["srt-recipe"] = multinode_recipe({"schema": 2, "roles": {"prefill": {}, "decode": {}}})
-    with pytest.raises(ValueError, match="Cannot resolve gpus-per-node"):
-        add_multinode_node_count(entry, {}, root=tmp_path)
+@pytest.mark.parametrize("root, recipe", [(None, "recipe.yaml"), (Path(), None)])
+def test_multinode_node_count_requires_a_recipe_and_project_root(root, recipe):
+    with pytest.raises(ValueError, match="requires an SRT recipe"):
+        add_multinode_node_count({"srt-recipe": recipe}, root)
 
 
 def test_aggregated_worker_expands_to_legacy_matrix_pair():
@@ -136,28 +118,25 @@ def multinode_recipe(tmp_path):
     return write
 
 
-@pytest.mark.parametrize("roles, workers, expected", [
-    ({"agg": {}}, {"agg": WorkerResources(6, 4)}, 3),
-    ({"prefill": {}, "decode": {}},
-     {"prefill": WorkerResources(2, 8), "decode": WorkerResources(4, 8)}, 6),
-    ({"prefill": {}, "decode": {"nodes": "colocate"}},
-     {"prefill": WorkerResources(2, 4), "decode": WorkerResources(2, 4)}, 2),
-    ({"prefill": {}, "decode": {"nodes": None}},
-     {"prefill": WorkerResources(1, 8), "decode": WorkerResources(1, 8)}, 2),
+@pytest.mark.parametrize("roles, expected", [
+    ({"agg": {"nodes": 3}}, 3),
+    ({"prefill": {"nodes": 2}, "decode": {"nodes": 4}}, 6),
+    ({"prefill": {"nodes": 2}, "decode": {"nodes": "colocate"}}, 2),
 ])
-def test_multinode_node_count_derives_roles_from_resource_requests(
-    tmp_path, multinode_recipe, roles, workers, expected
+def test_recipe_node_count_reads_aggregate_disaggregate_and_colocated_nodes(
+    tmp_path, multinode_recipe, roles, expected
 ):
-    srt_recipe = multinode_recipe({"schema": 2, "roles": roles})
-    assert generate_sweep_configs.recipe_node_count(tmp_path, srt_recipe, workers, 8) == expected
+    reference = multinode_recipe({"schema": 2, "roles": roles})
+    assert generate_sweep_configs.recipe_node_count(tmp_path, reference) == expected
 
 
-def test_multinode_node_count_rejects_invalid_role_mapping(tmp_path, multinode_recipe):
-    srt_recipe = multinode_recipe({"schema": 2, "roles": {"agg": None}})
+@pytest.mark.parametrize("roles", [None, {}, {"agg": None}, {"agg": {}},
+                                   {"agg": {"nodes": 0}}, {"agg": {"nodes": True}},
+                                   {"agg": {"nodes": "colocate"}}])
+def test_recipe_node_count_rejects_missing_or_invalid_reservations(tmp_path, multinode_recipe, roles):
+    reference = multinode_recipe({"schema": 2, "roles": roles})
     with pytest.raises(ValueError, match="[Rr]ole"):
-        generate_sweep_configs.recipe_node_count(
-            tmp_path, srt_recipe, {"agg": WorkerResources(1, 8)}, 8
-        )
+        generate_sweep_configs.recipe_node_count(tmp_path, reference)
 
 
 @pytest.mark.parametrize("sections", [
@@ -173,7 +152,7 @@ def test_recipe_node_count_treats_null_sections_as_absent(tmp_path, multinode_re
         {"schema": 2, "roles": {"prefill": {"nodes": 1}, "decode": {"nodes": 2}}, **sections}
     )
     assert generate.recipe_node_count(
-        tmp_path, srt_recipe, {"prefill": WorkerResources(1, 8), "decode": WorkerResources(2, 8)}, 8
+        tmp_path, srt_recipe
     ) == 3
 
 
@@ -181,56 +160,48 @@ def test_recipe_node_count_rejects_an_empty_recipe(tmp_path, multinode_recipe):
     import infx.matrix.generate as generate
     srt_recipe = multinode_recipe(None)
     with pytest.raises(ValueError, match="must declare schema: 2: .*test.yaml"):
-        generate.recipe_node_count(tmp_path, srt_recipe, {"agg": WorkerResources(1, 8)}, 8)
+        generate.recipe_node_count(tmp_path, srt_recipe)
 
 
 @pytest.mark.parametrize("selector, expected", [
     ("base", 2),
-    ("override_spread", 4),
+    ("override_wide", 4),
     ("override_colocated", 1),
     ("zip_override_sweep[0]", 2),
     ("zip_override_sweep[1]", 4),
 ])
 def test_recipe_node_count_resolves_override_selectors(tmp_path, multinode_recipe, selector, expected):
-    srt_recipe = multinode_recipe({
+    reference = multinode_recipe({
         "schema": 2,
-        "base": {"roles": {"prefill": {}, "decode": {}}},
-        "override_spread": {"resources": {"spread_workers": True}},
+        "base": {"roles": {"prefill": {"nodes": 1}, "decode": {"nodes": 1}}},
+        "override_wide": {"roles": {"decode": {"nodes": 3}}},
         "override_colocated": {"roles": {"decode": {"nodes": "colocate"}}},
-        "zip_override_sweep": {"resources": {"spread_workers": [False, True]}},
+        "zip_override_sweep": {"roles": {"decode": {"nodes": [1, 3]}}},
     }, "variants.yaml")
-    assert generate_sweep_configs.recipe_node_count(
-        tmp_path, f"{srt_recipe}:{selector}",
-        {"prefill": WorkerResources(3, 2), "decode": WorkerResources(1, 2)}, 8,
-    ) == expected
-
-
+    assert generate_sweep_configs.recipe_node_count(tmp_path, f"{reference}:{selector}") == expected
 
 
 def test_recipe_schema_can_be_declared_in_bundle_base(tmp_path, multinode_recipe):
     reference = multinode_recipe({
-        "base": {"schema": 2, "roles": {"agg": {}}},
+        "base": {"schema": 2, "roles": {"agg": {"nodes": 2}}},
         "override_packed": {},
     })
-    assert generate_sweep_configs.recipe_node_count(
-        tmp_path, f"{reference}:override_packed", {"agg": WorkerResources(3, 4)}, 8
-    ) == 2
+    assert generate_sweep_configs.recipe_node_count(tmp_path, f"{reference}:override_packed") == 2
 
 
-@pytest.mark.parametrize("spread", [False, True])
-def test_unselected_recipe_variants_must_agree_on_node_count(tmp_path, multinode_recipe, spread):
+@pytest.mark.parametrize("other_nodes", [2, 3])
+def test_unselected_recipe_variants_must_agree_on_node_count(tmp_path, multinode_recipe, other_nodes):
     reference = multinode_recipe({
         "schema": 2,
-        "base": {"roles": {"agg": {}}},
-        "override_packed": {},
-        "override_other": {"resources": {"spread_workers": spread}},
+        "base": {"roles": {"agg": {"nodes": 2}}},
+        "override_base": {},
+        "override_other": {"roles": {"agg": {"nodes": other_nodes}}},
     })
-    workers = {"agg": WorkerResources(3, 4)}
-    if spread:
+    if other_nodes != 2:
         with pytest.raises(ValueError, match="variants require different node counts"):
-            generate_sweep_configs.recipe_node_count(tmp_path, reference, workers, 8)
+            generate_sweep_configs.recipe_node_count(tmp_path, reference)
     else:
-        assert generate_sweep_configs.recipe_node_count(tmp_path, reference, workers, 8) == 2
+        assert generate_sweep_configs.recipe_node_count(tmp_path, reference) == 2
 
 
 @pytest.mark.parametrize("auxiliary, expected", [
@@ -262,39 +233,17 @@ def test_recipe_node_count_includes_auxiliary_nodes(tmp_path, multinode_recipe, 
 
     assert generate.recipe_node_count(
         tmp_path, f"{srt_recipe}:override_auxiliary",
-        {"prefill": WorkerResources(1, 8), "decode": WorkerResources(2, 8)}, 8,
     ) == expected
 
 
-def test_derived_node_count_includes_auxiliary_nodes(tmp_path, multinode_recipe):
+def test_scheduler_node_count_includes_auxiliary_nodes(tmp_path, multinode_recipe):
     reference = multinode_recipe({
-        "schema": 2, "roles": {"agg": {}},
+        "schema": 2, "roles": {"agg": {"nodes": 2}},
         "services": [{"type": "custom", "nodes": 1}],
     })
-    entry = {
-        "runner": "cluster:test", "disagg": False, "srt-recipe": reference,
-        "prefill": {"num-worker": 1, "gpus-per-worker": 16},
-        "decode": {"num-worker": 0, "gpus-per-worker": 16},
-    }
-    inventory = {"clusters": {"test": {"gpus-per-node": 8}}}
-    add_multinode_node_count(entry, inventory, tmp_path)
+    entry = {"srt-recipe": reference}
+    add_multinode_node_count(entry, tmp_path)
     assert entry["node-count"] == 3
-
-
-def test_multinode_node_count_uses_role_gpu_footprints(tmp_path, multinode_recipe, sample_runner_config):
-    prefill = {"num-worker": 3, "gpus-per-worker": 2, "tp": 2, "pp": 1, "pcp-size": 1}
-    decode = {"num-worker": 2, "gpus-per-worker": 8, "tp": 8, "pp": 1, "pcp-size": 1}
-
-    assert multinode_node_count(
-        prefill, decode, "cluster:b300-nv", sample_runner_config,
-        multinode_recipe({"schema": 2, "roles": {"prefill": {}, "decode": {}}}), tmp_path
-    ) == 3
-
-
-def test_multinode_node_count_requires_a_recipe():
-    worker = {"num-worker": 1, "gpus-per-worker": 8}
-    with pytest.raises(ValueError, match="requires an SRT recipe"):
-        multinode_node_count(worker, worker, "cluster:test", {}, None, None)
 
 
 def cluster_record(gpus_per_node, **facts):
@@ -308,34 +257,13 @@ def cluster_record(gpus_per_node, **facts):
     }
 
 
-@pytest.mark.parametrize(("colocated", "expected_nodes"), [(False, 2), (True, 1)])
-def test_multinode_node_count_uses_master_resources_and_recipe_placement(
-    tmp_path, multinode_recipe, colocated, expected_nodes
-):
-    roles = {"prefill": {}, "decode": {"nodes": "colocate"} if colocated else {}}
-    srt_recipe = multinode_recipe({"schema": 2, "roles": roles})
-    prefill = {"num-worker": 1, "gpus-per-worker": 4, "tp": 1}
-    decode = {"num-worker": 1, "gpus-per-worker": 4, "tp": 2}
-    inventory = {"clusters": {"test": cluster_record(8)}}
-    assert multinode_node_count(
-        prefill, decode, "cluster:test", inventory, srt_recipe, tmp_path
-    ) == expected_nodes
-
-
-def test_recipe_node_count_requires_the_physical_cluster_inventory(tmp_path, multinode_recipe):
-    srt_recipe = multinode_recipe({"schema": 2, "roles": {"prefill": {}, "decode": {}}})
-    worker = {"num-worker": 1, "gpus-per-worker": 8}
-    with pytest.raises(ValueError, match="Cannot resolve gpus-per-node"):
-        multinode_node_count(worker, worker, "unknown", {}, srt_recipe, tmp_path)
-
-
 def test_multinode_rows_resolve_recipes_and_count_nodes_from_them(
     tmp_path, multinode_recipe, sample_multinode_config, sample_runner_config,
 ):
     multinode_recipe({
         "schema": 2,
-        "base": {"roles": {"prefill": {}, "decode": {}}},
-        "override_wide": {"resources": {"spread_workers": True}},
+        "base": {"roles": {"prefill": {"nodes": 2}, "decode": {"nodes": 1}}},
+        "override_wide": {"roles": {"decode": {"nodes": 3}}},
     }, "dsr1/bundle.yaml")
     key, config = next(iter(sample_multinode_config.items()))
     config["srt-recipe-dir"] = "dsr1"
@@ -350,7 +278,7 @@ def test_multinode_rows_resolve_recipes_and_count_nodes_from_them(
 
     root = "benchmarks/multi_node/srt-slurm-recipes/dsr1"
     assert (row["srt-recipe"], row["eval-srt-recipe"], row["node-count"]) == (
-        f"{root}/bundle.yaml:override_wide", f"{root}/bundle.yaml:base", 7,
+        f"{root}/bundle.yaml:override_wide", f"{root}/bundle.yaml:base", 5,
     )
 
 
@@ -2198,7 +2126,7 @@ class TestCommandLine:
         recipe = project / "benchmarks/multi_node/srt-slurm-recipes/only-here/recipe.yaml"
         recipe.parent.mkdir(parents=True)
         recipe.write_text(yaml.safe_dump(
-            {"schema": 2, "roles": {"prefill": {}, "decode": {}}}
+            {"schema": 2, "roles": {"prefill": {"nodes": 2}, "decode": {"nodes": 1}}}
         ))
         key, config = next(iter(sample_multinode_config.items()))
         config["srt-recipe-dir"] = "only-here"
@@ -2223,7 +2151,7 @@ class TestCommandLine:
         assert result.returncode == 0, result.stderr
         [row] = json.loads(result.stdout)
         assert (row["srt-recipe"], row["node-count"]) == (
-            "benchmarks/multi_node/srt-slurm-recipes/only-here/recipe.yaml", 7,
+            "benchmarks/multi_node/srt-slurm-recipes/only-here/recipe.yaml", 3,
         )
 
     def test_all_evals_cli_marks_every_fixed_sequence_entry(
@@ -2902,7 +2830,6 @@ class TestAgenticGeneration:
         assert result[0]["decode"]["pp"] == 2
         assert result[0]["decode"]["dcp-size"] == 2
         assert result[0]["decode"]["pcp-size"] == 1
-        assert {entry["node-count"] for entry in result} == {10}
 
     def test_multinode_agentic_preserves_kv_offload_fields(self, sample_runner_config, generate_agentic_sweep):
         config = {
@@ -2937,37 +2864,6 @@ class TestAgenticGeneration:
         assert result[0]["kv-offload-backend"] == {"name": "hicache"}
         assert result[0]["exp-name"] == "dsv4_p1x8_d1x8_conc16_kvdram-hicache"
 
-    @pytest.mark.parametrize(("prefill_tp", "decode_tp"), [(12, 8), (8, 12)])
-    def test_multinode_agentic_uses_native_partial_multinode_allocation(
-        self, sample_runner_config, generate_agentic_sweep, prefill_tp, decode_tp
-    ):
-        config = {
-            "dsv4-agentic-hicache-misaligned": {
-                "image": "sglang-rocm",
-                "model": "deepseek-ai/DeepSeek-V4-Pro",
-                "model-prefix": "dsv4",
-                "precision": "fp4",
-                "framework": "sglang-disagg",
-                "runner": "cluster:mi355x-amds",
-                "multinode": True,
-                "disagg": True,
-                "kv-p2p-transfer": "mori",
-                "scenarios": {
-                    "agentic-coding": [{
-                        "search-space": [{
-                            "conc-list": [16],
-                            "kv-offloading": "dram",
-                            "kv-offload-backend": {"name": "hicache"},
-                            "prefill": {"num-worker": 1, "gpus-per-worker": prefill_tp, "tp": prefill_tp, "ep": 1, "dp-attn": False},
-                            "decode": {"num-worker": 1, "gpus-per-worker": decode_tp, "tp": decode_tp, "ep": 1, "dp-attn": False},
-                        }],
-                    }],
-                },
-            },
-        }
-
-        rows = generate_agentic_sweep(config, sample_runner_config)
-        assert [row["node-count"] for row in rows] == [3]
 
 class TestApplyNodeTypeDefaults:
 

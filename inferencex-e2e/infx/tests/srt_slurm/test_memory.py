@@ -11,6 +11,10 @@ sys.path.insert(0, str(ROOT / "utils/srt-slurm/src"))
 
 
 def recipe(roles, engine="sglang", **extra):
+    if isinstance(roles, dict):
+        for role in roles.values():
+            if isinstance(role, dict):
+                role.setdefault("nodes", 1)
     return {
         "schema": 2,
         "name": "memory-share",
@@ -23,10 +27,11 @@ def recipe(roles, engine="sglang", **extra):
     }
 
 
-def test_master_request_drives_topology_and_preserves_helpers():
+def test_master_request_preserves_reserved_nodes_and_helpers():
     item = recipe(
         {
             "agg": {
+                "nodes": 3,
                 "workers": 9,
                 "gpus": 8,
                 "srun_options": {"mem-per-cpu": "20M", "cpu-bind": "cores"},
@@ -39,7 +44,7 @@ def test_master_request_drives_topology_and_preserves_helpers():
     result = bind_memory(item, 8000, 8, {"agg": WorkerResources(1, 4)})
     assert result is item
     assert result["roles"]["agg"] == {
-        "workers": 1, "gpus": 4,
+        "nodes": 3, "workers": 1, "gpus": 4,
         "srun_options": {"mem": "4000M", "cpu-bind": "cores"},
     }
     assert result["srun_options"] == {"mem": "64M", "container-remap-root": ""}
@@ -67,7 +72,7 @@ def test_colocated_roles_have_independent_caps(engine):
 
 def test_colocated_roles_reserve_enough_nodes_for_both_roles():
     result = bind_memory(
-        recipe({"prefill": {}, "decode": {"nodes": "colocate"}}), 8000, 8,
+        recipe({"prefill": {"nodes": 2}, "decode": {"nodes": "colocate"}}), 8000, 8,
         {"prefill": WorkerResources(2, 4), "decode": WorkerResources(2, 4)},
     )
     assert result["roles"]["prefill"]["srun_options"]["mem"] == "4000M"
@@ -78,23 +83,23 @@ def test_colocated_roles_reserve_enough_nodes_for_both_roles():
 @pytest.mark.parametrize("engine", ["sglang", "trtllm"])
 def test_dep16_worker_gets_one_full_budget_on_each_hgx8_node(engine):
     result = bind_memory(
-        recipe({"agg": {}}, engine=engine), 8000, 8, {"agg": WorkerResources(1, 16)}
+        recipe({"agg": {"nodes": 2}}, engine=engine), 8000, 8, {"agg": WorkerResources(1, 16)}
     )
     assert result["roles"]["agg"] == {
-        "workers": 1, "gpus": 16, "srun_options": {"mem": "8000M"},
+        "nodes": 2, "workers": 1, "gpus": 16, "srun_options": {"mem": "8000M"},
     }
     assert result["benchmark"]["env"]["INFERENCEX_WORKER_MEMORY_MIB"] == "16000"
 
 
 def test_partial_multinode_worker_uses_native_local_gpu_share():
-    result = bind_memory(recipe({"agg": {}}), 8000, 8, {"agg": WorkerResources(1, 12)})
+    result = bind_memory(recipe({"agg": {"nodes": 2}}), 8000, 8, {"agg": WorkerResources(1, 12)})
     assert result["roles"]["agg"]["srun_options"]["mem"] == "6000M"
     assert result["benchmark"]["env"]["INFERENCEX_WORKER_MEMORY_MIB"] == "12000"
 
 
 def test_unequal_native_node_shares_cannot_share_one_role_limit():
     with pytest.raises(ValueError, match="one uniform Slurm memory limit"):
-        bind_memory(recipe({"agg": {}}, engine="trtllm"), 8000, 8, {"agg": WorkerResources(1, 12)})
+        bind_memory(recipe({"agg": {"nodes": 2}}, engine="trtllm"), 8000, 8, {"agg": WorkerResources(1, 12)})
 
 
 @pytest.mark.parametrize("available", [None, 0, True])
@@ -126,7 +131,7 @@ def test_vllm_dp_steps_split_the_logical_worker_budget(tp, dp, limit, total):
 
 
 def test_logical_gpu_capacity_does_not_inflate_physical_memory_share():
-    item = recipe({"agg": {}})
+    item = recipe({"agg": {"nodes": 2}})
     item["resources"]["gpus_per_node"] = 2
     result = bind_memory(item, 8000, 4, {"agg": WorkerResources(3, 1)})
     assert result["resources"]["gpus_per_node"] == 2
@@ -140,7 +145,7 @@ def test_logical_gpu_capacity_cannot_exceed_the_physical_node():
 
 
 def test_native_logical_capacity_determines_worker_steps():
-    item = recipe({"agg": {}})
+    item = recipe({"agg": {"nodes": 2}})
     item["resources"]["gpus_per_node"] = 2
     result = bind_memory(item, 8000, 4, {"agg": WorkerResources(1, 4)})
     assert result["roles"]["agg"]["srun_options"]["mem"] == "4000M"

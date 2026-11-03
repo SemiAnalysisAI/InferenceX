@@ -31,7 +31,7 @@ TileRT uses the pinned upstream srt-slurm submodule. Recipes select `roles.prefi
 
 ## Schema 2 and master configuration
 
-Recipes use `schema: 2`, `engine`, and `roles`. The master config supplies `num-worker` and required `gpus-per-worker`; the adapter writes the rendered roles' `workers`, `gpus`, and integer `nodes`. Recipe fragments own engine arguments, environment, and placement constraints such as `nodes: colocate`. `resources.gpus_per_node` may restrict packing capacity within the physical node; DRAM shares always use the physical cluster GPU count. `placement` controls the frontend and benchmark location, `services` describes auxiliary processes, and `dynamo.source` selects the Dynamo package or source revision.
+Recipes use `schema: 2`, `engine`, and `roles`. The master config supplies `num-worker` and required `gpus-per-worker`; the adapter writes the rendered roles' `workers` and `gpus`. Recipe fragments retain their `nodes`, engine arguments, environment, and placement settings such as `nodes: colocate`. `resources.gpus_per_node` may restrict packing capacity within the physical node; DRAM shares always use the physical cluster GPU count. `placement` controls the frontend and benchmark location, `services` describes auxiliary processes, and `dynamo.source` selects the Dynamo package or source revision.
 
 | Recipe field | `configs/nvidia-master.yaml` field |
 |---|---|
@@ -45,7 +45,7 @@ Recipes use `schema: 2`, `engine`, and `roles`. The master config supplies `num-
 | Recipe directory, relative to this tree | entry-level `srt-recipe-dir` |
 | Recipe file, optionally with a `base`, `override_<name>`, or `zip_override_<name>[<index>]` selector | search-space `srt-recipe`; `eval-srt-recipe` for eval-only real verification |
 
-Keep engine parallelism settings consistent with the master resource request. The launcher executes the bound recipe, validates actual worker placement against the InferenceX allocation, and applies its node-local DRAM budgets to worker steps. For aggregate recipes use `roles.agg`; `roles.decode.nodes: colocate` places both roles in a shared node pool. The scheduler node count includes the derived worker pool and any auxiliary nodes.
+Keep engine parallelism settings consistent with the master resource request. The launcher executes the bound recipe, applies GPU-proportional DRAM limits to its inference-worker steps. For aggregate recipes use `roles.agg`; `roles.decode.nodes: colocate` places both roles in a shared node pool. The scheduler node count reads the recipe’s existing worker node reservations and includes any auxiliary nodes.
 
 All referenced recipes must be checked in: srt-slurm 2 ships curated examples instead of the historical `recipes/` archive. The initial migration restores 204 previously external recipes and two still-referenced AgentX recipes from InferenceX history. Master-config paths follow the layout above; existing override selectors are preserved.
 
@@ -65,7 +65,7 @@ Recipes do not hardcode cluster hardware facts: a value `'@fabric.<name>'`, anyw
 Inspect what the launcher submits without a cluster:
 
 ```bash
-uv run infx generate --config-key 'dsr1-fp8-h200-*' --output-dir /tmp/recipes
+uv run --extra recipes infx generate --config-key 'dsr1-fp8-h200-*' --output-dir /tmp/recipes
 ```
 
 It writes one bound recipe per fixed-sequence or AgentX point, validated by the pinned srtctl, plus a `manifest.json` that maps each file to its matrix point and to the one cluster its runner label schedules on (`null` when the label spans several). Multi-node points take their cluster's binder inputs (DCGM exporter port, AgentX client env); a point that needs them fails unless its runner label names one cluster and the lane accepts the row's `power`. Native single-node points validate against each eligible cluster's exporter defaults while retaining cluster-independent recipe output. Fabric references take that cluster's facts; when the label spans several clusters they stay references. Launch-time edits such as the job name, health-check floor and runtime `--set` values are not applied.

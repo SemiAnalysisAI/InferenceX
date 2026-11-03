@@ -418,11 +418,6 @@ def planning_repo(tmp_path, monkeypatch):
 @pytest.fixture
 def committed_planning_repo(planning_repo):
     root, _, _ = planning_repo
-    shutil.copytree(
-        Path(__file__).resolve().parents[3] / "utils/srt-slurm/src",
-        root / "utils/srt-slurm/src",
-        ignore=shutil.ignore_patterns("__pycache__"),
-    )
     entry = {"config-keys": ["single"], "description": ["Fixture change"],
              "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
              "scenario-type": ["fixed-seq-len"], "no-evals": True}
@@ -493,11 +488,6 @@ def test_historical_generator_uses_snapshot_recipes_not_inherited_recovery_root(
     planning_repo, monkeypatch, nested_layout
 ):
     root, master, _ = planning_repo
-    shutil.copytree(
-        Path(__file__).resolve().parents[3] / "utils/srt-slurm/src",
-        root / "utils/srt-slurm/src",
-        ignore=shutil.ignore_patterns("__pycache__"),
-    )
     master["multi"]["scenarios"]["fixed-seq-len"][0]["search-space"][0][
         "srt-recipe"
     ] = "snapshot.yaml"
@@ -507,7 +497,7 @@ def test_historical_generator_uses_snapshot_recipes_not_inherited_recovery_root(
     if nested_layout:
         project = root / "inferencex-e2e"
         project.mkdir()
-        for name in ("infx", "configs", "benchmarks", "utils"):
+        for name in ("infx", "configs", "benchmarks"):
             shutil.move(root / name, project / name)
         recipe = project / "benchmarks/multi_node/srt-slurm-recipes/fixture/snapshot.yaml"
     for command in (

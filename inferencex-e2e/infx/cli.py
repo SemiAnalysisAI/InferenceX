@@ -38,7 +38,7 @@ def main(argv: list[str] | None = None) -> int:
             output=args.output_dir,
         )
     except ImportError as error:
-        parser.error(f"{error}; run it with uv run")
+        parser.error(f"{error}; run it with uv run --extra recipes")
     except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as error:
         parser.error(str(error))
     print(f"Wrote {len(manifest['recipes'])} recipes and manifest.json to {args.output_dir}")

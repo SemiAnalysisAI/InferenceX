@@ -10,9 +10,6 @@ from typing import Any, Literal
 from infx import yamlio
 from infx.clusters import CLUSTER_LABEL_PREFIX
 from infx.clusters.slurm import Fabric
-from infx.launch.resources import WorkerResources
-from infx.srt_slurm import load_srt
-from infx.srt_slurm.memory import bind_worker_resources
 from infx.srt_slurm.variants import expand_variants
 from infx.srt_slurm.workload import resolve_fabric
 
@@ -221,13 +218,8 @@ def recipe_auxiliary_node_count(recipe: dict) -> int:
     return pool_nodes + dedicated_roles
 
 
-def recipe_node_count(
-    root: Path, srt_recipe: str, workers: dict[str, WorkerResources], gpus_per_node: int
-) -> int:
-    """Map worker requests into the recipe and ask SRT how many worker nodes it needs."""
-    load_srt()
-    from srtctl.core.schema import Topology
-
+def recipe_node_count(root: Path, srt_recipe: str) -> int:
+    """Read the node reservation from each selected recipe variant."""
     path, _, selector = srt_recipe.partition(":")
     recipe_path = root / path
     raw = yamlio.safe_load(recipe_path.read_text())
@@ -237,8 +229,17 @@ def recipe_node_count(
     for _, recipe in expand_variants(raw, selector or None):
         if recipe.get("schema") != 2:
             raise ValueError(f"srt-slurm recipes must declare schema: 2: {recipe_path}")
-        bind_worker_resources(recipe, workers)
-        nodes = Topology.from_recipe(recipe, gpus_per_node=gpus_per_node).total_nodes
+        roles = recipe.get("roles")
+        if not isinstance(roles, dict) or not roles:
+            raise ValueError(f"Recipe has no worker roles: {recipe_path}")
+        nodes = 0
+        for role, settings in roles.items():
+            value = settings.get("nodes") if isinstance(settings, dict) else None
+            if value == "colocate" and role == "decode":
+                continue
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                raise ValueError(f"Recipe role {role!r} must specify positive nodes: {recipe_path}")
+            nodes += value
         counts.add(nodes + recipe_auxiliary_node_count(recipe))
     if len(counts) != 1:
         raise ValueError(f"Recipe variants require different node counts: {srt_recipe}")
@@ -276,46 +277,11 @@ def check_fabric_references(root: Path, srt_recipe: str, label: str, runner_data
                 raise ValueError(f"{srt_recipe}: {error} ({reach})") from None
 
 
-def multinode_node_count(
-    prefill: dict,
-    decode: dict,
-    runner: str,
-    runner_data: dict,
-    srt_recipe: str | None,
-    root: Path | None,
-) -> int:
-    """Return SRT's node requirement for the mapped worker requests."""
-    if srt_recipe is None or root is None:
+def add_multinode_node_count(entry: dict, root: Path | None) -> dict:
+    """Forward the recipe's node reservation to the scheduler."""
+    if root is None or not entry.get(Fields.SRT_RECIPE.value):
         raise ValueError("Multinode scheduling requires an SRT recipe and its project root")
-    active = (
-        {"prefill": prefill, "decode": decode}
-        if decode[Fields.NUM_WORKER.value]
-        else {"agg": prefill}
-    )
-    workers = {
-        role: WorkerResources(worker[Fields.NUM_WORKER.value], worker[Fields.GPUS_PER_WORKER.value])
-        for role, worker in active.items()
-    }
-    return recipe_node_count(
-        root, srt_recipe, workers, scheduling_gpus_per_node(runner, runner_data)
-    )
-
-
-def add_multinode_node_count(
-    entry: dict,
-    runner_data: dict,
-    root: Path | None,
-) -> dict:
-    """Derive scheduler node demand from worker resources and recipe placement."""
-    nodes = multinode_node_count(
-        entry[Fields.PREFILL.value],
-        entry[Fields.DECODE.value],
-        entry[Fields.RUNNER.value],
-        runner_data,
-        entry.get(Fields.SRT_RECIPE.value),
-        root,
-    )
-    entry[Fields.NODE_COUNT.value] = nodes
+    entry[Fields.NODE_COUNT.value] = recipe_node_count(root, entry[Fields.SRT_RECIPE.value])
     return entry
 
 
@@ -907,7 +873,7 @@ def _fixed_sequence_entries(
             )
             entry.update(component_metadata(benchmark, config))
             if is_multinode:
-                add_multinode_node_count(entry, runner_data, root)
+                add_multinode_node_count(entry, root)
             entries.append(validate_matrix_entry(entry, is_multinode))
     return entries
 
@@ -1028,7 +994,7 @@ def _agentic_entries(
             entry[Fields.KV_OFFLOAD_BACKEND.value] = kv_offload_backend
         entry.update(component_metadata(benchmark, config))
         if is_multinode:
-            add_multinode_node_count(entry, runner_data, root)
+            add_multinode_node_count(entry, root)
         entries.append(validate_agentic_matrix_entry(entry))
     return entries
 

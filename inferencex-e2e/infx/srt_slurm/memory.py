@@ -6,7 +6,6 @@ from typing import Any
 
 from infx.launch.memory import gpu_share_mib
 from infx.launch.resources import WorkerResources
-from infx.srt_slurm import load_srt
 
 _MEMORY_OPTIONS = ("mem", "mem-per-cpu", "mem-per-gpu")
 
@@ -37,7 +36,6 @@ def bind_memory(
     workers: Mapping[str, WorkerResources],
 ) -> dict[str, Any]:
     """Apply InferenceX's worker budgets to the Slurm steps the SRT adapter launches."""
-    load_srt()
     from marshmallow import ValidationError
     from srtctl.core.config import expand_engine_config_defaults, resolve_config_with_defaults
     from srtctl.core.schema import SrtConfig

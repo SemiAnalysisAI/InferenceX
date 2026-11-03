@@ -221,7 +221,6 @@ jobs:
                 ref: ${{ inputs.ref }}
                 fetch-depth: 0
                 persist-credentials: false
-                submodules: true
 
             - name: Checkout code (default)
               id: checkout-default
@@ -231,7 +230,6 @@ jobs:
                 ref: ${{ github.sha }}
                 fetch-depth: 0
                 persist-credentials: false
-                submodules: true
             - name: Resolve workflow tooling
               id: tooling
               uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -255,7 +253,6 @@ jobs:
                 ref: ${{ github.workflow_sha }}
                 path: .ci-priority
                 persist-credentials: false
-                submodules: true
 
             - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
             - name: Classify priority criteria
@@ -296,7 +293,7 @@ jobs:
                     fi
                     CMD=(
                       env PYTHONPATH="$PRIORITY_ROOT"
-                      uv run --project "$MEASURED_ROOT" --locked
+                      uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml
                       python -P -m infx.matrix.revision plan "$MEASURED_ROOT"
                       --changelog-file "${MEASURED_ROOT}/perf-changelog.yaml"
                       --base-ref "$CHANGELOG_BASE_REF"
@@ -331,7 +328,7 @@ jobs:
                       GENERATE_ARGS+=(--evals-only)
                     fi
                     CONFIG_JSON=$(env PYTHONPATH="$PRIORITY_ROOT" \
-                      uv run --project "$MEASURED_ROOT" --locked \
+                      uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
                       python -P -m infx.matrix.revision generate "$MEASURED_ROOT" "${GENERATE_ARGS[@]}")
                   fi
                   CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | env PYTHONPATH="$PRIORITY_ROOT" \

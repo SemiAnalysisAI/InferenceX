@@ -96,12 +96,10 @@ The below list describes what each field is:
 - `gpus-per-worker`: Required positive integer on each single-node search-space entry or each
   `worker`, `prefill`, and `decode` block. It is the total GPU allocation of one logical
   inference worker, including any data parallel ranks. Worker counts and GPU allocations
-  are supplied to the launch backend from the master config; SRT recipe roles specify engine
-  settings and placement constraints, not duplicate `gpus`, `workers`, or integer `nodes`.
-  InferenceX maps these fields directly to SRT `workers` and `gpus`. SRT derives node
-  counts and assigns GPUs using its native allocator. For example, DEP16 on HGX8
-  occupies eight GPUs on each of two nodes. Memory limits use the GPUs assigned to
-  each worker step; all steps of a role must have the same limit.
+  are copied from the master config into SRT `workers` and `gpus`. Recipe roles retain
+  their node counts and engine settings. For example, DEP16 on HGX8 uses a recipe with
+  two nodes and a master request for 16 GPUs per worker. Memory limits use the GPUs
+  assigned to each worker step; all steps of a role must have the same limit.
 - `multinode`: Required. `true` selects the multinode schema with `prefill`/`decode` or `worker` blocks, and `false` the single-node schema with `tp` entries.
 - `disagg`: Enables disaggregated serving and may only be `true` when
   `multinode` is also `true`.

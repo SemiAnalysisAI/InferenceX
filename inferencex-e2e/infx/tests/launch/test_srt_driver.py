@@ -796,7 +796,7 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
     (mirror / "trtllm/forced.yaml").write_text(
         "roles:\n  decode:\n    env:\n      TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS: 2\n      KEEP: 1\n"
     )
-    (mirror / "eval.yaml").write_text(LANE_FRAGMENT.replace("    nodes: 1\n", "").replace("gpus: 8", "gpus: 4"))
+    (mirror / "eval.yaml").write_text(LANE_FRAGMENT.replace("    nodes: 1\n", "    nodes: 2\n").replace("gpus: 8", "gpus: 4"))
     staged = {
         "eval_suite": "kimi_tool_call_schema", "recipe_fingerprint": "", "conc": 4,
         "eval_concs": [4, 8], "completed_eval_concs": [8], "failed_eval_concs": [4],
