@@ -1,7 +1,6 @@
 import argparse
 import fnmatch
 import json
-import math
 import re
 import sys
 from collections.abc import Iterable
@@ -12,6 +11,8 @@ from typing import Any, Literal
 from infx import yamlio
 from infx.clusters import CLUSTER_LABEL_PREFIX
 from infx.clusters.slurm import Fabric
+from infx.launch.resources import WorkerResources
+from infx.srt_slurm.memory import bind_worker_topology
 from infx.srt_slurm.variants import deep_merge, expand_variants
 from infx.srt_slurm.workload import resolve_fabric
 
@@ -256,11 +257,10 @@ def recipe_auxiliary_node_count(recipe: dict) -> int:
     return pool_nodes + dedicated_roles
 
 
-def recipe_node_count(root: Path, srt_recipe: str) -> int | None:
-    """Return the total node count of a schema 2 srt recipe, or None for an unknown variant.
-
-    Raise ValueError when the recipe is not schema 2 or its roles lack node counts.
-    """
+def recipe_node_count(
+    root: Path, srt_recipe: str, workers: dict[str, WorkerResources], gpus_per_node: int
+) -> int | None:
+    """Derive worker and auxiliary nodes from explicit resources and recipe placement."""
     path, _, selector = srt_recipe.partition(":")
     recipe_path = root / path
     recipe = yamlio.safe_load(recipe_path.read_text())
@@ -277,6 +277,7 @@ def recipe_node_count(root: Path, srt_recipe: str) -> int | None:
             return None
     if not isinstance(recipe, dict) or recipe.get("schema") != 2:
         raise ValueError(f"srt-slurm recipes must declare schema: 2: {recipe_path}")
+    bind_worker_topology(recipe, workers, gpus_per_node)
     roles = recipe.get("roles")
     if roles:
         for name, role in roles.items():
@@ -333,14 +334,12 @@ def worker_node_count(
 
     hardware_label = worker.get(Fields.HARDWARE.value) or runner
     gpus_per_node = scheduling_gpus_per_node(hardware_label, runner_data)
-    total_gpus = (
-        worker[Fields.NUM_WORKER.value]
-        * worker[Fields.TP.value]
-        * worker.get(Fields.PP.value, 1)
-        * worker.get(Fields.PCP_SIZE.value, 1)
-        * worker.get(Fields.DWDP_SIZE.value, 1)
+    count = worker[Fields.NUM_WORKER.value]
+    if count == 0:
+        return 0
+    return WorkerResources(count, worker[Fields.GPUS_PER_WORKER.value]).nodes_required(
+        gpus_per_node
     )
-    return math.ceil(total_gpus / gpus_per_node)
 
 
 def multinode_node_count(
@@ -354,7 +353,23 @@ def multinode_node_count(
     """Return a multinode entry's node count from its srt recipe, else from its workers."""
     if srt_recipe is not None and root is None:
         raise ValueError(f"Reading {srt_recipe} needs the master config's project root")
-    recipe_count = recipe_node_count(root, srt_recipe) if srt_recipe is not None else None
+    if srt_recipe is not None:
+        active = (
+            {"prefill": prefill, "decode": decode}
+            if decode[Fields.NUM_WORKER.value]
+            else {"agg": prefill}
+        )
+        workers = {
+            role: WorkerResources(
+                worker[Fields.NUM_WORKER.value], worker[Fields.GPUS_PER_WORKER.value]
+            )
+            for role, worker in active.items()
+        }
+        recipe_count = recipe_node_count(
+            root, srt_recipe, workers, scheduling_gpus_per_node(runner, runner_data)
+        )
+    else:
+        recipe_count = None
     if recipe_count is not None:
         return recipe_count
     return worker_node_count(prefill, "prefill", runner, runner_data) + worker_node_count(
@@ -368,33 +383,26 @@ def add_multinode_node_count(
     num_nodes: int | None,
     root: Path | None,
 ) -> dict:
-    """Set the entry's node count from ``num_nodes`` or its workers, and return the entry.
-
-    Raise ValueError when ``num_nodes`` is given for a disaggregated entry.
-    """
-    if not entry[Fields.DISAGG.value] and num_nodes is not None:
-        entry[Fields.NODE_COUNT.value] = num_nodes
-    elif num_nodes is not None:
+    """Derive scheduler node demand and reject a conflicting explicit node count."""
+    if entry[Fields.DISAGG.value] and num_nodes is not None:
         raise ValueError(f"{Fields.NUM_NODES.value} is not valid for disaggregated entries")
-    else:
-        entry[Fields.NODE_COUNT.value] = multinode_node_count(
-            entry[Fields.PREFILL.value],
-            entry[Fields.DECODE.value],
-            entry[Fields.RUNNER.value],
-            runner_data,
-            entry.get(Fields.SRT_RECIPE.value),
-            root,
-        )
+    nodes = multinode_node_count(
+        entry[Fields.PREFILL.value],
+        entry[Fields.DECODE.value],
+        entry[Fields.RUNNER.value],
+        runner_data,
+        entry.get(Fields.SRT_RECIPE.value),
+        root,
+    )
+    if num_nodes is not None and num_nodes != nodes:
+        raise ValueError(f"num-nodes={num_nodes} disagrees with the worker allocation: {nodes}")
+    entry[Fields.NODE_COUNT.value] = nodes
     return entry
 
 
 def effective_gpu_count(benchmark: dict) -> int:
-    """Return the GPUs one benchmark worker uses, TP times PP times PCP."""
-    return (
-        benchmark[Fields.TP.value]
-        * benchmark.get(Fields.PP.value, 1)
-        * benchmark.get(Fields.PCP_SIZE.value, 1)
-    )
+    """Return the explicitly requested GPU allocation of one benchmark worker."""
+    return benchmark[Fields.GPUS_PER_WORKER.value]
 
 
 def with_worker_parallelism_defaults(worker: dict) -> dict:
@@ -435,17 +443,10 @@ def multinode_worker_pair(benchmark: dict, disagg: bool) -> tuple[dict, dict]:
 def worker_gpus_per_node(worker: dict, gpus_per_node: int, role: str = "worker") -> int:
     """Return how many of a worker's GPUs land on each node.
 
-    Raise ValueError when its replica size and ``gpus_per_node`` do not divide one another.
+    Raise ValueError when a spanning worker does not occupy whole nodes.
     """
-    gpus_per_replica = (
-        worker[Fields.TP.value]
-        * worker.get(Fields.PP.value, 1)
-        * worker.get(Fields.PCP_SIZE.value, 1)
-        * worker.get(Fields.DWDP_SIZE.value, 1)
-    )
-    factors = f"{Fields.TP.value}*{Fields.PP.value}*{Fields.PCP_SIZE.value}"
-    if worker.get(Fields.DWDP_SIZE.value, 1) > 1:
-        factors += f"*{Fields.DWDP_SIZE.value}"
+    gpus_per_replica = worker[Fields.GPUS_PER_WORKER.value]
+    factors = Fields.GPUS_PER_WORKER.value
     if gpus_per_replica > gpus_per_node:
         if gpus_per_replica % gpus_per_node != 0:
             raise ValueError(
@@ -454,12 +455,6 @@ def worker_gpus_per_node(worker: dict, gpus_per_node: int, role: str = "worker")
                 f"of {Fields.GPUS_PER_NODE.value}={gpus_per_node}"
             )
         return gpus_per_node
-    if gpus_per_node % gpus_per_replica != 0:
-        raise ValueError(
-            f"{role} {factors}"
-            f"={gpus_per_replica} does not divide "
-            f"{Fields.GPUS_PER_NODE.value}={gpus_per_node} evenly"
-        )
     return gpus_per_replica
 
 
@@ -1003,6 +998,7 @@ def _fixed_sequence_entries(
             else:
                 entry.update(
                     {
+                        Fields.GPUS_PER_WORKER.value: benchmark[Fields.GPUS_PER_WORKER.value],
                         Fields.TP.value: benchmark[Fields.TP.value],
                         Fields.PP.value: benchmark.get(Fields.PP.value, 1),
                         Fields.DCP_SIZE.value: benchmark.get(Fields.DCP_SIZE.value, 1),
@@ -1114,6 +1110,7 @@ def _agentic_entries(
         else:
             entry.update(
                 {
+                    Fields.GPUS_PER_WORKER.value: benchmark[Fields.GPUS_PER_WORKER.value],
                     Fields.TP.value: tp,
                     Fields.PP.value: pp,
                     Fields.DCP_SIZE.value: dcp_size,

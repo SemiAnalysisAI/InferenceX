@@ -42,7 +42,7 @@ def point(tmp_path, monkeypatch):
     env = {
         "FRAMEWORK": "sglang", "MODEL": "test/model", "IMAGE": "test:tag", "PRECISION": "fp8",
         "TP": "4", "GPU_COUNT": "4", "PP_SIZE": "1", "DCP_SIZE": "1", "PCP_SIZE": "1",
-        "EP_SIZE": "1", "DP_ATTENTION": "false", "SPEC_DECODING": "none", "IS_AGENTIC": "0",
+        "EP_SIZE": "1", "DP_ATTENTION": "false", "SPEC_DECODING": "none", "IS_AGENTIC": "0", "IS_MULTINODE": "false",
         "RUN_EVAL": "false", "EVAL_ONLY": "false", "ISL": "256", "OSL": "64",
         "RANDOM_RANGE_RATIO": "0.5", "CONC": "2", "RESULT_FILENAME": "point-identity",
         "MODEL_PREFIX": "test",
@@ -58,7 +58,7 @@ def test_native_binding_submits_one_point_and_keeps_server_settings(point):
     assert actual["model"] == {"path": "hf:test/model", "container": "test:tag", "precision": "fp8"}
     assert actual["srun_options"] == {"gpus-per-node": "4"}
     assert actual["benchmark"] == {"type": "custom", "command": "bash client.sh", "env": {
-        "MODEL": "test/model", "ISL": "256", "OSL": "64", "RANDOM_RANGE_RATIO": "0.5",
+        "MODEL": "test/model", "ISL": "256", "OSL": "64", "RANDOM_RANGE_RATIO": "0.5", "GPU_COUNT": "4",
         "USE_CHAT_TEMPLATE": "false",
         "CONC": "2", "RESULT_FILENAME": "point-identity",
         "RUN_EVAL": "false", "EVAL_ONLY": "false", "RESULT_DIR": "/logs",
@@ -88,7 +88,7 @@ def test_agentx_fragments_are_composed_and_bound_to_the_point(point):
     assert selected == f"{path}:override_c2"
     assert bound["model"] == {"path": "hf:test/model", "container": "other:tag", "precision": "fp8"}
     assert bound["benchmark"] == {
-        "type": "custom", "command": "bash srt_agentic.sh", "env": {"CONC": "2", "MODEL": "test/model", "REQUIRE_POWER": "0", "ENABLE_AGENTX_POWER": "1"},
+        "type": "custom", "command": "bash srt_agentic.sh", "env": {"CONC": "2", "MODEL": "test/model", "GPU_COUNT": "4", "REQUIRE_POWER": "0", "ENABLE_AGENTX_POWER": "1"},
         "concurrencies": [2],
     }
     path.write_text(yaml.safe_dump({"base": {**recipe, "model": {"container": "stale:tag"}}}))
@@ -131,7 +131,8 @@ def test_prepare_refuses_an_arguments_file_named_like_the_bound_recipe(
         monkeypatch.setenv(name, value)
     output = tmp_path / "job" / "recipe.yaml"
     output.parent.mkdir()
-    argv = ["single_node", "prepare", f"{path}:base", str(output), "--fabric", "{}"]
+    argv = ["single_node", "prepare", f"{path}:base", str(output), "--fabric", "{}",
+            "--available-memory-mib", "8000", "--gpus-per-node", "8"]
     monkeypatch.setattr(sys, "argv", argv)
     with pytest.raises(SystemExit) as exit_info:
         main()

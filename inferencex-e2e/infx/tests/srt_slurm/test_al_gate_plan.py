@@ -54,7 +54,7 @@ def single_node_recipe(variants: dict[int, int | None]) -> dict[str, Any]:
 def single_node_row(conc: int) -> dict[str, Any]:
     return {
         "model": "test/model", "model-prefix": "dsv4", "image": "test:tag", "precision": "fp8",
-        "framework": "sglang", "runner": "cluster:test", "tp": 4, "pp": 1, "dcp-size": 1,
+        "framework": "sglang", "runner": "cluster:test", "gpus-per-worker": 4, "tp": 4, "pp": 1, "dcp-size": 1,
         "pcp-size": 1, "ep": 1, "dp-attn": False, "spec-decoding": "mtp", "conc": conc,
         "srt-recipe": "recipe.yaml", "kv-offloading": "none", "exp-name": f"dsv4_conc{conc}", "queue-token": f"q{conc}",
     }  # fmt: skip
@@ -63,10 +63,12 @@ def single_node_row(conc: int) -> dict[str, Any]:
 def multi_node_row(conc: int, decode_tp: int, config: str, framework: str = "dynamo-sglang"):
     return {
         "model": "test/model", "model-prefix": "dsv4", "framework": framework,
-        "runner": "cluster:test", "spec-decoding": "mtp", "conc": [conc],
+        "runner": "cluster:test", "spec-decoding": "mtp", "conc": [conc], "disagg": True,
         "srt-recipe": config, "image": "test:tag", "precision": "fp8", "kv-offloading": "none",
-        "exp-name": f"dsv4_c{conc}", "prefill": {"num-worker": 1, "tp": 8},
-        "decode": {"num-worker": 1, "tp": decode_tp},
+        "exp-name": f"dsv4_c{conc}", "prefill": {"num-worker": 1, "gpus-per-worker": 8, "tp": 8,
+                    "ep": 1, "pp": 1, "dcp-size": 1, "pcp-size": 1, "dp-attn": False},
+        "decode": {"num-worker": 1, "gpus-per-worker": decode_tp, "tp": decode_tp,
+                   "ep": 1, "pp": 1, "dcp-size": 1, "pcp-size": 1, "dp-attn": False},
     }  # fmt: skip
 
 
@@ -165,24 +167,24 @@ def vllm_recipe(dp: int, tp: int, gpus_per_node: int | None, pp: int = 1):
 
 
 @pytest.mark.parametrize(
-    ("framework", "recipe", "cluster_gpus", "exempt"),
+    ("framework", "recipe", "cluster_gpus", "worker_gpus", "exempt"),
     [
         # Eight data-parallel ranks over two 4-GPU nodes run as two processes.
-        ("dynamo-vllm", vllm_recipe(dp=8, tp=1, gpus_per_node=4), 8, True),
-        ("dynamo-vllm", vllm_recipe(dp=2, tp=2, pp=2, gpus_per_node=4), 8, True),
+        ("dynamo-vllm", vllm_recipe(dp=8, tp=1, gpus_per_node=4), 8, 8, True),
+        ("dynamo-vllm", vllm_recipe(dp=2, tp=2, pp=2, gpus_per_node=4), 8, 8, True),
         # One 8-GPU node runs a single process for every rank.
-        ("dynamo-vllm", vllm_recipe(dp=8, tp=1, gpus_per_node=8), 4, False),
+        ("dynamo-vllm", vllm_recipe(dp=8, tp=1, gpus_per_node=8), 4, 8, False),
         # A replica wider than a node keeps a single API leader for every rank.
-        ("dynamo-vllm", vllm_recipe(dp=2, tp=8, gpus_per_node=4), 4, False),
+        ("dynamo-vllm", vllm_recipe(dp=2, tp=8, gpus_per_node=4), 4, 16, False),
         # Without resources.gpus_per_node, srtctl uses the cluster's node size.
-        ("dynamo-vllm", vllm_recipe(dp=8, tp=1, gpus_per_node=None), 4, True),
+        ("dynamo-vllm", vllm_recipe(dp=8, tp=1, gpus_per_node=None), 4, 8, True),
         # Only Dynamo hands the benchmark one leader's metrics.
-        ("vllm-disagg", vllm_recipe(dp=8, tp=1, gpus_per_node=4), 4, False),
+        ("vllm-disagg", vllm_recipe(dp=8, tp=1, gpus_per_node=4), 4, 8, False),
     ],
 )
 def test_dynamo_vllm_data_parallel_workers_across_nodes_are_exempt(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
-    framework: str, recipe: dict[str, Any], cluster_gpus: int, exempt: bool,
+    framework: str, recipe: dict[str, Any], cluster_gpus: int, worker_gpus: int, exempt: bool,
 ) -> None:  # fmt: skip
     cluster = {"gpus-per-node": cluster_gpus, "arch": "x86_64", "scheduler": "slurm",
                "slurm": {"partition": "batch", "exclusive": True}}  # fmt: skip
@@ -191,6 +193,9 @@ def test_dynamo_vllm_data_parallel_workers_across_nodes_are_exempt(
     (tmp_path / "configs/runners.yaml").write_text(yaml.safe_dump(runners))
     monkeypatch.setenv("INFERENCEX_REPOSITORY_ROOT", str(tmp_path))
     row = multi_node_row(8, 8, write_recipe(tmp_path, "dp.yaml", recipe), framework)
+    row["disagg"] = False
+    row["prefill"]["gpus-per-worker"] = worker_gpus
+    row["decode"]["num-worker"] = 0
     gates = plan_multi_node([row], tmp_path, write_golden(tmp_path / "golden"))
     reasons = [entry["reason"] for entry in gates["unresolved"]]
     assert (len(gates["multi_node"]), len(reasons)) == ((0, 1) if exempt else (1, 0))

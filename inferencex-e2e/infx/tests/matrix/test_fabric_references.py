@@ -6,7 +6,7 @@ import yaml
 from infx.matrix.generate import generate_config_matrix
 from infx.matrix.validation import load_config_files
 
-ROLE = {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False}
+ROLE = {"num-worker": 1, "gpus-per-worker": 8, "tp": 8, "ep": 1, "dp-attn": False}
 MASTER = {"fixture": {
     "image": "org/image:1", "model": "org/model", "model-prefix": "dsr1", "precision": "fp8",
     "framework": "dynamo-sglang", "runner": "h200", "multinode": True, "disagg": True,

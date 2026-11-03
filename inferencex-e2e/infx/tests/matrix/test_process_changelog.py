@@ -37,7 +37,7 @@ def _fixed_matrix_row(
         "runner": "cluster:b300-nv",
         "isl": 8192,
         "osl": 1024,
-        "tp": tp,
+        "gpus-per-worker": (tp) * (1) * (1), "tp": tp,
         "pp": 1,
         "dcp-size": 1,
         "pcp-size": 1,
@@ -268,7 +268,7 @@ def test_append_only_scope_allows_additive_top_level_restructuring(tmp_path):
                         "isl": 8192,
                         "osl": 1024,
                         "search-space": [
-                            {"tp": 4, "conc-list": [1, 4, 8], "srt-recipe": "recipe.yaml"}
+                            {"gpus-per-worker": 4, "tp": 4, "conc-list": [1, 4, 8], "srt-recipe": "recipe.yaml"}
                         ],
                     }
                 ]
@@ -282,7 +282,7 @@ def test_append_only_scope_allows_additive_top_level_restructuring(tmp_path):
     ]
     search_space[0]["router"] = router_a
     search_space.append(
-        {"tp": 8, "conc-list": [12, 16], "router": router_b, "srt-recipe": "recipe.yaml"}
+        {"gpus-per-worker": 8, "tp": 8, "conc-list": [12, 16], "router": router_b, "srt-recipe": "recipe.yaml"}
     )
 
     validate_master_config(base, tmp_path)
@@ -313,8 +313,8 @@ def test_append_only_scope_rejects_global_change_with_unselected_scenario():
         "test-config": {
             "router": {"name": "dynamo-router", "version": "0.8.1"},
             "scenarios": {
-                "fixed-seq-len": {"search-space": [{"tp": 4, "conc-list": [1]}]},
-                "agentic-coding": {"search-space": [{"tp": 4, "conc-list": [1]}]},
+                "fixed-seq-len": {"search-space": [{"gpus-per-worker": 4, "tp": 4, "conc-list": [1]}]},
+                "agentic-coding": {"search-space": [{"gpus-per-worker": 4, "tp": 4, "conc-list": [1]}]},
             },
         }
     }
@@ -339,17 +339,17 @@ def test_append_only_scope_rejects_changes_to_unselected_scenario():
     base = {
         "test-config": {
             "scenarios": {
-                "fixed-seq-len": {"search-space": [{"tp": 4, "conc-list": [1]}]},
-                "agentic-coding": {"search-space": [{"tp": 4, "conc-list": [1]}]},
+                "fixed-seq-len": {"search-space": [{"gpus-per-worker": 4, "tp": 4, "conc-list": [1]}]},
+                "agentic-coding": {"search-space": [{"gpus-per-worker": 4, "tp": 4, "conc-list": [1]}]},
             }
         }
     }
     head = {
         "test-config": {
             "scenarios": {
-                "fixed-seq-len": {"search-space": [{"tp": 4, "conc-list": [1]}]},
+                "fixed-seq-len": {"search-space": [{"gpus-per-worker": 4, "tp": 4, "conc-list": [1]}]},
                 "agentic-coding": {
-                    "search-space": [{"tp": 4, "conc-list": [1, 4]}]
+                    "search-space": [{"gpus-per-worker": 4, "tp": 4, "conc-list": [1, 4]}]
                 },
             }
         }
@@ -372,8 +372,8 @@ def planning_inputs() -> tuple[dict, dict]:
     }}}
     master = {}
     for key, multinode in (("single", False), ("multi", True)):
-        shape = ({role: {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False}
-                  for role in ("prefill", "decode")} if multinode else {"tp": 8})
+        shape = ({role: {"num-worker": 1, "gpus-per-worker": 8, "tp": 8, "ep": 1, "dp-attn": False}
+                  for role in ("prefill", "decode")} if multinode else {"gpus-per-worker": 8, "tp": 8})
         master[key] = {
             "image": "example/image:stable", "model": key, "model-prefix": "dsr1",
             "precision": "fp8", "framework": "sglang", "runner": "cluster:fixture",
@@ -450,7 +450,7 @@ def test_recovery_plans_with_the_checkouts_own_planner_and_recipes(
     ] = "recovery-fixture.yaml"
     master_path.write_text(yaml.safe_dump(master, sort_keys=False))
     recipe = root / "benchmarks/multi_node/srt-slurm-recipes/fixture/recovery-fixture.yaml"
-    recipe.write_text("schema: 2\nroles:\n  prefill: {nodes: 3}\n  decode: {nodes: 4}\n")
+    recipe.write_text("schema: 2\nroles:\n  prefill: {}\n  decode: {}\nservices: [{name: pool, type: custom, nodes: 5}]\n")
     changelog = root / "perf-changelog.yaml"
     entries = yaml.safe_load(changelog.read_text())
     entries[0]["config-keys"] = ["multi"]
@@ -492,7 +492,7 @@ def test_historical_generator_uses_snapshot_recipes_not_inherited_recovery_root(
     ] = "snapshot.yaml"
     (root / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(master, sort_keys=False))
     recipe = root / "benchmarks/multi_node/srt-slurm-recipes/fixture/snapshot.yaml"
-    recipe.write_text("schema: 2\nroles:\n  prefill: {nodes: 3}\n  decode: {nodes: 4}\n")
+    recipe.write_text("schema: 2\nroles:\n  prefill: {}\n  decode: {}\nservices: [{name: pool, type: custom, nodes: 5}]\n")
     if nested_layout:
         project = root / "inferencex-e2e"
         project.mkdir()
@@ -507,7 +507,7 @@ def test_historical_generator_uses_snapshot_recipes_not_inherited_recovery_root(
         ["commit", "-qm", "committed recipe allocation"],
     ):
         subprocess.run(["git", *command], cwd=root, check=True)
-    recipe.write_text("schema: 2\nroles:\n  prefill: {nodes: 20}\n  decode: {nodes: 30}\n")
+    recipe.write_text("schema: 2\nroles:\n  prefill: {}\n  decode: {}\nservices: [{name: pool, type: custom, nodes: 48}]\n")
     unrelated = root / "other-revision"
     unrelated.mkdir()
     monkeypatch.setenv("INFERENCEX_REPOSITORY_ROOT", str(unrelated))
@@ -813,7 +813,7 @@ def test_generation_failure_does_not_publish_a_partial_matrix(planning_repo, cha
     with pytest.raises(subprocess.CalledProcessError):
         changelog_run([{"config-keys": ["single", "multi"]}])
     captured = capsys.readouterr()
-    assert "Recipe has no worker roles" in captured.out
+    assert "Recipe roles must match the requested inference workers" in captured.out
     assert '\"single_node\":' not in captured.out
 
 

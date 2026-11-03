@@ -195,7 +195,7 @@ def matrix(points):
 def gen(name, tp, conc, fingerprint):
     return {
         "exp-name": name,
-        "tp": tp,
+        "gpus-per-worker": (tp), "tp": tp,
         "ep": 1,
         "dp-attn": False,
         "conc": conc,

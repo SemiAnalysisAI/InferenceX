@@ -146,7 +146,7 @@ def coverage_entry(conc, name="fixture"):
         "image": "fixture:latest", "model": "fixture/model", "model-prefix": "gptoss",
         "precision": "fp4", "framework": "vllm", "spec-decoding": "none",
         "runner": "h100-dgxc-slurm", "isl": 8192, "osl": 1024,
-        "tp": 2, "pp": 1, "dcp-size": 1, "pcp-size": 1, "ep": 1, "dp-attn": False,
+        "gpus-per-worker": 2, "tp": 2, "pp": 1, "dcp-size": 1, "pcp-size": 1, "ep": 1, "dp-attn": False,
         "conc": conc, "max-model-len": 9216, "exp-name": name, "disagg": False,
         "run-eval": True, "recipe-fingerprint": "a" * 64, "eval-suite": "gsm8k",
     }  # fmt: skip
@@ -213,7 +213,7 @@ def test_coverage_failure_labels_evals_from_the_canonical_matrix_not_the_manifes
 
 AGENTX = {
     "image": "fixture:new", "model-prefix": "dsr1", "runner": "b200-dgxc", "framework": "sglang",
-    "precision": "fp4", "spec-decoding": "none", "scenario-type": "agentic-coding", "tp": 8,
+    "precision": "fp4", "spec-decoding": "none", "scenario-type": "agentic-coding", "gpus-per-worker": 8, "tp": 8,
     "ep": 1, "dp-attn": False, "exp-name": "fixture", "recipe-fingerprint": "f" * 64,
     "eval-suite": "minimax_m3_full",
 }  # fmt: skip

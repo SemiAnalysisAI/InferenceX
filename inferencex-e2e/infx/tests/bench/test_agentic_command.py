@@ -30,6 +30,7 @@ POINT = {
     "ENABLE_AGENTX_POWER": "0",
     "REQUIRE_POWER": "0",
     "TP": "3",
+    "GPU_COUNT": "12",
     "PP_SIZE": "2",
     "PCP_SIZE": "2",
     "IS_AGENTIC": "1",

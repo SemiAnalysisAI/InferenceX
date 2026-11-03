@@ -31,12 +31,12 @@ TileRT uses the pinned upstream srt-slurm submodule. Recipes select `roles.prefi
 
 ## Schema 2 and master configuration
 
-Recipes use `schema: 2`, `engine`, and `roles`. Each worker role owns its node count, worker count, GPU allocation, environment, and engine arguments. `resources` retains GPU hardware facts. `placement` controls the frontend and benchmark location, `services` describes auxiliary processes, and `dynamo.source` selects the Dynamo package or source revision.
+Recipes use `schema: 2`, `engine`, and `roles`. The master config supplies `num-worker` and required `gpus-per-worker`; the adapter writes the rendered roles' `workers`, `gpus`, and integer `nodes`. Recipe fragments own engine arguments, environment, and placement constraints such as `nodes: colocate`. `resources.gpus_per_node` may restrict packing capacity within the physical node; DRAM shares always use the physical cluster GPU count. `placement` controls the frontend and benchmark location, `services` describes auxiliary processes, and `dynamo.source` selects the Dynamo package or source revision.
 
 | Recipe field | `configs/nvidia-master.yaml` field |
 |---|---|
-| `roles.prefill.workers` | `prefill.num-worker` |
-| `roles.decode.workers` | `decode.num-worker` |
+| Rendered `roles.prefill.workers` / `gpus` | `prefill.num-worker` / `gpus-per-worker` |
+| Rendered `roles.decode.workers` / `gpus` | `decode.num-worker` / `gpus-per-worker` |
 | `roles.prefill.args.tp-size` (SGLang) | `prefill.tp` |
 | `roles.prefill.args.ep-size` (SGLang) | `prefill.ep` |
 | `roles.prefill.args.enable-dp-attention` | `prefill.dp-attn` |
@@ -45,7 +45,7 @@ Recipes use `schema: 2`, `engine`, and `roles`. Each worker role owns its node c
 | Recipe directory, relative to this tree | entry-level `srt-recipe-dir` |
 | Recipe file, optionally with a `base`, `override_<name>`, or `zip_override_<name>[<index>]` selector | search-space `srt-recipe`; `eval-srt-recipe` for eval-only real verification |
 
-Keep the recipe and master configuration synchronized. The launcher executes the recipe; the master configuration supplies result labels and scheduling metadata. For aggregate recipes use `roles.agg`; `roles.decode.nodes: colocate` shares prefill nodes and contributes no additional worker nodes to scheduling.
+Keep engine parallelism settings consistent with the master resource request. The launcher executes the bound recipe, validates actual worker placement against the InferenceX allocation, and applies its node-local DRAM budgets to worker steps. For aggregate recipes use `roles.agg`; `roles.decode.nodes: colocate` places both roles in a shared node pool. The scheduler node count includes the derived worker pool and any auxiliary nodes. Explicit `num-nodes` must match that total.
 
 All referenced recipes must be checked in: srt-slurm 2 ships curated examples instead of the historical `recipes/` archive. The initial migration restores 204 previously external recipes and two still-referenced AgentX recipes from InferenceX history. Master-config paths follow the layout above; existing override selectors are preserved.
 

@@ -308,6 +308,9 @@ def _run_processor(
             "FRAMEWORK": "vllm",
             "PRECISION": "fp4",
             "TP": "4",
+            "GPU_COUNT": "4",
+            "PREFILL_GPUS_PER_WORKER": "4",
+            "DECODE_GPUS_PER_WORKER": "4",
             "PP_SIZE": "1",
             "DCP_SIZE": "1",
             "PCP_SIZE": "1",
@@ -646,7 +649,7 @@ def test_processor_throughput_per_gpu(tmp_path: Path):
     agg = _run_processor(
         result_dir,
         output_dir,
-        env_overrides={"TP": "4", "PP_SIZE": "2", "DCP_SIZE": "2", "PCP_SIZE": "2"},
+        env_overrides={"TP": "4", "PP_SIZE": "2", "DCP_SIZE": "2", "PCP_SIZE": "2", "GPU_COUNT": "16"},
     )
     per_gpu = agg["request_metrics"]["throughput"]["per_gpu"]
     assert agg["pp"] == 2
@@ -703,6 +706,29 @@ def test_processor_aggregates_full_response_itl_and_interactivity(tmp_path: Path
     assert full_response_intvty["p75"] == pytest.approx(191.02578)
 
 
+@pytest.mark.parametrize(("worker_mib", "decode_mib"), [(None, None), ("2048", "1024")])
+def test_processor_surfaces_worker_memory_allocation(tmp_path: Path, worker_mib, decode_mib):
+    result_dir = _write_fixture(tmp_path)
+
+    agg = _run_processor(
+        result_dir,
+        tmp_path / "out",
+        env_overrides={
+            **({"INFERENCEX_WORKER_MEMORY_MIB": worker_mib} if worker_mib else {}),
+            **({"INFERENCEX_DECODE_MEMORY_MIB": decode_mib} if decode_mib else {}),
+        },
+    )
+
+    if worker_mib:
+        assert agg["allocated_cpu_dram_gb"] == pytest.approx(2.14748)
+    else:
+        assert "allocated_cpu_dram_gb" not in agg
+    if decode_mib:
+        assert agg["decode_allocated_cpu_dram_gb"] == pytest.approx(1.07374)
+    else:
+        assert "decode_allocated_cpu_dram_gb" not in agg
+
+
 def test_multinode_processor_surfaces_heterogeneous_hardware(tmp_path: Path):
     result_dir = _write_fixture(tmp_path)
     agg = _run_processor(
@@ -713,6 +739,8 @@ def test_multinode_processor_surfaces_heterogeneous_hardware(tmp_path: Path):
             "DISAGG": "true",
             "PREFILL_NUM_WORKERS": "1",
             "PREFILL_TP": "8",
+            "PREFILL_GPUS_PER_WORKER": "32",
+            "DECODE_GPUS_PER_WORKER": "16",
             "PREFILL_PP_SIZE": "2",
             "PREFILL_DCP_SIZE": "2",
             "PREFILL_PCP_SIZE": "2",
@@ -787,7 +815,7 @@ def test_multinode_processor_rejects_one_sided_hardware(
 
 @pytest.mark.parametrize("env", [{}, {"PP_SIZE": "", "DCP_SIZE": "", "PCP_SIZE": ""}])
 def test_gpu_shape_defaults_empty_parallelism_to_one(env):
-    assert _gpu_shape(env) == ({"pp": 1, "dcp_size": 1, "pcp_size": 1}, 1, 1, 1, "false")
+    assert _gpu_shape({**env, "GPU_COUNT": "1"}) == ({"pp": 1, "dcp_size": 1, "pcp_size": 1}, 1, 1, 1, "false")
 
 
 @pytest.mark.parametrize("decode_workers,expected_gpus,expected_decode", [
@@ -804,6 +832,7 @@ def test_gpu_shape_counts_workers_and_normalizes_absent_decode(
         "DECODE_TP": "2", "DECODE_EP": "11", "DECODE_PP_SIZE": "1",
         "DECODE_DCP_SIZE": "9", "DECODE_PCP_SIZE": "5", "DECODE_DP_ATTN": "false",
         "PREFILL_GPUS": "999", "DECODE_GPUS": "999",
+        "PREFILL_GPUS_PER_WORKER": "24", "DECODE_GPUS_PER_WORKER": "10",
     }
     fields, num_gpus, tp, ep, attention = _gpu_shape(env)
     assert num_gpus == expected_gpus
@@ -814,6 +843,32 @@ def test_gpu_shape_counts_workers_and_normalizes_absent_decode(
     assert (tp, ep, attention) == ((5, 11, "true") if decode_workers == "3" else (3, 8, "true"))
     assert fields["prefill_dp_attention"] == "YES"
     assert fields["decode_dp_attention"] == "false"
+
+
+def test_gpu_shape_counts_one_32_gpu_worker_without_rewriting_tp():
+    fields, count, tp, ep, _ = _gpu_shape({
+        "IS_MULTINODE": "true", "PREFILL_NUM_WORKERS": "1",
+        "PREFILL_GPUS_PER_WORKER": "32", "PREFILL_TP": "16", "PREFILL_EP": "32",
+        "DECODE_NUM_WORKERS": "0", "DECODE_GPUS_PER_WORKER": "32",
+    })
+    assert (count, fields["num_prefill_gpu"], fields["num_decode_gpu"]) == (32, 32, 0)
+    assert (tp, ep, fields["prefill_num_workers"]) == (16, 32, 1)
+
+
+@pytest.mark.parametrize("value", [None, "", "0", "-1"])
+def test_gpu_shape_requires_positive_explicit_gpu_count(value):
+    env = {"TP": "4", **({"GPU_COUNT": value} if value is not None else {})}
+    with pytest.raises(SystemExit, match="GPU_COUNT"):
+        _gpu_shape(env)
+
+
+@pytest.mark.parametrize("field", ["PREFILL_GPUS_PER_WORKER", "DECODE_GPUS_PER_WORKER"])
+def test_multinode_gpu_shape_requires_each_explicit_gpu_count(field):
+    env = {"IS_MULTINODE": "true", "PREFILL_NUM_WORKERS": "1", "DECODE_NUM_WORKERS": "1",
+           "PREFILL_GPUS_PER_WORKER": "4", "DECODE_GPUS_PER_WORKER": "8"}
+    del env[field]
+    with pytest.raises(SystemExit, match=field):
+        _gpu_shape(env)
 
 
 @pytest.mark.parametrize("env,error_type,message", [
@@ -1678,6 +1733,9 @@ def test_processor_uses_aiperf_theoretical_cache_metric(tmp_path: Path):
             "RESULT_FILENAME": "agg_test",
             "MODEL": "test-model",
             "TP": "4",
+            "GPU_COUNT": "4",
+            "PREFILL_GPUS_PER_WORKER": "4",
+            "DECODE_GPUS_PER_WORKER": "4",
             "CONC": "8",
             "KV_OFFLOADING": "none",
             "RUNNER_TYPE": "h100-x4",
@@ -1789,7 +1847,7 @@ def test_builder_uses_explicit_inputs_without_environment_or_file_access(monkeyp
     accounting = {"records_total": 4, "records_profiled": 2, "records_dropped_total": 2,
                   "records_warmup_dropped": 1, "records_error_dropped": 1,
                   "error_categories": {"Timeout": 1}}
-    env = {"KV_OFFLOADING": "none", "TP": "4", "FRAMEWORK": "vllm"}
+    env = {"KV_OFFLOADING": "none", "TP": "4", "GPU_COUNT": "4", "FRAMEWORK": "vllm"}
     before = deepcopy((records, aggregate, server_metrics, traces, logs, accounting, env))
 
     def forbidden(*args, **kwargs):
@@ -1806,7 +1864,7 @@ def test_builder_uses_explicit_inputs_without_environment_or_file_access(monkeyp
             records, aggregate, server_metrics, MappingProxyType(env),
             request_accounting=accounting, traces=iter(traces), server_logs=iter(logs),
         )
-        second = build_result(records, aggregate, {}, {**env, "TP": "2"})
+        second = build_result(records, aggregate, {}, {**env, "TP": "2", "GPU_COUNT": "2"})
 
     assert result["request_metrics"]["throughput"]["per_gpu"] == {
         "total_tput_tps": 37.5, "output_tput_tps": 12.5, "input_tput_tps": 25.0,
@@ -1834,7 +1892,7 @@ def test_builder_does_not_consume_logs_when_backend_does_not_use_them(framework,
 
     result = build_result(
         [], {}, {"metrics": {name: {"series": []} for name in metric_names}},
-        {"KV_OFFLOADING": "none", "FRAMEWORK": framework},
+        {"KV_OFFLOADING": "none", "GPU_COUNT": "1", "FRAMEWORK": framework},
         server_logs=unavailable_logs(),
     )
     assert result["kv_cache_pool_tokens"] is None
@@ -1863,7 +1921,7 @@ def test_processor_preserves_validation_before_optional_trace_reads(tmp_path, ov
     env = {
         "PATH": os.environ.get("PATH", ""), "PYTHONPATH": str(REPO_ROOT),
         "RESULT_DIR": str(result_dir), "AGENTIC_OUTPUT_DIR": str(out),
-        "RESULT_FILENAME": "agg_test", "KV_OFFLOADING": "none",
+        "RESULT_FILENAME": "agg_test", "KV_OFFLOADING": "none", "GPU_COUNT": "1",
         "FRAMEWORK": "vllm", "HF_HUB_CACHE": str(cache), **override,
     }
     proc = subprocess.run(

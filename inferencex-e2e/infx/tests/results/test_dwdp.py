@@ -19,7 +19,7 @@ from infx.results.topology import Parallelism, validate_parallelism
 
 
 def worker(**overrides):
-    return {"num-worker": 2, "tp": 1, "ep": 1, "dp-attn": False, "dwdp-size": 8, **overrides}
+    return {"num-worker": 2, "gpus-per-worker": 8, "tp": 1, "ep": 1, "dp-attn": False, "dwdp-size": 8, **overrides}
 
 
 def test_group_allocation():
@@ -74,9 +74,11 @@ def test_agentic_metadata_counts_groups():
             "PREFILL_EP": "1",
             "PREFILL_DWDP_SIZE": "8",
             "PREFILL_NUM_WORKERS": "2",
+            "PREFILL_GPUS_PER_WORKER": "8",
             "DECODE_TP": "8",
             "DECODE_EP": "8",
             "DECODE_NUM_WORKERS": "1",
+            "DECODE_GPUS_PER_WORKER": "8",
         }
     )
     assert (fields["num_prefill_gpu"], fields["num_decode_gpu"], total) == (16, 8, 24)
@@ -115,10 +117,10 @@ def test_agentic_names_select_dwdp_variants_without_ambiguity():
     assert filter_exp_names(entries, [name(8)]) == [entries[2]]
 
 
-@pytest.mark.parametrize("size", [3, 10])
-def test_allocation_errors_name_the_dwdp_factor(size):
-    with pytest.raises(ValueError, match=rf"tp\*pp\*pcp-size\*dwdp-size={size}"):
-        worker_gpus_per_node(worker(**{"dwdp-size": size}), 8)
+@pytest.mark.parametrize("size", [10, 12])
+def test_allocation_errors_name_the_explicit_gpu_request(size):
+    with pytest.raises(ValueError, match=rf"gpus-per-worker={size}"):
+        worker_gpus_per_node(worker(**{"gpus-per-worker": size}), 8)
 
 
 @pytest.mark.parametrize("key", [benchmark_key, agentic_key, eval_key])

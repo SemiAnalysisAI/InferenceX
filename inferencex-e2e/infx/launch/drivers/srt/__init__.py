@@ -36,6 +36,7 @@ from infx.launch.drivers.srt.recipe import (
     staged_recipe,
 )
 from infx.launch.drivers.srt.run import SrtRun, require, slurm_backend
+from infx.launch.memory import gpu_share_mib
 from infx.launch.request import (
     BATCH_REENTRY_ENV,
     MultiNodeRequest,
@@ -64,6 +65,14 @@ def run_single_node(launch: Launch) -> int:
         root = Path(tempfile.mkdtemp(prefix="srt-single.", dir=run.workspace))
         checkout = prepare_checkout(run, root / "checkout", power=not request.eval_only)
         install_srtctl(run, checkout)
+        available = run.cluster.available_cpu_dram_mib
+        job_mib = None
+        if available is not None:
+            job_mib = (
+                0
+                if run.srt.single_node_exclusive
+                else gpu_share_mib(available, request.gpu_count, run.cluster.gpus_per_node)
+            )
         if (options := config.srun_options(run.backend.settings)) is not None:
             run.env["SRT_SRUN_OPTIONS"] = options
         if rc := submit.bind_point(run, checkout, root / "arguments"):
@@ -86,6 +95,7 @@ def run_single_node(launch: Launch) -> int:
             mounts=[(str(hf_cache), request.hf_hub_cache)],
             single_node=True,
             account=run.account,
+            mem_mib=job_mib,
         )
         config.create_volume_mounts(run)
         config.write(checkout.root / "srtslurm.yaml", config.render(run.cluster, job_config))

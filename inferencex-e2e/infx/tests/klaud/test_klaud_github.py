@@ -2194,7 +2194,7 @@ def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
         "conc": [1, 2],
         "isl": 8000,
         "osl": 1000,
-        "tp": 8,
+        "gpus-per-worker": 8, "tp": 8,
         "ep": 1,
         "recipe-fingerprint": "fingerprint",
     }
@@ -2327,7 +2327,7 @@ def test_baseline_freezes_published_points_of_every_curve_key(monkeypatch):
             "model-prefix": "dsr1", "runner": "cluster:fixture", "framework": "sglang",
             "precision": "fp8", "spec-decoding": spec, "disagg": False,
             "scenario-type": "agentic-coding", "kv-offloading": "none", "image": "example/image:1",
-            "conc": [4], "tp": 1, "ep": 1, "recipe-fingerprint": spec,
+            "conc": [4], "gpus-per-worker": 1, "tp": 1, "ep": 1, "recipe-fingerprint": spec,
         }  # fmt: skip
 
     def row(spec, output):
@@ -2398,7 +2398,7 @@ def serve_mixed_curve(monkeypatch, agg="published"):
             "model-prefix": "dsr1", "runner": "cluster:fixture", "framework": "sglang",
             "precision": "fp8", "spec-decoding": spec, "disagg": False,
             "scenario-type": "agentic-coding", "kv-offloading": "none", "image": image,
-            "conc": [4], "tp": 1, "ep": 1, "recipe-fingerprint": spec,
+            "conc": [4], "gpus-per-worker": 1, "tp": 1, "ep": 1, "recipe-fingerprint": spec,
         }  # fmt: skip
 
     def row(spec, image, run, output):
@@ -2604,8 +2604,8 @@ def test_multinode_identity_matches_published_aggregate_encodings(
         "precision": "fp4", "spec-decoding": "mtp", "disagg": disagg,
         "scenario-type": "agentic-coding", "kv-offloading": "dram", "conc": 4,
         "image": "example/image:1",
-        "prefill": {"num-worker": workers, "tp": 8, "ep": 1, "dp-attn": False},
-        "decode": {"num-worker": int(disagg), "tp": 8 if disagg else 4, "ep": 1, "dp-attn": False},
+        "prefill": {"num-worker": workers, "gpus-per-worker": 8, "tp": 8, "ep": 1, "dp-attn": False},
+        "decode": {"num-worker": int(disagg), "gpus-per-worker": (8 if disagg else 4), "tp": 8 if disagg else 4, "ep": 1, "dp-attn": False},
     }
     multinode, prefill_workers, decode_workers, decode_tp = published
     row = {
@@ -2622,7 +2622,7 @@ def test_multinode_identity_matches_published_aggregate_encodings(
 
 
 def test_sglang_disagg_identity_matches_its_published_mori_sglang_rows():
-    worker = {"num-worker": 1, "tp": 4, "ep": 1, "dp-attn": False}
+    worker = {"num-worker": 1, "gpus-per-worker": 4, "tp": 4, "ep": 1, "dp-attn": False}
     entry = {
         "model-prefix": "dsv4", "runner": "cluster:mi355x-amds", "framework": "sglang-disagg",
         "precision": "fp4", "spec-decoding": "draft_model", "disagg": True,
@@ -2656,7 +2656,7 @@ def family_configs():
             "scenarios": {
                 "agentic-coding": [{
                     "search-space": [{
-                        "tp": 1, "kv-offloading": "none", "conc-list": [2, 6],
+                        "gpus-per-worker": 1, "tp": 1, "kv-offloading": "none", "conc-list": [2, 6],
                         "srt-recipe": "recipe.yaml",
                     }],
                 }],
@@ -2685,7 +2685,7 @@ def test_canonical_family_matrix_reads_revision_layout(monkeypatch, family_confi
     # A fixed-seq-len curve of the same family is outside Klaud's AgentX scope.
     master["fixture"]["scenarios"]["fixed-seq-len"] = [{
         "isl": 8192, "osl": 1024,
-        "search-space": [{"tp": 1, "conc-list": [4], "srt-recipe": "recipe.yaml"}],
+        "search-space": [{"gpus-per-worker": 1, "tp": 1, "conc-list": [4], "srt-recipe": "recipe.yaml"}],
     }]
     files = {
         prefix + "configs/nvidia-master.yaml": yaml.safe_dump(master),
@@ -2735,7 +2735,7 @@ def test_final_matrix_of_a_curve_needs_one_changelog_entry_for_all_its_keys(
     master = {
         "agg": agg,
         "mtp": {**agg, "scenarios": {"agentic-coding": [{"search-space": [{
-            "tp": 1, "kv-offloading": "none", "conc-list": [4], "spec-decoding": "mtp",
+            "gpus-per-worker": 1, "tp": 1, "kv-offloading": "none", "conc-list": [4], "spec-decoding": "mtp",
             "srt-recipe": "mtp.yaml",
         }]}]}},
         "other": {**agg, "precision": "fp4"},
@@ -2982,7 +2982,7 @@ def dsr1_point(isl, conc):
     return {
         "image": "example/image:stable", "model": "example/model", "model-prefix": "dsr1",
         "precision": "fp8", "framework": "sglang", "runner": "fixture", "isl": isl, "osl": 1024,
-        "tp": 8, "pp": 1, "dcp-size": 1, "pcp-size": 1, "ep": 1, "dp-attn": False,
+        "gpus-per-worker": 8, "tp": 8, "pp": 1, "dcp-size": 1, "pcp-size": 1, "ep": 1, "dp-attn": False,
         "spec-decoding": "none", "disagg": False, "conc": conc, "max-model-len": isl + 1280,
         "exp-name": f"dsr1_{isl}", "run-eval": False, "recipe-fingerprint": f"{isl:064x}",
     }
@@ -3726,13 +3726,13 @@ def test_choose_needs_node_demand_on_every_target_cluster_and_skips_unresolved_r
 ):
     master, runners = family_configs
     fixture, record = master["fixture"], runners["clusters"]["fixture"]
-    worker = {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False}
+    worker = {"num-worker": 1, "gpus-per-worker": 8, "tp": 8, "ep": 1, "dp-attn": False}
     master = {
         "exact": {**fixture, "runner": "cluster:h100-dsxe"},
         "wide": {**fixture, "runner": "cluster:h100-dsxe", "multinode": True, "scenarios": {
             "agentic-coding": [{"search-space": [
-                {"num-nodes": nodes, "worker": worker, "kv-offloading": "none", "conc-list": [4],
-                 "srt-recipe": "wide.yaml"}
+                {"num-nodes": nodes, "worker": {**worker, "num-worker": nodes},
+                 "kv-offloading": "none", "conc-list": [4], "srt-recipe": "wide.yaml"}
                 for nodes in (2, 4, 3)
             ]}],
         }},
@@ -3753,7 +3753,7 @@ def test_choose_needs_node_demand_on_every_target_cluster_and_skips_unresolved_r
     write_fixture_recipe(tmp_path)
     recipe = tmp_path / "benchmarks/multi_node/srt-slurm-recipes/fixture/wide.yaml"
     recipe.parent.mkdir(parents=True)
-    recipe.write_text("{}\n")
+    recipe.write_text("schema: 2\nroles: {agg: {}}\n")
 
     families = klaud.live_families(tmp_path)
 
@@ -3804,10 +3804,10 @@ def write_curve(root, record, *, mtp_image="example/image:stable", mtp_file="nvi
         "precision": "fp8", "framework": "sglang", "runner": "cluster:h100-cw",
         "multinode": False, "srt-recipe-dir": "fixture",
         "scenarios": {"agentic-coding": [{"search-space": [{
-            "tp": 1, "kv-offloading": "none", "conc-list": [2, 6], "srt-recipe": "recipe.yaml",
+            "gpus-per-worker": 1, "tp": 1, "kv-offloading": "none", "conc-list": [2, 6], "srt-recipe": "recipe.yaml",
         }]}]},
     }  # fmt: skip
-    worker = {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False}
+    worker = {"num-worker": 1, "gpus-per-worker": 8, "tp": 8, "ep": 1, "dp-attn": False}
     keys = {
         "agg": agg,
         "disagg": {**agg, "runner": "cluster:h100-dsxe", "multinode": True, "disagg": True,
@@ -3816,7 +3816,7 @@ def write_curve(root, record, *, mtp_image="example/image:stable", mtp_file="nvi
                        "kv-offloading": "none", "conc-list": [8], "srt-recipe": "disagg.yaml",
                    }]}]}},
         "mtp": {**agg, "image": mtp_image, "scenarios": {"agentic-coding": [{"search-space": [{
-            "tp": 1, "kv-offloading": "none", "conc-list": [4], "spec-decoding": "mtp",
+            "gpus-per-worker": 1, "tp": 1, "kv-offloading": "none", "conc-list": [4], "spec-decoding": "mtp",
             "srt-recipe": "recipe.yaml",
         }]}]}},
     }  # fmt: skip
@@ -4066,7 +4066,7 @@ def test_a_fixed_sequence_result_reports_its_failed_requests(completed, errors, 
     env = {
         "RUNNER_TYPE": "h100", "FRAMEWORK": "sglang", "PRECISION": "fp8", "SPEC_DECODING": "none",
         "ISL": "1024", "OSL": "1024", "DISAGG": "false", "MODEL_PREFIX": "dsr1", "IMAGE": "i:1",
-        "TP": "8", "EP_SIZE": "1", "DP_ATTENTION": "false",
+        "TP": "8", "EP_SIZE": "1", "DP_ATTENTION": "false", "GPU_COUNT": "8",
     }  # fmt: skip
     values = reporting.values(build_result(raw, env))
     point = reporting.Point(
@@ -4157,7 +4157,7 @@ def eval_entry(tp):
     return {
         "model-prefix": "dsr1", "runner": "cluster:fixture-a", "framework": "sglang",
         "precision": "fp8", "spec-decoding": "none", "disagg": False,
-        "scenario-type": "agentic-coding", "tp": tp, "ep": 1, "dp-attn": False, "conc": 8,
+        "scenario-type": "agentic-coding", "gpus-per-worker": (tp), "tp": tp, "ep": 1, "dp-attn": False, "conc": 8,
         "image": "example/image:stable", "run-eval": True, "eval-only": True,
     }  # fmt: skip
 

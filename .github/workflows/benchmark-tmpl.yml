@@ -116,6 +116,7 @@ env:
   IMAGE: ${{ fromJSON(inputs.config).image }}
   FRAMEWORK: ${{ fromJSON(inputs.config).framework }}
   PRECISION: ${{ fromJSON(inputs.config).precision }}
+  GPU_COUNT: ${{ fromJSON(inputs.config)['gpus-per-worker'] }}
   TP: ${{ fromJSON(inputs.config).tp }}
   PP_SIZE: ${{ fromJSON(inputs.config).pp }}
   DCP_SIZE: ${{ fromJSON(inputs.config).dcp-size }}
@@ -286,8 +287,6 @@ jobs:
           RESULT_FILENAME=$(python3 -m infx.results.result_filename)
           if [ "${AL_GATE}" = "true" ]; then RESULT_FILENAME="${RESULT_FILENAME}_algate"; fi  # apart from the point's throughput artifacts
           export RESULT_FILENAME
-          export GPU_COUNT=$((TP * PP_SIZE * PCP_SIZE))
-          echo "GPU_COUNT=${GPU_COUNT}" >> "$GITHUB_ENV"
 
           echo "RESULT_FILENAME=${RESULT_FILENAME}" >> "$GITHUB_ENV"
 

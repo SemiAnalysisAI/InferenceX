@@ -169,6 +169,7 @@ env:
   PR_NUMBER: ${{ inputs.pr-number }}
   TEST_NAME: ${{ inputs.test-name }}
 
+  PREFILL_GPUS_PER_WORKER: ${{ fromJSON(inputs.config).prefill['gpus-per-worker'] }}
   PREFILL_NUM_WORKERS: ${{ fromJSON(inputs.config).prefill.num-worker }}
   PREFILL_TP: ${{ fromJSON(inputs.config).prefill.tp }}
   PREFILL_PP_SIZE: ${{ fromJSON(inputs.config).prefill.pp }}
@@ -179,6 +180,7 @@ env:
   PREFILL_EP: ${{ fromJSON(inputs.config).prefill.ep }}
   PREFILL_DP_ATTN: ${{ fromJSON(inputs.config).prefill.dp-attn }}
 
+  DECODE_GPUS_PER_WORKER: ${{ fromJSON(inputs.config).decode['gpus-per-worker'] }}
   DECODE_NUM_WORKERS: ${{ fromJSON(inputs.config).decode.num-worker }}
   DECODE_TP: ${{ fromJSON(inputs.config).decode.tp }}
   DECODE_PP_SIZE: ${{ fromJSON(inputs.config).decode.pp }}

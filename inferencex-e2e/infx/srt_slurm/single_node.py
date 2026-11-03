@@ -13,6 +13,8 @@ from typing import Any
 import yaml
 
 from infx.config import repository_root
+from infx.launch.resources import worker_resources
+from infx.srt_slurm.memory import bind_memory, bind_worker_resources
 from infx.srt_slurm.synthetic_acceptance import ENGINES, selected_recipes, spec_parameters
 from infx.srt_slurm.workload import (
     BOUND_RECIPE,
@@ -96,6 +98,8 @@ def select_recipe(
     for name, recipe in recipes:
         try:
             recipe = bind_workload(recipe, environment, agentic=agentic, multinode=False)
+            bind_worker_resources(recipe, worker_resources(environment))
+            recipe["roles"]["agg"]["nodes"] = 1
             validate_recipe(recipe, environment)
         except ValueError as exc:
             errors.append(f"{name}: {exc}")
@@ -222,6 +226,8 @@ def main() -> None:
     prepare.add_argument("recipe")
     prepare.add_argument("output", type=Path)
     add_fabric_argument(prepare)
+    prepare.add_argument("--available-memory-mib", type=int, required=True)
+    prepare.add_argument("--gpus-per-node", type=int, required=True)
     submitted = commands.add_parser("submission")
     submitted.add_argument("manifest", type=Path)
     parsed = parser.parse_args()
@@ -231,6 +237,12 @@ def main() -> None:
         if parsed.command == "prepare":
             selected, recipe = select_recipe(parsed.recipe, os.environ)
             recipe = resolve_fabric(recipe, parsed.fabric)
+            bind_memory(
+                recipe,
+                parsed.available_memory_mib,
+                parsed.gpus_per_node,
+                worker_resources(os.environ),
+            )
             check_setup_script(recipe, Path(parsed.recipe.partition(":")[0]), repository_root())
             arguments = runtime_arguments(parsed.recipe, os.environ)
             config = parsed.output.with_name(BOUND_RECIPE)

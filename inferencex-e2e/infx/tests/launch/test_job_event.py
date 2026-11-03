@@ -73,7 +73,7 @@ def agentx_aggregate() -> dict:
         "records_total": 3, "records_profiled": 3, "records_dropped_total": 1,
         "records_warmup_dropped": 0, "records_error_dropped": 1, "error_categories": {},
     }  # fmt: skip
-    env = {"TP": "2", "CONC": "4", "KV_OFFLOADING": "none", "FRAMEWORK": "vllm"}
+    env = {"TP": "2", "GPU_COUNT": "2", "CONC": "4", "KV_OFFLOADING": "none", "FRAMEWORK": "vllm"}
     return build_result(records, {}, {}, env, request_accounting=accounting)
 
 
