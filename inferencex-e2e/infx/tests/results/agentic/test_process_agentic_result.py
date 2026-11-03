@@ -53,7 +53,6 @@ AGG_TOP_LEVEL_KEYS = {
     "dp_attention",
     "kv_offloading",
     "kv_offload_backend",
-    "allocated_cpu_dram_gb",
     "num_requests_total",
     "num_requests_successful",
     "request_accounting",
@@ -702,18 +701,6 @@ def test_processor_aggregates_full_response_itl_and_interactivity(tmp_path: Path
     assert full_response_itl["p75"] == pytest.approx(0.00523)
     assert full_response_intvty["p50"] == pytest.approx(200.0)
     assert full_response_intvty["p75"] == pytest.approx(191.02578)
-
-
-def test_processor_surfaces_allocated_cpu_dram(tmp_path: Path):
-    result_dir = _write_fixture(tmp_path)
-
-    agg = _run_processor(
-        result_dir,
-        tmp_path / "out",
-        env_overrides={"TOTAL_CPU_DRAM_GB": "2400"},
-    )
-
-    assert agg["allocated_cpu_dram_gb"] == 2400
 
 
 def test_multinode_processor_surfaces_heterogeneous_hardware(tmp_path: Path):

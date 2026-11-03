@@ -97,7 +97,6 @@ def _validate_kv_offload(env: Mapping[str, str]) -> None:
     elif mode == "dram":
         if not backend or backend == "none":
             raise inputs.InputError("KV_OFFLOAD_BACKEND is required when KV_OFFLOADING=dram")
-        inputs.parse_positive_int("TOTAL_CPU_DRAM_GB", env.get("TOTAL_CPU_DRAM_GB", ""))
     else:
         raise inputs.InputError(
             f"unsupported KV_OFFLOADING value {mode!r} (expected one of: none, dram)"

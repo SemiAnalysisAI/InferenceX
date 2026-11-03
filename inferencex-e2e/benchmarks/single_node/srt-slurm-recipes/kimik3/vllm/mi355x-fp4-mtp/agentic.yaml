@@ -153,7 +153,6 @@ override_tp8_c4_dcp8_simple:
     env:
       CONC: '4'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1799'
 
 override_tp8_c10_dcp8_simple:
   roles:
@@ -176,7 +175,6 @@ override_tp8_c10_dcp8_simple:
     env:
       CONC: '10'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1799'
 
 override_tp8_c16_dcp8_simple:
   roles:
@@ -199,7 +197,6 @@ override_tp8_c16_dcp8_simple:
     env:
       CONC: '16'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1799'
 
 override_tp8_c24_dcp8_simple:
   roles:
@@ -222,7 +219,6 @@ override_tp8_c24_dcp8_simple:
     env:
       CONC: '24'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1799'
 
 override_tp8_c32_dcp8_simple:
   roles:
@@ -245,7 +241,6 @@ override_tp8_c32_dcp8_simple:
     env:
       CONC: '32'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1799'
 
 # Throughput band: same dcp8 DRAM-offload layout with a 4-token DSpark draft.
 # Synthetic acceptance replaces block rejection with the golden acceptance
@@ -271,7 +266,6 @@ override_tp8_c48_dcp8_simple:
     env:
       CONC: '48'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1799'
       SPEC_DECODING: 'mtp'
 
 override_tp8_c52_dcp8_simple:
@@ -295,7 +289,6 @@ override_tp8_c52_dcp8_simple:
     env:
       CONC: '52'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1799'
       SPEC_DECODING: 'mtp'
 
 override_tp8_c60_dcp8_simple:
@@ -319,5 +312,4 @@ override_tp8_c60_dcp8_simple:
     env:
       CONC: '60'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1799'
       SPEC_DECODING: 'mtp'

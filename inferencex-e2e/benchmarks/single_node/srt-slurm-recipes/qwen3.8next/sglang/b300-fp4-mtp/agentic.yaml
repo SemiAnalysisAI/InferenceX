@@ -99,7 +99,6 @@ base:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       # Native single-node binding verifies these against the generated point.
-      TOTAL_CPU_DRAM_GB: '299'
       KV_OFFLOADING: dram
 
 override_tp4_c1:
@@ -128,7 +127,6 @@ override_tp4_c1:
     env:
       <<: &gpu_only_client
         KV_OFFLOADING: none
-        TOTAL_CPU_DRAM_GB: '0'
       CONC: '1'
 
 override_tp4_c2:

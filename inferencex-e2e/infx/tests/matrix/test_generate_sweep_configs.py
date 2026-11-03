@@ -2733,7 +2733,6 @@ class TestAgenticGeneration:
                 "scenarios": {
                     "agentic-coding": [
                         {
-                            "dram-utilization": 0.80,
                             "search-space": [
                                 {
                                     "tp": 8,
@@ -2754,71 +2753,7 @@ class TestAgenticGeneration:
         assert len(result) == 1
         assert result[0]["runner"] == "b300-nv_1"
         assert result[0]["scenario-type"] == "agentic-coding"
-        assert result[0]["total-cpu-dram-gb"] == 2399
         assert result[0]["duration"] == 3600
-
-    def test_agentic_node_dram_uses_explicit_gpu_count(self, sample_runner_config, generate_agentic_sweep):
-        config = {
-            "dsv4-b300-agentic": {
-                "image": "vllm/vllm-openai:v0.23.0",
-                "model": "deepseek-ai/DeepSeek-V4-Pro",
-                "model-prefix": "dsv4",
-                "precision": "fp4",
-                "framework": "vllm",
-                "runner": "cluster:b300-nv",
-                "multinode": False,
-                "scenarios": {
-                    "agentic-coding": [{
-                        "dram-utilization": 0.80,
-                        "search-space": [
-                            {
-                                "tp": 4,
-                                "kv-offloading": "dram",
-                                "kv-offload-backend": {"name": "native"},
-                                "conc-list": [32],
-                            },
-                            {
-                                "tp": 4,
-                                "dcp-size": 2,
-                                "pcp-size": 1,
-                                "kv-offloading": "dram",
-                                "kv-offload-backend": {"name": "native"},
-                                "conc-list": [32],
-                            },
-                            {
-                                "tp": 4,
-                                "dcp-size": 1,
-                                "pcp-size": 2,
-                                "kv-offloading": "dram",
-                                "kv-offload-backend": {"name": "native"},
-                                "conc-list": [32],
-                            },
-                            {
-                                "tp": 4,
-                                "pp": 2,
-                                "kv-offloading": "dram",
-                                "kv-offload-backend": {"name": "native"},
-                                "conc-list": [32],
-                            },
-                        ],
-                    }],
-                },
-            },
-        }
-
-        result = generate_agentic_sweep(config, sample_runner_config)
-
-        budgets = {
-            (entry["pp"], entry["dcp-size"], entry["pcp-size"]): entry["total-cpu-dram-gb"]
-            for entry in result
-        }
-        assert budgets == {
-            (1, 1, 1): 1199,
-            (1, 2, 1): 1199,
-            (1, 1, 2): 2399,
-            (2, 1, 1): 2399,
-        }
-        assert all(entry["duration"] == 3600 for entry in result)
 
     @pytest.mark.parametrize("filters", [{}, {"min_conc": 999, "conc": [999]}])
     def test_agentic_node_dram_rejects_tp_above_runner_gpus(self, sample_runner_config, generate_agentic_sweep, filters):
@@ -2833,7 +2768,6 @@ class TestAgenticGeneration:
                 "multinode": False,
                 "scenarios": {
                     "agentic-coding": [{
-                        "dram-utilization": 0.80,
                         "search-space": [
                             {
                                 "tp": 4,
@@ -2851,43 +2785,6 @@ class TestAgenticGeneration:
 
         with pytest.raises(ValueError, match="exceeds gpus-per-node"):
             generate_agentic_sweep(config, runner_config, **filters)
-
-    def test_cluster_records_supply_agentic_dram_budget(self, generate_agentic_sweep):
-        config = {
-            "dsv4-b300-agentic": {
-                "image": "vllm/vllm-openai:v0.23.0",
-                "model": "deepseek-ai/DeepSeek-V4-Pro",
-                "model-prefix": "dsv4",
-                "precision": "fp4",
-                "framework": "vllm",
-                "runner": "cluster:b300-nv",
-                "multinode": False,
-                "scenarios": {
-                    "agentic-coding": [{
-                        "dram-utilization": 0.80,
-                        "search-space": [
-                            {
-                                "tp": 4,
-                                "pp": pp,
-                                "kv-offloading": "dram",
-                                "kv-offload-backend": {"name": "native"},
-                                "conc-list": [32],
-                            }
-                            for pp in (1, 2)
-                        ],
-                    }],
-                },
-            },
-        }
-        cluster = cluster_record(8, **{"available-cpu-dram-mib": 2964436})
-        runners = {"labels": {"cluster:b300-nv": ["b300-nv_0"]}, "clusters": {"b300-nv": cluster}}
-
-        result = generate_agentic_sweep(config, validate_runner_config(runners))
-
-        assert {entry["pp"]: entry["total-cpu-dram-gb"] for entry in result} == {1: 1199, 2: 2399}
-        del cluster["available-cpu-dram-mib"]
-        with pytest.raises(ValueError, match="requires 'available-cpu-dram-mib'"):
-            generate_agentic_sweep(config, validate_runner_config(runners))
 
     def test_multinode_agentic_isolates_each_concurrency_per_search_entry(
         self, sample_runner_config, generate_agentic_sweep
@@ -2953,7 +2850,6 @@ class TestAgenticGeneration:
                 "kv-p2p-transfer": "mori",
                 "scenarios": {
                     "agentic-coding": [{
-                        "dram-utilization": 0.80,
                         "search-space": [{
                             "conc-list": [16],
                             "kv-offloading": "dram",
@@ -2972,42 +2868,6 @@ class TestAgenticGeneration:
         assert result[0]["kv-offloading"] == "dram"
         assert result[0]["kv-offload-backend"] == {"name": "hicache"}
         assert result[0]["exp-name"] == "dsv4_p1x8_d1x8_conc16_kvdram-hicache"
-        assert result[0]["total-cpu-dram-gb"] == 2399
-
-    def test_multinode_agentic_budgets_each_role_from_its_own_gpus(
-        self, sample_runner_config, generate_agentic_sweep
-    ):
-        config = {
-            "dsv4-agentic-hicache-asym": {
-                "image": "sglang-rocm",
-                "model": "deepseek-ai/DeepSeek-V4-Pro",
-                "model-prefix": "dsv4",
-                "precision": "fp4",
-                "framework": "sglang-disagg",
-                "runner": "cluster:mi355x-amds",
-                "multinode": True,
-                "disagg": True,
-                "kv-p2p-transfer": "mori",
-                "scenarios": {
-                    "agentic-coding": [{
-                        "dram-utilization": 0.80,
-                        "search-space": [{
-                            "conc-list": [16],
-                            "kv-offloading": "dram",
-                            "kv-offload-backend": {"name": "hicache"},
-                            "prefill": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
-                            "decode": {"num-worker": 1, "tp": 4, "ep": 1, "dp-attn": False},
-                        }],
-                    }],
-                },
-            },
-        }
-
-        result = generate_agentic_sweep(config, sample_runner_config)
-
-        assert len(result) == 1
-        assert result[0]["total-cpu-dram-gb"] == 2399
-        assert result[0]["decode-cpu-dram-gb"] == 1199
 
     @pytest.mark.parametrize(("prefill_tp", "decode_tp", "role"), [(6, 8, "prefill"), (8, 6, "decode")])
     def test_multinode_agentic_rejects_node_misaligned_worker(
@@ -3026,7 +2886,6 @@ class TestAgenticGeneration:
                 "kv-p2p-transfer": "mori",
                 "scenarios": {
                     "agentic-coding": [{
-                        "dram-utilization": 0.80,
                         "search-space": [{
                             "conc-list": [16],
                             "kv-offloading": "dram",
@@ -3041,49 +2900,6 @@ class TestAgenticGeneration:
 
         with pytest.raises(ValueError, match=rf"^{role} tp\*pp\*pcp-size=6 does not divide"):
             generate_agentic_sweep(config, sample_runner_config)
-
-    @pytest.mark.parametrize(
-        ("kv_offloading", "workers"),
-        [
-            ("none", {
-                "prefill": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
-                "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
-            }),
-            ("dram", {"worker": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False}}),
-        ],
-    )
-    def test_multinode_agentic_omits_zero_decode_budget(
-        self, sample_runner_config, generate_agentic_sweep, kv_offloading, workers
-    ):
-        offload = {"kv-offloading": kv_offloading}
-        if kv_offloading == "dram":
-            offload["kv-offload-backend"] = {"name": "hicache"}
-        config = {
-            "dsv4-agentic-no-decode-budget": {
-                "image": "sglang-rocm",
-                "model": "deepseek-ai/DeepSeek-V4-Pro",
-                "model-prefix": "dsv4",
-                "precision": "fp4",
-                "framework": "sglang-disagg",
-                "runner": "cluster:mi355x-amds",
-                "multinode": True,
-                "disagg": "prefill" in workers,
-                **({"kv-p2p-transfer": "mori"} if "prefill" in workers else {}),
-                "scenarios": {
-                    "agentic-coding": [{
-                        "dram-utilization": 0.80,
-                        "search-space": [{"conc-list": [16], **offload, **workers}],
-                    }],
-                },
-            },
-        }
-
-        result = generate_agentic_sweep(config, sample_runner_config)
-
-        assert len(result) == 1
-        assert "decode-cpu-dram-gb" not in result[0]
-
-
 
 class TestApplyNodeTypeDefaults:
 

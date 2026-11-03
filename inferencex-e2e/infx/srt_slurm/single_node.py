@@ -142,7 +142,7 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
         ),
         "AgentX client": (benchmark.get("command", "").endswith("srt_agentic.sh"), agentic),
     }
-    for name in ("CONC", "KV_OFFLOADING", "TOTAL_CPU_DRAM_GB"):
+    for name in ("CONC", "KV_OFFLOADING"):
         if name in workload:
             expected[name] = (str(workload[name]), environment[name])
     if engine == "atom":

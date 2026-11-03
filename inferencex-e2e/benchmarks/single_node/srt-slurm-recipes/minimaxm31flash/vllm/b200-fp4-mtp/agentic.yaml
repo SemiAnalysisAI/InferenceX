@@ -64,8 +64,6 @@ zip_override_tp4:
       CONC: ['1', '4', '8', '16', '24']
       KV_OFFLOADING: none
 
-# DRAM points give SimpleCPUOffload the whole host budget (TOTAL_CPU_DRAM_GB
-# decimal GB) with lazy offload.
 override_tp4_c32_dram:
   roles:
     agg:
@@ -81,7 +79,6 @@ override_tp4_c32_dram:
     env:
       CONC: '32'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1073'
 
 zip_override_dep8:
   frontend:
@@ -110,4 +107,3 @@ zip_override_dep8:
     env:
       CONC: ['64', '96', '128']
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1932'

@@ -60,7 +60,6 @@ override_hicache:
   benchmark:
     env:
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1234'
 # The same HiCache arm with the experts TP-sharded (EP1) on a later nightly.
 override_hicache_ep1:
   roles:
@@ -76,7 +75,6 @@ override_hicache_ep1:
   benchmark:
     env:
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1234'
 # TP4/EP4 HiCache on half the node: 617 GB / TP4 / 2 pools = 77 GB each.
 override_hicache_tp4_c8:
   roles:
@@ -96,7 +94,6 @@ override_hicache_tp4_c8:
     env:
       CONC: '8'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '617'
 override_hicache_tp4_c12:
   roles:
     agg:
@@ -115,7 +112,6 @@ override_hicache_tp4_c12:
     env:
       CONC: '12'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '617'
 # EP1 HiCache arm on the FA3 attention backend, with the EAGLE depth set per concurrency.
 override_hicache_ep1_fa3_k5_c4:
   roles:
@@ -135,7 +131,6 @@ override_hicache_ep1_fa3_k5_c4:
     env:
       CONC: '4'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1234'
 override_hicache_ep1_fa3_k5_c8:
   roles:
     agg:
@@ -154,7 +149,6 @@ override_hicache_ep1_fa3_k5_c8:
     env:
       CONC: '8'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1234'
 override_hicache_ep1_fa3_k5_c12:
   roles:
     agg:
@@ -173,7 +167,6 @@ override_hicache_ep1_fa3_k5_c12:
     env:
       CONC: '12'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1234'
 override_hicache_ep1_fa3_k6_c24:
   roles:
     agg:
@@ -192,7 +185,6 @@ override_hicache_ep1_fa3_k6_c24:
     env:
       CONC: '24'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1234'
 override_hicache_ep1_fa3_k6_c32:
   roles:
     agg:
@@ -211,7 +203,6 @@ override_hicache_ep1_fa3_k6_c32:
     env:
       CONC: '32'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1234'
 override_hicache_ep1_fa3_k4_c48:
   roles:
     agg:
@@ -230,4 +221,3 @@ override_hicache_ep1_fa3_k4_c48:
     env:
       CONC: '48'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1234'

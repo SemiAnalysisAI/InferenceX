@@ -1053,8 +1053,7 @@ qwen3.5-fp8-b200-sglang-agentic-mtp:
   srt-recipe-dir: qwen3.5/sglang/b200-fp8-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32, 40, 48, 56, 60, 62, 64], srt-recipe: agentic.yaml }
       - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64, 66, 68, 70, 72, 76], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 14], srt-recipe: agentic.yaml }
@@ -1083,8 +1082,7 @@ kimik3-fp4-h200-vllm-agentic-latency:
   srt-recipe-dir: kimik3/vllm/h200-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       # Latency-oriented: TP16 x DP2 with EP32 across four H200 nodes.
       - spec-decoding: mtp
         kv-offloading: none
@@ -1110,8 +1108,7 @@ kimik3-fp4-h200-vllm-agentic-balanced:
   srt-recipe-dir: kimik3/vllm/h200-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       # Balanced: TP8 x DP4 with EP32 across four H200 nodes.
       - spec-decoding: mtp
         kv-offloading: none
@@ -1137,8 +1134,7 @@ kimik3-fp4-h200-vllm-agentic-simple:
   srt-recipe-dir: kimik3/vllm/h200-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       # Throughput-oriented hybrid TP/DEP/EP with vLLM's host-DRAM KV tier.
       - spec-decoding: mtp
         kv-offloading: dram
@@ -1218,10 +1214,7 @@ kimik3-fp4-b300-vllm-agentic-dspark:
   scenarios:
     # Agentic-coding only: no fixed-seq-len (1k1k / 8k1k) arms for this recipe.
     agentic-coding:
-      # Sizes the Mooncake segment: this resolves to total-cpu-dram-gb, which
-      # the recipe divides across the 8 TP ranks.
-    - dram-utilization: 0.75
-      search-space:
+    - search-space:
       # TP8-only: a ~1.5 TB MXFP4 checkpoint does not fit below 8 GPUs.
       # One entry for every arm: the recipe drafts at DSpark 7 up to conc 8,
       # DSpark 3 at conc 16, and not at all above. Keep the concurrencies
@@ -3343,8 +3336,7 @@ qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg:
   scenarios:
     agentic-coding:
     # Recipes reserve 128 GiB per rank; each node has 840 GiB and 4 GPUs.
-    - dram-utilization: 0.609524
-      search-space:
+    - search-space:
       # 1P1D: 1 prefill (TP1/EP1/dp-attn), 1 decode (TP2/EP2) on the same node, batch 8, conc=38, 48
       - spec-decoding: "mtp"
         kv-offloading: dram
@@ -3486,8 +3478,7 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg:
   srt-recipe-dir: qwen3.5/sglang/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.90
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -3582,8 +3573,7 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg:
   srt-recipe-dir: qwen3.5/sglang/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.90
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -3708,8 +3698,7 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-pp-pareto:
   srt-recipe-dir: qwen3.5/sglang/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.90
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -3757,8 +3746,7 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg-pareto:
   srt-recipe-dir: qwen3.5/sglang/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.90
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -3810,8 +3798,7 @@ qwen3.5-fp8-gb300-dynamo-sglang-agentic-pp-pareto:
   srt-recipe-dir: qwen3.5/sglang/gb300-fp8/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.90
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -3893,8 +3880,7 @@ qwen3.5-fp8-gb300-dynamo-sglang-agentic-agg-pareto:
   srt-recipe-dir: qwen3.5/sglang/gb300-fp8/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.90
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -3967,8 +3953,7 @@ qwen3.5-fp8-b300-sglang-agentic-mtp:
   srt-recipe-dir: qwen3.5/sglang/b300-fp8-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32, 40, 48, 56, 60, 64, 68, 72], srt-recipe: agentic.yaml }
       - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32], srt-recipe: agentic.yaml }
       - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32, 34, 36, 38, 40, 44, 48, 52, 56], srt-recipe: agentic.yaml }
@@ -3984,8 +3969,7 @@ qwen3.5-fp4-b300-sglang-agentic-mtp:
   srt-recipe-dir: qwen3.5/sglang/b300-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32, 40, 48, 56, 60, 64, 68, 72], srt-recipe: agentic.yaml }
       - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32], srt-recipe: agentic.yaml }
       - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [36, 44, 52], srt-recipe: agentic.yaml }
@@ -4004,8 +3988,7 @@ qwen3.5-fp4-b300-dynamo-sglang-agentic-pareto:
   srt-recipe-dir: qwen3.5/sglang/b300-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.90
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -4078,9 +4061,7 @@ qwen3.8next-fp4-b300-sglang-agentic-mtp:
   srt-recipe-dir: qwen3.8next/sglang/b300-fp4-mtp
   scenarios:
     agentic-coding:
-    # HiCache rows take the 3 TB policy share per GPU (299 GB); the recipe's 298 GB keeps alignment headroom.
-    - dram-utilization: 0.8
-      search-space:
+    - search-space:
       - { tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2], srt-recipe: agentic.yaml }
       - { tp: 1, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 12, 24], srt-recipe: agentic.yaml }
       - { tp: 1, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [48, 80], srt-recipe: agentic.yaml }
@@ -4096,8 +4077,7 @@ qwen3.5-fp8-h100-sglang-agentic:
   srt-recipe-dir: qwen3.5/sglang/h100-fp8
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - { tp: 8, ep: 8, kv-offloading: none,    conc-list: [1, 2, 4, 8, 12, 14, 16], srt-recipe: agentic.yaml }
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [12, 14, 16, 20, 24, 28, 32, 42], srt-recipe: agentic.yaml }
 
@@ -4132,8 +4112,7 @@ qwen3.5-fp8-h200-sglang-agentic-mtp:
   srt-recipe-dir: qwen3.5/sglang/h200-fp8-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [4, 8, 12, 16], srt-recipe: agentic.yaml }
       - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [4, 8, 12, 16], srt-recipe: agentic.yaml }
 
@@ -4148,8 +4127,7 @@ qwen3.8next-fp8-h200-sglang-agentic-mtp:
   srt-recipe-dir: qwen3.8next/sglang/h200-fp8-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.8
-      search-space:
+    - search-space:
       - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 8, 12, 14, 16], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 8], srt-recipe: agentic.yaml }
 # H200 AgentX MTP frontier with DRAM HiCache. This is intentionally an MTP-only
@@ -4165,8 +4143,7 @@ qwen3.5-fp8-h200-sglang-agentic-hicache-mtp:
   srt-recipe-dir: qwen3.5/sglang/h200-fp8-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [2, 10, 16, 20], srt-recipe: agentic.yaml }
       - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [4], srt-recipe: agentic.yaml:override_hicache_ep1_fa3_k5_c4 }
       - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [8], srt-recipe: agentic.yaml:override_hicache_ep1_fa3_k5_c8 }
@@ -4188,8 +4165,7 @@ qwen3.5-fp8-h100-sglang-agentic-mtp:
   srt-recipe-dir: qwen3.5/sglang/h100-fp8-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16], srt-recipe: agentic.yaml }
       - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [4, 8, 12, 16], srt-recipe: agentic.yaml }
 # MiniMax-M3.1-Flash AgentX on H100: day-zero vLLM image from
@@ -4209,8 +4185,7 @@ minimaxm31flash-fp4-h100-vllm-agentic-dspark:
   srt-recipe-dir: minimaxm31flash/vllm/h100-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       # TP8 is the upstream Hopper layout. The 250 GB checkpoint leaves ~33 GiB of
       # KV per 80 GB GPU, about 2x MiniMax-M3 H100 (cliff c5-c6).
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 6, 8, 10, 12], srt-recipe: agentic.yaml }
@@ -4232,8 +4207,7 @@ minimaxm31flash-fp4-h200-vllm-agentic-dspark:
   srt-recipe-dir: minimaxm31flash/vllm/h200-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       # TP8 is the upstream Hopper layout. The 250 GB checkpoint leaves ~88 GiB of
       # KV per 141 GB GPU, about 1.3x MiniMax-M3 H200 (run to c14).
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 12, 16, 20, 24], srt-recipe: agentic.yaml }
@@ -4249,8 +4223,7 @@ qwen3.5-fp4-b200-sglang-agentic-mtp:
   srt-recipe-dir: qwen3.5/sglang/b200-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32, 40, 48, 56, 60, 62, 64], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64, 66, 68, 70, 72], srt-recipe: agentic.yaml }
       - { tp: 2, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 14], srt-recipe: agentic.yaml }
@@ -4270,8 +4243,7 @@ qwen3.8next-fp4-b200-sglang-agentic-mtp:
   srt-recipe-dir: qwen3.8next/sglang/b200-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.8
-      search-space:
+    - search-space:
       - { tp: 1, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 16], srt-recipe: agentic.yaml }
 qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
@@ -4285,8 +4257,7 @@ qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp:
   srt-recipe-dir: qwen3.5/sglang/gb200-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.90
-      search-space:
+    - search-space:
       # TP4 K5 covers the low-latency branch. Retain only materially distinct
       # point variants; omit variants dominated in the official PR sweep.
       - spec-decoding: mtp
@@ -4369,8 +4340,7 @@ minimaxm31flash-fp4-b200-vllm-agentic-dspark:
     agentic-coding:
     - search-space:
       - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 16, 24], srt-recipe: agentic.yaml }
-    - dram-utilization: 1.0
-      search-space:
+    - search-space:
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [32], srt-recipe: agentic.yaml }
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [40], srt-recipe: agg-variants.yaml:override_tp4_c40 }
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [48], srt-recipe: agg-variants.yaml:override_tp4_c48 }
@@ -4397,8 +4367,7 @@ minimaxm31flash-fp4-b200-sglang-agentic-dspark:
       - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 16, 32], srt-recipe: agentic.yaml }
       # Low-Latency: MSA-V1 MonoKernel at batch size 1.
       - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: agentic-low-latency.yaml }
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32, 40, 48, 56, 64], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [72, 80], srt-recipe: agentic.yaml }
 
@@ -4440,8 +4409,7 @@ minimaxm31flash-fp4-b300-vllm-agentic-dspark:
       - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [8], srt-recipe: 'agentic.yaml:zip_override_tp4[2]' }
       - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [16], srt-recipe: 'agentic.yaml:zip_override_tp4[3]' }
       - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [32], srt-recipe: 'agentic.yaml:override_tp4_c32' }
-    - dram-utilization: 1.0
-      search-space:
+    - search-space:
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [24], srt-recipe: 'agentic.yaml:override_tp4_c24' }
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [40], srt-recipe: 'agentic.yaml:zip_override_tp4_dram[0]' }
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [48], srt-recipe: 'agentic.yaml:zip_override_tp4_dram[1]' }
@@ -4472,8 +4440,7 @@ minimaxm31flash-fp4-gb200-sglang-agentic-dspark:
       - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 16, 32], srt-recipe: agentic.yaml }
       # Low-Latency: MSA-V1 MonoKernel at batch size 1.
       - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: agentic-low-latency.yaml }
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32, 40, 48, 56, 64], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [72, 80], srt-recipe: agentic.yaml }
 
@@ -4499,8 +4466,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic:
   srt-recipe-dir: kimik3/vllm/gb200-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.61
-      search-space:
+    - search-space:
       # Latency oriented: multi_node_tp strategy, TP16 across four GB200
       # nodes.
       # https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=gb200&nodes=4&strategy=multi_node_tp
@@ -4564,8 +4530,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg:
   srt-recipe-dir: kimik3/vllm/gb200-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.1065
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
@@ -4592,8 +4557,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg:
   srt-recipe-dir: kimik3/vllm/gb200-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.1065
-      search-space:
+    - search-space:
       - kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
         conc-list: [8, 40, 48]
@@ -4620,8 +4584,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
   srt-recipe-dir: kimik3/vllm/gb200-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.8
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
@@ -4737,8 +4700,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-2p2d:
   srt-recipe-dir: glm5.2/sglang/h200-fp8/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         conc-list: [8]
         kv-offloading: none
@@ -4805,8 +4767,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-1p1d-hicache:
   srt-recipe-dir: glm5.2/sglang/h200-fp8/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         conc-list: [8]
         kv-offloading: dram
@@ -4875,8 +4836,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg:
   srt-recipe-dir: glm5.2/sglang/h200-fp8/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         conc-list: [2]
         kv-offloading: dram
@@ -4962,8 +4922,7 @@ glm5.2-fp4-b300-sglang-agentic-mtp:
   srt-recipe-dir: glm5.2/sglang/b300-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32, 40, 48], srt-recipe: agentic.yaml }
 
 # GLM-5.2 FP8 AgentX on B300: TP8, 270 GB/rank HiCache, same upstream image.
@@ -4983,8 +4942,7 @@ glm5.2-fp8-b300-sglang-agentic-mtp:
   srt-recipe-dir: glm5.2/sglang/b300-fp8-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12, 16, 20, 24, 28], srt-recipe: agentic.yaml }
 
 # First GLM-5.2 AgentX recipe on B200, shipped spec-decode-only per the AgentX
@@ -5013,8 +4971,7 @@ glm5.2-fp4-b200-sglang-agentic-mtp:
   srt-recipe-dir: glm5.2/sglang/b200-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12, 16], srt-recipe: agentic.yaml }
 
 glm5.2-fp8-b200-sglang-agentic-mtp:
@@ -5028,8 +4985,7 @@ glm5.2-fp8-b200-sglang-agentic-mtp:
   srt-recipe-dir: glm5.2/sglang/b200-fp8-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12], srt-recipe: agentic.yaml }
       - { tp: 8, dcp-size: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [16, 17, 18, 24], srt-recipe: agentic.yaml }
 
@@ -5050,8 +5006,7 @@ glm5.2-fp4-b200-dynamo-sglang-agentic-agg:
   srt-recipe-dir: glm5.2/sglang/b200-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 1.0
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         power: true
         conc-list: [1]
@@ -5139,8 +5094,7 @@ glm5.2-fp4-b200-dynamo-sglang-agentic-disagg:
   srt-recipe-dir: glm5.2/sglang/b200-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       # 1P(DEP8)4D(TP4): three nodes total.
       - spec-decoding: mtp
         power: true
@@ -5189,8 +5143,7 @@ glm5.2-fp4-gb200-dynamo-sglang-agentic-agg:
   srt-recipe-dir: glm5.2/sglang/gb200-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         conc-list: [1]
         kv-offloading: dram
@@ -5231,8 +5184,7 @@ glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg:
   srt-recipe-dir: glm5.2/sglang/gb200-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         conc-list: [36]
         kv-offloading: dram
@@ -5365,8 +5317,7 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-agg:
   srt-recipe-dir: glm5.2/sglang/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         conc-list: [1]
         kv-offloading: dram
@@ -5403,8 +5354,7 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
   srt-recipe-dir: glm5.2/sglang/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.85
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         conc-list: [30]
         kv-offloading: dram
@@ -5524,8 +5474,7 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
   srt-recipe-dir: glm5.2/trtllm/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.15239
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         conc-list: [1]
         kv-offloading: dram
@@ -5636,8 +5585,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
   srt-recipe-dir: kimik3/vllm/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.1775
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend:
@@ -5768,8 +5716,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dep16-disagg:
   srt-recipe-dir: kimik3/vllm/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.1775
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend:
@@ -5845,8 +5792,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
   srt-recipe-dir: kimik3/vllm/b200-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.8
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [1]
@@ -6007,8 +5953,7 @@ dsv41flash-fp4-h100-vllm-agentic-dspark:
   srt-recipe-dir: dsv41flash/vllm/h100-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       # Extend beyond the c1 full-context capacity estimate to measure the
       # AgentX workload's practical saturation curve; c20, c24 and c28 fill in
       # the knee between c16 and the point where 1M-token trajectories preempt.
@@ -6036,8 +5981,7 @@ dsv41flash-fp4-h100-sglang-agentic-dspark:
   srt-recipe-dir: dsv41flash/sglang/h100-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 20], srt-recipe: agentic.yaml }
 
 # Sweep supported DP8 attention alongside the retained plain TP8 curve.
@@ -6052,8 +5996,7 @@ dsv41flash-fp4-h100-sglang-agentic-dspark-dpa:
   srt-recipe-dir: dsv41flash/sglang/h100-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [4, 8, 16, 20], srt-recipe: agentic.yaml }
 
 dsv41flash-fp4-gb200-vllm-agentic-dspark:
@@ -6067,8 +6010,7 @@ dsv41flash-fp4-gb200-vllm-agentic-dspark:
   srt-recipe-dir: dsv41flash/vllm/gb200-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
       # TP4 covers low concurrency with FlashInfer attention and THP Engram tables.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 32], srt-recipe: agentic.yaml }
@@ -6096,8 +6038,7 @@ dsv41flash-fp4-gb200-sglang-agentic-dspark:
   srt-recipe-dir: dsv41flash/sglang/gb200-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 32], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [16], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [64, 96, 128, 160, 256], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: agentic.yaml }
@@ -6115,8 +6056,7 @@ musespark-fp4-gb200-sglang-agentic-dflash:
     agentic-coding:
     - search-space:
       - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: draft_model, conc-list: [1], srt-recipe: agentic.yaml }
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [2, 4, 6, 8, 10, 16, 20, 24, 28, 32], srt-recipe: agentic.yaml }
 
 musespark-fp4-b200-sglang-agentic-dflash:
@@ -6130,8 +6070,7 @@ musespark-fp4-b200-sglang-agentic-dflash:
   srt-recipe-dir: musespark/sglang/b200-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.90
-      search-space:
+    - search-space:
       - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 6, 8, 10], srt-recipe: agentic.yaml }
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [56, 64], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [8, 10, 16, 24], srt-recipe: agentic.yaml }
@@ -6147,8 +6086,7 @@ musespark-fp4-h200-sglang-agentic-dflash:
   srt-recipe-dir: musespark/sglang/h200-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [1, 2, 4, 8, 16, 24, 32, 48, 64], srt-recipe: agentic.yaml }
 
 dsv41flash-fp4-b300-vllm-agentic-dspark:
@@ -6162,8 +6100,7 @@ dsv41flash-fp4-b300-vllm-agentic-dspark:
   srt-recipe-dir: dsv41flash/vllm/b300-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       # Engram weights use UVA DRAM; DEP2 at conc 128 and 192 also offloads KV blocks to DRAM.
       # TP4 covers low concurrency with FlashInfer attention and THP Engram tables.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 8, 16], srt-recipe: agentic.yaml }
@@ -6183,8 +6120,7 @@ dsv41flash-fp4-b200-vllm-agentic-dspark:
   srt-recipe-dir: dsv41flash/vllm/b200-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
       # TP4 covers concurrency 1-128 except 64 with FlashInfer attention and THP Engram tables.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 16, 32, 128], srt-recipe: agentic.yaml }
@@ -6208,8 +6144,7 @@ dsv41flash-fp4-b200-sglang-agentic-dspark:
   srt-recipe-dir: dsv41flash/sglang/b200-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [16, 24], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [48, 64, 96, 128, 192, 256], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: agentic.yaml }
@@ -6225,8 +6160,7 @@ dsv41flash-fp4-gb300-vllm-agentic-dspark:
   srt-recipe-dir: dsv41flash/vllm/gb300-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
       # TP4 covers low concurrency with FlashInfer attention and THP Engram tables.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 16], srt-recipe: agentic.yaml }
@@ -6278,8 +6212,7 @@ minimaxm31flash-fp4-gb300-sglang-agentic-dspark:
       - { tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [32], srt-recipe: agentic.yaml }
       # Low-Latency: MSA-V1 MonoKernel at batch size 1.
       - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: agentic-low-latency.yaml }
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       # Balanced TP4 with L2 HiCache: 180 GB per rank at conc 64.
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64], srt-recipe: agentic.yaml }
       # TP2 with L2 HiCache: 180 GB per rank at conc 32-44.
@@ -6341,8 +6274,7 @@ minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-agg:
         num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c16
         worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -6386,8 +6318,7 @@ minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg:
   srt-recipe-dir: minimaxm31flash/sglang/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 1.0
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -6436,8 +6367,7 @@ dsv41flash-fp4-h200-vllm-agentic-dspark:
   srt-recipe-dir: dsv41flash/vllm/h200-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       # 8x141 GB holds the 511 GB checkpoint minus the UVA-offloaded Engram
       # tables, so the KV cache stays GPU-resident across the full range.
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128], srt-recipe: agentic.yaml }
@@ -6468,8 +6398,7 @@ dsv41flash-fp4-h200-sglang-agentic-dspark:
   srt-recipe-dir: dsv41flash/sglang/h200-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16], srt-recipe: agentic.yaml }
       - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16], srt-recipe: agentic.yaml }
 
@@ -6489,8 +6418,7 @@ qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp:
   srt-recipe-dir: qwen3.5/sglang/b200-fp8/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.8
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         kv-offloading: dram
         conc-list:
@@ -6618,8 +6546,7 @@ qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg:
   srt-recipe-dir: qwen3.5/sglang/b300-fp8/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.8
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend:
@@ -6786,8 +6713,7 @@ dsv41flash-fp4-b300-sglang-agentic-dspark:
   srt-recipe-dir: dsv41flash/sglang/b300-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [8, 16, 20], srt-recipe: agentic.yaml }
       - { tp: 2, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [16, 32, 48], srt-recipe: agentic.yaml }
       - { tp: 2, ep: 2, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [64, 256], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: agentic.yaml }
@@ -6804,8 +6730,7 @@ dsv41flash-fp4-b300-sglang-agentic-dspark-lowconc:
   srt-recipe-dir: dsv41flash/sglang/b300-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4], srt-recipe: agentic-lowconc.yaml }
 
 # MiniMax-M3.1-Flash AgentX on B300 with SGLang: day-zero image from the SGLang
@@ -6830,8 +6755,7 @@ minimaxm31flash-fp4-b300-sglang-agentic-dspark:
       - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [16], srt-recipe: 'agentic-tp4-spf-extra.yaml:override_tp4_c16_spf_interval32' }
       # Low-Latency: MSA-V1 MonoKernel at batch size 1.
       - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: agentic-low-latency.yaml }
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32, 64, 80, 96], srt-recipe: agentic.yaml }
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [24], srt-recipe: 'agentic-tp4-spf.yaml:zip_override_tp4_dram_spf_interval32[0]' }
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32], srt-recipe: 'agentic-tp4-spf.yaml:zip_override_tp4_dram_spf_interval32[1]' }
@@ -6842,8 +6766,7 @@ minimaxm31flash-fp4-b300-sglang-agentic-dspark:
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [44], srt-recipe: 'agentic-tp4-spf-extra.yaml:zip_override_tp4_dram_spf_interval32[1]' }
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [52], srt-recipe: 'agentic-tp4-spf-extra.yaml:zip_override_tp4_dram_spf_interval32[2]' }
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [60], srt-recipe: 'agentic-tp4-spf-extra.yaml:zip_override_tp4_dram_spf_interval32[3]' }
-    - dram-utilization: 1.0
-      search-space:
+    - search-space:
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32, 36, 40, 44, 46, 48], srt-recipe: agentic-tp2.yaml }
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [40], srt-recipe: 'agentic-tp2-spf.yaml:zip_override_tp2_hicache_spf[0]' }
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [44], srt-recipe: 'agentic-tp2-spf.yaml:zip_override_tp2_hicache_spf[1]' }
@@ -6875,8 +6798,7 @@ dsv41flash-fp4-gb300-sglang-agentic-dspark:
   srt-recipe-dir: dsv41flash/sglang/gb300-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - { tp: 2, ep: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [16, 32], srt-recipe: agentic.yaml }
       - { tp: 2, ep: 2, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [64, 128, 160], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: agentic.yaml }
       - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 16], srt-recipe: agentic.yaml }
@@ -6893,8 +6815,7 @@ dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg:
   srt-recipe-dir: dsv41flash/sglang/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         conc-list: [1]
         num-nodes: 1
@@ -6946,8 +6867,7 @@ dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-hicache:
   srt-recipe-dir: dsv41flash/sglang/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         conc-list: [1228]
         srt-recipe: disagg-dep16-hicache-variants.yaml:override_3p1d_dep2_dep16_c1228
@@ -7022,8 +6942,7 @@ dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg:
   srt-recipe-dir: dsv41flash/vllm/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         kv-offloading: none
         srt-recipe: agg-variants.yaml:override_tp4_c1_seq1
@@ -7060,8 +6979,7 @@ dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg:
   scenarios:
     agentic-coding:
     # Four prefill DP ranks per node each offload up to 70 GiB of KV on an 840 GiB node.
-    - dram-utilization: 0.333333
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple }
@@ -7122,8 +7040,7 @@ qwen3.8next-fp4-gb300-sglang-agentic-mtp:
     agentic-coding:
     # Use the GB300 profile's proportional per-worker host DRAM allowance.
     # Generated allowance: 225 GB. Recipe H224 reserves alignment headroom.
-    - dram-utilization: 1.0
-      search-space:
+    - search-space:
       - tp: 1
         require-power: true
         ep: 1
@@ -7147,8 +7064,7 @@ musespark-fp4-gb300-sglang-agentic-dflash:
     agentic-coding:
     - search-space:
       - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 5, 8, 10, 15], srt-recipe: agentic.yaml }
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [24, 28, 30, 34, 44, 48], srt-recipe: agentic.yaml }
 
 musespark-fp4-gb300-dynamo-sglang-agentic-dflash:
@@ -7225,8 +7141,7 @@ musespark-fp4-gb300-dynamo-sglang-agentic-dflash:
           tp: 8
           ep: 8
           dp-attn: false
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - spec-decoding: draft_model
         conc-list: [40]
         kv-offloading: dram
@@ -7284,8 +7199,7 @@ musespark-fp4-gb300-trt-agentic-dflash:
           tp: 8
           ep: 8
           dp-attn: false
-    - dram-utilization: 0.427409
-      search-space:
+    - search-space:
       - spec-decoding: draft_model
         kv-offloading: dram
         kv-offload-backend: { name: native }
@@ -7319,8 +7233,7 @@ musespark-fp4-gb300-trt-agentic-dflash:
           tp: 4
           ep: 4
           dp-attn: false
-    - dram-utilization: 0.712348
-      search-space:
+    - search-space:
       - spec-decoding: draft_model
         kv-offloading: dram
         kv-offload-backend: { name: native }
@@ -7372,8 +7285,7 @@ qwen3.5-fp8-gb300-dynamo-sglang-agentic-pp-midcurve:
   srt-recipe-dir: qwen3.5/sglang/gb300-fp8/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.9
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend:
@@ -7454,8 +7366,7 @@ glm5.2-fp4-b300-dynamo-sglang-agentic-agg-tp4:
   srt-recipe-dir: glm5.2/sglang/b300-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 1.0
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         conc-list: [1]
         kv-offloading: dram
@@ -7545,8 +7456,7 @@ musespark-fp4-b300-sglang-agentic-dflash:
   srt-recipe-dir: musespark/sglang/b300-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 8, 10, 14, 16, 20, 24], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [16, 28, 32, 40, 44, 48], srt-recipe: agentic.yaml }
 
@@ -7561,8 +7471,7 @@ musespark-fp4-h100-sglang-agentic-dflash:
   srt-recipe-dir: musespark/sglang/h100-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [1, 2, 4, 8], srt-recipe: agentic.yaml }
 
 # Kimi-K3 GB200 disaggregated points: one
@@ -7584,8 +7493,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-disagg:
     agentic-coding:
     # 0.142 resolves to 128 GB of host DRAM per 4-GPU server node on
     # cluster:gb200-nv, matching the recipes' Mooncake segment size.
-    - dram-utilization: 0.142
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
@@ -7642,8 +7550,7 @@ glm5.3-fp4-b300-sglang-agentic-mtp:
     agentic-coding:
     - search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 10, 13, 14], srt-recipe: agentic.yaml }
-    - dram-utilization: 1.0
-      search-space:
+    - search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [22, 24, 25, 28], srt-recipe: agentic.yaml }
 
 minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-agg:
@@ -7686,8 +7593,7 @@ minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-agg:
         num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c16
         worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
-    - dram-utilization: 1.0
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple }
@@ -7719,8 +7625,7 @@ minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-disagg:
   srt-recipe-dir: minimaxm31flash/vllm/gb200-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 1.0
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: 0.3.13.post1 }
@@ -7824,8 +7729,7 @@ minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg:
         num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c32
         worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
-    - dram-utilization: 1.0
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple }
@@ -7864,8 +7768,7 @@ minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg:
   srt-recipe-dir: minimaxm31flash/vllm/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 1.0
-      search-space:
+    - search-space:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: 0.3.13.post1 }

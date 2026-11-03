@@ -61,4 +61,3 @@ override_hicache:
   benchmark:
     env:
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1607'

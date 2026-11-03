@@ -96,15 +96,15 @@ def test_agentx_fragments_are_composed_and_bound_to_the_point(point):
         select_recipe(f"{path}:base", agentic)
 
 
-def test_a_variant_with_another_dram_budget_is_rejected(point):
+def test_a_variant_with_another_offloading_mode_is_rejected(point):
     path, recipe, env = point
     path.write_text(yaml.safe_dump({"base": recipe, "override_c2_dram": {"benchmark": {"env": {
-        "CONC": "2", "KV_OFFLOADING": "dram", "TOTAL_CPU_DRAM_GB": "865",
-    }}}}))  # fmt: skip
-    dram = {**env, "IS_AGENTIC": "1", "KV_OFFLOADING": "dram", "TOTAL_CPU_DRAM_GB": "865"}
+        "CONC": "2", "KV_OFFLOADING": "dram",
+    }}}}))
+    dram = {**env, "IS_AGENTIC": "1", "KV_OFFLOADING": "dram"}
     assert select_recipe(str(path), dram)[0] == f"{path}:override_c2_dram"
-    with pytest.raises(ValueError, match=r"TOTAL_CPU_DRAM_GB: recipe/matrix '865' != '1731'"):
-        select_recipe(str(path), {**dram, "TOTAL_CPU_DRAM_GB": "1731"})
+    with pytest.raises(ValueError, match=r"KV_OFFLOADING: recipe/matrix 'dram' != 'none'"):
+        select_recipe(str(path), {**dram, "KV_OFFLOADING": "none"})
 
 
 def test_ambiguous_native_variants_are_rejected(point):
