@@ -1,24 +1,20 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from copy import deepcopy
 from typing import Any
+
+from infx.launch.memory import gpu_share_mib
 
 _MEMORY_OPTIONS = ("mem", "mem-per-cpu", "mem-per-gpu")
 
 
 def bind_memory(recipe: dict[str, Any], available_mib: int, gpus_per_node: int) -> dict[str, Any]:
-    """Bind GPU-proportional worker and job memory limits into a resolved recipe in place."""
+    """Bind GPU-proportional inference-worker memory limits into a resolved recipe in place."""
     from marshmallow import ValidationError
     from srtctl.core.config import expand_engine_config_defaults, resolve_config_with_defaults
     from srtctl.core.schema import SrtConfig
 
-    if isinstance(available_mib, bool) or not isinstance(available_mib, int) or available_mib <= 0:
-        raise ValueError(
-            "available-cpu-dram-mib must be a positive integer for worker memory limits"
-        )
-    if isinstance(gpus_per_node, bool) or not isinstance(gpus_per_node, int) or gpus_per_node <= 0:
-        raise ValueError("gpus-per-node must be a positive integer for worker memory limits")
+    gpu_share_mib(available_mib, gpus_per_node, gpus_per_node)
     global_options = recipe.get("srun_options", {})
     if conflict := sorted({"mem-per-cpu", "mem-per-gpu"} & global_options.keys()):
         raise ValueError(
@@ -26,8 +22,8 @@ def bind_memory(recipe: dict[str, Any], available_mib: int, gpus_per_node: int) 
             "scope helper memory options to their own steps"
         )
 
-    planning = deepcopy(recipe)
-    resources = planning.setdefault("resources", {})
+    resolved = resolve_config_with_defaults(recipe, {"gpus_per_node": gpus_per_node})
+    resources = resolved.setdefault("resources", {})
     placement_gpus = resources.setdefault("gpus_per_node", gpus_per_node)
     if (
         isinstance(placement_gpus, bool)
@@ -36,8 +32,7 @@ def bind_memory(recipe: dict[str, Any], available_mib: int, gpus_per_node: int) 
     ):
         raise ValueError("Recipe resources.gpus_per_node must fit the allocated cluster")
     # Exporter defaults are supplied later by the cluster; they cannot change GPU placement.
-    planning["telemetry"] = {"enabled": False}
-    resolved = resolve_config_with_defaults(planning, {"gpus_per_node": gpus_per_node})
+    resolved["telemetry"] = {"enabled": False}
     expand_engine_config_defaults(resolved)
     try:
         config = SrtConfig.Schema().load(resolved)
@@ -48,13 +43,11 @@ def bind_memory(recipe: dict[str, Any], available_mib: int, gpus_per_node: int) 
     processes = config.worker_processes(endpoints)
     counts: dict[str, set[int]] = defaultdict(set)
     capacities: dict[str, int] = defaultdict(int)
-    by_node: dict[str, int] = defaultdict(int)
 
     for endpoint in endpoints:
-        for rank, node in enumerate(endpoint.nodes):
-            size = available_mib * len(endpoint.gpus_on_node(rank)) // gpus_per_node
+        for rank in range(endpoint.num_nodes):
+            size = gpu_share_mib(available_mib, len(endpoint.gpus_on_node(rank)), gpus_per_node)
             capacities[endpoint.mode] += size
-            by_node[node] += size
     for process in processes:
         backend = config.backend_for_role(process.endpoint_mode)
         if backend.get_srun_config().launch_per_endpoint:
@@ -66,7 +59,7 @@ def bind_memory(recipe: dict[str, Any], available_mib: int, gpus_per_node: int) 
             counts[endpoint.mode].update(
                 len(endpoint.gpus_on_node(rank)) for rank in range(endpoint.num_nodes)
             )
-    if not by_node:
+    if not endpoints:
         raise ValueError("Automatic worker memory needs at least one inference worker")
     limits = {}
     for role, sizes in counts.items():
@@ -75,12 +68,7 @@ def bind_memory(recipe: dict[str, Any], available_mib: int, gpus_per_node: int) 
                 f"roles.{role} has different local GPU counts {sorted(sizes)}; "
                 "one role srun memory limit cannot enforce proportional memory on this layout"
             )
-        limit = available_mib * next(iter(sizes)) // gpus_per_node
-        if limit <= 0:
-            raise ValueError(f"roles.{role} GPU share is less than one MiB")
-        limits[role] = limit
-    if max(by_node.values()) > available_mib:
-        raise ValueError("Worker GPU placement exceeds the node's available DRAM")
+        limits[role] = gpu_share_mib(available_mib, next(iter(sizes)), gpus_per_node)
 
     recipe.setdefault("resources", {}).setdefault("gpus_per_node", gpus_per_node)
     for role, limit in limits.items():
@@ -88,10 +76,6 @@ def bind_memory(recipe: dict[str, Any], available_mib: int, gpus_per_node: int) 
         for key in _MEMORY_OPTIONS:
             options.pop(key, None)
         options["mem"] = f"{limit}M"
-    directives = recipe.setdefault("sbatch_directives", {})
-    for key in _MEMORY_OPTIONS:
-        directives.pop(key, None)
-    directives["mem"] = f"{max(by_node.values())}M"
     environment = recipe.setdefault("benchmark", {}).setdefault("env", {})
     environment["INFERENCEX_WORKER_MEMORY_MIB"] = str(sum(capacities.values()))
     if "decode" in capacities:

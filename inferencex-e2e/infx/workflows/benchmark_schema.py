@@ -31,7 +31,11 @@ class SingleNodeConfig(_WorkflowFields, SingleNodeMatrixEntry):
     """Fixed-sequence input to benchmark-tmpl.yml, before priority annotation."""
 
 
-class AgenticConfig(_WorkflowFields, SingleNodeAgenticMatrixEntry):
+class _HistoricalAgenticFields(BaseModel):
+    total_cpu_dram_gb: int = Field(default=0, alias="total-cpu-dram-gb", ge=0)
+
+
+class AgenticConfig(_HistoricalAgenticFields, _WorkflowFields, SingleNodeAgenticMatrixEntry):
     """AgentX input to benchmark-tmpl.yml, before priority annotation."""
 
     scenario_type: Literal["agentic-coding"] = Field(alias="scenario-type")
@@ -45,9 +49,10 @@ class MultiNodeConfig(_BatchFields, MultiNodeMatrixEntry):
     """Fixed-sequence input to benchmark-multinode-tmpl.yml."""
 
 
-class MultiNodeAgenticConfig(_BatchFields, MultiNodeAgenticMatrixEntry):
+class MultiNodeAgenticConfig(_HistoricalAgenticFields, _BatchFields, MultiNodeAgenticMatrixEntry):
     """AgentX input to benchmark-multinode-tmpl.yml."""
 
+    decode_cpu_dram_gb: int = Field(default=0, alias="decode-cpu-dram-gb", ge=0)
     scenario_type: Literal["agentic-coding"] = Field(alias="scenario-type")
 
 

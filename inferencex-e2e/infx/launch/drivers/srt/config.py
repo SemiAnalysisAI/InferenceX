@@ -49,6 +49,7 @@ class SrtJob:
     mounts: Sequence[tuple[str, str]] = ()
     single_node: bool = False
     account: str | None = None
+    mem_mib: int | None = None
 
 
 def pyxis_spelling(image: str) -> str:
@@ -137,6 +138,8 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
     if settings.exclude:
         directives["exclude"] = ",".join(settings.exclude)
     directives.update(settings.cpu_directives())
+    if job.mem_mib is not None:
+        directives["mem"] = f"{job.mem_mib}M" if job.mem_mib else "0"
     if srt.gpus_per_node_directive is False and (gres := settings.gres_for(cluster.gpus_per_node)):
         directives["gres"] = gres
     if directives:

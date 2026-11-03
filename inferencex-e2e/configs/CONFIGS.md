@@ -217,8 +217,11 @@ schema; unknown keys fail.
   `roles.<role>.srun_options.mem`. Four GPUs on an eight-GPU node receive half the node's
   available DRAM, including when the job has exclusive access. A worker spanning whole
   nodes receives the full available amount on each node; colocated roles receive their
-  own shares. Frontends, benchmark clients, telemetry, and services do not inherit worker
-  limits. Slurm must be configured to enforce job-step memory limits.
+  own shares. The proportional policy is scheduler independent; the Slurm adapter applies
+  it to inference-worker steps. Frontends, benchmark clients, telemetry, services, and job
+  allocations retain their existing memory settings. These are worker ceilings, not dedicated
+  reservations: workers and helpers still share the enclosing job's memory budget. Slurm
+  must be configured to enforce job-step memory limits.
   Native engine cache sizes remain recipe settings: the offload pool and all other server
   allocations must fit within the worker's limit. The memory allocation does not reserve
   the entire amount for KV cache. Results record the total assigned worker capacity in

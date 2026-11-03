@@ -1176,7 +1176,7 @@ AGENTIC_EVAL_ROW = {
     "model-prefix": "dsv4", "precision": "fp4", "framework": "vllm",
     "runner": "cluster:b300-nv", "tp": 8, "pp": 1, "dcp-size": 1,
     "pcp-size": 1, "ep": 8, "dp-attn": True, "spec-decoding": "mtp",
-    "conc": 224, "kv-offloading": "none",
+    "conc": 224, "kv-offloading": "none", "total-cpu-dram-gb": 0,
     "duration": 3600, "exp-name": "dsv4_tp8_conc224_kvnone_spec-mtp",
     "scenario-type": "agentic-coding", "run-eval": True, "eval-only": True,
 }
@@ -1190,7 +1190,7 @@ MULTINODE_AGENTIC_EVAL_ROW = {
     "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
     "conc": [32], "kv-offloading": "dram",
     "kv-offload-backend": {"name": "hicache"}, "kv-p2p-transfer": "mori",
-    "duration": 3600,
+    "total-cpu-dram-gb": 2399, "duration": 3600,
     "exp-name": "dsv4_p1x8_d1x8_conc32_kvdram-hicache", "disagg": True,
     "scenario-type": "agentic-coding", "run-eval": True, "eval-only": True,
     "eval-conc": 32,
@@ -1224,6 +1224,27 @@ class TestBenchmarkWorkflowSchema:
         monkeypatch.setattr(sys, "stdin", io.StringIO(raw))
         benchmark_schema.main()
         assert capsys.readouterr().out == raw
+
+    @pytest.mark.parametrize("budgets", [
+        {}, {"total-cpu-dram-gb": 0},
+        {"total-cpu-dram-gb": 2399, "decode-cpu-dram-gb": 1199},
+    ])
+    def test_preserves_historical_memory_fields(self, budgets, monkeypatch, capsys):
+        row = {key: value for key, value in MULTINODE_AGENTIC_EVAL_ROW.items()
+               if key != "total-cpu-dram-gb"}
+        row.update(budgets)
+        raw = json.dumps([row])
+        monkeypatch.setattr(sys, "argv", ["benchmark_schema"])
+        monkeypatch.setattr(sys, "stdin", io.StringIO(raw))
+        benchmark_schema.main()
+        assert capsys.readouterr().out == raw
+
+    @pytest.mark.parametrize("value", [-1, "32", None, True])
+    @pytest.mark.parametrize("field", ["total-cpu-dram-gb", "decode-cpu-dram-gb"])
+    def test_historical_memory_fields_require_nonnegative_integers(self, field, value):
+        row = {**MULTINODE_AGENTIC_EVAL_ROW, field: value}
+        with pytest.raises(ValueError, match=field):
+            benchmark_schema.validate_matrix([row])
 
     @pytest.mark.parametrize(("field", "value"), [
         ("tp", "8"), ("dp-attn", "false"), ("conc", [4]), ("conc", 0),
@@ -1289,6 +1310,15 @@ class TestBenchmarkWorkflowSchema:
         assert "error:" in output.err
 
 
+CURRENT_AGENTIC_EVAL_ROW = {
+    key: value for key, value in AGENTIC_EVAL_ROW.items() if key != "total-cpu-dram-gb"
+}
+CURRENT_MULTINODE_AGENTIC_EVAL_ROW = {
+    key: value for key, value in MULTINODE_AGENTIC_EVAL_ROW.items()
+    if key != "total-cpu-dram-gb"
+}
+
+
 class TestChangelogMatrixEntry:
     """Tests for the final search-space contract consumed by run-sweep.yml."""
 
@@ -1296,7 +1326,7 @@ class TestChangelogMatrixEntry:
         """`evals` is dispatched with fixed-seq-len inputs (isl/osl/
         max-model-len), so agentic rows must only validate in agentic_evals."""
         entry = ChangelogMatrixEntry.model_validate({
-            "agentic_evals": [AGENTIC_EVAL_ROW],
+            "agentic_evals": [CURRENT_AGENTIC_EVAL_ROW],
             "changelog_metadata": CHANGELOG_METADATA,
         })
         assert entry.agentic_evals[0].run_eval is True
@@ -1304,7 +1334,7 @@ class TestChangelogMatrixEntry:
 
         with pytest.raises(ValueError):
             ChangelogMatrixEntry.model_validate({
-                "evals": [AGENTIC_EVAL_ROW],
+                "evals": [CURRENT_AGENTIC_EVAL_ROW],
                 "changelog_metadata": CHANGELOG_METADATA,
             })
 
@@ -1313,7 +1343,7 @@ class TestChangelogMatrixEntry:
         max-model-len), so multi-node agentic rows must only validate in
         multinode_agentic_evals."""
         entry = ChangelogMatrixEntry.model_validate({
-            "multinode_agentic_evals": [MULTINODE_AGENTIC_EVAL_ROW],
+            "multinode_agentic_evals": [CURRENT_MULTINODE_AGENTIC_EVAL_ROW],
             "changelog_metadata": CHANGELOG_METADATA,
         })
         assert entry.multinode_agentic_evals[0].run_eval is True
@@ -1322,7 +1352,7 @@ class TestChangelogMatrixEntry:
 
         with pytest.raises(ValueError):
             ChangelogMatrixEntry.model_validate({
-                "multinode_evals": [MULTINODE_AGENTIC_EVAL_ROW],
+                "multinode_evals": [CURRENT_MULTINODE_AGENTIC_EVAL_ROW],
                 "changelog_metadata": CHANGELOG_METADATA,
             })
 
@@ -1330,7 +1360,7 @@ class TestChangelogMatrixEntry:
 class TestMultiNodeAgenticMatrixEntry:
 
     def test_node_count_is_required(self):
-        row = dict(MULTINODE_AGENTIC_EVAL_ROW)
+        row = dict(CURRENT_MULTINODE_AGENTIC_EVAL_ROW)
         del row["node-count"]
         with pytest.raises(ValidationError, match="node-count"):
             MultiNodeAgenticMatrixEntry(**row)
@@ -1339,10 +1369,10 @@ class TestMultiNodeAgenticMatrixEntry:
         """The dispatcher in validate_agentic_matrix_entry() picks
         MultiNodeAgenticMatrixEntry vs SingleNodeAgenticMatrixEntry based on
         whether the entry has a `prefill` key."""
-        validate_agentic_matrix_entry(dict(MULTINODE_AGENTIC_EVAL_ROW))
+        validate_agentic_matrix_entry(dict(CURRENT_MULTINODE_AGENTIC_EVAL_ROW))
 
         without_prefill = {
-            k: v for k, v in MULTINODE_AGENTIC_EVAL_ROW.items()
+            k: v for k, v in CURRENT_MULTINODE_AGENTIC_EVAL_ROW.items()
             if k not in ("prefill", "decode")
         }
         with pytest.raises(ValueError):
@@ -1351,7 +1381,7 @@ class TestMultiNodeAgenticMatrixEntry:
     def test_smoke_rows_satisfy_the_dispatch_schema(self):
         from infx.matrix.generate import smoke_entries
 
-        row = {**MULTINODE_AGENTIC_EVAL_ROW, "conc": [8, 32]}
+        row = {**CURRENT_MULTINODE_AGENTIC_EVAL_ROW, "conc": [8, 32]}
         del row["eval-only"]
         rows = smoke_entries([row])
 

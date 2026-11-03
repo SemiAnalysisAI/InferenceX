@@ -40,12 +40,12 @@ def test_half_node_worker_cap_preserves_helpers_and_overrides_worker_memory():
     assert result is item
     assert result["roles"]["agg"]["srun_options"] == {"mem": "4000M", "cpu-bind": "cores"}
     assert result["srun_options"] == {"mem": "64M", "container-remap-root": ""}
-    assert result["sbatch_directives"] == {"time": "00:10:00", "mem": "4000M"}
+    assert result["sbatch_directives"] == {"time": "00:10:00", "mem-per-gpu": "100M"}
     assert result["benchmark"]["env"]["INFERENCEX_WORKER_MEMORY_MIB"] == "4000"
     assert result["telemetry"] == {"enabled": True}
 
 
-def test_colocated_roles_have_independent_caps_and_one_combined_allocation():
+def test_colocated_roles_have_independent_caps():
     result = bind_memory(
         recipe(
             {
@@ -58,7 +58,7 @@ def test_colocated_roles_have_independent_caps_and_one_combined_allocation():
     )
     assert result["roles"]["prefill"]["srun_options"]["mem"] == "2000M"
     assert result["roles"]["decode"]["srun_options"]["mem"] == "3000M"
-    assert result["sbatch_directives"]["mem"] == "8000M"
+    assert "sbatch_directives" not in result
     assert result["benchmark"]["env"] == {
         "INFERENCEX_WORKER_MEMORY_MIB": "8000",
         "INFERENCEX_DECODE_MEMORY_MIB": "6000",
@@ -68,7 +68,7 @@ def test_colocated_roles_have_independent_caps_and_one_combined_allocation():
 def test_partial_multinode_worker_uses_its_actual_local_gpu_count():
     result = bind_memory(recipe({"agg": {"nodes": 2, "workers": 1, "gpus": 12}}), 8000, 8)
     assert result["roles"]["agg"]["srun_options"]["mem"] == "6000M"
-    assert result["sbatch_directives"]["mem"] == "6000M"
+    assert "sbatch_directives" not in result
     assert result["benchmark"]["env"]["INFERENCEX_WORKER_MEMORY_MIB"] == "12000"
 
 
@@ -112,7 +112,7 @@ def test_per_gpu_vllm_processes_split_the_endpoint_memory_between_steps():
     )
     result = bind_memory(item, 8000, 8)
     assert result["roles"]["agg"]["srun_options"]["mem"] == "1000M"
-    assert result["sbatch_directives"]["mem"] == "4000M"
+    assert "sbatch_directives" not in result
     assert result["benchmark"]["env"]["INFERENCEX_WORKER_MEMORY_MIB"] == "4000"
 
 
@@ -120,7 +120,7 @@ def test_uniform_multinode_mpi_caps_each_node_without_dividing_by_task_count():
     item = recipe({"agg": {"nodes": 2, "workers": 1, "gpus": 16}}, engine="trtllm")
     result = bind_memory(item, 8000, 8)
     assert result["roles"]["agg"]["srun_options"]["mem"] == "8000M"
-    assert result["sbatch_directives"]["mem"] == "8000M"
+    assert "sbatch_directives" not in result
     assert result["benchmark"]["env"]["INFERENCEX_WORKER_MEMORY_MIB"] == "16000"
 
 
@@ -130,7 +130,7 @@ def test_logical_gpu_capacity_does_not_inflate_physical_memory_share():
     result = bind_memory(item, 8000, 4)
     assert result["resources"]["gpus_per_node"] == 2
     assert result["roles"]["agg"]["srun_options"]["mem"] == "2000M"
-    assert result["sbatch_directives"]["mem"] == "4000M"
+    assert "sbatch_directives" not in result
     assert result["benchmark"]["env"]["INFERENCEX_WORKER_MEMORY_MIB"] == "4000"
 
 

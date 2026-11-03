@@ -311,9 +311,7 @@ class SlurmBackend(Backend):
             raise BackendError(f"squash of {image.name} is not readable: {error}") from None
         return f"{digest}  {squash}"
 
-    def submit_batch(
-        self, script: Path, *, gpus: int, time_min: int, log: Path, mem_mib: int
-    ) -> SlurmJob:
+    def submit_batch(self, script: Path, *, gpus: int, time_min: int, log: Path) -> SlurmJob:
         """``sbatch`` ``script`` on one node from the checkout; cancelled when the launch ends."""
         settings = self.settings
         extra = ["--ntasks=1", *(["--exclusive"] if settings.exclusive else [])]
@@ -322,11 +320,7 @@ class SlurmBackend(Backend):
             self._resources(gpus, time_min),
             output=log,
             chdir=self.request.workspace,
-            extra=[
-                *extra,
-                *(arg for arg in settings.salloc_args if not arg.startswith("--mem=")),
-                f"--mem={mem_mib}M",
-            ],
+            extra=[*extra, *settings.salloc_args],
         )
         self.life.callback(cli.cancel, job)
         return self._followed(SlurmJob(job.id, log=log))

@@ -323,7 +323,7 @@ def test_a_recipe_the_binder_rejects_fails_the_point_with_the_binders_error(harn
 
 
 @pytest.mark.parametrize(("dram", "exclusive", "step", "job"), [
-    (8000, True, {"mem": "4000M"}, {"mem": "4000M"}),
+    (8000, True, {"mem": "4000M"}, {"mem": "0"}),
     (8000, False, {"mem": "4000M"}, {"mem": "4000M"}),
     (None, True, {}, {}),
 ])  # fmt: skip
@@ -354,7 +354,8 @@ def test_single_node_jobs_cap_worker_dram_including_exclusive_nodes(harness, dra
     bound = Path(call["argv"][call["argv"].index("--file") + 1])
     recipe = yaml.safe_load(bound.read_text())
     assert recipe["roles"]["agg"]["srun_options"] == step
-    assert recipe["sbatch_directives"] == job
+    assert "sbatch_directives" not in recipe
+    assert srtslurm(harness.workspace).get("default_sbatch_directives", {}) == job
     assert recipe["benchmark"]["env"]["INFERENCEX_WORKER_MEMORY_MIB"] == "4000"
     assert "mem" not in recipe.get("srun_options", {})
 
