@@ -48,7 +48,9 @@ _DYNAMO = any_of("dynamo-sglang", "dynamo-trt", "dynamo-vllm")
 
 SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
     ("b200-nscale", LaunchPath.SRT_NATIVE): SrtLane(),
-    ("b200-nscale", LaunchPath.SRT_MULTI): SrtLane(frameworks=_DYNAMO),
+    ("b200-nscale", LaunchPath.SRT_MULTI): SrtLane(
+        frameworks=any_of("dynamo-sglang", "dynamo-trt", "dynamo-vllm", "vllm")
+    ),
     ("b300-dsxe", LaunchPath.SRT_MULTI): SrtLane(frameworks=_DYNAMO),
     ("gb200-nv", LaunchPath.SRT_MULTI): SrtLane(
         frameworks=any_of("dynamo-sglang", "dynamo-trt", "dynamo-vllm", "llmd-vllm"),

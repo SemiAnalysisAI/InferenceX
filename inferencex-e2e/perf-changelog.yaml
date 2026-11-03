@@ -11954,3 +11954,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4726
   scenario-type: [agentic-coding]
   append-only: true
+
+- config-keys:
+    - kimik3-fp4-b200-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi-K3 FP4 B200 vLLM AgentX config with DSpark speculative decoding, aggregated TP8 x PP2 on two nodes."
+    - "Image: vllm/vllm-openai:nightly-2b009fc6d1493a9a1ad19f4d0c7230b7e6b7e63a."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4759

@@ -47,6 +47,7 @@ CASES = [
     ("b200-nscale", NATIVE, "0", "glm5.2", "fp4", "dynamo-vllm", ERR),
     ("b200-nscale", MULTI, "1", "qwen3.5", "fp8", "dynamo-sglang", AGENTX),
     ("b200-nscale", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", ERR),
+    ("b200-nscale", MULTI, "1", "kimik3", "fp4", "vllm", AGENTX),
     ("b200-nscale", MULTI, "0", "dsv4", "fp4", "dynamo-vllm", ERR),
     ("h200-dgxc", MULTI, "1", "kimik3", "fp4", "vllm", AGENTX),
     ("h200-dgxc", MULTI, "1", "glm5.2", "fp8", "dynamo-sglang", ADAPTER),
