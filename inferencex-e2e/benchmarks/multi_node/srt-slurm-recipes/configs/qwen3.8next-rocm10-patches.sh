@@ -29,7 +29,6 @@
 #     on a QSA page, padded QSA group writes read an inert source, and off-page
 #     prefixes use the absolute mamba checkpoint grid
 #   - fused shared-expert loading for Qwen3.8, strict for the MTP draft
-#   - an all-floating-point MTP branch loads unquantized under a Quark target
 #   - sgl-project/sglang#46329: breakable prefill graphs replay multimodal batches
 #     (--cuda-graph-backend-prefill breakable), and a shared-quantized attention
 #     input (SGLANG_OPT_QWEN4_SHARED_ATTN_QUANT) goes through the QSA indexer break
@@ -73,7 +72,6 @@ apply /sgl-workspace/sglang 07-sglang-prefill-chunk-qsa-alignment.patch
 apply /sgl-workspace/sglang 08-sglang-qsa-flydsl-sparse-decode.patch
 apply /sgl-workspace/sglang 09-sglang-gdn-hip-fused-proj-conv.patch
 apply /sgl-workspace/sglang 10-sglang-qwen38-decode-opts.patch
-apply /sgl-workspace/sglang 11-sglang-mtp-quant-resolve.patch
 apply /sgl-workspace/sglang 13-sglang-prefill-breakable-multimodal.patch
 apply /sgl-workspace/sglang 14-sglang-qsa-breakable-shared-quant.patch
 apply /sgl-workspace/sglang 15-sglang-hc-combine-split-gate.patch
