@@ -6,7 +6,6 @@ from __future__ import annotations
 import inspect
 import os
 import sys
-import types
 from importlib import metadata
 from pathlib import Path
 
@@ -47,7 +46,8 @@ _ALLOW_MULTIPLE_REDUCTION = False
 # Low-latency receive sizing, deliberately two numbers: _LL_BUFFER_CAP sizes the pre-allocated
 # receive (and so the transport footprint and fp8 dequant volume), _LL_LADDER_CAP bounds which
 # token counts are measured. Equal today, but kept separate so the ladder can be clamped around a
-# kernel defect at one rung without moving the footprint (see `create_buffer`).
+# kernel defect at one rung without moving the footprint (see `_create_ll_buffer`). The adapter
+# carries them as LL_BUFFER_CAP and LL_LADDER_CAP.
 _LL_BUFFER_CAP = 256
 _LL_LADDER_CAP = 256
 assert _LL_LADDER_CAP <= _LL_BUFFER_CAP <= 511, (
@@ -141,6 +141,12 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
     CUDA_GRAPH_MODES = ("normal", "low-latency")
     # vLLM's low-latency send/receive split (see LegacyBufferLL).
     ll_recv_hook = True
+    # LL pre-allocates a fixed [num_local_experts, cap * num_ranks, hidden] receive buffer, so the
+    # ladder cap is a hard per-rank dispatch-slot bound; the harness clamps the ladder to it and
+    # records any dropped point in the artifact. Clamping LL_LADDER_CAP is the containment lever if
+    # a kernel defect reds the top rung (check the DeepEP pin first).
+    LL_LADDER_CAP = _LL_LADDER_CAP
+    LL_BUFFER_CAP = _LL_BUFFER_CAP
     # The num_sms the timed dispatch passes: 0 hands the count to DeepEP's model, as vLLM does;
     # create_buffer overrides it where the registry sets rdma_gbs.
     _dispatch_num_sms = 0
@@ -156,12 +162,8 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
         # Buffer); base SUPPORTED_MODES enforces the allowed set.
         super().__init__(args, rank, world_size, local_rank, device)
         self.group = dist.group.WORLD
-        self._fp8 = self.precision == "fp8"
-        # FP8 dispatch dequantizes the received (e4m3fn, per-128-block FP32 scale) payload
-        # back to the BF16 combine sends, which is real device work and so a separately-
-        # timed component. (Normal mode quantizes inside the timed dispatch; low-latency casts
-        # inside the dispatch kernel — either way the dequant lands in stage().)
-        self.stage_device_work = self._fp8
+        # Under FP8, normal mode quantizes inside the timed dispatch and low-latency casts inside
+        # the dispatch kernel; either way the dequant lands in stage() (stage_device_work).
         if self._fp8:
             # Resolve the pinned cast pair once (lazily, so a BF16-only run never imports
             # deep_ep.utils.math) so the timed stage() does no module lookup in the
@@ -207,31 +209,9 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
         """
         return min(self.max_tokens, 1 << max(0, int(tokens) - 1).bit_length())
 
-    def buffer_cap(self, args):
-        if self.mode == "low-latency":
-            # LL pre-allocates a fixed [num_local_experts, cap * num_ranks, hidden] receive
-            # buffer, so the cap is a hard per-rank dispatch-slot bound; the harness clamps the
-            # ladder to it and records any dropped point in the artifact. Clamping here is the
-            # containment lever if a kernel defect reds the top rung (check the DeepEP pin first).
-            return _LL_LADDER_CAP
-        return None
-
-    def create_buffer(self, spec):
+    def _normal_create_buffer(self, spec):
         args, world_size = self.args, self.world_size
         self.max_tokens = spec.max_tokens_per_rank
-        if self.mode == "low-latency":
-            # Size the LL buffer from the fixed cap, not from the clamped ladder: the receive
-            # footprint sets both the transport's memory traffic and the fp8 dequant volume
-            # (`_ll_recv_bf16` converts the whole padded receive), so following the ladder would
-            # shift every retained rung and break comparability with the published series.
-            if spec.max_tokens_per_rank > _LL_BUFFER_CAP:
-                raise RuntimeError(
-                    f"low-latency ladder maximum {spec.max_tokens_per_rank} exceeds the LL "
-                    f"buffer cap {_LL_BUFFER_CAP}"
-                )
-            self.max_tokens = _LL_BUFFER_CAP
-            self._create_ll_buffer(spec)
-            return
         _require_runtime()
         jit_root = Path(os.environ["EP_JIT_CACHE_DIR"])
         # Hybrid exactly where vLLM's VLLM_DEEPEP_V2_ALLOW_HYBRID_MODE=1 autoselects it: DeepEP
@@ -331,19 +311,14 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
         buffer and forces IBGDA even for single-node EP8, so there is no NVLink-only
         fallback. `allow_nvlink_for_low_latency_mode` lets NVLink carry intranode
         traffic alongside IBGDA; it does not remove the IBGDA requirement.
+
+        The buffer is sized from LL_BUFFER_CAP, not from the clamped ladder: the receive footprint
+        sets both the transport's memory traffic and the fp8 dequant volume (`_ll_recv_bf16`
+        converts the whole padded receive), so following the ladder would shift every retained
+        rung and break comparability with the published series.
         """
-        args, world_size = self.args, self.world_size
-        assert args.experts % world_size == 0, (
-            "low-latency EP requires num_experts divisible by the EP size"
-        )
-        self.num_local_experts = args.experts // world_size
-        if not hasattr(deep_ep.Buffer, "low_latency_dispatch"):
-            raise RuntimeError(
-                "invalid DeepEP LL runtime: deep_ep.Buffer.low_latency_dispatch is absent"
-            )
-        num_rdma_bytes = deep_ep.Buffer.get_low_latency_rdma_size_hint(
-            self.max_tokens, args.hidden, world_size, args.experts
-        )
+        args = self.args
+        num_rdma_bytes = self._ll_geometry(spec, deep_ep.Buffer, "DeepEP")
         kwargs = {}
         # On an MNNVL rack the scale-up fabric is NVLink across trays, but the legacy Buffer
         # defaults `allow_mnnvl=False` and a False there self-sets NVSHMEM_DISABLE_MNNVL, so
@@ -378,9 +353,9 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
         # DeepEP V2's kernels key routing indices on deep_ep.topk_idx_t, not int64.
         return deep_ep.topk_idx_t
 
-    def dispatch(self, p):
-        if self.mode == "low-latency":
-            return self._ll_dispatch(p)
+    # ---- normal-mode transport (LegacyBufferLL routes by mode; low-latency lives there) ----
+
+    def _normal_dispatch(self, p):
         # Quantise here, not in make_problem: production runs one fused bf16->fp8 kernel per
         # forward pass immediately before this collective, so the timed window must contain it.
         dispatch_x = self._quant(p.dispatch_x) if self._fp8 else p.dispatch_x
@@ -397,20 +372,9 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
             do_cpu_sync=False,
             do_expand=False,
         )
-        return types.SimpleNamespace(
-            recv_x=recv_x,
-            recv_topk_idx=recv_topk_idx,
-            recv_topk_weights=recv_topk_weights,
-            handle=handle,
-        )
+        return self._normal_handle(recv_x, recv_topk_idx, recv_topk_weights, handle)
 
-    def stage(self, p, h):
-        if self.mode == "low-latency":
-            # The timed combine sends the padded per-expert receive back as BF16 (dequant
-            # under FP8). Value correctness is exercised by the oracle's combine_transformed
-            # path; this only has to move the right shape for timing.
-            h.combine_input = self._ll_recv_bf16(h.recv_x)
-            return
+    def _normal_stage(self, p, h):
         if self._fp8:
             # Dequantize the received (fp8, scale) tuple to the BF16 combine sends. Without the
             # host sync that is the whole worst-case plane: combine requires its input to match
@@ -420,10 +384,7 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
             # BF16: the received buffer is already the semantic payload to combine.
             h.combine_input = h.recv_x
 
-    def combine(self, p, h):
-        if self.mode == "low-latency":
-            # The kernel applies topk_weights internally (weighted).
-            return self._ll_combine(p, h, h.combine_input)
+    def _normal_combine(self, p, h):
         # SM and QP counts default as in vLLM: the dispatch handle's SMs, DeepEP's QP model.
         combined_x, _, _ = self.buffer.combine(
             h.combine_input,
@@ -432,9 +393,7 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
         )
         return combined_x
 
-    def inspect_dispatch(self, p, h):
-        if self.mode == "low-latency":
-            return self._ll_inspect_dispatch(p, h)
+    def _normal_inspect_dispatch(self, p, h):
         count = self.recv_tokens(h)
         if self._fp8:
             # Dequantize the sliced (fp8, scale) recv tuple so the payload the oracle
@@ -447,9 +406,7 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
             self.args.experts // self.world_size,
         )
 
-    def combine_transformed(self, p, h, transformed):
-        if self.mode == "low-latency":
-            return self._ll_combine_transformed(p, h, transformed)
+    def _normal_combine_transformed(self, p, h, transformed):
         # Combine always sends BF16. Under FP8, recv_x is an (fp8, scale) tuple, so the
         # BF16 combine buffer is shaped from the fp8 payload rather than zeros_like it.
         if self._fp8:
@@ -464,7 +421,5 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
         )
         return combined
 
-    def recv_tokens(self, h):
-        if self.mode == "low-latency":
-            return int(h.recv_count.sum().item())
+    def _normal_recv_tokens(self, h):
         return int(h.handle.psum_num_recv_tokens_per_scaleup_rank[-1].item())
