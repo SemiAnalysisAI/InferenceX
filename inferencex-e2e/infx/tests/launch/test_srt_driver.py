@@ -582,12 +582,22 @@ def test_single_node_gate_measures_the_selected_variant_with_real_verification(h
     assert not (workspace / "point-identity.json").exists()
 
 
-AGENTX_LANE_RECIPE = """name: "fixture"
+AGENTX_LANE_RECIPE = """schema: 2
+name: "fixture"
+engine: vllm
+frontend:
+  type: dynamo
 roles:
   prefill:
+    nodes: 1
+    workers: 1
+    gpus: 8
     args:
       tensor-parallel-size: 8
   decode:
+    nodes: 1
+    workers: 1
+    gpus: 8
     args:
       tensor-parallel-size: 8
       speculative-config: '{"method": "dspark", "num_speculative_tokens": 3, "draft_sample_method": "greedy", "rejection_sample_method": "synthetic", "synthetic_acceptance_length": 2.5}'
