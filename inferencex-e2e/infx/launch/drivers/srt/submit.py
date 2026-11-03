@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from infx.launch.drivers.srt.checkout import Checkout
     from infx.launch.drivers.srt.lanes import SrtLane
     from infx.launch.drivers.srt.run import SrtRun
+    from infx.launch.request import SrtRequest
 
 SINGLE_NODE_SUBMISSION = "srt-single-node-submission.json"
 MULTINODE_SUBMISSION = "srt-submission.json"
@@ -38,6 +39,7 @@ SINGLE_NODE_EVAL_COMMAND = (
     '["bash", "{infmax_workspace}/benchmarks/single_node/srt_eval.sh", "{endpoint}", '
     '"/logs/infx-eval-exit-code"]'
 )
+GATE_COMMAND = "bash /infmax-workspace/benchmarks/srt_al_gate.sh"
 WORKLOAD_ENV = (
     "EVAL_*", "AIPERF_*", "AGENTIC_*",
     "TP", "EP_SIZE", "DP_ATTENTION", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "CONC",
@@ -64,6 +66,26 @@ def eval_args(env: Mapping[str, str], command: str) -> list[str]:
         "--set",
         f"post_eval.passthrough_env={json.dumps(names)}",
     ]
+
+
+def gate_args(request: SrtRequest) -> list[str]:
+    """Arguments that run the acceptance gate as the benchmark, without power telemetry.
+
+    ``benchmark.env`` outranks the job environment. The container resolves the relative
+    ``AL_GATE_DATASET`` in ``/infmax-workspace``.
+    """
+    env = {
+        "AL_GATE": "true",
+        "AL_GATE_CURVE": request.al_gate_curve,
+        "AL_GATE_DRAFT_TOKENS": str(request.al_gate_draft_tokens),
+        "AL_GATE_DATASET": request.al_gate_dataset,
+        "AL_GATE_OUTPUT_DIR": "/logs",
+        "THINKING_MODE": request.thinking_mode,
+    }
+    arguments = ["--set", f"benchmark.command={json.dumps(GATE_COMMAND)}"]
+    for name, value in env.items():
+        arguments += ["--set", f"benchmark.env.{name}={json.dumps(value)}"]
+    return [*arguments, "--unset", "telemetry"]
 
 
 def bind_point(run: SrtRun, checkout: Checkout, arguments: Path) -> int:
@@ -237,7 +259,7 @@ def multinode_arguments(
     """The ``srtctl apply`` arguments of a multi-node lane submission."""
     request = run.request
     arguments = [
-        *eval_args(run.env, MULTINODE_EVAL_COMMAND),
+        *(gate_args(request) if request.al_gate else eval_args(run.env, MULTINODE_EVAL_COMMAND)),
         "--set",
         "benchmark.stream_output=true",
         *overrides,
