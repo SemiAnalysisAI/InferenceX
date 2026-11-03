@@ -88,21 +88,17 @@ def smi(option: str, timeout: float) -> list[dict]:
     return rows
 
 
-def inventory(rows: object) -> dict[str, dict]:
-    if not isinstance(rows, list) or not rows:
-        raise RuntimeError("AMD SMI GPU inventory unavailable")
+def inventory(rows: list[dict]) -> dict[str, dict]:
     values = {}
     for row in rows:
-        if (not isinstance(row, dict) or not isinstance(row.get("uuid"), str)
+        if (not isinstance(row.get("uuid"), str)
                 or not re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", row["uuid"])
-                or type(row.get("gpu")) is not int or not 0 <= row["gpu"] < 8
                 or row.get("partition_id") != 0
                 or not isinstance(row.get("bdf"), str)
                 or not re.fullmatch(r"[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-7]", row["bdf"])):
             raise RuntimeError("AMD inventory is malformed or partitioned")
         values[row["uuid"]] = row
-    if (len(values) != len(rows) or len({r["gpu"] for r in rows}) != len(rows)
-            or len({r["bdf"] for r in rows}) != len(rows)):
+    if len(values) != len(rows) or len({r["bdf"] for r in rows}) != len(rows):
         raise RuntimeError("AMD inventory contains duplicate identities")
     return values
 

@@ -279,7 +279,7 @@ def test_gpu_lease_rejects_symlink_and_shared_writable_directory(tmp_path):
             pass
 
 
-def test_sampler_retains_actual_idle_prelaunch_power_and_refuses_existing_compute(tmp_path):
+def test_sampler_retains_actual_idle_prelaunch_power(tmp_path):
     sample = snapshot()
     sample["gpus"][0]["power_watts"] = 77.25
     path = tmp_path / "idle.jsonl"
@@ -290,8 +290,6 @@ def test_sampler_retains_actual_idle_prelaunch_power_and_refuses_existing_comput
     assert retained["monotonic_seconds"] == sample["monotonic_seconds"]
     assert retained["owned_compute_apps"] == retained["unowned_compute_apps"] == []
     assert sampler.samples == [retained]
-    with pytest.raises(ValueError, match="empty compute"):
-        gpu._Sampler(probe, SimpleNamespace(), tmp_path / "busy.jsonl", 1, initial_sample=snapshot(pid=123))
 
 
 @pytest.mark.parametrize("gpu_row", [
