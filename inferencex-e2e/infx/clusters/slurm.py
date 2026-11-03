@@ -174,13 +174,14 @@ class Fabric(Record):
 
 
 class CpuPowerExporter(Record):
-    """The Grace CPU power exporter srt-slurm scrapes on this cluster's compute trays.
+    """The CPU power exporter srt-slurm scrapes on this cluster's nodes.
 
     A point that selects ``cpu-power`` binds ``telemetry.cpu_power_exporter`` with this source.
-    Only ACPI serves the Grace socket meter the CPU leg integrates.
+    ACPI serves the Grace socket meter and RAPL the AMD EPYC package counter, the meters the
+    CPU leg integrates.
     """
 
-    source: Literal["acpi"]
+    source: Literal["acpi", "rapl"]
 
 
 class SrtSlurmSettings(Record):

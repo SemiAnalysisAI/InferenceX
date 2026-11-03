@@ -98,6 +98,13 @@ def single_node_env(harness, cluster_id: str, **overrides: str) -> dict[str, str
     return {**harness.env, **POINT_ENV, "RUNNER_NAME": runner, **overrides}
 
 
+def set_cpu_power_exporter(config: Path, cluster_id: str, exporter: dict) -> None:
+    """Give ``cluster_id``'s srt-slurm record the CPU power exporter ``exporter``."""
+    records = yaml.safe_load(config.read_text())
+    records["clusters"][cluster_id]["slurm"]["srt-slurm"]["cpu-power-exporter"] = exporter
+    config.write_text(yaml.safe_dump(records))
+
+
 def lane_env(harness, cluster_id: str, recipe: str = LANE_FRAGMENT, **overrides: str) -> dict[str, str]:
     """Environment of a multi-node point whose recipe lives in the workspace mirror.
 
@@ -203,11 +210,14 @@ def test_single_node_point_stages_workflow_artifacts(harness):
 
 
 @pytest.mark.parametrize("require_power", ["0", "1"])
-@pytest.mark.parametrize(("cluster_id", "kind", "port"), [
-    ("mi355x-amds", "custom", 19500), ("h100-cw", "dcgm", 9401),
+@pytest.mark.parametrize(("cluster_id", "kind", "port", "cpu_exporter"), [
+    ("mi355x-amds", "custom", 19500, {"source": "rapl"}), ("h100-cw", "dcgm", 9401, None),
 ])  # fmt: skip
-def test_single_node_native_power_is_bound_and_retained(harness, require_power, cluster_id, kind, port):
-    env = single_node_env(harness, cluster_id, REQUIRE_POWER=require_power)
+def test_single_node_native_power_is_bound_and_retained(
+    harness, require_power, cluster_id, kind, port, cpu_exporter
+):
+    cpu_power = "1" if cpu_exporter else "0"
+    env = single_node_env(harness, cluster_id, REQUIRE_POWER=require_power, CPU_POWER=cpu_power)
     assert_ok(launch(env, harness.config, harness.workspace))
 
     workspace = harness.workspace
@@ -222,6 +232,7 @@ def test_single_node_native_power_is_bound_and_retained(harness, require_power, 
     apply_overrides_to_recipe(variant, parse_overrides(sets, []))
     resolved = resolve_config_with_defaults(variant, rendered)
     telemetry = resolved["telemetry"]
+    assert telemetry.get("cpu_power_exporter") == cpu_exporter
     assert telemetry["enabled"] is True
     assert telemetry["required"] is (require_power == "1")
     assert telemetry["storage_subdir"] == "power"
@@ -532,18 +543,23 @@ def assert_gate_ran(harness, call: dict, job: dict) -> None:
     assert (harness.workspace / "al_gate/aiperf_artifacts/server_metrics_export.json").read_text() == "{}"
 
 
-def test_single_node_gate_measures_the_selected_variant_with_real_verification(harness):
+def gate_point_env(harness, cluster_id: str) -> dict[str, str]:
+    """Environment of a single-node acceptance-gate point on an EAGLE recipe, prompts downloaded."""
     recipe = json.loads(json.dumps(POINT_RECIPE))
     recipe["roles"]["agg"]["args"].update({"speculative-algorithm": "EAGLE", "speculative-num-steps": 3})
     recipe["roles"]["agg"]["env"] = {"KEEP": "yes", "SGLANG_SIMULATE_ACC_LEN": "2.5"}
     raw = {"base": recipe, "zip_override_conc": {"benchmark": {"env": {"CONC": ["2", "4"]}}}}
-    workspace = harness.workspace
-    (workspace / "recipe.yaml").write_text(yaml.safe_dump(raw))
-    env = {
-        **harness.env, **POINT_ENV, **GATE_ENV, "RUNNER_NAME": runner_for("h200-dgxc"), "MODEL_PREFIX": "dsv4",
+    (harness.workspace / "recipe.yaml").write_text(yaml.safe_dump(raw))
+    download_gate_prompts(harness.workspace)
+    return {
+        **harness.env, **POINT_ENV, **GATE_ENV, "RUNNER_NAME": runner_for(cluster_id), "MODEL_PREFIX": "dsv4",
         "SPEC_DECODING": "mtp", "DURATION": "600", "AL_GATE_CURVE": "dsv4_mtp", "AL_GATE_DRAFT_TOKENS": "3",
     }  # fmt: skip
-    download_gate_prompts(workspace)
+
+
+def test_single_node_gate_measures_the_selected_variant_with_real_verification(harness):
+    workspace = harness.workspace
+    env = gate_point_env(harness, "h200-dgxc")
     assert_ok(launch(env, harness.config, workspace))
 
     [call] = srtctl_calls(harness.logs)
@@ -846,6 +862,47 @@ def test_a_setup_failure_without_a_bad_archive_is_not_retried(harness):
     assert srtctl_calls(harness.logs) == [] and lines(harness.logs, "scancel") == []
     error = job_event(harness.workspace)["error"]
     assert (error["stage"], error["type"], error["evidence"]) == ("prepare", "SetupFailed", "srt-setup.log")
+
+
+RAPL_RESTORE = "sudo -n chown root /sys/class/powercap/intel-rapl/intel-rapl:*/energy_uj"
+CPU_POWER_POINTS = {
+    "native": lambda harness, cluster_id: single_node_env(harness, cluster_id, MAX_MODEL_LEN="1024"),
+    "eval-only": lambda harness, cluster_id: single_node_env(
+        harness, cluster_id, EVAL_ONLY="true", MAX_MODEL_LEN="1024"
+    ),
+    "al-gate": gate_point_env,
+    "multi-node": lambda harness, cluster_id: lane_env(
+        harness, cluster_id, LANE_FRAGMENT + POWER_TELEMETRY, MODEL_PREFIX="qwen3.5", PRECISION="fp8",
+        FRAMEWORK="dynamo-sglang", MODEL="Qwen/Qwen3.5-397B-A17B-FP8", POWER="1",
+    ),
+}  # fmt: skip
+
+
+@pytest.mark.parametrize(("point", "cluster_id", "cpu_power", "bound"), [
+    ("native", "mi355x-amds", "1", True),
+    ("native", "mi355x-amds", "0", False),
+    ("eval-only", "mi355x-amds", "1", False),
+    ("al-gate", "mi355x-amds", "1", False),
+    ("multi-node", "gb300-nv", "1", True),
+])  # fmt: skip
+def test_a_cpu_power_point_on_a_rapl_cluster_binds_the_exporter_and_grants_its_counters(
+    harness, point, cluster_id, cpu_power, bound
+):
+    set_cpu_power_exporter(harness.config, cluster_id, {"source": "rapl"})
+    env = {**CPU_POWER_POINTS[point](harness, cluster_id), "CPU_POWER": cpu_power}
+    assert_ok(launch(env, harness.config, harness.workspace))
+
+    [setup] = [call for call in lines(harness.logs, "make") if call.startswith("setup ")]
+    assert (f"CPU_POWER_EXPORTER_RELEASE={CPU_POWER_EXPORTER_RELEASE}" in setup.split()) is bound
+    [call] = srtctl_calls(harness.logs)
+    argv = call["argv"]
+    submitted = yaml.safe_load(Path(argv[argv.index("--file" if "--file" in argv else "-f") + 1]).read_text())
+    assert ("cpu_power_exporter" in submitted.get("telemetry", {})) is bound
+    if bound:
+        assert submitted["telemetry"]["cpu_power_exporter"] == {"source": "rapl"}
+    host_setup = srtslurm(harness.workspace).get("default_host_setup", {})
+    assert (host_setup.get("teardown") == [RAPL_RESTORE]) is bound
+    assert ("powercap" in " ".join(host_setup.get("commands", []))) is bound
 
 
 def test_a_setup_step_killed_by_a_signal_exits_128_plus_the_signal(harness):

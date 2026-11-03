@@ -16,6 +16,7 @@ from infx.config import repository_root
 from infx.srt_slurm.synthetic_acceptance import ENGINES, selected_recipes, spec_parameters
 from infx.srt_slurm.workload import (
     BOUND_RECIPE,
+    add_cpu_power_source_argument,
     add_fabric_argument,
     bind_workload,
     check_setup_script,
@@ -74,12 +75,14 @@ def select_recipe(
     *,
     root: Path | None = None,
     expand: Callable[..., list[tuple[str | None, dict[str, Any]]]] = selected_recipes,
+    cpu_power_source: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """Resolve a matrix point to one native variant, never submit an entire sweep.
 
     Variants are composed with the shared block under ``root`` (default: this
     repository) and bound before they are validated. ``expand`` lists the selected
     variants: srtctl at launch, ``variants.expand_variants`` in the planner.
+    ``cpu_power_source`` adds the cluster's CPU power exporter to the native telemetry.
     """
     path, _, selector = config.partition(":")
     agentic = environment["IS_AGENTIC"] == "1"
@@ -89,6 +92,7 @@ def select_recipe(
         multinode=False,
         root=root or repository_root(),
         native_power=environment.get("EVAL_ONLY") != "true",
+        cpu_power_source=cpu_power_source,
     )
     recipes = expand(raw, selector or None)
     matches = []
@@ -222,6 +226,7 @@ def main() -> None:
     prepare.add_argument("recipe")
     prepare.add_argument("output", type=Path)
     add_fabric_argument(prepare)
+    add_cpu_power_source_argument(prepare)
     submitted = commands.add_parser("submission")
     submitted.add_argument("manifest", type=Path)
     parsed = parser.parse_args()
@@ -229,7 +234,9 @@ def main() -> None:
         parser.error(f"{parsed.output} would overwrite the bound recipe written beside it")
     try:
         if parsed.command == "prepare":
-            selected, recipe = select_recipe(parsed.recipe, os.environ)
+            selected, recipe = select_recipe(
+                parsed.recipe, os.environ, cpu_power_source=parsed.cpu_power_source
+            )
             recipe = resolve_fabric(recipe, parsed.fabric)
             check_setup_script(recipe, Path(parsed.recipe.partition(":")[0]), repository_root())
             arguments = runtime_arguments(parsed.recipe, os.environ)

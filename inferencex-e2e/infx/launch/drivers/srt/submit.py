@@ -88,12 +88,19 @@ def gate_args(request: SrtRequest) -> list[str]:
     return [*arguments, "--unset", "telemetry"]
 
 
-def bind_point(run: SrtRun, checkout: Checkout, arguments: Path) -> int:
-    """Bind the single-node recipe variant for this point; the binder writes ``arguments``."""
+def bind_point(
+    run: SrtRun, checkout: Checkout, arguments: Path, cpu_power_source: str | None
+) -> int:
+    """Bind the single-node recipe variant for this point; the binder writes ``arguments``.
+
+    ``cpu_power_source`` adds the cluster's CPU power exporter to the native telemetry.
+    """
     prepare = [
         str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.single_node", "prepare",
         f"{run.workspace}/{run.request.srt_recipe}", str(arguments), *_fabric(run),
     ]  # fmt: skip
+    if cpu_power_source is not None:
+        prepare += ["--cpu-power-source", cpu_power_source]
     return _bind(run, prepare, checkout.root)
 
 

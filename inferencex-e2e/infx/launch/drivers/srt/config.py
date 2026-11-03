@@ -32,6 +32,13 @@ if TYPE_CHECKING:
 NGINX_IMAGE = "nginx:1.27.4"
 EXPORTER_PROVENANCE = "exporter-image.sha256"
 HEALTH_CHECK = {"max_attempts": HEALTH_ATTEMPTS, "interval_seconds": 10}
+# energy_uj is root-only (CVE-2020-8694); the glob matches only the top-level package zones.
+RAPL_COUNTERS = "/sys/class/powercap/intel-rapl/intel-rapl:*/energy_uj"
+RAPL_GRANT = (
+    f"for zone in {RAPL_COUNTERS}; do"
+    ' test -r "$zone" || sudo -n chown "$(id -un)" "$zone" || exit 1; done'
+)
+RAPL_RESTORE = f"sudo -n chown root {RAPL_COUNTERS}"
 
 
 @dataclass(frozen=True)
@@ -50,6 +57,7 @@ class SrtJob:
     single_node: bool = False
     account: str | None = None
     mem_mib: int | None = None
+    cpu_power_source: str | None = None
 
 
 def pyxis_spelling(image: str) -> str:
@@ -91,7 +99,11 @@ def volume_path(cluster: Cluster, volume: str) -> Path:
 
 
 def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
-    """The srtslurm.yaml mapping of ``job`` on ``cluster``; ``srt-slurm.extra`` only adds keys."""
+    """The srtslurm.yaml mapping of ``job`` on ``cluster``; ``srt-slurm.extra`` only adds keys.
+
+    A job whose CPU power exporter reads RAPL gives the job user the RAPL counters until
+    teardown.
+    """
     settings = slurm_settings(cluster)
     srt = settings.srt_slurm
     if srt is None:
@@ -154,6 +166,10 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
         if setup.nodes is not None:
             host_setup["nodes"] = setup.nodes
         config["default_host_setup"] = host_setup
+    if job.cpu_power_source == "rapl":
+        host_setup = config.setdefault("default_host_setup", {"commands": []})
+        host_setup["commands"].append(RAPL_GRANT)
+        host_setup["teardown"] = [RAPL_RESTORE]
     if shadowed := sorted(config.keys() & srt.extra.keys()):
         raise LaunchError(f"cluster {cluster.id!r} srt-slurm.extra sets rendered keys {shadowed}")
     config.update(srt.extra)
@@ -252,6 +268,17 @@ def agentic_client_env(
     return env
 
 
+def cpu_power_source(cluster: Cluster, srt: SrtSlurmSettings, cpu_power: bool) -> str | None:
+    """The cluster's CPU power exporter source when the point selected cpu-power, else None."""
+    if not cpu_power:
+        return None
+    if srt.cpu_power_exporter is None:
+        raise LaunchError(
+            f"cluster {cluster.id!r} declares no srt-slurm.cpu-power-exporter for cpu-power"
+        )
+    return srt.cpu_power_exporter.source
+
+
 def binder_inputs(
     cluster: Cluster,
     srt: SrtSlurmSettings,
@@ -261,18 +288,12 @@ def binder_inputs(
 ) -> tuple[int | None, str | None, dict[str, str]]:
     """The DCGM exporter port, CPU exporter source and AgentX client env a recipe is bound with.
 
-    The CPU source is the cluster's Grace exporter when the point selected cpu-power. The
+    The CPU source is the cluster's CPU exporter when the point selected cpu-power. The
     client marks power windows exactly when the launcher collects the point's AgentX power,
     and fails invalid power when the workflow or the lane's power rule requires it.
     """
     port = srt.power_exporter_port if decision.dcgm else None
-    cpu_source = None
-    if decision.cpu:
-        if srt.cpu_power_exporter is None:
-            raise LaunchError(
-                f"cluster {cluster.id!r} declares no srt-slurm.cpu-power-exporter for cpu-power"
-            )
-        cpu_source = srt.cpu_power_exporter.source
+    cpu_source = cpu_power_source(cluster, srt, decision.cpu)
     if not request.is_agentic:
         return port, cpu_source, {}
     return (
@@ -324,6 +345,7 @@ def write_lane_config(
         model_paths=model_paths,
         mounts=lane_mounts(run, lane),
         account=run.account,
+        cpu_power_source=cpu_power_source(run.cluster, run.srt, power.cpu),
     )
     config_yaml = checkout.root / "srtslurm.yaml"
     write(config_yaml, render(run.cluster, job))

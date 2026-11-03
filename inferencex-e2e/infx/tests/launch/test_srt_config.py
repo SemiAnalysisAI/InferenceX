@@ -118,6 +118,30 @@ def test_rendered_exporter_defaults_resolve_for_native_telemetry(exporter):
     assert resolve_config_with_defaults(recipe, config)["telemetry"]["dcgm_exporter"]["port"] == exporter["port"]
 
 
+RAPL = "/sys/class/powercap/intel-rapl/intel-rapl:*/energy_uj"
+HOOK = {"host-setup": {"script": "runners/hooks/setup.sh", "timeout-s": 1200}}
+
+
+@pytest.mark.parametrize(("srt", "hook"), [(HOOK, ["bash /ws/runners/hooks/setup.sh"]), ({}, [])])
+def test_a_rapl_cpu_exporter_grants_the_job_user_the_rapl_counters_until_teardown(srt, hook):
+    config = render(cluster(srt=srt), job(single_node=True, cpu_power_source="rapl"))
+    ClusterConfig.Schema().load(config)
+    host_setup = config["default_host_setup"]
+    assert host_setup["commands"] == [
+        *hook,
+        f'for zone in {RAPL}; do test -r "$zone" || sudo -n chown "$(id -un)" "$zone" || exit 1; done',
+    ]
+    assert host_setup["teardown"] == [f"sudo -n chown root {RAPL}"]
+
+
+@pytest.mark.parametrize("source", [None, "acpi"])
+def test_a_job_without_a_rapl_cpu_exporter_keeps_the_cluster_host_setup(source):
+    config = render(cluster(srt=HOOK), job(cpu_power_source=source))
+    assert config["default_host_setup"] == {
+        "commands": ["bash /ws/runners/hooks/setup.sh"], "timeout_seconds": 1200,
+    }  # fmt: skip
+
+
 @pytest.mark.parametrize("source,target", [("/absolute", "/config"), ("../escape", "/config"), ("", "/config"), ("config.json", "relative")])
 def test_workspace_mounts_reject_paths_outside_the_repository_or_container(source, target):
     with pytest.raises(ValueError, match="workspace-mounts"):
