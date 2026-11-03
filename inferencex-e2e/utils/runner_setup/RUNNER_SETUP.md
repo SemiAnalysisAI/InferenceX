@@ -217,9 +217,8 @@ into the internal prefill/decode matrix shape expected by the launcher.
 Aggregate master entries cannot declare separate `prefill` or `decode` roles.
 
 Disaggregated entries declare `prefill` and `decode`, and reject `worker`.
-For both topologies, the generated `node-count` comes from the worker GPU
-requests and cluster GPUs per node, accounting for shared role placement and
-any auxiliary nodes in the bound SRT recipe.
+For both topologies, the generated `node-count` reads the SRT recipe’s declared worker
+node reservations, accounting for colocated roles and auxiliary nodes.
 
 Runner leases account for GitHub-managed work only. Slurm remains the final
 capacity authority for external users, reservations, offline compute nodes,
