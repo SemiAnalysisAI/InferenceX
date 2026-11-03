@@ -300,6 +300,7 @@ jobs:
             case "$RUNNER_TYPE" in
               cluster:mi355x-amds) expected_mib=384924; delay_seconds=300 ;;
               cluster:gb300-nv) expected_mib=230000; delay_seconds=30 ;;
+              cluster:b200-nscale) expected_mib=255942; delay_seconds=300 ;;
               *) echo "Unexpected OOM probe cluster" >&2; exit 1 ;;
             esac
             "$INFERENCEX_LAUNCH_PYTHON" "$GITHUB_WORKSPACE/../.result-tooling/inferencex-e2e/infx/tests/oom_probe/overlay_recipe.py" \
