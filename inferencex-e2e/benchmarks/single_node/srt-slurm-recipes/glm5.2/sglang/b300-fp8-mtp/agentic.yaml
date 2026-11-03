@@ -57,7 +57,6 @@ base:
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '2399'
 
 # Tune admission and MTP depth per point; graph maxima follow admission.
 override_c1:

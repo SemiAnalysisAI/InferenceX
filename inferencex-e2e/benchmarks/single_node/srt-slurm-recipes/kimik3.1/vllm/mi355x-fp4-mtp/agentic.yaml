@@ -54,7 +54,7 @@ base:
         gpu-memory-utilization: 0.90
         stream-interval: 10
         disable-uvicorn-access-log: true
-        # 224.875 GB per rank; TOTAL_CPU_DRAM_GB (1799) split across the 8 TP ranks.
+        # 224.875 GB per rank; 1799 GB split across the 8 TP ranks.
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":224875000000,"lazy_offload":false}}'
       env:
         VLLM_ROCM_USE_AITER: '1'
@@ -169,7 +169,6 @@ override_dram_c16:
     env:
       CONC: '16'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1799'
 
 override_dram_c24:
   roles:
@@ -185,7 +184,6 @@ override_dram_c24:
     env:
       CONC: '24'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1799'
 
 override_dram_c32:
   roles:
@@ -203,7 +201,6 @@ override_dram_c32:
     env:
       CONC: '32'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1799'
 
 override_dram_c48:
   roles:
@@ -218,4 +215,3 @@ override_dram_c48:
     env:
       CONC: '48'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1799'

@@ -79,7 +79,7 @@ def rows(config_keys, config_files, runner_config):
                         "framework": entry["framework"], "runner": entry["runner"],
                         "tp": space["tp"], "pp": 1, "dcp-size": 1, "pcp-size": 1, "ep": 1,
                         "dp-attn": False, "spec-decoding": "none", "conc": conc,
-                        "kv-offloading": space["kv-offloading"], "total-cpu-dram-gb": 0,
+                        "kv-offloading": space["kv-offloading"],
                         "duration": 1800, "exp-name": entry["model-prefix"] + "_agentx",
                         "scenario-type": "agentic-coding", "run-eval": False,
                     })

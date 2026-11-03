@@ -101,7 +101,6 @@ base:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       # Native single-node binding verifies these against the generated point.
-      TOTAL_CPU_DRAM_GB: '241'
       KV_OFFLOADING: dram
 
 override_tp4_c3:
@@ -139,7 +138,6 @@ override_tp4_c3:
     env:
       <<: &gpu_only_client
         KV_OFFLOADING: none
-        TOTAL_CPU_DRAM_GB: '0'
       CONC: '3'
 
 override_c8:
@@ -249,7 +247,7 @@ override_c80:
         speculative-num-steps: 2
         speculative-num-draft-tokens: 3
         mem-fraction-static: 0.90
-        # The whole per-GPU host allowance (TOTAL_CPU_DRAM_GB 241).
+        # The whole per-GPU host allowance (241 GB).
         hicache-size: 241
         max-mamba-cache-size: 448
         max-running-requests: 72

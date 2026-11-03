@@ -101,9 +101,8 @@ zip_override_tp4_dspark7:
 
 # c32-c64: the working set outgrows the GPU KV cache, so
 # SimpleCPUOffloadConnector (eager) keeps about 24M tokens in 1349 GB of host
-# memory (dram-utilization 0.9 of the TP4 lane). LRU eviction drops the least
-# recently used prefixes from their tail, so a hot session's chain stays
-# whole. c64 runs DSpark 3 at 0.90 memory utilization.
+# memory. LRU eviction drops the least recently used prefixes from their tail,
+# so a hot session's chain stays whole. c64 runs DSpark 3 at 0.90 memory utilization.
 zip_override_tp4_offload:
   roles:
     agg:
@@ -119,4 +118,3 @@ zip_override_tp4_offload:
     env:
       CONC: ['32', '64']
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1349'

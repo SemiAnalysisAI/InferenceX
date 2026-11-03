@@ -48,11 +48,6 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'atom:'
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
 
-# One variant per point, all TP4. Decode graphs are captured for every batch
-# size up to max(8, 2x CONC). From CONC 32 the prefill delayer coalesces longer;
-# from CONC 48 LMCache offloads to host DRAM: 253 GB of KV plus 110 GB of GDN
-# state per rank, 363 GB x 4 ranks = 1452 GB, within the 1499 GB TP4 share at
-# dram-utilization 1.0.
 override_tp4_c1:
   roles:
     agg:
@@ -151,7 +146,6 @@ override_tp4_c48_lmcache:
     env:
       CONC: '48'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1499'
 
 override_tp4_c56_lmcache:
   roles:
@@ -173,7 +167,6 @@ override_tp4_c56_lmcache:
     env:
       CONC: '56'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1499'
 
 override_tp4_c64_lmcache:
   roles:
@@ -195,7 +188,6 @@ override_tp4_c64_lmcache:
     env:
       CONC: '64'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1499'
 
 override_tp4_c80_lmcache:
   roles:
@@ -217,4 +209,3 @@ override_tp4_c80_lmcache:
     env:
       CONC: '80'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1499'

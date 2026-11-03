@@ -71,7 +71,6 @@ override_c1:
     env:
       CONC: '1'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1717'
 
 override_c4:
   roles:
@@ -93,7 +92,6 @@ override_c4:
     env:
       CONC: '4'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1717'
 
 override_c8:
   roles:
@@ -113,7 +111,6 @@ override_c8:
     env:
       CONC: '8'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1717'
 
 override_c12:
   roles:
@@ -133,7 +130,6 @@ override_c12:
     env:
       CONC: '12'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1717'
 
 override_c16:
   roles:

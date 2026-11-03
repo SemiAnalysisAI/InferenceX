@@ -116,7 +116,6 @@ base:
   benchmark:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'tokenspeed:'
-      TOTAL_CPU_DRAM_GB: '241'
       KV_OFFLOADING: dram
 
 override_tp1_c1:

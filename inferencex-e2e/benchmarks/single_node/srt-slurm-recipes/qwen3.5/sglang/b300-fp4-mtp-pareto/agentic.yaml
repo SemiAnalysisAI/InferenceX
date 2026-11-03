@@ -345,4 +345,3 @@ override_tp2_ep2_c64_cap128_pf_hicache:
     env:
       CONC: '64'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '599'
