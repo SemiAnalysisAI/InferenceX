@@ -429,7 +429,7 @@ jobs:
                   uv run --no-project --exclude-newer PT12H --python 3.12 \
                     python -m infx.workflows.al_gate_reuse "$RUNNER_TEMP/al-gate-plan.json" \
                     --code-version "$(git rev-parse HEAD:./infx HEAD:./benchmarks/srt_al_gate.sh HEAD:./utils/srt-slurm | tr '\n' ' ')" \
-                    --repo "$GITHUB_REPOSITORY" --pr-number "$PR_NUMBER" \
+                    --repo "$GITHUB_REPOSITORY" --pr-number "$PR_NUMBER" --run-id "$GITHUB_RUN_ID" \
                     --output "$RUNNER_TEMP/al-gate-gates.json" --results "$RUNNER_TEMP/al_gate_reused"
                   jq -r '"gates=\(.single_node + .multi_node | length > 0)", "single-node-config=\(.single_node | tojson)", "multi-node-config=\(.multi_node | tojson)"' "$RUNNER_TEMP/al-gate-gates.json" >> "$GITHUB_OUTPUT"
 

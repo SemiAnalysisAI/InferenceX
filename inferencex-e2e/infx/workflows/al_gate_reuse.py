@@ -33,8 +33,10 @@ def gate_key(gate: dict[str, Any], code_version: str) -> str:
     return hashlib.sha256(json.dumps(identity).encode()).hexdigest()[:16]
 
 
-def measured(repo: str, pr_number: int, keys: set[str], token: str) -> dict[str, dict[str, Any]]:
-    """The newest non-error result of each key among this PR's runs."""
+def measured(
+    repo: str, pr_number: int, run_id: int, keys: set[str], token: str
+) -> dict[str, dict[str, Any]]:
+    """The newest non-error result of each key among this PR's earlier runs."""
     shas = sweep_runs.pr_commit_shas(repo, pr_number, token)
     found: dict[str, dict[str, Any]] = {}
     for key in keys:
@@ -44,7 +46,8 @@ def measured(repo: str, pr_number: int, keys: set[str], token: str) -> dict[str,
             artifact
             for artifact in artifacts
             if not artifact.get("expired")
-            and (artifact.get("workflow_run") or {}).get("head_sha") in shas
+            and (run := artifact.get("workflow_run") or {}).get("head_sha") in shas
+            and run.get("id") != run_id
         ]
         for artifact in sorted(ours, key=lambda artifact: artifact["created_at"], reverse=True):
             if result := _result(repo, artifact, token):
@@ -69,6 +72,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--code-version", required=True)
     parser.add_argument("--repo", required=True)
     parser.add_argument("--pr-number", type=int, required=True)
+    parser.add_argument("--run-id", type=int, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--results", type=Path, required=True)
     args = parser.parse_args(argv)
@@ -79,7 +83,7 @@ def main(argv: list[str] | None = None) -> int:
     keys = {gate["al-gate"]["key"] for gate in gates}
     try:
         token = os.environ["GH_TOKEN"]
-        found = measured(args.repo, args.pr_number, keys, token) if keys else {}
+        found = measured(args.repo, args.pr_number, args.run_id, keys, token) if keys else {}
     except LOOKUP_ERRORS as error:
         print(f"::warning title=Acceptance gate reuse::{error}", file=sys.stderr)
         found = {}

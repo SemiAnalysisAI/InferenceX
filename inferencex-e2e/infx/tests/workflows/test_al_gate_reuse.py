@@ -25,7 +25,8 @@ def run_reuse(tmp_path: Path, plan: dict) -> tuple[dict, dict[str, dict]]:
     (tmp_path / "plan.json").write_text(json.dumps(plan))
     argv = [
         str(tmp_path / "plan.json"), "--code-version", "abc", "--repo", "o/r", "--pr-number", "7",
-        "--output", str(tmp_path / "gates.json"), "--results", str(tmp_path / "reused"),
+        "--run-id", "99", "--output", str(tmp_path / "gates.json"),
+        "--results", str(tmp_path / "reused"),
     ]  # fmt: skip
     assert al_gate_reuse.main(argv) == 0
     reused = {
@@ -48,13 +49,15 @@ def test_the_newest_measured_result_of_each_gate_in_this_pr_is_reused(tmp_path, 
         "old-b": {"result_filename": "b", "status": "pass"},
     }
 
-    def artifact(result: str, sha: str, created: str, **extra: bool) -> dict:
-        return {"id": result, "created_at": created, "workflow_run": {"head_sha": sha}, **extra}
+    def artifact(result: str, sha: str, created: str, run: int = 1, **extra: bool) -> dict:
+        workflow_run = {"id": run, "head_sha": sha}
+        return {"id": result, "created_at": created, "workflow_run": workflow_run, **extra}
 
     by_name = {
         f"algate_{key['a']}": [artifact("old-a", "s1", "1"), artifact("new-a", "s2", "2")],
         f"algate_{key['b']}": [artifact("new-b", "s2", "2"), artifact("old-b", "s1", "1")],
         f"algate_{key['c']}": [artifact("new-c", "another-pr", "3"),
+                               artifact("new-c", "s2", "4", run=99),
                                artifact("new-c", "s2", "2", expired=True)],
     }  # fmt: skip
     monkeypatch.setattr(sweep_runs, "pr_commit_shas", lambda *_: {"s1", "s2"})
