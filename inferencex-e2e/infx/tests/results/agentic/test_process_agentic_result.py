@@ -1309,7 +1309,7 @@ def test_processor_ignores_server_warmup_metrics_for_headline_stats(
     assert agg["server_metrics"]["tokens"]["prompt_total"] == 1000
 
 
-@pytest.mark.parametrize("framework", ["sglang", "dynamo-sglang"])
+@pytest.mark.parametrize("framework", ["sglang", "dynamo-sglang", "llmd-sglang"])
 def test_processor_normalizes_sglang_server_metrics(tmp_path: Path, framework: str):
     result_dir = _write_fixture(tmp_path)
     artifact = result_dir / "aiperf_artifacts"
@@ -1350,7 +1350,7 @@ def test_processor_normalizes_sglang_server_metrics(tmp_path: Path, framework: s
             },
         }
     }
-    if framework == "dynamo-sglang":
+    if framework in {"dynamo-sglang", "llmd-sglang"}:
         server_metrics["metrics"].update(
             {
                 "dynamo_frontend_input_sequence_tokens": {
@@ -1388,7 +1388,7 @@ def test_processor_normalizes_sglang_server_metrics(tmp_path: Path, framework: s
 
     assert agg["server_metrics"]["tokens"]["prompt_total"] == 1000
     assert agg["server_metrics"]["tokens"]["generation_total"] == 200
-    if framework == "dynamo-sglang":
+    if framework in {"dynamo-sglang", "llmd-sglang"}:
         assert agg["server_metrics"]["kv_cache"]["gpu_total_tokens"] is None
         assert agg["kv_cache_pool_tokens"] is None
         assert any(
@@ -1852,7 +1852,7 @@ def test_builder_does_not_consume_logs_when_backend_does_not_use_them(framework,
     )
     assert result["kv_cache_pool_tokens"] is None
     assert result["num_requests_successful"] == 0
-    if framework == "dynamo-sglang":
+    if framework in {"dynamo-sglang", "llmd-sglang"}:
         assert result["warnings"] == [
             "Dynamo-SGLang logical KV capacity is unsupported: rank replicas are not normalized"
         ]
