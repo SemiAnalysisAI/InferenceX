@@ -24,9 +24,8 @@ def bundle(result: dict) -> bytes:
 def run_reuse(tmp_path: Path, plan: dict) -> tuple[dict, dict[str, dict]]:
     (tmp_path / "plan.json").write_text(json.dumps(plan))
     argv = [
-        str(tmp_path / "plan.json"), "--code-version", "abc", "--repo", "o/r", "--branch", "feat/x",
-        "--pr-number", "7", "--output", str(tmp_path / "gates.json"),
-        "--results", str(tmp_path / "reused"),
+        str(tmp_path / "plan.json"), "--code-version", "abc", "--repo", "o/r", "--pr-number", "7",
+        "--output", str(tmp_path / "gates.json"), "--results", str(tmp_path / "reused"),
     ]  # fmt: skip
     assert al_gate_reuse.main(argv) == 0
     reused = {
@@ -48,23 +47,18 @@ def test_the_newest_measured_result_of_each_gate_in_this_pr_is_reused(tmp_path, 
         "old-a": {"result_filename": "a", "status": "pass"},
         "old-b": {"result_filename": "b", "status": "pass"},
     }
-    artifacts = {
-        3: [{"id": "new-c", "name": f"algate_{key['c']}"}],
-        2: [{"id": "new-a", "name": f"algate_{key['a']}"}, {"id": "new-b", "name": f"algate_{key['b']}"},
-            {"id": "new-c", "name": f"algate_{key['c']}", "expired": True}],
-        1: [{"id": "old-a", "name": f"algate_{key['a']}"}, {"id": "old-b", "name": f"algate_{key['b']}"},
-            {"id": "plan", "name": "algate_plan"}],
+
+    def artifact(result: str, sha: str, created: str, **extra: bool) -> dict:
+        return {"id": result, "created_at": created, "workflow_run": {"head_sha": sha}, **extra}
+
+    by_name = {
+        f"algate_{key['a']}": [artifact("old-a", "s1", "1"), artifact("new-a", "s2", "2")],
+        f"algate_{key['b']}": [artifact("new-b", "s2", "2"), artifact("old-b", "s1", "1")],
+        f"algate_{key['c']}": [artifact("new-c", "another-pr", "3"),
+                               artifact("new-c", "s2", "2", expired=True)],
     }  # fmt: skip
-    runs = [
-        {"id": 1, "created_at": "2026-10-01", "head_sha": "s1"},
-        {"id": 2, "created_at": "2026-10-02", "head_sha": "s2"},
-        {"id": 3, "created_at": "2026-10-03", "head_sha": "another-pr"},
-    ]
     monkeypatch.setattr(sweep_runs, "pr_commit_shas", lambda *_: {"s1", "s2"})
-    monkeypatch.setattr(sweep_runs, "completed_pr_runs", lambda *_: runs)
-    monkeypatch.setattr(
-        github, "paginate", lambda repo, path, *_: artifacts[int(path.split("/")[3])]
-    )
+    monkeypatch.setattr(github, "paginate", lambda *args: by_name[args[4]["name"]])
     monkeypatch.setattr(
         github, "download", lambda repo, path, *_: bundle(results[path.split("/")[3]])
     )
