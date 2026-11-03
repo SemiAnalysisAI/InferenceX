@@ -1348,9 +1348,6 @@ def _window_contract_holds(window: dict, validations: list[dict]) -> bool:
     return False
 
 
-# --- aggregate patch + sidecar + entry point ---------------------------------
-
-
 def _host_workers(audit: MultinodePowerAudit) -> list[dict]:
     """Project validated device energy onto physical host/role power entries."""
     if not audit.power_valid or audit.window is None:

@@ -778,8 +778,6 @@ def test_non_object_aggregate_is_recorded_as_unwritable(tmp_path, aggregate):
     assert pkg.run(require_power=True) == 1
 
 
-# --- Grace CPU-side power leg (power/cpu/) -----------------------------------
-
 CPU_HOSTS = tuple(sorted({host for host, *_ in DEVICES}))
 CPU_HEADER = [
     "schema_version", "timestamp_unix", "hostname", "source", "sensor", "socket_id",
