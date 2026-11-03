@@ -1,0 +1,15 @@
+# Linux x86_64, CPython 3.12; PyPI torch 2.10.0 uses CUDA 12.8.
+diffusers @ https://github.com/huggingface/diffusers/archive/d8c1b13c756df0059bcdb6e477a1eafcd502098d.tar.gz
+torch==2.10.0
+torchvision==0.25.0
+transformers==5.22.1
+accelerate==1.12.0
+psutil==7.1.3
+huggingface-hub==1.32.0
+safetensors==0.8.0
+av==16.1.0
+numpy==2.3.5
+pyyaml==6.0.3
+einops==0.8.1
+setuptools==80.9.0
+wheel==0.45.1
