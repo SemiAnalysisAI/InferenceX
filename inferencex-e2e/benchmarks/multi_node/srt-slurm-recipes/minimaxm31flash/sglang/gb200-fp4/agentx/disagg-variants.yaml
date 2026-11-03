@@ -100,7 +100,7 @@ base:
         chunked-prefill-size: 32768
         # Shortest uncached prefill first: short cached turns stop queueing
         # behind long uncached prompts, which cuts the TTFT tail.
-        schedule-policy: shortest-prefill-first
+        schedule-policy: fcfs
         # 64 per DP rank.
         max-running-requests: 256
         mem-fraction-static: 0.88
@@ -158,9 +158,7 @@ base:
         # The frontend picks the decode DP rank; least-loaded sends each request to
         # the rank with the fewest in flight, where round-robin left the busiest rank
         # at 1.45x the mean and every DP rank waits for it each step.
-        router-mode: kv
-        router-session-affinity-ttl-secs: "14400"
-        disaggregation-decode-enable-radix-cache: true
+        router-mode: least-loaded
         load-balance-method: total_tokens
         # 48 per DP rank.
         max-running-requests: 384
@@ -172,7 +170,7 @@ base:
         speculative-draft-kv-cache-dtype: fp8_e4m3
         watchdog-timeout: 3600
         enable-metrics: true
-      kv_events: true
+      kv_events: false
   sbatch_directives:
     mem: "0"
     exclusive: ""
