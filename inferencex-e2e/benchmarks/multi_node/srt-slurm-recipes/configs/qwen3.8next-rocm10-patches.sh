@@ -3,7 +3,7 @@
 # applied to its editable AITER (285579b6) and SGLang (1ced9a9eb0) checkouts. The
 # image already has the monokernel (--enable-amd-monokernel), the AITER topk_gating
 # router (sglang#40708), ratio-3 GDN packing (sglang#44302), the 128-row hc_mix
-# (sglang#41880) and ROCm/aiter#6225, #5804, #6050, so none of them is patched.
+# (sglang#41880) and ROCm/aiter#6225, #5804, #6050, #6165, #6467, so none of them is patched.
 #   - ROCm/aiter#5992: FlyDSL causal conv1d prefill and GDN decode/verify
 #   - sgl-project/sglang#41879: opt-in SGLANG_AITER_GDN_CONV/_DECODE hooks
 #   - fused Triton QK Gemma-RMSNorm + M-RoPE + gate on HIP
@@ -33,11 +33,8 @@
 #     (--cuda-graph-backend-prefill breakable), and a shared-quantized attention
 #     input (SGLANG_OPT_QWEN4_SHARED_ATTN_QUANT) goes through the QSA indexer break
 #     as its two tensors instead of crashing the prefill graph capture
-#   - fused decode MoE route-sort + MXFP4 activation quant (ROCm/aiter#6165, #6467),
-#     instantiated for Qwen3.8-Flash-Next's 513 experts / top-11 / hidden 2560
 # All but the upstream PRs come from amd-nprotaso/{aiter,sglang} qwen_3_8_improvement.
-# All Python except the MoE sort + quant, whose prebuilt module is removed so AITER's
-# JIT rebuilds it on first use. A patch that no longer applies fails the worker.
+# All Python. A patch that no longer applies fails the worker.
 set -euo pipefail
 # srtctl only looks up setup_script here; the patches live with the single-node
 # recipe and are read through the workspace mount.
@@ -66,9 +63,6 @@ apply /sgl-workspace/aiter 02-aiter-flydsl-hc-mix.patch
 apply /sgl-workspace/aiter 03-aiter-flydsl-gdn-fused-prefill.patch
 apply /sgl-workspace/aiter 04-aiter-flydsl-gdn-decode-verify-perf.patch
 apply /sgl-workspace/aiter 05-aiter-qwen38-tuned-gemm-tables.patch
-apply /sgl-workspace/aiter 06-aiter-moe-sort-quant-2560.patch
-rm -rf /sgl-workspace/aiter/aiter/jit/module_moe_sorting_opus.so \
-    /sgl-workspace/aiter/aiter/jit/build/module_moe_sorting_opus
 apply /sgl-workspace/sglang 01-sglang-aiter-gdn-conv-decode-hooks.patch
 apply /sgl-workspace/sglang 02-sglang-fused-qk-rope-gate-hip.patch
 apply /sgl-workspace/sglang 03-sglang-hc-mix-env-gates.patch
