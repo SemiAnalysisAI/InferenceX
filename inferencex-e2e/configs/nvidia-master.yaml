@@ -8111,6 +8111,7 @@ minimaxm31flash-fp4-b300-sglang-agentic-dspark:
       # Balanced: TP4.
       - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 16, 32], srt-recipe: agentic.yaml }
       - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [16], srt-recipe: 'agentic-tp4-spf-extra.yaml:override_tp4_c16_spf_interval32' }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [17], srt-recipe: 'agentic-tp4-spf-extra.yaml:override_tp4_c17_spf_interval32' }
       # Low-Latency: MSA-V1 MonoKernel at batch size 1.
       - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: agentic-low-latency.yaml }
     - dram-utilization: 0.80

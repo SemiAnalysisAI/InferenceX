@@ -11816,7 +11816,7 @@
 - config-keys:
     - minimaxm31flash-fp4-b300-sglang-agentic-dspark
   description:
-    - "Add TP4 points with DRAM KV offload at conc 20, 44, 52 and 60, and a TP4 point without offload at conc 16, using shortest-prefill-first with a prefill-decode interval of 32."
+    - "Add TP4 points with DRAM KV offload at conc 20, 44, 52 and 60, and TP4 points without offload at conc 16 and 17, using shortest-prefill-first with a prefill-decode interval of 32."
     - "Add a TP2 point with DRAM KV offload at conc 44 using shortest-prefill-first with a prefill-decode interval of 32."
     - "Add TP2 points with DRAM KV offload and a larger HBM KV pool (mem-fraction-static 0.93) at conc 50 and 52 using shortest-prefill-first with a prefill-decode interval of 20."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4726

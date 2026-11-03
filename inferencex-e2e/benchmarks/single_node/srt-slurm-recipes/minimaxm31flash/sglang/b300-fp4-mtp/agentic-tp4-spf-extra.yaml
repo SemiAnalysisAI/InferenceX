@@ -93,3 +93,21 @@ override_tp4_c16_spf_interval32:
     env:
       CONC: '16'
       KV_OFFLOADING: none
+
+override_tp4_c17_spf_interval32:
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 4
+        moe-runner-backend: flashinfer_trtllm_routed
+        chunked-prefill-size: 8192
+        max-running-requests: 34
+        cuda-graph-max-bs-decode: 34
+        mem-fraction-static: 0.90
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 32
+        stream-interval: 20
+  benchmark:
+    env:
+      CONC: '17'
+      KV_OFFLOADING: none
