@@ -25,11 +25,13 @@ POLLARA_NIC_BASELINE = Provenance(
     kind="estimated",
     input_boundary="One scale-out NIC; excludes separately modeled transceivers and switches",
     assumptions=(
-        "Power is 34.5 W per card in both states: total_power_drawn averaged 38.65 W during an "
-        "InferenceX run, plus a 10% margin, minus the separately modeled 8 W transceiver.",
+        "Power is 34.5 W per card in both states: total_power_drawn averaged 38.65 W during a "
+        "DeepSeek-R1 InferenceX run, plus a 10% margin, minus the separately modeled 8 W "
+        "transceiver.",
         "total_power_drawn includes the QSFP-400G-DR4 transceiver.",
-        "That run (DeepSeek-R1 prefill/decode on two MI355X nodes, KV cache over Pollara) moved "
-        "about 1 Gbit/s per NIC and read the same as idle.",
+        "InferenceX prefill/decode runs on two MI355X nodes with KV cache over Pollara read the "
+        "same as idle: DeepSeek-R1 at about 1 Gbit/s per NIC, and AgentX Kimi-K3 at 3.5 Gbit/s "
+        "per NIC with 38.4-39.4 W per card.",
         "Synthetic RDMA at full 400 Gbit/s line rate both ways reads 42.6 W, within the margin.",
     ),
 )
