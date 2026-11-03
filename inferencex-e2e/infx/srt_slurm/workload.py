@@ -33,6 +33,7 @@ SHARED_BLOCKS = {
 BOUND_RECIPE = "recipe.yaml"
 TELEMETRY_BLOCK = Path("configs/srt-recipes/telemetry-dcgm.yaml")
 NATIVE_TELEMETRY_BLOCK = Path("configs/srt-recipes/telemetry-native.yaml")
+VIDEO_BLOCK = Path("configs/srt-recipes/video.yaml")
 _POINT_KEYS = (
     ("model", "path"),
     ("model", "container"),

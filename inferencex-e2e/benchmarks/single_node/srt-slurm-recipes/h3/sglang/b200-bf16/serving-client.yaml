@@ -4,9 +4,6 @@ name: h3-sglang-serving-client
 resources:
   gpu_type: b200
 
-frontend:
-  type: none
-
 services:
   - name: h3-server
     type: generic
@@ -66,12 +63,3 @@ services:
         path: /health
       timeout_seconds: 1800
       interval_seconds: 5
-
-benchmark:
-  type: custom
-  command: python3 -m infx.bench video client --request-seconds 900
-  env:
-    PYTHONPATH: /h3-package:/infmax-workspace
-    PYTHONUNBUFFERED: "1"
-    H3_SERVER_SERVICE: h3-server
-    H3_SERVER_PORT: "30283"

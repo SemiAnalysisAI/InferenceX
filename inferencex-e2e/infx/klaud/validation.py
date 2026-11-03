@@ -70,7 +70,12 @@ def canonical_matrix(repository: str, head: str, family: str) -> dict:
         validate_master_config,
         validate_runner_config,
     )
-    from infx.srt_slurm.workload import NATIVE_TELEMETRY_BLOCK, SHARED_BLOCKS, TELEMETRY_BLOCK
+    from infx.srt_slurm.workload import (
+        NATIVE_TELEMETRY_BLOCK,
+        SHARED_BLOCKS,
+        TELEMETRY_BLOCK,
+        VIDEO_BLOCK,
+    )
 
     OwnedCandidate(id="0" * 16 + "-" + "0" * 16, family=family, base=head)
     source, keys = family.split(":", 1)[0], family_keys(family)
@@ -84,7 +89,12 @@ def canonical_matrix(repository: str, head: str, family: str) -> dict:
         paths = {reference.partition(":")[0] for key in keys for reference in references[key]}
         blocks = [
             block.as_posix()
-            for block in (*SHARED_BLOCKS.values(), TELEMETRY_BLOCK, NATIVE_TELEMETRY_BLOCK)
+            for block in (
+                *SHARED_BLOCKS.values(),
+                TELEMETRY_BLOCK,
+                NATIVE_TELEMETRY_BLOCK,
+                VIDEO_BLOCK,
+            )
         ]
         for path in [*paths, *blocks]:
             (root / path).parent.mkdir(parents=True, exist_ok=True)

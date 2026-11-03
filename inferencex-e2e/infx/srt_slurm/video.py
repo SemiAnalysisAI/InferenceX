@@ -21,6 +21,7 @@ from infx.srt_slurm.workload import (
     BOUND_RECIPE,
     NATIVE_TELEMETRY_BLOCK,
     POWER_FLAGS,
+    VIDEO_BLOCK,
     _block,
     _lookup,
     _positive,
@@ -139,12 +140,13 @@ def check_video_fragment(raw: Mapping[str, Any], source: Path) -> None:
 
 
 def compose_video_recipe(path: Path, *, root: Path) -> dict[str, Any]:
-    """The fragment at ``path`` over the native telemetry block."""
+    """The fragment at ``path`` over the shared video and native telemetry blocks."""
     raw = yaml.safe_load(path.read_text())
     if not isinstance(raw, dict):
         raise ValueError(f"{path}: recipe must be a mapping")
     check_video_fragment(raw, path)
-    return merge_blocks(_block(root / NATIVE_TELEMETRY_BLOCK), raw)
+    shared = merge_blocks(_block(root / VIDEO_BLOCK), _block(root / NATIVE_TELEMETRY_BLOCK))
+    return merge_blocks(shared, raw)
 
 
 def spec_model_path(hf_hub_cache: str, model: str, revision: str) -> str:

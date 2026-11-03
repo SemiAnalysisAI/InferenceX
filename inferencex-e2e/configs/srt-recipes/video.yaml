@@ -1,0 +1,11 @@
+frontend:
+  type: none
+
+benchmark:
+  type: custom
+  command: python3 -m infx.bench video client --request-seconds 900
+  env:
+    PYTHONPATH: /h3-package:/infmax-workspace
+    PYTHONUNBUFFERED: "1"
+    H3_SERVER_SERVICE: h3-server
+    H3_SERVER_PORT: "30283"
