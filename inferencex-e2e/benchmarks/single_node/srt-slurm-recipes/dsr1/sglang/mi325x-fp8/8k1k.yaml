@@ -14,9 +14,6 @@ base:
   engine: sglang
   roles:
     agg:
-      nodes: 1
-      workers: 1
-      gpus: 8
       args:
         trust-remote-code: true
         tensor-parallel-size: 8

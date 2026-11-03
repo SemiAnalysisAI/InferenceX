@@ -23,9 +23,6 @@ base:
   engine: sglang
   roles:
     agg:
-      nodes: 1
-      workers: 1
-      gpus: 1
       env:
         PYTHONNOUSERSITE: '1'
         PYTHONUNBUFFERED: '1'
@@ -104,7 +101,6 @@ base:
 override_tp4_c1:
   roles:
     agg:
-      gpus: 4
       args:
         <<: &gpu_only_args
           # null drops the base setting, so SGLang's default applies.
@@ -132,7 +128,6 @@ override_tp4_c1:
 override_tp4_c2:
   roles:
     agg:
-      gpus: 4
       args:
         <<: *gpu_only_args
         tensor-parallel-size: 4

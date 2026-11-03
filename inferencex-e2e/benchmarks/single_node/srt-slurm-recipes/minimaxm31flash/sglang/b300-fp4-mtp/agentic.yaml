@@ -18,9 +18,6 @@ base:
     interval_seconds: 5
   roles:
     agg:
-      nodes: 1
-      workers: 1
-      gpus: 4
       # Serve flags follow the cookbook's B300 cells at
       # https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1.
       args:

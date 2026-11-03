@@ -32,7 +32,6 @@ base:
   engine: sglang
   roles:
     agg:
-      workers: 1
       env:
         TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
         PYTHONUNBUFFERED: '1'
@@ -92,8 +91,6 @@ override_tp4_c1:
   name: glm5.2-fp4-gb300-dynamo-sglang-agentx-agg-tp4-c1-mtp4
   roles:
     agg:
-      nodes: 1
-      gpus: 4
       args:
         tensor-parallel-size: 4
         kv-cache-dtype: fp8_e4m3
@@ -112,8 +109,6 @@ override_tp8_c1:
   name: glm5.2-fp4-gb300-dynamo-sglang-agentx-agg-tp8-c1-mtp5
   roles:
     agg:
-      nodes: 2
-      gpus: 8
       env:
         MC_TE_METRIC: 'true'
         MC_FORCE_MNNVL: '1'

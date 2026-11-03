@@ -17,9 +17,6 @@ base:
   engine: sglang
   roles:
     agg:
-      nodes: 1
-      workers: 1
-      gpus: 2
       env:
         SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '1'
         PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True

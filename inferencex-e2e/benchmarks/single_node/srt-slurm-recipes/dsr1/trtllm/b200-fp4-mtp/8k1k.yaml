@@ -16,9 +16,6 @@ base:
     served_model_name: nvidia/DeepSeek-R1-0528-FP4-V2
   roles:
     agg:
-      nodes: 1
-      workers: 1
-      gpus: 4
       args:
         cuda_graph_config:
           enable_padding: true
@@ -109,7 +106,6 @@ zip_override_tp8_ep1:
         max_num_tokens: 8320
         tensor_parallel_size: 8
         moe_expert_parallel_size: 1
-      gpus: 8
   benchmark:
     env:
       CONC: ['4']
@@ -132,7 +128,6 @@ zip_override_tp8_ep8_dpa:
         max_num_tokens: [8320, 8320, 8384]
         tensor_parallel_size: 8
         moe_expert_parallel_size: 8
-      gpus: 8
   benchmark:
     env:
       CONC: ['64', '128', '256']

@@ -23,9 +23,6 @@ base:
   engine: sglang
   roles:
     prefill:
-      nodes: 1
-      workers: 1
-      gpus: 8
       env:
         HF_HOME: /hf_hub_cache
         HF_HUB_CACHE: /hf_hub_cache/hub
@@ -72,9 +69,6 @@ base:
         enable-metrics: true
         enable-cache-report: true
     decode:
-      nodes: 1
-      workers: 1
-      gpus: 8
       env:
         HF_HOME: /hf_hub_cache
         HF_HUB_CACHE: /hf_hub_cache/hub
@@ -142,8 +136,6 @@ override_stp_2p1d_dep8:
   resources: {}
   roles:
     prefill:
-      nodes: 2
-      workers: 2
       args:
         moe-dense-tp-size: 1
         ep-size: 8
@@ -157,8 +149,6 @@ override_stp_2p1d_dep8:
         chunked-prefill-size: 65536
         cuda-graph-bs: [1, 2, 3]
     decode:
-      nodes: 1
-      workers: 1
       env:
         SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '256'
         SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD: '512'
@@ -190,12 +180,8 @@ override_stp_1p2d_tp8:
   name: mi355x-dsr1-fp8-stp-1p2d-tp8-fixed-seq
   resources: {}
   roles:
-    prefill:
-      nodes: 1
-      workers: 1
-    decode:
-      nodes: 2
-      workers: 2
+    prefill: {}
+    decode: {}
   benchmark:
     env:
       BENCHMARK_VARIANT: stp-1p2d-tp8
@@ -204,15 +190,9 @@ override_stp_1p1d_tp4_tp8:
   resources: {}
   roles:
     prefill:
-      nodes: 1
-      workers: 1
-      gpus: 4
       args:
         tp-size: 4
-    decode:
-      nodes: 1
-      workers: 1
-      gpus: 8
+    decode: {}
   benchmark:
     env:
       BENCHMARK_VARIANT: stp-1p1d-tp4-tp8
@@ -221,8 +201,6 @@ override_mtp_2p1d_dep8:
   resources: {}
   roles:
     prefill:
-      nodes: 2
-      workers: 2
       args:
         moe-dense-tp-size: 1
         ep-size: 8
@@ -240,8 +218,6 @@ override_mtp_2p1d_dep8:
         chunked-prefill-size: 65536
         cuda-graph-bs: [1, 2, 3]
     decode:
-      nodes: 1
-      workers: 1
       env:
         SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '512'
         SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD: '512'
@@ -278,16 +254,12 @@ override_mtp_1p2d_tp8:
   resources: {}
   roles:
     prefill:
-      nodes: 1
-      workers: 1
       args:
         speculative-algorithm: NEXTN
         speculative-eagle-topk: 1
         speculative-num-steps: 2
         speculative-num-draft-tokens: 3
     decode:
-      nodes: 2
-      workers: 2
       env:
         SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '1536'
       args:
@@ -303,9 +275,6 @@ override_mtp_1p1d_tp4_tp8:
   resources: {}
   roles:
     prefill:
-      nodes: 1
-      workers: 1
-      gpus: 4
       args:
         tp-size: 4
         speculative-algorithm: NEXTN
@@ -313,9 +282,6 @@ override_mtp_1p1d_tp4_tp8:
         speculative-num-steps: 2
         speculative-num-draft-tokens: 3
     decode:
-      nodes: 1
-      workers: 1
-      gpus: 8
       env:
         SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '1536'
       args:

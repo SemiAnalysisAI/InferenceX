@@ -16,9 +16,6 @@ base:
     served_model_name: deepseek-ai/DeepSeek-R1-0528
   roles:
     agg:
-      nodes: 1
-      workers: 1
-      gpus: 8
       args:
         cuda_graph_config:
           enable_padding: true
@@ -72,7 +69,6 @@ zip_override_tp4_ep1:
           free_gpu_memory_fraction: 0.75
         max_num_tokens: 8320
         tensor_parallel_size: 4
-      gpus: 4
   benchmark:
     env:
       CONC: ['8', '16', '32']

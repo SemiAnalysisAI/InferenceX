@@ -20,9 +20,6 @@ resources:
 engine: sglang
 roles:
   prefill:
-    nodes: 1
-    workers: 1
-    gpus: 4
     env:
       TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
       PYTHONUNBUFFERED: "1"
@@ -73,8 +70,6 @@ roles:
       speculative-num-draft-tokens: 4
 
   decode:
-    nodes: 1
-    workers: 1
     env:
       TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
       PYTHONUNBUFFERED: "1"

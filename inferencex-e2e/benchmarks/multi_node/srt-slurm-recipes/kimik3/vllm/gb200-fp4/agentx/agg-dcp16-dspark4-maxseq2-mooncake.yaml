@@ -67,9 +67,6 @@ engine:
   connector:
 roles:
   agg:
-    nodes: 4
-    workers: 1
-    gpus: 16
 
     env:
       VLLM_ALLREDUCE_USE_FLASHINFER: "1"

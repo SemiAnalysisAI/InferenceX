@@ -19,8 +19,6 @@ dynamo:
 engine: sglang
 roles:
   prefill:
-    nodes: 12
-    workers: 6
     env:
       TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
       SGLANG_DG_CACHE_DIR: "/configs/dg-10212025"
@@ -80,8 +78,6 @@ roles:
       deepep-config: "/configs/deepep_config.json"
 
   decode:
-    nodes: 6
-    workers: 1
     env:
       TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
       SGLANG_DG_CACHE_DIR: "/configs/dg-10212025"

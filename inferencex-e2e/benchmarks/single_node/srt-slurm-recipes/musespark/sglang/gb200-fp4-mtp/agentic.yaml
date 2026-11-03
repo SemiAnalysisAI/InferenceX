@@ -14,9 +14,6 @@ base:
   engine: sglang
   roles:
     agg:
-      nodes: 1
-      workers: 1
-      gpus: 4
       args:
         served-model-name: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
         trust-remote-code: true

@@ -65,9 +65,6 @@ base:
     dp_launch_mode: per_node
   roles:
     prefill:
-      nodes: 4
-      workers: 1
-      gpus: 16
       env: &kimi_env
         VLLM_USE_DIRECT_DCP_A2A: "1"
         VLLM_USE_DIRECT_DCP_Q_GATHER: "1"
@@ -125,9 +122,6 @@ base:
         enable-prefix-caching: true
       kv_events: true
     decode:
-      nodes: 4
-      workers: 1
-      gpus: 16
 
       env:
         <<: *kimi_env

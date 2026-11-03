@@ -30,9 +30,6 @@ engine:
   connector:
 roles:
   agg:
-    nodes: 4
-    workers: 1
-    gpus: 32
 
     env:
       CUDA_LAUNCH_BLOCKING: "1"

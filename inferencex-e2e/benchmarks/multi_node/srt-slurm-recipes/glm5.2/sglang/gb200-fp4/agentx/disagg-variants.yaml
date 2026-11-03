@@ -34,9 +34,6 @@ base:
   engine: sglang
   roles:
     prefill:
-      nodes: 2
-      workers: 1
-      gpus: 8
       env:
         TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
         PYTHONUNBUFFERED: '1'
@@ -173,9 +170,6 @@ override_1p6d_pp8_tp4_c36:
         active-prefill-tokens-threshold: None
         active-prefill-tokens-threshold-frac: None
     decode:
-      nodes: 6
-      workers: 6
-      gpus: 4
       args:
         tensor-parallel-size: 4
         disaggregation-decode-enable-radix-cache: true
@@ -193,9 +187,6 @@ override_1p4d_pp8_tp4_c48:
         active-prefill-tokens-threshold: None
         active-prefill-tokens-threshold-frac: None
     decode:
-      nodes: 4
-      workers: 4
-      gpus: 4
       args:
         tensor-parallel-size: 4
         disaggregation-decode-enable-radix-cache: true
@@ -207,9 +198,6 @@ override_1p2d_pp8_dep8_c64:
   name: glm5.2-fp4-gb200-dynamo-sglang-agentx-disagg-1p2d-pp8-dep8-c64
   roles:
     decode:
-      nodes: 4
-      workers: 2
-      gpus: 8
       args:
         tensor-parallel-size: 8
         data-parallel-size: 8
@@ -232,9 +220,6 @@ override_1p2d_pp8_dep8_c96:
       args:
         mem-fraction-static: 0.83
     decode:
-      nodes: 4
-      workers: 2
-      gpus: 8
       args:
         tensor-parallel-size: 8
         data-parallel-size: 8
@@ -258,9 +243,6 @@ override_1p1d_pp8_dep8_c96:
         max-running-requests: 16
         hicache-size: 100
     decode:
-      nodes: 2
-      workers: 1
-      gpus: 8
       args:
         tensor-parallel-size: 8
         data-parallel-size: 8
@@ -278,13 +260,8 @@ override_1p1d_pp8_dep8_c96:
 override_2p1d_pp8_dep16_c224:
   name: glm5.2-fp4-gb200-dynamo-sglang-agentx-disagg-2p1d-pp8-dep16-c224
   roles:
-    prefill:
-      nodes: 4
-      workers: 2
+    prefill: {}
     decode:
-      nodes: 4
-      workers: 1
-      gpus: 16
       args:
         tensor-parallel-size: 16
         data-parallel-size: 16
@@ -303,13 +280,8 @@ override_2p1d_pp8_dep16_c224:
 override_3p1d_pp8_dep16_c336:
   name: glm5.2-fp4-gb200-dynamo-sglang-agentx-disagg-3p1d-pp8-dep16-c336
   roles:
-    prefill:
-      nodes: 6
-      workers: 3
+    prefill: {}
     decode:
-      nodes: 4
-      workers: 1
-      gpus: 16
       args:
         tensor-parallel-size: 16
         data-parallel-size: 16

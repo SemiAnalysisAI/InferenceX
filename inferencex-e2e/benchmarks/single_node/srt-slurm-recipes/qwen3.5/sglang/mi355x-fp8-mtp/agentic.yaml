@@ -14,8 +14,6 @@ base:
   engine: sglang
   roles:
     agg:
-      nodes: 1
-      workers: 1
       args:
         served-model-name: Qwen/Qwen3.5-397B-A17B-FP8
         tokenizer-path: Qwen/Qwen3.5-397B-A17B-FP8
@@ -66,7 +64,6 @@ base:
 override_tp4_c1:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-running-requests: 2
@@ -79,7 +76,6 @@ override_tp4_c1:
 override_tp4_c4:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-running-requests: 8
@@ -92,7 +88,6 @@ override_tp4_c4:
 override_tp4_c8:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-running-requests: 16
@@ -105,7 +100,6 @@ override_tp4_c8:
 override_tp4_c12:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-running-requests: 24
@@ -118,7 +112,6 @@ override_tp4_c12:
 override_tp4_c14:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-running-requests: 28
@@ -131,7 +124,6 @@ override_tp4_c14:
 override_tp4_hicache_c16:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-running-requests: 32
@@ -149,7 +141,6 @@ override_tp4_hicache_c16:
 override_tp4_hicache_c18:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-running-requests: 36
@@ -167,7 +158,6 @@ override_tp4_hicache_c18:
 override_tp4_hicache_c20:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-running-requests: 40
@@ -185,7 +175,6 @@ override_tp4_hicache_c20:
 override_tp4_hicache_c22:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-running-requests: 44
@@ -203,7 +192,6 @@ override_tp4_hicache_c22:
 override_tp4_hicache_c24:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-running-requests: 48
@@ -221,7 +209,6 @@ override_tp4_hicache_c24:
 override_tp4_hicache_c28:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-running-requests: 56
@@ -239,7 +226,6 @@ override_tp4_hicache_c28:
 override_tp4_hicache_c32:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-running-requests: 64
@@ -258,7 +244,6 @@ override_tp4_hicache_c32:
 override_tp4_hicache_c36:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-running-requests: 72
@@ -277,7 +262,6 @@ override_tp4_hicache_c36:
 override_tp4_hicache_c40:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-running-requests: 80
@@ -296,7 +280,6 @@ override_tp4_hicache_c40:
 override_tp4_hicache_c48:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-running-requests: 96
@@ -315,7 +298,6 @@ override_tp4_hicache_c48:
 override_tp4_hicache_c56:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-running-requests: 112
@@ -334,7 +316,6 @@ override_tp4_hicache_c56:
 override_tp4_hicache_c64:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-running-requests: 128
@@ -353,7 +334,6 @@ override_tp4_hicache_c64:
 override_tp4_hicache_c72:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-running-requests: 144
@@ -372,7 +352,6 @@ override_tp4_hicache_c72:
 override_tp4_hicache_c80:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-running-requests: 160

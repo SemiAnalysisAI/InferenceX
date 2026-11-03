@@ -34,9 +34,6 @@ base:
   engine: sglang
   roles:
     prefill:
-      nodes: 1
-      workers: 1
-      gpus: 2
       env:
         PYTHONUNBUFFERED: '1'
         PIP_BREAK_SYSTEM_PACKAGES: '1'
@@ -94,8 +91,6 @@ base:
         hicache-write-policy: write_through
     decode:
       nodes: colocate
-      workers: 1
-      gpus: 2
       env:
         PYTHONUNBUFFERED: '1'
         PIP_BREAK_SYSTEM_PACKAGES: '1'
@@ -162,7 +157,6 @@ override_tp4_tp4_c4:
   name: qwen35-b300-disagg-1p1d-tp4-tp4-colocated-c4-mtp-hicache
   roles:
     prefill:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
@@ -170,7 +164,6 @@ override_tp4_tp4_c4:
         hicache-size: 72
         hicache-write-policy: write_through_selective
     decode:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
@@ -182,7 +175,6 @@ override_tp4_tp4_c12:
   name: qwen35-b300-disagg-1p1d-tp4-tp4-colocated-c12-mtp-hicache
   roles:
     prefill:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
@@ -190,7 +182,6 @@ override_tp4_tp4_c12:
         hicache-size: 72
         hicache-write-policy: write_through_selective
     decode:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
@@ -202,7 +193,6 @@ override_tp4_tp4_c24:
   name: qwen35-b300-disagg-1p1d-tp4-tp4-colocated-c24-mtp-hicache
   roles:
     prefill:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
@@ -210,7 +200,6 @@ override_tp4_tp4_c24:
         hicache-size: 72
         hicache-write-policy: write_through_selective
     decode:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
@@ -222,7 +211,6 @@ override_tp4ep4_tp4_c32:
   name: qwen35-b300-disagg-1p1d-tp4ep4-tp4-colocated-c32-mtp-hicache
   roles:
     prefill:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
@@ -230,7 +218,6 @@ override_tp4ep4_tp4_c32:
         hicache-size: 72
         hicache-write-policy: write_through_selective
     decode:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1

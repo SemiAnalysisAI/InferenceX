@@ -18,9 +18,6 @@ base:
     interval_seconds: 5
   roles:
     agg:
-      nodes: 1
-      workers: 1
-      gpus: 4
       # The cookbook's GB300 Low-Latency cell at
       # https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1: the MSA-V1
       # MonoKernel serves batch-size-1 DSpark steps; larger batches take the standard path.

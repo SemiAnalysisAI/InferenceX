@@ -61,8 +61,6 @@ base:
   engine: sglang
   roles:
     agg:
-      nodes: 1
-      workers: 1
       env:
         PYTHONNOUSERSITE: "1"
         PYTHONUNBUFFERED: "1"
@@ -103,7 +101,6 @@ override_tp2_c16:
   name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-agg-tp2ep2-c16
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         expert-parallel-size: 2
@@ -123,7 +120,6 @@ override_tp4_c1:
   name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-agg-tp4ep1-c1
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
@@ -157,7 +153,6 @@ override_tp4_c4:
   name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-agg-tp4ep1-c4
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
@@ -174,7 +169,6 @@ override_tp4_c16:
   name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-agg-tp4ep1-c16
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1

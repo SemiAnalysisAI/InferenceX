@@ -16,9 +16,6 @@ base:
     served_model_name: deepseek-ai/DeepSeek-R1-0528
   roles:
     agg:
-      nodes: 1
-      workers: 1
-      gpus: 8
       args:
         cuda_graph_config:
           enable_padding: true

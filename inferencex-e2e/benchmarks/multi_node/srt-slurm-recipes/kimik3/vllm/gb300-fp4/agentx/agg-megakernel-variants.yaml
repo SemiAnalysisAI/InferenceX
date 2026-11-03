@@ -23,9 +23,6 @@ base:
     connector: null
   roles:
     agg:
-      nodes: 2
-      workers: 1
-      gpus: 8
       env:
         VLLM_ALLREDUCE_USE_FLASHINFER: '1'
         VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: '1'
@@ -79,8 +76,6 @@ base:
 override_tp16_dspark5:
   roles:
     agg:
-      nodes: 4
-      gpus: 16
       args:
         tensor-parallel-size: 16
         decode-context-parallel-size: 16

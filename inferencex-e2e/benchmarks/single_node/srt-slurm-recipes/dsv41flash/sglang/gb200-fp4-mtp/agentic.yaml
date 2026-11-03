@@ -14,8 +14,6 @@ base:
   engine: sglang
   roles:
     agg:
-      nodes: 1
-      workers: 1
       args:
         served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
         trust-remote-code: true
@@ -56,7 +54,6 @@ base:
 override_tp4ep1_c1:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
@@ -75,7 +72,6 @@ override_tp4ep1_c1:
 override_tp4ep1_c4:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
@@ -95,7 +91,6 @@ override_tp4ep1_c4:
 override_tp4ep1_c8:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
@@ -117,7 +112,6 @@ override_tp4ep1_c8:
 override_tp4_c16:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
@@ -135,7 +129,6 @@ override_tp4_c16:
 override_tp4ep1_c32:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
@@ -166,7 +159,6 @@ override_dep4_hicache_c64:
       disable-retries: true
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         data-parallel-size: 4
@@ -216,7 +208,6 @@ override_dep4_hicache_c96:
       disable-retries: true
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         data-parallel-size: 4
@@ -266,7 +257,6 @@ override_dep4_hicache_c128:
       disable-retries: true
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         data-parallel-size: 4
@@ -316,7 +306,6 @@ override_dep4_hicache_c160:
       disable-retries: true
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         data-parallel-size: 4
@@ -366,7 +355,6 @@ override_dep4_hicache_c256:
       disable-retries: true
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         data-parallel-size: 4

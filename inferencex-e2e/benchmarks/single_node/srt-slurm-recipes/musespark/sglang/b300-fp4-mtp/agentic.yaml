@@ -16,9 +16,6 @@ base:
   engine: sglang
   roles:
     agg:
-      nodes: 1
-      workers: 1
-      gpus: 4
       args:
         served-model-name: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
         trust-remote-code: true
@@ -71,7 +68,6 @@ base:
 override_tp8_c1:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 8
@@ -90,7 +86,6 @@ override_tp8_c1:
 override_tp8_c4:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 8
@@ -110,7 +105,6 @@ override_tp8_c4:
 override_tp8_c8:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 8
@@ -129,7 +123,6 @@ override_tp8_c8:
 override_tp8_c10:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 8
@@ -149,7 +142,6 @@ override_tp8_c10:
 override_tp8_c14:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 8
@@ -169,7 +161,6 @@ override_tp8_c14:
 override_tp8_c16:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 8
@@ -189,7 +180,6 @@ override_tp8_c16:
 override_tp8_c20:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 8
@@ -210,7 +200,6 @@ override_tp8_c20:
 override_tp8_c24:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 8

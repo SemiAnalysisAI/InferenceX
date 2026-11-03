@@ -17,9 +17,6 @@ base:
   engine: sglang
   roles:
     agg:
-      nodes: 1
-      workers: 1
-      gpus: 1
       args:
         served-model-name: amd/Qwen3.8-Flash-Next-Quark-MXFP4-AttnFP8-PLEFP8
         tokenizer-path: amd/Qwen3.8-Flash-Next-Quark-MXFP4-AttnFP8-PLEFP8

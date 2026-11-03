@@ -14,9 +14,6 @@ base:
   engine: sglang
   roles:
     agg:
-      nodes: 1
-      workers: 1
-      gpus: 1
       args:
         served-model-name: RadixArk/Qwen3.8-Flash-Next-NVFP4
         trust-remote-code: true

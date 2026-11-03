@@ -63,15 +63,11 @@ base:
 override_bs4_1p7d_stp:
   roles:
     prefill:
-      nodes: 1
-      workers: 1
       args:
         mem-fraction-static: 0.82
         max-prefill-tokens: 32768
         chunked-prefill-size: 32768
     decode:
-      nodes: 7
-      workers: 7
       args:
         dp-size: 1
         ep-size: 1
@@ -82,15 +78,11 @@ override_bs4_1p7d_stp:
 override_bs8_1p6d_stp:
   roles:
     prefill:
-      nodes: 1
-      workers: 1
       args:
         mem-fraction-static: 0.82
         max-prefill-tokens: 32768
         chunked-prefill-size: 32768
     decode:
-      nodes: 6
-      workers: 6
       args:
         dp-size: 1
         ep-size: 1
@@ -101,15 +93,11 @@ override_bs8_1p6d_stp:
 override_bs16_1p3d_stp:
   roles:
     prefill:
-      nodes: 1
-      workers: 1
       args:
         mem-fraction-static: 0.82
         max-prefill-tokens: 32768
         chunked-prefill-size: 32768
     decode:
-      nodes: 3
-      workers: 3
       args:
         dp-size: 1
         ep-size: 1
@@ -120,15 +108,11 @@ override_bs16_1p3d_stp:
 override_bs64_2p3d_stp:
   roles:
     prefill:
-      nodes: 2
-      workers: 2
       args:
         mem-fraction-static: 0.82
         max-prefill-tokens: 32768
         chunked-prefill-size: 32768
     decode:
-      nodes: 3
-      workers: 3
       args:
         dp-size: 1
         ep-size: 1
@@ -139,15 +123,11 @@ override_bs64_2p3d_stp:
 override_bs128_1p1d_dep_stp:
   roles:
     prefill:
-      nodes: 1
-      workers: 1
       args:
         mem-fraction-static: 0.75
         max-prefill-tokens: 163840
         chunked-prefill-size: 163840
     decode:
-      nodes: 1
-      workers: 1
       args:
         dp-size: 8
         ep-size: 8
@@ -159,8 +139,6 @@ override_bs128_1p1d_dep_stp:
 override_bs4_1p7d_mtp:
   roles:
     prefill:
-      nodes: 1
-      workers: 1
       env:
         SGLANG_ENABLE_SPEC_V2: "1"
       args:
@@ -168,8 +146,6 @@ override_bs4_1p7d_mtp:
         max-prefill-tokens: 32768
         chunked-prefill-size: 32768
     decode:
-      nodes: 7
-      workers: 7
       env:
         SGLANG_ENABLE_SPEC_V2: "1"
       args:
@@ -186,8 +162,6 @@ override_bs4_1p7d_mtp:
 override_bs8_1p6d_mtp:
   roles:
     prefill:
-      nodes: 1
-      workers: 1
       env:
         SGLANG_ENABLE_SPEC_V2: "1"
       args:
@@ -195,8 +169,6 @@ override_bs8_1p6d_mtp:
         max-prefill-tokens: 32768
         chunked-prefill-size: 32768
     decode:
-      nodes: 6
-      workers: 6
       env:
         SGLANG_ENABLE_SPEC_V2: "1"
       args:
@@ -213,8 +185,6 @@ override_bs8_1p6d_mtp:
 override_bs16_1p3d_mtp:
   roles:
     prefill:
-      nodes: 1
-      workers: 1
       env:
         SGLANG_ENABLE_SPEC_V2: "1"
       args:
@@ -222,8 +192,6 @@ override_bs16_1p3d_mtp:
         max-prefill-tokens: 32768
         chunked-prefill-size: 32768
     decode:
-      nodes: 3
-      workers: 3
       env:
         SGLANG_ENABLE_SPEC_V2: "1"
       args:
@@ -240,8 +208,6 @@ override_bs16_1p3d_mtp:
 override_bs64_2p3d_mtp:
   roles:
     prefill:
-      nodes: 2
-      workers: 2
       env:
         SGLANG_ENABLE_SPEC_V2: "1"
       args:
@@ -249,8 +215,6 @@ override_bs64_2p3d_mtp:
         max-prefill-tokens: 32768
         chunked-prefill-size: 32768
     decode:
-      nodes: 3
-      workers: 3
       env:
         SGLANG_ENABLE_SPEC_V2: "1"
       args:
@@ -269,8 +233,6 @@ override_bs64_2p3d_mtp:
 override_bs128_1p1d_dep_mtp:
   roles:
     prefill:
-      nodes: 1
-      workers: 1
       env:
         SGLANG_ENABLE_SPEC_V2: "1"
       args:
@@ -278,8 +240,6 @@ override_bs128_1p1d_dep_mtp:
         max-prefill-tokens: 163840
         chunked-prefill-size: 163840
     decode:
-      nodes: 1
-      workers: 1
       env:
         SGLANG_ENABLE_SPEC_V2: "1"
       args:

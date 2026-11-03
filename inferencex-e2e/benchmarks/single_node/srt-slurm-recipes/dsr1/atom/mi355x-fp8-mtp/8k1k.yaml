@@ -15,9 +15,6 @@ base:
   engine: atom
   roles:
     agg:
-      nodes: 1
-      workers: 1
-      gpus: 8
       args:
         method: mtp
         num-speculative-tokens: 3

@@ -14,9 +14,6 @@ base:
   engine: sglang
   roles:
     agg:
-      nodes: 1
-      workers: 1
-      gpus: 8
       args:
         served-model-name: Qwen/Qwen3.5-397B-A17B-FP8
         trust-remote-code: true
@@ -79,7 +76,6 @@ override_hicache_ep1:
 override_hicache_tp4_c8:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
@@ -97,7 +93,6 @@ override_hicache_tp4_c8:
 override_hicache_tp4_c12:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4

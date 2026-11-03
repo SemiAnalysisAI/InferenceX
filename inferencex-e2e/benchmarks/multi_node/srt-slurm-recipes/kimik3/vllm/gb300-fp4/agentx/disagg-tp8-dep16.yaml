@@ -70,9 +70,6 @@ base:
 
   roles:
     prefill:
-      nodes: 2
-      workers: 1
-      gpus: 8
       env:
         <<: &kimi_env
           VLLM_ENABLE_GEMM_RS: "1"
@@ -139,9 +136,6 @@ base:
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
       kv_events: true
     decode:
-      nodes: 4
-      workers: 1
-      gpus: 16
       env:
         <<: *kimi_env
       args:
@@ -196,15 +190,10 @@ base:
 
 override_3p1d_c336:
   roles:
-    prefill:
-      nodes: 6
-      workers: 3
-
+    prefill: {}
 override_3p1d_c336_eval:
   roles:
     prefill:
-      nodes: 6
-      workers: 3
       args:
         reasoning-parser: kimi_k3
         dyn-tool-call-parser: kimi_k3

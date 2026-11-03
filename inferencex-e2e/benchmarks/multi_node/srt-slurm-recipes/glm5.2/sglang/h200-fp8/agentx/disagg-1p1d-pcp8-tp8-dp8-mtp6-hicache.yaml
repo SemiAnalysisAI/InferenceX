@@ -38,9 +38,6 @@ frontend:
 engine: sglang
 roles:
   prefill:
-    nodes: 1
-    workers: 1
-    gpus: 8
     env:
       HF_HOME: "/hf_hub_cache"
       HF_HUB_CACHE: "/hf_hub_cache"
@@ -87,9 +84,6 @@ roles:
       enable-cache-report: true
 
   decode:
-    nodes: 1
-    workers: 1
-    gpus: 8
 
     env:
       HF_HOME: "/hf_hub_cache"

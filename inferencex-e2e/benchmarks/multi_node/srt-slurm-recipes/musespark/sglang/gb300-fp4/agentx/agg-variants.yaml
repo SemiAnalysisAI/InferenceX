@@ -51,8 +51,6 @@ base:
   engine: sglang
   roles:
     agg:
-      nodes: 1
-      workers: 1
       env:
         HF_HUB_OFFLINE: "1"
         PYTHONNOUSERSITE: "1"
@@ -171,7 +169,6 @@ override_tp4_c8:
 override_tp8_c14:
   roles:
     agg:
-      nodes: 2
       env:
         NCCL_CUMEM_ENABLE: "1"
         NCCL_MNNVL_ENABLE: "1"
@@ -189,7 +186,6 @@ override_tp8_c14:
 override_tp8_c10:
   roles:
     agg:
-      nodes: 2
       env:
         NCCL_CUMEM_ENABLE: "1"
         NCCL_MNNVL_ENABLE: "1"
@@ -206,7 +202,6 @@ override_tp8_c10:
 override_tp8_c4:
   roles:
     agg:
-      nodes: 2
       env:
         NCCL_CUMEM_ENABLE: "1"
         NCCL_MNNVL_ENABLE: "1"
@@ -224,7 +219,6 @@ override_tp8_c4:
 override_tp8_c3:
   roles:
     agg:
-      nodes: 2
       env:
         NCCL_CUMEM_ENABLE: "1"
         NCCL_MNNVL_ENABLE: "1"

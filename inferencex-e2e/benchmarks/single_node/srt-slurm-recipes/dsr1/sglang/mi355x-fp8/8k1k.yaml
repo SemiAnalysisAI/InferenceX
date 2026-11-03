@@ -14,9 +14,6 @@ base:
   engine: sglang
   roles:
     agg:
-      nodes: 1
-      workers: 1
-      gpus: 4
       args:
         attention-backend: aiter
         tensor-parallel-size: 4
@@ -49,7 +46,6 @@ zip_override_tp4_ep1:
 zip_override_tp8_ep1:
   roles:
     agg:
-      gpus: 8
       args:
         cuda-graph-max-bs-decode: [4, 8, 16, 32, 64]
         tensor-parallel-size: 8

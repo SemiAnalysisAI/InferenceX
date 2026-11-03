@@ -12,7 +12,6 @@ base:
 
   roles:
     prefill:
-      gpus: 8
       env:
         NCCL_GRAPH_MIXING_SUPPORT: "0"
         OMPI_MCA_coll_ucc_enable: "0"
@@ -42,7 +41,6 @@ base:
         print_iter_log: true
         tensor_parallel_size: 8
     decode:
-      gpus: 8
       env:
         NCCL_GRAPH_MIXING_SUPPORT: "0"
         OMPI_MCA_coll_ucc_enable: "0"
@@ -87,8 +85,6 @@ base:
 override_1p6d_tp8_b1_mtp3_c8:
   roles:
     prefill:
-      nodes: 1
-      workers: 1
       args:
         cache_transceiver_config:
           backend: DEFAULT
@@ -100,8 +96,6 @@ override_1p6d_tp8_b1_mtp3_c8:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
-      nodes: 6
-      workers: 6
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -124,8 +118,6 @@ override_1p6d_tp8_b1_mtp3_c8:
 override_1p2d_tp8_b4_mtp3_c8:
   roles:
     prefill:
-      nodes: 1
-      workers: 1
       args:
         cache_transceiver_config:
           backend: DEFAULT
@@ -137,8 +129,6 @@ override_1p2d_tp8_b4_mtp3_c8:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
-      nodes: 2
-      workers: 2
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -161,8 +151,6 @@ override_1p2d_tp8_b4_mtp3_c8:
 override_1p6d_tp8_b8_mtp3_c48:
   roles:
     prefill:
-      nodes: 1
-      workers: 1
       args:
         cache_transceiver_config:
           backend: DEFAULT
@@ -174,8 +162,6 @@ override_1p6d_tp8_b8_mtp3_c48:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
-      nodes: 6
-      workers: 6
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -198,8 +184,6 @@ override_1p6d_tp8_b8_mtp3_c48:
 override_1p4d_tp8_b16_mtp3_c64:
   roles:
     prefill:
-      nodes: 1
-      workers: 1
       args:
         cache_transceiver_config:
           backend: DEFAULT
@@ -211,8 +195,6 @@ override_1p4d_tp8_b16_mtp3_c64:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
-      nodes: 4
-      workers: 4
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -235,8 +217,6 @@ override_1p4d_tp8_b16_mtp3_c64:
 override_2p3d_dep8_b8_mtp3_c224:
   roles:
     prefill:
-      nodes: 2
-      workers: 2
       args:
         cache_transceiver_config:
           backend: DEFAULT
@@ -248,8 +228,6 @@ override_2p3d_dep8_b8_mtp3_c224:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
-      nodes: 3
-      workers: 3
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -274,8 +252,6 @@ override_2p3d_dep8_b8_mtp3_c224:
 override_2p1d_dep8_b32_mtp3_c288:
   roles:
     prefill:
-      nodes: 2
-      workers: 2
       args:
         cache_transceiver_config:
           backend: DEFAULT
@@ -287,8 +263,6 @@ override_2p1d_dep8_b32_mtp3_c288:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
-      nodes: 1
-      workers: 1
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -313,8 +287,6 @@ override_2p1d_dep8_b32_mtp3_c288:
 override_4p1d_dep8_b128_mtp2_c1088:
   roles:
     prefill:
-      nodes: 4
-      workers: 4
       args:
         cache_transceiver_config:
           backend: UCX
@@ -326,8 +298,6 @@ override_4p1d_dep8_b128_mtp2_c1088:
           decoding_type: MTP
           num_nextn_predict_layers: 2
     decode:
-      nodes: 1
-      workers: 1
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -352,8 +322,6 @@ override_4p1d_dep8_b128_mtp2_c1088:
 override_1p1d_tp8_b1_mtp0_c1:
   roles:
     prefill:
-      nodes: 1
-      workers: 1
       args:
         cache_transceiver_config:
           backend: DEFAULT
@@ -365,8 +333,6 @@ override_1p1d_tp8_b1_mtp0_c1:
           free_gpu_memory_fraction: 0.8
         max_batch_size: 64
     decode:
-      nodes: 1
-      workers: 1
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -384,8 +350,6 @@ override_1p1d_tp8_b1_mtp0_c1:
 override_1p4d_tp8_b8_mtp0_c32:
   roles:
     prefill:
-      nodes: 1
-      workers: 1
       args:
         cache_transceiver_config:
           backend: DEFAULT
@@ -396,8 +360,6 @@ override_1p4d_tp8_b8_mtp0_c32:
           free_gpu_memory_fraction: 0.2
         max_batch_size: 1
     decode:
-      nodes: 4
-      workers: 4
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -415,8 +377,6 @@ override_1p4d_tp8_b8_mtp0_c32:
 override_1p4d_tp8_b32_mtp0_c128:
   roles:
     prefill:
-      nodes: 1
-      workers: 1
       args:
         cache_transceiver_config:
           backend: DEFAULT
@@ -427,8 +387,6 @@ override_1p4d_tp8_b32_mtp0_c128:
           free_gpu_memory_fraction: 0.2
         max_batch_size: 1
     decode:
-      nodes: 4
-      workers: 4
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -446,8 +404,6 @@ override_1p4d_tp8_b32_mtp0_c128:
 override_1p6d_tp8_b16_mtp0_c96:
   roles:
     prefill:
-      nodes: 1
-      workers: 1
       args:
         cache_transceiver_config:
           backend: DEFAULT
@@ -458,8 +414,6 @@ override_1p6d_tp8_b16_mtp0_c96:
           free_gpu_memory_fraction: 0.2
         max_batch_size: 1
     decode:
-      nodes: 6
-      workers: 6
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -477,8 +431,6 @@ override_1p6d_tp8_b16_mtp0_c96:
 override_1p1d_dep8_b128_mtp0_c128:
   roles:
     prefill:
-      nodes: 1
-      workers: 1
       args:
         cache_transceiver_config:
           backend: DEFAULT
@@ -489,8 +441,6 @@ override_1p1d_dep8_b128_mtp0_c128:
           free_gpu_memory_fraction: 0.2
         max_batch_size: 1
     decode:
-      nodes: 1
-      workers: 1
       args:
         cache_transceiver_config:
           backend: DEFAULT
@@ -506,8 +456,6 @@ override_1p1d_dep8_b128_mtp0_c128:
 override_1p2d_dep8_b64_mtp0_c128:
   roles:
     prefill:
-      nodes: 1
-      workers: 1
       args:
         cache_transceiver_config:
           backend: DEFAULT
@@ -518,8 +466,6 @@ override_1p2d_dep8_b64_mtp0_c128:
           free_gpu_memory_fraction: 0.2
         max_batch_size: 1
     decode:
-      nodes: 2
-      workers: 2
       args:
         cache_transceiver_config:
           backend: DEFAULT
@@ -535,8 +481,6 @@ override_1p2d_dep8_b64_mtp0_c128:
 override_1p1d_dep8_b256_mtp0_c256:
   roles:
     prefill:
-      nodes: 1
-      workers: 1
       args:
         cache_transceiver_config:
           backend: DEFAULT
@@ -547,8 +491,6 @@ override_1p1d_dep8_b256_mtp0_c256:
           free_gpu_memory_fraction: 0.2
         max_batch_size: 1
     decode:
-      nodes: 1
-      workers: 1
       args:
         cache_transceiver_config:
           backend: DEFAULT
@@ -564,8 +506,6 @@ override_1p1d_dep8_b256_mtp0_c256:
 override_2p1d_dep8_b640_mtp0_c640:
   roles:
     prefill:
-      nodes: 2
-      workers: 2
       args:
         cache_transceiver_config:
           backend: DEFAULT
@@ -576,8 +516,6 @@ override_2p1d_dep8_b640_mtp0_c640:
           free_gpu_memory_fraction: 0.2
         max_batch_size: 1
     decode:
-      nodes: 1
-      workers: 1
       args:
         cache_transceiver_config:
           backend: DEFAULT

@@ -95,12 +95,8 @@ base:
 
 override_1p3d_p_tp8_dp8_d_tp8_b32_c128:
   roles:
-    prefill:
-      nodes: 1
-      workers: 1
+    prefill: {}
     decode:
-      nodes: 3
-      workers: 3
       args:
         max-running-requests: 32
         cuda-graph-max-bs: 32
@@ -109,12 +105,8 @@ override_1p3d_p_tp8_dp8_d_tp8_b32_c128:
 
 override_1p4d_p_tp8_dp8_d_tp8_b32_c128:
   roles:
-    prefill:
-      nodes: 1
-      workers: 1
+    prefill: {}
     decode:
-      nodes: 4
-      workers: 4
       args:
         max-running-requests: 32
         cuda-graph-max-bs: 32
@@ -123,12 +115,8 @@ override_1p4d_p_tp8_dp8_d_tp8_b32_c128:
 
 override_1p6d_p_tp8_dp8_d_tp8_b22_c8x16x32x64x128:
   roles:
-    prefill:
-      nodes: 1
-      workers: 1
+    prefill: {}
     decode:
-      nodes: 6
-      workers: 6
       args:
         max-running-requests: 22
         cuda-graph-max-bs: 22
@@ -137,12 +125,8 @@ override_1p6d_p_tp8_dp8_d_tp8_b22_c8x16x32x64x128:
 
 override_1p2d_p_tp8_dp8_d_tp8_ep8_dp8_b128_c288:
   roles:
-    prefill:
-      nodes: 1
-      workers: 1
+    prefill: {}
     decode:
-      nodes: 2
-      workers: 2
       args:
         max-running-requests: 128
         cuda-graph-max-bs: 128
@@ -154,12 +138,8 @@ override_1p2d_p_tp8_dp8_d_tp8_ep8_dp8_b128_c288:
 
 override_1p1d_p_tp8_dp8_d_tp8_ep8_dp8_b256_c160x288:
   roles:
-    prefill:
-      nodes: 1
-      workers: 1
+    prefill: {}
     decode:
-      nodes: 1
-      workers: 1
       args:
         max-running-requests: 256
         cuda-graph-max-bs: 256
@@ -171,12 +151,8 @@ override_1p1d_p_tp8_dp8_d_tp8_ep8_dp8_b256_c160x288:
 
 override_2p1d_p_tp8_dp8_d_tp8_ep8_dp8_b512_c512:
   roles:
-    prefill:
-      nodes: 2
-      workers: 2
+    prefill: {}
     decode:
-      nodes: 1
-      workers: 1
       args:
         max-running-requests: 512
         cuda-graph-max-bs: 512
@@ -188,12 +164,8 @@ override_2p1d_p_tp8_dp8_d_tp8_ep8_dp8_b512_c512:
 
 override_3p1d_p_tp8_dp8_d_tp8_ep8_dp8_b1024_c1024:
   roles:
-    prefill:
-      nodes: 3
-      workers: 3
+    prefill: {}
     decode:
-      nodes: 1
-      workers: 1
       args:
         max-running-requests: 1024
         cuda-graph-max-bs: 1024

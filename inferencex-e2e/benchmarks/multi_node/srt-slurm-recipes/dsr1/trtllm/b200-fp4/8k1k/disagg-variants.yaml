@@ -12,7 +12,6 @@ base:
 
   roles:
     prefill:
-      gpus: 4
       env:
         NCCL_GRAPH_MIXING_SUPPORT: "0"
         OMPI_MCA_coll_ucc_enable: "0"
@@ -85,15 +84,11 @@ base:
 override_1p1d_dep8_b8_mtp3:
   roles:
     prefill:
-      nodes: 1
-      workers: 1
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
-      nodes: 1
-      workers: 1
       args:
         enable_attention_dp: true
         enable_lm_head_tp_in_adp: true
@@ -119,15 +114,11 @@ override_1p1d_dep8_b8_mtp3:
 override_1p3d_tep8_b16_mtp3:
   roles:
     prefill:
-      nodes: 1
-      workers: 1
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
-      nodes: 3
-      workers: 3
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -161,15 +152,11 @@ override_1p3d_tep8_b16_mtp3:
 override_1p5d_tep8_b1_mtp3:
   roles:
     prefill:
-      nodes: 1
-      workers: 1
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
-      nodes: 5
-      workers: 5
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -192,15 +179,11 @@ override_1p5d_tep8_b1_mtp3:
 override_1p5d_tep8_b8_mtp3:
   roles:
     prefill:
-      nodes: 1
-      workers: 1
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
-      nodes: 5
-      workers: 5
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -230,15 +213,11 @@ override_1p5d_tep8_b8_mtp3:
 override_3p1d_dep8_b64_mtp3:
   roles:
     prefill:
-      nodes: 2
-      workers: 3
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
-      nodes: 1
-      workers: 1
       args:
         enable_attention_dp: true
         enable_lm_head_tp_in_adp: true
@@ -268,15 +247,11 @@ override_3p1d_dep8_b64_mtp3:
 override_5p1d_dep8_b192_mtp1:
   roles:
     prefill:
-      nodes: 3
-      workers: 5
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 1
     decode:
-      nodes: 1
-      workers: 1
       args:
         enable_attention_dp: true
         enable_lm_head_tp_in_adp: true
@@ -310,15 +285,11 @@ override_5p1d_dep8_b192_mtp1:
 override_5p2d_dep8_b32_mtp3:
   roles:
     prefill:
-      nodes: 3
-      workers: 5
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
-      nodes: 2
-      workers: 2
       args:
         enable_attention_dp: true
         enable_lm_head_tp_in_adp: true
@@ -346,12 +317,8 @@ override_5p2d_dep8_b32_mtp3:
 
 override_1p5d_tep8_b1_mtp0:
   roles:
-    prefill:
-      nodes: 1
-      workers: 1
+    prefill: {}
     decode:
-      nodes: 5
-      workers: 5
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -370,12 +337,8 @@ override_1p5d_tep8_b1_mtp0:
 
 override_1p5d_tep8_b16_mtp0:
   roles:
-    prefill:
-      nodes: 1
-      workers: 1
+    prefill: {}
     decode:
-      nodes: 5
-      workers: 5
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -408,12 +371,8 @@ override_1p5d_tep8_b16_mtp0:
 
 override_2p5d_tep8_b64_mtp0:
   roles:
-    prefill:
-      nodes: 1
-      workers: 2
+    prefill: {}
     decode:
-      nodes: 5
-      workers: 5
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -441,12 +400,8 @@ override_2p5d_tep8_b64_mtp0:
 
 override_4p1d_dep8_b192_mtp0:
   roles:
-    prefill:
-      nodes: 2
-      workers: 4
+    prefill: {}
     decode:
-      nodes: 1
-      workers: 1
       args:
         enable_attention_dp: true
         enable_lm_head_tp_in_adp: false
@@ -476,12 +431,8 @@ override_4p1d_dep8_b192_mtp0:
 
 override_4p3d_dep8_b32_mtp0:
   roles:
-    prefill:
-      nodes: 2
-      workers: 4
+    prefill: {}
     decode:
-      nodes: 3
-      workers: 3
       args:
         enable_attention_dp: true
         enable_lm_head_tp_in_adp: false
@@ -504,12 +455,8 @@ override_4p3d_dep8_b32_mtp0:
 
 override_7p2d_dep8_b128_mtp0:
   roles:
-    prefill:
-      nodes: 4
-      workers: 7
+    prefill: {}
     decode:
-      nodes: 2
-      workers: 2
       args:
         enable_attention_dp: true
         enable_lm_head_tp_in_adp: false

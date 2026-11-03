@@ -17,9 +17,6 @@ roles:
       type: vllm
       set_visible_devices: true
     container: ghcr.io/tile-ai/tilert-rocm-prefill:0.1.6.post1
-    nodes: 1
-    workers: 1
-    gpus: 8
     env:
       TILERT_ROLE: prefill
       # The prefill image sets MOONCAKE_DISABLE_HIP_DMABUF=1, so Mooncake falls back to
@@ -58,9 +55,6 @@ roles:
   decode:
     engine: tilert
     container: ghcr.io/tile-ai/tilert-rocm-decode:0.1.6
-    nodes: 1
-    workers: 1
-    gpus: 8
     env:
       TILERT_ROLE: decode
       GLM5_AR_N: "2"

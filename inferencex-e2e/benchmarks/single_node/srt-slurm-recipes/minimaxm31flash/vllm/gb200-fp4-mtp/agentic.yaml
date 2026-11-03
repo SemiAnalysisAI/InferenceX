@@ -20,8 +20,6 @@ base:
     max_attempts: 1440
   roles:
     agg:
-      nodes: 1
-      workers: 1
       args:
         served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
         language-model-only: true
@@ -51,7 +49,6 @@ base:
 zip_override_tp4:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-num-seqs: [2, 8, 16, 32, 64]
@@ -73,7 +70,6 @@ zip_override_dep4:
   setup_script: vllm-router.sh
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 1
         data-parallel-size: 4

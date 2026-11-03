@@ -14,9 +14,6 @@ base:
   engine: sglang
   roles:
     agg:
-      nodes: 1
-      workers: 1
-      gpus: 4
       args:
         served-model-name: Qwen/Qwen3.8-Flash-Next-FP8
         trust-remote-code: true
@@ -43,7 +40,6 @@ base:
 override_tp2_c1:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         expert-parallel-size: 2
@@ -56,7 +52,6 @@ override_tp2_c1:
 override_tp2_c8:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         expert-parallel-size: 2
@@ -70,7 +65,6 @@ override_tp2_c8:
 override_tp2_c12:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         expert-parallel-size: 2
@@ -84,7 +78,6 @@ override_tp2_c12:
 override_tp2_c14:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         expert-parallel-size: 2
@@ -98,7 +91,6 @@ override_tp2_c14:
 override_tp2_c16:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         expert-parallel-size: 2

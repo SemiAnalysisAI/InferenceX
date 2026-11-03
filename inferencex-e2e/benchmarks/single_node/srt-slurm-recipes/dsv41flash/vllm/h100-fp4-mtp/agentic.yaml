@@ -20,8 +20,6 @@ base:
     max_attempts: 360
   roles:
     agg:
-      nodes: 1
-      workers: 1
       args:
         served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
         language-model-only: true
@@ -55,7 +53,6 @@ base:
 override_tp8_c1:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         max-num-seqs: 2
@@ -67,7 +64,6 @@ override_tp8_c1:
 override_tp8_c2:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         max-num-seqs: 4
@@ -79,7 +75,6 @@ override_tp8_c2:
 override_tp8_c4:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         max-num-seqs: 8
@@ -91,7 +86,6 @@ override_tp8_c4:
 override_tp8_c8:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         max-num-seqs: 16
@@ -103,7 +97,6 @@ override_tp8_c8:
 override_tp8_c16:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         max-num-seqs: 32
@@ -115,7 +108,6 @@ override_tp8_c16:
 override_tp8_c20:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         max-num-seqs: 40
@@ -127,7 +119,6 @@ override_tp8_c20:
 override_tp8_c24:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         max-num-seqs: 48
@@ -139,7 +130,6 @@ override_tp8_c24:
 override_tp8_c28:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         max-num-seqs: 56

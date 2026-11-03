@@ -14,9 +14,6 @@ base:
   engine: sglang
   roles:
     agg:
-      nodes: 1
-      workers: 1
-      gpus: 8
       args:
         served-model-name: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
         trust-remote-code: true
@@ -229,7 +226,6 @@ override_tp8_c64:
 override_tp4_c8:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
@@ -259,7 +255,6 @@ override_tp4_c8:
 override_tp4_c10:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
@@ -286,7 +281,6 @@ override_tp4_c10:
 override_tp4_c16:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
@@ -316,7 +310,6 @@ override_tp4_c16:
 override_tp4_c24:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4

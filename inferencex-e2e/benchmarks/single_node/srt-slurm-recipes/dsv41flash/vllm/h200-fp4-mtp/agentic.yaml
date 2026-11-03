@@ -20,8 +20,6 @@ base:
     max_attempts: 720
   roles:
     agg:
-      nodes: 1
-      workers: 1
       args:
         served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
         language-model-only: true
@@ -57,7 +55,6 @@ base:
 override_tp8_c1:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         max-cudagraph-capture-size: 64
@@ -68,7 +65,6 @@ override_tp8_c1:
 override_tp8_c2:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         max-cudagraph-capture-size: 64
@@ -79,7 +75,6 @@ override_tp8_c2:
 override_tp8_c4:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         max-cudagraph-capture-size: 64
@@ -90,7 +85,6 @@ override_tp8_c4:
 override_tp8_c8:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         max-cudagraph-capture-size: 64
@@ -101,7 +95,6 @@ override_tp8_c8:
 override_tp8_c16:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         max-cudagraph-capture-size: 128
@@ -112,7 +105,6 @@ override_tp8_c16:
 override_tp8_c32:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         max-cudagraph-capture-size: 256
@@ -123,7 +115,6 @@ override_tp8_c32:
 override_tp8_c64:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         max-cudagraph-capture-size: 512
@@ -134,7 +125,6 @@ override_tp8_c64:
 override_tp8_c128:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         max-cudagraph-capture-size: 1024
@@ -145,7 +135,6 @@ override_tp8_c128:
 override_tp4_c1:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-cudagraph-capture-size: 64
@@ -158,7 +147,6 @@ override_tp4_c1:
 override_tp4_c2:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-cudagraph-capture-size: 64
@@ -171,7 +159,6 @@ override_tp4_c2:
 override_tp4_c4:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-cudagraph-capture-size: 64
@@ -184,7 +171,6 @@ override_tp4_c4:
 override_tp4_c8:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-cudagraph-capture-size: 64
@@ -197,7 +183,6 @@ override_tp4_c8:
 override_tp4_c16:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-cudagraph-capture-size: 128
@@ -210,7 +195,6 @@ override_tp4_c16:
 override_tp4_c32:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-cudagraph-capture-size: 256
@@ -223,7 +207,6 @@ override_tp4_c32:
 override_tp4_c64:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-cudagraph-capture-size: 512
@@ -236,7 +219,6 @@ override_tp4_c64:
 override_tp4_c128:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-cudagraph-capture-size: 512

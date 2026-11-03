@@ -15,8 +15,6 @@ base:
   engine: atom
   roles:
     agg:
-      nodes: 1
-      workers: 1
       args:
         served-model-name: amd/GLM-5.2-MXFP4
         gpu-memory-utilization: 0.95
@@ -43,7 +41,6 @@ base:
 override_tp4_c1:
   roles:
     agg:
-      gpus: 4
       args:
         max-num-seqs: 1
         cudagraph-capture-sizes: '[1]'
@@ -57,7 +54,6 @@ override_tp4_c1:
 override_tp4_c2:
   roles:
     agg:
-      gpus: 4
       args:
         max-num-seqs: 2
         cudagraph-capture-sizes: '[1,2]'
@@ -71,7 +67,6 @@ override_tp4_c2:
 override_tp4_c4:
   roles:
     agg:
-      gpus: 4
       args:
         max-num-seqs: 8
         cudagraph-capture-sizes: '[1,2,4,8]'
@@ -83,7 +78,6 @@ override_tp4_c4:
 override_tp4_c8:
   roles:
     agg:
-      gpus: 4
       args:
         max-num-seqs: 16
         cudagraph-capture-sizes: '[1,2,4,8,12,16]'
@@ -95,7 +89,6 @@ override_tp4_c8:
 override_tp4_c10:
   roles:
     agg:
-      gpus: 4
       args:
         max-num-seqs: 20
         cudagraph-capture-sizes: '[1,2,4,8,12,16,20]'
@@ -107,7 +100,6 @@ override_tp4_c10:
 override_tp4_dcp4_c16_lmcache:
   roles:
     agg:
-      gpus: 4
       args:
         decode-context-parallel-size: 4
         max-num-seqs: 32
@@ -133,7 +125,6 @@ override_tp4_dcp4_c16_lmcache:
 override_tp4_dcp4_c24_lmcache:
   roles:
     agg:
-      gpus: 4
       args:
         decode-context-parallel-size: 4
         max-num-seqs: 48
@@ -149,7 +140,6 @@ override_tp4_dcp4_c24_lmcache:
 override_tp4_dcp4_c32_lmcache:
   roles:
     agg:
-      gpus: 4
       args:
         decode-context-parallel-size: 4
         max-num-seqs: 64
@@ -165,7 +155,6 @@ override_tp4_dcp4_c32_lmcache:
 override_tp4_dcp4_c40_lmcache:
   roles:
     agg:
-      gpus: 4
       args:
         decode-context-parallel-size: 4
         max-num-seqs: 80
@@ -181,7 +170,6 @@ override_tp4_dcp4_c40_lmcache:
 override_tp4_dcp4_c48_lmcache:
   roles:
     agg:
-      gpus: 4
       args:
         decode-context-parallel-size: 4
         max-num-seqs: 96
@@ -197,7 +185,6 @@ override_tp4_dcp4_c48_lmcache:
 override_tp8_c1:
   roles:
     agg:
-      gpus: 8
       args:
         max-num-seqs: 2
         cudagraph-capture-sizes: '[1,2]'
@@ -209,7 +196,6 @@ override_tp8_c1:
 override_tp8_c2:
   roles:
     agg:
-      gpus: 8
       args:
         max-num-seqs: 4
         cudagraph-capture-sizes: '[1,2,4]'
@@ -221,7 +207,6 @@ override_tp8_c2:
 override_tp8_c4:
   roles:
     agg:
-      gpus: 8
       args:
         max-num-seqs: 8
         cudagraph-capture-sizes: '[1,2,4,8]'

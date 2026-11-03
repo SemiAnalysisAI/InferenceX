@@ -14,9 +14,6 @@ base:
   engine: sglang
   roles:
     agg:
-      nodes: 1
-      workers: 1
-      gpus: 4
       args:
         trust-remote-code: true
         tensor-parallel-size: 4
@@ -47,7 +44,6 @@ zip_override_tp4_ep1:
 zip_override_tp8_ep1:
   roles:
     agg:
-      gpus: 8
       args:
         chunked-prefill-size: [196608, 196608, 196608, 196608, 32768]
         max-prefill-tokens: [196608, 196608, 196608, 196608, 32768]

@@ -19,8 +19,6 @@ base:
     max_attempts: 1440
   roles:
     agg:
-      nodes: 1
-      workers: 1
       args:
         served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
         language-model-only: true
@@ -54,7 +52,6 @@ base:
 override_tp4_c40:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1073000000000,"lazy_offload":true}}'
@@ -66,7 +63,6 @@ override_tp4_c40:
 override_tp4_c48:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1073000000000,"lazy_offload":true}}'
@@ -78,7 +74,6 @@ override_tp4_c48:
 override_tp4_c56:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1073000000000,"lazy_offload":true}}'
