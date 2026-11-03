@@ -11858,6 +11858,7 @@
     - glm5.2-fp4-mi355x-sglang-agentic-mtp
   description:
     - "Use the SGLang ROCm 7.2.0 MI35x 20261102 daily image for GLM-5.2 MXFP4 MI355X AgentX MTP."
-    - "Use Gluon target MoE only for TP8/EP1 at concurrency 1, 2, and 4; preserve the checkpoint BF16 draft experts with the auto speculative MoE backend."
+    - "Use Gluon target MoE only for TP8/EP1 at concurrency 1 and 2; preserve the checkpoint BF16 draft experts with the auto speculative MoE backend."
+    - "Drop the TP8/EP1 concurrency 4 point; concurrency 4 runs on the TP4/EP4 HiCache arm, which delivers more throughput per GPU."
     - "Keep TP4/EP4 HiCache and DCP4 settings unchanged and evaluate every point so the Gluon path receives accuracy coverage."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4748
