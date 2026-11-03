@@ -54,7 +54,7 @@ def test_single_node_collector_finalizes_native_agentx_power(
     env = {**os.environ, "INFERENCEX_RESULTS_PYTHON": sys.executable,
            "REQUIRE_POWER": str(int(require_power)),
            "PYTHONPATH": str(Path(__file__).resolve().parents[4])}
-    request = SimpleNamespace(is_agentic=True, eval_only=False, run_eval=False,
+    request = SimpleNamespace(is_agentic=True, eval_only=False, al_gate=False, run_eval=False,
                               require_power=require_power, inferencex_results_python=sys.executable,
                               result_filename="point", env=env)
     run = SimpleNamespace(request=request, env=env, workspace=tmp_path, life=Lifecycle())
