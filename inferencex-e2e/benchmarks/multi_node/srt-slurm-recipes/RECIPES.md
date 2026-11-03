@@ -45,7 +45,7 @@ Recipes use `schema: 2`, `engine`, and `roles`. The master config supplies `num-
 | Recipe directory, relative to this tree | entry-level `srt-recipe-dir` |
 | Recipe file, optionally with a `base`, `override_<name>`, or `zip_override_<name>[<index>]` selector | search-space `srt-recipe`; `eval-srt-recipe` for eval-only real verification |
 
-Keep engine parallelism settings consistent with the master resource request. The launcher executes the bound recipe, validates actual worker placement against the InferenceX allocation, and applies its node-local DRAM budgets to worker steps. For aggregate recipes use `roles.agg`; `roles.decode.nodes: colocate` places both roles in a shared node pool. The scheduler node count includes the derived worker pool and any auxiliary nodes. Explicit `num-nodes` must match that total.
+Keep engine parallelism settings consistent with the master resource request. The launcher executes the bound recipe, validates actual worker placement against the InferenceX allocation, and applies its node-local DRAM budgets to worker steps. For aggregate recipes use `roles.agg`; `roles.decode.nodes: colocate` places both roles in a shared node pool. The scheduler node count includes the derived worker pool and any auxiliary nodes.
 
 All referenced recipes must be checked in: srt-slurm 2 ships curated examples instead of the historical `recipes/` archive. The initial migration restores 204 previously external recipes and two still-referenced AgentX recipes from InferenceX history. Master-config paths follow the layout above; existing override selectors are preserved.
 

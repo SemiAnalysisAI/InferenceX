@@ -210,20 +210,16 @@ workflow's setup job uploads a `scheduling-facts.json` artifact keyed by the
 token in every `ci-job-<token>` label. The priority scheduler scores jobs from
 those facts, node count included, with weights kept outside this repository.
 
-Aggregated multi-node search-space entries must declare one aggregate `worker`
-role and `num-nodes`; that value becomes the generated `node-count` directly.
-The worker may set `num-worker` when the aggregate engine uses multiple process
-replicas, otherwise it defaults to one. The generator expands this role into
-the legacy internal prefill/decode matrix shape expected by the launcher.
+Aggregated multi-node search-space entries declare one aggregate `worker`
+role. The worker may set `num-worker` when the aggregate engine uses multiple
+process replicas, otherwise it defaults to one. The generator expands this role
+into the internal prefill/decode matrix shape expected by the launcher.
 Aggregate master entries cannot declare separate `prefill` or `decode` roles.
 
-Disaggregated entries must declare `prefill` and `decode`, and reject both
-`worker` and `num-nodes`. Their generated `node-count` is derived from, in
-precedence order:
-
-1. checked-in srt-slurm recipe `resources`;
-2. explicit `PREFILL_NODES` and `DECODE_NODES` settings; or
-3. worker GPU footprints divided by the relevant hardware's GPUs per node.
+Disaggregated entries declare `prefill` and `decode`, and reject `worker`.
+For both topologies, the generated `node-count` comes from the worker GPU
+requests and cluster GPUs per node, accounting for shared role placement and
+any auxiliary nodes in the bound SRT recipe.
 
 Runner leases account for GitHub-managed work only. Slurm remains the final
 capacity authority for external users, reservations, offline compute nodes,

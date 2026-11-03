@@ -3,8 +3,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from infx.launch.memory import gpu_share_mib
-
 
 def _positive(name: str, value: int) -> None:
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
@@ -34,38 +32,6 @@ class WorkerResources:
         local_gpus, nodes_per_worker = self.placement(gpus_per_node)
         per_node = gpus_per_node // local_gpus
         return ((self.num_workers + per_node - 1) // per_node) * nodes_per_worker
-
-    def allocate(self, available_mib: int, gpus_per_node: int) -> WorkerAllocation:
-        """Allocate a partial node or whole nodes to each logical inference worker."""
-        local_gpus, nodes_per_worker = self.placement(gpus_per_node)
-        return WorkerAllocation(
-            num_workers=self.num_workers,
-            gpus_per_worker=self.gpus_per_worker,
-            gpus_per_node=gpus_per_node,
-            local_gpus=local_gpus,
-            nodes_per_worker=nodes_per_worker,
-            memory_mib=gpu_share_mib(available_mib, local_gpus, gpus_per_node),
-        )
-
-
-@dataclass(frozen=True)
-class WorkerAllocation:
-    num_workers: int
-    gpus_per_worker: int
-    gpus_per_node: int
-    local_gpus: int
-    nodes_per_worker: int
-    memory_mib: int
-
-    def step_memory_mib(self, step_gpus: int) -> int:
-        """Split one node's budget between equally sized, independently limited processes."""
-        _positive("step GPUs", step_gpus)
-        if step_gpus > self.local_gpus or self.local_gpus % step_gpus:
-            raise ValueError("worker step GPUs must evenly partition the node-local allocation")
-        limit = self.memory_mib // (self.local_gpus // step_gpus)
-        if limit < 1:
-            raise ValueError("Worker step memory share is less than one MiB")
-        return limit
 
 
 def worker_resources(environment: Mapping[str, str]) -> dict[str, WorkerResources]:

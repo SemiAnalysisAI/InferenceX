@@ -183,14 +183,13 @@ def write_single_node_job(
     **fields: Any,
 ) -> None:
     """Write the single-node srtslurm.yaml; ``fields`` are the job's own SrtJob inputs."""
-    available = run.cluster.available_cpu_dram_mib
-    job_mib = None
-    if available is not None:
-        job_mib = (
-            0
-            if run.srt.single_node_exclusive
-            else gpu_share_mib(available, request.gpu_count, run.cluster.gpus_per_node)
+    job_mib = (
+        0
+        if run.srt.single_node_exclusive
+        else gpu_share_mib(
+            run.cluster.available_cpu_dram_mib, request.gpu_count, run.cluster.gpus_per_node
         )
+    )
     job_config = config.SrtJob(
         srtctl_root=checkout.root,
         workspace=run.workspace,
