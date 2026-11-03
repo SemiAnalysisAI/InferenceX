@@ -65,19 +65,18 @@ def run_single_node(launch: Launch) -> int:
         root = Path(tempfile.mkdtemp(prefix="srt-single.", dir=run.workspace))
         checkout = prepare_checkout(run, root / "checkout", power=not request.eval_only)
         install_srtctl(run, checkout)
-        available = run.cluster.available_cpu_dram_mib
-        job_mib = None
-        if available is not None:
-            job_mib = (
-                0
-                if run.srt.single_node_exclusive
-                else gpu_share_mib(available, request.gpu_count, run.cluster.gpus_per_node)
-            )
         if (options := config.srun_options(run.backend.settings)) is not None:
             run.env["SRT_SRUN_OPTIONS"] = options
         if rc := submit.bind_point(run, checkout, root / "arguments"):
             return rc
         selected, bound, runtime_args = submit.bound_arguments(root / "arguments")
+        job_mib = (
+            0
+            if run.srt.single_node_exclusive
+            else gpu_share_mib(
+                run.cluster.available_cpu_dram_mib, request.gpu_count, run.cluster.gpus_per_node
+            )
+        )
         event.set(recipe=selected.removeprefix(f"{run.workspace}/"))
         containers = {}
         if not request.eval_only and not request.al_gate:

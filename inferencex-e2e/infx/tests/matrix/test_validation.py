@@ -627,7 +627,7 @@ class TestSingleNodeSearchSpaceEntry:
     (AgenticCodingSearchSpaceEntry, {"gpus-per-worker": 1, "tp": -2, "kv-offloading": "none", "conc-list": [4]}),
     (WorkerConfig, {"num-worker": 1, "gpus-per-worker": 1, "tp": 0, "ep": 1, "dp-attn": False}),
     (MultiNodeSearchSpaceEntry,
-     {"worker": {"gpus-per-worker": 1, "tp": 0, "ep": 1, "dp-attn": False}, "num-nodes": 1, "conc-list": [4]}),
+     {"worker": {"gpus-per-worker": 1, "tp": 0, "ep": 1, "dp-attn": False}, "conc-list": [4]}),
 ])  # fmt: skip
 def test_tensor_parallelism_must_be_positive(schema, entry):
     with pytest.raises(ValidationError, match="greater than 0"):
@@ -645,7 +645,6 @@ class TestMultiNodeSearchSpaceEntry:
                 "ep": 1,
                 "dp-attn": False,
             },
-            "num-nodes": 2,
             "conc-list": [1, 2, 4],
         })
         assert entry.worker.tp == 8
@@ -696,7 +695,7 @@ class TestSeqLenConfigs:
 
 
 
-def make_aggregated_multinode_master_config(config, num_nodes=3):
+def make_aggregated_multinode_master_config(config):
     """Convert the disaggregated fixture to one aggregate worker."""
     config["disagg"] = False
     search_entry = config[
@@ -706,7 +705,6 @@ def make_aggregated_multinode_master_config(config, num_nodes=3):
     search_entry.pop("decode")
     worker.pop("num-worker")
     search_entry["worker"] = worker
-    search_entry["num-nodes"] = num_nodes
     return search_entry
 
 
@@ -760,33 +758,19 @@ class TestMasterConfigEntries:
 
         assert config.kv_p2p_transfer == "nixl"
 
-    def test_aggregated_multinode_allows_explicit_num_nodes(
+    def test_aggregated_multinode_uses_worker_resources(
         self,
         valid_multinode_master_config,
     ):
-        """Aggregated entries require one worker and a Slurm node count."""
+        """Aggregated entries specify their allocation through one worker."""
         make_aggregated_multinode_master_config(valid_multinode_master_config)
 
         config = MultiNodeMasterConfigEntry(**valid_multinode_master_config)
 
         validated_entry = config.scenarios.fixed_seq_len[0].search_space[0]
-        assert validated_entry.num_nodes == 3
         assert validated_entry.worker.tp == 4
         assert validated_entry.prefill is None
         assert validated_entry.decode is None
-
-    def test_aggregated_multinode_requires_num_nodes(
-        self,
-        valid_multinode_master_config,
-    ):
-        """Every aggregate multi-node entry must declare its allocation."""
-        search_entry = make_aggregated_multinode_master_config(
-            valid_multinode_master_config
-        )
-        search_entry.pop("num-nodes")
-
-        with pytest.raises(ValidationError, match="disagg=false requires num-nodes"):
-            MultiNodeMasterConfigEntry(**valid_multinode_master_config)
 
     def test_aggregated_multinode_rejects_prefill_decode(
         self,
@@ -798,32 +782,17 @@ class TestMasterConfigEntries:
         with pytest.raises(ValidationError, match="disagg=false requires one worker"):
             MultiNodeMasterConfigEntry(**valid_multinode_master_config)
 
-    def test_disaggregated_multinode_rejects_num_nodes(
-        self,
-        valid_multinode_master_config,
-    ):
-        """Disaggregated entries derive nodes from prefill and decode."""
+    @pytest.mark.parametrize("disagg", [False, True])
+    def test_master_rejects_redundant_num_nodes(self, valid_multinode_master_config, disagg):
+        """Node demand is derived from worker resources, not a second allocation field."""
+        if not disagg:
+            make_aggregated_multinode_master_config(valid_multinode_master_config)
         search_entry = valid_multinode_master_config[
             "scenarios"
         ]["fixed-seq-len"][0]["search-space"][0]
         search_entry["num-nodes"] = 3
 
-        with pytest.raises(ValidationError, match="disagg=true.*num-nodes"):
-            MultiNodeMasterConfigEntry(**valid_multinode_master_config)
-
-    @pytest.mark.parametrize("num_nodes", [0, -1, True])
-    def test_aggregated_multinode_rejects_invalid_num_nodes(
-        self,
-        valid_multinode_master_config,
-        num_nodes,
-    ):
-        """Explicit aggregate node counts must be strict positive integers."""
-        make_aggregated_multinode_master_config(
-            valid_multinode_master_config,
-            num_nodes=num_nodes,
-        )
-
-        with pytest.raises(ValidationError, match="num-nodes"):
+        with pytest.raises(ValidationError, match="num-nodes.*\n.*Extra inputs"):
             MultiNodeMasterConfigEntry(**valid_multinode_master_config)
 
     def test_component_metadata_rejects_image_as_version(self):
@@ -1073,9 +1042,10 @@ class TestValidateMasterConfig:
 
     @pytest.mark.parametrize("reference", [
         "/fixture/recipe.yaml", "../recipe.yaml", "sub//recipe.yaml", "./recipe.yaml", "",
-        "recipe.yaml:", "recipe.yaml:override_*", "recipe.yaml:zip_override_z", "recipe.yaml:z",
+        "recipe.yaml:", "recipe.yaml:override_", "recipe.yaml:zip_override_z", "recipe.yaml:z",
+        "recipe.yaml:zip_override_z[*]", "recipe.yaml:*",
     ])
-    def test_recipe_references_are_relative_paths_with_one_variant(self, reference):
+    def test_recipe_references_require_relative_paths_and_valid_selectors(self, reference):
         with pytest.raises(ValidationError, match="srt-recipe"):
             SingleNodeSearchSpaceEntry(**{"gpus-per-worker": 8, "tp": 8, "conc-list": [1], "srt-recipe": reference})
 
@@ -1083,10 +1053,15 @@ class TestValidateMasterConfig:
         ("srt-recipe", "bundle.yaml", None),
         ("srt-recipe", "bundle.yaml:base", None),
         ("srt-recipe", "bundle.yaml:override_a", None),
+        ("srt-recipe", "bundle.yaml:override_*", None),
+        ("srt-recipe", "bundle.yaml:override_?", None),
+        ("srt-recipe", "bundle.yaml:zip_override_z*", None),
         ("eval-srt-recipe", "bundle.yaml:zip_override_z[1]", None),
         ("srt-recipe", "missing.yaml", "does not exist"),
         ("eval-srt-recipe", "missing.yaml:base", "does not exist"),
         ("srt-recipe", "bundle.yaml:override_b", "has no variant override_b"),
+        ("srt-recipe", "bundle.yaml:override_b*", "has no variant override_b"),
+        ("srt-recipe", "bundle.yaml:zip_override_missing*", "has no variant zip_override_missing"),
         ("srt-recipe", "bundle.yaml:zip_override_z[2]", r"has no variant zip_override_z\[2\]"),
         ("srt-recipe", "recipe.yaml:base", "only an override bundle"),
         ("srt-recipe", "broken.yaml", "fixture/broken.yaml is not valid YAML"),

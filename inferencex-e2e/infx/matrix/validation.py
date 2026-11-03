@@ -1,3 +1,4 @@
+import fnmatch
 import pprint
 import re
 from enum import Enum
@@ -21,7 +22,9 @@ from infx.clusters import CLUSTER_LABEL_PREFIX, RunnerInventory
 DEFAULT_AGENTIC_DURATION_SECONDS = 3600
 SINGLE_NODE_RECIPES = "benchmarks/single_node/srt-slurm-recipes"
 MULTI_NODE_RECIPES = "benchmarks/multi_node/srt-slurm-recipes"
-RECIPE_SELECTOR = re.compile(r"base|override_[\w-]+|zip_override_[\w-]+\[\d+\]")
+RECIPE_SELECTOR = re.compile(
+    r"base|override_[\w*?-]+|zip_override_[\w-]+\[\d+\]|zip_override_[\w-]*[*?][\w*?-]*"
+)
 
 
 class Fields(Enum):
@@ -72,7 +75,6 @@ class Fields(Enum):
     AVAILABLE_CPU_DRAM_MIB = "available-cpu-dram-mib"
     GPUS_PER_NODE = "gpus-per-node"
     GPUS_PER_WORKER = "gpus-per-worker"
-    NUM_NODES = "num-nodes"
     NODE_COUNT = "node-count"
     DURATION = "duration"
     REQUIRE_POWER = "require-power"
@@ -545,7 +547,7 @@ def _recipe_reference(value: str) -> str:
     _recipe_path(path)
     if separator and not RECIPE_SELECTOR.fullmatch(selector):
         raise ValueError(
-            f"{value!r} must select base, override_<name> or zip_override_<name>[<index>]"
+            f"{value!r} must select base, an override name/pattern or zip_override_<name>[<index>]"
         )
     return value
 
@@ -599,7 +601,6 @@ class MultiNodeSearchSpaceEntry(BaseModel):
         default=None, alias=Fields.EVAL_SRT_RECIPE.value
     )
     power: bool = Field(default=False, strict=True)
-    num_nodes: int | None = Field(default=None, alias=Fields.NUM_NODES.value, gt=0, strict=True)
     router: ComponentMetadata | None = None
     kv_p2p_transfer: str | None = Field(
         default=None, alias=Fields.KV_P2P_TRANSFER.value, min_length=1
@@ -672,7 +673,6 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
     worker: AggregateWorkerConfig | None = None
     prefill: WorkerConfig | None = None
     decode: WorkerConfig | None = None
-    num_nodes: int | None = Field(default=None, alias=Fields.NUM_NODES.value, gt=0, strict=True)
     kv_offloading: Literal["none", "dram"] | None = Field(
         default=None, alias=Fields.KV_OFFLOADING.value
     )
@@ -872,27 +872,20 @@ def _validate_multinode_entry_scope(self: BaseModel) -> BaseModel:
         worker = getattr(entry, "worker", None)
         prefill = getattr(entry, "prefill", None)
         decode = getattr(entry, "decode", None)
-        num_nodes = getattr(entry, "num_nodes", None)
 
         if not self.multinode:
-            if (
-                worker is not None
-                or prefill is not None
-                or decode is not None
-                or num_nodes is not None
-            ):
+            if worker is not None or prefill is not None or decode is not None:
                 raise ValueError(
                     "Single-node search-space entries must specify tp topology "
-                    "and cannot declare worker, prefill, decode, or num-nodes"
+                    "and cannot declare worker, prefill, or decode"
                 )
             continue
 
         if self.disagg:
-            if worker is not None or num_nodes is not None:
+            if worker is not None:
                 raise ValueError(
                     f"{Fields.DISAGG.value}=true requires prefill and decode "
-                    f"and rejects {Fields.WORKER.value} and "
-                    f"{Fields.NUM_NODES.value}"
+                    f"and rejects {Fields.WORKER.value}"
                 )
             if prefill is None or decode is None:
                 raise ValueError(f"{Fields.DISAGG.value}=true requires prefill and decode")
@@ -902,11 +895,6 @@ def _validate_multinode_entry_scope(self: BaseModel) -> BaseModel:
             raise ValueError(
                 f"{Fields.DISAGG.value}=false requires one "
                 f"{Fields.WORKER.value} and rejects prefill and decode"
-            )
-        if num_nodes is None:
-            raise ValueError(
-                f"{Fields.DISAGG.value}=false requires "
-                f"{Fields.NUM_NODES.value} in every search-space entry"
             )
     return self
 
@@ -1044,6 +1032,13 @@ def _check_srt_recipe(root: Path, reference: str, recipes: dict[str, Any]) -> No
         return
     if not isinstance(recipe, dict) or "base" not in recipe:
         raise ValueError(f"{reference}: only an override bundle with a base takes a selector")
+    if any(char in selector for char in "*?"):
+        if not any(
+            key.startswith(("override_", "zip_override_")) and fnmatch.fnmatchcase(key, selector)
+            for key in recipe
+        ):
+            raise ValueError(f"{reference}: {path} has no variant {selector}")
+        return
     group, _, index = selector.removesuffix("]").partition("[")
     if group not in recipe or (index and int(index) >= _zip_length(recipe[group])):
         raise ValueError(f"{reference}: {path} has no variant {selector}")

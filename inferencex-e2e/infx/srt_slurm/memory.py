@@ -4,6 +4,7 @@ from collections import defaultdict
 from collections.abc import Mapping
 from typing import Any
 
+from infx.launch.memory import gpu_share_mib
 from infx.launch.resources import WorkerResources
 
 _MEMORY_OPTIONS = ("mem", "mem-per-cpu", "mem-per-gpu")
@@ -97,9 +98,6 @@ def bind_memory(
     from srtctl.core.config import expand_engine_config_defaults, resolve_config_with_defaults
     from srtctl.core.schema import SrtConfig
 
-    allocations = {
-        role: request.allocate(available_mib, gpus_per_node) for role, request in workers.items()
-    }
     bind_worker_topology(recipe, workers, gpus_per_node)
     global_options = recipe.get("srun_options", {})
     if conflict := sorted({"mem-per-cpu", "mem-per-gpu"} & global_options.keys()):
@@ -119,54 +117,27 @@ def bind_memory(
     nodes = [f"memory-node-{index}" for index in range(config.engine_node_count)]
     endpoints = config.allocate_worker_endpoints(nodes)
     processes = config.worker_processes(endpoints)
-    expected: dict[tuple[str, int, str], frozenset[int]] = {}
-    counts: dict[str, int] = defaultdict(int)
+    steps = [
+        (endpoint.mode, node, endpoint.gpus_on_node(rank))
+        for endpoint in endpoints
+        if config.backend_for_role(endpoint.mode).get_srun_config().launch_per_endpoint
+        for rank, node in enumerate(endpoint.nodes)
+    ]
+    steps.extend(
+        (process.endpoint_mode, process.node, process.gpu_indices)
+        for process in processes
+        if not config.backend_for_role(process.endpoint_mode).get_srun_config().launch_per_endpoint
+    )
     limits: dict[str, set[int]] = defaultdict(set)
     capacities: dict[str, int] = defaultdict(int)
     occupied: dict[str, set[int]] = defaultdict(set)
-    for endpoint in endpoints:
-        role = endpoint.mode
-        allocation = allocations[role]
-        counts[role] += 1
-        if endpoint.num_nodes != allocation.nodes_per_worker:
-            raise ValueError(
-                f"roles.{role}: SRT placement disagrees with the requested worker nodes"
-            )
-        for rank, node in enumerate(endpoint.nodes):
-            gpus = endpoint.gpus_on_node(rank)
-            if len(gpus) != allocation.local_gpus:
-                raise ValueError(
-                    f"roles.{role}: SRT placement disagrees with the requested local GPUs"
-                )
-            if occupied[node] & gpus:
-                raise ValueError("Inference workers must not overlap their GPU allocations")
-            occupied[node].update(gpus)
-            expected[role, endpoint.index, node] = gpus
-            if config.backend_for_role(role).get_srun_config().launch_per_endpoint:
-                limits[role].add(allocation.memory_mib)
-                capacities[role] += allocation.memory_mib
-    if counts != {role: request.num_workers for role, request in workers.items()}:
-        raise ValueError("SRT endpoint counts disagree with the requested inference workers")
-
-    covered: dict[tuple[str, int, str], set[int]] = defaultdict(set)
-    for process in processes:
-        role = process.endpoint_mode
-        if config.backend_for_role(role).get_srun_config().launch_per_endpoint:
-            continue
-        key = role, process.endpoint_index, process.node
-        gpus = process.gpu_indices
-        if key not in expected or not gpus <= expected[key] or covered[key] & gpus:
-            raise ValueError("Worker steps must partition each node-local worker GPU allocation")
-        covered[key].update(gpus)
-        limit = allocations[role].step_memory_mib(len(gpus))
+    for role, node, gpus in steps:
+        if occupied[node] & gpus:
+            raise ValueError("Worker steps must not overlap their GPU allocations")
+        occupied[node].update(gpus)
+        limit = gpu_share_mib(available_mib, len(gpus), gpus_per_node)
         limits[role].add(limit)
         capacities[role] += limit
-    for key, gpus in expected.items():
-        if (
-            not config.backend_for_role(key[0]).get_srun_config().launch_per_endpoint
-            and covered[key] != gpus
-        ):
-            raise ValueError("Worker steps must cover each node-local worker GPU allocation")
 
     for role in workers:
         if len(limits[role]) != 1:

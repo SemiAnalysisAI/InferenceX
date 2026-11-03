@@ -3731,7 +3731,7 @@ def test_choose_needs_node_demand_on_every_target_cluster_and_skips_unresolved_r
         "exact": {**fixture, "runner": "cluster:h100-dsxe"},
         "wide": {**fixture, "runner": "cluster:h100-dsxe", "multinode": True, "scenarios": {
             "agentic-coding": [{"search-space": [
-                {"num-nodes": nodes, "worker": {**worker, "num-worker": nodes},
+                {"worker": {**worker, "num-worker": nodes},
                  "kv-offloading": "none", "conc-list": [4], "srt-recipe": "wide.yaml"}
                 for nodes in (2, 4, 3)
             ]}],

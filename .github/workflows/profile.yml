@@ -228,6 +228,7 @@ jobs:
       IMAGE: ${{ matrix.config.image }}
       FRAMEWORK: ${{ matrix.config.framework }}
       PRECISION: ${{ matrix.config.precision }}
+      GPU_COUNT: ${{ matrix.config['gpus-per-worker'] }}
       TP: ${{ matrix.config.tp }}
       PP_SIZE: ${{ matrix.config.pp }}
       DCP_SIZE: ${{ matrix.config.dcp-size }}
@@ -337,8 +338,6 @@ jobs:
           export GITHUB_WORKSPACE="$PWD"
           echo "INFERENCEX_E2E_ROOT=$PWD" >> "$GITHUB_ENV"
           set -eo pipefail
-          export GPU_COUNT=$((TP * PP_SIZE * PCP_SIZE))
-          echo "GPU_COUNT=${GPU_COUNT}" >> "$GITHUB_ENV"
           ep_val="${EP_SIZE:-1}"
           res_name="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_tp${TP}-pp${PP_SIZE}-dcp${DCP_SIZE}-pcp${PCP_SIZE}_ep${ep_val}_dpa_${DP_ATTENTION}_conc${CONC}_${RUNNER_NAME}"
           export RESULT_FILENAME="${res_name}"

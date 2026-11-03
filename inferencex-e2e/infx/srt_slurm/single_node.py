@@ -133,10 +133,6 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
     expected = {
         "engine": (engine, SINGLE_NODE_ENGINES[environment["FRAMEWORK"]]),
         **parallelism_constraints(engine, args, environment),
-        "gpus": (role["gpus"], int(environment["GPU_COUNT"])),
-        "nodes": (role["nodes"], 1),
-        "workers": (role["workers"], 1),
-        "roles": (set(recipe["roles"]), {"agg"}),
         "benchmark type": (benchmark["type"], "custom"),
         "SPEC_DECODING": (
             speculation,

@@ -35,6 +35,7 @@ BUNDLE = {
 
 @pytest.mark.parametrize("selector", [
     None, "base", "override_wide", "override_named", "zip_override_conc[2]", "zip_override_named[1]",
+    "override_*", "override_w?de", "zip_override_*", "zip_override_con?",
 ])  # fmt: skip
 def test_expansion_matches_srtctl(selector):
     assert expand_variants(BUNDLE, selector) == selected_recipes(BUNDLE, selector)
@@ -42,6 +43,8 @@ def test_expansion_matches_srtctl(selector):
 
 @pytest.mark.parametrize(("raw", "selector"), [
     (BUNDLE, "override_missing"),
+    (BUNDLE, "override_missing*"),
+    (BUNDLE, "zip_override_missing*"),
     (BUNDLE, "zip_override_conc[3]"),
     ({"schema": 2, "engine": "sglang"}, "base"),
     ({"base": {}, "zip_override_uneven": {"a": [1, 2], "b": [1, 2, 3]}}, None),

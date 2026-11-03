@@ -165,5 +165,10 @@ def test_shadow_engines_cannot_each_duplicate_the_logical_worker_budget():
         engine={"type": "vllm", "failover": {"shadow_engines": 1}},
         frontend={"type": "dynamo"},
     )
-    with pytest.raises(ValueError, match="must partition"):
+    with pytest.raises(ValueError, match="must not overlap"):
         bind_memory(item, 8000, 8, {"agg": WorkerResources(1, 4)})
+
+
+def test_fractional_mib_share_cannot_become_unlimited_slurm_memory():
+    with pytest.raises(ValueError, match="less than one MiB"):
+        bind_memory(recipe({"agg": {}}), 1, 8, {"agg": WorkerResources(1, 1)})

@@ -7,6 +7,7 @@ selectors a master config accepts.
 
 from __future__ import annotations
 
+import fnmatch
 import re
 from typing import Any
 
@@ -95,7 +96,8 @@ def expand_variants(
     """The variants ``selector`` picks from ``raw``, each named by its own selector.
 
     No selector picks a plain recipe, or every ``override_*`` then every ``zip_override_*``
-    variant of a bundle, in name order. Variants inherit the bundle's ``schema``, and zip
+    variant of a bundle, in name order. Glob selectors match override block names,
+    including all indices of matching zip blocks. Variants inherit the bundle's ``schema``, and zip
     variants drop null-valued keys as ``srtctl apply`` does.
     """
     if "base" not in raw:
@@ -103,9 +105,13 @@ def expand_variants(
             raise ValueError("recipe selector requires an override-format recipe")
         return [(None, raw)]
     zipped = ZIP_VARIANT.fullmatch(selector or "")
-    if selector is None:
+    if selector is None or any(char in selector for char in "*?"):
         keys = sorted(key for key in raw if key.startswith("override_"))
         keys += sorted(key for key in raw if key.startswith("zip_override_"))
+        if selector is not None:
+            keys = [key for key in keys if fnmatch.fnmatchcase(key, selector)]
+            if not keys:
+                raise ValueError(f"recipe has no variant {selector}")
         selected = [variant for key in keys for variant in _block_variants(raw, key)]
     elif selector == "base":
         selected = [("base", deepcopy(raw["base"]))]

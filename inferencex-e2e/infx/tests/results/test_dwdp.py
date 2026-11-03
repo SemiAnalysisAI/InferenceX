@@ -8,7 +8,6 @@ from infx.launch.drivers.srt.submit import eval_args
 from infx.matrix.generate import (
     filter_exp_names,
     multinode_agentic_exp_name,
-    worker_gpus_per_node,
     worker_node_count,
 )
 from infx.matrix.validation import WorkerConfig
@@ -31,7 +30,6 @@ def test_group_allocation():
         )
         == 2
     )
-    assert worker_gpus_per_node(worker(), 8) == 8
     layout = Parallelism(tp=1, ep=1, dwdp_size=8)
     assert layout.gpus_per_worker == 8
     assert layout.fields("prefill_")["prefill_dwdp_size"] == 8
@@ -115,12 +113,6 @@ def test_agentic_names_select_dwdp_variants_without_ambiguity():
     assert "dwdp4" in name(4)
     assert "dwdp8" in name(8)
     assert filter_exp_names(entries, [name(8)]) == [entries[2]]
-
-
-@pytest.mark.parametrize("size", [10, 12])
-def test_allocation_errors_name_the_explicit_gpu_request(size):
-    with pytest.raises(ValueError, match=rf"gpus-per-worker={size}"):
-        worker_gpus_per_node(worker(**{"gpus-per-worker": size}), 8)
 
 
 @pytest.mark.parametrize("key", [benchmark_key, agentic_key, eval_key])

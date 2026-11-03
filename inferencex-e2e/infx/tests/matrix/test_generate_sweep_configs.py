@@ -16,8 +16,6 @@ from infx.matrix.generate import (
     add_multinode_node_count,
     apply_node_type_defaults,
     expand_config_keys,
-    effective_gpu_count,
-    worker_gpus_per_node,
     filter_exp_names,
     generate_full_sweep,
     generate_test_config_sweep,
@@ -32,8 +30,7 @@ from infx.matrix.validation import validate_runner_config
 from infx.launch.resources import WorkerResources
 
 
-@pytest.mark.parametrize("declared", [None, 2])
-def test_aggregated_multinode_node_count_validates_explicit_num_nodes(declared):
+def test_aggregated_multinode_node_count_comes_from_worker_resources():
     entry = {
         "runner": "cluster:test",
         "disagg": False,
@@ -42,35 +39,10 @@ def test_aggregated_multinode_node_count_validates_explicit_num_nodes(declared):
     }
     inventory = {"clusters": {"test": {"gpus-per-node": 8}}}
 
-    add_multinode_node_count(entry, inventory, num_nodes=declared, root=None)
+    add_multinode_node_count(entry, inventory, root=None)
 
     assert entry["node-count"] == 2
 
-
-def test_aggregated_multinode_node_count_rejects_underallocation():
-    entry = {
-        "runner": "cluster:test",
-        "disagg": False,
-        "prefill": {"num-worker": 1, "gpus-per-worker": 16},
-        "decode": {"num-worker": 0, "gpus-per-worker": 16},
-    }
-    inventory = {"clusters": {"test": {"gpus-per-node": 8}}}
-
-    with pytest.raises(ValueError, match="num-nodes=1 disagrees with the worker allocation: 2"):
-        add_multinode_node_count(entry, inventory, num_nodes=1, root=None)
-    assert "node-count" not in entry
-
-
-def test_disaggregated_multinode_node_count_rejects_num_nodes():
-    entry = {
-        "runner": "unknown",
-        "disagg": True,
-        "prefill": {},
-        "decode": {},
-    }
-
-    with pytest.raises(ValueError, match="num-nodes.*disaggregated"):
-        add_multinode_node_count(entry, {}, num_nodes=3, root=None)
 
 
 def test_disaggregated_multinode_node_count_requires_hardware_inventory():
@@ -82,7 +54,7 @@ def test_disaggregated_multinode_node_count_requires_hardware_inventory():
     }
 
     with pytest.raises(ValueError, match="Cannot resolve gpus-per-node"):
-        add_multinode_node_count(entry, {}, num_nodes=None, root=None)
+        add_multinode_node_count(entry, {}, root=None)
 
 
 def test_aggregated_worker_expands_to_legacy_matrix_pair():
@@ -235,8 +207,7 @@ def test_recipe_node_count_includes_auxiliary_nodes(tmp_path, multinode_recipe, 
     ) == expected
 
 
-@pytest.mark.parametrize("declared", [2, 3])
-def test_explicit_node_count_includes_auxiliary_nodes(tmp_path, multinode_recipe, declared):
+def test_derived_node_count_includes_auxiliary_nodes(tmp_path, multinode_recipe):
     reference = multinode_recipe({
         "schema": 2, "roles": {"agg": {}},
         "services": [{"type": "custom", "nodes": 1}],
@@ -247,12 +218,8 @@ def test_explicit_node_count_includes_auxiliary_nodes(tmp_path, multinode_recipe
         "decode": {"num-worker": 0, "gpus-per-worker": 16},
     }
     inventory = {"clusters": {"test": {"gpus-per-node": 8}}}
-    if declared == 2:
-        with pytest.raises(ValueError, match="num-nodes=2 disagrees with the worker allocation: 3"):
-            add_multinode_node_count(entry, inventory, declared, tmp_path)
-    else:
-        add_multinode_node_count(entry, inventory, declared, tmp_path)
-        assert entry["node-count"] == 3
+    add_multinode_node_count(entry, inventory, tmp_path)
+    assert entry["node-count"] == 3
 
 
 def test_multinode_node_count_uses_role_gpu_footprints(sample_runner_config):
@@ -2695,7 +2662,7 @@ def agentic_config(request, sample_single_node_config):
     if request.param == "single":
         benchmark = {"gpus-per-worker": 4, "tp": 4, "kv-offloading": "none"}
     elif request.param == "aggregated":
-        benchmark = {"num-nodes": 2, "worker": {"num-worker": 2, "gpus-per-worker": 8, "tp": 8, "ep": 1, "dp-attn": False}}
+        benchmark = {"worker": {"num-worker": 2, "gpus-per-worker": 8, "tp": 8, "ep": 1, "dp-attn": False}}
     else:
         entry.update(disagg=True, **{"kv-p2p-transfer": "nixl"})
         benchmark = {
@@ -2817,7 +2784,8 @@ class TestAgenticGeneration:
         assert result[0]["duration"] == 3600
 
     @pytest.mark.parametrize("filters", [{}, {"min_conc": 999, "conc": [999]}])
-    def test_agentic_node_dram_rejects_tp_above_runner_gpus(self, sample_runner_config, generate_agentic_sweep, filters):
+    @pytest.mark.parametrize("offloading", ["none", "dram", "ssd"])
+    def test_agentic_rejects_gpu_request_above_runner_capacity(self, sample_runner_config, generate_agentic_sweep, filters, offloading):
         config = {
             "dsv4-b300-agentic": {
                 "image": "vllm/vllm-openai:v0.23.0",
@@ -2831,8 +2799,8 @@ class TestAgenticGeneration:
                     "agentic-coding": [{
                         "search-space": [
                             {
-                                "gpus-per-worker": 4, "tp": 4,
-                                "kv-offloading": "dram",
+                                "gpus-per-worker": 4, "tp": 1,
+                                "kv-offloading": offloading,
                                 "kv-offload-backend": {"name": "native"},
                                 "conc-list": [32],
                             },
@@ -2930,9 +2898,9 @@ class TestAgenticGeneration:
         assert result[0]["kv-offload-backend"] == {"name": "hicache"}
         assert result[0]["exp-name"] == "dsv4_p1x8_d1x8_conc16_kvdram-hicache"
 
-    @pytest.mark.parametrize(("prefill_tp", "decode_tp", "role"), [(12, 8, "prefill"), (8, 12, "decode")])
+    @pytest.mark.parametrize(("prefill_tp", "decode_tp"), [(12, 8), (8, 12)])
     def test_multinode_agentic_rejects_node_misaligned_worker(
-        self, sample_runner_config, generate_agentic_sweep, prefill_tp, decode_tp, role
+        self, sample_runner_config, generate_agentic_sweep, prefill_tp, decode_tp
     ):
         config = {
             "dsv4-agentic-hicache-misaligned": {
@@ -2959,7 +2927,7 @@ class TestAgenticGeneration:
             },
         }
 
-        with pytest.raises(ValueError, match=rf"^{role} gpus-per-worker=12 spans multiple nodes but is not a multiple"):
+        with pytest.raises(ValueError, match="gpus-per-worker spanning nodes must be a multiple of gpus-per-node"):
             generate_agentic_sweep(config, sample_runner_config)
 
 class TestApplyNodeTypeDefaults:
@@ -3338,11 +3306,22 @@ def test_single_node_fixed_sequence_rejects_require_power(sample_single_node_con
         validate_master_config(sample_single_node_config, Path())
 
 
-def test_explicit_gpu_request_is_independent_of_engine_parallelism():
-    worker = {"gpus-per-worker": 4, "tp": 1, "pp": 2, "pcp-size": 1, "dwdp-size": 4}
-    assert effective_gpu_count(worker) == 4
-    assert worker_gpus_per_node(worker, 8) == 4
+@pytest.mark.parametrize("gpus", [3, 4, 8, 9])
+def test_single_node_fixed_sequence_validates_explicit_allocation(
+    sample_single_node_config, sample_runner_config, gpus
+):
+    from infx.matrix.generate import expand_full_sweep
 
-
-def test_partial_single_node_worker_does_not_need_to_divide_node_capacity():
-    assert worker_gpus_per_node({"gpus-per-worker": 3}, 8) == 3
+    config = next(iter(sample_single_node_config.values()))
+    for sequence in config["scenarios"]["fixed-seq-len"]:
+        sequence["search-space"] = [{
+            "gpus-per-worker": gpus, "tp": 1, "pp": 2, "pcp-size": 1,
+            "conc-start": 1, "conc-end": 1,
+        }]
+    if gpus > 8:
+        with pytest.raises(ValueError, match="gpus-per-worker=9 exceeds gpus-per-node=8"):
+            expand_full_sweep(sample_single_node_config, sample_runner_config)
+    else:
+        rows = expand_full_sweep(sample_single_node_config, sample_runner_config)
+        assert rows
+        assert all(row["gpus-per-worker"] == gpus for row in rows)
