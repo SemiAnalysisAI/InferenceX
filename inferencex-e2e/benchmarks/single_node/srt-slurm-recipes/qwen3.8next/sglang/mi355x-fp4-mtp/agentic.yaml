@@ -82,9 +82,6 @@ base:
         SGLANG_OPT_QWEN4_FUSED_GDN_NORM_QUANT: '1'
         SGLANG_OPT_QWEN_MOE_FUSED_SHARED_TOPK: '1'
         SGLANG_OPT_AITER_LM_HEAD_GEMM: '1'
-        # HC norm and inject GEMV folded into the FlyDSL HC mix for <= 128 rows
-        # (forwards outside the monokernel).
-        SGLANG_OPT_QWEN4_FUSED_HC: '1'
   benchmark:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'

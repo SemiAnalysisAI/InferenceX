@@ -29,8 +29,6 @@
 #     prefixes use the absolute mamba checkpoint grid
 #   - fused shared-expert loading for Qwen3.8, strict for the MTP draft
 #   - an all-floating-point MTP branch loads unquantized under a Quark target
-#   - opt-in fused HC for decode-sized rows (SGLANG_OPT_QWEN4_FUSED_HC): the
-#     per-branch norm and the combine's inject GEMV fold into the FlyDSL HC mix
 #   - sgl-project/sglang#46329: breakable prefill graphs replay multimodal batches
 #     (--cuda-graph-backend-prefill breakable), and a shared-quantized attention
 #     input (SGLANG_OPT_QWEN4_SHARED_ATTN_QUANT) goes through the QSA indexer break
@@ -82,7 +80,6 @@ apply /sgl-workspace/sglang 08-sglang-qsa-flydsl-sparse-decode.patch
 apply /sgl-workspace/sglang 09-sglang-gdn-hip-fused-proj-conv.patch
 apply /sgl-workspace/sglang 10-sglang-qwen38-decode-opts.patch
 apply /sgl-workspace/sglang 11-sglang-mtp-quant-resolve.patch
-apply /sgl-workspace/sglang 12-sglang-qwen38-fused-hc.patch
 apply /sgl-workspace/sglang 13-sglang-prefill-breakable-multimodal.patch
 apply /sgl-workspace/sglang 14-sglang-qsa-breakable-shared-quant.patch
 
