@@ -4,7 +4,7 @@ source /infmax-workspace/benchmarks/check_env.sh
 check_env_vars ROUTER_VERSION
 
 # Worker ranks sharing a container must not race pip's package writes.
-exec 9>/tmp/inferencex-smg-install.lock
+exec 9<"${BASH_SOURCE[0]}"
 flock 9
 pip_install=(python3 -m pip install)
 if python3 -m pip install --help 2>/dev/null | grep -q -- --break-system-packages; then

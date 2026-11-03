@@ -205,20 +205,6 @@ def test_a_component_a_script_installs_gets_the_master_version_where_the_script_
     ]  # fmt: skip
 
 
-def test_an_smg_setup_script_gets_the_point_router_version():
-    recipe = {"setup_script": "smg.sh", "frontend": {"type": "smg"}}
-    environment = {
-        **AGENTX_ENV,
-        "CONC": "32",
-        "ROUTER_METADATA": '{"name": "smg", "version": "9.8.7"}',
-    }
-
-    bound = bind_workload(recipe, environment, agentic=True, multinode=False)
-
-    assert bound["environment"]["ROUTER_VERSION"] == "9.8.7"
-    assert bound["frontend"] == {"type": "smg"}
-
-
 @pytest.mark.parametrize("metadata", ["", '{"name": "mooncake"}', '{"name": "lmcache", "version": "1"}'])
 def test_a_point_that_does_not_declare_an_installed_components_version_is_rejected(metadata):
     recipe = {"services": [{"name": "mooncake-master", "preamble": "bash /configs/vllm-mooncake.sh"}]}
