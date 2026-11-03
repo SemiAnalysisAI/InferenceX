@@ -1215,7 +1215,6 @@ kimik3-fp4-h200-vllm-agentic-latency:
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 10, 12]
-        num-nodes: 4
         srt-recipe: agg-tp16dp2ep32-latency.yaml
         power: true
         worker:
@@ -1242,7 +1241,6 @@ kimik3-fp4-h200-vllm-agentic-balanced:
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16]
-        num-nodes: 4
         srt-recipe: agg-tp8dp4ep32-balanced.yaml
         power: true
         worker:
@@ -1270,7 +1268,6 @@ kimik3-fp4-h200-vllm-agentic-simple:
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple }
         conc-list: [8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32]
-        num-nodes: 4
         srt-recipe: agg-tp8dp4ep32-vllm-simple.yaml
         power: true
         worker:
@@ -3888,7 +3885,6 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         conc-list: [1]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_c1
         worker:
           num-worker: 1
@@ -3900,7 +3896,6 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         conc-list: [24]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_c24
         worker:
           num-worker: 1
@@ -3912,7 +3907,6 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         conc-list: [32]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_c32
         worker:
           num-worker: 1
@@ -3924,7 +3918,6 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         conc-list: [40]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_c40
         worker:
           num-worker: 1
@@ -3936,7 +3929,6 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         conc-list: [48]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_c48
         worker:
           num-worker: 1
@@ -3948,7 +3940,6 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         conc-list: [52]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_c52
         worker:
           num-worker: 1
@@ -3960,7 +3951,6 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         conc-list: [64]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_c64
         worker:
           num-worker: 1
@@ -4181,7 +4171,6 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg-pareto:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         conc-list: [44]
-        num-nodes: 1
         srt-recipe: agg-pareto-variants.yaml:override_tp2_c44_b2
         worker:
           num-worker: 1
@@ -4194,7 +4183,6 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg-pareto:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         conc-list: [44]
-        num-nodes: 1
         srt-recipe: agg-pareto-variants.yaml:override_tp2_c44_b1
         worker:
           num-worker: 1
@@ -4207,7 +4195,6 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg-pareto:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         conc-list: [7]
-        num-nodes: 2
         srt-recipe: agg-pareto-variants.yaml:override_tp8_c7_b1
         worker:
           num-worker: 1
@@ -4326,7 +4313,6 @@ qwen3.5-fp8-gb300-dynamo-sglang-agentic-agg-pareto:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         conc-list: [44]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c44_b4
         worker:
           num-worker: 1
@@ -4339,7 +4325,6 @@ qwen3.5-fp8-gb300-dynamo-sglang-agentic-agg-pareto:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         conc-list: [44]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c44_b2
         worker:
           num-worker: 1
@@ -4352,7 +4337,6 @@ qwen3.5-fp8-gb300-dynamo-sglang-agentic-agg-pareto:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         conc-list: [44]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c44_b1
         worker:
           num-worker: 1
@@ -4365,7 +4349,6 @@ qwen3.5-fp8-gb300-dynamo-sglang-agentic-agg-pareto:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         conc-list: [1]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c1_b1
         worker:
           num-worker: 1
@@ -4378,7 +4361,6 @@ qwen3.5-fp8-gb300-dynamo-sglang-agentic-agg-pareto:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         conc-list: [1]
-        num-nodes: 2
         srt-recipe: agg-variants.yaml:override_tp8_c1_b1
         worker:
           num-worker: 1
@@ -4440,7 +4422,6 @@ qwen3.5-fp4-b300-dynamo-sglang-agentic-pareto:
         kv-offload-backend: { name: hicache }
         conc-list: [64]
         srt-recipe: agg-tp2ep2-mtp3-hicache.yaml
-        num-nodes: 1
         worker:
           num-worker: 1
           gpus-per-worker: 2
@@ -4453,7 +4434,6 @@ qwen3.5-fp4-b300-dynamo-sglang-agentic-pareto:
         kv-offload-backend: { name: hicache }
         conc-list: [44]
         srt-recipe: agg-tp2-mtp7-hicache-variants.yaml:zip_override_running_cap[2]
-        num-nodes: 1
         worker:
           num-worker: 1
           gpus-per-worker: 2
@@ -4466,7 +4446,6 @@ qwen3.5-fp4-b300-dynamo-sglang-agentic-pareto:
         kv-offload-backend: { name: hicache }
         conc-list: [36]
         srt-recipe: agg-tp2-mtp7-hicache-variants.yaml:zip_override_running_cap[0]
-        num-nodes: 1
         worker:
           num-worker: 1
           gpus-per-worker: 2
@@ -4479,7 +4458,6 @@ qwen3.5-fp4-b300-dynamo-sglang-agentic-pareto:
         kv-offload-backend: { name: hicache }
         conc-list: [40]
         srt-recipe: agg-tp2-b2-mtp5-hicache.yaml
-        num-nodes: 1
         worker:
           num-worker: 1
           gpus-per-worker: 2
@@ -4492,7 +4470,6 @@ qwen3.5-fp4-b300-dynamo-sglang-agentic-pareto:
         kv-offload-backend: { name: hicache }
         conc-list: [4]
         srt-recipe: agg-tp4-mtp6-hicache-variants.yaml:base
-        num-nodes: 1
         worker:
           num-worker: 1
           gpus-per-worker: 4
@@ -4714,7 +4691,6 @@ qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp:
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [1, 4, 8, 12, 20]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4
         worker:
           num-worker: 1
@@ -4725,7 +4701,6 @@ qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp:
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [2]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_no_symm
         worker:
           num-worker: 1
@@ -4736,7 +4711,6 @@ qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp:
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [24]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_parity
         worker:
           num-worker: 1
@@ -4750,7 +4724,6 @@ qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         conc-list: [22]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp2ep2_hicache
         worker:
           num-worker: 1
@@ -4764,7 +4737,6 @@ qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         conc-list: [32]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp2ep2_hicache_k3_baseline
         worker:
           num-worker: 1
@@ -4776,7 +4748,6 @@ qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         conc-list: [40, 48]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp2ep2_hicache_cap48
         worker:
           num-worker: 1
@@ -4929,7 +4900,6 @@ kimik3-fp4-gb200-dynamo-vllm-agentic:
       # https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=gb200&nodes=4&strategy=multi_node_tp
       - spec-decoding: mtp
         conc-list: [1, 2, 4, 8]
-        num-nodes: 4
         srt-recipe: agg-variants.yaml:override_tp16_latency
         worker:
           num-worker: 1
@@ -4941,7 +4911,6 @@ kimik3-fp4-gb200-dynamo-vllm-agentic:
       # https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=gb200&nodes=4&strategy=multi_node_tep
       - spec-decoding: mtp
         conc-list: [8, 16, 24, 32]
-        num-nodes: 4
         srt-recipe: agg-variants.yaml:override_tep16_balanced
         worker:
           num-worker: 1
@@ -4955,7 +4924,6 @@ kimik3-fp4-gb200-dynamo-vllm-agentic:
       # https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=gb200&nodes=4&strategy=multi_node_dep
       - spec-decoding: mtp
         conc-list: [32, 64, 96, 128, 192, 256]
-        num-nodes: 4
         srt-recipe: agg-variants.yaml:override_dep16
         worker:
           num-worker: 1
@@ -4970,7 +4938,6 @@ kimik3-fp4-gb200-dynamo-vllm-agentic:
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple, version: "13c59a3" }
         conc-list: [128, 192, 256, 384]
-        num-nodes: 4
         srt-recipe: agg-variants.yaml:override_dep16_vllm_simple_offload
         worker:
           num-worker: 1
@@ -4996,7 +4963,6 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg:
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
         conc-list: [1, 2, 4, 8, 16]
-        num-nodes: 4
         srt-recipe: agg-dcp16-dspark4-maxseq2-mooncake.yaml
         power: true
         worker:
@@ -5023,7 +4989,6 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg:
       - kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
         conc-list: [8, 40, 48]
-        num-nodes: 4
         srt-recipe: agg-dcp16-nospec-mooncake.yaml
         power: true
         worker:
@@ -5052,7 +5017,6 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         conc-list: [1]
-        num-nodes: 4
         srt-recipe: agg-tp8pp2-variants.yaml:override_tp8pp2_c1
         power: true
         worker:
@@ -5067,7 +5031,6 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         conc-list: [4]
-        num-nodes: 4
         srt-recipe: agg-tp8pp2-variants.yaml:override_tp8pp2_c4
         power: true
         worker:
@@ -5082,7 +5045,6 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         conc-list: [8]
-        num-nodes: 4
         srt-recipe: agg-tp8pp2-variants.yaml:override_tp8pp2_c8
         power: true
         worker:
@@ -5097,7 +5059,6 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         conc-list: [24]
-        num-nodes: 4
         srt-recipe: agg-tp8pp2-variants.yaml:override_tp8pp2_c24
         power: true
         worker:
@@ -5112,7 +5073,6 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         conc-list: [32]
-        num-nodes: 4
         srt-recipe: agg-tp8pp2-variants.yaml:override_tp8pp2_c32
         power: true
         worker:
@@ -5127,7 +5087,6 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         conc-list: [48]
-        num-nodes: 4
         srt-recipe: agg-tp8pp2-variants.yaml:override_tp8pp2_c48
         power: true
         worker:
@@ -5142,7 +5101,6 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         conc-list: [56]
-        num-nodes: 4
         srt-recipe: agg-tp8pp2-variants.yaml:override_tp8pp2_c56
         power: true
         worker:
@@ -5323,7 +5281,6 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg:
         conc-list: [2]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp8_c2
         power: true
         worker:
@@ -5336,7 +5293,6 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg:
         conc-list: [4]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp8_c4
         power: true
         worker:
@@ -5349,7 +5305,6 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg:
         conc-list: [8]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp8_c8
         power: true
         worker:
@@ -5362,7 +5317,6 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg:
         conc-list: [12]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp8_c12
         power: true
         worker:
@@ -5375,7 +5329,6 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg:
         conc-list: [16]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp8_c16
         power: true
         worker:
@@ -5499,7 +5452,6 @@ glm5.2-fp4-b200-dynamo-sglang-agentic-agg:
         conc-list: [1]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp8_c1
         worker:
           num-worker: 1
@@ -5512,7 +5464,6 @@ glm5.2-fp4-b200-dynamo-sglang-agentic-agg:
         conc-list: [1]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_c1
         worker:
           num-worker: 1
@@ -5525,7 +5476,6 @@ glm5.2-fp4-b200-dynamo-sglang-agentic-agg:
         conc-list: [4]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_c4
         worker:
           num-worker: 1
@@ -5538,7 +5488,6 @@ glm5.2-fp4-b200-dynamo-sglang-agentic-agg:
         conc-list: [8]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_c8
         worker:
           num-worker: 1
@@ -5551,7 +5500,6 @@ glm5.2-fp4-b200-dynamo-sglang-agentic-agg:
         conc-list: [12]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_c12
         worker:
           num-worker: 1
@@ -5564,7 +5512,6 @@ glm5.2-fp4-b200-dynamo-sglang-agentic-agg:
         conc-list: [32]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp8_dp8attn_c32
         worker:
           num-worker: 1
@@ -5645,7 +5592,6 @@ glm5.2-fp4-gb200-dynamo-sglang-agentic-agg:
         conc-list: [1]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c1
         # Shared deployment GPU power telemetry.
         power: true
@@ -5659,7 +5605,6 @@ glm5.2-fp4-gb200-dynamo-sglang-agentic-agg:
         conc-list: [1]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        num-nodes: 2
         srt-recipe: agg-variants.yaml:override_tp8_c1
         # Shared deployment GPU power telemetry.
         power: true
@@ -5835,7 +5780,6 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-agg:
         conc-list: [1]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c1
         worker:
           num-worker: 1
@@ -5847,7 +5791,6 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-agg:
         conc-list: [1]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        num-nodes: 2
         srt-recipe: agg-variants.yaml:override_tp8_c1
         worker:
           num-worker: 1
@@ -6306,7 +6249,6 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
         kv-offloading: none
         conc-list:
         - 1
-        num-nodes: 4
         srt-recipe: agg-megakernel-variants.yaml:override_tp16_dspark5
         power: true
         worker:
@@ -6348,7 +6290,6 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [1]
-        num-nodes: 2
         srt-recipe: agg-variants.yaml:override_tp8pp2_c1
         power: true
         worker:
@@ -6362,7 +6303,6 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [4]
-        num-nodes: 2
         srt-recipe: agg-variants.yaml:override_tp8pp2_c4
         power: true
         worker:
@@ -6376,7 +6316,6 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [8]
-        num-nodes: 2
         srt-recipe: agg-variants.yaml:override_tp8pp2_c8
         power: true
         worker:
@@ -6390,7 +6329,6 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [14]
-        num-nodes: 2
         srt-recipe: agg-variants.yaml:override_tp8pp2_c14
         power: true
         worker:
@@ -6404,7 +6342,6 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [24]
-        num-nodes: 2
         srt-recipe: agg-variants.yaml:override_tp8pp2_c24
         power: true
         worker:
@@ -6418,7 +6355,6 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [48]
-        num-nodes: 2
         srt-recipe: agg-variants.yaml:override_tp8pp2_c48
         power: true
         worker:
@@ -6431,7 +6367,6 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
           dp-attn: false
       - kv-offloading: none
         conc-list: [96]
-        num-nodes: 2
         srt-recipe: agg-variants.yaml:override_tp8pp2_c96
         power: true
         worker:
@@ -6445,7 +6380,6 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [32]
-        num-nodes: 2
         srt-recipe: agg-variants.yaml:override_tp8pp2_c32
         power: true
         worker:
@@ -6459,7 +6393,6 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [56]
-        num-nodes: 2
         srt-recipe: agg-variants.yaml:override_tp8pp2_c56
         power: true
         worker:
@@ -6473,7 +6406,6 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [72]
-        num-nodes: 2
         srt-recipe: agg-variants.yaml:override_tp8pp2_c72
         power: true
         worker:
@@ -6487,7 +6419,6 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [80]
-        num-nodes: 2
         srt-recipe: agg-variants.yaml:override_tp8pp2_c80
         power: true
         worker:
@@ -6810,31 +6741,26 @@ minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-agg:
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [1]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c1
         worker: { num-worker: 1, gpus-per-worker: 4, tp: 4, ep: 1, dp-attn: false }
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [1]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_monokernel_c1
         worker: { num-worker: 1, gpus-per-worker: 4, tp: 4, ep: 1, dp-attn: false }
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [4]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c4
         worker: { num-worker: 1, gpus-per-worker: 4, tp: 4, ep: 1, dp-attn: false }
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [8]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c8
         worker: { num-worker: 1, gpus-per-worker: 4, tp: 4, ep: 1, dp-attn: false }
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [16]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c16
         worker: { num-worker: 1, gpus-per-worker: 4, tp: 4, ep: 1, dp-attn: false }
     - search-space:
@@ -6842,28 +6768,24 @@ minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-agg:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         conc-list: [24]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_hicache_spf_c24
         worker: { num-worker: 1, gpus-per-worker: 4, tp: 4, ep: 1, dp-attn: false }
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         conc-list: [40]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp2_hicache_spf_c40
         worker: { num-worker: 1, gpus-per-worker: 2, tp: 2, ep: 1, dp-attn: false }
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         conc-list: [40]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp2_hicache_c40
         worker: { num-worker: 1, gpus-per-worker: 2, tp: 2, ep: 1, dp-attn: false }
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         conc-list: [44]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp2_hicache_c44
         worker: { num-worker: 1, gpus-per-worker: 2, tp: 2, ep: 1, dp-attn: false }
 
@@ -7411,7 +7333,6 @@ dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg:
     - search-space:
       - spec-decoding: mtp
         conc-list: [1]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c1
         worker:
           num-worker: 1
@@ -7421,7 +7342,6 @@ dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg:
           dp-attn: false
       - spec-decoding: mtp
         conc-list: [4]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c4
         worker:
           num-worker: 1
@@ -7431,7 +7351,6 @@ dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg:
           dp-attn: false
       - spec-decoding: mtp
         conc-list: [16]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c16
         worker:
           num-worker: 1
@@ -7441,7 +7360,6 @@ dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg:
           dp-attn: false
       - spec-decoding: mtp
         conc-list: [16]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp2_c16
         worker:
           num-worker: 1
@@ -7552,7 +7470,6 @@ dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg:
         kv-offloading: none
         srt-recipe: agg-variants.yaml:override_tp4_c1_seq1
         conc-list: [1]
-        num-nodes: 1
         worker:
           num-worker: 1
           gpus-per-worker: 4
@@ -7563,7 +7480,6 @@ dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg:
         kv-offloading: none
         srt-recipe: agg-variants.yaml:override_tp4_c16
         conc-list: [16]
-        num-nodes: 1
         worker:
           num-worker: 1
           gpus-per-worker: 4
@@ -7698,7 +7614,6 @@ musespark-fp4-gb300-dynamo-sglang-agentic-dflash:
       - spec-decoding: draft_model
         conc-list: [16]
         kv-offloading: none
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c16
         worker:
           num-worker: 1
@@ -7709,7 +7624,6 @@ musespark-fp4-gb300-dynamo-sglang-agentic-dflash:
       - spec-decoding: draft_model
         conc-list: [8]
         kv-offloading: none
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c8
         worker:
           num-worker: 1
@@ -7720,7 +7634,6 @@ musespark-fp4-gb300-dynamo-sglang-agentic-dflash:
       - spec-decoding: draft_model
         conc-list: [14]
         kv-offloading: none
-        num-nodes: 2
         srt-recipe: agg-variants.yaml:override_tp8_c14
         worker:
           num-worker: 1
@@ -7731,7 +7644,6 @@ musespark-fp4-gb300-dynamo-sglang-agentic-dflash:
       - spec-decoding: draft_model
         conc-list: [10]
         kv-offloading: none
-        num-nodes: 2
         srt-recipe: agg-variants.yaml:override_tp8_c10
         worker:
           num-worker: 1
@@ -7742,7 +7654,6 @@ musespark-fp4-gb300-dynamo-sglang-agentic-dflash:
       - spec-decoding: draft_model
         conc-list: [4]
         kv-offloading: none
-        num-nodes: 2
         srt-recipe: agg-variants.yaml:override_tp8_c4
         worker:
           num-worker: 1
@@ -7753,7 +7664,6 @@ musespark-fp4-gb300-dynamo-sglang-agentic-dflash:
       - spec-decoding: draft_model
         conc-list: [3]
         kv-offloading: none
-        num-nodes: 2
         srt-recipe: agg-variants.yaml:override_tp8_c3
         worker:
           num-worker: 1
@@ -7766,7 +7676,6 @@ musespark-fp4-gb300-dynamo-sglang-agentic-dflash:
         conc-list: [40]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c40
         worker:
           num-worker: 1
@@ -7778,7 +7687,6 @@ musespark-fp4-gb300-dynamo-sglang-agentic-dflash:
         conc-list: [32]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c32
         worker:
           num-worker: 1
@@ -7790,7 +7698,6 @@ musespark-fp4-gb300-dynamo-sglang-agentic-dflash:
         conc-list: [20]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c20
         worker:
           num-worker: 1
@@ -7815,7 +7722,6 @@ musespark-fp4-gb300-trt-agentic-dflash:
       - spec-decoding: draft_model
         kv-offloading: none
         conc-list: [1]
-        num-nodes: 2
         srt-recipe: agg-variants.yaml:override_tep8_c1
         worker:
           num-worker: 1
@@ -7828,7 +7734,6 @@ musespark-fp4-gb300-trt-agentic-dflash:
         kv-offloading: dram
         kv-offload-backend: { name: native }
         conc-list: [1]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tep4_c1
         worker:
           num-worker: 1
@@ -7840,7 +7745,6 @@ musespark-fp4-gb300-trt-agentic-dflash:
         kv-offloading: dram
         kv-offload-backend: { name: native }
         conc-list: [4]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tep4_c4
         worker:
           num-worker: 1
@@ -7852,7 +7756,6 @@ musespark-fp4-gb300-trt-agentic-dflash:
         kv-offloading: dram
         kv-offload-backend: { name: native }
         conc-list: [8]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tep4_c8
         worker:
           num-worker: 1
@@ -7865,7 +7768,6 @@ musespark-fp4-gb300-trt-agentic-dflash:
         kv-offloading: dram
         kv-offload-backend: { name: native }
         conc-list: [20]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tep4_c20
         worker:
           num-worker: 1
@@ -7877,7 +7779,6 @@ musespark-fp4-gb300-trt-agentic-dflash:
         kv-offloading: dram
         kv-offload-backend: { name: native }
         conc-list: [32]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tep4_c32
         worker:
           num-worker: 1
@@ -7889,7 +7790,6 @@ musespark-fp4-gb300-trt-agentic-dflash:
         kv-offloading: dram
         kv-offload-backend: { name: native }
         conc-list: [48]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tep4_c48
         worker:
           num-worker: 1
@@ -8007,7 +7907,6 @@ glm5.2-fp4-b300-dynamo-sglang-agentic-agg-tp4:
         conc-list: [1]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        num-nodes: 1
         srt-recipe: agg-tp4-variants.yaml:override_c1
         worker:
           num-worker: 1
@@ -8019,7 +7918,6 @@ glm5.2-fp4-b300-dynamo-sglang-agentic-agg-tp4:
         conc-list: [8]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        num-nodes: 1
         srt-recipe: agg-tp4-variants.yaml:override_c8
         worker:
           num-worker: 1
@@ -8031,7 +7929,6 @@ glm5.2-fp4-b300-dynamo-sglang-agentic-agg-tp4:
         conc-list: [16]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        num-nodes: 1
         srt-recipe: agg-tp4-variants.yaml:override_c16
         worker:
           num-worker: 1
@@ -8043,7 +7940,6 @@ glm5.2-fp4-b300-dynamo-sglang-agentic-agg-tp4:
         conc-list: [20]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        num-nodes: 1
         srt-recipe: agg-tp4-variants.yaml:override_c20
         worker:
           num-worker: 1
@@ -8055,7 +7951,6 @@ glm5.2-fp4-b300-dynamo-sglang-agentic-agg-tp4:
         conc-list: [24]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        num-nodes: 1
         srt-recipe: agg-tp4-variants.yaml:override_c24
         worker:
           num-worker: 1
@@ -8067,7 +7962,6 @@ glm5.2-fp4-b300-dynamo-sglang-agentic-agg-tp4:
         conc-list: [32]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        num-nodes: 1
         srt-recipe: agg-tp4-variants.yaml:override_c32
         worker:
           num-worker: 1
@@ -8079,7 +7973,6 @@ glm5.2-fp4-b300-dynamo-sglang-agentic-agg-tp4:
         conc-list: [48]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        num-nodes: 1
         srt-recipe: agg-tp4-variants.yaml:override_c48
         worker:
           num-worker: 1
@@ -8218,25 +8111,21 @@ minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-agg:
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [1]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c1
         worker: { num-worker: 1, gpus-per-worker: 4, tp: 4, ep: 1, dp-attn: false }
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [4]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c4
         worker: { num-worker: 1, gpus-per-worker: 4, tp: 4, ep: 1, dp-attn: false }
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [8]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c8
         worker: { num-worker: 1, gpus-per-worker: 4, tp: 4, ep: 1, dp-attn: false }
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [16]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c16
         worker: { num-worker: 1, gpus-per-worker: 4, tp: 4, ep: 1, dp-attn: false }
     - search-space:
@@ -8244,14 +8133,12 @@ minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-agg:
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple }
         conc-list: [32]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c32
         worker: { num-worker: 1, gpus-per-worker: 4, tp: 4, ep: 1, dp-attn: false }
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple }
         conc-list: [40]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c40
         worker: { num-worker: 1, gpus-per-worker: 4, tp: 4, ep: 1, dp-attn: false }
 
@@ -8348,31 +8235,26 @@ minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg:
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [1]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c1
         worker: { num-worker: 1, gpus-per-worker: 4, tp: 4, ep: 1, dp-attn: false }
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [4]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c4
         worker: { num-worker: 1, gpus-per-worker: 4, tp: 4, ep: 1, dp-attn: false }
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [8]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c8
         worker: { num-worker: 1, gpus-per-worker: 4, tp: 4, ep: 1, dp-attn: false }
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [16]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c16
         worker: { num-worker: 1, gpus-per-worker: 4, tp: 4, ep: 1, dp-attn: false }
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [32]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c32
         worker: { num-worker: 1, gpus-per-worker: 4, tp: 4, ep: 1, dp-attn: false }
     - search-space:
@@ -8380,21 +8262,18 @@ minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg:
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple }
         conc-list: [40]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c40
         worker: { num-worker: 1, gpus-per-worker: 4, tp: 4, ep: 1, dp-attn: false }
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple }
         conc-list: [48]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c48
         worker: { num-worker: 1, gpus-per-worker: 4, tp: 4, ep: 1, dp-attn: false }
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple }
         conc-list: [56]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c56
         worker: { num-worker: 1, gpus-per-worker: 4, tp: 4, ep: 1, dp-attn: false }
 

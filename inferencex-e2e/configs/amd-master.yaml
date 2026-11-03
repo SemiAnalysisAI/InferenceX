@@ -64,13 +64,13 @@ dsr1-fp4-mi355x-atom:
         ep: 1
         conc-start: 4
         conc-end: 256
-        srt-recipe: 8k1k.yaml
+        srt-recipe: 8k1k.yaml:zip_override_tp4_ep1*
       - gpus-per-worker: 8
         tp: 8
         ep: 1
         conc-start: 4
         conc-end: 4
-        srt-recipe: 8k1k.yaml
+        srt-recipe: 8k1k.yaml:zip_override_tp8_ep1*
 
 dsr1-fp4-mi355x-atom-mtp:
   image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
@@ -883,9 +883,9 @@ glm5.2-fp4-mi355x-atom-agentic-mtp:
   scenarios:
     agentic-coding:
     - search-space:
-       - { gpus-per-worker: 4, tp: 4, kv-offloading: none, conc-list: [1, 2, 4, 8, 10], spec-decoding: mtp, srt-recipe: agentic.yaml }
-       - { gpus-per-worker: 4, tp: 4, dcp-size: 4, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.6.dev139+gf22dec28" }, conc-list: [16, 24, 32, 40, 48], spec-decoding: mtp, srt-recipe: agentic.yaml }
-       - { gpus-per-worker: 8, tp: 8, kv-offloading: none, conc-list: [1, 2, 4], spec-decoding: mtp, srt-recipe: agentic.yaml }
+       - { gpus-per-worker: 4, tp: 4, kv-offloading: none, conc-list: [1, 2, 4, 8, 10], spec-decoding: mtp, srt-recipe: agentic.yaml:override_tp4_* }
+       - { gpus-per-worker: 4, tp: 4, dcp-size: 4, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.6.dev139+gf22dec28" }, conc-list: [16, 24, 32, 40, 48], spec-decoding: mtp, srt-recipe: agentic.yaml:override_tp4_* }
+       - { gpus-per-worker: 8, tp: 8, kv-offloading: none, conc-list: [1, 2, 4], spec-decoding: mtp, srt-recipe: agentic.yaml:override_tp8_* }
 
 # GSM8K for the GLM-5.2 mono decode. The agentic selector evals one point per
 # group, at the highest concurrency, which for the key above is DCP4 C48 with
@@ -904,7 +904,7 @@ glm5.2-fp4-mi355x-atom-agentic-mtp-mono:
   scenarios:
     agentic-coding:
     - search-space:
-      - { gpus-per-worker: 4, tp: 4, kv-offloading: none, conc-list: [1, 2], spec-decoding: mtp, srt-recipe: agentic.yaml }
+      - { gpus-per-worker: 4, tp: 4, kv-offloading: none, conc-list: [1, 2], spec-decoding: mtp, srt-recipe: agentic.yaml:override_tp4_* }
 
 # Upstream ROCm nightly rather than the deepseekv41-flash-0909 release tag: that
 # tag predates vllm-project/vllm#56503, which moves the mHC delayed pre block off
@@ -1014,8 +1014,8 @@ dsv41flash-fp4-mi355x-atom-agentic-dspark:
   scenarios:
     agentic-coding:
     - search-space:
-      - { gpus-per-worker: 2, tp: 2, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 6, 8, 16, 32, 64], srt-recipe: agentic.yaml }
-      - { gpus-per-worker: 4, tp: 4, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 8, 32], srt-recipe: agentic.yaml }
+      - { gpus-per-worker: 2, tp: 2, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 6, 8, 16, 32, 64], srt-recipe: agentic.yaml:override_tp2_* }
+      - { gpus-per-worker: 4, tp: 4, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 8, 32], srt-recipe: agentic.yaml:override_tp4_* }
 
 # The golden acceptance curve remains the provisional GLM-5.2-derived curve
 # documented in infx/golden_al_distribution/glm5.3_mtp.yaml.
