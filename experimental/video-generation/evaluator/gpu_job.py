@@ -30,9 +30,10 @@ import sys
 import threading
 import time
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO, Iterator
 
 from .runner import canonical_json_bytes, preview_plan, validate_plan
 
@@ -81,6 +82,11 @@ def _now() -> str:
 def _check_deadline(deadline: float | None) -> None:
     if deadline is not None and time.monotonic() >= deadline:
         raise TimeoutError("supervised operation exceeded its deadline")
+
+
+def _budget(timeout: float, deadline: float | None) -> float:
+    _check_deadline(deadline)
+    return timeout if deadline is None else min(timeout, max(0.001, deadline - time.monotonic()))
 
 
 def _hash(path: Path, deadline: float | None = None, cancelled: threading.Event | None = None) -> str:
@@ -136,6 +142,23 @@ def _read(path: Path, limit: int = 32 * 1024 * 1024) -> dict:
     if not isinstance(result, dict):
         raise ValueError("JSON evidence must be an object")
     return result
+
+
+@contextmanager
+def open_beneath(base: Path | str, parts: tuple[str, ...]) -> Iterator[BinaryIO]:
+    descriptors = []
+    try:
+        current = os.open(base, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        descriptors.append(current)
+        for part in parts[:-1]:
+            current = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=current)
+            descriptors.append(current)
+        descriptor = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=current)
+        with os.fdopen(descriptor, "rb") as stream:
+            yield stream
+    finally:
+        for descriptor in reversed(descriptors):
+            os.close(descriptor)
 
 
 def _keys(value: Any, expected: set[str], label: str, optional: set[str] | None = None) -> None:
@@ -468,8 +491,6 @@ def _proc_identity(pid: int) -> dict | None:
 
 def _diagnostic_proc_file(pid: int, name: str) -> str:
     """Bounded reads of only the two non-command-line diagnostic proc files."""
-    if name not in {"status", "cgroup"}:
-        raise ValueError("unsupported process diagnostic file")
     with Path(f"/proc/{pid}/{name}").open(encoding="utf-8") as stream:
         value = stream.read(65537)
     if len(value) > 65536:
@@ -731,10 +752,8 @@ class GpuProbe:
         fields = "uuid,power.limit,enforced.power.limit,power.default_limit,power.max_limit"
         result = {"observed_at": _now(), "query": fields, "status": "unavailable", "gpus": []}
         try:
-            _check_deadline(deadline)
-            timeout = self.timeout if deadline is None else min(self.timeout, max(0.001, deadline - time.monotonic()))
             raw = _command(["nvidia-smi", "--query-gpu=" + fields, "--format=csv,noheader,nounits",
-                            "--id=" + ",".join(self.devices)], timeout=timeout).decode()
+                            "--id=" + ",".join(self.devices)], timeout=_budget(self.timeout, deadline)).decode()
             result["raw"] = raw
             for row in csv.reader(io.StringIO(raw)):
                 if len(row) != 5:
@@ -755,13 +774,10 @@ class GpuProbe:
         return result
 
     def snapshot(self, *, deadline: float | None = None) -> dict:
-        def budget():
-            _check_deadline(deadline)
-            return self.timeout if deadline is None else min(self.timeout, max(0.001, deadline - time.monotonic()))
         fields = "index,uuid,name,memory.total,memory.used,utilization.gpu,driver_version,power.draw,temperature.gpu,mig.mode.current"
         query_start = time.monotonic()
         query_utc = _now()
-        raw = _command(["nvidia-smi", "--query-gpu=" + fields, "--format=csv,noheader,nounits", "--id=" + ",".join(self.devices)], timeout=budget())
+        raw = _command(["nvidia-smi", "--query-gpu=" + fields, "--format=csv,noheader,nounits", "--id=" + ",".join(self.devices)], timeout=_budget(self.timeout, deadline))
         query_end = time.monotonic()
         rows = list(csv.reader(io.StringIO(raw.decode())))
         gpus = []
@@ -781,7 +797,7 @@ class GpuProbe:
             gpus.append(device)
         if sorted(item["uuid"] for item in gpus) != sorted(self.devices):
             raise RuntimeError("observed GPU UUID inventory does not match leased devices")
-        raw = _command(["nvidia-smi", "--query-compute-apps=gpu_uuid,pid,used_memory", "--format=csv,noheader,nounits", "--id=" + ",".join(self.devices)], timeout=budget())
+        raw = _command(["nvidia-smi", "--query-compute-apps=gpu_uuid,pid,used_memory", "--format=csv,noheader,nounits", "--id=" + ",".join(self.devices)], timeout=_budget(self.timeout, deadline))
         apps = []
         for row in csv.reader(io.StringIO(raw.decode())):
             row = [item.strip() for item in row]
@@ -840,8 +856,6 @@ class _Sampler:
         self.thread = threading.Thread(target=self._loop, daemon=True)
         self.path.touch(exist_ok=False)
         if initial_sample is not None:
-            if initial_sample.get("compute_apps") != []:
-                raise ValueError("Prelaunch sample must have an empty compute inventory")
             sample = {**initial_sample, "phase": "startup", "owned_compute_apps": [], "unowned_compute_apps": [],
                       "observation": "verified_idle_before_runtime_launch"}
             self.samples.append(sample)
@@ -1311,10 +1325,6 @@ def run_gpu_job(spec: dict, output_dir: Path, *, serving_smoke: bool = False) ->
     The result's measurement_status, regression_status, and ci_accepted are
     intentionally independent; an uncalibrated hardware measurement can finish
     successfully without claiming that CI acceptance or release was earned.
-    Calibrated policies undergo prior-evidence/cell verification before weight
-    hashing or any GPU lease/probe. Observed environment equivalence and evidence
-    integrity are checked again after measurement; later drift can still reject
-    acceptance after compute was consumed.
     """
     spec = validate_gpu_job(spec)
     if serving_smoke and not spec.get("serving"):

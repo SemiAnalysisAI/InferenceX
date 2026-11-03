@@ -20,6 +20,10 @@ SILENCE_AMPLITUDE = 1e-4  # -80 dBFS sample threshold, also used for RMS presenc
 CLIPPING_AMPLITUDE = 1.0 - 1.0 / 32768.0
 FROZEN_MAE = 1.0 / 1024.0
 SPECTRAL_WINDOW_SAMPLES = 1024
+H3_ENCODING = {
+    "video_codec": "libx264", "preset": "ultrafast", "crf": 18,
+    "pixel_format": "yuv420p", "audio_codec": "aac",
+}
 
 
 def _libraries() -> tuple[Any, Any]:
@@ -77,15 +81,12 @@ def _validate_expected(expected: dict) -> None:
     for key in {"audio_required", "requires_motion", "requires_sound"} & expected.keys():
         if not isinstance(expected[key], bool):
             raise ValueError(f"expected.{key} must be a boolean")
-    if "encoding" in expected:
-        encoding = expected["encoding"]
-        if not isinstance(encoding, dict) or encoding != {
-            "video_codec": "libx264", "preset": "ultrafast", "crf": 18,
-            "pixel_format": "yuv420p", "audio_codec": "aac",
-            "audio_sample_rate_hz": expected.get("audio_sample_rate_hz"),
-            "audio_channels": expected.get("audio_channels"),
-        }:
-            raise ValueError("expected.encoding must match the supported explicit H3 encoder contract")
+    if "encoding" in expected and expected["encoding"] != {
+        **H3_ENCODING,
+        "audio_sample_rate_hz": expected.get("audio_sample_rate_hz"),
+        "audio_channels": expected.get("audio_channels"),
+    }:
+        raise ValueError("expected.encoding must match the supported explicit H3 encoder contract")
 
 
 def _audio_array(frame: Any, np: Any) -> Any:
@@ -236,7 +237,6 @@ def _audio_analysis(container: Any, stream: Any, np: Any, deadline: float | None
     rate = channels = None
     names: list[str] = []
     sum_squares = sums = peaks = silent = clipped = cross = None
-    stable = True
     previous_end = None
     max_gap = 0.0
     for frame in container.decode(stream):
@@ -255,7 +255,6 @@ def _audio_analysis(container: Any, stream: Any, np: Any, deadline: float | None
             clipped = np.zeros(channels, dtype=np.int64)
             cross = np.zeros((channels, channels), dtype=np.float64)
         if this_rate != rate or this_channels != channels or names != [channel.name for channel in frame.layout.channels]:
-            stable = False
             raise ValueError("audio sample rate or channel layout changes inside the stream")
         timestamp = _time(frame)
         if timestamp is not None and previous_end is not None:
@@ -290,7 +289,7 @@ def _audio_analysis(container: Any, stream: Any, np: Any, deadline: float | None
         "sample_rate_hz": rate,
         "channels": channels,
         "channel_names": names,
-        "format_stable": stable,
+        "format_stable": True,
         "frame_count": frame_count,
         "sample_count": sample_count,
         "duration_seconds": sample_count / rate if rate else None,

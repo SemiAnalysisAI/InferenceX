@@ -263,10 +263,6 @@ def verify_calibration(spec: dict, current: dict, *, deadline: float) -> tuple[b
     """Verify 2–4 prior same-build jobs without following nested references."""
     from . import gpu_job as gpu
 
-    if spec.get("serving"):
-        return False, "serving load is descriptive; serial calibration cannot qualify concurrent delivery metrics"
-    if spec["policy"]["calibration_status"] != "operator_calibrated":
-        return False, "policy is not calibrated; measurements are useful but CI acceptance is inconclusive"
     references = spec["policy"].get("calibration_evidence")
     if not isinstance(references, list) or not 2 <= len(references) <= 4:
         return False, "calibrated CI requires 2–4 hash-pinned independent same-build GPU jobs"

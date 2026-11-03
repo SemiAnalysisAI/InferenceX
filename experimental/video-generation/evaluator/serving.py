@@ -64,6 +64,14 @@ def validate_window(run: dict) -> int:
     return peak
 
 
+def _quantiles(ordered: list) -> dict:
+    return {
+        "p50": statistics.median(ordered) if ordered else None,
+        "p90": ordered[math.ceil(len(ordered) * .9) - 1] if len(ordered) >= 10 else None,
+        "p95": ordered[math.ceil(len(ordered) * .95) - 1] if len(ordered) >= 20 else None,
+    }
+
+
 def summarize(run: dict) -> dict:
     load = run["configuration"]["serving"]
     records = [r for r in run["records"] if r["phase"] == "measurement"]
@@ -81,9 +89,7 @@ def summarize(run: dict) -> dict:
         "client_ready_latency_seconds": {
             "values": values, "sample_count": len(values), "valid_clip_count": len(valid),
             "population": "technically valid measured requests; failures remain in completion counts",
-            "p50": statistics.median(values) if values else None,
-            "p90": values[math.ceil(len(values) * .9) - 1] if len(values) >= 10 else None,
-            "p95": values[math.ceil(len(values) * .95) - 1] if len(values) >= 20 else None,
+            **_quantiles(values),
             "quantile_method": "nearest_rank for P90/P95; sample floors 10/20 are not statistical qualification",
         },
         "submitted": sum(r["attempted"] for r in records),
@@ -110,10 +116,7 @@ def summarize(run: dict) -> dict:
             present = [value for value in samples if _finite(value) and value >= 0]
             ordered = sorted(present) if len(present) == len(samples) else []
             return {"values": sorted(present), "sample_count": len(present), "valid_clip_count": len(valid),
-                    "missing_count": len(samples) - len(present),
-                    "p50": statistics.median(ordered) if ordered else None,
-                    "p90": ordered[math.ceil(len(ordered) * .9) - 1] if len(ordered) >= 10 else None,
-                    "p95": ordered[math.ceil(len(ordered) * .95) - 1] if len(ordered) >= 20 else None}
+                    "missing_count": len(samples) - len(present), **_quantiles(ordered)}
 
         result.update(queue_delay_seconds=distribution("queue_delay_seconds"),
                       server_ready_latency_seconds=distribution("server_ready_latency_seconds"),

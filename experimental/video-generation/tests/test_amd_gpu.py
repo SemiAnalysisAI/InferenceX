@@ -29,17 +29,13 @@ def observations():
     }
 
 
-@pytest.mark.parametrize("legacy_static", [
-    True,
-], ids=['True'])
-def test_snapshot_preserves_zero_memory_process_and_measured_power(monkeypatch, legacy_static):
+def test_snapshot_preserves_zero_memory_process_and_measured_power(monkeypatch):
     data = observations()
-    if legacy_static:
-        data["static"] = data["static"]["gpu_data"]
-        data["static"][0]["limit"] = {
-            "socket_power": {"value": 1400, "unit": "W"},
-            "max_power": {"value": 1400, "unit": "W"},
-        }
+    data["static"] = data["static"]["gpu_data"]
+    data["static"][0]["limit"] = {
+        "socket_power": {"value": 1400, "unit": "W"},
+        "max_power": {"value": 1400, "unit": "W"},
+    }
     monkeypatch.setattr(amd, "_command", lambda command, **kwargs: json.dumps(data[command[1]]))
     probe = amd.AmdGpuProbe([GPU], 2)
     result = probe.snapshot()
@@ -70,7 +66,7 @@ def test_hip_order_joins_physical_identity_instead_of_smi_ordinal(monkeypatch):
 @pytest.mark.parametrize("mutation", [
     lambda rows: rows.append(dict(rows[0])),
     lambda rows: rows[0].update(partition_id=1),
-], ids=['<lambda>0', '<lambda>1'])
+])
 def test_ambiguous_or_partitioned_device_inventory_is_rejected(mutation):
     rows = observations()["list"]
     mutation(rows)
@@ -81,7 +77,7 @@ def test_ambiguous_or_partitioned_device_inventory_is_rejected(mutation):
 @pytest.mark.parametrize("change", [
     "start_ticks",
     "memory",
-], ids=['start_ticks', 'memory'])
+])
 def test_monitor_exception_rejects_changed_or_active_context(monkeypatch, change):
     identity = {"pid": 42, "start_ticks": 50, "executable": "/opt/gpuagent/gpuagent", "uid": 0}
     receipt = {"status": "verified", "process": identity}
@@ -89,10 +85,6 @@ def test_monitor_exception_rejects_changed_or_active_context(monkeypatch, change
     observed = dict(identity)
     if change == "memory":
         app["memory_used_mib"] = 1
-    elif change == "unverified":
-        receipt["status"] = "unverified"
-    elif change == "executable":
-        observed[change] = "/tmp/other"
     else:
         observed[change] += 1
     monkeypatch.setattr(amd, "monitor_process", lambda pid: observed)

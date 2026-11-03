@@ -15,6 +15,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
+from .media import analyze_media, compare_media
+from .runner import _slots, canonical_json_bytes, valid_numerical_identity, validate_plan
+
 
 _POLICY_NUMBERS = {
     "max_latency_increase_fraction": (0.0, None),
@@ -22,19 +25,6 @@ _POLICY_NUMBERS = {
     "min_audio_spectral_cosine": (-1.0, 1.0),
     "max_audio_rms_ratio_error": (0.0, None),
 }
-
-
-def analyze_media(path: Path, expected: dict | None = None) -> dict:
-    """Load the optional media backend only when a comparison needs it."""
-    from evaluator.media import analyze_media as implementation
-
-    return implementation(path, expected=expected)
-
-
-def compare_media(baseline: Path, candidate: Path) -> dict:
-    from evaluator.media import compare_media as implementation
-
-    return implementation(baseline, candidate)
 
 
 def _finite(value: Any, *, minimum: float | None = None) -> bool:
@@ -46,18 +36,9 @@ def _finite(value: Any, *, minimum: float | None = None) -> bool:
     )
 
 
-def _canonical(value: Any) -> bytes:
-    return json.dumps(
-        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
-    ).encode("utf-8")
-
-
 def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
     with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+        return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
 def _reject_nonfinite(value: str) -> None:
@@ -95,13 +76,11 @@ def _policy(policy: dict) -> dict:
         ):
             raise ValueError(f"policy.{name} must be an explicit, finite value in range")
     # Reject non-JSON extras as well; retain any declared calibration provenance.
-    return json.loads(_canonical(policy))
+    return json.loads(canonical_json_bytes(policy))
 
 
-def _planned_slots(plan: dict) -> dict[str, dict]:
+def _planned_slots(plan: dict) -> tuple[dict[str, dict], dict[str, dict]]:
     if "fairness" in plan and plan.get("model_id") == "MiniMaxAI/MiniMax-H3":
-        from .runner import validate_plan
-
         validate_plan(plan)
     for field in ("plan_id", "model_id", "model_revision"):
         _text(plan, field, "plan")
@@ -147,14 +126,10 @@ def _planned_slots(plan: dict) -> dict[str, dict]:
                 raise ValueError(f"case.{field} must be an explicit boolean")
     if len(set(ids)) != len(ids):
         raise ValueError("plan contains duplicate case_id values")
-    return {
-        f"measurement-r{repetition:03d}-c{index:03d}": {
-            **case,
-            "repetition": repetition,
-        }
-        for repetition in range(1, repetitions + 1)
-        for index, case in enumerate(cases, start=1)
-    }
+    slots: dict[str, dict[str, dict]] = {"warmup": {}, "measurement": {}}
+    for slot in _slots(plan):
+        slots[slot["phase"]][slot["slot_id"]] = slot
+    return slots["warmup"], slots["measurement"]
 
 
 def _artifact(run_dir: Path, record: dict) -> Path | None:
@@ -244,7 +219,7 @@ def _load_run(directory: Path) -> tuple[dict, dict[str, dict]]:
     if run.get("evidence_kind") not in {"operator_endpoint", "live_h3", "fixture", "imported_media"}:
         raise ValueError("run must declare its actual evidence_kind")
     plan = run.get("plan")
-    if not isinstance(plan, dict) or hashlib.sha256(_canonical(plan)).hexdigest() != run["plan_sha256"]:
+    if not isinstance(plan, dict) or hashlib.sha256(canonical_json_bytes(plan)).hexdigest() != run["plan_sha256"]:
         raise ValueError("run plan SHA256 does not match its canonical plan content")
     if plan.get("plan_id") != run["plan_id"]:
         raise ValueError("run.plan_id does not match its embedded plan")
@@ -257,7 +232,7 @@ def _load_run(directory: Path) -> tuple[dict, dict[str, dict]]:
         if configuration[field] != plan.get(field):
             raise ValueError(f"configuration.{field} does not match the frozen plan")
     unsigned_configuration = {key: value for key, value in configuration.items() if key != "configuration_sha256"}
-    configuration_digest = hashlib.sha256(_canonical(unsigned_configuration)).hexdigest()
+    configuration_digest = hashlib.sha256(canonical_json_bytes(unsigned_configuration)).hexdigest()
     if not (run.get("configuration_sha256") or configuration.get("configuration_sha256")):
         raise ValueError("run must declare its configuration SHA256")
     for declared in (run.get("configuration_sha256"), configuration.get("configuration_sha256")):
@@ -276,11 +251,7 @@ def _load_run(directory: Path) -> tuple[dict, dict[str, dict]]:
             raise ValueError("imported media cannot establish serving load")
     elif type(measurement.get("concurrency")) is not int or measurement["concurrency"] != 1:
         raise ValueError("MVP comparison requires serial concurrency=1 measurements")
-    planned = _planned_slots(plan)
-    planned_warmups = {
-        f"warmup-{index:03d}": {**(plan.get("warmup_case") or plan["cases"][(index - 1) % len(plan["cases"])]), "repetition": 0}
-        for index in range(1, plan["warmup_runs"] + 1)
-    }
+    planned_warmups, planned = _planned_slots(plan)
     records = run.get("records")
     if not isinstance(records, list):
         raise ValueError("run.records must be a list")
@@ -313,7 +284,7 @@ def _load_run(directory: Path) -> tuple[dict, dict[str, dict]]:
             if slot_id not in planned_warmups:
                 raise ValueError(f"unexpected warmup slot: {slot_id}")
             for field in ("case_id", "prompt", "seed", "repetition"):
-                if _canonical(record.get(field)) != _canonical(planned_warmups[slot_id].get(field)):
+                if canonical_json_bytes(record.get(field)) != canonical_json_bytes(planned_warmups[slot_id].get(field)):
                     raise ValueError(f"{slot_id}: {field} differs from planned warmup")
             if measurements:
                 raise ValueError("warmup slots must precede measurement slots")
@@ -330,7 +301,7 @@ def _load_run(directory: Path) -> tuple[dict, dict[str, dict]]:
             raise ValueError(f"unexpected measurement slot: {slot_id}")
         case = planned[slot_id]
         for field in ("case_id", "prompt", "seed", "repetition"):
-            if _canonical(record.get(field)) != _canonical(case.get(field)):
+            if canonical_json_bytes(record.get(field)) != canonical_json_bytes(case.get(field)):
                 raise ValueError(f"{slot_id}: {field} differs from the frozen plan")
         measurements[slot_id] = {**record, "_verified_path": verified_path}
     missing = set(planned) - set(measurements)
@@ -570,7 +541,7 @@ def _performance_differences(baseline: dict, candidate: dict, slots: list[dict])
     left, right = baseline["configuration"], candidate["configuration"]
     if left.get("serving") or right.get("serving"):
         differences.append("serving delivery measurements are descriptive; the existing serial regression policy is not calibrated for serving load")
-        if _canonical(left.get("serving")) != _canonical(right.get("serving")):
+        if canonical_json_bytes(left.get("serving")) != canonical_json_bytes(right.get("serving")):
             differences.append("serving load or delivery deadline differs")
     live = bool({"operator_endpoint", "live_h3"} & {baseline["evidence_kind"], candidate["evidence_kind"]})
     for field in ("hardware_label", "runtime"):
@@ -583,7 +554,7 @@ def _performance_differences(baseline: dict, candidate: dict, slots: list[dict])
             continue
         if absent_left or absent_right:
             differences.append(f"client {field} is missing")
-        elif _canonical(a) != _canonical(b):
+        elif canonical_json_bytes(a) != canonical_json_bytes(b):
             differences.append(f"client {field} differs")
     # Re-analysis versions must agree with the analyzer that was timed. Otherwise
     # a changed client evaluator could be mistaken for a server speed regression.
@@ -605,7 +576,7 @@ def _performance_differences(baseline: dict, candidate: dict, slots: list[dict])
                     "numpy_version": implementation.get("numpy_version"),
                     "ffmpeg_libraries": implementation.get("ffmpeg_libraries"),
                 }
-                if any(_canonical(actual[field]) != _canonical(pin[field]) for field in actual):
+                if any(canonical_json_bytes(actual[field]) != canonical_json_bytes(pin[field]) for field in actual):
                     differences.append(f"{label} media evaluator versions are unverified or differ from fresh analysis")
                     break
     return list(dict.fromkeys(differences))
@@ -638,19 +609,17 @@ def compare_runs(baseline_dir: Path, candidate_dir: Path, *, policy: dict) -> di
     fairness_comparison = "fairness" in plan
     left_config, right_config = baseline_run["configuration"], candidate_run["configuration"]
     numerical_identity = left_config.get("numerical_identity")
-    from .runner import valid_numerical_identity
-
     complete_identity = valid_numerical_identity(numerical_identity, plan, left_config["runtime_revision"])
     numerical_regression = fairness_comparison and (
         left_config["runtime"] == right_config["runtime"]
         and left_config["runtime_revision"] == right_config["runtime_revision"]
         and left_config["hardware_label"] == right_config["hardware_label"]
         and complete_identity
-        and _canonical(numerical_identity) == _canonical(right_config.get("numerical_identity"))
+        and canonical_json_bytes(numerical_identity) == canonical_json_bytes(right_config.get("numerical_identity"))
     )
     cross_engine = left_config["runtime"] != right_config["runtime"]
     diagnostic_quality = cross_engine or (fairness_comparison and not numerical_regression)
-    planned = _planned_slots(plan)
+    _, planned = _planned_slots(plan)
     slots = []
     for slot_id, case in planned.items():
         baseline = _observation(baseline_records[slot_id], _expected(plan, case), timing_measured=baseline_run["evidence_kind"] != "imported_media", latency_field="submit_to_media_seconds" if baseline_run["configuration"].get("serving") else "latency_seconds")

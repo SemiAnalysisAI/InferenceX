@@ -152,9 +152,7 @@ def fixture_server():
                 state["requests"].append(("GET", self.path))
                 state["auth"].append(self.headers.get("Authorization"))
                 if self.path.endswith("/content"):
-                    if state["mode"] == "oversized":
-                        self.send(200, FIXTURE_BYTES, announced_length=runner.MAX_MEDIA_BYTES + 1)
-                    elif state["mode"] == "truncated":
+                    if state["mode"] == "truncated":
                         self.send(200, FIXTURE_BYTES, announced_length=len(FIXTURE_BYTES) + 10)
                     else:
                         self.send(200, FIXTURE_BYTES, headers={"Content-Type": "video/mp4"})
@@ -190,12 +188,8 @@ def execute(plan, output_dir, endpoint, **kwargs):
     )
 
 
-
-
 @pytest.mark.parametrize("runtime", ["sglang", "vllm-omni"])
-@pytest.mark.parametrize(("duration", "frames"), [(4, 107)])
-def test_local_http_fixture_lifecycle_and_identity(plan, tmp_path, mocked_media, fixture_server, runtime, duration, frames):
-    plan["generation"].update(duration_seconds=duration, frame_count=frames)
+def test_local_http_fixture_lifecycle_and_identity(plan, tmp_path, mocked_media, fixture_server, runtime):
     output = tmp_path / runtime
     intents_seen = []
 
@@ -241,19 +235,19 @@ def test_local_http_fixture_lifecycle_and_identity(plan, tmp_path, mocked_media,
     for record in run["records"]:
         assert (output / record["artifact_path"]).read_bytes() == FIXTURE_BYTES
         assert record["sha256"] == hashlib.sha256(FIXTURE_BYTES).hexdigest()
-        assert math.isclose(record["expected_media"]["duration_seconds"], frames / 24)
+        assert math.isclose(record["expected_media"]["duration_seconds"], 107 / 24)
         assert record["expected_media"]["audio_required"] is True
     calls, _ = mocked_media
     assert len(calls) == 5
     assert all(expected["timeout_seconds"] > 0 for _, expected in calls)
     first = server["posts"][0]
     if runtime == "sglang":
-        assert first["target"] == {"duration_seconds": duration, "aspect_ratio": "16:9", "short_edge": 768}
+        assert first["target"] == {"duration_seconds": 4, "aspect_ratio": "16:9", "short_edge": 768}
         assert "fps" not in first and "num_frames" not in first
         assert first["audio_flow_shift"] == 3
     else:
         assert first["width"] == "1344"
-        assert first["num_frames"] == str(frames)
+        assert first["num_frames"] == "107"
         assert json.loads(first["extra_params"])["audio_flow_shift"] == 3
 
 
@@ -292,8 +286,6 @@ def test_fairness_request_and_disjoint_warmup_reach_local_http_fixture(
         assert all(json.loads(post["extra_params"])["video_codec_options"] == {"preset": "ultrafast", "crf": "18"} for post in server["posts"])
 
 
-
-
 def test_http_failure_is_durable_never_retried_and_aborts_unknown_jobs(plan, tmp_path, mocked_media, fixture_server):
     plan["warmup_runs"] = 0
     endpoint, state = fixture_server(mode="http_error")
@@ -324,8 +316,6 @@ def test_known_failed_job_does_not_remove_other_scheduled_attempts(plan, tmp_pat
     assert run["summary"]["failed_attempts"] == 4
     assert run["summary"]["not_started"] == 0
     assert run["abort_reason"] is None
-
-
 
 
 def test_timeout_is_bounded_and_retains_all_denominators(plan, tmp_path, mocked_media, fixture_server):
@@ -367,13 +357,12 @@ def test_failed_warmup_cannot_qualify_a_measured_run(plan, tmp_path, mocked_medi
     assert all(record["error"] == "not_started_after_failed_warmup" for record in run["records"][1:])
 
 
-@pytest.mark.parametrize("mode", ['truncated'])
-def test_download_size_and_integrity_limits(plan, tmp_path, mocked_media, fixture_server, mode):
+def test_download_size_and_integrity_limits(plan, tmp_path, mocked_media, fixture_server):
     plan["warmup_runs"] = 0
     plan["repetitions"] = 1
     plan["cases"] = plan["cases"][:1]
-    endpoint, state = fixture_server(mode=mode)
-    run = execute(plan, tmp_path / mode, endpoint)
+    endpoint, state = fixture_server(mode="truncated")
+    run = execute(plan, tmp_path / "truncated", endpoint)
     assert run["summary"]["valid"] == 0
     assert run["records"][0]["artifact_path"] is None
     assert run["records"][0]["sha256"] is None
@@ -407,11 +396,10 @@ def test_credential_is_not_persisted_or_forwarded_on_redirect(plan, tmp_path, mo
             assert b"fixture-credential-never-a-real-key" not in path.read_bytes()
 
 
-@pytest.mark.parametrize("endpoint", ['https://api.minimax.io'])
-def test_refuses_unsafe_or_hosted_endpoint_before_creating_output(plan, tmp_path, mocked_media, endpoint):
+def test_refuses_unsafe_or_hosted_endpoint_before_creating_output(plan, tmp_path, mocked_media):
     output = tmp_path / "must-not-exist"
     with pytest.raises(ValueError):
-        execute(plan, output, endpoint)
+        execute(plan, output, "https://api.minimax.io")
     assert not output.exists()
 
 
@@ -436,9 +424,8 @@ def test_missing_controls_and_revision_drift_fail_before_output(plan, tmp_path, 
     assert not output.exists()
 
 
-@pytest.mark.parametrize("change", [{'num_frames': 107}])
-def test_unsupported_or_inconsistent_generation_contracts_are_rejected(plan, change):
-    plan["generation"].update(change)
+def test_unsupported_or_inconsistent_generation_contracts_are_rejected(plan):
+    plan["generation"]["num_frames"] = 107
     with pytest.raises(ValueError):
         runner.preview_plan(plan)
 
@@ -557,14 +544,11 @@ def test_serving_failed_warmup_never_submits_measured_requests(plan, tmp_path, m
     assert run['serving']['peak_client_in_flight'] == 0
 
 
-
-
-@pytest.mark.parametrize("exception", [ConnectionError])
-def test_watchdog_deadline_wins_over_socket_teardown_errors(plan, tmp_path, mocked_media, monkeypatch, exception):
+def test_watchdog_deadline_wins_over_socket_teardown_errors(plan, tmp_path, mocked_media, monkeypatch):
     plan['warmup_runs'] = 0
     def stopped_transfer(*args, deadline, **kwargs):
         time.sleep(max(0, deadline-time.monotonic()) + .001)
-        raise exception('CPU fixture: watchdog closed transport')
+        raise ConnectionError('CPU fixture: watchdog closed transport')
     monkeypatch.setattr(runner, '_json_request', stopped_transfer)
     run = execute(plan, tmp_path / 'deadline', 'http://127.0.0.1:1', serving_concurrency=1, timeout_seconds=.01)
     assert run['serving']['outcomes']['timed_out'] == 1

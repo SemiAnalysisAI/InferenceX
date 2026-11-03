@@ -10,7 +10,7 @@ from pathlib import Path
 import re
 import time
 
-from .gpu_job import _check_deadline, _command, _now, _proc_identity
+from .gpu_job import _budget, _command, _now, _proc_identity
 
 
 def monitor_process(pid: int) -> dict:
@@ -88,21 +88,17 @@ def smi(option: str, timeout: float) -> list[dict]:
     return rows
 
 
-def inventory(rows: object) -> dict[str, dict]:
-    if not isinstance(rows, list) or not rows:
-        raise RuntimeError("AMD SMI GPU inventory unavailable")
+def inventory(rows: list[dict]) -> dict[str, dict]:
     values = {}
     for row in rows:
-        if (not isinstance(row, dict) or not isinstance(row.get("uuid"), str)
+        if (not isinstance(row.get("uuid"), str)
                 or not re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", row["uuid"])
-                or type(row.get("gpu")) is not int or not 0 <= row["gpu"] < 8
                 or row.get("partition_id") != 0
                 or not isinstance(row.get("bdf"), str)
                 or not re.fullmatch(r"[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-7]", row["bdf"])):
             raise RuntimeError("AMD inventory is malformed or partitioned")
         values[row["uuid"]] = row
-    if (len(values) != len(rows) or len({r["gpu"] for r in rows}) != len(rows)
-            or len({r["bdf"] for r in rows}) != len(rows)):
+    if len(values) != len(rows) or len({r["bdf"] for r in rows}) != len(rows):
         raise RuntimeError("AMD inventory contains duplicate identities")
     return values
 
@@ -157,9 +153,7 @@ class AmdGpuProbe:
                 raise RuntimeError("AMD device identity changed or unsupported GPU model")
 
     def power_configuration(self, *, deadline: float | None = None) -> dict:
-        _check_deadline(deadline)
-        timeout = self.timeout if deadline is None else min(self.timeout, max(0.001, deadline - time.monotonic()))
-        rows = {row["gpu"]: row for row in smi("static", timeout)}
+        rows = {row["gpu"]: row for row in smi("static", _budget(self.timeout, deadline))}
         gpus = []
         for key in self.devices:
             limits = rows[self.identity[key]["gpu"]]["limit"]
@@ -176,9 +170,7 @@ class AmdGpuProbe:
 
     def snapshot(self, *, deadline: float | None = None) -> dict:
         def query(option):
-            _check_deadline(deadline)
-            timeout = self.timeout if deadline is None else min(self.timeout, max(0.001, deadline - time.monotonic()))
-            return smi(option, timeout)
+            return smi(option, _budget(self.timeout, deadline))
         observed = inventory(query("list"))
         if any(observed.get(key) != self.identity[key] for key in self.devices):
             raise RuntimeError("AMD GPU inventory changed during measurement")

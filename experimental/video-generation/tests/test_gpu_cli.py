@@ -9,7 +9,6 @@ from types import SimpleNamespace
 import pytest
 
 from evaluator.cli import _load_mvp_object, main
-from test_gpu_job import spec as spec
 
 
 def test_gpu_preview_is_default_and_never_executes(tmp_path, monkeypatch, capsys):
@@ -30,7 +29,7 @@ def test_gpu_preview_is_default_and_never_executes(tmp_path, monkeypatch, capsys
     ({}, 0),
     ({"ci_accepted": False}, 2),
     ({"regression_status": "fail"}, 1),
-], ids=['changes0-0', 'changes1-2', 'changes4-1'])
+])
 def test_gpu_cli_never_confuses_completion_with_acceptance(tmp_path, monkeypatch, changes, expected):
     path = tmp_path / "spec.json"
     path.write_text("{}")

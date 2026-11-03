@@ -10,79 +10,57 @@ generation:
   aspect_ratio:
     value: '16:9'
     source: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:480
-    sent:
-      sglang: true
-      vllm-omni: true
+    sent: {sglang: true, vllm-omni: true}
     checked_on_clip: false
   audio_channels:
     value: 2
     source: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:481
-    sent:
-      sglang: false
-      vllm-omni: false
+    sent: {sglang: false, vllm-omni: false}
     checked_on_clip: true
   audio_flow_shift:
     value: 3.0
     source: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:482
-    sent:
-      sglang: true
-      vllm-omni: true
+    sent: {sglang: true, vllm-omni: true}
     checked_on_clip: false
   audio_sample_rate_hz:
     value: 32000
     source: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:483
-    sent:
-      sglang: false
-      vllm-omni: false
+    sent: {sglang: false, vllm-omni: false}
     checked_on_clip: true
   duration_seconds:
     value: 5
     source: huggingface/diffusers@d8c1b13c756df0059bcdb6e477a1eafcd502098d:src/diffusers/modular_pipelines/minimax_h3/before_denoise.py:198
-    sent:
-      sglang: true
-      vllm-omni: true
+    sent: {sglang: true, vllm-omni: true}
     checked_on_clip: false
   flow_shift:
     value: 12.0
     source: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:485
-    sent:
-      sglang: true
-      vllm-omni: true
+    sent: {sglang: true, vllm-omni: true}
     checked_on_clip: false
   fps:
     value: 24
     source: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:486
-    sent:
-      sglang: false
-      vllm-omni: true
+    sent: {sglang: false, vllm-omni: true}
     checked_on_clip: true
   frame_count:
     value: 124
     source: huggingface/diffusers@d8c1b13c756df0059bcdb6e477a1eafcd502098d:src/diffusers/modular_pipelines/minimax_h3/before_denoise.py:198
-    sent:
-      sglang: false
-      vllm-omni: true
+    sent: {sglang: false, vllm-omni: true}
     checked_on_clip: true
   height:
     value: 768
     source: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:488
-    sent:
-      sglang: false
-      vllm-omni: true
+    sent: {sglang: false, vllm-omni: true}
     checked_on_clip: true
   num_inference_steps:
     value: 49
     source: huggingface/diffusers@d8c1b13c756df0059bcdb6e477a1eafcd502098d:src/diffusers/schedulers/scheduling_minimax_h3.py:142
-    sent:
-      sglang: true
-      vllm-omni: true
+    sent: {sglang: true, vllm-omni: true}
     checked_on_clip: false
   width:
     value: 1344
     source: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:490
-    sent:
-      sglang: false
-      vllm-omni: true
+    sent: {sglang: false, vllm-omni: true}
     checked_on_clip: true
 prompts:
   ceramic-wheel:
@@ -223,71 +201,28 @@ sets:
       29: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/campaigns/h3-cross-hardware/formal-8s-plan.json:22
       47: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/campaigns/h3-cross-hardware/formal-8s-plan.json:29
       83: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/campaigns/h3-cross-hardware/formal-8s-plan.json:64
-    warmup_case:
-      case_id: warmup-only
-      prompt: warmup-only
-      seed: 11
+    warmup_case: {case_id: warmup-only, prompt: warmup-only, seed: 11}
     cases:
-    - case_id: ceramic-wheel
-      prompt: ceramic-wheel
-      seed: 11
-    - case_id: paper-fold
-      prompt: paper-fold
-      seed: 23
-    - case_id: wind-chimes
-      prompt: wind-chimes
-      seed: 29
-    - case_id: coffee-grinder
-      prompt: coffee-grinder
-      seed: 47
-    - case_id: dog-shake
-      prompt: dog-shake
-      seed: 83
-    - case_id: zipper-close
-      prompt: zipper-close
-      seed: 11
-    - case_id: rolling-ball
-      prompt: rolling-ball
-      seed: 23
-    - case_id: paint-brush
-      prompt: paint-brush
-      seed: 29
-    - case_id: kettle-pour
-      prompt: kettle-pour
-      seed: 47
-    - case_id: candle-light
-      prompt: candle-light
-      seed: 83
-    - case_id: book-pages
-      prompt: book-pages
-      seed: 11
-    - case_id: basketball-bounce
-      prompt: basketball-bounce
-      seed: 23
-    - case_id: window-rain
-      prompt: window-rain
-      seed: 29
-    - case_id: leaves-rake
-      prompt: leaves-rake
-      seed: 47
-    - case_id: sewing-machine
-      prompt: sewing-machine
-      seed: 83
-    - case_id: ping-pong
-      prompt: ping-pong
-      seed: 11
-    - case_id: umbrella-open
-      prompt: umbrella-open
-      seed: 23
-    - case_id: shoe-laces
-      prompt: shoe-laces
-      seed: 29
-    - case_id: ice-cubes
-      prompt: ice-cubes
-      seed: 47
-    - case_id: station-clock
-      prompt: station-clock
-      seed: 83
+      - {case_id: ceramic-wheel, prompt: ceramic-wheel, seed: 11}
+      - {case_id: paper-fold, prompt: paper-fold, seed: 23}
+      - {case_id: wind-chimes, prompt: wind-chimes, seed: 29}
+      - {case_id: coffee-grinder, prompt: coffee-grinder, seed: 47}
+      - {case_id: dog-shake, prompt: dog-shake, seed: 83}
+      - {case_id: zipper-close, prompt: zipper-close, seed: 11}
+      - {case_id: rolling-ball, prompt: rolling-ball, seed: 23}
+      - {case_id: paint-brush, prompt: paint-brush, seed: 29}
+      - {case_id: kettle-pour, prompt: kettle-pour, seed: 47}
+      - {case_id: candle-light, prompt: candle-light, seed: 83}
+      - {case_id: book-pages, prompt: book-pages, seed: 11}
+      - {case_id: basketball-bounce, prompt: basketball-bounce, seed: 23}
+      - {case_id: window-rain, prompt: window-rain, seed: 29}
+      - {case_id: leaves-rake, prompt: leaves-rake, seed: 47}
+      - {case_id: sewing-machine, prompt: sewing-machine, seed: 83}
+      - {case_id: ping-pong, prompt: ping-pong, seed: 11}
+      - {case_id: umbrella-open, prompt: umbrella-open, seed: 23}
+      - {case_id: shoe-laces, prompt: shoe-laces, seed: 29}
+      - {case_id: ice-cubes, prompt: ice-cubes, seed: 47}
+      - {case_id: station-clock, prompt: station-clock, seed: 83}
 fairness:
   schedule:
     sigma_points: 50

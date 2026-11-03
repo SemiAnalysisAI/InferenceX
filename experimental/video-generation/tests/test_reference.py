@@ -12,8 +12,6 @@ from evaluator.reference import digest, save_media, select_cases
 from specs import h3_spec
 
 
-
-
 def test_reference_retains_float_media_and_encodes_explicit_streams(tmp_path: Path) -> None:
     video = np.random.default_rng(7).random((12, 3, 32, 32), dtype=np.float32)
     audio = np.zeros((2, 16000), dtype=np.float32)
@@ -46,20 +44,10 @@ def test_reference_retains_float_media_and_encodes_explicit_streams(tmp_path: Pa
         save_media(target, video, audio, generation, encoding, threads=1, audio_bitrate=128000)
 
 
-@pytest.mark.parametrize("invalid", ['nan'])
-def test_reference_rejects_invalid_raw_outputs_before_creating_files(
-    tmp_path: Path, invalid: str
-) -> None:
+def test_reference_rejects_invalid_raw_outputs_before_creating_files(tmp_path: Path) -> None:
     video = np.zeros((1, 3, 32, 32), dtype=np.float32)
     audio = np.zeros((2, 10), dtype=np.float32)
-    if invalid == "shape":
-        video = video[:, :, :, :-1]
-    elif invalid == "nan":
-        video[0, 0, 0, 0] = np.nan
-    elif invalid == "range":
-        video[0, 0, 0, 0] = 1.1
-    else:
-        audio = audio[:, :0]
+    video[0, 0, 0, 0] = np.nan
     with pytest.raises(ValueError, match="reference"):
         save_media(
             tmp_path / "bad",
@@ -73,9 +61,8 @@ def test_reference_rejects_invalid_raw_outputs_before_creating_files(
     assert not (tmp_path / "bad").exists()
 
 
-@pytest.mark.parametrize(("error", "status"), [(RuntimeError('load failed'), 'failed')])
 def test_reference_retains_startup_failures_without_attesting_weights(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error: BaseException, status: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     plan = h3_spec.plan_for(
         h3_spec.load_spec(Path(__file__).parents[1] / "specs/h3-v0.1.yaml"), "release-v1"
@@ -87,7 +74,7 @@ def test_reference_retains_startup_failures_without_attesting_weights(
         (snapshot / name).mkdir()
 
     def fail_load(*_args: object, **_kwargs: object) -> Never:
-        raise error
+        raise RuntimeError("load failed")
 
     monkeypatch.setitem(sys.modules, "torch", SimpleNamespace())
     monkeypatch.setitem(
@@ -109,10 +96,10 @@ def test_reference_retains_startup_failures_without_attesting_weights(
         encoder_threads=1,
         audio_bitrate=128000,
     )
-    with pytest.raises(type(error)):
+    with pytest.raises(RuntimeError):
         reference.generate(args, plan, select_cases(plan, ["ceramic-wheel"]), {})
     record = json.loads((args.output / "reference.json").read_text())
-    assert record["status"] == status
+    assert record["status"] == "failed"
     assert record["cases"] == []
     assert record["quality_status"] == "unjudged"
     assert record["model_snapshot"]["weights_verified_by_helper"] is False
