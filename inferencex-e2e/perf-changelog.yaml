@@ -11887,6 +11887,75 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4542
 
 - config-keys:
+    - minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg
+    - minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-agg
+  description:
+    - "Add 6P DEP2 + DEP16 points at conc 220, 240 and 260, and a TP4 MonoKernel point at conc 1."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4750
+  scenario-type: [agentic-coding]
+  append-only: true
+
+- config-keys:
+    - glm5.2-fp8-b300-sglang-agentic-mtp
+  description:
+    - "Rerun the unchanged FP8 config to collect GPU-board power. Its published curve (2026-10-14) predates B300 single-node power collection and carries no power fields."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4702
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-atom-agentic-dspark
+  description:
+    - "Rerun the unchanged config to collect GPU-board power. Its published curve (2026-10-13) predates MI355X ATOM power collection and carries no power fields."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4703
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-disagg
+  description:
+    - "Collect GPU-board power for the six aggregated and two disaggregated GLM-5.2 B200 Dynamo-SGLang AgentX points, which currently publish no power."
+    - "Move the disaggregated key from the pruned lmsysorg/sglang:nightly-dev-20260910-00840301 tag (Docker Hub 404) to the digest-pinned v0.5.22-cu130 image the aggregated key already serves."
+    - "Concurrency points and evaluation coverage are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4656
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - qwen3.8next-fp4-gb300-sglang-agentic-mtp
+  description:
+    - "Require valid measured GPU power for the Qwen3.8 GB300 AgentX sweep."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4552
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - qwen3.8next-fp4-b300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update Qwen3.8-Flash-Next FP4 B300 SGLang AgentX to nvidia/Qwen3.8-Flash-Next-NVFP4 on lmsysorg/sglang:nightly-dev-cu13-20261028-586355a8 (digest-pinned)."
+    - "Update the search space to TP4/EP4 at concurrency 1 and 2, TP1/EP1 at concurrency 1, 2, 12 and 24, and TP1/EP1 with HiCache at concurrency 48 and 80."
+    - "Switch the target and draft KV caches from BF16 to FP8 E4M3 at concurrency 12, 24, 48 and 80."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4683
+
+- config-keys:
+    - dsv41flash-fp4-gb300-sglang-agentic-dspark
+  description:
+    - "Update the SGLang image from nightly-dev-cu13-20261021-c1c287a4 to nightly-dev-cu13-20261030-302b78cc, pinned by digest. The image includes sgl-project/sglang#46404 (DSpark simulated-acceptance bonus drawn at the simulated row), #46840 (simulated acceptance keeps the real verify accept cost), #46891 (no host sync in DSpark draft-block metadata) and sgl-nvidia-mega 54b428921749 (megakernel API 2, sgl-project/sglang#47145)."
+    - "TP4 c1 runs the NVIDIA megakernel (fp8_e4m3 KV cache, mem-fraction-static 0.91, decode graph batch 1, Engram host table) with SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION=1 (sgl-project/sglang#47105), which enables the DSpark and Qwen3.5/EAGLE megakernel runtime optimizations; DSpark simulated draws run ahead of the draft launch (SGLANG_OPT_DSV41_DSPARK_SIM_DRAW_AHEAD)."
+    - "TP4 c1/c4/c16 and TP2/EP2 c16/c32 pin dsv4-attn-backend flashmla; auto resolves to MegaAttention, which zero-pads per-rank attention heads to 64. DP-attention points are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4603
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm31flash-fp4-b300-sglang-agentic-dspark
+  description:
+    - "Add TP4 points with DRAM KV offload at conc 20, 44, 52 and 60, and a TP4 point without offload at conc 16, using shortest-prefill-first with a prefill-decode interval of 32."
+    - "Add a TP2 point with DRAM KV offload at conc 44 using shortest-prefill-first with a prefill-decode interval of 32."
+    - "Add TP2 points with DRAM KV offload and a larger HBM KV pool (mem-fraction-static 0.93) at conc 50 and 52 using shortest-prefill-first with a prefill-decode interval of 20."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4726
+  scenario-type: [agentic-coding]
+  append-only: true
+
+- config-keys:
     - glm5.2-fp4-mi355x-sglang-agentic-mtp
   description:
     - "Use the SGLang ROCm 7.2.0 MI35x 20261102 daily image for GLM-5.2 MXFP4 MI355X AgentX MTP."
