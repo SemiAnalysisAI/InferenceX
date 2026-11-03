@@ -20,9 +20,9 @@ base:
     max_attempts: 360
   # Embedded Mooncake ("GB" is GiB): 8 TP ranks x (256 GiB segment + 4 GiB buffer)
   # = 2233.4 GB stay within TOTAL_CPU_DRAM_GB (2249 GB).
-  # The setup script installs the master config's Mooncake and writes the node's
-  # first ACTIVE InfiniBand port that mlx5_core drives (ibp* on DSXE, never EFA)
-  # into the store config, failing the worker when there is none.
+  # The setup script checks that the image's bundled Mooncake is the master config's, then
+  # writes the node's first ACTIVE InfiniBand port that mlx5_core drives (ibp* on DSXE, never
+  # EFA) into the store config, failing the worker when there is none.
   setup_script: kimik3-b300-mooncake.sh
   # The whole host library directory, for RDMAV_DRIVERS: the host's
   # libibverbs/libmlx5-rdmav<ABI>.so is a relative link to ../libmlx5.so.1.*.
@@ -31,12 +31,12 @@ base:
   services:
     - name: mooncake-master
       type: mooncake-master
-      # The first container import on a node plus the in-container install outlast
+      # The first container import on a node plus the in-container check outlast
       # the default 120 s readiness window.
       readiness:
         port: 8700
         timeout_seconds: 900
-      preamble: bash /configs/vllm-mooncake.sh
+      preamble: python3 -c "from mooncake.store import MooncakeDistributedStore"
       args: ["--eviction_high_watermark_ratio=0.95", "--eviction_ratio=0.10"]
       options:
         store_config:

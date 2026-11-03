@@ -81,6 +81,36 @@ def b300_mooncake(command: str, *args: str, env: dict[str, str] | None = None) -
     )
 
 
+def bundled_mooncake(tmp_path: Path, bundled: str, declared: str) -> subprocess.CompletedProcess:
+    """Run the B300 bundled-Mooncake check against an image that ships ``bundled``."""
+    (tmp_path / "bin").mkdir()
+    executable(
+        tmp_path / "bin/python3",
+        f"#!{sys.executable}\nimport sys\nif 'importlib.metadata' in sys.argv[2]:\n    print({bundled!r})\n",
+    )
+    return b300_mooncake(
+        "check_bundled_mooncake",
+        env={
+            "PATH": f"{tmp_path / 'bin'}{os.pathsep}{os.environ['PATH']}",
+            "KV_OFFLOAD_BACKEND_VERSION": declared,
+        },
+    )
+
+
+def test_kimik3_b300_accepts_the_bundled_mooncake_at_the_declared_version(tmp_path):
+    result = bundled_mooncake(tmp_path, "9.8.7", "9.8.7")
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_kimik3_b300_rejects_a_bundled_mooncake_at_another_version(tmp_path):
+    result = bundled_mooncake(tmp_path, "9.8.7", "9.8.6")
+
+    assert result.returncode == 1
+    assert "bundles mooncake-transfer-engine-cuda13 9.8.7" in result.stderr
+    assert "version 9.8.6" in result.stderr
+
+
 def rdma_port(root: Path, name: str, driver: str, state: str, link_layer: str = "InfiniBand") -> None:
     """One sysfs ``infiniband`` class entry: driver symlink, port 1 state and link layer."""
     (root / name / "device").mkdir(parents=True)

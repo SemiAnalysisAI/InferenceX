@@ -37,6 +37,18 @@ check_mooncake_verbs_provider() {
     MOONCAKE_VERBS_PROVIDER="${providers[0]} -> $(readlink -f "${providers[0]}")"
 }
 
+# The image bundles Mooncake; it must be the master config's version, and it is never replaced.
+check_bundled_mooncake() {
+    local installed
+    installed="$(python3 -c "from importlib.metadata import version; print(version('mooncake-transfer-engine-cuda13'))")"
+    if [[ "$installed" != "$KV_OFFLOAD_BACKEND_VERSION" ]]; then
+        echo "Error: the image bundles mooncake-transfer-engine-cuda13 $installed, but the master config" \
+            "declares kv-offload-backend version $KV_OFFLOAD_BACKEND_VERSION" >&2
+        return 1
+    fi
+    python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
+}
+
 # Sourcing only defines the functions.
 [[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
 
@@ -49,7 +61,7 @@ if [[ "$MC_GID_INDEX" != 0 ]]; then
 fi
 check_mooncake_verbs_provider
 select_mooncake_rdma_device /sys/class/infiniband
-bash "$(dirname "${BASH_SOURCE[0]}")/vllm-mooncake.sh"
+check_bundled_mooncake
 
 python3 - "$MOONCAKE_CONFIG_PATH" "$MOONCAKE_RAIL" <<'PY'
 import json, sys
