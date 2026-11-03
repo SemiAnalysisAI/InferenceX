@@ -251,17 +251,6 @@ override_5p1d_dep2_dep16_c2884:
         cuda-graph-max-bs-decode: 40
         disaggregation-decode-extra-slots: 80
 
-override_6p1d_dep2_dep16_b64_c4370:
-  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep16-hicache-6p1d-dep2-dep16-b64-c4370
-  roles:
-    prefill:
-      nodes: 3
-      workers: 6
-    decode:
-      args:
-        max-running-requests: 1024
-        cuda-graph-max-bs-decode: 64
-
 override_7p1d_dep2_dep16_b96_c5540:
   name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep16-hicache-7p1d-dep2-dep16-b96-c5540
   roles:
