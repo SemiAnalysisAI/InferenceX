@@ -1,0 +1,215 @@
+diff --git a/src/srtctl/frontends/llm_d.py b/src/srtctl/frontends/llm_d.py
+index 9636358..9ffd1ba 100644
+--- a/src/srtctl/frontends/llm_d.py
++++ b/src/srtctl/frontends/llm_d.py
+@@ -10,10 +10,10 @@ ORIGINAL_DST. For P/D, EPP selects a decode sidecar and passes the prefill worke
+ in ``x-prefiller-host-port``; see ``services/llm_d_sidecar.py``.
+ 
+ srtctl supplies a fixed endpoint list through EPP's file-discovery plugin,
+-including one endpoint per external-LB DP rank. Startup waits for worker health
++including one endpoint per vLLM external-LB DP rank. Startup waits for worker health
+ when enabled, writes the configurations, then launches EPP and Envoy. Readiness
+ requires Envoy's ``/ready`` and EPP's ready-endpoint count, based on worker metrics.
+-Optional ``roles.<role>.kv_events`` feed EPP's precise prefix-cache index.
++Optional ``roles.<role>.kv_events`` feed EPP's precise prefix-cache index (vLLM).
+ 
+ Upstream, pinned: llm-d-router v0.10.0
+ (https://github.com/llm-d/llm-d-router/tree/71f4f0999f95b96c49a9d0c4afbd18dfdb943c26):
+@@ -226,10 +226,11 @@ def parse_ready_endpoints(metrics_text: str) -> int | None:
+ 
+ @register_frontend("llm-d")
+ class LLMDFrontend(StaticRouterFrontend):
+-    """llm-d Endpoint Picker behind Envoy, in front of direct vLLM workers."""
++    """llm-d Endpoint Picker behind Envoy, in front of direct vLLM or SGLang workers."""
+ 
+     type: ClassVar[str] = "llm-d"
+-    required_backend: ClassVar[str | None] = "vllm"
++    SUPPORTED_BACKENDS: ClassVar[frozenset[str]] = frozenset({"vllm", "sglang"})
++    required_backend: ClassVar[str | None] = None
+     accepts_epp_config: ClassVar[bool] = True
+     executable: ClassVar[tuple[str, ...]] = ("epp",)
+     # The EPP takes prefill/decode from its scheduler configuration, not a flag.
+@@ -239,6 +240,18 @@ class LLMDFrontend(StaticRouterFrontend):
+     wait_for_workers_before_start: ClassVar[bool] = True
+ 
+     def validate(self, config: Any) -> None:
++        from srtctl.backends.sglang import SGLangBackend
++
++        incompatible = [
++            f"roles.{role}: {backend.type!r}"
++            for role, backend in config.active_role_backends()
++            if backend.type not in self.SUPPORTED_BACKENDS
++        ]
++        if incompatible:
++            supported = ", ".join(sorted(self.SUPPORTED_BACKENDS))
++            raise ValueError(
++                f"frontend.type: {self.type} requires backend.type in ({supported}); got {', '.join(incompatible)}"
++            )
+         frontend = config.frontend
+         self._validate_epp_args(frontend.args)
+         if frontend.enable_multiple_frontends and config.engine_node_count > 1:
+@@ -267,12 +280,24 @@ class LLMDFrontend(StaticRouterFrontend):
+             )
+         self._validate_kv_events(config)
+         if _is_pd(config):
++            prefill_backend, decode_backend = config.backend_for_role("prefill"), config.backend_for_role("decode")
++            if prefill_backend.type != decode_backend.type:
++                raise ValueError(f"frontend.type: {self.type} prefill/decode needs the same engine in both roles")
++            if isinstance(prefill_backend, SGLangBackend):
++                endpoints = config.allocate_worker_endpoints([f"node{i}" for i in range(config.engine_node_count)])
++                prefill_endpoints = [ep for ep in endpoints if ep.mode == "prefill"]
++                if len({ep.leader_node for ep in prefill_endpoints}) != len(prefill_endpoints):
++                    raise ValueError(
++                        "frontend.type: llm-d with SGLang prefill/decode allows at most one prefill worker per node: "
++                        "srtctl allocates bootstrap ports per node while pd-sidecar dials one SGLANG_BOOTSTRAP_PORT; "
++                        "set resources.spread_workers: true or assign each prefill worker its own node"
++                    )
+             if frontend.epp_config is not None and not epp_config.get("schedulingProfiles"):
+                 raise ValueError(
+                     "frontend.type: llm-d with prefill and decode workers needs frontend.epp_config with "
+                     "prefill and decode schedulingProfiles and a disaggregation profile handler"
+                 )
+-            sidecar_kv_connector(config.backend_for_role("decode"))
++            sidecar_kv_connector(decode_backend)
+             sidecars = [entry for entry in effective_services(config) if entry.service.type == LLM_D_SIDECAR_TYPE]
+             if len(sidecars) != 1:
+                 raise ValueError(
+@@ -296,6 +321,12 @@ class LLMDFrontend(StaticRouterFrontend):
+             )
+             if count and config.backend_for_role(mode).get_kv_events_config_for_mode(mode)
+         ]
++        sglang_publishing = [mode for mode in publishing if config.backend_for_role(mode).type == "sglang"]
++        if sglang_publishing:
++            raise ValueError(
++                f"roles.{sglang_publishing[0]}.kv_events is not supported with frontend.type: llm-d and SGLang; "
++                "use approx-prefix-cache-producer in frontend.epp_config"
++            )
+         producers = _plugins(epp_config, PRECISE_PREFIX_PRODUCER)
+         if not producers:
+             if publishing:
+@@ -329,6 +360,8 @@ class LLMDFrontend(StaticRouterFrontend):
+                 "roles.<role>.kv_events: the workers publish to the EPP on the head node; set "
+                 "frontend.enable_multiple_frontends: false and keep frontend.placement.node: head"
+             )
++        from srtctl.backends.vllm import VLLMBackend
++
+         for mode in publishing:
+             backend = config.backend_for_role(mode)
+             kv_events = config.roles[mode].kv_events
+@@ -337,7 +370,7 @@ class LLMDFrontend(StaticRouterFrontend):
+                 raise ValueError(
+                     f"roles.{mode}.kv_events sets {', '.join(sorted(managed))}, which srtctl manages for llm-d"
+                 )
+-            if backend.is_dp_mode(mode) and not backend.is_external_lb(mode):
++            if isinstance(backend, VLLMBackend) and backend.is_dp_mode(mode) and not backend.is_external_lb(mode):
+                 raise ValueError(
+                     f"roles.{mode}.kv_events with data-parallel-size: vLLM publishes every DP rank's events on its "
+                     "own port, so the EPP must route to the ranks themselves; set "
+diff --git a/src/srtctl/services/llm_d_sidecar.py b/src/srtctl/services/llm_d_sidecar.py
+index 87b56be..bfa3fd2 100644
+--- a/src/srtctl/services/llm_d_sidecar.py
++++ b/src/srtctl/services/llm_d_sidecar.py
+@@ -4,15 +4,16 @@
+ 
+ """``type: llm-d-sidecar``: llm-d's P/D sidecar in front of every routable decode worker.
+ 
+-The llm-d frontend implies this service for P/D jobs. The sidecar calls the
+-prefill worker named in ``x-prefiller-host-port``, then passes the returned
+-``kv_transfer_params`` to its local vLLM, which pulls the prefill KV cache.
+-It listens on ``Process.proxy_port`` and forwards other routes, including
+-``/metrics``, to the worker's HTTP port.
+-
+-Upstream: llm-d-router ``cmd/pd-sidecar`` and ``pkg/sidecar/proxy`` at v0.10.0
++The llm-d frontend implies this service for P/D jobs. For vLLM (`nixlv2`), the
++sidecar calls the prefill worker named in ``x-prefiller-host-port`` and passes the
++returned ``kv_transfer_params`` to its local vLLM, which pulls the prefill KV cache.
++For SGLang (`sglang`), it coordinates bootstrap metadata and dispatches concurrent
++prefill and decode requests. It listens on ``Process.proxy_port`` and forwards other
++routes, including ``/metrics``, to the worker's HTTP port.
++
++Upstream: llm-d-router ``cmd/pd-sidecar`` and ``pkg/sidecar/proxy``
+ (https://github.com/llm-d/llm-d-router/tree/71f4f0999f95b96c49a9d0c4afbd18dfdb943c26/pkg/sidecar/proxy).
+-Its ``GET /health`` is independent of vLLM, allowing it to start before workers.
++Its ``GET /health`` is independent of the worker, allowing it to start before workers.
+ """
+ 
+ from __future__ import annotations
+@@ -21,6 +22,7 @@ from typing import TYPE_CHECKING, Any
+ 
+ from marshmallow import ValidationError
+ 
++from srtctl.ports import SGLANG_BOOTSTRAP_PORT_BASE
+ from srtctl.services.config import HttpProbe, ServiceReadinessConfig
+ from srtctl.services.registry import ServiceKind, ServiceLaunchContext, register_service
+ 
+@@ -31,10 +33,11 @@ if TYPE_CHECKING:
+ 
+ LLM_D_SIDECAR_TYPE = "llm-d-sidecar"
+ 
+-# The sidecar's --kv-connector protocol for the vLLM connector class the decode workers run.
++# The sidecar's --kv-connector protocol per engine type and decode connector / transfer backend.
+ # Upstream's table of protocols: pkg/sidecar/proxy/options.go (supportedKVConnectors).
+-SIDECAR_KV_CONNECTORS: dict[str, str] = {
+-    "NixlConnector": "nixlv2",
++SIDECAR_KV_CONNECTORS: dict[str, dict[str, str]] = {
++    "vllm": {"NixlConnector": "nixlv2"},
++    "sglang": {"nixl": "sglang"},
+ }
+ 
+ # Argv shown by dry-run, where there is no worker to read the ports from.
+@@ -45,18 +48,30 @@ _MANAGED_FLAGS = frozenset({"--port", "--model-server-port", "--kv-connector", "
+ def sidecar_kv_connector(backend: Any) -> str:
+     """Select the decode connector's sidecar protocol, or raise ``ValueError``.
+ 
+-    For ``MultiConnector``, use the first supported wrapped connector.
++    For vLLM ``MultiConnector``, use the first supported wrapped connector.
+     """
++    from srtctl.backends.sglang import SGLangBackend
+     from srtctl.backends.vllm import VLLMBackend
+ 
+-    # Only vLLM's KV-transfer protocol is supported.
+-    connectors = backend.kv_connector_classes("decode") if isinstance(backend, VLLMBackend) else ()
+-    protocol = next((SIDECAR_KV_CONNECTORS[name] for name in connectors if name in SIDECAR_KV_CONNECTORS), None)
++    if isinstance(backend, VLLMBackend):
++        connectors = backend.kv_connector_classes("decode")
++    elif isinstance(backend, SGLangBackend):
++        config = {key.replace("_", "-"): value for key, value in backend.get_config_for_mode("decode").items()}
++        transfer = config.get("disaggregation-transfer-backend")
++        connectors = (str(transfer),) if transfer else ()
++    else:
++        connectors = ()
++    backend_connectors = SIDECAR_KV_CONNECTORS.get(backend.type, {})
++    protocol = next((backend_connectors[name] for name in connectors if name in backend_connectors), None)
+     if protocol is None:
+-        supported = ", ".join(f"{name} ({protocol})" for name, protocol in SIDECAR_KV_CONNECTORS.items())
++        supported = (
++            ", ".join(f"{name} ({proto})" for name, proto in backend_connectors.items())
++            if backend_connectors
++            else "none"
++        )
+         raise ValueError(
+             f"the llm-d P/D sidecar has no protocol for the {backend.type} decode KV connector "
+-            f"{' > '.join(connectors) or None!r}; supported (vLLM, alone or in a MultiConnector): {supported}"
++            f"{' > '.join(connectors) or None!r}; supported for {backend.type}: {supported}"
+         )
+     return protocol
+ 
+@@ -101,6 +116,18 @@ class LLMDSidecarService(ServiceKind):
+         """Use the frontend image, which also contains ``pd-sidecar``."""
+         return config.frontend.container_image
+ 
++    def default_environment(self, service: ServiceConfig, ctx: ServiceLaunchContext) -> dict[str, str]:
++        from srtctl.backends.sglang import SGLangBackend
++
++        if (
++            ctx.config is not None
++            and ctx.process is not None
++            and ctx.config.topology.num_prefill > 0
++            and isinstance(ctx.config.backend_for_role("prefill"), SGLangBackend)
++        ):
++            return {"SGLANG_BOOTSTRAP_PORT": str(SGLANG_BOOTSTRAP_PORT_BASE)}
++        return {}
++
+     def attaches_to(self, process: Process) -> bool:
+         return process.proxy_port is not None
+ 

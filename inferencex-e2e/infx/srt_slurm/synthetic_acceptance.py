@@ -28,6 +28,7 @@ ENGINES = {
     "dynamo-vllm": "vllm",
     "llmd-vllm": "vllm",
     "dynamo-sglang": "sglang",
+    "llmd-sglang": "sglang",
     "trt": "trtllm",
     "dynamo-trt": "trtllm",
     "atom": "atom",

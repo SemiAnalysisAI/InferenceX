@@ -16,7 +16,7 @@ class DynamoVllmBackend(VllmBackend):
         """Return True for dynamo frameworks or dynamo_ metrics, except dynamo-sglang with sglang metrics."""
         metric_names = set(metrics)
         framework = framework.lower()
-        if framework == "dynamo-sglang" and any(
+        if framework in {"dynamo-sglang", "llmd-sglang"} and any(
             name.startswith("sglang:") for name in metric_names
         ):
             return False

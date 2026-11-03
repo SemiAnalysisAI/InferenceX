@@ -43,7 +43,12 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
     ("gb200-nv", LaunchPath.SRT_MULTI): PowerLane(
         rules=(
             PowerRule(
-                Match(any_of("glm5.2"), any_of("fp4"), any_of("dynamo-sglang"), agentic=True),
+                Match(
+                    any_of("glm5.2"),
+                    any_of("fp4"),
+                    any_of("dynamo-sglang", "llmd-sglang"),
+                    agentic=True,
+                ),
                 agentx=True,
             ),
             PowerRule(

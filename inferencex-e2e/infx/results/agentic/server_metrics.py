@@ -52,7 +52,7 @@ def compute_server_metrics(
     nested["adapter"] = adapter.name
     adapter.populate(metrics, flat, nested)
 
-    if framework.lower() == "dynamo-sglang" and adapter.name == "sglang":
+    if framework.lower() in {"dynamo-sglang", "llmd-sglang"} and adapter.name == "sglang":
         nested["kv_cache"]["gpu_total_tokens"] = None
         warnings.append(
             "Dynamo-SGLang logical KV capacity is unsupported: rank replicas are not normalized"
