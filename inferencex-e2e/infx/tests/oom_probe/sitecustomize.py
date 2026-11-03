@@ -26,6 +26,13 @@ def memory_groups(pid=None):
         for root, mount, fstype, opts in mounts:
             if (fstype == 'cgroup2') != v2 or (not v2 and 'memory' not in opts.split(',')):
                 continue
+            if v2 and not Path(mount).joinpath('memory.current').is_file():
+                # Hybrid hosts can expose an unrelated unified hierarchy while
+                # memory is governed entirely by v1. Only skip it when the mount
+                # itself confirms that memory is unavailable to its descendants.
+                controllers = Path(mount).joinpath('cgroup.controllers').read_text().split()
+                if 'memory' not in controllers:
+                    continue
             if group == root or group.startswith(root.rstrip('/') + '/'):
                 directory = Path(mount) / group.removeprefix(root).lstrip('/')
                 mapping = 'relative-to-mount-root'
@@ -51,7 +58,7 @@ def memory_groups(pid=None):
                     except OSError:
                         pass
                 if directory is None:
-                    raise RuntimeError('cannot find worker membership inside namespaced cgroup mount')
+                    raise RuntimeError(f'cannot find worker membership inside namespaced cgroup mount: pid={pid}, version={2 if v2 else 1}, root={root!r}, group={group!r}, mount={mount!r}, depth={depth}')
                 mapping = 'namespace-membership'
             else:
                 continue
