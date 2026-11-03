@@ -6,7 +6,6 @@ import json
 import pytest
 
 from infx.results import video
-from infx.tests.results.power import test_aggregate_power_multinode as power_fixture
 from infx.tests.results.power.test_aggregate_power_multinode import (
     WINDOW_END,
     WINDOW_START,
@@ -53,13 +52,10 @@ def test_aggregate_carries_identity_throughput_and_the_measured_window():
     assert aggregate["duration"] == WINDOW_END - WINDOW_START
 
 
-@pytest.mark.parametrize('run_edit,bench_edit', [
-    ({"measurement": {**RUN["measurement"], "concurrency": 2}}, {}),
-], ids=['run_edit0-bench_edit0'])
-def test_aggregate_refuses_a_window_that_disagrees_with_the_run(run_edit, bench_edit):
+def test_aggregate_refuses_a_window_that_disagrees_with_the_run():
     with pytest.raises(ValueError, match="c4"):
         video.build_aggregate(
-            {**RUN, **run_edit}, {**BENCH, **bench_edit}, concurrency=4, gpu_count=2,
+            {**RUN, "measurement": {**RUN["measurement"], "concurrency": 2}}, BENCH, concurrency=4, gpu_count=2,
             identity=IDENTITY, run_path="x", run_sha256="a" * 64,
         )
 
@@ -102,18 +98,14 @@ def _cell(pkg, logs_root, concurrency=4):
     return cell
 
 
-@pytest.mark.parametrize('gpu_count', [
-    4,
-], ids=['4'])
-def test_service_planned_gpus_validate_with_clip_normalized_energy(tmp_path, monkeypatch, gpu_count):
-    monkeypatch.setattr(power_fixture, "DEVICES", power_fixture.DEVICES[:gpu_count])
+def test_service_planned_gpus_validate_with_clip_normalized_energy(tmp_path):
     pkg = _service_package(tmp_path)
     _cell(pkg, pkg.logs_root)
     workspace = tmp_path / "ws"
     workspace.mkdir()
     rc = video.run(
         logs_root=pkg.logs_root, workspace=workspace, result_filename="h3_video", concurrencies=[4],
-        gpu_count=gpu_count, expected_producer_sha="a" * 40, identity=IDENTITY, require_power=True,
+        gpu_count=4, expected_producer_sha="a" * 40, identity=IDENTITY, require_power=True,
     )
     assert rc == 0
     aggregate = json.loads((workspace / "h3_video_conc4.json").read_text())
@@ -122,7 +114,7 @@ def test_service_planned_gpus_validate_with_clip_normalized_energy(tmp_path, mon
     assert set(sidecar["per_gpu_role"].values()) == {"h3-server"}
     assert aggregate["power_valid"] == 1
     # Four clips over 60 seconds; the fixture devices draw 300, 300, 400, 400 W.
-    assert aggregate["joules_per_successful_query"] == pytest.approx({2: 9000, 4: 21000}[gpu_count])
+    assert aggregate["joules_per_successful_query"] == pytest.approx(21000)
     assert "joules_per_output_token" not in aggregate
     assert aggregate["power_audit"]["source"] == "power_validation_h3_video_conc4.json"
     summary = json.loads((workspace / "h3_video.json").read_text())
@@ -146,10 +138,6 @@ def test_video_power_rejects_unjoined_server_gpu_identity(tmp_path, fault):
         spec_path.write_text(json.dumps(spec))
     elif fault == "missing":
         spec_path.unlink()
-    elif fault == "duplicate":
-        spec["gpu_uuids"][1] = spec["gpu_uuids"][0]
-        launch_path.write_text(json.dumps(spec))
-        spec_path.write_text(json.dumps(spec))
     else:
         launch_path.write_text(json.dumps({"gpu_uuids": [*spec["gpu_uuids"][:-1], "GPU-other"]}))
     workspace = tmp_path / "ws"

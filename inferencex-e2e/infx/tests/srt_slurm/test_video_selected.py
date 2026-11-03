@@ -25,10 +25,6 @@ ENV = {
 }
 
 
-
-
-
-
 def test_native_video_recipe_requires_one_server_service(native_fragment):
     raw, write = native_fragment
     raw["services"] = []
@@ -159,48 +155,35 @@ def native_fragment(tmp_path):
     return raw, write
 
 
-@pytest.mark.parametrize('gpus', [
-    4,
-], ids=['4'])
-def test_native_selected_recipe_renders_bound_engine_and_preserves_tuning(native_fragment, gpus):
+def test_native_selected_recipe_renders_bound_engine_and_preserves_tuning(native_fragment):
     raw, write = native_fragment
-    recipe = video.prepare(write(), {**ENV, "FRAMEWORK": "sglang", "GPU_COUNT": str(gpus)}, root=ROOT)
+    recipe = video.prepare(write(), {**ENV, "FRAMEWORK": "sglang", "GPU_COUNT": "4"}, root=ROOT)
     [server] = recipe["services"]
     model_path = recipe["benchmark"]["env"]["H3_MODEL_PATH"]
     args = server["args"]
     assert args[args.index("--model-path") + 1] == model_path
     assert args[args.index("--model-id") + 1] == ENV["MODEL"]
-    assert args[args.index("--num-gpus") + 1] == str(gpus)
-    assert args[args.index("--tp-size") + 1] == str(gpus)
-    assert args[args.index("--ulysses-degree") + 1] == str(gpus)
+    assert args[args.index("--num-gpus") + 1] == "4"
+    assert args[args.index("--tp-size") + 1] == "4"
+    assert args[args.index("--ulysses-degree") + 1] == "4"
     assert args[args.index("--attention-backend") + 1] == "fixture-backend"
     assert server["env"]["MODEL_REVISION_IN_ENV"] == args[args.index("--revision") + 1]
     assert server["env"]["TUNABLE_ENV"] == "keep-this-value"
     assert recipe["benchmark"]["command"] == raw["benchmark"]["command"]
-    assert recipe["resources"]["gpus_per_node"] == gpus
+    assert recipe["resources"]["gpus_per_node"] == 4
 
 
-@pytest.mark.parametrize('flag,wrong', [
-    ("--revision", "c" * 40),
-], ids=['--revision-cccccccccccccccccccccccccccccccccccccccc'])
-def test_selected_engine_identity_and_resources_must_match_bound_point(native_fragment, flag, wrong):
+def test_selected_engine_revision_must_match_bound_point(native_fragment):
     raw, write = native_fragment
     args = raw["services"][0]["args"]
-    index = args.index(flag)
-    if wrong is None:
-        del args[index:index + 2]
-    else:
-        args[index + 1] = wrong
-    with pytest.raises(ValueError, match=flag):
+    args[args.index("--revision") + 1] = "c" * 40
+    with pytest.raises(ValueError, match="--revision"):
         video.prepare(write(raw), {**ENV, "FRAMEWORK": "sglang"}, root=ROOT)
 
 
-@pytest.mark.parametrize('edit', [
-    lambda recipe: recipe["services"][0]["args"].remove("--"),
-], ids=['<lambda>0'])
-def test_native_entry_has_no_implicit_engine_or_client_window(native_fragment, edit):
+def test_native_entry_has_no_implicit_engine(native_fragment):
     raw, write = native_fragment
-    edit(raw)
+    raw["services"][0]["args"].remove("--")
     with pytest.raises(ValueError):
         video.prepare(write(raw), {**ENV, "FRAMEWORK": "sglang"}, root=ROOT)
 

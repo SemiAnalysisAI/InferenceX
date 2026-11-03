@@ -313,13 +313,10 @@ def test_unknown_video_status_preserves_same_jobs_terminal_receipt(tmp_path):
     assert (other_logs / "power/native-job-status.txt").read_text() == "42|unknown\n"
 
 
-@pytest.mark.parametrize('overrides,message', [
-    ({"IS_MULTINODE": "true"}, "single-node and not agentic"),
-], ids=['overrides0-single-node and not agentic'])
-def test_video_points_are_single_node_and_not_agentic(harness, overrides, message):
-    env = video_env(harness, "h100-cw", **overrides)
+def test_video_points_must_be_single_node(harness):
+    env = video_env(harness, "h100-cw", IS_MULTINODE="true")
     result = launch(env, harness.config, harness.workspace)
-    assert result.returncode != 0 and message in result.stderr
+    assert result.returncode != 0 and "single-node and not agentic" in result.stderr
     assert srtctl_calls(harness.logs) == []
 
 

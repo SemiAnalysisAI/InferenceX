@@ -7,16 +7,9 @@ from infx.bench.__main__ import main as bench_main
 from infx.bench.env import InputError
 
 
-
-
-@pytest.mark.parametrize('args', [
-    ["client", "--request-seconds", "inf"],
-], ids=['args3'])
-def test_video_command_rejects_missing_engine_or_invalid_window(args):
+def test_video_command_rejects_an_infinite_request_window():
     with pytest.raises(InputError):
-        video.parse_args(args)
-
-
+        video.parse_args(["client", "--request-seconds", "inf"])
 
 
 def test_client_uses_discovered_service_address(monkeypatch):
@@ -28,14 +21,10 @@ def test_client_uses_discovered_service_address(monkeypatch):
     assert video.endpoint() == "http://[2001:db8::3]:30301"
 
 
-@pytest.mark.parametrize('key,value', [
-    ("SRT_SERVICE_MY_H3_SERVER_IPS", "/invalid/host"),
-], ids=['SRT_SERVICE_MY_H3_SERVER_IPS-/invalid/host'])
-def test_client_rejects_invalid_service_address(monkeypatch, key, value):
+def test_client_rejects_invalid_service_address(monkeypatch):
     monkeypatch.setenv("H3_SERVER_SERVICE", "my-h3-server")
     monkeypatch.setenv("H3_SERVER_PORT", "30301")
-    monkeypatch.setenv("SRT_SERVICE_MY_H3_SERVER_IPS", "10.0.0.3")
-    monkeypatch.setenv(key, value)
+    monkeypatch.setenv("SRT_SERVICE_MY_H3_SERVER_IPS", "/invalid/host")
     with pytest.raises(InputError):
         video.endpoint()
 

@@ -71,10 +71,6 @@ def test_matrix_runs_every_concurrency_against_one_server_and_publishes_windows(
     assert window["benchmark_start_time_unix"] == contract["benchmark_start_time_unix"]
 
 
-
-
-
-
 def _native_job(tmp_path, concurrencies=(1, 2), power_valid=True):
     logs = tmp_path / "logs"
     h3, power = logs / "h3", logs / "power"
@@ -214,12 +210,11 @@ def test_bundle_marks_a_missing_or_short_cell_failed(tmp_path):
     assert any("c4: run.json missing" in f for f in result["failures"])
 
 
-@pytest.mark.parametrize("field,value", [('plan_sha256', 'a' * 64)])
-def test_bundle_rejects_cells_with_different_workload_or_engine(tmp_path, field, value):
+def test_bundle_rejects_cells_with_different_workload(tmp_path):
     logs, workspace = _native_job(tmp_path)
     path = logs / "h3/gpu/c2/baseline/run.json"
     run = json.loads(path.read_text())
-    run[field] = value
+    run["plan_sha256"] = "a" * 64
     path.write_text(json.dumps(run))
     with pytest.raises(ValueError, match="identity differs"):
         srt_bundle.build_bundle(h3_dir=logs / "h3", power_dir=logs / "power", workspace=workspace,
@@ -249,6 +244,17 @@ def _sweep(tmp_path):
     return artifacts
 
 
+def _reseal(bundle):
+    manifest_path = bundle / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["evidence"] = {p.relative_to(bundle).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+                            for p in bundle.rglob("*.json") if p != manifest_path}
+    manifest_path.write_text(json.dumps(manifest))
+    (bundle / "SHA256SUMS").write_text("".join(
+        f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.relative_to(bundle).as_posix()}\n"
+        for p in sorted(bundle.rglob("*")) if p.is_file() and p.name != "SHA256SUMS"))
+
+
 def test_reuse_validates_every_selected_native_deployment_and_preserves_checkout_identity(tmp_path):
     from infx.results.video_artifacts import validate_video_artifacts
     artifacts = _sweep(tmp_path)
@@ -259,40 +265,19 @@ def test_reuse_validates_every_selected_native_deployment_and_preserves_checkout
         validate_video_artifacts(artifacts, run_id="123", run_attempt="3", head_sha="c" * 40)
 
 
-@pytest.mark.parametrize(
-    "fault,match",
-    [
-        ('media', 'checksum mismatch'),
-        ('head', 'CI identity mismatch'),
-    ],
-)
+@pytest.mark.parametrize("fault,match", [("media", "checksum mismatch"), ("head", "CI identity mismatch")])
 def test_reuse_rejects_incomplete_or_altered_native_sweeps(tmp_path, fault, match):
-    import shutil
     from infx.results.video_artifacts import validate_video_artifacts
     artifacts = _sweep(tmp_path)
     bundle = artifacts / ("h3-results-123-2-" + "2" * 64)
-    if fault == "row":
-        shutil.rmtree(bundle)
-    elif fault == "media":
-        media = next(bundle.rglob("*.mp4"))
-        media.write_bytes(b"corrupted")
+    if fault == "media":
+        next(bundle.rglob("*.mp4")).write_bytes(b"corrupted")
     else:
-        path = bundle / ("serving-smoke.json" if fault == "cell" else "manifest.json")
+        path = bundle / "manifest.json"
         data = json.loads(path.read_text())
-        if fault == "cell":
-            data["cells"].pop()
-        else:
-            data["ci"]["head_sha"] = "d" * 40
+        data["ci"]["head_sha"] = "d" * 40
         path.write_text(json.dumps(data))
-        manifest_path = bundle / "manifest.json"
-        manifest = json.loads(manifest_path.read_text())
-        manifest["evidence"][path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
-        # The manifest does not include itself in evidence.
-        manifest["evidence"].pop("manifest.json", None)
-        manifest_path.write_text(json.dumps(manifest))
-        (bundle / "SHA256SUMS").write_text("".join(
-            f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.relative_to(bundle).as_posix()}\n"
-            for p in sorted(bundle.rglob("*")) if p.is_file() and p.name != "SHA256SUMS"))
+        _reseal(bundle)
     with pytest.raises(ValueError, match=match):
         validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40)
 
@@ -314,43 +299,25 @@ def test_startup_failure_preserves_declared_plan_and_engine_identity(tmp_path):
     assert "video-identity.json" in manifest["evidence"]
 
 
-@pytest.mark.parametrize("fault,match", [('power', 'unverified native')])
-def test_reuse_rechecks_sealed_receipts_and_selected_workload(tmp_path, fault, match):
+def test_reuse_rechecks_sealed_power_receipts(tmp_path):
     from infx.results.video_artifacts import validate_video_artifacts
     artifacts = _sweep(tmp_path)
     bundle = artifacts / ("h3-results-123-2-" + "2" * 64)
     matrix_path = bundle / "serving-smoke.json"
     matrix = json.loads(matrix_path.read_text())
     cell = matrix["cells"][0]
-    field = "power" if fault == "power" else "run"
-    path = bundle / cell[field]["path"]
-    value = json.loads(path.read_text())
-    if fault == "power":
-        value["valid"] = False
-    else:
-        value["plan"]["model_id"] = "another/model"
-    path.write_text(json.dumps(value))
-    cell[field]["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    path = bundle / cell["power"]["path"]
+    power = json.loads(path.read_text())
+    power["valid"] = False
+    path.write_text(json.dumps(power))
+    cell["power"]["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
     matrix_path.write_text(json.dumps(matrix))
-    manifest_path = bundle / "manifest.json"
-    manifest = json.loads(manifest_path.read_text())
-    manifest["evidence"] = {p.relative_to(bundle).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
-                            for p in bundle.rglob("*.json") if p != manifest_path}
-    manifest_path.write_text(json.dumps(manifest))
-    (bundle / "SHA256SUMS").write_text("".join(
-        f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.relative_to(bundle).as_posix()}\n"
-        for p in sorted(bundle.rglob("*")) if p.is_file() and p.name != "SHA256SUMS"))
-    with pytest.raises(ValueError, match=match):
+    _reseal(bundle)
+    with pytest.raises(ValueError, match="unverified native"):
         validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40)
 
 
-@pytest.mark.parametrize(
-    "fault,match",
-    [
-        ('population', 'request population'),
-        ('missing_media', 'reference mismatch'),
-    ],
-)
+@pytest.mark.parametrize("fault,match", [("population", "request population"), ("missing_media", "reference mismatch")])
 def test_reuse_rejects_resealed_missing_evidence_and_wrong_population(tmp_path, fault, match):
     from infx.results.video_artifacts import validate_video_artifacts
     artifacts = _sweep(tmp_path)
@@ -360,29 +327,15 @@ def test_reuse_rejects_resealed_missing_evidence_and_wrong_population(tmp_path, 
     cell = matrix["cells"][0]
     run_path = bundle / cell["run"]["path"]
     run = json.loads(run_path.read_text())
-    if fault in {"null_ref", "missing_ref"}:
-        cell["receipt"] = {"path": "missing.json", "sha256": None if fault == "null_ref" else "a" * 64}
-    elif fault == "duplicate_gpu":
-        matrix["gpu_uuids"] = [matrix["gpu_uuids"][0]] * 2
+    if fault == "population":
+        run["summary"].update(scheduled=1, valid=1)
+        run["records"] = run["records"][:1]
     else:
-        if fault == "population":
-            run["summary"].update(scheduled=1, valid=1)
-            run["records"] = run["records"][:1]
-        elif fault == "duplicate_slot":
-            run["records"][1] = run["records"][0]
-        else:
-            run["records"][0]["artifact_path"] = "artifacts/missing.mp4"
-        run_path.write_text(json.dumps(run))
-        cell["run"]["sha256"] = hashlib.sha256(run_path.read_bytes()).hexdigest()
+        run["records"][0]["artifact_path"] = "artifacts/missing.mp4"
+    run_path.write_text(json.dumps(run))
+    cell["run"]["sha256"] = hashlib.sha256(run_path.read_bytes()).hexdigest()
     matrix_path.write_text(json.dumps(matrix))
-    manifest_path = bundle / "manifest.json"
-    manifest = json.loads(manifest_path.read_text())
-    manifest["evidence"] = {p.relative_to(bundle).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
-                            for p in bundle.rglob("*.json") if p != manifest_path}
-    manifest_path.write_text(json.dumps(manifest))
-    (bundle / "SHA256SUMS").write_text("".join(
-        f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.relative_to(bundle).as_posix()}\n"
-        for p in sorted(bundle.rglob("*")) if p.is_file() and p.name != "SHA256SUMS"))
+    _reseal(bundle)
     with pytest.raises(ValueError, match=match):
         validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40)
 

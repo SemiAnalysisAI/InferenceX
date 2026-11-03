@@ -34,20 +34,10 @@ def test_video_generation_and_smoke_keep_one_server_job(master):
         validate_matrix([{**row, "conc-list": [1, 1]}])
 
 
-
-
-@pytest.mark.parametrize('edit,match', [
-    ({"spec": "../clip.yaml"}, "specs"),
-], ids=['edit0-specs'])
-def test_video_scenarios_name_a_yaml_workload_and_its_set(master, edit, match):
+def test_video_scenarios_keep_the_workload_spec_inside_specs(master):
     config = copy.deepcopy(master["video"])
-    scenario = config["scenarios"]["video-generation"][0]
-    for key, value in edit.items():
-        if value is None:
-            del scenario[key]
-        else:
-            scenario[key] = value
-    with pytest.raises(ValidationError, match=match):
+    config["scenarios"]["video-generation"][0]["spec"] = "../clip.yaml"
+    with pytest.raises(ValidationError, match="specs"):
         SingleNodeMasterConfigEntry(**config)
 
 

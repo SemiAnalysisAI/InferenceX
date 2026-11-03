@@ -11,13 +11,10 @@ import yaml
 ROOT = Path(__file__).resolve().parents[4]
 
 
-@pytest.mark.parametrize('llm', [
-    True,
-], ids=['True'])
-def test_canary_leaves_every_video_deployment_scheduled_once(tmp_path, llm):
+def test_canary_leaves_every_video_deployment_scheduled_once(tmp_path):
     video = [{"scenario-type": "video-generation", "conc-list": [1, 2, 4], "gpus": 2,
               "runner": runner, "run-eval": False} for runner in ("cluster:a", "cluster:b")]
-    fixed = [{"conc": 4, "run-eval": False}] if llm else []
+    fixed = [{"conc": 4, "run-eval": False}]
     matrix = {"single_node": {"video": video, "1k1k": fixed}}
     workflow = yaml.safe_load((ROOT / ".github/workflows/run-sweep.yml").read_text())
     step = workflow["jobs"]["canary-select"]["steps"][0]
@@ -35,10 +32,7 @@ def test_canary_leaves_every_video_deployment_scheduled_once(tmp_path, llm):
     assert [r for r in canary if r.get("scenario-type") == "video-generation"] + remaining["video"] == video
 
 
-@pytest.mark.parametrize('video,llm,retired,expected', [
-    (True, True, False, ("true", "true", "false")),
-], ids=['True-True-False-expected2'])
-def test_merge_ingest_routes_video_and_llm_independently(tmp_path, video, llm, retired, expected):
+def test_merge_ingest_routes_video_and_llm_independently(tmp_path):
     workspace = tmp_path / "workspace"
     benchmarks = workspace / "inferencex-e2e/benchmarks"
     benchmarks.mkdir(parents=True)
@@ -48,8 +42,8 @@ def test_merge_ingest_routes_video_and_llm_independently(tmp_path, video, llm, r
     uv = bindir / "uv"
     uv.write_text('#!/bin/sh\nprintf "%s" "$FIXTURE_PLAN"\n')
     uv.chmod(0o755)
-    plan = {"single_node": {"video": [{"x": 1}] if video else [], "1k1k": [{"x": 1}] if llm else []},
-            "multi_node": {}, "changelog_metadata": {"entries": [{"retired": retired}]}, "evals": [], "agentic_evals": [],
+    plan = {"single_node": {"video": [{"x": 1}], "1k1k": [{"x": 1}]},
+            "multi_node": {}, "changelog_metadata": {"entries": [{"retired": False}]}, "evals": [], "agentic_evals": [],
             "multinode_evals": [], "multinode_agentic_evals": []}
     workflow = yaml.safe_load((ROOT / ".github/workflows/merge-ingest.yml").read_text())
     step = next(step for step in workflow["jobs"]["ingest"]["steps"] if step.get("id") == "plan")
@@ -60,7 +54,7 @@ def test_merge_ingest_routes_video_and_llm_independently(tmp_path, video, llm, r
              "PUSH_BEFORE": "a", "PUSH_AFTER": "b"})
     assert result.returncode == 0, result.stderr
     outputs = dict(line.split("=", 1) for line in output.read_text().splitlines())
-    assert (outputs["video"], outputs["llm"], outputs["retirement-only"]) == expected
+    assert (outputs["video"], outputs["llm"], outputs["retirement-only"]) == ("true", "true", "false")
 
 
 def test_video_reuse_discovery_requires_the_selected_matrix_manifest():
@@ -87,10 +81,7 @@ def test_selected_video_manifest_distinguishes_full_sweep_from_partial(tmp_path,
     assert (manifest["run-id"], manifest["run-attempt"]) == (123, 2)
 
 
-@pytest.mark.parametrize('video,llm', [
-    (True, False),
-], ids=['True-False'])
-def test_sweep_setup_routes_only_llm_rows_to_benchmark_aggregation(tmp_path, video, llm):
+def test_sweep_setup_routes_only_llm_rows_to_benchmark_aggregation(tmp_path):
     workspace = tmp_path / "workspace"
     (workspace / "inferencex-e2e").mkdir(parents=True)
     bindir = tmp_path / "bin"
@@ -98,8 +89,7 @@ def test_sweep_setup_routes_only_llm_rows_to_benchmark_aggregation(tmp_path, vid
     uv = bindir / "uv"
     uv.write_text('#!/bin/sh\ncase "$*" in *infx.matrix.plan*) printf "%s" "$FIXTURE_PLAN";; *) cat;; esac\n')
     uv.chmod(0o755)
-    plan = {"single_node": {"video": [{"scenario-type": "video-generation"}] if video else [],
-                            "1k1k": [{"conc": 1}] if llm else []}, "multi_node": {}}
+    plan = {"single_node": {"video": [{"scenario-type": "video-generation"}], "1k1k": []}, "multi_node": {}}
     workflow = yaml.safe_load((ROOT / ".github/workflows/run-sweep.yml").read_text())
     step = next(step for step in workflow["jobs"]["setup"]["steps"] if step.get("id") == "setup")
     output = tmp_path / "output"
@@ -111,5 +101,5 @@ def test_sweep_setup_routes_only_llm_rows_to_benchmark_aggregation(tmp_path, vid
              "PRIORITY_CRITERIA": ""})
     assert result.returncode == 0, result.stderr
     outputs = dict(line.split("=", 1) for line in output.read_text().splitlines())
-    assert outputs["has-benchmark-results"] == str(llm).lower()
+    assert outputs["has-benchmark-results"] == "false"
     assert json.loads(outputs["search-space-config"]) == plan

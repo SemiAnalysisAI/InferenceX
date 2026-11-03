@@ -14,6 +14,14 @@ from evaluator import cli, gpu_job, srt_selected  # noqa: E402
 from specs import h3_spec  # noqa: E402
 
 
+def _snapshot(path):
+    (path / "FL2VA").mkdir(parents=True)
+    (path / "Ref2VA").mkdir()
+    for name in ("model_index.json", "LICENSE", "README.md", "Ref2VA/model_index.json"):
+        (path / name).write_text(name)
+    return path
+
+
 def test_selected_plan_binds_requested_set_and_digest(tmp_path):
     spec = h3_spec.load_spec(PACKAGE / "specs/h3.yaml")
     selected = spec["sets"]["release-v1"]
@@ -33,11 +41,8 @@ def test_selected_plan_binds_requested_set_and_digest(tmp_path):
 
 
 def test_h3_vllm_model_view_exposes_only_tested_partition(tmp_path):
-    snapshot = tmp_path / "snapshot"
-    (snapshot / "FL2VA").mkdir(parents=True)
-    (snapshot / "Ref2VA").mkdir()
-    for name in ("model_index.json", "LICENSE", "README.md", "Ref2VA/model_index.json", "modular_model_index.json"):
-        (snapshot / name).write_text(name)
+    snapshot = _snapshot(tmp_path / "snapshot")
+    (snapshot / "modular_model_index.json").write_text("modular_model_index.json")
     view = srt_selected.h3_vllm_model_view(snapshot, tmp_path / "view")
     assert (view / "FL2VA").resolve() == (snapshot / "FL2VA").resolve()
     assert (view / "Ref2VA/model_index.json").read_text() == "Ref2VA/model_index.json"
@@ -45,14 +50,9 @@ def test_h3_vllm_model_view_exposes_only_tested_partition(tmp_path):
 
 
 @pytest.mark.parametrize(("runtime", "model_view"), [("sglang", "snapshot"), ("vllm-omni", "h3-fl2va")])
-@pytest.mark.parametrize("recipe_metadata", [True])
-def test_selected_server_executes_recipe_command_and_records_selected_environment(tmp_path, monkeypatch, runtime, model_view, recipe_metadata):
+def test_selected_server_executes_recipe_command_and_records_selected_environment(tmp_path, monkeypatch, runtime, model_view):
     plan = h3_spec.plan_for(h3_spec.load_spec(PACKAGE / "specs/h3.yaml"), "release-v1")
-    model = tmp_path / "model"
-    (model / "FL2VA").mkdir(parents=True)
-    (model / "Ref2VA").mkdir()
-    for name in ("model_index.json", "LICENSE", "README.md", "Ref2VA/model_index.json"):
-        (model / name).write_text(name)
+    model = _snapshot(tmp_path / "model")
     uuids = ["GPU-1", "GPU-2"]
     monkeypatch.setattr(gpu_job, "cuda_devices", lambda: uuids)
     executed = []
@@ -60,10 +60,7 @@ def test_selected_server_executes_recipe_command_and_records_selected_environmen
     monkeypatch.setenv("HF_HUB_OFFLINE", "0")
     monkeypatch.setenv("TRANSFORMERS_OFFLINE", "1")
     monkeypatch.setenv("VLLM_OMNI_VIDEO_SYNC_TIMEOUT", "777")
-    if recipe_metadata:
-        monkeypatch.setenv("H3_RECIPE_ENV_KEYS", '["HF_HUB_OFFLINE", "VLLM_OMNI_VIDEO_SYNC_TIMEOUT"]')
-    else:
-        monkeypatch.delenv("H3_RECIPE_ENV_KEYS", raising=False)
+    monkeypatch.setenv("H3_RECIPE_ENV_KEYS", '["HF_HUB_OFFLINE", "VLLM_OMNI_VIDEO_SYNC_TIMEOUT"]')
     monkeypatch.setenv("VLLM_OMNI_SERVER_STORAGE__PATH", str(tmp_path / "storage"))
     monkeypatch.setenv("SECRET_TOKEN", "never-record")
     output = tmp_path / "server"
@@ -129,11 +126,7 @@ def test_selected_server_rejects_wrong_model_and_gpu_shape(tmp_path):
 
 def test_v01_vllm_four_gpu_server_records_sealed_launch(tmp_path, monkeypatch):
     plan = h3_spec.plan_for(h3_spec.load_spec(PACKAGE / "specs/h3-v0.1.yaml"), "release-v1")
-    model = tmp_path / "model"
-    (model / "FL2VA").mkdir(parents=True)
-    (model / "Ref2VA").mkdir()
-    for name in ("model_index.json", "LICENSE", "README.md", "Ref2VA/model_index.json"):
-        (model / name).write_text(name)
+    model = _snapshot(tmp_path / "model")
     uuids = [f"GPU-{index}" for index in range(4)]
     monkeypatch.setattr(gpu_job, "cuda_devices", lambda: uuids)
     monkeypatch.setenv("VLLM_OMNI_SERVER_STORAGE__PATH", str(tmp_path / "storage"))
@@ -238,8 +231,6 @@ def test_selected_cli_forwards_engine_command_after_separator(tmp_path, monkeypa
     launch = json.loads((output / "launch.json").read_text())
     assert launch["argv"] == command
     assert launch["plan_sha256"] == digest
-
-
 
 
 def test_sglang_child_rechecks_uuid_order_before_import(monkeypatch):
