@@ -210,6 +210,9 @@ def compose_recipe(
     return merge_blocks(shared, raw)
 
 
+POWER_FLAGS = frozenset({"1", "true", "TRUE", "yes", "YES"})
+
+
 def _required(environment: Mapping[str, str], name: str) -> str:
     """Return the input ``name`` from ``environment``, or raise ValueError if it is blank."""
     value = environment.get(name, "")
@@ -337,7 +340,7 @@ def bind_workload(
     if (bound.get("telemetry") or {}).get("enabled") is True:
         benchmark["concurrencies"] = concurrencies
         if not multinode:
-            required = environment.get("REQUIRE_POWER", "0") in {"1", "true", "TRUE", "yes", "YES"}
+            required = environment.get("REQUIRE_POWER", "0") in POWER_FLAGS
             bound["telemetry"]["required"] = required
             workload["REQUIRE_POWER"] = "1" if required else "0"
     if agentic and not multinode:

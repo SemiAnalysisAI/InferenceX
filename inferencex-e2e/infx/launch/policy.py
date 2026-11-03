@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
+from infx.launch.context import LaunchError
 from infx.launch.request import RequestError
 
 if TYPE_CHECKING:
@@ -59,6 +60,7 @@ class LaunchPath(StrEnum):
     SRT_MULTI = "srt-multi"
     SRT_NATIVE = "srt-native"
     SRT_BATCH = "srt-batch"
+    SRT_VIDEO = "srt-video"
     SCRIPT = "script"
 
 
@@ -76,8 +78,15 @@ BATCH_WRAPPED_LANES: dict[str, Match] = {
 }
 
 
+VIDEO_SCENARIO = "video-generation"
+
+
 def launch_path(cluster_id: str, request: LaunchRequest) -> LaunchPath:
     """Return the launch path that runs ``request`` on the cluster ``cluster_id``."""
+    if request.scenario_type == VIDEO_SCENARIO:
+        if request.is_multinode or request.is_agentic:
+            raise LaunchError("video-generation points are single-node and not agentic")
+        return LaunchPath.SRT_VIDEO
     if request.is_multinode:
         if any(lane(request) for lane in NATIVE_SRT_LANES.get(cluster_id, ())):
             return LaunchPath.SRT_NATIVE

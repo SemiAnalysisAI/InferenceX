@@ -17,6 +17,7 @@ from infx.matrix.validation import (
     MultiNodeMatrixEntry,
     SingleNodeAgenticMatrixEntry,
     SingleNodeMatrixEntry,
+    VideoMatrixEntry,
 )
 
 
@@ -41,6 +42,12 @@ class _BatchFields(BaseModel):
     conc: list[Annotated[int, Field(gt=0)]] = Field(min_length=1)
 
 
+class VideoConfig(VideoMatrixEntry):
+    """Video-generation input to benchmark-tmpl.yml: one server, every concurrency of conc-list."""
+
+    scenario_type: Literal["video-generation"] = Field(alias="scenario-type")
+
+
 class MultiNodeConfig(_BatchFields, MultiNodeMatrixEntry):
     """Fixed-sequence input to benchmark-multinode-tmpl.yml."""
 
@@ -57,6 +64,7 @@ def _validate_rows(
     path: str,
     multinode: bool | None = None,
     agentic: bool | None = None,
+    video: bool | None = None,
 ) -> None:
     """Validate each row in rows against its workflow schema.
 
@@ -71,7 +79,12 @@ def _validate_rows(
             raise ValueError(f"{location}: expected a matrix object")
         is_multinode = "prefill" in row if multinode is None else multinode
         is_agentic = row.get("scenario-type") == "agentic-coding" if agentic is None else agentic
-        if is_multinode:
+        is_video = row.get("scenario-type") == "video-generation" if video is None else video
+        if is_video and (is_multinode or is_agentic):
+            raise ValueError(f"{location}: video-generation rows are single-node, non-agentic")
+        if is_video:
+            schema = VideoConfig
+        elif is_multinode:
             schema = MultiNodeAgenticConfig if is_agentic else MultiNodeConfig
         else:
             schema = AgenticConfig if is_agentic else SingleNodeConfig
@@ -98,6 +111,7 @@ def validate_matrix(matrix: object, *, plan: bool = False) -> None:
                 path=f"{family}.{group}",
                 multinode=multinode,
                 agentic=group == "agentic",
+                video=group == "video",
             )
         prefix = "multinode_" if multinode else ""
         for suffix, agentic in (("evals", False), ("agentic_evals", True)):

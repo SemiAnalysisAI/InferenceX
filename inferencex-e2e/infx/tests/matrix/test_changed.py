@@ -81,6 +81,17 @@ def test_keys_with_changed_recipes_or_points_are_listed(tmp_path, monkeypatch, c
     assert capsys.readouterr().out.splitlines()[-1] == "3 of 4 config keys changed since base."
 
 
+def test_changed_video_points_use_gpu_count_and_concurrency_list(tmp_path):
+    row = {"scenario-type": "video-generation", "exp-name": "clip", "gpus": 2,
+           "conc-list": [1, 4], "spec": "clip.json"}
+    points, errors = changed._points([row], tmp_path)
+    report = changed.compare({}, {"clip": (points, errors)})
+    assert errors == []
+    assert report[0]["head-points"] == 2
+    assert [point["conc"] for point in report[0]["added"]] == [1, 4]
+    assert changed._label(report[0]["added"][1]).startswith("clip gpus2 conc 4 ")
+
+
 def test_rows_without_fingerprints_are_compared_individually(tmp_path):
     def matrix(*tps: int) -> changed.Matrix:
         rows = [

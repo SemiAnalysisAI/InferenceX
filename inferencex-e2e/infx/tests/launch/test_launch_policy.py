@@ -12,7 +12,7 @@ from infx.launch.drivers import check_tables
 from infx.launch.drivers.srt import models, power
 from infx.launch.drivers.srt.power import PowerPolicyError, decide_power
 from infx.launch.lifecycle import Lifecycle
-from infx.launch.policy import LaunchPath, Match, salloc_time_limit
+from infx.launch.policy import LaunchPath, salloc_time_limit
 from infx.launch.request import LaunchRequest, MultiNodeRequest, RequestError
 
 DCGM, AGENTX, ADAPTER, ERR = "dcgm", "agentx", "adapter", "error"
@@ -166,6 +166,18 @@ def test_cluster_settings_beat_the_host_but_never_the_points_settings(chosen, ex
     env = policy.runtime_env(cluster, request, {"LATER": "later", "SHARED": "later"})
 
     assert {name: env[name] for name in HOST} == expected
+
+
+VIDEO_ENV = {
+    "RUNNER_NAME": "h200-dgxc-slurm_00", "SCENARIO_TYPE": "video-generation", "IS_MULTINODE": "false",
+    "IS_AGENTIC": "0", "MODEL": "MiniMaxAI/MiniMax-H3", "FRAMEWORK": "sglang",
+}  # fmt: skip
+
+
+def test_video_generation_points_route_to_the_native_video_driver():
+    request = LaunchRequest.from_env(VIDEO_ENV)
+    assert policy.launch_path("h200-dgxc", request) is LaunchPath.SRT_VIDEO
+    assert drivers.ROUTES[LaunchPath.SRT_VIDEO].scheduler == "slurm"
 
 
 def test_a_role_without_additional_settings_arrives_as_null_and_sets_no_names():

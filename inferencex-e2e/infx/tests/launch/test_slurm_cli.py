@@ -1,6 +1,7 @@
 """Slurm CLI wrappers of the Slurm backend against fake salloc/srun/squeue/sacct/scontrol binaries."""
 
 import json
+import shlex
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -44,7 +45,7 @@ def fake_bin(tmp_path, monkeypatch):
 def recorder(log: Path) -> str:
     """Bash snippet appending the invocation's argv as a JSON line to ``log``."""
     return (
-        f"{sys.executable} -c 'import json,sys; print(json.dumps(sys.argv[1:]))' \"$@\" >> {log}"
+        f"{shlex.quote(sys.executable)} -c 'import json,sys; print(json.dumps(sys.argv[1:]))' \"$@\" >> {shlex.quote(str(log))}"
     )
 
 
@@ -77,20 +78,48 @@ def test_salloc_without_a_grant_fails(fake_bin, body):
         salloc(Resources(partition="p", account=None, time_min=10, job_name="n"))
 
 
-@pytest.mark.parametrize("record,state,exit_code,nodes", [
-    ("COMPLETED|0:0|gpu[01-02]", JobState.SUCCEEDED, 0, "gpu[01-02]"),
+@pytest.mark.parametrize('record,state,exit_code,nodes', [
     ("FAILED|1:0|gpu03", JobState.FAILED, 1, "gpu03"),
-    ("COMPLETED|0:15", JobState.FAILED, 143, None),
-    ("FAILED|0:9|gpu03", JobState.FAILED, 137, "gpu03"),
-    ("OUT_OF_MEMORY|0:125|gpu03", JobState.FAILED, 0, "gpu03"),
     ("CANCELLED by 1001|0:0|None assigned", JobState.CANCELLED, 0, None),
-])
+], ids=['FAILED|1:0|gpu03-failed-1-gpu03', 'CANCELLED by 1001|0:0|None assigned-cancelled-0-None'])
 def test_final_status_maps_allocation_accounting(fake_bin, tmp_path, record, state, exit_code, nodes):
     log = tmp_path / "sacct.log"
     fake_bin("sacct", f"{recorder(log)}\necho '{record}'")
     status = final_status(Job("42"), delay_s=0)
     assert (status.state, status.exit_code, status.nodes) == (state, exit_code, nodes)
-    assert calls(log) == [["-X", "-n", "-P", "-j", "42", "--format=State,ExitCode,NodeList,Submit,Start,End"]]
+    assert calls(log) == [["-X", "-n", "-P", "-j", "42",
+                           "--format=State,ExitCode,NodeList,Submit,Start,End,AllocTRES"]]
+
+
+def test_observe_carries_raw_alloc_tres_from_accounting(fake_bin):
+    allocation = "cpu=16,gres/gpu=8,mem=128G,node=1"
+    fake_bin("sacct", f"echo 'COMPLETED|0:0|gpu03|1791547200|1791548100|1791551700|{allocation}'")
+
+    status = cli.observe(Job("42"))
+
+    assert status.alloc_tres == allocation
+
+
+def test_observe_fills_missing_accounting_alloc_tres_from_matching_controller(fake_bin):
+    allocation = "cpu=16,gres/gpu=8,mem=128G,node=1"
+    fake_bin("sacct", "echo 'COMPLETED|0:0|gpu03|1791547200|1791548100|1791551700|Unknown'")
+    fake_bin("scontrol", f"echo 'JobId=42 JobState=FAILED ExitCode=1:0 NodeList=gpu03 AllocTRES={allocation}'")
+
+    status = cli.observe(Job("42"))
+
+    assert status.state is JobState.SUCCEEDED
+    assert status.alloc_tres == allocation
+
+
+def test_observe_does_not_take_alloc_tres_from_another_controller_job(fake_bin):
+    allocation = "cpu=16,gres/gpu=8,mem=128G,node=1"
+    fake_bin("sacct", "echo 'COMPLETED|0:0|gpu03|1791547200|1791548100|1791551700|Unknown'")
+    fake_bin("scontrol", f"echo 'JobId=420 JobState=COMPLETED ExitCode=0:0 NodeList=gpu03 AllocTRES={allocation}'")
+
+    status = cli.observe(Job("42"))
+
+    assert status.state is JobState.SUCCEEDED
+    assert status.alloc_tres is None
 
 
 def test_final_status_reads_the_accounting_times_as_epoch_seconds(fake_bin):

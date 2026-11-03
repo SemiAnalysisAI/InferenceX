@@ -23,6 +23,7 @@ from infx.matrix.generate import expand_config_keys, generate_config_matrix
 from infx.matrix.validation import config_root, load_config_files, load_runner_file
 from infx.srt_slurm.single_node import select_recipe
 from infx.srt_slurm.synthetic_acceptance import build_overrides, selected_recipes
+from infx.srt_slurm.video import prepare as prepare_video
 from infx.srt_slurm.workload import bind_multinode, check_setup_script, resolve_fabric
 
 if TYPE_CHECKING:
@@ -30,10 +31,39 @@ if TYPE_CHECKING:
 
 RANDOM_RANGE_RATIO = "0.8"
 THINKING_MODE = "thinking_on"
+# benchmark-tmpl.yml mounts the cluster's HF hub cache here inside every job.
+HF_HUB_CACHE = "/mnt/hf_hub_cache/"
+
+
+def is_video(point: Mapping[str, Any]) -> bool:
+    return point.get("scenario-type") == "video-generation"
 
 
 def point_environment(point: Mapping[str, Any]) -> dict[str, str]:
     """The workflow environment the launcher reads for ``point``."""
+    if is_video(point):
+        return {
+            "IMAGE": point["image"],
+            "MODEL": point["model"],
+            "MODEL_PREFIX": point["model-prefix"],
+            "PRECISION": point["precision"],
+            "FRAMEWORK": point["framework"],
+            "SPEC_DECODING": "none",
+            "SCENARIO_TYPE": "video-generation",
+            "IS_AGENTIC": "0",
+            "IS_MULTINODE": "false",
+            "ISL": "0",
+            "OSL": "0",
+            "RUN_EVAL": "false",
+            "EVAL_ONLY": "false",
+            "REQUIRE_POWER": "0",
+            "H3_SPEC": point["spec"],
+            "H3_SET": point["set"],
+            "GPU_COUNT": str(point["gpus"]),
+            "CONC_LIST": " ".join(map(str, point["conc-list"])),
+            "HF_HUB_CACHE": HF_HUB_CACHE,
+            "RESULT_FILENAME": point["exp-name"],
+        }
     agentic = point.get("scenario-type") == "agentic-coding"
     environment = {
         "IMAGE": point["image"],
@@ -146,6 +176,8 @@ def bound_variant(
     ``client_env``, the binder inputs the launcher computes. ``'@fabric.<name>'`` values stay
     unresolved: recipe fingerprints hash them as written.
     """
+    if is_video(point):
+        return None, prepare_video(root / point["srt-recipe"], environment, root=root)
     if "prefill" not in point:
         selected, recipe = select_recipe(
             str(root / point["srt-recipe"]), environment, root=root, expand=expand
@@ -181,7 +213,11 @@ def _apply_acceptance_and_validate(
     from srtctl.core.overrides import apply_overrides_to_recipe, parse_overrides
     from srtctl.core.schema import SrtConfig
 
-    arguments = build_overrides(recipe, environment["FRAMEWORK"], environment)
+    arguments = (
+        []
+        if environment.get("SCENARIO_TYPE") == "video-generation"
+        else build_overrides(recipe, environment["FRAMEWORK"], environment)
+    )
     pairs = list(zip(arguments[::2], arguments[1::2], strict=True))
     apply_overrides_to_recipe(
         recipe,

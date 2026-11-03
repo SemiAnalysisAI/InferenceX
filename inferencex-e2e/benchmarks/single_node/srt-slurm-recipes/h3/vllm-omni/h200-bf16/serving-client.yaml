@@ -1,0 +1,74 @@
+schema: 2
+name: h3-vllm-omni-serving-client
+
+resources:
+  gpu_type: h200
+
+frontend:
+  type: none
+
+services:
+  - name: h3-server
+    type: generic
+    nodes: 1
+    critical: true
+    start: before_workers
+    command: [python3, -m, infx.bench, video, serve]
+    args:
+      - --model-view
+      - h3-fl2va
+      - --
+      - vllm
+      - serve
+      - "{model_path}"
+      - --served-model-name
+      - "{model_id}"
+      - --omni
+      - --host
+      - 0.0.0.0
+      - --port
+      - "30283"
+      - --trust-remote-code
+      - --task-type
+      - fl2va
+      - --num-gpus
+      - "{gpus_per_node}"
+      - --tensor-parallel-size
+      - "1"
+      - --usp
+      - "4"
+      - --ring
+      - "1"
+      - --text-encoder-tp-size
+      - "4"
+      - --vae-patch-parallel-size
+      - "4"
+      - --vae-parallel-mode
+      - tile
+      - --vae-use-tiling
+    env:
+      PYTHONPATH: /h3-package:/infmax-workspace
+      PYTHONUNBUFFERED: "1"
+      H3_SERVER_PORT: "30283"
+      VIDEO_RUNTIME_REVISION: a8576ccb725c4e21cd13c3eb5f9a546b21149d2b
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      VLLM_WORKER_MULTIPROC_METHOD: spawn
+      OMNI_DIFFUSION_PROMPT_EMBED_CACHE: "0"
+      VLLM_OMNI_VIDEO_SYNC_TIMEOUT: "14400"
+      VLLM_OMNI_SERVER_STORAGE__PATH: /logs/h3/server/storage
+    readiness:
+      http:
+        port: 30283
+        path: /health
+      timeout_seconds: 900
+      interval_seconds: 5
+
+benchmark:
+  type: custom
+  command: python3 -m infx.bench video client --request-seconds 900
+  env:
+    PYTHONPATH: /h3-package:/infmax-workspace
+    PYTHONUNBUFFERED: "1"
+    H3_SERVER_SERVICE: h3-server
+    H3_SERVER_PORT: "30283"
