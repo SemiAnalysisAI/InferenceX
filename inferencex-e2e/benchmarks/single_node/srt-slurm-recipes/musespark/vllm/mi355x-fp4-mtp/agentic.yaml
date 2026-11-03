@@ -1,0 +1,81 @@
+base:
+  schema: 2
+  name: musespark-fp4-mi355x-vllm-agentic
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  health_check:
+    interval_seconds: 10
+    max_attempts: 360
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: amd/Muse-Spark-Open-816B-A42B-Quark-MXFP4
+        tensor-parallel-size: 8
+        enable-expert-parallel: true
+        language-model-only: true
+        dtype: bfloat16
+        distributed-executor-backend: mp
+        reasoning-parser: muse
+        enable-auto-tool-choice: true
+        tool-call-parser: muse
+        attention-backend: ROCM_AITER_FA
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
+        enable-prefix-caching: true
+        enable-chunked-prefill: true
+        max-model-len: 1048576
+        max-num-seqs: 16
+        max-num-batched-tokens: 8192
+        gpu-memory-utilization: 0.9
+        # Seven-token DSpark. AgentX throughput runs replace block rejection with the golden acceptance length.
+        speculative-config: '{"method":"dspark","model":"Inferact/Muse-Spark-Open-DSpark","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false,"attention_backend":"ROCM_AITER_FA"}'
+        # Verify steps of 1-16 requests run each layer as FlyDSL monokernel launches (vllm-project/vllm#63440). Needs TP8 with expert parallel, 16-token blocks and the LBHNC KV layout.
+        monokernel: true
+      env:
+        VLLM_ROCM_USE_AITER: '1'
+        VLLM_ROCM_MUSE_MOE_REDUCE_DTYPE: bf16
+        VLLM_USE_BREAKABLE_CUDAGRAPH: '1'
+        AITER_UNIFIED_ATTN_SHORT_QUERY_3D: '1'
+        VLLM_KV_CACHE_LAYOUT: LBHNC
+        PYTHONNOUSERSITE: '1'
+  benchmark:
+    env:
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+
+override_tp8_c1:
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp8_c4:
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp8_c8:
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
+override_tp8_c13:
+  benchmark:
+    env:
+      CONC: '13'
+      KV_OFFLOADING: none

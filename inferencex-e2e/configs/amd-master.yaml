@@ -1072,6 +1072,21 @@ musespark-fp4-mi355x-sglang-agentic-dflash:
       - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 8, 13], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [10, 16, 24, 28, 36, 40], srt-recipe: agentic.yaml }
 
+musespark-fp4-mi355x-vllm-agentic-dspark:
+  image: vllm/vllm-openai-rocm:nightly-40941f2c4ba96fba0a7e282a5355e89cd74d9ac5@sha256:5800b3b4cd79defc1cbcc66adb83b3c49e574b49ca5c6ba556e17388515dc84f
+  model: amd/Muse-Spark-Open-816B-A42B-Quark-MXFP4
+  model-prefix: musespark
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  srt-recipe-dir: musespark/vllm/mi355x-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.85
+      search-space:
+      - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 8, 13], srt-recipe: agentic.yaml }
+
 # Native Kimi-K3 PD with TP8 workers and MoRIIO READ.
 kimik3-fp4-mi355x-vllm-disagg-agentic:
   image: vllm/vllm-openai-rocm:nightly-81198e97ba7eee2a22540caaa756b7fdddcb4d93@sha256:a401e4f46872dcde77e07ae3d7fa2d3a71b7f2773714316116532e2b39deb179

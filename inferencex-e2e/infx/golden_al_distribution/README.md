@@ -118,7 +118,7 @@ collection:
 - `renderer` is how the client turned each prompt into text. `chat_template` applies the served model's Hugging Face chat template to one user message, with the generation prompt and `chat_template_kwargs`. `deepseek_v4` is vLLM's tokenizer mode of that name; the gate uses the equivalent [encoder](../bench_serving/encoding_dsv4.py) in this repository, with `chat_template_kwargs` as its thinking options.
 - `sampling` lists every sampling parameter the requests carried, including the `repetition_penalty: 1.0` that `vllm bench serve` adds. A parameter that is not listed was not sent, so the server used its own default.
 - Everything else is the same for every collection: the 80 prompts of the SPEED-Bench Qualitative `coding` category, in the order vLLM's loader sends them, as streaming `/v1/completions` requests with `max_tokens` 4096 and no `ignore_eos`. Collections ran at different concurrencies; the gate always replays at 64, treating AL as independent of concurrency.
-- New curves must include the block. Two curves have none, so the gate lists their points as unresolved. [`dsv41flash_dspark.yaml`](dsv41flash_dspark.yaml) needs a DeepSeek V4.1 renderer before the gate can render its prompts. [`musespark_dflash.yaml`](musespark_dflash.yaml) was collected with SGLang's `bench_serving` client on its native `/generate` endpoint, which the gate's `/v1/completions` replay does not reproduce. [`glm5.3_mtp.yaml`](glm5.3_mtp.yaml) is provisional and carries GLM-5.2's settings.
+- New curves must include the block. Two curves have none, so the gate lists their points as unresolved. [`dsv41flash_dspark.yaml`](dsv41flash_dspark.yaml) needs a DeepSeek V4.1 renderer before the gate can render its prompts. [`musespark_dflash.yaml`](musespark_dflash.yaml) was collected with SGLang's `bench_serving` client on its native `/generate` endpoint, which the gate's `/v1/completions` replay does not reproduce. [`glm5.3_mtp.yaml`](glm5.3_mtp.yaml) is provisional and carries GLM-5.2's settings. [`musespark_dspark.yaml`](musespark_dspark.yaml) is provisional, carries DFlash2's K=7 value, and has no collection block.
 
 ## Reproducing a collection
 
@@ -165,6 +165,7 @@ Before accepting an updated curve, reviewers should verify:
 | GLM-5.3 | MTP (provisional, K=3 copied from GLM-5.2) | [`glm5.3_mtp.yaml`](glm5.3_mtp.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479) (GLM-5.2) |
 | Qwen3.8-Flash-Next | MTP (native) | [`qwen3.8next_mtp.yaml`](qwen3.8next_mtp.yaml) | [33034290269](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/33034290269) |
 | Muse Spark Open | DFlash2 | [`musespark_dflash.yaml`](musespark_dflash.yaml) | [38808046215](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/38808046215) |
+| Muse Spark Open | DSpark (provisional, K=7 copied from DFlash2) | [`musespark_dspark.yaml`](musespark_dspark.yaml) | [38808046215](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/38808046215) (DFlash2) |
 
 ## Using golden curves in srt-slurm runs
 
