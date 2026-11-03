@@ -110,10 +110,10 @@ def test_per_gpu_vllm_processes_split_the_endpoint_memory_between_steps():
         engine={"type": "vllm", "dp_launch_mode": "per_gpu"},
         frontend={"type": "dynamo"},
     )
-    result = bind_memory(item, 8000, 8)
-    assert result["roles"]["agg"]["srun_options"]["mem"] == "1000M"
+    result = bind_memory(item, 3079397, 8)
+    assert result["roles"]["agg"]["srun_options"]["mem"] == "384924M"
     assert "sbatch_directives" not in result
-    assert result["benchmark"]["env"]["INFERENCEX_WORKER_MEMORY_MIB"] == "4000"
+    assert result["benchmark"]["env"]["INFERENCEX_WORKER_MEMORY_MIB"] == "1539696"
 
 
 def test_uniform_multinode_mpi_caps_each_node_without_dividing_by_task_count():

@@ -44,21 +44,21 @@ def bind_memory(recipe: dict[str, Any], available_mib: int, gpus_per_node: int) 
     counts: dict[str, set[int]] = defaultdict(set)
     capacities: dict[str, int] = defaultdict(int)
 
-    for endpoint in endpoints:
-        for rank in range(endpoint.num_nodes):
-            size = gpu_share_mib(available_mib, len(endpoint.gpus_on_node(rank)), gpus_per_node)
-            capacities[endpoint.mode] += size
     for process in processes:
         backend = config.backend_for_role(process.endpoint_mode)
         if backend.get_srun_config().launch_per_endpoint:
             continue
         counts[process.endpoint_mode].add(len(process.gpu_indices))
+        capacities[process.endpoint_mode] += gpu_share_mib(
+            available_mib, len(process.gpu_indices), gpus_per_node
+        )
     for endpoint in endpoints:
         backend = config.backend_for_role(endpoint.mode)
         if backend.get_srun_config().launch_per_endpoint:
-            counts[endpoint.mode].update(
-                len(endpoint.gpus_on_node(rank)) for rank in range(endpoint.num_nodes)
-            )
+            for rank in range(endpoint.num_nodes):
+                local_gpus = len(endpoint.gpus_on_node(rank))
+                counts[endpoint.mode].add(local_gpus)
+                capacities[endpoint.mode] += gpu_share_mib(available_mib, local_gpus, gpus_per_node)
     if not endpoints:
         raise ValueError("Automatic worker memory needs at least one inference worker")
     limits = {}
