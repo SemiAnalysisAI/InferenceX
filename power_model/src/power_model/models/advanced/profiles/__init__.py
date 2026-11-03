@@ -18,6 +18,25 @@ def nic_power_baseline(nic_name: str, idle_power_w: float, active_power_w: float
     )
 
 
+POLLARA_NIC_BASELINE = Provenance(
+    profile_id="pollara-state-power",
+    version="2",
+    source="nicctl total_power_drawn calibration on an MI355X host",
+    kind="estimated",
+    input_boundary="One scale-out NIC; excludes separately modeled transceivers and switches",
+    assumptions=(
+        "Idle power is 34.5 W and power at line rate is 39 W per card: total_power_drawn means "
+        "of 38.5 W idle and 42.6 W at 391 Gbit/s each way, plus a 10% margin, minus the "
+        "separately modeled 8 W transceiver.",
+        "Assumes total_power_drawn includes the QSFP-400G-DR4 transceiver; if it does not, "
+        "both values are 8 W low.",
+        "Power rises about 0.5 W per 100 Gbit/s sent plus received, so traffic below line rate "
+        "draws less.",
+        "Measured on the eight cards of one MI355X node, RDMA writes through the leaf switches.",
+    ),
+)
+
+
 def system_side_transceiver_baseline(bandwidth_gbps: int, power_w: float) -> Provenance:
     return Provenance(
         profile_id=f"system-side-{bandwidth_gbps}g-transceiver",

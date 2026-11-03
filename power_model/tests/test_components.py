@@ -46,16 +46,16 @@ def test_invalid_x86_state_or_power_override_is_rejected(inputs):
 
 
 @pytest.mark.parametrize(
-    "nic_class, active_w, idle_w, total_w, bandwidth",
+    "nic_class, active_w, idle_w, total_w, bandwidth, kind",
     [
-        (ConnectX7NICCard, 50, 15, 65, 400),
-        (ConnectX8NICCard, 100, 30, 130, 800),
-        (Thor2NICCard, 60, 20, 80, 400),
-        (PollaraNICCard, 60, 20, 80, 400),
+        (ConnectX7NICCard, 50, 15, 65, 400, "assumed"),
+        (ConnectX8NICCard, 100, 30, 130, 800, "assumed"),
+        (Thor2NICCard, 60, 20, 80, 400, "assumed"),
+        (PollaraNICCard, 78, 34.5, 112.5, 400, "estimated"),
     ],
 )
 def test_nic_state_selects_fixed_power_without_changing_capacity_metadata(
-    nic_class, active_w, idle_w, total_w, bandwidth
+    nic_class, active_w, idle_w, total_w, bandwidth, kind
 ):
     active = nic_class(state=NICState.ACTIVE)
     idle = nic_class(state="idle")
@@ -73,7 +73,7 @@ def test_nic_state_selects_fixed_power_without_changing_capacity_metadata(
     assert dict(active_group.details)["state"] == "active"
     assert dict(idle_group.details)["idle_power_w"] == idle_w
     assert dict(active_group.details)["active_power_w"] == active_w / 2
-    assert active_group.provenance.kind == "assumed"
+    assert active_group.provenance.kind == kind
 
 
 @pytest.mark.parametrize("state, expected", [("idle", 121.6), ("active", 224)])
