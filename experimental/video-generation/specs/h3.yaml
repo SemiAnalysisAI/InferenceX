@@ -175,7 +175,6 @@ sets:
       - {case_id: footsteps-s47, prompt: footsteps, seed: 47}
       - {case_id: footsteps-s83, prompt: footsteps, seed: 83}
 
-# Informational only; not hashed.
 reference:
   sglang:
     pull_request: https://github.com/SemiAnalysisAI/InferenceX/pull/2916
