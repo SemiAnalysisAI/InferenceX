@@ -8,6 +8,7 @@ import queue
 import signal
 import subprocess
 import sys
+import tarfile
 import tempfile
 import threading
 from collections.abc import Iterator, Sequence
@@ -38,7 +39,9 @@ TOOLS = {"generate": GENERATOR, "plan": PLANNER}
 FINGERPRINTER = "infx.matrix.fingerprint"
 CONFIG_DIRS = ("configs", ".github/configs")
 NESTED_PROJECT = "inferencex-e2e/"
+SRT_PATH = "utils/srt-slurm"
 SNAPSHOT_PATHS = (
+    SRT_PATH,
     "infx",
     "utils/matrix_logic",
     *CONFIG_DIRS,
@@ -325,9 +328,14 @@ def snapshot(ref: str) -> Iterator[Revision]:
         check=True,
     ).stdout
     objects = {}
+    submodule = None
     for entry in listing.split(b"\0")[:-1]:
         metadata, path = entry.split(b"\t", 1)
-        objects[os.fsdecode(path)] = metadata.split()[2]
+        _, kind, oid = metadata.split()
+        if kind == b"commit":
+            submodule = oid.decode()
+        else:
+            objects[os.fsdecode(path)] = oid
     if any(path.startswith(NESTED_PROJECT) for path in objects):
         objects = {
             path.removeprefix(NESTED_PROJECT): oid
@@ -344,6 +352,17 @@ def snapshot(ref: str) -> Iterator[Revision]:
         ).stdout
     )
     with tempfile.TemporaryDirectory(prefix="infx-revision-") as temp_dir:
+        if submodule is not None:
+            source = project_root(repository) / SRT_PATH
+            archive = subprocess.run(
+                ["git", "-C", str(source), "archive", submodule, "src"],
+                capture_output=True,
+                check=True,
+            ).stdout
+            destination = Path(temp_dir, SRT_PATH)
+            destination.mkdir(parents=True)
+            with tarfile.open(fileobj=io.BytesIO(archive)) as contents:
+                contents.extractall(destination, filter="data")
         for path in objects:
             header = blobs.readline().split()
             if len(header) != 3 or header[1] != b"blob":

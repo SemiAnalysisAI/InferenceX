@@ -251,6 +251,8 @@ def test_conc_list_must_be_canonical_positive_integers():
 
 
 def test_the_multinode_binder_writes_the_one_selected_variant(project, tmp_path):
+    (project / "utils").mkdir()
+    (project / "utils/srt-slurm").symlink_to(ROOT / "utils/srt-slurm", target_is_directory=True)
     path = fragment(project, {
         "base": {"schema": 2, "name": "bundle", "engine": "sglang",
                  "frontend": {"type": "sglang-router"},

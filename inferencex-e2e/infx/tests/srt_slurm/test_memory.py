@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from infx.launch.resources import WorkerResources
-from infx.srt_slurm.memory import bind_memory, bind_worker_topology
+from infx.srt_slurm.memory import bind_memory
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "utils/srt-slurm/src"))
@@ -27,7 +27,6 @@ def test_master_request_drives_topology_and_preserves_helpers():
     item = recipe(
         {
             "agg": {
-                "nodes": 9,
                 "workers": 9,
                 "gpus": 8,
                 "srun_options": {"mem-per-cpu": "20M", "cpu-bind": "cores"},
@@ -40,7 +39,7 @@ def test_master_request_drives_topology_and_preserves_helpers():
     result = bind_memory(item, 8000, 8, {"agg": WorkerResources(1, 4)})
     assert result is item
     assert result["roles"]["agg"] == {
-        "nodes": 1, "workers": 1, "gpus": 4,
+        "workers": 1, "gpus": 4,
         "srun_options": {"mem": "4000M", "cpu-bind": "cores"},
     }
     assert result["srun_options"] == {"mem": "64M", "container-remap-root": ""}
@@ -56,7 +55,6 @@ def test_colocated_roles_have_independent_caps(engine):
         8000, 8,
         {"prefill": WorkerResources(1, 2), "decode": WorkerResources(2, 3)},
     )
-    assert result["roles"]["prefill"]["nodes"] == 1
     assert result["roles"]["decode"]["nodes"] == "colocate"
     assert result["roles"]["prefill"]["srun_options"]["mem"] == "2000M"
     assert result["roles"]["decode"]["srun_options"]["mem"] == "3000M"
@@ -72,7 +70,6 @@ def test_colocated_roles_reserve_enough_nodes_for_both_roles():
         recipe({"prefill": {}, "decode": {"nodes": "colocate"}}), 8000, 8,
         {"prefill": WorkerResources(2, 4), "decode": WorkerResources(2, 4)},
     )
-    assert result["roles"]["prefill"]["nodes"] == 2
     assert result["roles"]["prefill"]["srun_options"]["mem"] == "4000M"
     assert result["roles"]["decode"]["srun_options"]["mem"] == "4000M"
     assert result["benchmark"]["env"]["INFERENCEX_WORKER_MEMORY_MIB"] == "16000"
@@ -84,17 +81,20 @@ def test_dep16_worker_gets_one_full_budget_on_each_hgx8_node(engine):
         recipe({"agg": {}}, engine=engine), 8000, 8, {"agg": WorkerResources(1, 16)}
     )
     assert result["roles"]["agg"] == {
-        "nodes": 2, "workers": 1, "gpus": 16, "srun_options": {"mem": "8000M"},
+        "workers": 1, "gpus": 16, "srun_options": {"mem": "8000M"},
     }
     assert result["benchmark"]["env"]["INFERENCEX_WORKER_MEMORY_MIB"] == "16000"
 
 
-@pytest.mark.parametrize("engine", ["sglang", "trtllm"])
-def test_partial_multinode_worker_is_rejected(engine):
-    item = recipe({"agg": {}}, engine=engine)
-    with pytest.raises(ValueError, match="spanning nodes must be a multiple"):
-        bind_memory(item, 8000, 8, {"agg": WorkerResources(1, 12)})
-    assert "srun_options" not in item["roles"]["agg"]
+def test_partial_multinode_worker_uses_native_local_gpu_share():
+    result = bind_memory(recipe({"agg": {}}), 8000, 8, {"agg": WorkerResources(1, 12)})
+    assert result["roles"]["agg"]["srun_options"]["mem"] == "6000M"
+    assert result["benchmark"]["env"]["INFERENCEX_WORKER_MEMORY_MIB"] == "12000"
+
+
+def test_unequal_native_node_shares_cannot_share_one_role_limit():
+    with pytest.raises(ValueError, match="one uniform Slurm memory limit"):
+        bind_memory(recipe({"agg": {}}, engine="trtllm"), 8000, 8, {"agg": WorkerResources(1, 12)})
 
 
 @pytest.mark.parametrize("available", [None, 0, True])
@@ -130,7 +130,6 @@ def test_logical_gpu_capacity_does_not_inflate_physical_memory_share():
     item["resources"]["gpus_per_node"] = 2
     result = bind_memory(item, 8000, 4, {"agg": WorkerResources(3, 1)})
     assert result["resources"]["gpus_per_node"] == 2
-    assert result["roles"]["agg"]["nodes"] == 2
     assert result["roles"]["agg"]["srun_options"]["mem"] == "2000M"
     assert result["benchmark"]["env"]["INFERENCEX_WORKER_MEMORY_MIB"] == "6000"
 
@@ -140,17 +139,12 @@ def test_logical_gpu_capacity_cannot_exceed_the_physical_node():
         bind_memory(recipe({"agg": {}}), 8000, 4, {"agg": WorkerResources(1, 4)})
 
 
-def test_logical_capacity_cannot_split_a_physical_node_worker():
+def test_native_logical_capacity_determines_worker_steps():
     item = recipe({"agg": {}})
     item["resources"]["gpus_per_node"] = 2
-    with pytest.raises(ValueError, match="would split the requested node-local worker"):
-        bind_memory(item, 8000, 4, {"agg": WorkerResources(1, 4)})
-
-
-def test_partial_workers_are_packed_without_splitting_them():
-    item = recipe({"agg": {}})
-    result = bind_worker_topology(item, {"agg": WorkerResources(5, 3)}, 8)
-    assert result["roles"]["agg"]["nodes"] == 3
+    result = bind_memory(item, 8000, 4, {"agg": WorkerResources(1, 4)})
+    assert result["roles"]["agg"]["srun_options"]["mem"] == "4000M"
+    assert result["benchmark"]["env"]["INFERENCEX_WORKER_MEMORY_MIB"] == "8000"
 
 
 @pytest.mark.parametrize("roles", [None, {}, {"agg": None}, {"agg": {}, "decode": {}}])

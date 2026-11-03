@@ -156,6 +156,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
+          submodules: true
 
       - name: Select Python project
         run: |

@@ -98,10 +98,10 @@ The below list describes what each field is:
   inference worker, including any data parallel ranks. Worker counts and GPU allocations
   are supplied to the launch backend from the master config; SRT recipe roles specify engine
   settings and placement constraints, not duplicate `gpus`, `workers`, or integer `nodes`.
-  A worker may occupy part of one node or span whole physical nodes; a spanning worker
-  must request a multiple of the cluster's `gpus-per-node`. For example, DEP16 on HGX8
-  occupies eight GPUs on each of two nodes. Backend adapters validate that their actual
-  placement matches this resource request before submission.
+  InferenceX maps these fields directly to SRT `workers` and `gpus`. SRT derives node
+  counts and assigns GPUs using its native allocator. For example, DEP16 on HGX8
+  occupies eight GPUs on each of two nodes. Memory limits use the GPUs assigned to
+  each worker step; all steps of a role must have the same limit.
 - `multinode`: Required. `true` selects the multinode schema with `prefill`/`decode` or `worker` blocks, and `false` the single-node schema with `tp` entries.
 - `disagg`: Enables disaggregated serving and may only be `true` when
   `multinode` is also `true`.
@@ -221,8 +221,7 @@ schema; unknown keys fail.
   `python -m infx.launch` resolves its cluster from `RUNNER_NAME` this way.
 - Matrix generation reads `gpus-per-node` from the cluster a master config's
   `cluster:<id>` label names; broad SKU labels use the GPU family when its clusters agree.
-  Agentic master configs must use a `cluster:<id>` label. Servers must tile their nodes,
-  and per-worker `hardware` is not supported.
+  Agentic master configs must use a `cluster:<id>` label; per-worker `hardware` is not supported.
 - `available-cpu-dram-mib` is the host DRAM a benchmark job can use on a node: the lower of
   Slurm's `RealMemory - MemSpecLimit` and `MemTotal` less 16 GiB for the OS, over the
   cluster's GPU nodes. Inference workers automatically receive

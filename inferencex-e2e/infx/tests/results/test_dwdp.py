@@ -8,7 +8,6 @@ from infx.launch.drivers.srt.submit import eval_args
 from infx.matrix.generate import (
     filter_exp_names,
     multinode_agentic_exp_name,
-    worker_node_count,
 )
 from infx.matrix.validation import WorkerConfig
 from infx.results.agentic import _gpu_shape
@@ -24,12 +23,6 @@ def worker(**overrides):
 def test_group_allocation():
     config = WorkerConfig.model_validate(worker())
     assert config.dwdp_size == 8
-    assert (
-        worker_node_count(
-            worker(), "prefill", "cluster:test", {"clusters": {"test": {"gpus-per-node": 8}}}
-        )
-        == 2
-    )
     layout = Parallelism(tp=1, ep=1, dwdp_size=8)
     assert layout.gpus_per_worker == 8
     assert layout.fields("prefill_")["prefill_dwdp_size"] == 8

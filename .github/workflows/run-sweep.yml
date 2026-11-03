@@ -78,6 +78,7 @@ jobs:
               with:
                   fetch-depth: 0
                   persist-credentials: false
+                  submodules: true
 
             - name: Read PR sweep policy
               id: sweep_policy
@@ -101,8 +102,7 @@ jobs:
               run: |
                   cd "$GITHUB_WORKSPACE/inferencex-e2e"
                   CMD=(
-                      uv run --no-project --exclude-newer PT12H --python 3.12
-                      --with "pydantic>=2" --with pyyaml python -m infx.workflows.validate_perf_changelog
+                      uv run --locked python -m infx.workflows.validate_perf_changelog
                       --changelog-file perf-changelog.yaml
                       --base-ref "origin/${GITHUB_BASE_REF}"
                       --head-ref "${PR_HEAD_SHA}"
@@ -202,6 +202,7 @@ jobs:
               with:
                   fetch-depth: 0
                   persist-credentials: false
+                  submodules: true
 
             - name: Resolve workflow tooling
               id: tooling
@@ -241,8 +242,7 @@ jobs:
                   cd "$GITHUB_WORKSPACE/inferencex-e2e"
 
                   CMD=(
-                      uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-                      python -m infx.matrix.plan
+                      uv run --locked python -m infx.matrix.plan
                       --changelog-file "${GITHUB_WORKSPACE}/inferencex-e2e/perf-changelog.yaml"
                       --base-ref "origin/${GITHUB_BASE_REF}"
                       --head-ref "${PR_HEAD_SHA}"

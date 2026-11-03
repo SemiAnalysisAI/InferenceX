@@ -351,3 +351,37 @@ def test_cli_rejects_a_checkout_without_the_tool(tmp_path):
     assert result.returncode == 2
     assert "has neither infx/matrix/generate.py nor utils/matrix_logic/generate_sweep_configs.py" in result.stderr
     assert result.stdout == ""
+
+
+def test_snapshot_generates_with_its_pinned_srt_source(generation_repo):
+    root, git = generation_repo
+    git("checkout", "newer", "--", "infx", "configs")
+    git("-c", "protocol.file.allow=always", "submodule", "add", "--quiet",
+        str(ROOT / "utils/srt-slurm"), "utils/srt-slurm")
+    recipe = root / "benchmarks/multi_node/srt-slurm-recipes/fixture/recipe.yaml"
+    recipe.parent.mkdir(parents=True)
+    recipe.write_text("schema: 2\nroles: {agg: {}}\n")
+    master = {"fixture": {
+        "image": "example/image:stable", "model": "example/model", "model-prefix": "fixture",
+        "precision": "fp8", "framework": "sglang", "runner": "fixture",
+        "multinode": True, "disagg": False, "srt-recipe-dir": "fixture",
+        "scenarios": {"fixed-seq-len": [{
+            "isl": 1024, "osl": 1024,
+            "search-space": [{
+                "worker": {"num-worker": 3, "gpus-per-worker": 4, "tp": 4, "ep": 1, "dp-attn": False},
+                "conc-list": [2], "srt-recipe": "recipe.yaml",
+            }],
+        }]},
+    }}
+    (root / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(master))
+    git("add", ".")
+    git("commit", "-qm", "multinode resources")
+    (root / "utils/srt-slurm/src/srtctl/core/schema.py").write_text(
+        'raise RuntimeError("uncommitted submodule was used")\n'
+    )
+
+    with revision.snapshot("HEAD") as inputs:
+        rows = inputs.generate(["fixture"], ["--no-evals"])
+
+    assert len(rows) == 1
+    assert rows[0]["node-count"] == 2

@@ -18,21 +18,6 @@ class WorkerResources:
         _positive("num-worker", self.num_workers)
         _positive("gpus-per-worker", self.gpus_per_worker)
 
-    def placement(self, gpus_per_node: int) -> tuple[int, int]:
-        """Return local GPUs and nodes per worker for a partial node or whole nodes."""
-        _positive("gpus-per-node", gpus_per_node)
-        if self.gpus_per_worker > gpus_per_node and self.gpus_per_worker % gpus_per_node:
-            raise ValueError("gpus-per-worker spanning nodes must be a multiple of gpus-per-node")
-        return min(self.gpus_per_worker, gpus_per_node), max(
-            1, self.gpus_per_worker // gpus_per_node
-        )
-
-    def nodes_required(self, gpus_per_node: int) -> int:
-        """Pack complete workers on nodes without splitting a partial-node worker."""
-        local_gpus, nodes_per_worker = self.placement(gpus_per_node)
-        per_node = gpus_per_node // local_gpus
-        return ((self.num_workers + per_node - 1) // per_node) * nodes_per_worker
-
 
 def worker_resources(environment: Mapping[str, str]) -> dict[str, WorkerResources]:
     """Read the explicit worker resource requests forwarded by the benchmark workflow."""

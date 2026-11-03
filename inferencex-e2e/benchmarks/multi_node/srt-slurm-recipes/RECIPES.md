@@ -65,7 +65,7 @@ Recipes do not hardcode cluster hardware facts: a value `'@fabric.<name>'`, anyw
 Inspect what the launcher submits without a cluster:
 
 ```bash
-uv run --extra recipes infx generate --config-key 'dsr1-fp8-h200-*' --output-dir /tmp/recipes
+uv run infx generate --config-key 'dsr1-fp8-h200-*' --output-dir /tmp/recipes
 ```
 
 It writes one bound recipe per fixed-sequence or AgentX point, validated by the pinned srtctl, plus a `manifest.json` that maps each file to its matrix point and to the one cluster its runner label schedules on (`null` when the label spans several). Multi-node points take their cluster's binder inputs (DCGM exporter port, AgentX client env); a point that needs them fails unless its runner label names one cluster and the lane accepts the row's `power`. Native single-node points validate against each eligible cluster's exporter defaults while retaining cluster-independent recipe output. Fabric references take that cluster's facts; when the label spans several clusters they stay references. Launch-time edits such as the job name, health-check floor and runtime `--set` values are not applied.
