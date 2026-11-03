@@ -11876,6 +11876,26 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4666
 
 - config-keys:
+    - qwen3.8next-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the MI355X Qwen3.8-Flash-Next SGLang AgentX recipe to lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261031@sha256:3867dc07ba2530f914e1f210ed829f7a572a75286c8c362dbc22cbecf9b5a7e6. This nightly's SGLang pins sgl-amd-mono at b10f3b71 (sglang #47483, the merge of sgl-amd-mono #29), so the checkout setup script is removed and no patch is applied."
+    - "c1, c2, c4 and c8 enable the FlyDSL monokernel (--enable-amd-monokernel) for MTP target verify and draft. The kernel writes the per-draft intermediate SSM states and reads the PLE table on the GPU, so those points drop ReplaySSM and PLE offload and admit CONC requests (max-running-requests = cuda-graph-max-bs-decode = 1, 2, 4 and 8). c12 and c16 stay on the round 03 default path: ReplaySSM, PLE offload, and 2x CONC admission. Integer all-reduce stays off (ROCM_QUICK_REDUCE_QUANTIZATION=NONE)."
+    - "The monokernel reads the FP8 and MXFP4 weights in place, keeps per-token FP8 activations for the W8A8 projections and runs the MoE on BF16 activations (a16w4), where the default path quantizes them to MXFP4. c1-c8 also set SGLANG_USE_AITER=1, which the monokernel requires and the image already sets, so they get their own GSM8K eval at c8."
+    - "Every point now serves the model's default thinking-on chat template: the recipe no longer passes --default-chat-template-kwargs '{\"enable_thinking\": false}', so the served mode matches the thinking_on golden AL (2.32 at 3 draft tokens) and the other qwen3.8next recipes."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4542
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg
+    - minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-agg
+  description:
+    - "Add 6P DEP2 + DEP16 points at conc 220, 240 and 260, and a TP4 MonoKernel point at conc 1."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4750
+  scenario-type: [agentic-coding]
+  append-only: true
+
+- config-keys:
     - dsv41flash-fp4-h100-vllm-agentic-dspark
   description:
     - "Update the vLLM image from nightly-e4a5b5537344 to nightly-00b6c4c565a8, pinned by digest."
