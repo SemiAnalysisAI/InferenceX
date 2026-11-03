@@ -11880,6 +11880,6 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Update Kimi-K3 B300 vLLM AgentX to concurrency 1, 4, 8, 12, 14, 16, 24 and 28 with DSpark draft lengths 7, 5 and 3 and per-point CUDA graph capture sizes."
-    - "Pin the vLLM nightly-49cb2bbf image digest and use an InfiniBand rail for Mooncake KV offload at 256 GiB per TP rank."
+    - "Update Kimi-K3 B300 vLLM AgentX to concurrency 1, 4, 8, 12, 14, 16, 24 and 28 with DSpark draft lengths 7, 5 and 3, per-point CUDA graph capture sizes and a bfloat16 recurrent-state cache."
+    - "Pin the vLLM nightly-49cb2bbf image digest and use the image's bundled Mooncake 0.3.13.post1 over an InfiniBand rail for KV offload at 256 GiB per TP rank."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4381
