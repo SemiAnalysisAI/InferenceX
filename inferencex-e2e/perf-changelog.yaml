@@ -11918,3 +11918,10 @@
     - "Concurrency points and evaluation coverage are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4656
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - qwen3.8next-fp4-gb300-sglang-agentic-mtp
+  description:
+    - "Require valid measured GPU power for the Qwen3.8 GB300 AgentX sweep."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4552
+  scenario-type: [agentic-coding]
