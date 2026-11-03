@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 set -eo pipefail
+# Frontends do not use MoRI. The baseline installer validates Dynamo itself.
+if [[ -z ${UMBP_ENDPOINT-} ]]; then
+    exec bash /configs/k3-umbp-dynamo-venv.sh
+fi
 bash /configs/k3-mori810-prepare.sh
 bash /configs/k3-mori810-pool.sh
 source /infmax-workspace/benchmarks/check_env.sh

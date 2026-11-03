@@ -10960,3 +10960,10 @@
     - "Rebuild MoRI c4399a8 in the original Kimi-K3 image and cap UMBP host registrations at 512 GiB; preserve the Dynamo 2P3D c176 benchmark configuration."
   scenario-type: [agentic-coding]
   no-evals: true
+
+- config-keys:
+    - kimik3-fp4-mi355x-dynamo-vllm-disagg-agentic-umbp-c70-mori810
+  description:
+    - "Validate MoRI c4399a8 with writable build caches on 1P1D c70; skip MoRI compilation in the Dynamo frontend. Preserve the original image and engine parameters."
+  scenario-type: [agentic-coding]
+  no-evals: true

@@ -4,6 +4,17 @@ source /infmax-workspace/benchmarks/check_env.sh
 check_env_vars MORI_SOURCE_COMMIT DYNAMO_VERSION DYNAMO_ENGINE_GRPC_VERSION
 venv_path="$1"
 src="$venv_path/mori-source"
+# Container root may be read-only. Keep all build caches in the writable venv.
+export CCACHE_DIR="$venv_path/build-cache/ccache"
+export CCACHE_TEMPDIR="$venv_path/build-cache/ccache-tmp"
+export XDG_CACHE_HOME="$venv_path/build-cache/xdg"
+export PIP_CACHE_DIR="$venv_path/build-cache/pip"
+export TMPDIR="$venv_path/build-cache/tmp"
+mkdir -p "$CCACHE_DIR" "$CCACHE_TEMPDIR" "$XDG_CACHE_HOME" "$PIP_CACHE_DIR" "$TMPDIR"
+for directory in "$CCACHE_DIR" "$CCACHE_TEMPDIR" "$XDG_CACHE_HOME" "$PIP_CACHE_DIR" "$TMPDIR"; do
+    probe=$(mktemp "$directory/write-check.XXXXXX")
+    rm -- "$probe"
+done
 if [[ ! -f /usr/include/grpcpp/grpcpp.h || ! -f /usr/include/google/protobuf/message.h ]] || ! command -v protoc >/dev/null || ! command -v grpc_cpp_plugin >/dev/null; then
     [[ $(id -u) == 0 ]]
     apt-get update -qq
