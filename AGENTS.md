@@ -96,6 +96,7 @@ Run the focused test path first. Use `--extra workflows` for GitHub integrations
 - Launch only through `python -m infx.launch`; add no shell launchers. Cluster facts go in the cluster's `clusters:` record, workload rules in named policy tables; drivers never branch on a cluster id. Retiring a cluster removes its label, record, and policy rows in one PR.
 - srt-slurm host-setup hooks only check or prepare hosts: they never run benchmarks, tune engines, patch containers, or hide failures.
 - Never hard-code synthetic acceptance lengths; the srt driver picks measured values from `infx/golden_al_distribution/` ([details](inferencex-e2e/infx/golden_al_distribution/README.md#using-golden-curves-in-srt-slurm-runs)).
+- `run-sweep.yml` PR sweeps run the report-only [speculative acceptance gate](.github/workflows/README.md#speculative-acceptance-gate) alongside AgentX throughput. New golden curves need a `collection` block with the SPEED-Bench client settings they were measured with.
 
 ## Deprecating benchmark configs
 
