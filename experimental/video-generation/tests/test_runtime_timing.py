@@ -55,20 +55,10 @@ def test_interleaved_requests_and_missing_stage_do_not_create_queue_time(ledger)
     assert timing.collect("b")["status"] == "complete"
 
 
-@pytest.mark.parametrize("defect", ['clock'])
-def test_corrupt_or_incompatible_events_fail_closed(ledger, defect):
+def test_corrupt_or_incompatible_events_fail_closed(ledger):
     complete_request("a")
     rows = timing.read_events(ledger)
-    if defect == "duplicate":
-        rows.append(rows[0])
-    elif defect == "clock":
-        rows[2]["clock_id"] = "another-host"
-    elif defect == "reverse":
-        rows[2]["monotonic_ns"] = rows[0]["monotonic_ns"] - 1
-    elif defect == "instance":
-        rows[2]["instance_id"] = "another-server"
-    else:
-        rows[2]["observed_batch_size"] = 2
+    rows[2]["clock_id"] = "another-host"
     with pytest.raises(ValueError):
         timing.derive(rows, "a", "cpu-fixture-instance")
 

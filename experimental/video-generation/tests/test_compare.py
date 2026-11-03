@@ -166,18 +166,17 @@ def test_failed_attempt_may_have_only_terminal_timing(tmp_path, media_stub):
     assert compare_runs(baseline, candidate, policy=POLICY)["overall_status"] == "fail"
 
 
-@pytest.mark.parametrize("field", ['hardware_label'])
-def test_cross_configuration_latency_is_descriptive_not_a_regression_gate(tmp_path, media_stub, field):
+def test_cross_configuration_latency_is_descriptive_not_a_regression_gate(tmp_path, media_stub):
     baseline, _ = bundle(tmp_path, "baseline")
     candidate, document = bundle(tmp_path, "candidate")
-    document["configuration"][field] = "different-class"
+    document["configuration"]["hardware_label"] = "different-class"
     document["configuration_sha256"] = digest(document["configuration"])
     for record in document["records"]:
         record["latency_seconds"] = 100.0
     document["measurement"]["wall_seconds"] = 200.5
     write_bundle(candidate, document)
     result = compare_runs(baseline, candidate, policy=POLICY)
-    assert result["overall_status"] == ("inconclusive" if field == "runtime" else "pass")
+    assert result["overall_status"] == "pass"
     assert result["measurement"]["performance_mode"] == "descriptive_only"
     assert next(check for check in result["checks"] if check["name"] == "performance.median_latency")["status"] == "descriptive"
 
@@ -208,8 +207,6 @@ def test_fairness_cross_engine_pixel_difference_is_diagnostic_and_quality_unjudg
     assert result["overall_status"] == "inconclusive"
     assert result["slots"][0]["metrics"]["video_psnr_db"] == 8.0
     assert not any(check["name"] == "fidelity.video_psnr" for slot in result["slots"] for check in slot["checks"])
-
-
 
 
 def test_fairness_numerical_regression_requires_matching_server_identity(tmp_path, media_stub):
@@ -280,8 +277,6 @@ def test_missing_or_nonfinite_quality_metric_is_not_a_pass(tmp_path, media_stub,
     json.dumps(result, allow_nan=False)
 
 
-
-
 def test_not_started_failure_is_retained_without_zero_latency_imputation(tmp_path, media_stub):
     baseline, _ = bundle(tmp_path, "baseline")
     candidate, document = bundle(tmp_path, "candidate")
@@ -322,20 +317,12 @@ def test_media_validation_is_recomputed_not_trusted(tmp_path, media_stub, monkey
     assert result["candidate"]["summary"]["valid"] == 0
 
 
-
-
-@pytest.mark.parametrize(
-    "mutation,match",
-    [
-        (lambda d: d['records'][-1].update(sha256='0' * 64), 'SHA256 mismatch'),
-    ],
-)
-def test_malformed_or_tampered_bundles_are_refused(tmp_path, media_stub, mutation, match):
+def test_malformed_or_tampered_bundles_are_refused(tmp_path, media_stub):
     baseline, _ = bundle(tmp_path, "baseline")
     candidate, document = bundle(tmp_path, "candidate")
-    mutation(document)
+    document['records'][-1].update(sha256='0' * 64)
     write_bundle(candidate, document)
-    with pytest.raises(ValueError, match=match):
+    with pytest.raises(ValueError, match='SHA256 mismatch'):
         compare_runs(baseline, candidate, policy=POLICY)
 
 
@@ -360,11 +347,8 @@ def test_duplicate_json_keys_are_rejected(tmp_path, media_stub):
         compare_runs(baseline, candidate, policy=POLICY)
 
 
-
-
-@pytest.mark.parametrize("value", [None])
-def test_threshold_policy_has_no_implicit_or_nonfinite_defaults(tmp_path, media_stub, value):
-    policy = {**POLICY, "max_latency_increase_fraction": value}
+def test_threshold_policy_has_no_implicit_or_nonfinite_defaults(tmp_path, media_stub):
+    policy = {**POLICY, "max_latency_increase_fraction": None}
     with pytest.raises(ValueError, match="explicit, finite"):
         compare_runs(tmp_path / "unused", tmp_path / "unused", policy=policy)
 
@@ -395,8 +379,6 @@ def test_report_is_portable_script_free_escaped_and_hash_checked(tmp_path, media
         write_report(result, destination.with_name("tampered.html"))
     assert not destination.with_name("tampered.html").exists()
     assert not destination.with_name("tampered.comparison.json").exists()
-
-
 
 
 def test_imported_media_compares_fidelity_without_fake_performance(tmp_path, media_stub):
@@ -459,19 +441,12 @@ def _pin_client(document, media_stub, monkeypatch):
     document["configuration_sha256"] = digest(document["configuration"])
 
 
-@pytest.mark.parametrize("field", ['client_source_sha256'])
-@pytest.mark.parametrize("change", ['different'])
-def test_client_measurement_changes_cannot_performance_gate(tmp_path, media_stub, monkeypatch, field, change):
+def test_client_measurement_changes_cannot_performance_gate(tmp_path, media_stub, monkeypatch):
     baseline, left = bundle(tmp_path, "baseline")
     candidate, right = bundle(tmp_path, "candidate")
     for document in (left, right):
         _pin_client(document, media_stub, monkeypatch)
-    if change == "missing":
-        right["configuration"].pop(field)
-    elif isinstance(right["configuration"][field], dict):
-        right["configuration"][field] = {**right["configuration"][field], "changed": True}
-    else:
-        right["configuration"][field] = "3" * 64
+    right["configuration"]["client_source_sha256"] = "3" * 64
     right["configuration_sha256"] = digest(right["configuration"])
     write_bundle(baseline, left)
     write_bundle(candidate, right)
@@ -523,15 +498,12 @@ def test_evaluator_unavailable_is_counted_without_inventing_model_failure(tmp_pa
     assert "Media evaluation unavailable for 2 observation(s)" in destination.read_text()
 
 
-
-
-@pytest.mark.parametrize("suffix", ['.comparison.json'])
-def test_report_exclusive_creation_handles_post_preflight_race(tmp_path, media_stub, monkeypatch, suffix):
+def test_report_exclusive_creation_handles_post_preflight_race(tmp_path, media_stub, monkeypatch):
     baseline, _ = bundle(tmp_path, "baseline", warmups=0)
     candidate, _ = bundle(tmp_path, "candidate", warmups=0)
     result = compare_runs(baseline, candidate, policy=POLICY)
     destination = tmp_path / "racing.html"
-    racing = destination.with_suffix(suffix)
+    racing = destination.with_suffix(".comparison.json")
     original_open = Path.open
 
     def race(path, mode="r", *args, **kwargs):
@@ -544,8 +516,7 @@ def test_report_exclusive_creation_handles_post_preflight_race(tmp_path, media_s
     with pytest.raises(FileExistsError):
         write_report(result, destination)
     assert racing.read_text() == "concurrent-owner-content"
-    other = destination.with_suffix(".comparison.json") if suffix == ".html" else destination
-    assert not other.exists()
+    assert not destination.exists()
     assert not (tmp_path / "racing_assets").exists()
 
 

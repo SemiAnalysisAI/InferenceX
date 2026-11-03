@@ -32,6 +32,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .media import H3_ENCODING
 from .serving import settings as serving_settings, summarize as serving_summary
 
 
@@ -43,6 +44,9 @@ MAX_SLOTS = 10000
 MAX_POLLS = 10000
 SOCKET_TIMEOUT_SECONDS = 30.0
 POLL_INTERVAL_SECONDS = 0.5
+_ACTIVE_STATUSES = {"queued", "pending", "in_progress", "processing", "running"}
+_FAILED_STATUSES = {"failed", "cancelled", "canceled"}
+_TERMINAL_STATUSES = _FAILED_STATUSES | {"completed", "succeeded", "success"}
 _CHUNK_BYTES = 64 * 1024
 _EVENT_LOCK = threading.Lock()
 _PROTOCOL_SOURCES = {
@@ -186,10 +190,8 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
             or schedule["audio_flow_shift"] != generation["audio_flow_shift"]
         ):
             raise ValueError("fairness.schedule must match request updates and flow shifts")
-        encoding = fairness["encoding"]
-        if not isinstance(encoding, dict) or encoding != {
-            "video_codec": "libx264", "preset": "ultrafast", "crf": 18,
-            "pixel_format": "yuv420p", "audio_codec": "aac",
+        if fairness["encoding"] != {
+            **H3_ENCODING,
             "audio_sample_rate_hz": generation["audio_sample_rate_hz"],
             "audio_channels": generation["audio_channels"],
         }:
@@ -740,19 +742,16 @@ def run_plan(
                 _event(journal, "job_submitted", slot_id=slot["slot_id"], job_id=identifier)
                 for poll in range(MAX_POLLS + 1):
                     status = reply.get("status")
-                    record["provider_status"] = status if isinstance(status, str) and status in {"queued", "pending", "in_progress", "processing", "running", "failed", "cancelled", "canceled", "completed", "succeeded", "success"} else None
-                    if status in {"failed", "cancelled", "canceled"}:
-                        record["outcome"] = "provider_failed" if status == "failed" else "provider_cancelled"
+                    record["provider_status"] = status if isinstance(status, str) and status in _ACTIVE_STATUSES | _TERMINAL_STATUSES else None
+                    if status in _TERMINAL_STATUSES:
                         remote_terminal = True
                         record["submit_to_terminal_seconds"] = time.monotonic() - start
                         record["timing_window"]["terminal_monotonic_seconds"] = start + record["submit_to_terminal_seconds"]
-                        raise _RequestError(f"provider job reported {status}; provider text omitted")
-                    if status in {"completed", "succeeded", "success"}:
-                        remote_terminal = True
-                        record["submit_to_terminal_seconds"] = time.monotonic() - start
-                        record["timing_window"]["terminal_monotonic_seconds"] = start + record["submit_to_terminal_seconds"]
+                        if status in _FAILED_STATUSES:
+                            record["outcome"] = "provider_failed" if status == "failed" else "provider_cancelled"
+                            raise _RequestError(f"provider job reported {status}; provider text omitted")
                         break
-                    if status not in {"queued", "pending", "in_progress", "processing", "running"}:
+                    if status not in _ACTIVE_STATUSES:
                         raise _RequestError("provider job returned an unsupported status")
                     if poll == MAX_POLLS:
                         raise _RequestError("job exceeded maximum polling requests")
