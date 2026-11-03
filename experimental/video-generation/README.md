@@ -22,17 +22,21 @@ artifact identity, reuse validation and post-merge publication.
 
 ## Entry points
 
-`python -m evaluator.cli` (`vgbench`) exposes the commands the native entry calls:
+The native entry `python3 -m infx.bench video` calls `evaluator.srt_selected`
+directly. Both actions first load the selected spec and set from `specs/` and
+check its `plan_sha256` against the bound value.
 
-- `srt-yaml-serve`: load the selected spec and set from `specs/`, check its
-  `plan_sha256` against the bound value, record the sealed server spec and
-  launch, and exec the engine (`sglang` or `vllm-omni`) on the job's GPUs.
-- `srt-yaml-client`: run the same plan at every `CONC_LIST` concurrency against
-  the service endpoint, one cell per concurrency under `gpu/c<N>/`, and publish
+- `serve` records the sealed server spec and launch, then execs the engine
+  (`sglang` or `vllm-omni`) on the job's GPUs.
+- `client` runs the same plan at every `CONC_LIST` concurrency against the
+  service endpoint, one cell per concurrency under `gpu/c<N>/`, and publishes
   each cell's measured window.
-- `srt-finalize`: join the cells, their power validation sidecars and the
-  server record into the `h3-results-<run>-<attempt>-<recipe-fingerprint>`
-  bundle the dashboard ingests.
+
+After the job, the launcher runs `python -m evaluator.cli srt-finalize`. It joins
+the cells, their power validation sidecars and the server record into the
+`h3-results-<run>-<attempt>-<recipe-fingerprint>` bundle the dashboard ingests.
+`evaluator.cli` (`vgbench`) also exposes the serve and client steps as
+`srt-yaml-serve` and `srt-yaml-client` for manual runs.
 
 `specs/h3_spec.py` loads the YAML workload, validates it and hashes the
 selected plan; `infx.srt_slurm.video` imports it when binding a point.

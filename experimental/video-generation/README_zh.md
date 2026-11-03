@@ -20,15 +20,20 @@ diffusion 引擎在单节点上提供服务，选定的冻结 YAML 工作负载�
 
 ## 入口
 
-`python -m evaluator.cli`（`vgbench`）提供原生入口调用的命令：
+原生入口 `python3 -m infx.bench video` 直接调用 `evaluator.srt_selected`。
+两个动作都会先加载 `specs/` 中选定的 spec 与集合，并核对其 `plan_sha256`
+与绑定值一致。
 
-- `srt-yaml-serve`：加载 `specs/` 中选定的 spec 与集合，核对其 `plan_sha256`
-  与绑定值一致，记录封存的服务端 spec 与启动信息，然后在任务的 GPU 上 exec
+- `serve` 记录封存的服务端 spec 与启动信息，然后在任务的 GPU 上 exec
   引擎（`sglang` 或 `vllm-omni`）。
-- `srt-yaml-client`：对服务端点按 `CONC_LIST` 的每个并发度运行同一计划，
-  每个并发度一个 `gpu/c<N>/` 单元，并发布各单元的测量窗口。
-- `srt-finalize`：把各单元、其功耗校验边车与服务端记录合并为仪表盘摄入的
-  `h3-results-<run>-<attempt>-<recipe-fingerprint>` 包。
+- `client` 对服务端点按 `CONC_LIST` 的每个并发度运行同一计划，每个并发度一个
+  `gpu/c<N>/` 单元，并发布各单元的测量窗口。
+
+任务结束后，launcher 运行 `python -m evaluator.cli srt-finalize`，把各单元、
+其功耗校验边车与服务端记录合并为仪表盘摄入的
+`h3-results-<run>-<attempt>-<recipe-fingerprint>` 包。
+`evaluator.cli`（`vgbench`）也以 `srt-yaml-serve` 与 `srt-yaml-client`
+提供同样的服务端与客户端步骤，供手动运行。
 
 `specs/h3_spec.py` 加载 YAML 工作负载、校验并对选定计划做哈希；
 `infx.srt_slurm.video` 在绑定测试点时导入它。

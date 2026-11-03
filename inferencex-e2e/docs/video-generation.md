@@ -5,8 +5,8 @@ H200, and B200 SGLang and H200 vLLM-Omni select four-GPU C1 deployments using
 `h3-v0.1.yaml`: 20 distinct measured prompts, a separate warmup, 49 denoising
 updates, and 124 frames at 24 fps and 1344×768. A five-second request produces
 124/24 seconds of video. Config presence is not GPU or quality qualification.
-The H100/H200/B200 SGLang recipes pin the public amd64 `nightly-dev-cu13-20261103-797af717` image
-at SGLang commit `797af7170f34dd4cb9e397e0038c52371ef5e050`.
+Each deployment's image pin is its `*-video` entry in
+[`configs/nvidia-master.yaml`](../configs/nvidia-master.yaml).
 Actual step execution, media,
 and power must be checked in the original run. The YAML workload has no `model.path`
 or Python field: the binder derives the pinned model snapshot path from `MODEL`,
@@ -44,21 +44,24 @@ explicitly selected model view, records the final command, then starts it.
 It adds no engine flags or performance environment defaults. The SGLang child
 checks the assigned UUID order before importing its engine. The previous B200
 `frozen-c124` four-clip JSON and YAML artifacts remain readable as historical evidence.
-SGLang recipes allow 1800 seconds for readiness; the public image's H100 diagnostic
-needed more than the previous 900-second window to load and warm up.
+Each recipe's `readiness.timeout_seconds` sets how long the server may load and
+warm up.
 
-The custom benchmark runs `python3 -m infx.bench video client
---request-seconds 900`. It resolves the native service IP and measurement-window
-directory at runtime, preserving per-concurrency outputs and native power
-windows. Its timeout and environment are supplied by the recipe.
+The shared [`configs/srt-recipes/video.yaml`](../configs/srt-recipes/video.yaml)
+block runs `python3 -m infx.bench video client` as the custom benchmark for every
+recipe. It resolves the native service IP and measurement-window directory at
+runtime, preserving per-concurrency outputs and native power windows. Its request
+timeout and environment are supplied by that block.
 
 `perf-changelog.yaml` → `infx.matrix.plan` → `run-sweep.yml` →
 `benchmark-tmpl.yml` → `infx.launch` → native srt-slurm service/client → result bundle.
 A video canary runs one complete deployment and is removed from the remaining
 matrix. `full-sweep-fail-fast` retains the repository's matrix-scoped fail-fast.
-Video uses a 75-minute scheduler allocation and a 90-minute workflow timeout,
-including preparation and cleanup; the caller's video limit overrides cluster
-profile defaults. Each request retains its explicit timeout. No automatic retry is added.
+Video's scheduler allocation and workflow timeout, including preparation and
+cleanup, are set in
+[`benchmark-tmpl.yml`](../../.github/workflows/benchmark-tmpl.yml); the caller's
+video limit overrides cluster profile defaults. Each request retains its explicit
+timeout. No automatic retry is added.
 
 Artifact names are `h3-results-<run>-<attempt>-<recipe-fingerprint>`; the full
 fingerprint separates hardware, engines and deployments. `manifest.artifact_name`
@@ -90,15 +93,11 @@ the first native video reuse request; a PR-local checker cannot bypass that gate
 ## Contribute an H3 deployment
 
 For an existing H3 runtime/API, change its native recipe and master config rather
-than adding a launcher or modifying the Python client. These are the configured
-adapters and workloads; the table does not establish final-head GPU qualification:
-
-| Master-config key | Recipe under `benchmarks/single_node/srt-slurm-recipes/` | GPUs | Measured clips |
-| --- | --- | --- | --- |
-| `h3-bf16-h100-sglang-video` | `h3/sglang/h100-bf16/serving-client.yaml` | 4 | 20 at C1, v0.1 |
-| `h3-bf16-h200-sglang-video` | `h3/sglang/h200-bf16/serving-client.yaml` | 4 | 20 at C1, v0.1 |
-| `h3-bf16-h200-vllm-omni-video` | `h3/vllm-omni/h200-bf16/serving-client.yaml` | 4 | 20 at C1, v0.1 |
-| `h3-bf16-b200-sglang-video` | `h3/sglang/b200-bf16/serving-client.yaml` | 4 | 20 at C1, v0.1 |
+than adding a launcher or modifying the Python client. The configured deployments
+are the `*-video` keys in [`configs/nvidia-master.yaml`](../configs/nvidia-master.yaml);
+each names its recipe directory under
+[`benchmarks/single_node/srt-slurm-recipes/h3/`](../benchmarks/single_node/srt-slurm-recipes/h3/).
+Their presence does not establish final-head GPU qualification.
 
 1. Choose an existing combination and keep its frozen workload, model revision,
    concurrency population and measurement boundary. Put the full engine command
