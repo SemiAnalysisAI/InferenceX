@@ -30,7 +30,18 @@ def memory_groups(pid=None):
                 directory = Path(mount) / group.removeprefix(root).lstrip('/')
                 mapping = 'relative-to-mount-root'
             elif '..' in Path(root).parts:
-                candidates = [Path(mount), *Path(mount).glob('*/'), *Path(mount).glob('*/*/')]
+                # Enroot keeps the host controller mount while rebasing cgroup
+                # paths to the worker's namespace. Each '..' in its mount root
+                # is an ancestor between that root and namespace '/'. Slurm's
+                # task cgroup is five levels deep on MI355X, not two.
+                root_parts = Path(root).parts[1:]
+                group_parts = Path(group).parts[1:]
+                if any(part != '..' for part in root_parts) or '..' in group_parts:
+                    raise RuntimeError(f'unsupported namespaced cgroup mapping: {root!r}, {group!r}')
+                depth = len(root_parts) + len(group_parts)
+                if not 1 <= depth <= 32:
+                    raise RuntimeError(f'unsafe cgroup namespace depth: {depth}')
+                candidates = Path(mount).glob('/'.join(['*'] * depth))
                 directory = None
                 for candidate in candidates:
                     try:
