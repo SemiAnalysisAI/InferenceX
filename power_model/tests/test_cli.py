@@ -128,9 +128,9 @@ def test_cli_hopper_workloads_select_cpu_and_memory_power_with_air_cooling(
             2192,
             "PollaraNICCard",
             552,
-            624,
-            440.885717,
-            458.280424,
+            552,
+            440.883992,
+            451.883211,
         ),
         (
             "b200",

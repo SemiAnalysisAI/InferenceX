@@ -51,7 +51,7 @@ def test_invalid_x86_state_or_power_override_is_rejected(inputs):
         (ConnectX7NICCard, 50, 15, 65, 400, "assumed"),
         (ConnectX8NICCard, 100, 30, 130, 800, "assumed"),
         (Thor2NICCard, 60, 20, 80, 400, "assumed"),
-        (PollaraNICCard, 78, 34.5, 112.5, 400, "estimated"),
+        (PollaraNICCard, 69, 34.5, 103.5, 400, "estimated"),
     ],
 )
 def test_nic_state_selects_fixed_power_without_changing_capacity_metadata(

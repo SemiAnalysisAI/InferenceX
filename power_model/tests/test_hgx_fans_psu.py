@@ -199,13 +199,13 @@ def test_psu_rejects_invalid_efficiency(efficiency):
         ("b300", 1200, 11184, 1584, 663.034611, 12455.527974, 697.5, 2137.367046),
         ("mi300", 750, 7244, 1244, 429.454821, 7999.153182, 348.75, 1356.534267),
         ("mi325", 1000, 9244, 1244, 548.023242, 10286.874315, 348.75, 1728.288951),
-        ("mi355", 1400, 12516, 1316, 742.001179, 13905.626932, 348.75, 2316.336252),
+        ("mi355", 1400, 12480, 1280, 739.866947, 13866.526278, 348.75, 2309.982395),
     ],
 )
 def test_cli_sizes_fans_from_system_tdp_and_host_inventory_before_psu_and_pue(
     capsys, system, tdp, design_heat, design_host, expected_fan, expected_ac, network_w, per_gpu
 ):
-    # Max-state host subtotals: Hopper/B200 1614 W, MI300/MI325 1254 W, MI355 1326 W, B300 1594 W.
+    # Max-state host subtotals: Hopper/B200 1614 W, MI300/MI325 1254 W, MI355 1290 W, B300 1594 W.
     # Full-load fans use the common 563.2 / 9500 ratio. AC fixtures use the
     # 20-50% efficiency segment, except B200 on the 50-100% segment.
     main(

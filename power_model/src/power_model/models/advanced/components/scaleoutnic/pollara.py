@@ -11,5 +11,5 @@ from power_model.models.advanced.profiles import POLLARA_NIC_BASELINE
 class PollaraNICCard(ScaleOutNICCard):
     bandwidth_gbps: ClassVar[int] = 400
     idle_power_w: ClassVar[float] = 34.5
-    active_power_w: ClassVar[float] = 39.0
+    active_power_w: ClassVar[float] = 34.5
     provenance: Provenance = POLLARA_NIC_BASELINE
