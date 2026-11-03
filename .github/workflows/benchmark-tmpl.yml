@@ -293,6 +293,14 @@ jobs:
           echo "RESULT_FILENAME=${RESULT_FILENAME}" >> "$GITHUB_ENV"
 
           source benchmarks/runtime_settings.sh
+          monitor_output="$GITHUB_WORKSPACE/memory-evidence"
+          monitor_stop="$RUNNER_TEMP/memory-monitor-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.stop"
+          "$INFERENCEX_RESULTS_PYTHON" "$GITHUB_WORKSPACE/../.result-tooling/inferencex-e2e/infx/tests/monitor_memory.py" \
+            --output "$monitor_output" --workspace "$GITHUB_WORKSPACE" \
+            --runner "$RUNNER_NAME" --stop-file "$monitor_stop" \
+            > "$monitor_output.log" 2>&1 &
+          monitor_pid=$!
+          trap 'touch "$monitor_stop"; wait "$monitor_pid" || true' EXIT
           "$INFERENCEX_LAUNCH_PYTHON" -m infx.launch run
 
           if [ "${AL_GATE}" = "true" ]; then
@@ -360,6 +368,16 @@ jobs:
             export POWER_PRODUCER_SHA="$(cat power-producer-sha.txt)"
           fi
           "$INFERENCEX_RESULTS_PYTHON" -P -m infx.results.fixed_sequence
+
+      - name: Upload worker memory evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: memory-evidence-${{ github.job }}-${{ strategy.job-index }}-${{ github.run_attempt }}
+          path: |
+            ${{ github.workspace }}/inferencex-e2e/memory-evidence/**
+            ${{ github.workspace }}/inferencex-e2e/memory-evidence.log
+          if-no-files-found: warn
 
       - name: Upload result
         id: upload-result
