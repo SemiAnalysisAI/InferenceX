@@ -23,7 +23,6 @@ def encode_media(
     sample_rate: int = 24000,
     audio_mode: str = "stereo",
     video_change: bool = False,
-    frozen: bool = False,
     blank: bool = False,
     timestamp_offset_seconds: float = 0.0,
     audio_offset_seconds: float = 0.0,
@@ -44,10 +43,6 @@ def encode_media(
         left[:], right[:] = 0, 0
     elif audio_mode == "silent_right":
         right[:] = 0
-    elif audio_mode == "collapsed":
-        right = left.copy()
-    elif audio_mode == "loud":
-        left[:], right[:] = 1, -1
     signal = np.stack([left, right])
     with av.open(str(path), "w") as container:
         video = container.add_stream("libx264" if is_mp4 else "ffv1", rate=fps)
@@ -65,7 +60,7 @@ def encode_media(
                 pixels[:, :, 0] = 40
                 pixels[:, :, 1] = np.arange(width, dtype=np.uint8)[None, :] * 3
                 moving_index = min(index, freeze_after_frame) if freeze_after_frame is not None else index
-                x = 4 if frozen else (4 + moving_index * 3) % (width - 12)
+                x = (4 + moving_index * 3) % (width - 12)
                 pixels[8:24, x : x + 12] = [220, 90, 20]
                 if video_change:
                     pixels[:, :, 2] = 160
@@ -168,10 +163,6 @@ def test_silence_freeze_and_blank_are_detected_without_quality_claims(tmp_path):
     json.dumps(result, allow_nan=False)
 
 
-
-
-
-
 def test_changed_visual_content_and_silent_channel_are_measured(tmp_path):
     baseline = encode_media(tmp_path / "baseline.mkv")
     candidate = encode_media(tmp_path / "changed.mkv", video_change=True, audio_mode="silent_right")
@@ -190,10 +181,9 @@ def test_changed_visual_content_and_silent_channel_are_measured(tmp_path):
     json.dumps(result, allow_nan=False)
 
 
-@pytest.mark.parametrize("change", [{'timestamp_offset_seconds': 0.2}])
-def test_incompatible_media_is_not_resized_trimmed_or_time_shifted(tmp_path, change):
+def test_incompatible_media_is_not_resized_trimmed_or_time_shifted(tmp_path):
     baseline = encode_media(tmp_path / "baseline.mkv")
-    candidate = encode_media(tmp_path / "incompatible.mkv", **change)
+    candidate = encode_media(tmp_path / "incompatible.mkv", timestamp_offset_seconds=0.2)
     result = compare_media(baseline, candidate)
     assert not result["compatible"], result
     assert result["metrics"]["video_mae"] is None
@@ -243,8 +233,6 @@ def test_real_cpu_h3_encoding_checks_observable_streams_without_inventing_option
     assert {check["name"] for check in refused["checks"] if check["status"] == "failed"} >= {"video.codec", "audio.codec"}
 
 
-
-
 def test_optional_av_boundary_and_partial_freeze_gates_are_explicit(tmp_path):
     offset = encode_media(tmp_path / "offset-audio.mkv", audio_offset_seconds=0.2)
     unconstrained = analyze_media(offset)
@@ -265,10 +253,9 @@ def test_optional_av_boundary_and_partial_freeze_gates_are_explicit(tmp_path):
     assert not analyze_media(partial_freeze, {"max_frozen_fraction": 0.2})["valid"]
 
 
-@pytest.mark.parametrize("expected", [{'fps': float('nan')}])
-def test_invalid_expectations_never_produce_nonfinite_or_accepted_results(tmp_path, expected):
+def test_invalid_expectations_never_produce_nonfinite_or_accepted_results(tmp_path):
     path = encode_media(tmp_path / "valid.mkv")
-    report = analyze_media(path, expected)
+    report = analyze_media(path, {"fps": float("nan")})
     assert not report["valid"]
     assert not report["decode_ok"]
     assert report["errors"]

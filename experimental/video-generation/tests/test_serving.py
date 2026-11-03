@@ -1,7 +1,5 @@
 """Hand-worked serving metrics; synthetic request timings, never GPU evidence."""
 
-from copy import deepcopy
-
 import pytest
 
 from evaluator.serving import settings, summarize, validate_window
@@ -41,21 +39,8 @@ def test_percentiles_goodput_and_failure_denominators():
     assert metrics['offered_request_rate_per_second'] is None
 
 
-
-
-@pytest.mark.parametrize('defect', ['boundary'])
-def test_tampered_serving_windows_fail_closed(defect):
-    run = deepcopy(sample_run())
-    if defect == 'wall':
-        run['measurement']['wall_seconds'] = 130
-    elif defect == 'boundary':
-        run['measurement']['boundary'] = 'submit_to_validated_media'
-    elif defect == 'outside':
-        run['records'][0]['timing_window']['transport_end_monotonic_seconds'] = 133
-    elif defect == 'empty_interval':
-        run['records'][0]['timing_window']['transport_end_monotonic_seconds'] = 0
-    else:
-        run['records'][1]['timing_window']['start_monotonic_seconds'] = .5
-        run['records'][1]['timing_window']['transport_end_monotonic_seconds'] = 2.5
+def test_tampered_serving_windows_fail_closed():
+    run = sample_run()
+    run['measurement']['boundary'] = 'submit_to_validated_media'
     with pytest.raises(ValueError):
         validate_window(run)
