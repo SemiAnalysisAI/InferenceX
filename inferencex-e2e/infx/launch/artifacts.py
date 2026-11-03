@@ -300,11 +300,6 @@ def run_power_adapter(
     require_power: bool,
 ) -> int:
     """Join one AgentX point's aggregate to the power package under ``logs_dir``."""
-    python_path = os.environ.get("PYTHONPATH")
-    env = {
-        **os.environ,
-        "PYTHONPATH": f"{_PROJECT_ROOT}:{python_path}" if python_path else str(_PROJECT_ROOT),
-    }
     argv = [
         results_python, "-m", "infx.results.agentic.power_adapter",
         "--result-dir", str(result_dir),
@@ -315,4 +310,4 @@ def run_power_adapter(
         *extra,
         *(["--require-power"] if require_power else []),
     ]  # fmt: skip
-    return proc.run(argv, env=env, cwd=workspace).returncode
+    return proc.run(argv, env=_results_env(), cwd=workspace).returncode

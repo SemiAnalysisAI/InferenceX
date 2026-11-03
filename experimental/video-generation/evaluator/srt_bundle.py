@@ -18,6 +18,7 @@ import json
 import os
 import shutil
 import subprocess
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -28,10 +29,6 @@ MODE = "serving-smoke"
 BUNDLE_TYPE = "h3_serving_smoke_matrix"
 RECEIPT_BUNDLE_TYPE = "srt_slurm_h3_service_receipt"
 POWER_SCHEMA = "1.0.0"
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
 def _read(path: Path) -> dict:
@@ -217,10 +214,6 @@ def _completion(run: dict) -> dict:
     }  # fmt: skip
 
 
-def _copy_tree(source: Path, destination: Path) -> None:
-    shutil.copytree(source, destination, dirs_exist_ok=True)
-
-
 def build_bundle(
     *,
     h3_dir: Path,
@@ -236,7 +229,7 @@ def build_bundle(
     if output.exists():
         shutil.rmtree(output)
     output.mkdir(parents=True)
-    started = _now()
+    started = _iso(time.time())
     server = h3_dir / "server"
     spec = _read(server / "spec.json") if (server / "spec.json").is_file() else None
     launch = _read(server / "launch.json") if (server / "launch.json").is_file() else None
@@ -249,8 +242,6 @@ def build_bundle(
     job_fields = job_status.split("|")
     slurm_job_id, slurm_state = [*job_fields, "", ""][:2]
     alloc_tres = job_fields[3].strip() if len(job_fields) > 3 else ""
-    if alloc_tres in {"Unknown", "None", "(null)"}:
-        alloc_tres = ""
     failures: list[str] = []
     cells = []
     declared_path = workspace / "video-identity.json"
@@ -270,7 +261,7 @@ def build_bundle(
                                   "failed": 0, "not_started": 0, "unfinished": 0}
             cells.append(cell)
             continue
-        _copy_tree(source_cell / "baseline", cell_dir / "baseline")
+        shutil.copytree(source_cell / "baseline", cell_dir / "baseline", dirs_exist_ok=True)
         run = _read(cell_dir / "baseline" / "run.json")
         configuration = run.get("configuration") or {}
         cell_identity = {"plan_sha256": run.get("plan_sha256"),
@@ -354,7 +345,7 @@ def build_bundle(
         if aggregate is not None:
             cell["aggregate"] = {"path": f"gpu/c{concurrency}/aggregate.json", "sha256": _hash(cell_dir / "aggregate.json")}
         cells.append(cell)
-    finished = _now()
+    finished = _iso(time.time())
     # Requests decide completion; power decides verification. Invalid power never publishes
     # as measured, but it fails the job only under REQUIRE_POWER (the launcher's call).
     status = "complete" if cells and all(c["status"] == "complete" for c in cells) else "failed"

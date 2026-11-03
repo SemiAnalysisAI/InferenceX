@@ -16,6 +16,7 @@ import yaml
 from infx.bench.env import BenchError
 from infx.bench.video import parse_args
 from infx.config import repository_root
+from infx.srt_slurm.single_node import srun_overrides
 from infx.srt_slurm.workload import (
     BOUND_RECIPE,
     NATIVE_TELEMETRY_BLOCK,
@@ -372,17 +373,11 @@ def bind_video(
 def runtime_arguments(environment: Mapping[str, str]) -> list[str]:
     """Bind only runtime-owned srun values after the recipe is bound."""
     gpus = _positive(_required(environment, "GPU_COUNT"), "GPU_COUNT")
-    overrides = ["--set", f"srun_options.gpus-per-node={json.dumps(str(gpus))}"]
-    if environment.get("SRT_SRUN_OPTIONS"):
-        options = json.loads(environment["SRT_SRUN_OPTIONS"])
-        if not isinstance(options, dict) or any(
-            not re.fullmatch(r"[a-z][a-z0-9-]*", key) or not isinstance(value, str)
-            for key, value in options.items()
-        ):
-            raise ValueError("SRT_SRUN_OPTIONS must map option names to string values")
-        for key, value in options.items():
-            overrides += ["--set", f"srun_options.{key}={json.dumps(value)}"]
-    return overrides
+    return [
+        "--set",
+        f"srun_options.gpus-per-node={json.dumps(str(gpus))}",
+        *srun_overrides(environment),
+    ]
 
 
 def prepare(recipe: Path, environment: Mapping[str, str], *, root: Path) -> dict[str, Any]:

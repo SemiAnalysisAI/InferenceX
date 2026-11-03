@@ -6,7 +6,6 @@ Logs are staged on every exit path, and always before the job's outputs are dele
 from __future__ import annotations
 
 import contextlib
-import hashlib
 import json
 import os
 import shutil
@@ -158,18 +157,10 @@ def finalize_single_node_results(run: SrtRun, logs: Path, producer_sha: str) -> 
 def stage_video_identity(run: SrtRun, bound: Path) -> None:
     """Retain the selected workload before startup, using the binder's declared identity."""
     environment = yaml.safe_load(bound.read_text())["benchmark"]["env"]
-    plan = load_spec(run.request.env["H3_SPEC"], root=run.workspace, set_id=environment["H3_SET"])[
-        "plan"
-    ]
-    digest = hashlib.sha256(
-        json.dumps(
-            plan,
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=False,
-            allow_nan=False,
-        ).encode()
-    ).hexdigest()
+    selected = load_spec(
+        run.request.env["H3_SPEC"], root=run.workspace, set_id=environment["H3_SET"]
+    )
+    plan, digest = selected["plan"], selected["plan_sha256"]
     if digest != environment["H3_PLAN_SHA256"] or plan["model_id"] != run.request.model:
         raise ValueError("bound video identity disagrees with the selected workload")
     identity = {
@@ -196,10 +187,6 @@ def write_video_job_status(logs: Path, job_id: str, status: JobStatus) -> None:
     if same_job:
         previous_tres = previous_status[3] if len(previous_status) == 4 else None
     else:
-        previous_tres = None
-    if alloc_tres in {"", "Unknown", "None", "(null)"}:
-        alloc_tres = None
-    if previous_tres in {"", "Unknown", "None", "(null)"}:
         previous_tres = None
     alloc_tres = alloc_tres or previous_tres
     raw_status = status.raw

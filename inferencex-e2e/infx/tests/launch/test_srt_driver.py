@@ -1142,7 +1142,7 @@ def test_declared_video_identity_is_retained_before_startup(tmp_path, monkeypatc
     run = SimpleNamespace(workspace=tmp_path, request=SimpleNamespace(model="test/video", env={"H3_SPEC": "video.yaml"}))
     def selected(name, *, root, set_id):
         assert (name, root, set_id) == ("video.yaml", tmp_path, "release-v1")
-        return {"plan": plan}
+        return {"plan": plan, "plan_sha256": digest}
     monkeypatch.setattr(collect, "load_spec", selected)
     collect.stage_video_identity(run, bound)
     identity = json.loads((tmp_path / "video-identity.json").read_text())

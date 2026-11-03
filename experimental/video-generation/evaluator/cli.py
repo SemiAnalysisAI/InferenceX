@@ -47,11 +47,9 @@ def _load_mvp_object(path: Path) -> dict[str, Any]:
     return result
 
 
-def _engine_command(raw: list[str], *, required: bool = False) -> list[str] | None:
+def _engine_command(raw: list[str]) -> list[str]:
     if not raw:
-        if required:
-            raise ValueError("the native server requires an engine command after --")
-        return None
+        raise ValueError("the native server requires an engine command after --")
     if raw[0] != "--" or len(raw) == 1:
         raise ValueError("the engine command must follow --")
     return raw[1:]
@@ -95,13 +93,11 @@ def _mvp_command(arguments: argparse.Namespace) -> int:
             from .srt_selected import selected_plan, serve
 
             plan = selected_plan(arguments.spec, arguments.set, arguments.plan_sha256)
-            command = _engine_command(arguments.engine_command, required=True)
-            assert command is not None
             serve(
                 plan, runtime=arguments.runtime, runtime_revision=arguments.runtime_revision,
                 model_path=arguments.model_path, port=arguments.port,
                 gpus=arguments.gpus, output=arguments.record,
-                command=command, model_view=arguments.model_view,
+                command=_engine_command(arguments.engine_command), model_view=arguments.model_view,
             )
             return 0
 

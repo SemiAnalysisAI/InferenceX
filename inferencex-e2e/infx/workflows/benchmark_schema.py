@@ -42,12 +42,6 @@ class _BatchFields(BaseModel):
     conc: list[Annotated[int, Field(gt=0)]] = Field(min_length=1)
 
 
-class VideoConfig(VideoMatrixEntry):
-    """Video-generation input to benchmark-tmpl.yml: one server, every concurrency of conc-list."""
-
-    scenario_type: Literal["video-generation"] = Field(alias="scenario-type")
-
-
 class MultiNodeConfig(_BatchFields, MultiNodeMatrixEntry):
     """Fixed-sequence input to benchmark-multinode-tmpl.yml."""
 
@@ -83,7 +77,7 @@ def _validate_rows(
         if is_video and (is_multinode or is_agentic):
             raise ValueError(f"{location}: video-generation rows are single-node, non-agentic")
         if is_video:
-            schema = VideoConfig
+            schema = VideoMatrixEntry
         elif is_multinode:
             schema = MultiNodeAgenticConfig if is_agentic else MultiNodeConfig
         else:
