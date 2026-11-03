@@ -171,7 +171,7 @@ def build_result(benchmark: Mapping[str, Any], env: Mapping[str, str]) -> dict[s
         if disagg:
             raise ValueError("Disaggregated mode requires multinode setup.")
 
-        require_environment(env, ["TP", "EP_SIZE", "DP_ATTENTION"])
+        require_environment(env, ["TP", "EP_SIZE", "DP_ATTENTION", "GPU_COUNT"])
         tp_size = int(env["TP"])
         ep_size = int(env["EP_SIZE"])
         dp_attention = env["DP_ATTENTION"]
@@ -183,7 +183,9 @@ def build_result(benchmark: Mapping[str, Any], env: Mapping[str, str]) -> dict[s
             ep=ep_size,
         )
         validate_parallelism(parallelism)
-        num_gpus = parallelism.gpus_per_worker
+        num_gpus = int(env["GPU_COUNT"])
+        if num_gpus <= 0:
+            raise ValueError("GPU_COUNT must be a positive integer")
 
         single_node_data = {
             "is_multinode": False,

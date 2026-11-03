@@ -416,7 +416,7 @@ def test_build_recovery_config_from_current_and_historical_projects(
         "srt-recipe-dir": "fixture",
         "scenarios": {"fixed-seq-len": [{
             "isl": 8192, "osl": 1024,
-            "search-space": [{"tp": 1, "conc-list": [2], "srt-recipe": "recipe.yaml"}],
+            "search-space": [{"gpus-per-worker": 1, "tp": 1, "conc-list": [2], "srt-recipe": "recipe.yaml"}],
         }]},
     }}
     (configs / "nvidia-master.yaml").write_text(yaml.safe_dump(master))

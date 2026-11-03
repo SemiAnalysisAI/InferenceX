@@ -21,7 +21,9 @@ import yaml
 from infx import yamlio
 from infx.config import repository_root
 from infx.fastcopy import deepcopy
+from infx.launch.resources import worker_resources
 from infx.results.metadata import parse_component_metadata
+from infx.srt_slurm.memory import bind_memory, bind_worker_resources
 from infx.srt_slurm.synthetic_acceptance import selected_recipes, spec_parameters
 
 SHARED_BLOCKS = {
@@ -54,7 +56,7 @@ _WORKFLOW_ENV = (
 _MULTINODE_ENV = (
     "SPEC_DECODING", "KV_OFFLOADING", "PREFILL_DWDP_SIZE",
     *(f"{role}_{field}" for role in ("PREFILL", "DECODE")
-      for field in ("NUM_WORKERS", "TP", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "EP", "DP_ATTN")),
+      for field in ("NUM_WORKERS", "GPUS_PER_WORKER", "TP", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "EP", "DP_ATTN")),
 )  # fmt: skip
 _SINGLE_NODE_ENV = ("TP", "EP_SIZE", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "DP_ATTENTION", "GPU_COUNT")
 BOUND_ENV = {
@@ -308,6 +310,15 @@ def bind_workload(
         identity["container"]["image"] = image.replace("#", "/", 1)
     benchmark = bound.setdefault("benchmark", {})
     workload = benchmark.setdefault("env", {})
+    for name in (
+        "GPU_COUNT",
+        "PREFILL_NUM_WORKERS",
+        "DECODE_NUM_WORKERS",
+        "PREFILL_GPUS_PER_WORKER",
+        "DECODE_GPUS_PER_WORKER",
+    ):
+        if name in environment:
+            workload[name] = environment[name]
     if not agentic:
         workload.update(
             (name, str(_positive(_required(environment, name), name))) for name in ("ISL", "OSL")
@@ -367,9 +378,11 @@ def bind_multinode(
     if len(variants) != 1:
         raise ValueError(f"{recipe} selects {len(variants)} variants, not one")
     name, selected = variants[0]
-    return name, bind_workload(
+    bound = bind_workload(
         selected, environment, agentic=agentic, multinode=True, client_env=client_env
     )
+    bind_worker_resources(bound, worker_resources(environment))
+    return name, bound
 
 
 def resolve_fabric(node: Any, fabric: Mapping[str, str | None], where: str = "") -> Any:
@@ -435,6 +448,8 @@ def main(argv: list[str] | None = None) -> None:
         help="a launcher-owned benchmark client setting",
     )
     add_fabric_argument(parser)
+    parser.add_argument("--available-memory-mib", type=int, required=True)
+    parser.add_argument("--gpus-per-node", type=int, required=True)
     args = parser.parse_args(argv)
     try:
         root = repository_root()
@@ -446,6 +461,9 @@ def main(argv: list[str] | None = None) -> None:
             client_env=dict(args.client_env),
         )
         bound = resolve_fabric(bound, args.fabric)
+        bind_memory(
+            bound, args.available_memory_mib, args.gpus_per_node, worker_resources(os.environ)
+        )
         check_setup_script(bound, Path(args.recipe.partition(":")[0]), root)
     except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as error:
         parser.error(str(error))

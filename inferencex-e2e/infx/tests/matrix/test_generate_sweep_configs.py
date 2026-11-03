@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+from tempfile import TemporaryDirectory
 from pathlib import Path
 
 import pytest
@@ -21,7 +22,6 @@ from infx.matrix.generate import (
     generate_test_config_sweep,
     mark_all_eval_entries,
     mark_eval_entries,
-    multinode_node_count,
     multinode_worker_pair,
     seq_len_to_str,
     trim_conc,
@@ -29,48 +29,52 @@ from infx.matrix.generate import (
 from infx.matrix.validation import validate_runner_config
 
 
-def test_aggregated_multinode_node_count_uses_explicit_num_nodes():
-    entry = {
-        "runner": "unknown",
-        "disagg": False,
-        "prefill": {},
-        "decode": {},
-    }
 
-    add_multinode_node_count(entry, {}, num_nodes=3, root=None)
+def fixture_recipes(configs, project):
+    """Give synthetic multinode configurations concrete SRT role recipes."""
+    configured = copy.deepcopy(configs)
+    for key, config in configured.items():
+        if not config.get("multinode"):
+            continue
+        for groups in config["scenarios"].values():
+            for group in groups:
+                for point in group["search-space"]:
+                    if "srt-recipe" in point:
+                        continue
+                    config["srt-recipe-dir"] = "fixture"
+                    point["srt-recipe"] = f"{key}.yaml"
+                    path = project / "benchmarks/multi_node/srt-slurm-recipes/fixture" / point["srt-recipe"]
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    roles = ({"prefill": {"nodes": 8}, "decode": {"nodes": 8}}
+                             if config.get("disagg") else {"agg": {"nodes": 8}})
+                    path.write_text(yaml.safe_dump({"schema": 2, "roles": roles}))
+    return configured
 
+
+def generate_matrix(generate, args, configs, runners, *, root=None):
+    """Run the real generator with concrete recipe inputs for synthetic fixtures."""
+    with TemporaryDirectory() as directory:
+        project = root or Path(directory)
+        return generate(args, fixture_recipes(configs, project), runners, root=project)
+
+
+def test_multinode_node_count_reads_the_recipe_reservation(tmp_path, multinode_recipe):
+    entry = {"srt-recipe": multinode_recipe({"schema": 2, "roles": {"agg": {"nodes": 3}}})}
+    add_multinode_node_count(entry, root=tmp_path)
     assert entry["node-count"] == 3
 
 
-def test_disaggregated_multinode_node_count_rejects_num_nodes():
-    entry = {
-        "runner": "unknown",
-        "disagg": True,
-        "prefill": {},
-        "decode": {},
-    }
-
-    with pytest.raises(ValueError, match="num-nodes.*disaggregated"):
-        add_multinode_node_count(entry, {}, num_nodes=3, root=None)
-
-
-def test_disaggregated_multinode_node_count_requires_hardware_inventory():
-    entry = {
-        "runner": "cluster:unknown",
-        "disagg": True,
-        "prefill": {"num-worker": 1, "tp": 8},
-        "decode": {"num-worker": 1, "tp": 8},
-    }
-
-    with pytest.raises(ValueError, match="Cannot resolve gpus-per-node"):
-        add_multinode_node_count(entry, {}, num_nodes=None, root=None)
+@pytest.mark.parametrize("root, recipe", [(None, "recipe.yaml"), (Path(), None)])
+def test_multinode_node_count_requires_a_recipe_and_project_root(root, recipe):
+    with pytest.raises(ValueError, match="requires an SRT recipe"):
+        add_multinode_node_count({"srt-recipe": recipe}, root)
 
 
 def test_aggregated_worker_expands_to_legacy_matrix_pair():
     benchmark = {
         "worker": {
             "num-worker": 2,
-            "tp": 8,
+            "gpus-per-worker": 16, "tp": 8,
             "pp": 2,
             "ep": 1,
             "dp-attn": False,
@@ -82,7 +86,7 @@ def test_aggregated_worker_expands_to_legacy_matrix_pair():
 
     assert prefill == {
         "num-worker": 2,
-        "tp": 8,
+        "gpus-per-worker": 16, "tp": 8,
         "pp": 2,
         "dcp-size": 1,
         "pcp-size": 1,
@@ -92,7 +96,7 @@ def test_aggregated_worker_expands_to_legacy_matrix_pair():
     }
     assert decode == {
         "num-worker": 0,
-        "tp": 8,
+        "gpus-per-worker": 16, "tp": 8,
         "pp": 2,
         "dcp-size": 1,
         "pcp-size": 1,
@@ -115,21 +119,24 @@ def multinode_recipe(tmp_path):
 
 
 @pytest.mark.parametrize("roles, expected", [
-    ({"agg": {"nodes": 3, "workers": 6}}, 3),
+    ({"agg": {"nodes": 3}}, 3),
     ({"prefill": {"nodes": 2}, "decode": {"nodes": 4}}, 6),
     ({"prefill": {"nodes": 2}, "decode": {"nodes": "colocate"}}, 2),
-    ({"prefill": {"nodes": 2}, "decode": {"workers": 1}}, None),
-    ({"prefill": {"nodes": 2}, "decode": {"nodes": None}}, None),
-    ({"prefill": {"nodes": 2}, "decode": None}, None),
 ])
-def test_multinode_node_count_reads_schema_two_roles(tmp_path, multinode_recipe, roles, expected):
-    import infx.matrix.generate as generate
-    srt_recipe = multinode_recipe({"schema": 2, "roles": roles})
-    if expected is None:
-        with pytest.raises(ValueError, match="role 'decode' must specify nodes"):
-            generate.recipe_node_count(tmp_path, srt_recipe)
-    else:
-        assert generate.recipe_node_count(tmp_path, srt_recipe) == expected
+def test_recipe_node_count_reads_aggregate_disaggregate_and_colocated_nodes(
+    tmp_path, multinode_recipe, roles, expected
+):
+    reference = multinode_recipe({"schema": 2, "roles": roles})
+    assert generate_sweep_configs.recipe_node_count(tmp_path, reference) == expected
+
+
+@pytest.mark.parametrize("roles", [None, {}, {"agg": None}, {"agg": {}},
+                                   {"agg": {"nodes": 0}}, {"agg": {"nodes": True}},
+                                   {"agg": {"nodes": "colocate"}}])
+def test_recipe_node_count_rejects_missing_or_invalid_reservations(tmp_path, multinode_recipe, roles):
+    reference = multinode_recipe({"schema": 2, "roles": roles})
+    with pytest.raises(ValueError, match="[Rr]ole"):
+        generate_sweep_configs.recipe_node_count(tmp_path, reference)
 
 
 @pytest.mark.parametrize("sections", [
@@ -144,7 +151,9 @@ def test_recipe_node_count_treats_null_sections_as_absent(tmp_path, multinode_re
     srt_recipe = multinode_recipe(
         {"schema": 2, "roles": {"prefill": {"nodes": 1}, "decode": {"nodes": 2}}, **sections}
     )
-    assert generate.recipe_node_count(tmp_path, srt_recipe) == 3
+    assert generate.recipe_node_count(
+        tmp_path, srt_recipe
+    ) == 3
 
 
 def test_recipe_node_count_rejects_an_empty_recipe(tmp_path, multinode_recipe):
@@ -155,22 +164,44 @@ def test_recipe_node_count_rejects_an_empty_recipe(tmp_path, multinode_recipe):
 
 
 @pytest.mark.parametrize("selector, expected", [
-    ("base", 3),
-    ("override_wide", 5),
-    ("override_colocated", 2),
+    ("base", 2),
+    ("override_wide", 4),
+    ("override_colocated", 1),
     ("zip_override_sweep[0]", 2),
-    ("zip_override_sweep[1]", 3),
+    ("zip_override_sweep[1]", 4),
 ])
 def test_recipe_node_count_resolves_override_selectors(tmp_path, multinode_recipe, selector, expected):
-    srt_recipe = multinode_recipe({
+    reference = multinode_recipe({
         "schema": 2,
-        "base": {"roles": {"prefill": {"nodes": 1}, "decode": {"nodes": 2}}},
-        "override_wide": {"roles": {"decode": {"nodes": 4}}},
-        "override_colocated": {"roles": {"prefill": {"nodes": 2}, "decode": {"nodes": "colocate"}}},
-        "zip_override_sweep": {"roles": {"decode": {"nodes": [1, 2]}}},
+        "base": {"roles": {"prefill": {"nodes": 1}, "decode": {"nodes": 1}}},
+        "override_wide": {"roles": {"decode": {"nodes": 3}}},
+        "override_colocated": {"roles": {"decode": {"nodes": "colocate"}}},
+        "zip_override_sweep": {"roles": {"decode": {"nodes": [1, 3]}}},
     }, "variants.yaml")
-    import infx.matrix.generate as generate
-    assert generate.recipe_node_count(tmp_path, f"{srt_recipe}:{selector}") == expected
+    assert generate_sweep_configs.recipe_node_count(tmp_path, f"{reference}:{selector}") == expected
+
+
+def test_recipe_schema_can_be_declared_in_bundle_base(tmp_path, multinode_recipe):
+    reference = multinode_recipe({
+        "base": {"schema": 2, "roles": {"agg": {"nodes": 2}}},
+        "override_packed": {},
+    })
+    assert generate_sweep_configs.recipe_node_count(tmp_path, f"{reference}:override_packed") == 2
+
+
+@pytest.mark.parametrize("other_nodes", [2, 3])
+def test_unselected_recipe_variants_must_agree_on_node_count(tmp_path, multinode_recipe, other_nodes):
+    reference = multinode_recipe({
+        "schema": 2,
+        "base": {"roles": {"agg": {"nodes": 2}}},
+        "override_base": {},
+        "override_other": {"roles": {"agg": {"nodes": other_nodes}}},
+    })
+    if other_nodes != 2:
+        with pytest.raises(ValueError, match="variants require different node counts"):
+            generate_sweep_configs.recipe_node_count(tmp_path, reference)
+    else:
+        assert generate_sweep_configs.recipe_node_count(tmp_path, reference) == 2
 
 
 @pytest.mark.parametrize("auxiliary, expected", [
@@ -200,42 +231,19 @@ def test_recipe_node_count_includes_auxiliary_nodes(tmp_path, multinode_recipe, 
         "override_auxiliary": auxiliary,
     })
 
-    assert generate.recipe_node_count(tmp_path, f"{srt_recipe}:override_auxiliary") == expected
+    assert generate.recipe_node_count(
+        tmp_path, f"{srt_recipe}:override_auxiliary",
+    ) == expected
 
 
-def test_multinode_node_count_uses_role_gpu_footprints(sample_runner_config):
-    prefill = {"num-worker": 3, "tp": 2, "pp": 1, "pcp-size": 1}
-    decode = {"num-worker": 2, "tp": 8, "pp": 1, "pcp-size": 1}
-
-    assert multinode_node_count(
-        prefill, decode, "cluster:b300-nv", sample_runner_config, None, None
-    ) == 3
-
-
-def test_multinode_node_count_honors_explicit_role_node_settings():
-    prefill = {
-        "num-worker": 1,
-        "tp": 8,
-        "additional-settings": ["PREFILL_NODES=2"],
-    }
-    decode = {
-        "num-worker": 1,
-        "tp": 8,
-        "additional-settings": ["DECODE_NODES=1"],
-    }
-
-    assert multinode_node_count(prefill, decode, "unknown", {}, None, None) == 3
-
-
-def test_multinode_node_count_resolves_heterogeneous_worker_hardware(
-    sample_runner_config,
-):
-    prefill = {"hardware": "gb200", "num-worker": 5, "tp": 4}
-    decode = {"hardware": "h100", "num-worker": 1, "tp": 8}
-
-    assert multinode_node_count(
-        prefill, decode, "gb200", sample_runner_config, None, None
-    ) == 6
+def test_scheduler_node_count_includes_auxiliary_nodes(tmp_path, multinode_recipe):
+    reference = multinode_recipe({
+        "schema": 2, "roles": {"agg": {"nodes": 2}},
+        "services": [{"type": "custom", "nodes": 1}],
+    })
+    entry = {"srt-recipe": reference}
+    add_multinode_node_count(entry, tmp_path)
+    assert entry["node-count"] == 3
 
 
 def cluster_record(gpus_per_node, **facts):
@@ -247,18 +255,6 @@ def cluster_record(gpus_per_node, **facts):
         "scheduler": "slurm",
         "slurm": {"partition": "batch", "exclusive": True},
     }
-
-
-@pytest.mark.parametrize(("roles", "expected_nodes"), [
-    ({"agg": {"nodes": 3}}, 3),
-    ({"prefill": {"nodes": 2}, "decode": {"nodes": 3}}, 5),
-])
-def test_multinode_node_count_prefers_recipe_roles(tmp_path, multinode_recipe, roles, expected_nodes):
-    srt_recipe = multinode_recipe({"schema": 2, "roles": roles})
-    prefill = {"num-worker": 1, "tp": 8, "additional-settings": ["PREFILL_NODES=7"]}
-    decode = {"num-worker": 1, "tp": 8, "additional-settings": ["DECODE_NODES=9"]}
-
-    assert multinode_node_count(prefill, decode, "unknown", {}, srt_recipe, tmp_path) == expected_nodes
 
 
 def test_multinode_rows_resolve_recipes_and_count_nodes_from_them(
@@ -275,7 +271,7 @@ def test_multinode_rows_resolve_recipes_and_count_nodes_from_them(
         "srt-recipe": "bundle.yaml:override_wide", "eval-srt-recipe": "bundle.yaml:base",
     })
 
-    [row] = generate_test_config_sweep(
+    [row] = generate_matrix(generate_test_config_sweep,
         argparse.Namespace(config_keys=[key]), sample_multinode_config, sample_runner_config,
         root=tmp_path,
     )
@@ -335,14 +331,14 @@ def sample_single_node_config():
                         "isl": 1024,
                         "osl": 1024,
                         "search-space": [
-                            {"tp": 8, "conc-start": 4, "conc-end": 64}
+                            {"gpus-per-worker": 8, "tp": 8, "conc-start": 4, "conc-end": 64}
                         ]
                     },
                     {
                         "isl": 8192,
                         "osl": 1024,
                         "search-space": [
-                            {"tp": 8, "conc-start": 4, "conc-end": 64}
+                            {"gpus-per-worker": 8, "tp": 8, "conc-start": 4, "conc-end": 64}
                         ]
                     }
                 ]
@@ -375,9 +371,8 @@ def sample_multinode_config():
                             {
                                 "conc-list": [2150],
                                 "prefill": {
-                                    "hardware": "gb200",
                                     "num-worker": 5,
-                                    "tp": 4,
+                                    "gpus-per-worker": 4, "tp": 4,
                                     "ep": 4,
                                     "dp-attn": True,
                                     "additional-settings": [
@@ -386,9 +381,8 @@ def sample_multinode_config():
                                     ],
                                 },
                                 "decode": {
-                                    "hardware": "h100",
                                     "num-worker": 1,
-                                    "tp": 8,
+                                    "gpus-per-worker": 8, "tp": 8,
                                     "ep": 8,
                                     "dp-attn": True,
                                     "additional-settings": [
@@ -485,7 +479,7 @@ class TestMarkEvalEntries:
         base = {
             "scenario-type": "agentic-coding",
             "model": "m", "runner": "b300", "framework": "vllm",
-            "precision": "fp4", "tp": 8, "spec-decoding": "none",
+            "precision": "fp4", "gpus-per-worker": 8, "tp": 8, "spec-decoding": "none",
             "dp-attn": False, "image": "img:a",
         }
         variants = [
@@ -528,10 +522,10 @@ class TestMarkEvalEntries:
             "scenario-type": "agentic-coding",
             "model": "m", "runner": "b300", "framework": "sglang-disagg",
             "precision": "fp4", "spec-decoding": "none", "disagg": True,
-            "prefill": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
-            "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+            "prefill": {"num-worker": 1, "gpus-per-worker": 8, "tp": 8, "ep": 1, "dp-attn": False},
+            "decode": {"num-worker": 1, "gpus-per-worker": 8, "tp": 8, "ep": 1, "dp-attn": False},
         }
-        low_topology = {**common, "prefill": {**common["prefill"], "tp": 4}}
+        low_topology = {**common, "prefill": {**common["prefill"], "gpus-per-worker": 4, "tp": 4}}
         low_deployment = {**common, "model": "latency-engine"}
         matrix_values = [
             {**common, "conc": [8], "exp-name": "p1x8_d1x8_conc8"},
@@ -556,12 +550,12 @@ class TestMarkEvalEntries:
             "precision": "fp4", "spec-decoding": "none", "disagg": True,
         }
         topology_a = {
-            "prefill": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
-            "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+            "prefill": {"num-worker": 1, "gpus-per-worker": 8, "tp": 8, "ep": 1, "dp-attn": False},
+            "decode": {"num-worker": 1, "gpus-per-worker": 8, "tp": 8, "ep": 1, "dp-attn": False},
         }
         topology_b = {
-            "prefill": {"num-worker": 1, "tp": 8, "ep": 8, "dp-attn": True},
-            "decode": {"num-worker": 1, "tp": 8, "ep": 8, "dp-attn": True},
+            "prefill": {"num-worker": 1, "gpus-per-worker": 8, "tp": 8, "ep": 8, "dp-attn": True},
+            "decode": {"num-worker": 1, "gpus-per-worker": 8, "tp": 8, "ep": 8, "dp-attn": True},
         }
         matrix_values = [
             {**base, **topology_a, "conc": [16], "exp-name": "a_conc16"},
@@ -582,13 +576,13 @@ class TestMarkEvalEntries:
             {
                 "scenario-type": "agentic-coding",
                 "model": "m", "runner": "b300", "framework": "vllm",
-                "precision": "fp4", "tp": 8, "conc": 32,
+                "precision": "fp4", "gpus-per-worker": 8, "tp": 8, "conc": 32,
                 "spec-decoding": "none", "dp-attn": False, "image": "img",
             },
             {
                 "scenario-type": "agentic-coding",
                 "model": "m", "runner": "b300", "framework": "vllm",
-                "precision": "fp4", "tp": 8, "conc": 64,
+                "precision": "fp4", "gpus-per-worker": 8, "tp": 8, "conc": 64,
                 "spec-decoding": "none", "dp-attn": False, "image": "img",
             },
         ]
@@ -606,7 +600,7 @@ class TestMarkEvalEntries:
     def test_vendor_models_run_vendor_suite_everywhere_plus_gsm8k(self, all_evals, runner):
         shape = {
             "scenario-type": "agentic-coding", "runner": runner, "framework": "vllm",
-            "precision": "fp4", "tp": 8, "spec-decoding": "none", "dp-attn": False,
+            "precision": "fp4", "gpus-per-worker": 8, "tp": 8, "spec-decoding": "none", "dp-attn": False,
             "image": "img",
         }
         matrix_values = [
@@ -654,8 +648,8 @@ class TestMarkEvalEntries:
             "precision": "fp4",
             "spec-decoding": "none",
             "disagg": True,
-            "prefill": {"num-worker": 1, "tp": 8},
-            "decode": {"num-worker": 1, "tp": 8},
+            "prefill": {"num-worker": 1, "gpus-per-worker": 8, "tp": 8},
+            "decode": {"num-worker": 1, "gpus-per-worker": 8, "tp": 8},
         }
         matrix_values = [
             {**common, "conc": [2], "exp-name": "kimi-conc2"},
@@ -678,7 +672,7 @@ class TestMarkEvalEntries:
         common = {
             "scenario-type": "agentic-coding", "model-prefix": "minimaxm3",
             "model": "MiniMaxAI/MiniMax-M3", "runner": "cluster:b200-nscale",
-            "framework": "vllm", "precision": "fp4", "tp": 4, "ep": 1,
+            "framework": "vllm", "precision": "fp4", "gpus-per-worker": 4, "tp": 4, "ep": 1,
             "spec-decoding": "mtp", "dp-attn": False, "image": "img",
         }
         dram = {"kv-offloading": "dram", "kv-offload-backend": {"name": "vllm-simple"}}
@@ -714,7 +708,7 @@ class TestMarkEvalEntries:
             "osl": 1024,
             "spec-decoding": "none",
             "dp-attn": False,
-            "tp": 8,
+            "gpus-per-worker": 8, "tp": 8,
             "conc": MIN_EVAL_CONC,
         }]
 
@@ -736,7 +730,7 @@ class TestMarkEvalEntries:
                 "osl": 1024,
                 "spec-decoding": "none",
                 "dp-attn": False,
-                "tp": 8,
+                "gpus-per-worker": 8, "tp": 8,
                 "conc": 8,
             },
             {
@@ -748,7 +742,7 @@ class TestMarkEvalEntries:
                 "osl": 1024,
                 "spec-decoding": "none",
                 "dp-attn": False,
-                "tp": 8,
+                "gpus-per-worker": 8, "tp": 8,
                 "conc": MIN_EVAL_CONC,
             },
             {
@@ -760,7 +754,7 @@ class TestMarkEvalEntries:
                 "osl": 1024,
                 "spec-decoding": "none",
                 "dp-attn": False,
-                "tp": 8,
+                "gpus-per-worker": 8, "tp": 8,
                 "conc": 32,
             },
             {
@@ -772,7 +766,7 @@ class TestMarkEvalEntries:
                 "osl": 1024,
                 "spec-decoding": "none",
                 "dp-attn": False,
-                "tp": 8,
+                "gpus-per-worker": 8, "tp": 8,
                 "conc": 64,
             },
         ]
@@ -796,13 +790,13 @@ class TestMarkEvalEntries:
                 "spec-decoding": "none",
                 "prefill": {
                     "num-worker": 1,
-                    "tp": 8,
+                    "gpus-per-worker": 8, "tp": 8,
                     "ep": 1,
                     "dp-attn": False,
                 },
                 "decode": {
                     "num-worker": 1,
-                    "tp": 8,
+                    "gpus-per-worker": 8, "tp": 8,
                     "ep": 1,
                     "dp-attn": False,
                 },
@@ -827,13 +821,13 @@ class TestMarkEvalEntries:
                 "spec-decoding": "none",
                 "prefill": {
                     "num-worker": 1,
-                    "tp": 8,
+                    "gpus-per-worker": 8, "tp": 8,
                     "ep": 1,
                     "dp-attn": True,
                 },
                 "decode": {
                     "num-worker": 4,
-                    "tp": 8,
+                    "gpus-per-worker": 8, "tp": 8,
                     "ep": 1,
                     "dp-attn": False,
                 },
@@ -849,13 +843,13 @@ class TestMarkEvalEntries:
                 "spec-decoding": "none",
                 "prefill": {
                     "num-worker": 2,
-                    "tp": 4,
+                    "gpus-per-worker": 4, "tp": 4,
                     "ep": 1,
                     "dp-attn": True,
                 },
                 "decode": {
                     "num-worker": 2,
-                    "tp": 4,
+                    "gpus-per-worker": 4, "tp": 4,
                     "ep": 1,
                     "dp-attn": False,
                 },
@@ -882,13 +876,13 @@ class TestMarkEvalEntries:
                 "spec-decoding": "none",
                 "prefill": {
                     "num-worker": prefill_workers,
-                    "tp": 4,
+                    "gpus-per-worker": 4, "tp": 4,
                     "ep": 1,
                     "dp-attn": False,
                 },
                 "decode": {
                     "num-worker": decode_workers,
-                    "tp": 8,
+                    "gpus-per-worker": 8, "tp": 8,
                     "ep": 1,
                     "dp-attn": False,
                 },
@@ -918,14 +912,14 @@ class TestMarkEvalEntries:
             "spec-decoding": "none",
             "prefill": {
                 "num-worker": 1,
-                "tp": 8,
+                "gpus-per-worker": 8, "tp": 8,
                 "ep": 1,
                 "dp-attn": False,
                 "additional-settings": ["PREFILL_NODES=1"],
             },
             "decode": {
                 "num-worker": 2,
-                "tp": 8,
+                "gpus-per-worker": 8, "tp": 8,
                 "ep": 1,
                 "dp-attn": False,
                 "additional-settings": ["DECODE_NODES=2"],
@@ -948,13 +942,13 @@ class TestMarkEvalEntries:
         """Should mark highest and median concurrency for 8k1k entries."""
         entries = [
             {'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
-             'isl': 8192, 'osl': 1024, 'tp': 2, 'conc': 32,
+             'isl': 8192, 'osl': 1024, "gpus-per-worker": 2, 'tp': 2, 'conc': 32,
              'spec-decoding': False, 'dp-attn': False, 'run-eval': False},
             {'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
-             'isl': 8192, 'osl': 1024, 'tp': 2, 'conc': 128,
+             'isl': 8192, 'osl': 1024, "gpus-per-worker": 2, 'tp': 2, 'conc': 128,
              'spec-decoding': False, 'dp-attn': False, 'run-eval': False},
             {'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
-             'isl': 8192, 'osl': 1024, 'tp': 2, 'conc': 512,
+             'isl': 8192, 'osl': 1024, "gpus-per-worker": 2, 'tp': 2, 'conc': 512,
              'spec-decoding': False, 'dp-attn': False, 'run-eval': False},
         ]
         result = mark_eval_entries(entries)
@@ -965,7 +959,7 @@ class TestMarkEvalEntries:
     def test_non_8k1k_never_marked(self):
         entries = [
             {'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
-             'isl': 1024, 'osl': 1024, 'tp': 2, 'conc': 512,
+             'isl': 1024, 'osl': 1024, "gpus-per-worker": 2, 'tp': 2, 'conc': 512,
              'spec-decoding': False, 'dp-attn': False, 'run-eval': False},
         ]
         result = mark_eval_entries(entries)
@@ -978,12 +972,12 @@ class TestMarkAllEvalEntries:
         entries = [
             {
                 'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
-                'isl': 1024, 'osl': 1024, 'tp': 2, 'conc': 1,
+                'isl': 1024, 'osl': 1024, "gpus-per-worker": 2, 'tp': 2, 'conc': 1,
                 'spec-decoding': 'none', 'dp-attn': False, 'run-eval': False,
             },
             {
                 'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
-                'isl': 8192, 'osl': 1024, 'tp': 2, 'conc': 8,
+                'isl': 8192, 'osl': 1024, "gpus-per-worker": 2, 'tp': 2, 'conc': 8,
                 'spec-decoding': 'none', 'dp-attn': False, 'run-eval': False,
             },
         ]
@@ -1028,7 +1022,7 @@ class TestMarkAllEvalEntries:
         common = {
             'model': 'm', 'model-prefix': 'm', 'runner': 'r', 'framework': 'f',
             'precision': 'fp8', 'isl': 8192, 'osl': 1024, 'spec-decoding': 'none',
-            'prefill': {'tp': 8, 'dp-attn': False}, 'decode': {'tp': 8, 'dp-attn': False},
+            'prefill': {"gpus-per-worker": 8, 'tp': 8, 'dp-attn': False}, 'decode': {"gpus-per-worker": 8, 'tp': 8, 'dp-attn': False},
             'run-eval': False,
         }
         entries = [
@@ -1149,8 +1143,8 @@ class TestMarkAllEvalEntries:
             'scenario-type': 'agentic-coding',
             'model': 'm', 'runner': 'r', 'framework': 'sglang-disagg',
             'precision': 'fp4', 'spec-decoding': 'none', 'disagg': True,
-            'prefill': {'num-worker': 1, 'tp': 8, 'ep': 1, 'dp-attn': False},
-            'decode': {'num-worker': 1, 'tp': 8, 'ep': 1, 'dp-attn': False},
+            'prefill': {'num-worker': 1, "gpus-per-worker": 8, 'tp': 8, 'ep': 1, 'dp-attn': False},
+            'decode': {'num-worker': 1, "gpus-per-worker": 8, 'tp': 8, 'ep': 1, 'dp-attn': False},
         }
         entries = [
             {**common, 'conc': [2], 'exp-name': 'p1x8_d1x8_conc2'},
@@ -1185,8 +1179,8 @@ class TestMarkAllEvalEntries:
             "precision": "fp4",
             "spec-decoding": "none",
             "disagg": True,
-            "prefill": {"num-worker": 1, "tp": 8},
-            "decode": {"num-worker": 1, "tp": 8},
+            "prefill": {"num-worker": 1, "gpus-per-worker": 8, "tp": 8},
+            "decode": {"num-worker": 1, "gpus-per-worker": 8, "tp": 8},
         }
         entries = [
             {**common, "conc": [2], "exp-name": "model-conc2"},
@@ -1211,7 +1205,7 @@ class TestGenerateFullSweepSingleNode:
 
     def test_sweep_expands_each_sequence_length_across_concurrencies(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
         """Each input sequence pair gets the complete requested concurrency range."""
-        result = generate_full_sweep(
+        result = generate_matrix(generate_full_sweep,
             full_sweep_args_single_node,
             sample_single_node_config,
             sample_runner_config
@@ -1229,7 +1223,7 @@ class TestGenerateFullSweepSingleNode:
         ]
 
     def test_matrix_entry_structure(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        result = generate_full_sweep(
+        result = generate_matrix(generate_full_sweep,
             full_sweep_args_single_node,
             sample_single_node_config,
             sample_runner_config
@@ -1249,7 +1243,7 @@ class TestGenerateFullSweepSingleNode:
         for seq_config in explicit_config["dsr1-fp8-mi300x-sglang"]["scenarios"]["fixed-seq-len"]:
             for search_entry in seq_config["search-space"]:
                 search_entry.update({"pp": 2, "dcp-size": 2, "pcp-size": 2})
-        explicit_result = generate_full_sweep(
+        explicit_result = generate_matrix(generate_full_sweep,
             full_sweep_args_single_node,
             explicit_config,
             sample_runner_config,
@@ -1266,7 +1260,7 @@ class TestGenerateFullSweepSingleNode:
         selected = {}
         for prefixes in (["dsr1"], ["dsr1flash"], ["dsr1", "dsr1flash"]):
             full_sweep_args_single_node.model_prefix = prefixes
-            result = generate_full_sweep(
+            result = generate_matrix(generate_full_sweep,
                 full_sweep_args_single_node,
                 sample_single_node_config,
                 sample_runner_config
@@ -1291,7 +1285,7 @@ class TestGenerateFullSweepSingleNode:
         selected = {}
         for value in ("fp8", "fp4") if field == "precision" else ("sglang", "vllm"):
             setattr(full_sweep_args_single_node, field, [value])
-            result = generate_full_sweep(
+            result = generate_matrix(generate_full_sweep,
                 full_sweep_args_single_node, sample_single_node_config, sample_runner_config,
             )
             selected[value] = {row["precision"] for row in result}
@@ -1312,13 +1306,13 @@ class TestGenerateFullSweepSingleNode:
     ):
         vars(full_sweep_args_single_node).update(filters)
         with pytest.raises(ValueError, match=f"^{message}$"):
-            generate_full_sweep(
+            generate_matrix(generate_full_sweep,
                 full_sweep_args_single_node, sample_single_node_config, sample_runner_config,
             )
 
     def test_filter_by_runner_type(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
         full_sweep_args_single_node.runner_type = ["mi300x"]
-        result = generate_full_sweep(
+        result = generate_matrix(generate_full_sweep,
             full_sweep_args_single_node,
             sample_single_node_config,
             sample_runner_config
@@ -1326,7 +1320,7 @@ class TestGenerateFullSweepSingleNode:
         assert len(result) > 0
 
         full_sweep_args_single_node.runner_type = ["h100"]
-        result = generate_full_sweep(
+        result = generate_matrix(generate_full_sweep,
             full_sweep_args_single_node,
             sample_single_node_config,
             sample_runner_config
@@ -1336,7 +1330,7 @@ class TestGenerateFullSweepSingleNode:
     def test_invalid_runner_type_raises_error(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
         full_sweep_args_single_node.runner_type = ["invalid_runner"]
         with pytest.raises(ValueError) as exc_info:
-            generate_full_sweep(
+            generate_matrix(generate_full_sweep,
                 full_sweep_args_single_node,
                 sample_single_node_config,
                 sample_runner_config
@@ -1345,7 +1339,7 @@ class TestGenerateFullSweepSingleNode:
 
     def test_filter_by_seq_lens(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
         full_sweep_args_single_node.seq_lens = ["1k1k"]
-        result = generate_full_sweep(
+        result = generate_matrix(generate_full_sweep,
             full_sweep_args_single_node,
             sample_single_node_config,
             sample_runner_config
@@ -1356,7 +1350,7 @@ class TestGenerateFullSweepSingleNode:
     def test_max_conc_filter(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
         full_sweep_args_single_node.max_conc = 16
         full_sweep_args_single_node.seq_lens = ["1k1k"]
-        result = generate_full_sweep(
+        result = generate_matrix(generate_full_sweep,
             full_sweep_args_single_node,
             sample_single_node_config,
             sample_runner_config
@@ -1367,7 +1361,7 @@ class TestGenerateFullSweepSingleNode:
     def test_max_conc_creates_config_when_below_min(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
         full_sweep_args_single_node.max_conc = 1
         full_sweep_args_single_node.seq_lens = ["1k1k"]
-        result = generate_full_sweep(
+        result = generate_matrix(generate_full_sweep,
             full_sweep_args_single_node,
             sample_single_node_config,
             sample_runner_config
@@ -1378,7 +1372,7 @@ class TestGenerateFullSweepSingleNode:
     def test_max_conc_zero_or_negative_skips(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
         for invalid_value in [0, -1, -100]:
             full_sweep_args_single_node.max_conc = invalid_value
-            result = generate_full_sweep(
+            result = generate_matrix(generate_full_sweep,
                 full_sweep_args_single_node,
                 sample_single_node_config,
                 sample_runner_config
@@ -1403,8 +1397,8 @@ class TestGenerateFullSweepSingleNode:
                             "isl": 1024,
                             "osl": 1024,
                             "search-space": [
-                                {"tp": 4, "conc-start": 4, "conc-end": 64},
-                                {"tp": 8, "conc-start": 4, "conc-end": 64},
+                                {"gpus-per-worker": 4, "tp": 4, "conc-start": 4, "conc-end": 64},
+                                {"gpus-per-worker": 8, "tp": 8, "conc-start": 4, "conc-end": 64},
                             ],
                         }
                     ]
@@ -1415,7 +1409,7 @@ class TestGenerateFullSweepSingleNode:
         full_sweep_args_single_node.max_tp = 4
         full_sweep_args_single_node.seq_lens = ["1k1k"]
 
-        result = generate_full_sweep(
+        result = generate_matrix(generate_full_sweep,
             full_sweep_args_single_node,
             config,
             sample_runner_config,
@@ -1428,7 +1422,7 @@ class TestGenerateFullSweepSingleNode:
         full_sweep_args_single_node.max_tp = 2
         full_sweep_args_single_node.seq_lens = ["1k1k"]
 
-        result = generate_full_sweep(
+        result = generate_matrix(generate_full_sweep,
             full_sweep_args_single_node,
             sample_single_node_config,
             sample_runner_config,
@@ -1439,7 +1433,7 @@ class TestGenerateFullSweepSingleNode:
     def test_max_tp_zero_or_negative_skips(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
         for invalid_value in [0, -1, -100]:
             full_sweep_args_single_node.max_tp = invalid_value
-            result = generate_full_sweep(
+            result = generate_matrix(generate_full_sweep,
                 full_sweep_args_single_node,
                 sample_single_node_config,
                 sample_runner_config
@@ -1449,7 +1443,7 @@ class TestGenerateFullSweepSingleNode:
     def test_step_size(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
         full_sweep_args_single_node.step_size = 4
         full_sweep_args_single_node.seq_lens = ["1k1k"]
-        result = generate_full_sweep(
+        result = generate_matrix(generate_full_sweep,
             full_sweep_args_single_node,
             sample_single_node_config,
             sample_runner_config
@@ -1466,7 +1460,7 @@ class TestGenerateFullSweepSingleNode:
         full_sweep_args_single_node.runner_node_filter = "amd"
         full_sweep_args_single_node.seq_lens = ["1k1k"]
         full_sweep_args_single_node.max_conc = 4
-        result = generate_full_sweep(
+        result = generate_matrix(generate_full_sweep,
             full_sweep_args_single_node,
             sample_single_node_config,
             sample_runner_config
@@ -1479,7 +1473,7 @@ class TestGenerateFullSweepSingleNode:
     def test_runner_node_filter_no_match(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
         full_sweep_args_single_node.runner_type = ["mi300x"]
         full_sweep_args_single_node.runner_node_filter = "nonexistent"
-        result = generate_full_sweep(
+        result = generate_matrix(generate_full_sweep,
             full_sweep_args_single_node,
             sample_single_node_config,
             sample_runner_config
@@ -1492,7 +1486,7 @@ class TestGenerateFullSweepMultiNode:
 
     def test_multinode_entry_structure(self, sample_multinode_config, sample_runner_config, full_sweep_args_multi_node):
         """Multinode entries should have prefill and decode configs."""
-        result = generate_full_sweep(
+        result = generate_matrix(generate_full_sweep,
             full_sweep_args_multi_node,
             sample_multinode_config,
             sample_runner_config
@@ -1502,8 +1496,6 @@ class TestGenerateFullSweepMultiNode:
         assert entry["prefill"]["num-worker"] == 5
         assert entry["decode"]["num-worker"] == 1
         assert entry["disagg"] is True
-        assert entry["prefill"]["hardware"] == "gb200"
-        assert entry["decode"]["hardware"] == "h100"
         assert (
             entry["prefill"]["pp"],
             entry["prefill"]["dcp-size"],
@@ -1521,7 +1513,7 @@ class TestGenerateFullSweepMultiNode:
         search_entry["prefill"].update({"pp": 2, "dcp-size": 2, "pcp-size": 2})
         search_entry["decode"].update({"pp": 2, "dcp-size": 4, "pcp-size": 1})
 
-        entry = generate_full_sweep(
+        entry = generate_matrix(generate_full_sweep,
             full_sweep_args_multi_node,
             explicit_config,
             sample_runner_config,
@@ -1561,13 +1553,13 @@ class TestGenerateFullSweepMultiNode:
                                     "conc-list": [100],
                                     "prefill": {
                                         "num-worker": 1,
-                                        "tp": 4,
+                                        "gpus-per-worker": 4, "tp": 4,
                                         "ep": 4,
                                         "dp-attn": False,
                                     },
                                     "decode": {
                                         "num-worker": 1,
-                                        "tp": 8,
+                                        "gpus-per-worker": 8, "tp": 8,
                                         "ep": 8,
                                         "dp-attn": False,
                                     },
@@ -1580,7 +1572,7 @@ class TestGenerateFullSweepMultiNode:
         }
         full_sweep_args_multi_node.runner_type = ["h200"]
         full_sweep_args_multi_node.runner_node_filter = "cw"
-        result = generate_full_sweep(
+        result = generate_matrix(generate_full_sweep,
             full_sweep_args_multi_node,
             config,
             sample_runner_config
@@ -1611,14 +1603,14 @@ class TestEdgeCases:
                             "isl": 1024,
                             "osl": 1024,
                             "search-space": [
-                                {"tp": 4, "ep": 4, "dp-attn": True, "conc-start": 4, "conc-end": 4}
+                                {"gpus-per-worker": 4, "tp": 4, "ep": 4, "dp-attn": True, "conc-start": 4, "conc-end": 4}
                             ]
                         }
                     ]
                 }
             }
         }
-        result = generate_full_sweep(
+        result = generate_matrix(generate_full_sweep,
             full_sweep_args_single_node,
             config,
             sample_runner_config
@@ -1644,14 +1636,14 @@ class TestEdgeCases:
                             "isl": 1024,
                             "osl": 1024,
                             "search-space": [
-                                {"tp": 8, "spec-decoding": "mtp", "conc-start": 4, "conc-end": 4}
+                                {"gpus-per-worker": 8, "tp": 8, "spec-decoding": "mtp", "conc-start": 4, "conc-end": 4}
                             ]
                         }
                     ]
                 }
             }
         }
-        result = generate_full_sweep(
+        result = generate_matrix(generate_full_sweep,
             full_sweep_args_single_node,
             config,
             sample_runner_config
@@ -1676,14 +1668,14 @@ class TestEdgeCases:
                             "isl": 1024,
                             "osl": 1024,
                             "search-space": [
-                                {"tp": 8, "conc-list": [4, 16, 64]}
+                                {"gpus-per-worker": 8, "tp": 8, "conc-list": [4, 16, 64]}
                             ]
                         }
                     ]
                 }
             }
         }
-        result = generate_full_sweep(
+        result = generate_matrix(generate_full_sweep,
             full_sweep_args_single_node,
             config,
             sample_runner_config
@@ -1711,7 +1703,7 @@ class TestEdgeCases:
                             "isl": 1024,
                             "osl": 1024,
                             "search-space": [
-                                {"tp": 8, "conc-list": [4, 16, 64]}
+                                {"gpus-per-worker": 8, "tp": 8, "conc-list": [4, 16, 64]}
                             ],
                         }
                     ]
@@ -1721,7 +1713,7 @@ class TestEdgeCases:
         full_sweep_args_single_node.min_conc = 8
         full_sweep_args_single_node.max_conc = 32
 
-        result = generate_full_sweep(
+        result = generate_matrix(generate_full_sweep,
             full_sweep_args_single_node,
             config,
             sample_runner_config,
@@ -1738,7 +1730,7 @@ class TestEdgeCases:
         full_sweep_args_single_node.step_size = 1
 
         with pytest.raises(ValueError, match="greater than 1"):
-            generate_full_sweep(
+            generate_matrix(generate_full_sweep,
                 full_sweep_args_single_node,
                 sample_single_node_config,
                 sample_runner_config,
@@ -1754,7 +1746,7 @@ class TestEdgeCases:
         full_sweep_args_single_node.max_conc = 8
 
         with pytest.raises(ValueError, match="less than or equal"):
-            generate_full_sweep(
+            generate_matrix(generate_full_sweep,
                 full_sweep_args_single_node,
                 sample_single_node_config,
                 sample_runner_config,
@@ -1777,14 +1769,14 @@ class TestEdgeCases:
                             "isl": 1024,
                             "osl": 1024,
                             "search-space": [
-                                {"tp": 8, "conc-start": 4, "conc-end": 4}
+                                {"gpus-per-worker": 8, "tp": 8, "conc-start": 4, "conc-end": 4}
                             ]
                         }
                     ]
                 }
             }
         }
-        result = generate_full_sweep(
+        result = generate_matrix(generate_full_sweep,
             full_sweep_args_single_node,
             config,
             sample_runner_config
@@ -1815,13 +1807,13 @@ class TestEdgeCases:
                                     "conc-end": 8,
                                     "prefill": {
                                         "num-worker": 1,
-                                        "tp": 4,
+                                        "gpus-per-worker": 4, "tp": 4,
                                         "ep": 4,
                                         "dp-attn": False,
                                     },
                                     "decode": {
                                         "num-worker": 1,
-                                        "tp": 8,
+                                        "gpus-per-worker": 8, "tp": 8,
                                         "ep": 8,
                                         "dp-attn": False,
                                     },
@@ -1832,7 +1824,7 @@ class TestEdgeCases:
                 }
             }
         }
-        result = generate_full_sweep(
+        result = generate_matrix(generate_full_sweep,
             full_sweep_args_multi_node,
             config,
             sample_runner_config
@@ -1857,7 +1849,7 @@ class TestEdgeCases:
                             "isl": 1024,
                             "osl": 1024,
                             "search-space": [
-                                {"tp": 8, "ep": 8, "conc-start": 4, "conc-end": 4}
+                                {"gpus-per-worker": 8, "tp": 8, "ep": 8, "conc-start": 4, "conc-end": 4}
                             ]
                         }
                     ]
@@ -1865,7 +1857,7 @@ class TestEdgeCases:
             }
         }
         full_sweep_args_single_node.max_ep = 2
-        result = generate_full_sweep(
+        result = generate_matrix(generate_full_sweep,
             full_sweep_args_single_node,
             config,
             sample_runner_config
@@ -1890,7 +1882,7 @@ class TestEdgeCases:
                             "isl": 1024,
                             "osl": 1024,
                             "search-space": [
-                                {"tp": 8, "ep": 8, "conc-start": 4, "conc-end": 4}
+                                {"gpus-per-worker": 8, "tp": 8, "ep": 8, "conc-start": 4, "conc-end": 4}
                             ]
                         }
                     ]
@@ -1899,7 +1891,7 @@ class TestEdgeCases:
         }
         for invalid_value in [0, -1, -100]:
             full_sweep_args_single_node.max_ep = invalid_value
-            result = generate_full_sweep(
+            result = generate_matrix(generate_full_sweep,
                 full_sweep_args_single_node,
                 config,
                 sample_runner_config
@@ -1929,13 +1921,13 @@ class TestEdgeCases:
                                     "conc-list": [100, 200, 400],
                                     "prefill": {
                                         "num-worker": 1,
-                                        "tp": 4,
+                                        "gpus-per-worker": 4, "tp": 4,
                                         "ep": 4,
                                         "dp-attn": False,
                                     },
                                     "decode": {
                                         "num-worker": 1,
-                                        "tp": 8,
+                                        "gpus-per-worker": 8, "tp": 8,
                                         "ep": 8,
                                         "dp-attn": False,
                                     },
@@ -1948,7 +1940,7 @@ class TestEdgeCases:
         }
         for invalid_value in [0, -1, -100]:
             full_sweep_args_multi_node.max_conc = invalid_value
-            result = generate_full_sweep(
+            result = generate_matrix(generate_full_sweep,
                 full_sweep_args_multi_node,
                 config,
                 sample_runner_config
@@ -1978,13 +1970,13 @@ class TestEdgeCases:
                                     "conc-list": [100, 200, 400],
                                     "prefill": {
                                         "num-worker": 1,
-                                        "tp": 4,
+                                        "gpus-per-worker": 4, "tp": 4,
                                         "ep": 4,
                                         "dp-attn": False,
                                     },
                                     "decode": {
                                         "num-worker": 1,
-                                        "tp": 8,
+                                        "gpus-per-worker": 8, "tp": 8,
                                         "ep": 8,
                                         "dp-attn": False,
                                     },
@@ -1996,7 +1988,7 @@ class TestEdgeCases:
             }
         }
         full_sweep_args_multi_node.max_conc = 1
-        result = generate_full_sweep(
+        result = generate_matrix(generate_full_sweep,
             full_sweep_args_multi_node,
             config,
             sample_runner_config
@@ -2022,8 +2014,8 @@ class TestEdgeCases:
                             "isl": 1024,
                             "osl": 1024,
                             "search-space": [
-                                {"tp": 8, "ep": 8, "conc-start": 100, "conc-end": 200},
-                                {"tp": 2, "ep": 8, "conc-start": 100, "conc-end": 200},
+                                {"gpus-per-worker": 8, "tp": 8, "ep": 8, "conc-start": 100, "conc-end": 200},
+                                {"gpus-per-worker": 2, "tp": 2, "ep": 8, "conc-start": 100, "conc-end": 200},
                             ]
                         }
                     ]
@@ -2034,7 +2026,7 @@ class TestEdgeCases:
         full_sweep_args_single_node.max_ep = 1
         full_sweep_args_single_node.max_conc = 1
 
-        result = generate_full_sweep(
+        result = generate_matrix(generate_full_sweep,
             full_sweep_args_single_node,
             config,
             sample_runner_config
@@ -2279,8 +2271,8 @@ class TestCommandLine:
 
     def test_trim_conc_updates_multinode_dispatch_concurrency(self):
         low_entry = {
-            'prefill': {'num-worker': 1, 'tp': 8},
-            'decode': {'num-worker': 0, 'tp': 8},
+            'prefill': {'num-worker': 1, "gpus-per-worker": 8, 'tp': 8},
+            'decode': {'num-worker': 0, "gpus-per-worker": 8, 'tp': 8},
             'conc': [4],
         }
         high_entry = {
@@ -2299,7 +2291,7 @@ class TestCommandLine:
 
     def test_trim_conc_merges_concurrencies_whose_recipe_variants_differ(self):
         # A single-node bundle selects one variant per CONC, so each point has its own fingerprint.
-        shape = {'tp': 8, 'model': 'm', 'srt-recipe': 'agentic.yaml'}
+        shape = {"gpus-per-worker": 8, 'tp': 8, 'model': 'm', 'srt-recipe': 'agentic.yaml'}
         rows = [
             {**shape, 'conc': 8, 'recipe-fingerprint': 'b' * 64},
             {**shape, 'conc': 2, 'recipe-fingerprint': 'a' * 64},
@@ -2308,7 +2300,7 @@ class TestCommandLine:
         assert trim_conc(rows) == [{**shape, 'conc': 2, 'recipe-fingerprint': 'a' * 64}]
 
     def test_trim_conc_never_merges_a_standalone_eval_into_another_suite(self):
-        shape = {'tp': 8, 'model': 'm'}
+        shape = {"gpus-per-worker": 8, 'tp': 8, 'model': 'm'}
         vendor = {**shape, 'conc': 16, 'run-eval': True,
                   'eval-framework': 'kimi-vendor', 'eval-suite': 'kimi_tool_call_schema_full'}
         vendor_low = {**vendor, 'conc': 1}
@@ -2329,10 +2321,10 @@ class TestCommandLine:
             'dp-attn': False, 'image': 'img', 'kv-offloading': 'none',
         }
         if multinode:
-            shape |= {'prefill': {'tp': 8}, 'decode': {'tp': 8}}
+            shape |= {'prefill': {"gpus-per-worker": 8, 'tp': 8}, 'decode': {"gpus-per-worker": 8, 'tp': 8}}
             rows = [{**shape, 'conc': [4, 8]}]
         else:
-            shape |= {'tp': 4}
+            shape |= {"gpus-per-worker": 4, 'tp': 4}
             rows = [{**shape, 'conc': 4}, {**shape, 'conc': 8}]
 
         result = generate_sweep_configs.select_matrix_evals(rows, mode='all', trim=True)
@@ -2347,8 +2339,8 @@ class TestCommandLine:
         shape = {
             'model': 'm', 'model-prefix': 'm', 'runner': 'r', 'framework': 'f',
             'precision': 'fp4', 'spec-decoding': 'none', 'disagg': True, 'isl': 8192,
-            'osl': 1024, 'prefill': {'tp': 8, 'num-worker': 1},
-            'decode': {'tp': 8, 'num-worker': 2},
+            'osl': 1024, 'prefill': {"gpus-per-worker": 8, 'tp': 8, 'num-worker': 1},
+            'decode': {"gpus-per-worker": 8, 'tp': 8, 'num-worker': 2},
         }
         rows = [
             {**shape, 'srt-recipe': 'narrow.yaml', 'conc': [2, 64]},
@@ -2367,8 +2359,8 @@ class TestCommandLine:
         shape = {
             'scenario-type': 'agentic-coding', 'model': 'm', 'model-prefix': 'm',
             'runner': 'r', 'framework': 'f', 'precision': 'fp4', 'spec-decoding': 'none',
-            'disagg': True, 'kv-offloading': 'none', 'prefill': {'tp': 8, 'num-worker': 1},
-            'decode': {'tp': 8, 'num-worker': 1},
+            'disagg': True, 'kv-offloading': 'none', 'prefill': {"gpus-per-worker": 8, 'tp': 8, 'num-worker': 1},
+            'decode': {"gpus-per-worker": 8, 'tp': 8, 'num-worker': 1},
         }
         rows = [
             {**shape, 'srt-recipe': 'dense.yaml', 'conc': [16]},
@@ -2410,7 +2402,7 @@ class TestCommandLine:
 
     def test_multinode_smoke_preserves_representative_eval_concurrency(self):
         from infx.matrix.generate import smoke_entries
-        entry = {'prefill': {'num-worker': 1, 'tp': 8}, 'decode': {'num-worker': 1, 'tp': 8},
+        entry = {'prefill': {'num-worker': 1, "gpus-per-worker": 8, 'tp': 8}, 'decode': {'num-worker': 1, "gpus-per-worker": 8, 'tp': 8},
                  'conc': [4, 32, 64], 'run-eval': True, 'eval-conc': 64}
         result = smoke_entries([entry])
         assert [(row['conc'], row.get('eval-only', False), row['run-eval']) for row in result] == [
@@ -2419,7 +2411,7 @@ class TestCommandLine:
 
     def test_smoke_does_not_turn_a_standalone_eval_into_an_idle_row(self):
         from infx.matrix.generate import smoke_entries
-        shape = {'tp': 4, 'model': 'm'}
+        shape = {"gpus-per-worker": 4, 'tp': 4, 'model': 'm'}
         vendor = {**shape, 'conc': 4, 'run-eval': True, 'eval-framework': 'minimax-vendor'}
         gsm8k = {**shape, 'conc': 8, 'run-eval': True, 'eval-only': True,
                  'eval-framework': 'lm-eval'}
@@ -2433,6 +2425,7 @@ class TestCommandLine:
     def test_all_evals_batches_each_multinode_concurrency(
         self,
         monkeypatch,
+        tmp_path,
         sample_multinode_config,
         sample_runner_config,
     ):
@@ -2440,7 +2433,9 @@ class TestCommandLine:
 
         from infx.matrix import generate as generate_sweep_configs
 
-        config = sample_multinode_config
+        (tmp_path / "configs").mkdir()
+        (tmp_path / "configs/master.yaml").write_text("{}\n")
+        config = fixture_recipes(sample_multinode_config, tmp_path)
         seq_entry = (
             config['dsr1-fp4-gb200-dynamo-trt']['scenarios']
             ['fixed-seq-len'][0]
@@ -2463,7 +2458,7 @@ class TestCommandLine:
         monkeypatch.setattr(sys, 'argv', [
             'generate_sweep_configs.py',
             'test-config',
-            '--config-files', 'dummy.yaml',
+            '--config-files', str(tmp_path / 'configs/master.yaml'),
             '--config-keys', 'dsr1-fp4-gb200-dynamo-trt',
             '--all-evals',
         ])
@@ -2521,7 +2516,7 @@ class TestGenerateTestConfigSweep:
             runner_node_filter=None,
         )
 
-        default_result = generate_test_config_sweep(
+        default_result = generate_matrix(generate_test_config_sweep,
             args, sample_single_node_config, sample_runner_config
         )
         assert [
@@ -2533,7 +2528,7 @@ class TestGenerateTestConfigSweep:
         explicit_config["dsr1-fp8-mi300x-sglang"]["scenarios"]["fixed-seq-len"][0]["search-space"][0].update(
             {"pp": 2, "dcp-size": 2, "pcp-size": 2}
         )
-        explicit_result = generate_test_config_sweep(
+        explicit_result = generate_matrix(generate_test_config_sweep,
             args, explicit_config, sample_runner_config
         )
         assert [
@@ -2557,7 +2552,7 @@ class TestGenerateTestConfigSweep:
         search_entry["prefill"].update({"pp": 2, "dcp-size": 2, "pcp-size": 2})
         search_entry["decode"].update({"pp": 2, "dcp-size": 4, "pcp-size": 1})
 
-        entry = generate_test_config_sweep(
+        entry = generate_matrix(generate_test_config_sweep,
             args, explicit_config, sample_runner_config
         )[0]
 
@@ -2581,7 +2576,7 @@ class TestGenerateTestConfigSweep:
             runner_node_filter="gb200-nv_0",
         )
 
-        result = generate_test_config_sweep(
+        result = generate_matrix(generate_test_config_sweep,
             args,
             sample_multinode_config,
             sample_runner_config,
@@ -2598,7 +2593,7 @@ class TestGenerateTestConfigSweep:
             runner_node_filter="gb300-nv_0",
         )
 
-        result = generate_test_config_sweep(
+        result = generate_matrix(generate_test_config_sweep,
             args,
             sample_multinode_config,
             sample_runner_config,
@@ -2613,7 +2608,7 @@ def agentic_mode(request):
 
 
 @pytest.fixture
-def generate_agentic_sweep(agentic_mode, full_sweep_args_single_node):
+def generate_agentic_sweep(agentic_mode, full_sweep_args_single_node, tmp_path):
     def generate(config, runner_data, **filters):
         args = copy.copy(full_sweep_args_single_node)
         vars(args).update(
@@ -2622,7 +2617,7 @@ def generate_agentic_sweep(agentic_mode, full_sweep_args_single_node):
         )
         vars(args).update(filters)
         generate = generate_full_sweep if agentic_mode == "full-sweep" else generate_test_config_sweep
-        return generate(args, config, runner_data)
+        return generate_matrix(generate, args, config, runner_data, root=tmp_path)
     return generate
 
 
@@ -2632,14 +2627,14 @@ def agentic_config(request, sample_single_node_config):
     entry = next(iter(config.values()))
     entry.update(runner="cluster:b300-nv", multinode=request.param != "single")
     if request.param == "single":
-        benchmark = {"tp": 4, "kv-offloading": "none"}
+        benchmark = {"gpus-per-worker": 4, "tp": 4, "kv-offloading": "none"}
     elif request.param == "aggregated":
-        benchmark = {"num-nodes": 2, "worker": {"num-worker": 2, "tp": 8, "ep": 1, "dp-attn": False}}
+        benchmark = {"worker": {"num-worker": 2, "gpus-per-worker": 8, "tp": 8, "ep": 1, "dp-attn": False}}
     else:
         entry.update(disagg=True, **{"kv-p2p-transfer": "nixl"})
         benchmark = {
-            "prefill": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
-            "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+            "prefill": {"num-worker": 1, "gpus-per-worker": 8, "tp": 8, "ep": 1, "dp-attn": False},
+            "decode": {"num-worker": 1, "gpus-per-worker": 8, "tp": 8, "ep": 1, "dp-attn": False},
         }
     entry["scenarios"] = {"agentic-coding": [{"search-space": [benchmark]}]}
     return config, benchmark
@@ -2648,7 +2643,7 @@ def agentic_config(request, sample_single_node_config):
 class TestAgenticGeneration:
     @pytest.mark.parametrize("power_key", ["require-power", "require_power"])
     def test_required_power_reaches_benchmarks_but_not_evals(
-        self, power_key, agentic_config, sample_runner_config, generate_agentic_sweep,
+        self, power_key, agentic_config, sample_runner_config, generate_agentic_sweep, tmp_path,
     ):
         from infx.matrix.generate import select_matrix_evals
         from infx.matrix.validation import AgenticCodingSearchSpaceEntry
@@ -2660,7 +2655,7 @@ class TestAgenticGeneration:
         AgenticCodingSearchSpaceEntry.model_validate(benchmark)
         after = generate_agentic_sweep(config, sample_runner_config)
         assert after == [{**row, "require-power": True} for row in before]
-        evals = select_matrix_evals(copy.deepcopy(after), mode="all")
+        evals = select_matrix_evals(copy.deepcopy(after), mode="all", root=tmp_path)
         assert evals
         assert all("require-power" not in row for row in evals)
 
@@ -2735,7 +2730,7 @@ class TestAgenticGeneration:
                         {
                             "search-space": [
                                 {
-                                    "tp": 8,
+                                    "gpus-per-worker": 8, "tp": 8,
                                     "ep": 1,
                                     "kv-offloading": "dram",
                                     "kv-offload-backend": {"name": "hicache"},
@@ -2756,7 +2751,8 @@ class TestAgenticGeneration:
         assert result[0]["duration"] == 3600
 
     @pytest.mark.parametrize("filters", [{}, {"min_conc": 999, "conc": [999]}])
-    def test_agentic_node_dram_rejects_tp_above_runner_gpus(self, sample_runner_config, generate_agentic_sweep, filters):
+    @pytest.mark.parametrize("offloading", ["none", "dram", "ssd"])
+    def test_agentic_rejects_gpu_request_above_runner_capacity(self, sample_runner_config, generate_agentic_sweep, filters, offloading):
         config = {
             "dsv4-b300-agentic": {
                 "image": "vllm/vllm-openai:v0.23.0",
@@ -2770,8 +2766,8 @@ class TestAgenticGeneration:
                     "agentic-coding": [{
                         "search-space": [
                             {
-                                "tp": 4,
-                                "kv-offloading": "dram",
+                                "gpus-per-worker": 4, "tp": 1,
+                                "kv-offloading": offloading,
                                 "kv-offload-backend": {"name": "native"},
                                 "conc-list": [32],
                             },
@@ -2807,8 +2803,8 @@ class TestAgenticGeneration:
                             "search-space": [
                                 {
                                     "conc-list": [16, 32, 64, 128, 256],
-                                    "prefill": {"hardware": "gb200", "num-worker": 2, "tp": 4, "pp": 2, "dcp-size": 2, "pcp-size": 2, "ep": 4, "dp-attn": False},
-                                    "decode": {"hardware": "h100", "num-worker": 1, "tp": 4, "pp": 2, "dcp-size": 2, "pcp-size": 1, "ep": 1, "dp-attn": False},
+                                    "prefill": {"num-worker": 2, "gpus-per-worker": 16, "tp": 4, "pp": 2, "dcp-size": 2, "pcp-size": 2, "ep": 4, "dp-attn": False},
+                                    "decode": {"num-worker": 1, "gpus-per-worker": 8, "tp": 4, "pp": 2, "dcp-size": 2, "pcp-size": 1, "ep": 1, "dp-attn": False},
                                 }
                             ],
                         }
@@ -2834,7 +2830,6 @@ class TestAgenticGeneration:
         assert result[0]["decode"]["pp"] == 2
         assert result[0]["decode"]["dcp-size"] == 2
         assert result[0]["decode"]["pcp-size"] == 1
-        assert {entry["node-count"] for entry in result} == {9}
 
     def test_multinode_agentic_preserves_kv_offload_fields(self, sample_runner_config, generate_agentic_sweep):
         config = {
@@ -2854,8 +2849,8 @@ class TestAgenticGeneration:
                             "conc-list": [16],
                             "kv-offloading": "dram",
                             "kv-offload-backend": {"name": "hicache"},
-                            "prefill": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
-                            "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+                            "prefill": {"num-worker": 1, "gpus-per-worker": 8, "tp": 8, "ep": 1, "dp-attn": False},
+                            "decode": {"num-worker": 1, "gpus-per-worker": 8, "tp": 8, "ep": 1, "dp-attn": False},
                         }],
                     }],
                 },
@@ -2869,37 +2864,6 @@ class TestAgenticGeneration:
         assert result[0]["kv-offload-backend"] == {"name": "hicache"}
         assert result[0]["exp-name"] == "dsv4_p1x8_d1x8_conc16_kvdram-hicache"
 
-    @pytest.mark.parametrize(("prefill_tp", "decode_tp", "role"), [(6, 8, "prefill"), (8, 6, "decode")])
-    def test_multinode_agentic_rejects_node_misaligned_worker(
-        self, sample_runner_config, generate_agentic_sweep, prefill_tp, decode_tp, role
-    ):
-        config = {
-            "dsv4-agentic-hicache-misaligned": {
-                "image": "sglang-rocm",
-                "model": "deepseek-ai/DeepSeek-V4-Pro",
-                "model-prefix": "dsv4",
-                "precision": "fp4",
-                "framework": "sglang-disagg",
-                "runner": "cluster:mi355x-amds",
-                "multinode": True,
-                "disagg": True,
-                "kv-p2p-transfer": "mori",
-                "scenarios": {
-                    "agentic-coding": [{
-                        "search-space": [{
-                            "conc-list": [16],
-                            "kv-offloading": "dram",
-                            "kv-offload-backend": {"name": "hicache"},
-                            "prefill": {"num-worker": 1, "tp": prefill_tp, "ep": 1, "dp-attn": False},
-                            "decode": {"num-worker": 1, "tp": decode_tp, "ep": 1, "dp-attn": False},
-                        }],
-                    }],
-                },
-            },
-        }
-
-        with pytest.raises(ValueError, match=rf"^{role} tp\*pp\*pcp-size=6 does not divide"):
-            generate_agentic_sweep(config, sample_runner_config)
 
 class TestApplyNodeTypeDefaults:
 
@@ -2938,7 +2902,7 @@ class TestGenerateFullSweepMixed:
         before = copy.deepcopy(config)
         vars(full_sweep_args_both).update(min_conc=5, max_conc=7, seq_lens=["1k1k"])
 
-        rows = generate_full_sweep(full_sweep_args_both, config, sample_runner_config)
+        rows = generate_matrix(generate_full_sweep, full_sweep_args_both, config, sample_runner_config)
 
         assert [row["conc"] for row in rows] == expected
         assert config == before
@@ -2951,7 +2915,7 @@ class TestGenerateFullSweepMixed:
     ):
         sample_runner_config["labels"]["mi300x"] = node_names
         key, config = next(iter(sample_single_node_config.items()))
-        config["scenarios"]["fixed-seq-len"][0]["search-space"] = [{"tp": 8, "conc-list": [4]}]
+        config["scenarios"]["fixed-seq-len"][0]["search-space"] = [{"gpus-per-worker": 8, "tp": 8, "conc-list": [4]}]
         vars(full_sweep_args_both).update(
             config_keys=[key], runner_node_filter="mi300x", seq_lens=["1k1k"],
         )
@@ -2970,7 +2934,7 @@ class TestGenerateFullSweepMixed:
     ):
         config = next(iter(sample_single_node_config.values()))
         config["scenarios"]["agentic-coding"] = [{"search-space": [
-            {"tp": 4, "kv-offloading": "none", "conc-list": [16, 8]},
+            {"gpus-per-worker": 4, "tp": 4, "kv-offloading": "none", "conc-list": [16, 8]},
         ]}]
         excluded = copy.deepcopy(config)
         excluded["framework"] = "vllm"
@@ -3014,11 +2978,11 @@ class TestGenerateFullSweepMixed:
         benchmark.pop("conc-list")
         benchmark.update({"conc-start": 10, "conc-end": 3})
 
-        rows = generate_full_sweep(full_sweep_args_both, sample_multinode_config, sample_runner_config)
+        rows = generate_matrix(generate_full_sweep, full_sweep_args_both, sample_multinode_config, sample_runner_config)
 
         assert [row["conc"] for row in rows] == [[]]
         full_sweep_args_both.min_conc = 1
-        assert generate_full_sweep(full_sweep_args_both, sample_multinode_config, sample_runner_config) == []
+        assert generate_matrix(generate_full_sweep, full_sweep_args_both, sample_multinode_config, sample_runner_config) == []
 
     @pytest.mark.parametrize("command", ["full-sweep", "test-config"])
     def test_unmatched_runner_defers_scenario_access_only_for_selected_keys(
@@ -3029,13 +2993,13 @@ class TestGenerateFullSweepMixed:
         vars(full_sweep_args_both).update(config_keys=[key], runner_node_filter="missing")
 
         if command == "test-config":
-            assert generate_test_config_sweep(full_sweep_args_both, sample_single_node_config, sample_runner_config) == []
+            assert generate_matrix(generate_test_config_sweep, full_sweep_args_both, sample_single_node_config, sample_runner_config) == []
         else:
             with pytest.raises(KeyError, match="scenarios"):
-                generate_full_sweep(full_sweep_args_both, sample_single_node_config, sample_runner_config)
+                generate_matrix(generate_full_sweep, full_sweep_args_both, sample_single_node_config, sample_runner_config)
 
     def test_both_flags_generates_mixed(self, sample_mixed_config, sample_runner_config, full_sweep_args_both):
-        result = generate_full_sweep(
+        result = generate_matrix(generate_full_sweep,
             full_sweep_args_both,
             sample_mixed_config,
             sample_runner_config
@@ -3046,7 +3010,7 @@ class TestGenerateFullSweepMixed:
         assert has_multi, "Expected multinode entries in mixed output"
 
     def test_single_node_only_from_mixed(self, sample_mixed_config, sample_runner_config, full_sweep_args_single_node):
-        result = generate_full_sweep(
+        result = generate_matrix(generate_full_sweep,
             full_sweep_args_single_node,
             sample_mixed_config,
             sample_runner_config
@@ -3056,7 +3020,7 @@ class TestGenerateFullSweepMixed:
         assert all("tp" in entry for entry in result), "All entries should have tp field"
 
     def test_multi_node_only_from_mixed(self, sample_mixed_config, sample_runner_config, full_sweep_args_multi_node):
-        result = generate_full_sweep(
+        result = generate_matrix(generate_full_sweep,
             full_sweep_args_multi_node,
             sample_mixed_config,
             sample_runner_config
@@ -3083,7 +3047,7 @@ class TestGenerateFullSweepMixed:
                 "scenarios": {
                     "agentic-coding": [{
                         "search-space": [
-                            {"tp": 4, "pp": 2, "kv-offloading": "none", "conc-list": [16]},
+                            {"gpus-per-worker": 8, "tp": 4, "pp": 2, "kv-offloading": "none", "conc-list": [16]},
                         ],
                     }],
                 },
@@ -3103,8 +3067,8 @@ class TestGenerateFullSweepMixed:
                         "search-space": [
                             {
                                 "conc-list": [16],
-                                "prefill": {"hardware": "gb200", "num-worker": 2, "tp": 4, "pp": 2, "dcp-size": 2, "pcp-size": 2, "ep": 4, "dp-attn": False},
-                                "decode": {"hardware": "h100", "num-worker": 1, "tp": 4, "pp": 2, "dcp-size": 2, "pcp-size": 1, "ep": 1, "dp-attn": False},
+                                "prefill": {"num-worker": 2, "gpus-per-worker": 16, "tp": 4, "pp": 2, "dcp-size": 2, "pcp-size": 2, "ep": 4, "dp-attn": False},
+                                "decode": {"num-worker": 1, "gpus-per-worker": 8, "tp": 4, "pp": 2, "dcp-size": 2, "pcp-size": 1, "ep": 1, "dp-attn": False},
                             },
                         ],
                     }],
@@ -3112,12 +3076,12 @@ class TestGenerateFullSweepMixed:
             },
         }
 
-        single_result = generate_full_sweep(
+        single_result = generate_matrix(generate_full_sweep,
             full_sweep_args_single_node,
             config,
             sample_runner_config,
         )
-        multi_result = generate_full_sweep(
+        multi_result = generate_matrix(generate_full_sweep,
             full_sweep_args_multi_node,
             config,
             sample_runner_config,
@@ -3242,21 +3206,21 @@ class TestExpandConfigKeys:
 
 @pytest.mark.parametrize("power_key", ["require-power", "require_power"])
 def test_require_power_is_scoped_to_one_multinode_fixed_sequence(
-    power_key, sample_multinode_config, sample_runner_config
+    power_key, sample_multinode_config, sample_runner_config, tmp_path
 ):
     from infx.matrix.generate import expand_full_sweep, select_matrix_evals
     from infx.matrix.validation import MultiNodeSeqLenConfig
 
-    config = sample_multinode_config
+    config = fixture_recipes(sample_multinode_config, tmp_path)
     entry = next(iter(config.values()))
     sequences = entry["scenarios"]["fixed-seq-len"]
     sequences.append(copy.deepcopy(sequences[0]))
     sequences[-1]["isl"] = 8192
-    before = expand_full_sweep(config, sample_runner_config)
+    before = expand_full_sweep(config, sample_runner_config, root=tmp_path)
     assert all("require-power" not in row for row in before)
     sequences[-1][power_key] = True
     MultiNodeSeqLenConfig.model_validate(sequences[-1])
-    after = expand_full_sweep(config, sample_runner_config)
+    after = expand_full_sweep(config, sample_runner_config, root=tmp_path)
     assert len(before) == len(after)
     for original, row in zip(before, after):
         assert row == ({**original, "require-power": True} if original["isl"] == 8192 else original)
@@ -3265,7 +3229,7 @@ def test_require_power_is_scoped_to_one_multinode_fixed_sequence(
     assert all("require-power" not in row for row in evals)
     sequences[0][power_key] = True
     with pytest.raises(ValueError, match="only fixed-sequence 8192/1024"):
-        expand_full_sweep(config, sample_runner_config)
+        expand_full_sweep(config, sample_runner_config, root=tmp_path)
 
 
 def test_single_node_fixed_sequence_rejects_require_power(sample_single_node_config):
@@ -3275,3 +3239,24 @@ def test_single_node_fixed_sequence_rejects_require_power(sample_single_node_con
     entry["scenarios"]["fixed-seq-len"][-1]["require-power"] = True
     with pytest.raises(ValueError, match="require-power"):
         validate_master_config(sample_single_node_config, Path())
+
+
+@pytest.mark.parametrize("gpus", [3, 4, 8, 9])
+def test_single_node_fixed_sequence_validates_explicit_allocation(
+    sample_single_node_config, sample_runner_config, gpus
+):
+    from infx.matrix.generate import expand_full_sweep
+
+    config = next(iter(sample_single_node_config.values()))
+    for sequence in config["scenarios"]["fixed-seq-len"]:
+        sequence["search-space"] = [{
+            "gpus-per-worker": gpus, "tp": 1, "pp": 2, "pcp-size": 1,
+            "conc-start": 1, "conc-end": 1,
+        }]
+    if gpus > 8:
+        with pytest.raises(ValueError, match="gpus-per-worker=9 exceeds gpus-per-node=8"):
+            expand_full_sweep(sample_single_node_config, sample_runner_config)
+    else:
+        rows = expand_full_sweep(sample_single_node_config, sample_runner_config)
+        assert rows
+        assert all(row["gpus-per-worker"] == gpus for row in rows)

@@ -53,7 +53,7 @@ def generation_repo(tmp_path, monkeypatch):
             "multinode": False, "srt-recipe-dir": "fixture",
             "scenarios": {"fixed-seq-len": [{
                 "isl": 1024, "osl": 1024,
-                "search-space": [{"tp": 1, "conc-list": [conc], "srt-recipe": "recipe.yaml"}],
+                "search-space": [{"gpus-per-worker": 1, "tp": 1, "conc-list": [conc], "srt-recipe": "recipe.yaml"}],
             }]},
         }}
         (tmp_path / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(master))

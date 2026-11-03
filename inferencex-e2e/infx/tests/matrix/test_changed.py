@@ -21,7 +21,7 @@ def entry(recipe: str, concurrencies: list[int]) -> dict:
         "precision": "fp8", "framework": "sglang", "runner": "cluster:fixture",
         "multinode": False, "srt-recipe-dir": "fixture",
         "scenarios": {"fixed-seq-len": [{"isl": 1024, "osl": 128, "search-space": [
-            {"tp": 4, "conc-list": concurrencies, "srt-recipe": recipe},
+            {"gpus-per-worker": 4, "tp": 4, "conc-list": concurrencies, "srt-recipe": recipe},
         ]}]},
     }  # fmt: skip
 
@@ -84,7 +84,7 @@ def test_keys_with_changed_recipes_or_points_are_listed(tmp_path, monkeypatch, c
 def test_rows_without_fingerprints_are_compared_individually(tmp_path):
     def matrix(*tps: int) -> changed.Matrix:
         rows = [
-            {"exp-name": f"key_tp{tp}", "tp": tp, "ep": 1, "conc": [4], "srt-recipe": "gone.yaml"}
+            {"exp-name": f"key_tp{tp}", "gpus-per-worker": (tp), "tp": tp, "ep": 1, "conc": [4], "srt-recipe": "gone.yaml"}
             for tp in tps
         ]
         return {"key": changed._points(rows, tmp_path)}
@@ -102,7 +102,7 @@ def test_rows_without_fingerprints_are_compared_individually(tmp_path):
 
 def test_points_sharing_a_name_and_concurrency_keep_generation_order(tmp_path):
     tps = [8, 4, 2, 1, 16, 32, 64, 128]
-    rows = [{"exp-name": "dsr1_8k1k", "tp": tp, "ep": 1, "conc": [32]} for tp in tps]
+    rows = [{"exp-name": "dsr1_8k1k", "gpus-per-worker": (tp), "tp": tp, "ep": 1, "conc": [32]} for tp in tps]
     head = {"key": changed._points(rows, tmp_path)}
 
     [change] = changed.compare({}, head)

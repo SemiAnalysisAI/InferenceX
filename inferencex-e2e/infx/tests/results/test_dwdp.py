@@ -8,8 +8,6 @@ from infx.launch.drivers.srt.submit import eval_args
 from infx.matrix.generate import (
     filter_exp_names,
     multinode_agentic_exp_name,
-    worker_gpus_per_node,
-    worker_node_count,
 )
 from infx.matrix.validation import WorkerConfig
 from infx.results.agentic import _gpu_shape
@@ -19,19 +17,12 @@ from infx.results.topology import Parallelism, validate_parallelism
 
 
 def worker(**overrides):
-    return {"num-worker": 2, "tp": 1, "ep": 1, "dp-attn": False, "dwdp-size": 8, **overrides}
+    return {"num-worker": 2, "gpus-per-worker": 8, "tp": 1, "ep": 1, "dp-attn": False, "dwdp-size": 8, **overrides}
 
 
 def test_group_allocation():
     config = WorkerConfig.model_validate(worker())
     assert config.dwdp_size == 8
-    assert (
-        worker_node_count(
-            worker(), "prefill", "cluster:test", {"clusters": {"test": {"gpus-per-node": 8}}}
-        )
-        == 2
-    )
-    assert worker_gpus_per_node(worker(), 8) == 8
     layout = Parallelism(tp=1, ep=1, dwdp_size=8)
     assert layout.gpus_per_worker == 8
     assert layout.fields("prefill_")["prefill_dwdp_size"] == 8
@@ -74,9 +65,11 @@ def test_agentic_metadata_counts_groups():
             "PREFILL_EP": "1",
             "PREFILL_DWDP_SIZE": "8",
             "PREFILL_NUM_WORKERS": "2",
+            "PREFILL_GPUS_PER_WORKER": "8",
             "DECODE_TP": "8",
             "DECODE_EP": "8",
             "DECODE_NUM_WORKERS": "1",
+            "DECODE_GPUS_PER_WORKER": "8",
         }
     )
     assert (fields["num_prefill_gpu"], fields["num_decode_gpu"], total) == (16, 8, 24)
@@ -113,12 +106,6 @@ def test_agentic_names_select_dwdp_variants_without_ambiguity():
     assert "dwdp4" in name(4)
     assert "dwdp8" in name(8)
     assert filter_exp_names(entries, [name(8)]) == [entries[2]]
-
-
-@pytest.mark.parametrize("size", [3, 10])
-def test_allocation_errors_name_the_dwdp_factor(size):
-    with pytest.raises(ValueError, match=rf"tp\*pp\*pcp-size\*dwdp-size={size}"):
-        worker_gpus_per_node(worker(**{"dwdp-size": size}), 8)
 
 
 @pytest.mark.parametrize("key", [benchmark_key, agentic_key, eval_key])

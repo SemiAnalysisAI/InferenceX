@@ -252,25 +252,31 @@ def test_conc_list_must_be_canonical_positive_integers():
 
 def test_the_multinode_binder_writes_the_one_selected_variant(project, tmp_path):
     path = fragment(project, {
-        "base": {"name": "bundle", "roles": {"decode": {"nodes": 1}}},
-        "override_wide": {"roles": {"decode": {"nodes": 4}}},
-        "override_narrow": {"roles": {"decode": {"nodes": 2, "env": {"UCX": "@fabric.rdma-device-ports"}}}},
+        "base": {"schema": 2, "name": "bundle", "engine": "sglang",
+                 "frontend": {"type": "sglang-router"},
+                 "roles": {"agg": {"nodes": 1, "workers": 1, "gpus": 8}}},
+        "override_wide": {"roles": {"agg": {"nodes": 4}}},
+        "override_narrow": {"roles": {"agg": {"nodes": 2, "env": {"UCX": "@fabric.rdma-device-ports"}}}},
     })
     output = tmp_path / "bound.yaml"
-    env = {**os.environ, **MULTI_ENV, "IS_AGENTIC": "0", "INFERENCEX_REPOSITORY_ROOT": str(project),
+    env = {**os.environ, **MULTI_ENV, "IS_AGENTIC": "0", "IS_MULTINODE": "true", "DISAGG": "false",
+           "PREFILL_NUM_WORKERS": "1", "PREFILL_GPUS_PER_WORKER": "32",
+           "INFERENCEX_REPOSITORY_ROOT": str(project),
            "PYTHONPATH": os.pathsep.join([str(ROOT), str(ROOT / "utils/srt-slurm/src")])}  # fmt: skip
 
     def bind(*arguments: str) -> subprocess.CompletedProcess[str]:
         fabric = json.dumps({"rdma-device-ports": "mlx5_0:1,mlx5_1:1", "rdma-devices": None})
         return subprocess.run(
-            [sys.executable, "-m", "infx.srt_slurm.workload", *arguments, "--fabric", fabric],
+            [sys.executable, "-m", "infx.srt_slurm.workload", *arguments, "--fabric", fabric,
+             "--available-memory-mib", "8000", "--gpus-per-node", "8"],
             env=env, capture_output=True, text=True, check=False,
         )
 
     assert bind(f"{path}:override_wide", str(output)).returncode == 0
     bound = yaml.safe_load(output.read_text())
     assert (bound["name"], bound["roles"], bound["benchmark"]["command"]) == (
-        "bundle_wide", {"decode": {"nodes": 4}}, "bash fixed-sequence-multi.sh",
+        "bundle_wide", {"agg": {"nodes": 4, "workers": 1, "gpus": 32,
+                                  "srun_options": {"mem": "8000M"}}}, "bash fixed-sequence-multi.sh",
     )
     output.unlink()
     result = bind(f"{path}:override_*", str(output))
@@ -278,10 +284,11 @@ def test_the_multinode_binder_writes_the_one_selected_variant(project, tmp_path)
     assert "selects 2 variants, not one" in result.stderr
     assert not output.exists()
     env["IS_AGENTIC"] = "1"
+    env["PREFILL_GPUS_PER_WORKER"] = "16"
     assert bind(f"{path}:override_narrow", str(output)).returncode == 0
     bound = yaml.safe_load(output.read_text())
     assert bound["benchmark"]["command"] == "bash agentic.sh"
-    assert bound["roles"]["decode"]["env"] == {"UCX": "mlx5_0:1,mlx5_1:1"}
+    assert bound["roles"]["agg"]["env"] == {"UCX": "mlx5_0:1,mlx5_1:1"}
 
 
 def test_fabric_references_take_the_clusters_rendering_in_env_args_and_services():

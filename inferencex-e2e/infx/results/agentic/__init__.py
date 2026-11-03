@@ -36,6 +36,13 @@ def _required_env(env: Mapping[str, str], name: str) -> str:
     return value
 
 
+def _required_gpu_count(env: Mapping[str, str], name: str) -> int:
+    count = int(_required_env(env, name))
+    if count <= 0:
+        raise SystemExit(f"{name} must be a positive integer")
+    return count
+
+
 def _optional_component_metadata(env: Mapping[str, str], env_name: str) -> dict[str, str] | None:
     """Parse the component metadata JSON in ``env[env_name]``, or None when unset."""
     return parse_component_metadata(
@@ -101,7 +108,7 @@ def _gpu_shape(env: Mapping[str, str]) -> tuple[dict[str, Any], int, int, int, s
             "dcp_size": parallelism.dcp_size,
             "pcp_size": parallelism.pcp_size,
         }
-        return fields, parallelism.gpus_per_worker, tp, ep, dp_attention
+        return fields, _required_gpu_count(env, "GPU_COUNT"), tp, ep, dp_attention
 
     prefill_num_workers = _env_int(env, "PREFILL_NUM_WORKERS")
     prefill = Parallelism(
@@ -127,8 +134,8 @@ def _gpu_shape(env: Mapping[str, str]) -> tuple[dict[str, Any], int, int, int, s
     decode_hardware = env.get("DECODE_HARDWARE", "")
     if bool(prefill_hardware) != bool(decode_hardware):
         raise SystemExit("PREFILL_HARDWARE and DECODE_HARDWARE must be specified together.")
-    num_prefill_gpu = prefill_num_workers * prefill.gpus_per_worker
-    num_decode_gpu = decode_num_workers * decode.gpus_per_worker
+    num_prefill_gpu = prefill_num_workers * _required_gpu_count(env, "PREFILL_GPUS_PER_WORKER")
+    num_decode_gpu = decode_num_workers * _required_gpu_count(env, "DECODE_GPUS_PER_WORKER")
     num_gpus = num_prefill_gpu + num_decode_gpu
     decode = decode.for_decode(num_decode_gpu)
     tp = prefill.tp + decode.tp
@@ -207,6 +214,10 @@ def build_result(
         "request_accounting": request_accounting,
     }
     agg.update(multinode_fields)
+    if worker_memory_mib := _env_int(env, "INFERENCEX_WORKER_MEMORY_MIB"):
+        agg["allocated_cpu_dram_gb"] = worker_memory_mib * 2**20 / 1e9
+    if decode_memory_mib := _env_int(env, "INFERENCEX_DECODE_MEMORY_MIB"):
+        agg["decode_allocated_cpu_dram_gb"] = decode_memory_mib * 2**20 / 1e9
 
     router = _optional_component_metadata(env, "ROUTER_METADATA")
     if router is not None:

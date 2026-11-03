@@ -1,3 +1,4 @@
+import fnmatch
 import pprint
 import re
 from enum import Enum
@@ -21,7 +22,9 @@ from infx.clusters import CLUSTER_LABEL_PREFIX, RunnerInventory
 DEFAULT_AGENTIC_DURATION_SECONDS = 3600
 SINGLE_NODE_RECIPES = "benchmarks/single_node/srt-slurm-recipes"
 MULTI_NODE_RECIPES = "benchmarks/multi_node/srt-slurm-recipes"
-RECIPE_SELECTOR = re.compile(r"base|override_[\w-]+|zip_override_[\w-]+\[\d+\]")
+RECIPE_SELECTOR = re.compile(
+    r"base|override_[\w*?-]+|zip_override_[\w-]+\[\d+\]|zip_override_[\w-]*[*?][\w*?-]*"
+)
 
 
 class Fields(Enum):
@@ -71,7 +74,7 @@ class Fields(Enum):
     KV_P2P_TRANSFER = "kv-p2p-transfer"
     AVAILABLE_CPU_DRAM_MIB = "available-cpu-dram-mib"
     GPUS_PER_NODE = "gpus-per-node"
-    NUM_NODES = "num-nodes"
+    GPUS_PER_WORKER = "gpus-per-worker"
     NODE_COUNT = "node-count"
     DURATION = "duration"
     REQUIRE_POWER = "require-power"
@@ -141,6 +144,8 @@ def _validate_tp_context_topology(self: Any) -> Any:
 class SingleNodeMatrixEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
+    gpus_per_worker: int = Field(alias=Fields.GPUS_PER_WORKER.value, gt=0, strict=True)
+
     image: str
     srt_recipe: str | None = Field(default=None, alias=Fields.SRT_RECIPE.value, min_length=1)
     model: str
@@ -181,7 +186,9 @@ class SingleNodeMatrixEntry(BaseModel):
 class WorkerConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    num_worker: int = Field(alias=Fields.NUM_WORKER.value)
+    gpus_per_worker: int = Field(alias=Fields.GPUS_PER_WORKER.value, gt=0, strict=True)
+
+    num_worker: int = Field(alias=Fields.NUM_WORKER.value, ge=0, strict=True)
     tp: int = Field(gt=0)
     pp: int = Field(default=1, gt=0, strict=True)
     dcp_size: int = Field(default=1, alias=Fields.DCP_SIZE.value, gt=0, strict=True)
@@ -210,6 +217,8 @@ class WorkerConfig(BaseModel):
 
 class AggregateWorkerConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    gpus_per_worker: int = Field(alias=Fields.GPUS_PER_WORKER.value, gt=0, strict=True)
 
     num_worker: int = Field(default=1, alias=Fields.NUM_WORKER.value, gt=0, strict=True)
     tp: int = Field(gt=0)
@@ -297,6 +306,8 @@ class MultiNodeMatrixEntry(BaseModel):
 
 class SingleNodeAgenticMatrixEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    gpus_per_worker: int = Field(alias=Fields.GPUS_PER_WORKER.value, gt=0, strict=True)
 
     image: str
     require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
@@ -536,7 +547,7 @@ def _recipe_reference(value: str) -> str:
     _recipe_path(path)
     if separator and not RECIPE_SELECTOR.fullmatch(selector):
         raise ValueError(
-            f"{value!r} must select base, override_<name> or zip_override_<name>[<index>]"
+            f"{value!r} must select base, an override name/pattern or zip_override_<name>[<index>]"
         )
     return value
 
@@ -547,6 +558,8 @@ RecipeReference = Annotated[str, AfterValidator(_recipe_reference)]
 
 class SingleNodeSearchSpaceEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    gpus_per_worker: int = Field(alias=Fields.GPUS_PER_WORKER.value, gt=0, strict=True)
 
     tp: int = Field(gt=0)
     srt_recipe: RecipeReference | None = Field(default=None, alias=Fields.SRT_RECIPE.value)
@@ -588,7 +601,6 @@ class MultiNodeSearchSpaceEntry(BaseModel):
         default=None, alias=Fields.EVAL_SRT_RECIPE.value
     )
     power: bool = Field(default=False, strict=True)
-    num_nodes: int | None = Field(default=None, alias=Fields.NUM_NODES.value, gt=0, strict=True)
     router: ComponentMetadata | None = None
     kv_p2p_transfer: str | None = Field(
         default=None, alias=Fields.KV_P2P_TRANSFER.value, min_length=1
@@ -642,6 +654,9 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
 
     require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     tp: int | None = Field(default=None, gt=0)
+    gpus_per_worker: int | None = Field(
+        default=None, alias=Fields.GPUS_PER_WORKER.value, gt=0, strict=True
+    )
     srt_recipe: RecipeReference | None = Field(default=None, alias=Fields.SRT_RECIPE.value)
     eval_srt_recipe: RecipeReference | None = Field(
         default=None, alias=Fields.EVAL_SRT_RECIPE.value
@@ -658,7 +673,6 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
     worker: AggregateWorkerConfig | None = None
     prefill: WorkerConfig | None = None
     decode: WorkerConfig | None = None
-    num_nodes: int | None = Field(default=None, alias=Fields.NUM_NODES.value, gt=0, strict=True)
     kv_offloading: Literal["none", "dram"] | None = Field(
         default=None, alias=Fields.KV_OFFLOADING.value
     )
@@ -703,6 +717,8 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
                 "worker, or both prefill and decode"
             )
         if has_single_node:
+            if self.gpus_per_worker is None:
+                raise ValueError("Single-node entries must specify gpus-per-worker")
             if self.kv_offloading is None:
                 raise ValueError(
                     f"Single-node agentic search-space entries must specify "
@@ -718,6 +734,7 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
                 "pp",
                 "dcp_size",
                 "pcp_size",
+                "gpus_per_worker",
             } & self.model_fields_set
             if explicitly_single_node_fields:
                 field_names = ", ".join(
@@ -727,6 +744,7 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
                         Fields.DCP_SIZE.value,
                         Fields.PCP_SIZE.value,
                         Fields.DWDP_SIZE.value,
+                        Fields.GPUS_PER_WORKER.value,
                     )
                 )
                 raise ValueError(
@@ -854,27 +872,20 @@ def _validate_multinode_entry_scope(self: BaseModel) -> BaseModel:
         worker = getattr(entry, "worker", None)
         prefill = getattr(entry, "prefill", None)
         decode = getattr(entry, "decode", None)
-        num_nodes = getattr(entry, "num_nodes", None)
 
         if not self.multinode:
-            if (
-                worker is not None
-                or prefill is not None
-                or decode is not None
-                or num_nodes is not None
-            ):
+            if worker is not None or prefill is not None or decode is not None:
                 raise ValueError(
                     "Single-node search-space entries must specify tp topology "
-                    "and cannot declare worker, prefill, decode, or num-nodes"
+                    "and cannot declare worker, prefill, or decode"
                 )
             continue
 
         if self.disagg:
-            if worker is not None or num_nodes is not None:
+            if worker is not None:
                 raise ValueError(
                     f"{Fields.DISAGG.value}=true requires prefill and decode "
-                    f"and rejects {Fields.WORKER.value} and "
-                    f"{Fields.NUM_NODES.value}"
+                    f"and rejects {Fields.WORKER.value}"
                 )
             if prefill is None or decode is None:
                 raise ValueError(f"{Fields.DISAGG.value}=true requires prefill and decode")
@@ -884,11 +895,6 @@ def _validate_multinode_entry_scope(self: BaseModel) -> BaseModel:
             raise ValueError(
                 f"{Fields.DISAGG.value}=false requires one "
                 f"{Fields.WORKER.value} and rejects prefill and decode"
-            )
-        if num_nodes is None:
-            raise ValueError(
-                f"{Fields.DISAGG.value}=false requires "
-                f"{Fields.NUM_NODES.value} in every search-space entry"
             )
     return self
 
@@ -1026,6 +1032,13 @@ def _check_srt_recipe(root: Path, reference: str, recipes: dict[str, Any]) -> No
         return
     if not isinstance(recipe, dict) or "base" not in recipe:
         raise ValueError(f"{reference}: only an override bundle with a base takes a selector")
+    if any(char in selector for char in "*?"):
+        if not any(
+            key.startswith(("override_", "zip_override_")) and fnmatch.fnmatchcase(key, selector)
+            for key in recipe
+        ):
+            raise ValueError(f"{reference}: {path} has no variant {selector}")
+        return
     group, _, index = selector.removesuffix("]").partition("[")
     if group not in recipe or (index and int(index) >= _zip_length(recipe[group])):
         raise ValueError(f"{reference}: {path} has no variant {selector}")

@@ -1,8 +1,6 @@
 import argparse
 import fnmatch
 import json
-import math
-import re
 import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -12,7 +10,7 @@ from typing import Any, Literal
 from infx import yamlio
 from infx.clusters import CLUSTER_LABEL_PREFIX
 from infx.clusters.slurm import Fabric
-from infx.srt_slurm.variants import deep_merge, expand_variants
+from infx.srt_slurm.variants import expand_variants
 from infx.srt_slurm.workload import resolve_fabric
 
 from .validation import (
@@ -164,24 +162,6 @@ def runner_nodes_for_label(runner: str, runner_data: dict) -> list[str]:
     return runner_labels(runner_data).get(runner, [])
 
 
-def runner_hardware_int(runner: str, runner_data: dict, field: str) -> int:
-    """Return the integer hardware ``field`` of ``runner``, or raise ValueError if it is unset."""
-    hardware = runner_hardware(runner_data).get(runner, {})
-    value = hardware.get(field)
-    if value is None:
-        available = ", ".join(sorted(runner_hardware(runner_data).keys()))
-        raise ValueError(
-            f"Runner '{runner}' requires '{field}' "
-            f"in runner hardware metadata. Available hardware keys: {available}"
-        )
-    return value
-
-
-def runner_gpus_per_node(runner: str, runner_data: dict) -> int:
-    """Return the GPUs per node of ``runner``."""
-    return runner_hardware_int(runner, runner_data, Fields.GPUS_PER_NODE.value)
-
-
 def _hardware_family(label: str) -> str:
     """Return the hardware family of a label, such as b200 for cluster:b200-dgxc."""
     return label.removeprefix("cluster:").split("-", 1)[0]
@@ -208,24 +188,6 @@ def scheduling_gpus_per_node(label: str, runner_data: dict) -> int:
     if not matches:
         raise ValueError(f"Cannot resolve {Fields.GPUS_PER_NODE.value} for '{label}'")
     raise ValueError(f"Ambiguous {Fields.GPUS_PER_NODE.value} for '{label}': {sorted(matches)}")
-
-
-def _worker_node_override(worker: dict, setting_name: str) -> int | None:
-    """Return the positive ``setting_name=N`` value in a worker's additional settings, or None.
-
-    Raise ValueError when the settings disagree or are not positive.
-    """
-    pattern = re.compile(rf"^{re.escape(setting_name)}=(\d+)$")
-    values = []
-    for setting in worker.get(Fields.ADDITIONAL_SETTINGS.value, []) or []:
-        match = pattern.match(setting)
-        if match:
-            values.append(int(match.group(1)))
-    if not values:
-        return None
-    if len(set(values)) != 1 or values[0] <= 0:
-        raise ValueError(f"Conflicting or invalid {setting_name} settings: {values}")
-    return values[0]
 
 
 def recipe_auxiliary_node_count(recipe: dict) -> int:
@@ -256,37 +218,32 @@ def recipe_auxiliary_node_count(recipe: dict) -> int:
     return pool_nodes + dedicated_roles
 
 
-def recipe_node_count(root: Path, srt_recipe: str) -> int | None:
-    """Return the total node count of a schema 2 srt recipe, or None for an unknown variant.
-
-    Raise ValueError when the recipe is not schema 2 or its roles lack node counts.
-    """
+def recipe_node_count(root: Path, srt_recipe: str) -> int:
+    """Read the node reservation from each selected recipe variant."""
     path, _, selector = srt_recipe.partition(":")
     recipe_path = root / path
-    recipe = yamlio.safe_load(recipe_path.read_text())
-    if isinstance(recipe, dict) and "base" in recipe:
-        if selector.startswith("zip_override_"):
-            [(_, recipe)] = expand_variants(recipe, selector)
-        elif selector == "base" or selector.startswith("override_"):
-            schema = recipe.get("schema")
-            recipe = deep_merge(recipe["base"], recipe[selector] or {})
-            recipe.setdefault("schema", schema)
-        else:
-            return None
-        if recipe.get("schema") != 2:
-            return None
-    if not isinstance(recipe, dict) or recipe.get("schema") != 2:
+    raw = yamlio.safe_load(recipe_path.read_text())
+    if not isinstance(raw, dict):
         raise ValueError(f"srt-slurm recipes must declare schema: 2: {recipe_path}")
-    roles = recipe.get("roles")
-    if roles:
-        for name, role in roles.items():
-            if not isinstance(role, dict) or role.get("nodes") is None:
-                raise ValueError(f"Recipe role {name!r} must specify nodes: {recipe_path}")
-        worker_nodes = sum(
-            0 if role["nodes"] == "colocate" else int(role["nodes"]) for role in roles.values()
-        )
-        return worker_nodes + recipe_auxiliary_node_count(recipe)
-    raise ValueError(f"Recipe has no worker roles: {recipe_path}")
+    counts = set()
+    for _, recipe in expand_variants(raw, selector or None):
+        if recipe.get("schema") != 2:
+            raise ValueError(f"srt-slurm recipes must declare schema: 2: {recipe_path}")
+        roles = recipe.get("roles")
+        if not isinstance(roles, dict) or not roles:
+            raise ValueError(f"Recipe has no worker roles: {recipe_path}")
+        nodes = 0
+        for role, settings in roles.items():
+            value = settings.get("nodes") if isinstance(settings, dict) else None
+            if value == "colocate" and role == "decode":
+                continue
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                raise ValueError(f"Recipe role {role!r} must specify positive nodes: {recipe_path}")
+            nodes += value
+        counts.add(nodes + recipe_auxiliary_node_count(recipe))
+    if len(counts) != 1:
+        raise ValueError(f"Recipe variants require different node counts: {srt_recipe}")
+    return counts.pop()
 
 
 def _label_fabrics(label: str, runner_data: dict) -> dict[str, Fabric]:
@@ -320,81 +277,12 @@ def check_fabric_references(root: Path, srt_recipe: str, label: str, runner_data
                 raise ValueError(f"{srt_recipe}: {error} ({reach})") from None
 
 
-def worker_node_count(
-    worker: dict,
-    role: str,
-    runner: str,
-    runner_data: dict,
-) -> int:
-    """Return the nodes a worker role needs, from a ``<ROLE>_NODES`` setting or its GPU count."""
-    override = _worker_node_override(worker, f"{role.upper()}_NODES")
-    if override is not None:
-        return override
-
-    hardware_label = worker.get(Fields.HARDWARE.value) or runner
-    gpus_per_node = scheduling_gpus_per_node(hardware_label, runner_data)
-    total_gpus = (
-        worker[Fields.NUM_WORKER.value]
-        * worker[Fields.TP.value]
-        * worker.get(Fields.PP.value, 1)
-        * worker.get(Fields.PCP_SIZE.value, 1)
-        * worker.get(Fields.DWDP_SIZE.value, 1)
-    )
-    return math.ceil(total_gpus / gpus_per_node)
-
-
-def multinode_node_count(
-    prefill: dict,
-    decode: dict,
-    runner: str,
-    runner_data: dict,
-    srt_recipe: str | None,
-    root: Path | None,
-) -> int:
-    """Return a multinode entry's node count from its srt recipe, else from its workers."""
-    if srt_recipe is not None and root is None:
-        raise ValueError(f"Reading {srt_recipe} needs the master config's project root")
-    recipe_count = recipe_node_count(root, srt_recipe) if srt_recipe is not None else None
-    if recipe_count is not None:
-        return recipe_count
-    return worker_node_count(prefill, "prefill", runner, runner_data) + worker_node_count(
-        decode, "decode", runner, runner_data
-    )
-
-
-def add_multinode_node_count(
-    entry: dict,
-    runner_data: dict,
-    num_nodes: int | None,
-    root: Path | None,
-) -> dict:
-    """Set the entry's node count from ``num_nodes`` or its workers, and return the entry.
-
-    Raise ValueError when ``num_nodes`` is given for a disaggregated entry.
-    """
-    if not entry[Fields.DISAGG.value] and num_nodes is not None:
-        entry[Fields.NODE_COUNT.value] = num_nodes
-    elif num_nodes is not None:
-        raise ValueError(f"{Fields.NUM_NODES.value} is not valid for disaggregated entries")
-    else:
-        entry[Fields.NODE_COUNT.value] = multinode_node_count(
-            entry[Fields.PREFILL.value],
-            entry[Fields.DECODE.value],
-            entry[Fields.RUNNER.value],
-            runner_data,
-            entry.get(Fields.SRT_RECIPE.value),
-            root,
-        )
+def add_multinode_node_count(entry: dict, root: Path | None) -> dict:
+    """Forward the recipe's node reservation to the scheduler."""
+    if root is None or not entry.get(Fields.SRT_RECIPE.value):
+        raise ValueError("Multinode scheduling requires an SRT recipe and its project root")
+    entry[Fields.NODE_COUNT.value] = recipe_node_count(root, entry[Fields.SRT_RECIPE.value])
     return entry
-
-
-def effective_gpu_count(benchmark: dict) -> int:
-    """Return the GPUs one benchmark worker uses, TP times PP times PCP."""
-    return (
-        benchmark[Fields.TP.value]
-        * benchmark.get(Fields.PP.value, 1)
-        * benchmark.get(Fields.PCP_SIZE.value, 1)
-    )
 
 
 def with_worker_parallelism_defaults(worker: dict) -> dict:
@@ -432,56 +320,13 @@ def multinode_worker_pair(benchmark: dict, disagg: bool) -> tuple[dict, dict]:
     return prefill, decode
 
 
-def worker_gpus_per_node(worker: dict, gpus_per_node: int, role: str = "worker") -> int:
-    """Return how many of a worker's GPUs land on each node.
-
-    Raise ValueError when its replica size and ``gpus_per_node`` do not divide one another.
-    """
-    gpus_per_replica = (
-        worker[Fields.TP.value]
-        * worker.get(Fields.PP.value, 1)
-        * worker.get(Fields.PCP_SIZE.value, 1)
-        * worker.get(Fields.DWDP_SIZE.value, 1)
-    )
-    factors = f"{Fields.TP.value}*{Fields.PP.value}*{Fields.PCP_SIZE.value}"
-    if worker.get(Fields.DWDP_SIZE.value, 1) > 1:
-        factors += f"*{Fields.DWDP_SIZE.value}"
-    if gpus_per_replica > gpus_per_node:
-        if gpus_per_replica % gpus_per_node != 0:
-            raise ValueError(
-                f"{role} {factors}"
-                f"={gpus_per_replica} spans multiple nodes but is not a multiple "
-                f"of {Fields.GPUS_PER_NODE.value}={gpus_per_node}"
-            )
-        return gpus_per_node
-    if gpus_per_node % gpus_per_replica != 0:
+def validate_single_node_worker(benchmark: dict, runner: str, runner_data: dict) -> None:
+    """Reject an allocation that cannot fit on the selected runner's physical node."""
+    gpus = benchmark[Fields.GPUS_PER_WORKER.value]
+    gpus_per_node = scheduling_gpus_per_node(runner, runner_data)
+    if gpus > gpus_per_node:
         raise ValueError(
-            f"{role} {factors}"
-            f"={gpus_per_replica} does not divide "
-            f"{Fields.GPUS_PER_NODE.value}={gpus_per_node} evenly"
-        )
-    return gpus_per_replica
-
-
-def validate_agentic_worker_shapes(benchmark: dict, runner: str, runner_data: dict) -> None:
-    """Reject DRAM workers whose GPUs cannot fit evenly on the selected nodes."""
-    if benchmark.get(Fields.KV_OFFLOADING.value, "none") != "dram":
-        return
-    gpus_per_node = runner_gpus_per_node(runner, runner_data)
-    if Fields.WORKER.value in benchmark:
-        worker_gpus_per_node(benchmark[Fields.WORKER.value], gpus_per_node)
-        return
-    if Fields.PREFILL.value in benchmark:
-        worker_gpus_per_node(benchmark[Fields.PREFILL.value], gpus_per_node, "prefill")
-        worker_gpus_per_node(benchmark[Fields.DECODE.value], gpus_per_node, "decode")
-        return
-    gpu_count = effective_gpu_count(benchmark)
-    if gpu_count > gpus_per_node:
-        raise ValueError(
-            f"tp={benchmark[Fields.TP.value]} with "
-            f"{Fields.PP.value}={benchmark.get(Fields.PP.value, 1)} and "
-            f"{Fields.PCP_SIZE.value}={benchmark.get(Fields.PCP_SIZE.value, 1)} "
-            f"requires {gpu_count} GPUs and exceeds "
+            f"{Fields.GPUS_PER_WORKER.value}={gpus} exceeds "
             f"{Fields.GPUS_PER_NODE.value}={gpus_per_node} for runner '{runner}'"
         )
 
@@ -972,6 +817,7 @@ def _fixed_sequence_entries(
     if is_multinode:
         prefill, decode = multinode_worker_pair(benchmark, disagg)
     else:
+        validate_single_node_worker(benchmark, config[Fields.RUNNER.value], runner_data)
         ep = benchmark.get(Fields.EP.value)
         dp_attn = benchmark.get(Fields.DP_ATTN.value)
 
@@ -1003,6 +849,7 @@ def _fixed_sequence_entries(
             else:
                 entry.update(
                     {
+                        Fields.GPUS_PER_WORKER.value: benchmark[Fields.GPUS_PER_WORKER.value],
                         Fields.TP.value: benchmark[Fields.TP.value],
                         Fields.PP.value: benchmark.get(Fields.PP.value, 1),
                         Fields.DCP_SIZE.value: benchmark.get(Fields.DCP_SIZE.value, 1),
@@ -1026,9 +873,7 @@ def _fixed_sequence_entries(
             )
             entry.update(component_metadata(benchmark, config))
             if is_multinode:
-                add_multinode_node_count(
-                    entry, runner_data, benchmark.get(Fields.NUM_NODES.value), root
-                )
+                add_multinode_node_count(entry, root)
             entries.append(validate_matrix_entry(entry, is_multinode))
     return entries
 
@@ -1053,6 +898,7 @@ def _agentic_entries(
         prefill, decode = multinode_worker_pair(benchmark, disagg)
         kv_offloading = benchmark.get(Fields.KV_OFFLOADING.value, "none")
     else:
+        validate_single_node_worker(benchmark, config[Fields.RUNNER.value], runner_data)
         tp = benchmark[Fields.TP.value]
         pp = benchmark.get(Fields.PP.value, 1)
         dcp_size = benchmark.get(Fields.DCP_SIZE.value, 1)
@@ -1062,7 +908,6 @@ def _agentic_entries(
         kv_offloading = benchmark[Fields.KV_OFFLOADING.value]
     spec_decoding = benchmark.get(Fields.SPEC_DECODING.value, "none")
     kv_offload_backend = benchmark.get(Fields.KV_OFFLOAD_BACKEND.value)
-    validate_agentic_worker_shapes(benchmark, config[Fields.RUNNER.value], runner_data)
 
     conc_values = benchmark.get(Fields.CONC_LIST.value)
     if not conc_values:
@@ -1114,6 +959,7 @@ def _agentic_entries(
         else:
             entry.update(
                 {
+                    Fields.GPUS_PER_WORKER.value: benchmark[Fields.GPUS_PER_WORKER.value],
                     Fields.TP.value: tp,
                     Fields.PP.value: pp,
                     Fields.DCP_SIZE.value: dcp_size,
@@ -1148,9 +994,7 @@ def _agentic_entries(
             entry[Fields.KV_OFFLOAD_BACKEND.value] = kv_offload_backend
         entry.update(component_metadata(benchmark, config))
         if is_multinode:
-            add_multinode_node_count(
-                entry, runner_data, benchmark.get(Fields.NUM_NODES.value), root
-            )
+            add_multinode_node_count(entry, root)
         entries.append(validate_agentic_matrix_entry(entry))
     return entries
 
