@@ -24,6 +24,8 @@ except Exception:  # torch is absent in the plain CPU test image; the math check
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "bench")]
 
+import _fakes  # noqa: E402
+
 PREPARE = ROOT / "runtime" / "prepare_backend.sh"
 PIN = "df000fd3001da04a397253fd6a2204bde62d32aa"
 GIB = 1024 * 1024 * 1024
@@ -96,18 +98,12 @@ class FakeBuffer:
 
 
 def _stubs(*, hip=None, foreign_config=False):
-    torch = types.ModuleType("torch")
-    torch.version = types.SimpleNamespace(cuda=None if hip else "13.0", hip=hip)
-    # Hopper: the shared low-latency path keys its Blackwell-only FP8 scale format on this.
-    torch.cuda = types.SimpleNamespace(get_device_capability=lambda device=None: (9, 0))
-    torch.float8_e4m3fn, torch.float8_e4m3fnuz = "e4m3fn", "e4m3fnuz"
-    torch.bfloat16, torch.float32, torch.int64, torch.int = "bfloat16", "float32", "int64", "int"
-    # `@torch.compile(dynamic=False)` and `torch.compile(fn, dynamic=False)` both pass fn through.
-    torch.compile = lambda fn=None, **kwargs: fn if fn is not None else (lambda inner: inner)
-    torch._dynamo = types.SimpleNamespace(config=types.SimpleNamespace(cache_size_limit=8))
-    dist = types.ModuleType("torch.distributed")
-    dist.group = types.SimpleNamespace(WORLD="world")
-    torch.distributed = dist
+    modules = _fakes.stub_torch(
+        version=types.SimpleNamespace(cuda=None if hip else "13.0", hip=hip),
+        # Hopper: the shared low-latency path keys its Blackwell-only FP8 scale format on this.
+        cuda=types.SimpleNamespace(get_device_capability=lambda device=None: (9, 0)),
+        float8_e4m3fn="e4m3fn", float8_e4m3fnuz="e4m3fnuz", int="int",
+    )
     uccl, uccl_ep = types.ModuleType("uccl"), types.ModuleType("uccl.ep")
     uccl_ep.Config = FakeConfig
     uccl.ep = uccl_ep
@@ -115,15 +111,11 @@ def _stubs(*, hip=None, foreign_config=False):
     # UCCL's wrapper re-exports uccl.ep's Config; DeepSeek's DeepEP brings its own.
     deep_ep.Buffer = FakeBuffer
     deep_ep.Config = type("Config", (), {}) if foreign_config else FakeConfig
-    return {"torch": torch, "torch.distributed": dist, "uccl": uccl, "uccl.ep": uccl_ep,
-            "deep_ep": deep_ep}
+    return {**modules, "uccl": uccl, "uccl.ep": uccl_ep, "deep_ep": deep_ep}
 
 
 def _load(**stub_options):
-    with mock.patch.dict(sys.modules, _stubs(**stub_options)):
-        for name in ("ep_uccl", "ep_legacy_ll"):
-            sys.modules.pop(name, None)
-        return importlib.import_module("ep_uccl")
+    return _fakes.fresh_import("ep_uccl", _stubs(**stub_options), also_pop=("ep_legacy_ll",))
 
 
 def _args(**updates):
