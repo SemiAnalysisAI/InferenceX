@@ -1,5 +1,6 @@
 """Plan the AgentX speculative acceptance gate from a sweep search space."""
 
+import shutil
 import sys
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "utils/srt-slurm/src"))
 
 import infx.srt_slurm.al_gate as al_gate  # noqa: E402
+from infx.golden_al_distribution import GOLDEN_DIR  # noqa: E402
 from infx.srt_slurm.al_gate import plan, summarize  # noqa: E402
 
 EAGLE = {"speculative-algorithm": "EAGLE"}
@@ -30,7 +32,8 @@ def write_golden(directory: Path, collection: bool = True) -> Path:
     if collection:
         curve["collection"] = {"renderer": "chat_template"}
     directory.mkdir(exist_ok=True)
-    (directory / "dsv4_mtp.yaml").write_text(yaml.safe_dump(curve))
+    shutil.copy(GOLDEN_DIR / "identities.yaml", directory)
+    (directory / "deepseek-v4-pro__mtp__native__default-default.yaml").write_text(yaml.safe_dump(curve))
     return directory
 
 
@@ -110,7 +113,7 @@ def test_gates_split_by_topology_and_draft_length(
     # largest one.
     assert three["conc"] == representative
     assert three["al-gate"] == {
-        "curve": "dsv4_mtp",
+        "curve": "deepseek-v4-pro__mtp__native__default-default",
         "draft-tokens": 3,
         "golden-acceptance-length": 2.4,
         "covers": [1, 2, 4],
@@ -138,8 +141,8 @@ def test_gates_split_by_topology_and_draft_length(
 @pytest.mark.parametrize(
     ("tokens", "collection", "reason"),
     [
-        (5, True, "planning error: ValueError: No golden acceptance for dsv4_mtp/thinking_on/5"),
-        (3, False, "golden curve dsv4_mtp records no collection settings to replay"),
+        (5, True, "planning error: ValueError: No golden acceptance for deepseek-v4-pro__mtp__native__default-default/thinking_on/5"),
+        (3, False, "golden curve deepseek-v4-pro__mtp__native__default-default records no collection settings to replay"),
     ],
 )
 def test_points_the_gate_cannot_replay_are_unresolved(
@@ -227,7 +230,7 @@ def test_summary_lists_verdicts_missing_gates_and_unresolved_points() -> None:
     unresolved = [{"point": f"p{c}", "conc": c, "reason": "not mirrored"} for c in (1, 2, 4, 8)]
     unresolved.append({"point": "z", "conc": [1], "reason": "exempt: no metrics"})
     planned = {"single_node": [{}, {}], "multi_node": [{}], "unresolved": unresolved}
-    gate = {"curve": "dsv4_mtp", "draft_tokens": 3, "golden_acceptance_length": 2.4}
+    gate = {"curve": "deepseek-v4-pro__mtp__native__default-default", "draft_tokens": 3, "golden_acceptance_length": 2.4}
     below = {"acceptance_length": 2.1, "ratio": 0.875, "status": "below"}
     error = {"acceptance_length": None, "ratio": None, "status": "error"}
     results = [
@@ -236,8 +239,8 @@ def test_summary_lists_verdicts_missing_gates_and_unresolved_points() -> None:
     ]
     lines = summarize(planned, results).splitlines()
     assert [line for line in lines if line.startswith("| `")] == [
-        "| `c1` | dsv4_mtp | 3 | 2.40 | - | - | error |",
-        "| `c2` | dsv4_mtp | 3 | 2.40 | 2.10 | 0.875 | below |",
+        "| `c1` | deepseek-v4-pro__mtp__native__default-default | 3 | 2.40 | - | - | error |",
+        "| `c2` | deepseek-v4-pro__mtp__native__default-default | 3 | 2.40 | 2.10 | 0.875 | below |",
     ]
     assert "1 planned gate(s) have no result; see their logs." in lines
     assert [line for line in lines if line.startswith("- ")] == [
