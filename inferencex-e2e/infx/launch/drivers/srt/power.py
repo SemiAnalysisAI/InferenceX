@@ -73,8 +73,12 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
                 Match(any_of("kimik3"), any_of("fp4"), any_of("dynamo-vllm"), agentic=True),
                 agentx=True,
             ),
+            PowerRule(
+                Match(any_of("glm5.2"), any_of("fp4"), any_of("dynamo-sglang"), agentic=True),
+                agentx=True,
+            ),
         ),
-        error="B200 nscale dcgm-power requires Kimi-K3 FP4 AgentX dynamo-vllm",
+        error="B200 nscale dcgm-power requires Kimi-K3 FP4 AgentX dynamo-vllm or GLM-5.2 FP4 AgentX dynamo-sglang",
     ),
     ("b200-nscale", LaunchPath.SRT_MULTI): PowerLane(
         rules=(
@@ -109,6 +113,8 @@ class PowerDecision:
     agentx: bool
     adapter: bool = False
     require: bool = False
+    # The point selected cpu-power: the cluster's Grace CPU exporter is bound and expected.
+    cpu: bool = False
 
 
 NO_POWER = PowerDecision(dcgm=False, agentx=False)
@@ -119,7 +125,7 @@ def decide_power(cluster_id: str, path: LaunchPath, request: MultiNodeRequest) -
 
     Raises ``PowerPolicyError`` for a combination the lane does not allow.
     """
-    if not request.power:
+    if not request.power or request.al_gate:
         return NO_POWER
     lane = POWER_LANES.get((cluster_id, path))
     if lane is None:
@@ -127,7 +133,11 @@ def decide_power(cluster_id: str, path: LaunchPath, request: MultiNodeRequest) -
     for rule in lane.rules:
         if rule.when(request):
             return PowerDecision(
-                dcgm=True, agentx=rule.agentx, adapter=rule.adapter, require=rule.require
+                dcgm=True,
+                agentx=rule.agentx,
+                adapter=rule.adapter,
+                require=rule.require,
+                cpu=request.cpu_power,
             )
     message = lane.agentic_error if request.is_agentic and lane.agentic_error else lane.error
     raise PowerPolicyError(message)
