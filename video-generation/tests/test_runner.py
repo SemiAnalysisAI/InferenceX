@@ -741,6 +741,48 @@ def test_serving_unknown_remote_completion_stops_queued_requests(
     assert run["serving"]["client_ready_latency_seconds"]["sample_count"] == 0
 
 
+def test_serving_interrupt_stops_polling_and_finalizes_promptly(
+    plan, tmp_path, mocked_media, fixture_server, monkeypatch
+):
+    plan["warmup_runs"] = 0
+    second_submitted = threading.Event()
+
+    def before_submit():
+        if state["posts"]:
+            state["mode"] = "timeout"
+            second_submitted.set()
+
+    endpoint, state = fixture_server(before_submit=before_submit)
+    journal = runner._event
+
+    def interrupt_before_validation(path, event, **fields):
+        if event == "validation_started":
+            assert second_submitted.wait(2), "second request never reached the fixture"
+            raise KeyboardInterrupt
+        journal(path, event, **fields)
+
+    monkeypatch.setattr(runner, "_event", interrupt_before_validation)
+    output = tmp_path / "interrupted-serving"
+    started = time.monotonic()
+    with pytest.raises(KeyboardInterrupt):
+        execute(plan, output, endpoint, serving_concurrency=1, timeout_seconds=5)
+    assert time.monotonic() - started < 5
+    run = json.loads((output / "run.json").read_text())
+    assert [r["outcome"] for r in run["records"]] == [
+        "interrupted",
+        "interrupted",
+        "not_started",
+        "not_started",
+    ]
+    assert [r["slot_id"] for r in run["records"]] == [s["slot_id"] for s in runner._slots(plan)]
+    assert {r["error"] for r in run["records"][:2]} == {
+        "interrupted by operator; server completion may be unknown"
+    }
+    assert run["finished_at"]
+    assert run["abort_reason"].startswith("interrupted by operator")
+    assert len(state["posts"]) == 2
+
+
 def test_serving_failed_warmup_never_submits_measured_requests(
     plan, tmp_path, mocked_media, fixture_server
 ):
