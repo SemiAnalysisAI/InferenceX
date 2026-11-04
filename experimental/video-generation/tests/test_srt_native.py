@@ -168,7 +168,8 @@ def _native_job(tmp_path, concurrencies=(1, 2), power_valid=True):
         for seq in range(70):
             for index, uuid in enumerate(bound["gpu_uuids"]):
                 writer.writerow([1, 1000.0 + seq, seq, "node", index, uuid, 600.0 + index])
-    (power / "native-job-status.txt").write_text("77|COMPLETED|0:0\n")
+    job = {"job_id": "77", "state": "succeeded", "raw": "COMPLETED|0:0", "alloc_tres": None}
+    (power / "native-job-status.json").write_text(json.dumps(job))
     (power / "power-producer-sha.txt").write_text("a" * 40 + "\n")
     (power / "exporter-image.sha256").write_text("sha256:" + "e" * 64 + "\n")
     workspace = tmp_path / "ws"
@@ -278,7 +279,7 @@ def test_bundle_joins_cells_power_and_identity_into_the_app_layout(tmp_path):
     assert manifest["engine"] == matrix["engine"] == {"name": "sglang", "revision": "7" * 40}
     assert manifest["evidence"]["serving-smoke.json"] == checksums["serving-smoke.json"]
     assert (
-        ci["slurm_job"] == {"job_id": "77", "state": "COMPLETED"}
+        ci["slurm_job"] == {"job_id": "77", "state": "succeeded", "raw": "COMPLETED|0:0"}
         and ci["power"]["producer_git_commit"] == "a" * 40
     )
     for cell in matrix["cells"]:
@@ -313,7 +314,8 @@ def test_bundle_joins_cells_power_and_identity_into_the_app_layout(tmp_path):
 def test_bundle_seals_observed_slurm_allocation(tmp_path):
     logs, workspace = _native_job(tmp_path, concurrencies=(1,))
     allocation = "cpu=16,gres/gpu=8,mem=128G,node=1"
-    (logs / "power/native-job-status.txt").write_text(f"77|COMPLETED|0:0|{allocation}\n")
+    path = logs / "power/native-job-status.json"
+    path.write_text(json.dumps({**json.loads(path.read_text()), "alloc_tres": allocation}))
     output = tmp_path / "h3-results"
 
     srt_bundle.build_bundle(
@@ -329,7 +331,7 @@ def test_bundle_seals_observed_slurm_allocation(tmp_path):
     ci = json.loads((output / "ci.json").read_text())
     manifest = json.loads((output / "manifest.json").read_text())
     checksums = _checksums(output)
-    assert ci["slurm_job"] == {"job_id": "77", "state": "COMPLETED", "AllocTRES": allocation}
+    assert ci["slurm_job"]["AllocTRES"] == allocation
     assert manifest["evidence"]["ci.json"] == checksums["ci.json"]
     assert hashlib.sha256((output / "ci.json").read_bytes()).hexdigest() == checksums["ci.json"]
 

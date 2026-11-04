@@ -270,7 +270,9 @@ def test_video_point_serves_the_h3_service_and_stages_every_concurrency(harness)
     assert ci["power"]["producer_git_commit"] == (workspace / "power-producer-sha.txt").read_text().strip()
     assert ci["power"]["exporter_image_sha256"] == (workspace / "exporter-image.sha256").read_text().strip()
     assert (workspace / "LOGS/power/samples.csv").read_text() == "retained native samples\n"
-    assert (workspace / "LOGS/power/native-job-status.txt").read_text() == f"42|COMPLETED|0:0|{allocation}\n"
+    assert json.loads((workspace / "LOGS/power/native-job-status.json").read_text()) == {
+        "job_id": "42", "state": "succeeded", "raw": "COMPLETED|0:0", "alloc_tres": allocation,
+    }
     assert (workspace / "srt-video-logs.tar.gz").stat().st_size > 0
     assert lines(harness.logs, "scancel") == []
 
@@ -280,8 +282,7 @@ def test_video_point_requiring_power_fails_without_a_native_package(harness):
     result = launch(env, harness.config, harness.workspace)
     assert result.returncode == 1
     ci = json.loads((harness.workspace / "h3-results/ci.json").read_text())
-    assert ci["slurm_job"] == {"job_id": "42", "state": "COMPLETED"}
-    assert (harness.workspace / "LOGS/power/native-job-status.txt").read_text() == "42|COMPLETED|0:0\n"
+    assert ci["slurm_job"] == {"job_id": "42", "state": "succeeded", "raw": "COMPLETED|0:0"}
     aggregate = json.loads((harness.workspace / "point-identity_conc1.json").read_text())
     assert aggregate["power_valid"] == 0
     assert "manifest_missing" in json.loads(
@@ -290,6 +291,9 @@ def test_video_point_requiring_power_fails_without_a_native_package(harness):
 
 
 def test_unknown_video_status_preserves_same_jobs_terminal_receipt(tmp_path):
+    def status(logs):
+        return json.loads((logs / "power/native-job-status.json").read_text())
+
     logs = tmp_path / "logs"
     allocation = "cpu=16,gres/gpu=8,mem=128G,node=1"
     collect.write_video_job_status(
@@ -298,19 +302,18 @@ def test_unknown_video_status_preserves_same_jobs_terminal_receipt(tmp_path):
 
     collect.write_video_job_status(logs, "42", JobStatus(JobState.UNKNOWN, "unknown"))
 
-    assert (logs / "power/native-job-status.txt").read_text() == (
-        f"42|COMPLETED|0:0|{allocation}\n"
-    )
+    unknown = {"job_id": "42", "state": "unknown", "raw": "unknown", "alloc_tres": None}
+    assert status(logs) == {**unknown, "state": "succeeded", "raw": "COMPLETED|0:0", "alloc_tres": allocation}
     unknown_logs = tmp_path / "unknown-logs"
     collect.write_video_job_status(unknown_logs, "42", JobStatus(JobState.UNKNOWN, "unknown"))
-    assert (unknown_logs / "power/native-job-status.txt").read_text() == "42|unknown\n"
+    assert status(unknown_logs) == unknown
 
     other_logs = tmp_path / "other-logs"
     collect.write_video_job_status(
         other_logs, "420", JobStatus(JobState.SUCCEEDED, "COMPLETED|0:0", 0, alloc_tres=allocation)
     )
     collect.write_video_job_status(other_logs, "42", JobStatus(JobState.UNKNOWN, "unknown"))
-    assert (other_logs / "power/native-job-status.txt").read_text() == "42|unknown\n"
+    assert status(other_logs) == unknown
 
 
 def test_video_points_must_be_single_node(harness):
@@ -807,9 +810,8 @@ def test_sigterm_while_streaming_cancels_the_job_and_exits_143(harness, shape):
         bundle = harness.workspace / "h3-results"
         ci = json.loads((bundle / "ci.json").read_text())
         assert ci["slurm_job"]["AllocTRES"] == allocation
-        assert (harness.workspace / "LOGS/power/native-job-status.txt").read_text() == (
-            f"42|COMPLETED|0:0|{allocation}\n"
-        )
+        recorded = json.loads((harness.workspace / "LOGS/power/native-job-status.json").read_text())
+        assert recorded["alloc_tres"] == allocation
     error = job_event(harness.workspace)["error"]
     assert {key: error[key] for key in ("stage", "type", "exit_code", "retriable")} == {
         "stage": "run", "type": "Interrupted", "exit_code": 143, "retriable": True,

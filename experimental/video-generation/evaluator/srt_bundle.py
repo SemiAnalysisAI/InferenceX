@@ -22,7 +22,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from infx.bench.video import cell_dir, read_object, run_complete, window_file, write_json
+from infx.bench.video import (
+    JOB_STATUS,
+    cell_dir,
+    read_object,
+    run_complete,
+    window_file,
+    write_json,
+)
 
 EVIDENCE_KIND = "srt_slurm_h3_service"
 TASK_ID = "h3-video"
@@ -281,10 +288,10 @@ def build_bundle(
     run_id = environ.get("GITHUB_RUN_ID", "local")
     attempt = environ.get("GITHUB_RUN_ATTEMPT", "1")
     source_sha = _source_sha(workspace, environ)
-    job_status = _text(power_dir / "native-job-status.txt") or ""
-    job_fields = job_status.split("|")
-    slurm_job_id, slurm_state = [*job_fields, "", ""][:2]
-    alloc_tres = job_fields[3].strip() if len(job_fields) > 3 else ""
+    job = read_object(power_dir / JOB_STATUS) if (power_dir / JOB_STATUS).is_file() else {}
+    slurm_job = {"job_id": job.get("job_id"), "state": job.get("state"), "raw": job.get("raw")}
+    if job.get("alloc_tres"):
+        slurm_job["AllocTRES"] = job["alloc_tres"]
     failures: list[str] = []
     cells = []
     declared_path = workspace / "video-identity.json"
@@ -362,7 +369,7 @@ def build_bundle(
             "bundle_type": RECEIPT_BUNDLE_TYPE,
             "evidence_kind": EVIDENCE_KIND,
             "job_id": f"github-{run_id}-{attempt}-c{concurrency}",
-            "execution_id": f"slurm-{slurm_job_id or 'unknown'}",
+            "execution_id": f"slurm-{job.get('job_id') or 'unknown'}",
             "spec_sha256": _hash(target / "spec.json") if cell_spec is not None else None,
             "plan_sha256": run.get("plan_sha256"),
             "status": "complete" if complete else "failed",
@@ -377,7 +384,7 @@ def build_bundle(
             "finished_at": run.get("finished_at"),
             "allocation": (spec or {}).get("allocation"),
             "authorization": (spec or {}).get("authorization"),
-            "slurm": {"job_id": slurm_job_id or None, "state": slurm_state or None},
+            "slurm": slurm_job,
             "server": launch,
             "roles": {
                 "baseline": {
@@ -477,9 +484,6 @@ def build_bundle(
         "failures": failures,
     }
     write_json(output / "serving-smoke.json", matrix)
-    slurm_job = {"job_id": slurm_job_id or None, "state": slurm_state or None}
-    if alloc_tres:
-        slurm_job["AllocTRES"] = alloc_tres
     ci_state = {
         "artifact_name": artifact_name,
         "schema_version": 1,

@@ -18,7 +18,7 @@ import yaml
 
 from infx.bench.env import InputError
 from infx.bench.eval import meta as eval_meta
-from infx.bench.video import write_json
+from infx.bench.video import JOB_STATUS, read_object, write_json
 from infx.launch.artifacts import (
     ArtifactError,
     build_video_bundle,
@@ -49,6 +49,7 @@ SINGLE_NODE_LOGS = "srt-single-node-logs.tar.gz"
 VIDEO_LOGS = "srt-video-logs.tar.gz"
 MULTINODE_LOGS = "multinode_server_logs.tar.gz"
 VIDEO_BUNDLE = "h3-results"
+_TERMINAL = {JobState.SUCCEEDED, JobState.FAILED, JobState.CANCELLED}
 
 
 def _copy_tree_into(source: Path, destination: Path) -> None:
@@ -175,35 +176,22 @@ def stage_video_identity(run: SrtRun, bound: Path) -> None:
 
 
 def write_video_job_status(logs: Path, job_id: str, status: JobStatus) -> None:
-    """Retain native status and any observed allocation beside video power logs."""
-    power = logs / "power"
-    power.mkdir(parents=True, exist_ok=True)
-    path = power / "native-job-status.txt"
-    alloc_tres = status.alloc_tres
-    previous_status: list[str] = []
-    if path.is_file():
-        previous_status = path.read_text().rstrip("\n").split("|", 3)
-    same_job = bool(previous_status) and previous_status[0] == job_id
-    if same_job:
-        previous_tres = previous_status[3] if len(previous_status) == 4 else None
-    else:
-        previous_tres = None
-    alloc_tres = alloc_tres or previous_tres
-    raw_status = status.raw
-    previous_state = previous_status[1].upper() if same_job and len(previous_status) > 2 else ""
-    if (
-        status.state is JobState.UNKNOWN
-        and same_job
-        and len(previous_status) > 2
-        and previous_status[1]
-        and previous_status[2]
-        and previous_state not in {"", "UNKNOWN", "PENDING", "CONFIGURING", "RUNNING", "COMPLETING"}
-    ):
-        raw_status = "|".join(previous_status[1:3])
-    record = f"{job_id}|{raw_status}"
-    if alloc_tres:
-        record += f"|{alloc_tres}"
-    path.write_text(record + "\n")
+    """Retain native status and any observed allocation beside video power logs.
+
+    An unknown reading after cancellation keeps the same job's earlier terminal status.
+    """
+    path = logs / "power" / JOB_STATUS
+    previous = read_object(path) if path.is_file() else {}
+    same_job = previous.get("job_id") == job_id
+    record = {
+        "job_id": job_id,
+        "state": status.state.value,
+        "raw": status.raw,
+        "alloc_tres": status.alloc_tres or (previous.get("alloc_tres") if same_job else None),
+    }
+    if same_job and status.state is JobState.UNKNOWN and previous.get("state") in _TERMINAL:
+        record.update(state=previous["state"], raw=previous["raw"])
+    write_json(path, record)
 
 
 def finish_video(run: SrtRun, submitted: Submitted, fetched: Path) -> int:
