@@ -46,7 +46,6 @@ base:
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":281125000000,"lazy_offload":false}}'
       env:
         VLLM_ENGINE_READY_TIMEOUT_S: '3600'
-        VLLM_ALLREDUCE_USE_FLASHINFER: '1'
         PYTHONUNBUFFERED: '1'
         # Identical prefixes must hash to identical block keys run-to-run.
         PYTHONHASHSEED: '42'
@@ -60,46 +59,123 @@ base:
 
 # Admission is 2x CONC. The decode graphs cover max-num-seqs x (1 + draft tokens);
 # throughput runs replace block rejection with the golden acceptance length.
-zip_override_dspark5:
+override_c1:
   roles:
     agg:
       args:
-        max-num-seqs: [2, 4, 8, 16]
-        max-cudagraph-capture-size: [12, 24, 48, 96]
+        max-num-seqs: 2
+        max-cudagraph-capture-size: 12
         speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:
-      CONC: ['1', '2', '4', '8']
+      CONC: '1'
 
-zip_override_dspark4:
+override_c2:
   roles:
     agg:
       args:
-        max-num-seqs: [32, 48]
-        max-cudagraph-capture-size: [160, 240]
+        max-num-seqs: 4
+        max-cudagraph-capture-size: 24
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  benchmark:
+    env:
+      CONC: '2'
+
+override_c4:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 8
+        max-cudagraph-capture-size: 48
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  benchmark:
+    env:
+      CONC: '4'
+
+override_c8:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 16
+        max-cudagraph-capture-size: 96
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  benchmark:
+    env:
+      CONC: '8'
+
+override_c16:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 32
+        max-cudagraph-capture-size: 160
         speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:
-      CONC: ['16', '24']
+      CONC: '16'
 
-zip_override_dspark3:
+override_c24:
   roles:
     agg:
       args:
-        max-num-seqs: [64, 80, 96]
-        max-cudagraph-capture-size: [256, 320, 384]
+        max-num-seqs: 48
+        max-cudagraph-capture-size: 240
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  benchmark:
+    env:
+      CONC: '24'
+
+override_c32:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 64
+        max-cudagraph-capture-size: 256
         speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":3,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:
-      CONC: ['32', '40', '48']
+      CONC: '32'
 
-zip_override_dspark2:
+override_c40:
   roles:
     agg:
       args:
-        max-num-seqs: [112, 140]
-        max-cudagraph-capture-size: [336, 420]
+        max-num-seqs: 80
+        max-cudagraph-capture-size: 320
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":3,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  benchmark:
+    env:
+      CONC: '40'
+
+override_c48:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 96
+        max-cudagraph-capture-size: 384
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":3,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  benchmark:
+    env:
+      CONC: '48'
+
+override_c56:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 112
+        max-cudagraph-capture-size: 336
         speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":2,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:
-      CONC: ['56', '70']
+      CONC: '56'
+
+override_c70:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 140
+        max-cudagraph-capture-size: 420
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":2,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  benchmark:
+    env:
+      CONC: '70'
