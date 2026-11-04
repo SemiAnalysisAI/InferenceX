@@ -13,9 +13,7 @@ from specs import h3_spec
 PLAN = h3_spec.plan_for(
     h3_spec.load_spec(Path(__file__).resolve().parents[1] / "specs/h3.yaml"), "frozen-c124"
 )
-PLAN_SHA = hashlib.sha256(
-    json.dumps(PLAN, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
-).hexdigest()
+PLAN_SHA = h3_spec.plan_sha256(PLAN)
 
 
 def _run(concurrency, scheduled=4, valid=4, status="complete"):
@@ -79,12 +77,13 @@ def _run(concurrency, scheduled=4, valid=4, status="complete"):
 def test_matrix_runs_every_concurrency_against_one_server_and_publishes_windows(
     tmp_path, monkeypatch
 ):
-    seen = []
+    seen, identities = [], []
 
     def fake_run_plan(plan, output, **kwargs):
         seen.append(
             (kwargs["serving_concurrency"], output, kwargs["runtime"], kwargs["runtime_revision"])
         )
+        identities.append(kwargs["numerical_identity"])
         output.mkdir(parents=True)
         run = _run(kwargs["serving_concurrency"])
         (output / "run.json").write_text(json.dumps(run))
@@ -96,6 +95,18 @@ def test_matrix_runs_every_concurrency_against_one_server_and_publishes_windows(
     logs = tmp_path / "logs"
     windows = logs / "power" / "windows"
     windows.mkdir(parents=True)
+    (logs / "h3/server").mkdir(parents=True)
+    launch = {
+        "runtime": "sglang",
+        "runtime_revision": "7" * 40,
+        "model_revision": PLAN["model_revision"],
+        "plan_sha256": PLAN_SHA,
+        "image_digest": "c" * 64,
+        "gpu_uuids": ["GPU-0", "GPU-1"],
+        "argv": ["python3", "-m", "sglang"],
+        "environment": {"PYTHONUNBUFFERED": "1"},
+    }
+    (logs / "h3/server/launch.json").write_text(json.dumps(launch))
     runs = srt_selected.run_matrix(
         PLAN,
         runtime="sglang",
@@ -113,6 +124,17 @@ def test_matrix_runs_every_concurrency_against_one_server_and_publishes_windows(
         (2, "sglang", "7" * 40),
     ]
     assert seen[0][1] == logs / "h3/gpu/c1/baseline"
+    assert (
+        identities[0]
+        == identities[1]
+        == {
+            "runtime_revision": "7" * 40,
+            "image_digest": "c" * 64,
+            "server_argv": launch["argv"],
+            "server_environment": launch["environment"],
+            "gpu_topology": {"gpu_uuids": launch["gpu_uuids"]},
+        }
+    )
     assert sorted(runs) == [1, 2]
     contract = json.loads((logs / "h3/gpu/c2/benchmark_concurrency_2.json").read_text())
     assert contract["max_concurrency"] == 2 and contract["energy_normalization"] == "clips"

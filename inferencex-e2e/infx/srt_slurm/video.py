@@ -175,7 +175,11 @@ def load_spec(name: str, *, root: Path, set_id: str) -> dict[str, Any]:
     if set_id not in source["sets"]:
         raise ValueError(f"H3_SET {set_id!r} is not defined in {name}")
     plan = module.plan_for(source, set_id)
-    return {"plan": plan, "plan_sha256": module.plan_sha256(plan)}
+    return {
+        "plan": plan,
+        "plan_sha256": module.plan_sha256(plan),
+        "schema_version": module.schema_version(plan),
+    }
 
 
 def _pool_service(recipe: Mapping[str, Any]) -> dict[str, Any]:
@@ -262,7 +266,6 @@ def bind_video(
     concurrencies = parse_concurrencies(_required(environment, "CONC_LIST"))
     spec_name, set_id = _required(environment, "H3_SPEC"), _required(environment, "H3_SET")
     spec = load_spec(spec_name, root=root, set_id=set_id)
-    fairness = spec["plan"].get("fairness")
     if spec["plan"]["model_id"] != model:
         raise ValueError(f"H3 spec serves {spec['plan']['model_id']!r}, the point {model!r}")
     model_path = spec_model_path(
@@ -322,7 +325,7 @@ def bind_video(
         port=port,
         gpus=gpus,
     )
-    if fairness and fairness["conditioning_cache"] == "disabled_across_requests":
+    if spec["schema_version"] == 2:
         if runtime == "sglang":
             if service["args"].count("--disable-conditioning-cache") != 1:
                 raise ValueError("fairness workload requires --disable-conditioning-cache")
@@ -344,15 +347,14 @@ def bind_video(
         "H3_SET": set_id,
         "H3_PLAN_SHA256": spec["plan_sha256"],
         "H3_RUNTIME": runtime,
+        "H3_CONTAINER_IMAGE": image,
         "H3_RUNTIME_REVISION": revision,
         "GPU_COUNT": str(gpus),
     }
-    if fairness:
-        values["H3_CONTAINER_IMAGE"] = image
     workload.update(values)
     service["env"] = {
         **(service.get("env") or {}),
-        **{k: values[k] for k in _SERVICE_ENV if k in values},
+        **{k: values[k] for k in _SERVICE_ENV},
         _RECIPE_ENV_KEYS: json.dumps(recipe_env_keys),
     }
     if (bound.get("telemetry") or {}).get("enabled") is True:

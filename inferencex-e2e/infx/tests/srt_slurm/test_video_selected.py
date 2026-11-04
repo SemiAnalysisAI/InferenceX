@@ -12,7 +12,7 @@ from infx.srt_slurm import video
 
 ROOT = repository_root()
 ENV = {
-    "IMAGE": "vllm/vllm-omni:v0.30.0",
+    "IMAGE": "vllm/vllm-omni:v0.30.0@sha256:" + "f" * 64,
     "MODEL": "MiniMaxAI/MiniMax-H3",
     "PRECISION": "bf16",
     "GPU_COUNT": "2",
@@ -65,8 +65,7 @@ def test_both_h3_engines_bind_the_same_selected_plan(native_fragment):
         assert service["env"]["H3_RUNTIME_REVISION"] == client["H3_RUNTIME_REVISION"]
         assert client["H3_SPEC_PATH"] == "/h3-package/specs/h3.yaml"
         assert client["GPU_COUNT"] == "2"
-        assert "H3_CONTAINER_IMAGE" not in service["env"]
-        assert "H3_CONTAINER_IMAGE" not in client
+        assert service["env"]["H3_CONTAINER_IMAGE"] == client["H3_CONTAINER_IMAGE"] == ENV["IMAGE"]
     assert vllm["benchmark"]["env"]["H3_PLAN_SHA256"] == sglang["benchmark"]["env"]["H3_PLAN_SHA256"]
 
 
