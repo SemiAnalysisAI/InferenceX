@@ -84,6 +84,11 @@ on:
         required: false
         type: string
         default: ""
+      head-sha:
+        description: "Approved PR head a trusted dispatch tested; empty uses the triggering event's head"
+        required: false
+        type: string
+        default: ""
       test-name:
         description: "Name of the dispatched test run; empty for other triggers"
         required: false
@@ -144,7 +149,7 @@ env:
   AL_GATE_CURVE: ${{ inputs.al-gate && fromJSON(inputs.config)['al-gate'].curve || '' }}
   AL_GATE_DRAFT_TOKENS: ${{ inputs.al-gate && format('{0}', fromJSON(inputs.config)['al-gate']['draft-tokens']) || '' }}
   AL_GATE_DATASET: ${{ inputs.al-gate && 'al_gate_dataset/speedbench_coding.jsonl' || '' }}
-  GITHUB_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  GITHUB_HEAD_SHA: ${{ inputs.head-sha || github.event.pull_request.head.sha || github.sha }}
   VIDEO_ARTIFACT_NAME: ${{ inputs.scenario-type == 'video-generation' && format('h3-results-{0}-{1}-{2}', github.run_id, github.run_attempt, fromJSON(inputs.config).recipe-fingerprint) || '' }}
   VIDEO_SPEC: ${{ inputs.scenario-type == 'video-generation' && fromJSON(inputs.config).spec || '' }}
   VIDEO_SET: ${{ inputs.scenario-type == 'video-generation' && fromJSON(inputs.config).set || '' }}
