@@ -154,6 +154,7 @@ input.
 Notes:
 - The fields above are the common ones, not the full schema. The Pydantic models in [`infx/matrix/validation.py`](../infx/matrix/validation.py) are the authoritative contract; they also accept fields such as `spec-decoding`, `num-nodes`, `require-power` and `power`, and they reject any field they do not define, which fails matrix generation.
 - A multinode search-space entry with `power: true` measures DCGM power: its rows carry `power: true`, the launcher merges the shared telemetry block into the recipe and rejects lanes without a power rule.
+- A multinode entry with `cpu-power: true` beside `power: true` also measures CPU power: its rows carry `cpu-power: true` and the launcher binds the cluster's `cpu-power-exporter` record beside the DCGM block. Single-node entries cannot carry it.
 - srt-slurm entries require `srt-recipe-dir`. Every row requires `srt-recipe: <file>[:<selector>]` under it (selector: `base`, `override_<name>` or `zip_override_<name>[<i>]`). Multinode rows may add `eval-srt-recipe`. Validation rejects missing files or variants, and `CONFIG_FILE`/`EVAL_CONFIG_FILE` settings. Only `llmd-vllm` keeps `CONFIG_FILE`. Generated rows carry the path from `inferencex-e2e/`.
 - Setting the fields above only guarantees that their values are passed as environment variables to benchmark scripts. Single-node jobs receive `PP_SIZE`, `DCP_SIZE`, and `PCP_SIZE`. Multinode jobs receive `PREFILL_PP_SIZE`, `PREFILL_DCP_SIZE`, `PREFILL_PCP_SIZE`, `DECODE_PP_SIZE`, `DECODE_DCP_SIZE`, and `DECODE_PCP_SIZE`. Actually using those variables is an implementation detail of the benchmark Bash script.
 
@@ -265,7 +266,9 @@ schema; unknown keys fail.
   volumes every job mounts to container paths, `mounts` does the same for host
   paths outside the volumes (devices), `agentic-volume-mounts` adds world-writable
   volumes for multi-node AgentX jobs, `power-exporter-port` is the DCGM exporter port
-  of power points, `env` is the environment of the srt-slurm
+  of power points, `cpu-power-exporter` (`source`) is the CPU power exporter a
+  `cpu-power` row binds beside it (`make setup` installs it from the pinned srt-slurm
+  release), `env` is the environment of the srt-slurm
   launch, `container-aliases` and `nginx-aliases` name the recipe containers that
   resolve to the main image and to the staged nginx, and `outputs`,
   `shared-run-root` and `uv-cache-root` are the directories the srt-slurm launcher
