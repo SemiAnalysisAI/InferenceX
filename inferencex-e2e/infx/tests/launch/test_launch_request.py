@@ -49,7 +49,7 @@ def gate_env(tmp_path, **overrides: str) -> dict[str, str]:
     (tmp_path / "speedbench_coding.jsonl").write_text(PROMPTS)
     return {
         **MULTINODE_AGENTX, "GITHUB_WORKSPACE": str(workspace), "CONC": "4", "CONC_LIST": "4", "SPEC_DECODING": "mtp",
-        "AL_GATE": "true", "AL_GATE_CURVE": "dsv4_mtp", "AL_GATE_DRAFT_TOKENS": "3", "AL_GATE_DATASET": DATASET,
+        "AL_GATE": "true", "AL_GATE_CURVE": "deepseek-v4-pro__mtp__native__default-default", "AL_GATE_DRAFT_TOKENS": "3", "AL_GATE_DATASET": DATASET,
         **overrides,
     }  # fmt: skip
 
