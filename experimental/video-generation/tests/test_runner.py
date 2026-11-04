@@ -507,7 +507,6 @@ def test_serving_overlaps_requests_without_waiting_for_local_validation(plan, tm
     assert run['summary']['valid'] == 4
     assert run['serving']['deadline_met_valid_clips'] == 4
     assert run['serving']['client_ready_latency_seconds']['p90'] is None
-    assert run['serving']['observed_batch_sizes'] is None
     assert len({r['job_id'] for r in run['records']}) == 4
     assert [r['slot_id'] for r in run['records']] == [s['slot_id'] for s in runner._slots(plan)]
     window = run['measurement']
@@ -516,7 +515,6 @@ def test_serving_overlaps_requests_without_waiting_for_local_validation(plan, tm
     assert run['summary']['valid_clips_per_second'] == 4 / window['wall_seconds']
     for record in run['records']:
         assert 0 <= record['submit_to_accepted_seconds'] <= record['submit_to_terminal_seconds'] <= record['submit_to_media_seconds'] <= record['latency_seconds']
-        assert record['server_timings'] is None
     assert len(state['posts']) == 4
 
 

@@ -711,7 +711,6 @@ def run_plan(
             "media_validation_seconds": None,
             "attempted": False, "expected_media": expected, "outcome": "not_started",
             "job_id": None, "provider_status": None, "submit_to_accepted_seconds": None,
-            "server_timings": None,
         }
         if abort_reason:
             record["error"] = abort_code
@@ -788,8 +787,6 @@ def run_plan(
                 if defer_validation:
                     record["timing_window"]["transport_end_monotonic_seconds"] = time.monotonic()
                     _event(journal, "transport_finished", slot_id=record["slot_id"])
-                from .runtime_timing import collect
-                record["server_timings"] = collect(record["job_id"])
         return record
 
     order = {slot["slot_id"]: index for index, slot in enumerate(slots)}

@@ -103,29 +103,9 @@ def summarize(run: dict) -> dict:
         "deadline_met_valid_clips": on_time,
         "deadline_attainment_fraction": on_time / len(records) if on_time is not None and records else None,
         "deadline_goodput_clips_per_second": on_time / wall if on_time is not None and wall > 0 else None,
-        "queue_delay_seconds": None, "server_ready_latency_seconds": None,
-        "observed_batch_sizes": None,
         "limitations": ["Closed-loop delivery load, not a fixed arrival-rate or sustainable-capacity test.",
                         "Local validation follows delivery and is excluded from the throughput window.",
                         "Client polling observations are not server-side queue or execution timestamps.",
                         "Deadline goodput requires technical validity, not calibrated perceptual quality."],
     }
-    if any(record.get("server_timings") is not None for record in records):
-        def distribution(field):
-            samples = [(record.get("server_timings") or {}).get(field) for record in valid]
-            present = [value for value in samples if _finite(value) and value >= 0]
-            ordered = sorted(present) if len(present) == len(samples) else []
-            return {"values": sorted(present), "sample_count": len(present), "valid_clip_count": len(valid),
-                    "missing_count": len(samples) - len(present), **_quantiles(ordered)}
-
-        result.update(queue_delay_seconds=distribution("queue_delay_seconds"),
-                      server_ready_latency_seconds=distribution("server_ready_latency_seconds"),
-                      server_execution_seconds=distribution("execution_seconds"),
-                      server_prequeue_seconds=distribution("prequeue_seconds"),
-                      server_postprocess_seconds=distribution("postprocess_seconds"))
-        timings = [record.get("server_timings") or {} for record in valid]
-        complete = bool(timings) and all(value.get("status") == "complete" for value in timings)
-        result["observed_batch_sizes"] = [value["observed_batch_size"] for value in timings] if complete else None
-        result["observed_replica_ids"] = sorted({value["replica_id"] for value in timings}) if complete else None
-        result["server_timing_population"] = "technically valid measured requests; partial coverage withholds percentiles"
     return result
