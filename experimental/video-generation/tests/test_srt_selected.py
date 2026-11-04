@@ -94,10 +94,25 @@ def test_selected_server_executes_recipe_command_and_records_selected_environmen
             "--model-path",
             str(model),
             "--tp-size",
-            "3",
+            "1",
+            "--ulysses-degree",
+            "2",
+            "--disable-conditioning-cache",
+            "--dit-cpu-offload",
+            "false",
         ]
         if runtime == "sglang"
-        else ["vllm", "serve", str(model), "--tensor-parallel-size", "3"]
+        else [
+            "vllm",
+            "serve",
+            str(model),
+            "--tensor-parallel-size",
+            "1",
+            "--usp",
+            "2",
+            "--ring",
+            "1",
+        ]
     )
     srt_selected.serve(
         plan,
@@ -113,6 +128,11 @@ def test_selected_server_executes_recipe_command_and_records_selected_environmen
     launch = json.loads((output / "launch.json").read_text())
     assert spec["plan"] == plan and spec["gpu_uuids"] == launch["gpu_uuids"] == uuids
     assert spec["serving"] == {"mode": "closed_loop"}
+    assert spec["server"] == (
+        {"tp_size": 1, "ulysses_degree": 2, "dit_cpu_offload": False}
+        if runtime == "sglang"
+        else {"tp_size": 1, "ulysses_degree": 2}
+    )
     assert spec["baseline"]["name"] == launch["runtime"] == runtime
     assert spec["baseline"]["revision"] == launch["runtime_revision"] == "a" * 40
     assert spec["baseline"]["argv"] == launch["argv"] == executed[0][1]
