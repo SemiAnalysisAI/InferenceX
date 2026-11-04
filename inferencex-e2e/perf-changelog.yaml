@@ -11982,4 +11982,6 @@
     - "Use NVFP4 KV cache and NVFP4 or FP8 indexer KV cache in the TensorRT-LLM workers."
     - "Configure iteration and KV cache statistics for the aggregate, prefill, and decode workers."
     - "Enable GPU and host CPU power collection for the AgentX configurations."
+    - "Configure fastokens and NUMA binding, least-loaded decode routing, prefill conversation affinity, and the KV transfer timeout."
+    - "Set both TP4 disaggregated variants to concurrency 36."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4751

@@ -19,6 +19,8 @@ base:
     type: trtllm
     served_model_name: MiniMaxAI/MiniMax-M3.1-Flash
     publish_metrics: true
+    numa_cpu_bind: true
+    numa_memory_bind: preferred
   roles:
     prefill:
       nodes: 1
@@ -39,6 +41,7 @@ base:
         TRTLLM_KV_TRANSFER_NUM_THREADS: '4'
         DYN_ROUTER_MODE: kv
         DYN_ROUTER_SESSION_AFFINITY_TTL_SECS: '14400'
+        DYN_ENGINE_CONV_AFFINITY: '1'
         DYN_REASONING_PARSER: minimax_m3
         DYN_TOOL_CALL_PARSER: minimax_m3
         DYN_CUSTOM_JINJA_TEMPLATE: /model/chat_template.jinja
@@ -84,6 +87,7 @@ base:
           backend: NIXL
           transceiver_runtime: PYTHON
           max_tokens_in_buffer: 524288
+          kv_transfer_timeout_ms: 600000
         enable_autotuner: true
         enable_tokenization_cache: true
         stream_interval: 20
@@ -113,8 +117,7 @@ base:
         TRTLLM_M31_NO_MIX: '1'
         TRTLLM_M31_NO_MIX_DECODE_INTERVAL: '1'
         TRTLLM_KV_TRANSFER_NUM_THREADS: '4'
-        DYN_ROUTER_MODE: kv
-        DYN_ROUTER_SESSION_AFFINITY_TTL_SECS: '14400'
+        DYN_ROUTER_MODE: least-loaded
         DYN_REASONING_PARSER: minimax_m3
         DYN_TOOL_CALL_PARSER: minimax_m3
         DYN_CUSTOM_JINJA_TEMPLATE: /model/chat_template.jinja
@@ -160,6 +163,7 @@ base:
           backend: NIXL
           transceiver_runtime: PYTHON
           max_tokens_in_buffer: 524288
+          kv_transfer_timeout_ms: 600000
         enable_autotuner: true
         enable_tokenization_cache: true
         stream_interval: 20
@@ -180,6 +184,7 @@ base:
     env:
       ETCD_LEASE_TTL: '120'
       DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: '3600'
+      DYN_TOKENIZER: fastokens
       DYN_TOKENIZER_CACHE_BYTES: '8589934592'
       DYN_REQUEST_PLANE: tcp
       DYN_FRONTEND_ENABLE_KV_EVENTS: '0'
@@ -199,9 +204,6 @@ base:
     colocate_with_frontend: true
   telemetry:
     startup_timeout_seconds: 180
-    cpu_power_exporter:
-      port: 9405
-      source: auto
   observability:
     enabled: false
     enable_otel: false
@@ -295,8 +297,8 @@ override_disagg_1p2d_tp2_tp2_mtp7_c32:
           indexer_kv_dtype: nvfp4
   health_check:
     max_attempts: 720
-override_disagg_1p2d_tp4_tp4_mtp7_c40:
-  name: m31f-gb300-23c67f2-disagg-1p2d-tp4-tp4-mtp7-c40
+override_disagg_1p2d_tp4_tp4_mtp7_c36:
+  name: m31f-gb300-23c67f2-disagg-1p2d-tp4-tp4-mtp7-c36
   roles:
     prefill:
       gpus: 4
@@ -395,8 +397,8 @@ override_disagg_1p3d_tp2_tp2_mtp7_c36:
           indexer_kv_dtype: nvfp4
   health_check:
     max_attempts: 720
-override_disagg_1p3d_tp4_tp4_mtp7_c40:
-  name: m31f-gb300-23c67f2-disagg-1p3d-tp4-tp4-mtp7-c40
+override_disagg_1p3d_tp4_tp4_mtp7_c36:
+  name: m31f-gb300-23c67f2-disagg-1p3d-tp4-tp4-mtp7-c36
   roles:
     prefill:
       gpus: 4

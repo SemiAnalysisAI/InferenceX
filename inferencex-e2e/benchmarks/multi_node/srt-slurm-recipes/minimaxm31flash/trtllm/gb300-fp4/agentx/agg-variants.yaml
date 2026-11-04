@@ -19,6 +19,8 @@ base:
     type: trtllm
     served_model_name: MiniMaxAI/MiniMax-M3.1-Flash
     publish_metrics: true
+    numa_cpu_bind: true
+    numa_memory_bind: preferred
   roles:
     agg:
       nodes: 1
@@ -138,6 +140,7 @@ base:
     env:
       ETCD_LEASE_TTL: '120'
       DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: '3600'
+      DYN_TOKENIZER: fastokens
       DYN_TOKENIZER_CACHE_BYTES: '8589934592'
       DYN_REQUEST_PLANE: tcp
       DYN_FRONTEND_ENABLE_KV_EVENTS: '0'
@@ -160,9 +163,6 @@ base:
     colocate_with_frontend: true
   telemetry:
     startup_timeout_seconds: 180
-    cpu_power_exporter:
-      port: 9405
-      source: auto
   observability:
     enabled: false
     enable_otel: false
