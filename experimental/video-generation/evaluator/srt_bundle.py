@@ -177,8 +177,6 @@ def _power(
         "completed": summary.get("completed", 0),
         "valid_clips": summary.get("valid", 0),
         "duration_seconds": duration,
-        "window_count": 1,
-        "valid_window_count": int(valid),
         "aggregate": {
             "avg_power_w": metrics.get("avg_total_gpu_power_w"),
             "energy_j": metrics.get("total_gpu_energy_j"),
@@ -245,8 +243,7 @@ def _power(
                 "unix_seconds": s["unix_seconds"],
                 "aggregate_watts": s["aggregate_watts"],
                 "per_gpu_watts": s["per_gpu_watts"],
-                "valid": True,
-                "invalid_reasons": [],
+                "valid": all(uuid in s["per_gpu_watts"] for uuid in gpu_uuids),
             }
             for s in series
         ],
@@ -389,13 +386,8 @@ def build_bundle(
             "measurement_verified": verified,
             "power_verified": power["valid"],
             "cleanup_status": "srt_slurm_job_teardown",
-            "ci_accepted": False,
-            "release_qualified": False,
-            "regression_status": "inconclusive",
             "started_at": run.get("started_at"),
             "finished_at": run.get("finished_at"),
-            "allocation": (spec or {}).get("allocation"),
-            "authorization": (spec or {}).get("authorization"),
             "slurm": slurm_job,
             "server": launch,
             "roles": {
@@ -473,13 +465,10 @@ def build_bundle(
         "finished_at": finished,
         "plan": plan,
         "runtime": (spec or {}).get("baseline"),
-        "server": (spec or {}).get("server"),
         "gpu_uuids": gpu_uuids,
         "scheduled": sum(c["completion"]["scheduled"] for c in cells),
         "requests_per_configuration": (cells[0]["completion"]["scheduled"] if cells else 0),
         "warmup_per_configuration": (plan or {}).get("warmup_runs"),
-        "ci_accepted": False,
-        "release_qualified": False,
         "cells": cells,
         "completion": {
             key: sum(c["completion"][key] for c in cells)
@@ -509,7 +498,6 @@ def build_bundle(
         "mode": MODE,
         "launcher": "srt-slurm",
         "evidence_kind": EVIDENCE_KIND,
-        "ci_accepted": False,
         "release_qualified": False,
         "ci": ci,
         "slurm_job": slurm_job,
@@ -542,14 +530,10 @@ def build_bundle(
         "evidence_kind": EVIDENCE_KIND,
         "workload_plan": plan,
         "gpu_uuids": gpu_uuids,
-        "runtime": {
-            "image": environ.get("IMAGE"),
-            "python": (spec or {}).get("baseline", {}).get("python"),
-        },
+        "runtime": {"image": environ.get("IMAGE")},
         "exit_code": 0 if status == "complete" else 1,
         "evidence": evidence,
         "artifact_checksums": "SHA256SUMS",
-        "excluded_persistent_caches": [],
     }
     write_json(output / "manifest.json", manifest)
     lines = [

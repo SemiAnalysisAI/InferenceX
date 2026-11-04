@@ -357,6 +357,25 @@ def test_bundle_counts_malformed_power_samples_instead_of_hiding_them(tmp_path):
     assert len(power["sample_series"]) == 70
 
 
+def test_power_sample_is_valid_only_when_it_reads_every_server_gpu(tmp_path):
+    logs, workspace = _native_job(tmp_path, concurrencies=(1,))
+    samples = logs / "power/samples.csv"
+    lines = samples.read_text().splitlines(keepends=True)
+    samples.write_text("".join(line for line in lines if not line.startswith("1,1005.0,5,node,1,")))
+    output = tmp_path / "h3-results"
+    srt_bundle.build_bundle(
+        h3_dir=logs / "h3",
+        power_dir=logs / "power",
+        workspace=workspace,
+        result_filename="r",
+        concurrencies=[1],
+        output=output,
+        environ={"PATH": os.environ["PATH"]},
+    )
+    series = json.loads((output / "gpu/c1/power.json").read_text())["sample_series"]
+    assert [sample["valid"] for sample in series[4:7]] == [True, False, True]
+
+
 def test_bundle_reports_invalid_power_without_verifying_the_cell(tmp_path):
     logs, workspace = _native_job(tmp_path, concurrencies=(1,), power_valid=False)
     output = tmp_path / "h3-results"
