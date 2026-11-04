@@ -36,6 +36,7 @@ def run(tmp_path: Path, script: str, env: dict[str, str]) -> tuple[subprocess.Co
             "BASH_ENV": str(tmp_path / "mount.sh"),
             "STUB_WORKSPACE": str(ROOT),
             "STUB_PYTHON3_TRACE": str(trace),
+            "SMG_INSTALL_LOCK_DIR": str(tmp_path),
             **env,
         },
         capture_output=True,
@@ -56,6 +57,7 @@ def test_an_installer_fails_without_the_version_the_binder_writes(tmp_path, scri
 
 
 @pytest.mark.parametrize(("script", "env", "expected"), [
+    ("smg.sh", {"ROUTER_VERSION": "9.8.7"}, {"smg==9.8.7", "--no-deps"}),
     ("vllm-router.sh", {"ROUTER_VERSION": "9.8.7"}, {"vllm-router==9.8.7"}),
     ("vllm-mooncake.sh", {"KV_OFFLOAD_BACKEND_VERSION": "9.8.7"},
      {"mooncake-transfer-engine-cuda13==9.8.7"}),
