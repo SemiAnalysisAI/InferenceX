@@ -31,7 +31,7 @@ def _libraries() -> tuple[Any, Any]:
         import av
         import numpy as np
     except ImportError as exc:
-        raise RuntimeError("Media measurements require the 'mvp' extra: uv sync --extra mvp") from exc
+        raise RuntimeError("Media measurements require PyAV and NumPy: uv sync") from exc
     return av, np
 
 
