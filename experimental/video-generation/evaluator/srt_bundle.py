@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import csv
 import hashlib
-import json
 import os
 import shutil
 import subprocess
@@ -23,24 +22,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from infx.bench.video import cell_dir, read_object, run_complete, window_file, write_json
+
 EVIDENCE_KIND = "srt_slurm_h3_service"
 TASK_ID = "h3-video"
 MODE = "serving-smoke"
 BUNDLE_TYPE = "h3_serving_smoke_matrix"
 RECEIPT_BUNDLE_TYPE = "srt_slurm_h3_service_receipt"
 POWER_SCHEMA = "1.0.0"
-
-
-def _read(path: Path) -> dict:
-    value = json.loads(path.read_text())
-    if not isinstance(value, dict):
-        raise ValueError(f"{path}: expected a JSON object")
-    return value
-
-
-def _write(path: Path, value: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n")
 
 
 def _hash(path: Path) -> str:
@@ -285,8 +274,8 @@ def build_bundle(
     output.mkdir(parents=True)
     started = _iso(time.time())
     server = h3_dir / "server"
-    spec = _read(server / "spec.json") if (server / "spec.json").is_file() else None
-    launch = _read(server / "launch.json") if (server / "launch.json").is_file() else None
+    spec = read_object(server / "spec.json") if (server / "spec.json").is_file() else None
+    launch = read_object(server / "launch.json") if (server / "launch.json").is_file() else None
     series, sampled_uuids = _samples(power_dir)
     gpu_uuids = list(spec["gpu_uuids"]) if spec else sampled_uuids
     run_id = environ.get("GITHUB_RUN_ID", "local")
@@ -299,14 +288,14 @@ def build_bundle(
     failures: list[str] = []
     cells = []
     declared_path = workspace / "video-identity.json"
-    declared = _read(declared_path) if declared_path.is_file() else None
+    declared = read_object(declared_path) if declared_path.is_file() else None
     plan = declared["workload_plan"] if declared else None
     identity = {key: declared[key] for key in ("plan_sha256", "engine")} if declared else None
     if declared:
-        _write(output / "video-identity.json", declared)
+        write_json(output / "video-identity.json", declared)
     for concurrency in concurrencies:
-        cell_dir = output / "gpu" / f"c{concurrency}"
-        source_cell = h3_dir / "gpu" / f"c{concurrency}"
+        relative = cell_dir(concurrency)
+        target, source_cell = output / relative, h3_dir / relative
         cell: dict[str, Any] = {"concurrency": concurrency, "status": "failed", "verified": False}
         run_path = source_cell / "baseline" / "run.json"
         if not run_path.is_file():
@@ -322,8 +311,8 @@ def build_bundle(
             }
             cells.append(cell)
             continue
-        shutil.copytree(source_cell / "baseline", cell_dir / "baseline", dirs_exist_ok=True)
-        run = _read(cell_dir / "baseline" / "run.json")
+        shutil.copytree(source_cell / "baseline", target / "baseline", dirs_exist_ok=True)
+        run = read_object(target / "baseline" / "run.json")
         configuration = run.get("configuration") or {}
         cell_identity = {
             "plan_sha256": run.get("plan_sha256"),
@@ -336,21 +325,21 @@ def build_bundle(
             raise ValueError(f"c{concurrency}: workload or engine identity differs between cells")
         identity = cell_identity
         plan = run.get("plan")
-        bench_path = source_cell / f"benchmark_concurrency_{concurrency}.json"
-        bench = _read(bench_path) if bench_path.is_file() else {}
+        bench_path = source_cell / window_file(concurrency)
+        bench = read_object(bench_path) if bench_path.is_file() else {}
         validation_path = workspace / f"power_validation_{result_filename}_conc{concurrency}.json"
         validation = (
-            _read(validation_path)
+            read_object(validation_path)
             if validation_path.is_file()
             else {"power_valid": False, "reasons": ["validation_sidecar_missing"]}
         )
         aggregate_path = workspace / f"{result_filename}_conc{concurrency}.json"
-        aggregate = _read(aggregate_path) if aggregate_path.is_file() else None
+        aggregate = read_object(aggregate_path) if aggregate_path.is_file() else None
         if bench:
-            shutil.copyfile(bench_path, cell_dir / bench_path.name)
-        _write(cell_dir / "power-validation.json", validation)
+            shutil.copyfile(bench_path, target / bench_path.name)
+        write_json(target / "power-validation.json", validation)
         if aggregate is not None:
-            _write(cell_dir / "aggregate.json", aggregate)
+            write_json(target / "aggregate.json", aggregate)
         cell_spec = None
         if spec is not None:
             cell_spec = {
@@ -358,15 +347,11 @@ def build_bundle(
                 "job_id": f"github-{run_id}-{attempt}-c{concurrency}",
                 "serving": {**(spec.get("serving") or {}), "concurrency": concurrency},
             }
-            _write(cell_dir / "spec.json", cell_spec)
+            write_json(target / "spec.json", cell_spec)
         power = _power(validation, series, run, bench, gpu_uuids)
-        _write(cell_dir / "power.json", power)
+        write_json(target / "power.json", power)
         summary = run.get("summary") or {}
-        complete = (
-            run.get("status") == "complete"
-            and bool(summary.get("scheduled"))
-            and summary.get("valid") == summary.get("scheduled")
-        )
+        complete = run_complete(run)
         if not complete:
             failures.append(
                 f"c{concurrency}: {summary.get('valid', 0)}/{summary.get('scheduled', 0)} valid clips"
@@ -378,7 +363,7 @@ def build_bundle(
             "evidence_kind": EVIDENCE_KIND,
             "job_id": f"github-{run_id}-{attempt}-c{concurrency}",
             "execution_id": f"slurm-{slurm_job_id or 'unknown'}",
-            "spec_sha256": _hash(cell_dir / "spec.json") if cell_spec is not None else None,
+            "spec_sha256": _hash(target / "spec.json") if cell_spec is not None else None,
             "plan_sha256": run.get("plan_sha256"),
             "status": "complete" if complete else "failed",
             "measurement_status": "complete" if complete else "incomplete",
@@ -397,7 +382,7 @@ def build_bundle(
             "roles": {
                 "baseline": {
                     "run_path": "baseline/run.json",
-                    "run_sha256": _hash(cell_dir / "baseline" / "run.json"),
+                    "run_sha256": _hash(target / "baseline" / "run.json"),
                     "run_status": run.get("status"),
                     "status": "complete" if complete else "failed",
                     "started_at": run.get("started_at"),
@@ -407,14 +392,14 @@ def build_bundle(
             },
             "power": {
                 "path": "power.json",
-                "sha256": _hash(cell_dir / "power.json"),
+                "sha256": _hash(target / "power.json"),
                 "valid": power["valid"],
                 "invalid_reasons": power["invalid_reasons"],
             },
             "aggregate_path": "aggregate.json" if aggregate is not None else None,
             "failures": [f for f in failures if f.startswith(f"c{concurrency}:")],
         }
-        _write(cell_dir / "gpu-job.json", receipt)
+        write_json(target / "gpu-job.json", receipt)
         cell.update(
             {
                 "status": "complete" if complete else "failed",
@@ -430,15 +415,15 @@ def build_bundle(
                     "measurement": run.get("measurement"),
                 },
                 "run": {
-                    "path": f"gpu/c{concurrency}/baseline/run.json",
+                    "path": f"{relative}/baseline/run.json",
                     "sha256": receipt["roles"]["baseline"]["run_sha256"],
                 },
                 "receipt": {
-                    "path": f"gpu/c{concurrency}/gpu-job.json",
-                    "sha256": _hash(cell_dir / "gpu-job.json"),
+                    "path": f"{relative}/gpu-job.json",
+                    "sha256": _hash(target / "gpu-job.json"),
                 },
                 "power": {
-                    "path": f"gpu/c{concurrency}/power.json",
+                    "path": f"{relative}/power.json",
                     "sha256": receipt["power"]["sha256"],
                     "phases": power["phases"],
                 },
@@ -446,8 +431,8 @@ def build_bundle(
         )
         if aggregate is not None:
             cell["aggregate"] = {
-                "path": f"gpu/c{concurrency}/aggregate.json",
-                "sha256": _hash(cell_dir / "aggregate.json"),
+                "path": f"{relative}/aggregate.json",
+                "sha256": _hash(target / "aggregate.json"),
             }
         cells.append(cell)
     finished = _iso(time.time())
@@ -491,7 +476,7 @@ def build_bundle(
         },
         "failures": failures,
     }
-    _write(output / "serving-smoke.json", matrix)
+    write_json(output / "serving-smoke.json", matrix)
     slurm_job = {"job_id": slurm_job_id or None, "state": slurm_state or None}
     if alloc_tres:
         slurm_job["AllocTRES"] = alloc_tres
@@ -522,7 +507,7 @@ def build_bundle(
         "power_verified": power_verified,
         "failures": failures,
     }
-    _write(output / "ci.json", ci_state)
+    write_json(output / "ci.json", ci_state)
     evidence = {
         path.relative_to(output).as_posix(): _hash(path) for path in sorted(output.rglob("*.json"))
     }
@@ -550,7 +535,7 @@ def build_bundle(
         "artifact_checksums": "SHA256SUMS",
         "excluded_persistent_caches": [],
     }
-    _write(output / "manifest.json", manifest)
+    write_json(output / "manifest.json", manifest)
     lines = [
         f"{_hash(path)}  {path.relative_to(output).as_posix()}"
         for path in sorted(output.rglob("*"))

@@ -6,7 +6,6 @@ Logs are staged on every exit path, and always before the job's outputs are dele
 from __future__ import annotations
 
 import contextlib
-import json
 import os
 import shutil
 import sys
@@ -19,6 +18,7 @@ import yaml
 
 from infx.bench.env import InputError
 from infx.bench.eval import meta as eval_meta
+from infx.bench.video import write_json
 from infx.launch.artifacts import (
     ArtifactError,
     build_video_bundle,
@@ -171,7 +171,7 @@ def stage_video_identity(run: SrtRun, bound: Path) -> None:
             "revision": environment["H3_RUNTIME_REVISION"],
         },
     }
-    (run.workspace / "video-identity.json").write_text(json.dumps(identity, sort_keys=True) + "\n")
+    write_json(run.workspace / "video-identity.json", identity)
 
 
 def write_video_job_status(logs: Path, job_id: str, status: JobStatus) -> None:

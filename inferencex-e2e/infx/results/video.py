@@ -17,13 +17,13 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import os
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from infx.bench.video import cell_dir, read_object, run_complete, window_file
 from infx.results.power import multinode
 from infx.results.power.audit import audit_summary
 from infx.results.power.common import _write_json_atomic
@@ -32,15 +32,7 @@ SCENARIO_TYPE = "video-generation"
 SERVICE = "h3-server"
 H3_DIR = "h3"
 POWER_DIR = "power"
-BENCHMARK_STEM = "benchmark_concurrency_{concurrency}"
 IDENTITY = ("cluster", "model", "image", "framework", "precision", "spec")
-
-
-def _read(path: Path) -> dict[str, Any]:
-    value = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(value, dict):
-        raise ValueError(f"{path}: expected a JSON object")
-    return value
 
 
 def _sha256(path: Path) -> str:
@@ -50,8 +42,8 @@ def _sha256(path: Path) -> str:
 def _server_gpu_uuids(logs_root: Path, gpu_count: int) -> tuple[str, ...]:
     """The actual server assignment, sealed in both native H3 launch records."""
     server = logs_root / H3_DIR / "server"
-    spec = _read(server / "spec.json").get("gpu_uuids")
-    launch = _read(server / "launch.json").get("gpu_uuids")
+    spec = read_object(server / "spec.json").get("gpu_uuids")
+    launch = read_object(server / "launch.json").get("gpu_uuids")
     if (
         not isinstance(spec, list)
         or len(spec) != gpu_count
@@ -135,14 +127,6 @@ def build_aggregate(
     }
 
 
-def _complete(aggregate: Mapping[str, Any]) -> bool:
-    return (
-        aggregate.get("run_status") == "complete"
-        and bool(aggregate.get("scheduled"))
-        and aggregate.get("valid") == aggregate.get("scheduled")
-    )
-
-
 def run(
     *,
     logs_root: Path,
@@ -165,14 +149,15 @@ def run(
     rc = 0
     cells: dict[str, Any] = {}
     for concurrency in concurrencies:
-        cell = logs_root / H3_DIR / "gpu" / f"c{concurrency}"
+        cell = logs_root / H3_DIR / cell_dir(concurrency)
         run_path = cell / "baseline" / "run.json"
-        bench = cell / f"{BENCHMARK_STEM.format(concurrency=concurrency)}.json"
+        bench = cell / window_file(concurrency)
         agg = workspace / f"{result_filename}_conc{concurrency}.json"
         sidecar = workspace / f"power_validation_{result_filename}_conc{concurrency}.json"
         try:
+            cell_run = read_object(run_path)
             aggregate = build_aggregate(
-                _read(run_path), _read(bench), concurrency=concurrency, gpu_count=gpu_count,
+                cell_run, read_object(bench), concurrency=concurrency, gpu_count=gpu_count,
                 identity=identity, run_path=run_path.relative_to(logs_root).as_posix(),
                 run_sha256=_sha256(run_path),
             )  # fmt: skip
@@ -189,10 +174,10 @@ def run(
             server_gpu_uuids=server_gpu_uuids, validation_result=sidecar,
             require_power=require_power,
         )  # fmt: skip
-        patched = _read(agg)
-        patched.update(audit_summary(_read(sidecar), sidecar.name))
+        patched = read_object(agg)
+        patched.update(audit_summary(read_object(sidecar), sidecar.name))
         _write_json_atomic(agg, patched)
-        complete = _complete(patched)
+        complete = run_complete(cell_run)
         if not complete:
             print(
                 f"[video] c{concurrency}: {patched.get('valid')}/{patched.get('scheduled')} valid "

@@ -9,6 +9,7 @@ import time
 import uuid
 from pathlib import Path
 
+from infx.bench.video import CREDENTIAL_ENV, cell_dir, window_file, write_json
 from specs import h3_spec
 
 from .runner import run_plan, validate_plan
@@ -22,14 +23,6 @@ RECORDED_ENGINE_ENV = (
     "VLLM_OMNI_VIDEO_SYNC_TIMEOUT",
     "VLLM_OMNI_SERVER_STORAGE__PATH",
     "VGBENCH_GPU_UUIDS",
-)
-
-BENCHMARK_STEM = "benchmark_concurrency_{concurrency}"
-CELL_DIR = "gpu/c{concurrency}"
-_CREDENTIAL_ENV = re.compile(
-    r"(?:^|_)(?:TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIALS?|AUTH|BEARER|"
-    r"API_KEY|ACCESS_KEY|PRIVATE_KEY|SSH_KEY)(?:_|$)",
-    re.IGNORECASE,
 )
 
 
@@ -65,18 +58,13 @@ def _recipe_environment(env: dict[str, str]) -> dict[str, str]:
     if not isinstance(names, list) or any(
         not isinstance(name, str)
         or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name)
-        or _CREDENTIAL_ENV.search(name)
+        or CREDENTIAL_ENV.search(name)
         for name in names
     ):
         raise ValueError("invalid H3_RECIPE_ENV_KEYS")
     if len(names) != len(set(names)) or any(name not in env for name in names):
         raise ValueError("H3_RECIPE_ENV_KEYS names must be unique and present at launch")
     return {name: env[name] for name in names}
-
-
-def _write(path: Path, value: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n")
 
 
 def benchmark_window(run: dict, *, utc_minus_monotonic: float) -> dict:
@@ -188,7 +176,7 @@ def serve(
         Path(storage).mkdir(parents=True, exist_ok=True)
     argv = [str(served_path) if part == snapshot else part for part in command]
     recorded_env.update({name: env[name] for name in RECORDED_ENGINE_ENV if name in env})
-    _write(
+    write_json(
         output / "spec.json",
         {
             "schema_version": "0.1.0",
@@ -217,7 +205,7 @@ def serve(
     }
     if image_digest is not None:
         launch["image_digest"] = image_digest
-    _write(output / "launch.json", launch)
+    write_json(output / "launch.json", launch)
     os.execvpe(argv[0], argv, env)
 
 
@@ -306,7 +294,7 @@ def run_matrix(
             }
     results = {}
     for concurrency in concurrencies:
-        cell = output / CELL_DIR.format(concurrency=concurrency)
+        cell = output / cell_dir(concurrency)
         before = time.time() - time.monotonic()
         run = run_plan(
             plan,
@@ -323,8 +311,8 @@ def run_matrix(
         after = time.time() - time.monotonic()
         contract = benchmark_window(run, utc_minus_monotonic=(before + after) / 2)
         contract["clock"]["offset_spread_seconds"] = abs(after - before)
-        path = cell / f"{BENCHMARK_STEM.format(concurrency=concurrency)}.json"
-        _write(path, contract)
+        path = cell / window_file(concurrency)
+        write_json(path, contract)
         from infx.results.power.window import write_window
 
         write_window(path, concurrency, window_dir)

@@ -14,7 +14,7 @@ from typing import Any
 import yaml
 
 from infx.bench.env import BenchError
-from infx.bench.video import parse_args
+from infx.bench.video import CREDENTIAL_ENV, parse_args
 from infx.config import repository_root
 from infx.srt_slurm.single_node import srun_overrides
 from infx.srt_slurm.workload import (
@@ -82,11 +82,6 @@ _RESERVED_ENV = (
         "SRT_MEASUREMENT_WINDOW_DIR",
     }
 )
-_CREDENTIAL_ENV = re.compile(
-    r"(?:^|_)(?:TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIALS?|AUTH|BEARER|"
-    r"API_KEY|ACCESS_KEY|PRIVATE_KEY|SSH_KEY)(?:_|$)",
-    re.IGNORECASE,
-)
 
 
 def _declared_server_env_keys(recipe: Mapping[str, Any], server: Mapping[str, Any]) -> list[str]:
@@ -109,7 +104,7 @@ def _declared_server_env_keys(recipe: Mapping[str, Any], server: Mapping[str, An
                 raise ValueError(f"{scope} has an invalid environment name: {name!r}")
             if name in _RESERVED_ENV or name.startswith("SRT_SERVICE_"):
                 raise ValueError(f"{scope}.{name} is owned by the launcher or runtime")
-            if _CREDENTIAL_ENV.search(name):
+            if CREDENTIAL_ENV.search(name):
                 raise ValueError(f"{scope}.{name} could expose a credential in the launch receipt")
     return sorted(set(recipe.get("environment") or {}) | set(server.get("env") or {}))
 

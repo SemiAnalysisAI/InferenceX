@@ -3,9 +3,47 @@ from __future__ import annotations
 import argparse
 import json
 import re
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 from infx.bench import env
+
+CREDENTIAL_ENV = re.compile(
+    r"(?:^|_)(?:TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIALS?|AUTH|BEARER|"
+    r"API_KEY|ACCESS_KEY|PRIVATE_KEY|SSH_KEY)(?:_|$)",
+    re.IGNORECASE,
+)
+
+
+def cell_dir(concurrency: int) -> str:
+    return f"gpu/c{concurrency}"
+
+
+def window_file(concurrency: int) -> str:
+    return f"benchmark_concurrency_{concurrency}.json"
+
+
+def run_complete(run: Mapping[str, Any]) -> bool:
+    summary = run.get("summary") or {}
+    return (
+        run.get("status") == "complete"
+        and bool(summary.get("scheduled"))
+        and summary.get("valid") == summary.get("scheduled")
+    )
+
+
+def read_object(path: Path) -> dict[str, Any]:
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise ValueError(f"{path}: expected a JSON object")
+    return value
+
+
+def write_json(path: Path, value: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = json.dumps(value, indent=2, sort_keys=True, allow_nan=False)
+    path.write_text(text + "\n", encoding="utf-8")
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -97,14 +135,6 @@ def main(argv: list[str]) -> int:
                     }
                 )
             )
-        return (
-            0
-            if all(
-                run["summary"]["valid"] == run["summary"]["scheduled"]
-                and run["summary"]["scheduled"]
-                for run in runs.values()
-            )
-            else 1
-        )
+        return 0 if all(map(run_complete, runs.values())) else 1
     except (OSError, ValueError, RuntimeError, KeyError) as error:
         raise env.BenchError(str(error)) from error

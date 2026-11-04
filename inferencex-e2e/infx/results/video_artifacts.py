@@ -8,14 +8,9 @@ import json
 import re
 from pathlib import Path, PurePosixPath
 
+from infx.bench.video import read_object
+
 VIDEO_ARTIFACT = re.compile(r"h3-results-([0-9]+)-([0-9]+)-([0-9a-f]{64})")
-
-
-def _read(path: Path) -> dict:
-    value = json.loads(path.read_text())
-    if not isinstance(value, dict):
-        raise ValueError(f"{path.name}: expected an object")
-    return value
 
 
 def _inventory(root: Path) -> dict[str, str]:
@@ -68,7 +63,7 @@ def validate_video_artifacts(
     actual executed checkout, which can be the PR merge commit rather than its head.
     Older attempts remain archived but do not fill holes in the selected attempt.
     """
-    sweep = _read(root / "video-sweep-manifest/sweep_manifest.json")
+    sweep = read_object(root / "video-sweep-manifest/sweep_manifest.json")
     source_run, attempt, head = str(sweep["run-id"]), str(sweep["run-attempt"]), sweep["head"]
     if (
         (run_id is not None and run_id != source_run)
@@ -101,7 +96,7 @@ def validate_video_artifacts(
         bundle = root / name
         inventory = _inventory(bundle)
         manifest, ci, matrix = (
-            _read(bundle / filename)
+            read_object(bundle / filename)
             for filename in ("manifest.json", "ci.json", "serving-smoke.json")
         )
         if any(
@@ -130,9 +125,9 @@ def validate_video_artifacts(
                 raise ValueError(f"{name}: incomplete video cell")
             for field in ("run", "receipt", "power"):
                 _reference(inventory, cell[field])
-            run = _read(bundle / cell["run"]["path"])
-            receipt = _read(bundle / cell["receipt"]["path"])
-            power = _read(bundle / cell["power"]["path"])
+            run = read_object(bundle / cell["run"]["path"])
+            receipt = read_object(bundle / cell["receipt"]["path"])
+            power = read_object(bundle / cell["power"]["path"])
             if (
                 power.get("valid") is not True
                 or power.get("status") != "valid"
