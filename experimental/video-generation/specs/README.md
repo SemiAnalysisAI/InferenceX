@@ -6,7 +6,13 @@
 
 `h3-v0.1.yaml` is a separate proposed 5-second H3 workload. Its `release-v1` set contains 20 distinct measured prompts with fixed seeds and a disjoint warmup prompt. The expected delivered clip is 124 frames at 24 fps (124/24 seconds), 1344×768, with 32 kHz stereo audio. The request uses 49 denoising updates; the frozen schedule identity records 50 sigma points and video/audio shifts 12/3.
 
-The optional `fairness` plan field seals the schedule, requested libx264 ultrafast/CRF 18/yuv420p plus AAC encoding, disabled cross-request conditioning cache policy, and fixed official Diffusers source/model/RNG candidate. Those pins identify a proposed reference producer. They do not assert that a reference was generated, that encoder settings were observed, or that cross-engine quality passed. Runtime flags and environment values are set by the native recipe and checked against its rendered launch; they are not silently inferred from this YAML.
+`h3.yaml` uses schema version 1 and `h3-v0.1.yaml` uses schema version 2.
+Version 2 adds a `warmup_case` to every set and a `fairness` block that seals the schedule, the requested libx264 ultrafast/CRF 18/yuv420p plus AAC encoding, the disabled cross-request conditioning cache, and the official Diffusers source, model and RNG candidate.
+The loader enforces the version 2 policy once: 20 measured cases with distinct prompt text, one warmup run on a disjoint prompt, a schedule that matches the request, and encoding audio that matches generation.
+Those pins identify a proposed reference producer; they do not assert that a reference was generated, that encoder settings were observed, or that cross-engine quality passed.
+
+A version 2 plan carries `schema_version: 2` and `fairness`; a version 1 plan omits `schema_version`, so its recorded hash still holds.
+Code that needs the version calls `schema_version(plan)` instead of testing which keys a plan has.
 
 ## What the YAML records
 
@@ -15,8 +21,8 @@ The optional `fairness` plan field seals the schedule, requested libx264 ultrafa
   SGLang rejects caller-set fps and frame counts and derives them from its `target`; only vLLM-Omni receives fps, frame count, width, and height.
   The runner checks the clip's duration against `frame_count / fps` (107 / 24 = 4.458 s), not `duration_seconds`.
 - `prompts` defines each prompt once with its motion and sound requirements.
-  Each entry in `sets` lists cases that pair a prompt with a seed.
-- `reference` records the SGLang run on #2916 whose plan hash `frozen-c124` reproduces.
+  Each entry in `sets` lists cases that pair a prompt with a seed; no two cases repeat both prompt text and seed.
+- `reference` (version 1 only) records the SGLang run on #2916 whose plan hash `frozen-c124` reproduces.
 
 ## Hash contract
 
@@ -26,7 +32,7 @@ Both hashes below and the runner's recorded `plan_sha256` are SHA-256 over those
 - `plan_sha256(plan_for(spec, set_id))` equals the `plan_sha256` that the runner records for the same plan.
   The `frozen-c124` set reproduces the `h3-serving-2gpu-c124-v1` plan that the reference run recorded, whose hash is `8d51a472caa7db0f5d4c33adec1e9c9f852e7144cf25356085802edaf7d80d68`; `test_h3_spec.py` asserts it.
 - `spec_sha256(spec)` covers the model, the generation values, and each set's resolved cases and counts.
-- For `h3-v0.1.yaml`, both hashes also cover `warmup_case` and `fairness`, including encoding, schedule, conditioning-cache policy, and reference producer identity.
+- For `h3-v0.1.yaml`, both hashes also cover `warmup_case` and `fairness`, and the plan hash covers `schema_version`.
 - `reference`, YAML key order, comments, and formatting are outside both hashes.
   Neither hash includes GPU UUIDs, job IDs, ports, or hosts.
 - `plan_for(spec, set_id, repetitions=..., warmup_runs=...)` overrides the counts.

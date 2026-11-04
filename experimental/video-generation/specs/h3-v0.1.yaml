@@ -1,4 +1,4 @@
-schema_version: 1
+schema_version: 2
 model:
   id: MiniMaxAI/MiniMax-H3
   revision: 42ed227ee7df40d41602854ae760620d6eb651fe
@@ -169,6 +169,3 @@ fairness:
     diffusers_revision: d8c1b13c756df0059bcdb6e477a1eafcd502098d
     model_revision: 42ed227ee7df40d41602854ae760620d6eb651fe
     rng_policy: cpu_generator_float32_video_then_audio
-reference:
-  status: source_candidate_not_generated
-  note: This spec does not establish a generated reference or quality result.
