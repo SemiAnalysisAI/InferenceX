@@ -1,7 +1,7 @@
 # Native video delivery
 
 The `video-generation` scenario schedules one server job per deployment. H100,
-H200, and B200 SGLang and H200 vLLM-Omni select four-GPU C1 deployments using
+H200, and B200 SGLang select four-GPU C1 deployments using
 `h3-v0.1.yaml`: 20 distinct measured prompts, a separate warmup, 49 denoising
 updates, and 124 frames at 24 fps and 1344×768. A five-second request produces
 124/24 seconds of video. Config presence is not GPU or quality qualification.
@@ -118,7 +118,7 @@ Their presence does not establish final-head GPU qualification.
    ```bash
    recipe_output=$(mktemp -d)
    uv run --locked --extra recipes infx generate \
-     --config-key h3-bf16-h200-vllm-omni-video --output-dir "$recipe_output"
+     --config-key h3-bf16-h100-sglang-video --output-dir "$recipe_output"
    uv run --locked --all-extras --group test python -m infx.matrix.changed \
      --base origin/main --json
    ```
