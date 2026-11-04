@@ -89,6 +89,10 @@ frontend:
     parser: none
     model-path: /model
     queue-timeout: 1800
+    # The router renders the chat template and tokenizes each request itself, so the prefill
+    # receives token ids. The template must render exactly what the prefill's vLLM renders; the
+    # router checks that against the prefill's /tokenize at startup and stays off otherwise.
+    chat-template: /configs/dsv41flash-tilert-chat-template.jinja
 sbatch_directives:
   cpus-per-task: "128"
   mem: "0"
