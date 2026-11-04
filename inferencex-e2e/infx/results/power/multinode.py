@@ -927,6 +927,8 @@ class MultinodePowerAudit:
     window_metrics: dict[str, float] = field(default_factory=dict)
     per_gpu_energy_j: dict[str, float] = field(default_factory=dict)
     per_gpu_role: dict[str, str] = field(default_factory=dict)
+    # Not serialized; absent for a GPU assigned to more than one worker.
+    per_gpu_worker_index: dict[str, int] = field(default_factory=dict)
     per_gpu_max_sample_gap_s: dict[str, float] = field(default_factory=dict)
     observed_gpu_count: int = 0
     expected_gpu_count: int = 0
@@ -1153,6 +1155,11 @@ def _validate_gpu_leg(
     audit.per_gpu_role = {
         uuid_label.get(key, f"{key[0]}/{key[1]}"): role for key, role in sorted(roles.items())
     }
+    for device in expected_devices:
+        indices = {assignment.worker_index for assignment in device.assignments}
+        if device.key in roles and len(indices) == 1:
+            label = uuid_label.get(device.key, f"{device.key[0]}/{device.key[1]}")
+            audit.per_gpu_worker_index[label] = indices.pop()
 
     window = _select_window_for_result(
         audit, parsed_windows, logs_root, bench_result_path, benchmark
@@ -1349,30 +1356,34 @@ def _window_contract_holds(window: dict, validations: list[dict]) -> bool:
 
 
 def _host_workers(audit: MultinodePowerAudit) -> list[dict]:
-    """Project validated device energy onto physical host/role power entries."""
+    """Project validated device energy onto one entry per worker per physical host.
+
+    A worker spanning hosts yields one entry per host, each with the manifest's worker
+    index, so consumers can model trays by host and still group entries by worker.
+    """
     if not audit.power_valid or audit.window is None:
         return []
+    if audit.per_gpu_energy_j.keys() - audit.per_gpu_worker_index.keys():
+        return []
     duration_s = audit.window["end_time_unix"] - audit.window["start_time_unix"]
-    energies: dict[tuple[str, str], list[float]] = {}
+    energies: dict[tuple[str, int, str], list[float]] = {}
     for device, joules in audit.per_gpu_energy_j.items():
-        host = device.rsplit("/", 1)[0]
-        role = audit.per_gpu_role[device]
-        energies.setdefault((role, host), []).append(joules)
-    workers = []
-    indices: dict[str, int] = {}
-    for (role, host), values in sorted(energies.items()):
-        index = indices.get(role, 0)
-        workers.append(
-            {
-                "role": role,
-                "worker_idx": index,
-                "hosts": [host],
-                "num_gpus": len(values),
-                "avg_power_w": round(sum(values) / duration_s / len(values), 3),
-            }
+        key = (
+            audit.per_gpu_role[device],
+            audit.per_gpu_worker_index[device],
+            device.rsplit("/", 1)[0],
         )
-        indices[role] = index + 1
-    return workers
+        energies.setdefault(key, []).append(joules)
+    return [
+        {
+            "role": role,
+            "worker_idx": worker_idx,
+            "hosts": [host],
+            "num_gpus": len(values),
+            "avg_power_w": round(sum(values) / duration_s / len(values), 3),
+        }
+        for (role, worker_idx, host), values in sorted(energies.items())
+    ]
 
 
 def _patch_agg(agg_path: Path, audit: MultinodePowerAudit) -> None:
