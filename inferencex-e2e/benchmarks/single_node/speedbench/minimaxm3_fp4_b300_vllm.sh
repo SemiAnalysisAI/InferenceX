@@ -32,10 +32,11 @@ check_env_vars \
 SERVE_MODEL="${MODEL_PATH}"
 GPU_MEM_UTIL="0.90"
 
-DRAFT_MODEL="${DRAFT_MODEL:-Inferact/MiniMax-M3-EAGLE3}"
-# Extra speculative-config members a variant wrapper sets, e.g. ', "rejection_sample_method": "block"'.
-SPEC_EXTRA="${SPEC_EXTRA:-}"
-COLLECTOR="${COLLECTOR:-benchmarks/single_node/speedbench/minimaxm3_fp4_b300_vllm.sh}"
+# Variant wrappers source this script and may set DRAFT_SUFFIX (e.g. -GQA) and SPEC_EXTRA,
+# extra speculative-config members such as ', "rejection_sample_method": "block"'; $0 is
+# then the wrapper.
+DRAFT_MODEL="Inferact/MiniMax-M3-EAGLE3${DRAFT_SUFFIX}"
+COLLECTOR="benchmarks/single_node/speedbench/$(basename "$0")"
 
 MODEL_KEY="$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')"
 CONCURRENCY="1"

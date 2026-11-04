@@ -1,21 +1,5 @@
 #!/usr/bin/env bash
 
-# GLM-5.3 B300 SGLang SPEED-Bench AL matrix collector for native MTP (NEXTN) speculative
-# decoding on the NVFP4 checkpoint the GLM-5.3 SGLang configs serve.
-#
-# For each MTP level, measure the REAL acceptance length (AL) on one SPEED-Bench category and
-# emit a YAML matrix in the golden_al_distribution shape. Server flags follow
-# benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/b300-fp4-mtp/agentic.yaml, with
-# speculative-num-steps set to the level and one verification token on top.
-#
-# SGLang's SPEED-Bench loader renders prompts with the chat template's default, which for
-# GLM-5.3 is thinking on, so only thinking_on is collected.
-#
-# AL is SGLang's accept_length (accepted tokens per verify step, bonus token included), the
-# same quantity as vLLM's 1 + accepted/drafts. Each cell restarts the server.
-#
-# Dispatch this collector through speedbench-al.yml with model-prefix=glm5.3 framework=sglang.
-
 set -o pipefail
 repo_root="$(cd "$(dirname "$0")/../../.." && pwd)"
 source "$repo_root/benchmarks/check_env.sh"
@@ -132,6 +116,7 @@ run_cell() {
     echo "  Cell: thinking=$mode  MTP=$mtp  category=$CATEGORY"
     echo "=========================================="
 
+    # Flags follow srt-slurm-recipes/glm5.3/sglang/b300-fp4-mtp/agentic.yaml.
     local serve_args=(
         --model-path "$SERVE_MODEL"
         --host 0.0.0.0 --port "$PORT"
@@ -177,6 +162,7 @@ run_cell() {
         --output-file "$result_file" \
         --output-details
 
+    # accept_length counts the bonus token, like vLLM's 1 + accepted/drafts.
     local al
     al=$(python3 -c '
 import json, sys

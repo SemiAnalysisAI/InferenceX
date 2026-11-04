@@ -28,9 +28,9 @@ MAX_MODEL_LEN="16384"
 MAX_NUM_SEQS="512"
 
 DRAFT_MODEL="Inferact/Kimi-K3-DSpark"
-# Extra speculative-config members a variant wrapper sets, e.g. ', "draft_sample_method": "probabilistic"'.
-SPEC_EXTRA="${SPEC_EXTRA:-}"
-COLLECTOR="${COLLECTOR:-benchmarks/single_node/speedbench/kimik3_fp4_b300_vllm.sh}"
+# Variant wrappers source this script and may set SPEC_EXTRA, extra speculative-config
+# members such as ', "draft_sample_method": "probabilistic"'; $0 is then the wrapper.
+COLLECTOR="benchmarks/single_node/speedbench/$(basename "$0")"
 
 MODEL_KEY="$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')"
 # AL is concurrency-independent (per-token accept/reject; no spec-disable-by-batch is
