@@ -293,8 +293,8 @@ def test_local_http_fixture_lifecycle_and_identity(
         "ffmpeg_libraries": {"libavcodec": "62.1.2"},
     }
     digest = config.pop("configuration_sha256")
-    assert hashlib.sha256(runner.canonical_json_bytes(config)).hexdigest() == digest
-    assert (output / "plan.json").read_bytes() == runner.canonical_json_bytes(plan)
+    assert hashlib.sha256(h3_spec.canonical_json_bytes(config)).hexdigest() == digest
+    assert (output / "plan.json").read_bytes() == h3_spec.canonical_json_bytes(plan)
     assert json.loads((output / "run.json").read_text()) == run
     for record in run["records"]:
         assert (output / record["artifact_path"]).read_bytes() == FIXTURE_BYTES

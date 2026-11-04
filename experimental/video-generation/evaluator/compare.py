@@ -15,8 +15,10 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
+from specs.h3_spec import canonical_json_bytes, plan_sha256
+
 from .media import analyze_media, compare_media
-from .runner import _slots, canonical_json_bytes, valid_numerical_identity, validate_plan
+from .runner import _slots, valid_numerical_identity, validate_plan
 
 
 _POLICY_NUMBERS = {
@@ -234,10 +236,7 @@ def _load_run(directory: Path) -> tuple[dict, dict[str, dict]]:
     }:
         raise ValueError("run must declare its actual evidence_kind")
     plan = run.get("plan")
-    if (
-        not isinstance(plan, dict)
-        or hashlib.sha256(canonical_json_bytes(plan)).hexdigest() != run["plan_sha256"]
-    ):
+    if not isinstance(plan, dict) or plan_sha256(plan) != run["plan_sha256"]:
         raise ValueError("run plan SHA256 does not match its canonical plan content")
     if plan.get("plan_id") != run["plan_id"]:
         raise ValueError("run.plan_id does not match its embedded plan")

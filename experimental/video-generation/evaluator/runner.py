@@ -32,6 +32,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from specs.h3_spec import canonical_json_bytes
+
 from .media import H3_ENCODING
 from .serving import settings as serving_settings, summarize as serving_summary
 
@@ -67,13 +69,6 @@ _PROTOCOL_SOURCES = {
         ],
     },
 }
-
-
-def canonical_json_bytes(value: Any) -> bytes:
-    """Stable hash representation, UTF-8, sorted keys, no trailing newline."""
-    return json.dumps(
-        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
-    ).encode("utf-8")
 
 
 def _digest(value: Any) -> str:
