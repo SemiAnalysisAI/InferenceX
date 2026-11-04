@@ -1,1 +1,1 @@
-"""H3 video generation, measurement, comparison, and artifact reports."""
+"""Video generation, measurement, comparison, and artifact reports."""

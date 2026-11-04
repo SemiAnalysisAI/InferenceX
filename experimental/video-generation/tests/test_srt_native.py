@@ -7,13 +7,13 @@ from pathlib import Path
 import pytest
 
 from evaluator import srt_bundle, srt_selected
-from specs import h3_spec
+from specs import video_spec
 
 # frozen-c124 measures one prompt four times: the four-clip cells these fixtures describe.
-PLAN = h3_spec.plan_for(
-    h3_spec.load_spec(Path(__file__).resolve().parents[1] / "specs/h3.yaml"), "frozen-c124"
+PLAN = video_spec.plan_for(
+    video_spec.load_spec(Path(__file__).resolve().parents[1] / "specs/h3.yaml"), "frozen-c124"
 )
-PLAN_SHA = h3_spec.plan_sha256(PLAN)
+PLAN_SHA = video_spec.plan_sha256(PLAN)
 
 
 def _run(concurrency, scheduled=4, valid=4, status="complete"):

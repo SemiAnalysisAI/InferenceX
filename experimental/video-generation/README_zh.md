@@ -33,7 +33,7 @@ diffusion 引擎在单节点上提供服务，选定的冻结 YAML 工作负载�
 其功耗校验边车与服务端记录合并为仪表盘摄入的
 `h3-results-<run>-<attempt>-<recipe-fingerprint>` 包。
 
-`specs/h3_spec.py` 加载 YAML 工作负载、校验并对选定计划做哈希；
+`specs/video_spec.py` 加载 YAML 工作负载、校验并对选定计划做哈希；
 `infx.srt_slurm.video` 在绑定测试点时导入它。
 
 离线 Diffusers 参考媒体使用[固定依赖与生成命令](reference/README.md)。
@@ -55,6 +55,6 @@ PYTHONPATH=../../inferencex-e2e uv run --no-project --python 3.12 \
   --with 'pyyaml>=6,<7' --with 'pytest>=8,<9' python -m pytest -q
 ```
 
-[Test H3 Video Harness](../../.github/workflows/test-h3-spec.yml) 会在相关
+[Test H3 Video Harness](../../.github/workflows/test-video-harness.yml) 会在相关
 变更上运行这些 CPU 检查。它们不调用模型、调度器或 GPU；sweep 产物才是验收
 证据。

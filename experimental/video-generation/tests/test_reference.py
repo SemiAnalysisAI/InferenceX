@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 from evaluator import reference
 from evaluator.reference import digest, save_media, select_cases
-from specs import h3_spec
+from specs import video_spec
 
 
 def test_reference_retains_float_media_and_encodes_explicit_streams(tmp_path: Path) -> None:
@@ -64,8 +64,8 @@ def test_reference_rejects_invalid_raw_outputs_before_creating_files(tmp_path: P
 def test_reference_retains_startup_failures_without_attesting_weights(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    plan = h3_spec.plan_for(
-        h3_spec.load_spec(Path(__file__).parents[1] / "specs/h3-v0.1.yaml"), "release-v1"
+    plan = video_spec.plan_for(
+        video_spec.load_spec(Path(__file__).parents[1] / "specs/h3-v0.1.yaml"), "release-v1"
     )
     snapshot = tmp_path / plan["model_revision"]
     snapshot.mkdir()

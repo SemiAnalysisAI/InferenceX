@@ -220,7 +220,7 @@ def test_nested_snapshot_keeps_the_video_specs_the_binder_loads(generation_repo,
     (root / "inferencex-e2e").mkdir()
     git("mv", "infx", "configs", "benchmarks", "inferencex-e2e/")
     (root / VIDEO_SPEC_DIR).mkdir(parents=True)
-    for name in ("h3_spec.py", "h3-v0.1.yaml"):
+    for name in ("video_spec.py", "h3-v0.1.yaml"):
         shutil.copy(ROOT.parent / VIDEO_SPEC_DIR / name, root / VIDEO_SPEC_DIR / name)
     git("add", ".")
     git("commit", "-qm", "relocate project beside the video harness")

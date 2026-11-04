@@ -1,4 +1,4 @@
-"""Controlled H3 CI, full-stream comparison, and portable evidence reports."""
+"""Controlled video-generation CI, full-stream comparison, and portable evidence reports."""
 
 from __future__ import annotations
 
@@ -163,7 +163,7 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("plan", type=Path)
     run.add_argument("--runtime", choices=("sglang", "vllm-omni"), default="sglang")
     run.add_argument(
-        "--execute", action="store_true", help="submit real requests to your H3 server"
+        "--execute", action="store_true", help="submit real requests to your video server"
     )
     run.add_argument("--endpoint", help="self-hosted server base URL, without /v1/videos")
     run.add_argument(

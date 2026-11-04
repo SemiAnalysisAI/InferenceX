@@ -1,4 +1,4 @@
-"""Closed-loop serving measurements using the existing H3 request records."""
+"""Closed-loop serving measurements using the existing video request records."""
 
 from __future__ import annotations
 

@@ -10,7 +10,7 @@ import uuid
 from pathlib import Path
 
 from infx.bench.video import CREDENTIAL_ENV, cell_dir, read_object, window_file, write_json
-from specs import h3_spec
+from specs import video_spec
 
 from .runner import RUNTIMES, run_plan, validate_plan
 
@@ -88,16 +88,16 @@ def benchmark_window(run: dict, *, utc_minus_monotonic: float) -> dict:
         "energy_normalization": "clips",
         "clock": {"utc_minus_monotonic_seconds": utc_minus_monotonic},
         "run_path": "baseline/run.json",
-        "run_sha256": hashlib.sha256(h3_spec.canonical_json_bytes(run)).hexdigest(),
+        "run_sha256": hashlib.sha256(video_spec.canonical_json_bytes(run)).hexdigest(),
     }
 
 
 def selected_plan(path: Path, set_id: str, expected_sha256: str) -> dict:
-    spec = h3_spec.load_spec(path)
+    spec = video_spec.load_spec(path)
     if set_id not in spec["sets"]:
         raise ValueError(f"unknown selected workload set: {set_id}")
-    plan = validate_plan(h3_spec.plan_for(spec, set_id))
-    if h3_spec.plan_sha256(plan) != expected_sha256:
+    plan = validate_plan(video_spec.plan_for(spec, set_id))
+    if video_spec.plan_sha256(plan) != expected_sha256:
         raise ValueError("selected workload plan does not match the bound plan_sha256")
     return plan
 
@@ -180,7 +180,7 @@ def serve(
         "runtime_revision": runtime_revision,
         "model_id": plan["model_id"],
         "model_revision": plan["model_revision"],
-        "plan_sha256": h3_spec.plan_sha256(plan),
+        "plan_sha256": video_spec.plan_sha256(plan),
         "gpu_uuids": uuids,
         "argv": argv,
         "environment": recorded_env,
@@ -213,7 +213,7 @@ def _sealed_identity(path: Path, plan: dict, *, runtime: str, gpus: int) -> dict
     expected = {
         "runtime": runtime,
         "model_revision": plan["model_revision"],
-        "plan_sha256": h3_spec.plan_sha256(plan),
+        "plan_sha256": video_spec.plan_sha256(plan),
     }
     for key, value in expected.items():
         if launch.get(key) != value:

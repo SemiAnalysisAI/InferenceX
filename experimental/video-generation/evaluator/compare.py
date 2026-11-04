@@ -1,4 +1,4 @@
-"""Auditable, paired comparison of the small H3 execution bundles.
+"""Auditable, paired comparison of the small video execution bundles.
 
 The MVP measures implementation fidelity, not which generative model is better.
 Threshold decisions are deliberately separate from release qualification.
@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
-from specs.h3_spec import canonical_json_bytes, plan_sha256, schema_version
+from specs.video_spec import canonical_json_bytes, plan_sha256, schema_version
 
 from .media import analyze_media, compare_media
 from .runner import _slots, requested_encoding, valid_numerical_identity

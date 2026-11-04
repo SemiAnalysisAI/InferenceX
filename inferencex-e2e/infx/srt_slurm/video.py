@@ -165,7 +165,7 @@ def load_spec(name: str, *, root: Path, set_id: str) -> dict[str, Any]:
         raise ValueError(f"H3 spec not found: {path}")
     if not re.fullmatch(r"[A-Za-z0-9_-]+", set_id):
         raise ValueError(f"H3_SET must name a workload set of {name}: {set_id!r}")
-    helper = path.with_name("h3_spec.py")
+    helper = path.with_name("video_spec.py")
     module_spec = importlib.util.spec_from_file_location("video_workload_spec", helper)
     if module_spec is None or module_spec.loader is None:
         raise ValueError(f"cannot load workload helper: {helper}")

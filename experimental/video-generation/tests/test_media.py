@@ -232,8 +232,10 @@ def test_audio_optional_and_identically_silent_pairs_are_explicit(tmp_path):
     json.dumps(silent_pair, allow_nan=False)
 
 
-def test_real_cpu_h3_encoding_checks_observable_streams_without_inventing_options(tmp_path):
-    path = encode_media(tmp_path / "h3-contract.mp4", fps=24, frame_count=124, sample_rate=32000)
+def test_real_cpu_encoding_checks_observable_streams_without_inventing_options(tmp_path):
+    path = encode_media(
+        tmp_path / "encoding-contract.mp4", fps=24, frame_count=124, sample_rate=32000
+    )
     encoding = {
         "video_codec": "libx264",
         "preset": "ultrafast",

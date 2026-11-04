@@ -12,7 +12,7 @@ PACKAGE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PACKAGE))
 
 from evaluator import srt_selected  # noqa: E402
-from specs import h3_spec  # noqa: E402
+from specs import video_spec  # noqa: E402
 
 
 def _snapshot(path):
@@ -24,13 +24,13 @@ def _snapshot(path):
 
 
 def test_selected_plan_binds_requested_set_and_digest(tmp_path):
-    spec = h3_spec.load_spec(PACKAGE / "specs/h3.yaml")
+    spec = video_spec.load_spec(PACKAGE / "specs/h3.yaml")
     selected = spec["sets"]["release-v1"]
     selected.update(plan_id="selected-control", repetitions=2, warmup_runs=0)
     selected["cases"] = selected["cases"][:1]
     path = tmp_path / "controlled.yaml"
     path.write_text(yaml.safe_dump(spec))
-    expected = h3_spec.plan_sha256(h3_spec.plan_for(spec, "release-v1"))
+    expected = video_spec.plan_sha256(video_spec.plan_for(spec, "release-v1"))
     plan = srt_selected.selected_plan(path, "release-v1", expected)
     assert plan["plan_id"] == "selected-control"
     assert (len(plan["cases"]), plan["repetitions"], plan["warmup_runs"]) == (1, 2, 0)
@@ -49,7 +49,7 @@ def test_measurement_window_hashes_the_run_as_the_runner_writes_it():
         "plan": {"cases": [{"prompt": "un café à Montréal"}]},
     }
     window = srt_selected.benchmark_window(run, utc_minus_monotonic=100.0)
-    assert window["run_sha256"] == hashlib.sha256(h3_spec.canonical_json_bytes(run)).hexdigest()
+    assert window["run_sha256"] == hashlib.sha256(video_spec.canonical_json_bytes(run)).hexdigest()
 
 
 def test_h3_vllm_model_view_exposes_only_tested_partition(tmp_path):
@@ -67,7 +67,7 @@ def test_h3_vllm_model_view_exposes_only_tested_partition(tmp_path):
 def test_selected_server_executes_recipe_command_and_records_selected_environment(
     tmp_path, monkeypatch, runtime, model_view
 ):
-    plan = h3_spec.plan_for(h3_spec.load_spec(PACKAGE / "specs/h3.yaml"), "release-v1")
+    plan = video_spec.plan_for(video_spec.load_spec(PACKAGE / "specs/h3.yaml"), "release-v1")
     model = _snapshot(tmp_path / "model")
     uuids = ["GPU-1", "GPU-2"]
     monkeypatch.setattr(srt_selected, "cuda_devices", lambda: uuids)
@@ -132,7 +132,7 @@ def test_selected_server_executes_recipe_command_and_records_selected_environmen
 
 
 def test_selected_server_requires_snapshot_argument_and_explicit_view(tmp_path, monkeypatch):
-    plan = h3_spec.plan_for(h3_spec.load_spec(PACKAGE / "specs/h3.yaml"), "release-v1")
+    plan = video_spec.plan_for(video_spec.load_spec(PACKAGE / "specs/h3.yaml"), "release-v1")
     model = tmp_path / "model"
     model.mkdir()
     monkeypatch.setattr(srt_selected, "cuda_devices", lambda: ["GPU-1", "GPU-2"])
@@ -161,7 +161,7 @@ def test_selected_server_requires_snapshot_argument_and_explicit_view(tmp_path, 
 
 
 def test_selected_server_requires_the_recipe_gpus_and_runtime(tmp_path, monkeypatch):
-    plan = h3_spec.plan_for(h3_spec.load_spec(PACKAGE / "specs/h3.yaml"), "release-v1")
+    plan = video_spec.plan_for(video_spec.load_spec(PACKAGE / "specs/h3.yaml"), "release-v1")
     model = _snapshot(tmp_path / "model")
     monkeypatch.setattr(srt_selected, "cuda_devices", lambda: ["GPU-1", "GPU-2"])
     kwargs = {
@@ -179,7 +179,7 @@ def test_selected_server_requires_the_recipe_gpus_and_runtime(tmp_path, monkeypa
 
 
 def test_v01_vllm_four_gpu_server_records_sealed_launch(tmp_path, monkeypatch):
-    plan = h3_spec.plan_for(h3_spec.load_spec(PACKAGE / "specs/h3-v0.1.yaml"), "release-v1")
+    plan = video_spec.plan_for(video_spec.load_spec(PACKAGE / "specs/h3-v0.1.yaml"), "release-v1")
     model = _snapshot(tmp_path / "model")
     uuids = [f"GPU-{index}" for index in range(4)]
     monkeypatch.setattr(srt_selected, "cuda_devices", lambda: uuids)
@@ -239,7 +239,7 @@ def test_v01_vllm_four_gpu_server_records_sealed_launch(tmp_path, monkeypatch):
 
 
 def test_v01_client_requires_matching_sealed_launch_before_requests(tmp_path, monkeypatch):
-    plan = h3_spec.plan_for(h3_spec.load_spec(PACKAGE / "specs/h3-v0.1.yaml"), "release-v1")
+    plan = video_spec.plan_for(video_spec.load_spec(PACKAGE / "specs/h3-v0.1.yaml"), "release-v1")
     seen = []
 
     def stop_after_preflight(*args, **kwargs):
@@ -265,7 +265,7 @@ def test_v01_client_requires_matching_sealed_launch_before_requests(tmp_path, mo
         "runtime": "vllm-omni",
         "runtime_revision": "a" * 40,
         "model_revision": plan["model_revision"],
-        "plan_sha256": h3_spec.plan_sha256(plan),
+        "plan_sha256": video_spec.plan_sha256(plan),
         "image_digest": "a" * 64,
         "gpu_uuids": [f"GPU-{index}" for index in range(4)],
         "argv": ["vllm", "serve", "/model", "--usp", "4"],
@@ -304,12 +304,12 @@ INCOMPLETE_IDENTITY = "numerical_identity must contain a complete matching serve
     ],
 )
 def test_client_rejects_a_mismatched_sealed_launch_before_requests(tmp_path, field, value, message):
-    plan = h3_spec.plan_for(h3_spec.load_spec(PACKAGE / "specs/h3-v0.1.yaml"), "release-v1")
+    plan = video_spec.plan_for(video_spec.load_spec(PACKAGE / "specs/h3-v0.1.yaml"), "release-v1")
     launch = {
         "runtime": "vllm-omni",
         "runtime_revision": "a" * 40,
         "model_revision": plan["model_revision"],
-        "plan_sha256": h3_spec.plan_sha256(plan),
+        "plan_sha256": video_spec.plan_sha256(plan),
         "image_digest": "a" * 64,
         "gpu_uuids": [f"GPU-{index}" for index in range(4)],
         "argv": ["vllm", "serve", "/model"],
@@ -334,7 +334,7 @@ def test_client_rejects_a_mismatched_sealed_launch_before_requests(tmp_path, fie
 
 
 def test_vllm_view_checks_snapshot_before_creating_runtime_directories(tmp_path, monkeypatch):
-    plan = h3_spec.plan_for(h3_spec.load_spec(PACKAGE / "specs/h3.yaml"), "release-v1")
+    plan = video_spec.plan_for(video_spec.load_spec(PACKAGE / "specs/h3.yaml"), "release-v1")
     model = tmp_path / "model"
     model.mkdir()
     storage = tmp_path / "storage"

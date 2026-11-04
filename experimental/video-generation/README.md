@@ -36,7 +36,7 @@ After the job, the launcher runs `python -m evaluator.cli srt-finalize`. It join
 the cells, their power validation sidecars and the server record into the
 `h3-results-<run>-<attempt>-<recipe-fingerprint>` bundle the dashboard ingests.
 
-`specs/h3_spec.py` loads the YAML workload, validates it and hashes the
+`specs/video_spec.py` loads the YAML workload, validates it and hashes the
 selected plan; `infx.srt_slurm.video` imports it when binding a point.
 
 For offline Diffusers reference media, use the [pinned environment and generation
@@ -62,6 +62,6 @@ PYTHONPATH=../../inferencex-e2e uv run --no-project --python 3.12 \
   --with 'pyyaml>=6,<7' --with 'pytest>=8,<9' python -m pytest -q
 ```
 
-[Test H3 Video Harness](../../.github/workflows/test-h3-spec.yml) runs these
+[Test H3 Video Harness](../../.github/workflows/test-video-harness.yml) runs these
 CPU checks on relevant changes. They make no model, scheduler or GPU calls;
 sweep artifacts are the acceptance evidence.
