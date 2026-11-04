@@ -12012,3 +12012,13 @@
     - "Keep historical results, SPEED-Bench collectors, golden AL curves, vendor evals and OperatorX shapes."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4762
   retired: true
+
+- config-keys:
+    - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-agg
+    - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi-K3.1-Pro GB300 vLLM AgentX on vllm/vllm-openai:kimi-k31 with the Inferact/Kimi-K3.1-Pro-DSpark-preview draft."
+    - "Aggregated TP8 low-latency decode at concurrency 1; disaggregated TP8/DCP8 and DEP16 decode with NIXL and Simple CPU KV offload on prefill at concurrency 16 to 336."
+  pr-link: TBD

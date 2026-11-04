@@ -52,8 +52,15 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
         agentic_error="AgentX dcgm-power requires GLM-5.2 FP4 dynamo-sglang",
     ),
     ("gb300-nv", LaunchPath.SRT_MULTI): PowerLane(
-        rules=(PowerRule(Match(frameworks=any_of("dynamo-sglang")), agentx=False),),
-        error="dcgm-power requires dynamo-sglang",
+        rules=(
+            PowerRule(
+                Match(any_of("kimik3.1"), any_of("fp4"), any_of("dynamo-vllm"), agentic=True),
+                agentx=True,
+                require=True,
+            ),
+            PowerRule(Match(frameworks=any_of("dynamo-sglang")), agentx=False),
+        ),
+        error="dcgm-power requires dynamo-sglang or Kimi-K3.1 FP4 AgentX dynamo-vllm",
     ),
     ("b200-nscale", LaunchPath.SRT_NATIVE): PowerLane(
         rules=(

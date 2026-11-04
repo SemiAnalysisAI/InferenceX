@@ -1,0 +1,62 @@
+schema: 2
+name: kimik3.1-gb300-agg-tp8-lowlat-dspark7
+dynamo:
+  install: false
+resources:
+  gpu_type: gb300
+  gpus_per_node: 4
+health_check:
+  max_attempts: 720
+  interval_seconds: 10
+frontend:
+  type: vllm
+  enable_multiple_frontends: false
+engine:
+  type: vllm
+  connector: null
+roles:
+  agg:
+    nodes: 2
+    workers: 1
+    gpus: 8
+    env:
+      HF_HOME: /hf_hub_cache
+      HF_HUB_CACHE: /hf_hub_cache
+      VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+      VLLM_RPC_TIMEOUT: '600000'
+      VLLM_ALLREDUCE_USE_FLASHINFER: '1'
+    args:
+      served-model-name: moonshotai/Kimi-K3.1-Pro
+      enable-auto-tool-choice: true
+      tool-call-parser: kimi_k3
+      reasoning-parser: kimi_k3
+      trust-remote-code: true
+      language-model-only: true
+      load-format: fastsafetensors
+      kv-cache-dtype: fp8
+      mamba-ssm-cache-dtype: float32
+      enable-prefix-caching: true
+      stream-interval: 10
+      tensor-parallel-size: 8
+      gpu-memory-utilization: 0.92
+      max-num-seqs: 8
+      max-num-batched-tokens: 16384
+      # The fused CuTe DSL decode path is qualified at TP8 without EP and needs FULL decode graphs.
+      additional-config: '{"decode_backend":"latency_specialized"}'
+      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[8,16,24,32,40,48,56,64]}'
+      speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","attention_backend":"FLASHINFER_MLA","method":"dspark","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+sbatch_directives:
+  mem: '0'
+  cpus-per-task: '72'
+  comment: '''{"OccupiedIdleGPUsJobReaper":{"exemptIdleTimeMins":"60","reason":"model_loading","description":"Very large model will take extra loading time."}}'''
+srun_options:
+  mem: '0'
+  container-remap-root: ''
+telemetry:
+  collector_join_timeout_seconds: 12
+benchmark:
+  env:
+    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+  placement:
+    node: head
