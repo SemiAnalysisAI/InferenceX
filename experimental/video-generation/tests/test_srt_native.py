@@ -10,8 +10,12 @@ from evaluator import srt_bundle, srt_selected
 from specs import h3_spec
 
 # frozen-c124 measures one prompt four times: the four-clip cells these fixtures describe.
-PLAN = h3_spec.plan_for(h3_spec.load_spec(Path(__file__).resolve().parents[1] / "specs/h3.yaml"), "frozen-c124")
-PLAN_SHA = hashlib.sha256(json.dumps(PLAN, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+PLAN = h3_spec.plan_for(
+    h3_spec.load_spec(Path(__file__).resolve().parents[1] / "specs/h3.yaml"), "frozen-c124"
+)
+PLAN_SHA = hashlib.sha256(
+    json.dumps(PLAN, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+).hexdigest()
 
 
 def _run(concurrency, scheduled=4, valid=4, status="complete"):
@@ -19,28 +23,68 @@ def _run(concurrency, scheduled=4, valid=4, status="complete"):
     for repetition in range(1, PLAN["repetitions"] + 1):
         for index, case in enumerate(PLAN["cases"], 1):
             slot_id = f"measurement-r{repetition:03d}-c{index:03d}"
-            records.append({**case, "slot_id": slot_id, "repetition": repetition,
-                "phase": "measurement", "attempted": True, "status": "succeeded", "media": {"valid": True},
-                "artifact_path": f"artifacts/{slot_id}.mp4", "sha256": hashlib.sha256(b"clip").hexdigest(),
-                "timing_window": {"end_monotonic_seconds": 150.0}})
+            records.append(
+                {
+                    **case,
+                    "slot_id": slot_id,
+                    "repetition": repetition,
+                    "phase": "measurement",
+                    "attempted": True,
+                    "status": "succeeded",
+                    "media": {"valid": True},
+                    "artifact_path": f"artifacts/{slot_id}.mp4",
+                    "sha256": hashlib.sha256(b"clip").hexdigest(),
+                    "timing_window": {"end_monotonic_seconds": 150.0},
+                }
+            )
     return {
-        "bundle_type": "mvp_run", "status": status, "plan_id": PLAN["plan_id"], "plan_sha256": PLAN_SHA,
-        "plan": PLAN, "configuration": {"runtime": "sglang", "runtime_revision": "7" * 40, "model_revision": PLAN["model_revision"]},
-        "started_at": "2026-10-17T00:00:00Z", "finished_at": "2026-10-17T00:10:00Z",
-        "measurement": {"boundary": "submit_to_downloaded_media", "concurrency": concurrency, "warmup_runs": 1,
-                        "wall_seconds": 60.0, "start_monotonic_seconds": 100.0, "end_monotonic_seconds": 160.0},
-        "serving": {"mode": "closed_loop", "concurrency": concurrency, "client_ready_latency_seconds": {"p50": 118.0}},
+        "bundle_type": "mvp_run",
+        "status": status,
+        "plan_id": PLAN["plan_id"],
+        "plan_sha256": PLAN_SHA,
+        "plan": PLAN,
+        "configuration": {
+            "runtime": "sglang",
+            "runtime_revision": "7" * 40,
+            "model_revision": PLAN["model_revision"],
+        },
+        "started_at": "2026-10-17T00:00:00Z",
+        "finished_at": "2026-10-17T00:10:00Z",
+        "measurement": {
+            "boundary": "submit_to_downloaded_media",
+            "concurrency": concurrency,
+            "warmup_runs": 1,
+            "wall_seconds": 60.0,
+            "start_monotonic_seconds": 100.0,
+            "end_monotonic_seconds": 160.0,
+        },
+        "serving": {
+            "mode": "closed_loop",
+            "concurrency": concurrency,
+            "client_ready_latency_seconds": {"p50": 118.0},
+        },
         "records": records[:valid],
-        "summary": {"scheduled": scheduled, "completed": valid, "valid": valid, "failed": scheduled - valid,
-                    "not_started": 0, "latency_median_seconds": 119.0, "valid_clips_per_second": valid / 60},
-    }  # fmt: skip
+        "summary": {
+            "scheduled": scheduled,
+            "completed": valid,
+            "valid": valid,
+            "failed": scheduled - valid,
+            "not_started": 0,
+            "latency_median_seconds": 119.0,
+            "valid_clips_per_second": valid / 60,
+        },
+    }
 
 
-def test_matrix_runs_every_concurrency_against_one_server_and_publishes_windows(tmp_path, monkeypatch):
+def test_matrix_runs_every_concurrency_against_one_server_and_publishes_windows(
+    tmp_path, monkeypatch
+):
     seen = []
 
     def fake_run_plan(plan, output, **kwargs):
-        seen.append((kwargs["serving_concurrency"], output, kwargs["runtime"], kwargs["runtime_revision"]))
+        seen.append(
+            (kwargs["serving_concurrency"], output, kwargs["runtime"], kwargs["runtime_revision"])
+        )
         output.mkdir(parents=True)
         run = _run(kwargs["serving_concurrency"])
         (output / "run.json").write_text(json.dumps(run))
@@ -53,12 +97,21 @@ def test_matrix_runs_every_concurrency_against_one_server_and_publishes_windows(
     windows = logs / "power" / "windows"
     windows.mkdir(parents=True)
     runs = srt_selected.run_matrix(
-        PLAN, runtime="sglang", runtime_revision="7" * 40, endpoint="http://10.0.0.1:30283",
-        output=logs / "h3", concurrencies=[1, 2], gpus=2, window_dir=windows,
+        PLAN,
+        runtime="sglang",
+        runtime_revision="7" * 40,
+        endpoint="http://10.0.0.1:30283",
+        output=logs / "h3",
+        concurrencies=[1, 2],
+        gpus=2,
+        window_dir=windows,
         request_seconds=900,
     )
 
-    assert [(c, r, rev) for c, _, r, rev in seen] == [(1, "sglang", "7" * 40), (2, "sglang", "7" * 40)]
+    assert [(c, r, rev) for c, _, r, rev in seen] == [
+        (1, "sglang", "7" * 40),
+        (2, "sglang", "7" * 40),
+    ]
     assert seen[0][1] == logs / "h3/gpu/c1/baseline"
     assert sorted(runs) == [1, 2]
     contract = json.loads((logs / "h3/gpu/c2/benchmark_concurrency_2.json").read_text())
@@ -67,7 +120,11 @@ def test_matrix_runs_every_concurrency_against_one_server_and_publishes_windows(
     assert contract["duration"] == pytest.approx(60.0) and contract["completed"] == 4
     window = json.loads((windows / "benchmark_concurrency_2.json").read_text())
     assert window["result_path"] == "h3/gpu/c2/benchmark_concurrency_2.json"
-    assert (window["benchmark_type"], window["concurrency"], window["status"]) == ("custom", 2, "completed")
+    assert (window["benchmark_type"], window["concurrency"], window["status"]) == (
+        "custom",
+        2,
+        "completed",
+    )
     assert window["benchmark_start_time_unix"] == contract["benchmark_start_time_unix"]
 
 
@@ -76,16 +133,38 @@ def _native_job(tmp_path, concurrencies=(1, 2), power_valid=True):
     h3, power = logs / "h3", logs / "power"
     (h3 / "server").mkdir(parents=True)
     # The record srt_selected.serve seals before it execs the engine.
-    bound = {"schema_version": "0.1.0", "plan": PLAN, "serving": {"mode": "closed_loop"},
-             "gpu_uuids": ["GPU-11111111-1111-1111-1111-111111111111", "GPU-22222222-2222-2222-2222-222222222222"],
-             "baseline": {"name": "sglang", "revision": "7" * 40, "model_path": "/model",
-                          "model_revision": PLAN["model_revision"], "argv": ["/usr/bin/python3"]}}
+    bound = {
+        "schema_version": "0.1.0",
+        "plan": PLAN,
+        "serving": {"mode": "closed_loop"},
+        "gpu_uuids": [
+            "GPU-11111111-1111-1111-1111-111111111111",
+            "GPU-22222222-2222-2222-2222-222222222222",
+        ],
+        "baseline": {
+            "name": "sglang",
+            "revision": "7" * 40,
+            "model_path": "/model",
+            "model_revision": PLAN["model_revision"],
+            "argv": ["/usr/bin/python3"],
+        },
+    }
     (h3 / "server/spec.json").write_text(json.dumps(bound))
     (h3 / "server/launch.json").write_text(json.dumps({"slurm_job_id": "77", "argv": ["x"]}))
     power.mkdir()
     with (power / "samples.csv").open("w", newline="") as stream:
         writer = csv.writer(stream)
-        writer.writerow(["schema_version", "timestamp_unix", "scrape_seq", "hostname", "gpu_index", "gpu_uuid", "power_w"])
+        writer.writerow(
+            [
+                "schema_version",
+                "timestamp_unix",
+                "scrape_seq",
+                "hostname",
+                "gpu_index",
+                "gpu_uuid",
+                "power_w",
+            ]
+        )
         for seq in range(70):
             for index, uuid in enumerate(bound["gpu_uuids"]):
                 writer.writerow([1, 1000.0 + seq, seq, "node", index, uuid, 600.0 + index])
@@ -101,66 +180,133 @@ def _native_job(tmp_path, concurrencies=(1, 2), power_valid=True):
         (cell / "baseline/run.json").write_text(json.dumps(run))
         for record in run["records"]:
             (cell / "baseline" / record["artifact_path"]).write_bytes(b"clip")
-        (cell / f"benchmark_concurrency_{concurrency}.json").write_text(json.dumps({
-            "max_concurrency": concurrency, "benchmark_start_time_unix": 1005.0, "benchmark_end_time_unix": 1065.0,
-            "duration": 60.0, "completed": 4, "scheduled": 4, "energy_normalization": "clips",
-            "clock": {"utc_minus_monotonic_seconds": 905.0}}))
-        (workspace / f"r_conc{concurrency}.json").write_text(json.dumps({"max_concurrency": concurrency, "power_valid": int(power_valid)}))
-        (workspace / f"power_validation_r_conc{concurrency}.json").write_text(json.dumps({
-            "power_valid": power_valid, "reasons": [] if power_valid else ["manifest_missing"],
-            "benchmark_window": {"start_time_unix": 1005.0, "end_time_unix": 1065.0},
-            "expected_gpu_count": 2, "observed_gpu_count": 2,
-            "per_gpu_role": {f"node/{u}": "h3-server" for u in bound["gpu_uuids"]},
-            "per_gpu_energy_j": {f"node/{u}": 36000.0 + i for i, u in enumerate(bound["gpu_uuids"])},
-            "per_gpu_max_sample_gap_s": {f"node/{u}": 1.0 for u in bound["gpu_uuids"]},
-            "metrics": {"avg_total_gpu_power_w": 1201.0, "total_gpu_energy_j": 72001.0,
-                        "joules_per_successful_query": 18000.25} if power_valid else {},
-            "producer": {"producer_git_commit": "a" * 40, "exporter_image_sha256": "e" * 64},
-            "integration_method": "per_device_trapezoidal_with_linear_boundary_interpolation",
-        }))
+        (cell / f"benchmark_concurrency_{concurrency}.json").write_text(
+            json.dumps(
+                {
+                    "max_concurrency": concurrency,
+                    "benchmark_start_time_unix": 1005.0,
+                    "benchmark_end_time_unix": 1065.0,
+                    "duration": 60.0,
+                    "completed": 4,
+                    "scheduled": 4,
+                    "energy_normalization": "clips",
+                    "clock": {"utc_minus_monotonic_seconds": 905.0},
+                }
+            )
+        )
+        (workspace / f"r_conc{concurrency}.json").write_text(
+            json.dumps({"max_concurrency": concurrency, "power_valid": int(power_valid)})
+        )
+        (workspace / f"power_validation_r_conc{concurrency}.json").write_text(
+            json.dumps(
+                {
+                    "power_valid": power_valid,
+                    "reasons": [] if power_valid else ["manifest_missing"],
+                    "benchmark_window": {"start_time_unix": 1005.0, "end_time_unix": 1065.0},
+                    "expected_gpu_count": 2,
+                    "observed_gpu_count": 2,
+                    "per_gpu_role": {f"node/{u}": "h3-server" for u in bound["gpu_uuids"]},
+                    "per_gpu_energy_j": {
+                        f"node/{u}": 36000.0 + i for i, u in enumerate(bound["gpu_uuids"])
+                    },
+                    "per_gpu_max_sample_gap_s": {f"node/{u}": 1.0 for u in bound["gpu_uuids"]},
+                    "metrics": {
+                        "avg_total_gpu_power_w": 1201.0,
+                        "total_gpu_energy_j": 72001.0,
+                        "joules_per_successful_query": 18000.25,
+                    }
+                    if power_valid
+                    else {},
+                    "producer": {
+                        "producer_git_commit": "a" * 40,
+                        "exporter_image_sha256": "e" * 64,
+                    },
+                    "integration_method": "per_device_trapezoidal_with_linear_boundary_interpolation",
+                }
+            )
+        )
     return logs, workspace
 
 
 def _checksums(output):
-    return dict(line.split("  ", 1)[::-1] for line in (output / "SHA256SUMS").read_text().splitlines())
+    return dict(
+        line.split("  ", 1)[::-1] for line in (output / "SHA256SUMS").read_text().splitlines()
+    )
 
 
 def test_bundle_joins_cells_power_and_identity_into_the_app_layout(tmp_path):
     logs, workspace = _native_job(tmp_path)
     output = tmp_path / "h3-results"
-    environ = {"GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "2", "GITHUB_REPOSITORY": "SemiAnalysisAI/InferenceX",
-               "GITHUB_SHA": "b" * 40, "IMAGE": "img:tag", "PATH": os.environ["PATH"],
-               "VIDEO_ARTIFACT_NAME": "h3-results-123-2-" + "c" * 64}
-    result = srt_bundle.build_bundle(h3_dir=logs / "h3", power_dir=logs / "power", workspace=workspace,
-                                         result_filename="r", concurrencies=[1, 2], output=output, environ=environ)
-    assert result["status"] == "complete" and result["power_verified"] and all(c["verified"] for c in result["cells"])
+    environ = {
+        "GITHUB_RUN_ID": "123",
+        "GITHUB_RUN_ATTEMPT": "2",
+        "GITHUB_REPOSITORY": "SemiAnalysisAI/InferenceX",
+        "GITHUB_SHA": "b" * 40,
+        "IMAGE": "img:tag",
+        "PATH": os.environ["PATH"],
+        "VIDEO_ARTIFACT_NAME": "h3-results-123-2-" + "c" * 64,
+    }
+    result = srt_bundle.build_bundle(
+        h3_dir=logs / "h3",
+        power_dir=logs / "power",
+        workspace=workspace,
+        result_filename="r",
+        concurrencies=[1, 2],
+        output=output,
+        environ=environ,
+    )
+    assert (
+        result["status"] == "complete"
+        and result["power_verified"]
+        and all(c["verified"] for c in result["cells"])
+    )
     matrix = json.loads((output / "serving-smoke.json").read_text())
     manifest = json.loads((output / "manifest.json").read_text())
     ci = json.loads((output / "ci.json").read_text())
     checksums = _checksums(output)
-    assert matrix["evidence_kind"] == "srt_slurm_h3_service" and matrix["gpu_uuids"] == ["GPU-11111111-1111-1111-1111-111111111111", "GPU-22222222-2222-2222-2222-222222222222"]
+    assert matrix["evidence_kind"] == "srt_slurm_h3_service" and matrix["gpu_uuids"] == [
+        "GPU-11111111-1111-1111-1111-111111111111",
+        "GPU-22222222-2222-2222-2222-222222222222",
+    ]
     assert matrix["completion"]["valid"] == 8 and matrix["scheduled"] == 8
     assert (manifest["run_id"], manifest["run_attempt"], ci["run_id"]) == ("123", "2", "123")
-    assert manifest["git_commit"] == ci["source_sha"] and manifest["workload_plan"] == matrix["plan"]
+    assert (
+        manifest["git_commit"] == ci["source_sha"] and manifest["workload_plan"] == matrix["plan"]
+    )
     assert manifest["artifact_name"] == ci["artifact_name"] == "h3-results-123-2-" + "c" * 64
     assert manifest["plan_sha256"] == matrix["plan_sha256"] == PLAN_SHA
     assert manifest["engine"] == matrix["engine"] == {"name": "sglang", "revision": "7" * 40}
     assert manifest["evidence"]["serving-smoke.json"] == checksums["serving-smoke.json"]
-    assert ci["slurm_job"] == {"job_id": "77", "state": "COMPLETED"} and ci["power"]["producer_git_commit"] == "a" * 40
+    assert (
+        ci["slurm_job"] == {"job_id": "77", "state": "COMPLETED"}
+        and ci["power"]["producer_git_commit"] == "a" * 40
+    )
     for cell in matrix["cells"]:
         for ref in ("run", "receipt", "power"):
             path = output / cell[ref]["path"]
-            assert hashlib.sha256(path.read_bytes()).hexdigest() == cell[ref]["sha256"] == checksums[cell[ref]["path"]]
+            assert (
+                hashlib.sha256(path.read_bytes()).hexdigest()
+                == cell[ref]["sha256"]
+                == checksums[cell[ref]["path"]]
+            )
         receipt = json.loads((output / cell["receipt"]["path"]).read_text())
-        assert receipt["job_id"] == f"github-123-2-c{cell['concurrency']}" and receipt["measurement_verified"]
+        assert (
+            receipt["job_id"] == f"github-123-2-c{cell['concurrency']}"
+            and receipt["measurement_verified"]
+        )
         assert receipt["spec_sha256"] == checksums[f"gpu/c{cell['concurrency']}/spec.json"]
         spec = json.loads((output / f"gpu/c{cell['concurrency']}/spec.json").read_text())
-        assert spec["serving"]["concurrency"] == cell["concurrency"] and spec["gpu_uuids"] == matrix["gpu_uuids"]
+        assert (
+            spec["serving"]["concurrency"] == cell["concurrency"]
+            and spec["gpu_uuids"] == matrix["gpu_uuids"]
+        )
         power = json.loads((output / cell["power"]["path"]).read_text())
         assert power["valid"] and power["phases"] == cell["power"]["phases"]
         assert power["phases"]["measurement"]["aggregate"]["joules_per_valid_clip"] == 18000.25
         assert power["phases"]["measurement"]["aggregate"]["observed_peak_power_w"] == 1201.0
-        assert len(power["sample_series"]) == 70 and set(power["per_gpu"]) == set(matrix["gpu_uuids"])
+        assert len(power["sample_series"]) == 70 and set(power["per_gpu"]) == set(
+            matrix["gpu_uuids"]
+        )
     assert "gpu/c1/baseline/artifacts/measurement-r001-c001.mp4" in checksums
 
 
@@ -171,8 +317,13 @@ def test_bundle_seals_observed_slurm_allocation(tmp_path):
     output = tmp_path / "h3-results"
 
     srt_bundle.build_bundle(
-        h3_dir=logs / "h3", power_dir=logs / "power", workspace=workspace,
-        result_filename="r", concurrencies=[1], output=output, environ={"PATH": os.environ["PATH"]},
+        h3_dir=logs / "h3",
+        power_dir=logs / "power",
+        workspace=workspace,
+        result_filename="r",
+        concurrencies=[1],
+        output=output,
+        environ={"PATH": os.environ["PATH"]},
     )
 
     ci = json.loads((output / "ci.json").read_text())
@@ -186,8 +337,15 @@ def test_bundle_seals_observed_slurm_allocation(tmp_path):
 def test_bundle_reports_invalid_power_without_verifying_the_cell(tmp_path):
     logs, workspace = _native_job(tmp_path, concurrencies=(1,), power_valid=False)
     output = tmp_path / "h3-results"
-    result = srt_bundle.build_bundle(h3_dir=logs / "h3", power_dir=logs / "power", workspace=workspace,
-                                         result_filename="r", concurrencies=[1], output=output, environ={"PATH": os.environ["PATH"]})
+    result = srt_bundle.build_bundle(
+        h3_dir=logs / "h3",
+        power_dir=logs / "power",
+        workspace=workspace,
+        result_filename="r",
+        concurrencies=[1],
+        output=output,
+        environ={"PATH": os.environ["PATH"]},
+    )
     assert result["status"] == "complete" and result["power_verified"] is False
     [cell] = json.loads((output / "serving-smoke.json").read_text())["cells"]
     assert cell["status"] == "complete" and cell["verified"] is False
@@ -201,10 +359,20 @@ def test_bundle_marks_a_missing_or_short_cell_failed(tmp_path):
     short = _run(1, valid=3)
     (logs / "h3/gpu/c1/baseline/run.json").write_text(json.dumps(short))
     output = tmp_path / "h3-results"
-    result = srt_bundle.build_bundle(h3_dir=logs / "h3", power_dir=logs / "power", workspace=workspace,
-                                         result_filename="r", concurrencies=[1, 4], output=output, environ={"PATH": os.environ["PATH"]})
+    result = srt_bundle.build_bundle(
+        h3_dir=logs / "h3",
+        power_dir=logs / "power",
+        workspace=workspace,
+        result_filename="r",
+        concurrencies=[1, 4],
+        output=output,
+        environ={"PATH": os.environ["PATH"]},
+    )
     assert result["status"] == "failed"
-    cells = {c["concurrency"]: c for c in json.loads((output / "serving-smoke.json").read_text())["cells"]}
+    cells = {
+        c["concurrency"]: c
+        for c in json.loads((output / "serving-smoke.json").read_text())["cells"]
+    }
     assert cells[1]["status"] == "failed" and cells[1]["completion"]["valid"] == 3
     assert cells[4]["status"] == "failed" and "run" not in cells[4]
     assert any("c4: run.json missing" in f for f in result["failures"])
@@ -217,8 +385,14 @@ def test_bundle_rejects_cells_with_different_workload(tmp_path):
     run["plan_sha256"] = "a" * 64
     path.write_text(json.dumps(run))
     with pytest.raises(ValueError, match="identity differs"):
-        srt_bundle.build_bundle(h3_dir=logs / "h3", power_dir=logs / "power", workspace=workspace,
-                                   result_filename="r", concurrencies=[1, 2], output=tmp_path / "bundle")
+        srt_bundle.build_bundle(
+            h3_dir=logs / "h3",
+            power_dir=logs / "power",
+            workspace=workspace,
+            result_filename="r",
+            concurrencies=[1, 2],
+            output=tmp_path / "bundle",
+        )
 
 
 def _sweep(tmp_path):
@@ -231,43 +405,86 @@ def _sweep(tmp_path):
         logs, workspace = _native_job(fixture)
         fingerprint = str(index) * 64
         name = f"h3-results-123-2-{fingerprint}"
-        env = {"GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "2", "GITHUB_HEAD_SHA": "c" * 40,
-               "GITHUB_SHA": "b" * 40, "RECIPE_FINGERPRINT": fingerprint, "VIDEO_ARTIFACT_NAME": name}
-        srt_bundle.build_bundle(h3_dir=logs / "h3", power_dir=logs / "power", workspace=workspace,
-                                   result_filename="r", concurrencies=[1, 2], output=artifacts / name, environ=env)
-        rows.append({"recipe-fingerprint": fingerprint, "runner": runner, "framework": "sglang",
-                     "gpus": 2, "conc-list": [1, 2], "model": PLAN["model_id"]})
+        env = {
+            "GITHUB_RUN_ID": "123",
+            "GITHUB_RUN_ATTEMPT": "2",
+            "GITHUB_HEAD_SHA": "c" * 40,
+            "GITHUB_SHA": "b" * 40,
+            "RECIPE_FINGERPRINT": fingerprint,
+            "VIDEO_ARTIFACT_NAME": name,
+        }
+        srt_bundle.build_bundle(
+            h3_dir=logs / "h3",
+            power_dir=logs / "power",
+            workspace=workspace,
+            result_filename="r",
+            concurrencies=[1, 2],
+            output=artifacts / name,
+            environ=env,
+        )
+        rows.append(
+            {
+                "recipe-fingerprint": fingerprint,
+                "runner": runner,
+                "framework": "sglang",
+                "gpus": 2,
+                "conc-list": [1, 2],
+                "model": PLAN["model_id"],
+            }
+        )
     directory = artifacts / "video-sweep-manifest"
     directory.mkdir()
-    (directory / "sweep_manifest.json").write_text(json.dumps({"run-id": 123, "run-attempt": 2,
-        "head": "c" * 40, "video-full-sweep": True, "matrix": {"single_node": {"video": rows}}}))
+    (directory / "sweep_manifest.json").write_text(
+        json.dumps(
+            {
+                "run-id": 123,
+                "run-attempt": 2,
+                "head": "c" * 40,
+                "video-full-sweep": True,
+                "matrix": {"single_node": {"video": rows}},
+            }
+        )
+    )
     return artifacts
 
 
 def _reseal(bundle):
     manifest_path = bundle / "manifest.json"
     manifest = json.loads(manifest_path.read_text())
-    manifest["evidence"] = {p.relative_to(bundle).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
-                            for p in bundle.rglob("*.json") if p != manifest_path}
+    manifest["evidence"] = {
+        p.relative_to(bundle).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+        for p in bundle.rglob("*.json")
+        if p != manifest_path
+    }
     manifest_path.write_text(json.dumps(manifest))
-    (bundle / "SHA256SUMS").write_text("".join(
-        f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.relative_to(bundle).as_posix()}\n"
-        for p in sorted(bundle.rglob("*")) if p.is_file() and p.name != "SHA256SUMS"))
+    (bundle / "SHA256SUMS").write_text(
+        "".join(
+            f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.relative_to(bundle).as_posix()}\n"
+            for p in sorted(bundle.rglob("*"))
+            if p.is_file() and p.name != "SHA256SUMS"
+        )
+    )
 
 
 def test_reuse_validates_every_selected_native_deployment_and_preserves_checkout_identity(tmp_path):
     from infx.results.video_artifacts import validate_video_artifacts
+
     artifacts = _sweep(tmp_path)
-    assert validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40) == 2
+    assert (
+        validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40) == 2
+    )
     with pytest.raises(ValueError, match="trusted run/head"):
         validate_video_artifacts(artifacts, run_id="124", run_attempt="2", head_sha="c" * 40)
     with pytest.raises(ValueError, match="trusted run/head/attempt"):
         validate_video_artifacts(artifacts, run_id="123", run_attempt="3", head_sha="c" * 40)
 
 
-@pytest.mark.parametrize("fault,match", [("media", "checksum mismatch"), ("head", "CI identity mismatch")])
+@pytest.mark.parametrize(
+    "fault,match", [("media", "checksum mismatch"), ("head", "CI identity mismatch")]
+)
 def test_reuse_rejects_incomplete_or_altered_native_sweeps(tmp_path, fault, match):
     from infx.results.video_artifacts import validate_video_artifacts
+
     artifacts = _sweep(tmp_path)
     bundle = artifacts / ("h3-results-123-2-" + "2" * 64)
     if fault == "media":
@@ -285,12 +502,21 @@ def test_reuse_rejects_incomplete_or_altered_native_sweeps(tmp_path, fault, matc
 def test_startup_failure_preserves_declared_plan_and_engine_identity(tmp_path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    identity = {"plan_sha256": PLAN_SHA, "workload_plan": PLAN,
-                "engine": {"name": "vllm-omni", "revision": "a" * 40}}
+    identity = {
+        "plan_sha256": PLAN_SHA,
+        "workload_plan": PLAN,
+        "engine": {"name": "vllm-omni", "revision": "a" * 40},
+    }
     (workspace / "video-identity.json").write_text(json.dumps(identity))
     output = tmp_path / "bundle"
-    result = srt_bundle.build_bundle(h3_dir=tmp_path / "absent", power_dir=tmp_path / "power",
-        workspace=workspace, result_filename="r", concurrencies=[1, 2], output=output)
+    result = srt_bundle.build_bundle(
+        h3_dir=tmp_path / "absent",
+        power_dir=tmp_path / "power",
+        workspace=workspace,
+        result_filename="r",
+        concurrencies=[1, 2],
+        output=output,
+    )
     manifest = json.loads((output / "manifest.json").read_text())
     matrix = json.loads((output / "serving-smoke.json").read_text())
     assert result["status"] == "failed" and result["power_verified"] is False
@@ -301,6 +527,7 @@ def test_startup_failure_preserves_declared_plan_and_engine_identity(tmp_path):
 
 def test_reuse_rechecks_sealed_power_receipts(tmp_path):
     from infx.results.video_artifacts import validate_video_artifacts
+
     artifacts = _sweep(tmp_path)
     bundle = artifacts / ("h3-results-123-2-" + "2" * 64)
     matrix_path = bundle / "serving-smoke.json"
@@ -317,9 +544,12 @@ def test_reuse_rechecks_sealed_power_receipts(tmp_path):
         validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40)
 
 
-@pytest.mark.parametrize("fault,match", [("population", "request population"), ("missing_media", "reference mismatch")])
+@pytest.mark.parametrize(
+    "fault,match", [("population", "request population"), ("missing_media", "reference mismatch")]
+)
 def test_reuse_rejects_resealed_missing_evidence_and_wrong_population(tmp_path, fault, match):
     from infx.results.video_artifacts import validate_video_artifacts
+
     artifacts = _sweep(tmp_path)
     bundle = artifacts / ("h3-results-123-2-" + "2" * 64)
     matrix_path = bundle / "serving-smoke.json"
@@ -342,6 +572,7 @@ def test_reuse_rejects_resealed_missing_evidence_and_wrong_population(tmp_path, 
 
 def test_partial_native_sweep_cannot_qualify_for_reuse(tmp_path):
     from infx.results.video_artifacts import validate_video_artifacts
+
     artifacts = _sweep(tmp_path)
     path = artifacts / "video-sweep-manifest/sweep_manifest.json"
     manifest = json.loads(path.read_text())

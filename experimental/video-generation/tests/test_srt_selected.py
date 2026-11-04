@@ -49,14 +49,20 @@ def test_h3_vllm_model_view_exposes_only_tested_partition(tmp_path):
     assert not (view / "modular_model_index.json").exists()
 
 
-@pytest.mark.parametrize(("runtime", "model_view"), [("sglang", "snapshot"), ("vllm-omni", "h3-fl2va")])
-def test_selected_server_executes_recipe_command_and_records_selected_environment(tmp_path, monkeypatch, runtime, model_view):
+@pytest.mark.parametrize(
+    ("runtime", "model_view"), [("sglang", "snapshot"), ("vllm-omni", "h3-fl2va")]
+)
+def test_selected_server_executes_recipe_command_and_records_selected_environment(
+    tmp_path, monkeypatch, runtime, model_view
+):
     plan = h3_spec.plan_for(h3_spec.load_spec(PACKAGE / "specs/h3.yaml"), "release-v1")
     model = _snapshot(tmp_path / "model")
     uuids = ["GPU-1", "GPU-2"]
     monkeypatch.setattr(srt_selected, "cuda_devices", lambda: uuids)
     executed = []
-    monkeypatch.setattr(srt_selected.os, "execvpe", lambda file, argv, env: executed.append((file, argv, env)))
+    monkeypatch.setattr(
+        srt_selected.os, "execvpe", lambda file, argv, env: executed.append((file, argv, env))
+    )
     monkeypatch.setenv("HF_HUB_OFFLINE", "0")
     monkeypatch.setenv("TRANSFORMERS_OFFLINE", "1")
     monkeypatch.setenv("VLLM_OMNI_VIDEO_SYNC_TIMEOUT", "777")
@@ -64,12 +70,30 @@ def test_selected_server_executes_recipe_command_and_records_selected_environmen
     monkeypatch.setenv("VLLM_OMNI_SERVER_STORAGE__PATH", str(tmp_path / "storage"))
     monkeypatch.setenv("SECRET_TOKEN", "never-record")
     output = tmp_path / "server"
-    command = (["/usr/bin/python3", "-m", "evaluator.srt_selected", "serve", "--model-path", str(model), "--tp-size", "3"]
-               if runtime == "sglang" else ["vllm", "serve", str(model), "--tensor-parallel-size", "3"])
+    command = (
+        [
+            "/usr/bin/python3",
+            "-m",
+            "evaluator.srt_selected",
+            "serve",
+            "--model-path",
+            str(model),
+            "--tp-size",
+            "3",
+        ]
+        if runtime == "sglang"
+        else ["vllm", "serve", str(model), "--tensor-parallel-size", "3"]
+    )
     srt_selected.serve(
-        plan, runtime=runtime, runtime_revision="a" * 40,
-        model_path=model, port=30283, gpus=2, output=output,
-        command=command, model_view=model_view,
+        plan,
+        runtime=runtime,
+        runtime_revision="a" * 40,
+        model_path=model,
+        port=30283,
+        gpus=2,
+        output=output,
+        command=command,
+        model_view=model_view,
     )
     spec = json.loads((output / "spec.json").read_text())
     launch = json.loads((output / "launch.json").read_text())
@@ -100,22 +124,43 @@ def test_selected_server_requires_snapshot_argument_and_explicit_view(tmp_path, 
     model.mkdir()
     monkeypatch.setattr(srt_selected, "cuda_devices", lambda: ["GPU-1", "GPU-2"])
     with pytest.raises(ValueError, match="model snapshot"):
-        srt_selected.serve(plan, runtime="sglang", runtime_revision="a" * 40,
-            model_path=model, port=30283, gpus=2, output=tmp_path / "server",
-            command=["python3", "serve"], model_view="snapshot")
+        srt_selected.serve(
+            plan,
+            runtime="sglang",
+            runtime_revision="a" * 40,
+            model_path=model,
+            port=30283,
+            gpus=2,
+            output=tmp_path / "server",
+            command=["python3", "serve"],
+            model_view="snapshot",
+        )
     with pytest.raises(ValueError, match="model view"):
-        srt_selected.serve(plan, runtime="sglang", runtime_revision="a" * 40,
-            model_path=model, port=30283, gpus=2, output=tmp_path / "server",
-            command=["python3", str(model)], model_view="h3-fl2va")
+        srt_selected.serve(
+            plan,
+            runtime="sglang",
+            runtime_revision="a" * 40,
+            model_path=model,
+            port=30283,
+            gpus=2,
+            output=tmp_path / "server",
+            command=["python3", str(model)],
+            model_view="h3-fl2va",
+        )
 
 
 def test_selected_server_rejects_wrong_model_and_gpu_shape(tmp_path):
     plan = h3_spec.plan_for(h3_spec.load_spec(PACKAGE / "specs/h3.yaml"), "release-v1")
     model = tmp_path / "model"
     model.mkdir()
-    kwargs = {"runtime_revision": "a" * 40, "model_path": model, "port": 30283,
-              "output": tmp_path / "server", "command": ["vllm", "serve", str(model)],
-              "model_view": "snapshot"}
+    kwargs = {
+        "runtime_revision": "a" * 40,
+        "model_path": model,
+        "port": 30283,
+        "output": tmp_path / "server",
+        "command": ["vllm", "serve", str(model)],
+        "model_view": "snapshot",
+    }
     with pytest.raises(ValueError, match="requires MiniMaxAI/MiniMax-H3"):
         srt_selected.serve({**plan, "model_id": "other/model"}, runtime="sglang", gpus=2, **kwargs)
     with pytest.raises(ValueError, match="two GPUs"):
@@ -134,23 +179,57 @@ def test_v01_vllm_four_gpu_server_records_sealed_launch(tmp_path, monkeypatch):
     monkeypatch.setenv("H3_RECIPE_ENV_KEYS", '["VLLM_OMNI_SERVER_STORAGE__PATH"]')
     executed = []
     monkeypatch.setattr(srt_selected.os, "execvpe", lambda file, argv, env: executed.append(argv))
-    command = ["vllm", "serve", str(model), "--num-gpus", "4", "--usp", "4", "--vae-patch-parallel-size", "4"]
-    srt_selected.serve(plan, runtime="vllm-omni", runtime_revision="a" * 40,
-        model_path=model, port=30283, gpus=4, output=tmp_path / "server",
-        command=command, model_view="h3-fl2va")
+    command = [
+        "vllm",
+        "serve",
+        str(model),
+        "--num-gpus",
+        "4",
+        "--usp",
+        "4",
+        "--vae-patch-parallel-size",
+        "4",
+    ]
+    srt_selected.serve(
+        plan,
+        runtime="vllm-omni",
+        runtime_revision="a" * 40,
+        model_path=model,
+        port=30283,
+        gpus=4,
+        output=tmp_path / "server",
+        command=command,
+        model_view="h3-fl2va",
+    )
     launch = json.loads((tmp_path / "server/launch.json").read_text())
     assert launch["gpu_uuids"] == uuids
     assert launch["image_digest"] == "a" * 64
     assert launch["argv"] == executed[0]
     with pytest.raises(ValueError, match="two GPUs or four for v0.1"):
-        srt_selected.serve(plan, runtime="vllm-omni", runtime_revision="a" * 40,
-            model_path=model, port=30283, gpus=3, output=tmp_path / "unused",
-            command=command, model_view="h3-fl2va")
+        srt_selected.serve(
+            plan,
+            runtime="vllm-omni",
+            runtime_revision="a" * 40,
+            model_path=model,
+            port=30283,
+            gpus=3,
+            output=tmp_path / "unused",
+            command=command,
+            model_view="h3-fl2va",
+        )
     monkeypatch.setenv("H3_CONTAINER_IMAGE", "example/vllm:v0.30.0")
     with pytest.raises(ValueError, match="pinned by a SHA256 digest"):
-        srt_selected.serve(plan, runtime="vllm-omni", runtime_revision="a" * 40,
-            model_path=model, port=30283, gpus=4, output=tmp_path / "unsealed",
-            command=command, model_view="h3-fl2va")
+        srt_selected.serve(
+            plan,
+            runtime="vllm-omni",
+            runtime_revision="a" * 40,
+            model_path=model,
+            port=30283,
+            gpus=4,
+            output=tmp_path / "unsealed",
+            command=command,
+            model_view="h3-fl2va",
+        )
 
 
 def test_v01_client_requires_matching_sealed_launch_before_requests(tmp_path, monkeypatch):
@@ -162,20 +241,30 @@ def test_v01_client_requires_matching_sealed_launch_before_requests(tmp_path, mo
         raise RuntimeError("preflight reached runner")
 
     monkeypatch.setattr(srt_selected, "run_plan", stop_after_preflight)
-    kwargs = {"runtime": "vllm-omni", "runtime_revision": "a" * 40,
-              "endpoint": "http://localhost:30283", "output": tmp_path,
-              "concurrencies": [1], "gpus": 4, "window_dir": tmp_path / "window",
-              "request_seconds": 1200}
+    kwargs = {
+        "runtime": "vllm-omni",
+        "runtime_revision": "a" * 40,
+        "endpoint": "http://localhost:30283",
+        "output": tmp_path,
+        "concurrencies": [1],
+        "gpus": 4,
+        "window_dir": tmp_path / "window",
+        "request_seconds": 1200,
+    }
     with pytest.raises(ValueError, match="sealed server launch"):
         srt_selected.run_matrix(plan, **kwargs)
     assert not seen
     (tmp_path / "server").mkdir()
-    launch = {"runtime": "vllm-omni", "runtime_revision": "a" * 40,
-              "model_revision": plan["model_revision"], "plan_sha256": h3_spec.plan_sha256(plan),
-              "image_digest": "a" * 64,
-              "gpu_uuids": [f"GPU-{index}" for index in range(4)],
-              "argv": ["vllm", "serve", "/model", "--usp", "4"],
-              "environment": {"OMNI_DIFFUSION_PROMPT_EMBED_CACHE": "0"}}
+    launch = {
+        "runtime": "vllm-omni",
+        "runtime_revision": "a" * 40,
+        "model_revision": plan["model_revision"],
+        "plan_sha256": h3_spec.plan_sha256(plan),
+        "image_digest": "a" * 64,
+        "gpu_uuids": [f"GPU-{index}" for index in range(4)],
+        "argv": ["vllm", "serve", "/model", "--usp", "4"],
+        "environment": {"OMNI_DIFFUSION_PROMPT_EMBED_CACHE": "0"},
+    }
     (tmp_path / "server/launch.json").write_text(json.dumps(launch))
     with pytest.raises(RuntimeError, match="preflight reached runner"):
         srt_selected.run_matrix(plan, **kwargs)
@@ -208,9 +297,17 @@ def test_vllm_view_checks_snapshot_before_creating_runtime_directories(tmp_path,
     monkeypatch.setenv("H3_RECIPE_ENV_KEYS", '["VLLM_OMNI_SERVER_STORAGE__PATH"]')
     monkeypatch.setattr(srt_selected, "cuda_devices", lambda: ["GPU-1", "GPU-2"])
     with pytest.raises(ValueError, match="snapshot lacks"):
-        srt_selected.serve(plan, runtime="vllm-omni", runtime_revision="a" * 40,
-            model_path=model, port=30283, gpus=2, output=output,
-            command=["vllm", "serve", str(model)], model_view="h3-fl2va")
+        srt_selected.serve(
+            plan,
+            runtime="vllm-omni",
+            runtime_revision="a" * 40,
+            model_path=model,
+            port=30283,
+            gpus=2,
+            output=output,
+            command=["vllm", "serve", str(model)],
+            model_view="h3-fl2va",
+        )
     assert not storage.exists() and not output.exists()
 
 

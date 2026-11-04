@@ -14,9 +14,14 @@ from specs import h3_spec
 from .runner import run_plan, validate_plan
 
 RECORDED_ENGINE_ENV = (
-    "PYTHONPATH", "PYTHONUNBUFFERED", "HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE",
-    "VLLM_WORKER_MULTIPROC_METHOD", "VLLM_OMNI_VIDEO_SYNC_TIMEOUT",
-    "VLLM_OMNI_SERVER_STORAGE__PATH", "VGBENCH_GPU_UUIDS",
+    "PYTHONPATH",
+    "PYTHONUNBUFFERED",
+    "HF_HUB_OFFLINE",
+    "TRANSFORMERS_OFFLINE",
+    "VLLM_WORKER_MULTIPROC_METHOD",
+    "VLLM_OMNI_VIDEO_SYNC_TIMEOUT",
+    "VLLM_OMNI_SERVER_STORAGE__PATH",
+    "VGBENCH_GPU_UUIDS",
 )
 
 BENCHMARK_STEM = "benchmark_concurrency_{concurrency}"
@@ -32,9 +37,11 @@ def cuda_devices() -> list[str]:
     # Resolve the current mask through the driver without creating a CUDA context;
     # nvidia-smi ordinals alone do not establish CUDA device identity.
     cuda = ctypes.CDLL("libcuda.so.1")
+
     def ok(code):
         if code != 0:
             raise RuntimeError("CUDA driver inventory failed: " + str(code))
+
     ok(cuda.cuInit(0))
     count = ctypes.c_int()
     ok(cuda.cuDeviceGetCount(ctypes.byref(count)))
@@ -124,8 +131,16 @@ def h3_vllm_model_view(snapshot: Path, output: Path) -> Path:
 
 
 def serve(
-    plan: dict, *, runtime: str, runtime_revision: str, model_path: Path,
-    port: int, gpus: int, output: Path, command: list[str], model_view: str,
+    plan: dict,
+    *,
+    runtime: str,
+    runtime_revision: str,
+    model_path: Path,
+    port: int,
+    gpus: int,
+    output: Path,
+    command: list[str],
+    model_view: str,
 ) -> None:
     if plan["model_id"] != "MiniMaxAI/MiniMax-H3":
         raise ValueError("this H3 native profile requires MiniMaxAI/MiniMax-H3")
@@ -141,7 +156,9 @@ def serve(
         raise ValueError("runtime revision must be an immutable commit")
     if not model_path.is_dir():
         raise ValueError("the pinned model snapshot is unavailable")
-    if model_view not in {"snapshot", "h3-fl2va"} or (model_view == "h3-fl2va" and runtime != "vllm-omni"):
+    if model_view not in {"snapshot", "h3-fl2va"} or (
+        model_view == "h3-fl2va" and runtime != "vllm-omni"
+    ):
         raise ValueError(f"unsupported model view {model_view!r} for {runtime}")
     if not command or any(not isinstance(part, str) or not part for part in command):
         raise ValueError("the video server requires a complete engine command")
@@ -171,24 +188,32 @@ def serve(
         Path(storage).mkdir(parents=True, exist_ok=True)
     argv = [str(served_path) if part == snapshot else part for part in command]
     recorded_env.update({name: env[name] for name in RECORDED_ENGINE_ENV if name in env})
-    _write(output / "spec.json", {
-        "schema_version": "0.1.0",
-        "plan": plan,
-        "gpu_uuids": uuids,
-        "baseline": {
-            "name": runtime,
-            "revision": runtime_revision,
-            "model_path": str(served_path),
-            "model_revision": plan["model_revision"],
-            "argv": argv,
+    _write(
+        output / "spec.json",
+        {
+            "schema_version": "0.1.0",
+            "plan": plan,
+            "gpu_uuids": uuids,
+            "baseline": {
+                "name": runtime,
+                "revision": runtime_revision,
+                "model_path": str(served_path),
+                "model_revision": plan["model_revision"],
+                "argv": argv,
+            },
+            "serving": {"mode": "closed_loop"},
         },
-        "serving": {"mode": "closed_loop"},
-    })
+    )
     launch = {
-        "runtime": runtime, "runtime_revision": runtime_revision,
-        "model_id": plan["model_id"], "model_revision": plan["model_revision"],
-        "plan_sha256": h3_spec.plan_sha256(plan), "gpu_uuids": uuids,
-        "argv": argv, "environment": recorded_env, "slurm_job_id": env.get("SLURM_JOB_ID"),
+        "runtime": runtime,
+        "runtime_revision": runtime_revision,
+        "model_id": plan["model_id"],
+        "model_revision": plan["model_revision"],
+        "plan_sha256": h3_spec.plan_sha256(plan),
+        "gpu_uuids": uuids,
+        "argv": argv,
+        "environment": recorded_env,
+        "slurm_job_id": env.get("SLURM_JOB_ID"),
     }
     if image_digest is not None:
         launch["image_digest"] = image_digest
@@ -210,8 +235,15 @@ def _sglang_main() -> None:
 
 
 def run_matrix(
-    plan: dict, *, runtime: str, runtime_revision: str, endpoint: str,
-    output: Path, concurrencies: list[int], gpus: int, window_dir: Path,
+    plan: dict,
+    *,
+    runtime: str,
+    runtime_revision: str,
+    endpoint: str,
+    output: Path,
+    concurrencies: list[int],
+    gpus: int,
+    window_dir: Path,
     request_seconds: float,
 ) -> dict[int, dict]:
     if runtime not in {"sglang", "vllm-omni"}:
@@ -222,18 +254,43 @@ def run_matrix(
         try:
             launch = json.loads(launch_path.read_text(encoding="utf-8"))
         except (OSError, ValueError) as error:
-            raise ValueError("v0.1 requires the sealed server launch before client requests") from error
-        if any(launch.get(key) != value for key, value in (
-            ("runtime", runtime), ("runtime_revision", runtime_revision),
-            ("model_revision", plan["model_revision"]),
-            ("plan_sha256", h3_spec.plan_sha256(plan)),
-        )) or not isinstance(launch.get("gpu_uuids"), list) or len(launch["gpu_uuids"]) != gpus or not all(isinstance(uuid, str) and uuid for uuid in launch["gpu_uuids"]):
-            raise ValueError("sealed server launch differs from the selected v0.1 plan or GPU shape")
+            raise ValueError(
+                "v0.1 requires the sealed server launch before client requests"
+            ) from error
+        if (
+            any(
+                launch.get(key) != value
+                for key, value in (
+                    ("runtime", runtime),
+                    ("runtime_revision", runtime_revision),
+                    ("model_revision", plan["model_revision"]),
+                    ("plan_sha256", h3_spec.plan_sha256(plan)),
+                )
+            )
+            or not isinstance(launch.get("gpu_uuids"), list)
+            or len(launch["gpu_uuids"]) != gpus
+            or not all(isinstance(uuid, str) and uuid for uuid in launch["gpu_uuids"])
+        ):
+            raise ValueError(
+                "sealed server launch differs from the selected v0.1 plan or GPU shape"
+            )
         argv, environment = launch.get("argv"), launch.get("environment")
-        if not isinstance(argv, list) or not argv or not all(isinstance(arg, str) and arg for arg in argv) or not isinstance(environment, dict) or not environment or not all(isinstance(key, str) and isinstance(value, str) for key, value in environment.items()):
+        if (
+            not isinstance(argv, list)
+            or not argv
+            or not all(isinstance(arg, str) and arg for arg in argv)
+            or not isinstance(environment, dict)
+            or not environment
+            or not all(
+                isinstance(key, str) and isinstance(value, str)
+                for key, value in environment.items()
+            )
+        ):
             raise ValueError("sealed server launch lacks complete command or environment")
         image_digest = launch.get("image_digest")
-        if image_digest is not None and (not isinstance(image_digest, str) or not re.fullmatch(r"[0-9a-f]{64}", image_digest)):
+        if image_digest is not None and (
+            not isinstance(image_digest, str) or not re.fullmatch(r"[0-9a-f]{64}", image_digest)
+        ):
             raise ValueError("sealed server launch has an invalid image digest")
         if image_digest is not None:
             numerical_identity = {
@@ -242,17 +299,24 @@ def run_matrix(
                 "server_argv": argv,
                 "server_environment": environment,
                 "gpu_topology": {"gpu_uuids": launch["gpu_uuids"]},
-                "algorithm_config": {"generation": plan["generation"], "fairness": plan["fairness"]},
+                "algorithm_config": {
+                    "generation": plan["generation"],
+                    "fairness": plan["fairness"],
+                },
             }
     results = {}
     for concurrency in concurrencies:
         cell = output / CELL_DIR.format(concurrency=concurrency)
         before = time.time() - time.monotonic()
         run = run_plan(
-            plan, cell / "baseline", endpoint=endpoint, runtime=runtime,
+            plan,
+            cell / "baseline",
+            endpoint=endpoint,
+            runtime=runtime,
             runtime_revision=runtime_revision,
             hardware_label=f"native srt-slurm {gpus} GPUs",
-            model_revision=plan["model_revision"], timeout_seconds=request_seconds,
+            model_revision=plan["model_revision"],
+            timeout_seconds=request_seconds,
             serving_concurrency=concurrency,
             numerical_identity=numerical_identity,
         )
