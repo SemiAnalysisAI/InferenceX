@@ -11989,3 +11989,26 @@
     - "Update the Muse Spark Open GB300 curve to lmsysorg/sglang:nightly-dev-cu13-20261030-302b78cc and retune request admission, prefill-decode interval, scheduling and host cache per concurrency."
     - "Add TP4/EP4 concurrency 4 and 40; drop concurrency 5, 28 and 34."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4724
+
+- config-keys:
+    - kimik3-fp4-mi355x-atom-agentic-mtp
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+    - kimik3-fp4-mi355x-vllm-disagg-agentic
+    - kimik3-fp4-h200-vllm-agentic-latency
+    - kimik3-fp4-h200-vllm-agentic-balanced
+    - kimik3-fp4-h200-vllm-agentic-simple
+    - kimik3-fp4-b300-vllm-agentic-dspark
+    - kimik3-fp4-gb200-dynamo-vllm-agentic
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dep16-disagg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+    - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-disagg
+  description:
+    - "Retire all Kimi-K3 serving benchmarks and remove unused recipes and launch routing."
+    - "Keep historical results, SPEED-Bench collectors, golden AL curves, vendor evals and OperatorX shapes."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4762
+  retired: true
