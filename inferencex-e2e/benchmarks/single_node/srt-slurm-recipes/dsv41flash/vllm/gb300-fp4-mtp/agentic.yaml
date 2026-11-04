@@ -79,10 +79,13 @@ zip_override_dep2:
     type: smg
     args:
       policy: consistent_hashing
+      request-id-headers: x-correlation-id
       prometheus-host: 127.0.0.1
       request-timeout-secs: 14400
       disable-retries: true
   setup_script: smg.sh
+  environment:
+    SMG_INSTALL_LOCK_DIR: /tmp
   roles:
     agg:
       gpus: 2
@@ -113,3 +116,4 @@ zip_override_dep2:
   benchmark:
     env:
       CONC: ['8', '16', '32', '64', '128', '192']
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
