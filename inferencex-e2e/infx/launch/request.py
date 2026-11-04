@@ -216,8 +216,8 @@ class SingleNodeRequest(SrtRequest):
 class VideoRequest(SrtRequest):
     """One native video-generation job: one server, every CONC_LIST concurrency in turn.
 
-    The H3 client and server come from ``experimental/video-generation`` (``H3_SPEC`` names
-    the YAML workload under its ``specs/`` and ``H3_SET`` its selected set); the model is
+    The video client and server come from ``experimental/video-generation`` (``VIDEO_SPEC`` names
+    the YAML workload under its ``specs/`` and ``VIDEO_SET`` its selected set); the model is
     served from the HF hub cache.
     """
 
@@ -225,8 +225,8 @@ class VideoRequest(SrtRequest):
     model: str = Field(alias="MODEL")
     gpu_count: int = Field(alias="GPU_COUNT", gt=0)
     conc_list: IntList = Field(alias="CONC_LIST", min_length=1)
-    h3_spec: str = Field(alias="H3_SPEC", min_length=1)
-    h3_set: str = Field(alias="H3_SET", min_length=1)
+    video_spec: str = Field(alias="VIDEO_SPEC", min_length=1)
+    video_set: str = Field(alias="VIDEO_SET", min_length=1)
     hf_hub_cache: str = Field(alias="HF_HUB_CACHE")
     salloc_time_limit: int = Field(alias="SALLOC_TIME_LIMIT")
 

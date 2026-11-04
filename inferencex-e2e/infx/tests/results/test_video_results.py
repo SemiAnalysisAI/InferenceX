@@ -42,7 +42,7 @@ IDENTITY = {"cluster": "h200-dgxc", "model": "MiniMaxAI/MiniMax-H3", "image": "i
 def test_aggregate_carries_identity_throughput_and_the_measured_window():
     aggregate = video.build_aggregate(
         RUN, BENCH, concurrency=4, gpu_count=2, identity=IDENTITY,
-        run_path="h3/gpu/c4/baseline/run.json", run_sha256="a" * 64,
+        run_path="video/gpu/c4/baseline/run.json", run_sha256="a" * 64,
     )
     assert aggregate["scenario_type"] == "video-generation" and aggregate["cluster"] == "h200-dgxc"
     assert (aggregate["max_concurrency"], aggregate["num_gpus"], aggregate["valid"]) == (4, 2, 4)
@@ -60,7 +60,7 @@ def test_aggregate_refuses_a_window_that_disagrees_with_the_run():
         )
 
 
-def _service_package(tmp_path, service="h3-server"):
+def _service_package(tmp_path, service="video-server"):
     """A self-consistent native package whose GPUs are planned by the pool service."""
     pkg = build_package(tmp_path, bench_extra={**BENCH, "model_id": "MiniMaxAI/MiniMax-H3"})
     manifest = json.loads((pkg.power_dir / "manifest.json").read_text())
@@ -70,7 +70,7 @@ def _service_package(tmp_path, service="h3-server"):
     (pkg.power_dir / "manifest.json").write_text(json.dumps(manifest))
     with (pkg.power_dir / "samples.csv").open(newline="") as stream:
         uuids = list(dict.fromkeys(row["gpu_uuid"] for row in csv.DictReader(stream)))
-    server = pkg.logs_root / "h3/server"
+    server = pkg.logs_root / "video/server"
     server.mkdir(parents=True)
     (server / "spec.json").write_text(json.dumps({"gpu_uuids": uuids}))
     (server / "launch.json").write_text(json.dumps({"gpu_uuids": uuids}))
@@ -78,7 +78,7 @@ def _service_package(tmp_path, service="h3-server"):
 
 
 def _cell(pkg, logs_root, concurrency=4):
-    cell = logs_root / "h3" / "gpu" / f"c{concurrency}"
+    cell = logs_root / "video" / "gpu" / f"c{concurrency}"
     (cell / "baseline").mkdir(parents=True)
     (cell / "baseline/run.json").write_text(json.dumps(RUN))
     bench = cell / f"benchmark_concurrency_{concurrency}.json"
@@ -111,7 +111,7 @@ def test_service_planned_gpus_validate_with_clip_normalized_energy(tmp_path):
     aggregate = json.loads((workspace / "h3_video_conc4.json").read_text())
     sidecar = json.loads((workspace / "power_validation_h3_video_conc4.json").read_text())
     assert sidecar["power_valid"] is True and sidecar["reasons"] == []
-    assert set(sidecar["per_gpu_role"].values()) == {"h3-server"}
+    assert set(sidecar["per_gpu_role"].values()) == {"video-server"}
     assert aggregate["power_valid"] == 1
     # Four clips over 60 seconds; the fixture devices draw 300, 300, 400, 400 W.
     assert aggregate["joules_per_successful_query"] == pytest.approx(21000)
@@ -129,7 +129,7 @@ def test_service_planned_gpus_validate_with_clip_normalized_energy(tmp_path):
 def test_video_power_rejects_unjoined_server_gpu_identity(tmp_path, fault):
     pkg = _service_package(tmp_path)
     _cell(pkg, pkg.logs_root)
-    server = pkg.logs_root / "h3/server"
+    server = pkg.logs_root / "video/server"
     spec_path, launch_path = server / "spec.json", server / "launch.json"
     spec = json.loads(spec_path.read_text())
     if fault == "disjoint":

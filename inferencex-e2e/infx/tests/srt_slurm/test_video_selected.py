@@ -17,8 +17,8 @@ ENV = {
     "PRECISION": "bf16",
     "GPU_COUNT": "2",
     "CONC_LIST": "1",
-    "H3_SPEC": "h3.yaml",
-    "H3_SET": "release-v1",
+    "VIDEO_SPEC": "h3.yaml",
+    "VIDEO_SET": "release-v1",
     "FRAMEWORK": "vllm-omni",
     "HF_HUB_CACHE": "/mnt/hf_hub_cache",
     "RESULT_FILENAME": "h3-native-release",
@@ -51,7 +51,7 @@ def test_spec_model_path_uses_the_pinned_hub_snapshot():
         video.spec_model_path("/cache", "org/name", "main")
 
 
-def test_both_h3_engines_bind_the_same_selected_plan(native_fragment):
+def test_both_engines_bind_the_same_selected_plan(native_fragment):
     raw, write = native_fragment
     sglang = video.prepare(write(), {**ENV, "FRAMEWORK": "sglang"}, root=ROOT)
     _as_vllm(raw)
@@ -59,19 +59,19 @@ def test_both_h3_engines_bind_the_same_selected_plan(native_fragment):
     for recipe, runtime in ((vllm, "vllm-omni"), (sglang, "sglang")):
         [service] = recipe["services"]
         client = recipe["benchmark"]["env"]
-        assert service["env"]["H3_PLAN_SHA256"] == client["H3_PLAN_SHA256"]
-        assert service["env"]["H3_SET"] == client["H3_SET"] == "release-v1"
-        assert service["env"]["H3_RUNTIME"] == client["H3_RUNTIME"] == runtime
-        assert service["env"]["H3_RUNTIME_REVISION"] == client["H3_RUNTIME_REVISION"]
-        assert client["H3_SPEC_PATH"] == "/h3-package/specs/h3.yaml"
+        assert service["env"]["VIDEO_PLAN_SHA256"] == client["VIDEO_PLAN_SHA256"]
+        assert service["env"]["VIDEO_SET"] == client["VIDEO_SET"] == "release-v1"
+        assert service["env"]["VIDEO_RUNTIME"] == client["VIDEO_RUNTIME"] == runtime
+        assert service["env"]["VIDEO_RUNTIME_REVISION"] == client["VIDEO_RUNTIME_REVISION"]
+        assert client["VIDEO_SPEC_PATH"] == "/video-package/specs/h3.yaml"
         assert client["GPU_COUNT"] == "2"
-        assert service["env"]["H3_CONTAINER_IMAGE"] == client["H3_CONTAINER_IMAGE"] == ENV["IMAGE"]
-    assert vllm["benchmark"]["env"]["H3_PLAN_SHA256"] == sglang["benchmark"]["env"]["H3_PLAN_SHA256"]
+        assert service["env"]["VIDEO_CONTAINER_IMAGE"] == client["VIDEO_CONTAINER_IMAGE"] == ENV["IMAGE"]
+    assert vllm["benchmark"]["env"]["VIDEO_PLAN_SHA256"] == sglang["benchmark"]["env"]["VIDEO_PLAN_SHA256"]
 
 
 def test_fairness_sglang_requires_disabled_cross_request_cache(native_fragment):
     raw, write = native_fragment
-    selected = {**ENV, "FRAMEWORK": "sglang", "H3_SPEC": "h3-v0.1.yaml", "GPU_COUNT": "4"}
+    selected = {**ENV, "FRAMEWORK": "sglang", "VIDEO_SPEC": "h3-v0.1.yaml", "GPU_COUNT": "4"}
     with pytest.raises(ValueError, match="--disable-conditioning-cache"):
         video.prepare(write(), selected, root=ROOT)
 
@@ -79,14 +79,14 @@ def test_fairness_sglang_requires_disabled_cross_request_cache(native_fragment):
     recipe = video.prepare(write(raw), selected, root=ROOT)
     [server] = recipe["services"]
     assert server["args"][-1] == "--disable-conditioning-cache"
-    assert server["env"]["H3_CONTAINER_IMAGE"] == selected["IMAGE"]
-    assert recipe["benchmark"]["env"]["H3_CONTAINER_IMAGE"] == selected["IMAGE"]
+    assert server["env"]["VIDEO_CONTAINER_IMAGE"] == selected["IMAGE"]
+    assert recipe["benchmark"]["env"]["VIDEO_CONTAINER_IMAGE"] == selected["IMAGE"]
 
 
 def test_fairness_vllm_requires_disabled_prompt_embedding_cache(native_fragment):
     raw, write = native_fragment
     _as_vllm(raw)
-    selected = {**ENV, "H3_SPEC": "h3-v0.1.yaml", "GPU_COUNT": "4"}
+    selected = {**ENV, "VIDEO_SPEC": "h3-v0.1.yaml", "GPU_COUNT": "4"}
     with pytest.raises(ValueError, match="OMNI_DIFFUSION_PROMPT_EMBED_CACHE=0"):
         video.prepare(write(raw), selected, root=ROOT)
 
@@ -98,11 +98,11 @@ def test_fairness_vllm_requires_disabled_prompt_embedding_cache(native_fragment)
     recipe = video.prepare(write(raw), selected, root=ROOT)
     [server] = recipe["services"]
     assert server["env"]["OMNI_DIFFUSION_PROMPT_EMBED_CACHE"] == "0"
-    assert server["env"]["H3_CONTAINER_IMAGE"] == selected["IMAGE"]
+    assert server["env"]["VIDEO_CONTAINER_IMAGE"] == selected["IMAGE"]
 
 
 @pytest.mark.parametrize('edits', [
-    {"H3_SET": "../release-v1"},
+    {"VIDEO_SET": "../release-v1"},
     {"MODEL": "Other/model"},
 ], ids=['edits1', 'edits2'])
 def test_invalid_selected_plan_or_runtime_fails_before_submission(native_fragment, edits):
@@ -118,7 +118,7 @@ def test_server_port_must_be_a_tcp_port_before_submission(native_fragment, port)
     raw, write = native_fragment
     [server] = raw["services"]
     server["args"][server["args"].index("--port") + 1] = str(port)
-    server["env"]["H3_SERVER_PORT"] = raw["benchmark"]["env"]["H3_SERVER_PORT"] = str(port)
+    server["env"]["VIDEO_SERVER_PORT"] = raw["benchmark"]["env"]["VIDEO_SERVER_PORT"] = str(port)
     server["readiness"]["http"]["port"] = port
     with pytest.raises(ValueError, match="TCP port"):
         video.prepare(write(raw), {**ENV, "FRAMEWORK": "sglang"}, root=ROOT)
@@ -129,7 +129,7 @@ def native_fragment(tmp_path):
     """A small recipe whose engine settings remain owned by the recipe."""
     raw = {
         "schema": 2,
-        "name": "h3-fixture",
+        "name": "video-fixture",
         "resources": {"gpu_type": "test-gpu"},
         "frontend": {"type": "none"},
         "services": [{
@@ -145,7 +145,7 @@ def native_fragment(tmp_path):
                 "--attention-backend", "fixture-backend",
             ],
             "env": {
-                "H3_SERVER_PORT": "30283", "VIDEO_RUNTIME_REVISION": "b" * 40,
+                "VIDEO_SERVER_PORT": "30283", "VIDEO_RUNTIME_REVISION": "b" * 40,
                 "MODEL_REVISION_IN_ENV": "{model_revision}", "TUNABLE_ENV": "keep-this-value",
             },
             "readiness": {"http": {"port": 30283, "path": "/health"}},
@@ -153,7 +153,7 @@ def native_fragment(tmp_path):
         "benchmark": {
             "type": "custom",
             "command": "python3 -m infx.bench video client --request-seconds 73",
-            "env": {"H3_SERVER_SERVICE": "video-server", "H3_SERVER_PORT": "30283"},
+            "env": {"VIDEO_SERVER_SERVICE": "video-server", "VIDEO_SERVER_PORT": "30283"},
         },
     }
     path = tmp_path / "serving-client.yaml"
@@ -169,7 +169,7 @@ def test_native_selected_recipe_renders_bound_engine_and_preserves_tuning(native
     raw, write = native_fragment
     recipe = video.prepare(write(), {**ENV, "FRAMEWORK": "sglang", "GPU_COUNT": "4"}, root=ROOT)
     [server] = recipe["services"]
-    model_path = recipe["benchmark"]["env"]["H3_MODEL_PATH"]
+    model_path = recipe["benchmark"]["env"]["VIDEO_MODEL_PATH"]
     args = server["args"]
     assert args[args.index("--model-path") + 1] == model_path
     assert args[args.index("--model-id") + 1] == ENV["MODEL"]
@@ -202,13 +202,13 @@ def test_native_entry_has_no_implicit_engine(native_fragment):
     ("environment", "SRT_SERVICE_VIDEO_SERVER_IPS"),
     ("service", "VGBENCH_GPU_UUIDS"),
     ("environment", "CUDA_VISIBLE_DEVICES"),
-    ("service", "H3_MODEL_PATH"),
-    ("benchmark", "H3_MODEL_PATH"),
+    ("service", "VIDEO_MODEL_PATH"),
+    ("benchmark", "VIDEO_MODEL_PATH"),
     ("environment", "HF_TOKEN"),
     ("benchmark", "HF_TOKEN"),
     ("service", "OPENAI_API_KEY"),
     ("benchmark", "GOOGLE_APPLICATION_CREDENTIALS"),
-], ids=['SRT_SERVICE_VIDEO_SERVER_IPS-environment', 'VGBENCH_GPU_UUIDS-service', 'CUDA_VISIBLE_DEVICES-environment', 'H3_MODEL_PATH-service', 'H3_MODEL_PATH-benchmark', 'HF_TOKEN-environment', 'HF_TOKEN-benchmark', 'OPENAI_API_KEY-service', 'GOOGLE_APPLICATION_CREDENTIALS-benchmark'])
+], ids=['SRT_SERVICE_VIDEO_SERVER_IPS-environment', 'VGBENCH_GPU_UUIDS-service', 'CUDA_VISIBLE_DEVICES-environment', 'VIDEO_MODEL_PATH-service', 'VIDEO_MODEL_PATH-benchmark', 'HF_TOKEN-environment', 'HF_TOKEN-benchmark', 'OPENAI_API_KEY-service', 'GOOGLE_APPLICATION_CREDENTIALS-benchmark'])
 def test_native_recipe_rejects_reserved_and_credential_environment(native_fragment, scope, name):
     raw, write = native_fragment
     if scope == "environment":
@@ -227,7 +227,7 @@ def test_vllm_selected_recipe_uses_explicit_fl2va_view(native_fragment):
     recipe = video.prepare(write(raw), ENV, root=ROOT)
     args = recipe["services"][0]["args"]
     assert args[:5] == ["--model-view", "h3-fl2va", "--", "vllm", "serve"]
-    assert args[5] == recipe["benchmark"]["env"]["H3_MODEL_PATH"]
+    assert args[5] == recipe["benchmark"]["env"]["VIDEO_MODEL_PATH"]
     assert args[args.index("--gpu-memory-utilization") + 1] == "0.84"
 
 
@@ -250,7 +250,7 @@ def test_bound_selected_service_executes_its_engine_and_retains_launch_receipts(
         "Path(os.environ['CHILD_RECEIPT']).write_text(json.dumps({"
         "'argv': sys.argv, 'tunable': os.environ['TUNABLE_ENV'], "
         "'global_tunable': os.environ['GLOBAL_TUNABLE'], "
-        "'metadata_present': 'H3_RECIPE_ENV_KEYS' in os.environ, "
+        "'metadata_present': 'VIDEO_RECIPE_ENV_KEYS' in os.environ, "
         "'gpu_uuids': os.environ['VGBENCH_GPU_UUIDS']}))\n"
     )
     args = raw["services"][0]["args"]
@@ -262,14 +262,14 @@ def test_bound_selected_service_executes_its_engine_and_retains_launch_receipts(
     environment = {**ENV, "FRAMEWORK": "sglang", "HF_HUB_CACHE": str(tmp_path / "cache")}
     bound = video.prepare(write(raw), environment, root=ROOT)
     [server] = bound["services"]
-    Path(server["env"]["H3_MODEL_PATH"]).mkdir(parents=True)
+    Path(server["env"]["VIDEO_MODEL_PATH"]).mkdir(parents=True)
     output = tmp_path / "result"
     process_env = {
         **os.environ,
         **bound.get("environment", {}),
         **server["env"],
-        "H3_SPEC_PATH": str(video.video_package(ROOT) / "specs/h3.yaml"),
-        "H3_RESULT_DIR": str(output),
+        "VIDEO_SPEC_PATH": str(video.video_package(ROOT) / "specs/h3.yaml"),
+        "VIDEO_RESULT_DIR": str(output),
     }
     bootstrap = (
         "import sys; from evaluator import srt_selected; "
@@ -293,6 +293,6 @@ def test_bound_selected_service_executes_its_engine_and_retains_launch_receipts(
     assert child["metadata_present"] is False
     assert launch["environment"]["TUNABLE_ENV"] == child["tunable"]
     assert launch["environment"]["GLOBAL_TUNABLE"] == child["global_tunable"]
-    assert "H3_RECIPE_ENV_KEYS" not in launch["environment"]
+    assert "VIDEO_RECIPE_ENV_KEYS" not in launch["environment"]
     assert child["gpu_uuids"].split(",") == launch["gpu_uuids"] == spec["gpu_uuids"]
     assert launch["model_revision"] == spec["baseline"]["model_revision"]

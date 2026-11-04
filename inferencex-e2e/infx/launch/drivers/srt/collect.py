@@ -159,17 +159,17 @@ def stage_video_identity(run: SrtRun, bound: Path) -> None:
     """Retain the selected workload before startup, using the binder's declared identity."""
     environment = yaml.safe_load(bound.read_text())["benchmark"]["env"]
     selected = load_spec(
-        run.request.env["H3_SPEC"], root=run.workspace, set_id=environment["H3_SET"]
+        run.request.env["VIDEO_SPEC"], root=run.workspace, set_id=environment["VIDEO_SET"]
     )
     plan, digest = selected["plan"], selected["plan_sha256"]
-    if digest != environment["H3_PLAN_SHA256"]:
+    if digest != environment["VIDEO_PLAN_SHA256"]:
         raise ValueError("bound video identity disagrees with the selected workload")
     identity = {
         "plan_sha256": digest,
         "workload_plan": plan,
         "engine": {
-            "name": environment["H3_RUNTIME"],
-            "revision": environment["H3_RUNTIME_REVISION"],
+            "name": environment["VIDEO_RUNTIME"],
+            "revision": environment["VIDEO_RUNTIME_REVISION"],
         },
     }
     write_json(run.workspace / "video-identity.json", identity)
@@ -219,14 +219,14 @@ def finish_video(run: SrtRun, submitted: Submitted, fetched: Path) -> int:
 
 
 def finalize_video_results(run: SrtRun, logs: Path, producer_sha: str) -> int:
-    """Validate every concurrency's H3 result against the native power package, then bundle.
+    """Validate every concurrency's video result against the native power package, then bundle.
 
     Each concurrency gets its own aggregate and validation sidecar beside the result
     summary; the bundle under ``h3-results`` is what the app ingests. An incomplete
     concurrency fails the point; invalid power fails it only under REQUIRE_POWER.
     """
     request, event = run.request, run.life.event
-    require(request, "INFERENCEX_RESULTS_PYTHON", "CONC_LIST", "GPU_COUNT", "H3_SPEC")
+    require(request, "INFERENCEX_RESULTS_PYTHON", "CONC_LIST", "GPU_COUNT", "VIDEO_SPEC")
     power_rc = _stage_power_package(run, logs)
     rc = validate_video_results(
         request.inferencex_results_python, run.workspace, logs, producer_sha,
@@ -235,11 +235,11 @@ def finalize_video_results(run: SrtRun, logs: Path, producer_sha: str) -> int:
         identity={
             "cluster": run.cluster.id, "model": request.env["MODEL"], "image": request.image,
             "framework": request.framework, "precision": request.precision,
-            "spec": request.env["H3_SPEC"],
+            "spec": request.env["VIDEO_SPEC"],
         },
     )  # fmt: skip
     if rc:
-        event.fail("VideoValidationFailed", "H3 result validation failed", report=False)
+        event.fail("VideoValidationFailed", "Video result validation failed", report=False)
     bundle_rc = build_video_bundle(
         request.inferencex_results_python, run.workspace, logs,
         package=video_package(run.workspace),
@@ -247,7 +247,7 @@ def finalize_video_results(run: SrtRun, logs: Path, producer_sha: str) -> int:
         concurrencies=request.conc_list,
     )  # fmt: skip
     if bundle_rc:
-        event.fail("VideoBundleFailed", "H3 results bundle was not built", report=False)
+        event.fail("VideoBundleFailed", "Video results bundle was not built", report=False)
     return power_rc or rc or bundle_rc
 
 

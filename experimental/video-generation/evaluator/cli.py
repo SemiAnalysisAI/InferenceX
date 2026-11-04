@@ -53,7 +53,7 @@ def _mvp_command(arguments: argparse.Namespace) -> int:
             from .srt_bundle import build_bundle
 
             result = build_bundle(
-                h3_dir=arguments.h3_dir,
+                video_dir=arguments.video_dir,
                 power_dir=arguments.power_dir,
                 workspace=arguments.workspace,
                 result_filename=arguments.result_filename,
@@ -150,16 +150,16 @@ def _parser() -> argparse.ArgumentParser:
 
     srt_finalize = subparsers.add_parser(
         "srt-finalize",
-        help="assemble the app bundle from an srt-slurm H3 job and its power validation",
+        help="assemble the app bundle from an srt-slurm video job and its power validation",
     )
-    srt_finalize.add_argument("--h3-dir", required=True, type=Path)
+    srt_finalize.add_argument("--video-dir", required=True, type=Path)
     srt_finalize.add_argument("--power-dir", required=True, type=Path)
     srt_finalize.add_argument("--workspace", required=True, type=Path)
     srt_finalize.add_argument("--result-filename", required=True)
     srt_finalize.add_argument("--concurrencies", nargs="+", type=int, required=True)
     srt_finalize.add_argument("--output", required=True, type=Path)
 
-    run = subparsers.add_parser("run", help="preview an H3 plan; --execute explicitly submits it")
+    run = subparsers.add_parser("run", help="preview a video plan; --execute explicitly submits it")
     run.add_argument("plan", type=Path)
     run.add_argument("--runtime", choices=("sglang", "vllm-omni"), default="sglang")
     run.add_argument(

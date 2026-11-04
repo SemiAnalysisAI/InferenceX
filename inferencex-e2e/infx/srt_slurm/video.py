@@ -34,8 +34,8 @@ from infx.srt_slurm.workload import (
 
 VIDEO_PACKAGE = "experimental/video-generation"
 SPEC_DIR = "specs"
-PACKAGE_MOUNT = "/h3-package"
-RESULT_DIR = "/logs/h3"
+PACKAGE_MOUNT = "/video-package"
+RESULT_DIR = "/logs/video"
 READINESS_PATH = "/health"
 VIDEO_ENV = (
     "MODEL",
@@ -43,14 +43,14 @@ VIDEO_ENV = (
     "RESULT_FILENAME",
     "RESULT_DIR",
     "REQUIRE_POWER",
-    "H3_SPEC_PATH",
-    "H3_MODEL_PATH",
-    "H3_RESULT_DIR",
-    "H3_SET",
-    "H3_PLAN_SHA256",
-    "H3_CONTAINER_IMAGE",
-    "H3_RUNTIME",
-    "H3_RUNTIME_REVISION",
+    "VIDEO_SPEC_PATH",
+    "VIDEO_MODEL_PATH",
+    "VIDEO_RESULT_DIR",
+    "VIDEO_SET",
+    "VIDEO_PLAN_SHA256",
+    "VIDEO_CONTAINER_IMAGE",
+    "VIDEO_RUNTIME",
+    "VIDEO_RUNTIME_REVISION",
 )
 _BOUND_KEYS = (
     ("model",),
@@ -61,17 +61,17 @@ _BOUND_KEYS = (
     *(("benchmark", "env", name) for name in VIDEO_ENV),
 )
 _SERVICE_ENV = (
-    "H3_SPEC_PATH",
-    "H3_MODEL_PATH",
-    "H3_RESULT_DIR",
-    "H3_SET",
-    "H3_PLAN_SHA256",
-    "H3_CONTAINER_IMAGE",
-    "H3_RUNTIME",
-    "H3_RUNTIME_REVISION",
+    "VIDEO_SPEC_PATH",
+    "VIDEO_MODEL_PATH",
+    "VIDEO_RESULT_DIR",
+    "VIDEO_SET",
+    "VIDEO_PLAN_SHA256",
+    "VIDEO_CONTAINER_IMAGE",
+    "VIDEO_RUNTIME",
     "GPU_COUNT",
 )
-_RECIPE_ENV_KEYS = "H3_RECIPE_ENV_KEYS"
+_RECIPE_ENV_KEYS = "VIDEO_RECIPE_ENV_KEYS"
+# The server recipe pins VIDEO_RUNTIME_REVISION itself; the binder copies it to the client.
 _RESERVED_ENV = (
     set(VIDEO_ENV)
     | set(_SERVICE_ENV)
@@ -81,7 +81,7 @@ _RESERVED_ENV = (
         "VGBENCH_GPU_UUIDS",
         "SRT_MEASUREMENT_WINDOW_DIR",
     }
-)
+) - {"VIDEO_RUNTIME_REVISION"}
 
 
 def _declared_server_env_keys(recipe: Mapping[str, Any], server: Mapping[str, Any]) -> list[str]:
@@ -110,7 +110,7 @@ def _declared_server_env_keys(recipe: Mapping[str, Any], server: Mapping[str, An
 
 
 def video_package(root: Path) -> Path:
-    """The H3 harness beside the end-to-end project ``root`` in the repository."""
+    """The video harness beside the end-to-end project ``root`` in the repository."""
     return root.parent / VIDEO_PACKAGE
 
 
@@ -158,13 +158,13 @@ def load_spec(name: str, *, root: Path, set_id: str) -> dict[str, Any]:
     """The selected set of the YAML workload ``name`` under the harness's ``specs`` directory."""
     if name != PurePosixPath(name).name or not name.endswith((".yaml", ".yml")):
         raise ValueError(
-            f"H3_SPEC must name a YAML file under {VIDEO_PACKAGE}/{SPEC_DIR}: {name!r}"
+            f"VIDEO_SPEC must name a YAML file under {VIDEO_PACKAGE}/{SPEC_DIR}: {name!r}"
         )
     path = video_package(root) / SPEC_DIR / name
     if not path.is_file():
-        raise ValueError(f"H3 spec not found: {path}")
+        raise ValueError(f"video spec not found: {path}")
     if not re.fullmatch(r"[A-Za-z0-9_-]+", set_id):
-        raise ValueError(f"H3_SET must name a workload set of {name}: {set_id!r}")
+        raise ValueError(f"VIDEO_SET must name a workload set of {name}: {set_id!r}")
     helper = path.with_name("video_spec.py")
     module_spec = importlib.util.spec_from_file_location("video_workload_spec", helper)
     if module_spec is None or module_spec.loader is None:
@@ -173,7 +173,7 @@ def load_spec(name: str, *, root: Path, set_id: str) -> dict[str, Any]:
     module_spec.loader.exec_module(module)
     source = module.load_spec(path)
     if set_id not in source["sets"]:
-        raise ValueError(f"H3_SET {set_id!r} is not defined in {name}")
+        raise ValueError(f"VIDEO_SET {set_id!r} is not defined in {name}")
     plan = module.plan_for(source, set_id)
     return {
         "plan": plan,
@@ -260,14 +260,14 @@ def _bind_command(
 def bind_video(
     recipe: Mapping[str, Any], environment: Mapping[str, str], *, root: Path
 ) -> dict[str, Any]:
-    """Write the point's model, image, GPU count, concurrencies and H3 paths into ``recipe``."""
+    """Write the point's model, image, GPU count, concurrencies and video paths into ``recipe``."""
     image, model = _required(environment, "IMAGE"), _required(environment, "MODEL")
     gpus = _positive(_required(environment, "GPU_COUNT"), "GPU_COUNT")
     concurrencies = parse_concurrencies(_required(environment, "CONC_LIST"))
-    spec_name, set_id = _required(environment, "H3_SPEC"), _required(environment, "H3_SET")
+    spec_name, set_id = _required(environment, "VIDEO_SPEC"), _required(environment, "VIDEO_SET")
     spec = load_spec(spec_name, root=root, set_id=set_id)
     if spec["plan"]["model_id"] != model:
-        raise ValueError(f"H3 spec serves {spec['plan']['model_id']!r}, the point {model!r}")
+        raise ValueError(f"video spec serves {spec['plan']['model_id']!r}, the point {model!r}")
     model_path = spec_model_path(
         _required(environment, "HF_HUB_CACHE"), model, spec["plan"]["model_revision"]
     )
@@ -305,16 +305,16 @@ def bind_video(
         raise ValueError(f"the server service must probe a TCP port, not {port!r}")
     port = str(port)
     if (
-        str(workload.get("H3_SERVER_PORT")) != port
-        or str((service.get("env") or {}).get("H3_SERVER_PORT")) != port
+        str(workload.get("VIDEO_SERVER_PORT")) != port
+        or str((service.get("env") or {}).get("VIDEO_SERVER_PORT")) != port
         or readiness.get("path") != READINESS_PATH
     ):
         raise ValueError(
             f"the server service must probe {READINESS_PATH} on its port and the client "
-            "must address that port (H3_SERVER_PORT)"
+            "must address that port (VIDEO_SERVER_PORT)"
         )
-    if workload.get("H3_SERVER_SERVICE") != service["name"]:
-        raise ValueError("benchmark.env.H3_SERVER_SERVICE must name the server service")
+    if workload.get("VIDEO_SERVER_SERVICE") != service["name"]:
+        raise ValueError("benchmark.env.VIDEO_SERVER_SERVICE must name the server service")
     runtime = _required(environment, "FRAMEWORK")
     _bind_command(
         service,
@@ -341,14 +341,14 @@ def bind_video(
         "CONC_LIST": " ".join(map(str, concurrencies)),
         "RESULT_FILENAME": _required(environment, "RESULT_FILENAME"),
         "RESULT_DIR": "/logs",
-        "H3_SPEC_PATH": f"{PACKAGE_MOUNT}/{SPEC_DIR}/{spec_name}",
-        "H3_MODEL_PATH": model_path,
-        "H3_RESULT_DIR": RESULT_DIR,
-        "H3_SET": set_id,
-        "H3_PLAN_SHA256": spec["plan_sha256"],
-        "H3_RUNTIME": runtime,
-        "H3_CONTAINER_IMAGE": image,
-        "H3_RUNTIME_REVISION": revision,
+        "VIDEO_SPEC_PATH": f"{PACKAGE_MOUNT}/{SPEC_DIR}/{spec_name}",
+        "VIDEO_MODEL_PATH": model_path,
+        "VIDEO_RESULT_DIR": RESULT_DIR,
+        "VIDEO_SET": set_id,
+        "VIDEO_PLAN_SHA256": spec["plan_sha256"],
+        "VIDEO_RUNTIME": runtime,
+        "VIDEO_CONTAINER_IMAGE": image,
+        "VIDEO_RUNTIME_REVISION": revision,
         "GPU_COUNT": str(gpus),
     }
     workload.update(values)

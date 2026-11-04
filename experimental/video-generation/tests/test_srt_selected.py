@@ -52,10 +52,10 @@ def test_measurement_window_hashes_the_run_as_the_runner_writes_it():
     assert window["run_sha256"] == hashlib.sha256(video_spec.canonical_json_bytes(run)).hexdigest()
 
 
-def test_h3_vllm_model_view_exposes_only_tested_partition(tmp_path):
+def test_vllm_model_view_exposes_only_tested_partition(tmp_path):
     snapshot = _snapshot(tmp_path / "snapshot")
     (snapshot / "modular_model_index.json").write_text("modular_model_index.json")
-    view = srt_selected.h3_vllm_model_view(snapshot, tmp_path / "view")
+    view = srt_selected.vllm_model_view(snapshot, tmp_path / "view")
     assert (view / "FL2VA").resolve() == (snapshot / "FL2VA").resolve()
     assert (view / "Ref2VA/model_index.json").read_text() == "Ref2VA/model_index.json"
     assert not (view / "modular_model_index.json").exists()
@@ -78,10 +78,12 @@ def test_selected_server_executes_recipe_command_and_records_selected_environmen
     monkeypatch.setenv("HF_HUB_OFFLINE", "0")
     monkeypatch.setenv("TRANSFORMERS_OFFLINE", "1")
     monkeypatch.setenv("VLLM_OMNI_VIDEO_SYNC_TIMEOUT", "777")
-    monkeypatch.setenv("H3_RECIPE_ENV_KEYS", '["HF_HUB_OFFLINE", "VLLM_OMNI_VIDEO_SYNC_TIMEOUT"]')
+    monkeypatch.setenv(
+        "VIDEO_RECIPE_ENV_KEYS", '["HF_HUB_OFFLINE", "VLLM_OMNI_VIDEO_SYNC_TIMEOUT"]'
+    )
     monkeypatch.setenv("VLLM_OMNI_SERVER_STORAGE__PATH", str(tmp_path / "storage"))
     monkeypatch.setenv("SECRET_TOKEN", "never-record")
-    monkeypatch.setenv("H3_CONTAINER_IMAGE", "example/engine:v1@sha256:" + "b" * 64)
+    monkeypatch.setenv("VIDEO_CONTAINER_IMAGE", "example/engine:v1@sha256:" + "b" * 64)
     output = tmp_path / "server"
     command = (
         [
@@ -118,7 +120,7 @@ def test_selected_server_executes_recipe_command_and_records_selected_environmen
     assert executed[0][2]["VLLM_OMNI_VIDEO_SYNC_TIMEOUT"] == "777"
     assert launch["environment"]["HF_HUB_OFFLINE"] == "0"
     assert launch["environment"]["VLLM_OMNI_VIDEO_SYNC_TIMEOUT"] == "777"
-    assert "H3_RECIPE_ENV_KEYS" not in executed[0][2]
+    assert "VIDEO_RECIPE_ENV_KEYS" not in executed[0][2]
     assert "SECRET_TOKEN" not in launch["environment"]
     assert executed[0][2]["VGBENCH_GPU_UUIDS"] == "GPU-1,GPU-2"
     assert launch["image_digest"] == "b" * 64
@@ -184,8 +186,8 @@ def test_v01_vllm_four_gpu_server_records_sealed_launch(tmp_path, monkeypatch):
     uuids = [f"GPU-{index}" for index in range(4)]
     monkeypatch.setattr(srt_selected, "cuda_devices", lambda: uuids)
     monkeypatch.setenv("VLLM_OMNI_SERVER_STORAGE__PATH", str(tmp_path / "storage"))
-    monkeypatch.setenv("H3_CONTAINER_IMAGE", "example/vllm:v0.30.0@sha256:" + "a" * 64)
-    monkeypatch.setenv("H3_RECIPE_ENV_KEYS", '["VLLM_OMNI_SERVER_STORAGE__PATH"]')
+    monkeypatch.setenv("VIDEO_CONTAINER_IMAGE", "example/vllm:v0.30.0@sha256:" + "a" * 64)
+    monkeypatch.setenv("VIDEO_RECIPE_ENV_KEYS", '["VLLM_OMNI_SERVER_STORAGE__PATH"]')
     executed = []
     monkeypatch.setattr(srt_selected.os, "execvpe", lambda file, argv, env: executed.append(argv))
     command = [
@@ -224,7 +226,7 @@ def test_v01_vllm_four_gpu_server_records_sealed_launch(tmp_path, monkeypatch):
             command=command,
             model_view="h3-fl2va",
         )
-    monkeypatch.setenv("H3_CONTAINER_IMAGE", "example/vllm:v0.30.0")
+    monkeypatch.setenv("VIDEO_CONTAINER_IMAGE", "example/vllm:v0.30.0")
     with pytest.raises(ValueError, match="pinned by a SHA256 digest"):
         srt_selected.serve(
             plan,
@@ -340,8 +342,8 @@ def test_vllm_view_checks_snapshot_before_creating_runtime_directories(tmp_path,
     storage = tmp_path / "storage"
     output = tmp_path / "server"
     monkeypatch.setenv("VLLM_OMNI_SERVER_STORAGE__PATH", str(storage))
-    monkeypatch.setenv("H3_RECIPE_ENV_KEYS", '["VLLM_OMNI_SERVER_STORAGE__PATH"]')
-    monkeypatch.setenv("H3_CONTAINER_IMAGE", "example/vllm:v0.30.0@sha256:" + "a" * 64)
+    monkeypatch.setenv("VIDEO_RECIPE_ENV_KEYS", '["VLLM_OMNI_SERVER_STORAGE__PATH"]')
+    monkeypatch.setenv("VIDEO_CONTAINER_IMAGE", "example/vllm:v0.30.0@sha256:" + "a" * 64)
     monkeypatch.setattr(srt_selected, "cuda_devices", lambda: ["GPU-1", "GPU-2"])
     with pytest.raises(ValueError, match="snapshot lacks"):
         srt_selected.serve(

@@ -1,4 +1,4 @@
-# H3 video-generation harness
+# Video-generation harness
 
 **English** | [中文](README_zh.md)
 
@@ -15,7 +15,7 @@ them from `perf-changelog.yaml`, `run-sweep.yml` runs the `video` bucket through
 the SKU recipe under `benchmarks/single_node/srt-slurm-recipes/h3/` starts the
 engine through `python3 -m infx.bench video serve` as a generic service and runs
 `python3 -m infx.bench video client` as `benchmark.type: custom`. This directory
-is mounted into the job as `/h3-package`. H100, H200 and B200 select
+is mounted into the job as `/video-package`. H100, H200 and B200 select
 `h3-v0.1.yaml/release-v1`: 20 distinct measured prompts at C1. See
 [native video delivery](../../inferencex-e2e/docs/video-generation.md) for
 artifact identity, reuse validation and post-merge publication.
@@ -62,6 +62,6 @@ PYTHONPATH=../../inferencex-e2e uv run --no-project --python 3.12 \
   --with 'pyyaml>=6,<7' --with 'pytest>=8,<9' python -m pytest -q
 ```
 
-[Test H3 Video Harness](../../.github/workflows/test-video-harness.yml) runs these
+[Test Video Harness](../../.github/workflows/test-video-harness.yml) runs these
 CPU checks on relevant changes. They make no model, scheduler or GPU calls;
 sweep artifacts are the acceptance evidence.

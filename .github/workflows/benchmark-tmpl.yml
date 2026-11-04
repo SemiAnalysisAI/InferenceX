@@ -146,8 +146,8 @@ env:
   AL_GATE_DATASET: ${{ inputs.al-gate && 'al_gate_dataset/speedbench_coding.jsonl' || '' }}
   GITHUB_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
   VIDEO_ARTIFACT_NAME: ${{ inputs.scenario-type == 'video-generation' && format('h3-results-{0}-{1}-{2}', github.run_id, github.run_attempt, fromJSON(inputs.config).recipe-fingerprint) || '' }}
-  H3_SPEC: ${{ inputs.scenario-type == 'video-generation' && fromJSON(inputs.config).spec || '' }}
-  H3_SET: ${{ inputs.scenario-type == 'video-generation' && fromJSON(inputs.config).set || '' }}
+  VIDEO_SPEC: ${{ inputs.scenario-type == 'video-generation' && fromJSON(inputs.config).spec || '' }}
+  VIDEO_SET: ${{ inputs.scenario-type == 'video-generation' && fromJSON(inputs.config).set || '' }}
   VIDEO_GPUS: ${{ inputs.scenario-type == 'video-generation' && fromJSON(inputs.config).gpus || '' }}
   VIDEO_CONC_LIST: ${{ inputs.scenario-type == 'video-generation' && join(fromJSON(inputs.config).conc-list, ' ') || '' }}
   AIPERF_FAILED_REQUEST_THRESHOLD: '0.10'
@@ -530,8 +530,8 @@ jobs:
             ${{ env.INFERENCEX_E2E_ROOT }}/results/agentic_power_timezone_offset.txt
             ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/power/**
             ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/agentic_power_concurrency_*.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/h3/**/benchmark_concurrency_*.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/h3/server/*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/video/**/benchmark_concurrency_*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/video/server/*.json
             ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/${{ env.RESULT_FILENAME }}.json
             ${{ env.INFERENCEX_E2E_ROOT }}/power-producer-sha.txt
             ${{ env.INFERENCEX_E2E_ROOT }}/exporter-image.sha256

@@ -95,7 +95,7 @@ def test_matrix_runs_every_concurrency_against_one_server_and_publishes_windows(
     logs = tmp_path / "logs"
     windows = logs / "power" / "windows"
     windows.mkdir(parents=True)
-    (logs / "h3/server").mkdir(parents=True)
+    (logs / "video/server").mkdir(parents=True)
     launch = {
         "runtime": "sglang",
         "runtime_revision": "7" * 40,
@@ -106,13 +106,13 @@ def test_matrix_runs_every_concurrency_against_one_server_and_publishes_windows(
         "argv": ["python3", "-m", "sglang"],
         "environment": {"PYTHONUNBUFFERED": "1"},
     }
-    (logs / "h3/server/launch.json").write_text(json.dumps(launch))
+    (logs / "video/server/launch.json").write_text(json.dumps(launch))
     runs = srt_selected.run_matrix(
         PLAN,
         runtime="sglang",
         runtime_revision="7" * 40,
         endpoint="http://10.0.0.1:30283",
-        output=logs / "h3",
+        output=logs / "video",
         concurrencies=[1, 2],
         gpus=2,
         window_dir=windows,
@@ -123,7 +123,7 @@ def test_matrix_runs_every_concurrency_against_one_server_and_publishes_windows(
         (1, "sglang", "7" * 40),
         (2, "sglang", "7" * 40),
     ]
-    assert seen[0][1] == logs / "h3/gpu/c1/baseline"
+    assert seen[0][1] == logs / "video/gpu/c1/baseline"
     assert (
         identities[0]
         == identities[1]
@@ -136,12 +136,12 @@ def test_matrix_runs_every_concurrency_against_one_server_and_publishes_windows(
         }
     )
     assert sorted(runs) == [1, 2]
-    contract = json.loads((logs / "h3/gpu/c2/benchmark_concurrency_2.json").read_text())
+    contract = json.loads((logs / "video/gpu/c2/benchmark_concurrency_2.json").read_text())
     assert contract["max_concurrency"] == 2 and contract["energy_normalization"] == "clips"
     assert contract["benchmark_start_time_unix"] == pytest.approx(1_000_100.0)
     assert contract["duration"] == pytest.approx(60.0) and contract["completed"] == 4
     window = json.loads((windows / "benchmark_concurrency_2.json").read_text())
-    assert window["result_path"] == "h3/gpu/c2/benchmark_concurrency_2.json"
+    assert window["result_path"] == "video/gpu/c2/benchmark_concurrency_2.json"
     assert (window["benchmark_type"], window["concurrency"], window["status"]) == (
         "custom",
         2,
@@ -152,8 +152,8 @@ def test_matrix_runs_every_concurrency_against_one_server_and_publishes_windows(
 
 def _native_job(tmp_path, concurrencies=(1, 2), power_valid=True):
     logs = tmp_path / "logs"
-    h3, power = logs / "h3", logs / "power"
-    (h3 / "server").mkdir(parents=True)
+    video, power = logs / "video", logs / "power"
+    (video / "server").mkdir(parents=True)
     # The record srt_selected.serve seals before it execs the engine.
     bound = {
         "schema_version": "0.1.0",
@@ -171,8 +171,8 @@ def _native_job(tmp_path, concurrencies=(1, 2), power_valid=True):
             "argv": ["/usr/bin/python3"],
         },
     }
-    (h3 / "server/spec.json").write_text(json.dumps(bound))
-    (h3 / "server/launch.json").write_text(json.dumps({"slurm_job_id": "77", "argv": ["x"]}))
+    (video / "server/spec.json").write_text(json.dumps(bound))
+    (video / "server/launch.json").write_text(json.dumps({"slurm_job_id": "77", "argv": ["x"]}))
     power.mkdir()
     with (power / "samples.csv").open("w", newline="") as stream:
         writer = csv.writer(stream)
@@ -197,7 +197,7 @@ def _native_job(tmp_path, concurrencies=(1, 2), power_valid=True):
     workspace = tmp_path / "ws"
     workspace.mkdir()
     for concurrency in concurrencies:
-        cell = h3 / "gpu" / f"c{concurrency}"
+        cell = video / "gpu" / f"c{concurrency}"
         (cell / "baseline/artifacts").mkdir(parents=True)
         run = _run(concurrency)
         (cell / "baseline/run.json").write_text(json.dumps(run))
@@ -228,7 +228,7 @@ def _native_job(tmp_path, concurrencies=(1, 2), power_valid=True):
                     "benchmark_window": {"start_time_unix": 1005.0, "end_time_unix": 1065.0},
                     "expected_gpu_count": 2,
                     "observed_gpu_count": 2,
-                    "per_gpu_role": {f"node/{u}": "h3-server" for u in bound["gpu_uuids"]},
+                    "per_gpu_role": {f"node/{u}": "video-server" for u in bound["gpu_uuids"]},
                     "per_gpu_energy_j": {
                         f"node/{u}": 36000.0 + i for i, u in enumerate(bound["gpu_uuids"])
                     },
@@ -270,7 +270,7 @@ def test_bundle_joins_cells_power_and_identity_into_the_app_layout(tmp_path):
         "VIDEO_ARTIFACT_NAME": "h3-results-123-2-" + "c" * 64,
     }
     result = srt_bundle.build_bundle(
-        h3_dir=logs / "h3",
+        video_dir=logs / "video",
         power_dir=logs / "power",
         workspace=workspace,
         result_filename="r",
@@ -342,7 +342,7 @@ def test_bundle_seals_observed_slurm_allocation(tmp_path):
     output = tmp_path / "h3-results"
 
     srt_bundle.build_bundle(
-        h3_dir=logs / "h3",
+        video_dir=logs / "video",
         power_dir=logs / "power",
         workspace=workspace,
         result_filename="r",
@@ -367,7 +367,7 @@ def test_bundle_counts_malformed_power_samples_instead_of_hiding_them(tmp_path):
         writer.writerow([1, 1071.0, 71, "node", 0, "GPU-x", "nan"])
     output = tmp_path / "h3-results"
     srt_bundle.build_bundle(
-        h3_dir=logs / "h3",
+        video_dir=logs / "video",
         power_dir=logs / "power",
         workspace=workspace,
         result_filename="r",
@@ -387,7 +387,7 @@ def test_power_sample_is_valid_only_when_it_reads_every_server_gpu(tmp_path):
     samples.write_text("".join(line for line in lines if not line.startswith("1,1005.0,5,node,1,")))
     output = tmp_path / "h3-results"
     srt_bundle.build_bundle(
-        h3_dir=logs / "h3",
+        video_dir=logs / "video",
         power_dir=logs / "power",
         workspace=workspace,
         result_filename="r",
@@ -403,7 +403,7 @@ def test_bundle_reports_invalid_power_without_verifying_the_cell(tmp_path):
     logs, workspace = _native_job(tmp_path, concurrencies=(1,), power_valid=False)
     output = tmp_path / "h3-results"
     result = srt_bundle.build_bundle(
-        h3_dir=logs / "h3",
+        video_dir=logs / "video",
         power_dir=logs / "power",
         workspace=workspace,
         result_filename="r",
@@ -422,10 +422,10 @@ def test_bundle_reports_invalid_power_without_verifying_the_cell(tmp_path):
 def test_bundle_marks_a_missing_or_short_cell_failed(tmp_path):
     logs, workspace = _native_job(tmp_path, concurrencies=(1,))
     short = _run(1, valid=3)
-    (logs / "h3/gpu/c1/baseline/run.json").write_text(json.dumps(short))
+    (logs / "video/gpu/c1/baseline/run.json").write_text(json.dumps(short))
     output = tmp_path / "h3-results"
     result = srt_bundle.build_bundle(
-        h3_dir=logs / "h3",
+        video_dir=logs / "video",
         power_dir=logs / "power",
         workspace=workspace,
         result_filename="r",
@@ -446,13 +446,13 @@ def test_bundle_marks_a_missing_or_short_cell_failed(tmp_path):
 
 def test_bundle_rejects_cells_with_different_workload(tmp_path):
     logs, workspace = _native_job(tmp_path)
-    path = logs / "h3/gpu/c2/baseline/run.json"
+    path = logs / "video/gpu/c2/baseline/run.json"
     run = json.loads(path.read_text())
     run["plan_sha256"] = "a" * 64
     path.write_text(json.dumps(run))
     with pytest.raises(ValueError, match="identity differs"):
         srt_bundle.build_bundle(
-            h3_dir=logs / "h3",
+            video_dir=logs / "video",
             power_dir=logs / "power",
             workspace=workspace,
             result_filename="r",
@@ -480,7 +480,7 @@ def _sweep(tmp_path):
             "VIDEO_ARTIFACT_NAME": name,
         }
         srt_bundle.build_bundle(
-            h3_dir=logs / "h3",
+            video_dir=logs / "video",
             power_dir=logs / "power",
             workspace=workspace,
             result_filename="r",
@@ -576,7 +576,7 @@ def test_startup_failure_preserves_declared_plan_and_engine_identity(tmp_path):
     (workspace / "video-identity.json").write_text(json.dumps(identity))
     output = tmp_path / "bundle"
     result = srt_bundle.build_bundle(
-        h3_dir=tmp_path / "absent",
+        video_dir=tmp_path / "absent",
         power_dir=tmp_path / "power",
         workspace=workspace,
         result_filename="r",

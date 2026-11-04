@@ -856,7 +856,7 @@ class VideoGenerationSearchSpaceEntry(BaseModel):
 
 
 class VideoGenerationConfig(BaseModel):
-    """One selected set of the H3 YAML workload and the deployments that serve it."""
+    """One selected set of the video YAML workload and the deployments that serve it."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 

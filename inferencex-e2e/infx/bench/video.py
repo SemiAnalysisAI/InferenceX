@@ -66,14 +66,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 
 def endpoint() -> str:
-    inputs = env.require("H3_SERVER_SERVICE", "H3_SERVER_PORT")
-    key = re.sub(r"[^A-Z0-9_]", "_", inputs["H3_SERVER_SERVICE"].upper())
+    inputs = env.require("VIDEO_SERVER_SERVICE", "VIDEO_SERVER_PORT")
+    key = re.sub(r"[^A-Z0-9_]", "_", inputs["VIDEO_SERVER_SERVICE"].upper())
     host = env.require(f"SRT_SERVICE_{key}_IPS")[f"SRT_SERVICE_{key}_IPS"].split(",")[0]
     if not host or any(char.isspace() for char in host) or any(c in host for c in "/?#@"):
         raise env.InputError("the video service must publish a valid host address")
-    port = env.positive_int("H3_SERVER_PORT")
+    port = env.positive_int("VIDEO_SERVER_PORT")
     if port > 65535:
-        raise env.InputError("H3_SERVER_PORT exceeds 65535")
+        raise env.InputError("VIDEO_SERVER_PORT exceeds 65535")
     if ":" in host and not host.startswith("["):
         host = f"[{host}]"
     return f"http://{host}:{port}"
@@ -81,23 +81,23 @@ def endpoint() -> str:
 
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
-    inputs = env.require("H3_SPEC_PATH", "H3_RESULT_DIR")
-    spec_path, output = Path(inputs["H3_SPEC_PATH"]), Path(inputs["H3_RESULT_DIR"])
+    inputs = env.require("VIDEO_SPEC_PATH", "VIDEO_RESULT_DIR")
+    spec_path, output = Path(inputs["VIDEO_SPEC_PATH"]), Path(inputs["VIDEO_RESULT_DIR"])
     try:
         if args.action == "serve":
-            env.require("H3_RECIPE_ENV_KEYS")
-        selected = env.require("H3_SET")["H3_SET"]
+            env.require("VIDEO_RECIPE_ENV_KEYS")
+        selected = env.require("VIDEO_SET")["VIDEO_SET"]
         from evaluator import srt_selected
 
-        native = env.require("H3_PLAN_SHA256", "H3_RUNTIME", "H3_RUNTIME_REVISION")
-        plan = srt_selected.selected_plan(spec_path, selected, native["H3_PLAN_SHA256"])
+        native = env.require("VIDEO_PLAN_SHA256", "VIDEO_RUNTIME", "VIDEO_RUNTIME_REVISION")
+        plan = srt_selected.selected_plan(spec_path, selected, native["VIDEO_PLAN_SHA256"])
         gpus = env.positive_int("GPU_COUNT")
         if args.action == "serve":
-            model = env.require("H3_MODEL_PATH")["H3_MODEL_PATH"]
+            model = env.require("VIDEO_MODEL_PATH")["VIDEO_MODEL_PATH"]
             srt_selected.serve(
                 plan,
-                runtime=native["H3_RUNTIME"],
-                runtime_revision=native["H3_RUNTIME_REVISION"],
+                runtime=native["VIDEO_RUNTIME"],
+                runtime_revision=native["VIDEO_RUNTIME_REVISION"],
                 model_path=Path(model),
                 gpus=gpus,
                 output=output / "server",
@@ -116,8 +116,8 @@ def main(argv: list[str]) -> int:
         url = endpoint()
         runs = srt_selected.run_matrix(
             plan,
-            runtime=native["H3_RUNTIME"],
-            runtime_revision=native["H3_RUNTIME_REVISION"],
+            runtime=native["VIDEO_RUNTIME"],
+            runtime_revision=native["VIDEO_RUNTIME_REVISION"],
             endpoint=url,
             output=output,
             concurrencies=concurrencies,

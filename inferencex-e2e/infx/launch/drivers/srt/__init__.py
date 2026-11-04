@@ -126,7 +126,7 @@ def run_single_node(launch: Launch) -> int:
 def run_video(launch: Launch) -> int:
     """One native video-generation job: bind the services-only recipe, submit, follow, verify.
 
-    The H3 server is a recipe service on the job's GPUs and the H3 client its custom
+    The video server is a recipe service on the job's GPUs and the video client its custom
     benchmark; the harness is mounted beside the workspace and the model is served from
     the mounted HF hub cache. Power is always collected natively.
     """

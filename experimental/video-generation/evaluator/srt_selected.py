@@ -48,22 +48,22 @@ def cuda_devices() -> list[str]:
 
 
 def _recipe_environment(env: dict[str, str]) -> dict[str, str]:
-    raw = env.pop("H3_RECIPE_ENV_KEYS", None)
+    raw = env.pop("VIDEO_RECIPE_ENV_KEYS", None)
     if raw is None:
         return {}
     try:
         names = json.loads(raw)
     except (TypeError, json.JSONDecodeError) as error:
-        raise ValueError("invalid H3_RECIPE_ENV_KEYS") from error
+        raise ValueError("invalid VIDEO_RECIPE_ENV_KEYS") from error
     if not isinstance(names, list) or any(
         not isinstance(name, str)
         or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name)
         or CREDENTIAL_ENV.search(name)
         for name in names
     ):
-        raise ValueError("invalid H3_RECIPE_ENV_KEYS")
+        raise ValueError("invalid VIDEO_RECIPE_ENV_KEYS")
     if len(names) != len(set(names)) or any(name not in env for name in names):
-        raise ValueError("H3_RECIPE_ENV_KEYS names must be unique and present at launch")
+        raise ValueError("VIDEO_RECIPE_ENV_KEYS names must be unique and present at launch")
     return {name: env[name] for name in names}
 
 
@@ -102,7 +102,7 @@ def selected_plan(path: Path, set_id: str, expected_sha256: str) -> dict:
     return plan
 
 
-def h3_vllm_model_view(snapshot: Path, output: Path) -> Path:
+def vllm_model_view(snapshot: Path, output: Path) -> Path:
     """Expose only the tested FL2VA files without copying weights or mutating the cache."""
     required = ("FL2VA", "model_index.json", "LICENSE", "README.md", "Ref2VA/model_index.json")
     for name in required:
@@ -147,15 +147,15 @@ def serve(
     env = os.environ.copy()
     env["VGBENCH_GPU_UUIDS"] = ",".join(uuids)
     recorded_env = _recipe_environment(env)
-    image = re.fullmatch(r"[^\s@]+@sha256:([0-9a-f]{64})", env.get("H3_CONTAINER_IMAGE", ""))
+    image = re.fullmatch(r"[^\s@]+@sha256:([0-9a-f]{64})", env.get("VIDEO_CONTAINER_IMAGE", ""))
     if image is None:
-        raise ValueError("H3_CONTAINER_IMAGE must be an image pinned by a SHA256 digest")
+        raise ValueError("VIDEO_CONTAINER_IMAGE must be an image pinned by a SHA256 digest")
     served_path = model_path
     if model_view == "h3-fl2va":
         storage = env.get("VLLM_OMNI_SERVER_STORAGE__PATH")
         if not storage:
             raise ValueError("VLLM_OMNI_SERVER_STORAGE__PATH must be set by the recipe")
-        served_path = h3_vllm_model_view(model_path, output / "model-view")
+        served_path = vllm_model_view(model_path, output / "model-view")
         Path(storage).mkdir(parents=True, exist_ok=True)
     argv = [str(served_path) if part == snapshot else part for part in command]
     recorded_env.update({name: env[name] for name in RECORDED_ENGINE_ENV if name in env})

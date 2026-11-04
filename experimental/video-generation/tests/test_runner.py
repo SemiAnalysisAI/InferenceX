@@ -241,7 +241,7 @@ def execute(plan, output_dir, endpoint, **kwargs):
         output_dir,
         endpoint=endpoint,
         runtime_revision=RUNTIME_REVISION,
-        hardware_label="LOCAL HTTP FIXTURE; no GPU and no H3 execution",
+        hardware_label="LOCAL HTTP FIXTURE; no GPU and no model execution",
         **kwargs,
     )
 

@@ -135,18 +135,18 @@ elif mode == "gate":
     (logs / "al_gate" / "aiperf_artifacts").mkdir(parents=True)
     (logs / "al_gate" / "aiperf_artifacts" / "server_metrics_export.json").write_text("{}")
 elif mode == "video":
-    # The H3 service and client leave the server record, one run per concurrency and
+    # The video service and client leave the server record, one run per concurrency and
     # each cell's measured window; the native power package is what srt-slurm retained.
     # The client runs the plan the launcher declared before startup (video-identity.json).
     workspace = pathlib.Path(os.environ["INFMAX_WORKSPACE"])
     declared = json.loads((workspace / "video-identity.json").read_text())
     (logs / "power").mkdir()
     (logs / "power/samples.csv").write_text("retained native samples\n")
-    (logs / "h3/server").mkdir(parents=True)
-    (logs / "h3/server/spec.json").write_text(json.dumps({"gpu_uuids": ["GPU-a", "GPU-b"], "plan": declared["workload_plan"],
+    (logs / "video/server").mkdir(parents=True)
+    (logs / "video/server/spec.json").write_text(json.dumps({"gpu_uuids": ["GPU-a", "GPU-b"], "plan": declared["workload_plan"],
         "baseline": {"name": declared["engine"]["name"], "revision": declared["engine"]["revision"]}}))
     for conc in os.environ["CONC_LIST"].split():
-        cell = logs / "h3/gpu" / f"c{conc}"
+        cell = logs / "video/gpu" / f"c{conc}"
         (cell / "baseline").mkdir(parents=True)
         summary = {"scheduled": 4, "completed": 4, "valid": 4, "failed": 0, "not_started": 0,
                    "latency_median_seconds": 119.0, "valid_clips_per_second": 0.05}

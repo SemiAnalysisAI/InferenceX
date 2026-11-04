@@ -246,7 +246,7 @@ def validate_video_results(
     require_power: bool,
     identity: Mapping[str, str],
 ) -> int:
-    """Join every concurrency's H3 result to the native power package under ``logs_dir``."""
+    """Join every concurrency's video result to the native power package under ``logs_dir``."""
     argv = [
         results_python, "-P", "-m", "infx.results.video",
         "--logs-root", str(logs_dir), "--workspace", str(workspace),
@@ -269,10 +269,10 @@ def build_video_bundle(
     result_filename: str,
     concurrencies: Sequence[int],
 ) -> int:
-    """Assemble the app-facing H3 bundle from the job's results and validation sidecars."""
+    """Assemble the app-facing video bundle from the job's results and validation sidecars."""
     argv = [
         results_python, "-P", "-m", "evaluator.cli", "srt-finalize",
-        "--h3-dir", str(logs_dir / "h3"), "--power-dir", str(logs_dir / "power"),
+        "--video-dir", str(logs_dir / "video"), "--power-dir", str(logs_dir / "power"),
         "--workspace", str(workspace), "--result-filename", result_filename,
         "--output", str(output), "--concurrencies", *map(str, concurrencies),
     ]  # fmt: skip

@@ -206,7 +206,7 @@ VIDEO_ENV = {
     "FRAMEWORK": "sglang", "MODEL": "MiniMaxAI/MiniMax-H3", "IMAGE": "test:tag", "PRECISION": "bf16",
     "MODEL_PREFIX": "h3", "SPEC_DECODING": "none", "IS_AGENTIC": "0", "ISL": "0", "OSL": "0",
     "SCENARIO_TYPE": "video-generation", "IS_MULTINODE": "false", "GPU_COUNT": "2",
-    "CONC_LIST": "1 2", "H3_SPEC": "h3.yaml", "H3_SET": "release-v1", "HF_HUB_CACHE": "/mnt/hf_hub_cache/",
+    "CONC_LIST": "1 2", "VIDEO_SPEC": "h3.yaml", "VIDEO_SET": "release-v1", "HF_HUB_CACHE": "/mnt/hf_hub_cache/",
     "SRT_RECIPE": "benchmarks/single_node/srt-slurm-recipes/h3/sglang/h200-bf16/serving-client.yaml",
     "FAKE_RESULTS": "video",
 }  # fmt: skip
@@ -226,7 +226,7 @@ def video_env(harness, cluster_id: str, **overrides: str) -> dict[str, str]:
     return {**harness.env, **VIDEO_ENV, "RUNNER_NAME": runner, **overrides}
 
 
-def test_video_point_serves_the_h3_service_and_stages_every_concurrency(harness):
+def test_video_point_serves_the_video_service_and_stages_every_concurrency(harness):
     workspace = harness.workspace
     allocation = "cpu=16,gres/gpu=8,mem=128G,node=1"
     env = video_env(
@@ -248,7 +248,7 @@ def test_video_point_serves_the_h3_service_and_stages_every_concurrency(harness)
     rendered = srtslurm(workspace)
     ClusterConfig.Schema().load(rendered)
     mounts = rendered["default_mounts"]
-    assert mounts[str(workspace.parent / "experimental/video-generation")] == "/h3-package"
+    assert mounts[str(workspace.parent / "experimental/video-generation")] == "/video-package"
     assert rendered["default_time_limit"] == "75"
     assert "/mnt/hf_hub_cache/" in mounts.values()
     assert rendered["containers"][rendered["default_gpu_exporter"]["container_image"]]
@@ -1138,10 +1138,10 @@ def test_declared_video_identity_is_retained_before_startup(tmp_path, monkeypatc
     digest = hashlib.sha256(json.dumps(plan, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
     bound = tmp_path / "config.yaml"
     bound.write_text(yaml.safe_dump({"benchmark": {"env": {
-        "H3_SET": "release-v1", "H3_PLAN_SHA256": digest,
-        "H3_RUNTIME": "vllm-omni", "H3_RUNTIME_REVISION": "a" * 40,
+        "VIDEO_SET": "release-v1", "VIDEO_PLAN_SHA256": digest,
+        "VIDEO_RUNTIME": "vllm-omni", "VIDEO_RUNTIME_REVISION": "a" * 40,
     }}}))
-    run = SimpleNamespace(workspace=tmp_path, request=SimpleNamespace(model="test/video", env={"H3_SPEC": "video.yaml"}))
+    run = SimpleNamespace(workspace=tmp_path, request=SimpleNamespace(model="test/video", env={"VIDEO_SPEC": "video.yaml"}))
     def selected(name, *, root, set_id):
         assert (name, root, set_id) == ("video.yaml", tmp_path, "release-v1")
         return {"plan": plan, "plan_sha256": digest}

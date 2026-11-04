@@ -1,8 +1,8 @@
-"""Join a video-generation job's per-concurrency H3 results to its native power package.
+"""Join a video-generation job's per-concurrency video results to its native power package.
 
-One srt-slurm job serves the model once and runs the H3 client at every CONC_LIST
-concurrency. Each cell leaves the client's run bundle (``h3/gpu/c<N>/baseline/run.json``)
-and its measured window (``h3/gpu/c<N>/benchmark_concurrency_<N>.json``, also published as
+One srt-slurm job serves the model once and runs the video client at every CONC_LIST
+concurrency. Each cell leaves the client's run bundle (``video/gpu/c<N>/baseline/run.json``)
+and its measured window (``video/gpu/c<N>/benchmark_concurrency_<N>.json``, also published as
 the telemetry window). This module writes one aggregate per concurrency in the runner
 workspace, validates its window against the power package with the shared multinode
 validator (the server is a recipe service, so its GPUs carry the service's name as their
@@ -29,8 +29,8 @@ from infx.results.power.audit import audit_summary
 from infx.results.power.common import _write_json_atomic
 
 SCENARIO_TYPE = "video-generation"
-SERVICE = "h3-server"
-H3_DIR = "h3"
+SERVICE = "video-server"
+VIDEO_DIR = "video"
 POWER_DIR = "power"
 IDENTITY = ("cluster", "model", "image", "framework", "precision", "spec")
 
@@ -40,8 +40,8 @@ def _sha256(path: Path) -> str:
 
 
 def _server_gpu_uuids(logs_root: Path, gpu_count: int) -> tuple[str, ...]:
-    """The actual server assignment, sealed in both native H3 launch records."""
-    server = logs_root / H3_DIR / "server"
+    """The actual server assignment, sealed in both native video launch records."""
+    server = logs_root / VIDEO_DIR / "server"
     spec = read_object(server / "spec.json").get("gpu_uuids")
     launch = read_object(server / "launch.json").get("gpu_uuids")
     if (
@@ -149,7 +149,7 @@ def run(
     rc = 0
     cells: dict[str, Any] = {}
     for concurrency in concurrencies:
-        cell = logs_root / H3_DIR / cell_dir(concurrency)
+        cell = logs_root / VIDEO_DIR / cell_dir(concurrency)
         run_path = cell / "baseline" / "run.json"
         bench = cell / window_file(concurrency)
         agg = workspace / f"{result_filename}_conc{concurrency}.json"
@@ -162,7 +162,7 @@ def run(
                 run_sha256=_sha256(run_path),
             )  # fmt: skip
         except (OSError, ValueError) as error:
-            print(f"[video] c{concurrency}: unusable H3 result: {error}", file=sys.stderr)
+            print(f"[video] c{concurrency}: unusable video result: {error}", file=sys.stderr)
             cells[str(concurrency)] = {"status": "missing", "error": str(error)}
             rc = 1
             continue

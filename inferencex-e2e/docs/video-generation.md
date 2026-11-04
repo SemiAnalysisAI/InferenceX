@@ -18,7 +18,7 @@ be verified there before execution. MI355X is excluded because the prepared
 CUDA image cannot run on AMD. Historical artifacts remain evidence of their
 original workloads.
 
-Each H3 service uses `command: [python3, -m, infx.bench, video, serve]`.
+Each video service uses `command: [python3, -m, infx.bench, video, serve]`.
 Its `args` select `--model-view snapshot` or `--model-view h3-fl2va`, followed
 by `--` and the complete engine executable and flags. TP, Ulysses, offload,
 compilation, host, and port are explicit recipe settings. `services[].env`
@@ -29,7 +29,7 @@ model, revision, port, or GPU-count mismatches before submission. Other native
 srt-slurm service placeholders retain their existing meaning. For a v0.1
 fairness plan, the binder also requires SGLang's `--disable-conditioning-cache`
 or vLLM-Omni's `OMNI_DIFFUSION_PROMPT_EMBED_CACHE=0` in the selected recipe.
-It forwards every point's image as `H3_CONTAINER_IMAGE`; the server refuses an
+It forwards every point's image as `VIDEO_CONTAINER_IMAGE`; the server refuses an
 image without a SHA256 digest and records the digest in its launch receipt.
 
 The launch receipt records recipe-wide `environment` and server `env` values
@@ -90,9 +90,9 @@ Verify the downstream publication and playback before claiming delivery. The
 trusted main-branch `/use` handler must support video artifacts before accepting
 the first native video reuse request; a PR-local checker cannot bypass that gate.
 
-## Contribute an H3 deployment
+## Contribute a video deployment
 
-For an existing H3 runtime/API, change its native recipe and master config rather
+For an existing video runtime/API, change its native recipe and master config rather
 than adding a launcher or modifying the Python client. The configured deployments
 are the `*-video` keys in [`configs/nvidia-master.yaml`](../configs/nvidia-master.yaml);
 each names its recipe directory under
@@ -141,9 +141,9 @@ Their presence does not establish final-head GPU qualification.
    App's ten-valid-sample chart floor.
 
 During execution, native `recipe.lock.yaml` and the scheduler job record identify
-the submitted configuration. Inspect `logs/h3/server/launch.json` for the actual
+the submitted configuration. Inspect `logs/video/server/launch.json` for the actual
 argv/environment and assigned GPU UUIDs; `spec.json` retains the selected model
-and workload. Service startup failures are in `logs/service_h3-server.out` and
+and workload. Service startup failures are in `logs/service_video-server.out` and
 `logs/sweep_<job>.log`. Client failures remain in each cell's `baseline/run.json`;
 native power failures retain `power-validation.json`. Keep run ID, attempt, source
 head, executed checkout, recipe fingerprint and plan hash distinct when reporting

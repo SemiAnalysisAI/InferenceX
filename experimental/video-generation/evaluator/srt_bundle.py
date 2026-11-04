@@ -1,13 +1,13 @@
-"""Assemble the app-facing H3 result bundle from one srt-slurm video job.
+"""Assemble the app-facing video result bundle from one srt-slurm video job.
 
-The job leaves the client's per-concurrency run bundles under ``<logs>/h3/gpu/c<N>``
-and the server's bound spec under ``<logs>/h3/server``; InferenceX validates each
+The job leaves the client's per-concurrency run bundles under ``<logs>/video/gpu/c<N>``
+and the server's bound spec under ``<logs>/video/server``; InferenceX validates each
 cell's measured window against the native power package and leaves the aggregate and
 validation sidecar in the runner workspace. This module joins them into the matrix
 layout the dashboard ingests (``serving-smoke.json``, ``gpu/c<N>/{spec,gpu-job,power}.json``,
 ``manifest.json``, ``ci.json``, ``SHA256SUMS``) with evidence kind
 ``srt_slurm_h3_service``: power comes from srt-slurm's DCGM telemetry, re-validated by
-InferenceX, never from the H3 supervisor's own sampler.
+InferenceX, never from the video supervisor's own sampler.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ from infx.bench.video import (
 )
 
 EVIDENCE_KIND = "srt_slurm_h3_service"
-TASK_ID = "h3-video"
+TASK_ID = "video-generation"
 MODE = "serving-smoke"
 BUNDLE_TYPE = "h3_serving_smoke_matrix"
 RECEIPT_BUNDLE_TYPE = "srt_slurm_h3_service_receipt"
@@ -275,7 +275,7 @@ def _completion(run: dict) -> dict:
 
 def build_bundle(
     *,
-    h3_dir: Path,
+    video_dir: Path,
     power_dir: Path,
     workspace: Path,
     result_filename: str,
@@ -289,7 +289,7 @@ def build_bundle(
         shutil.rmtree(output)
     output.mkdir(parents=True)
     started = _iso(time.time())
-    server = h3_dir / "server"
+    server = video_dir / "server"
     spec = read_object(server / "spec.json") if (server / "spec.json").is_file() else None
     launch = read_object(server / "launch.json") if (server / "launch.json").is_file() else None
     series, sampled_uuids, malformed = _samples(power_dir)
@@ -311,7 +311,7 @@ def build_bundle(
         write_json(output / "video-identity.json", declared)
     for concurrency in concurrencies:
         relative = cell_dir(concurrency)
-        target, source_cell = output / relative, h3_dir / relative
+        target, source_cell = output / relative, video_dir / relative
         cell: dict[str, Any] = {"concurrency": concurrency, "status": "failed", "verified": False}
         run_path = source_cell / "baseline" / "run.json"
         if not run_path.is_file():
