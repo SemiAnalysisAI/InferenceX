@@ -68,7 +68,7 @@ REFERENCE_OUTPUT=/path/to/persistent/campaign/reference-pilot
 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 "$REFERENCE_ENV/bin/python" \
   -m evaluator.reference --spec specs/h3-v0.1.yaml --set release-v1 \
   --case ceramic-wheel --snapshot "$H3_SNAPSHOT" --output "$REFERENCE_OUTPUT" \
-  --device cuda:0 --dtype bfloat16 --attention-backend native --offload-reserve 12GB \
+  --device cuda:0 --offload-reserve 12GB \
   --encoder-threads 1 --audio-bitrate 128000
 ```
 

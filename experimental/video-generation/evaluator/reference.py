@@ -296,8 +296,8 @@ def main() -> None:
     parser.add_argument("--snapshot", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--device")
-    parser.add_argument("--dtype", choices=["bfloat16"])
-    parser.add_argument("--attention-backend", choices=["native"])
+    parser.add_argument("--dtype", choices=["bfloat16"], default="bfloat16")
+    parser.add_argument("--attention-backend", choices=["native"], default="native")
     parser.add_argument("--offload-reserve")
     parser.add_argument("--encoder-threads", type=int)
     parser.add_argument("--audio-bitrate", type=int)
@@ -327,15 +327,13 @@ def main() -> None:
             "snapshot",
             "output",
             "device",
-            "dtype",
-            "attention_backend",
             "offload_reserve",
             "encoder_threads",
             "audio_bitrate",
         )
     ):
         parser.error(
-            "generation requires explicit snapshot, output, device, dtype, attention, offload and encoder settings"
+            "generation requires explicit snapshot, output, device, offload and encoder settings"
         )
     if not args.device.startswith("cuda") or args.encoder_threads < 1 or args.audio_bitrate < 1:
         parser.error("use a CUDA device and positive encoder settings")

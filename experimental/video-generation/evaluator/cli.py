@@ -1,4 +1,4 @@
-"""Controlled H3 runs and media inspection."""
+"""Controlled H3 CI, full-stream comparison, and portable evidence reports."""
 
 from __future__ import annotations
 
@@ -80,7 +80,6 @@ def _mvp_command(arguments: argparse.Namespace) -> int:
                 "endpoint",
                 "runtime_revision",
                 "hardware_label",
-                "model_revision",
                 "output",
             )
             missing = [name.replace("_", "-") for name in required if not getattr(arguments, name)]
@@ -101,7 +100,6 @@ def _mvp_command(arguments: argparse.Namespace) -> int:
                     runtime=arguments.runtime,
                     runtime_revision=arguments.runtime_revision,
                     hardware_label=arguments.hardware_label,
-                    model_revision=arguments.model_revision,
                     timeout_seconds=arguments.timeout_seconds,
                     api_key_env=arguments.api_key_env,
                     serving_concurrency=arguments.serving_concurrency,
@@ -115,6 +113,20 @@ def _mvp_command(arguments: argparse.Namespace) -> int:
             receipt["run_json"] = str((arguments.output / "run.json").resolve())
             print(json.dumps(receipt, indent=2, sort_keys=True, allow_nan=False))
             return 0 if result.get("status") == "complete" else 1
+
+        if arguments.command == "compare":
+            from .compare import compare_runs
+            from .report import write_report
+
+            result = compare_runs(
+                arguments.baseline,
+                arguments.candidate,
+                policy=_load_mvp_object(arguments.policy),
+            )
+            if arguments.report is not None:
+                write_report(result, arguments.report)
+            print(json.dumps(result, indent=2, sort_keys=True, allow_nan=False))
+            return {"pass": 0, "fail": 1, "inconclusive": 2}[result["overall_status"]]
 
         if arguments.command == "inspect-media":
             from .media import analyze_media
@@ -161,9 +173,6 @@ def _parser() -> argparse.ArgumentParser:
         "--hardware-label", help="operator-declared hardware, precision, and topology label"
     )
     run.add_argument(
-        "--model-revision", help="operator-declared exact checkpoint revision matching the plan"
-    )
-    run.add_argument(
         "--output", type=Path, help="new output directory; existing paths are never overwritten"
     )
     run.add_argument("--timeout-seconds", type=float, default=3600)
@@ -179,6 +188,16 @@ def _parser() -> argparse.ArgumentParser:
         "--delivery-deadline-seconds",
         type=float,
         help="optional submit-to-downloaded-media deadline for technical goodput; not an attempt timeout",
+    )
+
+    compare = subparsers.add_parser(
+        "compare", help="compare paired run bundles and return a CI exit code"
+    )
+    compare.add_argument("baseline", type=Path)
+    compare.add_argument("candidate", type=Path)
+    compare.add_argument("--policy", required=True, type=Path)
+    compare.add_argument(
+        "--report", type=Path, help="new portable HTML report plus a local media-assets directory"
     )
 
     inspect = subparsers.add_parser(

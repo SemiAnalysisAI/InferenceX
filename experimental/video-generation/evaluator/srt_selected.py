@@ -278,10 +278,6 @@ def run_matrix(
                 "server_argv": launch["argv"],
                 "server_environment": launch["environment"],
                 "gpu_topology": {"gpu_uuids": launch["gpu_uuids"]},
-                "algorithm_config": {
-                    "generation": plan["generation"],
-                    "fairness": plan["fairness"],
-                },
             }
     results = {}
     for concurrency in concurrencies:
@@ -294,7 +290,6 @@ def run_matrix(
             runtime=runtime,
             runtime_revision=runtime_revision,
             hardware_label=f"native srt-slurm {gpus} GPUs",
-            model_revision=plan["model_revision"],
             timeout_seconds=request_seconds,
             serving_concurrency=concurrency,
             numerical_identity=numerical_identity,

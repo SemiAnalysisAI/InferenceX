@@ -175,11 +175,7 @@ def load_spec(name: str, *, root: Path, set_id: str) -> dict[str, Any]:
     if set_id not in source["sets"]:
         raise ValueError(f"H3_SET {set_id!r} is not defined in {name}")
     plan = module.plan_for(source, set_id)
-    return {
-        "plan": plan,
-        "model": {"revision": source["model"]["revision"]["value"]},
-        "plan_sha256": module.plan_sha256(plan),
-    }
+    return {"plan": plan, "plan_sha256": module.plan_sha256(plan)}
 
 
 def _pool_service(recipe: Mapping[str, Any]) -> dict[str, Any]:
@@ -270,7 +266,7 @@ def bind_video(
     if spec["plan"]["model_id"] != model:
         raise ValueError(f"H3 spec serves {spec['plan']['model_id']!r}, the point {model!r}")
     model_path = spec_model_path(
-        _required(environment, "HF_HUB_CACHE"), model, spec["model"]["revision"]
+        _required(environment, "HF_HUB_CACHE"), model, spec["plan"]["model_revision"]
     )
     if recipe.get("frontend", {}).get("type") != "none":
         raise ValueError("video recipes are services-only: frontend.type must be none")
@@ -322,7 +318,7 @@ def bind_video(
         runtime=runtime,
         model=model,
         model_path=model_path,
-        revision=spec["model"]["revision"],
+        revision=spec["plan"]["model_revision"],
         port=port,
         gpus=gpus,
     )

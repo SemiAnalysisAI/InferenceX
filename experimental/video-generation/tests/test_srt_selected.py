@@ -27,9 +27,6 @@ def test_selected_plan_binds_requested_set_and_digest(tmp_path):
     selected = spec["sets"]["release-v1"]
     selected.update(plan_id="selected-control", repetitions=2, warmup_runs=0)
     selected["cases"] = selected["cases"][:1]
-    selected["seed_sources"] = {
-        case["seed"]: selected["seed_sources"][case["seed"]] for case in selected["cases"]
-    }
     path = tmp_path / "controlled.yaml"
     path.write_text(yaml.safe_dump(spec))
     expected = h3_spec.plan_sha256(h3_spec.plan_for(spec, "release-v1"))

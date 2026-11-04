@@ -4,7 +4,9 @@ on:
   pull_request:
     paths: &h3-video-paths
       - 'experimental/video-generation/**'
+      - 'inferencex-e2e/infx/bench/video.py'
       - 'inferencex-e2e/infx/results/power/**'
+      - 'inferencex-e2e/infx/results/video_artifacts.py'
       - '.github/workflows/test-h3-spec.yml'
   push:
     paths: *h3-video-paths
@@ -36,12 +38,6 @@ jobs:
           --with 'pyyaml>=6,<7' --with 'pytest>=8,<9'
           python -m pytest -q
       - name: Lint and format
-        # The infx config never lints tests/, so assert (S101) is allowed there.
-        # These standalone modules have no package, so INP001 does not apply.
         run: |
-          uvx ruff@0.14.0 check --config inferencex-e2e/infx/ruff.toml --ignore INP001 \
-            experimental/video-generation/specs/h3_spec.py
-          uvx ruff@0.14.0 check --config inferencex-e2e/infx/ruff.toml --ignore INP001,S101 \
-            experimental/video-generation/tests/test_h3_spec.py
-          uvx ruff@0.14.0 format --check --config inferencex-e2e/infx/ruff.toml \
-            experimental/video-generation/specs/h3_spec.py experimental/video-generation/tests/test_h3_spec.py
+          uvx ruff@0.14.0 check experimental/video-generation
+          uvx ruff@0.14.0 format --check experimental/video-generation
