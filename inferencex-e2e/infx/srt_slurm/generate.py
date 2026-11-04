@@ -112,7 +112,8 @@ def _binder_inputs(
     """
     agentic = environment["IS_AGENTIC"] == "1"
     single_node = "prefill" not in point
-    binds = point.get("cpu-power") if single_node else agentic or point.get("power")
+    cpu_power = bool(point.get("cpu-power"))
+    binds = (cpu_power or placement is not None) if single_node else agentic or point.get("power")
     if not binds:
         return None, None, {}
     if placement is None:
@@ -127,7 +128,7 @@ def _binder_inputs(
         raise ValueError(f"cluster {cluster.id!r} has no slurm.srt-slurm settings")
     if single_node:
         try:
-            return None, config.cpu_power_source(cluster, srt, cpu_power=True), {}
+            return None, config.cpu_power_source(cluster, srt, cpu_power, default=True), {}
         except LaunchError as error:
             raise ValueError(str(error)) from error
     runtime = {

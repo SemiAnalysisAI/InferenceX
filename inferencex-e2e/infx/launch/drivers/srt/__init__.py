@@ -71,7 +71,7 @@ def run_single_node(launch: Launch) -> int:
             run.env["SRT_SRUN_OPTIONS"] = options
         native_power = not request.eval_only and not request.al_gate
         cpu_source = config.cpu_power_source(
-            run.cluster, run.srt, native_power and request.cpu_power
+            run.cluster, run.srt, native_power and request.cpu_power, default=native_power
         )
         if rc := submit.bind_point(run, checkout, root / "arguments", cpu_source):
             return rc

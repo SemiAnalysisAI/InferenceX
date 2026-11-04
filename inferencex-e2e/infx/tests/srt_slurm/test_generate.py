@@ -252,6 +252,23 @@ def test_a_single_node_cpu_power_point_binds_the_clusters_rapl_exporter_or_fails
     assert [recipe["telemetry"]["cpu_power_exporter"] for recipe in recipes] == [{"source": "rapl"}] * 2
 
 
+@pytest.mark.parametrize("declared", [True, False])
+def test_a_single_node_point_measures_cpu_power_by_default_where_its_cluster_declares_it(
+    project, tmp_path, declared
+):
+    if declared:
+        runners = project / "configs/runners.yaml"
+        inventory = yaml.safe_load(runners.read_text())
+        inventory["clusters"]["fixture"]["slurm"]["srt-slurm"]["cpu-power-exporter"] = {"source": "rapl"}
+        runners.write_text(yaml.safe_dump(inventory))
+    output = tmp_path / "out"
+
+    assert generate(project, output, "fixture-sglang") == 0
+    recipes = [recipe for _, recipe in written(output)]
+    exporters = [recipe.get("telemetry", {}).get("cpu_power_exporter") for recipe in recipes]
+    assert exporters == [{"source": "rapl"} if declared else None] * 2
+
+
 def test_a_multinode_agentx_point_without_power_turns_its_clients_power_off(
     project, power_lane, tmp_path
 ):

@@ -277,16 +277,18 @@ def agentic_client_env(
 
 
 def cpu_power_source(
-    cluster: Cluster, srt: SrtSlurmSettings, cpu_power: bool
+    cluster: Cluster, srt: SrtSlurmSettings, cpu_power: bool, *, default: bool = False
 ) -> CpuPowerSource | None:
-    """The cluster's CPU power exporter source when the point selected cpu-power, else None."""
-    if not cpu_power:
-        return None
-    if srt.cpu_power_exporter is None:
+    """The cluster's CPU power exporter source when the point selected cpu-power, or measures
+    it by ``default`` on a cluster that declares an exporter; else None.
+    """
+    if srt.cpu_power_exporter is not None and (cpu_power or default):
+        return srt.cpu_power_exporter.source
+    if cpu_power:
         raise LaunchError(
             f"cluster {cluster.id!r} declares no srt-slurm.cpu-power-exporter for cpu-power"
         )
-    return srt.cpu_power_exporter.source
+    return None
 
 
 def binder_inputs(

@@ -882,12 +882,12 @@ CPU_POWER_POINTS = {
 
 @pytest.mark.parametrize(("point", "cluster_id", "cpu_power", "bound"), [
     ("native", "mi355x-amds", "1", True),
-    ("native", "mi355x-amds", "0", False),
+    ("native", "mi355x-amds", "0", True),
     ("eval-only", "mi355x-amds", "1", False),
     ("al-gate", "mi355x-amds", "1", False),
     ("multi-node", "gb300-nv", "1", True),
 ])  # fmt: skip
-def test_a_cpu_power_point_on_a_rapl_cluster_binds_the_exporter_and_grants_its_counters(
+def test_a_power_point_on_a_rapl_cluster_binds_the_exporter_and_grants_its_counters(
     harness, point, cluster_id, cpu_power, bound
 ):
     set_cpu_power_exporter(harness.config, cluster_id, {"source": "rapl"})
