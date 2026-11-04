@@ -20,13 +20,8 @@ SILENCE_AMPLITUDE = 1e-4  # -80 dBFS sample threshold, also used for RMS presenc
 CLIPPING_AMPLITUDE = 1.0 - 1.0 / 32768.0
 FROZEN_MAE = 1.0 / 1024.0
 SPECTRAL_WINDOW_SAMPLES = 1024
-H3_ENCODING = {
-    "video_codec": "libx264",
-    "preset": "ultrafast",
-    "crf": 18,
-    "pixel_format": "yuv420p",
-    "audio_codec": "aac",
-}
+# An MP4 records the codec family, not which encoder produced it.
+_DECODED_VIDEO_CODEC = {"libx264": "h264"}
 
 
 def _libraries() -> tuple[Any, Any]:
@@ -93,12 +88,18 @@ def _validate_expected(expected: dict) -> None:
     for key in {"audio_required", "requires_motion", "requires_sound"} & expected.keys():
         if not isinstance(expected[key], bool):
             raise ValueError(f"expected.{key} must be a boolean")
-    if "encoding" in expected and expected["encoding"] != {
-        **H3_ENCODING,
-        "audio_sample_rate_hz": expected.get("audio_sample_rate_hz"),
-        "audio_channels": expected.get("audio_channels"),
-    }:
-        raise ValueError("expected.encoding must match the supported explicit H3 encoder contract")
+    if "encoding" in expected:
+        encoding = expected["encoding"]
+        if (
+            not isinstance(encoding, dict)
+            or encoding.get("video_codec") not in _DECODED_VIDEO_CODEC
+            or not all(
+                isinstance(encoding.get(key), str) for key in ("pixel_format", "audio_codec")
+            )
+        ):
+            raise ValueError(
+                "expected.encoding must name a known video encoder, a pixel format, and an audio codec"
+            )
 
 
 def _audio_array(frame: Any, np: Any) -> Any:
@@ -511,12 +512,13 @@ def analyze_media(path: Path, expected: dict | None = None) -> dict:
             )
     if "encoding" in expected:
         encoding = expected["encoding"]
+        codec = _DECODED_VIDEO_CODEC[encoding["video_codec"]]
         checks.append(
             _check(
                 "video.codec",
-                video.get("codec") == "h264",
+                video.get("codec") == codec,
                 video.get("codec"),
-                "h264",
+                codec,
                 "Decoded codec family; an MP4 cannot prove the exact encoder implementation.",
             )
         )

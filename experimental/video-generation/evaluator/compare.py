@@ -18,7 +18,7 @@ from urllib.parse import urlsplit, urlunsplit
 from specs.h3_spec import canonical_json_bytes, plan_sha256, schema_version
 
 from .media import analyze_media, compare_media
-from .runner import _slots, valid_numerical_identity
+from .runner import _slots, requested_encoding, valid_numerical_identity
 
 
 _POLICY_NUMBERS = {
@@ -373,8 +373,9 @@ def _expected(plan: dict, case: dict) -> dict:
     generation["audio_required"] = bool(
         generation.get("audio_required", generation.get("audio_sample_rate_hz"))
     )
-    if "fairness" in plan:
-        generation["encoding"] = plan["fairness"]["encoding"]
+    encoding = requested_encoding(plan)
+    if encoding:
+        generation["encoding"] = encoding
     for field in ("requires_motion", "requires_sound"):
         generation[field] = bool(case.get(field, False))
     return generation

@@ -74,6 +74,8 @@ _H3_CELL = {
 }
 # H3 snaps each requested duration to its own delivered frame count.
 _H3_DURATION_FRAMES = ((4, 107), (5, 124), (8, 192))
+# SGLang has no crf field; it encodes with crf = int((1 - output_compression / 100) * 51).
+SGLANG_OUTPUT_COMPRESSION = {18: 63}
 _PROTOCOL_SOURCES = {
     "sglang": {
         "repository": "https://github.com/sgl-project/sglang",
@@ -152,6 +154,10 @@ def valid_numerical_identity(identity: Any, runtime_revision: str) -> bool:
     )
 
 
+def requested_encoding(plan: dict[str, Any]) -> dict[str, Any] | None:
+    return plan["fairness"]["encoding"] if schema_version(plan) == 2 else None
+
+
 def _case(case: Any, name: str) -> None:
     if not isinstance(case, dict) or set(case) != _CASE_FIELDS:
         raise ValueError(f"{name} must declare exactly {sorted(_CASE_FIELDS)}")
@@ -185,6 +191,15 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("model_revision must be an immutable 40-character commit")
     if schema_version(frozen) not in (1, 2):
         raise ValueError("schema_version must be 1 or 2")
+    if schema_version(frozen) == 2:
+        fairness = frozen.get("fairness")
+        encoding = fairness.get("encoding") if isinstance(fairness, dict) else None
+        if (
+            not isinstance(encoding, dict)
+            or not isinstance(encoding.get("preset"), str)
+            or type(encoding.get("crf")) is not int
+        ):
+            raise ValueError("schema 2 plans must request fairness.encoding preset and integer crf")
     generation = frozen.get("generation")
     if not isinstance(generation, dict):
         raise ValueError("generation must be an object with explicit controls")
@@ -254,6 +269,7 @@ def _slots(plan: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _payload(plan: dict[str, Any], slot: dict[str, Any], runtime: str) -> dict[str, Any]:
     generation = plan["generation"]
+    encoding = requested_encoding(plan)
     target = {
         "duration_seconds": generation["duration_seconds"],
         "aspect_ratio": generation["aspect_ratio"],
@@ -269,16 +285,26 @@ def _payload(plan: dict[str, Any], slot: dict[str, Any], runtime: str) -> dict[s
     if runtime == "sglang":
         # H3's SGLang admission explicitly rejects caller-set fps/num_frames;
         # its target resolves both. Expected dimensions are verified on delivery.
-        return {
+        request = {
             **common,
             "task": "t2va",
             "conditions": [],
             "target": target,
             "audio_flow_shift": generation["audio_flow_shift"],
-            **(
-                {"x264_preset": "ultrafast", "output_compression": 63} if "fairness" in plan else {}
-            ),
         }
+        if encoding:
+            if encoding["crf"] not in SGLANG_OUTPUT_COMPRESSION:
+                raise ValueError(f"SGLang cannot request CRF {encoding['crf']}")
+            request["x264_preset"] = encoding["preset"]
+            request["output_compression"] = SGLANG_OUTPUT_COMPRESSION[encoding["crf"]]
+        return request
+    extra = {
+        "task": "t2va",
+        "target": target,
+        "audio_flow_shift": generation["audio_flow_shift"],
+    }
+    if encoding:
+        extra["video_codec_options"] = {"preset": encoding["preset"], "crf": str(encoding["crf"])}
     return {
         **common,
         "width": generation["width"],
@@ -286,16 +312,7 @@ def _payload(plan: dict[str, Any], slot: dict[str, Any], runtime: str) -> dict[s
         "fps": generation["fps"],
         "num_frames": generation["frame_count"],
         "num_outputs_per_prompt": 1,
-        "extra_params": {
-            "task": "t2va",
-            "target": target,
-            "audio_flow_shift": generation["audio_flow_shift"],
-            **(
-                {"video_codec_options": {"preset": "ultrafast", "crf": "18"}}
-                if "fairness" in plan
-                else {}
-            ),
-        },
+        "extra_params": extra,
     }
 
 
@@ -707,6 +724,9 @@ def run_plan(
         },
     }
 
+    slots = _slots(frozen)
+    payloads = {slot["slot_id"]: _payload(frozen, slot, runtime) for slot in slots}
+    encoding = requested_encoding(frozen)
     directory = Path(output_dir)
     directory.mkdir(parents=True, exist_ok=False)
     (directory / "artifacts").mkdir()
@@ -771,7 +791,6 @@ def run_plan(
         )
     configuration["configuration_sha256"] = _digest(configuration)
     _write_json(directory / "configuration.json", configuration, exclusive=True)
-    slots = _slots(frozen)
     scheduled = len(frozen["cases"]) * frozen["repetitions"]
     run: dict[str, Any] = {
         "bundle_version": "0.1.0",
@@ -834,8 +853,8 @@ def run_plan(
             "audio_required": True,
         }
         expected["duration_seconds"] = expected["frame_count"] / expected["fps"]
-        if "fairness" in frozen:
-            expected["encoding"] = frozen["fairness"]["encoding"]
+        if encoding:
+            expected["encoding"] = encoding
         record: dict[str, Any] = {
             **{
                 key: slot[key]
@@ -861,7 +880,7 @@ def run_plan(
             record["error"] = abort_code
             _event(journal, "slot_not_started", slot_id=slot["slot_id"], reason=record["error"])
         else:
-            payload = _payload(frozen, slot, runtime)
+            payload = payloads[slot["slot_id"]]
             _write_json(
                 directory / "requests" / (slot["slot_id"] + ".json"), payload, exclusive=True
             )

@@ -372,6 +372,21 @@ def test_fairness_request_and_disjoint_warmup_reach_local_http_fixture(
         )
 
 
+def test_request_encoding_comes_from_the_plan(tmp_path):
+    path = Path(__file__).resolve().parents[1] / "specs/h3-v0.1.yaml"
+    plan = h3_spec.plan_for(h3_spec.load_spec(path), "release-v1")
+    plan["fairness"]["encoding"]["preset"] = "veryfast"
+    sglang = runner.preview_plan(plan, runtime="sglang")["slots"][0]["request"]
+    vllm = runner.preview_plan(plan, runtime="vllm-omni")["slots"][0]["request"]
+    assert (sglang["x264_preset"], sglang["output_compression"]) == ("veryfast", 63)
+    assert vllm["extra_params"]["video_codec_options"] == {"preset": "veryfast", "crf": "18"}
+    plan["fairness"]["encoding"]["crf"] = 23
+    output = tmp_path / "not-created"
+    with pytest.raises(ValueError, match="SGLang cannot request CRF 23"):
+        execute(plan, output, "http://127.0.0.1:1")
+    assert not output.exists()
+
+
 def test_http_failure_is_durable_never_retried_and_aborts_unknown_jobs(
     plan, tmp_path, mocked_media, fixture_server
 ):
