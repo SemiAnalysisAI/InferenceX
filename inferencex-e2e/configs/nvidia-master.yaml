@@ -6071,9 +6071,7 @@ dsv41flash-fp4-gb200-vllm-agentic-dspark:
     - dram-utilization: 0.80
       search-space:
       # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
-      # TP4 covers low concurrency with FlashInfer sparse MLA, THP Engram tables and an active-request cap.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [4, 10, 16], srt-recipe: agentic.yaml }
-      # DEP4 is native TP1 x DP4 + EP4 with MegaMoE and FlashMLA mega-attention behind a consistent-hash vLLM Router.
       - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [64, 100, 136, 170, 256], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
 
 # SGLang arm for DeepSeek-V4.1-Flash AgentX on GB200, from the SGLang cookbook

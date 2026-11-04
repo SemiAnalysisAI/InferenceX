@@ -47,12 +47,6 @@ base:
 
 # Native zip expansion creates one variant per concurrency.
 
-# TP4 covers low concurrency with FlashInfer sparse MLA and THP Engram tables.
-# max-num-active-seqs admits only 1, 2 or 3 requests into RUNNING, so decode
-# batches stay small while max-num-seqs still sizes the runner and graphs.
-# prefill-schedule-interval admits prefill once every 16 (c4) or 96 steps and
-# leaves the steps in between to decode alone. c4 also uses the DeepSelect
-# top-k for the sparse indexer.
 zip_override_tp4:
   roles:
     agg:
@@ -66,6 +60,7 @@ zip_override_tp4:
           - '{"enable_flashinfer_autotune":true}'
           - '{"enable_flashinfer_autotune":true}'
         max-num-seqs: [8, 16, 64]
+        # Keeps decode batches small; max-num-seqs still sizes the runner and graphs.
         max-num-active-seqs: [1, 2, 3]
         prefill-schedule-interval: [16, 96, 96]
         # Piecewise graph capture sizes are multiples of the six-token DSpark
@@ -80,14 +75,6 @@ zip_override_tp4:
     env:
       CONC: ['4', '10', '16']
 
-# DEP4: TP1 x DP4 + EP4 with MegaMoE, FlashMLA mega-attention and the DeepSelect
-# top-k behind a consistent-hash router. Engram tables are shared across DP ranks.
-# Prefill runs once every 96 steps. A long prompt is prefilled at most
-# long-prefill-token-threshold tokens per step, so a cold long prompt on one DP rank
-# does not hold the other ranks' decode for a whole budget-sized step. The KV pool
-# is fixed (kv-cache-memory) to leave room for the large prefill budget's
-# activations: 64k tokens and 16 GiB at c64/c100, 56k and 22 GiB at c136/c170, 48k
-# and 28 GiB at c256. The sparse-MLA prefill workspace is 4x max-model-len below c256.
 zip_override_dep4:
   frontend:
     type: vllm-router
@@ -118,12 +105,13 @@ zip_override_dep4:
         max-num-seqs: 128
         prefill-schedule-interval: 96
         max-num-batched-tokens: [65536, 65536, 57344, 57344, 49152]
+        # gpu-memory-utilization sizing reserves this prefill budget's activation peak and leaves too little KV.
         kv-cache-memory: [17179869184, 17179869184, 23622320128, 23622320128, 30064771072]
+        # A cold long prompt on one DP rank would otherwise stall the other ranks' decode for a full budget step.
         long-prefill-token-threshold: [4096, 8192, 8192, 8192, 8192]
         compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048,2304,2560,2816,3072,3328,3584,3840,4096]}'
         max-cudagraph-capture-size: 8190
-        # Bind DP ranks 0-1 to NUMA node 0 and ranks 2-3 to node 1. The value is one
-        # list, wrapped once so the zip broadcasts it to every variant.
+        # Wrapped once so the zip broadcasts the single list to every variant.
         numa-bind: true
         numa-bind-nodes: [[0, 0, 1, 1]]
       env:
