@@ -559,10 +559,14 @@ Verify BOTH:
   Name the config/script and line.
 - (b) AL VALUE MATCHES THE GOLDEN CURVE. Read the committed golden AL YAML for the
   model in `inferencex-e2e/infx/golden_al_distribution/` on the default-branch checkout. Examples include
-  `qwen3.5_mtp.yaml` and `minimaxm3_eagle3.yaml`. Confirm the pinned AL equals the golden value for that
+  `qwen3.5-397b-a17b-nvfp4__mtp__native__default-default.yaml` and `minimax-m3__eagle3__minimax-m3-eagle3__default-default.yaml`. Confirm the pinned AL equals the golden value for that
   model, thinking mode, and the config's `num_speculative_tokens` / MTP level (e.g.
   qwen3.5 thinking_on with 3 speculative tokens -> 3.39; `signoff_facts golden-al` returns
-  the expected value and setting). For TRT-LLM configs, compare
+  the expected value and setting; pass the generation role's verifier, as `identities.yaml` may select on it:
+  `--verify block` for vLLM `rejection_sample_method: block` or `synthetic` and SGLang
+  `speculative-use-block-verification`, `--verify relaxed` for TRT-LLM
+  `use_relaxed_acceptance_for_thinking`, `--verify standard` for vLLM, SGLang and TRT-LLM roles
+  that set none, and no `--verify` for ATOM and TileRT). For TRT-LLM configs, compare
   the pinned `TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS` value PLUS 1 against the
   golden AL (the env var excludes the bonus token). A submission may choose any
   supported draft length, but it may NOT substitute a different acceptance target.
