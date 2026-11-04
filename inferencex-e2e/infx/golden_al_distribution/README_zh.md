@@ -26,6 +26,13 @@ AL 取决于工作负载：草稿模型的预测在某些领域比其他领域�
 
 对于 Qwen3.5 的 srt-slurm 启动，srt 驱动会运行 `infx/srt_slurm/synthetic_acceptance.py` 连接器，在应用调用方覆盖设置后，根据生成角色的 `speculative-num-steps` 和 `THINKING_MODE` 选择已提交的曲线。验证 token 不计为额外的 MTP 步数。对于采用合成接受的 SGLang MTP 吞吐测试，如果生成角色缺少 `speculative-num-draft-tokens`，或者其值不是等于 `speculative-num-steps + 1` 的整数，连接器会拒绝启动。无需手动设置接受长度。仅评测运行会移除合成设置并使用真实验证。
 
+TokenSpeed MTP 配置同样根据 `speculative-num-steps` 自动选择黄金 AL，要求
+`speculative-num-draft-tokens` 等于步数加一，且 `speculative-eagle-topk: 1`。
+连接器为 AgentX 吞吐测试设置 `synthetic-acceptance-length` 和所需的
+`sampling-backend: greedy`；仅评测和固定序列长度运行会移除该接受长度，并选择
+`sampling-backend: flashinfer` 进行真实验证。TokenSpeed 连接器接受显式 MTP 参数，
+拒绝其他投机算法和 JSON `speculative-config` 简写。
+
 vLLM 通过合成拒绝采样支持这一策略。例如，EAGLE3 运行可以通过 `synthetic_acceptance_length` 注入所选 YAML 值：
 
 ```bash
