@@ -12012,3 +12012,12 @@
     - "Keep historical results, SPEED-Bench collectors, golden AL curves, vendor evals and OperatorX shapes."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4762
   retired: true
+
+- config-keys:
+    - qwen3.8next-fp4-gb300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update to lmsysorg/sglang:nightly-dev-cu13-20261103-797af717 and enable SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION and breakable prefill CUDA graphs."
+    - "Replace the search space with TP4/EP4 at concurrency 3, TP1/EP1 at concurrency 8 and 20, and TP1/EP1 with HiCache at concurrency 36, 56 and 80."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PRNUM
