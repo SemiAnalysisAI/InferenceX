@@ -146,6 +146,7 @@ env:
   EVAL_CONC: ${{ inputs.eval-conc }}
   EVAL_LIMIT: ${{ inputs.eval-limit }}
   POWER: ${{ fromJSON(inputs.config).power && '1' || '0' }}
+  CPU_POWER: ${{ fromJSON(inputs.config)['cpu-power'] && '1' || '0' }}
   AL_GATE: ${{ inputs.al-gate }}
   AL_GATE_CURVE: ${{ inputs.al-gate && fromJSON(inputs.config)['al-gate'].curve || '' }}
   AL_GATE_DRAFT_TOKENS: ${{ inputs.al-gate && format('{0}', fromJSON(inputs.config)['al-gate']['draft-tokens']) || '' }}

@@ -42,6 +42,7 @@ _POINT_KEYS = (
     ("benchmark", "concurrencies"),
     ("telemetry", "enabled"),
     ("telemetry", "dcgm_exporter", "port"),
+    ("telemetry", "cpu_power_exporter"),
 )
 _FIXED_ENV = ("MODEL", "ISL", "OSL", "CONC", "CONC_LIST", "RANDOM_RANGE_RATIO", "USE_CHAT_TEMPLATE")
 _AGENTIC_ENV = ("CONC", "CONC_LIST", "RESULT_DIR", "AGENTIC_OUTPUT_DIR", "HF_HUB_CACHE",
@@ -189,11 +190,13 @@ def compose_recipe(
     multinode: bool,
     root: Path,
     power_port: int | None = None,
+    cpu_power_source: str | None = None,
     native_power: bool = False,
 ) -> dict[str, Any]:
     """The fragment at ``path`` over its lane's shared block, under ``base`` for bundles.
 
-    ``power_port`` adds the DCGM telemetry block with its exporter on that port.
+    ``power_port`` adds the DCGM telemetry block with its exporter on that port, and
+    ``cpu_power_source`` the cluster's Grace CPU power exporter beside it.
     """
     raw = yamlio.safe_load(path.read_text())
     if not isinstance(raw, dict):
@@ -203,7 +206,9 @@ def compose_recipe(
     if native_power:
         shared = merge_blocks(shared, _block(root / NATIVE_TELEMETRY_BLOCK))
     if power_port is not None:
-        exporter = {"telemetry": {"dcgm_exporter": {"port": power_port}}}
+        exporter: dict[str, Any] = {"telemetry": {"dcgm_exporter": {"port": power_port}}}
+        if cpu_power_source is not None:
+            exporter["telemetry"]["cpu_power_exporter"] = {"source": cpu_power_source}
         shared = merge_blocks(shared, merge_blocks(_block(root / TELEMETRY_BLOCK), exporter))
     if "base" in raw:
         return {**raw, "base": merge_blocks(shared, raw["base"])}
@@ -355,13 +360,19 @@ def bind_multinode(
     root: Path,
     expand: Callable[..., list[tuple[str | None, dict[str, Any]]]] = selected_recipes,
     power_port: int | None = None,
+    cpu_power_source: str | None = None,
     client_env: Mapping[str, str] | None = None,
 ) -> tuple[str | None, dict[str, Any]]:
     """Bind the one variant ``recipe`` (``fragment[:selector]``) selects; return its name too."""
     agentic = environment["IS_AGENTIC"] == "1"
     path, _, selector = recipe.partition(":")
     composed = compose_recipe(
-        Path(path), agentic=agentic, multinode=True, root=root, power_port=power_port
+        Path(path),
+        agentic=agentic,
+        multinode=True,
+        root=root,
+        power_port=power_port,
+        cpu_power_source=cpu_power_source,
     )
     variants = expand(composed, selector or None)
     if len(variants) != 1:
@@ -427,6 +438,11 @@ def main(argv: list[str] | None = None) -> None:
         "--power-port", type=int, help="merge the DCGM telemetry block, its exporter on this port"
     )
     parser.add_argument(
+        "--cpu-power-source",
+        choices=("acpi",),
+        help="bind the cluster's Grace CPU power exporter with this source (needs --power-port)",
+    )
+    parser.add_argument(
         "--client-env",
         type=_assignment,
         action="append",
@@ -443,6 +459,7 @@ def main(argv: list[str] | None = None) -> None:
             os.environ,
             root=root,
             power_port=args.power_port,
+            cpu_power_source=args.cpu_power_source,
             client_env=dict(args.client_env),
         )
         bound = resolve_fabric(bound, args.fabric)
