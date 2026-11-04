@@ -920,3 +920,22 @@ def test_the_acceptance_gate_rejects_a_recipe_drafting_otherwise(
     environment = {**ENV, **GATE, **gate}
     with pytest.raises(ValueError, match=error):
         plan_commands(str(recipe), framework, ["-f", str(recipe)], environment, golden_dir=tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("verify", "curve"),
+    [
+        ({}, "kimi-k3__dspark__kimi-k3-dspark__probabilistic-default"),
+        ({"rejection_sample_method": "block"}, "kimi-k3__dspark__kimi-k3-dspark__probabilistic-block"),
+    ],
+    ids=["standard", "block"],
+)
+def test_the_acceptance_gate_checks_the_verifiers_curve(
+    tmp_path: Path, verify: dict[str, str], curve: str
+) -> None:
+    spec = {"method": "dspark", "num_speculative_tokens": 3, "draft_sample_method": "probabilistic"}
+    args = {"speculative-config": json.dumps({**spec, **verify})}
+    recipe = tmp_path / "recipe.yaml"
+    recipe.write_text(yaml.safe_dump({"roles": {"agg": {"args": args}}}))
+    environment = {**ENV, **GATE, "MODEL_PREFIX": "kimik3", "AL_GATE_CURVE": curve}
+    plan_commands(str(recipe), "vllm", ["-f", str(recipe)], environment, golden_dir=tmp_path)

@@ -111,7 +111,7 @@ collection:
 - `renderer` 表示客户端如何把每个提示词渲染成文本。`chat_template` 对一条用户消息应用所服务模型的 Hugging Face 聊天模板，并带上生成提示和 `chat_template_kwargs`。`deepseek_v4` 是 vLLM 中同名的 tokenizer 模式；门禁使用本仓库中等效的[编码器](../bench_serving/encoding_dsv4.py)，并把 `chat_template_kwargs` 作为其思考选项。
 - `sampling` 列出请求携带的全部采样参数，其中包括 `vllm bench serve` 附加的 `repetition_penalty: 1.0`。未列出的参数即未发送，服务端使用了自身的默认值。
 - 其余设置对所有收集都相同：SPEED-Bench Qualitative `coding` 类别的 80 条提示词，按 vLLM 加载器的发送顺序，以流式 `/v1/completions` 请求发送，`max_tokens` 为 4096，且不设置 `ignore_eos`。各次收集的并发数不同；门禁始终以并发 64 重放，即视 AL 与并发无关。
-- 新曲线必须包含该块。目前有两条曲线没有该块，门禁会把它们的点列为未解析（unresolved）。[`deepseek-v4.1-flash__dspark__native__probabilistic-block.yaml`](deepseek-v4.1-flash__dspark__native__probabilistic-block.yaml) 需要等 DeepSeek V4.1 渲染器落地后，门禁才能渲染其提示词。[`muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml`](muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml) 使用 SGLang 的 `bench_serving` 客户端在其原生 `/generate` 端点上收集，门禁的 `/v1/completions` 重放无法复现该方式。[`glm-5.3-fp8__mtp__native__default-default.yaml`](glm-5.3-fp8__mtp__native__default-default.yaml) 是临时曲线，沿用 GLM-5.2 的设置。
+- 新曲线必须包含该块。目前有三条曲线没有该块，门禁会把它们的点列为未解析（unresolved）。[`deepseek-v4.1-flash__dspark__native__probabilistic-block.yaml`](deepseek-v4.1-flash__dspark__native__probabilistic-block.yaml) 需要等 DeepSeek V4.1 渲染器落地后，门禁才能渲染其提示词。[`muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml`](muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml) 使用 SGLang 的 `bench_serving` 客户端在其原生 `/generate` 端点上收集，门禁的 `/v1/completions` 重放无法复现该方式。[`glm-5.3-nvfp4__mtp__native__default-default.yaml`](glm-5.3-nvfp4__mtp__native__default-default.yaml) 的收集方式相同。
 
 ## 复现一次收集
 

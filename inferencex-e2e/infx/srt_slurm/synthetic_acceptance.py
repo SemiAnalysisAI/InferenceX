@@ -217,10 +217,14 @@ def is_synthetic(environment: Mapping[str, str]) -> bool:
     )
 
 
-def check_gate(spec: Mapping[str, Any], environment: Mapping[str, str]) -> None:
+def check_gate(
+    spec: Mapping[str, Any], environment: Mapping[str, str], verify: str | None = None
+) -> None:
     """Fail unless the generation worker drafts the golden curve and length the gate uses."""
     tokens = spec.get("num_speculative_tokens")
-    drafted = (curve_name(environment["MODEL_PREFIX"], spec), tokens) if spec else None
+    drafted = (
+        (curve_name(environment["MODEL_PREFIX"], spec, verify=verify), tokens) if spec else None
+    )
     gate = (environment["AL_GATE_CURVE"], int(environment["AL_GATE_DRAFT_TOKENS"]))
     if drafted != gate:
         raise ValueError(f"the recipe drafts {drafted}, but the acceptance gate measures {gate}")
@@ -245,7 +249,10 @@ def build_overrides(
         return []
     roles = recipe.get("roles", {})
     if is_gate(environment):
-        check_gate(spec_parameters(generation_role(recipe), engine), environment)
+        generation = generation_role(recipe)
+        check_gate(
+            spec_parameters(generation, engine), environment, verifier(generation, engine).value
+        )
     al = _simulated_length(recipe, framework, environment, golden_dir=golden_dir)
     overrides = []
     variables = {
