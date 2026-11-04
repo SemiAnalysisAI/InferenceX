@@ -61,6 +61,16 @@ def test_reference_rejects_invalid_raw_outputs_before_creating_files(tmp_path: P
     assert not (tmp_path / "bad").exists()
 
 
+@pytest.mark.parametrize("selection", [["all"], ["../escape"]])
+def test_every_selection_rejects_case_ids_that_leave_the_output(selection) -> None:
+    plan = video_spec.plan_for(
+        video_spec.load_spec(Path(__file__).parents[1] / "specs/h3-v2.yaml"), "release-v1"
+    )
+    plan["cases"][0]["case_id"] = "../escape"
+    with pytest.raises(ValueError, match="plain directory names"):
+        select_cases(plan, selection)
+
+
 def test_reference_retains_startup_failures_without_attesting_weights(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

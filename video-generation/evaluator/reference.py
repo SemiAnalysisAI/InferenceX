@@ -37,11 +37,11 @@ def digest(path: Path) -> str:
 def select_cases(plan: dict, names: list[str]) -> list[dict]:
     cases = [{**plan["warmup_case"], "role": "warmup"}]
     cases += [{**case, "role": "measured"} for case in plan["cases"]]
-    if names == ["all"]:
-        return cases
     known = {case["case_id"] for case in cases}
     if any(Path(name).name != name or name in {".", ".."} for name in known):
         raise ValueError("case IDs must be plain directory names")
+    if names == ["all"]:
+        return cases
     if not names or len(set(names)) != len(names) or not set(names) <= known:
         raise ValueError("select distinct case IDs from the frozen plan, or only 'all'")
     return [case for case in cases if case["case_id"] in names]
