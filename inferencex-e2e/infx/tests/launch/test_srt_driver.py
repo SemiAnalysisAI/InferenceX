@@ -554,7 +554,7 @@ def gate_point_env(harness, cluster_id: str) -> dict[str, str]:
     download_gate_prompts(harness.workspace)
     return {
         **harness.env, **POINT_ENV, **GATE_ENV, "RUNNER_NAME": runner_for(cluster_id), "MODEL_PREFIX": "dsv4",
-        "SPEC_DECODING": "mtp", "DURATION": "600", "AL_GATE_CURVE": "dsv4_mtp", "AL_GATE_DRAFT_TOKENS": "3",
+        "SPEC_DECODING": "mtp", "DURATION": "600", "AL_GATE_CURVE": "deepseek-v4-pro__mtp__native__default-default", "AL_GATE_DRAFT_TOKENS": "3",
     }  # fmt: skip
 
 
@@ -596,7 +596,7 @@ def lane_gate_env(harness) -> dict[str, str]:
     return lane_env(
         harness, "h200-dgxc", AGENTX_LANE_RECIPE + POWER_TELEMETRY, **GATE_ENV,
         MODEL_PREFIX="kimik3", PRECISION="fp4", FRAMEWORK="vllm", MODEL="moonshotai/Kimi-K3", ISL="0", OSL="0",
-        CONC="4", SPEC_DECODING="dspark", AL_GATE_CURVE="kimik3_dspark", AL_GATE_DRAFT_TOKENS="3",
+        CONC="4", SPEC_DECODING="dspark", AL_GATE_CURVE="kimi-k3__dspark__kimi-k3-dspark__default-default", AL_GATE_DRAFT_TOKENS="3",
     )  # fmt: skip
 
 
