@@ -24,7 +24,6 @@ roles:
       HF_HUB_CACHE: /hf_hub_cache
       VLLM_ENGINE_READY_TIMEOUT_S: '3600'
       VLLM_RPC_TIMEOUT: '600000'
-      VLLM_ALLREDUCE_USE_FLASHINFER: '1'
     args:
       served-model-name: moonshotai/Kimi-K3.1-Pro
       enable-auto-tool-choice: true
@@ -48,7 +47,6 @@ roles:
 sbatch_directives:
   mem: '0'
   cpus-per-task: '72'
-  comment: '''{"OccupiedIdleGPUsJobReaper":{"exemptIdleTimeMins":"60","reason":"model_loading","description":"Very large model will take extra loading time."}}'''
 srun_options:
   mem: '0'
   container-remap-root: ''

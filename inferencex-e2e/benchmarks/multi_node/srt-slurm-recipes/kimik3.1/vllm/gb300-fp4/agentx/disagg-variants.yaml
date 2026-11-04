@@ -38,7 +38,6 @@ base:
       DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: '3600'
       DYN_TOKENIZER_CACHE_BYTES: '8589934592'
       DYN_TCP_REQUEST_TIMEOUT: '120'
-      DYN_DISABLE_OPENAI_STRICT_SCHEMA_VALIDATION: '1'
   engine:
     type: vllm
     connector: null
@@ -56,8 +55,6 @@ base:
         VLLM_SSM_CONV_STATE_LAYOUT: DS
         VLLM_ENGINE_READY_TIMEOUT_S: '3600'
         VLLM_RPC_TIMEOUT: '600000'
-        VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1800'
-        VLLM_ALLREDUCE_USE_FLASHINFER: '1'
         DYN_REQUEST_PLANE: tcp
         DYN_TCP_REQUEST_TIMEOUT: '120'
         ETCD_LEASE_TTL: '600'
@@ -66,12 +63,8 @@ base:
         NCCL_CUMEM_ENABLE: '1'
         NCCL_MNNVL_ENABLE: '1'
         NCCL_NVLS_ENABLE: '1'
-        NCCL_P2P_LEVEL: NVL
-        NCCL_NET_PLUGIN: none
         UCX_MEMTYPE_CACHE: 'n'
         UCX_MEMTYPE_REG_WHOLE: 'n'
-        UCX_RCACHE_MAX_UNRELEASED: '1024'
-        UCX_TCP_AF_PRIO: inet
       args:
         served-model-name: moonshotai/Kimi-K3.1-Pro
         trust-remote-code: true
@@ -120,7 +113,6 @@ base:
   sbatch_directives:
     mem: '0'
     cpus-per-task: '72'
-    comment: '''{"OccupiedIdleGPUsJobReaper":{"exemptIdleTimeMins":"60","reason":"model_loading","description":"Very large model will take extra loading time."}}'''
   srun_options:
     mem: '0'
     container-remap-root: ''
@@ -135,31 +127,11 @@ base:
       AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: '14400'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
-override_1p3d_lowlat:
+override_1p3d:
   roles:
-    prefill:
-      args:
-        cp-kv-cache-interleave-size: 1
     decode:
       nodes: 6
       workers: 3
-      args: &lowlat_decode_args
-        # Kept at 1 on both roles: NIXL otherwise raises it to the block size after the fused decode reads it.
-        cp-kv-cache-interleave-size: 1
-        additional-config: '{"decode_backend":"latency_specialized"}'
-        # The fused decode path covers batches up to 64 tokens: 64 // (1 + 4 drafts).
-        max-num-seqs: 12
-        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[5,10,15,20,25,30,35,40,45,50,55,60]}'
-
-override_1p2d_lowlat:
-  roles:
-    prefill:
-      args:
-        cp-kv-cache-interleave-size: 1
-    decode:
-      nodes: 4
-      workers: 2
-      args: *lowlat_decode_args
 
 override_1p2d:
   roles:
