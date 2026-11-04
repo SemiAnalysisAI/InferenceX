@@ -167,6 +167,7 @@ base:
     placement:
       node: head
     env:
+      HF_HUB_OFFLINE: "0"
       TOKENIZER: /model
       AIPERF_HTTP_TCP_USER_TIMEOUT: "900000"
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
