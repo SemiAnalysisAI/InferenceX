@@ -139,7 +139,7 @@ Agreed by the vLLM and SGLang communities for week-1 official AgentX results. "N
 
 - EPLB: dynamic only, static EPLB not allowed.
 - A4W4 and NVFP4 MoE are allowed because AMD has no W4A8 (FP4 weight, FP8 activation) MoE kernel.
-- FP4 KV cache without native support is excluded from official AgentX results. Unofficial results (e.g. vendor blogs on the AgentX harness) must be labeled unofficial and include the full KVV suite showing FP4 KV cache passes or is near every KVV eval.
+- FP4 KV cache without native support is not allowed in official AgentX results for week 1; it may be reconsidered once it passes KVV (and/or TB 4.0). Vendor blogs may still show it on the AgentX harness: such results must be labeled unofficial per the InferenceX/AgentX trademark and should include the full KVV suite showing FP4 KV cache passes or is near every KVV eval.
 - Engines outside vLLM, SGLang, TileRT and TokenSpeed on widely available hardware (i.e. not MI455X, Rubin, etc.) must first pass KVV (and/or TB 4.0), with logs and reproduction scripts, before submitting.
 - Any rule may be revisited after week 1 with a passing KVV (and/or TB 4.0) result. Passing requires public reproduction scripts and full logs.
 
