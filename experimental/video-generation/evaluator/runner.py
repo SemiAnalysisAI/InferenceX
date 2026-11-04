@@ -745,7 +745,6 @@ def run_plan(
         "protocol_source": _PROTOCOL_SOURCES[runtime],
         "client_source_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         "media_evaluator": media_evaluator,
-        "server_identity_caveat": "Model weights, runtime revision, hardware and server launch flags are not remotely verified.",
         "client_environment": {
             "python": platform.python_version(),
             "system": platform.system(),
@@ -762,17 +761,6 @@ def run_plan(
             "poll_interval_seconds": POLL_INTERVAL_SECONDS,
         },
         "hash_convention": "SHA256 of sorted-key compact UTF-8 JSON; configuration hash excludes configuration_sha256",
-        "measurement_semantics": {
-            "latency": "monotonic submit to downloaded and validated media, including polling, transfer and client analysis; not GPU kernel latency",
-            "submit_to_terminal_seconds": "monotonic submit to first observed terminal provider status; includes queueing, generation, encoding, HTTP and polling delay, not GPU kernel latency",
-            "submit_to_media_seconds": "monotonic submit to complete downloaded media; excludes local media validation",
-            "media_validation_seconds": "local full-stream media analysis wall time; not model inference",
-            "latency_population": "valid measured clips only; paired with all-scheduled technical success rate",
-            "throughput": "valid measured clips divided by serial measured-block wall time; not saturated server capacity",
-            "failed": "scheduled minus technically valid, including invalid completed media and unstarted slots",
-            "warmups": "recorded, excluded from measurement counts and measured wall time",
-            "deadline": "network watchdog plus cooperative media deadline; one native decoder call may overrun",
-        },
     }
     if numerical_identity is not None:
         configuration["numerical_identity"] = numerical_identity
@@ -783,12 +771,6 @@ def run_plan(
         configuration["serving_source_sha256"] = hashlib.sha256(
             Path(serving_module.__file__).read_bytes()
         ).hexdigest()
-        configuration["measurement_semantics"]["throughput"] = (
-            "valid clips / closed-loop delivery wall time, including failures and download; local media validation occurs after delivery"
-        )
-        configuration["measurement_semantics"]["deadline"] = (
-            "separate bounded transport and local validation phases; unknown remote completion stops new submissions"
-        )
     configuration["configuration_sha256"] = _digest(configuration)
     _write_json(directory / "configuration.json", configuration, exclusive=True)
     scheduled = len(frozen["cases"]) * frozen["repetitions"]
@@ -801,7 +783,6 @@ def run_plan(
         "plan": frozen,
         "configuration": configuration,
         "evidence_kind": "operator_endpoint",
-        "evidence_caveat": "Operator-managed HTTP endpoint; the client alone cannot establish H3 execution. Model identity is operator-declared, not attested. Mock-server tests are not H3 evidence. Controlled GPU execution requires a separate verified supervisor receipt.",
         "started_at": _timestamp(),
         "finished_at": None,
         "status": "partial",

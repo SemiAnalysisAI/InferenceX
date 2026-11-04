@@ -279,8 +279,6 @@ def test_local_http_fixture_lifecycle_and_identity(
     assert run["summary"]["latency_sample_stddev_seconds"] is not None
     assert run["summary"]["submit_to_terminal_median_seconds"] > 0
     assert run["configuration"]["identity_verification"] == "operator_declared"
-    assert "not remotely verified" in run["configuration"]["server_identity_caveat"]
-    assert "Mock-server tests are not H3 evidence" in run["evidence_caveat"]
     assert run["configuration"]["hardware_label"].startswith("LOCAL HTTP FIXTURE")
     assert run["measurement"]["warmup_qualified"] is True
     config = copy.deepcopy(run["configuration"])

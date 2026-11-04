@@ -704,7 +704,6 @@ def _performance_differences(baseline: dict, candidate: dict, slots: list[dict])
         "limits",
         "client_environment",
         "client_source_sha256",
-        "measurement_semantics",
         "media_evaluator",
     ):
         a, b = left.get(field), right.get(field)

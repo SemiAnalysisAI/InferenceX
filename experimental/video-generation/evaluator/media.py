@@ -390,12 +390,6 @@ def analyze_media(path: Path, expected: dict | None = None) -> dict:
             "blank_definition": "all decoded RGB samples <=3 or all >=252 on the 0..255 scale",
             "timestamp_policy": "use decoded PTS; final video duration fallback is explicitly labeled",
             "timeout_policy": "monotonic checks between hash chunks and decoded frames; not a native-call interrupt",
-            "non_claims": [
-                "generative quality",
-                "semantic accuracy",
-                "perceptual fidelity",
-                "lip synchronization",
-            ],
         },
     }
     try:

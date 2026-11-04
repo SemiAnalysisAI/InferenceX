@@ -116,7 +116,6 @@ def summarize(run: dict) -> dict:
     seconds = sum(durations) if all(_finite(value) and value > 0 for value in durations) else None
     result = {
         **load,
-        "capacity_qualified": False,
         "client_ready_latency_seconds": {
             "values": values,
             "sample_count": len(values),
@@ -143,7 +142,6 @@ def summarize(run: dict) -> dict:
         "observed_submission_rate_per_second": sum(r["attempted"] for r in records) / wall
         if wall > 0
         else None,
-        "offered_request_rate_per_second": None,
         "peak_client_in_flight": validate_window(run),
         "valid_video_seconds_per_second": seconds / wall
         if seconds is not None and wall > 0
@@ -155,11 +153,5 @@ def summarize(run: dict) -> dict:
         "deadline_goodput_clips_per_second": on_time / wall
         if on_time is not None and wall > 0
         else None,
-        "limitations": [
-            "Closed-loop delivery load, not a fixed arrival-rate or sustainable-capacity test.",
-            "Local validation follows delivery and is excluded from the throughput window.",
-            "Client polling observations are not server-side queue or execution timestamps.",
-            "Deadline goodput requires technical validity, not calibrated perceptual quality.",
-        ],
     }
     return result

@@ -563,7 +563,6 @@ def _pin_client(document, media_stub, monkeypatch):
         limits={"poll_interval_seconds": 0.5},
         client_environment={"python": "3.13", "av": "17.1.0", "numpy": "2.5.2"},
         client_source_sha256="2" * 64,
-        measurement_semantics={"latency": "submit through validated media"},
         media_evaluator={
             **code,
             "pyav_version": "17.1.0",

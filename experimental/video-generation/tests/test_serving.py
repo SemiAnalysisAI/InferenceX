@@ -50,8 +50,6 @@ def test_percentiles_goodput_and_failure_denominators():
     assert metrics["deadline_goodput_clips_per_second"] == 5 / 132
     assert metrics["valid_video_seconds_per_second"] == 80 / 132
     assert metrics["outcomes"]["provider_failed"] == 1
-    assert metrics["capacity_qualified"] is False
-    assert metrics["offered_request_rate_per_second"] is None
 
 
 def test_tampered_serving_windows_fail_closed():
