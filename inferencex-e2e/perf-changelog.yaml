@@ -11971,3 +11971,11 @@
     - "Collect Grace CPU power on the Kimi K3 GB300 aggregate AgentX recipe, with cpu-power-exporter v2.66.1."
     - "Publish CPU socket, rail, SysIO and module power over the GPU window, independent of the GPU verdict, and per-host GPU power in workers[]."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3296
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-vllm-agentic-dspark
+  description:
+    - "Try SMG 1.11.0 instead of vllm-router 0.1.14 for the single-node DP4/EP4 point at concurrency 64, using SMG's consistent_hashing policy."
+    - "Expose one vLLM HTTP server per DP rank with data-parallel-external-lb so SMG routes across all four ranks; leave serving, speculative and KV-offload settings unchanged."
+  pr-link: XXX
+  scenario-type: [agentic-coding]

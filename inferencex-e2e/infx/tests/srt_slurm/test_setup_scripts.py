@@ -56,6 +56,7 @@ def test_an_installer_fails_without_the_version_the_binder_writes(tmp_path, scri
 
 
 @pytest.mark.parametrize(("script", "env", "expected"), [
+    ("smg.sh", {"ROUTER_VERSION": "9.8.7"}, {"smg==9.8.7", "--no-deps"}),
     ("vllm-router.sh", {"ROUTER_VERSION": "9.8.7"}, {"vllm-router==9.8.7"}),
     ("vllm-mooncake.sh", {"KV_OFFLOAD_BACKEND_VERSION": "9.8.7"},
      {"mooncake-transfer-engine-cuda13==9.8.7"}),
