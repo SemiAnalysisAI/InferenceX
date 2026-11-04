@@ -28,6 +28,7 @@ class ListingUnavailable(VerificationError):  # noqa: N818
 
 
 READ_BACKOFF_SECONDS = (1, 4)
+TRANSPORT_FAILURE = re.compile(r"connection reset|\bEOF\b|TLS handshake timeout|i/o timeout")
 
 
 def sleep(seconds: float) -> None:
@@ -40,7 +41,7 @@ def http_status(error: BaseException) -> int | None:
     stderr = getattr(error, "stderr", None)
     if not isinstance(error, subprocess.CalledProcessError) or not isinstance(stderr, str):
         return None
-    match = re.search(r"\(HTTP ([1-5][0-9]{2})\)", stderr)
+    match = re.search(r"\bHTTP ([1-5][0-9]{2})\b", stderr)
     return int(match[1]) if match else None
 
 
@@ -49,7 +50,10 @@ def _transient(error: Exception) -> bool:
     if isinstance(error, subprocess.TimeoutExpired):
         return True
     if isinstance(error, subprocess.CalledProcessError):
-        return (http_status(error) or 0) >= 500
+        status = http_status(error)
+        if status is None:
+            return isinstance(error.stderr, str) and bool(TRANSPORT_FAILURE.search(error.stderr))
+        return status >= 500
     return isinstance(error, github.ListingError) and str(error) == "Incomplete GitHub listing"
 
 

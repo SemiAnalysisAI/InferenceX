@@ -515,6 +515,22 @@ def test_relink_refuses_a_link_it_cannot_replace_line_for_line():
         relink_entries(block("a", f'"{PR9}"'), 9, PR50)
 
 
+@pytest.mark.parametrize("mixed", [False, True])
+def test_recovery_excludes_retired_entries_without_weakening_key_validation(mixed):
+    base = block("old", PR50)
+    retirement = block("retired", PR9) + b"  retired: true\n"
+    active = block("active", PR9)
+    merged = base + b"\n" + retirement + (b"\n" + active if mixed else b"")
+    if mixed:
+        recovered = extract_original_entries(base, merged, 9)
+        assert yaml.safe_load(recovered) == yaml.safe_load(active)
+        relinked = relink_entries(recovered, 9, PR50)
+        assert yaml.safe_load(relinked)[0]["pr-link"] == PR50
+    else:
+        with pytest.raises(RecoveryError, match="no result artifacts to recover"):
+            extract_original_entries(base, merged, 9)
+
+
 @pytest.mark.parametrize("runs,message", [
     ([], None),
     ([{"id": 1, "status": "completed", "conclusion": "failure"},

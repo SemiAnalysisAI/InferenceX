@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 
 from . import github
@@ -133,6 +134,52 @@ def family_owners(repository: str) -> list[Ownership]:
             raise VerificationError("Invalid family claim")
         result.append(owner)
     return result
+
+
+def candidate_owner(repository: str, candidate: str) -> Ownership | None:
+    """Return the family claim candidate ID ``candidate`` holds, or None if it holds none.
+
+    The ID starts with its family's claim name, so this reads one claim instead of all of them.
+    """
+    value = ref(repository, "klaud/claim-" + candidate.split("-", 1)[0])
+    if not value:
+        return None
+    owner = Ownership.model_validate(record(repository, value))
+    return owner if [owned.id for owned in owner.candidates] == [candidate] else None
+
+
+def deferred_name(parent: int, candidate: str, number: int) -> str:
+    """Return the branch that records a deferred grant of ``candidate``'s session ``number``."""
+    return f"klaud/deferred-{parent}-{candidate}-{number}"
+
+
+def defer_resume(repository: str, parent: int, candidate: OwnedCandidate, number: int) -> None:
+    """Record that recovery approved session ``number`` of ``candidate`` of run ``parent`` but
+    had no free session slot to grant it."""
+    name = deferred_name(parent, candidate.id, number)
+    if not ref(repository, name):
+        create(repository, name, {"run-id": parent, "session": number}, candidate.base)
+
+
+def deferred_resumes(repository: str) -> list[tuple[int, str, int]]:
+    """Every deferred grant as (planner run, candidate ID, session), oldest planners first."""
+    pattern = r"refs/heads/klaud/deferred-(\d+)-([0-9a-f]{16}-[0-9a-f]{16})-([1-9][0-9]*)"
+    return sorted(
+        (int(match[1]), match[2], int(match[3]))
+        for value in github.items(repository, "git/matching-refs/heads/klaud/deferred-")
+        if (match := re.fullmatch(pattern, value["ref"]))
+    )
+
+
+def clear_deferred(repository: str, parent: int, candidate: str, number: int) -> None:
+    """Delete a deferred grant's record; one another pass deleted first counts as cleared."""
+    try:
+        github.write(
+            repository, "git/refs/heads/" + deferred_name(parent, candidate, number), "DELETE"
+        )
+    except subprocess.CalledProcessError as error:
+        if github.http_status(error) not in (404, 422):
+            raise
 
 
 def recovery_lease(repository: str, parent: int, candidate: OwnedCandidate) -> bool:

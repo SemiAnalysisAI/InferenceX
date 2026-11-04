@@ -67,20 +67,6 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
         ),
         error="dcgm-power requires dynamo-sglang or the supported Kimi-K3 AgentX route",
     ),
-    ("b300-dsxe", LaunchPath.SRT_MULTI): PowerLane(
-        rules=(
-            PowerRule(
-                Match(
-                    any_of("dsv4"),
-                    any_of("fp4"),
-                    any_of("dynamo-sglang", "dynamo-vllm"),
-                    agentic=False,
-                ),
-                agentx=False,
-            ),
-        ),
-        error="B300 dcgm-power is limited to fixed-sequence DSV4 FP4 dynamo-sglang/vllm",
-    ),
     ("b200-nscale", LaunchPath.SRT_NATIVE): PowerLane(
         rules=(
             PowerRule(
@@ -88,16 +74,11 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
                 agentx=True,
             ),
             PowerRule(
-                Match(
-                    any_of("dsv4"),
-                    any_of("fp4"),
-                    any_of("dynamo-sglang", "dynamo-vllm"),
-                    agentic=False,
-                ),
-                agentx=False,
+                Match(any_of("glm5.2"), any_of("fp4"), any_of("dynamo-sglang"), agentic=True),
+                agentx=True,
             ),
         ),
-        error="B200 nscale dcgm-power requires a supported fixed-sequence lane or Kimi-K3 AgentX vLLM",
+        error="B200 nscale dcgm-power requires Kimi-K3 FP4 AgentX dynamo-vllm or GLM-5.2 FP4 AgentX dynamo-sglang",
     ),
     ("b200-nscale", LaunchPath.SRT_MULTI): PowerLane(
         rules=(
@@ -105,12 +86,8 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
                 Match(any_of("qwen3.5"), any_of("fp8"), any_of("dynamo-sglang"), agentic=True),
                 agentx=True,
             ),
-            PowerRule(
-                Match(any_of("dsv4"), any_of("fp4"), any_of("dynamo-vllm"), agentic=False),
-                agentx=False,
-            ),
         ),
-        error="B200 Nscale dcgm-power requires fixed-sequence DSV4 FP4 dynamo-vllm or Qwen3.5 FP8 AgentX dynamo-sglang",
+        error="B200 Nscale dcgm-power requires Qwen3.5 FP8 AgentX dynamo-sglang",
     ),
     ("h200-dgxc", LaunchPath.SRT_MULTI): PowerLane(
         rules=(
@@ -118,14 +95,12 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
                 Match(any_of("kimik3"), any_of("fp4"), any_of("vllm"), agentic=True), agentx=True
             ),
             PowerRule(
-                Match(
-                    any_of("glm5.2", "dsv4"), any_of("fp8"), any_of("dynamo-sglang"), agentic=True
-                ),
+                Match(any_of("glm5.2"), any_of("fp8"), any_of("dynamo-sglang"), agentic=True),
                 agentx=False,
                 adapter=True,
             ),
         ),
-        error="H200 dcgm-power requires AgentX dynamo-sglang glm5.2/dsv4 FP8 or Kimi-K3 vLLM FP4",
+        error="H200 dcgm-power requires AgentX dynamo-sglang glm5.2 FP8 or Kimi-K3 vLLM FP4",
     ),
 }
 
@@ -138,6 +113,8 @@ class PowerDecision:
     agentx: bool
     adapter: bool = False
     require: bool = False
+    # The point selected cpu-power: the cluster's Grace CPU exporter is bound and expected.
+    cpu: bool = False
 
 
 NO_POWER = PowerDecision(dcgm=False, agentx=False)
@@ -148,7 +125,7 @@ def decide_power(cluster_id: str, path: LaunchPath, request: MultiNodeRequest) -
 
     Raises ``PowerPolicyError`` for a combination the lane does not allow.
     """
-    if not request.power:
+    if not request.power or request.al_gate:
         return NO_POWER
     lane = POWER_LANES.get((cluster_id, path))
     if lane is None:
@@ -156,7 +133,11 @@ def decide_power(cluster_id: str, path: LaunchPath, request: MultiNodeRequest) -
     for rule in lane.rules:
         if rule.when(request):
             return PowerDecision(
-                dcgm=True, agentx=rule.agentx, adapter=rule.adapter, require=rule.require
+                dcgm=True,
+                agentx=rule.agentx,
+                adapter=rule.adapter,
+                require=rule.require,
+                cpu=request.cpu_power,
             )
     message = lane.agentic_error if request.is_agentic and lane.agentic_error else lane.error
     raise PowerPolicyError(message)

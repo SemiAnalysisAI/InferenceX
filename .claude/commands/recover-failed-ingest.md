@@ -70,6 +70,11 @@ ETL or mapping. Missing output is not repaired by rerunning a database ingest.
 
 ## Verify recovery eligibility
 
+Retirement-only merges have no benchmark results to ingest or recover; do not
+re-append their `retired: true` entries. For mixed changes, the recovery tool
+excludes retired entries and recovers only entries with results. Keep the
+planner's requirement that retired keys existed in the original base revision.
+
 The target must be completed, on `main`, with event `push` and the workflow above.
 A green legacy dispatch is not proof of valid data; leave bogus historical rows alone.
 Resolve `FAILED_RUN_OR_JOB_URL`, `ORIGINAL_PR`, and `ORIGINAL_MERGE_SHA`:

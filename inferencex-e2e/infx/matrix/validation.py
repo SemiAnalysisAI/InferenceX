@@ -79,6 +79,7 @@ class Fields(Enum):
     DURATION = "duration"
     REQUIRE_POWER = "require-power"
     POWER = "power"
+    CPU_POWER = "cpu-power"
 
     CONC = "conc"
     MAX_MODEL_LEN = "max-model-len"
@@ -263,6 +264,7 @@ class MultiNodeMatrixEntry(BaseModel):
     osl: int
     require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     power: bool = Field(default=False, strict=True)
+    cpu_power: bool = Field(default=False, alias=Fields.CPU_POWER.value, strict=True)
     prefill: WorkerConfig
     decode: WorkerConfig
     conc: list[int]
@@ -302,6 +304,7 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     image: str
+    require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     srt_recipe: str | None = Field(default=None, alias=Fields.SRT_RECIPE.value, min_length=1)
     model: str
     model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value)
@@ -352,6 +355,7 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     image: str
+    require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     model: str
     model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value)
     precision: str
@@ -364,6 +368,7 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     )
     node_count: int = Field(alias=Fields.NODE_COUNT.value, gt=0, strict=True)
     power: bool = Field(default=False, strict=True)
+    cpu_power: bool = Field(default=False, alias=Fields.CPU_POWER.value, strict=True)
     prefill: WorkerConfig
     decode: WorkerConfig
     conc: list[int]
@@ -578,6 +583,13 @@ class SingleNodeSearchSpaceEntry(BaseModel):
         return _validate_tp_context_topology(self)
 
 
+def _cpu_power_rides_on_power(self: Any) -> Any:
+    """``cpu-power`` adds the cluster's Grace CPU exporter to a point that measures power."""
+    if self.cpu_power and not self.power:
+        raise ValueError(f"{Fields.CPU_POWER.value} requires {Fields.POWER.value} on the entry")
+    return self
+
+
 class MultiNodeSearchSpaceEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -592,6 +604,7 @@ class MultiNodeSearchSpaceEntry(BaseModel):
         default=None, alias=Fields.EVAL_SRT_RECIPE.value
     )
     power: bool = Field(default=False, strict=True)
+    cpu_power: bool = Field(default=False, alias=Fields.CPU_POWER.value, strict=True)
     num_nodes: int | None = Field(default=None, alias=Fields.NUM_NODES.value, gt=0, strict=True)
     router: ComponentMetadata | None = None
     kv_p2p_transfer: str | None = Field(
@@ -600,6 +613,10 @@ class MultiNodeSearchSpaceEntry(BaseModel):
     conc_start: int | None = Field(default=None, alias=Fields.CONC_START.value)
     conc_end: int | None = Field(default=None, alias=Fields.CONC_END.value)
     conc_list: list[int] | None = Field(default=None, alias=Fields.CONC_LIST.value)
+
+    @model_validator(mode="after")
+    def validate_cpu_power(self) -> Self:
+        return _cpu_power_rides_on_power(self)
 
     @model_validator(mode="after")
     def validate_conc_fields(self) -> Self:
@@ -644,12 +661,14 @@ class MultiNodeSeqLenConfig(BaseModel):
 class AgenticCodingSearchSpaceEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
+    require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     tp: int | None = Field(default=None, gt=0)
     srt_recipe: RecipeReference | None = Field(default=None, alias=Fields.SRT_RECIPE.value)
     eval_srt_recipe: RecipeReference | None = Field(
         default=None, alias=Fields.EVAL_SRT_RECIPE.value
     )
     power: bool = Field(default=False, strict=True)
+    cpu_power: bool = Field(default=False, alias=Fields.CPU_POWER.value, strict=True)
     pp: int = Field(default=1, gt=0, strict=True)
     dcp_size: int = Field(default=1, alias=Fields.DCP_SIZE.value, gt=0, strict=True)
     pcp_size: int = Field(default=1, alias=Fields.PCP_SIZE.value, gt=0, strict=True)
@@ -716,6 +735,7 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
                     f"Only multinode entries measure DCGM power; remove {Fields.POWER.value}"
                 )
             _validate_tp_context_topology(self)
+        _cpu_power_rides_on_power(self)
         if has_aggregate_worker or has_complete_multinode:
             explicitly_single_node_fields = {
                 "pp",
@@ -1132,6 +1152,10 @@ class ChangelogEntry(BaseModel):
             "every existing generated point, then append them to the latest curve"
         ),
     )
+    retired: bool = Field(
+        default=False,
+        description="Record configs removed from the base revision without scheduling benchmarks",
+    )
     eval_min_prefill_ep: int | None = Field(
         alias="eval-min-prefill-ep",
         default=None,
@@ -1150,7 +1174,16 @@ class ChangelogEntry(BaseModel):
 
     @model_validator(mode="after")
     def validate_append_only_mode(self) -> Self:
-        """Return the entry, raising ValueError if no-evals or append-only selects evals."""
+        """Reject incompatible retirement, append-only, and eval-selection fields."""
+        if self.retired and (
+            self.append_only
+            or self.evals_only
+            or self.all_evals
+            or self.no_evals
+            or self.eval_min_prefill_ep is not None
+            or self.scenario_type is not None
+        ):
+            raise ValueError("retired entries cannot use sweep or scenario selection fields")
         if self.no_evals and (
             self.evals_only or self.all_evals or self.eval_min_prefill_ep is not None
         ):
