@@ -121,14 +121,14 @@ Other offloading tiers, including NVMe KV cache offloading, are outside the init
 
 ### Kimi K3.1 Pro week-1 precision policy
 
-Agreed by the vLLM and SGLang communities for week-1 official AgentX results. "Native" means the precision of the original released checkpoint.
+Agreed by the vLLM and SGLang communities for week-1 official AgentX results. "Native" means the precision of the original released checkpoint. Each entry is the lowest precision allowed; higher precision is always allowed (e.g. an FP8 indexer cache).
 
-| Component | Required / allowed precision |
+| Component | Minimum precision |
 |---|---|
 | Linear ops | Native (BF16) |
 | Shared expert | Native (BF16) |
 | MoE weights | MXFP4 or NVFP4 |
-| MoE activations | A4W4 allowed |
+| MoE activations | FP4 (A4W4) |
 | MoE dispatch | MX/NV-style quantization allowed |
 | MoE combine | Native (BF16) |
 | AllReduce / AG / RS | Native (BF16) |
@@ -138,9 +138,9 @@ Agreed by the vLLM and SGLang communities for week-1 official AgentX results. "N
 | KV cache | FP8. FP4 only if the native checkpoint ships an FP4 KV cache |
 
 - EPLB: dynamic only, static EPLB not allowed.
-- A4W4 and NVFP4 MoE are allowed because AMD does not support A4W8.
-- FP4 KV cache without native support is excluded from official AgentX results. Unofficial results (e.g. vendor blogs on the AgentX harness) must be labeled unofficial and include the full KVV suite.
-- Engines outside vLLM, SGLang, TileRT and TokenSpeed on widely available hardware (i.e. not MI455X, Rubin, etc.) must first pass KVV (and/or TB 4.0) before submitting.
+- A4W4 and NVFP4 MoE are allowed because AMD has no W4A8 (FP4 weight, FP8 activation) MoE kernel.
+- FP4 KV cache without native support is excluded from official AgentX results. Unofficial results (e.g. vendor blogs on the AgentX harness) must be labeled unofficial and include the full KVV suite showing FP4 KV cache passes or is near every KVV eval.
+- Engines outside vLLM, SGLang, TileRT and TokenSpeed on widely available hardware (i.e. not MI455X, Rubin, etc.) must first pass KVV (and/or TB 4.0), with logs and reproduction scripts, before submitting.
 - Any rule may be revisited after week 1 with a passing KVV (and/or TB 4.0) result. Passing requires public reproduction scripts and full logs.
 
 ## Model support matrix
