@@ -104,7 +104,7 @@ The below list describes what each field is:
     - `osl`: An integer representing the output sequence length, e.g., `1024`
     - PR sweeps run only `isl`/`osl` pairs 1024/1024 and 8192/1024; the changelog planner rejects any other pair.
     - `search-space`: A list of configurations to run with respective `isl` and `osl`, each entry must be a dict with the following fields:
-      - `tp`: A positive integer representing the tensor parallelism level that the configuration will be served at.
+      - `tp`: A positive integer representing the benchmark's parallel width. In native single-node SRT recipes, its mapping depends on the engine: TokenSpeed and vLLM use attention TP/TP times data parallelism, while SGLang and TensorRT-LLM compare their TP fields directly. See [single-node parallelism validation](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md#single-node-parallelism-validation) for the full mapping and mismatch behavior.
       - `conc-start`: An integer representing the starting level of concurrency e.g., `4`
       - `conc-end`: An integer representing the ending level of concurrency (inclusive) e.g., `128`
       - Note: the step factor between `conc-start` and `conc-end` is 2, so if `conc-start` is 4 and `conc-end` is 128, all concurrencies `4, 8, 16, 32, ..., 128` will be run.
@@ -290,7 +290,7 @@ schema; unknown keys fail.
   measurement fails the job under `REQUIRE_POWER=1` and otherwise records an invalid
   verdict without energy metrics. NVIDIA clusters run `dcgm-exporter`; AMD clusters use
   srt-slurm's
-  [`kind: custom` schema](https://github.com/NVIDIA/srt-slurm/blob/96f1111ac6093619511d9e276635abf4cad78edf/docs/power-telemetry.md#gpu-exporter-labels-and-metrics),
+  [`kind: custom` schema](https://github.com/NVIDIA/srt-slurm/blob/acfb4dcc3bd48fd6a1e7b615e849e7954c0c3852/docs/power-telemetry.md#gpu-exporter-labels-and-metrics),
   which requires `gpu_labels` and `gpu_metrics` and rejects unknown keys such as the
   former `power_profile`. The AMD exporter reads
   [`runners/srt-slurm/exporters/amd-power.json`](../runners/srt-slurm/exporters/amd-power.json);
