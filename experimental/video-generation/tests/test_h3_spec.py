@@ -132,3 +132,9 @@ def test_fairness_spec_rejects_invalid_workloads(
     path.write_text(yaml.safe_dump(document))
     with pytest.raises(ValueError, match=re.escape(message)):
         h3_spec.load_spec(path)
+
+
+def test_canonical_json_bytes_is_sorted_compact_utf8_and_finite() -> None:
+    assert h3_spec.canonical_json_bytes({"b": "é", "a": [1, 2.5]}) == '{"a":[1,2.5],"b":"é"}'.encode()
+    with pytest.raises(ValueError, match="Out of range float values"):
+        h3_spec.canonical_json_bytes({"a": float("nan")})

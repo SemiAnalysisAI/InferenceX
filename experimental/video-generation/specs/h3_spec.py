@@ -14,11 +14,15 @@ _REVISION = re.compile(r"[0-9a-f]{40}")
 _MAX_SEED = 2**63
 
 
-def _sha256(value: Any) -> str:
-    text = json.dumps(
+def canonical_json_bytes(value: Any) -> bytes:
+    """The bytes every H3 hash covers: sorted keys, compact separators, UTF-8, no NaN."""
+    return json.dumps(
         value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
-    )
-    return hashlib.sha256(text.encode()).hexdigest()
+    ).encode("utf-8")
+
+
+def _sha256(value: Any) -> str:
+    return hashlib.sha256(canonical_json_bytes(value)).hexdigest()
 
 
 def _fields(value: Any, where: str, keys: set[str]) -> dict[str, Any]:
