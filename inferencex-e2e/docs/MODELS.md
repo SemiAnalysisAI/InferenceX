@@ -121,21 +121,21 @@ Other offloading tiers, including NVMe KV cache offloading, are outside the init
 
 ### Kimi K3.1 Pro week-1 precision policy
 
-Agreed by the vLLM and SGLang communities for week-1 official AgentX results. "Native" means the precision of the original released checkpoint. Each entry is the lowest precision allowed; higher precision is always allowed (e.g. an FP8 indexer cache).
+Agreed by the vLLM and SGLang communities for week-1 official AgentX results. "Native" means the precision of the original released checkpoint.
 
-| Component | Minimum precision |
+| Component | Rule |
 |---|---|
-| Linear ops | Native (BF16) |
-| Shared expert | Native (BF16) |
+| Linear ops | Must match native (BF16) |
+| Shared expert | Must match native (BF16) |
 | MoE weights | MXFP4 or NVFP4 |
-| MoE activations | FP4 (A4W4) |
+| MoE activations | A4W4 allowed |
 | MoE dispatch | MX/NV-style quantization allowed |
-| MoE combine | Native (BF16) |
-| AllReduce / AG / RS | Native (BF16) |
+| MoE combine | Must match native (BF16) |
+| AllReduce / AG / RS | Must match native (BF16) |
 | KDA cache | FP32 |
 | Conv cache | Native (BF16) |
-| Indexer cache | FP4 |
-| KV cache | FP8. FP4 only if the native checkpoint ships an FP4 KV cache |
+| Indexer cache | FP4 allowed |
+| KV cache | FP8 allowed. FP4 only if the native checkpoint ships an FP4 KV cache |
 
 - EPLB: dynamic only, static EPLB not allowed.
 - A4W4 and NVFP4 MoE are allowed because AMD has no W4A8 (FP4 weight, FP8 activation) MoE kernel.
