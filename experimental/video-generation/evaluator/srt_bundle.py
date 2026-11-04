@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import math
 import os
 import shutil
 import subprocess
@@ -92,13 +93,14 @@ def _ci_context(environ: dict[str, str]) -> dict:
     }
 
 
-def _samples(power_dir: Path) -> tuple[list[dict], list[str]]:
-    """Per-scrape total and per-GPU watts from srt-slurm's samples.csv (any wire version)."""
+def _samples(power_dir: Path) -> tuple[list[dict], list[str], int]:
+    """Per-scrape total and per-GPU watts from srt-slurm's samples.csv, and its malformed rows."""
     path = power_dir / "samples.csv"
     if not path.is_file():
-        return [], []
+        return [], [], 0
     scrapes: dict[int, dict] = {}
     uuids: list[str] = []
+    malformed = 0
     with path.open(newline="") as stream:
         for row in csv.DictReader(stream):
             try:
@@ -108,6 +110,10 @@ def _samples(power_dir: Path) -> tuple[list[dict], list[str]]:
                     float(row["power_w"]),
                 )
             except (KeyError, TypeError, ValueError):
+                malformed += 1
+                continue
+            if not (math.isfinite(stamp) and math.isfinite(watts)):
+                malformed += 1
                 continue
             uuid = row.get("gpu_uuid") or f"{row.get('hostname')}/{row.get('gpu_index')}"
             if uuid not in uuids:
@@ -127,11 +133,16 @@ def _samples(power_dir: Path) -> tuple[list[dict], list[str]]:
                 "per_gpu_watts": dict(sorted(scrape["per_gpu_watts"].items())),
             }
         )
-    return series, uuids
+    return series, uuids, malformed
 
 
 def _power(
-    validation: dict, series: list[dict], run: dict, bench: dict, gpu_uuids: list[str]
+    validation: dict,
+    series: list[dict],
+    run: dict,
+    bench: dict,
+    gpu_uuids: list[str],
+    malformed_samples: int,
 ) -> dict:
     """Project InferenceX's validation sidecar onto the bundle's power document."""
     valid = bool(validation.get("power_valid"))
@@ -227,6 +238,7 @@ def _power(
         "metrics": dict(metrics),
         "per_gpu": per_gpu,
         "phases": {"measurement": measurement},
+        "malformed_sample_rows": malformed_samples,
         "sample_series": [
             {
                 "at": s["at"],
@@ -283,7 +295,7 @@ def build_bundle(
     server = h3_dir / "server"
     spec = read_object(server / "spec.json") if (server / "spec.json").is_file() else None
     launch = read_object(server / "launch.json") if (server / "launch.json").is_file() else None
-    series, sampled_uuids = _samples(power_dir)
+    series, sampled_uuids, malformed = _samples(power_dir)
     gpu_uuids = list(spec["gpu_uuids"]) if spec else sampled_uuids
     run_id = environ.get("GITHUB_RUN_ID", "local")
     attempt = environ.get("GITHUB_RUN_ATTEMPT", "1")
@@ -355,7 +367,7 @@ def build_bundle(
                 "serving": {**(spec.get("serving") or {}), "concurrency": concurrency},
             }
             write_json(target / "spec.json", cell_spec)
-        power = _power(validation, series, run, bench, gpu_uuids)
+        power = _power(validation, series, run, bench, gpu_uuids, malformed)
         write_json(target / "power.json", power)
         summary = run.get("summary") or {}
         complete = run_complete(run)

@@ -336,6 +336,27 @@ def test_bundle_seals_observed_slurm_allocation(tmp_path):
     assert hashlib.sha256((output / "ci.json").read_bytes()).hexdigest() == checksums["ci.json"]
 
 
+def test_bundle_counts_malformed_power_samples_instead_of_hiding_them(tmp_path):
+    logs, workspace = _native_job(tmp_path, concurrencies=(1,))
+    with (logs / "power/samples.csv").open("a", newline="") as stream:
+        writer = csv.writer(stream)
+        writer.writerow([1, 1070.0, 70, "node", 0, "GPU-x", "n/a"])
+        writer.writerow([1, 1071.0, 71, "node", 0, "GPU-x", "nan"])
+    output = tmp_path / "h3-results"
+    srt_bundle.build_bundle(
+        h3_dir=logs / "h3",
+        power_dir=logs / "power",
+        workspace=workspace,
+        result_filename="r",
+        concurrencies=[1],
+        output=output,
+        environ={"PATH": os.environ["PATH"]},
+    )
+    power = json.loads((output / "gpu/c1/power.json").read_text())
+    assert power["malformed_sample_rows"] == 2
+    assert len(power["sample_series"]) == 70
+
+
 def test_bundle_reports_invalid_power_without_verifying_the_cell(tmp_path):
     logs, workspace = _native_job(tmp_path, concurrencies=(1,), power_valid=False)
     output = tmp_path / "h3-results"
