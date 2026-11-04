@@ -11956,10 +11956,28 @@
   append-only: true
 
 - config-keys:
+    - minimaxm31flash-fp4-gb300-vllm-agentic-dspark
+  description:
+    - "Retune TP4 c8 and c16 with CUDA graph capture sizes, add TP4 c24 and c40 points, and add TP2 c28, c32 and c36 points with CPU KV offload."
+    - "Image and speculative config are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4662
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Collect Grace CPU power on the Kimi K3 GB300 aggregate AgentX recipe, with cpu-power-exporter v2.66.1."
+    - "Publish CPU socket, rail, SysIO and module power over the GPU window, independent of the GPU verdict, and per-host GPU power in workers[]."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3296
+
+- config-keys:
     - kimik3-fp4-b200-vllm-agentic-dspark
   scenario-type:
     - agentic-coding
   description:
     - "Add Kimi-K3 FP4 B200 vLLM AgentX config with DSpark speculative decoding, aggregated TP8 x PP2 on two nodes."
     - "Image: vllm/vllm-openai:nightly-2b009fc6d1493a9a1ad19f4d0c7230b7e6b7e63a."
+    - "Serve with decode context parallelism 8 (a2a), an fp8 KV cache and a bfloat16 KDA recurrent-state cache (mamba-ssm-cache-dtype); DSpark drafts 7 tokens at conc 1-16 and 4 tokens at conc 24-96, with TOKENSPEED_MLA draft attention at conc 1-4 and KIMI_K3_KV_BALANCED_MLA from conc 10, and a Mooncake DRAM KV store at conc 1, 4, 10, 48 and 96."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4759
