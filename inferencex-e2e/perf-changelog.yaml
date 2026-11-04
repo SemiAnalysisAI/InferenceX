@@ -11977,5 +11977,6 @@
   description:
     - "Try SMG 1.11.0 instead of vllm-router 0.1.14 for the single-node DP4/EP4 point at concurrency 64, using SMG's consistent_hashing policy."
     - "Expose one vLLM HTTP server per DP rank with data-parallel-external-lb so SMG routes across all four ranks; leave serving, speculative and KV-offload settings unchanged."
+    - "Send the AgentX correlation ID as X-SMG-Routing-Key for session affinity and identify requests by x-correlation-id; serialize installation using a writable container-local lock."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4775
   scenario-type: [agentic-coding]
