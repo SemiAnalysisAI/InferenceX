@@ -341,7 +341,7 @@ jobs:
             collection=$(PYTHONPATH="$PWD" "$INFERENCEX_LAUNCH_PYTHON" -P -c 'import sys, yaml; from infx.golden_al_distribution import load_curve; c = load_curve(sys.argv[1]).collection; print(yaml.safe_dump({"collection": c}, sort_keys=False) if c else "", end="")' "$GOLDEN_CURVE")
           fi
           {
-            echo "# Source GitHub Actions run: ${run_url}"
+            echo "source_run: ${run_url}"
             cat speedbench-reference-al.yaml
             if [[ -n "$collection" ]]; then printf '\n%s\n' "$collection"; fi
           } > "$curve_file"
