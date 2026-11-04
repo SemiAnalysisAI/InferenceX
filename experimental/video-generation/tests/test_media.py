@@ -10,7 +10,7 @@ import pytest
 av = pytest.importorskip("av")
 np = pytest.importorskip("numpy")
 
-from evaluator.media import analyze_media
+from evaluator.media import analyze_media, compare_media
 
 
 def encode_media(
@@ -161,6 +161,52 @@ def test_silence_freeze_and_blank_are_detected_without_quality_claims(tmp_path):
     failed = {item["name"] for item in result["checks"] if item["status"] == "failed"}
     assert {"video.motion_presence", "audio.sound_presence"} <= failed
     json.dumps(result, allow_nan=False)
+
+
+def test_changed_visual_content_and_silent_channel_are_measured(tmp_path):
+    baseline = encode_media(tmp_path / "baseline.mkv")
+    candidate = encode_media(tmp_path / "changed.mkv", video_change=True, audio_mode="silent_right")
+    result = compare_media(baseline, candidate)
+    assert result["compatible"], result
+    metrics = result["metrics"]
+    assert metrics["video_mae"] > 0.1
+    assert metrics["video_psnr_db"] < 15
+    assert metrics["video_identical"] is False
+    assert metrics["audio_rms_ratio_channels"] == [1.0, 0.0]
+    assert metrics["audio_spectral_cosine_channels"][0] == pytest.approx(1.0)
+    assert metrics["audio_spectral_cosine_channels"][1] is None
+    assert metrics["audio_spectral_cosine"] is None
+    assert metrics["audio_newly_silent_channels"] == [1]
+    assert metrics["audio_waveform_mae_channels"][1] > 0.1
+    json.dumps(result, allow_nan=False)
+
+
+def test_incompatible_media_is_not_resized_trimmed_or_time_shifted(tmp_path):
+    baseline = encode_media(tmp_path / "baseline.mkv")
+    candidate = encode_media(tmp_path / "incompatible.mkv", timestamp_offset_seconds=0.2)
+    result = compare_media(baseline, candidate)
+    assert not result["compatible"], result
+    assert result["metrics"]["video_mae"] is None
+    assert any(check["status"] == "failed" for check in result["checks"])
+
+
+def test_audio_optional_and_identically_silent_pairs_are_explicit(tmp_path):
+    absent = encode_media(tmp_path / "absent.mkv", audio_mode="absent")
+    result = analyze_media(absent)
+    assert result["valid"]
+    assert result["audio"]["present"] is False
+    assert result["metrics"]["av_end_skew_seconds"] is None
+    assert not analyze_media(absent, {"audio_required": True})["valid"]
+    no_audio_pair = compare_media(absent, absent)
+    assert no_audio_pair["compatible"]
+    assert no_audio_pair["metrics"]["audio_spectral_cosine"] is None
+    silent = encode_media(tmp_path / "silent.mkv", audio_mode="silent")
+    silent_pair = compare_media(silent, silent)
+    assert silent_pair["compatible"]
+    assert silent_pair["metrics"]["audio_identical"] is True
+    assert silent_pair["metrics"]["audio_rms_ratio"] is None
+    assert silent_pair["metrics"]["audio_spectral_cosine"] is None
+    json.dumps(silent_pair, allow_nan=False)
 
 
 def test_real_cpu_h3_encoding_checks_observable_streams_without_inventing_options(tmp_path):
