@@ -3,7 +3,7 @@ name: Test Video Harness
 on:
   pull_request:
     paths: &video-harness-paths
-      - 'experimental/video-generation/**'
+      - 'video-generation/**'
       - '.github/workflows/test-video-harness.yml'
   push:
     paths: *video-harness-paths
@@ -26,7 +26,7 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       - name: Test the harness, spec loader and hashes
-        working-directory: experimental/video-generation
+        working-directory: video-generation
         run: >-
           uv run --no-project --python 3.12
           --with 'av==16.1.0' --with 'numpy==2.3.5'
@@ -34,5 +34,5 @@ jobs:
           python -m pytest -q
       - name: Lint and format
         run: |
-          uvx ruff@0.14.0 check experimental/video-generation
-          uvx ruff@0.14.0 format --check experimental/video-generation
+          uvx ruff@0.14.0 check video-generation
+          uvx ruff@0.14.0 format --check video-generation

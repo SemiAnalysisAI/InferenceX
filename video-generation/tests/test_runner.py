@@ -319,7 +319,7 @@ def test_local_http_fixture_lifecycle_and_identity(
 def test_fairness_request_and_disjoint_warmup_reach_local_http_fixture(
     tmp_path, mocked_media, fixture_server, runtime
 ):
-    path = Path(__file__).resolve().parents[1] / "specs/h3-v0.1.yaml"
+    path = Path(__file__).resolve().parents[1] / "specs/h3-v2.yaml"
     plan = video_spec.plan_for(video_spec.load_spec(path), "release-v1")
     plan["cases"] = [
         {
@@ -374,7 +374,7 @@ def test_fairness_request_and_disjoint_warmup_reach_local_http_fixture(
 
 
 def test_request_encoding_comes_from_the_plan(tmp_path):
-    path = Path(__file__).resolve().parents[1] / "specs/h3-v0.1.yaml"
+    path = Path(__file__).resolve().parents[1] / "specs/h3-v2.yaml"
     plan = video_spec.plan_for(video_spec.load_spec(path), "release-v1")
     plan["fairness"]["encoding"]["preset"] = "veryfast"
     sglang = runner.preview_plan(plan, runtime="sglang")["slots"][0]["request"]

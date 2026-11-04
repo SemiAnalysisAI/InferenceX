@@ -65,7 +65,7 @@ def test_reference_retains_startup_failures_without_attesting_weights(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     plan = video_spec.plan_for(
-        video_spec.load_spec(Path(__file__).parents[1] / "specs/h3-v0.1.yaml"), "release-v1"
+        video_spec.load_spec(Path(__file__).parents[1] / "specs/h3-v2.yaml"), "release-v1"
     )
     snapshot = tmp_path / plan["model_revision"]
     snapshot.mkdir()

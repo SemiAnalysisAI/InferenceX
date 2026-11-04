@@ -21,7 +21,7 @@ It is a selected source version, not a claim that MiniMax tested this dependency
 combination. Real imports and CPU scheduler checks can pass without validating
 model loading, GPU kernels or generated quality.
 
-From `experimental/video-generation/`, prepare the environment on persistent
+From `video-generation/`, prepare the environment on persistent
 storage before allocating GPUs. Reuse an existing environment only if these
 versions and the archive identity match. The first install supplies the pinned
 build tools; the second installs the hash-locked runtime without isolated,
@@ -36,7 +36,7 @@ uv pip sync --python "$REFERENCE_ENV/bin/python" --require-hashes --no-build-iso
 uv pip check --python "$REFERENCE_ENV/bin/python"
 
 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 "$REFERENCE_ENV/bin/python" \
-  -m evaluator.reference --spec specs/h3-v0.1.yaml --set release-v1 --case all --check
+  -m evaluator.reference --spec specs/h3-v2.yaml --set release-v1 --case all --check
 ```
 
 The check imports the actual ModularPipeline and Qwen3-VL classes, validates the
@@ -66,7 +66,7 @@ H3_SNAPSHOT=/path/to/hf-hub-cache/models--MiniMaxAI--MiniMax-H3/snapshots/42ed22
 REFERENCE_OUTPUT=/path/to/persistent/campaign/reference-pilot
 
 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 "$REFERENCE_ENV/bin/python" \
-  -m evaluator.reference --spec specs/h3-v0.1.yaml --set release-v1 \
+  -m evaluator.reference --spec specs/h3-v2.yaml --set release-v1 \
   --case ceramic-wheel --snapshot "$H3_SNAPSHOT" --output "$REFERENCE_OUTPUT" \
   --device cuda:0 --offload-reserve 12GB \
   --encoder-threads 1 --audio-bitrate 128000
