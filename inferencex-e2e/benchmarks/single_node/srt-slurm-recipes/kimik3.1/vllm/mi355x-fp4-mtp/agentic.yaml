@@ -1,0 +1,139 @@
+base:
+  schema: 2
+  name: kimik3.1-fp4-mi355x-vllm-agentic
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  # A node's first run downloads ~1.56 TB of MXFP4 shards into its local HF cache before loading.
+  health_check:
+    interval_seconds: 10
+    max_attempts: 720
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: moonshotai/Kimi-K3.1-Pro
+        tensor-parallel-size: 8
+        decode-context-parallel-size: 8
+        dcp-comm-backend: a2a
+        cp-kv-cache-interleave-size: 1
+        trust-remote-code: true
+        language-model-only: true
+        load-format: fastsafetensors
+        enable-auto-tool-choice: true
+        tool-call-parser: kimi_k3
+        reasoning-parser: kimi_k3
+        max-model-len: 1048576
+        enable-prefix-caching: true
+        prefix-match-unit: 64
+        kv-cache-dtype: fp8
+        # The K3.1 week-1 precision policy requires an FP32 KDA recurrent state.
+        mamba-ssm-cache-dtype: float32
+        # The policy's FP4 indexer cache; the image's AITER pads the FP4 indexer pages it needs.
+        attention-config: '{"mla_prefill_backend":"ROCM_AITER_FA","indexer_kv_dtype":"mxfp4"}'
+        additional-config: '{"kda_prefill_backend":"fused"}'
+        # Prefix-cached prefill chunks end on K3.1's 1152-token packed DSA block, so 10240 tokens floor to 9216.
+        max-num-batched-tokens: 10240
+        # Keeps the ~6 GiB per GPU free that the recipe asks for.
+        gpu-memory-utilization: 0.92
+        stream-interval: 10
+        disable-uvicorn-access-log: true
+        # TOTAL_CPU_DRAM_GB split across the 8 TP ranks.
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":224875000000,"lazy_offload":false}}'
+      env:
+        VLLM_ROCM_USE_AITER: '1'
+        VLLM_ROCM_USE_AITER_MOE_SITUV2: '1'
+        SAFETENSORS_FAST_GPU: '1'
+        VLLM_USE_V2_MODEL_RUNNER: '1'
+        VLLM_FASTSAFETENSORS_QUEUE_SIZE: '-1'
+        # K3.1 has no torch.compile submodule; only breakable graphs capture the prefill sizes.
+        VLLM_USE_BREAKABLE_CUDAGRAPH: '1'
+        VLLM_ROCM_AITER_MLA_ASM_PADDING: asm
+        # Verify the draft tokens with the AITER assembly DCP kernel.
+        VLLM_ROCM_AITER_MLA_DCP_VERIFY: asm
+        VLLM_ROCM_DCP_AITER_ALLGATHER: '1'
+        VLLM_ROCM_USE_AITER_FLYDSL_SPARSE_MLA: '1'
+        # AITER reads its own variable for the same kernels.
+        AITER_FLYDSL_SPARSE_MLA: '1'
+        VLLM_ROCM_DSA_DCP_GLOBAL_KEY_PREFILL: '1'
+        VLLM_ROCM_DSA_DCP_ROWSHARD_PREFILL: '1'
+        VLLM_USE_DIRECT_DCP_A2A: '0'
+        VLLM_USE_DIRECT_DCP_Q_GATHER: '0'
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '0'
+        # The K3.1 policy and MODELS.md keep all-reduce in BF16, so quick reduce must not quantize.
+        VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: NONE
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+        PYTHONUNBUFFERED: '1'
+        # Identical prefixes must hash to identical block keys run-to-run.
+        PYTHONHASHSEED: '42'
+        # Outlast AIPerf's pooled-connection idle gaps.
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '900'
+  benchmark:
+    env:
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+
+# Admission equals CONC: each breakable graph size costs graph-pool memory taken from the KV cache.
+# Graphs cover every decode batch, CONC x (1 + drafts) in steps of 1 + drafts, then the prefill sizes;
+# throughput runs replace block rejection with the golden acceptance length.
+zip_override_gpu_kv_dspark5:
+  roles:
+    agg:
+      args:
+        max-num-seqs: [1, 4]
+        compilation-config:
+          - '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":10240,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[6,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240]}'
+          - '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":10240,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[6,12,18,24,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240]}'
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":5,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        kv-transfer-config: null
+  benchmark:
+    env:
+      CONC: ['1', '4']
+      KV_OFFLOADING: 'none'
+
+zip_override_dram_dspark5:
+  roles:
+    agg:
+      args:
+        max-num-seqs: [4, 10, 16, 24, 32, 48]
+        compilation-config:
+          - '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":10240,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[6,12,18,24,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240]}'
+          - '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":10240,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[6,12,18,24,30,36,42,48,54,60,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240]}'
+          - '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":10240,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[6,12,18,24,30,36,42,48,54,60,66,72,78,84,90,96,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240]}'
+          - '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":10240,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[6,12,18,24,30,36,42,48,54,60,66,72,78,84,90,96,102,108,114,120,126,132,138,144,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240]}'
+          - '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":10240,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[6,12,18,24,30,36,42,48,54,60,66,72,78,84,90,96,102,108,114,120,126,132,138,144,150,156,162,168,174,180,186,192,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240]}'
+          - '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":10240,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[6,12,18,24,30,36,42,48,54,60,66,72,78,84,90,96,102,108,114,120,126,132,138,144,150,156,162,168,174,180,186,192,198,204,210,216,222,228,234,240,246,252,258,264,270,276,282,288,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240]}'
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":5,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  benchmark:
+    env:
+      CONC: ['4', '10', '16', '24', '32', '48']
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '1799'
+
+# At c52-c60 the batch is large enough that a fifth draft costs more verify compute than it saves.
+zip_override_dram_dspark4:
+  roles:
+    agg:
+      args:
+        max-num-seqs: [52, 60]
+        compilation-config:
+          - '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":10240,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100,105,110,115,120,125,130,135,140,145,150,155,160,165,170,175,180,185,190,195,200,205,210,215,220,225,230,235,240,245,250,255,260,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240]}'
+          - '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":10240,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100,105,110,115,120,125,130,135,140,145,150,155,160,165,170,175,180,185,190,195,200,205,210,215,220,225,230,235,240,245,250,255,260,265,270,275,280,285,290,295,300,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240]}'
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  benchmark:
+    env:
+      CONC: ['52', '60']
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '1799'

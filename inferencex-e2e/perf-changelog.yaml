@@ -12012,3 +12012,9 @@
     - "Keep historical results, SPEED-Bench collectors, golden AL curves, vendor evals and OperatorX shapes."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4762
   retired: true
+
+- config-keys:
+    - kimik3.1-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Add Kimi-K3.1-Pro day-0 vLLM AgentX on MI355X: TP8 x DCP8 with DSpark (Inferact/Kimi-K3.1-Pro-DSpark-preview), GPU-resident KV at conc 1 and 4 and Simple CPU KV offload at conc 4-60."
+  pr-link: TBD
