@@ -19,6 +19,7 @@ import yaml
 
 from infx.launch.__main__ import main
 from infx.launch.drivers.srt import lanes, models
+from infx.launch.drivers.srt.checkout import CPU_POWER_EXPORTER_RELEASE
 from infx.launch.drivers.srt.lanes import LaneMount, SrtLane
 from infx.launch.drivers.srt.models import Override
 from infx.launch.policy import LaunchPath, Match
@@ -118,6 +119,15 @@ def srtslurm(root: Path) -> dict:
     """The srtslurm.yaml the launch rendered under ``root``."""
     [path] = root.glob("**/srtslurm.yaml")
     return yaml.safe_load(path.read_text())
+
+
+def job_recipe(raw: dict, argv: list[str]) -> dict:
+    """The recipe an ``srtctl apply argv`` job runs: ``raw`` overridden."""
+    sets = [value for flag, value in zip(argv, argv[1:]) if flag == "--set"]
+    unsets = [value for flag, value in zip(argv, argv[1:]) if flag == "--unset"]
+    document = json.loads(json.dumps(raw))
+    apply_overrides_to_recipe(document, parse_overrides(sets, unsets))
+    return document
 
 
 WORKDIR = 'srun_options.container-workdir="/infmax-workspace"'
@@ -486,6 +496,8 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     assert bound["benchmark"]["env"]["REQUIRE_POWER"] == require_power
     assert bound["telemetry"]["collector_join_timeout_seconds"] == 12
     assert (bound["telemetry"]["enabled"], bound["telemetry"]["dcgm_exporter"]["port"]) == (True, 9401)
+    assert "cpu_power_exporter" not in bound["telemetry"]
+    assert all("CPU_POWER_EXPORTER_RELEASE" not in call for call in lines(harness.logs, "make"))
 
     runs = lines(harness.logs, "adapter")
     assert [run.split("--result-dir ")[1].split()[0].rsplit("/", 1)[1] for run in runs] == ["conc_4"]
@@ -495,6 +507,111 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     if lane == "agentx":
         status = (workspace / "LOGS/power/native-job-status.txt").read_text()
         assert status == "42|COMPLETED|0:0\n"
+
+
+GATE_DATASET = "al_gate_dataset/speedbench_coding.jsonl"
+GATE_PROMPTS = '{"question_id": "0", "prompt": "Reverse a singly linked list in place."}\n'
+GATE_ENV = {"AL_GATE": "true", "IS_AGENTIC": "1", "FAKE_RESULTS": "gate", "AL_GATE_DATASET": GATE_DATASET}
+
+
+def download_gate_prompts(workspace: Path) -> None:
+    """What the gate job's download step leaves in the workspace."""
+    (workspace / GATE_DATASET).parent.mkdir(parents=True)
+    (workspace / GATE_DATASET).write_text(GATE_PROMPTS)
+
+
+def assert_gate_ran(harness, call: dict, job: dict) -> None:
+    """The job ran the gate client on the downloaded prompts, and its outputs were staged."""
+    assert job["benchmark"]["command"] == "bash /infmax-workspace/benchmarks/srt_al_gate.sh"
+    assert "post_eval" not in job
+    # The container resolves AL_GATE_DATASET in INFMAX_WORKSPACE, its /infmax-workspace mount.
+    prompts = Path(call["env"]["INFMAX_WORKSPACE"]) / job["benchmark"]["env"]["AL_GATE_DATASET"]
+    assert prompts.read_text() == GATE_PROMPTS
+    verdict = json.loads((harness.workspace / "al_gate_point-identity.json").read_text())
+    assert verdict == {"status": "below", "result_filename": "point-identity"}
+    assert (harness.workspace / "al_gate/aiperf_artifacts/server_metrics_export.json").read_text() == "{}"
+
+
+def test_single_node_gate_measures_the_selected_variant_with_real_verification(harness):
+    recipe = json.loads(json.dumps(POINT_RECIPE))
+    recipe["roles"]["agg"]["args"].update({"speculative-algorithm": "EAGLE", "speculative-num-steps": 3})
+    recipe["roles"]["agg"]["env"] = {"KEEP": "yes", "SGLANG_SIMULATE_ACC_LEN": "2.5"}
+    raw = {"base": recipe, "zip_override_conc": {"benchmark": {"env": {"CONC": ["2", "4"]}}}}
+    workspace = harness.workspace
+    (workspace / "recipe.yaml").write_text(yaml.safe_dump(raw))
+    env = {
+        **harness.env, **POINT_ENV, **GATE_ENV, "RUNNER_NAME": runner_for("h200-dgxc"), "MODEL_PREFIX": "dsv4",
+        "SPEC_DECODING": "mtp", "DURATION": "600", "AL_GATE_CURVE": "dsv4_mtp", "AL_GATE_DRAFT_TOKENS": "3",
+    }  # fmt: skip
+    download_gate_prompts(workspace)
+    assert_ok(launch(env, harness.config, workspace))
+
+    [call] = srtctl_calls(harness.logs)
+    argv = call["argv"]
+    submitted = Path(argv[argv.index("--file") + 1])
+    job = job_recipe(yaml.safe_load(submitted.read_text()), argv)
+    assert_gate_ran(harness, call, job)
+    assert job["benchmark"]["env"]["CONC"] == "2"
+    # Real verification: the recipe's simulated acceptance is gone.
+    assert job["roles"]["agg"]["env"] == {"KEEP": "yes"}
+
+    # A job that leaves no verdict fails, and a throughput result is never staged in its place.
+    result = launch({**env, "FAKE_RESULTS": "single"}, harness.config, workspace)
+    assert result.returncode == 1
+    assert "al_gate_point-identity.json is missing or empty" in result.stderr
+    assert not (workspace / "point-identity.json").exists()
+
+
+AGENTX_LANE_RECIPE = """name: "fixture"
+roles:
+  prefill:
+    args:
+      tensor-parallel-size: 8
+  decode:
+    args:
+      tensor-parallel-size: 8
+      speculative-config: '{"method": "dspark", "num_speculative_tokens": 3, "draft_sample_method": "greedy", "rejection_sample_method": "synthetic", "synthetic_acceptance_length": 2.5}'
+"""
+
+
+def lane_gate_env(harness) -> dict[str, str]:
+    """The gate of a multi-node speculative AgentX point on a power lane."""
+    return lane_env(
+        harness, "h200-dgxc", AGENTX_LANE_RECIPE + POWER_TELEMETRY, **GATE_ENV,
+        MODEL_PREFIX="kimik3", PRECISION="fp4", FRAMEWORK="vllm", MODEL="moonshotai/Kimi-K3", ISL="0", OSL="0",
+        CONC="4", SPEC_DECODING="dspark", AL_GATE_CURVE="kimik3_dspark", AL_GATE_DRAFT_TOKENS="3",
+    )  # fmt: skip
+
+
+def test_power_lane_gate_measures_real_acceptance_without_power(harness):
+    workspace = harness.workspace
+    download_gate_prompts(workspace)
+    assert_ok(launch(lane_gate_env(harness), harness.config, workspace))
+
+    [call] = srtctl_calls(harness.logs)
+    checkout = Path(call["cwd"])
+    submitted = Path(call["argv"][call["argv"].index("--file") + 1])
+    job = job_recipe(yaml.safe_load(submitted.read_text()), call["argv"])
+    assert_gate_ran(harness, call, job)
+    assert json.loads(job["roles"]["decode"]["args"]["speculative-config"]) == {
+        "method": "dspark", "num_speculative_tokens": 3, "draft_sample_method": "greedy",
+        "rejection_sample_method": "block",
+    }  # fmt: skip
+    # Without the gate this lane measures AgentX power; the gate measures and stages none.
+    assert "telemetry" not in job
+    assert "dcgm-exporter" not in srtslurm(checkout)["containers"]
+    assert not (workspace / "power-producer-sha.txt").exists()
+
+
+def test_a_gate_without_its_prompts_fails_before_any_work(harness):
+    result = launch(lane_gate_env(harness), harness.config, harness.workspace)
+
+    assert result.returncode == 1
+    error = f"AL_GATE_DATASET {GATE_DATASET} is not a file in {harness.workspace.resolve()}"
+    assert f"ERROR: {error}\n" in result.stderr
+    # Nothing was cloned, imported or submitted.
+    assert [lines(harness.logs, name) for name in ("git", "enroot", "sbatch")] == [[], [], []]
+    assert srtctl_calls(harness.logs) == []
 
 
 @pytest.mark.parametrize("shape", ["single", "multi"])
@@ -864,3 +981,49 @@ def test_multinode_eval_overrides_image_offline_mode_and_host_model_path(harness
         "http://worker:8000",
         str(harness.workspace),
     ]
+
+
+def test_launch_cpu_expectation_reaches_fixed_sequence_processor(harness, monkeypatch):
+    from infx.results.fixed_sequence import aggregate_power_result
+    from infx.tests.results.power.test_aggregate_power_multinode import (
+        PRODUCER_SHA,
+        build_package,
+    )
+
+    env = lane_env(
+        harness,
+        "gb300-nv",
+        LANE_FRAGMENT + POWER_TELEMETRY,
+        MODEL_PREFIX="qwen3.5",
+        PRECISION="fp8",
+        FRAMEWORK="dynamo-sglang",
+        MODEL="Qwen/Qwen3.5-397B-A17B-FP8",
+        REQUIRE_POWER="1",
+        POWER="1",
+        CPU_POWER="1",
+    )
+    assert_ok(launch(env, harness.config, harness.workspace))
+    [checkout] = harness.workspace.glob("srt-slurm-9001-*")
+    bound = yaml.safe_load((checkout / "recipe.yaml").read_text())
+    assert bound["telemetry"]["cpu_power_exporter"] == {"source": "acpi"}
+    assert bound["telemetry"]["dcgm_exporter"]["port"] == 19401
+    [setup] = [call for call in lines(harness.logs, "make") if call.startswith("setup ")]
+    assert f"CPU_POWER_EXPORTER_RELEASE={CPU_POWER_EXPORTER_RELEASE}" in setup.split()
+    pkg = build_package(harness.tmp / "power-input")
+    monkeypatch.chdir(harness.tmp)
+    # The workflow exports CPU_POWER once; the launcher and the processor both read it.
+    result_env = {
+        "CPU_POWER": "1",
+        "REQUIRE_POWER": "1",
+        "IS_MULTINODE": "true",
+        "RESULT_FILENAME": "fixture",
+        "PREFILL_GPUS": "2",
+        "DECODE_GPUS": "2",
+        "POWER_PRODUCER_SHA": PRODUCER_SHA,
+        "POWER_ARTIFACT_DIR": str(pkg.power_dir),
+        "POWER_RESULT_ROOT": str(pkg.logs_root),
+    }
+    assert aggregate_power_result(result_env, pkg.bench_result, pkg.agg_result) == 1
+    aggregate = pkg.agg()
+    assert aggregate["power_valid"] == 1
+    assert aggregate["cpu_power_valid"] == 0
