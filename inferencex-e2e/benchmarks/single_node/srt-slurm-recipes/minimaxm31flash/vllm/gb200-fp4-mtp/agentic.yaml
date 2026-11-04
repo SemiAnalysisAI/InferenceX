@@ -63,20 +63,23 @@ zip_override_tp4:
 
 zip_override_dep4:
   frontend:
-    type: vllm-router
+    type: smg
     args:
-      policy: consistent_hash
+      policy: consistent_hashing
+      request-id-headers: x-correlation-id
       prometheus-host: 127.0.0.1
-      prometheus-port: 18000
       request-timeout-secs: 14400
       disable-retries: true
-  setup_script: vllm-router.sh
+  setup_script: smg.sh
+  environment:
+    SMG_INSTALL_LOCK_DIR: /tmp
   roles:
     agg:
       gpus: 4
       args:
         tensor-parallel-size: 1
         data-parallel-size: 4
+        data-parallel-external-lb: true
         enable-expert-parallel: true
         max-num-seqs: [32, 64]
         # Golden AL 2.88.
@@ -84,3 +87,4 @@ zip_override_dep4:
   benchmark:
     env:
       CONC: ['64', '128']
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
