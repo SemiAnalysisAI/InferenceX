@@ -408,7 +408,7 @@ def bind_speculation(recipe: dict[str, Any], environment: Mapping[str, str]) -> 
             f"{'drafts' if spec else 'does not draft'}"
         )
     if spec:
-        algorithm, draft_model = speculation_facts(environment.get("MODEL_PREFIX", ""), spec)
+        algorithm, draft_model = speculation_facts(_required(environment, "MODEL_PREFIX"), spec)
         workload = recipe.setdefault("benchmark", {}).setdefault("env", {})
         workload.update(SPEC_ALGORITHM=algorithm, SPEC_DRAFT_MODEL=draft_model)
 
