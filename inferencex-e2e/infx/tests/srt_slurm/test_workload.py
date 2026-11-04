@@ -94,6 +94,8 @@ def test_bundles_take_the_shared_block_under_base_and_keep_their_variants(projec
     ({"base": {}, "override_c": {"benchmark": {"concurrencies": [4]}}}, False, False,
      "override_c.benchmark.concurrencies (= [4])"),
     ({"telemetry": {"enabled": True}}, False, True, "telemetry.enabled (= True)"),
+    ({"base": {"telemetry": {"cpu_power_exporter": {"source": "acpi"}}}}, True, True,
+     "base.telemetry.cpu_power_exporter (= {'source': 'acpi'})"),
     ({"benchmark": {"env": {"HF_HUB_CACHE": "/elsewhere"}}}, True, True,
      "benchmark.env.HF_HUB_CACHE (= '/elsewhere')"),
     ({"base": {"benchmark": {"env": {"RESULT_DIR": "/logs"}}}}, True, False,
@@ -168,6 +170,10 @@ def test_a_power_point_gets_telemetry_and_its_concurrencies_on_a_bundle_variant(
         "dcgm_exporter": {"container_image": "dcgm-exporter", "port": 19401},
     }  # fmt: skip
     assert bound["benchmark"]["concurrencies"] == [8]
+    with_cpu = compose_recipe(
+        path, agentic=True, multinode=True, root=project, power_port=19401, cpu_power_source="acpi"
+    )
+    assert with_cpu["base"]["telemetry"]["cpu_power_exporter"] == {"source": "acpi"}
     unpowered = compose_recipe(path, agentic=True, multinode=True, root=project)["base"]
     assert "concurrencies" not in bind_workload(unpowered, AGENTX_ENV, agentic=True, multinode=True)[
         "benchmark"
