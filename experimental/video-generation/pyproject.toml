@@ -17,8 +17,12 @@ vgbench = "evaluator.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["evaluator*"]
+include = ["evaluator*", "specs*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = [".", "tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"

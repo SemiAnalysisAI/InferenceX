@@ -1,79 +1,25 @@
-# `sent` follows the payload builders at
-#   feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/evaluator/mvp_runner.py:186-209
-# `checked_on_clip` follows the clip checks at
-#   feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/evaluator/mvp_media.py:384-425
-# against the expected media built at mvp_runner.py:613-615.
-
 schema_version: 1
 
 model:
-  id:
-    value: MiniMaxAI/MiniMax-H3
-    source: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:492
-  revision:
-    value: 42ed227ee7df40d41602854ae760620d6eb651fe
-    source: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:493
+  id: MiniMaxAI/MiniMax-H3
+  revision: 42ed227ee7df40d41602854ae760620d6eb651fe
 
 generation:
-  aspect_ratio:
-    value: "16:9"
-    source: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:480
-    sent: {sglang: true, vllm-omni: true}
-    checked_on_clip: false
-  audio_channels:
-    value: 2
-    source: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:481
-    sent: {sglang: false, vllm-omni: false}
-    checked_on_clip: true
-  audio_flow_shift:
-    value: 3.0
-    source: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:482
-    sent: {sglang: true, vllm-omni: true}
-    checked_on_clip: false
-  audio_sample_rate_hz:
-    value: 32000
-    source: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:483
-    sent: {sglang: false, vllm-omni: false}
-    checked_on_clip: true
-  duration_seconds:
-    value: 4
-    source: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:484
-    sent: {sglang: true, vllm-omni: true}
-    checked_on_clip: false
-  flow_shift:
-    value: 12.0
-    source: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:485
-    sent: {sglang: true, vllm-omni: true}
-    checked_on_clip: false
-  fps:
-    value: 24
-    source: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:486
-    sent: {sglang: false, vllm-omni: true}
-    checked_on_clip: true
-  frame_count:
-    # SGLang rejects caller-set fps and num_frames, runs at a fixed 24 fps, and
-    # snaps duration_seconds * fps = 96 up to its 17n+5 frame boundary, so the
-    # clip lasts 107 / 24 = 4.458 s rather than duration_seconds
-    # (sgl-project/sglang@71de97b26:python/sglang/multimodal_gen/runtime/pipelines_core/stages/model_specific_stages/minimax_h3/time_request.py:5).
-    value: 107
-    source: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:487
-    sent: {sglang: false, vllm-omni: true}
-    checked_on_clip: true
-  height:
-    value: 768
-    source: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:488
-    sent: {sglang: false, vllm-omni: true}
-    checked_on_clip: true
-  num_inference_steps:
-    value: 50
-    source: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:489
-    sent: {sglang: true, vllm-omni: true}
-    checked_on_clip: false
-  width:
-    value: 1344
-    source: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:490
-    sent: {sglang: false, vllm-omni: true}
-    checked_on_clip: true
+  aspect_ratio: "16:9"
+  audio_channels: 2
+  audio_flow_shift: 3.0
+  audio_sample_rate_hz: 32000
+  duration_seconds: 4
+  flow_shift: 12.0
+  fps: 24
+  # SGLang rejects caller-set fps and num_frames, runs at a fixed 24 fps, and
+  # snaps duration_seconds * fps = 96 up to its 17n+5 frame boundary, so the
+  # clip lasts 107 / 24 = 4.458 s rather than duration_seconds
+  # (sgl-project/sglang@71de97b26:python/sglang/multimodal_gen/runtime/pipelines_core/stages/model_specific_stages/minimax_h3/time_request.py:5).
+  frame_count: 107
+  height: 768
+  num_inference_steps: 50
+  width: 1344
 
 prompts:
   drum-taps:
@@ -85,7 +31,6 @@ prompts:
       subtitles, or scene cuts.
     requires_motion: true
     requires_sound: true
-    source: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/h3-smoke.plan.json:21
   pouring-water:
     text: >-
       A single continuous close-up of a hand steadily pouring water from a
@@ -95,7 +40,6 @@ prompts:
       no scene cuts.
     requires_motion: true
     requires_sound: true
-    source: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/h3-smoke.plan.json:28
   bicycle-pass:
     text: >-
       A single continuous wide shot of a cyclist riding from the left side of
@@ -105,7 +49,6 @@ prompts:
       speech, subtitles, or scene cuts.
     requires_motion: true
     requires_sound: true
-    source: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/h3-smoke.plan.json:35
   footsteps:
     text: >-
       A single continuous low-angle shot of a person in ordinary shoes walking
@@ -114,24 +57,18 @@ prompts:
       camera stays still. No music, speech, subtitles, or scene cuts.
     requires_motion: true
     requires_sound: true
-    source: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/h3-smoke.plan.json:42
 
 sets:
   frozen-c124:
     plan_id: h3-serving-2gpu-c124-v1
     repetitions: 4
     warmup_runs: 1
-    seed_sources:
-      11: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:476
     cases:
       - {case_id: drum-taps, prompt: drum-taps, seed: 11}
   engine-compare-v1:
     plan_id: h3-engine-compare-v1
     repetitions: 1
     warmup_runs: 1
-    seed_sources:
-      11: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/campaigns/h3-cross-hardware/formal-8s-plan.json:8
-      29: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/campaigns/h3-cross-hardware/formal-8s-plan.json:22
     cases:
       - {case_id: drum-taps-s11, prompt: drum-taps, seed: 11}
       - {case_id: drum-taps-s29, prompt: drum-taps, seed: 29}
@@ -147,12 +84,6 @@ sets:
     plan_id: h3-native-engine-release-v1
     repetitions: 1
     warmup_runs: 1
-    seed_sources:
-      11: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/campaigns/h3-cross-hardware/formal-8s-plan.json:8
-      23: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/h3-smoke.plan.json:29
-      29: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/campaigns/h3-cross-hardware/formal-8s-plan.json:22
-      47: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/campaigns/h3-cross-hardware/formal-8s-plan.json:29
-      83: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/campaigns/h3-cross-hardware/formal-8s-plan.json:64
     cases:
       - {case_id: drum-taps-s11, prompt: drum-taps, seed: 11}
       - {case_id: drum-taps-s23, prompt: drum-taps, seed: 23}
@@ -189,8 +120,3 @@ reference:
       stereo.
     sglang_revision: 71de97b264b04dcd514cf904003028aefe9775c8
     server: {ulysses_degree: 2, tp_size: 1, port: 30283}
-    sources:
-      - feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:13
-      - feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:507
-      - feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:513
-      - feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/specs/h3-serving-2gpu.json:514
