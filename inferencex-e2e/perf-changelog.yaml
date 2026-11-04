@@ -12020,4 +12020,4 @@
   description:
     - "Add Kimi K3.1 Pro B200 vLLM AgentX on vllm/vllm-openai:kimi-k31: two nodes, TP8 x PP2 with DCP8, no KV offload, concurrency 1, 4, 8, 14, 24, 32, 48, 56, 72, 80 with DSpark and 96 without speculation."
     - "DSpark uses Inferact/Kimi-K3.1-Pro-DSpark-preview with probabilistic drafting and block verification, 7 draft tokens through concurrency 14 and 4 above."
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4797
