@@ -6,19 +6,18 @@ source "$repo_root/benchmarks/check_env.sh"
 check_env_vars \
     CATEGORY MODEL MODEL_PATH MTP_LIST OUT_YAML PORT SPEEDBENCH_OUTPUT_LEN THINKING_MODES
 
-# The chat template thinks by default and the SGLang SPEED-Bench loader passes no
-# chat_template_kwargs, so only the thinking-on mode can be collected.
 if [[ "$THINKING_MODES" != "on" ]]; then
-    echo "CRITICAL: this collector renders only the template default (thinking on); dispatch with thinking-modes=on (got '$THINKING_MODES')"
+    echo "CRITICAL: the K3.1 DSpark curve this matches has thinking_on only; dispatch with thinking-modes=on (got '$THINKING_MODES')"
     exit 1
 fi
 
 SERVE_MODEL="${MODEL_PATH}"
 DRAFT_MODEL="RadixArk/Kimi-K3.1-Dflash2-Preview"
 MODEL_KEY="$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')"
-# The draft card fits 32 running requests at verification width 8 on B300; AL does not
-# depend on batch size.
-CONCURRENCY="32"
+# Client settings of the K3.1 DSpark curve's vLLM collection, so the two curves differ only
+# in the drafter.
+CONCURRENCY="64"
+CHAT_TEMPLATE_KWARGS='{"thinking": true}'
 SAMPLING='{"temperature": 1.0, "top_p": 0.95, "repetition_penalty": 1.0}'
 
 SPEEDBENCH_DIR="/workspace/speed_bench_data"
@@ -54,23 +53,46 @@ if [[ ! -f "$SPEEDBENCH_DIR/qualitative.jsonl" ]]; then
     exit 1
 fi
 
-# SGLang's speed-bench loader reads prompts from "turns", while prepare.py writes "messages".
-CATEGORY_JSONL="$SPEEDBENCH_DIR/qualitative_${CATEGORY}.jsonl"
-python3 - "$SPEEDBENCH_DIR/qualitative.jsonl" "$CATEGORY_JSONL" "$CATEGORY" <<'EOF'
-import json, sys
-src, dst, category = sys.argv[1:]
-with open(src) as f, open(dst, "w") as out:
-    for line in f:
+# SGLang's SPEED-Bench loaders reorder the prompts, so this client sends them itself: each
+# category row's first user message, in vllm bench serve's order (random.seed(0) shuffle),
+# rendered by the AL gate's chat-template renderer and streamed to /v1/completions with
+# max_tokens 4096 and the engine-default ignore_eos, exactly as the vLLM collection did.
+BENCH_CLIENT="$RESULTS_DIR/speedbench_completions_client.py"
+cat > "$BENCH_CLIENT" <<'PYEOF'
+import json, random, sys, urllib.request
+from concurrent.futures import ThreadPoolExecutor
+
+from transformers import AutoTokenizer
+
+from infx.bench.al_gate import render
+
+dataset, category, model, url, concurrency, max_tokens, kwargs, sampling = sys.argv[1:]
+prompts = []
+with open(dataset) as rows:
+    for line in rows:
         row = json.loads(line)
         if row.get("category") == category:
-            row["turns"] = [m["content"] for m in row["messages"] if m["role"] == "user"]
-            out.write(json.dumps(row) + "\n")
-EOF
-NUM_PROMPTS=$(wc -l < "$CATEGORY_JSONL")
-if [[ "$NUM_PROMPTS" -eq 0 ]]; then
-    echo "CRITICAL: no SPEED-Bench qualitative rows for category '$CATEGORY'"
-    exit 1
-fi
+            prompts.append(next(m["content"] for m in row["messages"] if m["role"] == "user"))
+if not prompts:
+    sys.exit(f"no SPEED-Bench qualitative rows for category {category!r}")
+random.Random(0).shuffle(prompts)
+tokenizer = AutoTokenizer.from_pretrained(model, trust_remote_code=True)
+texts = [render(p, "chat_template", json.loads(kwargs), tokenizer) for p in prompts]
+body = {"model": model, "max_tokens": int(max_tokens), "stream": True, **json.loads(sampling)}
+
+
+def send(text):
+    data = json.dumps({**body, "prompt": text}).encode()
+    request = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(request, timeout=3600) as response:
+        for _ in response:
+            pass
+
+
+with ThreadPoolExecutor(int(concurrency)) as pool:
+    list(pool.map(send, texts))
+print(f"sent {len(texts)} {category} prompts at concurrency {concurrency}")
+PYEOF
 
 scrape_metrics() {
     curl -sf "http://localhost:${PORT}/metrics" > "$1"
@@ -136,6 +158,8 @@ run_cell() {
 
     # Server flags follow the draft card's B300 TP8 block-verification command; DFLASH's
     # --speculative-num-draft-tokens is the verification width, the drafts plus one.
+    # ReplaySSM keeps one KDA state per request instead of one per draft token, which lets
+    # 64 running requests fit at the widest widths.
     local serve_args=(
         --model-path "$SERVE_MODEL"
         --host 0.0.0.0 --port "$PORT"
@@ -159,6 +183,7 @@ run_cell() {
         --speculative-draft-kv-cache-dtype fp8_e4m3
         --speculative-num-draft-tokens "$((mtp + 1))"
         --speculative-use-block-verification
+        --enable-linear-replayssm-spec
     )
 
     local server_log="$RESULTS_DIR/server_on_mtp${mtp}.log"
@@ -182,23 +207,11 @@ run_cell() {
         return
     fi
 
-    # sglang-oai streams /v1/completions like the vLLM collections; its loader renders each
-    # prompt with the chat template, and sampling goes in the request body because this
-    # backend ignores --temperature and --top-p.
-    python3 -m sglang.benchmark.serving \
-        --backend sglang-oai \
-        --port "$PORT" \
-        --model "$SERVE_MODEL" \
-        --dataset-name speed-bench \
-        --dataset-path "$CATEGORY_JSONL" \
-        --speed-bench-output-len "$SPEEDBENCH_OUTPUT_LEN" \
-        --num-prompts "$NUM_PROMPTS" \
-        --max-concurrency "$CONCURRENCY" \
-        --extra-request-body "$SAMPLING" \
-        --disable-ignore-eos \
-        --output-file "$RESULTS_DIR/speedbench_on_mtp${mtp}.jsonl" \
-        --output-details
-    local bench_rc=$?
+    PYTHONSAFEPATH=1 PYTHONPATH="$repo_root${PYTHONPATH:+:$PYTHONPATH}" python3 "$BENCH_CLIENT" \
+        "$SPEEDBENCH_DIR/qualitative.jsonl" "$CATEGORY" "$SERVE_MODEL" \
+        "http://localhost:${PORT}/v1/completions" "$CONCURRENCY" "$SPEEDBENCH_OUTPUT_LEN" \
+        "$CHAT_TEMPLATE_KWARGS" "$SAMPLING" 2>&1 | tee "$RESULTS_DIR/client_on_mtp${mtp}.log"
+    local bench_rc=${PIPESTATUS[0]}
     if [[ $bench_rc -ne 0 ]]; then
         echo "  -> benchmark client exited rc=$bench_rc (dflash=$mtp); cell will be N/A"
         AL_RESULT["$mtp"]="N/A"
@@ -206,12 +219,19 @@ run_cell() {
         return
     fi
 
-    # Counters lag the last responses by a scheduler step or two.
-    sleep 5
-    local reading="N/A"
-    if scrape_metrics "$after"; then
+    # The engine counts the last verifications after the responses close, so scrape until
+    # the reading settles, as the AL gate does.
+    local reading="N/A" previous="" settle
+    for settle in $(seq 30); do
+        if ! scrape_metrics "$after"; then
+            reading="N/A"
+            break
+        fi
         reading=$(acceptance_length "$before" "$after" || echo "N/A")
-    fi
+        [[ "$reading" == "$previous" ]] && break
+        previous="$reading"
+        sleep 2
+    done
     local al="${reading%% *}"
     echo "  -> thinking=on DFLASH=$mtp AL=$al (accepted verifications: ${reading#* })"
     AL_RESULT["$mtp"]="$al"
@@ -226,7 +246,7 @@ done
 {
     echo "# Acceptance Length (AL) reference values measured with SPEED-Bench."
     echo "# dataset: $CATEGORY | top_p: 0.95 | output_len: $SPEEDBENCH_OUTPUT_LEN"
-    echo "# thinking_on: temperature=1.0, chat template default (thinking on)"
+    echo "# thinking_on: temperature=1.0, chat_template_kwargs: $CHAT_TEMPLATE_KWARGS"
     echo "# speculative: DFLASH, draft $DRAFT_MODEL, block verification"
     echo "# Measured on $MODEL_KEY ($GPU_NAME, SGLang DFLASH), per num_speculative_tokens."
     echo "# Auto-generated by benchmarks/single_node/speedbench/kimik3.1_fp4_b300_sglang.sh (speedbench-al.yml)."
