@@ -24,6 +24,21 @@ RECORDED_ENGINE_ENV = (
     "VLLM_OMNI_SERVER_STORAGE__PATH",
     "VGBENCH_GPU_UUIDS",
 )
+_BOOLEAN = {"true": True, "false": False}
+# Deployment keys only: the dashboard treats any other spec.json server key as workload identity.
+SERVER_FLAGS = {
+    "sglang": {
+        "--tp-size": ("tp_size", int),
+        "--ulysses-degree": ("ulysses_degree", int),
+        "--encoder-parallel": ("encoder_parallel", str),
+        "--dit-cpu-offload": ("dit_cpu_offload", lambda value: _BOOLEAN[value.lower()]),
+        "--attention-backend": ("attention_backend", str),
+    },
+    "vllm-omni": {
+        "--tensor-parallel-size": ("tp_size", int),
+        "--usp": ("ulysses_degree", int),
+    },
+}
 
 
 def cuda_devices() -> list[str]:
@@ -116,6 +131,16 @@ def vllm_model_view(snapshot: Path, output: Path) -> Path:
     return output
 
 
+def server_parallelism(runtime: str, argv: list[str]) -> dict:
+    """The explicit engine parallelism flags, under the keys the dashboard reads."""
+    flags = SERVER_FLAGS[runtime]
+    return {
+        flags[flag][0]: flags[flag][1](value)
+        for flag, value in zip(argv, argv[1:])
+        if flag in flags
+    }
+
+
 def serve(
     plan: dict,
     *,
@@ -158,6 +183,7 @@ def serve(
         served_path = vllm_model_view(model_path, output / "model-view")
         Path(storage).mkdir(parents=True, exist_ok=True)
     argv = [str(served_path) if part == snapshot else part for part in command]
+    server = server_parallelism(runtime, argv)
     recorded_env.update({name: env[name] for name in RECORDED_ENGINE_ENV if name in env})
     write_json(
         output / "spec.json",
@@ -173,6 +199,7 @@ def serve(
                 "argv": argv,
             },
             "serving": {"mode": "closed_loop"},
+            "server": server,
         },
     )
     launch = {
