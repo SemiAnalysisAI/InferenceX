@@ -6231,9 +6231,7 @@ dsv41flash-fp4-gb300-vllm-agentic-dspark:
       # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
       # TP4 covers low concurrency with FlashInfer attention and THP Engram tables.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 16], srt-recipe: agentic.yaml }
-      # DEP2 is native TP1 x DP2 + EP2 with MegaMoE behind a consistent-hash vLLM
-      # Router; FlashInfer attention up to conc 64, MegaAttention above.
-      - { tp: 2, ep: 2, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [8, 16, 32, 64, 128, 192], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
+      - { tp: 2, ep: 2, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [8, 16, 32, 64, 128, 192], router: { name: smg, version: "1.11.0" }, srt-recipe: agentic.yaml }
 
 # MiniMax-M3.1-Flash AgentX on GB300: the B200 recipe and search space plus a
 # DEP4 c96 point, with the vLLM blog's FlashInfer PrimiTS DSpark drafter and the

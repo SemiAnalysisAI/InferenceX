@@ -74,24 +74,25 @@ zip_override_tp4:
     env:
       CONC: ['1', '4', '8', '16']
 
-# DEP2: TP1 x DP2 + EP2 with MegaMoE behind a consistent-hash router;
-# MegaAttention at CONC 128 and above.
 zip_override_dep2:
   frontend:
-    type: vllm-router
+    type: smg
     args:
-      policy: consistent_hash
+      policy: consistent_hashing
+      request-id-headers: x-correlation-id
       prometheus-host: 127.0.0.1
-      prometheus-port: 18000
       request-timeout-secs: 14400
       disable-retries: true
-  setup_script: vllm-router.sh
+  setup_script: smg.sh
+  environment:
+    SMG_INSTALL_LOCK_DIR: /tmp
   roles:
     agg:
       gpus: 2
       args:
         tensor-parallel-size: 1
         data-parallel-size: 2
+        data-parallel-external-lb: true
         enable-expert-parallel: true
         kernel-config: '{"enable_flashinfer_autotune":true,"moe_backend":"deep_gemm_mega_moe"}'
         engram-config: '{"cpu_offload":true,"embedding_across_dp":true}'
@@ -115,3 +116,4 @@ zip_override_dep2:
   benchmark:
     env:
       CONC: ['8', '16', '32', '64', '128', '192']
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
