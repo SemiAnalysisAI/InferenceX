@@ -11964,6 +11964,15 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Collect Grace CPU power on the Kimi K3 GB300 aggregate AgentX recipe, with cpu-power-exporter v2.66.1."
+    - "Publish CPU socket, rail, SysIO and module power over the GPU window, independent of the GPU verdict, and per-host GPU power in workers[]."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3296
+
+- config-keys:
     - glm5.2-fp8-b200-sglang-agentic-mtp
   description:
     - "Update the SGLang image to nightly-dev-20261026-8252e3af and lower c16 mem-fraction-static to 0.83."
