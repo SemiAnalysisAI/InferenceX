@@ -90,6 +90,7 @@ def cgroup(dirs: list[str]) -> list[dict]:
 def tcp() -> dict:
     states: dict[str, int] = {}
     remotes: dict[str, dict[str, int]] = {}
+    by_addr: dict[str, dict[str, int]] = {}
     for table in ("/proc/net/tcp", "/proc/net/tcp6"):
         try:
             with open(table) as f:
@@ -102,6 +103,14 @@ def tcp() -> dict:
                         rem = p[2][-4:]  # remote port (hex)
                         per = remotes.setdefault(rem, {})
                         per[st] = per.get(st, 0) + 1
+                        # IPv4 remote address:port (hex, little-endian), so a run that uses
+                        # two addresses for the same frontend shows the split per address.
+                        if len(p[2]) == 13:
+                            addr = p[2][:8]
+                            ip = ".".join(str(int(addr[i : i + 2], 16)) for i in (6, 4, 2, 0))
+                            key = f"{ip}:{int(rem, 16)}"
+                            pa = by_addr.setdefault(key, {})
+                            pa[st] = pa.get(st, 0) + 1
         except OSError:
             pass
     top = sorted(remotes.items(), key=lambda kv: -sum(kv[1].values()))[:4]
@@ -121,6 +130,7 @@ def tcp() -> dict:
     return {
         "states": states,
         "by_remote_port": {str(int(k, 16)): v for k, v in top},
+        "by_remote_addr": dict(sorted(by_addr.items(), key=lambda kv: -sum(kv[1].values()))[:6]),
         "sockstat": sockstat,
         "ext": {k: ext.get(k, -1) for k in TCP_EXT},
         "snmp": {k: tcp_snmp.get(k, -1) for k in TCP_SNMP},

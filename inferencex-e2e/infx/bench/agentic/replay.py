@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import urllib.parse
+import subprocess
+import socket
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -101,6 +104,40 @@ class ReplayConfig:
         )
 
 
+def extra_frontend_urls(url: str) -> list[str]:
+    """Diagnostic branch only: a second address for the SAME frontend process.
+
+    Each destination IP:port has its own ephemeral-port space, and the 20k
+    cache-pressure stage opens ~30k connections against a 28,232-port range.
+    When the frontend runs on this host (the client node), 127.0.0.1:8000
+    reaches the same process over the same loopback path as the NIC address,
+    so only the TCP destination differs; aiperf's round-robin URL choice is
+    made once per session start. Falls back to the single URL unless the
+    loopback endpoint answers /v1/models.
+    """
+    parsed = urllib.parse.urlsplit(url)
+    host, port = parsed.hostname, parsed.port
+    if not host or not port or host in {"127.0.0.1", "localhost"}:
+        return []
+    local = {"127.0.0.1", "localhost", socket.gethostname(), socket.getfqdn()}
+    try:
+        local.update(socket.gethostbyname_ex(socket.gethostname())[2])
+    except OSError:
+        pass
+    if host not in local:
+        print(f"Frontend {host} is not this host; single URL", flush=True)
+        return []
+    loopback = f"http://127.0.0.1:{port}"
+    check = subprocess.run(
+        ["curl", "-sf", "-m", "10", f"{loopback}/v1/models"], capture_output=True, text=True
+    )
+    if check.returncode:
+        print(f"Loopback preflight {loopback}/v1/models failed (rc={check.returncode}); single URL", flush=True)
+        return []
+    print(f"Frontend is local: adding {loopback} as a second URL for the same frontend", flush=True)
+    return [loopback]
+
+
 def server_url(env: Mapping[str, str]) -> str:
     """srt-slurm's frontend, else ``AIPERF_SERVER_URL``, else ``http://localhost:$PORT``."""
     host = inputs.optional("SRT_FRONTEND_HOST", env)
@@ -140,7 +177,7 @@ def metrics_urls(env: Mapping[str, str], path: str = "/metrics") -> tuple[str, .
 
 def replay_argv(cfg: ReplayConfig, cli: str | Path) -> list[str]:
     """The ``agentx profile`` argv for ``cfg``; ``cli`` is the ``agentx`` executable."""
-    argv = [str(cli), "profile", "--url", cfg.url]
+    argv = [str(cli), "profile", "--url", cfg.url, *extra_frontend_urls(cfg.url)]
     argv += ["--model", cfg.model, "--tokenizer", cfg.tokenizer]
     argv += ["--concurrency", str(cfg.concurrency), "--benchmark-duration", str(cfg.duration)]
     if cfg.live_failed_request_threshold is not None:
