@@ -28,13 +28,12 @@ mkdir -p "$RESULTS_DIR"
 nvidia-smi
 GPU_NAME="$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)"
 
-# Pyxis containers share the host network, so a stray listener on the node fails every cell's
-# bind; stop before the downloads and name the holder.
-if [[ -n "$(ss -Hltn "sport = :${PORT}" 2>/dev/null)" ]] \
-        || (exec 3<>"/dev/tcp/127.0.0.1/${PORT}") 2>/dev/null; then
-    echo "CRITICAL: port ${PORT} on $(hostname) is already in use by a process outside this job."
-    ss -ltnp "sport = :${PORT}" 2>&1 || true
-    exit 1
+# Pyxis containers share the host network and some B300 nodes run another service on the
+# workflow's port, so serve on a free one instead.
+if ! python3 -c 'import socket, sys; socket.socket().bind(("0.0.0.0", int(sys.argv[1])))' "$PORT" 2>/dev/null; then
+    busy_port="$PORT"
+    PORT="$(python3 -c 'import socket; s = socket.socket(); s.bind(("0.0.0.0", 0)); print(s.getsockname()[1])')"
+    echo "Port $busy_port is in use on $(hostname); serving on $PORT"
 fi
 
 # An unstaged checkpoint lands in the cluster's writable download root; hf download resumes and
