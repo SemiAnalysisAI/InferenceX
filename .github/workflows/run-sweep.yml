@@ -1082,7 +1082,7 @@ jobs:
 
     calc-success-rate:
         name: calc-success-rate
-        needs: [setup, collect-results]
+        needs: [setup, collect-results, sweep-video]
         if: ${{ always() && needs.collect-results.result != 'skipped'}}
         runs-on: ubuntu-latest
         permissions:
