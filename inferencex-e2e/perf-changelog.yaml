@@ -11982,3 +11982,12 @@
     - "Run native H3 v0.1 C1 sweeps on four GPUs: H100 SGLang TP2/Ulysses2, H200 and B200 SGLang Ulysses4, and H200 vLLM-Omni Ulysses4."
     - "Select 20 distinct measured prompts, a disjoint warmup, 124 frames, 49 denoising updates, SGLang nightly 797af717, pinned vLLM-Omni, and explicit cross-request conditioning-cache policy."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916
+
+- config-keys:
+    - h3-bf16-b200-sglang-video
+    - h3-bf16-h100-sglang-video
+  scenario-type: [video-generation]
+  description:
+    - "Run H3 on the SGLang v0.5.23 release image (SGLang 297e54fd) instead of nightly 797af717 for B200 Ulysses4 and H100 TP2/Ulysses2."
+    - "Engine flags, eager BF16 execution, the disabled conditioning cache and the v0.1 workload are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
