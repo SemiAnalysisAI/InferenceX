@@ -85,7 +85,7 @@ def test_frozen_plan_reproduces_the_hash_its_reference_run_recorded() -> None:
 
 
 def test_v01_plan_declares_schema_2_with_its_fairness_and_warmup() -> None:
-    spec = video_spec.load_spec(SPECS / "h3-v0.1.yaml")
+    spec = video_spec.load_spec(SPECS / "h3-v2.yaml")
     plan = video_spec.plan_for(spec, "release-v1")
     assert video_spec.schema_version(plan) == 2
     assert plan["fairness"] == spec["fairness"]
@@ -100,32 +100,32 @@ def _reuse_text(source: str, target: str) -> Callable[[dict[str, Any]], None]:
     ("name", "mutate", "message"),
     [
         (
-            "h3-v0.1.yaml",
+            "h3-v2.yaml",
             lambda doc: doc.update(schema_version=1),
             "spec must be a mapping with exactly the keys",
         ),
         (
-            "h3-v0.1.yaml",
+            "h3-v2.yaml",
             lambda doc: doc["sets"]["release-v1"]["cases"].pop(),
             "needs 20 distinct measured prompts",
         ),
         (
-            "h3-v0.1.yaml",
+            "h3-v2.yaml",
             _reuse_text("ceramic-wheel", "paper-fold"),
             "needs 20 distinct measured prompts",
         ),
         (
-            "h3-v0.1.yaml",
+            "h3-v2.yaml",
             lambda doc: doc["sets"]["release-v1"]["warmup_case"].update(prompt="ceramic-wheel"),
             "warmup_case must be disjoint",
         ),
         (
-            "h3-v0.1.yaml",
+            "h3-v2.yaml",
             _reuse_text("ceramic-wheel", "warmup-only"),
             "warmup_case must be disjoint",
         ),
         (
-            "h3-v0.1.yaml",
+            "h3-v2.yaml",
             lambda doc: doc["fairness"]["schedule"].update(denoising_updates=50),
             "fairness.schedule must match",
         ),
