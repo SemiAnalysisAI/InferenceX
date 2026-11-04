@@ -434,6 +434,26 @@ class TestValidPackage:
         assert agg["total_gpu_energy_j"] == 84000.0
         assert set(apm.ROLE_METRIC_KEYS).isdisjoint(agg)
         assert set(pkg.sidecar()["per_gpu_role"].values()) == {"agg"}
+        # One worker across two hosts: one entry per host, both with its manifest index.
+        assert agg["workers"] == [
+            {"role": "agg", "worker_idx": 0, "hosts": ["node-d"],
+             "num_gpus": 2, "avg_power_w": 300.0},
+            {"role": "agg", "worker_idx": 0, "hosts": ["node-p"],
+             "num_gpus": 2, "avg_power_w": 400.0},
+        ]
+
+    def test_gpu_shared_by_two_workers_omits_workers(self, tmp_path):
+        pkg = build_package(tmp_path)
+        manifest_path = pkg.power_dir / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        shared = manifest["expected_devices"][0]["assignments"]
+        shared.append({**shared[0], "worker_index": 1, "worker_process": 1})
+        manifest_path.write_text(json.dumps(manifest, indent=2))
+
+        assert pkg.run() == 0
+        agg = pkg.agg()
+        assert agg["power_valid"] == 1
+        assert "workers" not in agg
 
     def test_agentx_adapter_consumes_a_real_custom_benchmark_package(self, tmp_path):
         from infx.results.agentic.power_adapter import run_native_agentic_power
