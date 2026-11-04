@@ -36,7 +36,7 @@ from infx.launch.artifacts import (
 from infx.launch.backends.base import BackendError, JobState, JobStatus
 from infx.launch.drivers.srt.config import EXPORTER_PROVENANCE
 from infx.launch.drivers.srt.run import SrtRun, require
-from infx.srt_slurm.video import load_spec
+from infx.srt_slurm.video import load_spec, video_package
 
 if TYPE_CHECKING:
     from infx.launch.backends.base import Job
@@ -242,7 +242,7 @@ def finalize_video_results(run: SrtRun, logs: Path, producer_sha: str) -> int:
         event.fail("VideoValidationFailed", "H3 result validation failed", report=False)
     bundle_rc = build_video_bundle(
         request.inferencex_results_python, run.workspace, logs,
-        package=run.workspace.parent / "experimental/video-generation",
+        package=video_package(run.workspace),
         output=run.workspace / VIDEO_BUNDLE, result_filename=request.result_filename,
         concurrencies=request.conc_list,
     )  # fmt: skip

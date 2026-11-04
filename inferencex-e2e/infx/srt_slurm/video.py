@@ -109,11 +109,9 @@ def _declared_server_env_keys(recipe: Mapping[str, Any], server: Mapping[str, An
     return sorted(set(recipe.get("environment") or {}) | set(server.get("env") or {}))
 
 
-def video_package(root: Path | None = None) -> Path:
-    """The H3 harness beside the end-to-end project (the repository's ``experimental`` tree)."""
-    project = root or repository_root()
-    nested = project / VIDEO_PACKAGE
-    return nested if nested.is_dir() else project.parent / VIDEO_PACKAGE
+def video_package(root: Path) -> Path:
+    """The H3 harness beside the end-to-end project ``root`` in the repository."""
+    return root.parent / VIDEO_PACKAGE
 
 
 def check_video_fragment(raw: Mapping[str, Any], source: Path) -> None:
