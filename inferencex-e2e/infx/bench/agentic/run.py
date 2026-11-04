@@ -6,6 +6,7 @@ import argparse
 import datetime as dt
 import os
 import shlex
+import subprocess
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -137,8 +138,18 @@ def execute(plan: Plan, runtime: Runtime, environ: Mapping[str, str]) -> int:
     argv = replay_argv(cfg, runtime.agentx)
     (plan.result_dir / "benchmark_command.txt").write_text(f"{shlex.join(argv)}\n")
     log = plan.result_dir / "benchmark.log"
+    # Diagnostic branch only: sample client-node memory, OOM events and sockets during the replay.
+    stop = plan.result_dir / "monitor" / "stop"
+    sampler = subprocess.Popen(
+        [python, str(Path(__file__).with_name("monitor.py")), str(stop.parent), str(stop)],
+        stdout=subprocess.DEVNULL,
+        stderr=(plan.result_dir / "monitor.err").open("w"),
+    )
     with proc.DeferSignals() as signals:
         replay_rc = 0 if signals.received else proc.tee(argv, log, env)
+    stop.parent.mkdir(parents=True, exist_ok=True)
+    stop.touch()
+    sampler.wait(timeout=30)
     if signals.received:
         return 128 + signals.received
     return _score(plan, python, env, replay_rc)
