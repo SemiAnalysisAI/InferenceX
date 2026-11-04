@@ -49,6 +49,8 @@ _ACTIVE_STATUSES = {"queued", "pending", "in_progress", "processing", "running"}
 _FAILED_STATUSES = {"failed", "cancelled", "canceled"}
 _TERMINAL_STATUSES = _FAILED_STATUSES | {"completed", "succeeded", "success"}
 _CHUNK_BYTES = 64 * 1024
+_ERROR_EXCERPT_CHARS = 300
+_PAID_MINIMAX_DOMAINS = ("minimax.io", "minimaxi.com")
 _EVENT_LOCK = threading.Lock()
 _CASE_FIELDS = {"case_id", "prompt", "seed", "requires_motion", "requires_sound"}
 _GENERATION_CONTROLS = {
@@ -334,7 +336,7 @@ def preview_plan(plan: dict[str, Any], *, runtime: str = "sglang") -> dict[str, 
 
 
 class _RequestError(RuntimeError):
-    """A safe, locally composed message (never an HTTP response body)."""
+    """A locally composed message; HTTP error bodies appear only as redacted excerpts."""
 
 
 def _endpoint(value: str) -> tuple[str, urllib.parse.SplitResult, str]:
@@ -355,9 +357,8 @@ def _endpoint(value: str) -> tuple[str, urllib.parse.SplitResult, str]:
         raise ValueError(
             "endpoint requires HTTP(S) and may not include credentials, query, or fragment"
         )
-    if parts.hostname.lower() == "api.minimax.io" or parts.hostname.lower().endswith(
-        ".minimaxi.com"
-    ):
+    host = parts.hostname.lower().rstrip(".")
+    if any(host == domain or host.endswith("." + domain) for domain in _PAID_MINIMAX_DOMAINS):
         raise ValueError(
             "the MVP runner supports operator-managed endpoints, not the paid hosted MiniMax API"
         )
@@ -486,7 +487,14 @@ def _open_response(
         connection.request(method, path, body=body, headers=headers)
         response = connection.getresponse()
         if not 200 <= response.status < 300:
-            raise _RequestError(f"{method} received HTTP {response.status}; response body omitted")
+            body = response.read(_ERROR_EXCERPT_CHARS + len(credential or ""))
+            text = body.decode("utf-8", "replace")
+            if credential:
+                text = text.replace(credential, "[redacted]")
+            text = " ".join("".join(c if c.isprintable() else " " for c in text).split())
+            raise _RequestError(
+                f"{method} received HTTP {response.status}: {text[:_ERROR_EXCERPT_CHARS]}"
+            )
         return connection, response, timer
     except BaseException:
         timer.cancel()
@@ -604,8 +612,7 @@ def _safe_error(exc: BaseException) -> str:
         return str(exc)
     if isinstance(exc, KeyboardInterrupt):
         return "interrupted by operator; server completion may be unknown"
-    # Provider/body text, URL query strings, credentials, and arbitrary exception
-    # messages are deliberately excluded from durable traces.
+    # Arbitrary exception text can carry URLs or credentials, so traces keep only the type.
     return f"{type(exc).__name__}: local transport or media analysis failed; details omitted"
 
 

@@ -180,7 +180,10 @@ def fixture_server():
                     state["posts"].append(payload)
                     ordinal = len(state["posts"])
                 if state["mode"] == "http_error":
-                    self.send_json(500, {"error": "do-not-log-this-server-secret"})
+                    detail = "num_frames is not accepted\x1b[0m; got " + str(
+                        self.headers.get("Authorization")
+                    )
+                    self.send_json(400, {"detail": detail, "padding": "x" * 4096})
                 elif state["mode"] == "redirect":
                     self.send(307, b"", headers={"Location": "/stolen-credentials"})
                 elif state["mode"] == "unsafe_id":
@@ -403,13 +406,27 @@ def test_http_failure_is_durable_never_retried_and_aborts_unknown_jobs(
     assert run["summary"]["latency_samples"] == 0
     assert run["records"][0]["submit_to_terminal_seconds"] is None
     assert run["records"][1]["submit_to_media_seconds"] is None
-    assert "HTTP 500" in run["records"][0]["error"]
+    assert run["records"][0]["error"].startswith("POST received HTTP 400: ")
     assert all(
         record["error"] == "not_started_after_uncertain_remote_completion"
         for record in run["records"][1:]
     )
-    assert "do-not-log-this-server-secret" not in (output / "events.jsonl").read_text()
-    assert "do-not-log-this-server-secret" not in (output / "run.json").read_text()
+
+
+def test_http_error_keeps_a_bounded_redacted_body_excerpt(
+    plan, tmp_path, mocked_media, fixture_server, monkeypatch
+):
+    monkeypatch.setenv("VGBENCH_TEST_ONLY_TOKEN", "fixture-credential-never-a-real-key")
+    endpoint, _ = fixture_server(mode="http_error")
+    output = tmp_path / "http-error-excerpt"
+    run = execute(plan, output, endpoint, api_key_env="VGBENCH_TEST_ONLY_TOKEN")
+    error = run["records"][0]["error"]
+    assert "num_frames is not accepted" in error
+    assert "\x1b" not in error
+    assert len(error) < 400
+    for path in output.rglob("*"):
+        if path.is_file():
+            assert b"fixture-credential-never-a-real-key" not in path.read_bytes()
 
 
 def test_known_failed_job_does_not_remove_other_scheduled_attempts(
@@ -517,6 +534,20 @@ def test_refuses_unsafe_or_hosted_endpoint_before_creating_output(plan, tmp_path
     with pytest.raises(ValueError):
         execute(plan, output, "https://api.minimax.io")
     assert not output.exists()
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "https://api.minimax.io",
+        "https://www.minimax.io",
+        "https://minimaxi.com",
+        "https://API.MINIMAXI.COM.",
+    ],
+)
+def test_every_paid_minimax_host_is_refused(endpoint):
+    with pytest.raises(ValueError, match="paid hosted MiniMax API"):
+        runner._endpoint(endpoint)
 
 
 def test_untrusted_job_id_cannot_change_download_destination(
