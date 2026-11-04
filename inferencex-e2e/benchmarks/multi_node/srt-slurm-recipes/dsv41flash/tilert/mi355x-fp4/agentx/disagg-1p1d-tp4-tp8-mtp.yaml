@@ -105,6 +105,9 @@ benchmark:
     TOKENIZER: /model
     SERVED_MODEL_NAME: deepseek-ai/DeepSeek-V4.1-Flash
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
+    # Same request fields as the board's GB300 DeepSeek-V4.1-Flash recipes (the model's
+    # defaults, stated explicitly).
+    AIPERF_EXTRA_INPUTS: '{"chat_template_kwargs":{"reasoning_effort":"high","thinking":true},"temperature":1}'
     HF_HOME: /logs/hf_cache
     HF_HUB_OFFLINE: ""
     TRANSFORMERS_VERBOSITY: error
