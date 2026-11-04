@@ -11990,6 +11990,7 @@
     - "Add TP4/EP4 concurrency 4 and 40; drop concurrency 5, 28 and 34."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4724
 
+- config-keys:
     - qwen3.8next-fp4-mi355x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
