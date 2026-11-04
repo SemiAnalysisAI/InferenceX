@@ -78,6 +78,8 @@ base:
         dyn-reasoning-parser: kimi_k3
         tensor-parallel-size: 8
         decode-context-parallel-size: 8
+        # FlashInfer MLA native DCP needs interleave 1 on both roles; NIXL otherwise raises it to the KV block size.
+        cp-kv-cache-interleave-size: 1
         enable-expert-parallel: true
         moe-backend: deep_gemm_mega_moe
         all2all-backend: flashinfer_nvlink_one_sided
@@ -105,6 +107,7 @@ base:
         dyn-reasoning-parser: kimi_k3
         tensor-parallel-size: 8
         decode-context-parallel-size: 8
+        cp-kv-cache-interleave-size: 1
         gpu-memory-utilization: 0.92
         max-num-seqs: 128
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
