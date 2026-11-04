@@ -19,6 +19,7 @@ import yaml
 
 from infx.launch.__main__ import main
 from infx.launch.drivers.srt import lanes, models
+from infx.launch.drivers.srt.checkout import CPU_POWER_EXPORTER_RELEASE
 from infx.launch.drivers.srt.lanes import LaneMount, SrtLane
 from infx.launch.drivers.srt.models import Override
 from infx.launch.policy import LaunchPath, Match
@@ -459,13 +460,13 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
     assert outputs.exists() is not outputs.is_relative_to(checkout)
 
 
-@pytest.mark.parametrize(("model_prefix", "precision", "framework", "model", "require_power", "lane"), [
-    ("kimik3", "fp4", "vllm", "moonshotai/Kimi-K3", "0", "agentx"),
-    ("glm5.2", "fp8", "dynamo-sglang", "zai-org/GLM-5.2-FP8", "1", "adapter"),
-    ("glm5.2", "fp8", "dynamo-sglang", "zai-org/GLM-5.2-FP8", "0", "adapter"),
+@pytest.mark.parametrize(("cluster", "precision", "model", "require_power", "lane"), [
+    ("gb200-nv", "fp4", "zai-org/GLM-5.2", "0", "agentx"),
+    ("h200-dgxc", "fp8", "zai-org/GLM-5.2-FP8", "1", "adapter"),
+    ("h200-dgxc", "fp8", "zai-org/GLM-5.2-FP8", "0", "adapter"),
 ])  # fmt: skip
 def test_power_lane_stages_provenance_and_validates_each_concurrency(
-    harness, model_prefix, precision, framework, model, require_power, lane
+    harness, cluster, precision, model, require_power, lane
 ):
     adapter = harness.tmp / "results-python"
     adapter.write_text(
@@ -473,8 +474,8 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     )
     adapter.chmod(0o755)
     env = lane_env(
-        harness, "h200-dgxc", LANE_FRAGMENT + POWER_TELEMETRY,
-        MODEL_PREFIX=model_prefix, PRECISION=precision, FRAMEWORK=framework, MODEL=model,
+        harness, cluster, LANE_FRAGMENT + POWER_TELEMETRY,
+        MODEL_PREFIX="glm5.2", PRECISION=precision, FRAMEWORK="dynamo-sglang", MODEL=model,
         IS_AGENTIC="1", ISL="0", OSL="0", CONC="4", CONC_LIST="4", FAKE_RESULTS="agentic",
         REQUIRE_POWER=require_power, INFERENCEX_RESULTS_PYTHON=str(adapter), POWER="1",
     )  # fmt: skip
@@ -483,7 +484,8 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     workspace = harness.workspace
     commit = harness.env["FAKE_SRT_COMMIT"]
     assert (workspace / "power-producer-sha.txt").read_text() == commit + "\n"
-    [checkout] = workspace.glob("srt-slurm-9001-*")
+    [call] = srtctl_calls(harness.logs)
+    checkout = Path(call["cwd"]).resolve()
     exporter = srtslurm(checkout)["containers"]["dcgm-exporter"]
     provenance = (workspace / "exporter-image.sha256").read_text()
     assert provenance.endswith(f"  {exporter}\n")
@@ -495,6 +497,8 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     assert bound["benchmark"]["env"]["REQUIRE_POWER"] == require_power
     assert bound["telemetry"]["collector_join_timeout_seconds"] == 12
     assert (bound["telemetry"]["enabled"], bound["telemetry"]["dcgm_exporter"]["port"]) == (True, 9401)
+    assert "cpu_power_exporter" not in bound["telemetry"]
+    assert all("CPU_POWER_EXPORTER_RELEASE" not in call for call in lines(harness.logs, "make"))
 
     runs = lines(harness.logs, "adapter")
     assert [run.split("--result-dir ")[1].split()[0].rsplit("/", 1)[1] for run in runs] == ["conc_4"]
@@ -978,3 +982,49 @@ def test_multinode_eval_overrides_image_offline_mode_and_host_model_path(harness
         "http://worker:8000",
         str(harness.workspace),
     ]
+
+
+def test_launch_cpu_expectation_reaches_fixed_sequence_processor(harness, monkeypatch):
+    from infx.results.fixed_sequence import aggregate_power_result
+    from infx.tests.results.power.test_aggregate_power_multinode import (
+        PRODUCER_SHA,
+        build_package,
+    )
+
+    env = lane_env(
+        harness,
+        "gb300-nv",
+        LANE_FRAGMENT + POWER_TELEMETRY,
+        MODEL_PREFIX="qwen3.5",
+        PRECISION="fp8",
+        FRAMEWORK="dynamo-sglang",
+        MODEL="Qwen/Qwen3.5-397B-A17B-FP8",
+        REQUIRE_POWER="1",
+        POWER="1",
+        CPU_POWER="1",
+    )
+    assert_ok(launch(env, harness.config, harness.workspace))
+    [checkout] = harness.workspace.glob("srt-slurm-9001-*")
+    bound = yaml.safe_load((checkout / "recipe.yaml").read_text())
+    assert bound["telemetry"]["cpu_power_exporter"] == {"source": "acpi"}
+    assert bound["telemetry"]["dcgm_exporter"]["port"] == 19401
+    [setup] = [call for call in lines(harness.logs, "make") if call.startswith("setup ")]
+    assert f"CPU_POWER_EXPORTER_RELEASE={CPU_POWER_EXPORTER_RELEASE}" in setup.split()
+    pkg = build_package(harness.tmp / "power-input")
+    monkeypatch.chdir(harness.tmp)
+    # The workflow exports CPU_POWER once; the launcher and the processor both read it.
+    result_env = {
+        "CPU_POWER": "1",
+        "REQUIRE_POWER": "1",
+        "IS_MULTINODE": "true",
+        "RESULT_FILENAME": "fixture",
+        "PREFILL_GPUS": "2",
+        "DECODE_GPUS": "2",
+        "POWER_PRODUCER_SHA": PRODUCER_SHA,
+        "POWER_ARTIFACT_DIR": str(pkg.power_dir),
+        "POWER_RESULT_ROOT": str(pkg.logs_root),
+    }
+    assert aggregate_power_result(result_env, pkg.bench_result, pkg.agg_result) == 1
+    aggregate = pkg.agg()
+    assert aggregate["power_valid"] == 1
+    assert aggregate["cpu_power_valid"] == 0

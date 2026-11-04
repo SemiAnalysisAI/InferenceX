@@ -258,21 +258,33 @@ def binder_inputs(
     lane: SrtLane,
     request: SrtRequest,
     decision: PowerDecision,
-) -> tuple[int | None, dict[str, str]]:
-    """The DCGM exporter port and AgentX client env a multi-node recipe is bound with.
+) -> tuple[int | None, str | None, dict[str, str]]:
+    """The DCGM exporter port, CPU exporter source and AgentX client env a recipe is bound with.
 
-    The client marks power windows exactly when the launcher collects the point's AgentX power,
+    The CPU source is the cluster's Grace exporter when the point selected cpu-power. The
+    client marks power windows exactly when the launcher collects the point's AgentX power,
     and fails invalid power when the workflow or the lane's power rule requires it.
     """
     port = srt.power_exporter_port if decision.dcgm else None
+    cpu_source = None
+    if decision.cpu:
+        if srt.cpu_power_exporter is None:
+            raise LaunchError(
+                f"cluster {cluster.id!r} declares no srt-slurm.cpu-power-exporter for cpu-power"
+            )
+        cpu_source = srt.cpu_power_exporter.source
     if not request.is_agentic:
-        return port, {}
-    return port, {
-        **agentic_client_env(cluster, srt, lane, request),
-        "IS_MULTINODE": str(request.is_multinode).lower(),
-        "ENABLE_AGENTX_POWER": "1" if decision.agentx or decision.adapter else "0",
-        "REQUIRE_POWER": "1" if decision.require or request.require_power else "0",
-    }
+        return port, cpu_source, {}
+    return (
+        port,
+        cpu_source,
+        {
+            **agentic_client_env(cluster, srt, lane, request),
+            "IS_MULTINODE": str(request.is_multinode).lower(),
+            "ENABLE_AGENTX_POWER": "1" if decision.agentx or decision.adapter else "0",
+            "REQUIRE_POWER": "1" if decision.require or request.require_power else "0",
+        },
+    )
 
 
 def write_lane_config(
