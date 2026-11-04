@@ -1,9 +1,9 @@
-"""Auditable serial and closed-loop serving client for an operator-managed H3 video endpoint.
+"""Auditable serial and closed-loop serving client for an operator-managed video endpoint.
 
 This module does not launch a server, download weights, verify server identity,
 or contact MiniMax's paid API. ``preview_plan`` is network-free; ``run_plan``
 submits real requests to the explicitly supplied endpoint. Local HTTP fixtures
-can exercise that transport, but are not evidence of H3 inference.
+can exercise that transport, but are not evidence of model inference.
 
 Protocol implementations were inspected at SGLang 253020450290328e9deb307eece1e402fa17f35e
 and vLLM-Omni eb11446b7f2e30ca582f8aff3afe12e9a2e66f6c. They are deliberately
@@ -784,7 +784,7 @@ def run_plan(
     run: dict[str, Any] = {
         "bundle_version": "0.1.0",
         "bundle_type": "mvp_run",
-        "run_id": "h3-" + uuid.uuid4().hex,
+        "run_id": "video-" + uuid.uuid4().hex,
         "plan_id": frozen["plan_id"],
         "plan_sha256": plan_sha256,
         "plan": frozen,

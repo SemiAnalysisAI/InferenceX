@@ -1,4 +1,4 @@
-"""Auditable, paired comparison of the small H3 execution bundles.
+"""Auditable, paired comparison of the small video execution bundles.
 
 The MVP measures implementation fidelity, not which generative model is better.
 Threshold decisions are deliberately separate from release qualification.

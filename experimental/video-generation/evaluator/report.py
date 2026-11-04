@@ -269,22 +269,22 @@ def _case(slot: dict, *, imported: bool = False) -> str:
 def _render(comparison: dict, json_name: str) -> str:
     evidence = comparison.get("evidence_kind", "unknown")
     imported = comparison.get("comparison_scope") == "media_fidelity_only"
-    title = "H3 sample media comparison" if imported else "H3 runtime comparison"
+    title = "Video sample media comparison" if imported else "Video runtime comparison"
     titles = {
         "fixture": (
-            "Synthetic fixture evidence — not an H3 result",
+            "Synthetic fixture evidence — not a model result",
             "These test clips and fixture timings exercise the harness. They do not measure MiniMax model performance or quality.",
         ),
         "operator_endpoint": (
-            "Endpoint results — H3 execution is not independently verified",
+            "Endpoint results — model execution is not independently verified",
             "Clips were collected from a configured endpoint. Only a separate controlled-GPU job receipt can establish observed runtime, model files, GPU use, and resource cleanup.",
         ),
         "live_h3": (
-            "Legacy endpoint results — H3 execution is not independently verified",
-            "This older bundle used the label live_h3, but its model, hardware, and runtime identities were only operator-declared. The label is not proof that H3 ran.",
+            "Legacy endpoint results — model execution is not independently verified",
+            "This older bundle used the label live_h3, but its model, hardware, and runtime identities were only operator-declared. The label is not proof that the model ran.",
         ),
         "imported_media": (
-            "Imported-media evidence — no H3 inference run or timing measurement",
+            "Imported-media evidence — no model inference run or timing measurement",
             "These source clips demonstrate media validation and paired fidelity only. Model attribution is operator-supplied; decoded media properties are a post-hoc contract, not proof of prompt compliance.",
         ),
         "mixed": (

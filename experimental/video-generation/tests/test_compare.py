@@ -484,7 +484,7 @@ def test_report_is_portable_script_free_escaped_and_hash_checked(tmp_path, media
     write_report(result, destination)
     content = destination.read_text(encoding="utf-8")
     assert "Synthetic fixture evidence" in content
-    assert "not an H3 result" in content
+    assert "not a model result" in content
     assert "<script>" not in content
     assert "&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; injection" in content
     assert 'src="http' not in content
@@ -533,7 +533,7 @@ def test_imported_media_compares_fidelity_without_fake_performance(tmp_path, med
     output = tmp_path / "imported.html"
     write_report(result, output)
     html = output.read_text()
-    assert "no H3 inference run or timing measurement" in html
+    assert "no model inference run or timing measurement" in html
     assert "Not measured" in html
     assert "pairing ID seed (not a generation seed)" in html
     assert "compressed video bit-exact: yes" in html

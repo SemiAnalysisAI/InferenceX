@@ -1,4 +1,4 @@
-"""Offline transport tests using a local HTTP fixture, never an H3 model.
+"""Offline transport tests using a local HTTP fixture, never a real model.
 
 The fixture returns deliberately non-video bytes and a mocked media analyzer.
 Actual decoding/corruption tests belong to the media engine's test suite.
@@ -26,7 +26,7 @@ from specs import video_spec
 
 
 MODEL_REVISION = "42ed227ee7df40d41602854ae760620d6eb651fe"
-FIXTURE_BYTES = b"LOCAL_HTTP_FIXTURE_NOT_H3_VIDEO"
+FIXTURE_BYTES = b"LOCAL_HTTP_FIXTURE_NOT_GENERATED_VIDEO"
 ANALYZER_BYTES = b"# controlled CPU media analyzer fixture\n"
 
 
@@ -237,7 +237,7 @@ def execute(plan, output_dir, endpoint, **kwargs):
         output_dir,
         endpoint=endpoint,
         runtime_revision="253020450290328e9deb307eece1e402fa17f35e",
-        hardware_label="LOCAL HTTP FIXTURE; no GPU and no H3 execution",
+        hardware_label="LOCAL HTTP FIXTURE; no GPU and no model execution",
         **kwargs,
     )
 
