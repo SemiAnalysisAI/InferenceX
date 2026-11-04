@@ -50,7 +50,6 @@ base:
         PYTHONHASHSEED: '0'
         AITER_LOG_LEVEL: WARNING
         AITER_SITUV2_A4W4: '1'
-        AITER_QUICK_REDUCE_QUANTIZATION: INT4
         AITER_FLYDSL_STAGE2_FP8: '1'
         AITER_REUSE_IDENTICAL_COMM_GROUPS: '0'
         ATOM_GDN_SSM_DTYPE: fp16
@@ -75,9 +74,6 @@ base:
         enable_prefix_caching: true
         # -1 keeps the prompt-end checkpoint anchor without the fixed-interval grid.
         state-checkpoint-interval-tokens: -1
-        # Global ptpc_fp8 online quantization; the trailing entries keep the BF16
-        # draft (unprefixed layers.* and context_proj) unquantized.
-        online_quant_config: '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","*self_attn.[qkv]_conv1d*","*block_sparse_moe.experts*","*block_sparse_moe.routed_expert_*","*vision_tower*","*mm_projector*","layers.*.self_attn.fused_qkv_a_proj","layers.*.self_attn.q_b_proj","layers.*.self_attn.kv_b_proj","layers.*.self_attn.o_proj","layers.*.mlp.gate_up_proj","layers.*.mlp.down_proj","context_proj"]}'
         method: dspark
         draft-model: /models/Inferact-Kimi-K3-DSpark
         num-speculative-tokens: 7
