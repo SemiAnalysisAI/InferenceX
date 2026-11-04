@@ -261,6 +261,8 @@ This proof of concept produces benchmark and evaluation artifacts through the
 End-to-End Tests workflow. The dispatch also uploads a `source-identity`
 artifact (PR number, full approved head SHA, merge SHA, and the `evals-only`,
 `agentx-fast`, `all-evals`, and fail-fast modifiers) and `changelog-metadata`.
+When the matrix selects video, it also uploads `video-sweep-manifest` and runs
+`validate-video-results`, because video reuse requires that manifest.
 A pinned `/use <run_id>` accepts these runs; reuse and staging report the
 recorded PR head and judge modifiers from the recorded dispatch rather than the
 PR's current labels. Older runs without the artifact fall back to the run title

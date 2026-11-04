@@ -103,3 +103,24 @@ def test_sweep_setup_routes_only_llm_rows_to_benchmark_aggregation(tmp_path):
     outputs = dict(line.split("=", 1) for line in output.read_text().splitlines())
     assert outputs["has-benchmark-results"] == "false"
     assert json.loads(outputs["search-space-config"]) == plan
+
+
+@pytest.mark.parametrize("agentx_fast,manifest", [("false", True), ("true", False)])
+def test_trusted_external_dispatch_records_reusable_video_matrix(tmp_path, agentx_fast, manifest):
+    workflow = yaml.safe_load((ROOT / ".github/workflows/e2e-tests.yml").read_text())
+    step = next(s for s in workflow["jobs"]["get-jobs"]["steps"] if s.get("id") == "source-identity")
+    plan = {"single_node": {"video": [{"recipe-fingerprint": "f"}]}, "changelog_metadata": {}}
+    (tmp_path / "plan.json").write_text(json.dumps(plan))
+    output = tmp_path / "output"
+    head, merge = "a" * 40, "b" * 40
+    result = subprocess.run(["bash", "-e", "-c", step["run"]], text=True, capture_output=True,
+        env={**os.environ, "RUNNER_TEMP": str(tmp_path), "GITHUB_OUTPUT": str(output), "GITHUB_RUN_ID": "123",
+             "GITHUB_RUN_ATTEMPT": "2", "SOURCE_PR_NUMBER": "7", "CHANGELOG_HEAD_REF": head, "MERGE_SHA": merge,
+             "EVALS_ONLY": "false", "AGENTX_FAST": agentx_fast, "ALL_EVALS": "false", "FAIL_FAST": "true"})
+    assert result.returncode == 0, result.stderr
+    if not manifest:
+        assert not (tmp_path / "sweep_manifest.json").exists()
+        return
+    assert output.read_text() == "video-manifest=true\n"
+    assert json.loads((tmp_path / "sweep_manifest.json").read_text()) == {
+        "head": head, "run-id": 123, "run-attempt": 2, "video-full-sweep": True, "matrix": plan}

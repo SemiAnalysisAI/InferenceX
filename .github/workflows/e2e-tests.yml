@@ -213,6 +213,7 @@ jobs:
             multi-node-agentic-config: ${{ steps.get-jobs.outputs.multi-node-agentic-config }}
             multi-node-agentic-eval-config: ${{ steps.get-jobs.outputs.multi-node-agentic-eval-config }}
             video-config: ${{ steps.get-jobs.outputs.video-config }}
+            video-manifest: ${{ steps.source-identity.outputs.video-manifest }}
         steps:
             - name: Checkout code (ref)
               id: checkout-ref
@@ -312,6 +313,7 @@ jobs:
                     RAW_CONFIG_JSON=$("${CMD[@]}")
                     python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["changelog_metadata"]))' \
                       <<<"$RAW_CONFIG_JSON" > "$RUNNER_TEMP/changelog_metadata.json"
+                    printf '%s' "$RAW_CONFIG_JSON" > "$RUNNER_TEMP/plan.json"
                     CONFIG_JSON=$(python3 -c 'import json,sys; data=json.load(sys.stdin); rows=[row for family in ("single_node","multi_node") for group in data.get(family,{}).values() for row in group]; rows.extend(row for family in ("evals","agentic_evals","multinode_evals","multinode_agentic_evals") for row in data.get(family,[])); print(json.dumps(rows))' <<<"$RAW_CONFIG_JSON")
                   else
                     if [ -z "$GENERATE_COMMAND" ]; then
@@ -366,6 +368,7 @@ jobs:
                   } >> "$GITHUB_OUTPUT"
 
             - name: Record source identity
+              id: source-identity
               if: ${{ inputs.source-pr-number != '' }}
               env:
                   SOURCE_PR_NUMBER: ${{ inputs.source-pr-number }}
@@ -390,6 +393,15 @@ jobs:
                       if not re.fullmatch(r'[0-9a-f]{40}', identity[key]):
                           raise SystemExit(f'{key} must be a full commit SHA, got {identity[key]!r}')
                   Path(os.environ['RUNNER_TEMP'], 'source_identity.json').write_text(json.dumps(identity))
+                  plan = json.loads(Path(os.environ['RUNNER_TEMP'], 'plan.json').read_text())
+                  if plan['single_node'].get('video') and not (identity['evals_only'] or identity['agentx_fast']):
+                      Path(os.environ['RUNNER_TEMP'], 'sweep_manifest.json').write_text(json.dumps({
+                          'head': identity['head_sha'], 'run-id': int(os.environ['GITHUB_RUN_ID']),
+                          'run-attempt': int(os.environ['GITHUB_RUN_ATTEMPT']),
+                          'video-full-sweep': True, 'matrix': plan,
+                      }))
+                      with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+                          output.write('video-manifest=true\n')
                   PY
 
             - name: Upload source identity
@@ -398,6 +410,14 @@ jobs:
               with:
                   name: source-identity
                   path: ${{ runner.temp }}/source_identity.json
+                  if-no-files-found: error
+
+            - name: Upload selected video matrix
+              if: ${{ steps.source-identity.outputs.video-manifest == 'true' }}
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: video-sweep-manifest
+                  path: ${{ runner.temp }}/sweep_manifest.json
                   if-no-files-found: error
 
             - name: Upload changelog artifact
@@ -599,6 +619,35 @@ jobs:
             run-eval: false
             scenario-type: video-generation
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
+            head-sha: ${{ inputs.changelog-head-ref }}
+
+    validate-video-results:
+        name: validate-video-results
+        needs: [get-jobs, test-sweep-video]
+        if: ${{ !cancelled() && needs.get-jobs.outputs.video-manifest == 'true' }}
+        runs-on: ubuntu-latest
+        permissions:
+            actions: read # Download the current run's video artifacts.
+            contents: read # Check out the video validator.
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: ${{ needs.get-jobs.outputs.tooling-ref }}
+                  persist-credentials: false
+            - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              with:
+                  pattern: h3-results-*
+                  path: video-artifacts
+            - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              with:
+                  name: video-sweep-manifest
+                  path: video-artifacts/video-sweep-manifest
+            - name: Validate the complete selected video matrix
+              env:
+                  HEAD_SHA: ${{ inputs.changelog-head-ref }}
+              run: |
+                  python3 -m infx.results.video_artifacts --artifacts-dir video-artifacts \
+                    --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" --head-sha "$HEAD_SHA"
 
     test-sweep-single-node:
         needs: get-jobs
