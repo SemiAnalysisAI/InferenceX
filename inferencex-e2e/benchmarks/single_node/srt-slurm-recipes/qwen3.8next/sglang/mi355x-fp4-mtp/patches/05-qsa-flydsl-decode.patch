@@ -1,3 +1,41 @@
+From 28ae37fb453e6b2479047485bab9608560503fcf Mon Sep 17 00:00:00 2001
+From: Christian Gilli <272772515+amd-cgilli@users.noreply.github.com>
+Date: Tue, 3 Nov 2026 16:53:02 +0000
+Subject: [PATCH] [Perf] [AMD] QSA: fused FlyDSL sparse decode on gfx950
+
+Serve Qwen sparse attention decode/verify on gfx950 with a FlyDSL kernel that
+reads the selected KV straight from the pool through req_to_token (no gather
+pass, no packed scratch) and splits each row's top-k list across CTAs, with a
+small FlyDSL reduce over the splits. It is tried after the trtllm branch and
+before the Triton gather + sparse_gqa_packed_decode_triton fallback.
+
+SGLANG_ENABLE_QSA_FLYDSL_DECODE (default on) is the kill switch; other GPUs
+and unsupported operands keep the Triton path.
+
+Original kernel by Nikolai Protasov.
+---
+ .../sglang/kernels/ops/attention/__init__.py  |   6 +
+ .../ops/attention/qsa_flydsl/__init__.py      |  19 +
+ .../attention/qsa_flydsl/kernels/__init__.py  |   0
+ .../qsa_flydsl/kernels/sparse_decode_attn.py  | 442 ++++++++++++++++++
+ .../kernels/sparse_decode_reduce.py           | 100 ++++
+ .../attention/qsa_flydsl/qsa_sparse_decode.py | 204 ++++++++
+ python/sglang/srt/environ.py                  |   6 +
+ .../attention/qwen_sparse_attn_backend.py     |  99 ++++
+ .../attention/bench_qsa_sparse_decode.py      | 146 ++++++
+ .../ops/attention/qsa_flydsl/__init__.py      |   0
+ .../qsa_flydsl/test_qsa_sparse_decode.py      | 237 ++++++++++
+ .../unit/kernels/test_kernels_namespace.py    |   1 +
+ 12 files changed, 1260 insertions(+)
+ create mode 100644 python/sglang/kernels/ops/attention/qsa_flydsl/__init__.py
+ create mode 100644 python/sglang/kernels/ops/attention/qsa_flydsl/kernels/__init__.py
+ create mode 100644 python/sglang/kernels/ops/attention/qsa_flydsl/kernels/sparse_decode_attn.py
+ create mode 100644 python/sglang/kernels/ops/attention/qsa_flydsl/kernels/sparse_decode_reduce.py
+ create mode 100644 python/sglang/kernels/ops/attention/qsa_flydsl/qsa_sparse_decode.py
+ create mode 100644 test/registered/kernels/benchmark/attention/bench_qsa_sparse_decode.py
+ create mode 100644 test/registered/kernels/ops/attention/qsa_flydsl/__init__.py
+ create mode 100644 test/registered/kernels/ops/attention/qsa_flydsl/test_qsa_sparse_decode.py
+
 diff --git a/python/sglang/kernels/ops/attention/__init__.py b/python/sglang/kernels/ops/attention/__init__.py
 index a525a562fb..78eb7c6719 100644
 --- a/python/sglang/kernels/ops/attention/__init__.py
@@ -45,10 +83,10 @@ new file mode 100644
 index 0000000000..e69de29bb2
 diff --git a/python/sglang/kernels/ops/attention/qsa_flydsl/kernels/sparse_decode_attn.py b/python/sglang/kernels/ops/attention/qsa_flydsl/kernels/sparse_decode_attn.py
 new file mode 100644
-index 0000000000..fa3361bb70
+index 0000000000..0f6a170821
 --- /dev/null
 +++ b/python/sglang/kernels/ops/attention/qsa_flydsl/kernels/sparse_decode_attn.py
-@@ -0,0 +1,446 @@
+@@ -0,0 +1,442 @@
 +# SPDX-License-Identifier: Apache-2.0
 +
 +"""Fused QSA sparse-decode attention for gfx950.
@@ -283,10 +321,7 @@ index 0000000000..fa3361bb70
 +        # ds_read_b64_tr_b16 source address for O^T rows 16m..16m+15: lane (g, s)
 +        # points at token 4g + s//4, dims 16m + 4*(s%4) .. +4.
 +        v_read_off = (
-+            wave_v_off
-+            + ((s % 4) // 2) * 256
-+            + (4 * g + s // 4) * 16
-+            + (s % 2) * 8
++            wave_v_off + ((s % 4) // 2) * 256 + (4 * g + s // 4) * 16 + (s % 2) * 8
 +        )
 +        neg_inf = fx.Float32(float("-inf"))
 +        zero_f = fx.Float32(0.0)
@@ -362,8 +397,7 @@ index 0000000000..fa3361bb70
 +            m_safe = (m_new > neg_inf).select(m_new, zero_f)
 +            alpha = fx.exp2(m_old - m_safe, fastmath="fast")
 +            probs = [
-+                fx.exp2(scores[v] - m_safe, fastmath="fast")
-+                for v in range_constexpr(4)
++                fx.exp2(scores[v] - m_safe, fastmath="fast") for v in range_constexpr(4)
 +            ]
 +            l_new = l_old * alpha + ((probs[0] + probs[1]) + (probs[2] + probs[3]))
 +            p_op = (
@@ -603,7 +637,7 @@ index 0000000000..01ff24e6b4
 +    return launch
 diff --git a/python/sglang/kernels/ops/attention/qsa_flydsl/qsa_sparse_decode.py b/python/sglang/kernels/ops/attention/qsa_flydsl/qsa_sparse_decode.py
 new file mode 100644
-index 0000000000..eaa14a3876
+index 0000000000..737911a7aa
 --- /dev/null
 +++ b/python/sglang/kernels/ops/attention/qsa_flydsl/qsa_sparse_decode.py
 @@ -0,0 +1,204 @@
@@ -621,8 +655,8 @@ index 0000000000..eaa14a3876
 +
 +import functools
 +
-+import torch
 +import flydsl.expr as fx
++import torch
 +from aiter.ops.flydsl.kernels.tensor_shim import _run_compiled, ptr_arg
 +
 +from .kernels.sparse_decode_attn import (
@@ -812,26 +846,35 @@ index 0000000000..eaa14a3876
 +        )
 +    return out
 diff --git a/python/sglang/srt/environ.py b/python/sglang/srt/environ.py
-index 468a0a6dbc..a750e35822 100644
+index bd4646cb58..5ca6158245 100644
 --- a/python/sglang/srt/environ.py
 +++ b/python/sglang/srt/environ.py
-@@ -1037,6 +1037,11 @@ class Envs:
-     # concurrency the grid is only num_seqs * num_kv_heads * splits CTAs, so a
-     # larger value may be worth forcing.
-     SGLANG_AITER_QSA_PA_DECODE_SPLITS = EnvInt(0)
+@@ -664,6 +664,12 @@ class Envs:
+     SGLANG_AITER_PAGED_PREFILL_ASM = EnvBool(True)
+     # Bucket aiter paged_attention_ragged decode partitions by sequence length.
+     SGLANG_AITER_DECODE_PARTITION_BUCKETS = EnvBool(True)
 +    # Serve QSA decode/verify on gfx950 with the fused FlyDSL kernel in
 +    # sglang.kernels.ops.attention.qsa_flydsl: it reads the selected KV straight
 +    # from the pool (no gather pass) and splits each row across CTAs, where the
 +    # Triton fallback runs one program per (row, kv head). Other GPUs ignore it.
++    # Kill switch, default on.
 +    SGLANG_ENABLE_QSA_FLYDSL_DECODE = EnvBool(True)
-     # Run GDN chunked prefill through AITER's opt_vk stages (fused FlyDSL prepare,
-     # tuned hidden-state kernel) instead of the Triton FLA chunk path. Requires
-     # SGLANG_USE_AITER. Measured on MI355X: 1.4x on the chunk stage, GSM8K unchanged.
+     # size the KV pool after CUDA-graph capture
+     SGLANG_ENABLE_POST_CAPTURE_KV_SIZING = EnvBool(False)
+ 
 diff --git a/python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py b/python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py
-index 30046d844b..95607d4cd1 100644
+index b95ffe238d..9745391135 100644
 --- a/python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py
 +++ b/python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py
-@@ -84,6 +84,19 @@ def _resolve_trtllm_sparse_decode():
+@@ -16,6 +16,7 @@ import msgspec
+ import torch
+ import torch.nn.functional as F
+ 
++from sglang.srt.environ import envs
+ from sglang.srt.layers.attention.base_attn_backend import AttentionBackend
+ from sglang.srt.layers.attention.qsa.config import (
+     is_qwen_qsa,
+@@ -78,6 +79,19 @@ def _resolve_trtllm_sparse_decode():
      return trtllm_batch_decode_with_kv_cache
  
  
@@ -851,17 +894,17 @@ index 30046d844b..95607d4cd1 100644
  @lru_cache(maxsize=1)
  def _resolve_flash_attn_varlen_func():
      from sglang.srt.utils import is_hip, is_sm121
-@@ -275,6 +288,7 @@ class QwenSparseAttnBackend(AttentionBackend):
+@@ -268,6 +282,7 @@ class QwenSparseAttnBackend(AttentionBackend):
+         self._mtp_shared_sparse_indices = None
          self._trtllm_workspace = None
          self._trtllm_counters = {}
-         self._flydsl_partials = {}
 +        self._flydsl_decode_workspace = None
          self._graph_extend_lens = None
          self._graph_extend_lens_pin = None
          self._verify_mask = None
-@@ -1924,6 +1938,75 @@ class QwenSparseAttnBackend(AttentionBackend):
-             self._flydsl_partials[key] = cached
-         return cached
+@@ -1889,6 +1904,75 @@ class QwenSparseAttnBackend(AttentionBackend):
+         )
+         return output.reshape(q.shape[0], -1)
  
 +    def _forward_flydsl_fused_sparse(
 +        self,
@@ -932,10 +975,10 @@ index 30046d844b..95607d4cd1 100644
 +            return None
 +        return self._flydsl_decode_workspace
 +
-     def _forward_flydsl_sparse(
+     def forward_decode(
          self,
          q: torch.Tensor,
-@@ -2089,6 +2172,21 @@ class QwenSparseAttnBackend(AttentionBackend):
+@@ -1945,6 +2029,21 @@ class QwenSparseAttnBackend(AttentionBackend):
                  trtllm_decode,
              )
  
@@ -954,9 +997,9 @@ index 30046d844b..95607d4cd1 100644
 +                topk_indices,
 +            )
 +
-         if flydsl_qsa_pa_decode_supported(q, k_buffer, _TRTLLM_SPARSE_PAGE_SIZE):
-             return self._forward_flydsl_sparse(
-                 q, k_buffer, v_buffer, layer, forward_batch, metadata, topk_indices
+         batch, topk = topk_indices.shape
+         sequence_lens = metadata.sequence_lengths
+         if metadata.is_cuda_graph:
 diff --git a/test/registered/kernels/benchmark/attention/bench_qsa_sparse_decode.py b/test/registered/kernels/benchmark/attention/bench_qsa_sparse_decode.py
 new file mode 100644
 index 0000000000..b3061f6a34
@@ -1114,10 +1157,10 @@ new file mode 100644
 index 0000000000..e69de29bb2
 diff --git a/test/registered/kernels/ops/attention/qsa_flydsl/test_qsa_sparse_decode.py b/test/registered/kernels/ops/attention/qsa_flydsl/test_qsa_sparse_decode.py
 new file mode 100644
-index 0000000000..9d648b6fcb
+index 0000000000..ec4e01110e
 --- /dev/null
 +++ b/test/registered/kernels/ops/attention/qsa_flydsl/test_qsa_sparse_decode.py
-@@ -0,0 +1,236 @@
+@@ -0,0 +1,237 @@
 +"""Correctness tests for the fused FlyDSL QSA sparse decode (gfx950)."""
 +
 +from __future__ import annotations
@@ -1318,8 +1361,9 @@ index 0000000000..9d648b6fcb
 +    k[0] = 0.0  # the Triton fallback has no NaN guard for masked rows
 +    v[0] = 0.0
 +    backend = qsa_module.QwenSparseAttnBackend.__new__(qsa_module.QwenSparseAttnBackend)
++    kv_layer = SimpleNamespace(key=lambda: k, value=lambda: v)
 +    backend.token_to_kv_pool = SimpleNamespace(
-+        get_key_buffer=lambda layer_id: k, get_value_buffer=lambda layer_id: v
++        layer_router=SimpleNamespace(read=lambda layer_id: kv_layer)
 +    )
 +    backend.req_to_token_pool = SimpleNamespace(req_to_token=req_to_token)
 +    backend.qsa_profile = None
@@ -1355,7 +1399,7 @@ index 0000000000..9d648b6fcb
 +
 +    sys.exit(pytest.main([__file__, "-v"]))
 diff --git a/test/registered/unit/kernels/test_kernels_namespace.py b/test/registered/unit/kernels/test_kernels_namespace.py
-index 973b6e137b..8fb34b9e9e 100644
+index 4d9eaf7bad..bb2e6479f4 100644
 --- a/test/registered/unit/kernels/test_kernels_namespace.py
 +++ b/test/registered/unit/kernels/test_kernels_namespace.py
 @@ -334,6 +334,7 @@ def test_import_stays_metadata_only():
@@ -1366,3 +1410,6 @@ index 973b6e137b..8fb34b9e9e 100644
          ("communication.all_reduce_push_res", KernelBackend.JIT, "cuda"),
          ("communication.gemm_ag_up_proj", KernelBackend.JIT, "cuda"),
          ("communication.reduce_scatter_res", KernelBackend.JIT, "cuda"),
+-- 
+2.43.0
+

@@ -1,0 +1,26 @@
+From 116d3c971075ff5ae4cf8d1f1379edfbc33bd267 Mon Sep 17 00:00:00 2001
+From: Christian Gilli <272772515+amd-cgilli@users.noreply.github.com>
+Date: Tue, 3 Nov 2026 16:52:00 +0000
+Subject: [PATCH] [Perf] [AMD] Qwen3.5 GDN: use zero-copy prefill projection
+ views on HIP
+
+---
+ python/sglang/srt/models/qwen3_5.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/python/sglang/srt/models/qwen3_5.py b/python/sglang/srt/models/qwen3_5.py
+index 2191ddce80..3306dd8db5 100644
+--- a/python/sglang/srt/models/qwen3_5.py
++++ b/python/sglang/srt/models/qwen3_5.py
+@@ -1056,7 +1056,7 @@ class Qwen3_5GatedDeltaNet(nn.Module):
+             # The strided views feed only prefill GDN; DP-relabeled decode rows
+             # run the decode kernels, so pick the layout from the logical mode.
+             use_strided_prefill_z = (
+-                _is_cuda
++                (_is_cuda or _is_hip)
+                 and forward_batch.logical_forward_mode.is_extend_without_speculative()
+             )
+             split_fn = (
+-- 
+2.43.0
+

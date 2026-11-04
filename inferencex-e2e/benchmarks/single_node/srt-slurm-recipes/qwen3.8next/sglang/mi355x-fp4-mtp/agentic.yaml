@@ -15,11 +15,10 @@ base:
     tachometer:
       enabled: false
   engine: sglang
-  # Qwen3.8 AITER/FlyDSL kernels and SGLang dispatch (GDN conv/decode/prefill,
-  # fused QK-norm/RoPE/gate, hc_mix, QSA paged decode) and exact-chunk-fill /
-  # shared-expert loading fixes, patched into
-  # the upstream ROCm 10 image. The patch files are in patches/ next to this
-  # recipe.
+  # Qwen3.8 AITER/FlyDSL kernels and SGLang dispatch (FlyDSL QSA sparse decode,
+  # AITER GDN conv and fused chunked prefill, fused hyper-connection decode, QSA
+  # indexer Q padding, zero-copy GDN prefill views), patched into the upstream
+  # ROCm 10 image. The patch files are in patches/ next to this recipe.
   setup_script: qwen3.8next-rocm10-patches.sh
   roles:
     agg:
@@ -67,23 +66,12 @@ base:
         # Outlast AIPerf's 300 s client connection pool.
         SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
         SGLANG_ENABLE_SPEC_V2: '1'
-        # Opt-in FlyDSL kernels from the patches: GDN causal conv1d, GDN decode and
-        # MTP verify, QSA paged decode, and the fused GDN chunked prefill.
-        SGLANG_AITER_GDN_CONV: '1'
-        SGLANG_AITER_GDN_DECODE: '1'
-        SGLANG_AITER_QSA_PA_DECODE: '1'
-        SGLANG_AITER_GDN_PREFILL: '1'
-        SGLANG_AITER_GDN_PREFILL_H: fused
         AITER_GDR_FLYDSL: '1'
-        # Decode optimizations from the patches: shared per-token FP8 attention
-        # input quant, fused GDN gated norm + out_proj quant, shared-expert gate
-        # folded into the router, and the BF16 lm_head through tgemm.
-        SGLANG_OPT_QWEN4_SHARED_ATTN_QUANT: '1'
-        SGLANG_OPT_QWEN4_FUSED_GDN_NORM_QUANT: '1'
-        SGLANG_OPT_QWEN_MOE_FUSED_SHARED_TOPK: '1'
-        SGLANG_OPT_AITER_LM_HEAD_GEMM: '1'
-        # Single-kernel hc_combine (the split pair costs a second launch on gfx950).
-        SGLANG_HC_COMBINE_SPLIT: '0'
+        # Kernels from the patches: fused FlyDSL QSA sparse decode (default on), AITER
+        # GDN causal conv1d and fused chunked prefill.
+        SGLANG_ENABLE_QSA_FLYDSL_DECODE: '1'
+        SGLANG_AITER_GDN_CONV: '1'
+        SGLANG_AITER_GDN_PREFILL: '1'
   benchmark:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
@@ -98,9 +86,7 @@ base:
 # 0.85 scaling. c12 and c16 keep ReplaySSM, the PLE offload, 2x CONC admission and
 # the default path. c12 and c16 capture decode graphs up to their admission, so
 # bursts past CONC stay in a graph, and use mem-fraction-static 0.9 as given (a
-# larger KV pool than the scaled 0.765). c12 and c16 also run breakable prefill CUDA
-# graphs on the buckets of this workload's prefill sizes (sgl-project/sglang#46329,
-# patched in, lets multimodal batches replay too).
+# larger KV pool than the scaled 0.765).
 override_c1:
   roles:
     agg:
@@ -172,8 +158,6 @@ override_c12:
         max-running-requests: 24
         cuda-graph-max-bs-decode: 24
         mem-fraction-static: 0.9
-        cuda-graph-backend-prefill: breakable
-        cuda-graph-bs-prefill: [256, 512, 768, 1024, 1280, 1408, 2560, 2752, 3840, 4096, 5376]
       env:
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
   benchmark:
@@ -188,11 +172,79 @@ override_c16:
         max-running-requests: 32
         cuda-graph-max-bs-decode: 32
         mem-fraction-static: 0.9
-        cuda-graph-backend-prefill: breakable
-        cuda-graph-bs-prefill: [256, 512, 768, 1024, 1280, 1408, 2560, 2752, 3840, 4096, 5376]
       env:
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
   benchmark:
     env:
       CONC: '16'
       KV_OFFLOADING: none
+
+# c24, c48 and c80 keep ReplaySSM and the PLE offload, store the target and draft KV
+# caches in FP8 (E4M3), and add HiCache host-DRAM offload with a Mamba state pool
+# that tracks a checkpoint every 256 tokens (extra_buffer_lazy). HiCache takes the
+# point's 299 GB DRAM share from the matrix generator (hicache-size 200 at c24, 298
+# at c48 and c80); TOTAL_CPU_DRAM_GB records it. mem-fraction-static is 0.88, used
+# as given. c24 admits 2x CONC; c48 and c80 admit 128 requests. SGLANG_OPT_QWEN4_FUSED_HC
+# (patch 08) fuses the decode-sized hyper-connection norm and inject into the mix.
+# c80 caches only the prompt on finish and keeps at most two Mamba states per path.
+override_c24:
+  roles:
+    agg:
+      args: &hicache_args
+        kv-cache-dtype: fp8_e4m3
+        speculative-draft-kv-cache-dtype: fp8_e4m3
+        mem-fraction-static: 0.88
+        max-running-requests: 48
+        cuda-graph-max-bs-decode: 48
+        max-mamba-cache-size: 960
+        mamba-radix-cache-strategy: extra_buffer_lazy
+        mamba-track-interval: 256
+        enable-hierarchical-cache: true
+        hicache-size: 200
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        hicache-write-policy: write_back
+      env: &hicache_env
+        SGLANG_USE_AITER: '1'
+        SGLANG_USE_AITER_UNIFIED_ATTN: '1'
+        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
+        SGLANG_OPT_QWEN4_FUSED_HC: '1'
+  benchmark:
+    env: &hicache_client
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '299'
+      CONC: '24'
+
+override_c48:
+  roles:
+    agg:
+      args:
+        <<: *hicache_args
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 128
+        max-mamba-cache-size: 720
+        hicache-size: 298
+      env: *hicache_env
+  benchmark:
+    env:
+      <<: *hicache_client
+      CONC: '48'
+
+override_c80:
+  roles:
+    agg:
+      args:
+        <<: *hicache_args
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 128
+        max-mamba-cache-size: 640
+        hicache-size: 298
+        # Cache only the prompt on finish; the AgentX replay never re-sends model output.
+        strip-thinking-cache: true
+        # At most two Mamba states per conversation path; stale interior states skip host write-back.
+        mamba-max-states-per-path: 2
+      env: *hicache_env
+  benchmark:
+    env:
+      <<: *hicache_client
+      CONC: '80'

@@ -1,13 +1,23 @@
-From 4b31b5e872da94027cc72e05a934937e4245b3cb Mon Sep 17 00:00:00 2001
-From: Chang Liu <cliu1004@amd.com>
-Date: Thu, 15 Oct 2026 13:50:54 +0000
-Subject: [PATCH 4/4] [FlyDSL] Add a single-kernel GDN fused prefill
+From 975b92d83bd17674e7605e4e700aef2bb419b45e Mon Sep 17 00:00:00 2001
+From: Nikolai Protasov <nprotaso@amd.com>
+Date: Tue, 13 Oct 2026 17:41:24 +0000
+Subject: [PATCH] [FlyDSL] Add single-kernel GDN fused chunked prefill for gfx950
 
-aiter.ops.flydsl.gdn_fused_prefill runs GDN chunked prefill in one FlyDSL
-kernel, with op_tests/test_gdn_fused_prefill.py against the Triton chunk
-path.
+One FlyDSL launch replaces the l2norm, prepare, chunk hidden-state and output
+stages of the Gated DeltaNet chunked prefill (BT=64, K=V=128). Each workgroup
+keeps its slice of the recurrent state on chip across the sequence's chunks,
+so the per-chunk states never reach HBM; the bf16 state pool is updated in
+place. Optionally writes the fp32 state at one chunk boundary per sequence
+(prefix-cache snapshots).
 
-From amd-nprotaso/aiter qwen_3_8_improvement: 9539fd39.
+- aiter/ops/flydsl/gdn_fused_prefill.py: host wrapper
+  gdn_fused_prefill_fwd + gdn_fused_prefill_supported gate (callers keep their
+  multi-kernel path when it returns False).
+- aiter/ops/flydsl/kernels/gdr_prefill/gdn_fused_prefill.py: device kernel.
+- op_tests/test_gdn_fused_prefill.py: fp32 recurrence reference, Qwen3.8 and
+  Qwen3.5 shapes, padding/stray-write and contract checks.
+
+MI355X, one layer, 16K tokens: 1.72 ms (Triton chunk path) -> 0.78 ms.
 ---
  aiter/ops/flydsl/gdn_fused_prefill.py         | 224 +++++
  .../flydsl/kernels/gdr_prefill/__init__.py    |   5 +-
@@ -20,7 +30,7 @@ From amd-nprotaso/aiter qwen_3_8_improvement: 9539fd39.
 
 diff --git a/aiter/ops/flydsl/gdn_fused_prefill.py b/aiter/ops/flydsl/gdn_fused_prefill.py
 new file mode 100644
-index 00000000..754b0771
+index 000000000..754b07712
 --- /dev/null
 +++ b/aiter/ops/flydsl/gdn_fused_prefill.py
 @@ -0,0 +1,224 @@
@@ -249,7 +259,7 @@ index 00000000..754b0771
 +
 +__all__ = ["gdn_fused_prefill_fwd", "gdn_fused_prefill_supported"]
 diff --git a/aiter/ops/flydsl/kernels/gdr_prefill/__init__.py b/aiter/ops/flydsl/kernels/gdr_prefill/__init__.py
-index 269633a2..fc036077 100644
+index 269633a25..fc036077e 100644
 --- a/aiter/ops/flydsl/kernels/gdr_prefill/__init__.py
 +++ b/aiter/ops/flydsl/kernels/gdr_prefill/__init__.py
 @@ -3,13 +3,16 @@
@@ -272,7 +282,7 @@ index 269633a2..fc036077 100644
  ]
 diff --git a/aiter/ops/flydsl/kernels/gdr_prefill/gdn_fused_prefill.py b/aiter/ops/flydsl/kernels/gdr_prefill/gdn_fused_prefill.py
 new file mode 100644
-index 00000000..29b5a3a2
+index 000000000..29b5a3a28
 --- /dev/null
 +++ b/aiter/ops/flydsl/kernels/gdr_prefill/gdn_fused_prefill.py
 @@ -0,0 +1,844 @@
@@ -1122,7 +1132,7 @@ index 00000000..29b5a3a2
 +__all__ = ["compile_gdn_fused_prefill"]
 diff --git a/op_tests/test_gdn_fused_prefill.py b/op_tests/test_gdn_fused_prefill.py
 new file mode 100644
-index 00000000..4b803467
+index 000000000..4b8034672
 --- /dev/null
 +++ b/op_tests/test_gdn_fused_prefill.py
 @@ -0,0 +1,247 @@
@@ -1374,5 +1384,5 @@ index 00000000..4b803467
 +if __name__ == "__main__":
 +    main()
 -- 
-2.34.1
+2.43.0
 

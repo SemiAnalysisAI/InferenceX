@@ -1,5 +1,39 @@
+From 86e1aa430b24fc84cdb071ad144b78c183aeb6de Mon Sep 17 00:00:00 2001
+From: Christian Gilli <272772515+amd-cgilli@users.noreply.github.com>
+Date: Tue, 3 Nov 2026 17:06:49 +0000
+Subject: [PATCH] [FlyDSL] Add varlen causal conv1d prefill kernel (causal_conv1d_fn
+ contract)
+
+Add causal_conv1d_prefill_flydsl_fn, a FlyDSL depthwise causal conv1d for
+packed (varlen) prefill batches with the same contract as the Triton
+causal_conv1d_fn: one output tensor, conv_states updated in place,
+cache_indices / has_initial_state / pad_slot_id / optional bias and SiLU.
+Channels map to lanes (two adjacent bf16/fp16 channels per thread for
+channel-last inputs with >= 8192 tokens); only chunk zero touches the cache,
+so there are no inter-block state races.
+
+Used by the Qwen3.5/Qwen3.8 GDN linear-attention prefill in SGLang.
+
+op_tests/test_causal_conv1d_prefill.py checks Triton and FlyDSL against an
+fp32 torch reference (conv_states bit-exact). gfx950, bf16, dim 10240,
+width 4, channel-last (model layout):
+
+  tokens               triton us   flydsl us
+  16384 (1 seq)          314.8       183.9    1.71x
+  4 x 4096               315.2       183.5    1.72x
+  1000,63,1000            34.5        27.2    1.27x
+
+Kernel originally by Nikolai Protasov <nprotaso@amd.com>.
+---
+ aiter/ops/flydsl/causal_conv1d_flydsl.py      | 197 +++++++++++++++
+ .../flydsl/kernels/causal_conv1d_prefill.py   | 230 ++++++++++++++++++
+ op_tests/test_causal_conv1d_prefill.py        | 160 ++++++++++++
+ 3 files changed, 587 insertions(+)
+ create mode 100644 aiter/ops/flydsl/kernels/causal_conv1d_prefill.py
+ create mode 100644 op_tests/test_causal_conv1d_prefill.py
+
 diff --git a/aiter/ops/flydsl/causal_conv1d_flydsl.py b/aiter/ops/flydsl/causal_conv1d_flydsl.py
-index 677ce9ae..bddbf15d 100644
+index 677ce9ae5..bddbf15d4 100644
 --- a/aiter/ops/flydsl/causal_conv1d_flydsl.py
 +++ b/aiter/ops/flydsl/causal_conv1d_flydsl.py
 @@ -3,6 +3,7 @@
@@ -219,7 +253,7 @@ index 677ce9ae..bddbf15d 100644
 +    return out
 diff --git a/aiter/ops/flydsl/kernels/causal_conv1d_prefill.py b/aiter/ops/flydsl/kernels/causal_conv1d_prefill.py
 new file mode 100644
-index 00000000..931464f0
+index 000000000..e7a89f7db
 --- /dev/null
 +++ b/aiter/ops/flydsl/kernels/causal_conv1d_prefill.py
 @@ -0,0 +1,230 @@
@@ -290,7 +324,7 @@ index 00000000..931464f0
 +        )
 +
 +    @flyc.kernel(known_block_size=[block, 1, 1])
-+    def causal_conv1d_prefill_kernel(
++    def kernel(
 +        x: fx.Tensor,
 +        w: fx.Tensor,
 +        bias: fx.Tensor,
@@ -429,7 +463,7 @@ index 00000000..931464f0
 +        out_span: fx.Int64,
 +        stream: fx.Stream = _DEFAULT_STREAM,
 +    ):
-+        causal_conv1d_prefill_kernel(
++        kernel(
 +            x,
 +            w,
 +            bias,
@@ -453,511 +487,172 @@ index 00000000..931464f0
 +        )
 +
 +    return launch
-diff --git a/aiter/ops/flydsl/kernels/gdn_decode_verify.py b/aiter/ops/flydsl/kernels/gdn_decode_verify.py
+diff --git a/op_tests/test_causal_conv1d_prefill.py b/op_tests/test_causal_conv1d_prefill.py
 new file mode 100644
-index 00000000..bd71db63
+index 000000000..39d9fdc77
 --- /dev/null
-+++ b/aiter/ops/flydsl/kernels/gdn_decode_verify.py
-@@ -0,0 +1,305 @@
++++ b/op_tests/test_causal_conv1d_prefill.py
+@@ -0,0 +1,160 @@
 +# SPDX-License-Identifier: MIT
 +# Copyright (C) 2024-2026, Advanced Micro Devices, Inc. All rights reserved.
 +
-+"""Gated Delta Net decode recurrence for packed (varlen) batches."""
++"""Varlen prefill causal-conv1d (``causal_conv1d_fn`` contract): FlyDSL vs Triton.
 +
-+import functools
++Inputs follow the SGLang GDN prefill call: ``x`` is a transposed view of the
++token-major ``mixed_qkv`` [tokens, dim] (``channel_last``), ``conv_states`` is a
++[slots, dim, width-1] view of a [slots, width-1, dim] cache, and the conv state
++is updated in place.
++"""
 +
-+import flydsl.compiler as flyc
-+import flydsl.expr as fx
-+from flydsl.expr import const_expr, range_constexpr
++import argparse
++import itertools
 +
-+_DEFAULT_STREAM = fx.Stream(None)
++import pandas as pd
++import torch
++import torch.nn.functional as F
 +
-+KDIM = 128
-+HALF = 8
++import aiter
++from aiter import dtypes
++from aiter.jit.utils.chip_info import get_gfx
++from aiter.ops.flydsl.causal_conv1d_flydsl import causal_conv1d_prefill_flydsl_fn
++from aiter.ops.triton.conv.causal_conv1d import causal_conv1d_fn
++from aiter.test_common import benchmark, checkAllclose, run_perftest
 +
++torch.set_default_device("cuda")
 +
-+def _dt(name: str):
-+    return {"torch.bfloat16": fx.BFloat16, "torch.float32": fx.Float32}[name]
-+
-+
-+@flyc.jit
-+def _load_vec(buf, offset, width: fx.Constexpr[int], dtype: fx.Constexpr):
-+    view = fx.make_view(fx.get_iter(buf) + offset, fx.make_layout(width, 1))
-+    reg = fx.make_rmem_tensor(width, dtype)
-+    fx.copy_atom_call(
-+        fx.make_copy_atom(fx.rocdl.BufferCopy(width * dtype.width), dtype), view, reg
-+    )
-+    return reg.load()
-+
-+
-+@flyc.jit
-+def _store_vec(buf, offset, value, dtype: fx.Constexpr):
-+    reg = fx.make_rmem_tensor(value.numel, dtype)
-+    reg.store(value)
-+    view = fx.make_view(fx.get_iter(buf) + offset, fx.make_layout(value.numel, 1))
-+    fx.copy_atom_call(
-+        fx.make_copy_atom(fx.rocdl.BufferCopy(value.numel * dtype.width), dtype),
-+        reg,
-+        view,
-+    )
++SUPPORTED_GFX = ["gfx942", "gfx950"]
 +
 +
-+@functools.lru_cache(maxsize=1024)
-+def create_gdn_decode_verify_kernel(
-+    num_v_heads: int,
-+    num_k_heads: int,
-+    head_v_dim: int,
-+    tokens_per_seq: int,
-+    out_bytes: int,
-+    state_slot_stride: int,
-+    q_token_stride: int,
-+    k_token_stride: int,
-+    v_token_stride: int,
-+    a_token_stride: int,
-+    b_token_stride: int,
-+    scale: float,
-+    softplus_beta: float,
-+    softplus_threshold: float,
-+    update_state: bool,
-+    cache_states: bool,
-+    cache_steps: int,
-+    a_dtype: str,
-+    b_dtype: str,
-+    KSPLIT: int = 8,
-+    BLOCK: int = 256,
-+    VITER: int = 1,
-+):
-+    HV, Hg, V, TSTATIC = num_v_heads, num_k_heads, head_v_dim, tokens_per_seq
-+
-+    VLANES = BLOCK // KSPLIT
-+    VTILE = VLANES * VITER
-+    KLOCAL = KDIM // KSPLIT
-+    NHALF = KLOCAL // HALF
-+    if KLOCAL % HALF or VLANES * KSPLIT != BLOCK or V % VTILE or VITER < 1:
-+        raise ValueError(
-+            f"bad geometry: KSPLIT={KSPLIT} BLOCK={BLOCK} VITER={VITER} V={V} -> "
-+            f"KLOCAL={KLOCAL} VLANES={VLANES} VTILE={VTILE}"
-+        )
-+    group = HV // Hg
-+    A_DT, B_DT = _dt(a_dtype), _dt(b_dtype)
-+    OOB = out_bytes  # bytes >= elements for bf16, so always past the descriptor
-+
-+    @flyc.jit
-+    def _group_sum(x):
-+        # Unrolled explicitly: the AST rewriter rebinds names captured inside
-+        # range_constexpr bodies, which would break an accumulator.
-+        s = x
-+        if const_expr(KSPLIT > 1):
-+            s = s + fx.gpu.shuffle_xor(s, 1, 64)
-+        if const_expr(KSPLIT > 2):
-+            s = s + fx.gpu.shuffle_xor(s, 2, 64)
-+        if const_expr(KSPLIT > 4):
-+            s = s + fx.gpu.shuffle_xor(s, 4, 64)
-+        if const_expr(KSPLIT > 8):
-+            s = s + fx.gpu.shuffle_xor(s, 8, 64)
-+        if const_expr(KSPLIT > 16):
-+            s = s + fx.gpu.shuffle_xor(s, 16, 64)
-+        if const_expr(KSPLIT > 32):
-+            s = s + fx.gpu.shuffle_xor(s, 32, 64)
-+        return s
-+
-+    @flyc.kernel
-+    def gdn_decode_verify_kernel(
-+        q: fx.Tensor,
-+        k: fx.Tensor,
-+        v: fx.Tensor,
-+        a: fx.Tensor,
-+        b: fx.Tensor,
-+        A_log: fx.Tensor,
-+        dt_bias: fx.Tensor,
-+        state: fx.Tensor,
-+        indices: fx.Tensor,
-+        out: fx.Tensor,
-+        cu: fx.Tensor,
-+        icache: fx.Tensor,
-+        icache_idx: fx.Tensor,
-+    ):
-+        tid = fx.Int64(fx.thread_idx.x)
-+        hv = fx.Int64(fx.block_idx.x)
-+        vb = fx.Int64(fx.block_idx.y) * VTILE
-+        seq = fx.Int64(fx.block_idx.z)
-+
-+        kpart = tid % KSPLIT
-+        vcol = vb + tid // KSPLIT
-+        kbase = kpart * KLOCAL
-+        ih = hv // group
-+
-+        bos = fx.Int64(cu[seq])
-+        slot = fx.Int64(indices[seq])
-+        cslot = fx.Int64(0)
-+        if const_expr(cache_states):
-+            cslot = fx.Int64(icache_idx[seq])
-+
-+        qb = fx.rocdl.make_buffer_tensor(q)
-+        kb = fx.rocdl.make_buffer_tensor(k)
-+        vbuf = fx.rocdl.make_buffer_tensor(v)
-+        ab = fx.rocdl.make_buffer_tensor(a)
-+        bb = fx.rocdl.make_buffer_tensor(b)
-+
-+        ob = fx.rocdl.make_buffer_tensor(
-+            out, max_size=False, num_records_bytes=fx.Int64(out_bytes)
-+        )
-+        # Rebase before building the 32-bit-offset resource: a whole state pool
-+        # can exceed the 32-bit offset range.
-+        state_slot = fx.make_view(
-+            fx.get_iter(state) + slot * state_slot_stride,
-+            fx.make_layout(HV * V * KDIM, 1),
-+        )
-+        ss = fx.rocdl.make_buffer_tensor(state_slot)
-+        if const_expr(cache_states):
-+            cache_slot = fx.make_view(
-+                fx.get_iter(icache) + cslot * (cache_steps * HV * V * KDIM),
-+                fx.make_layout(cache_steps * HV * V * KDIM, 1),
-+            )
-+            cb = fx.rocdl.make_buffer_tensor(cache_slot)
-+
-+        alog = fx.Float32(A_log[hv])
-+        dtb = fx.Float32(dt_bias[hv])
-+        neg_exp_alog = -fx.exp(alog)
-+
-+        sbase = hv * V * KDIM + vcol * KDIM + kbase
-+        VSTEP = VLANES * KDIM
-+        h = [fx.Vector.filled(HALF, 0.0, fx.Float32) for _ in range(VITER * NHALF)]
-+        if slot >= 0:
-+            h = [
-+                _load_vec(ss, sbase + i * VSTEP + j * HALF, HALF, fx.BFloat16).to(
-+                    fx.Float32
-+                )
-+                for i in range(VITER)
-+                for j in range(NHALF)
-+            ]
-+
-+        for t in range_constexpr(TSTATIC):
-+            tok = bos + t
-+            koff = tok * k_token_stride + ih * KDIM + kbase
-+            qoff = tok * q_token_stride + ih * KDIM + kbase
-+            kvec = [
-+                _load_vec(kb, koff + j * HALF, HALF, fx.BFloat16).to(fx.Float32)
-+                for j in range(NHALF)
-+            ]
-+            qvec = [
-+                _load_vec(qb, qoff + j * HALF, HALF, fx.BFloat16).to(fx.Float32)
-+                for j in range(NHALF)
-+            ]
-+
-+            sk_local = functools.reduce(lambda p, c: p + c, [x * x for x in kvec])
-+            sq_local = functools.reduce(lambda p, c: p + c, [x * x for x in qvec])
-+            sk = _group_sum(sk_local.reduce(fx.ReductionOp.ADD, fx.Float32(0.0)))
-+            sq = _group_sum(sq_local.reduce(fx.ReductionOp.ADD, fx.Float32(0.0)))
-+            rk = fx.Float32(1.0) / fx.sqrt(sk + fx.Float32(1e-6))
-+            rq = scale / fx.sqrt(sq + fx.Float32(1e-6))
-+            kvec = [x * rk for x in kvec]
-+            qvec = [x * rq for x in qvec]
-+
-+            av = fx.Float32(
-+                _load_vec(ab, tok * a_token_stride + hv, 1, A_DT)[0].to(fx.Float32)
-+            )
-+            bv_in = fx.Float32(
-+                _load_vec(bb, tok * b_token_stride + hv, 1, B_DT)[0].to(fx.Float32)
-+            )
-+            voff = tok * v_token_stride + hv * V + vcol
-+            vval = [
-+                fx.Float32(
-+                    _load_vec(vbuf, voff + i * VLANES, 1, fx.BFloat16)[0].to(fx.Float32)
-+                )
-+                for i in range(VITER)
-+            ]
-+
-+            x = av + dtb
-+            bx = softplus_beta * x
-+            sp = (bx <= softplus_threshold).select(
-+                (fx.Float32(1.0) / softplus_beta)
-+                * fx.log(fx.Float32(1.0) + fx.exp(bx)),
-+                x,
-+            )
-+            decay = fx.exp(neg_exp_alog * sp)
-+            beta = fx.Float32(1.0) / (fx.Float32(1.0) + fx.exp(-bv_in))
-+
-+            hd = [y * decay for y in h]
-+            dv = [
-+                _group_sum(
-+                    functools.reduce(
-+                        lambda p, c: p + c,
-+                        [hd[i * NHALF + j] * kvec[j] for j in range(NHALF)],
-+                    ).reduce(fx.ReductionOp.ADD, fx.Float32(0.0))
-+                )
-+                for i in range(VITER)
-+            ]
-+            vnew = [(vval[i] - dv[i]) * beta for i in range(VITER)]
-+            h = [
-+                hd[i * NHALF + j] + kvec[j] * vnew[i]
-+                for i in range(VITER)
-+                for j in range(NHALF)
-+            ]
-+
-+            ov = [
-+                _group_sum(
-+                    functools.reduce(
-+                        lambda p, c: p + c,
-+                        [h[i * NHALF + j] * qvec[j] for j in range(NHALF)],
-+                    ).reduce(fx.ReductionOp.ADD, fx.Float32(0.0))
-+                )
-+                for i in range(VITER)
-+            ]
-+            obase = (tok * HV + hv) * V + vcol
-+            oaddr = [
-+                (kpart == 0).select(obase + i * VLANES, fx.Int64(OOB))
-+                for i in range(VITER)
-+            ]
-+            for i in range_constexpr(VITER):
-+                _store_vec(
-+                    ob,
-+                    oaddr[i],
-+                    fx.Vector.from_elements([ov[i].to(fx.BFloat16)], fx.BFloat16),
-+                    fx.BFloat16,
-+                )
-+
-+            # Keep compile-time and runtime branches separate for FlyDSL.
-+            if const_expr(cache_states):  # noqa: SIM102
-+                if cslot >= 0:
-+                    for i in range_constexpr(VITER):
-+                        for j in range_constexpr(NHALF):
-+                            _store_vec(
-+                                cb,
-+                                t * (HV * V * KDIM) + sbase + i * VSTEP + j * HALF,
-+                                h[i * NHALF + j].to(fx.BFloat16),
-+                                fx.BFloat16,
-+                            )
-+
-+        # Keep compile-time and runtime branches separate for FlyDSL.
-+        if const_expr(update_state):  # noqa: SIM102
-+            if slot >= 0:
-+                for i in range_constexpr(VITER):
-+                    for j in range_constexpr(NHALF):
-+                        _store_vec(
-+                            ss,
-+                            sbase + i * VSTEP + j * HALF,
-+                            h[i * NHALF + j].to(fx.BFloat16),
-+                            fx.BFloat16,
-+                        )
-+
-+    @flyc.jit
-+    def launch(
-+        q: fx.Tensor,
-+        k: fx.Tensor,
-+        v: fx.Tensor,
-+        a: fx.Tensor,
-+        b: fx.Tensor,
-+        A_log: fx.Tensor,
-+        dt_bias: fx.Tensor,
-+        state: fx.Tensor,
-+        indices: fx.Tensor,
-+        out: fx.Tensor,
-+        cu: fx.Tensor,
-+        icache: fx.Tensor,
-+        icache_idx: fx.Tensor,
-+        n: fx.Int32,
-+        stream: fx.Stream = _DEFAULT_STREAM,
-+    ):
-+        gdn_decode_verify_kernel(
-+            q, k, v, a, b, A_log, dt_bias, state, indices, out, cu, icache, icache_idx
-+        ).launch(grid=(HV, V // VTILE, n), block=(BLOCK,), stream=stream)
-+
-+    return launch
-diff --git a/aiter/ops/flydsl/linear_attention_kernels.py b/aiter/ops/flydsl/linear_attention_kernels.py
-index 38a2f787..08448cd4 100644
---- a/aiter/ops/flydsl/linear_attention_kernels.py
-+++ b/aiter/ops/flydsl/linear_attention_kernels.py
-@@ -8,12 +8,14 @@ from __future__ import annotations
- import collections
- import functools
- 
-+import flydsl.expr as fx
- import torch
- from flydsl.compiler.kernel_function import CompilationContext
- from flydsl.runtime.device import get_rocm_arch
- 
- from aiter.ops.triton.utils.device_info import get_num_sms
- 
-+from .kernels.gdn_decode_verify import create_gdn_decode_verify_kernel
- from .kernels.gdr_decode import (
-     MTP_MODE_CHAIN,
-     MTP_MODE_SNAPSHOT,
-@@ -23,6 +25,7 @@ from .kernels.gdr_decode import (
- from .kernels.tensor_shim import _run_compiled, get_dtype_str
- 
- __all__ = [
-+    "flydsl_gdn_decode_varlen",
-     "flydsl_gdr_decode",
-     "flydsl_gdr_mtp",
-     "flydsl_gdr_mtp_sglang",
-@@ -1067,3 +1070,169 @@ def flydsl_gdr_mtp_sglang(
-         disable_state_update=disable_state_update,
-         stream=stream,
-     )
++def run_torch(x, weight, conv_states, seq_lens, cache_indices, has_initial_state):
++    """fp32 reference with SiLU. Returns (out, new_conv_states)."""
++    dim, width = weight.shape
++    out = torch.empty(x.shape, dtype=dtypes.fp32)
++    states = conv_states.clone()
++    start = 0
++    for s, n in enumerate(seq_lens):
++        slot = int(cache_indices[s])
++        hist = conv_states[slot, :, : width - 1].float()
++        if not bool(has_initial_state[s]):
++            hist = torch.zeros_like(hist)
++        xin = torch.cat([hist, x[:, start : start + n].float()], dim=1)
++        y = F.conv1d(xin[None], weight.float()[:, None, :], groups=dim)[0]
++        out[:, start : start + n] = F.silu(y)
++        states[slot, :, : width - 1] = xin[:, -(width - 1) :].to(states.dtype)
++        start += n
++    return out, states
 +
 +
-+_GDN_VARLEN_VITER4_MIN_DRAFT = 4
-+_GDN_VARLEN_VITER4_BLOCKS_PER_CU = 1.5
-+_GDN_VARLEN_VITER2_BLOCKS_PER_CU = 12.0
-+
-+
-+def _gdn_varlen_viter(n, tokens_per_seq, num_v_heads, head_v_dim, ksplit, block):
-+    """Widest v-iteration this launch's grid can pay for.
-+
-+    A VITER that does not divide the head width is skipped rather than rounded,
-+    since the kernel would refuse it.
-+    """
-+    vlanes = block // ksplit
-+    num_sms = get_num_sms()
-+    draft = max(1, tokens_per_seq)
-+
-+    def blocks(viter):
-+        vtile = vlanes * viter
-+        if head_v_dim % vtile:
-+            return None
-+        return n * num_v_heads * (head_v_dim // vtile)
-+
-+    wide = blocks(4)
-+    if (
-+        draft >= _GDN_VARLEN_VITER4_MIN_DRAFT
-+        and wide is not None
-+        and wide >= _GDN_VARLEN_VITER4_BLOCKS_PER_CU * num_sms
-+    ):
-+        return 4
-+    mid = blocks(2)
-+    if mid is not None and mid >= (_GDN_VARLEN_VITER2_BLOCKS_PER_CU / draft) * num_sms:
-+        return 2
-+    return 1
-+
-+
-+def flydsl_gdn_decode_varlen(
-+    *,
-+    q: torch.Tensor,
-+    k: torch.Tensor,
-+    v: torch.Tensor,
-+    a: torch.Tensor,
-+    b: torch.Tensor,
-+    A_log: torch.Tensor,
-+    dt_bias: torch.Tensor,
-+    state: torch.Tensor,
-+    state_indices: torch.Tensor,
-+    cu_seqlens: torch.Tensor,
-+    scale: float | None = None,
-+    softplus_beta: float = 1.0,
-+    softplus_threshold: float = 20.0,
-+    disable_state_update: bool = False,
-+    intermediate_states: torch.Tensor | None = None,
-+    intermediate_state_indices: torch.Tensor | None = None,
-+    ksplit: int = 8,
-+    block: int = 256,
-+    viter: int | None = None,
-+) -> torch.Tensor:
-+    """Gated Delta Net decode recurrence over a packed (varlen) batch.
-+
-+    Unlike :func:`flydsl_gdr_decode` this takes the layout a serving stack hands
-+    over during speculative decoding: ``q``/``k``/``v`` packed as ``[1, T, H, D]``
-+    with ``cu_seqlens``, optional per-draft-step state snapshots, and an optional
-+    suppressed final write-back (EAGLE target-verify commits the accepted prefix
-+    itself).
-+
-+    Returns ``out`` shaped ``[1, T, num_v_heads, head_v_dim]``.
-+    """
-+    B, T, Hg, K = k.shape
-+    HV, V = v.shape[-2:]
-+    if B != 1:
-+        raise ValueError(f"packed decode expects B=1, got {B}")
-+    if K != 128:
-+        raise ValueError(f"head_k_dim must be 128, got {K}")
-+    if HV % Hg:
-+        raise ValueError(f"num_v_heads {HV} must be a multiple of num_k_heads {Hg}")
-+
-+    for name, t_, dim in (("q", q, K), ("k", k, K), ("v", v, V)):
-+        if t_.dtype != torch.bfloat16:
-+            raise ValueError(f"{name} must be bf16, got {t_.dtype}")
-+        if t_.stride()[-1] != 1 or t_.stride()[-2] != dim:
-+            raise ValueError(
-+                f"{name} must be head-major contiguous within a token "
-+                f"(stride[-2:] == ({dim}, 1)), got {t_.stride()[-2:]}"
-+            )
-+    for name, t_ in (("a", a), ("b", b), ("A_log", A_log), ("dt_bias", dt_bias)):
-+        if t_.dtype not in (torch.float32, torch.bfloat16):
-+            raise ValueError(f"{name} must be fp32 or bf16, got {t_.dtype}")
-+        if not t_.is_contiguous():
-+            raise ValueError(f"{name} must be contiguous")
-+    if state.dtype != torch.bfloat16:
-+        raise ValueError("state pool must be bf16")
-+    if state.stride()[1:] != (V * K, K, 1):
-+        raise ValueError("state pool inner dims must be contiguous [HV, V, K]")
-+
-+    n = cu_seqlens.numel() - 1
-+    if n <= 0 or T % n:
-+        raise ValueError(f"ragged batch: T={T} is not divisible by n={n}")
-+    tokens_per_seq = T // n
-+
-+    cache_states = intermediate_states is not None
-+    if cache_states:
-+        if intermediate_state_indices is None:
-+            raise ValueError("intermediate_states needs intermediate_state_indices")
-+        if intermediate_states.dtype != state.dtype:
-+            raise ValueError("intermediate_states dtype must match the state pool")
-+        if not intermediate_states.is_contiguous():
-+            raise ValueError("intermediate_states must be contiguous")
-+        if tuple(intermediate_states.shape[2:]) != (HV, V, K):
-+            raise ValueError(
-+                f"intermediate_states must be [slots, steps, {HV}, {V}, {K}], "
-+                f"got {tuple(intermediate_states.shape)}"
-+            )
-+        cache_steps = intermediate_states.shape[1]
++@benchmark()
++def test_causal_conv1d_prefill(dtype, dim, width, seq_lens, has_initial, layout):
++    seq_lens = [seq_lens] if isinstance(seq_lens, int) else list(seq_lens)
++    batch, total = len(seq_lens), sum(seq_lens)
++    if layout == "channel_last":  # model: mixed_qkv[tokens, dim].transpose(0, 1)
++        x = torch.randn(total, dim, dtype=dtype).t()
 +    else:
-+        cache_steps = 0
++        x = torch.randn(dim, total, dtype=dtype)
++    weight = torch.randn(dim, width, dtype=dtype) * 0.5
++    # Reversed slots so cache_indices is not the identity mapping.
++    conv_states = torch.randn(batch + 1, width - 1, dim, dtype=dtype).transpose(1, 2)
++    cache_indices = torch.arange(batch, 0, -1, dtype=dtypes.i32)
++    has_initial_state = torch.full((batch,), has_initial, dtype=torch.bool)
++    query_start_loc = torch.tensor([0] + seq_lens, dtype=dtypes.i32).cumsum(0)
++    query_start_loc = query_start_loc.to(dtypes.i32)
 +
-+    out = q.new_empty(1, T, HV, V)
++    ref, ref_states = run_torch(
++        x, weight, conv_states, seq_lens, cache_indices, has_initial_state
++    )
 +
-+    with CompilationContext.compile_hints({"fastmath": "fast"}):
-+        launch = create_gdn_decode_verify_kernel(
-+            HV,
-+            Hg,
-+            V,
-+            tokens_per_seq,
-+            out.numel() * out.element_size(),
-+            state.stride(0),
-+            q.stride()[1],
-+            k.stride()[1],
-+            v.stride()[1],
-+            a.stride()[1] if a.ndim == 3 else a.stride()[-2],
-+            b.stride()[1] if b.ndim == 3 else b.stride()[-2],
-+            float(K**-0.5) if scale is None else float(scale),
-+            float(softplus_beta),
-+            float(softplus_threshold),
-+            not disable_state_update,
-+            cache_states,
-+            int(cache_steps),
-+            str(a.dtype),
-+            str(b.dtype),
-+            ksplit,
-+            block,
-+            (
-+                _gdn_varlen_viter(n, tokens_per_seq, HV, V, ksplit, block)
-+                if viter is None
-+                else int(viter)
-+            ),
++    candidates = {
++        "triton": causal_conv1d_fn,
++        "flydsl": causal_conv1d_prefill_flydsl_fn,
++    }
++    flops = 2 * width * dim * total
++    nbytes = (2 * dim * total + dim * width) * x.element_size()
++
++    ret = {"gfx": get_gfx()}
++    for name, fn in candidates.items():
++        states = conv_states.clone()
++
++        def call():
++            return fn(
++                x,
++                weight,
++                None,
++                conv_states=states,
++                query_start_loc=query_start_loc,
++                seq_lens_cpu=seq_lens,
++                cache_indices=cache_indices,
++                has_initial_state=has_initial_state,
++                activation="silu",
++            )
++
++        out = call()
++        # The state update is a copy of inputs: must be bit-exact.
++        checkAllclose(
++            ref_states, states, rtol=0, atol=0, msg=f"{name}: conv_states"
 +        )
-+        launch(
-+            q,
-+            k,
-+            v,
-+            a,
-+            b,
-+            A_log,
-+            dt_bias,
-+            state,
-+            state_indices,
-+            out,
-+            cu_seqlens,
-+            intermediate_states if cache_states else state,
-+            intermediate_state_indices if cache_states else state_indices,
-+            fx.Int32(n),
-+            fx.Stream(torch.cuda.current_stream(q.device)),
++        err = checkAllclose(
++            ref, out.to(dtypes.fp32), rtol=1e-2, atol=1e-2, msg=f"{name}: out"
 +        )
-+    return out
++        _, us = run_perftest(call)
++        ret[f"{name} us"] = us
++        ret[f"{name} TFLOPS"] = flops / us / 1e6
++        ret[f"{name} TB/s"] = nbytes / us / 1e6
++        ret[f"{name} err"] = err
++    return ret
++
++
++def main():
++    if get_gfx() not in SUPPORTED_GFX:
++        aiter.logger.warning("causal_conv1d_prefill unsupported on %s", get_gfx())
++        return
++
++    parser = argparse.ArgumentParser(
++        formatter_class=argparse.RawTextHelpFormatter,
++        description="varlen prefill causal conv1d: FlyDSL vs Triton",
++    )
++    parser.add_argument(
++        "-d", "--dtype", type=dtypes.str2Dtype, nargs="*", default="bf16,"
++    )
++    parser.add_argument("--dim", type=int, nargs="*", default=[10240])
++    parser.add_argument("-w", "--width", type=int, nargs="*", default=[4])
++    parser.add_argument(
++        "-s",
++        "--seq_lens",
++        type=dtypes.str2tuple,
++        nargs="*",
++        default=[(1,), (2, 5, 1), (1000, 63, 1000), (4096,) * 4, (16384,)],
++        help="per-sequence token counts of one packed batch, e.g. -s 1000,63,1000",
++    )
++    parser.add_argument(
++        "-i", "--has_initial", type=dtypes.str2bool, nargs="*", default=[False, True]
++    )
++    parser.add_argument(
++        "-l",
++        "--layout",
++        type=str,
++        nargs="*",
++        choices=["channel_last", "channel_first"],
++        default=["channel_last", "channel_first"],
++    )
++    args = parser.parse_args()
++
++    for dtype in args.dtype:
++        df = [
++            test_causal_conv1d_prefill(dtype, dim, width, seq_lens, has_initial, layout)
++            for layout, dim, width, seq_lens, has_initial in itertools.product(
++                args.layout, args.dim, args.width, args.seq_lens, args.has_initial
++            )
++        ]
++        df = pd.DataFrame(df)
++        aiter.logger.info(
++            "causal_conv1d_prefill summary (markdown):\n%s",
++            df.to_markdown(index=False),
++        )
++
++
++if __name__ == "__main__":
++    main()
+-- 
+2.43.0
+
