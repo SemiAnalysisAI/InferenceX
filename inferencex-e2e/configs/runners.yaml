@@ -454,6 +454,7 @@ clusters:
         deepseek-r1-fp4: {root: scratch, dir: DeepSeek-R1-0528-NVFP4-v2}
         GLM-5.2-FP8: {root: scratch, dir: GLM-5.2-FP8}
         GLM-5.2-NVFP4: {root: scratch, dir: GLM-5.2-NVFP4}
+        Kimi-K3.1-Pro: {root: scratch, dir: Kimi-K3.1-Pro}
         MiniMax-M3.1-Flash: {root: data-models, dir: MiniMax-M3.1-Flash}
         Muse-Spark-Open-816B-A42B-NVFP4: {root: data-models, dir: Muse-Spark-Open-816B-A42B-NVFP4}
         Qwen3.5-397B-A17B-FP8: {root: scratch, dir: Qwen3.5-397B-A17B-FP8}
@@ -519,6 +520,7 @@ clusters:
         GLM-5.2-NVFP4: {root: scratch, dir: GLM-5.2-NVFP4}
         GLM-5.3-NVFP4: {root: scratch, dir: GLM-5.3-NVFP4}
         Kimi-K3: {root: scratch, dir: Kimi-K3}
+        Kimi-K3.1-Pro: {root: scratch, dir: Kimi-K3.1-Pro}
         MiniMax-M3: {root: scratch, dir: MiniMax-M3}
         MiniMax-M3-MXFP8: {root: scratch, dir: MiniMax-M3-MXFP8}
         MiniMax-M3-NVFP4: {root: scratch, dir: MiniMax-M3-NVFP4}
@@ -577,6 +579,7 @@ clusters:
         GLM-5.2-NVFP4: {root: sa-shared-models, dir: GLM-5.2-NVFP4}
         DeepSeek-R1-0528: {root: numa1, dir: DeepSeek-R1-0528}
         DeepSeek-R1-0528-NVFP4-v2: {root: numa1, dir: DeepSeek-R1-0528-NVFP4-v2}
+        Kimi-K3.1-Pro: {root: numa1, dir: Kimi-K3.1-Pro}
     scheduler: slurm
     slurm:
       partition: batch
@@ -628,6 +631,7 @@ clusters:
         DeepSeek-R1-0528: {root: scratch, dir: DeepSeek-R1-0528}
         DeepSeek-R1-0528-NVFP4-v2: {root: scratch, dir: DeepSeek-R1-0528-NVFP4-v2}
         GLM-5.2-NVFP4: {root: scratch, dir: GLM-5.2-NVFP4}
+        Kimi-K3.1-Pro: {root: scratch, dir: Kimi-K3.1-Pro}
         MiniMax-M3.1-Flash: {root: data-models, dir: MiniMax-M3.1-Flash}
         Muse-Spark-Open-816B-A42B-NVFP4: {root: data-models, dir: Muse-Spark-Open-816B-A42B-NVFP4}
         Qwen3.5-397B-A17B-FP8: {root: scratch, dir: Qwen3.5-397B-A17B-FP8}
