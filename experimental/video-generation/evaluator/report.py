@@ -53,7 +53,11 @@ def _percent(value: Any, *, signed: bool = False) -> str:
 
 def _badge(status: Any) -> str:
     status = str(status)
-    css = status if status in {"pass", "fail", "inconclusive", "descriptive", "not_applicable"} else "inconclusive"
+    css = (
+        status
+        if status in {"pass", "fail", "inconclusive", "descriptive", "not_applicable"}
+        else "inconclusive"
+    )
     return f'<span class="badge {css}">{_escape(status.replace("_", " "))}</span>'
 
 
@@ -103,11 +107,15 @@ def _check_table(checks: list[dict]) -> str:
         threshold_text = _number(threshold, 4) if threshold is not None else "—"
         rows.append(
             f'<tr><td class="mono">{_escape(check.get("name", ""))}</td>'
-            f'<td>{_badge(check.get("status", "inconclusive"))}</td>'
+            f"<td>{_badge(check.get('status', 'inconclusive'))}</td>"
             f'<td class="number">{observed_text}</td><td class="number">{threshold_text}</td>'
             f'<td class="reason">{_escape(check.get("reason", ""))}</td></tr>'
         )
-    return '<div class="table-wrap"><table><thead><tr><th>Check</th><th>Decision</th><th>Observed</th><th>Threshold</th><th>Explanation</th></tr></thead><tbody>' + "".join(rows) + "</tbody></table></div>"
+    return (
+        '<div class="table-wrap"><table><thead><tr><th>Check</th><th>Decision</th><th>Observed</th><th>Threshold</th><th>Explanation</th></tr></thead><tbody>'
+        + "".join(rows)
+        + "</tbody></table></div>"
+    )
 
 
 def _transformation_label(value: Any) -> str:
@@ -118,14 +126,20 @@ def _transformation_label(value: Any) -> str:
         "exact_file_copy": "Exact file copy",
         "deliberate_audio_mute": "Deliberately muted audio",
     }
-    parts = [labels.get(value.get("kind"), str(value.get("kind") or "Declared transformation").replace("_", " "))]
+    parts = [
+        labels.get(
+            value.get("kind"), str(value.get("kind") or "Declared transformation").replace("_", " ")
+        )
+    ]
     for key, label in (
         ("compressed_video_bitexact", "compressed video bit-exact"),
         ("decoded_video_identical", "decoded video identical"),
         ("audio_sample_count_preserved", "audio sample count preserved"),
     ):
         if key in value:
-            parts.append(f"{label}: {'yes' if value[key] is True else 'no' if value[key] is False else 'unverified'}")
+            parts.append(
+                f"{label}: {'yes' if value[key] is True else 'no' if value[key] is False else 'unverified'}"
+            )
     return "; ".join(parts)
 
 
@@ -143,14 +157,22 @@ def _configuration(label: str, run: dict) -> str:
         ("Run SHA256", run.get("run_bundle_sha256", "not recorded")),
     ]
     if provenance:
-        fields.extend([
-            ("Source", provenance.get("source_url") or provenance.get("source_filename", "not recorded")),
-            ("Source SHA256", provenance.get("source_sha256", "not recorded")),
-            ("Attribution", provenance.get("attribution_status", "unverified")),
-            ("Transformation", _transformation_label(provenance.get("transformation"))),
-            ("Contract origin", provenance.get("contract_origin", "not recorded")),
-        ])
-    body = "".join(f'<dt>{_escape(name)}</dt><dd class="mono">{_escape(value)}</dd>' for name, value in fields)
+        fields.extend(
+            [
+                (
+                    "Source",
+                    provenance.get("source_url")
+                    or provenance.get("source_filename", "not recorded"),
+                ),
+                ("Source SHA256", provenance.get("source_sha256", "not recorded")),
+                ("Attribution", provenance.get("attribution_status", "unverified")),
+                ("Transformation", _transformation_label(provenance.get("transformation"))),
+                ("Contract origin", provenance.get("contract_origin", "not recorded")),
+            ]
+        )
+    body = "".join(
+        f'<dt>{_escape(name)}</dt><dd class="mono">{_escape(value)}</dd>' for name, value in fields
+    )
     return f'<section class="panel"><h3>{_escape(label)}</h3><dl class="kv">{body}</dl></section>'
 
 
@@ -162,15 +184,31 @@ def _media(label: str, observation: dict) -> str:
     if path:
         body = f'<video controls preload="metadata" playsinline src="{_escape(quote(path, safe="/"))}">Your browser cannot play this format. <a href="{_escape(quote(path, safe="/"))}">Download the clip</a>.</video>'
     else:
-        reason = observation.get("error") or observation.get("analysis_error") or "No media artifact was produced."
+        reason = (
+            observation.get("error")
+            or observation.get("analysis_error")
+            or "No media artifact was produced."
+        )
         body = f'<div class="no-media"><strong>No playable artifact</strong><p>{_escape(reason)}</p></div>'
     latency = observation.get("latency_seconds")
-    boundary = 'downloaded media' if observation.get('latency_boundary') == 'submit_to_downloaded_media' else 'validated media'
-    details = [f'{_number(latency)} s submit → {boundary}' if latency is not None else 'generation timing not measured']
+    boundary = (
+        "downloaded media"
+        if observation.get("latency_boundary") == "submit_to_downloaded_media"
+        else "validated media"
+    )
+    details = [
+        f"{_number(latency)} s submit → {boundary}"
+        if latency is not None
+        else "generation timing not measured"
+    ]
     if video.get("width") and video.get("height"):
-        details.append(f'{video["width"]}×{video["height"]} · {video.get("frame_count", "?")} frames')
+        details.append(
+            f"{video['width']}×{video['height']} · {video.get('frame_count', '?')} frames"
+        )
     if audio.get("present"):
-        details.append(f'{audio.get("channels", "?")} audio channels · {audio.get("sample_rate_hz", "?")} Hz')
+        details.append(
+            f"{audio.get('channels', '?')} audio channels · {audio.get('sample_rate_hz', '?')} Hz"
+        )
     elif media:
         details.append("no audio stream")
     caption = " · ".join(_escape(part) for part in details)
@@ -179,29 +217,52 @@ def _media(label: str, observation: dict) -> str:
 
 def _case(slot: dict, *, imported: bool = False) -> str:
     metrics = slot.get("metrics", {})
-    psnr = "exact decoded match" if metrics.get("video_identical") is True else _number(metrics.get("video_psnr_db")) + " dB"
+    psnr = (
+        "exact decoded match"
+        if metrics.get("video_identical") is True
+        else _number(metrics.get("video_psnr_db")) + " dB"
+    )
     pairs = [
         ("Video PSNR", psnr, "same-request RGB fidelity, not generative quality"),
         ("Video mean absolute error", _number(metrics.get("video_mae"), 6), "normalized RGB, 0–1"),
-        ("Audio spectral cosine", _number(metrics.get("audio_spectral_cosine"), 5), "spectral similarity; not semantic or perceptual quality"),
-        ("Audio RMS ratio", _number(metrics.get("audio_rms_ratio"), 5), "candidate ÷ baseline; threshold uses worst channel"),
-        ("Request latency change", _percent(metrics.get("latency_increase_fraction"), signed=True), "paired request; run-level gate uses median population"),
+        (
+            "Audio spectral cosine",
+            _number(metrics.get("audio_spectral_cosine"), 5),
+            "spectral similarity; not semantic or perceptual quality",
+        ),
+        (
+            "Audio RMS ratio",
+            _number(metrics.get("audio_rms_ratio"), 5),
+            "candidate ÷ baseline; threshold uses worst channel",
+        ),
+        (
+            "Request latency change",
+            _percent(metrics.get("latency_increase_fraction"), signed=True),
+            "paired request; run-level gate uses median population",
+        ),
     ]
     if imported:
-        pairs[-1] = ("Generation latency", "Not applicable", "Imported media; no inference timing was measured")
-    metric_rows = "".join(f'<tr><td>{_escape(label)}</td><td class="number">{_escape(value)}</td><td class="reason">{_escape(note)}</td></tr>' for label, value, note in pairs)
-    notes = "".join(f'<li>{_escape(note)}</li>' for note in slot.get("notes", []))
+        pairs[-1] = (
+            "Generation latency",
+            "Not applicable",
+            "Imported media; no inference timing was measured",
+        )
+    metric_rows = "".join(
+        f'<tr><td>{_escape(label)}</td><td class="number">{_escape(value)}</td><td class="reason">{_escape(note)}</td></tr>'
+        for label, value, note in pairs
+    )
+    notes = "".join(f"<li>{_escape(note)}</li>" for note in slot.get("notes", []))
     note_list = f'<ul class="notes">{notes}</ul>' if notes else ""
     opened = " open" if slot.get("status") != "pass" else ""
     seed_label = "pairing ID seed (not a generation seed)" if imported else "seed"
     return (
         '<article class="case"><div class="case-heading"><div class="case-title">'
-        f'<h3>{_escape(slot.get("case_id", "Case"))}</h3>{_badge(slot.get("status", "inconclusive"))}</div>'
+        f"<h3>{_escape(slot.get('case_id', 'Case'))}</h3>{_badge(slot.get('status', 'inconclusive'))}</div>"
         f'<div class="case-meta"><span class="mono">{_escape(slot.get("slot_id", ""))}</span> · {seed_label} {_escape(slot.get("seed", ""))} · repetition {_escape(slot.get("repetition", ""))}</div>'
         f'<p class="prompt">{_escape(slot.get("prompt", ""))}</p></div>'
         f'<div class="media-grid">{_media("Baseline", slot.get("baseline", {}))}{_media("Candidate", slot.get("candidate", {}))}</div>'
         f'<div class="case-body"><div class="table-wrap"><table><thead><tr><th>Metric</th><th>Observed</th><th>Interpretation</th></tr></thead><tbody>{metric_rows}</tbody></table></div>'
-        f'<details{opened}><summary>Per-slot checks and failure reasons</summary>{_check_table(slot.get("checks", []))}{note_list}</details></div></article>'
+        f"<details{opened}><summary>Per-slot checks and failure reasons</summary>{_check_table(slot.get('checks', []))}{note_list}</details></div></article>"
     )
 
 
@@ -210,15 +271,40 @@ def _render(comparison: dict, json_name: str) -> str:
     imported = comparison.get("comparison_scope") == "media_fidelity_only"
     title = "H3 sample media comparison" if imported else "H3 runtime comparison"
     titles = {
-        "fixture": ("Synthetic fixture evidence — not an H3 result", "These test clips and fixture timings exercise the harness. They do not measure MiniMax model performance or quality."),
-        "operator_endpoint": ("Endpoint results — H3 execution is not independently verified", "Clips were collected from a configured endpoint. Only a separate controlled-GPU job receipt can establish observed runtime, model files, GPU use, and resource cleanup."),
-        "live_h3": ("Legacy endpoint results — H3 execution is not independently verified", "This older bundle used the label live_h3, but its model, hardware, and runtime identities were only operator-declared. The label is not proof that H3 ran."),
-        "imported_media": ("Imported-media evidence — no H3 inference run or timing measurement", "These source clips demonstrate media validation and paired fidelity only. Model attribution is operator-supplied; decoded media properties are a post-hoc contract, not proof of prompt compliance."),
-        "mixed": ("Mixed evidence — this comparison is inconclusive", "The baseline and candidate use different evidence kinds. Do not interpret this as a controlled live-model benchmark."),
+        "fixture": (
+            "Synthetic fixture evidence — not an H3 result",
+            "These test clips and fixture timings exercise the harness. They do not measure MiniMax model performance or quality.",
+        ),
+        "operator_endpoint": (
+            "Endpoint results — H3 execution is not independently verified",
+            "Clips were collected from a configured endpoint. Only a separate controlled-GPU job receipt can establish observed runtime, model files, GPU use, and resource cleanup.",
+        ),
+        "live_h3": (
+            "Legacy endpoint results — H3 execution is not independently verified",
+            "This older bundle used the label live_h3, but its model, hardware, and runtime identities were only operator-declared. The label is not proof that H3 ran.",
+        ),
+        "imported_media": (
+            "Imported-media evidence — no H3 inference run or timing measurement",
+            "These source clips demonstrate media validation and paired fidelity only. Model attribution is operator-supplied; decoded media properties are a post-hoc contract, not proof of prompt compliance.",
+        ),
+        "mixed": (
+            "Mixed evidence — this comparison is inconclusive",
+            "The baseline and candidate use different evidence kinds. Do not interpret this as a controlled live-model benchmark.",
+        ),
     }
-    evidence_title, evidence_note = titles.get(evidence, ("Unverified evidence", "The report does not establish where these artifacts were generated."))
+    evidence_title, evidence_note = titles.get(
+        evidence,
+        (
+            "Unverified evidence",
+            "The report does not establish where these artifacts were generated.",
+        ),
+    )
     status = comparison.get("overall_status", "inconclusive")
-    decision = {"pass": "Declared checks passed", "fail": "Regression checks failed", "inconclusive": "Comparison needs more evidence"}.get(status, "Comparison needs more evidence")
+    decision = {
+        "pass": "Declared checks passed",
+        "fail": "Regression checks failed",
+        "inconclusive": "Comparison needs more evidence",
+    }.get(status, "Comparison needs more evidence")
     baseline = comparison.get("baseline", {})
     candidate = comparison.get("candidate", {})
     left, right = baseline.get("summary", {}), candidate.get("summary", {})
@@ -227,37 +313,81 @@ def _render(comparison: dict, json_name: str) -> str:
     policy = comparison.get("policy", {})
     if imported and status == "fail":
         transformation = (candidate.get("provenance") or {}).get("transformation") or {}
-        decision = "Controlled audio defect detected" if isinstance(transformation, dict) and transformation.get("kind") == "deliberate_audio_mute" else "Media checks failed"
+        decision = (
+            "Controlled audio defect detected"
+            if isinstance(transformation, dict)
+            and transformation.get("kind") == "deliberate_audio_mute"
+            else "Media checks failed"
+        )
     mode = measurement.get("performance_mode", "not recorded").replace("_", " ")
     cards = [
-        ("Candidate median latency", f'{_number(right.get("latency_median_seconds"))} s', f'Baseline {_number(left.get("latency_median_seconds"))} s · {_percent(measurement.get("latency_increase_fraction"), signed=True)}'),
-        ("Candidate verified-valid clips", f'{right.get("valid", "?")} / {right.get("scheduled", "?")}', f'{_percent(right.get("verified_technical_success_fraction", right.get("technical_success_rate")))} verified yield · failures stay in denominator'),
-        ("Matched valid media pairs", str(summary.get("matched_valid_pairs", "?")), f'{summary.get("measurement_slots", "?")} scheduled measurement slots · warmups excluded'),
-        ("Candidate throughput", f'{_number(right.get("valid_clips_per_second"), 4)}', 'valid clips / recorded measurement wall second · not saturation capacity'),
+        (
+            "Candidate median latency",
+            f"{_number(right.get('latency_median_seconds'))} s",
+            f"Baseline {_number(left.get('latency_median_seconds'))} s · {_percent(measurement.get('latency_increase_fraction'), signed=True)}",
+        ),
+        (
+            "Candidate verified-valid clips",
+            f"{right.get('valid', '?')} / {right.get('scheduled', '?')}",
+            f"{_percent(right.get('verified_technical_success_fraction', right.get('technical_success_rate')))} verified yield · failures stay in denominator",
+        ),
+        (
+            "Matched valid media pairs",
+            str(summary.get("matched_valid_pairs", "?")),
+            f"{summary.get('measurement_slots', '?')} scheduled measurement slots · warmups excluded",
+        ),
+        (
+            "Candidate throughput",
+            f"{_number(right.get('valid_clips_per_second'), 4)}",
+            "valid clips / recorded measurement wall second · not saturation capacity",
+        ),
     ]
     if imported:
         cards = [
             ("Generation latency", "Not measured", "Imported clips do not establish model speed"),
-            ("Candidate valid media", f'{right.get("valid", "?")} / {right.get("scheduled", "?")}', "Full-stream decode and declared media contract"),
-            ("Matched valid media pairs", str(summary.get("matched_valid_pairs", "?")), "Same-source paired fidelity; not a model-quality score"),
-            ("Generation throughput", "Not measured", "No inference job or hardware utilization was measured"),
+            (
+                "Candidate valid media",
+                f"{right.get('valid', '?')} / {right.get('scheduled', '?')}",
+                "Full-stream decode and declared media contract",
+            ),
+            (
+                "Matched valid media pairs",
+                str(summary.get("matched_valid_pairs", "?")),
+                "Same-source paired fidelity; not a model-quality score",
+            ),
+            (
+                "Generation throughput",
+                "Not measured",
+                "No inference job or hardware utilization was measured",
+            ),
         ]
-    card_html = "".join(f'<div class="card"><div class="label">{_escape(label)}</div><div class="value">{_escape(value)}</div><div class="detail">{_escape(detail)}</div></div>' for label, value, detail in cards)
-    unavailable = int(left.get("evaluator_unavailable", 0)) + int(right.get("evaluator_unavailable", 0))
+    card_html = "".join(
+        f'<div class="card"><div class="label">{_escape(label)}</div><div class="value">{_escape(value)}</div><div class="detail">{_escape(detail)}</div></div>'
+        for label, value, detail in cards
+    )
+    unavailable = int(left.get("evaluator_unavailable", 0)) + int(
+        right.get("evaluator_unavailable", 0)
+    )
     unavailable_note = (
         f'<aside class="banner"><strong>Media evaluation unavailable for {unavailable} observation(s)</strong>'
-        '<p>Verified-valid yield is incomplete. Unassessed media is not evidence of model failure; inspect the per-slot evaluator errors.</p></aside>'
-        if unavailable else ""
+        "<p>Verified-valid yield is incomplete. Unassessed media is not evidence of model failure; inspect the per-slot evaluator errors.</p></aside>"
+        if unavailable
+        else ""
     )
     policy_rows = [
         ("Policy", policy.get("policy_id")),
         ("Calibration", policy.get("calibration_status")),
         ("Max median latency increase", _percent(policy.get("max_latency_increase_fraction"))),
-        ("Min video PSNR", _number(policy.get("min_video_psnr_db")) + " dB (exact matches pass separately)"),
+        (
+            "Min video PSNR",
+            _number(policy.get("min_video_psnr_db")) + " dB (exact matches pass separately)",
+        ),
         ("Min audio spectral cosine", _number(policy.get("min_audio_spectral_cosine"), 5)),
         ("Max channel RMS ratio error", _number(policy.get("max_audio_rms_ratio_error"), 5)),
     ]
-    policy_body = "".join(f'<dt>{_escape(label)}</dt><dd>{_escape(value)}</dd>' for label, value in policy_rows)
+    policy_body = "".join(
+        f"<dt>{_escape(label)}</dt><dd>{_escape(value)}</dd>" for label, value in policy_rows
+    )
     measurement_rows = [
         ("Plan", comparison.get("plan_id")),
         ("Plan SHA256", comparison.get("plan_sha256")),
@@ -267,16 +397,25 @@ def _render(comparison: dict, json_name: str) -> str:
         ("Timing evidence", measurement.get("timing_evidence", "see evidence kind and source run")),
         ("Statistical claim", measurement.get("statistical_claim")),
     ]
-    measurement_body = "".join(f'<dt>{_escape(label)}</dt><dd class="mono">{_escape(value)}</dd>' for label, value in measurement_rows)
-    limitations = "".join(f'<li>{_escape(note)}</li>' for note in comparison.get("limitations", []))
+    measurement_body = "".join(
+        f'<dt>{_escape(label)}</dt><dd class="mono">{_escape(value)}</dd>'
+        for label, value in measurement_rows
+    )
+    limitations = "".join(f"<li>{_escape(note)}</li>" for note in comparison.get("limitations", []))
     cases = "".join(_case(slot, imported=imported) for slot in comparison.get("slots", []))
     banner_class = "banner live" if evidence == "live_h3" else "banner"
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
-        '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; media-src \'self\' file:; img-src \'self\' data:; base-uri \'none\'; form-action \'none\'">'
-        f'<title>{title} · evidence report</title>'
+        "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; media-src 'self' file:; img-src 'self' data:; base-uri 'none'; form-action 'none'\">"
+        f"<title>{title} · evidence report</title>"
         f'<style>{_CSS}</style></head><body><main><header><div><div class="eyebrow">Video generation benchmark · execution MVP</div>'
-        f'<h1>{title}</h1><p class="sub">' + ('A paired, artifact-backed view of an imported source clip and controlled transformations. Generation performance is not measured.' if imported else 'A paired, artifact-backed view of media validity, implementation fidelity, and recorded end-to-end performance.') + '</p></div>'
+        f'<h1>{title}</h1><p class="sub">'
+        + (
+            "A paired, artifact-backed view of an imported source clip and controlled transformations. Generation performance is not measured."
+            if imported
+            else "A paired, artifact-backed view of media validity, implementation fidelity, and recorded end-to-end performance."
+        )
+        + "</p></div>"
         f'<a class="download" href="{_escape(quote(json_name))}" download>Download evidence JSON ↗</a></header>'
         f'<aside class="{banner_class}"><strong>{_escape(evidence_title)}</strong><p>{_escape(evidence_note)}</p></aside>'
         f'<div class="decision">{_badge(status)}<h2>{_escape(decision)}</h2></div>'
@@ -290,8 +429,8 @@ def _render(comparison: dict, json_name: str) -> str:
         f'<div class="panel"><h3>Explicit thresholds</h3><dl class="kv">{policy_body}</dl></div><div class="panel"><h3>Measurement boundary</h3><dl class="kv">{measurement_body}</dl></div></div></section>'
         f'<section class="section panel"><h2>What this report does not claim</h2><ul class="notes">{limitations}</ul></section>'
         f'<footer class="foot">Generated {_escape(comparison.get("created_at", ""))}. Report version {_escape(comparison.get("bundle_version", ""))}. '
-        'This report is read-only and contains no scripts or remote dependencies. Share the HTML, its comparison JSON, and the adjacent assets folder together.</footer>'
-        '</main></body></html>'
+        "This report is read-only and contains no scripts or remote dependencies. Share the HTML, its comparison JSON, and the adjacent assets folder together.</footer>"
+        "</main></body></html>"
     )
 
 
@@ -333,17 +472,30 @@ def write_report(comparison: dict, output_path: Path) -> None:
                     observation = slot.get(label, {})
                     source = observation.get("artifact_path")
                     if source:
-                        asset = _copy_artifact(Path(source), str(observation.get("sha256", "")), assets)
-                        observation["artifact_path"] = asset.relative_to(output_path.parent).as_posix()
+                        asset = _copy_artifact(
+                            Path(source), str(observation.get("sha256", "")), assets
+                        )
+                        observation["artifact_path"] = asset.relative_to(
+                            output_path.parent
+                        ).as_posix()
                         observation["artifact_path_base"] = "report_directory"
-                        if isinstance(observation.get("media"), dict) and "path" in observation["media"]:
+                        if (
+                            isinstance(observation.get("media"), dict)
+                            and "path" in observation["media"]
+                        ):
                             observation["media"]["path"] = observation["artifact_path"]
             for label in ("baseline", "candidate"):
                 provenance = portable.get(label, {}).get("provenance")
                 if isinstance(provenance, dict) and provenance.get("source_path"):
-                    provenance.setdefault("source_filename", Path(str(provenance["source_path"])).name)
+                    provenance.setdefault(
+                        "source_filename", Path(str(provenance["source_path"])).name
+                    )
                     del provenance["source_path"]
-            portable["report"] = {"html": output_path.name, "portable_assets": assets.name, "scripts": False}
+            portable["report"] = {
+                "html": output_path.name,
+                "portable_assets": assets.name,
+                "scripts": False,
+            }
             payload = json.dumps(portable, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
             document = _render(portable, json_path.name)
             streams[json_path].write(payload)

@@ -21,8 +21,11 @@ CLIPPING_AMPLITUDE = 1.0 - 1.0 / 32768.0
 FROZEN_MAE = 1.0 / 1024.0
 SPECTRAL_WINDOW_SAMPLES = 1024
 H3_ENCODING = {
-    "video_codec": "libx264", "preset": "ultrafast", "crf": 18,
-    "pixel_format": "yuv420p", "audio_codec": "aac",
+    "video_codec": "libx264",
+    "preset": "ultrafast",
+    "crf": 18,
+    "pixel_format": "yuv420p",
+    "audio_codec": "aac",
 }
 
 
@@ -66,10 +69,19 @@ def _positive_number(value: Any) -> float | None:
 def _validate_expected(expected: dict) -> None:
     integer_keys = {"width", "height", "frame_count", "audio_sample_rate_hz", "audio_channels"}
     positive_keys = integer_keys | {"fps", "duration_seconds", "timeout_seconds"}
-    nonnegative_keys = {"duration_tolerance_seconds", "max_av_start_skew_seconds", "max_av_end_skew_seconds", "max_frozen_fraction"}
+    nonnegative_keys = {
+        "duration_tolerance_seconds",
+        "max_av_start_skew_seconds",
+        "max_av_end_skew_seconds",
+        "max_frozen_fraction",
+    }
     for key in (positive_keys | nonnegative_keys) & expected.keys():
         value = expected[key]
-        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+        ):
             raise ValueError(f"expected.{key} must be a finite number, got {value!r}")
         outside_domain = value <= 0 if key in positive_keys else value < 0
         if outside_domain:
@@ -163,7 +175,9 @@ def _video_analysis(container: Any, stream: Any, np: Any, deadline: float | None
         count += 1
         corrupt += int(bool(getattr(frame, "is_corrupt", False)))
         frame_duration = _positive_number(getattr(frame, "duration", None))
-        duration = frame_duration * float(frame.time_base) if frame_duration and frame.time_base else None
+        duration = (
+            frame_duration * float(frame.time_base) if frame_duration and frame.time_base else None
+        )
         last_duration_source = "decoded_frame_duration" if duration else None
         timing.add(frame, duration)
         maximum, minimum = int(pixels.max()), int(pixels.min())
@@ -194,7 +208,12 @@ def _video_analysis(container: Any, stream: Any, np: Any, deadline: float | None
     duration = end - timing.first if end is not None and timing.first is not None else None
     fps = None
     fps_source = None
-    if count > 1 and timing.first is not None and timing.last is not None and timing.last > timing.first:
+    if (
+        count > 1
+        and timing.first is not None
+        and timing.last is not None
+        and timing.last > timing.first
+    ):
         fps = (count - 1) / (timing.last - timing.first)
         fps_source = "decoded_frame_timestamps"
     elif count == 1 and tail_duration:
@@ -254,7 +273,11 @@ def _audio_analysis(container: Any, stream: Any, np: Any, deadline: float | None
             silent = np.zeros(channels, dtype=np.int64)
             clipped = np.zeros(channels, dtype=np.int64)
             cross = np.zeros((channels, channels), dtype=np.float64)
-        if this_rate != rate or this_channels != channels or names != [channel.name for channel in frame.layout.channels]:
+        if (
+            this_rate != rate
+            or this_channels != channels
+            or names != [channel.name for channel in frame.layout.channels]
+        ):
             raise ValueError("audio sample rate or channel layout changes inside the stream")
         timestamp = _time(frame)
         if timestamp is not None and previous_end is not None:
@@ -272,17 +295,27 @@ def _audio_analysis(container: Any, stream: Any, np: Any, deadline: float | None
         silent += (absolute <= SILENCE_AMPLITUDE).sum(axis=1)
         clipped += (absolute >= CLIPPING_AMPLITUDE).sum(axis=1)
         cross += values @ values.T
-        if not np.isfinite(sum_squares).all() or not np.isfinite(sums).all() or not np.isfinite(cross).all():
+        if (
+            not np.isfinite(sum_squares).all()
+            or not np.isfinite(sums).all()
+            or not np.isfinite(cross).all()
+        ):
             raise ValueError("decoded audio overflows finite signal-statistic accumulation")
     rms = np.sqrt(sum_squares / sample_count) if sample_count else np.array([])
     identical_pairs = []
     if sample_count:
         for left in range(channels):
             for right in range(left + 1, channels):
-                residual = max(0.0, float(sum_squares[left] + sum_squares[right] - 2 * cross[left, right]))
+                residual = max(
+                    0.0, float(sum_squares[left] + sum_squares[right] - 2 * cross[left, right])
+                )
                 if residual / sample_count <= 1e-16:
                     identical_pairs.append([left, right])
-    end = timing.last + timing.last_duration if timing.last is not None and timing.last_duration else None
+    end = (
+        timing.last + timing.last_duration
+        if timing.last is not None and timing.last_duration
+        else None
+    )
     return {
         "present": True,
         "codec": stream.codec_context.name,
@@ -293,7 +326,9 @@ def _audio_analysis(container: Any, stream: Any, np: Any, deadline: float | None
         "frame_count": frame_count,
         "sample_count": sample_count,
         "duration_seconds": sample_count / rate if rate else None,
-        "timeline_duration_seconds": end - timing.first if end is not None and timing.first is not None else None,
+        "timeline_duration_seconds": end - timing.first
+        if end is not None and timing.first is not None
+        else None,
         "start_time_seconds": timing.first,
         "end_time_seconds": end,
         "time_base_seconds": timing.tick,
@@ -303,7 +338,9 @@ def _audio_analysis(container: Any, stream: Any, np: Any, deadline: float | None
         "timestamp_sha256": timing.hash.hexdigest(),
         "corrupt_frame_count": corrupt,
         "rms_channels": rms.tolist(),
-        "rms_dbfs_channels": [20 * math.log10(float(value)) if value > 0 else None for value in rms],
+        "rms_dbfs_channels": [
+            20 * math.log10(float(value)) if value > 0 else None for value in rms
+        ],
         "peak_channels": peaks.tolist() if sample_count else [],
         "dc_offset_channels": (sums / sample_count).tolist() if sample_count else [],
         "clipping_fraction_channels": (clipped / sample_count).tolist() if sample_count else [],
@@ -326,13 +363,24 @@ def analyze_media(path: Path, expected: dict | None = None) -> dict:
     path = Path(path).expanduser().resolve()
     deadline = None
     report: dict[str, Any] = {
-        "path": str(path), "sha256": None, "byte_size": None, "decode_ok": False,
-        "video": {"present": False}, "audio": {"present": False},
-        "checks": [], "valid": False, "errors": [], "metrics": {},
+        "path": str(path),
+        "sha256": None,
+        "byte_size": None,
+        "decode_ok": False,
+        "video": {"present": False},
+        "audio": {"present": False},
+        "checks": [],
+        "valid": False,
+        "errors": [],
+        "metrics": {},
         "implementation": {
-            "name": "vgbench.cpu_media", "version": IMPLEMENTATION_VERSION,
-            "pyav_version": av.__version__, "numpy_version": np.__version__,
-            "ffmpeg_libraries": {key: ".".join(map(str, value)) for key, value in av.library_versions.items()},
+            "name": "vgbench.cpu_media",
+            "version": IMPLEMENTATION_VERSION,
+            "pyav_version": av.__version__,
+            "numpy_version": np.__version__,
+            "ffmpeg_libraries": {
+                key: ".".join(map(str, value)) for key, value in av.library_versions.items()
+            },
             "coverage": "all decoded video frames and all decoded audio samples",
             "video_comparison_color_space": "decoded RGB24; no spatial resizing",
             "silence_amplitude_threshold": SILENCE_AMPLITUDE,
@@ -341,7 +389,12 @@ def analyze_media(path: Path, expected: dict | None = None) -> dict:
             "blank_definition": "all decoded RGB samples <=3 or all >=252 on the 0..255 scale",
             "timestamp_policy": "use decoded PTS; final video duration fallback is explicitly labeled",
             "timeout_policy": "monotonic checks between hash chunks and decoded frames; not a native-call interrupt",
-            "non_claims": ["generative quality", "semantic accuracy", "perceptual fidelity", "lip synchronization"],
+            "non_claims": [
+                "generative quality",
+                "semantic accuracy",
+                "perceptual fidelity",
+                "lip synchronization",
+            ],
         },
     }
     try:
@@ -362,13 +415,17 @@ def analyze_media(path: Path, expected: dict | None = None) -> dict:
             video_streams = list(container.streams.video)
             audio_streams = list(container.streams.audio)
             if len(video_streams) != 1 or len(audio_streams) > 1:
-                raise ValueError("MVP requires exactly one video stream and at most one audio stream; ambiguous tracks are not silently selected")
+                raise ValueError(
+                    "MVP requires exactly one video stream and at most one audio stream; ambiguous tracks are not silently selected"
+                )
             report["video"] = _video_analysis(container, video_streams[0], np, deadline)
             has_audio = bool(audio_streams)
         # Reopen, not seek: video decoding consumed the demuxer to EOF.
         if has_audio:
             with av.open(str(path), mode="r") as container:
-                report["audio"] = _audio_analysis(container, container.streams.audio[0], np, deadline)
+                report["audio"] = _audio_analysis(
+                    container, container.streams.audio[0], np, deadline
+                )
         final = path.stat()
         if (initial.st_size, initial.st_mtime_ns) != (final.st_size, final.st_mtime_ns):
             raise ValueError("media file changed while it was being analyzed")
@@ -378,82 +435,309 @@ def analyze_media(path: Path, expected: dict | None = None) -> dict:
         # Invalid expectations must never reach numerical checks or serialize
         # non-finite caller values into a report that looks like a valid run.
         if report["byte_size"] is None:
-            report["checks"].append(_check("media.preflight", False, report["errors"][-1], "valid contract and local file", "No media measurement was accepted."))
+            report["checks"].append(
+                _check(
+                    "media.preflight",
+                    False,
+                    report["errors"][-1],
+                    "valid contract and local file",
+                    "No media measurement was accepted.",
+                )
+            )
             return report
 
     checks = report["checks"]
     video, audio = report["video"], report["audio"]
-    checks.append(_check("media.decode", report["decode_ok"], report["decode_ok"], True, "Full-stream local decoding completed without an exception."))
-    checks.append(_check("video.present", video.get("frame_count", 0) > 0, video.get("frame_count", 0), ">0", "At least one video frame must be decoded."))
+    checks.append(
+        _check(
+            "media.decode",
+            report["decode_ok"],
+            report["decode_ok"],
+            True,
+            "Full-stream local decoding completed without an exception.",
+        )
+    )
+    checks.append(
+        _check(
+            "video.present",
+            video.get("frame_count", 0) > 0,
+            video.get("frame_count", 0),
+            ">0",
+            "At least one video frame must be decoded.",
+        )
+    )
     if video.get("frame_count", 0):
-        checks.append(_check("video.geometry_stable", video["geometry_stable"], video["geometry_stable"], True, "All decoded frames retain the original geometry."))
+        checks.append(
+            _check(
+                "video.geometry_stable",
+                video["geometry_stable"],
+                video["geometry_stable"],
+                True,
+                "All decoded frames retain the original geometry.",
+            )
+        )
         timestamp_ok = video["missing_timestamps"] == 0 and video["nonincreasing_timestamps"] == 0
-        checks.append(_check("video.timestamps", timestamp_ok, {"missing": video["missing_timestamps"], "nonincreasing": video["nonincreasing_timestamps"]}, {"missing": 0, "nonincreasing": 0}, "Every decoded frame has strictly increasing PTS."))
-        checks.append(_check("video.corrupt_frames", video["corrupt_frame_count"] == 0, video["corrupt_frame_count"], 0, "Decoder corruption flags are not ignored."))
+        checks.append(
+            _check(
+                "video.timestamps",
+                timestamp_ok,
+                {
+                    "missing": video["missing_timestamps"],
+                    "nonincreasing": video["nonincreasing_timestamps"],
+                },
+                {"missing": 0, "nonincreasing": 0},
+                "Every decoded frame has strictly increasing PTS.",
+            )
+        )
+        checks.append(
+            _check(
+                "video.corrupt_frames",
+                video["corrupt_frame_count"] == 0,
+                video["corrupt_frame_count"],
+                0,
+                "Decoder corruption flags are not ignored.",
+            )
+        )
     for name, key in (("width", "width"), ("height", "height"), ("frame_count", "frame_count")):
         if key in expected:
-            checks.append(_check(f"video.{name}", video.get(name) == expected[key], video.get(name), expected[key], "Exact expected decoded media contract."))
+            checks.append(
+                _check(
+                    f"video.{name}",
+                    video.get(name) == expected[key],
+                    video.get(name),
+                    expected[key],
+                    "Exact expected decoded media contract.",
+                )
+            )
     if "encoding" in expected:
         encoding = expected["encoding"]
-        checks.append(_check("video.codec", video.get("codec") == "h264", video.get("codec"), "h264", "Decoded codec family; an MP4 cannot prove the exact encoder implementation."))
-        checks.append(_check("video.pixel_format", encoding["pixel_format"] in video.get("pixel_formats", []), video.get("pixel_formats"), encoding["pixel_format"], "Decoded pixel format."))
-        checks.append(_check("audio.codec", audio.get("codec") == encoding["audio_codec"], audio.get("codec"), encoding["audio_codec"], "Decoded audio codec."))
+        checks.append(
+            _check(
+                "video.codec",
+                video.get("codec") == "h264",
+                video.get("codec"),
+                "h264",
+                "Decoded codec family; an MP4 cannot prove the exact encoder implementation.",
+            )
+        )
+        checks.append(
+            _check(
+                "video.pixel_format",
+                encoding["pixel_format"] in video.get("pixel_formats", []),
+                video.get("pixel_formats"),
+                encoding["pixel_format"],
+                "Decoded pixel format.",
+            )
+        )
+        checks.append(
+            _check(
+                "audio.codec",
+                audio.get("codec") == encoding["audio_codec"],
+                audio.get("codec"),
+                encoding["audio_codec"],
+                "Decoded audio codec.",
+            )
+        )
         report["encoding_evidence"] = {
             "requested": encoding,
-            "observed": {"video_codec": video.get("codec"), "video_pixel_formats": video.get("pixel_formats"), "video_encoder_tag": video.get("encoder_tag"), "audio_codec": audio.get("codec"), "audio_sample_rate_hz": audio.get("sample_rate_hz"), "audio_channels": audio.get("channels")},
-            "unverified": ["video_encoder_implementation", "preset", "crf", "encoder_thread_count", "aac_bitrate"],
+            "observed": {
+                "video_codec": video.get("codec"),
+                "video_pixel_formats": video.get("pixel_formats"),
+                "video_encoder_tag": video.get("encoder_tag"),
+                "audio_codec": audio.get("codec"),
+                "audio_sample_rate_hz": audio.get("sample_rate_hz"),
+                "audio_channels": audio.get("channels"),
+            },
+            "unverified": [
+                "video_encoder_implementation",
+                "preset",
+                "crf",
+                "encoder_thread_count",
+                "aac_bitrate",
+            ],
         }
     if "fps" in expected:
         target = float(expected["fps"])
         actual = video.get("fps")
         tolerance = max(0.001, abs(target) * 0.001)
-        checks.append(_check("video.fps", actual is not None and abs(actual - target) <= tolerance, actual, {"value": target, "absolute_tolerance": tolerance}, "FPS is derived from decoded frame timestamps; the tolerance covers container timestamp quantization."))
+        checks.append(
+            _check(
+                "video.fps",
+                actual is not None and abs(actual - target) <= tolerance,
+                actual,
+                {"value": target, "absolute_tolerance": tolerance},
+                "FPS is derived from decoded frame timestamps; the tolerance covers container timestamp quantization.",
+            )
+        )
         if video.get("frame_count", 0) > 1:
             interval = 1.0 / target
             cadence_tolerance = max(video.get("time_base_seconds", 0), interval * 0.001) + 1e-9
-            intervals = [video.get("min_frame_interval_seconds"), video.get("max_frame_interval_seconds")]
-            cadence_ok = all(value is not None and abs(value - interval) <= cadence_tolerance for value in intervals)
-            checks.append(_check("video.cadence", cadence_ok, {"min_seconds": intervals[0], "max_seconds": intervals[1]}, {"interval_seconds": interval, "absolute_tolerance_seconds": cadence_tolerance}, "When a fixed FPS is requested, average FPS alone must not conceal internal gaps or bursty timestamps."))
+            intervals = [
+                video.get("min_frame_interval_seconds"),
+                video.get("max_frame_interval_seconds"),
+            ]
+            cadence_ok = all(
+                value is not None and abs(value - interval) <= cadence_tolerance
+                for value in intervals
+            )
+            checks.append(
+                _check(
+                    "video.cadence",
+                    cadence_ok,
+                    {"min_seconds": intervals[0], "max_seconds": intervals[1]},
+                    {"interval_seconds": interval, "absolute_tolerance_seconds": cadence_tolerance},
+                    "When a fixed FPS is requested, average FPS alone must not conceal internal gaps or bursty timestamps.",
+                )
+            )
     if "duration_seconds" in expected:
         target = float(expected["duration_seconds"])
-        tolerance = float(expected.get("duration_tolerance_seconds", 1.0 / video["fps"] if video.get("fps") else 0.05))
+        tolerance = float(
+            expected.get(
+                "duration_tolerance_seconds", 1.0 / video["fps"] if video.get("fps") else 0.05
+            )
+        )
         actual = video.get("duration_seconds")
-        checks.append(_check("video.duration_seconds", actual is not None and tolerance >= 0 and abs(actual - target) <= tolerance + 1e-9, actual, {"value": target, "absolute_tolerance": tolerance}, "Caller supplies expected media duration, with any request-to-output rounding already resolved."))
+        checks.append(
+            _check(
+                "video.duration_seconds",
+                actual is not None and tolerance >= 0 and abs(actual - target) <= tolerance + 1e-9,
+                actual,
+                {"value": target, "absolute_tolerance": tolerance},
+                "Caller supplies expected media duration, with any request-to-output rounding already resolved.",
+            )
+        )
     if "audio_required" in expected:
         required = bool(expected["audio_required"])
-        checks.append(_check("audio.required", bool(audio.get("present")) if required else None, audio.get("present", False), required, "False means audio is optional, not prohibited."))
+        checks.append(
+            _check(
+                "audio.required",
+                bool(audio.get("present")) if required else None,
+                audio.get("present", False),
+                required,
+                "False means audio is optional, not prohibited.",
+            )
+        )
     if audio.get("present"):
-        checks.append(_check("audio.samples", audio.get("sample_count", 0) > 0, audio.get("sample_count", 0), ">0", "An advertised audio stream must contain decoded samples."))
+        checks.append(
+            _check(
+                "audio.samples",
+                audio.get("sample_count", 0) > 0,
+                audio.get("sample_count", 0),
+                ">0",
+                "An advertised audio stream must contain decoded samples.",
+            )
+        )
         timestamp_ok = audio["missing_timestamps"] == 0 and audio["nonincreasing_timestamps"] == 0
-        checks.append(_check("audio.timestamps", timestamp_ok, {"missing": audio["missing_timestamps"], "nonincreasing": audio["nonincreasing_timestamps"]}, {"missing": 0, "nonincreasing": 0}, "Every audio frame has strictly increasing PTS."))
-        tolerance = max(audio.get("time_base_seconds", 0), 1.0 / audio["sample_rate_hz"]) + 1e-9 if audio.get("sample_rate_hz") else 0
-        checks.append(_check("audio.continuity", audio["max_timestamp_gap_seconds"] <= tolerance, audio["max_timestamp_gap_seconds"], {"maximum_seconds": tolerance}, "PCM sample continuity allows one container timestamp tick, without filling gaps or removing overlaps."))
-        checks.append(_check("audio.corrupt_frames", audio["corrupt_frame_count"] == 0, audio["corrupt_frame_count"], 0, "Decoder corruption flags are not ignored."))
+        checks.append(
+            _check(
+                "audio.timestamps",
+                timestamp_ok,
+                {
+                    "missing": audio["missing_timestamps"],
+                    "nonincreasing": audio["nonincreasing_timestamps"],
+                },
+                {"missing": 0, "nonincreasing": 0},
+                "Every audio frame has strictly increasing PTS.",
+            )
+        )
+        tolerance = (
+            max(audio.get("time_base_seconds", 0), 1.0 / audio["sample_rate_hz"]) + 1e-9
+            if audio.get("sample_rate_hz")
+            else 0
+        )
+        checks.append(
+            _check(
+                "audio.continuity",
+                audio["max_timestamp_gap_seconds"] <= tolerance,
+                audio["max_timestamp_gap_seconds"],
+                {"maximum_seconds": tolerance},
+                "PCM sample continuity allows one container timestamp tick, without filling gaps or removing overlaps.",
+            )
+        )
+        checks.append(
+            _check(
+                "audio.corrupt_frames",
+                audio["corrupt_frame_count"] == 0,
+                audio["corrupt_frame_count"],
+                0,
+                "Decoder corruption flags are not ignored.",
+            )
+        )
     for key, field in (("audio_sample_rate_hz", "sample_rate_hz"), ("audio_channels", "channels")):
         if key in expected:
-            checks.append(_check(f"audio.{field}", audio.get(field) == expected[key], audio.get(field), expected[key], "Original decoded audio contract; no resampling or channel conversion."))
+            checks.append(
+                _check(
+                    f"audio.{field}",
+                    audio.get(field) == expected[key],
+                    audio.get(field),
+                    expected[key],
+                    "Original decoded audio contract; no resampling or channel conversion.",
+                )
+            )
     if expected.get("requires_motion"):
         actual = video.get("mean_adjacent_frame_mae")
-        checks.append(_check("video.motion_presence", actual is not None and actual > FROZEN_MAE, actual, {"greater_than": FROZEN_MAE}, "Adjacent RGB change is a technical motion-presence proxy, not action understanding or physical correctness."))
+        checks.append(
+            _check(
+                "video.motion_presence",
+                actual is not None and actual > FROZEN_MAE,
+                actual,
+                {"greater_than": FROZEN_MAE},
+                "Adjacent RGB change is a technical motion-presence proxy, not action understanding or physical correctness.",
+            )
+        )
     if "max_frozen_fraction" in expected:
         actual = video.get("frozen_fraction")
         target = expected["max_frozen_fraction"]
-        checks.append(_check("video.frozen_fraction", actual is not None and actual <= target, actual, {"maximum": target}, "Explicit caller-supplied limit on near-identical adjacent-frame transitions; no universal freeze threshold is assumed."))
+        checks.append(
+            _check(
+                "video.frozen_fraction",
+                actual is not None and actual <= target,
+                actual,
+                {"maximum": target},
+                "Explicit caller-supplied limit on near-identical adjacent-frame transitions; no universal freeze threshold is assumed.",
+            )
+        )
     if expected.get("requires_sound"):
         actual = max(audio.get("rms_channels", []) or [0.0])
-        checks.append(_check("audio.sound_presence", actual > SILENCE_AMPLITUDE, actual, {"greater_than": SILENCE_AMPLITUDE}, "At least one channel has non-silent RMS; intentionally silent channels are reported separately."))
+        checks.append(
+            _check(
+                "audio.sound_presence",
+                actual > SILENCE_AMPLITUDE,
+                actual,
+                {"greater_than": SILENCE_AMPLITUDE},
+                "At least one channel has non-silent RMS; intentionally silent channels are reported separately.",
+            )
+        )
     metrics = report["metrics"]
-    for key in ("blank_fraction", "duplicate_fraction", "frozen_fraction", "mean_adjacent_frame_mae"):
+    for key in (
+        "blank_fraction",
+        "duplicate_fraction",
+        "frozen_fraction",
+        "mean_adjacent_frame_mae",
+    ):
         metrics[f"video_{key}"] = video.get(key)
     metrics["audio_rms_channels"] = audio.get("rms_channels", [])
     metrics["audio_silent_channel_count"] = len(audio.get("silent_channels", []))
     for boundary in ("start", "end"):
-        video_time, audio_time = video.get(f"{boundary}_time_seconds"), audio.get(f"{boundary}_time_seconds")
-        metrics[f"av_{boundary}_skew_seconds"] = audio_time - video_time if video_time is not None and audio_time is not None else None
+        video_time, audio_time = (
+            video.get(f"{boundary}_time_seconds"),
+            audio.get(f"{boundary}_time_seconds"),
+        )
+        metrics[f"av_{boundary}_skew_seconds"] = (
+            audio_time - video_time if video_time is not None and audio_time is not None else None
+        )
         expectation_key = f"max_av_{boundary}_skew_seconds"
         if expectation_key in expected:
             actual = metrics[f"av_{boundary}_skew_seconds"]
-            checks.append(_check(f"av.{boundary}_skew_seconds", actual is not None and abs(actual) <= expected[expectation_key] + 1e-9, actual, {"maximum_absolute_seconds": expected[expectation_key]}, "Explicit caller-supplied media-boundary limit, not semantic or lip synchronization."))
+            checks.append(
+                _check(
+                    f"av.{boundary}_skew_seconds",
+                    actual is not None and abs(actual) <= expected[expectation_key] + 1e-9,
+                    actual,
+                    {"maximum_absolute_seconds": expected[expectation_key]},
+                    "Explicit caller-supplied media-boundary limit, not semantic or lip synchronization.",
+                )
+            )
     report["valid"] = report["decode_ok"] and all(check["status"] != "failed" for check in checks)
     return report
 
@@ -469,9 +753,14 @@ def _decoded_audio(path: Path, av: Any, np: Any):
             yield _audio_array(frame, np), _time(frame), float(frame.time_base or 0)
 
 
-def _compare_audio(baseline: Path, candidate: Path, av: Any, np: Any, channels: int, rate: int) -> dict:
+def _compare_audio(
+    baseline: Path, candidate: Path, av: Any, np: Any, channels: int, rate: int
+) -> dict:
     """Compare all samples despite harmless differences in codec frame chunking."""
-    left_iter, right_iter = iter(_decoded_audio(baseline, av, np)), iter(_decoded_audio(candidate, av, np))
+    left_iter, right_iter = (
+        iter(_decoded_audio(baseline, av, np)),
+        iter(_decoded_audio(candidate, av, np)),
+    )
     left = right = None
     left_offset = right_offset = 0
     absolute = np.zeros(channels)
@@ -529,15 +818,24 @@ def _compare_audio(baseline: Path, candidate: Path, av: Any, np: Any, channels: 
         pending_right = np.concatenate((pending_right, b), axis=1)
         cursor = 0
         while pending_left.shape[1] - cursor >= SPECTRAL_WINDOW_SAMPLES:
-            spectrum(pending_left[:, cursor : cursor + SPECTRAL_WINDOW_SAMPLES], pending_right[:, cursor : cursor + SPECTRAL_WINDOW_SAMPLES])
+            spectrum(
+                pending_left[:, cursor : cursor + SPECTRAL_WINDOW_SAMPLES],
+                pending_right[:, cursor : cursor + SPECTRAL_WINDOW_SAMPLES],
+            )
             cursor += SPECTRAL_WINDOW_SAMPLES
-        pending_left, pending_right = pending_left[:, cursor:].copy(), pending_right[:, cursor:].copy()
+        pending_left, pending_right = (
+            pending_left[:, cursor:].copy(),
+            pending_right[:, cursor:].copy(),
+        )
     if pending_left.shape[1]:
         spectrum(pending_left, pending_right)
     if count == 0:
         raise ValueError("paired audio contains no samples")
     ratios = [math.sqrt(float(b / a)) if a > 0 else None for a, b in zip(energy_left, energy_right)]
-    cosines = [min(1.0, max(0.0, float(dot / math.sqrt(a * b)))) if a > 0 and b > 0 else None for dot, a, b in zip(spectral_dot, spectral_left, spectral_right)]
+    cosines = [
+        min(1.0, max(0.0, float(dot / math.sqrt(a * b)))) if a > 0 and b > 0 else None
+        for dot, a, b in zip(spectral_dot, spectral_left, spectral_right)
+    ]
     return {
         "audio_channel_count": channels,
         "audio_compared_samples_per_channel": count,
@@ -547,12 +845,21 @@ def _compare_audio(baseline: Path, candidate: Path, av: Any, np: Any, channels: 
         "audio_waveform_mae_channels": (absolute / count).tolist(),
         "audio_waveform_rmse_channels": np.sqrt(squared_error / count).tolist(),
         "audio_identical": bool(np.all(squared_error == 0)),
-        "audio_rms_ratio": math.sqrt(float(energy_right.sum() / energy_left.sum())) if energy_left.sum() > 0 else None,
+        "audio_rms_ratio": math.sqrt(float(energy_right.sum() / energy_left.sum()))
+        if energy_left.sum() > 0
+        else None,
         "audio_rms_ratio_channels": ratios,
-        "audio_spectral_cosine": min(cosines) if all(value is not None for value in cosines) else None,
+        "audio_spectral_cosine": min(cosines)
+        if all(value is not None for value in cosines)
+        else None,
         "audio_spectral_cosine_channels": cosines,
         "audio_spectral_windows": windows,
-        "audio_newly_silent_channels": [index for index, (a, b) in enumerate(zip(energy_left, energy_right)) if math.sqrt(float(a / count)) > SILENCE_AMPLITUDE and math.sqrt(float(b / count)) <= SILENCE_AMPLITUDE],
+        "audio_newly_silent_channels": [
+            index
+            for index, (a, b) in enumerate(zip(energy_left, energy_right))
+            if math.sqrt(float(a / count)) > SILENCE_AMPLITUDE
+            and math.sqrt(float(b / count)) <= SILENCE_AMPLITUDE
+        ],
     }
 
 
@@ -568,10 +875,18 @@ def compare_media(baseline: Path, candidate: Path) -> dict:
     result: dict[str, Any] = {
         "compatible": False,
         "metrics": {
-            "video_mae": None, "video_psnr_db": None, "video_identical": None,
-            "video_compared_frames": 0, "video_total_frames": 0, "video_sample_coverage_fraction": 0.0,
-            "audio_waveform_mae": None, "audio_spectral_cosine": None, "audio_rms_ratio": None,
-            "audio_rms_ratio_channels": [], "audio_spectral_cosine_channels": [], "audio_waveform_mae_channels": [],
+            "video_mae": None,
+            "video_psnr_db": None,
+            "video_identical": None,
+            "video_compared_frames": 0,
+            "video_total_frames": 0,
+            "video_sample_coverage_fraction": 0.0,
+            "audio_waveform_mae": None,
+            "audio_spectral_cosine": None,
+            "audio_rms_ratio": None,
+            "audio_rms_ratio_channels": [],
+            "audio_spectral_cosine_channels": [],
+            "audio_waveform_mae_channels": [],
             "audio_channel_count": 0,
         },
         "checks": [],
@@ -586,23 +901,63 @@ def compare_media(baseline: Path, candidate: Path) -> dict:
     }
     left, right = analyze_media(baseline), analyze_media(candidate)
     checks = result["checks"]
-    checks.append(_check("pair.valid_media", left["valid"] and right["valid"], {"baseline": left["valid"], "candidate": right["valid"]}, {"baseline": True, "candidate": True}, "Both original files must decode fully with valid media timing."))
+    checks.append(
+        _check(
+            "pair.valid_media",
+            left["valid"] and right["valid"],
+            {"baseline": left["valid"], "candidate": right["valid"]},
+            {"baseline": True, "candidate": True},
+            "Both original files must decode fully with valid media timing.",
+        )
+    )
     if not left["valid"] or not right["valid"]:
         result["notes"].extend(left["errors"] + right["errors"])
         return result
     for field in ("width", "height", "frame_count"):
         a, b = left["video"][field], right["video"][field]
-        checks.append(_check(f"pair.video.{field}", a == b, {"baseline": a, "candidate": b}, "equal", "Original dimensions and complete decoded frame counts must match."))
+        checks.append(
+            _check(
+                f"pair.video.{field}",
+                a == b,
+                {"baseline": a, "candidate": b},
+                "equal",
+                "Original dimensions and complete decoded frame counts must match.",
+            )
+        )
     video_tick = max(left["video"]["time_base_seconds"], right["video"]["time_base_seconds"], 1e-9)
     for field in ("start_time_seconds", "end_time_seconds"):
         a, b = left["video"][field], right["video"][field]
-        checks.append(_check(f"pair.video.{field}", a is not None and b is not None and abs(a - b) <= video_tick + 1e-9, {"baseline": a, "candidate": b}, {"maximum_delta_seconds": video_tick}, "No timestamp offset or duration trimming is allowed."))
+        checks.append(
+            _check(
+                f"pair.video.{field}",
+                a is not None and b is not None and abs(a - b) <= video_tick + 1e-9,
+                {"baseline": a, "candidate": b},
+                {"maximum_delta_seconds": video_tick},
+                "No timestamp offset or duration trimming is allowed.",
+            )
+        )
     left_audio, right_audio = left["audio"]["present"], right["audio"]["present"]
-    checks.append(_check("pair.audio.presence", left_audio == right_audio if left_audio or right_audio else None, {"baseline": left_audio, "candidate": right_audio}, "equal", "Both clips may omit audio; an audio stream may not disappear in only one clip."))
+    checks.append(
+        _check(
+            "pair.audio.presence",
+            left_audio == right_audio if left_audio or right_audio else None,
+            {"baseline": left_audio, "candidate": right_audio},
+            "equal",
+            "Both clips may omit audio; an audio stream may not disappear in only one clip.",
+        )
+    )
     if left_audio and right_audio:
         for field in ("sample_rate_hz", "channels", "channel_names", "sample_count"):
             a, b = left["audio"][field], right["audio"][field]
-            checks.append(_check(f"pair.audio.{field}", a == b, {"baseline": a, "candidate": b}, "equal", "PCM channel order, sample rate, and complete sample counts must match."))
+            checks.append(
+                _check(
+                    f"pair.audio.{field}",
+                    a == b,
+                    {"baseline": a, "candidate": b},
+                    "equal",
+                    "PCM channel order, sample rate, and complete sample counts must match.",
+                )
+            )
     if any(check["status"] == "failed" for check in checks):
         return result
     metrics = dict(result["metrics"])
@@ -615,7 +970,9 @@ def compare_media(baseline: Path, candidate: Path) -> dict:
             delta = abs(_time(a) - _time(b))
             max_alignment_delta = max(max_alignment_delta, delta)
             if delta > video_tick + 1e-9:
-                raise ValueError("video frame timestamps do not align; frame-index matching alone is insufficient")
+                raise ValueError(
+                    "video frame timestamps do not align; frame-index matching alone is insufficient"
+                )
             x, y = a.to_ndarray(format="rgb24"), b.to_ndarray(format="rgb24")
             if x.shape != y.shape:
                 raise ValueError("video geometry changed during comparison")
@@ -626,21 +983,48 @@ def compare_media(baseline: Path, candidate: Path) -> dict:
             samples += x.size
             count += 1
         mse = squared_sum / (samples * 255.0 * 255.0)
-        metrics.update({
-            "video_mae": absolute_sum / (samples * 255.0),
-            "video_psnr_db": -10.0 * math.log10(mse) if mse > 0 else None,
-            "video_identical": squared_sum == 0,
-            "video_compared_frames": count,
-            "video_total_frames": left["video"]["frame_count"],
-            "video_sample_coverage_fraction": 1.0,
-            "video_max_alignment_delta_seconds": max_alignment_delta,
-        })
+        metrics.update(
+            {
+                "video_mae": absolute_sum / (samples * 255.0),
+                "video_psnr_db": -10.0 * math.log10(mse) if mse > 0 else None,
+                "video_identical": squared_sum == 0,
+                "video_compared_frames": count,
+                "video_total_frames": left["video"]["frame_count"],
+                "video_sample_coverage_fraction": 1.0,
+                "video_max_alignment_delta_seconds": max_alignment_delta,
+            }
+        )
         if left_audio and right_audio:
-            metrics.update(_compare_audio(baseline, candidate, av, np, left["audio"]["channels"], left["audio"]["sample_rate_hz"]))
-        checks.append(_check("pair.full_stream_alignment", True, True, True, "Every compared frame/sample met temporal compatibility; all streams were exhausted."))
+            metrics.update(
+                _compare_audio(
+                    baseline,
+                    candidate,
+                    av,
+                    np,
+                    left["audio"]["channels"],
+                    left["audio"]["sample_rate_hz"],
+                )
+            )
+        checks.append(
+            _check(
+                "pair.full_stream_alignment",
+                True,
+                True,
+                True,
+                "Every compared frame/sample met temporal compatibility; all streams were exhausted.",
+            )
+        )
         result["metrics"] = metrics
         result["compatible"] = True
     except Exception as exc:
-        checks.append(_check("pair.full_stream_alignment", False, str(exc), "complete aligned streams", "Partial comparison metrics are discarded on any decoding, shape, or timing failure."))
+        checks.append(
+            _check(
+                "pair.full_stream_alignment",
+                False,
+                str(exc),
+                "complete aligned streams",
+                "Partial comparison metrics are discarded on any decoding, shape, or timing failure.",
+            )
+        )
         result["notes"].append(f"{type(exc).__name__}: {exc}")
     return result

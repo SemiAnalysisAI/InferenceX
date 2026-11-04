@@ -50,10 +50,20 @@ def plan():
             "audio_flow_shift": 3.0,
         },
         "cases": [
-            {"case_id": "fixture-a", "prompt": "LOCAL TEST: motion and sound.", "seed": 42,
-             "requires_motion": True, "requires_sound": True},
-            {"case_id": "fixture-b", "prompt": "LOCAL TEST: a quiet still scene.", "seed": 91,
-             "requires_motion": False, "requires_sound": False},
+            {
+                "case_id": "fixture-a",
+                "prompt": "LOCAL TEST: motion and sound.",
+                "seed": 42,
+                "requires_motion": True,
+                "requires_sound": True,
+            },
+            {
+                "case_id": "fixture-b",
+                "prompt": "LOCAL TEST: a quiet still scene.",
+                "seed": 91,
+                "requires_motion": False,
+                "requires_sound": False,
+            },
         ],
         "repetitions": 2,
         "warmup_runs": 1,
@@ -72,20 +82,38 @@ def mocked_media(monkeypatch, tmp_path):
         calls.append((path, expected))
         return {
             "decode_ok": True,
-            "video": {"width": expected["width"], "height": expected["height"],
-                      "frame_count": expected["frame_count"], "fps": expected["fps"]},
-            "audio": {"sample_rate_hz": expected["audio_sample_rate_hz"], "channels": expected["audio_channels"]},
+            "video": {
+                "width": expected["width"],
+                "height": expected["height"],
+                "frame_count": expected["frame_count"],
+                "fps": expected["fps"],
+            },
+            "audio": {
+                "sample_rate_hz": expected["audio_sample_rate_hz"],
+                "channels": expected["audio_channels"],
+            },
             "checks": {"fixture_analysis_only": state["valid"]},
             "valid": state["valid"],
             "metrics": {},
         }
 
-    monkeypatch.setitem(sys.modules, "evaluator.media", SimpleNamespace(
-        analyze_media=analyze, IMPLEMENTATION_VERSION="local-test-fixture", __file__=str(analyzer),
-    ))
-    monkeypatch.setitem(sys.modules, "av", SimpleNamespace(
-        __version__="local-test-fixture", library_versions={"libavcodec": (62, 1, 2)},
-    ))
+    monkeypatch.setitem(
+        sys.modules,
+        "evaluator.media",
+        SimpleNamespace(
+            analyze_media=analyze,
+            IMPLEMENTATION_VERSION="local-test-fixture",
+            __file__=str(analyzer),
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "av",
+        SimpleNamespace(
+            __version__="local-test-fixture",
+            library_versions={"libavcodec": (62, 1, 2)},
+        ),
+    )
     monkeypatch.setitem(sys.modules, "numpy", SimpleNamespace(__version__="local-test-fixture"))
     monkeypatch.setattr(runner, "POLL_INTERVAL_SECONDS", 0.001)
     return calls, state
@@ -107,7 +135,10 @@ def fixture_server():
 
             def send(self, status, body, *, headers=None, announced_length=None):
                 self.send_response(status)
-                self.send_header("Content-Length", str(len(body) if announced_length is None else announced_length))
+                self.send_header(
+                    "Content-Length",
+                    str(len(body) if announced_length is None else announced_length),
+                )
                 self.send_header("Connection", "close")
                 for key, value in (headers or {}).items():
                     self.send_header(key, value)
@@ -119,7 +150,9 @@ def fixture_server():
                 self.close_connection = True
 
             def send_json(self, status, body):
-                self.send(status, json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+                self.send(
+                    status, json.dumps(body).encode(), headers={"Content-Type": "application/json"}
+                )
 
             def do_POST(self):
                 state["requests"].append(("POST", self.path))
@@ -130,10 +163,17 @@ def fixture_server():
                 content_type = self.headers.get("Content-Type", "")
                 if content_type.startswith("multipart/form-data"):
                     message = BytesParser(policy=policy.default).parsebytes(
-                        b"Content-Type: " + content_type.encode() + b"\r\nMIME-Version: 1.0\r\n\r\n" + body
+                        b"Content-Type: "
+                        + content_type.encode()
+                        + b"\r\nMIME-Version: 1.0\r\n\r\n"
+                        + body
                     )
-                    payload = {part.get_param("name", header="content-disposition"): part.get_payload(decode=True).decode()
-                               for part in message.iter_parts()}
+                    payload = {
+                        part.get_param("name", header="content-disposition"): part.get_payload(
+                            decode=True
+                        ).decode()
+                        for part in message.iter_parts()
+                    }
                 else:
                     payload = json.loads(body)
                 with submission_lock:
@@ -158,15 +198,25 @@ def fixture_server():
                         self.send(200, FIXTURE_BYTES, headers={"Content-Type": "video/mp4"})
                 else:
                     state["polls"][self.path] = state["polls"].get(self.path, 0) + 1
-                    status = "queued" if state["mode"] == "timeout" else (
-                        "failed" if state["mode"] == "job_failed" else "completed"
+                    status = (
+                        "queued"
+                        if state["mode"] == "timeout"
+                        else ("failed" if state["mode"] == "job_failed" else "completed")
                     )
-                    self.send_json(200, {"id": self.path.rsplit("/", 1)[-1], "status": status,
-                                         "error": "do-not-log-this-server-secret"})
+                    self.send_json(
+                        200,
+                        {
+                            "id": self.path.rsplit("/", 1)[-1],
+                            "status": status,
+                            "error": "do-not-log-this-server-secret",
+                        },
+                    )
 
         server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         server.daemon_threads = True
-        thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.005}, daemon=True)
+        thread = threading.Thread(
+            target=server.serve_forever, kwargs={"poll_interval": 0.005}, daemon=True
+        )
         thread.start()
         servers.append((server, thread))
         return f"http://127.0.0.1:{server.server_port}", state
@@ -180,7 +230,9 @@ def fixture_server():
 
 def execute(plan, output_dir, endpoint, **kwargs):
     return runner.run_plan(
-        plan, output_dir, endpoint=endpoint,
+        plan,
+        output_dir,
+        endpoint=endpoint,
         runtime_revision="253020450290328e9deb307eece1e402fa17f35e",
         hardware_label="LOCAL HTTP FIXTURE; no GPU and no H3 execution",
         model_revision=MODEL_REVISION,
@@ -189,7 +241,9 @@ def execute(plan, output_dir, endpoint, **kwargs):
 
 
 @pytest.mark.parametrize("runtime", ["sglang", "vllm-omni"])
-def test_local_http_fixture_lifecycle_and_identity(plan, tmp_path, mocked_media, fixture_server, runtime):
+def test_local_http_fixture_lifecycle_and_identity(
+    plan, tmp_path, mocked_media, fixture_server, runtime
+):
     output = tmp_path / runtime
     intents_seen = []
 
@@ -205,13 +259,22 @@ def test_local_http_fixture_lifecycle_and_identity(plan, tmp_path, mocked_media,
     assert len(run["records"]) == 5
     assert len(server["posts"]) == 5
     assert len(intents_seen) == 5
-    assert run["summary"]["scheduled"] == run["summary"]["completed"] == run["summary"]["valid"] == 4
+    assert (
+        run["summary"]["scheduled"] == run["summary"]["completed"] == run["summary"]["valid"] == 4
+    )
     assert run["summary"]["failed"] == 0
     assert run["summary"]["technical_success_rate"] == 1
-    assert math.isclose(run["summary"]["valid_clips_per_second"], 4 / run["measurement"]["wall_seconds"])
+    assert math.isclose(
+        run["summary"]["valid_clips_per_second"], 4 / run["measurement"]["wall_seconds"]
+    )
     assert all(record["latency_seconds"] > 0 for record in run["records"])
     for record in run["records"]:
-        assert 0 < record["submit_to_terminal_seconds"] <= record["submit_to_media_seconds"] <= record["latency_seconds"]
+        assert (
+            0
+            < record["submit_to_terminal_seconds"]
+            <= record["submit_to_media_seconds"]
+            <= record["latency_seconds"]
+        )
         assert 0 <= record["media_validation_seconds"] <= record["latency_seconds"]
     assert run["summary"]["latency_samples"] == 4
     assert run["summary"]["latency_sample_stddev_seconds"] is not None
@@ -225,7 +288,8 @@ def test_local_http_fixture_lifecycle_and_identity(plan, tmp_path, mocked_media,
     assert config["media_evaluator"] == {
         "implementation_version": "local-test-fixture",
         "source_sha256": hashlib.sha256(ANALYZER_BYTES).hexdigest(),
-        "pyav_version": "local-test-fixture", "numpy_version": "local-test-fixture",
+        "pyav_version": "local-test-fixture",
+        "numpy_version": "local-test-fixture",
         "ffmpeg_libraries": {"libavcodec": "62.1.2"},
     }
     digest = config.pop("configuration_sha256")
@@ -258,35 +322,61 @@ def test_fairness_request_and_disjoint_warmup_reach_local_http_fixture(
     path = Path(__file__).resolve().parents[1] / "specs/h3-v0.1.yaml"
     plan = h3_spec.plan_for(h3_spec.load_spec(path), "release-v1")
     plan["cases"] = [
-        {"case_id": f"measured-{i}", "prompt": f"controlled measured scene {i}", "seed": i,
-         "requires_motion": True, "requires_sound": True}
+        {
+            "case_id": f"measured-{i}",
+            "prompt": f"controlled measured scene {i}",
+            "seed": i,
+            "requires_motion": True,
+            "requires_sound": True,
+        }
         for i in range(20)
     ]
-    plan["warmup_case"] = {"case_id": "warmup", "prompt": "independent warmup scene", "seed": 17,
-                           "requires_motion": True, "requires_sound": True}
+    plan["warmup_case"] = {
+        "case_id": "warmup",
+        "prompt": "independent warmup scene",
+        "seed": 17,
+        "requires_motion": True,
+        "requires_sound": True,
+    }
     plan["repetitions"], plan["warmup_runs"] = 1, 1
     preview = runner.preview_plan(plan, runtime=runtime)
     assert preview["measurement_count"] == 20
     assert preview["total_requests"] == 21
     assert preview["slots"][0]["prompt"] not in {slot["prompt"] for slot in preview["slots"][1:]}
     endpoint, server = fixture_server()
-    identity = {"runtime_revision": "253020450290328e9deb307eece1e402fa17f35e", "image_digest": "a" * 64, "server_argv": ["serve", runtime],
-                "server_environment": {"CACHE": "0"}, "gpu_topology": {"gpu_uuids": ["GPU-fixture"]},
-                "algorithm_config": {"generation": plan["generation"], "fairness": plan["fairness"]}}
+    identity = {
+        "runtime_revision": "253020450290328e9deb307eece1e402fa17f35e",
+        "image_digest": "a" * 64,
+        "server_argv": ["serve", runtime],
+        "server_environment": {"CACHE": "0"},
+        "gpu_topology": {"gpu_uuids": ["GPU-fixture"]},
+        "algorithm_config": {"generation": plan["generation"], "fairness": plan["fairness"]},
+    }
     run = execute(plan, tmp_path / runtime, endpoint, runtime=runtime, numerical_identity=identity)
     assert run["summary"]["valid"] == 20
     assert run["configuration"]["numerical_identity"] == identity
     assert len(server["posts"]) == 21
-    assert all(record["expected_media"]["duration_seconds"] == 124 / 24 for record in run["records"])
+    assert all(
+        record["expected_media"]["duration_seconds"] == 124 / 24 for record in run["records"]
+    )
     assert all(record["expected_media"]["encoding"]["crf"] == 18 for record in run["records"])
     assert all(str(post["num_inference_steps"]) == "49" for post in server["posts"])
     if runtime == "sglang":
-        assert all(post["x264_preset"] == "ultrafast" and post["output_compression"] == 63 for post in server["posts"])
+        assert all(
+            post["x264_preset"] == "ultrafast" and post["output_compression"] == 63
+            for post in server["posts"]
+        )
     else:
-        assert all(json.loads(post["extra_params"])["video_codec_options"] == {"preset": "ultrafast", "crf": "18"} for post in server["posts"])
+        assert all(
+            json.loads(post["extra_params"])["video_codec_options"]
+            == {"preset": "ultrafast", "crf": "18"}
+            for post in server["posts"]
+        )
 
 
-def test_http_failure_is_durable_never_retried_and_aborts_unknown_jobs(plan, tmp_path, mocked_media, fixture_server):
+def test_http_failure_is_durable_never_retried_and_aborts_unknown_jobs(
+    plan, tmp_path, mocked_media, fixture_server
+):
     plan["warmup_runs"] = 0
     endpoint, state = fixture_server(mode="http_error")
     output = tmp_path / "failed-http-fixture"
@@ -303,12 +393,17 @@ def test_http_failure_is_durable_never_retried_and_aborts_unknown_jobs(plan, tmp
     assert run["records"][0]["submit_to_terminal_seconds"] is None
     assert run["records"][1]["submit_to_media_seconds"] is None
     assert "HTTP 500" in run["records"][0]["error"]
-    assert all(record["error"] == "not_started_after_uncertain_remote_completion" for record in run["records"][1:])
+    assert all(
+        record["error"] == "not_started_after_uncertain_remote_completion"
+        for record in run["records"][1:]
+    )
     assert "do-not-log-this-server-secret" not in (output / "events.jsonl").read_text()
     assert "do-not-log-this-server-secret" not in (output / "run.json").read_text()
 
 
-def test_known_failed_job_does_not_remove_other_scheduled_attempts(plan, tmp_path, mocked_media, fixture_server):
+def test_known_failed_job_does_not_remove_other_scheduled_attempts(
+    plan, tmp_path, mocked_media, fixture_server
+):
     plan["warmup_runs"] = 0
     endpoint, state = fixture_server(mode="job_failed")
     run = execute(plan, tmp_path / "failed-jobs-fixture", endpoint)
@@ -318,7 +413,9 @@ def test_known_failed_job_does_not_remove_other_scheduled_attempts(plan, tmp_pat
     assert run["abort_reason"] is None
 
 
-def test_timeout_is_bounded_and_retains_all_denominators(plan, tmp_path, mocked_media, fixture_server):
+def test_timeout_is_bounded_and_retains_all_denominators(
+    plan, tmp_path, mocked_media, fixture_server
+):
     plan["warmup_runs"] = 0
     endpoint, state = fixture_server(mode="timeout")
     start = time.monotonic()
@@ -331,7 +428,9 @@ def test_timeout_is_bounded_and_retains_all_denominators(plan, tmp_path, mocked_
     assert run["records"][1]["attempted"] is False
 
 
-def test_completed_but_invalid_media_is_not_technical_success(plan, tmp_path, mocked_media, fixture_server):
+def test_completed_but_invalid_media_is_not_technical_success(
+    plan, tmp_path, mocked_media, fixture_server
+):
     plan["warmup_runs"] = 0
     _, media = mocked_media
     media["valid"] = False
@@ -354,7 +453,9 @@ def test_failed_warmup_cannot_qualify_a_measured_run(plan, tmp_path, mocked_medi
     assert run["measurement"]["warmup_qualified"] is False
     assert run["measurement"]["warmup_status"] == "failed"
     assert run["summary"]["scheduled"] == run["summary"]["not_started"] == 4
-    assert all(record["error"] == "not_started_after_failed_warmup" for record in run["records"][1:])
+    assert all(
+        record["error"] == "not_started_after_failed_warmup" for record in run["records"][1:]
+    )
 
 
 def test_download_size_and_integrity_limits(plan, tmp_path, mocked_media, fixture_server):
@@ -370,7 +471,9 @@ def test_download_size_and_integrity_limits(plan, tmp_path, mocked_media, fixtur
     assert not mocked_media[0]
 
 
-def test_refuses_overwrite_without_network_or_file_changes(plan, tmp_path, mocked_media, fixture_server):
+def test_refuses_overwrite_without_network_or_file_changes(
+    plan, tmp_path, mocked_media, fixture_server
+):
     output = tmp_path / "existing"
     output.mkdir()
     marker = output / "user-owned.txt"
@@ -383,7 +486,9 @@ def test_refuses_overwrite_without_network_or_file_changes(plan, tmp_path, mocke
     assert not state["requests"]
 
 
-def test_credential_is_not_persisted_or_forwarded_on_redirect(plan, tmp_path, mocked_media, fixture_server, monkeypatch):
+def test_credential_is_not_persisted_or_forwarded_on_redirect(
+    plan, tmp_path, mocked_media, fixture_server, monkeypatch
+):
     monkeypatch.setenv("VGBENCH_TEST_ONLY_TOKEN", "fixture-credential-never-a-real-key")
     endpoint, state = fixture_server(mode="redirect")
     output = tmp_path / "redirect-fixture"
@@ -403,7 +508,9 @@ def test_refuses_unsafe_or_hosted_endpoint_before_creating_output(plan, tmp_path
     assert not output.exists()
 
 
-def test_untrusted_job_id_cannot_change_download_destination(plan, tmp_path, mocked_media, fixture_server):
+def test_untrusted_job_id_cannot_change_download_destination(
+    plan, tmp_path, mocked_media, fixture_server
+):
     endpoint, state = fixture_server(mode="unsafe_id")
     run = execute(plan, tmp_path / "unsafe-id-fixture", endpoint)
     assert len(state["requests"]) == 1
@@ -430,7 +537,9 @@ def test_unsupported_or_inconsistent_generation_contracts_are_rejected(plan):
         runner.preview_plan(plan)
 
 
-def test_missing_media_dependency_prevents_live_submission(plan, tmp_path, mocked_media, fixture_server, monkeypatch):
+def test_missing_media_dependency_prevents_live_submission(
+    plan, tmp_path, mocked_media, fixture_server, monkeypatch
+):
     monkeypatch.setitem(sys.modules, "av", None)
     endpoint, server = fixture_server()
     output = tmp_path / "dependency-missing"
@@ -440,7 +549,9 @@ def test_missing_media_dependency_prevents_live_submission(plan, tmp_path, mocke
     assert not server["requests"]
 
 
-def test_dns_timeout_cannot_submit_late_request(plan, tmp_path, mocked_media, fixture_server, monkeypatch):
+def test_dns_timeout_cannot_submit_late_request(
+    plan, tmp_path, mocked_media, fixture_server, monkeypatch
+):
     plan["warmup_runs"] = 0
     endpoint, server = fixture_server()
     release_resolver = threading.Event()
@@ -460,7 +571,9 @@ def test_dns_timeout_cannot_submit_late_request(plan, tmp_path, mocked_media, fi
         release_resolver.set()
 
 
-def test_keyboard_interrupt_retains_inflight_outcome_and_schedule(plan, tmp_path, mocked_media, fixture_server, monkeypatch):
+def test_keyboard_interrupt_retains_inflight_outcome_and_schedule(
+    plan, tmp_path, mocked_media, fixture_server, monkeypatch
+):
     plan["warmup_runs"] = 0
     endpoint, server = fixture_server()
 
@@ -479,8 +592,10 @@ def test_keyboard_interrupt_retains_inflight_outcome_and_schedule(plan, tmp_path
     assert run["records"][0]["error"].startswith("interrupted by operator")
 
 
-def test_serving_overlaps_requests_without_waiting_for_local_validation(plan, tmp_path, mocked_media, fixture_server, monkeypatch):
-    plan['warmup_runs'] = 0
+def test_serving_overlaps_requests_without_waiting_for_local_validation(
+    plan, tmp_path, mocked_media, fixture_server, monkeypatch
+):
+    plan["warmup_runs"] = 0
     pair = threading.Barrier(2)
     submitted = threading.Event()
     count = [0]
@@ -494,60 +609,84 @@ def test_serving_overlaps_requests_without_waiting_for_local_validation(plan, tm
         pair.wait(timeout=2)
 
     endpoint, state = fixture_server(before_submit=before_submit)
-    analyzer = sys.modules['evaluator.media'].analyze_media
+    analyzer = sys.modules["evaluator.media"].analyze_media
 
     def validate_after_submissions(path, expected):
-        assert submitted.wait(2), 'local validation blocked later submissions'
+        assert submitted.wait(2), "local validation blocked later submissions"
         return analyzer(path, expected)
 
-    monkeypatch.setattr(sys.modules['evaluator.media'], 'analyze_media', validate_after_submissions)
-    run = execute(plan, tmp_path / 'serving', endpoint, serving_concurrency=2, delivery_deadline_seconds=10)
-    assert run['status'] == 'complete'
-    assert run['serving']['peak_client_in_flight'] == 2
-    assert run['summary']['valid'] == 4
-    assert run['serving']['deadline_met_valid_clips'] == 4
-    assert run['serving']['client_ready_latency_seconds']['p90'] is None
-    assert len({r['job_id'] for r in run['records']}) == 4
-    assert [r['slot_id'] for r in run['records']] == [s['slot_id'] for s in runner._slots(plan)]
-    window = run['measurement']
-    assert window['boundary'] == 'submit_to_downloaded_media'
-    assert window['end_monotonic_seconds'] == max(r['timing_window']['transport_end_monotonic_seconds'] for r in run['records'])
-    assert run['summary']['valid_clips_per_second'] == 4 / window['wall_seconds']
-    for record in run['records']:
-        assert 0 <= record['submit_to_accepted_seconds'] <= record['submit_to_terminal_seconds'] <= record['submit_to_media_seconds'] <= record['latency_seconds']
-    assert len(state['posts']) == 4
+    monkeypatch.setattr(sys.modules["evaluator.media"], "analyze_media", validate_after_submissions)
+    run = execute(
+        plan, tmp_path / "serving", endpoint, serving_concurrency=2, delivery_deadline_seconds=10
+    )
+    assert run["status"] == "complete"
+    assert run["serving"]["peak_client_in_flight"] == 2
+    assert run["summary"]["valid"] == 4
+    assert run["serving"]["deadline_met_valid_clips"] == 4
+    assert run["serving"]["client_ready_latency_seconds"]["p90"] is None
+    assert len({r["job_id"] for r in run["records"]}) == 4
+    assert [r["slot_id"] for r in run["records"]] == [s["slot_id"] for s in runner._slots(plan)]
+    window = run["measurement"]
+    assert window["boundary"] == "submit_to_downloaded_media"
+    assert window["end_monotonic_seconds"] == max(
+        r["timing_window"]["transport_end_monotonic_seconds"] for r in run["records"]
+    )
+    assert run["summary"]["valid_clips_per_second"] == 4 / window["wall_seconds"]
+    for record in run["records"]:
+        assert (
+            0
+            <= record["submit_to_accepted_seconds"]
+            <= record["submit_to_terminal_seconds"]
+            <= record["submit_to_media_seconds"]
+            <= record["latency_seconds"]
+        )
+    assert len(state["posts"]) == 4
 
 
-def test_serving_unknown_remote_completion_stops_queued_requests(plan, tmp_path, mocked_media, fixture_server):
-    plan['warmup_runs'] = 0
+def test_serving_unknown_remote_completion_stops_queued_requests(
+    plan, tmp_path, mocked_media, fixture_server
+):
+    plan["warmup_runs"] = 0
     pair = threading.Barrier(2)
-    endpoint, state = fixture_server(mode='timeout', before_submit=lambda: pair.wait(timeout=2))
-    run = execute(plan, tmp_path / 'timeout', endpoint, serving_concurrency=2, timeout_seconds=.1)
-    assert len(state['posts']) == 2
-    assert run['summary']['scheduled'] == run['summary']['failed'] == 4
-    assert run['summary']['not_started'] == 2
-    assert run['serving']['outcomes']['timed_out'] == 2, run['records']
-    assert run['serving']['outcomes']['not_started'] == 2
-    assert run['serving']['peak_client_in_flight'] == 2
-    assert run['serving']['client_ready_latency_seconds']['sample_count'] == 0
+    endpoint, state = fixture_server(mode="timeout", before_submit=lambda: pair.wait(timeout=2))
+    run = execute(plan, tmp_path / "timeout", endpoint, serving_concurrency=2, timeout_seconds=0.1)
+    assert len(state["posts"]) == 2
+    assert run["summary"]["scheduled"] == run["summary"]["failed"] == 4
+    assert run["summary"]["not_started"] == 2
+    assert run["serving"]["outcomes"]["timed_out"] == 2, run["records"]
+    assert run["serving"]["outcomes"]["not_started"] == 2
+    assert run["serving"]["peak_client_in_flight"] == 2
+    assert run["serving"]["client_ready_latency_seconds"]["sample_count"] == 0
 
 
-def test_serving_failed_warmup_never_submits_measured_requests(plan, tmp_path, mocked_media, fixture_server):
-    mocked_media[1]['valid'] = False
+def test_serving_failed_warmup_never_submits_measured_requests(
+    plan, tmp_path, mocked_media, fixture_server
+):
+    mocked_media[1]["valid"] = False
     endpoint, state = fixture_server()
-    run = execute(plan, tmp_path / 'warmup-failure', endpoint, serving_concurrency=2)
-    assert len(state['posts']) == 1
-    assert run['summary']['not_started'] == 4
-    assert run['measurement']['warmup_status'] == 'failed'
-    assert run['serving']['peak_client_in_flight'] == 0
+    run = execute(plan, tmp_path / "warmup-failure", endpoint, serving_concurrency=2)
+    assert len(state["posts"]) == 1
+    assert run["summary"]["not_started"] == 4
+    assert run["measurement"]["warmup_status"] == "failed"
+    assert run["serving"]["peak_client_in_flight"] == 0
 
 
-def test_watchdog_deadline_wins_over_socket_teardown_errors(plan, tmp_path, mocked_media, monkeypatch):
-    plan['warmup_runs'] = 0
+def test_watchdog_deadline_wins_over_socket_teardown_errors(
+    plan, tmp_path, mocked_media, monkeypatch
+):
+    plan["warmup_runs"] = 0
+
     def stopped_transfer(*args, deadline, **kwargs):
-        time.sleep(max(0, deadline-time.monotonic()) + .001)
-        raise ConnectionError('CPU fixture: watchdog closed transport')
-    monkeypatch.setattr(runner, '_json_request', stopped_transfer)
-    run = execute(plan, tmp_path / 'deadline', 'http://127.0.0.1:1', serving_concurrency=1, timeout_seconds=.01)
-    assert run['serving']['outcomes']['timed_out'] == 1
-    assert run['summary']['not_started'] == 3
+        time.sleep(max(0, deadline - time.monotonic()) + 0.001)
+        raise ConnectionError("CPU fixture: watchdog closed transport")
+
+    monkeypatch.setattr(runner, "_json_request", stopped_transfer)
+    run = execute(
+        plan,
+        tmp_path / "deadline",
+        "http://127.0.0.1:1",
+        serving_concurrency=1,
+        timeout_seconds=0.01,
+    )
+    assert run["serving"]["outcomes"]["timed_out"] == 1
+    assert run["summary"]["not_started"] == 3

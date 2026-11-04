@@ -5,10 +5,9 @@ import hashlib
 import json
 from pathlib import Path
 
+import av
+import numpy as np
 import pytest
-
-av = pytest.importorskip("av")
-np = pytest.importorskip("numpy")
 
 from evaluator.media import analyze_media, compare_media
 
@@ -59,7 +58,9 @@ def encode_media(
             if not blank:
                 pixels[:, :, 0] = 40
                 pixels[:, :, 1] = np.arange(width, dtype=np.uint8)[None, :] * 3
-                moving_index = min(index, freeze_after_frame) if freeze_after_frame is not None else index
+                moving_index = (
+                    min(index, freeze_after_frame) if freeze_after_frame is not None else index
+                )
                 x = (4 + moving_index * 3) % (width - 12)
                 pixels[8:24, x : x + 12] = [220, 90, 20]
                 if video_change:
@@ -77,11 +78,17 @@ def encode_media(
                 if is_mp4:
                     values, fmt = chunk.astype(np.float32), "fltp"
                 else:
-                    values = np.round(np.clip(chunk, -1, 32767 / 32768) * 32768).astype(np.int16).T.reshape(1, -1)
+                    values = (
+                        np.round(np.clip(chunk, -1, 32767 / 32768) * 32768)
+                        .astype(np.int16)
+                        .T.reshape(1, -1)
+                    )
                     fmt = "s16"
                 frame = av.AudioFrame.from_ndarray(values, format=fmt, layout="stereo")
                 frame.sample_rate = sample_rate
-                frame.pts = start + round((timestamp_offset_seconds + audio_offset_seconds) * sample_rate)
+                frame.pts = start + round(
+                    (timestamp_offset_seconds + audio_offset_seconds) * sample_rate
+                )
                 frame.time_base = Fraction(1, sample_rate)
                 for packet in audio.encode(frame):
                     container.mux(packet)
@@ -118,7 +125,9 @@ def test_full_decode_contract_and_channel_statistics(tmp_path):
     assert result["video"]["duration_seconds"] == pytest.approx(0.8)
     assert result["audio"]["sample_count"] == 19200
     assert result["audio"]["channels"] == 2
-    assert result["audio"]["rms_channels"] == pytest.approx([0.35 / 2**0.5, 0.25 / 2**0.5], abs=5e-5)
+    assert result["audio"]["rms_channels"] == pytest.approx(
+        [0.35 / 2**0.5, 0.25 / 2**0.5], abs=5e-5
+    )
     assert result["audio"]["silent_channels"] == []
     assert result["metrics"]["av_start_skew_seconds"] == pytest.approx(0.0)
     assert result["metrics"]["av_end_skew_seconds"] == pytest.approx(0.0, abs=0.001)
@@ -139,12 +148,26 @@ def test_corrupt_file_fails_without_pretending_it_is_a_clip(tmp_path):
 
 def test_wrong_media_contract_fails(tmp_path):
     path = encode_media(tmp_path / "mismatch.mkv")
-    expected = expectation() | {"width": 128, "frame_count": 9, "fps": 24, "duration_seconds": 5, "audio_channels": 1, "audio_sample_rate_hz": 48000}
+    expected = expectation() | {
+        "width": 128,
+        "frame_count": 9,
+        "fps": 24,
+        "duration_seconds": 5,
+        "audio_channels": 1,
+        "audio_sample_rate_hz": 48000,
+    }
     result = analyze_media(path, expected)
     assert result["decode_ok"]
     assert not result["valid"]
     failed = {item["name"] for item in result["checks"] if item["status"] == "failed"}
-    assert {"video.width", "video.frame_count", "video.fps", "video.duration_seconds", "audio.channels", "audio.sample_rate_hz"} <= failed
+    assert {
+        "video.width",
+        "video.frame_count",
+        "video.fps",
+        "video.duration_seconds",
+        "audio.channels",
+        "audio.sample_rate_hz",
+    } <= failed
 
 
 def test_silence_freeze_and_blank_are_detected_without_quality_claims(tmp_path):
@@ -212,25 +235,41 @@ def test_audio_optional_and_identically_silent_pairs_are_explicit(tmp_path):
 def test_real_cpu_h3_encoding_checks_observable_streams_without_inventing_options(tmp_path):
     path = encode_media(tmp_path / "h3-contract.mp4", fps=24, frame_count=124, sample_rate=32000)
     encoding = {
-        "video_codec": "libx264", "preset": "ultrafast", "crf": 18,
-        "pixel_format": "yuv420p", "audio_codec": "aac",
-        "audio_sample_rate_hz": 32000, "audio_channels": 2,
+        "video_codec": "libx264",
+        "preset": "ultrafast",
+        "crf": 18,
+        "pixel_format": "yuv420p",
+        "audio_codec": "aac",
+        "audio_sample_rate_hz": 32000,
+        "audio_channels": 2,
     }
     expected = {
-        "width": 64, "height": 48, "fps": 24, "frame_count": 124,
-        "duration_seconds": 124 / 24, "audio_sample_rate_hz": 32000,
-        "audio_channels": 2, "encoding": encoding,
+        "width": 64,
+        "height": 48,
+        "fps": 24,
+        "frame_count": 124,
+        "duration_seconds": 124 / 24,
+        "audio_sample_rate_hz": 32000,
+        "audio_channels": 2,
+        "encoding": encoding,
     }
     result = analyze_media(path, expected)
     assert result["valid"] is True
-    assert {check["name"]: check["status"] for check in result["checks"] if check["name"] in {"video.codec", "video.pixel_format", "audio.codec"}} == {
-        "video.codec": "passed", "video.pixel_format": "passed", "audio.codec": "passed"
-    }
-    assert {"preset", "crf", "video_encoder_implementation"} <= set(result["encoding_evidence"]["unverified"])
+    assert {
+        check["name"]: check["status"]
+        for check in result["checks"]
+        if check["name"] in {"video.codec", "video.pixel_format", "audio.codec"}
+    } == {"video.codec": "passed", "video.pixel_format": "passed", "audio.codec": "passed"}
+    assert {"preset", "crf", "video_encoder_implementation"} <= set(
+        result["encoding_evidence"]["unverified"]
+    )
     wrong = encode_media(tmp_path / "wrong-encoder.mkv", fps=24, frame_count=124, sample_rate=32000)
     refused = analyze_media(wrong, expected)
     assert refused["valid"] is False
-    assert {check["name"] for check in refused["checks"] if check["status"] == "failed"} >= {"video.codec", "audio.codec"}
+    assert {check["name"] for check in refused["checks"] if check["status"] == "failed"} >= {
+        "video.codec",
+        "audio.codec",
+    }
 
 
 def test_optional_av_boundary_and_partial_freeze_gates_are_explicit(tmp_path):
@@ -240,7 +279,10 @@ def test_optional_av_boundary_and_partial_freeze_gates_are_explicit(tmp_path):
     assert unconstrained["metrics"]["av_start_skew_seconds"] == pytest.approx(0.2)
     constrained = analyze_media(offset, {"max_av_start_skew_seconds": 0.05})
     assert not constrained["valid"]
-    assert any(item["name"] == "av.start_skew_seconds" and item["status"] == "failed" for item in constrained["checks"])
+    assert any(
+        item["name"] == "av.start_skew_seconds" and item["status"] == "failed"
+        for item in constrained["checks"]
+    )
     short_audio = encode_media(tmp_path / "short-audio.mkv", audio_duration_scale=0.5)
     assert analyze_media(short_audio)["valid"]
     constrained = analyze_media(short_audio, {"max_av_end_skew_seconds": 0.05})

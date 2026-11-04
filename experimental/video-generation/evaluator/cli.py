@@ -54,6 +54,7 @@ def _mvp_command(arguments: argparse.Namespace) -> int:
 
             plan = _load_mvp_object(arguments.plan)
             from .serving import settings
+
             serving = settings(arguments.serving_concurrency, arguments.delivery_deadline_seconds)
             if not arguments.execute:
                 result = preview_plan(plan, runtime=arguments.runtime)
@@ -61,10 +62,19 @@ def _mvp_command(arguments: argparse.Namespace) -> int:
                     result["serving"] = serving
                 print(json.dumps(result, indent=2, sort_keys=True, allow_nan=False))
                 return 0
-            required = ("endpoint", "runtime_revision", "hardware_label", "model_revision", "output")
+            required = (
+                "endpoint",
+                "runtime_revision",
+                "hardware_label",
+                "model_revision",
+                "output",
+            )
             missing = [name.replace("_", "-") for name in required if not getattr(arguments, name)]
             if missing:
-                raise ValueError("--execute also requires " + ", ".join("--" + name for name in missing))
+                raise ValueError(
+                    "--execute also requires " + ", ".join("--" + name for name in missing)
+                )
+
             def interrupt_run(_signum, _frame):
                 raise KeyboardInterrupt
 
@@ -86,8 +96,7 @@ def _mvp_command(arguments: argparse.Namespace) -> int:
             finally:
                 signal.signal(signal.SIGTERM, previous_sigterm)
             receipt = {
-                key: result.get(key)
-                for key in ("run_id", "evidence_kind", "status", "summary")
+                key: result.get(key) for key in ("run_id", "evidence_kind", "status", "summary")
             }
             receipt["run_json"] = str((arguments.output / "run.json").resolve())
             print(json.dumps(receipt, indent=2, sort_keys=True, allow_nan=False))
@@ -98,7 +107,8 @@ def _mvp_command(arguments: argparse.Namespace) -> int:
             from .report import write_report
 
             result = compare_runs(
-                arguments.baseline, arguments.candidate,
+                arguments.baseline,
+                arguments.candidate,
                 policy=_load_mvp_object(arguments.policy),
             )
             if arguments.report is not None:
@@ -129,24 +139,50 @@ def _parser() -> argparse.ArgumentParser:
     run = subparsers.add_parser("run", help="preview an H3 plan; --execute explicitly submits it")
     run.add_argument("plan", type=Path)
     run.add_argument("--runtime", choices=("sglang", "vllm-omni"), default="sglang")
-    run.add_argument("--execute", action="store_true", help="submit real requests to your H3 server")
+    run.add_argument(
+        "--execute", action="store_true", help="submit real requests to your H3 server"
+    )
     run.add_argument("--endpoint", help="self-hosted server base URL, without /v1/videos")
-    run.add_argument("--runtime-revision", help="operator-declared exact server code/container revision")
-    run.add_argument("--hardware-label", help="operator-declared hardware, precision, and topology label")
-    run.add_argument("--model-revision", help="operator-declared exact checkpoint revision matching the plan")
-    run.add_argument("--output", type=Path, help="new output directory; existing paths are never overwritten")
+    run.add_argument(
+        "--runtime-revision", help="operator-declared exact server code/container revision"
+    )
+    run.add_argument(
+        "--hardware-label", help="operator-declared hardware, precision, and topology label"
+    )
+    run.add_argument(
+        "--model-revision", help="operator-declared exact checkpoint revision matching the plan"
+    )
+    run.add_argument(
+        "--output", type=Path, help="new output directory; existing paths are never overwritten"
+    )
     run.add_argument("--timeout-seconds", type=float, default=3600)
-    run.add_argument("--api-key-env", help="name of an environment variable containing a bearer token")
-    run.add_argument("--serving-concurrency", type=int, help="opt into closed-loop delivery load with 1-32 concurrent requests; validation is separate")
-    run.add_argument("--delivery-deadline-seconds", type=float, help="optional submit-to-downloaded-media deadline for technical goodput; not an attempt timeout")
+    run.add_argument(
+        "--api-key-env", help="name of an environment variable containing a bearer token"
+    )
+    run.add_argument(
+        "--serving-concurrency",
+        type=int,
+        help="opt into closed-loop delivery load with 1-32 concurrent requests; validation is separate",
+    )
+    run.add_argument(
+        "--delivery-deadline-seconds",
+        type=float,
+        help="optional submit-to-downloaded-media deadline for technical goodput; not an attempt timeout",
+    )
 
-    compare = subparsers.add_parser("compare", help="compare paired run bundles and return a CI exit code")
+    compare = subparsers.add_parser(
+        "compare", help="compare paired run bundles and return a CI exit code"
+    )
     compare.add_argument("baseline", type=Path)
     compare.add_argument("candidate", type=Path)
     compare.add_argument("--policy", required=True, type=Path)
-    compare.add_argument("--report", type=Path, help="new portable HTML report plus a local media-assets directory")
+    compare.add_argument(
+        "--report", type=Path, help="new portable HTML report plus a local media-assets directory"
+    )
 
-    inspect = subparsers.add_parser("inspect-media", help="fully decode a file and measure technical media integrity")
+    inspect = subparsers.add_parser(
+        "inspect-media", help="fully decode a file and measure technical media integrity"
+    )
     inspect.add_argument("media", type=Path)
     inspect.add_argument("--expected", type=Path, help="optional JSON media expectations")
     return parser

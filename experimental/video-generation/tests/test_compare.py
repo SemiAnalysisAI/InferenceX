@@ -18,13 +18,25 @@ POLICY = {
     "min_audio_spectral_cosine": 0.99,
     "max_audio_rms_ratio_error": 0.05,
 }
-FAIRNESS = {"encoding": {"video_codec": "libx264", "preset": "ultrafast", "crf": 18,
-                         "pixel_format": "yuv420p", "audio_codec": "aac",
-                         "audio_sample_rate_hz": 32000, "audio_channels": 2}}
+FAIRNESS = {
+    "encoding": {
+        "video_codec": "libx264",
+        "preset": "ultrafast",
+        "crf": 18,
+        "pixel_format": "yuv420p",
+        "audio_codec": "aac",
+        "audio_sample_rate_hz": 32000,
+        "audio_channels": 2,
+    }
+}
 
 
 def digest(value):
-    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode()).hexdigest()
+    return hashlib.sha256(
+        json.dumps(
+            value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+        ).encode()
+    ).hexdigest()
 
 
 def write_bundle(directory, document):
@@ -40,46 +52,85 @@ def bundle(tmp_path, name, *, warmups=1):
         "model_id": "fixture/no-model",
         "model_revision": "fixed-model-revision",
         "generation": {
-            "width": 320, "height": 180, "fps": 24, "frame_count": 48,
-            "duration_seconds": 2, "audio_sample_rate_hz": 32000, "audio_channels": 2,
+            "width": 320,
+            "height": 180,
+            "fps": 24,
+            "frame_count": 48,
+            "duration_seconds": 2,
+            "audio_sample_rate_hz": 32000,
+            "audio_channels": 2,
         },
         "repetitions": 1,
         "warmup_runs": warmups,
         "cases": [
-            {"case_id": f"case-{index}", "prompt": f"test prompt {index}", "seed": index,
-             "requires_motion": True, "requires_sound": True}
+            {
+                "case_id": f"case-{index}",
+                "prompt": f"test prompt {index}",
+                "seed": index,
+                "requires_motion": True,
+                "requires_sound": True,
+            }
             for index in (1, 2)
         ],
     }
     configuration = {
-        "runtime": "test-runtime", "runtime_revision": name,
-        "model_id": plan["model_id"], "model_revision": plan["model_revision"],
-        "hardware_label": "same-test-device", "endpoint": "http://localhost:1234",
+        "runtime": "test-runtime",
+        "runtime_revision": name,
+        "model_id": plan["model_id"],
+        "model_revision": plan["model_revision"],
+        "hardware_label": "same-test-device",
+        "endpoint": "http://localhost:1234",
         "identity_verification": "operator_declared",
     }
     records = []
-    slots = [(f"warmup-{index:03d}", plan["cases"][(index - 1) % 2], "warmup", 0) for index in range(1, warmups + 1)]
-    slots += [(f"measurement-r001-c{index:03d}", case, "measurement", 1) for index, case in enumerate(plan["cases"], 1)]
+    slots = [
+        (f"warmup-{index:03d}", plan["cases"][(index - 1) % 2], "warmup", 0)
+        for index in range(1, warmups + 1)
+    ]
+    slots += [
+        (f"measurement-r001-c{index:03d}", case, "measurement", 1)
+        for index, case in enumerate(plan["cases"], 1)
+    ]
     for slot_id, case, phase, repetition in slots:
         relative = f"media/{slot_id}.mp4"
         data = f"mock-{name}-{slot_id}".encode()
         (directory / relative).write_bytes(data)
-        records.append({
-            "slot_id": slot_id, "case_id": case["case_id"], "prompt": case["prompt"],
-            "seed": case["seed"], "repetition": repetition, "phase": phase,
-            "status": "succeeded", "attempted": True,
-            "artifact_path": relative, "sha256": hashlib.sha256(data).hexdigest(),
-            "latency_seconds": 1000.0 if phase == "warmup" else 10.0,
-            "media": {"valid": True}, "error": None,
-        })
+        records.append(
+            {
+                "slot_id": slot_id,
+                "case_id": case["case_id"],
+                "prompt": case["prompt"],
+                "seed": case["seed"],
+                "repetition": repetition,
+                "phase": phase,
+                "status": "succeeded",
+                "attempted": True,
+                "artifact_path": relative,
+                "sha256": hashlib.sha256(data).hexdigest(),
+                "latency_seconds": 1000.0 if phase == "warmup" else 10.0,
+                "media": {"valid": True},
+                "error": None,
+            }
+        )
     document = {
-        "bundle_version": "0.1.0", "bundle_type": "mvp_run", "run_id": name,
-        "plan_id": plan["plan_id"], "plan_sha256": digest(plan), "plan": plan,
-        "configuration": configuration, "configuration_sha256": digest(configuration),
+        "bundle_version": "0.1.0",
+        "bundle_type": "mvp_run",
+        "run_id": name,
+        "plan_id": plan["plan_id"],
+        "plan_sha256": digest(plan),
+        "plan": plan,
+        "configuration": configuration,
+        "configuration_sha256": digest(configuration),
         "evidence_kind": "fixture",
-        "status": "complete", "started_at": "2026-09-01T00:00:00+00:00", "finished_at": "2026-09-01T00:30:00+00:00",
-        "measurement": {"boundary": "submit_to_validated_media", "concurrency": 1,
-                        "wall_seconds": 20.5, "timing_evidence": "synthetic_fixture_control"},
+        "status": "complete",
+        "started_at": "2026-09-01T00:00:00+00:00",
+        "finished_at": "2026-09-01T00:30:00+00:00",
+        "measurement": {
+            "boundary": "submit_to_validated_media",
+            "concurrency": 1,
+            "wall_seconds": 20.5,
+            "timing_evidence": "synthetic_fixture_control",
+        },
         "records": records,
         "summary": {"valid": 9999, "latency_median_seconds": 0.00001},
     }
@@ -89,29 +140,47 @@ def bundle(tmp_path, name, *, warmups=1):
 
 @pytest.fixture
 def media_stub(monkeypatch):
-    analysis = {"valid": True, "video": {"present": True, "width": 320, "height": 180, "frame_count": 48},
-                "audio": {"present": True, "channels": 2, "sample_rate_hz": 32000}, "checks": []}
+    analysis = {
+        "valid": True,
+        "video": {"present": True, "width": 320, "height": 180, "frame_count": 48},
+        "audio": {"present": True, "channels": 2, "sample_rate_hz": 32000},
+        "checks": [],
+    }
     comparison = {
         "compatible": True,
         "metrics": {
-            "video_mae": 0.0, "video_psnr_db": None, "video_identical": True,
-            "video_compared_frames": 48, "video_total_frames": 48, "video_sample_coverage_fraction": 1.0,
-            "audio_spectral_cosine": 1.0, "audio_spectral_cosine_channels": [1.0, 1.0],
-            "audio_rms_ratio": 1.0, "audio_rms_ratio_channels": [1.0, 1.0],
+            "video_mae": 0.0,
+            "video_psnr_db": None,
+            "video_identical": True,
+            "video_compared_frames": 48,
+            "video_total_frames": 48,
+            "video_sample_coverage_fraction": 1.0,
+            "audio_spectral_cosine": 1.0,
+            "audio_spectral_cosine_channels": [1.0, 1.0],
+            "audio_rms_ratio": 1.0,
+            "audio_rms_ratio_channels": [1.0, 1.0],
         },
-        "checks": [], "notes": [],
+        "checks": [],
+        "notes": [],
     }
-    monkeypatch.setattr(compare, "analyze_media", lambda path, expected=None: copy.deepcopy(analysis))
+    monkeypatch.setattr(
+        compare, "analyze_media", lambda path, expected=None: copy.deepcopy(analysis)
+    )
     monkeypatch.setattr(compare, "compare_media", lambda left, right: copy.deepcopy(comparison))
     return analysis, comparison
 
 
-def test_recomputed_summary_pairs_only_measurements_and_retains_explicit_limits(tmp_path, media_stub):
+def test_recomputed_summary_pairs_only_measurements_and_retains_explicit_limits(
+    tmp_path, media_stub
+):
     baseline, _ = bundle(tmp_path, "baseline")
     candidate, document = bundle(tmp_path, "candidate")
     for record in document["records"]:
-        record.update(submit_to_terminal_seconds=7.0, submit_to_media_seconds=8.0,
-                      media_validation_seconds=1.5)
+        record.update(
+            submit_to_terminal_seconds=7.0,
+            submit_to_media_seconds=8.0,
+            media_validation_seconds=1.5,
+        )
     write_bundle(candidate, document)
     result = compare_runs(baseline, candidate, policy=POLICY)
     assert result["overall_status"] == "pass"
@@ -135,21 +204,27 @@ def test_latency_regression_uses_declared_threshold(tmp_path, media_stub):
     result = compare_runs(baseline, candidate, policy=POLICY)
     assert result["overall_status"] == "fail"
     assert result["measurement"]["latency_increase_fraction"] == pytest.approx(0.2)
-    assert next(check for check in result["checks"] if check["name"] == "performance.median_latency")["status"] == "fail"
+    assert (
+        next(check for check in result["checks"] if check["name"] == "performance.median_latency")[
+            "status"
+        ]
+        == "fail"
+    )
 
 
 @pytest.mark.parametrize(
     "updates,match",
     [
-        ({'submit_to_terminal_seconds': 9}, 'follows completed media'),
-        ({'submit_to_terminal_seconds': None}, 'missing client timing'),
+        ({"submit_to_terminal_seconds": 9}, "follows completed media"),
+        ({"submit_to_terminal_seconds": None}, "missing client timing"),
     ],
 )
 def test_impossible_client_timing_boundaries_are_rejected(tmp_path, media_stub, updates, match):
     baseline, _ = bundle(tmp_path, "baseline")
     candidate, document = bundle(tmp_path, "candidate")
-    document["records"][-1].update(submit_to_terminal_seconds=7.0,
-                                  submit_to_media_seconds=8.0, media_validation_seconds=1.5)
+    document["records"][-1].update(
+        submit_to_terminal_seconds=7.0, submit_to_media_seconds=8.0, media_validation_seconds=1.5
+    )
     document["records"][-1].update(updates)
     write_bundle(candidate, document)
     with pytest.raises(ValueError, match=match):
@@ -159,9 +234,16 @@ def test_impossible_client_timing_boundaries_are_rejected(tmp_path, media_stub, 
 def test_failed_attempt_may_have_only_terminal_timing(tmp_path, media_stub):
     baseline, _ = bundle(tmp_path, "baseline")
     candidate, document = bundle(tmp_path, "candidate")
-    document["records"][-1].update(status="failed", artifact_path=None, sha256=None,
-                                  media=None, error="provider failed", submit_to_terminal_seconds=7.0,
-                                  submit_to_media_seconds=None, media_validation_seconds=None)
+    document["records"][-1].update(
+        status="failed",
+        artifact_path=None,
+        sha256=None,
+        media=None,
+        error="provider failed",
+        submit_to_terminal_seconds=7.0,
+        submit_to_media_seconds=None,
+        media_validation_seconds=None,
+    )
     write_bundle(candidate, document)
     assert compare_runs(baseline, candidate, policy=POLICY)["overall_status"] == "fail"
 
@@ -178,7 +260,12 @@ def test_cross_configuration_latency_is_descriptive_not_a_regression_gate(tmp_pa
     result = compare_runs(baseline, candidate, policy=POLICY)
     assert result["overall_status"] == "pass"
     assert result["measurement"]["performance_mode"] == "descriptive_only"
-    assert next(check for check in result["checks"] if check["name"] == "performance.median_latency")["status"] == "descriptive"
+    assert (
+        next(check for check in result["checks"] if check["name"] == "performance.median_latency")[
+            "status"
+        ]
+        == "descriptive"
+    )
 
 
 def test_worst_audio_channel_cannot_be_hidden_by_aggregate(tmp_path, media_stub):
@@ -192,10 +279,15 @@ def test_worst_audio_channel_cannot_be_hidden_by_aggregate(tmp_path, media_stub)
     assert names == {"fidelity.audio_rms_ratio_error", "fidelity.audio_spectral_cosine"}
 
 
-def test_fairness_cross_engine_pixel_difference_is_diagnostic_and_quality_unjudged(tmp_path, media_stub):
+def test_fairness_cross_engine_pixel_difference_is_diagnostic_and_quality_unjudged(
+    tmp_path, media_stub
+):
     baseline, left = bundle(tmp_path, "baseline")
     candidate, right = bundle(tmp_path, "candidate")
-    for directory, document, runtime in ((baseline, left, "sglang"), (candidate, right, "vllm-omni")):
+    for directory, document, runtime in (
+        (baseline, left, "sglang"),
+        (candidate, right, "vllm-omni"),
+    ):
         document["plan"]["fairness"] = copy.deepcopy(FAIRNESS)
         document["plan_sha256"] = digest(document["plan"])
         document["configuration"]["runtime"] = runtime
@@ -206,7 +298,11 @@ def test_fairness_cross_engine_pixel_difference_is_diagnostic_and_quality_unjudg
     assert result["quality_status"] == "unjudged"
     assert result["overall_status"] == "inconclusive"
     assert result["slots"][0]["metrics"]["video_psnr_db"] == 8.0
-    assert not any(check["name"] == "fidelity.video_psnr" for slot in result["slots"] for check in slot["checks"])
+    assert not any(
+        check["name"] == "fidelity.video_psnr"
+        for slot in result["slots"]
+        for check in slot["checks"]
+    )
 
 
 def test_fairness_numerical_regression_requires_matching_server_identity(tmp_path, media_stub):
@@ -217,11 +313,15 @@ def test_fairness_numerical_regression_requires_matching_server_identity(tmp_pat
         document["plan_sha256"] = digest(document["plan"])
         document["configuration"]["runtime_revision"] = "same-runtime-revision"
         document["configuration"]["numerical_identity"] = {
-            "runtime_revision": "same-runtime-revision", "image_digest": "a" * 64,
+            "runtime_revision": "same-runtime-revision",
+            "image_digest": "a" * 64,
             "server_argv": ["serve", "--usp", "4"],
-            "server_environment": {"CACHE": "0"}, "gpu_topology": {"gpu_uuids": ["GPU-1", "GPU-2"]},
-            "algorithm_config": {"generation": document["plan"]["generation"],
-                                 "fairness": document["plan"]["fairness"]},
+            "server_environment": {"CACHE": "0"},
+            "gpu_topology": {"gpu_uuids": ["GPU-1", "GPU-2"]},
+            "algorithm_config": {
+                "generation": document["plan"]["generation"],
+                "fairness": document["plan"]["fairness"],
+            },
         }
         document["configuration_sha256"] = digest(document["configuration"])
         write_bundle(directory, document)
@@ -235,9 +335,13 @@ def test_fairness_numerical_regression_requires_matching_server_identity(tmp_pat
     result = compare_runs(baseline, candidate, policy=POLICY)
     assert result["quality_status"] == "unjudged"
     assert result["overall_status"] == "inconclusive"
-    placeholder = {**left["configuration"]["numerical_identity"],
-                   "server_argv": True, "server_environment": True, "gpu_topology": True,
-                   "algorithm_config": True}
+    placeholder = {
+        **left["configuration"]["numerical_identity"],
+        "server_argv": True,
+        "server_environment": True,
+        "gpu_topology": True,
+        "algorithm_config": True,
+    }
     for directory, document in ((baseline, left), (candidate, right)):
         document["configuration"]["numerical_identity"] = copy.deepcopy(placeholder)
         document["configuration_sha256"] = digest(document["configuration"])
@@ -252,11 +356,16 @@ def test_separate_warmup_case_is_validated_against_frozen_plan(tmp_path, media_s
     for name in ("baseline", "candidate"):
         directory, document = bundle(tmp_path, name)
         document["plan"]["warmup_case"] = {
-            "case_id": "warmup-only", "prompt": "distinct warmup prompt", "seed": 77,
-            "requires_motion": True, "requires_sound": True,
+            "case_id": "warmup-only",
+            "prompt": "distinct warmup prompt",
+            "seed": 77,
+            "requires_motion": True,
+            "requires_sound": True,
         }
         document["plan_sha256"] = digest(document["plan"])
-        document["records"][0].update(case_id="warmup-only", prompt="distinct warmup prompt", seed=77)
+        document["records"][0].update(
+            case_id="warmup-only", prompt="distinct warmup prompt", seed=77
+        )
         write_bundle(directory, document)
         paths.append(directory)
     assert compare_runs(*paths, policy=POLICY)["overall_status"] == "pass"
@@ -266,7 +375,7 @@ def test_separate_warmup_case_is_validated_against_frozen_plan(tmp_path, media_s
         compare_runs(*paths, policy=POLICY)
 
 
-@pytest.mark.parametrize("value", [None, float('nan')])
+@pytest.mark.parametrize("value", [None, float("nan")])
 def test_missing_or_nonfinite_quality_metric_is_not_a_pass(tmp_path, media_stub, value):
     baseline, _ = bundle(tmp_path, "baseline")
     candidate, _ = bundle(tmp_path, "candidate")
@@ -280,8 +389,15 @@ def test_missing_or_nonfinite_quality_metric_is_not_a_pass(tmp_path, media_stub,
 def test_not_started_failure_is_retained_without_zero_latency_imputation(tmp_path, media_stub):
     baseline, _ = bundle(tmp_path, "baseline")
     candidate, document = bundle(tmp_path, "candidate")
-    document["records"][-1].update(status="failed", attempted=False, latency_seconds=0,
-                                  artifact_path=None, sha256=None, media=None, error="Not started after uncertain remote completion")
+    document["records"][-1].update(
+        status="failed",
+        attempted=False,
+        latency_seconds=0,
+        artifact_path=None,
+        sha256=None,
+        media=None,
+        error="Not started after uncertain remote completion",
+    )
     write_bundle(candidate, document)
     result = compare_runs(baseline, candidate, policy=POLICY)
     summary = result["candidate"]["summary"]
@@ -298,7 +414,9 @@ def test_not_started_failure_is_retained_without_zero_latency_imputation(tmp_pat
 def test_baseline_failure_is_inconclusive_not_evidence_of_candidate_quality(tmp_path, media_stub):
     baseline, document = bundle(tmp_path, "baseline")
     candidate, _ = bundle(tmp_path, "candidate")
-    document["records"][-1].update(status="failed", artifact_path=None, sha256=None, media=None, error="baseline failed")
+    document["records"][-1].update(
+        status="failed", artifact_path=None, sha256=None, media=None, error="baseline failed"
+    )
     write_bundle(baseline, document)
     result = compare_runs(baseline, candidate, policy=POLICY)
     assert result["overall_status"] == "inconclusive"
@@ -308,10 +426,15 @@ def test_media_validation_is_recomputed_not_trusted(tmp_path, media_stub, monkey
     baseline, _ = bundle(tmp_path, "baseline")
     candidate, _ = bundle(tmp_path, "candidate")
     analysis = media_stub[0]
-    monkeypatch.setattr(compare, "analyze_media", lambda path, expected=None: {
-        **analysis, "valid": "candidate" not in path.parts,
-        "checks": [{"name": "video.decode", "status": "failed", "detail": "corrupted frame"}],
-    })
+    monkeypatch.setattr(
+        compare,
+        "analyze_media",
+        lambda path, expected=None: {
+            **analysis,
+            "valid": "candidate" not in path.parts,
+            "checks": [{"name": "video.decode", "status": "failed", "detail": "corrupted frame"}],
+        },
+    )
     result = compare_runs(baseline, candidate, policy=POLICY)
     assert result["overall_status"] == "fail"
     assert result["candidate"]["summary"]["valid"] == 0
@@ -320,9 +443,9 @@ def test_media_validation_is_recomputed_not_trusted(tmp_path, media_stub, monkey
 def test_malformed_or_tampered_bundles_are_refused(tmp_path, media_stub):
     baseline, _ = bundle(tmp_path, "baseline")
     candidate, document = bundle(tmp_path, "candidate")
-    document['records'][-1].update(sha256='0' * 64)
+    document["records"][-1].update(sha256="0" * 64)
     write_bundle(candidate, document)
-    with pytest.raises(ValueError, match='SHA256 mismatch'):
+    with pytest.raises(ValueError, match="SHA256 mismatch"):
         compare_runs(baseline, candidate, policy=POLICY)
 
 
@@ -333,7 +456,9 @@ def test_artifact_symlink_may_not_escape_run_directory(tmp_path, media_stub):
     outside.write_bytes(b"outside")
     link = candidate / "media" / "link.mp4"
     link.symlink_to(outside)
-    document["records"][-1].update(artifact_path="media/link.mp4", sha256=hashlib.sha256(b"outside").hexdigest())
+    document["records"][-1].update(
+        artifact_path="media/link.mp4", sha256=hashlib.sha256(b"outside").hexdigest()
+    )
     write_bundle(candidate, document)
     with pytest.raises(ValueError, match="inside its run directory"):
         compare_runs(baseline, candidate, policy=POLICY)
@@ -342,7 +467,9 @@ def test_artifact_symlink_may_not_escape_run_directory(tmp_path, media_stub):
 def test_duplicate_json_keys_are_rejected(tmp_path, media_stub):
     baseline, _ = bundle(tmp_path, "baseline")
     candidate, document = bundle(tmp_path, "candidate")
-    (candidate / "run.json").write_text('{"run_id":"hidden",' + json.dumps(document)[1:], encoding="utf-8")
+    (candidate / "run.json").write_text(
+        '{"run_id":"hidden",' + json.dumps(document)[1:], encoding="utf-8"
+    )
     with pytest.raises(ValueError, match="duplicate JSON key: run_id"):
         compare_runs(baseline, candidate, policy=POLICY)
 
@@ -363,8 +490,8 @@ def test_report_is_portable_script_free_escaped_and_hash_checked(tmp_path, media
     content = destination.read_text(encoding="utf-8")
     assert "Synthetic fixture evidence" in content
     assert "not an H3 result" in content
-    assert '<script>' not in content
-    assert '&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; injection' in content
+    assert "<script>" not in content
+    assert "&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; injection" in content
     assert 'src="http' not in content
     assert "report.comparison.json" in content
     portable = json.loads(destination.with_suffix(".comparison.json").read_text())
@@ -390,10 +517,15 @@ def test_imported_media_compares_fidelity_without_fake_performance(tmp_path, med
         for record in document["records"]:
             record["latency_seconds"] = None
         document["provenance"] = {
-            "source_url": "https://example.com/public-sample.mp4", "source_path": "/private/path/sample.mp4",
-            "transformation": {"kind": "deliberate_audio_mute", "compressed_video_bitexact": True,
-                               "decoded_video_identical": True, "audio_sample_count_preserved": True,
-                               "full_stream_verification": {"details": "DETAILED_JSON_ONLY" * 1000}},
+            "source_url": "https://example.com/public-sample.mp4",
+            "source_path": "/private/path/sample.mp4",
+            "transformation": {
+                "kind": "deliberate_audio_mute",
+                "compressed_video_bitexact": True,
+                "decoded_video_identical": True,
+                "audio_sample_count_preserved": True,
+                "full_stream_verification": {"details": "DETAILED_JSON_ONLY" * 1000},
+            },
         }
         write_bundle(directory, document)
     result = compare_runs(baseline, candidate, policy=POLICY)
@@ -427,7 +559,9 @@ def _pin_client(document, media_stub, monkeypatch):
     code = {"implementation_version": "test-v1", "source_sha256": "1" * 64}
     monkeypatch.setattr(compare, "_active_media_code", lambda: code)
     media_stub[0]["implementation"] = {
-        "version": "test-v1", "pyav_version": "17.1.0", "numpy_version": "2.5.2",
+        "version": "test-v1",
+        "pyav_version": "17.1.0",
+        "numpy_version": "2.5.2",
         "ffmpeg_libraries": {"libavcodec": "62.28.101"},
     }
     document["configuration"].update(
@@ -435,8 +569,12 @@ def _pin_client(document, media_stub, monkeypatch):
         client_environment={"python": "3.13", "av": "17.1.0", "numpy": "2.5.2"},
         client_source_sha256="2" * 64,
         measurement_semantics={"latency": "submit through validated media"},
-        media_evaluator={**code, "pyav_version": "17.1.0", "numpy_version": "2.5.2",
-                         "ffmpeg_libraries": {"libavcodec": "62.28.101"}},
+        media_evaluator={
+            **code,
+            "pyav_version": "17.1.0",
+            "numpy_version": "2.5.2",
+            "ffmpeg_libraries": {"libavcodec": "62.28.101"},
+        },
     )
     document["configuration_sha256"] = digest(document["configuration"])
 
@@ -452,10 +590,17 @@ def test_client_measurement_changes_cannot_performance_gate(tmp_path, media_stub
     write_bundle(candidate, right)
     result = compare_runs(baseline, candidate, policy=POLICY)
     assert result["measurement"]["performance_mode"] == "descriptive_only"
-    assert next(check for check in result["checks"] if check["name"] == "performance.median_latency")["status"] == "descriptive"
+    assert (
+        next(check for check in result["checks"] if check["name"] == "performance.median_latency")[
+            "status"
+        ]
+        == "descriptive"
+    )
 
 
-def test_live_performance_needs_pinned_client_but_not_matching_endpoints(tmp_path, media_stub, monkeypatch):
+def test_live_performance_needs_pinned_client_but_not_matching_endpoints(
+    tmp_path, media_stub, monkeypatch
+):
     baseline, left = bundle(tmp_path, "baseline")
     candidate, right = bundle(tmp_path, "candidate")
     for directory, document in ((baseline, left), (candidate, right)):
@@ -465,7 +610,9 @@ def test_live_performance_needs_pinned_client_but_not_matching_endpoints(tmp_pat
     assert result["measurement"]["performance_mode"] == "descriptive_only"
     for directory, document in ((baseline, left), (candidate, right)):
         _pin_client(document, media_stub, monkeypatch)
-        document["configuration"]["endpoint"] = "http://localhost:9999" if directory == candidate else "http://localhost:8888"
+        document["configuration"]["endpoint"] = (
+            "http://localhost:9999" if directory == candidate else "http://localhost:8888"
+        )
         document["configuration_sha256"] = digest(document["configuration"])
         write_bundle(directory, document)
     result = compare_runs(baseline, candidate, policy=POLICY)
@@ -476,7 +623,9 @@ def test_live_performance_needs_pinned_client_but_not_matching_endpoints(tmp_pat
     assert result["measurement"]["performance_mode"] == "descriptive_only"
 
 
-def test_evaluator_unavailable_is_counted_without_inventing_model_failure(tmp_path, media_stub, monkeypatch):
+def test_evaluator_unavailable_is_counted_without_inventing_model_failure(
+    tmp_path, media_stub, monkeypatch
+):
     baseline, _ = bundle(tmp_path, "baseline", warmups=0)
     candidate, _ = bundle(tmp_path, "candidate", warmups=0)
 
@@ -522,29 +671,39 @@ def test_report_exclusive_creation_handles_post_preflight_race(tmp_path, media_s
 
 def test_serving_comparison_uses_delivery_latency_and_checks_real_overlap(tmp_path, media_stub):
     from evaluator.serving import settings
+
     paths = []
-    for name in ('baseline', 'candidate'):
+    for name in ("baseline", "candidate"):
         path, run = bundle(tmp_path, name, warmups=0)
-        run['configuration']['serving'] = settings(2)
-        run['configuration_sha256'] = digest(run['configuration'])
-        run['measurement'] = {'boundary': 'submit_to_downloaded_media', 'concurrency': 2,
-                              'start_monotonic_seconds': 0, 'end_monotonic_seconds': 6, 'wall_seconds': 6}
-        for row in run['records']:
-            row.update(submit_to_terminal_seconds=4, submit_to_media_seconds=5, media_validation_seconds=.1,
-                       timing_window={'start_monotonic_seconds': 0, 'transport_end_monotonic_seconds': 5})
+        run["configuration"]["serving"] = settings(2)
+        run["configuration_sha256"] = digest(run["configuration"])
+        run["measurement"] = {
+            "boundary": "submit_to_downloaded_media",
+            "concurrency": 2,
+            "start_monotonic_seconds": 0,
+            "end_monotonic_seconds": 6,
+            "wall_seconds": 6,
+        }
+        for row in run["records"]:
+            row.update(
+                submit_to_terminal_seconds=4,
+                submit_to_media_seconds=5,
+                media_validation_seconds=0.1,
+                timing_window={"start_monotonic_seconds": 0, "transport_end_monotonic_seconds": 5},
+            )
         write_bundle(path, run)
         paths.append(path)
     result = compare_runs(*paths, policy=POLICY)
-    assert result['measurement']['performance_mode'] == 'descriptive_only'
-    assert result['measurement']['concurrency'] == 2
-    assert result['baseline']['summary']['latency_median_seconds'] == 5
-    assert result['baseline']['summary']['valid_clips_per_second'] == 2 / 6
-    assert result['slots'][0]['baseline']['latency_boundary'] == 'submit_to_downloaded_media'
+    assert result["measurement"]["performance_mode"] == "descriptive_only"
+    assert result["measurement"]["concurrency"] == 2
+    assert result["baseline"]["summary"]["latency_median_seconds"] == 5
+    assert result["baseline"]["summary"]["valid_clips_per_second"] == 2 / 6
+    assert result["slots"][0]["baseline"]["latency_boundary"] == "submit_to_downloaded_media"
     path = paths[1]
-    run = json.loads((path / 'run.json').read_text())
-    run['measurement']['concurrency'] = 1
-    run['configuration']['serving'] = settings(1)
-    run['configuration_sha256'] = digest(run['configuration'])
+    run = json.loads((path / "run.json").read_text())
+    run["measurement"]["concurrency"] = 1
+    run["configuration"]["serving"] = settings(1)
+    run["configuration_sha256"] = digest(run["configuration"])
     write_bundle(path, run)
-    with pytest.raises(ValueError, match='exceed declared'):
+    with pytest.raises(ValueError, match="exceed declared"):
         compare_runs(*paths, policy=POLICY)
