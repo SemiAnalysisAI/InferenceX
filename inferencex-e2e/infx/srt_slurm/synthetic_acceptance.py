@@ -18,6 +18,7 @@ import yaml
 from infx import yamlio
 from infx.bench.proc import status
 from infx.golden_al_distribution import GOLDEN_DIR, curve_name, golden_length
+from infx.golden_al_distribution.identity import Fact
 from infx.srt_slurm.variants import ZIP_VARIANT, without_nulls
 
 ENGINES = {
@@ -113,6 +114,26 @@ def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
     }
 
 
+def verifier(role: Mapping[str, Any], engine: str) -> Fact:
+    """How a role verifies drafts. Block, relaxed and adaptive verification are opt-in, so an
+    unset flag means standard; a synthetic sampler becomes block on real runs. ATOM and TileRT
+    do not expose their verifier."""
+    args = role.get("args") or {}
+    if engine == "vllm":
+        method = spec_parameters(role, engine).get("rejection_sample_method")
+        if method == "synthetic":
+            return Fact("block", "documented")
+        return Fact(method, "explicit") if method else Fact("standard", "documented")
+    if engine == "sglang" and args.get("speculative-use-block-verification") is True:
+        return Fact("block", "explicit")
+    config = args.get("speculative_config") or {}
+    if engine == "trtllm" and config.get("use_relaxed_acceptance_for_thinking") is True:
+        return Fact("relaxed", "explicit")
+    if engine in ("sglang", "trtllm"):
+        return Fact("standard", "documented")
+    return Fact(None, "unknown")
+
+
 def acceptance_length(
     recipe: Mapping[str, Any],
     framework: str,
@@ -159,7 +180,13 @@ def _simulated_length(
         if name in ("agg", "prefill", "decode") and spec_parameters(role, engine)
     ):
         return None
-    al = golden_length(environment["MODEL_PREFIX"], spec, environment["THINKING_MODE"], golden_dir)
+    al = golden_length(
+        environment["MODEL_PREFIX"],
+        spec,
+        environment["THINKING_MODE"],
+        golden_dir,
+        verifier(generation, engine).value,
+    )
     if (
         engine == "sglang"
         and environment["MODEL_PREFIX"] == "qwen3.5"
@@ -190,10 +217,14 @@ def is_synthetic(environment: Mapping[str, str]) -> bool:
     )
 
 
-def check_gate(spec: Mapping[str, Any], environment: Mapping[str, str]) -> None:
+def check_gate(
+    spec: Mapping[str, Any], environment: Mapping[str, str], verify: str | None = None
+) -> None:
     """Fail unless the generation worker drafts the golden curve and length the gate uses."""
     tokens = spec.get("num_speculative_tokens")
-    drafted = (curve_name(environment["MODEL_PREFIX"], spec), tokens) if spec else None
+    drafted = (
+        (curve_name(environment["MODEL_PREFIX"], spec, verify=verify), tokens) if spec else None
+    )
     gate = (environment["AL_GATE_CURVE"], int(environment["AL_GATE_DRAFT_TOKENS"]))
     if drafted != gate:
         raise ValueError(f"the recipe drafts {drafted}, but the acceptance gate measures {gate}")
@@ -218,7 +249,10 @@ def build_overrides(
         return []
     roles = recipe.get("roles", {})
     if is_gate(environment):
-        check_gate(spec_parameters(generation_role(recipe), engine), environment)
+        generation = generation_role(recipe)
+        check_gate(
+            spec_parameters(generation, engine), environment, verifier(generation, engine).value
+        )
     al = _simulated_length(recipe, framework, environment, golden_dir=golden_dir)
     overrides = []
     variables = {
