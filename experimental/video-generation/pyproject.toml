@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "inferencex-h3-video-ci"
+name = "inferencex-video-ci"
 version = "0.1.0"
-description = "Controlled H3 runtime regression measurements for InferenceX CI"
+description = "Controlled video-generation runtime regression measurements for InferenceX CI"
 requires-python = ">=3.12"
 dependencies = ["pyyaml==6.0.3"]
 
