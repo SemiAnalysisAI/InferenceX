@@ -57,10 +57,8 @@ base:
         PYTHONUNBUFFERED: "1"
         SGLANG_TIMEOUT_KEEP_ALIVE: "900"
         SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: "1"
-        SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: "1"
         SGLANG_FLASHINFER_NVFP4_PER_TOKEN_ACTIVATION: "0"
         SGLANG_TRTLLM_MHA_FULL_ATTN_KV_SPLITS: "16"
-        SGLANG_TRTLLM_MHA_FULL_ATTN_KV_SPLITS_MIN_BS: "4"
       args:
         served-model-name: "meta-models/Muse-Spark-Open-816B-A42B-NVFP4"
         trust-remote-code: true
