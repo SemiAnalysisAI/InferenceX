@@ -159,8 +159,8 @@ def bound_variant(
 
     Variants get the CPU exporter on ``cpu_power_source``; multi-node variants also get the
     DCGM telemetry block on ``power_port`` and the client paths ``client_env``: the binder
-    inputs the launcher computes. ``'@fabric.<name>'`` values stay unresolved: recipe fingerprints hash them as
-    written.
+    inputs the launcher computes. ``'@fabric.<name>'`` values stay unresolved: recipe
+    fingerprints hash them as written.
     """
     if "prefill" not in point:
         selected, recipe = select_recipe(
