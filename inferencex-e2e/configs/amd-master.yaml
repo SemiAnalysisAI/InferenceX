@@ -1005,3 +1005,21 @@ musespark-fp4-mi355x-sglang-agentic-dflash:
       search-space:
       - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 8, 13], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [10, 16, 24, 28, 36, 40], srt-recipe: agentic.yaml }
+
+h3-bf16-mi355x-sglang-video:
+  image: lmsysorg/sglang:v0.5.23-rocm724-mi35x@sha256:e5278f805bb4482cadc4957af63633a0b914b40c778f7f3ea63693a31ee04fdf
+  model: MiniMaxAI/MiniMax-H3
+  model-prefix: h3
+  runner: cluster:mi355x-amds
+  precision: bf16
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: h3/sglang/mi355x-bf16
+  scenarios:
+    video-generation:
+      - spec: h3-v2.yaml
+        set: release-v1
+        search-space:
+          - gpus: 4
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
