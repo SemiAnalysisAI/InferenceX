@@ -8,39 +8,20 @@ import yaml
 from specs import h3_spec
 
 SPECS = Path(__file__).resolve().parents[1] / "specs"
-CITATION = "feat/example@0123456789abcdef:specs/source.json:1"
 
 
 @pytest.fixture(scope="module")
 def spec() -> dict[str, Any]:
     return {
         "schema_version": 1,
-        "model": {
-            "id": {"value": "org/model", "source": CITATION},
-            "revision": {"value": "a" * 40, "source": CITATION},
-        },
-        "generation": {
-            "fps": {
-                "value": 24,
-                "source": CITATION,
-                "sent": {"sglang": False, "vllm-omni": True},
-                "checked_on_clip": True,
-            },
-        },
-        "prompts": {
-            "p": {
-                "text": "a prompt",
-                "requires_motion": True,
-                "requires_sound": False,
-                "source": CITATION,
-            },
-        },
+        "model": {"id": "org/model", "revision": "a" * 40},
+        "generation": {"fps": 24},
+        "prompts": {"p": {"text": "a prompt", "requires_motion": True, "requires_sound": False}},
         "sets": {
             "s": {
                 "plan_id": "plan",
                 "repetitions": 2,
                 "warmup_runs": 1,
-                "seed_sources": {7: CITATION},
                 "cases": [{"case_id": "c", "prompt": "p", "seed": 7}],
             },
         },
@@ -100,6 +81,20 @@ def test_count_overrides_rename_the_plan_and_change_its_hash(spec: dict[str, Any
         h3_spec.plan_for(spec, "s", repetitions=0)
 
 
+RECORDED_FROZEN_PLAN_SHA256 = "8d51a472caa7db0f5d4c33adec1e9c9f852e7144cf25356085802edaf7d80d68"
+
+
+def test_frozen_plan_reproduces_the_hash_its_reference_run_recorded() -> None:
+    spec = h3_spec.load_spec(SPECS / "h3.yaml")
+    recorded = spec["reference"]["sglang"]
+    plan = h3_spec.plan_for(spec, "frozen-c124")
+    assert plan["plan_id"] == recorded["plan_id"]
+    assert (
+        h3_spec.plan_sha256(plan) == recorded["recorded_plan_sha256"] == RECORDED_FROZEN_PLAN_SHA256
+    )
+    assert RECORDED_FROZEN_PLAN_SHA256 in (SPECS / "README.md").read_text()
+
+
 def _reuse_text(source: str, target: str) -> Callable[[dict[str, Any]], None]:
     return lambda doc: doc["prompts"][target].update(text=doc["prompts"][source]["text"])
 
@@ -117,10 +112,6 @@ def _reuse_text(source: str, target: str) -> Callable[[dict[str, Any]], None]:
         ),
         (_reuse_text("ceramic-wheel", "paper-fold"), "cases must resolve to distinct prompt text"),
         (_reuse_text("ceramic-wheel", "warmup-only"), "warmup_case text must be disjoint"),
-        (
-            lambda doc: doc["sets"]["release-v1"]["seed_sources"].pop(11),
-            "seed_sources must cite exactly the seeds",
-        ),
     ],
 )
 def test_fairness_spec_rejects_invalid_workloads(
@@ -135,6 +126,8 @@ def test_fairness_spec_rejects_invalid_workloads(
 
 
 def test_canonical_json_bytes_is_sorted_compact_utf8_and_finite() -> None:
-    assert h3_spec.canonical_json_bytes({"b": "é", "a": [1, 2.5]}) == '{"a":[1,2.5],"b":"é"}'.encode()
+    assert (
+        h3_spec.canonical_json_bytes({"b": "é", "a": [1, 2.5]}) == '{"a":[1,2.5],"b":"é"}'.encode()
+    )
     with pytest.raises(ValueError, match="Out of range float values"):
         h3_spec.canonical_json_bytes({"a": float("nan")})
