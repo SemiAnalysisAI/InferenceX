@@ -12021,4 +12021,4 @@
   description:
     - "Add Kimi-K3.1-Pro GB300 vLLM AgentX on vllm/vllm-openai:kimi-k31 with the Inferact/Kimi-K3.1-Pro-DSpark-preview draft."
     - "Aggregated TP8 low-latency decode at concurrency 1; disaggregated TP8/DCP8 and DEP16 decode with NIXL and Simple CPU KV offload on prefill at concurrency 16 to 336."
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4800
