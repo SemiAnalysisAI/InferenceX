@@ -295,24 +295,31 @@ def test_the_multinode_binder_writes_the_one_selected_variant(project, tmp_path)
 
 
 EAGLE = {"speculative-algorithm": "EAGLE", "speculative-num-steps": 3}
+DFLASH = {
+    "speculative-algorithm": "DFLASH", "speculative-num-steps": 7,
+    "speculative-draft-model-path": "/hf_hub_cache/models--Org--Drafter-DFlash2/snapshots/46c90f4",
+}  # fmt: skip
 
 
-@pytest.mark.parametrize(("label", "decode_args", "error"), [
-    ("mtp", EAGLE, None),
-    ("none", {}, None),
+@pytest.mark.parametrize(("label", "decode_args", "expected"), [
+    ("mtp", EAGLE, {"SPEC_ALGORITHM": "mtp", "SPEC_DRAFT_MODEL": "native"}),
+    ("draft_model", DFLASH, {"SPEC_ALGORITHM": "dflash", "SPEC_DRAFT_MODEL": "Org/Drafter-DFlash2"}),
+    ("none", {}, {}),
     ("mtp", {}, "matrix 'mtp', but the generation worker does not draft"),
     ("none", EAGLE, "matrix 'none', but the generation worker drafts"),
 ])  # fmt: skip
-def test_a_multinode_spec_label_must_match_the_decode_worker(project, label, decode_args, error):
+def test_a_multinode_spec_label_must_match_the_decode_worker(project, label, decode_args, expected):
     path = fragment(project, {"name": "job", "roles": {
         "prefill": {"args": {}}, "decode": {"args": decode_args},
     }})  # fmt: skip
     env = {**MULTI_ENV, "IS_AGENTIC": "1", "FRAMEWORK": "dynamo-sglang", "SPEC_DECODING": label}
-    if error is None:
-        bind_multinode(str(path), env, root=project)
-    else:
-        with pytest.raises(ValueError, match=re.escape(error)):
+    if isinstance(expected, str):
+        with pytest.raises(ValueError, match=re.escape(expected)):
             bind_multinode(str(path), env, root=project)
+        return
+    _, bound = bind_multinode(str(path), env, root=project)
+    workload = bound["benchmark"]["env"]
+    assert {key: workload[key] for key in workload if key.startswith("SPEC_")} == expected
 
 
 def test_fabric_references_take_the_clusters_rendering_in_env_args_and_services():

@@ -22,6 +22,7 @@ from infx import yamlio
 from infx.config import repository_root
 from infx.fastcopy import deepcopy
 from infx.results.metadata import parse_component_metadata
+from infx.srt_slurm.spec_identity import speculation_facts
 from infx.srt_slurm.synthetic_acceptance import (
     ENGINES,
     generation_role,
@@ -56,6 +57,7 @@ _WORKFLOW_ENV = (
     "IMAGE", "MODEL_PREFIX", "FRAMEWORK", "PRECISION", "DISAGG", "DURATION", "MAX_MODEL_LEN",
     "KV_OFFLOAD_BACKEND", "KV_OFFLOAD_BACKEND_METADATA", "ROUTER_METADATA", "KV_P2P_TRANSFER",
     "POWER", "REQUIRE_POWER", "IS_AGENTIC", "SCENARIO_TYPE", "RUN_EVAL", "EVAL_ONLY",
+    "SPEC_ALGORITHM", "SPEC_DRAFT_MODEL",
 )  # fmt: skip
 _MULTINODE_ENV = (
     "SPEC_DECODING", "KV_OFFLOADING", "TOTAL_CPU_DRAM_GB", "DECODE_CPU_DRAM_GB", "PREFILL_DWDP_SIZE",
@@ -387,23 +389,28 @@ def bind_multinode(
     bound = bind_workload(
         selected, environment, agentic=agentic, multinode=True, client_env=client_env
     )
-    check_speculation(bound, environment)
+    bind_speculation(bound, environment)
     return name, bound
 
 
-def check_speculation(recipe: Mapping[str, Any], environment: Mapping[str, str]) -> None:
-    """Fail unless the matrix's SPEC_DECODING says whether the generation worker drafts."""
+def bind_speculation(recipe: dict[str, Any], environment: Mapping[str, str]) -> None:
+    """Fail unless the matrix's SPEC_DECODING says whether the generation worker drafts, and
+    give the client the algorithm and draft model it drafts with."""
     engine = recipe.get("engine")
     engine = ENGINES.get(environment["FRAMEWORK"]) or (
         engine.get("type") if isinstance(engine, Mapping) else engine
     )
-    drafts = bool(spec_parameters(generation_role(recipe), engine))
+    spec = spec_parameters(generation_role(recipe), engine)
     label = environment["SPEC_DECODING"]
-    if drafts != (label != "none"):
+    if bool(spec) != (label != "none"):
         raise ValueError(
             f"SPEC_DECODING: matrix {label!r}, but the generation worker "
-            f"{'drafts' if drafts else 'does not draft'}"
+            f"{'drafts' if spec else 'does not draft'}"
         )
+    if spec:
+        algorithm, draft_model = speculation_facts(environment.get("MODEL_PREFIX", ""), spec)
+        workload = recipe.setdefault("benchmark", {}).setdefault("env", {})
+        workload.update(SPEC_ALGORITHM=algorithm, SPEC_DRAFT_MODEL=draft_model)
 
 
 def resolve_fabric(node: Any, fabric: Mapping[str, str | None], where: str = "") -> Any:

@@ -13,7 +13,7 @@ from typing import Any
 
 from infx.bench_serving.benchmark_outcome import benchmark_outcome
 
-from .metadata import parse_component_metadata, run_attempt
+from .metadata import parse_component_metadata, run_attempt, speculation_fields
 from .power import (
     ALL_POWER_METRIC_KEYS,
     POWER_METRIC_SCHEMA_VERSION,
@@ -64,6 +64,7 @@ def build_result(benchmark: Mapping[str, Any], env: Mapping[str, str]) -> dict[s
         "isl": int(env["ISL"]),
         "osl": int(env["OSL"]),
     }
+    data.update(speculation_fields(env))
     if "benchmark_outcome" in benchmark:
         outcome = benchmark["benchmark_outcome"]
         expected = benchmark_outcome(outcome["requested"], outcome["completed"])
