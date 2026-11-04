@@ -139,7 +139,7 @@ def run_rapl_grant(tmp_path):
     """Run the rendered grant under bash against counters in ``tmp_path`` with a fake sudo."""
     sudo = tmp_path / "bin" / "sudo"
     sudo.parent.mkdir()
-    sudo.write_text(f'#!/bin/sh\necho "$@" >> {tmp_path / "sudo.log"}\nexit "$SUDO_RC"\n')
+    sudo.write_text(f'#!/bin/sh\nprintf "%s\\n" "$*" >> {tmp_path / "sudo.log"}\nexit "$SUDO_RC"\n')
     sudo.chmod(0o755)
     root = tmp_path / "powercap"
 
