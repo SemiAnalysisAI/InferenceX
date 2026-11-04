@@ -98,7 +98,6 @@ def main(argv: list[str]) -> int:
                 runtime=native["H3_RUNTIME"],
                 runtime_revision=native["H3_RUNTIME_REVISION"],
                 model_path=Path(model),
-                port=env.positive_int("H3_SERVER_PORT"),
                 gpus=gpus,
                 output=output / "server",
                 command=args.command,

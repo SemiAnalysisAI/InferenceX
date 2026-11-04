@@ -12,7 +12,7 @@ from pathlib import Path
 from infx.bench.video import CREDENTIAL_ENV, cell_dir, read_object, window_file, write_json
 from specs import h3_spec
 
-from .runner import run_plan, validate_plan
+from .runner import RUNTIMES, run_plan, validate_plan
 
 RECORDED_ENGINE_ENV = (
     "PYTHONPATH",
@@ -124,30 +124,19 @@ def serve(
     runtime: str,
     runtime_revision: str,
     model_path: Path,
-    port: int,
     gpus: int,
     output: Path,
     command: list[str],
     model_view: str,
 ) -> None:
-    if plan["model_id"] != "MiniMaxAI/MiniMax-H3":
-        raise ValueError("this H3 native profile requires MiniMaxAI/MiniMax-H3")
-    if runtime == "sglang":
-        if gpus not in (2, 4):
-            raise ValueError("the H3 SGLang native profile requires two or four GPUs")
-    elif runtime == "vllm-omni":
-        if gpus != 2 and not (gpus == 4 and "fairness" in plan):
-            raise ValueError("the H3 vLLM-Omni native profile requires two GPUs or four for v0.1")
-    else:
+    if runtime not in RUNTIMES:
         raise ValueError(f"unsupported native video runtime: {runtime}")
     if not re.fullmatch(r"[0-9a-f]{40}", runtime_revision):
         raise ValueError("runtime revision must be an immutable commit")
     if not model_path.is_dir():
         raise ValueError("the pinned model snapshot is unavailable")
-    if model_view not in {"snapshot", "h3-fl2va"} or (
-        model_view == "h3-fl2va" and runtime != "vllm-omni"
-    ):
-        raise ValueError(f"unsupported model view {model_view!r} for {runtime}")
+    if model_view == "h3-fl2va" and runtime != "vllm-omni":
+        raise ValueError(f"model view {model_view!r} is for vllm-omni, not {runtime}")
     if not command or any(not isinstance(part, str) or not part for part in command):
         raise ValueError("the video server requires a complete engine command")
     snapshot = str(model_path)
@@ -273,8 +262,6 @@ def run_matrix(
     window_dir: Path,
     request_seconds: float,
 ) -> dict[int, dict]:
-    if runtime not in {"sglang", "vllm-omni"}:
-        raise ValueError("unsupported native video runtime")
     numerical_identity = None
     if "fairness" in plan:
         launch = _check_sealed_launch(

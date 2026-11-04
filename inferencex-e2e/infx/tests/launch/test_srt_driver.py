@@ -1148,6 +1148,6 @@ def test_declared_video_identity_is_retained_before_startup(tmp_path, monkeypatc
     identity = json.loads((tmp_path / "video-identity.json").read_text())
     assert identity == {"plan_sha256": digest, "workload_plan": plan,
                         "engine": {"name": "vllm-omni", "revision": "a" * 40}}
-    run.request.model = "wrong/model"
+    bound.write_text(bound.read_text().replace(digest, "0" * 64))
     with pytest.raises(ValueError, match="disagrees"):
         collect.stage_video_identity(run, bound)

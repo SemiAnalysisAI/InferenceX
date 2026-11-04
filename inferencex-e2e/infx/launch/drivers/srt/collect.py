@@ -161,7 +161,7 @@ def stage_video_identity(run: SrtRun, bound: Path) -> None:
         run.request.env["H3_SPEC"], root=run.workspace, set_id=environment["H3_SET"]
     )
     plan, digest = selected["plan"], selected["plan_sha256"]
-    if digest != environment["H3_PLAN_SHA256"] or plan["model_id"] != run.request.model:
+    if digest != environment["H3_PLAN_SHA256"]:
         raise ValueError("bound video identity disagrees with the selected workload")
     identity = {
         "plan_sha256": digest,

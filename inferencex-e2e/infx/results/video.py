@@ -221,8 +221,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     for key in IDENTITY:
         parser.add_argument(f"--{key}", default="")
     args = parser.parse_args(argv)
-    if args.gpu_count <= 0 or len(set(args.concurrencies)) != len(args.concurrencies):
-        parser.error("--gpu-count must be positive and --concurrencies distinct")
     return run(
         logs_root=args.logs_root.resolve(), workspace=args.workspace.resolve(),
         result_filename=args.result_filename, concurrencies=args.concurrencies,

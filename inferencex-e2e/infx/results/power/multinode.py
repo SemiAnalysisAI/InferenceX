@@ -1130,10 +1130,8 @@ def validate_and_integrate(
     }
     if server_gpu_uuids is not None:
         observed_uuids = [uuid for device in observed for uuid in device.gpu_uuids]
-        if not server_gpu_uuids or len(set(server_gpu_uuids)) != len(server_gpu_uuids):
-            _add_reason(
-                audit, "server_gpu_identity_missing", "server GPU UUIDs are missing or duplicated"
-            )
+        if not server_gpu_uuids:
+            _add_reason(audit, "server_gpu_identity_missing", "server GPU UUIDs are missing")
         elif len(observed_uuids) != len(server_gpu_uuids) or set(observed_uuids) != set(
             server_gpu_uuids
         ):

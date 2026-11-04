@@ -89,7 +89,6 @@ def test_selected_server_executes_recipe_command_and_records_selected_environmen
         runtime=runtime,
         runtime_revision="a" * 40,
         model_path=model,
-        port=30283,
         gpus=2,
         output=output,
         command=command,
@@ -129,7 +128,6 @@ def test_selected_server_requires_snapshot_argument_and_explicit_view(tmp_path, 
             runtime="sglang",
             runtime_revision="a" * 40,
             model_path=model,
-            port=30283,
             gpus=2,
             output=tmp_path / "server",
             command=["python3", "serve"],
@@ -141,7 +139,6 @@ def test_selected_server_requires_snapshot_argument_and_explicit_view(tmp_path, 
             runtime="sglang",
             runtime_revision="a" * 40,
             model_path=model,
-            port=30283,
             gpus=2,
             output=tmp_path / "server",
             command=["python3", str(model)],
@@ -149,24 +146,22 @@ def test_selected_server_requires_snapshot_argument_and_explicit_view(tmp_path, 
         )
 
 
-def test_selected_server_rejects_wrong_model_and_gpu_shape(tmp_path):
+def test_selected_server_requires_the_recipe_gpus_and_runtime(tmp_path, monkeypatch):
     plan = h3_spec.plan_for(h3_spec.load_spec(PACKAGE / "specs/h3.yaml"), "release-v1")
-    model = tmp_path / "model"
-    model.mkdir()
+    model = _snapshot(tmp_path / "model")
+    monkeypatch.setattr(srt_selected, "cuda_devices", lambda: ["GPU-1", "GPU-2"])
     kwargs = {
         "runtime_revision": "a" * 40,
         "model_path": model,
-        "port": 30283,
         "output": tmp_path / "server",
-        "command": ["vllm", "serve", str(model)],
+        "command": ["python3", "-m", "engine", str(model)],
         "model_view": "snapshot",
     }
-    with pytest.raises(ValueError, match="requires MiniMaxAI/MiniMax-H3"):
-        srt_selected.serve({**plan, "model_id": "other/model"}, runtime="sglang", gpus=2, **kwargs)
-    with pytest.raises(ValueError, match="two GPUs"):
-        srt_selected.serve(plan, runtime="vllm-omni", gpus=4, **kwargs)
-    with pytest.raises(ValueError, match="two or four GPUs"):
-        srt_selected.serve(plan, runtime="sglang", gpus=1, **kwargs)
+    with pytest.raises(RuntimeError, match="visible GPU count"):
+        srt_selected.serve(plan, runtime="sglang", gpus=4, **kwargs)
+    with pytest.raises(ValueError, match="unsupported native video runtime"):
+        srt_selected.serve(plan, runtime="tgi", gpus=2, **kwargs)
+    assert not (tmp_path / "server").exists()
 
 
 def test_v01_vllm_four_gpu_server_records_sealed_launch(tmp_path, monkeypatch):
@@ -195,7 +190,6 @@ def test_v01_vllm_four_gpu_server_records_sealed_launch(tmp_path, monkeypatch):
         runtime="vllm-omni",
         runtime_revision="a" * 40,
         model_path=model,
-        port=30283,
         gpus=4,
         output=tmp_path / "server",
         command=command,
@@ -205,13 +199,12 @@ def test_v01_vllm_four_gpu_server_records_sealed_launch(tmp_path, monkeypatch):
     assert launch["gpu_uuids"] == uuids
     assert launch["image_digest"] == "a" * 64
     assert launch["argv"] == executed[0]
-    with pytest.raises(ValueError, match="two GPUs or four for v0.1"):
+    with pytest.raises(RuntimeError, match="visible GPU count"):
         srt_selected.serve(
             plan,
             runtime="vllm-omni",
             runtime_revision="a" * 40,
             model_path=model,
-            port=30283,
             gpus=3,
             output=tmp_path / "unused",
             command=command,
@@ -224,7 +217,6 @@ def test_v01_vllm_four_gpu_server_records_sealed_launch(tmp_path, monkeypatch):
             runtime="vllm-omni",
             runtime_revision="a" * 40,
             model_path=model,
-            port=30283,
             gpus=4,
             output=tmp_path / "unsealed",
             command=command,
@@ -347,7 +339,6 @@ def test_vllm_view_checks_snapshot_before_creating_runtime_directories(tmp_path,
             runtime="vllm-omni",
             runtime_revision="a" * 40,
             model_path=model,
-            port=30283,
             gpus=2,
             output=output,
             command=["vllm", "serve", str(model)],
