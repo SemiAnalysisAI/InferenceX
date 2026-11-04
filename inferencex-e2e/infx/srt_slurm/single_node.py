@@ -17,6 +17,7 @@ from infx.srt_slurm.synthetic_acceptance import ENGINES, selected_recipes, spec_
 from infx.srt_slurm.workload import (
     BOUND_RECIPE,
     add_fabric_argument,
+    bind_speculation,
     bind_workload,
     check_setup_script,
     compose_recipe,
@@ -97,6 +98,7 @@ def select_recipe(
         try:
             recipe = bind_workload(recipe, environment, agentic=agentic, multinode=False)
             validate_recipe(recipe, environment)
+            bind_speculation(recipe, environment)
         except ValueError as exc:
             errors.append(f"{name}: {exc}")
         except (KeyError, TypeError) as exc:
@@ -124,7 +126,7 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
         raise ValueError(
             "Single-node SRT supports only native MTP, EAGLE3, DSpark, DFlash or no speculation"
         )
-    speculation = "mtp" if spec else workload.get("SPEC_DECODING", "none")
+    speculation = "mtp" if spec else "none"
     agentic = environment["IS_AGENTIC"] == "1"
     expected = {
         "engine": (engine, SINGLE_NODE_ENGINES[environment["FRAMEWORK"]]),
