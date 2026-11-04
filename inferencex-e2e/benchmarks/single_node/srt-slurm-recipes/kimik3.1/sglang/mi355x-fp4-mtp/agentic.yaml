@@ -1,0 +1,295 @@
+base:
+  schema: 2
+  name: kimik3.1-fp4-mi355x-sglang-agentic
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        served-model-name: moonshotai/Kimi-K3.1-Pro
+        trust-remote-code: true
+        dtype: bfloat16
+        kv-cache-dtype: fp8_e4m3
+        mamba-ssm-dtype: float32
+        mem-fraction-static: 0.85
+        chunked-prefill-size: 16384
+        schedule-policy: lpm
+        mamba-radix-cache-strategy: extra_buffer_lazy
+        cuda-graph-backend-prefill: breakable
+        cuda-graph-bs-prefill: [256, 512, 768, 1024, 1536, 2048, 3072, 4096]
+        stream-interval: 1
+        weight-loader-prefetch-checkpoints: true
+        model-loader-extra-config: '{"enable_multithread_load": true}'
+        reasoning-parser: kimi_k3
+        tool-call-parser: kimi_k3
+        enable-metrics: true
+        # DFLASH verifies 6 tokens per step on MI35x: the current token plus 5 drafts.
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: RadixArk/Kimi-K3.1-Dflash2-Preview
+        speculative-draft-model-revision: d0d8bc2e3c6d0a195d2e00a49017e71ca8d881f1
+        speculative-draft-attention-backend: triton
+        speculative-draft-kv-cache-dtype: fp8_e4m3
+        speculative-num-draft-tokens: 6
+        speculative-use-block-verification: true
+        enable-linear-replayssm-spec: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        ROCM_QUICK_REDUCE_QUANTIZATION: NONE
+        # Outlast AIPerf's 300 s client connection pool.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+        SGLANG_USE_AITER: '1'
+        SGLANG_AITER_K3_OPT: '1'
+        AITER_FLYDSL_FORCE: '1'
+        AITER_SITUV2_A8W4: '1'
+        PYTORCH_HIP_ALLOC_CONF: garbage_collection_threshold:0.95
+        SGLANG_OPT_MAMBA_SKIP_DECODE_LOCK: '1'
+        HSA_USERPTR_FOR_PAGED_MEM: '0'
+  # A node's first K3.1 point downloads the ~1.56 TB checkpoint before loading it.
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  benchmark:
+    env:
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+# The decode monokernel takes no KV offload; admission and decode graphs follow the agent count.
+override_mono_c1:
+  roles:
+    agg:
+      args:
+        enable-amd-monokernel: true
+        max-mamba-cache-size: 60
+        max-running-requests: 1
+        cuda-graph-max-bs-decode: 1
+      env:
+        SGLANG_AMD_MONO_K31_WIDE: '1'
+        SGLANG_ROCM_RUNTIME_RESERVE_GB: '6'
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_mono_c4:
+  roles:
+    agg:
+      args:
+        enable-amd-monokernel: true
+        max-mamba-cache-size: 60
+        max-running-requests: 4
+        cuda-graph-max-bs-decode: 4
+        prefill-decode-interval: 16
+      env:
+        SGLANG_AMD_MONO_K31_WIDE: '1'
+        SGLANG_ROCM_RUNTIME_RESERVE_GB: '6'
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+# HiCache at ratio 2.5 with a mamba host ratio of 12 pins about 190 GB of host memory per GPU.
+override_hicache_c4:
+  roles:
+    agg:
+      args:
+        dcp-size: 8
+        dcp-comm-backend: a2a
+        mamba-full-memory-ratio: 0.65
+        prefill-decode-interval: 16
+        enable-hierarchical-cache: true
+        hicache-ratio: 2.5
+        hicache-write-policy: write_back
+        max-running-requests: 4
+        cuda-graph-max-bs-decode: 4
+      env:
+        SGLANG_ROCM_RUNTIME_RESERVE_GB: '10'
+        SGLANG_HICACHE_MAMBA_HOST_RATIO: '12'
+        # Keeps every rank on the Rust TreeCore; write-back asserts on a mix with the Python one.
+        RUSTUP_TOOLCHAIN: stable
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1529'
+
+override_hicache_c10:
+  roles:
+    agg:
+      args:
+        dcp-size: 8
+        dcp-comm-backend: a2a
+        mamba-full-memory-ratio: 0.65
+        prefill-decode-interval: 16
+        enable-hierarchical-cache: true
+        hicache-ratio: 2.5
+        hicache-write-policy: write_back
+        max-running-requests: 10
+        cuda-graph-max-bs-decode: 10
+      env:
+        SGLANG_ROCM_RUNTIME_RESERVE_GB: '10'
+        SGLANG_HICACHE_MAMBA_HOST_RATIO: '12'
+        # Keeps every rank on the Rust TreeCore; write-back asserts on a mix with the Python one.
+        RUSTUP_TOOLCHAIN: stable
+  benchmark:
+    env:
+      CONC: '10'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1529'
+
+override_hicache_c16:
+  roles:
+    agg:
+      args:
+        dcp-size: 8
+        dcp-comm-backend: a2a
+        mamba-full-memory-ratio: 0.65
+        prefill-decode-interval: 16
+        enable-hierarchical-cache: true
+        hicache-ratio: 2.5
+        hicache-write-policy: write_back
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+      env:
+        SGLANG_ROCM_RUNTIME_RESERVE_GB: '10'
+        SGLANG_HICACHE_MAMBA_HOST_RATIO: '12'
+        # Keeps every rank on the Rust TreeCore; write-back asserts on a mix with the Python one.
+        RUSTUP_TOOLCHAIN: stable
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1529'
+
+override_hicache_c24:
+  roles:
+    agg:
+      args:
+        dcp-size: 8
+        dcp-comm-backend: a2a
+        mamba-full-memory-ratio: 0.65
+        prefill-decode-interval: 16
+        enable-hierarchical-cache: true
+        hicache-ratio: 2.5
+        hicache-write-policy: write_back
+        max-running-requests: 24
+        cuda-graph-max-bs-decode: 24
+      env:
+        SGLANG_ROCM_RUNTIME_RESERVE_GB: '10'
+        SGLANG_HICACHE_MAMBA_HOST_RATIO: '12'
+        # Keeps every rank on the Rust TreeCore; write-back asserts on a mix with the Python one.
+        RUSTUP_TOOLCHAIN: stable
+  benchmark:
+    env:
+      CONC: '24'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1529'
+
+override_hicache_c32:
+  roles:
+    agg:
+      args:
+        dcp-size: 8
+        dcp-comm-backend: a2a
+        mamba-full-memory-ratio: 0.65
+        prefill-decode-interval: 16
+        enable-hierarchical-cache: true
+        hicache-ratio: 2.5
+        hicache-write-policy: write_back
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+      env:
+        SGLANG_ROCM_RUNTIME_RESERVE_GB: '10'
+        SGLANG_HICACHE_MAMBA_HOST_RATIO: '12'
+        # Keeps every rank on the Rust TreeCore; write-back asserts on a mix with the Python one.
+        RUSTUP_TOOLCHAIN: stable
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1529'
+
+override_hicache_c48:
+  roles:
+    agg:
+      args:
+        dcp-size: 8
+        dcp-comm-backend: a2a
+        mamba-full-memory-ratio: 0.65
+        prefill-decode-interval: 16
+        enable-hierarchical-cache: true
+        hicache-ratio: 2.5
+        hicache-write-policy: write_back
+        max-running-requests: 48
+        cuda-graph-max-bs-decode: 48
+      env:
+        SGLANG_ROCM_RUNTIME_RESERVE_GB: '10'
+        SGLANG_HICACHE_MAMBA_HOST_RATIO: '12'
+        # Keeps every rank on the Rust TreeCore; write-back asserts on a mix with the Python one.
+        RUSTUP_TOOLCHAIN: stable
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1529'
+
+override_hicache_c52:
+  roles:
+    agg:
+      args:
+        dcp-size: 8
+        dcp-comm-backend: a2a
+        mamba-full-memory-ratio: 0.65
+        prefill-decode-interval: 16
+        enable-hierarchical-cache: true
+        hicache-ratio: 2.5
+        hicache-write-policy: write_back
+        max-running-requests: 52
+        cuda-graph-max-bs-decode: 52
+      env:
+        SGLANG_ROCM_RUNTIME_RESERVE_GB: '10'
+        SGLANG_HICACHE_MAMBA_HOST_RATIO: '12'
+        # Keeps every rank on the Rust TreeCore; write-back asserts on a mix with the Python one.
+        RUSTUP_TOOLCHAIN: stable
+  benchmark:
+    env:
+      CONC: '52'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1529'
+
+override_hicache_c60:
+  roles:
+    agg:
+      args:
+        dcp-size: 8
+        dcp-comm-backend: a2a
+        mamba-full-memory-ratio: 0.65
+        prefill-decode-interval: 16
+        enable-hierarchical-cache: true
+        hicache-ratio: 2.5
+        hicache-write-policy: write_back
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 64
+      env:
+        SGLANG_ROCM_RUNTIME_RESERVE_GB: '10'
+        SGLANG_HICACHE_MAMBA_HOST_RATIO: '12'
+        # Keeps every rank on the Rust TreeCore; write-back asserts on a mix with the Python one.
+        RUSTUP_TOOLCHAIN: stable
+  benchmark:
+    env:
+      CONC: '60'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1529'
