@@ -148,8 +148,8 @@ def test_cli_list_and_show(capsys) -> None:
     listed = json.loads(capsys.readouterr().out)
     assert [row["curve"] for row in listed] == [curve.name for curve in list_curves()]
 
-    assert main(["show", "glm-5.3-fp8__mtp__native__default-default"]) == 0
-    assert "glm-5.3-fp8" in capsys.readouterr().out
+    assert main(["show", "glm-5.3-nvfp4__mtp__native__default-default"]) == 0
+    assert "glm-5.3-nvfp4" in capsys.readouterr().out
 
 
 def test_cli_reports_errors(capsys) -> None:

@@ -307,6 +307,10 @@ jobs:
             echo "AL collection failed: speedbench-reference-al.yaml not produced." >&2
             exit 1
           fi
+          if ! grep -qE '^ +[0-9]+: [0-9]' speedbench-reference-al.yaml; then
+            echo "AL collection failed: no cell was measured (every value is N/A)." >&2
+            exit 1
+          fi
           echo "### SpeedBench AL matrix" >> "$GITHUB_STEP_SUMMARY"
           echo '```yaml' >> "$GITHUB_STEP_SUMMARY"
           cat speedbench-reference-al.yaml >> "$GITHUB_STEP_SUMMARY"
