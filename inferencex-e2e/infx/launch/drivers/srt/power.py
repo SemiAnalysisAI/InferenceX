@@ -70,8 +70,12 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
                 Match(any_of("qwen3.5"), any_of("fp8"), any_of("dynamo-sglang"), agentic=True),
                 agentx=True,
             ),
+            PowerRule(
+                Match(any_of("kimik3.1"), any_of("fp4"), any_of("dynamo-sglang"), agentic=True),
+                agentx=True,
+            ),
         ),
-        error="B200 Nscale dcgm-power requires Qwen3.5 FP8 AgentX dynamo-sglang",
+        error="B200 Nscale dcgm-power requires Qwen3.5 FP8 or Kimi-K3.1 FP4 AgentX dynamo-sglang",
     ),
     ("h200-dgxc", LaunchPath.SRT_MULTI): PowerLane(
         rules=(

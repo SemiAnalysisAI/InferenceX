@@ -12012,3 +12012,12 @@
     - "Keep historical results, SPEED-Bench collectors, golden AL curves, vendor evals and OperatorX shapes."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4762
   retired: true
+
+- config-keys:
+    - kimik3.1-fp4-b200-dynamo-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi K3.1 Pro B200 SGLang AgentX on lmsysorg/sglang:dev-kimi-k31-pro: one aggregated worker over two nodes, TP16 with DCP16, no KV offload, concurrency 1, 4, 8, 14, 24, 32, 48, 56, 72, 80 with DFLASH and 96 without speculation."
+    - "DFLASH uses RadixArk/Kimi-K3.1-Dflash2-Preview with block verification, 7 draft tokens through concurrency 14 and 4 above."
+  pr-link: TBD
