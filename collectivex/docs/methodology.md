@@ -1,776 +1,686 @@
-# CollectiveX EP Benchmark Methodology
+# Summary
 
-CollectiveX schedules expert-parallel (EP) communication benchmarks, executes them on real
-accelerator allocations, and uploads the neutral artifacts each run emits. It does **not** validate
-those artifacts, promote, rank, recommend, select, hide, or decide what any consumer displays. The
-frontend reads the neutral matrix, result, and summary artifacts and makes its own coverage
-and display decisions. This document describes how a case is scheduled, measured, checked, and
-recorded, not a publication or qualification contract.
+What CollectiveX measures, how, and how to read it. The sections after this summary hold the
+evidence behind each rule; the [README](../README.md) holds usage and coverage. Where the docs and
+`collectivex/bench/` disagree, the code is authoritative.
+
+## Scope and workload
+
+CollectiveX times one MoE layer's expert-parallel communication on real allocations: **dispatch**
+sends each token to the ranks owning its top-k experts, **combine** brings the expert outputs back.
+No expert compute runs, so it measures neither overlap nor serving throughput, and it does not rank
+or recommend.
+
+- **Shape** `deepseek-v4-pro`: hidden 7168, top-k 6, 384 experts, packed placement, uniform
+  deterministic routing, proven identical on every rank.
+- **`T` is tokens per rank**: decode 1-512, prefill 1024-8192, powers of two. Unreachable rungs go
+  in `ladder_dropped`.
+- **Precision**: dispatch BF16, or FP8 (per-128-block e4m3, FP32 scales) where the backend supports
+  it upstream; combine always BF16.
+- **Scale**: EP8 is one 8-GPU node (2x4 MNNVL on GB200/GB300); EP16 is 2x8 over RDMA, or 4x4 MNNVL
+  on GB200/GB300.
+
+## Backends run as engines run them
+
+Each backend runs the configuration its reference engine selects, so `production` rows compare
+deployed contracts. `production` means an engine can select it today; `candidate` rows describe the
+library only. Details are under [Backends](#backends).
+
+| Backend | Maturity | Launch | Engine contract |
+|---|---|---|---|
+| deepep-v2 | production | graph; normal prefill eager | vLLM `deepep_v2` and `deepep_low_latency` (MNNVL opt-in on GB pools); LL stops at T=256 |
+| nccl-ep | production for in-domain zero-copy LL rank-major BF16; library otherwise | graph decode; prefill eager | TensorRT-LLM `NcclEP` with NVIDIA/TensorRT-LLM#20631; HT and FP8 (DS_FP8E3M4) are library rows |
+| uccl-ep | candidate | normal eager; LL graph | vLLM's DeepEP configuration on UCCL's drop-in `deep_ep`; no engine ships its selector |
+| mori | production | graph decode; eager prefill | vLLM's MoRI IntraNode / InterNodeV1, LL EP16 only |
+| flashinfer-ep | production | graph decode; eager prefill | vLLM's integration, GB200/GB300 only |
+
+## Timing
+
+Every window is a pair of CUDA events.
+
+**Fresh entry** times one drained `roundtrip`, `dispatch` or `combine` per sample (256 trials x 8).
+Each sample opens with a 2 ms GPU spin and a device all-reduce, so launch skew stays outside the
+window, and is reduced across ranks by MAX; MIN and the spread are kept too. A sample whose host
+enqueued slower than the spin is a **miss**. See [Rank Alignment](#rank-alignment).
+
+**Chained** times 128 back-to-back pairs with no host sync, 16 dropped as fill, 4 trials:
+
+- **`pair_period`**, the headline: events only around each pair, MEDIAN across ranks.
+- **`chain_floor_us`**: events around each op, MIN across ranks; tracks kernel time to about 10%.
+- Health: `pair_spread_us`, `interpair_gap_us`, `settle_drift_us`. Chained per-op medians are
+  never published.
+
+Graphed rows replay CUDA graphs as engines capture decode; the rest run eager. The two regimes carry
+different `kernel_generation` suffixes and never pool.
+
+## Validation
+
+Every case is gated by an oracle before and after timing and after the chain: per-expert transforms,
+metadata, counts, payload and a combine model matching each backend's reduction (tolerance 8 x 2^-8
+relative). Graphed replays must rewrite poisoned outputs. Any failure makes the case `invalid`.
+
+## Reading results
+
+- Rank on `pair_period` p50. Each case is one run, so a small gap is no result.
+- Fresh-entry p90/p95/p99 are withheld once misses reach 10/5/1% of samples. Do not rank
+  multi-node decode on fresh-entry p99.
+- Bandwidth is logical wire payload over latency, never link utilization.
+- FP8 `stage` (the dequant) is excluded from `roundtrip` and `pair_period`; do not sum it in.
+- EFA pools (b300, h100) run EP16 through a CPU proxy, so those rows measure the proxy. b300's
+  deepep-v2 rows build AWS's EFA fork of DeepEP (`-aws-efa-fork`).
+- On GB200/GB300, eager FP8 prefill chains at T=1024 are bound by the Grace host, not the fabric.
+- Vendor tables time kernels in a profiler; compare them with `cross_rank_min_us` or
+  `chain_floor_us`.
+- Limits: no compute between ops, uniform routing, no L2 flush, unlocked clocks (`slow_gpu` flags
+  outliers), interior chain pairs unvalidated.
+
+## KV-cache transfer
+
+The `kv-transfer` suite's rules and evidence are in [kv-transfer.md](kv-transfer.md).
+
+# Methodology
+
+CollectiveX runs expert-parallel (EP) communication benchmarks by hand on real accelerator
+allocations and writes one result document per case into `collectivex/results/`. Uploading those
+files to the CollectiveX database publishes them; they are not committed. CollectiveX does not rank,
+recommend or select: the frontend reads `results/cases.json` and the result documents and makes its
+own display decisions. The [Summary](#summary) above states the rules in
+brief. Where the docs disagree with the code in `collectivex/bench/`, the code is authoritative.
 
 ## Product Boundary
 
-CollectiveX is a communication microbenchmark for:
-
-- comparing EP libraries on one chip/topology.
-- comparing EP latency and logical payload bandwidth across systems under the same workload.
-- surfacing unsupported, failed, invalid, and unstable cases rather than hiding them.
-
-It does not predict serving throughput without a separate correlation study.
+CollectiveX is a communication microbenchmark for comparing EP libraries on one chip and topology,
+and EP latency and logical payload bandwidth across systems under the same workload. It reports
+unsupported, failed, invalid and unstable cases rather than hiding them. It does not predict serving
+throughput: no expert compute runs, so it measures neither compute/communication overlap nor a layer.
 
 ## Matrix
 
-The implemented workload is `deepseek-v4-pro` (DeepSeek-V4-Pro 1.6T, the `dsv4` model the rest of
-InferenceX benchmarks): hidden 7168, top-k 6, 384 routed experts, packed
-placement, and one pinned fixed resource profile per backend/topology. Combine is always BF16.
-Dispatch precision is a swept dimension, with a BF16 control and, on the backends whose FP8 dispatch is
-supported upstream (DeepEP V2, MoRI, UCCL-EP, FlashInfer EP), an FP8 dispatch (`bf16`, `fp8`),
-caller-prequantized in `normal` mode (the `low-latency` kernels quantize FP8 internally from BF16 on
-DeepEP and UCCL-EP, and stay caller-prequantized on MoRI). That caller-side quantize is charged
-**inside the measured dispatch**, because a production forward pass pays it on the critical path. It
-is one fused kernel on DeepEP V2, UCCL-EP and FlashInfer EP, guarded bitwise against its eager
-reference. MoRI's is a plain dtype cast and needs neither. So an FP8 `normal` dispatch covers
-quantize-plus-transport while its BF16 control covers transport alone, and is not comparable to a row
-measured before that change. The sweep `version` deliberately stays 1 across it, so
-`implementation.stage_excluded_from_roundtrip` and the presence of a `stage` component are the
-discriminators for THAT change.
+The workload is `deepseek-v4-pro` (DeepSeek-V4-Pro, the `dsv4` model the rest of InferenceX
+benchmarks): hidden 7168, top-k 6, 384 routed experts, packed placement, uniform routing. Each
+backend/topology runs one pinned configuration, the one its reference engine runs. The token ladders
+live in `configs/sweep.json`: decode T=1..512 and prefill T=1024..8192 tokens per rank, in powers of
+two. `normal` mode runs both ladders with `layout-and-dispatch-v1` semantics. `low-latency` runs each
+backend's decode kernels on the decode ladder, and nccl-ep's on the prefill ladder too
+(`backend_mode_phases`); it is enabled cell by cell from the registry's `ll_backends` map.
 
-Those two fields do not separate every generation, and it is worth being exact about which ones
-they miss, because the version tag will not help. A same-cell comparison across the durable store
-puts numbers on it: the FP8 quantize charge moved dispatch by +64% to +110% (median, small T). The
-staging hoist widening moved FlashInfer roundtrip −46% and MoRI BF16 −23%. MoRI's move to the
-external input buffer with 16 warps moved FP8 combine +33% to +65% on gfx950. Sizing the NCCL EP
-HT combine to its receive count moved combine −10% to −41%. The two-pass chain moved
-`pair_period` −5% to −42% everywhere. Of those, only the first two are keyed by the fields above.
+`sweep_matrix.py` turns the requested SKUs, backends, EP sizes, modes, precisions and ladders into
+shards of one allocation each. A filter produces a smaller matrix, not a different contract.
+`results/cases.json` is the committed snapshot of the full matrix, and a unit test fails when it no
+longer matches the configs. A cell whose backend runs on that SKU at another EP size is listed as
+`unsupported`. Low-latency adds only runnable cells, so a low-latency wall is explained in
+[Backends](#backends) rather than listed. Whether a case succeeded is decided only by the
+benchmark's return code.
 
-One more key, for the rest. **`chain_health.interpair_gap_us` present** marks the two-pass chain:
-rows from the single six-events chain carry `chain_health` with `pair_spread_us` alone, and their
-`pair_period` is inflated by a host constant rather than being a different-but-valid quantity, so
-treat those rows as defective, not merely older. For the MoRI buffer-mode change and the NCCL EP
-combine sizing there is **no per-row discriminator at all**. `kernel_generation` reads the same on
-both sides, so pre-change rows for those two backends cannot be separated from post-change rows by
-any field, and must be excluded from the store rather than keyed around.
+### Ladder Clamps
 
-If the sweep version is ever bumped, **skip 2 and go to 3.** A short-lived bump to 2 during this
-branch's development left stored documents tagged `version: 2` that are currently invisible only
-because the frontend reader accepts `[1]`. Publishing support for 2 would silently resurface that
-mid-development churn as valid data.
+A backend may clamp the ladder, and `workload.ladder_measured`, `ladder_dropped` and `ladder_cap`
+record what ran. DeepEP V2, UCCL-EP and MoRI allocate their low-latency receive at 256 tokens per
+rank (vLLM's batched-DP budget; for MoRI, the harness's shared cap), so their low-latency ladders stop
+at 256. NCCL EP sizes its group to the ladder's top and runs every rung. DeepEP V2's receive is sized
+from a constant rather than the ladder, so clamping around a kernel defect cannot change the
+footprint. That was used once: DeepEP's low-latency combine corrupted the 256 rung on every
+Blackwell SKU until the pin moved to upstream main with
+[DeepEP #642](https://github.com/deepseek-ai/DeepEP/pull/642), a CTA-scope fence before the combine
+staging buffer is recycled.
 
-The `fp8_consume` derivation, in full, since the code now points here for it. `dequant` is a
-verification hatch rather than a second metric (never a sweep axis, never a default) because the
-mismatched-config cost is derivable from what every run already emits:
+### Precision
 
-    dequant roundtrip  ~=  roundtrip + stage        (+2.4% .. -0.1%, b200 LL fp8 ladder)
+Combine is always BF16. Dispatch is a BF16 control plus, on backends whose FP8 dispatch is supported
+upstream, an FP8 dispatch (`BACKEND_PRECISIONS` in `sweep_matrix.py`). Every FP8 codec is per-128-block
+e4m3 with FP32 scales on the wire: 7168 value bytes plus 224 scale bytes per copy.
 
-slightly high because chaining amortises launch overhead (median `rt/(d+s+c)` = 0.93 across the
-corpus). The reverse does **not** hold: reconstructing native as `dequant - stage` errs by -11.6% at
-T=1, -5% at T=64, and converges only by T=256. This is worst precisely in the decode regime the headline
-reports. So measure native and derive dequant, never the other way round. The hatch reproduces
-historical deepep-v2/uccl-ep numbers for regression checks (302.0µs against 302.5µs in run
-30177021271 at T=1). It does not reproduce MoRI fp8, whose stage now casts only the rows dispatch
-filled, nor any pre-hoist BF16 roundtrip.
+- **MoRI** quantizes as vLLM's MoRI `prepare()` does for a block-quantized model (aiter `per_1x128`),
+  in e4m3fnuz on gfx942 and OCP e4m3fn on gfx950.
+- **UCCL-EP** quantizes per token and per 128 channels, e4m3fnuz on gfx942 and e4m3fn elsewhere.
+- **Blackwell low-latency** (DeepEP and UCCL-EP) rounds scales to powers of two and hands the receiver
+  packed UE8M0 exponents, as vLLM's DeepEP LL path asks when its expert GEMM takes UE8M0 scales. The
+  wire still carries FP32 scales. Those rows carry the `-ue8m0` generation suffix.
+- **`normal`-mode codecs** of DeepEP V2, UCCL-EP and FlashInfer EP keep unrounded FP32 scales, where
+  vLLM rounds them on its DeepGEMM E8M0 path: byte-identical and timing-neutral, not bit-identical.
+- **NCCL EP** uses its internal DS_FP8E3M4 recipe, for low-latency prefill and decode, with a BF16
+  combine. FP8 dispatch zero-copies under the same conditions as BF16, registering both the token and
+  scale windows. It runs in the default matrix as a library row: TensorRT-LLM's `NcclEP` sends
+  DeepSeek-FP8 activations in BF16. NCCL EP's normal mode stays BF16-only.
 
-Read that charge as a **fixed per-call cost, not a payload-proportional one**. On DeepEP V2 decode,
-FP8 dispatch p50 minus its BF16 control is 65us on h100, 59us on b200, 27us on b300 and 57us on
-gb300 at T=1, flat within a microsecond or two through T=64, then decaying. By T=512 it is slightly
-negative on h100 and b300, where halved payload bytes more than repay it. FlashInfer EP carries
-~107us on gb300 (its own codec, and a fourth dispatch payload under FP8). At T=1 the FP8 path moves
-*fewer* bytes than BF16, so this is per-call work, not transport, and it exceeds the fused quantize's
-own device time (1.5-3.6us per SKU) by more than an order of magnitude: the timing window has no host
-sync before its start event (see below), so a near-idle stream at T=1 lets host-side launch cost land
-inside it. Compiling the quantize reduces this rather than causing it. An eager quantize measures
-33-39us worse per decode dispatch on h100 through the same window, but production issues one custom
-quantize op into an already-busy stream, so the small-T end of an FP8 `normal` row is the least
-production-representative number the suite emits. Compare FP8 and BF16 at the top of the ladder.
-`low-latency` rows are unaffected: those kernels quantize internally or take pre-quantized input by
-API contract. NCCL EP supports FP8 only for low-latency decode, using native DS_FP8E3M4
-dispatch with zero-copy disabled and BF16 combine. Native-consume roundtrip excludes
-dequantization staging; normal mode and prefill remain BF16-only.
-The
-per-backend precision set lives in `sweep_matrix.py`'s `BACKEND_PRECISIONS` and a backend never
-emits a case for a precision it does not support. `normal`-mode cases use the
-`layout-and-dispatch-v1` semantics. `low-latency` cases use each backend's decode-kernel semantics
-(detailed below).
+The caller-side quantize is **inside the measured dispatch**, because a forward pass pays it on the
+critical path. On DeepEP V2, UCCL-EP, FlashInfer EP and MoRI it is one compiled kernel, checked
+bitwise against its eager reference before timing. The DeepEP V2 and UCCL-EP low-latency kernels
+quantize internally. So an FP8 `normal` dispatch covers quantize plus transport, and its BF16
+control covers transport alone. Read that charge as a fixed per-call cost, not a payload-proportional
+one, and compare FP8 with BF16 at the top of the ladder: at small T the FP8 path moves fewer bytes but
+carries the quantize launch, and by T=512 the halved payload repays it.
 
-- `ep-core`: uniform routing over the workload's token ladders, which for `deepseek-v4-pro` include decode
-  T=1..512 powers of two and prefill T=1024..8192 powers of two. Ladders are model-specific and
-  live with the workload in `configs/sweep.json`.
+`implementation.fp8_consume` names the FP8 consumption the chained roundtrip models. `native`, the
+default, has the expert GEMM consume the dispatched FP8 and scales directly, as vLLM and SGLang do for
+this 128-block shape. `CX_FP8_CONSUME=dequant` stages every pair from its own dispatch, modelling
+vLLM's quant-format mismatch fallback. It is a verification hatch, not a second metric, because the
+mismatched cost is derivable from what every run emits (`dequant roundtrip ~= roundtrip + stage`,
+within 2.4% on b200). The reverse does not hold, so measure native and derive dequant.
 
-A backend may clamp the ladder below that, and every clamped point is reported in the artifact
-rather than dropped silently. `workload.ladder_measured`, `ladder_dropped` and `ladder_cap`
-record what ran and what did not. DeepEP V2 in `low-latency` mode pre-allocates a fixed receive,
-so its ladder cannot exceed that buffer. Both are 256, so the decode ladder runs to its full
-extent and only the 512 point is dropped.
+## Backends
 
-That clamp was briefly load-bearing. DeepEP's low-latency combine corrupted the 256 rung on every
-Blackwell SKU (B200, GB200 and GB300, EP8 and EP16, both precisions, MNNVL and RDMA alike) while
-Hopper stayed clean, stochastically at roughly 1.5-3.3% per invocation, surfacing as one wrong token
-row whose norm still matched to 4 significant figures. Upstream PR #642 fixed it with a CTA-scope
-fence retiring the combine consumer's shared-memory reads before its staging buffer is recycled. The
-commit we pinned was a pre-merge branch head that predated it, so we clamped the measured ladder to
-128 until the pin moved to upstream main. The receive is sized from a constant rather than from
-`max(ladder)` so clamping cannot change the footprint, which drives both the transport's memory
-traffic and the FP8 dequant volume.
+Each backend runs the configuration its reference engine selects: vLLM, except TensorRT-LLM for NCCL
+EP low-latency (as of NVIDIA/TensorRT-LLM#20631; see [nccl-ep.md](nccl-ep.md)).
+`implementation.maturity` is `production` where an engine can select the configuration today and
+`candidate` where the row describes the library ([Result Document](#result-document)). Compare
+`production` rows for deployed contracts.
 
-`sweep_matrix.py` materializes the requested SKUs, backends, EP sizes, and token ladders into a
-matrix document, then extracts strict per-shard controls. `--only-sku`, `--exclude-skus`,
-`--ep-sizes`, and `--precisions` select a subset. A subset produces a smaller matrix, not a
-different contract. The matrix is generated per dispatch. There is no frozen matrix digest or locked
-case count.
+### DeepEP V2
 
-| Systems | EP8 | EP16 |
-|---|---|---|
-| H100/H200/B200/B300 | 1x8 NVLink, scale-up | 2x8 NVLink + RDMA, scale-out |
-| MI300X/MI325X/MI355X | 1x8 XGMI, scale-up | 2x8 XGMI + RDMA, scale-out |
-| GB200/GB300 | 2x4 MNNVL, scale-up | 4x4 MNNVL, scale-up |
+DeepEP V2 is the `ElasticBuffer` of [DeepEP #605](https://github.com/deepseek-ai/DeepEP/pull/605).
+The pin in `runtime/common.sh` is upstream `main`, which also carries #630 (pure scale-up init without
+GIN), #640 (NCCL shared-memory mappings) and #642 (the low-latency combine fence). The adapter fails
+closed unless the loaded `deep_ep` exposes `ElasticBuffer`, which also catches an image-bundled
+`deep_ep` shadowing the build.
 
-**A virtualized pool can make a scale-out row measure the hypervisor rather than the fabric.**
-h200-dgxc EP16 on deepep-v2 paid three to eight times h100's cross-node cost while nccl-ep on the
-same nodes ran at h100 rates. ElasticBuffer registers its GIN window `NCCL_WIN_STRICT_ORDERING`,
-which strips PCIe relaxed ordering, and in h200's KVM guests strict-ordered GPU-NIC writes cap the
-hop near 10 GB/s per GPU. The DeepEP build patches the registration behind a switch that a pool
-opts into with `rdma_relaxed_ordering` in its `network` block. On h200-dgxc, bf16 decode at 512
-tokens per rank drops from 3088µs to 620µs per round trip and the oracle passes in bf16 and fp8.
-Upstream made the window strict on purpose (DeepEP #661/#674): with relaxed ordering a GIN signal
-can in principle overtake the data it announces. That race has not been reproduced, and a passing
-oracle does not rule it out. Those rows carry a `-relaxed-ordering` `kernel_generation` suffix and
-never pool with the strict series; every other pool keeps upstream's registration.
+On b300 (registry `deepep_efa_fork`) the build uses AWS's fork instead,
+[amazon-contributing/DeepEP](https://github.com/amazon-contributing/DeepEP) `main`: the same pin plus
+its EFA commits. Upstream treats EFA as unsupported
+([deepseek-ai/DeepEP#369](https://github.com/deepseek-ai/DeepEP/issues/369)), and its scale-out
+kernels assume writes land in order. The fork's default `unordered` kernels batch each put with an
+in-band header and count completions, which the aws-ofi-nccl proxy's weak signals support; it also
+caps the scale-out GIN contexts at 17. It builds against NCCL 2.32.3, whose headers declare the GIN
+signal requirements the fork sets. These rows carry the `-aws-efa-fork` series suffix and record
+`deepep_source` and `hybrid_kernel`, so they never pool with upstream rows. The fork is not what vLLM
+ships, so there `normal` keeps vLLM's call configuration on AWS's kernels. h100-dgxc stays on upstream:
+on its p5 nodes (32 EFA NICs each) the fork's unordered dispatch times out forwarding scale-out tokens.
 
-Physical host count does not define scope. Both GB cells remain inside one 72-GPU MNNVL scale-up
-domain.
+`normal` runs vLLM's `deepep_v2` configuration (`library_config.engine_contract = "vllm"`). With CUDA
+graphs on, vLLM's default, every batch, prefill as well as decode, dispatches with `do_cpu_sync=False`
+and `do_expand=False` into a receive bounded at the next power of two of T, with
+`prefer_overlap_with_compute=False` (DeepEP then sizes its kernels at 64 SMs) and
+`allow_multiple_reduction=False`. No deepep-v2 dispatch waits on the host. Decode replays a graph and
+prefill runs eager, as vLLM runs large prefill batches uncaptured.
 
-Unsupported combinations are explicitly classified in the matrix, not silently skipped coverage. DeepEP V2 is the
-`ElasticBuffer` introduced by PR #605, pinned at upstream main, which carries that PR plus #630's
-minimal pure-scale-up fix, the #640 library matcher that excludes NCCL shared-memory mappings, and
-the #642 low-latency combine fence. Scale-up cases
-request NCCL Device API LSA and fail closed unless the realized LSA team covers the full EP world.
-x86 EP16 scale-out uses the hybrid path with GIN and requires two logical scale-out domains
-represented by two physical RDMA ranks, with eight scale-up ranks per domain. GB EP16 remains MNNVL
-scale-up and uses LSA. MoRI EP8 uses the direct IntraNode kernel on every CDNA SKU. MoRI EP16 runs the InterNodeV1
-kernel on mi355x over the Pollara RoCE rails with MoRI's default STATIC_HEAP symmetric heap.
-Two defects had to be removed before that row could publish. `combine()` takes the rank's own
-routing tensor, not dispatch's returned recv-slot indices (part of the ROCm/mori#475 corruption
-was that caller-side mix-up, guarded upstream by ROCm/mori#546). The residual stochastic
-corruption from T~64 up, near-certain at prefill token counts, was this adapter forcing
-`MORI_SHMEM_MODE=VMM_HEAP` for scale-out: on ROCm 7.2 the HIP runtime leaves VMM allocations
-requested uncached in the cached pool, so cross-node combine partials read stale lines
-(ROCm/mori#610). A same-branch CI A/B on mi355x settled it — STATIC_HEAP is correct on every
-bf16 and fp8 rung, decode 1..512 and prefill 1024..8192 (run 34939333022), while VMM_HEAP
-reproduces the corruption (run 34941185534) — and the adapter now fails closed if the heap mode
-is anything but STATIC_HEAP. The tw pairs stay unsupported at EP16: they have no cross-node GPU
-fabric. UCCL-EP EP16 stays off mi355x: its CPU-proxy RDMA is functional on the Pollara fabric but
-roughly 13x under its upstream-documented bandwidth (~6 GB/s vs 82 GB/s), unchanged by GPU-memory
-registration mode (DMA-BUF vs peer-memory) or traffic class — an ionic-driver-level suspect.
-UCCL-EP EP16 is registered on b200-nscale, where it runs at full health on bare-metal IB.
-MoRI runs under its MANUAL launch mode with a pinned launch config, because that is what the engines
-run: neither vLLM nor SGLang sets `MORI_EP_LAUNCH_CONFIG_MODE`, and both pin block_num 80,
-rdma_block_num 0, and `warp_num_per_block` 16 for the intra-node kernel, on dispatch and combine
-alike (neither passes a per-call override), with an external input buffer, MoRI's default, which
-SGLang sets explicitly. The two are pinned together deliberately: MoRI's tuning tables key combine on
-`zero_copy`, selecting roughly 16 warps for external input against 4-8 for a registered buffer, and
-the mismatch is measurable in both directions. On MI300X, MI325X and MI355X,
-**in registered-buffer mode** 16 warps costs +13-18% combine at T=128 and +61-78% at T=512 against 8.
-**In the external-input mode the engines actually run** the same 16 warps *wins* by 14-19% at T=128,
-26-27% at T=256, and 9-14% at every prefill rung including T=8192. Below T=32 it gives up 0.2-2.5us,
-the only range where 8 is ahead. All arms were correct at every rung. With an external input buffer
-the kernel does its own staging copy, bounded by the receive count, so BF16 rows hand over the
-dispatch output unchanged and declare `stage` as an explicit unavailable marker (null percentiles,
-zero samples). FP8 rows still stage for real, to dequantize the received payload. These numbers
-describe the engine-integrated configuration, not MoRI's peak: its shipped tuning tables reach a
-faster combine with per-shape block and warp counts no engine selects, and AUTO would not reproduce
-them uniformly. Gfx950 ships no IntraNodeLL combine table and no BF16 rule for normal-mode
-IntraNode dispatch, so AUTO defaults exactly those two (coupling the result to whichever MoRI
-revision is pinned) while tuning the other two, which is not one number about the hardware. How far
-off peak is arch-dependent: across buffer modes on MI355X, with
-the registered mode's excluded BF16 stage added back, a registered buffer at 8 warps is still 15%
-faster at T=512 decode and 8% at T=8192 prefill than the shipped pairing, but that did not reproduce
-on gfx942, so treat 0-15% as the honest range for a configuration no engine runs. The low-latency
-arm has no engine-integrated configuration to match at all: SGLang's low-latency path pins `AsyncLL`
-at 8 warps while this suite uses `IntraNodeLL` (`AsyncLL` is split-phase and fails silently under a
-single-call harness), so its launch config is inherited from the normal-mode tuple by choice rather
-than by precedent. UCCL-EP is a drop-in, API-identical DeepEP replacement that keeps the legacy `Buffer`
-`dispatch`/`combine` (unweighted rank-sum) but routes it over CPU-proxy GPUDirect RDMA on plain
-`libibverbs`, with no NVSHMEM/IBGDA and with software message ordering, atomics, and flow control. Its
-scale-up is single-node `cudaIpc` over NVLink/XGMI (so the scale-up domain is one physical node,
-never MNNVL) and its EP16 scale-out uses the same per-SKU RDMA rails as the other backends. NCCL EP
-is NVIDIA's native MoE dispatch/combine on the NCCL Device API, shipped since v0.2 as the
-`nccl-extensions` wheel (which owns `nccl.ep`; `nccl4py`, pinned alongside, provides `nccl.core`).
-`normal` mode selects its `HIGH_THROUGHPUT` algorithm, whose FLAT `[N, hidden]` receive and
-unweighted rank-sum combine match `layout-and-dispatch-v1` exactly, so the same oracle applies. It is
-NVIDIA-only and CUDA 13 only, and runs EP8 and EP16 on all six NVIDIA SKUs: EP16 stays inside the
-MNNVL scale-up domain on GB200/GB300 and is a 2x8 RDMA scale-out over the cross-node GIN path on
-H100/H200/B200/B300. Under v0.1 that GIN path faulted inside `nccl_ep.cc` identically on RoCE and IB
-on every x86 pool; v0.2 clears it, revalidated on-metal on B200, H100 and H200 (full decode and
-prefill ladders correct), with B300 enabled on the same fix pending its pool's revalidation. FlashInfer EP is TensorRT-LLM's one-sided MNNVL `MoeAlltoAll`, in which each rank writes tokens directly into its peers' workspace windows and combine reads them back, so there is no send/recv pairing and no NVSHMEM. It is GB200/GB300-only for that reason, and runs EP8 and EP16 inside the MNNVL scale-up domain. Its combine is the one place a backend's accumulator precision changes the expectation rather than the tolerance: through 0.6.15 the kernel holds its top-k accumulators in the payload dtype and reduces them with a hand-unrolled pairwise tree, so every level rounds to BF16, and the oracle reproduces that tree exactly rather than loosening the gate to absorb it (0.6.16 rewrote the accumulator to FP32. The adapter reads the installed version and picks the matching model). Those throughput kernels run across the full token ladder in the `normal` mode. Its FP8 dispatch is the one (backend, precision) pair here that is realizable but off every deployed path. vLLM accepts only nvfp4/mxfp8/bf16 on this transport, so `sweep_matrix.py`'s `OFF_PATH_PRECISIONS` keeps it out of the default matrix and a production sweep measures only configurations an engine can select. Naming the precision explicitly (`--precisions fp8`) opts it back in for transport comparison against DeepEP V2/UCCL-EP at matching bytes and block size: the one place a precision filter ADDS rows rather than only removing them.
+Scale-up cases request NCCL Device API LSA and fail closed unless the LSA team covers the whole EP
+world, which is also what makes the hybrid choice match vLLM's autoselect: DeepEP goes hybrid only
+when the LSA team is smaller than the world. x86 EP16 is that hybrid path, GIN across two scale-out
+domains of eight scale-up ranks each. GB EP16 stays inside MNNVL and uses LSA. Hybrid EP16 allocates
+33 GIN QPs per peer (a fixed 512-QP budget) instead of the automatic 65/129, which exhausts the
+per-NIC QP budget on CX-7. DeepEP's SM model reads the scale-out rate from an `ibstat` probe that cannot
+see EFA and that the vLLM image does not ship, so on the EFA pools, h200-dgxc and b200-nscale the
+registry's `network.rdma_gbs` supplies the per-GPU rate and the resulting count is passed explicitly
+(`library_config.sm_model_rdma_gbs`).
 
-A second `low-latency` mode adds each backend's decode-optimized kernel family. On DeepEP it drives
-the legacy `deep_ep.Buffer` low-latency decode kernels (`low_latency_dispatch`/`low_latency_combine`),
-which deliver a per-expert padded receive buffer and apply the top-k gate weights inside a source-side
-combine (weighted-kernel-sum). For the scoped single-node EP8 cells these run over the intra-node
-NVLink low-latency path (`allow_nvlink_for_low_latency_mode`). NVSHMEM/IBGDA (and thus `/dev/gdrdrv`)
-is only exercised on the wire by a multi-node scale-out (EP16) run, and single-node EP8 was validated
-on H200 with `/dev/gdrdrv` absent. On MoRI it selects the `IntraNodeLL` kernel, a single-call,
-pure-intranode decode kernel that keeps the same rank-deduplicated compact layout and plain unweighted
-rank-sum combine as the throughput `IntraNode` kernel, so it differs only by kernel type and timing
-(the split-phase RDMA-staged `AsyncLL` kernel is deliberately not used because its separate receive phase
-does not fit the single-call dispatch/combine contract). Low latency is a decode-phase-only addition
-whose runnable set is narrower than and distinct from the throughput kernels', so it is enabled
-cell-by-cell from the registry's `ll_backends` map rather than assumed wherever `normal` runs. It is
-currently enabled for DeepEP V2 at EP8 on H100/H200 and at EP8 and EP16 on B200 (the nscale
-bare-metal pool: IBGDA over native IB rails with `/dev/gdrdrv`, which an x86 low-latency scale-out
-needs and no virtualized pool has) and on GB200/GB300 (EP16 inside the MNNVL scale-up domain), MoRI
-EP8 on MI300X/MI325X/MI355X, and UCCL-EP EP8 on H100/H200/B200 only (the legacy
-`Buffer` low-latency kernels, which at EP8 run `cudaIpc` over NVLink, not the CPU-proxy RDMA path,
-because the adapter passes `is_intranode` and UCCL then never starts its proxies. The AMD SKUs drop
-LL: upstream raised `kNumMaxTopK` 9 -> 16 six days before our pin, and the resulting host assert
-cannot hold on AMD's 16 warp groups), and NCCL EP at EP8 on H100/H200/B300 and at EP8 and EP16 on
-B200/GB200/GB300. NCCL EP's `LOW_LATENCY` algorithm uses rank-major receive with caller-side
-weighted expert pre-reduction and an unweighted rank-sum combine, as used by inference frameworks.
-Its direct zero-copy receive is enabled within one LSA/MNNVL domain and staged for scale-out.
-These rows were held while v0.1's combine
-recv pipeline — a port of DeepEP's PRE-FIX code, missing the `fence.proxy.async.shared::cta` DeepEP
-added in #642 — raced on every rung (observed 1-in-5 bimodal corruption at T=256 on gb300 EP8,
-error 0.47 vs 0.0039; the interim T<=128 ladder clamp reduced exposure but was never a safety
-boundary, so even green clamped rows were not publication-valid). The v0.2 `nccl-extensions` wheel
-ships that fence (`fence_view_async_shared` before the `emptyBarriers` arrive in `ll_ep.cuh`),
-which is the documented restore condition: the ladder runs unclamped to the full receive and the
-rows are enabled, subject as always to the correctness oracle. (Historically those rows also wedged
-on stale peer signals, [NVIDIA/nccl#2303](https://github.com/NVIDIA/nccl/issues/2303), fixed by the
-single-handle adapter.) B300's only low-latency coverage beyond DeepEP V2 EP8 is this `candidate`
-NCCL EP row.
-Whether a given SKU/backend/EP/mode cell is attempted is a capability
-fact. Whether it succeeded is decided only by the emitted artifact.
+**A virtualized pool can make a scale-out row measure the hypervisor.** ElasticBuffer registers its GIN
+window `NCCL_WIN_STRICT_ORDERING`, which strips PCIe relaxed ordering; in h200-dgxc's KVM guests
+strict-ordered GPU-NIC writes cap near 10 GB/s per GPU. The build patches the registration behind a
+switch a pool opts into with `rdma_relaxed_ordering` in its `network` block: h200 bf16 decode at T=512
+drops from 3088 µs to 620 µs per roundtrip, oracle green in both precisions. Upstream made the window
+strict on purpose (DeepEP #661/#674), since a relaxed GIN signal can in principle overtake its data;
+that race has not been reproduced, and a passing oracle does not rule it out. Those rows carry
+`-relaxed-ordering` and never pool with the strict series.
+
+`low-latency` drives the legacy `deep_ep.Buffer` IBGDA decode kernels, which deliver a per-expert
+padded receive and apply the gate weights inside a source-side combine (weighted-kernel-sum). It
+builds and calls them as vLLM's `deepep_low_latency` path does: `num_qps_per_rank` equal to the local
+expert count, NVLink allowed, MNNVL allowed only on the GB pools (`VLLM_DEEPEP_LOW_LATENCY_USE_MNNVL`),
+and each collective split into a send kernel and a receive hook that runs straight after it. EP8
+runs over intra-node NVLink; multi-node EP16 rides NVSHMEM IBGDA, which wants gdrdrv on the node
+(b200-nscale's bare-metal IB has it), and GB EP16 stays inside MNNVL. B300 registers no DeepEP
+low-latency: the legacy Buffer initializes NVSHMEM with an RDMA transport even on one node, and
+NVSHMEM aborts on topology detection over B300's EFA.
+
+### UCCL-EP
+
+[UCCL](https://github.com/uccl-project/uccl) EP is an API-identical DeepEP replacement that keeps the
+legacy `Buffer` but routes scale-out over CPU proxies issuing GPUDirect RDMA on plain `libibverbs`.
+Its scale-up is single-node `cudaIpc`, never MNNVL, and proxies start only across nodes. No engine
+ships a UCCL selector, so its rows stay `candidate`, but engines deploy it as a drop-in `deep_ep`
+under vLLM's DeepEP backends, and the adapter runs that configuration.
+
+`normal` is vLLM's `deepep_ht` path: UCCL's default 20 SMs, `get_dispatch_config`/`get_combine_config`
+per call, 1 GiB of NVLink buffer, plus 1 GiB of RDMA buffer and 10 QPs per rank across nodes. Its
+dispatch polls receive counters on the host before launching the transfer, so `normal` stays eager and
+passes through the host gate ([Rank Alignment](#rank-alignment)). `low-latency` issues the same calls
+as DeepEP V2 (send kernel plus receive hook) with vLLM's 256-token receive; at EP8 `is_intranode`
+keeps it on NVLink. UCCL-EP is built from source at its pin with UCCL's drop-in flags
+`USE_DMABUF=1 PER_EXPERT_BATCHING=1`; `implementation.library_version` names the commit and flags,
+and the import probe rejects any other `deep_ep`.
+
+**h200-dgxc EP16 runs a deeper RDMA receive ring than vLLM.** With vLLM's dispatch config (RDMA
+chunks send 20 / receive 140), BF16 prefill deadlocks inside UCCL on every attempt: the sender
+coordinator waits for a full chunk the senders cannot prepare, and the receiver for tokens that are
+never delivered ([uccl-project/uccl#1110](https://github.com/uccl-project/uccl/issues/1110)). A
+receive ring of 1040 tokens (a multiple of the send chunk) is deep enough that no prefill stream
+wraps, and every rung passes the oracle. The registry's `network.uccl_rdma_recv_tokens` sets it for
+h200-dgxc only; those rows carry `-rdmarecv1040` in `kernel_generation` and the realized config in
+`library_config`, so they are library rows rather than vLLM's configuration until UCCL is fixed.
+
+UCCL-EP EP16 is not registered on mi355x: its CPU-proxy RDMA works over the Pollara fabric but runs
+about 13x under UCCL's documented bandwidth, unchanged by registration mode or traffic class (an
+ionic-driver suspect).
+
+### MoRI
+
+`normal` runs vLLM's MoRI configuration (`MoriAll2AllManager`) under MoRI's default MANUAL launch mode.
+One node runs IntraNode at block_num 80, rdma_block_num 0 and 16 warps per block; two nodes run
+InterNodeV1 at 64/32/8 on gfx950 (32/16/16 on gfx942). One QP per PE, an external input buffer and
+combine `quant_type` `none`. `library_config` records the tuple the handle realized, and the adapter
+fails closed if it differs from the request.
+
+Warp count and buffer mode are pinned together: MoRI's tuning keys combine on `zero_copy`, and 16
+warps loses 13-78% against 8 with a registered buffer but wins 9-27% from T=128 up with the external
+input the engines run. These rows describe the engine-integrated configuration, not MoRI's peak:
+its shipped per-shape tables reach a faster combine (0-15% depending on arch) with tuples no engine
+selects.
+
+MoRI EP16 runs InterNodeV1 across two nodes with the STATIC_HEAP symmetric heap, and a scale-out case
+fails closed under any other heap mode: `VMM_HEAP` corrupts cross-node combine on ROCm 7.2, where uncached VMM allocations
+read stale lines (ROCm/mori#610). `combine()` takes the rank's own routing tensor, never dispatch's
+recv-slot indices, because InterNodeV1 keys its node predicate by the rank's own token id
+(ROCm/mori#475). `low-latency` follows vLLM's `mori_low_latency`, which differs only across nodes:
+`InterNodeV1LL` with the arch's tuple, so MoRI has no EP8 low-latency cell. `MORI_ENABLE_SDMA` stays
+unset, as vLLM leaves it; a row run with it set carries `-sdma`.
+
+### NCCL EP
+
+NCCL EP is NVIDIA's MoE dispatch/combine on the NCCL Device API, shipped as the `nccl-extensions`
+wheel. [nccl-ep.md](nccl-ep.md) documents its engine contract, row identity and wheel pin. It runs EP8
+and EP16 on all six NVIDIA SKUs: EP16 stays inside MNNVL on GB200/GB300 and is a 2x8 scale-out over
+the cross-node GIN path on H100, H200, B200 and B300.
+
+`normal` selects `HIGH_THROUGHPUT`, whose FLAT receive and unweighted rank-sum combine match
+`layout-and-dispatch-v1`. No engine runs it, so HT rows are `candidate`. Its timed dispatch carries
+`ncclEpUpdateHandle`, the per-step routing update the API requires before every dispatch whose
+routing changed, as every backend's dispatch carries its routing work. The update's HT work is sized
+by the handle's capacity, not by T, so every rung carries a term set by the ladder's top. NVIDIA's
+`ep_bench` excludes it.
+
+`low-latency` runs TensorRT-LLM's `NcclEP` configuration: rank-major receive with caller-side weighted
+pre-reduction, an unweighted rank-sum combine, and one group sized to the ladder's top. Dispatch writes
+a registered window directly within one LSA/MNNVL domain, graphed or eager, and scale-out stages, as
+TensorRT-LLM does with NVIDIA/TensorRT-LLM#20631. The v0.2 wheel ships the combine fence the v0.1
+port lacked, so the ladder runs unclamped. The adapter binds one handle per group and rebinds it per
+point, because two handles from one group share its double-buffer parity slots
+([NVIDIA/nccl#2303](https://github.com/NVIDIA/nccl/issues/2303)).
+
+### FlashInfer EP
+
+FlashInfer EP is TensorRT-LLM's one-sided MNNVL `MoeAlltoAll` from FlashInfer 0.7.1, vLLM main's pin:
+each rank writes tokens directly into its peers' workspace windows, so it is GB200/GB300-only and runs
+EP8 and EP16 inside MNNVL. It has one kernel family, so it runs `normal` only, across both ladders.
+It runs vLLM's integration (`flashinfer_nvlink_one_sided`): combine is handed a caller-owned payload
+with `payload_in_workspace=False`, so FlashInfer's staging copy into the workspace runs, and is timed,
+inside `combine`, as in vLLM (writing the expert output into the workspace directly is TensorRT-LLM's
+path). FP8 dispatch is DeepSeek blockwise FP8 carried as a fourth payload (vLLM v0.29.0+). Through
+0.6.15 the combine accumulates in BF16 with a pairwise slot tree, which the oracle models exactly
+(`combine_reduction = "topk-slot-tree"`); 0.6.16 moved to FP32, and the adapter picks the model from
+the installed version. Graph replay cuts gb200 EP8 T=1 from 151 µs to 43 µs, so decode replays.
 
 ## Workload Identity
 
-One deterministic workload is generated over the global token batch from the workload's seed in
-`configs/sweep.json` (part of the workload identity, baked into every scheduled case) and sliced by
-source rank. A keyed BLAKE2b counter over the (token, slot, attempt, stream) coordinates produces
-byte-identical expert indices and gate weights on every runtime, and the harness proves the
-realized routing trace identical across ranks before a case can succeed.
-
-Routing traffic distinguishes:
-
-- token-expert assignments, which determine expert compute load.
-- rank-deduplicated token payload copies, which determine EP activation traffic.
-
-Adapters may not generate routing or reinterpret one quantity as the other.
+One deterministic workload is generated over the global token batch from the workload's seed and
+sliced by source rank. A keyed BLAKE2b counter over (token, slot, attempt, stream) gives byte-identical
+expert indices and gate weights on every runtime, and the harness proves the routing trace identical
+across ranks before a case can succeed. Token-expert assignments (expert compute load) and
+rank-deduplicated token copies (EP activation traffic) are kept distinct; adapters may not generate
+routing or reinterpret one as the other.
 
 ## Measurement
 
-Normal mode uses `layout-and-dispatch-v1`: dispatch timing includes layout plus communication, and
-combine returns activation payload through an unweighted rank-sum path. Expert-output staging is
-outside isolated combine timing AND outside the measured paired roundtrip, so `roundtrip` means
-dispatch then combine (the transport) in every row, and staging is reported as its own `stage`
-component wherever it does device work. The `CX_FP8_CONSUME=dequant` verification hatch is the one
-exception, putting the conversion back inside the chain on purpose.
+Every window is a pair of CUDA events on the stream. `roundtrip` means dispatch then combine, the
+transport. Expert-output staging is outside it and outside isolated combine, and is reported as its
+own `stage` component where it does device work (the `dequant` hatch puts it back on purpose).
 
-Under FP8, treat `stage` as **harness scaffolding rather than a phase a serving stack has**: it
-converts the received FP8 payload to the BF16 combine sends, something production never does separately. In production,
-the FP8 lands in the expert GEMM, which reads FP8 operands natively and emits the BF16 combine
-receives. This suite measures the collective, not the layer, so `stage` stands in for that GEMM,
-which is why it is excluded from `roundtrip` and why **`stage` must not be summed into a total or
-compared between backends**: each adapter converts a different amount. DeepEP V2 and UCCL-EP convert
-only the received rows in `normal` mode but the whole padded plane in `low-latency`, where the
-receive buffer is `[experts, cap * ranks, hidden]` regardless of token count. MoRI converts only the
-received rows. FlashInfer only converts the filled slots. The one production path that *does* pay a separate
-materialised dequant is a quant-format mismatch fallback (vLLM dequantises when `block_k` disagrees
-with DeepEP's block size), which `CX_FP8_CONSUME=dequant` models. It is not the default because it
-is not the fast path.
+**`stage` is harness scaffolding, not a serving phase.** Under FP8 it converts the received payload
+to the BF16 combine sends, standing in for the expert GEMM that reads FP8 natively in production. Do
+not sum it into a total or compare it across backends: each adapter converts a different amount (only
+the received rows, the whole padded plane, or, for FlashInfer, only filled slots).
+`implementation.stage_excluded_from_roundtrip` means device-work staging existed and was hoisted out;
+`false` covers both "nothing to stage" (every BF16 row) and the `dequant` hatch. `isolated_sum` is
+derived: isolated dispatch plus combine, never `stage`.
 
-Read `implementation.stage_excluded_from_roundtrip` as "there was device-work staging and it was
-hoisted out of the chain", not as "this row's roundtrip is stage-free". It is gated on whether the
-backend's `stage()` does device work at all, so `false` covers two unrelated situations that the
-`stage` component separates: **absent** means the backend has nothing to stage (a bare pointer
-assignment, as for NCCL EP and every BF16 row that hands the receive buffer straight to combine),
-**present alongside `false`** means the `dequant` hatch put the conversion back inside the chain.
-Reading `false` alone as "roundtrip includes staging" subtracts a cost the row never paid. Each component declares
-availability, origin, and sample count. A paired-only API reports null isolated components.
-`isolated_sum` is derived.
+Each point measures two families:
 
-Headline latency is the **chained pair period** (`components.pair_period`, defined under Chained
-Pair Period below) for every row that carries one, graph-replayed or eager. The earlier eager flip shipped **held** while the
-six-events-per-pair chain described below, whose inner records inflated small-T periods
-fleet-wide, was replaced by the two-pass chain, and was released on 2026-08-06 once the b200, h200
-and gb200 hand references were confirmed against two-pass fleet artifacts (runs 31092783122 and
-31089556516). Both `p50` and `p99` are
-emitted either way and `summarize.py` prints both. MAX is the fresh-entry family's reduction because
-a layer is not finished until its slowest rank is, so MAX is the completion cost, and it charges
-inter-rank entry stagger to whichever component the ranks entered unevenly. That stagger depends on
-the code path AND the precision, not only on the fleet: on identical h200 low-latency decode cells
-the per-iteration spread is ~9.3 us for deepep-v2 and uccl-ep at BF16 (they share the legacy
-`Buffer` path) against ~2.6 us for nccl-ep, and collapses to ~2.8 us for those same two under FP8,
-where in-kernel quantisation makes the heavier dispatch self-align the ranks. The term is not
-subtractable in any principled way, so MAX alone taxes some rows more than others.
+- **Fresh entry** (`roundtrip`, `dispatch`, `combine`, and eager `stage`): one aligned call per
+  sample, reduced across ranks by MAX, because a layer finishes with its slowest rank.
+  [Rank Alignment](#rank-alignment) describes how each sample opens.
+- **Chained** (`pair_period`, `chain_floor_us`, `chain_health`): pairs issued back to back with no host
+  sync, as a decode loop issues them. `pair_period` is the **headline** for every row, graphed or
+  eager. See [Chained Pair Period](#chained-pair-period).
 
-Every row therefore also carries `cross_rank_min_us` (the same iterations reduced with MIN, the
-skew-excluded floor) and `cross_rank_spread_us` (per-iteration MAX minus MIN). Read MAX and MIN as a
-bracket: two cells whose MAX gap is smaller than the larger contender's spread are not separated by
-the data. Rank on roundtrip p50 and call a winner only where MAX and MIN agree on the ordering. Do
-not rank on p99 of MAX for multi-node decode cells, where it is dominated by worst-rank stalls
-rather than transport, while p99 of MIN is the synchronized-cost tail beside it. The isolated components
-inherit the preceding operation's per-rank exit stagger, so treat them as residual-wait diagnostics
-rather than per-operation costs. The paired roundtrip is the comparable quantity.
+![One fresh-entry sample](img/fresh-entry.svg)
+
+Every row also carries `cross_rank_min_us` (the same samples reduced by MIN) and
+`cross_rank_spread_us` (roundtrip MAX minus MIN). Alignment removes entry skew, but ranks still leave a
+window unevenly, so read MAX and MIN as a bracket: two cells whose MAX gap is smaller than the larger
+spread are not separated by the data. Do not rank multi-node decode cells on p99 of MAX, which
+worst-rank stalls dominate. The isolated `dispatch` and `combine` inherit the preceding op's exit
+stagger, so treat them as diagnostics; the paired roundtrip is the comparable fresh-entry quantity.
 
 ### CUDA Graph Replay
 
-Serving engines capture their decode step, so graph-compatible backend/mode pairs are measured
-under `CUDAGraph.replay()` by default: each library's best measured configuration that passed
-every check, without changing its contract.
+Serving engines capture their decode step, so graph-compatible pairs replay `CUDAGraph.replay()` at
+decode by default, as each backend's engine captures it. Prefill stays eager everywhere, as engines run
+it, and `COLLX_CUDA_GRAPH=0` restores eager everywhere.
 
-- **nccl-ep** low-latency and HT **decode**. HT decode replays as a captured decode step would
-  run it. Its per-step routing `ncclAllGather` is the one host NCCL collective in any capture, so
-  nccl-ep's communicator runs NCCL graph usage mode 1 (one graph at a time): the default mixing
-  mode wraps every captured collective in an external event wait and record, which left ~14 µs
-  idle before each all-gather (h100 EP8 trace). Rows carry the `-gum1` generation suffix. Across
-  nodes the captured all-gather is still proxy-driven, and NCCL fronts it with a host-callback
-  node on every replay (about +50 µs of dispatch at EP16). HT prefill stays eager.
-- **flashinfer-ep** decode; prefill stays eager (graphs change nothing there).
-- **uccl-ep** low-latency, intranode only, except b200 FP8 (faster eager). Normal mode host-syncs.
-- **deepep-v2** low-latency and normal **decode**, run as vLLM's graphed `deepep_v2` decode runs
-  ElasticBuffer (`do_cpu_sync=False`, receive sized to the next power of two of T; kernel
-  generation `v2-elastic-buffer-nosync`). Normal prefill keeps its host sync and stays eager.
-- **MoRI** both modes. ROCm torch before 2.13 rejects external events, so the timing events are
-  captured with `hipEventRecordWithFlags(..., hipEventRecordExternal)`, the call newer torch makes.
+- **deepep-v2** `normal` and `low-latency` decode.
+- **nccl-ep** low-latency and HT decode. Graphed low-latency within one domain takes the window path
+  (`-zc`), as TensorRT-LLM's captured decode does with #20631; scale-out stages. HT's per-step
+  routing `ncclAllGather` is the one host NCCL collective in any capture, so the communicator runs
+  NCCL graph usage mode 1: the default mixing mode left ~14 µs idle before each captured all-gather.
+  Those rows carry `-gum1`. Across nodes NCCL fronts the captured all-gather with a host-callback node
+  (about +50 µs of dispatch at EP16).
+- **mori** `normal` and `low-latency` decode. ROCm torch before 2.13 rejects external events, so the
+  timing events are captured with `hipEventRecordWithFlags(..., hipEventRecordExternal)`.
+- **flashinfer-ep** decode.
+- **uccl-ep** low-latency, intranode only; `normal` host-syncs and stays eager.
 
-Only the launch mechanism changes; every family keeps its eager meaning:
+Only the launch mechanism changes. Each fresh-entry component captures one pair, with the alignment
+captured ahead of the first timing event (origin `cuda-graph-replay`; `stage` is not timed
+separately). Each chain sibling is one graph of 128 unrolled pairs, replayed once to upload and once
+timed. Capture uses torch's default `global` error mode, as vLLM's and SGLang's decode captures do,
+so a capture-unsafe call fails instead of being recorded. Graphed rows carry `-cudagraph-spin-ar` on
+`kernel_generation` and eager rows `-eager-spin-ar`, so the two never pool.
 
-- **Fresh-entry components** (`roundtrip`, `dispatch`, `combine`) capture one pair with event
-  nodes around the timed window. Each timed replay starts behind a device-side rank barrier (an
-  all-reduce, then a spin of fixed wall time, calibrated per GPU because `torch.cuda._sleep`
-  counts SM cycles); without it b200 EP16 ranks entered ~75 µs apart. A rank whose host launches
-  late still stalls the others, so these series publish **only p50** (p90/p95/p99 and the matching
-  token rate are null). Component origin is `cuda-graph-replay`.
-- **The chained family** (`pair_period`, floors, health) captures each sibling chain as one graph
-  of `chain_iters` unrolled pairs, the shape of a decode graph, replayed once untimed and once
-  behind the barrier. Its oracle, output check and tails apply unchanged.
+### Rank Alignment
 
-`stage` is not separately timed under replay. `COLLX_CUDA_GRAPH=0` restores the eager pipeline.
-Every graphed row is value-checked: each timed capture's output is poisoned and must be rewritten
-by a further replay, and a separate capture with staging inside it has dispatch's output and its
-result overwritten with 0xFF bytes before its only replay, whose output must then match an eager
-drained pair (`cuda_graph_last_output_passed`). Graphed rows carry a `-cudagraph` suffix on
-`kernel_generation`, so the durable store never pools them with eager rows; the artifact also
-records `implementation.cuda_graph_replay` and `cuda_graph_supported`.
+Every fresh-entry sample opens the way DeepEP's `bench_kineto` does: a GPU spin, then a device
+all-reduce, with no host sync before the start event. The spin lasts 2 ms of wall time
+(`COLLX_ALIGN_SPIN_US`), calibrated after each warm-up because `torch.cuda._sleep` counts cycles. It
+outlasts the host's enqueue of the sample, so the last rank to arrive already has its timed work queued
+when the all-reduce releases everyone, and every window opens at the barrier's exit: entry skew and
+the first kernel's launch latency both leave the window. Eager rows queue the spin and all-reduce
+before each sample; graphed rows capture them in the graph ahead of its first event, so no host
+handoff follows the alignment. Before the all-reduce moved into the graph, a late host launch stalled
+the other ranks inside the window (gb200 flashinfer EP8 T=1 roundtrip p99 858 µs); in-graph, graphed
+decode roundtrip p99 runs 1.01-1.19x its p50. That is why graphed rows publish tails. On ROCm, where
+HIP submits a replay node by node from the host, the spin is what gives a lagging host time to submit
+the whole replay before the barrier releases anyone.
+
+A sample is **missed** when some rank's host took longer than the spin to finish enqueuing its timed
+work (eager) or to return from its replay call (graphed). Garbage collection is off for every timed
+series. Rows publish `rank_alignment.missed_samples` per series and `missed_fraction`, and the
+fresh-entry tails are withheld once missed or host-stalled samples could fill them: p99 at 1%, p95 at
+5%, p90 at 10%. `implementation.rank_alignment` records the method and the spin.
+
+`combine` (and eager `stage`) is timed behind its own untimed dispatch, so its window inherits that
+dispatch's exit stagger. A dispatch that waits on the host (uccl-ep `normal`) runs before the
+alignment, so the spin is not spent on its wait.
+
+**Host-synced series wait out a throttled host.** In uccl-ep `normal`, the host's poll and relaunch
+sit inside the window, which is their production cost. While uccl-ep EP16 runs, b200-nscale nodes
+intermittently drop every core to about 200 MHz for 100-200 ms every 2-5 s (the platform's response to
+uccl-ep's 32 busy-polling proxies per node; never idle, never under deepep-v2), which put ~1% of EP16
+decode samples at 1-2 ms. So each sample of these series first times a ~20 µs loop of interpreter
+work outside the window and keeps probing while it runs more than 2.5x slow; the other ranks wait at
+the barrier. A second probe after the sample catches a throttle that began inside it. A sample waits
+at most 0.5 s and a run 60 s. Rows publish `host_held_samples` (start held more than 1 ms) and
+`host_stalled_samples` (a probe more than 5x slow; these gate the tails like missed samples), with
+their largest series shares; all four are null where the dispatch does not wait on the host. The probes
+see only the two ends of a sample, and nothing flushes L2 between samples.
+
+Each chain sibling is aligned once, by the all-reduce alone when eager: a spin in front lets the host
+queue a backlog the GPU drains faster than the host refills it, mixing two speeds into the kept pairs.
+A graphed sibling keeps the captured spin, since its replay is one host call. In host-synced modes
+each eager sibling also passes the host gate, and every rank restarts it together, up to three times,
+if any host ran throttled (`chain_health.host_retried_siblings`, `host_stalled_trials`).
 
 ### Chained Pair Period
 
-The eager pipeline measures **fresh entry**: drained around each timed window, so every
-sample starts from an idle pipeline and the ranks re-stagger before each one. A decode loop never
-stops, and what it pays per MoE layer is the pipeline's steady-state **period**. Every eager row
-therefore carries the chained family, measured by `benchmark_chain`: dispatch→combine pairs issued
-back-to-back with CUDA events enqueued on-stream and **no host synchronization inside the loop**,
-the first `chain_drop` (16) pairs discarded as pipeline fill, pooled over `chain_trials` (4) per
-point on the same rotated ladder order as the rest of Pass 2. The pairing is exactly
-`run_roundtrip`'s (dispatch, the staged combine input (or an inline `stage` under the
-`CX_FP8_CONSUME=dequant` hatch), then combine), so paired-API backends stay in contract and
-`pair_period` excludes expert-output staging on the same rule `roundtrip` does.
+Fresh-entry components start every sample from an idle pipeline. A decode loop never stops, and what it
+pays per MoE layer is the pipeline's steady-state **period**. `benchmark_chain` issues dispatch→combine
+pairs back to back with events enqueued on-stream and no host sync inside the loop, drops the first 16
+pairs as pipeline fill, and pools 4 trials per point over the same rotated ladder order as the
+fresh-entry pass. The pairing is `run_roundtrip`'s, so `pair_period` excludes staging on the same rule
+`roundtrip` does.
 
-Each trial runs **two sibling chains** of `chain_iters` (128) pairs, because the statistics must
-not carry the instrumentation that collects them. The first version ran ONE chain with six
-`record()` calls per pair. Wherever the device drains faster than the host enqueues (the bottom
-of the ladder), every event executes as issued, the pair window degenerates to host elapsed time,
-and the four inner records plus glue were charged into the published period. The fleet exposed it
-before a profiler did: period minus floor-sum sat at a roughly T-independent 10–30µs on every
-vendor and fabric at once (a host constant, not transport), inflating T=1 periods by 20–38%. So a
-**floors chain** runs first carrying only the four op-window events, and a **period chain** runs
-second carrying only the outer pair events, nothing between its two collectives: both records' host
-cost lands in the inter-pair gap, outside the window, so the period carries what an uninstrumented
-caller pays. (An eager-mode launch floor remains, as for any eager caller, but a CUDA-graphs decode loop
-pays less host per pair than any eager harness can.)
+![Two sibling chains](img/chained-pairs.svg)
 
-The two chains publish five statistics, and only five:
+Each trial runs **two sibling chains** of 128 pairs, so the statistics do not carry the
+instrumentation that collects them. One chain with six `record()` calls per pair charged the inner
+records into the period wherever the device drained faster than the host enqueued, a roughly
+T-independent 10-30 µs on every vendor at once. So a **floors chain** runs first with only the four
+op-window events, and a **period chain** second with only the outer pair events, whose host cost lands
+in the inter-pair gap.
 
-- `components.pair_period` (origin `chained-median`) is the per-pair period from the period chain,
-  reduced across ranks by MEDIAN. MAX is right for a drained component (a layer finishes with its
-  slowest rank), but the period is a **rate**: the collectives phase-lock every rank into one
-  cadence, and a MAX would publish whichever rank hiccuped as the pipeline's speed.
-- `chain_floor_us.dispatch` / `.combine` (origin `chained-cross-rank-min`) are each op's window from
-  the floors chain, reduced across ranks by MIN: the last rank into a collective waited least, so
-  its window is the op's floor, and it tracks profiler kernel time to ~10%, making it a free Kineto
-  substitute. Read floor-vs-period as transport share, not an identity that must close to zero.
-  `period − Σfloors` is a real quantity with a meaning in each sign, and neither sign is an error:
-  - **Positive** is the per-pair inter-rank wait that the MIN deliberately strips. Where a backend
-    is synchronization-dominated it rivals the floor sum and sits *flat in T*, as gb200
-    flashinfer-ep normal decode (run 31089556516) holds ~70µs bf16 / ~100µs fp8 at every rung,
-    vanishing by T=512 and in prefill as the floors grow into it. That is `period = max(sync
-    budget, work)`, not instrumentation. It is invisible to `pair_spread_us` (2.7–8.5µs against
-    62–107µs gaps) because the period is conserved while the wait migrates between op windows. This is
-    the same steady-state stagger that bans chained per-op medians below.
-  - **Negative** is the floors chain's own four-records-per-pair host cost (~10–12µs) inflating
-    *its* windows wherever the device outruns the host: the very effect the two-chain split
-    evicted from the period, still present and harmless in the floors (gb200/h200 fp8 LL, run
-    31089556516). It is not overlap, and it is not cross-chain settling.
+- `components.pair_period` (origin `chained-median`): each pair window, reduced across ranks by MEDIAN.
+  The period is a rate: the collectives phase-lock every rank into one cadence, and a MAX would publish
+  whichever rank hiccuped.
+- `chain_floor_us.dispatch` / `.combine` (origin `chained-cross-rank-min`): each op window, reduced by
+  MIN. The last rank into a collective waited least, so its window is the op's floor, within ~10% of
+  profiler kernel time. `period - Σfloors` has meaning in both signs. Positive is per-pair inter-rank
+  wait, which on a synchronization-dominated backend sits flat in T (`period = max(sync budget, work)`).
+  Negative is the floors chain's own record cost inflating its windows where the device outruns the
+  host.
+- `chain_health.pair_spread_us`: per-pair cross-rank spread. Large next to `pair_period` means a paced
+  or slow rank, and the point is not a steady-state period.
+- `chain_health.interpair_gap_us`: start-to-start median minus pair-window median, the cost outside
+  the window and the regression guard against the six-events defect.
+- `chain_health.settle_drift_us`: late-half minus early-half period, the proof that 16 dropped pairs
+  were enough.
 
-  Do not read a large positive residual as the six-events defect returning. That defect was a
-  roughly T-independent host constant appearing on *every vendor and fabric at once*, and it lands
-  in `interpair_gap_us`. A sync-dominated residual is backend-specific and leaves the gap small.
-- `chain_health.pair_spread_us` measures per-iteration cross-rank max-minus-min of the pair. It is the *proof*
-  the median means anything. Large next to `pair_period` means a paced or slow rank, and the
-  point should not be read as a steady-state period at all.
-- `chain_health.interpair_gap_us` is the start-to-start median minus pair-window median, measured once per
-  trial: the per-pair cost OUTSIDE the published window (the harness's own two `record()` calls
-  plus any inter-pair stall), and the in-artifact regression guard against the six-events defect
-  above.
-- `chain_health.settle_drift_us` measures the late-half minus early-half period median, once per trial,
-  signed, cross-rank max-magnitude. `chain_drop` *assumes* the chain settled before the kept
-  pairs. This is the proof, and an unconverged chain (or a device clocking down mid-chain)
-  publishes its drift instead of a clean-looking period.
+**Chained per-op medians and p99s are never published.** Without a host sync, each rank's wait parks in
+whichever op window it happens to block in: stable per rank, arbitrary across ranks, bistable across
+runs, while the pair period is conserved. Only the period and the MIN floor are stable.
 
-**Chained per-op medians and p99s are never published.** Without a host sync the ranks arrive at
-each collective at slightly different times, and the resulting wait parks in whichever op window a
-given rank happens to block in. This placement is stable per rank (so one rank's per-op numbers look clean and
-convincing), arbitrary across ranks, with rank 3's dispatch long exactly where rank 5's combine is,
-and bistable across runs of an identical configuration, while the sum, the pair period, is
-conserved. A chained per-op median measures where the wait sat on that run rather than what the
-operation cost. The cross-rank MIN is the one reduction that removes it, which is why the floors are
-published and the medians are not. A p99 of a chained window would mix the same noise back in
-through the tail.
+**The period is always free-running.** Ranks may drift by up to about one iteration, which is sound
+only where the receive plane tolerates it: every backend double-buffers per dispatch, enforces strict
+pairing, or completes each op on a reusable handle, and DeepEP V2 `normal` passed an un-synchronized
+256-pair hand probe at EP8 and EP16 in both precisions. A backend that cannot run free needs a fix,
+not a variant: re-aligning ranks between pairs adds its own ~10 µs and removes the overlap the
+measurement exists to capture.
 
-With `COLLX_CUDA_GRAPH=0`, the fresh-entry family keeps its prior meaning:
-`components.roundtrip`, `dispatch`, `combine`, `stage`, `isolated_sum`, `cross_rank_min_us` and
-`cross_rank_spread_us` are measured and reduced as before, at the same 256×8 sampling.
+**An eager chain can be host-bound.** Prefill chains are eager, so the host enqueues every pair. Where
+its per-pair cost exceeds the GPU's pair time, the slowest host sets the cadence and the other ranks
+wait inside dispatch: on GB200/GB300 the Grace host makes deepep-v2 normal FP8 prefill at T=1024 run
+above its aligned roundtrip (EP8 227-229 µs against 197 µs). The aligned `roundtrip` is the transport
+number there.
 
-**The published period always means one thing: free-running.** The chain lets ranks drift by up to
-about one iteration, which is only sound where the receive plane tolerates it: every backend
-double-buffers per dispatch, enforces strict pairing by contract, or completes each op on a reusable
-handle, and DeepEP V2's **normal** mode (the one genuinely unaudited cell) was hand-probed with
-256 un-synchronized pairs at T=128, EP8+EP16, both precisions (2026-08-06, pin `01dc3aaa`, the
-then-current dgxc pool's hybrid GIN over RoCE): all passed, outputs finite, timed inputs unchanged,
-cross-rank period agreement within 1µs, and the chain-vs-synced gap is the size of the effect this
-section is about (EP8 105.4 vs 125.4µs BF16, 216.6 vs 272.3µs FP8, while EP16 838 vs 863µs and 820 vs
-897µs). A backend that cannot run free belongs behind a fix, not a measurement variant: re-aligning
-ranks between pairs adds its own ~10µs and removes the cross-pair overlap the measurement exists to
-capture. That is a differently-defined quantity that must never share a column with the free-running
-period.
+### Timing Profile
 
-Every backend's timed HT dispatch now carries its routing work. nccl-ep binds routing with
-`ncclEpUpdateHandle`, documented as a "per-step collective: prepare the handle for the given top-k
-routing decisions" — and production routing changes every MoE layer, so a serving step pays that
-collective before every dispatch, at the handle's full token capacity. Earlier generations excluded
-it (as NVIDIA's own `ep_bench` does: CUDA events around dispatch and combine only, handle update
-outside the loop) on the argument that its capacity-proportional cost would import a ladder-max
-term into dispatch; that argument describes exactly what production pays, since engines size the
-handle to their max token capacity and update it per step. The timed window now includes the
-update; rows carry `kernel_generation` `nccl-ep-v02-ht-routed-zc-static`
-(`nccl-ep-v02-ll-rm-zc` for scale-up low-latency and `nccl-ep-v02-ll-rm` for scale-out;
-`nccl-ep-v02-ll-em` under `COLLX_NCCL_LL_LAYOUT=expert-major`). `-static` marks HT combine taking
-the full static receive plane the FLAT contract requires; earlier `-zc` rows sliced it to the
-received count.
-The `v02` component discriminates the `nccl-extensions` v0.2 mover from earlier wheels, and
-pre-change `nccl-ep-ht`/`nccl-ep-ht-routed` rows are a different measurement contract or mover —
-the per-row discriminator the earliest NCCL changes lacked. HT uses zero-copy. LL uses the
-rank-major, pre-reduced inference-framework contract; zero-copy applies only within one LSA/MNNVL
-domain.
-Low-latency mode has nothing to include: `ncclEpUpdateHandle` returns immediately there and the
-kernel reads
-the cached routing inside the timed dispatch. The other backends already carried this cost --
-uccl-ep calls `get_dispatch_layout` inside dispatch, while deepep-v2, MoRI and FlashInfer pass
-routing on every call.
+One timing profile, defined in `configs/sweep.json` and recorded in `measurement.sampling`:
 
-Every measured component uses one fixed timing profile, defined once in `configs/sweep.json`
-and baked into every scheduled case:
+- Fresh entry: 256 trials x 8 timed iterations = 2048 samples per component.
+- Chained: 4 trials x (128 pairs - 16 dropped) = 448 pairs for the period and 448 for the floors.
+- 32 full dispatch-stage-combine warm-ups before each component at every trial and point, and before
+  each chain trial.
+- Component order rotates each trial (`trial_order`) over a per-trial-rotated ladder.
+- Each fresh-entry sample is reduced across ranks by MAX before nearest-rank p50/p90/p95/p99.
 
-- 256 trials x 8 timed iterations = 2048 observations for the fresh-entry family.
-- 4 chain trials x (128 free-running pairs - 16 dropped for pipeline fill) = 448 observations for
-  the pair period and another 448 for the op floors, each trial running the two sibling chains
-  (floors first, then the lean period chain). The trial count is lower than the fresh-entry family's
-  because one call already yields 128 pairs, and matching it would multiply the leg's wall clock
-  without buying convergence.
-- 32 synchronized full dispatch-stage-combine warmups before each available measured component at
-  every trial/point, and before each chain trial.
-- component measurement order rotates each trial (`trial_order`) so every timed component occupies
-  every position in the sequence, over a per-trial-rotated token ladder, which the chain trials
-  rotate the same way.
-- per-iteration maximum latency across ranks before nearest-rank p50/p90/p95/p99 (the chained
-  family reduces by median and minimum, as described in Chained Pair Period).
+Ascending through the ladder, each shape gets 8 untimed roundtrips to settle clocks, fabric and buffer
+state before it is correctness-checked; all timing happens after every shape is warmed and checked.
+Decode and prefill name the serving regime; they do not change the timed primitive.
 
-`measurement.sampling` carries both halves of that profile, because `sample_count` alone cannot be
-decomposed back into them and a 128x4 chain is not the same measurement as a 512x1 one.
+### Vendor Tables
 
-The chained pair period is the headline latency where a row carries one, and measured roundtrip
-p99 otherwise. Decode and prefill identify the serving regime
-represented by one MoE-layer collective. They do not change the timed primitive at an otherwise
-identical shape. Ascending through the ladder, each measured shape is conditioned with 8 untimed
-full roundtrips (settling clocks, fabric, and buffer state) before it is correctness-checked.
-All timing happens after every shape is warmed and checked. Conditioning rounds are never
-measured or emitted.
+Vendor microbenchmarks for these kernels variously time the kernel alone through a profiler (DeepEP,
+UCCL low-latency), replay graphs (MoRI), average across ranks rather than take the max, and report the
+best of a config sweep. Expect this suite's headline to read above such a table by at least the
+max-versus-mean gap; `cross_rank_min_us` and `chain_floor_us` are the figures to place beside one.
 
-Comparing these figures against a vendor table is not like-for-like, in a knowable direction.
-Every sample here is an eager per-call measurement that includes kernel-launch cost and
-inter-rank entry skew, reduced across ranks by MAX. Vendor microbenchmarks published for these
-same kernels variously time the named kernel only via a profiler (DeepEP, UCCL low-latency),
-replay CUDA graphs (MoRI), average across ranks instead of taking the max (all of them), delete
-entry skew with a pre-iteration sleep or an amortized barrier (DeepEP, MoRI), and report the
-best of a config sweep (DeepEP V1, MoRI). Expect our headline to read roughly 5-10% above such
-a table on a healthy fabric. `cross_rank_min_us` is the per-row figure to place beside one.
-Where a like-for-like comparison exists we match or beat: our skew-excluded MoRI dispatch is
-0.96x MoRI's own shipped tuning-config best at the same shape and byte count, DeepEP V2 on B300
-reproduces DeepEP's published 8x2 figure within 3%, and FlashInfer EP matches NVIDIA's published
-one-sided kernel within 4% across eight byte-normalized points.
+### Bandwidth
 
-Logical payload bandwidth is:
+Rows carry bytes and latency, not bandwidth: `bandwidth.py` and the dashboard derive logical payload
+bandwidth as `wire_payload_bytes / measured_latency_seconds`. Both byte accountings exclude metadata,
+padding and buffer capacity.
 
-`wire_payload_bytes / measured_latency_seconds`
+- `byte_provenance` is the comparable basis: one copy per unique (token, destination rank).
+- `wire_byte_provenance` is what the kernels move: the same for every rank-deduplicating layout (every
+  `normal` mode, MoRI InterNodeV1LL, NCCL EP rank-major), and one copy per (token, expert) for the
+  low-latency kernels that weight inside combine (DeepEP V2, UCCL-EP, NCCL EP expert-major).
+  Bandwidth divides the wire basis; `logical_copies` states which applies.
 
-Every row carries two byte accountings and each excludes expert metadata, padding, and backend
-buffer capacity. `byte_provenance` is the canonical comparable basis: rank-deduplicated
-token-rank activations, one copy per unique (token, dest-rank) pair. `wire_byte_provenance` is
-what the kernels actually move: identical to the canonical basis for every layout that
-deduplicates per rank (all normal modes, and MoRI's low-latency kernels, whose combine is an
-unweighted rank-sum), and one copy per (token, expert) assignment for the low-latency kernels
-that apply top-k weights inside combine (DeepEP V2, UCCL-EP, NCCL EP). For a token whose experts
-share a destination rank the deduplicated count is a lower bound on those kernels' traffic —
-34% low on nccl-ep low-latency EP8 at T=128 — which is why every emitted GB/s divides from the
-WIRE basis; a rate derived from `byte_provenance` on such a row is a lower bound, not the wire
-rate, and is not comparable across backends. Artifacts written before `wire_byte_provenance`
-existed fall back to the deduplicated basis, which only ever understates. `logical_copies`
-states each row's wire basis (`routed`, `assignments`, `wire`), so the two are never silently
-mixed. BF16 moves 2 bytes per value with no scale payload. An FP8 dispatch moves 1 byte per
-value, plus per-128-block FP32 scales for every blockwise codec here (DeepEP V2, UCCL-EP and
-FlashInfer EP, which carries them as a fourth dispatch payload), and none for MoRI's plain e4m3
-cast, while combine stays BF16, so the dispatch and combine directions can carry different byte
-counts and the roundtrip is their per-field sum. Latency (the headline) is
-measured directly and is unaffected. Algorithm bandwidth, bus bandwidth,
-wire utilization, and physical-link utilization are not emitted without a defined primitive model or
-transport counters. Logical bandwidth must never be labeled physical bandwidth. Payload and token
-rates are named `rate_at_latency_percentile`: bytes or tokens divided by the matching latency
-percentile. They are lower-tail service rates at p99 latency, not p99 percentiles of an inverted
-rate distribution.
+FP8 dispatch moves 1 byte per value plus per-128-block FP32 scales; combine stays BF16, so the two
+directions can differ and the roundtrip is their sum. Logical bandwidth is never labelled physical,
+and bus bandwidth or link utilization are not derived. `token_rate_at_latency_percentile` divides
+global tokens by each roundtrip percentile.
 
 ## Correctness
 
-An implementation-independent oracle uses an expert-specific deterministic transform so wrong expert
-routing cannot pass an identity roundtrip. For every rank and point it verifies:
+An implementation-independent oracle uses an expert-specific deterministic transform, so wrong routing
+cannot pass an identity roundtrip. For every rank and point it verifies:
 
-1. destination rank/expert, source token, multiplicity, gate weight, and receive counts.
-2. dispatched payload and metadata before timing.
-3. combined output before timing.
-4. unchanged semantic inputs through all timed samples.
-5. dispatched payload/metadata and combined output again after timing.
-6. the **free-running chain's own final combined output**, once per chain trial, against a
-   drained pair through the identical dispatch→combine path.
-7. the same full check as 2-5 once more against the state the free-running chain leaves behind.
+1. destination rank and expert, source token, multiplicity, gate weight and receive counts;
+2. dispatched payload and metadata before timing;
+3. combined output before timing;
+4. unchanged semantic inputs through all timed samples;
+5. dispatched payload, metadata and combined output again after timing;
+6. the free-running chain's final combined output, once per chain trial, against a drained pair
+   through the same path;
+7. the full checks 2-5 again against the state the chain leaves behind;
+8. under graph replay, that every timed capture's poisoned output was rewritten by its replay, and that
+   a capture with staging inside it, replayed after its inputs are scaled by 2 in place and its outputs
+   poisoned, matches an eager drained pair on the scaled inputs (a replay that re-sent captured data
+   fails).
 
-Checks 6 and 7 exist because checks 2-5 only ever see drained calls: without them the headline
-`pair_period` would come from a regime no oracle had inspected, and a backend that transports
-correctly when drained but corrupts under back-to-back pairs would present as the fastest cell in
-the suite. They answer different questions. Check 6 is a regime A/B, not an oracle: after each
-chain trial's closing synchronize, outside every timed window, the chain's last combined output
-is compared elementwise (the oracle's tolerance, not bit equality, since combine kernels are not
-required to be order-deterministic) against a freshly drained pair through the same code path, so
-it catches corruption the chain wrote into its own results. Check 7 reruns the full expert oracle
-after the final trial, on the settled communicator (`benchmark_chain` ends synchronized), so it
-catches state the chain corrupted for whatever runs next. Interior chain pairs stay unvalidated by
-design: each pair overwrites its predecessor's output, and holding or reducing every output would
-put device work (or ~O(iters × T × hidden) memory) inside the timed loops the chain exists to keep
-clean. A defect confined to interior pairs that heals by the final pair is outside this suite's
-evidence. Check 6 is reported per row as `correctness.chain_last_output_passed` (ANDed across
-trials) and check 7 as `correctness.post_chain_state_passed`. Check 7 is **folded into
-`correctness.passed`**, so its failure fails the leg exactly as any other oracle failure does.
+Every check folds into `correctness.passed`; any failed rank or point makes the case `invalid`. Checks
+6 and 7 exist because 2-5 see only drained calls: without them a backend that corrupts under
+back-to-back pairs would present as the fastest cell. Check 6 compares within the oracle's tolerance
+(combine kernels need not be order-deterministic); interior chain pairs stay unvalidated by design,
+since holding every output would put work inside the timed loop.
 
-Check 6 gates **only where the chain stages per pair**, and is reported as `null` elsewhere. That
-boundary is measured, not assumed. Wherever `stage_excluded_from_roundtrip` holds (every FP8
-adapter by default, since `stage_device_work` *is* the FP8 flag), the chain hoists staging out of
-the timed loop, capturing one warm-up dispatch's stand-in and reusing it for all 128 pairs. Neither
-the chain's final combine nor the drained reference then consumes an input matching its own
-dispatch, so they are two differently mismatched pairs and nothing requires them to agree.
+**Check 6 gates only where the chain stages per pair**, and reports `null` elsewhere. Every FP8 row
+hoists staging out of the chain by default, so the chain's final combine and the drained reference
+consume differently mismatched inputs and nothing requires them to agree (on h100 deepep-v2 the hoisted
+error was 1000-3000x tolerance, the per-pair `dequant` run bit-identical). It keeps its teeth on every
+BF16 row and under the `dequant` hatch. What `null` leaves uncovered is a corruption that appears only
+under free-running pairs, leaves no state behind, and lives in a path the BF16 sibling does not
+exercise. Run `CX_FP8_CONSUME=dequant` whenever an FP8 period moves in a way its BF16 sibling does not,
+and before publishing a new FP8 backend. `correctness.chain_last_output_error` is published whether or
+not the verdict passed: read the magnitude before the verdict, since a coarse accumulator and a
+corruption call for opposite responses.
 
-The A/B, on h100/deepep-v2/EP8, identical in every respect but the hoist:
+Every `normal` mode, MoRI InterNodeV1LL and nccl-ep rank-major low-latency use an unweighted rank-sum
+combine. The oracle builds each rank's gate-weighted FP32 expert aggregate, casts it to BF16 as the
+adapter does, and reduces per `implementation.combine_reduction`:
 
-| staging | `chain_last_output_error` | vs `COMBINE_REL_TOL` |
-|---|--:|--:|
-| hoisted (`fp8_consume=native`) | 31 – 93 | **1000× – 2966×** |
-| per pair (`fp8_consume=dequant`) | `0.0` at every rung | bit-identical |
+- `domain-fp32` (uccl-ep, MoRI, nccl-ep HT, FlashInfer from 0.6.16): ranks in one scale-up domain
+  reduce in FP32, and each domain casts its partial to BF16 before the scale-out sum.
+- `rank-fp32` (deepep-v2, nccl-ep low-latency rank-major): the source sums the first slot of each
+  unique destination rank in FP32, since deepep-v2 runs `allow_multiple_reduction=False` and forms no
+  per-domain partials. On x86 EP16 that moves one scale-out row per destination rank, about 2.6x the
+  per-node combine bytes; the `token-rank` byte basis already counts it.
+- `topk-slot-tree` (FlashInfer before 0.6.16).
 
-in **both** `normal` and `low-latency` mode (runs 31180411148, 31185184372, 31185233991), against a
-BF16 control that is `0.0` because BF16 never hoists. So the difference was an artifact of the
-hoist, not a transport defect: gating on it under the hoist reddened every FP8 leg fleet-wide for
-something the harness does deliberately.
+The gate is the max elementwise relative error, denominator clamped at 0.02, below `8 * 2^-8`. The other
+low-latency adapters weight inside combine, so the oracle derives a per-(source, expert)-slot gate-scaled
+sum of BF16 messages instead and checks the delivered assignments against the routing trace. Under FP8
+the oracle applies the backend's exact quantize round-trip to the semantic payload, so the payload match
+stays bit-exact and the tolerance does not widen. Physical receive order is not a correctness property.
 
-Passing the chain's staged input to the drained pair was tried first and is *not* sufficient. It
-makes the two share an input, but a shared input that matches neither dispatch. Only per-pair
-staging makes the regimes comparable.
+## Result Document
 
-The check keeps its teeth exactly where it has meaning: every BF16 row, and any FP8 row run under
-the `dequant` hatch. `null` there means the question was not asked, never a comparison that ran and
-failed. If this boundary is ever moved, move it on a measured magnitude: the verdict alone
-justified two wrong calls in one day, and the number settled it in one probe each time.
+One raw case document, `results/<sku>/<case_id>.json`, carries `record_type: "case-attempt"`, the
+sweep `version` and `generated_at`, and:
 
-What the null leaves uncovered is the intersection of three conditions: a corruption that manifests
-only under free-running pairs (the drained oracles are blind by regime), leaves no state behind
-(the post-chain oracle is blind), and lives in a path the BF16 sibling row does not exercise (its
-still-gating check is blind). Anything short of all three still reds a gate. The DeepEP
-low-latency 256-rung corruption hit both precisions, so its BF16 rows would red
-`chain_last_output_passed` today, and a wedge trips the per-case hang guard. Note the hoisted chain
-also never consumes its own FP8 receive, so the exposure covers dispatch-side corruption as well as
-combine-side, and `chain_health` is a consistency guard, not a work guard: a regime defect that
-uniformly shortens the combine would publish a fast period no surviving check contradicts. The
-standing probe for the intersection is the `dequant` hatch. `CX_FP8_CONSUME=dequant` stages every
-pair from its own dispatch, restoring this check on FP8's own free-running pairs. Run one whenever
-an FP8 chained period moves in a way its BF16 sibling does not, and before first publishing a new
-FP8 backend. flashinfer-ep hoists at BF16 as well (its stage is the workspace staging copy), so its
-rows are null at every precision and the hatch does not reach it, and its coverage is an open
-follow-up.
-
-Check 6 also publishes `correctness.chain_last_output_error`, the worst chained-vs-drained
-relative error, cross-rank MAX, **reported whether or not the verdict passed**. Read it before
-reading the verdict. The check assumes a regime defect lands orders of magnitude past
-`COMBINE_REL_TOL` while ordinary kernel non-determinism stays well inside it, and that assumption
-is not free: FlashInfer EP accumulates its combine in the payload dtype (a BF16 slot-tree) rather
-than FP32, so its rounding over a large receive plane is far coarser than a backend reducing in
-FP32. A verdict alone cannot separate "the transport corrupted this" from "this tolerance is too
-tight for this accumulator", and the two call for opposite responses. The magnitude is the
-discriminator. A failure reported without it should not be read as evidence of corruption.
-(`post_chain_state_passed` was previously published as `chain_regime_passed`, a name that
-overclaimed. A fresh post-chain oracle proves the state, not the chain's outputs. Artifacts from
-older harnesses carry the old name, where `null` meant the chain never ran. A validated chain
-budget is now required up front, so `post_chain_state_passed` is always a boolean in new
-artifacts. `chain_last_output_passed` is the separate case described above and is legitimately `null`
-wherever the chain hoists staging, which is every FP8 row outside the `dequant` hatch.)
-
-Normal-mode adapters use activation-only, unweighted rank-sum combine. The oracle builds each rank's
-gate-weighted expert aggregate before combine and derives the expected combine from the values
-actually communicated, reproducing the two-level reduction: each destination rank casts its FP32
-aggregate to the payload dtype (BF16) exactly as the adapter does. Ranks sharing a scale-up domain
-(NVLink/MNNVL) reduce in FP32, and each domain casts its aggregate to BF16 for the scale-out send
-before those partials are summed. A group that fits in one scale-up domain (`ep_size <=
-scale_up_domain`, including every EP8 case and the MNNVL EP16 cases) has a single domain and no scale-out
-rounding. A multi-node RoCE EP16 group carries one BF16 partial per node. Modelling that per-domain
-cast is what lets the gate stay tight (max elementwise relative error (denominator clamped at 0.02)
-below `8 * 2^-8`, the residual accumulation-order ambiguity) across scale-up and scale-out topologies
-alike (omitting it left multi-node EP16 ~0.048 off, above the gate).
-
-Low-latency adapters instead use a source-side gate-weighted combine: the kernel multiplies each
-expert's returned message by that assignment's top-k weight, so the adapter stages the UNWEIGHTED
-per-expert transform and a dedicated per-(source, expert)-slot oracle derives the expected combine as
-the gate-scaled sum of per-expert BF16 messages, with no per-domain intermediate, since the low-latency
-kernels reduce at the source rank. The delivered (source, expert) assignment multiset and per-expert
-counts are checked against the routing trace, and the same tight combine gate applies. Under FP8
-dispatch the oracle applies the backend's exact per-token cast round-trip to its semantic payload before both the
-dispatched-payload compare and this combine expectation, so the payload match stays bit-exact and the
-same tight gate holds. The quantization is modeled, not absorbed into a wider tolerance. It is a
-correctness gate, not an estimate of transport error. Any failed rank or point makes the case ineligible in the result it writes.
-Pre/post dispatch behavior is checked against canonical source-token metadata and expected output.
-Native receive slots may be assigned nondeterministically, so physical receive order is not treated
-as a correctness property.
-
-## Result Artifact
-
-One raw case document carries `record_type: "case-attempt"`, the single `version`, and a
-`generated_at` timestamp, and contains:
-
-- `identity`: `case_id`, `attempt_ordinal`, `case_factors` (SKU and the scheduled case, including backend,
-  EP size, mode, precision, phase, suite, workload, and the topology coordinate), and
-  `allocation_factors` (run id, run attempt, source SHA).
-- `workload`: `cross_rank_consistent`, whether the routing trace was proven identical across ranks.
-- `measurement`: dispatch/combine dtype (the realized wire formats, with combine always BF16 and dispatch
-  BF16 or the SKU's FP8 format) and semantics, `payload_unit` (`token-rank`), `sampling`, and the
+- `identity`: `case_id`, `attempt_ordinal`, `case_factors` (SKU and scheduled case) and
+  `allocation_factors` (source SHA; run id and attempt are null for hand runs).
+- `workload`: `cross_rank_consistent`, `ladder_measured`, `ladder_dropped`, `ladder_cap`.
+- `measurement`: dispatch and combine dtype, `combine_semantics`, `payload_unit`, `sampling`, and the
   per-point `rows`.
-- `implementation`: backend name, kernel generation, and `maturity`, which indicates whether a production
-  inference engine can select this transport today (`production` = exposed by vLLM's
-  `--all2all-backend` or SGLang's `--moe-a2a-backend`, while `candidate` = a real transport we
-  benchmark that no engine ships a selector for, so its numbers describe the library rather
-  than a deployable configuration). The same map is in the registry's `backend_maturity`. It also
-  carries `fp8_consume` (which FP8 consumption path the chained roundtrip modelled (see above)),
-  `combine_reduction` and `library_version` (which reduction the oracle held the kernel to, and
-  the installed library that selected it), and two generation discriminators:
-  `stage_excluded_from_roundtrip` (whether `roundtrip` excludes expert-output staging, discussed
-  above), `chained_period` (whether this document's rows carry the chained family),
-  `cuda_graph_supported` (whether the adapter declares this mode graph-safe), and
-  `cuda_graph_replay` (whether the existing measurement pipeline used replay).
-- `topology`: requested SKU/product, placement, `gpus_per_node`, nodes, scale-up domain, `scope`,
-  `topology_class`, world size, and three distinct transport fields, `scale_up_transport` and
-  `scale_out_transport` (the components), plus `transport`, the derived summary that folds them
-  into one string (`nvlink` scale-up-only, `nvlink-rdma` once a case scales out).
-- `runtime`: the realized software stack, `vendor`, `framework` (the torch version),
-  `accelerator_runtime` (the CUDA or HIP version torch was built against), and
-  `collective_library` (`nccl`/`rccl` and the version actually loaded into the process).
-- `provenance`: the mounted image tag and source SHA, and
+- `implementation`:
+  - `name` and `kernel_generation` ([Identity](#identity)).
+  - `maturity`: `production` where an engine can select the configuration today (vLLM's
+    `--all2all-backend`, SGLang's `--moe-a2a-backend`, or TensorRT-LLM's `NcclEP` for NCCL EP's
+    low-latency rank-major BF16 rows); `candidate` for a transport or mode no engine ships a selector
+    for. uccl-ep stays `candidate` although it runs vLLM's DeepEP configuration. nccl-ep sets it per row.
+  - `fp8_consume`, `rank_alignment`, `stage_excluded_from_roundtrip`, `chained_period`,
+    `cuda_graph_supported` and `cuda_graph_replay`.
+  - `combine_reduction` and `library_version` (the installed wheel or pinned commit).
+  - `library_config`: what the adapter chose or the library resolved that changes what a row measures
+    (`EPBackend.implementation_details()`): SM and QP counts, buffer flags and sizing, zero-copy,
+    `engine_contract` and similar, per backend.
+- `topology`: device, placement, `gpus_per_node`, `nodes`, `scale_up_domain`, `scope`,
+  `topology_class`, `world_size`, `scale_up_transport`, `scale_out_transport` and the derived
+  `transport`.
+- `runtime`: vendor, torch, CUDA or HIP, the loaded `nccl`/`rccl` version, and `gpu_clocks`. A clamped
+  GPU looks exactly like a slow library, so every case records each rank's SM clock after each point's
+  timed bursts and after each chain (NVML or amdsmi), throttle fractions by cause,
+  `sm_clock_ratio_min` (slowest over fastest rank) and `slow_gpu` (ratio below 0.95, a hardware,
+  thermal or power brake, or 5% of the timed passes throttled). Reads happen only between bursts; a
+  probe that cannot start leaves nulls and never fails the case.
+- `provenance`: image tag, source SHA and `source_dirty` (a dirty result is never published).
 - `outcome`: `status` (`success` or `invalid`) and `reasons`.
 
-Each `rows` entry carries point latency (`components`, graph-replayed by default where supported,
-plus `components.pair_period`, `chain_floor_us` and `chain_health` (see Chained Pair Period)), byte
-accounting, token rate, correctness, load, and fanout, while
-per-point statistics are summarized in place, not emitted as separate documents. Each dispatched
-case writes exactly this one raw result document, while unsupported or never-run cells produce no
-synthetic record.
+Each `rows` entry carries the components, `pair_period`, `chain_floor_us`, `chain_health`, the skew
+bracket, `rank_alignment`, `correctness`, the byte accounting, receive counts, routing load and the
+token rate. Each run writes exactly this one document per case, replacing the case's previous file;
+unsupported or never-run cells produce no record.
 
 ## Identity
 
-Identifiers are readable factor strings:
+- `case_id`: `{sku}-{backend}-{workload}-{mode}-{phase}-ep{ep}-{routing}-{precision}`, slug-normalized.
+  It names the result file, so a re-run replaces that case in the next uploaded run.
+- `attempt_ordinal`: `COLLX_ATTEMPT_ID`, 1 unless set.
 
-- `case_id`: `{sku}-{backend}-{workload}-{mode}-{phase}-ep{ep}-{routing}-{precision}`, each factor
-  slug-normalized, and
-- `attempt_ordinal`: a positive integer distinguishing repeat executions of one `case_id`.
+The backend does not compute cohorts, comparisons or recommendations; a reader decides how to compare
+cases. `implementation.kernel_generation` names the kernel family plus the regime suffix
+(`-cudagraph-spin-ar` or `-eager-spin-ar`), and rows of one backend pool only within one generation:
 
-Backend source pins live in `runtime/common.sh` and are enforced by exact fetched-commit comparison, and
-the loaded DeepEP V2 build is checked for the required `ElasticBuffer` API.
+| Backend | Families |
+|---|---|
+| deepep-v2 | `v2-elastic-buffer-vllm-nosync`, plus `-relaxed-ordering` on h200 EP16; `legacy-buffer-ll-hook`, plus `-ue8m0` for Blackwell FP8 |
+| uccl-ep | `uccl-legacy-buffer-vllm-ht`; `uccl-legacy-buffer-ll-hook`, plus `-ue8m0` for B200 FP8 |
+| mori | `intranode-vllm`, `inter-node-v1-vllm`, `inter-node-v1ll-vllm`, each plus `-sdma` when SDMA was on |
+| nccl-ep | `nccl-ep-v02-ht-routed-zc-static` (plus `-gum1` graphed), `nccl-ep-v02-ll-rm` (plus `-zc` on the window path) or `nccl-ep-v02-ll-em`, then `-fp8-ds-e3m4` and `-cap<N>-<wheel version>` ([nccl-ep.md](nccl-ep.md)) |
+| flashinfer-ep | `flashinfer-mnnvl-one-sided-staged-<wheel version>` |
 
-These IDs let a consumer group matched configurations and separate distinct ones. The backend does
-not itself compute cohorts, controlled comparisons, sensitivity pairs, eligibility, or
-recommendations. A reader decides which cases to surface and how to compare them.
+Backend source pins live in `runtime/common.sh` and are enforced by exact fetched-commit comparison.
 
 ## Execution Isolation
 
-Every non-MNNVL scale-out case uses operator-pinned socket and RDMA selectors. The launcher rejects
-missing or partial profiles, then probes every allocated node for the configured interface, active
-HCA port, and configured GID before backend initialization. It never substitutes a default route,
-inherited runner environment, or transport fallback. Scale-up and MNNVL cases clear the profile.
-Scale-out NVIDIA forces `NCCL_NET=IB`, while AMD leaves plugin selection to RCCL. Both use exact HCA
-matching. Scale-out also pins `NCCL_IB_MERGE_NICS=0` so dual-port NIC fusion cannot disable NCCL GIN
-(which the DeepEP V2 EP16 hybrid path requires), and a rail-isolated fabric (`rail_isolated`) adds
-`NCCL_CROSS_NIC=0`. Selectors come from the tracked platform registry, optionally overlaid by an
-operator config, and appear only in mode-0600 private logs.
+Every non-MNNVL scale-out case needs the registry's `rdma_devices` for its approved fabric; the launcher
+rejects a missing or malformed selector, and HCAs are never guessed. `socket_ifname` pins the cross-node
+socket interface. After allocation every scale-out node must show its socket interface up and an ACTIVE
+port on every listed device before backend initialization. Every shard first clears the NCCL, NVSHMEM,
+MoRI and UCCL selectors it inherited, and host-side utility steps receive only a minimal environment.
 
-Repository staging uses a pre-existing, runner-owned, group/world non-writable shared base outside
-the checkout and workflow workspace. The parent process resolves the exact execution child before
-copying. Backend preparation then runs from that tree on every allocated node. Cleanup waits for
-confirmed allocation teardown and removes only that child. DeepEP V2 source is fetched before allocation at an
-exact pinned revision, initializes its pinned `fmt` submodule, and applies the required local patch.
+On the IB and RoCE pools, scale-out NVIDIA forces `NCCL_NET=IB` so a socket fallback fails instead of
+being mislabelled RDMA. Device lists use NCCL's `=` exact-match prefix (`mlx5_1` cannot select
+`mlx5_10`). `ib_gid_index` applies only when every selected port is Ethernet; native IB keeps its LID
+path, and mixed lists are rejected. `rdma_service_level` and `rdma_traffic_class` set the matching
+NVSHMEM, NCCL, MoRI, UCCL and DeepEP variables. Scale-out pins `NCCL_IB_MERGE_NICS=0`, because a fused
+dual-port device disables NCCL GIN, which DeepEP V2's hybrid EP16 needs. A rail-isolated fabric adds
+`NCCL_CROSS_NIC=0`. Selectors come from the tracked registry, whose `network` block wins over an
+operator document, and appear only in mode-0600 private logs.
 
-H200, B200, and B300 may derive that private base beneath the validated operating-system account home
-when it is compute-visible. H100 instead derives a sibling of its shared container directory, never a
-child of image storage.
-Canonical B300 execution ignores the legacy operator `stage_dir` field and always derives the base
-from the validated shared account home. Its UID-mapped Actions shell may accept that exact base when
-its owner matches the private parent owner. Explicit stages and all other runners retain the strict
-effective-UID ownership rule. An execution-ID suffix isolates parallel B300 workers. The current
-NFS export may realize a newly created base as
-UID 0. Only that creation path is accepted, while a pre-existing root-owned base is rejected.
-Canonical GB300 execution likewise ignores its legacy group-writable `stage_dir` and derives an
-execution-specific private base beneath the validated compute-visible account home.
+The EFA pools (b300 and h100-dgxc) reach the fabric only through the aws-ofi-nccl libfabric plugin.
+Multi-node shards bind the host's `/opt/amazon/{efa,ofi-nccl}` and rdma-core read-only, ahead of the
+image's older EFA user space; the IB selector family stays unset, `NCCL_NET_PLUGIN=ofi` and
+`FI_PROVIDER=efa` select the plugin, and setup fails unless libfabric reaches every listed device from
+inside the container. NCCL GIN rides the plugin's CPU-proxy GIN (`NCCL_GIN_TYPE=2`), which needs
+GDRCopy 2.5+ on the node. The type is pinned because the plugin's GPU-initiated EFA backend has only
+weak signals, which nccl.ep and DeepEP cannot use. Where the host plugin predates 1.21 (h100's 1.20),
+shards build aws-ofi-nccl 1.21.1 into the backend cache, since 1.20's proxy applies every signal with
+an inline GPU read-modify-write (1.3-4.5x slower on b300 EP16). They also build it where the host
+plugin cannot load in the image (b300's links libhwloc.so.15, which the vLLM image lacks): NCCL does
+not fail on such a plugin but falls back to its internal IB transport on the hosts' CX-7 ports. Proxy GIN still bounds these rows
+well below the IB pools.
+
+The single-slurm pools (H100, H200, B200, B300) reject an allocation holding a GPU with an active
+thermal slowdown or above 90 °C and retry elsewhere, up to three allocations: one clamped device paces
+every rank.
+
+Repository staging copies `collectivex/` into a mode-0700 execution child of the operator's
+`stage_dir` (or beside the image under `squash_dir`), visible at the same path on the login node and
+every allocated node. Cleanup waits for confirmed allocation teardown and removes only that child.
+Pinned sources are fetched on the submit host before allocation, at the exact pinned revision, because
+compute nodes may have no network.
 
 ## Image Pinning And Build Isolation
 
-Enroot imports configured container tags into one squash per (image platform, image reference),
-staged once per cluster and reused by every run of the same image. Freshness is decided against a
-digest sidecar: the registry manifest digest is resolved from the submit host at launch, and a
-resolved digest that differs from the sidecar stamp means the tag moved upstream and forces a
-fresh import. An unresolved digest (no registry egress, a transient blip) reuses whatever is
-staged; the `refresh_image` dispatch input forces an update in that case, discarding only files
-staged before the launch so concurrent legs still import once. Validity is still proven per use
-(`unsquashfs -l`) before any reuse. Image-provided DeepEP is
-also checked against exact package versions and its expected API. Source-built DeepEP V2 uses
-a separate mode-0700 cluster-local cache mounted only as `/cx-cache`. Its path binds CPU/GPU
-architecture, image, and upstream commit. The cache is never an artifact. Per-execution
-source/results stages remain isolated and disposable, and runtime probes fail closed before reuse. The runner UID is
-inside the trusted cluster boundary: this cache guards against stale or accidental mutation, not
-hostile same-UID jobs. Only an unpublished partial build may be reset automatically. A cache that
-fails integrity or runtime checks is left intact and rejected so a concurrent allocation cannot lose
-files it is using.
+Enroot imports each configured image tag into one squash per (platform, reference), staged once per
+cluster and reused. Freshness is decided by the registry manifest digest resolved at launch against a
+sidecar stamp: a moved tag forces a fresh import, an unresolved digest reuses what is staged, and
+`COLLX_IMAGE_REFRESH=1` forces an update. Validity is proven per use (`unsquashfs -l`), and a squash
+another account owns is reused when readable and current but never replaced.
 
-## Neutral Artifact Delivery
+Backends the image does not ship live in a mode-0700 cluster-local backend cache mounted as `/cx-cache`:
+DeepEP V2 and UCCL-EP built at their pins, the `nccl-extensions` wheels, FlashInfer at vLLM's pin, and
+aws-ofi-nccl 1.21.1 where needed. Each cache directory's name binds the CPU architecture, the image and
+the pin (plus the GPU architecture and build-recipe generation for GPU builds), and it is never
+committed. The DeepEP V2 build applies one local patch, the opt-in relaxed-ordering switch; UCCL-EP's
+AMD build swaps managed allocations for pinned host memory. MoRI ships in the image and is only
+import-checked. Runtime probes fail closed before reuse, and a cache that fails them is rejected, not
+reset, so a concurrent allocation cannot lose files it is using.
 
-There is no results server, attached store, or managed object store. Each shard runs one allocation,
-emits per-case result JSON and a small mechanical summary, and uploads them as GitHub artifacts with
-`always()` so a red or partial run still uploads. A case counts as successful on the benchmark's own
-return code. There is no completeness or privacy validation step before upload, and failed or
-unsupported cells produce no synthetic record.
+## Result Delivery
 
-No step promotes a run, builds a dataset, or advances a channel. The artifacts are the output. Any
-downstream display or comparison is the consumer's responsibility.
-
-## Legacy Data
-
-Historical numeric schemas 3-5 are outside this benchmark's artifacts. They remain historical
-diagnostic evidence and are not produced or consumed by the current sweep.
+There is no results server. Each shard runs one allocation and copies its per-case documents to
+`results/<sku>/` in the checkout that ran it. Results reach the dashboard only through the
+InferenceX-app upload (`admin:db:ingest:collectivex --dir`), which checks every file against
+`results/cases.json`, rejects ones measured from uncommitted code, and rejects IP addresses and
+host-identifying fields.

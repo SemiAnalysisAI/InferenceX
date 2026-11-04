@@ -21,14 +21,17 @@ class RequestError(ValueError):
 
     @classmethod
     def missing(cls, *names: str) -> RequestError:
+        """Return an error naming the unset environment variables ``names``."""
         return cls(f"required environment variables are not set: {', '.join(names)}")
 
 
 def _equals(*truthy: str) -> BeforeValidator:
+    """Return a validator reading a string as True when it is one of ``truthy``."""
     return BeforeValidator(lambda value: value if isinstance(value, bool) else value in truthy)
 
 
 def _int_list(value: Any) -> Any:
+    """Split a whitespace-separated string into a list, passing other values through."""
     return value.split() if isinstance(value, str) else value
 
 
@@ -39,6 +42,7 @@ IntList = Annotated[list[int], BeforeValidator(_int_list)]
 
 
 def _describe(error: ValidationError) -> str:
+    """Render a validation error as one message listing missing then invalid inputs."""
     missing: list[str] = []
     invalid: list[str] = []
     for detail in error.errors(include_url=False, include_input=False):
@@ -53,6 +57,10 @@ def _describe(error: ValidationError) -> str:
 
 
 BATCH_REENTRY_ENV = "INFX_BATCH_REENTRY"
+AL_GATE_EXEMPT_FRAMEWORKS = {
+    "dynamo-trt": "the Dynamo TRT-LLM recipes disable TRT-LLM metrics",
+    "tilert": "TileRT rejects streaming /v1/completions and serves no metrics",
+}
 
 
 class LaunchRequest(BaseModel):
@@ -76,10 +84,41 @@ class LaunchRequest(BaseModel):
     conc_list: IntList = Field(default_factory=list, alias="CONC_LIST")
     run_eval: TrueFlag = Field(False, alias="RUN_EVAL")
     eval_only: TrueFlag = Field(False, alias="EVAL_ONLY")
+    al_gate: TrueFlag = Field(False, alias="AL_GATE")
+    al_gate_curve: str | None = Field(None, alias="AL_GATE_CURVE")
+    al_gate_draft_tokens: int | None = Field(None, alias="AL_GATE_DRAFT_TOKENS")
+    al_gate_dataset: str | None = Field(None, alias="AL_GATE_DATASET")
     salloc_time_limit: int | None = Field(None, alias="SALLOC_TIME_LIMIT")
     enroot_import_time_limit: int | None = Field(None, alias="ENROOT_IMPORT_TIME_LIMIT")
 
     env: dict[str, str] = Field(default_factory=dict, exclude=True, repr=False)
+
+    @model_validator(mode="after")
+    def _acceptance_gate(self) -> Self:
+        """The acceptance gate measures one AgentX speculative srt-slurm point.
+
+        Its container reads the prompts the workflow downloaded into the workspace, which it
+        mounts at ``/infmax-workspace``; it never prepares them.
+        """
+        if not self.al_gate:
+            return self
+        if not (
+            self.al_gate_curve
+            and (self.al_gate_draft_tokens or 0) > 0
+            and self.is_agentic
+            and self.spec_decoding not in (None, "none")
+            and not (self.eval_only or self.run_eval or self.bench_script_override)
+            and self.framework not in AL_GATE_EXEMPT_FRAMEWORKS
+        ):
+            raise ValueError(
+                "AL_GATE needs AL_GATE_CURVE, a positive AL_GATE_DRAFT_TOKENS, IS_AGENTIC=1 and a "
+                "SPEC_DECODING method, and no eval, BENCH_SCRIPT_OVERRIDE or exempt framework"
+            )
+        workspace, dataset = self.workspace.resolve(), Path(self.al_gate_dataset or "")
+        staged = (workspace / dataset).resolve()
+        if dataset.is_absolute() or not staged.is_relative_to(workspace) or not staged.is_file():
+            raise ValueError(f"AL_GATE_DATASET {self.al_gate_dataset} is not a file in {workspace}")
+        return self
 
     @model_validator(mode="after")
     def _one_agentx_concurrency(self) -> Self:
@@ -113,6 +152,7 @@ class LaunchRequest(BaseModel):
 
     @property
     def workspace(self) -> Path:
+        """Return ``GITHUB_WORKSPACE``, or raise ``RequestError`` if it is unset."""
         if self.github_workspace is None:
             raise RequestError.missing("GITHUB_WORKSPACE")
         return self.github_workspace
@@ -150,6 +190,7 @@ class MultiNodeRequest(SrtRequest):
     srt_recipe: str = Field(alias="SRT_RECIPE")
     eval_srt_recipe: str | None = Field(None, alias="EVAL_SRT_RECIPE")
     power: OneFlag = Field(False, alias="POWER")
+    cpu_power: OneFlag = Field(False, alias="CPU_POWER")
 
 
 class SingleNodeRequest(SrtRequest):
@@ -181,17 +222,3 @@ class ScriptRequest(LaunchRequest):
     model: str = Field(alias="MODEL")
     gpu_count: int = Field(alias="GPU_COUNT")
     salloc_time_limit: int = Field(alias="SALLOC_TIME_LIMIT")
-
-
-class LlmdRequest(SrtRequest):
-    """An llm-d vLLM multinode job submitted through benchmarks/multi_node/llm-d."""
-
-    model: str = Field(alias="MODEL")
-    disagg: TrueFlag = Field(alias="DISAGG")
-    prefill_nodes: int = Field(alias="PREFILL_NODES")
-    decode_nodes: int = Field(alias="DECODE_NODES")
-    prefill_num_workers: int = Field(1, alias="PREFILL_NUM_WORKERS")
-    decode_num_workers: int = Field(1, alias="DECODE_NUM_WORKERS")
-    isl: int = Field(alias="ISL")
-    osl: int = Field(alias="OSL")
-    random_range_ratio: str = Field(alias="RANDOM_RANGE_RATIO")

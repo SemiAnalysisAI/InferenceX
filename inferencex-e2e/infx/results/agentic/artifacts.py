@@ -21,11 +21,13 @@ def resolve_artifact_dir(result_dir: Path) -> Path:
 
 
 def load_aggregate(path: Path) -> dict[str, Any]:
+    """Return the JSON object stored at ``path``."""
     with open(path) as f:
         return json.load(f)
 
 
 def load_records(path: Path) -> list[dict[str, Any]]:
+    """Return the profiled, error-free records from the profile_export.jsonl at ``path``."""
     records, _ = load_records_with_accounting(path)
     return records
 
@@ -73,6 +75,7 @@ def load_records_with_accounting(
 
 
 def _error_category(error: Any) -> str:
+    """Reduce a record's ``error`` field to a short category name, ``"unknown"`` when empty."""
     if isinstance(error, dict):
         for key in ("type", "error_type", "code", "class", "status"):
             value = error.get(key)
@@ -90,6 +93,7 @@ def _error_category(error: Any) -> str:
 
 
 def load_server_metrics(path: Path) -> dict[str, Any]:
+    """Return the server metrics JSON at ``path``, or an empty dict when the file is missing."""
     if not path.exists():
         return {}
     with open(path) as f:
@@ -97,6 +101,7 @@ def load_server_metrics(path: Path) -> dict[str, Any]:
 
 
 def load_server_log_head(path: Path, max_bytes: int = 64 * 1024 * 1024) -> str | None:
+    """Return up to ``max_bytes`` of the log at ``path`` as text without NUL bytes, or None if missing."""
     if not path.exists():
         return None
     with open(path, "rb") as f:
@@ -105,6 +110,7 @@ def load_server_log_head(path: Path, max_bytes: int = 64 * 1024 * 1024) -> str |
 
 
 def find_server_log_paths(result_dir: Path) -> list[Path]:
+    """List server.log in ``result_dir`` and watchtower-*.out files from it and three parents, deduplicated."""
     paths: list[Path] = []
     direct = result_dir / "server.log"
     if direct.is_file():
@@ -127,6 +133,10 @@ def find_server_log_paths(result_dir: Path) -> list[Path]:
 
 
 def _hf_traces_dir(hf_dataset_name: str | None, env: Mapping[str, str]) -> Path | None:
+    """Return the single cached snapshot dir of the HF dataset named ``hf_dataset_name``, else None.
+
+    The hub cache root comes from HF_HUB_CACHE, HUGGINGFACE_HUB_CACHE or HF_HOME in ``env``.
+    """
     if not hf_dataset_name:
         return None
 
@@ -146,6 +156,7 @@ def _hf_traces_dir(hf_dataset_name: str | None, env: Mapping[str, str]) -> Path 
 
 
 def _iter_trace_blobs(traces_dir: Path) -> Iterator[dict[str, Any]]:
+    """Yield every JSON object from the *.jsonl and *.json files in ``traces_dir``, skipping unreadable ones."""
     for path in sorted(traces_dir.glob("*.jsonl")):
         try:
             with open(path) as f:

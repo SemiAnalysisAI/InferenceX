@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import os
 import shutil
@@ -9,8 +10,10 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
+from importlib import metadata
 from pathlib import Path
 
+from infx.bench.proc import echo
 from infx.config import repository_root
 from infx.launch import proc
 from infx.launch.context import LaunchError
@@ -18,6 +21,9 @@ from infx.launch.drivers.srt.recipe import RECIPES_MIRROR
 from infx.launch.drivers.srt.run import SrtRun, require
 
 SUBMODULE = Path("utils/srt-slurm")
+# The cpu-power-exporter release asset ``make setup`` installs for a job that scrapes Grace CPU
+# power; it ships with the srt-slurm release the submodule pins, so bump both together.
+CPU_POWER_EXPORTER_RELEASE = "v2.66.1"
 PATCHES = Path("runners/srt-slurm/patches")
 SETUP_LOG = "srt-setup.log"
 SETUP_ATTEMPTS = 5
@@ -33,10 +39,12 @@ class Checkout:
 
     @property
     def venv(self) -> Path:
+        """Return the checkout's virtualenv directory."""
         return self.root / ".venv"
 
 
 def _git(*args: str | Path, capture: bool = False) -> str:
+    """Run ``git`` and return stripped stdout if ``capture``, or raise LaunchError on failure."""
     try:
         result = proc.run(["git", *args], check=True, capture=capture)
     except (OSError, subprocess.CalledProcessError) as error:
@@ -45,6 +53,7 @@ def _git(*args: str | Path, capture: bool = False) -> str:
 
 
 def _checked(result: subprocess.CompletedProcess[str], action: str) -> None:
+    """Raise LaunchError naming ``action`` if ``result`` exited non-zero."""
     if result.returncode:
         raise LaunchError(f"{action} failed (exit {result.returncode})")
 
@@ -88,6 +97,7 @@ def prepare_checkout(run: SrtRun, destination: Path, *, power: bool) -> Checkout
     if head != commit:
         raise LaunchError(f"srt-slurm checkout is at {head}, expected {commit}")
     print(f"Using srt-slurm revision {commit}", flush=True)
+    run.life.event.set_versions(srt_slurm_sha=head)
     sha_file = run.workspace / "srt-slurm-sha.txt"
     sha_file.write_text(f"{head}\n")
     if power:
@@ -109,7 +119,8 @@ def _uv(run: SrtRun) -> str:
     install_dir = root / "bin" if root is not None else Path.home() / ".local/bin"
     install_dir.mkdir(parents=True, exist_ok=True)
     env = {**run.env, "UV_INSTALL_DIR": str(install_dir), "UV_NO_MODIFY_PATH": "1"}
-    _checked(proc.run(["sh", "-c", f"curl -LsSf {UV_INSTALLER} | sh"], env=env), "installing uv")
+    installer = f"curl -LsSf {UV_INSTALLER} | sh"
+    _checked(proc.run(["bash", "-o", "pipefail", "-c", installer], env=env), "installing uv")
     run.prepend_path(install_dir)
     return str(install_dir / "uv")
 
@@ -124,8 +135,11 @@ def install_srtctl(run: SrtRun, checkout: Checkout, *, python: str | None = None
         run.env["UV_CACHE_DIR"] = str(cache)
         run.env["UV_PYTHON_INSTALL_DIR"] = str(root / "python")
     venv = checkout.venv
+    # Copy instead of hardlinking: parallel jobs hardlinking the same files in a uv
+    # cache on shared NFS fail at sweep fan-out. Costs ~8 s per install.
+    env = {**run.env, "UV_LINK_MODE": "copy"}
     argv = [uv, "venv", "--quiet", "--seed", *(["--python", python] if python else []), str(venv)]
-    _checked(proc.run(argv, env=run.env, cwd=checkout.root), "uv venv")
+    _checked(proc.run(argv, env=env, cwd=checkout.root), "uv venv")
     install = [
         uv,
         "pip",
@@ -137,16 +151,27 @@ def install_srtctl(run: SrtRun, checkout: Checkout, *, python: str | None = None
         str(checkout.root),
     ]
     _checked(
-        proc.run(install, env={**run.env, "VIRTUAL_ENV": str(venv)}, cwd=checkout.root),
+        proc.run(install, env={**env, "VIRTUAL_ENV": str(venv)}, cwd=checkout.root),
         "installing srtctl",
     )
     run.prepend_path(venv / "bin")
     if shutil.which("srtctl", path=run.env["PATH"]) is None:
         raise LaunchError("Failed to install srtctl")
+    run.life.event.set_versions(srtctl_version=_installed_version(venv, "srtctl"))
+
+
+def _installed_version(venv: Path, name: str) -> str | None:
+    """The version of ``name`` installed in ``venv``, read from its metadata."""
+    paths = [str(path) for path in venv.glob("lib/python*/site-packages")]
+    with contextlib.suppress(OSError):
+        for distribution in metadata.distributions(name=name, path=paths):
+            return distribution.version
+    return None
 
 
 def _run_logged(argv: list[str], log: Path, *, env: dict[str, str], cwd: Path) -> int:
-    proc.echo(argv, env)
+    """Echo and run ``argv`` in ``cwd``, append its output to ``log`` and return its exit code."""
+    echo(argv, env)
     with log.open("a") as handle:
         return subprocess.run(
             argv, env=env, cwd=cwd, stdout=handle, stderr=subprocess.STDOUT, check=False
@@ -173,22 +198,30 @@ def _discard_corrupt_archives(configs: Path) -> bool:
     return discarded
 
 
-def run_setup(run: SrtRun, checkout: Checkout) -> int:
-    """Run ``make setup`` in the checkout, logging to SETUP_LOG; return its exit code."""
+def run_setup(run: SrtRun, checkout: Checkout, *, cpu_power_exporter: bool = False) -> int:
+    """Run ``make setup`` in the checkout, logging to SETUP_LOG; return its exit code.
+
+    ``cpu_power_exporter`` pins the cpu-power-exporter release, which makes its download fatal.
+    """
     log = run.workspace / SETUP_LOG
+    event = run.life.event
+    event.evidence(log)
     for attempt in range(1, SETUP_ATTEMPTS + 1):
         print(f"Setting up srt-slurm, attempt {attempt} (details: {SETUP_LOG})", flush=True)
         argv = ["make", "setup", f"ARCH={run.cluster.arch}"]
+        if cpu_power_exporter:
+            argv.append(f"CPU_POWER_EXPORTER_RELEASE={CPU_POWER_EXPORTER_RELEASE}")
         rc = _run_logged(argv, log, env=run.env, cwd=checkout.root)
         if rc == 0:
             print("srt-slurm setup complete", flush=True)
             return 0
         sys.stderr.write(log.read_text(errors="replace"))
         if not _discard_corrupt_archives(checkout.root / "configs"):
+            event.fail("SetupFailed", f"make setup exited {rc}")
             return rc
         if attempt < SETUP_ATTEMPTS:
             time.sleep(attempt * 5)
-    print(f"ERROR: srt-slurm setup failed after {SETUP_ATTEMPTS} attempts", file=sys.stderr)
+    event.fail("SetupFailed", f"srt-slurm setup failed after {SETUP_ATTEMPTS} attempts")
     return 1
 
 

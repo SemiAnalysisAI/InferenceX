@@ -7,6 +7,10 @@ from lm_eval.models.openai_completions import LocalChatCompletion
 
 
 def _parse_generations(outputs: Any, **kwargs: Any) -> list[Any]:  # noqa: ARG001
+    """Return the text of every choice in chat completion outputs.
+
+    Falls back to reasoning_content when content is empty.
+    """
     results = []
     if not isinstance(outputs, list):
         outputs = [outputs]
@@ -42,6 +46,11 @@ if TemplateAPI is not None and JsonChatStr is not None:
         chat_history: list[dict[str, Any]],
         add_generation_prompt: bool = True,
     ) -> Any:
+        """Render chat_history for the configured tokenizer backend.
+
+        Returns a templated string for local HF tokenizers, the raw messages for remote ones, or a
+        JSON chat string otherwise.
+        """
         if self.tokenizer_backend == "huggingface" and self.tokenized_requests:
             return self.tokenizer.apply_chat_template(
                 chat_history,

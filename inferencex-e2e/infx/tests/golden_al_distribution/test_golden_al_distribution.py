@@ -2,8 +2,10 @@
 
 import json
 import math
+from pathlib import Path
 
 import pytest
+import yaml
 
 from infx.golden_al_distribution import (
     GOLDEN_DIR,
@@ -11,6 +13,7 @@ from infx.golden_al_distribution import (
     curve_name,
     golden_length,
     list_curves,
+    load_curve,
 )
 from infx.golden_al_distribution.__main__ import main
 
@@ -28,6 +31,26 @@ def test_every_committed_curve_is_valid() -> None:
                 assert 1 <= value <= tokens + 1
 
 
+def test_collection_settings_sit_beside_the_model(tmp_path: Path) -> None:
+    collection = {
+        "renderer": "deepseek_v4",
+        "modes": {"thinking_on": {"chat_template_kwargs": None, "sampling": {"temperature": 1.0}}},
+    }
+    curves = {
+        "recorded": {"deepseek-v4-pro": {"thinking_on": {3: 3.01}}, "collection": collection},
+        "unrecorded": {"kimi-k3": {"thinking_on": {7: 3.78}}},
+        "two_models": {"a": {"thinking_on": {1: 1.5}}, "b": {}, "collection": collection},
+    }
+    for name, document in curves.items():
+        (tmp_path / f"{name}.yaml").write_text(yaml.safe_dump(document))
+    recorded = load_curve("recorded", tmp_path)
+    assert (recorded.model, recorded.acceptance("thinking_on", 3)) == ("deepseek-v4-pro", 3.01)
+    assert recorded.collection == collection
+    assert load_curve("unrecorded", tmp_path).collection is None
+    with pytest.raises(ValueError, match="Expected one model in golden curve two_models.yaml"):
+        load_curve("two_models", tmp_path)
+
+
 @pytest.mark.parametrize(
     ("model", "spec", "expected"),
     [
@@ -38,6 +61,8 @@ def test_every_committed_curve_is_valid() -> None:
         ("minimaxm3", {"method": "eagle3", "model": "org/MiniMax-M3-EAGLE3-GQA"}, "minimaxm3_eagle3_gqa"),
         ("dsv4dsparkprob", {"method": "dspark"}, "dsv4-pro-0813-dspark"),
         ("dsv41flash", {"method": "dspark"}, "dsv41flash_dspark"),
+        ("musespark", {"method": "dflash"}, "musespark_dflash"),
+        ("minimaxm31flash", {"method": "dspark"}, "minimaxm31flash_dspark"),
         ("kimik3", {"method": "dspark", "draft_sample_method": "greedy"}, "kimik3_dspark"),
         (
             "kimik3",
@@ -88,3 +113,31 @@ def test_cli_list_and_show(capsys) -> None:
 def test_cli_reports_errors(capsys) -> None:
     assert main(["show", "missing_curve"]) == 1
     assert "No committed golden curve" in capsys.readouterr().err
+
+
+def test_cli_show_rejects_a_curve_outside_the_golden_dir(tmp_path, capsys) -> None:
+    golden = tmp_path / "golden"
+    golden.mkdir()
+    (tmp_path / "outside.yaml").write_text("some-model:\n  thinking_on:\n    3: 2.5\n")
+
+    assert main(["--golden-dir", str(golden), "show", "../outside"]) == 1
+    assert "Invalid golden curve identity" in capsys.readouterr().err
+
+
+def test_a_thinking_mode_written_as_a_list_is_rejected(tmp_path) -> None:
+    (tmp_path / "m_mtp.yaml").write_text("m:\n  thinking_on: [1.5, 2.3, 2.9]\n")
+    spec = {"method": "mtp", "num_speculative_tokens": 2}
+
+    with pytest.raises(ValueError, match="thinking_on of golden curve m_mtp.yaml"):
+        golden_length("m", spec, "thinking_on", tmp_path)
+
+
+def test_cli_show_marks_every_cell_of_an_empty_thinking_mode(tmp_path, capsys) -> None:
+    (tmp_path / "m_mtp.yaml").write_text("m:\n  thinking_on:\n    1: 1.5\n  thinking_off:\n")
+
+    assert main(["--golden-dir", str(tmp_path), "show", "m_mtp"]) == 0
+    assert capsys.readouterr().out.splitlines() == [
+        "m_mtp (m)",
+        "tokens  thinking_on  thinking_off",
+        "1       1.50         -",
+    ]

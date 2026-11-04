@@ -5,6 +5,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 from infx.matrix import changed
@@ -78,3 +79,43 @@ def test_keys_with_changed_recipes_or_points_are_listed(tmp_path, monkeypatch, c
 
     changed.main(["--base", "base"])
     assert capsys.readouterr().out.splitlines()[-1] == "3 of 4 config keys changed since base."
+
+
+def test_rows_without_fingerprints_are_compared_individually(tmp_path):
+    def matrix(*tps: int) -> changed.Matrix:
+        rows = [
+            {"exp-name": f"key_tp{tp}", "tp": tp, "ep": 1, "conc": [4], "srt-recipe": "gone.yaml"}
+            for tp in tps
+        ]
+        return {"key": changed._points(rows, tmp_path)}
+
+    base, head = matrix(4, 8), matrix(4, 2)
+
+    assert [len(errors) for _, errors in (base["key"], head["key"])] == [2, 2]
+    assert [
+        (change["base-points"], change["head-points"],
+         [point["tp"] for point in change["added"]], [point["tp"] for point in change["removed"]],
+         [point["recipe-fingerprint"] for point in change["added"] + change["removed"]])
+        for change in changed.compare(base, head)
+    ] == [(2, 2, [2], [8], [None, None])]  # fmt: skip
+
+
+def test_points_sharing_a_name_and_concurrency_keep_generation_order(tmp_path):
+    tps = [8, 4, 2, 1, 16, 32, 64, 128]
+    rows = [{"exp-name": "dsr1_8k1k", "tp": tp, "ep": 1, "conc": [32]} for tp in tps]
+    head = {"key": changed._points(rows, tmp_path)}
+
+    [change] = changed.compare({}, head)
+
+    assert [point["tp"] for point in change["added"]] == tps
+
+
+def test_a_head_config_error_wins_over_a_base_that_cannot_generate(tmp_path, monkeypatch):
+    (tmp_path / "configs").mkdir()
+    (tmp_path / "configs/nvidia-master.yaml").write_text("key: [unclosed\n")
+    (tmp_path / "configs/amd-master.yaml").write_text("{}\n")
+    (tmp_path / "configs/runners.yaml").write_text("labels: {}\n")
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(yaml.YAMLError, match="while parsing a flow sequence"):
+        changed.main(["--base", "missing-ref"])

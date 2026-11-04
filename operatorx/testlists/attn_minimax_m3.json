@@ -1,0 +1,4099 @@
+[
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 1,
+      "ctx": 1024
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ },
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 1,
+      "ctx": 4096
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ },
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 1,
+      "ctx": 16384
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ },
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 1,
+      "ctx": 65536
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ },
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 1,
+      "ctx": 131072
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ },
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 4,
+      "q": 1,
+      "ctx": 1024
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ },
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 4,
+      "q": 1,
+      "ctx": 4096
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ },
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 4,
+      "q": 1,
+      "ctx": 16384
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ },
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 4,
+      "q": 1,
+      "ctx": 65536
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ },
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 4,
+      "q": 1,
+      "ctx": 131072
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ },
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 16,
+      "q": 1,
+      "ctx": 1024
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ },
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 16,
+      "q": 1,
+      "ctx": 4096
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ },
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 16,
+      "q": 1,
+      "ctx": 16384
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ },
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 16,
+      "q": 1,
+      "ctx": 65536
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ },
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 16,
+      "q": 1,
+      "ctx": 131072
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ },
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 64,
+      "q": 1,
+      "ctx": 1024
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ },
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 64,
+      "q": 1,
+      "ctx": 4096
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ },
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 64,
+      "q": 1,
+      "ctx": 16384
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ },
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 64,
+      "q": 1,
+      "ctx": 65536
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ },
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 64,
+      "q": 1,
+      "ctx": 131072
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ },
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 256,
+      "q": 1,
+      "ctx": 1024
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ },
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 256,
+      "q": 1,
+      "ctx": 4096
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ },
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 256,
+      "q": 1,
+      "ctx": 16384
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ },
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 256,
+      "q": 1,
+      "ctx": 65536
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ },
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 256,
+      "q": 1,
+      "ctx": 131072
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ },
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 1024,
+      "ctx": 0
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ },
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 4096,
+      "ctx": 0
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ },
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 16384,
+      "ctx": 0
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ },
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 32768,
+      "ctx": 0
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ },
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 8192,
+      "ctx": 8192
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ },
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 8192,
+      "ctx": 32768
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ },
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 8192,
+      "ctx": 131072
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ },
+ {
+  "type": "gqa",
+  "args": {
+   "hidden": 6144,
+   "q_heads": 64,
+   "kv_heads": 4,
+   "head_dim": 128,
+   "rope_dim": 64,
+   "rope_theta": 5000000,
+   "qk_norm": true,
+   "kv_cache_dtype": "fp8",
+   "proj": {
+    "k_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "o_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "q_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    },
+    "v_proj": {
+     "a": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": false
+      }
+     },
+     "b": {
+      "dtype": "e4m3",
+      "scale": {
+       "dtype": "ue8m0",
+       "group": [
+        1,
+        32
+       ],
+       "static": true
+      }
+     }
+    }
+   },
+   "batch": {
+    "groups": [
+     {
+      "count": 1,
+      "q": 8192,
+      "ctx": 8192
+     },
+     {
+      "count": 64,
+      "q": 1,
+      "ctx": 8192
+     }
+    ]
+   }
+  },
+  "sources": [
+   "MiniMaxAI/MiniMax-M3-MXFP8/self_attn",
+   "nvidia/MiniMax-M3-NVFP4/self_attn"
+  ]
+ }
+]

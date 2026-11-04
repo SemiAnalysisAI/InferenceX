@@ -7,21 +7,27 @@ from throughput. Selection lives in `mark_eval_entries()` in
 
 ## Selection
 
-- **Fixed-sequence, single-node:** 8k1k only, at the highest and median
-  concurrency for every model, runner, framework, precision, TP, and decoding
-  configuration.
+- **Fixed-sequence, single-node:** 8k1k only. Each group of model, runner,
+  framework, precision, spec-decoding, and dp-attn runs evals at the highest
+  and the median of its concurrencies of 16 or above. Every row at those concurrencies
+  gets an eval, and TP/EP do not split groups.
 - **Fixed-sequence, multi-node:** 8k1k only, with one job per parallelism
   topology at its highest eligible concurrency. Rows differing only by
   concurrency share a topology.
 - **Agentic GSM8K (every model, including Kimi K3 and MiniMax M3):** selected
   by default as a separate eval-only job at the highest concurrency of each
   single-node group of model, runner, framework, precision, spec-decoding,
-  dp-attn and image (the 8k1k keys plus image). TP/EP and KV offloading do not
-  split groups. Multi-node rows use the highest eligible concurrency per
-  topology; a deployment with no topology at concurrency 16 or above gets one
-  eval at its highest concurrency. Throughput for every agentic point still
-  runs. Scores use the same GSM8K floors in `thresholds.yaml` as
-  fixed-sequence 8k1k evals.
+  dp-attn, image and engine environment (the 8k1k keys plus image and engine
+  environment). The engine environment is the bound srt recipe's recipe-wide
+  `environment` plus every role's `env`, so a point whose recipe override turns
+  on a different kernel path through an env var (for example a mono or
+  megakernel decode at low concurrency) gets its own eval. Frontend and
+  benchmark env do not split groups, and neither do TP/EP, KV offloading or
+  CLI args. Multi-node rows use the highest eligible concurrency per topology;
+  each deployment and engine environment that no topology at concurrency 16 or
+  above covers gets one eval at its highest concurrency. Throughput for every
+  agentic point still runs. Scores use the same GSM8K floors in
+  `thresholds.yaml` as fixed-sequence 8k1k evals.
 - **Kimi K3 agentic, in addition:** every generated point automatically runs
   `kimi-vendor` with `kimi_tool_call_schema_full` (204 schema cases in two
   stream modes, 408 checks). The two-check smoke requires an explicit override.
@@ -461,8 +467,8 @@ mismatched parser/chat template.
 staging, the workflow upload, the collector, and the score validator. It projects
 the four-case aggregate as task `bfcl_smoke` and the four one-case diagnostic
 tasks shown above. Every row uses lm-eval-compatible `acc,none` (plus
-`acc_stderr,none`); BFCL workflows therefore validate with metric prefix
-`acc,` rather than the default exact-match prefix.
+`acc_stderr,none`), and every task config declares the `acc` metric, so the
+score validator selects `acc,` without a metric override.
 
 The `bfcl_smoke` and four `bfcl_<category>` thresholds are `0.0`, so all five
 scores remain diagnostic. Dependency, endpoint, timeout, malformed-output,
@@ -502,10 +508,11 @@ adapter rejects missing, unexpected, or duplicate result IDs and score headers
 whose counts or accuracy do not reconcile with the selected corpus.
 
 The compatibility result publishes `bfcl_vllm_minimax_m3` or
-`bfcl_vllm_kimi` as the aggregate task and preserves per-category
-`bfcl_<category>` tasks. Kimi also publishes a combined `bfcl_multi_turn`
-task. Full-suite thresholds are `0.0`; they are diagnostic until repeated
-hardware runs establish model, precision, and backend baselines. A completed
+`bfcl_vllm_kimi` as the aggregate task, plus one `<suite>_<category>` task per
+category, such as `bfcl_vllm_kimi_simple_python`. Kimi also publishes a
+combined `bfcl_vllm_kimi_multi_turn` task. Full-suite thresholds are `0.0`, so
+they stay diagnostic until repeated hardware runs establish model, precision,
+and backend baselines. A completed
 zero-score run therefore passes threshold validation, while dependency,
 transport, timeout, malformed-output, and integration failures still fail.
 

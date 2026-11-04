@@ -1,0 +1,50 @@
+name: Template - Collect Job Events
+
+on:
+  workflow_call:
+    inputs:
+      tooling-ref:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  collect-job-events:
+    name: collect-job-events
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read # List the run's jobs to record the jobs that wrote no event.
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tooling-ref }}
+          persist-credentials: false
+
+      - name: Download job events
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: job_events/
+          pattern: job_event_*
+
+      - name: Collect job events
+        continue-on-error: true
+        env:
+          PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python3 -m infx.results.collect_events job_events/ events.jsonl
+          --run "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
+
+      - name: Upload job events
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: job_events
+          path: events.jsonl
+          if-no-files-found: ignore

@@ -151,8 +151,13 @@ def sweep_env(
         "CONC_LIST": "4 16",
         "PREFILL_NUM_WORKERS": "1",
         "PREFILL_TP": "2",
+        "PREFILL_PP_SIZE": "1",
+        "PREFILL_PCP_SIZE": "1",
+        "PREFILL_DWDP_SIZE": "1",
         "DECODE_NUM_WORKERS": "2",
         "DECODE_TP": "4",
+        "DECODE_PP_SIZE": "1",
+        "DECODE_PCP_SIZE": "1",
         "TOKENIZER": None,
         "SRT_MEASUREMENT_WINDOW_DIR": None,
         **overrides,
@@ -338,6 +343,30 @@ def test_sweep_stops_at_the_first_failing_point(tmp_path, tools, http_server, mo
     ]
     point_dir = tmp_path / "logs" / "sa-bench_isl_1024_osl_128"
     assert [path.name for path in point_dir.iterdir()] == ["results_concurrency_4_gpus_4_ctx_4_gen_0.json"]
+
+
+@pytest.mark.parametrize(
+    ("topology", "name"),
+    [
+        (
+            {"PREFILL_TP": "2", "PREFILL_PP_SIZE": "2", "DECODE_TP": "4", "DECODE_PCP_SIZE": "2"},
+            "results_concurrency_4_gpus_20_ctx_4_gen_16.json",
+        ),
+        (
+            {"PREFILL_NUM_WORKERS": "3", "PREFILL_TP": "1", "PREFILL_DWDP_SIZE": "4"},
+            "results_concurrency_4_gpus_20_ctx_12_gen_8.json",
+        ),
+    ],
+)
+def test_sweep_names_every_physical_gpu_of_each_worker(
+    tmp_path, tools, http_server, monkeypatch, topology, name
+):
+    url = http_server(frontend("served/model-id"))
+    use_env(monkeypatch, sweep_env(tmp_path, tools, url, CONC_LIST="4", **topology))
+
+    assert bench(["fixed-seq", "srt-sweep", "--logs-dir", str(tmp_path / "logs")]) == 0
+    point_dir = tmp_path / "logs" / "sa-bench_isl_1024_osl_128"
+    assert [path.name for path in point_dir.iterdir()] == [name]
 
 
 def test_sweep_without_a_served_model_runs_nothing(

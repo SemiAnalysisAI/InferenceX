@@ -49,6 +49,7 @@ class SrtJob:
     mounts: Sequence[tuple[str, str]] = ()
     single_node: bool = False
     account: str | None = None
+    mem_mib: int | None = None
 
 
 def pyxis_spelling(image: str) -> str:
@@ -137,6 +138,8 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
     if settings.exclude:
         directives["exclude"] = ",".join(settings.exclude)
     directives.update(settings.cpu_directives())
+    if job.mem_mib is not None:
+        directives["mem"] = f"{job.mem_mib}M" if job.mem_mib else "0"
     if srt.gpus_per_node_directive is False and (gres := settings.gres_for(cluster.gpus_per_node)):
         directives["gres"] = gres
     if directives:
@@ -173,15 +176,22 @@ def stage_gpu_exporter(run: SrtRun, *, single_node: bool = False) -> tuple[str, 
     return image, staged.reference
 
 
-def srun_options(settings: SlurmSettings) -> str | None:
-    """SRT_SRUN_OPTIONS for the single-node binder: ``slurm.srun-args`` as a JSON mapping."""
-    if not settings.srun_args:
+def gpu_share_mib(cluster: Cluster, gpus: int) -> int | None:
+    """``gpus``' share of the node's ``available-cpu-dram-mib``; None where unmeasured."""
+    if cluster.available_cpu_dram_mib is None:
         return None
+    return cluster.available_cpu_dram_mib * gpus // cluster.gpus_per_node
+
+
+def srun_options(settings: SlurmSettings, mem_mib: int | None) -> str | None:
+    """SRT_SRUN_OPTIONS for the single-node binder: ``slurm.srun-args`` and the step mem cap."""
     options = {}
     for arg in settings.srun_args:
         name, _, value = arg.removeprefix("--").partition("=")
         options[name] = value
-    return json.dumps(options)
+    if mem_mib is not None:
+        options["mem"] = f"{mem_mib}M"
+    return json.dumps(options) if options else None
 
 
 def _create_dir(path: Path, *, world_writable: bool = False) -> None:
@@ -248,21 +258,33 @@ def binder_inputs(
     lane: SrtLane,
     request: SrtRequest,
     decision: PowerDecision,
-) -> tuple[int | None, dict[str, str]]:
-    """The DCGM exporter port and AgentX client env a multi-node recipe is bound with.
+) -> tuple[int | None, str | None, dict[str, str]]:
+    """The DCGM exporter port, CPU exporter source and AgentX client env a recipe is bound with.
 
-    The client marks power windows exactly when the launcher collects the point's AgentX power,
+    The CPU source is the cluster's Grace exporter when the point selected cpu-power. The
+    client marks power windows exactly when the launcher collects the point's AgentX power,
     and fails invalid power when the workflow or the lane's power rule requires it.
     """
     port = srt.power_exporter_port if decision.dcgm else None
+    cpu_source = None
+    if decision.cpu:
+        if srt.cpu_power_exporter is None:
+            raise LaunchError(
+                f"cluster {cluster.id!r} declares no srt-slurm.cpu-power-exporter for cpu-power"
+            )
+        cpu_source = srt.cpu_power_exporter.source
     if not request.is_agentic:
-        return port, {}
-    return port, {
-        **agentic_client_env(cluster, srt, lane, request),
-        "IS_MULTINODE": str(request.is_multinode).lower(),
-        "ENABLE_AGENTX_POWER": "1" if decision.agentx or decision.adapter else "0",
-        "REQUIRE_POWER": "1" if decision.require or request.require_power else "0",
-    }
+        return port, cpu_source, {}
+    return (
+        port,
+        cpu_source,
+        {
+            **agentic_client_env(cluster, srt, lane, request),
+            "IS_MULTINODE": str(request.is_multinode).lower(),
+            "ENABLE_AGENTX_POWER": "1" if decision.agentx or decision.adapter else "0",
+            "REQUIRE_POWER": "1" if decision.require or request.require_power else "0",
+        },
+    )
 
 
 def write_lane_config(

@@ -24,6 +24,11 @@ from infx.srt_slurm.workload import (
 )
 
 SINGLE_NODE_ENGINES = {**ENGINES, "atom": "atom"}
+DCP_FLAGS = {
+    "sglang": ("dcp-size", "decode-context-parallel-size"),
+    "vllm": ("decode-context-parallel-size",),
+    "atom": ("decode-context-parallel-size",),
+}
 
 
 def parallelism_constraints(
@@ -94,6 +99,8 @@ def select_recipe(
             validate_recipe(recipe, environment)
         except ValueError as exc:
             errors.append(f"{name}: {exc}")
+        except (KeyError, TypeError) as exc:
+            errors.append(f"{name}: missing or malformed field {exc}")
         else:
             matches.append((f"{path}:{name}" if name else path, recipe))
     if len(matches) != 1:
@@ -113,9 +120,9 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
     if environment["FRAMEWORK"] not in {"sglang", "trt", "atom", "vllm"}:
         raise ValueError(f"Unsupported single-node framework: {environment['FRAMEWORK']!r}")
     spec = spec_parameters(role, engine)
-    if spec and spec["method"] not in {"eagle", "eagle3", "nextn", "mtp", "dspark"}:
+    if spec and spec["method"] not in {"eagle", "eagle3", "nextn", "mtp", "dspark", "dflash"}:
         raise ValueError(
-            "Single-node SRT supports only native MTP, EAGLE3, DSpark or no speculation"
+            "Single-node SRT supports only native MTP, EAGLE3, DSpark, DFlash or no speculation"
         )
     speculation = "mtp" if spec else workload.get("SPEC_DECODING", "none")
     agentic = environment["IS_AGENTIC"] == "1"
@@ -140,7 +147,7 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
             expected[name] = (str(workload[name]), environment[name])
     if engine == "atom":
         expected["ATOM TP"] = (role["gpus"], int(environment["TP"]))
-    dcp = str(args.get("decode-context-parallel-size", 1)) if engine in {"vllm", "atom"} else "1"
+    dcp = next((str(args[flag]) for flag in DCP_FLAGS.get(engine, ()) if flag in args), "1")
     for name, value in {"PP_SIZE": "1", "DCP_SIZE": dcp, "PCP_SIZE": "1"}.items():
         expected[name] = (environment[name], value)
     for name, (actual, wanted) in expected.items():
@@ -194,6 +201,8 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
 def submission_fields(path: Path) -> tuple[str, str]:
     """Accept exactly one successful native JSON submission, never scrape prose."""
     record = json.loads(path.read_text())
+    if not isinstance(record, dict):
+        raise ValueError("SRT submission manifest is not a JSON object")
     if record.get("status") != "submitted":
         raise ValueError("SRT did not submit a job")
     job_id = str(record["slurm_job_id"])
@@ -206,6 +215,7 @@ def submission_fields(path: Path) -> tuple[str, str]:
 
 
 def main() -> None:
+    """Run ``prepare`` to bind a recipe, or ``submission`` to print a job's id and output dir."""
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     prepare = commands.add_parser("prepare")
@@ -215,15 +225,17 @@ def main() -> None:
     submitted = commands.add_parser("submission")
     submitted.add_argument("manifest", type=Path)
     parsed = parser.parse_args()
+    if parsed.command == "prepare" and parsed.output.name == BOUND_RECIPE:
+        parser.error(f"{parsed.output} would overwrite the bound recipe written beside it")
     try:
         if parsed.command == "prepare":
-            _, recipe = select_recipe(parsed.recipe, os.environ)
+            selected, recipe = select_recipe(parsed.recipe, os.environ)
             recipe = resolve_fabric(recipe, parsed.fabric)
             check_setup_script(recipe, Path(parsed.recipe.partition(":")[0]), repository_root())
             arguments = runtime_arguments(parsed.recipe, os.environ)
             config = parsed.output.with_name(BOUND_RECIPE)
             config.write_text(yaml.safe_dump(recipe, sort_keys=False))
-            parsed.output.write_bytes("\0".join([str(config), *arguments, ""]).encode())
+            parsed.output.write_bytes("\0".join([selected, str(config), *arguments, ""]).encode())
         else:
             print("\n".join(submission_fields(parsed.manifest)))
     except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as exc:

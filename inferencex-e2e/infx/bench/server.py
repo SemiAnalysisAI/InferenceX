@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import codecs
 import http.client
 import json
 import os
@@ -44,7 +45,7 @@ def http_json(url: str) -> object | None:
 
 
 def process_alive(pid: int) -> bool:
-    """A zombie waiting to be reaped is not a live server."""
+    """Whether ``pid`` is running, counting a zombie waiting to be reaped as dead."""
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -63,18 +64,32 @@ def wait_ready(
 ) -> None:
     """Poll ``url`` until it answers below 400, streaming ``log``; fail once ``pid`` exits."""
     offset = 0
+    inode: int | None = None
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+
+    def stream() -> None:
+        """Copy new bytes of ``log`` to stdout, restarting when the file is replaced or truncated."""
+        nonlocal offset, inode
+        if log is None or not log.exists():
+            return
+        with log.open("rb") as source:
+            stat = os.fstat(source.fileno())
+            if stat.st_ino != inode or stat.st_size < offset:
+                offset, inode = 0, stat.st_ino
+                decoder.reset()
+            source.seek(offset)
+            chunk = source.read()
+        offset += len(chunk)
+        sys.stdout.write(decoder.decode(chunk))
+        sys.stdout.flush()
+
     while True:
-        if log is not None and log.exists():
-            with log.open("rb") as stream:
-                stream.seek(offset)
-                chunk = stream.read()
-            offset += len(chunk)
-            sys.stdout.write(chunk.decode(errors="replace"))
-            sys.stdout.flush()
+        stream()
         status = http_status(url)
         if status is not None and status < 400:
             return
         if pid is not None and not process_alive(pid):
+            stream()
             raise NotReadyError(f"process {pid} died before {url} became ready")
         time.sleep(poll_s)
 
@@ -96,13 +111,15 @@ def wait_chat_route(
     healthy_since: float | None = None
     next_report = 0.0
     while True:
-        now = time.monotonic()
         models = http_json(f"{base_url}/v1/models")
-        entries = models.get("data", []) if isinstance(models, dict) else []
-        served = any(isinstance(entry, dict) and entry.get("id") == model for entry in entries)
+        entries = models.get("data") if isinstance(models, dict) else None
+        served = isinstance(entries, list) and any(
+            isinstance(entry, dict) and entry.get("id") == model for entry in entries
+        )
         if served and http_status(chat_url) in {401, 403, 405}:
             break
         status = http_status(f"{base_url}/health")
+        now = time.monotonic()
         if status is None or status >= 400:
             healthy_since = None
         elif healthy_since is None:

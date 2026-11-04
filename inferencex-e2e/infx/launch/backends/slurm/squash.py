@@ -11,6 +11,7 @@ import fcntl
 import glob
 import os
 import re
+import shutil
 import socket
 import stat
 import sys
@@ -41,6 +42,8 @@ class ImageError(BackendError):
 class _PermanentImageError(ImageError):
     """A failure that retrying cannot fix (lock timeout, missing pre-staged image)."""
 
+    retriable = False
+
 
 def squash_key(image: str) -> str:
     """Filesystem-safe image key: ``/ : @ #`` become ``_``."""
@@ -57,6 +60,7 @@ def squash_path(image: str, policy: SquashPolicy) -> Path:
 
 
 def lock_path(image: str, policy: SquashPolicy) -> Path:
+    """Return the lock file guarding the squash file of ``image`` under the policy's lock layout."""
     path = squash_path(image, policy)
     if policy.lock_file == "locks-dir":
         return path.parent / ".locks" / f"{squash_key(image)}.lock"
@@ -97,6 +101,7 @@ def registry_reference(image: str) -> str:
 
 
 def is_valid_squash(path: Path) -> bool:
+    """Return whether ``path`` is readable and ``unsquashfs`` can list it."""
     if not os.access(path, os.R_OK):
         return False
     try:
@@ -155,6 +160,8 @@ def _locked(path: Path, timeout_s: int) -> Iterator[None]:
 def _import_here(image: str, policy: SquashPolicy) -> None:
     """Import on this host into a temp file, validate, ``chmod a+r``, rename into place."""
     path = squash_path(image, policy)
+    if shutil.which("unsquashfs") is None:
+        raise _PermanentImageError(f"unsquashfs is not installed here; cannot validate {path}")
     with _locked(lock_path(image, policy), policy.lock_timeout_s):
         if is_valid_squash(path):
             print(
@@ -303,7 +310,9 @@ def ensure_image(
         return str(path)
     node_local = policy.visibility == "node-local"
     if node_local and job is None:
-        raise ImageError(f"node-local image storage for {image} requires a job allocation")
+        raise _PermanentImageError(
+            f"node-local image storage for {image} requires a job allocation"
+        )
     if mode == "pre-staged":
         if node_local:
             _retrying(
@@ -311,7 +320,7 @@ def ensure_image(
                 lambda: _run_node_script(image, policy, "validate", job=job, alloc_args=()),
             )
         elif not is_valid_squash(path):
-            raise ImageError(
+            raise _PermanentImageError(
                 f"pre-staged image {image} is missing or invalid at {path}; stage it there before running"
             )
         return str(path)
@@ -322,7 +331,9 @@ def ensure_image(
         print(f"Squash file already exists and is valid, skipping import: {path}", file=sys.stderr)
         return str(path)
     if job is None and (mode == "all-nodes" or not alloc_args):
-        raise ImageError(f"{mode} import of {image} needs a job allocation or allocation arguments")
+        raise _PermanentImageError(
+            f"{mode} import of {image} needs a job allocation or allocation arguments"
+        )
     _retrying(
         f"import of {image}",
         lambda: _run_node_script(image, policy, "import", job=job, alloc_args=alloc_args),

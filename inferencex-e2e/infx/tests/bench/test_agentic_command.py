@@ -15,7 +15,6 @@ from pathlib import Path
 
 import pytest
 
-from infx.bench.agentic import traces
 from infx.bench.agentic.run import Plan, execute
 from infx.bench.agentic.venv import Runtime
 from infx.bench.env import BenchError, InputError
@@ -426,7 +425,7 @@ def test_srt_shim_builds_the_runtime_waits_for_the_server_and_writes_the_point(
 
     assert result.returncode == 0, result.stderr
     assert _events(tmp_path) == [
-        f"hf download --repo-type dataset {traces.LOADERS[traces.CAPPED]}",
+        "hf download --repo-type dataset semianalysisai/cc-traces-weka-062126",
         "GET /v1/models",
         "GET /v1/chat/completions",
         "replay",

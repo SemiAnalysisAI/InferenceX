@@ -13,7 +13,7 @@ from typing import Any
 
 from infx.bench_serving.benchmark_outcome import benchmark_outcome
 
-from .metadata import parse_component_metadata
+from .metadata import parse_component_metadata, run_attempt
 from .power import (
     ALL_POWER_METRIC_KEYS,
     POWER_METRIC_SCHEMA_VERSION,
@@ -279,6 +279,7 @@ def aggregate_power_result(
             aggregate_gpus=aggregate_gpus,
             expected_producer_sha=env.get("POWER_PRODUCER_SHA") or None,
             logs_root=Path(env.get("POWER_RESULT_ROOT", "LOGS")),
+            expected_cpu=env.get("CPU_POWER") == "1",
             validation_result=validation_path,
             require_power=require_power,
         )
@@ -296,12 +297,18 @@ def aggregate_power_result(
 
 
 def process_result(env: Mapping[str, str]) -> int:
+    """Write agg_<RESULT_FILENAME>.json from the benchmark JSON and ``env``, join power when configured.
+
+    Returns 1 when power is required and fails or the benchmark failed, else 0.
+    """
     require_environment(env, _BASE_ENV_VARS)
     result_filename = env["RESULT_FILENAME"]
     bench_path = Path(f"{result_filename}.json")
     with open(bench_path) as f:
         benchmark = json.load(f)
     data = build_result(benchmark, env)
+    if (attempt := run_attempt(env)) is not None:
+        data["run_attempt"] = attempt
     agg_path = Path(f"agg_{result_filename}.json")
     with open(agg_path, "w") as f:
         json.dump(data, f, indent=2)
@@ -407,6 +414,7 @@ def process_multinode_results(env: Mapping[str, str]) -> int:
 
 
 def main() -> int:
+    """Process every multinode point with ``--all``, else the single result named by the environment."""
     return (
         process_multinode_results(os.environ)
         if sys.argv[1:] == ["--all"]

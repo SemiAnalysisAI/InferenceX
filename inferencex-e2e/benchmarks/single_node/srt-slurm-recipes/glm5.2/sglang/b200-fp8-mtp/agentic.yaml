@@ -24,25 +24,19 @@ base:
         expert-parallel-size: 1
         kv-cache-dtype: fp8_e4m3
         bf16-gemm-backend: cutedsl
-        max-prefill-tokens: 8192
         quantization: fp8
         # GLM-5.2 emits the GLM-4.7 tool-call format; glm45 leaves calls as raw text.
         tool-call-parser: glm47
         reasoning-parser: glm45
-        chunked-prefill-size: 8192
-        # B200 HBM leaves ~31 GB outside the static share for EAGLE verification,
-        # graph capture and DSA indexer temporaries.
-        mem-fraction-static: 0.83
         speculative-algorithm: EAGLE
-        speculative-num-steps: 3
+        speculative-num-steps: 5
         speculative-eagle-topk: 1
-        speculative-num-draft-tokens: 4
-        enable-hierarchical-cache: true
-        hicache-write-policy: write_back
-        hicache-io-backend: direct
-        hicache-mem-layout: page_first_direct
+        speculative-num-draft-tokens: 6
         watchdog-timeout: 1800
         enable-metrics: true
+        weight-loader-prefetch-checkpoints: true
+        weight-loader-drop-cache-after-load: false
+        model-loader-extra-config: '{"enable_multithread_load":true}'
       env:
         PYTHONNOUSERSITE: '1'
         TORCH_CUDA_ARCH_LIST: '10.0'
@@ -55,64 +49,172 @@ base:
       # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
-      KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1731'
+      AIPERF_EXTRA_INPUTS: '{"chat_template_kwargs":{"enable_thinking":true}}'
 
-# One variant per point. Admission is 2x CONC and the graph batch matches it,
-# capped at 64. MLA ranks hold complete per-token KV, so ratio 0.75 gives too
-# few host slots past C8; C12/C16 pin a 169 GB/rank pool (~1,662 GB across TP8
-# with the DSA indexer, within the 1,731 GB budget).
 override_c1:
   roles:
     agg:
       args:
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        mem-fraction-static: 0.83
         max-running-requests: 2
-        cuda-graph-max-bs: 2
+        cuda-graph-max-bs-decode: 2
+        speculative-num-steps: 6
+        speculative-num-draft-tokens: 7
+        enable-hierarchical-cache: true
         hicache-ratio: 0.75
+        hicache-write-policy: write_back
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
   benchmark:
     env:
       CONC: '1'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1717'
 
 override_c4:
   roles:
     agg:
       args:
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        mem-fraction-static: 0.88
         max-running-requests: 8
-        cuda-graph-max-bs: 8
-        hicache-ratio: 0.75
+        cuda-graph-max-bs-decode: 8
+        enable-hierarchical-cache: true
+        # MLA ranks hold full per-token KV: 169 GB x 8 plus the DSA indexer pool
+        # (~1,662 GB) fits the 1,717 GB budget.
+        hicache-size: 169
+        hicache-write-policy: write_through
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
   benchmark:
     env:
       CONC: '4'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1717'
 
 override_c8:
   roles:
     agg:
       args:
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        mem-fraction-static: 0.88
         max-running-requests: 16
-        cuda-graph-max-bs: 16
-        hicache-ratio: 0.75
+        cuda-graph-max-bs-decode: 16
+        enable-hierarchical-cache: true
+        hicache-size: 169
+        hicache-write-policy: write_through
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
   benchmark:
     env:
       CONC: '8'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1717'
 
 override_c12:
   roles:
     agg:
       args:
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        mem-fraction-static: 0.88
         max-running-requests: 24
-        cuda-graph-max-bs: 24
+        cuda-graph-max-bs-decode: 24
+        enable-hierarchical-cache: true
         hicache-size: 169
+        hicache-write-policy: write_through
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
   benchmark:
     env:
       CONC: '12'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1717'
 
 override_c16:
   roles:
     agg:
       args:
+        # MLA KV is replicated per TP rank; DCP8 shards it so the working set
+        # stays in HBM without host offload.
+        dcp-size: 8
+        chunked-prefill-size: 16384
+        max-prefill-tokens: 16384
+        mem-fraction-static: 0.88
         max-running-requests: 32
-        cuda-graph-max-bs: 32
-        hicache-size: 169
+        cuda-graph-max-bs-decode: 32
+        # Hold prefills until min(0.5 x running, prefill-max-requests) are queued,
+        # at most max-delay-ms, so they interrupt decode together.
+        enable-prefill-delayer: true
+        prefill-max-requests: 2
+        prefill-delayer-max-delay-ms: 800
+        prefill-delayer-max-delay-passes: 32
+        prefill-delayer-queue-min-ratio: 0.5
   benchmark:
     env:
       CONC: '16'
+      KV_OFFLOADING: none
+
+override_c17:
+  roles:
+    agg:
+      args:
+        dcp-size: 8
+        chunked-prefill-size: 16384
+        max-prefill-tokens: 16384
+        mem-fraction-static: 0.83
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+        enable-prefill-delayer: true
+        prefill-max-requests: 3
+        prefill-delayer-max-delay-ms: 750
+        prefill-delayer-max-delay-passes: 40
+        prefill-delayer-queue-min-ratio: 0.5
+  benchmark:
+    env:
+      CONC: '17'
+      KV_OFFLOADING: none
+
+override_c18:
+  roles:
+    agg:
+      args:
+        dcp-size: 8
+        chunked-prefill-size: 16384
+        max-prefill-tokens: 16384
+        mem-fraction-static: 0.83
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+        enable-prefill-delayer: true
+        prefill-max-requests: 3
+        prefill-delayer-max-delay-ms: 750
+        prefill-delayer-max-delay-passes: 40
+        prefill-delayer-queue-min-ratio: 0.5
+  benchmark:
+    env:
+      CONC: '18'
+      KV_OFFLOADING: none
+
+override_c24:
+  roles:
+    agg:
+      args:
+        dcp-size: 8
+        chunked-prefill-size: 16384
+        max-prefill-tokens: 16384
+        mem-fraction-static: 0.83
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+        enable-prefill-delayer: true
+        prefill-max-requests: 2
+        prefill-delayer-max-delay-ms: 800
+        prefill-delayer-max-delay-passes: 32
+        prefill-delayer-queue-min-ratio: 0.5
+  benchmark:
+    env:
+      CONC: '24'
+      KV_OFFLOADING: none

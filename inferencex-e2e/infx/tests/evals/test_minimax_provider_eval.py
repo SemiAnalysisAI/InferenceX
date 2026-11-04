@@ -48,6 +48,21 @@ def _compatibility(output_dir: Path) -> dict[str, Any]:
     return json.loads(paths[0].read_text(encoding="utf-8"))
 
 
+def test_projection_reads_a_row_whose_text_holds_a_unicode_line_separator(
+    tmp_path: Path,
+) -> None:
+    _native_outputs(tmp_path, match_rate=0.5)
+    (tmp_path / mpe.NATIVE_RESULTS_FILENAME).write_text(
+        json.dumps({"data_index": 1, "status": "success", "response": "a\u2028b"}, ensure_ascii=False)
+        + "\n",
+        encoding="utf-8",
+    )
+
+    mpe.project_native_artifacts(output_dir=tmp_path, model="MiniMax-M3")
+
+    assert _compatibility(tmp_path)["results"][mpe.TASK_NAME]["exact_match,strict-match"] == 0.5
+
+
 def test_prepare_smoke_input_preserves_request_and_unicode(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

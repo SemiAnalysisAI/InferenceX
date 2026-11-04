@@ -3,7 +3,7 @@ name: Stage PR Results
 run-name: Stage results for PR #${{ github.event.issue.number }}
 
 on:
-  issue_comment:
+  issue_comment: # zizmor: ignore[dangerous-triggers] runs trusted default-branch code; stage_results.py requires write access before using FRONTEND_PAT
     types: [created]
 
 permissions: {}
@@ -86,7 +86,6 @@ jobs:
           REQUESTED_BY: ${{ steps.request.outputs.requested-by }}
           COMMENT_ID: ${{ steps.acknowledge.outputs.comment-id }}
         with:
-          # Cross-repository dispatch credential; trusted control code validates maintainer authorization.
           github-token: ${{ secrets.FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
           script: |
             await github.rest.repos.createDispatchEvent({

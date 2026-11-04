@@ -70,7 +70,7 @@ override_tp2_ep2_c1:
         tensor-parallel-size: 2
         expert-parallel-size: 2
         mem-fraction-static: 0.95
-        cuda-graph-max-bs: 1
+        cuda-graph-max-bs-decode: 1
         max-running-requests: 2
   benchmark:
     env:
@@ -84,7 +84,7 @@ override_tp2_ep2_c4:
         tensor-parallel-size: 2
         expert-parallel-size: 2
         mem-fraction-static: 0.95
-        cuda-graph-max-bs: 4
+        cuda-graph-max-bs-decode: 4
         max-running-requests: 8
   benchmark:
     env:
@@ -98,7 +98,7 @@ override_tp2_ep2_c6:
         tensor-parallel-size: 2
         expert-parallel-size: 2
         mem-fraction-static: 0.95
-        cuda-graph-max-bs: 6
+        cuda-graph-max-bs-decode: 6
         max-running-requests: 12
   benchmark:
     env:
@@ -113,7 +113,7 @@ override_tp4_ep1_c1:
         expert-parallel-size: 1
         mem-fraction-static: 0.8
         tokenizer-worker-num: 6
-        cuda-graph-max-bs: 1
+        cuda-graph-max-bs-decode: 1
         max-running-requests: 2
   benchmark:
     env:
@@ -128,7 +128,7 @@ override_tp4_ep1_c8:
         expert-parallel-size: 1
         mem-fraction-static: 0.8
         tokenizer-worker-num: 6
-        cuda-graph-max-bs: 8
+        cuda-graph-max-bs-decode: 8
         max-running-requests: 16
   benchmark:
     env:
@@ -143,7 +143,7 @@ override_tp4_ep1_c16:
         expert-parallel-size: 1
         mem-fraction-static: 0.8
         tokenizer-worker-num: 6
-        cuda-graph-max-bs: 16
+        cuda-graph-max-bs-decode: 16
         max-running-requests: 32
   benchmark:
     env:
@@ -158,7 +158,7 @@ override_tp4_ep1_c32:
         expert-parallel-size: 1
         mem-fraction-static: 0.8
         tokenizer-worker-num: 6
-        cuda-graph-max-bs: 32
+        cuda-graph-max-bs-decode: 32
         max-running-requests: 64
   benchmark:
     env:
@@ -173,7 +173,7 @@ override_tp4_ep1_c40:
         expert-parallel-size: 1
         mem-fraction-static: 0.8
         tokenizer-worker-num: 6
-        cuda-graph-max-bs: 40
+        cuda-graph-max-bs-decode: 40
         max-running-requests: 80
   benchmark:
     env:
@@ -188,7 +188,7 @@ override_tp4_ep1_c48:
         expert-parallel-size: 1
         mem-fraction-static: 0.8
         tokenizer-worker-num: 6
-        cuda-graph-max-bs: 48
+        cuda-graph-max-bs-decode: 48
         max-running-requests: 96
   benchmark:
     env:
@@ -203,7 +203,7 @@ override_tp4_ep4_c4:
         expert-parallel-size: 4
         mem-fraction-static: 0.8
         tokenizer-worker-num: 6
-        cuda-graph-max-bs: 4
+        cuda-graph-max-bs-decode: 4
         max-running-requests: 8
   benchmark:
     env:
@@ -218,7 +218,7 @@ override_tp4_ep4_c16:
         expert-parallel-size: 4
         mem-fraction-static: 0.8
         tokenizer-worker-num: 6
-        cuda-graph-max-bs: 16
+        cuda-graph-max-bs-decode: 16
         max-running-requests: 32
   benchmark:
     env:
@@ -233,7 +233,7 @@ override_tp4_ep4_c32:
         expert-parallel-size: 4
         mem-fraction-static: 0.8
         tokenizer-worker-num: 6
-        cuda-graph-max-bs: 32
+        cuda-graph-max-bs-decode: 32
         max-running-requests: 64
   benchmark:
     env:
@@ -248,7 +248,7 @@ override_tp4_ep4_c40:
         expert-parallel-size: 4
         mem-fraction-static: 0.8
         tokenizer-worker-num: 6
-        cuda-graph-max-bs: 40
+        cuda-graph-max-bs-decode: 40
         max-running-requests: 80
   benchmark:
     env:
@@ -263,7 +263,7 @@ override_tp4_ep4_c48:
         expert-parallel-size: 4
         mem-fraction-static: 0.8
         tokenizer-worker-num: 6
-        cuda-graph-max-bs: 48
+        cuda-graph-max-bs-decode: 48
         max-running-requests: 96
   benchmark:
     env:
@@ -278,7 +278,7 @@ override_tp8_ep1_c1:
         expert-parallel-size: 1
         mem-fraction-static: 0.8
         tokenizer-worker-num: 6
-        cuda-graph-max-bs: 1
+        cuda-graph-max-bs-decode: 1
         max-running-requests: 2
   benchmark:
     env:
@@ -293,7 +293,7 @@ override_tp8_ep1_c4:
         expert-parallel-size: 1
         mem-fraction-static: 0.8
         tokenizer-worker-num: 6
-        cuda-graph-max-bs: 4
+        cuda-graph-max-bs-decode: 4
         max-running-requests: 8
   benchmark:
     env:
@@ -308,7 +308,7 @@ override_tp8_ep1_c8:
         expert-parallel-size: 1
         mem-fraction-static: 0.8
         tokenizer-worker-num: 6
-        cuda-graph-max-bs: 8
+        cuda-graph-max-bs-decode: 8
         max-running-requests: 16
   benchmark:
     env:
@@ -323,7 +323,7 @@ override_tp8_ep1_c12:
         expert-parallel-size: 1
         mem-fraction-static: 0.8
         tokenizer-worker-num: 6
-        cuda-graph-max-bs: 12
+        cuda-graph-max-bs-decode: 12
         max-running-requests: 24
   benchmark:
     env:
@@ -338,7 +338,7 @@ override_tp8_ep1_c16:
         expert-parallel-size: 1
         mem-fraction-static: 0.8
         tokenizer-worker-num: 6
-        cuda-graph-max-bs: 16
+        cuda-graph-max-bs-decode: 16
         max-running-requests: 32
   benchmark:
     env:
@@ -353,7 +353,7 @@ override_tp8_ep1_c24:
         expert-parallel-size: 1
         mem-fraction-static: 0.8
         tokenizer-worker-num: 6
-        cuda-graph-max-bs: 24
+        cuda-graph-max-bs-decode: 24
         max-running-requests: 48
   benchmark:
     env:
@@ -368,7 +368,7 @@ override_tp8_ep1_c32:
         expert-parallel-size: 1
         mem-fraction-static: 0.8
         tokenizer-worker-num: 6
-        cuda-graph-max-bs: 32
+        cuda-graph-max-bs-decode: 32
         max-running-requests: 64
   benchmark:
     env:
@@ -383,7 +383,7 @@ override_tp8_ep1_c40:
         expert-parallel-size: 1
         mem-fraction-static: 0.8
         tokenizer-worker-num: 6
-        cuda-graph-max-bs: 40
+        cuda-graph-max-bs-decode: 40
         max-running-requests: 80
   benchmark:
     env:
@@ -398,7 +398,7 @@ override_tp8_ep1_c48:
         expert-parallel-size: 1
         mem-fraction-static: 0.8
         tokenizer-worker-num: 6
-        cuda-graph-max-bs: 48
+        cuda-graph-max-bs-decode: 48
         max-running-requests: 96
   benchmark:
     env:
@@ -413,7 +413,7 @@ override_tp8_ep1_c64:
         expert-parallel-size: 1
         mem-fraction-static: 0.8
         tokenizer-worker-num: 6
-        cuda-graph-max-bs: 64
+        cuda-graph-max-bs-decode: 64
         max-running-requests: 128
   benchmark:
     env:
@@ -428,7 +428,7 @@ override_tp8_ep1_c80:
         expert-parallel-size: 1
         mem-fraction-static: 0.8
         tokenizer-worker-num: 6
-        cuda-graph-max-bs: 64
+        cuda-graph-max-bs-decode: 64
         max-running-requests: 160
   benchmark:
     env:
@@ -443,7 +443,7 @@ override_tp8_ep8_c4:
         expert-parallel-size: 8
         mem-fraction-static: 0.8
         tokenizer-worker-num: 6
-        cuda-graph-max-bs: 4
+        cuda-graph-max-bs-decode: 4
         max-running-requests: 8
   benchmark:
     env:
@@ -458,7 +458,7 @@ override_tp8_ep8_c16:
         expert-parallel-size: 8
         mem-fraction-static: 0.8
         tokenizer-worker-num: 6
-        cuda-graph-max-bs: 16
+        cuda-graph-max-bs-decode: 16
         max-running-requests: 32
   benchmark:
     env:
@@ -473,7 +473,7 @@ override_tp8_ep8_c24:
         expert-parallel-size: 8
         mem-fraction-static: 0.8
         tokenizer-worker-num: 6
-        cuda-graph-max-bs: 24
+        cuda-graph-max-bs-decode: 24
         max-running-requests: 48
   benchmark:
     env:
@@ -488,7 +488,7 @@ override_tp8_ep8_c32:
         expert-parallel-size: 8
         mem-fraction-static: 0.8
         tokenizer-worker-num: 6
-        cuda-graph-max-bs: 32
+        cuda-graph-max-bs-decode: 32
         max-running-requests: 64
   benchmark:
     env:
@@ -503,7 +503,7 @@ override_tp8_ep8_c40:
         expert-parallel-size: 8
         mem-fraction-static: 0.8
         tokenizer-worker-num: 6
-        cuda-graph-max-bs: 40
+        cuda-graph-max-bs-decode: 40
         max-running-requests: 80
   benchmark:
     env:
@@ -518,7 +518,7 @@ override_tp8_ep8_c48:
         expert-parallel-size: 8
         mem-fraction-static: 0.8
         tokenizer-worker-num: 6
-        cuda-graph-max-bs: 48
+        cuda-graph-max-bs-decode: 48
         max-running-requests: 96
   benchmark:
     env:
@@ -533,7 +533,7 @@ override_tp8_ep8_c64:
         expert-parallel-size: 8
         mem-fraction-static: 0.8
         tokenizer-worker-num: 6
-        cuda-graph-max-bs: 64
+        cuda-graph-max-bs-decode: 64
         max-running-requests: 128
   benchmark:
     env:

@@ -7,6 +7,10 @@ from collections.abc import Iterable
 from infx import github
 from infx.clusters import CLUSTER_LABEL_PREFIX, load_clusters
 
+# run-sweep's report-only acceptance-gate jobs. A gate whose deployment fails can still conclude
+# success, so their conclusions say nothing about the hardware.
+GATE_JOB_PREFIXES = ("al-gate /", "multi-node al-gate /")
+
 
 def load_hardware_labels() -> list[str]:
     """Return the run-stats hardware buckets: every cluster id in runners.yaml."""
@@ -16,6 +20,7 @@ def load_hardware_labels() -> list[str]:
 def build_hardware_match_patterns(
     hardware_labels: Iterable[str],
 ) -> dict[str, tuple[re.Pattern[str], ...]]:
+    """Map each hardware label to whole-word regexes for it and its cluster label."""
     return {
         hardware: tuple(
             re.compile(rf"(?<![a-z0-9]){re.escape(label)}(?![a-z0-9])")
@@ -28,6 +33,10 @@ def build_hardware_match_patterns(
 def extract_hardware_from_name(
     job_name: str, match_patterns: dict[str, tuple[re.Pattern[str], ...]] | None = None
 ) -> str | None:
+    """Return the first hardware label whose patterns match job_name, or None if nothing matches.
+
+    Builds patterns from runners.yaml when match_patterns is omitted.
+    """
     job_lower = job_name.lower()
     if match_patterns is None:
         match_patterns = build_hardware_match_patterns(load_hardware_labels())
@@ -39,6 +48,7 @@ def extract_hardware_from_name(
 
 
 def calculate_hardware_success_rates() -> dict[str, dict[str, int]]:
+    """Count successful and total non-skipped jobs per hardware in the current Actions run."""
     hardware_labels = load_hardware_labels()
     patterns = build_hardware_match_patterns(hardware_labels)
     run_id = int(os.environ["GITHUB_RUN_ID"])
@@ -51,6 +61,8 @@ def calculate_hardware_success_rates() -> dict[str, dict[str, int]]:
     )
     success_rates = {hardware: {"n_success": 0, "total": 0} for hardware in hardware_labels}
     for job in jobs:
+        if job["name"].startswith(GATE_JOB_PREFIXES):
+            continue
         hardware = extract_hardware_from_name(job["name"], patterns)
         if hardware and job["conclusion"] != "skipped":
             success_rates[hardware]["total"] += 1
@@ -82,6 +94,7 @@ def print_success_rates(success_rates: dict[str, dict[str, int]] | None) -> None
 
 
 def main() -> None:
+    """Print per-hardware success rates for this run and write them to <argv[1]>.json."""
     run_stats = calculate_hardware_success_rates()
     print_success_rates(run_stats)
 

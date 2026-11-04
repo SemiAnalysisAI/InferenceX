@@ -53,6 +53,7 @@ def main(argv: list[str]) -> int:
 
 
 def _server_root(endpoint: str) -> str:
+    """Strip trailing slashes from ``endpoint``, raising ``InputError`` unless it is an http(s) root."""
     root = endpoint.rstrip("/")
     try:
         parts = urllib.parse.urlsplit(root)
@@ -65,6 +66,7 @@ def _server_root(endpoint: str) -> str:
 
 
 def _concurrencies(values: str) -> list[int]:
+    """Parse the space-separated ``values`` into positive ints, raising ``InputError`` if none."""
     concurrencies = [env.parse_positive_int("--concurrency", value) for value in values.split()]
     if not concurrencies:
         raise env.InputError("--concurrency must name at least one concurrency")
@@ -144,6 +146,7 @@ def _record(
     suite: str,
     batch: Mapping[str, Sequence[int]] | None = None,
 ) -> bool:
+    """Write ``meta_env.json`` into ``destination`` and return whether that succeeded."""
     path = destination / "meta_env.json"
     try:
         destination.mkdir(parents=True, exist_ok=True)
@@ -161,6 +164,7 @@ def _single(
     destination: Path,
     environ: Mapping[str, str],
 ) -> int:
+    """Run one eval at ``conc``, stage and record it, and return the exit code."""
     outcome, staged = _run(framework, context, conc, destination, "")
     recorded = _record(destination, environ, conc, outcome.suite)
     if outcome.returncode:
@@ -179,6 +183,7 @@ def _batched(
     destination: Path,
     environ: Mapping[str, str],
 ) -> int:
+    """Run lm-eval at each concurrency and record the batch manifest, returning 1 if that fails."""
     completed: list[int] = []
     failed: list[int] = []
     suite = ""

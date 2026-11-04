@@ -20,7 +20,7 @@ case "$RUNNER" in
 esac
 export COLLX_RUNNER="$RUNNER" COLLX_BENCH="${COLLX_BENCH:-mori}"
 export COLLX_VENDOR=amd
-collx_launcher_prologue "$RUNNER"
+collx_launcher_prologue
 
 collx_set_placement 1 8 8 xgmi
 TIME_MIN="${COLLX_TIME:-60}"
@@ -33,7 +33,7 @@ case "$COLLX_BENCH" in
 esac
 
 export MORI_DISABLE_AUTO_XGMI="${MORI_DISABLE_AUTO_XGMI:-0}"
-export MORI_ENABLE_SDMA="${MORI_ENABLE_SDMA:-1}"
+# MORI_ENABLE_SDMA stays unset (off), as vLLM runs MoRI.
 export MORI_APP_LOG_LEVEL="${MORI_APP_LOG_LEVEL:-info}"
 export MORI_SHMEM_LOG_LEVEL="${MORI_SHMEM_LOG_LEVEL:-info}"
 export MORI_IO_LOG_LEVEL="${MORI_IO_LOG_LEVEL:-info}"
@@ -58,9 +58,8 @@ command -v salloc >/dev/null || collx_die "salloc not found on this runner"
 allocation=(--partition="$PARTITION" --nodes="$NODES" --gres=gpu:"$GPN"
   --time="$TIME_MIN" --ntasks-per-node="$GPN")
 [ -z "$CPUS_PER_NODE" ] || allocation+=(--cpus-per-task="$((CPUS_PER_NODE / GPN))")
-case "$RUNNER" in
-  mi300x|mi355x) allocation+=(--exclusive) ;;
-esac
+# Every pool runs alone on its nodes, as every other launcher allocates.
+allocation+=(--exclusive)
 excluded_nodes="$EXCLUDE_NODES"
 for allocation_attempt in 1 2 3; do
   attempt_allocation=("${allocation[@]}")
@@ -103,6 +102,7 @@ for allocation_attempt in 1 2 3; do
 done
 unset COLLX_SALLOC_ATTEMPT COLLX_NETWORK_VALIDATION_ATTEMPT
 CONTAINER_MOUNTS="$MOUNT_SRC:$MOUNT_DIR$DEVICE_MOUNTS"
+collx_add_host_verbs_provider_mount
 # uccl-ep builds from source, so it gets the cross-allocation backend cache single-slurm uses.
 # Its parent is COLLX_STAGE_DIR, not SQUASH_DIR: this SKU's squash dir is node-local and
 # root-owned (/var/lib/squash), so the submit-side mkdir fails and the path is not what compute
@@ -117,5 +117,5 @@ fi
 COLLX_DISTRIBUTED_CONTAINER_ARGS=(--container-writable --container-remap-root)
 collx_execute_and_collect "$MOUNT_SRC" "$REPO_ROOT"
 rm -f "$MOUNT_SRC"/collectivex/gpucore.* 2>/dev/null || true
-collx_log "done - result artifacts collected"
+collx_log "done - results collected"
 exit "$FINAL_RC"

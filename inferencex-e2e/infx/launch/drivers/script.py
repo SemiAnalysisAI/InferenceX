@@ -7,6 +7,7 @@ the container workspace, and ``speedbench_results/`` come back on every exit pat
 from __future__ import annotations
 
 import fnmatch
+import posixpath
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
@@ -32,6 +33,7 @@ EDITABLE_INSTALL_IMAGE_GLOBS = (
 
 
 def container_workspace(image: str) -> PurePosixPath:
+    """Return ``/ix`` for images with an editable install there, else ``/workspace``."""
     if any(fnmatch.fnmatchcase(image, glob) for glob in EDITABLE_INSTALL_IMAGE_GLOBS):
         return PurePosixPath("/ix")
     return PurePosixPath("/workspace")
@@ -58,13 +60,14 @@ def script_outputs(request: ScriptRequest, workdir: PurePosixPath) -> tuple[Pure
     out_yaml = request.env.get("OUT_YAML")
     if not out_yaml:
         return (RESULTS_DIR,)
-    path = workdir / out_yaml
+    path = PurePosixPath(posixpath.normpath(workdir / out_yaml))
     if not path.is_relative_to(workdir):
         raise LaunchError(f"OUT_YAML {out_yaml} lies outside the container workspace {workdir}")
     return (path.relative_to(workdir), RESULTS_DIR)
 
 
 def run(launch: Launch) -> int:
+    """Run the request's benchmark script in one container and return its exit code."""
     request = ScriptRequest.from_env(launch.request.env)
     cluster, backend = launch.cluster, launch.backend
     time_limit = policy.salloc_time_limit(cluster.id, request)
@@ -78,8 +81,10 @@ def run(launch: Launch) -> int:
     model_path = CONTAINER_MODELS / model.dir
     workdir = container_workspace(request.image)
     outputs = script_outputs(request, workdir)
+    with launch.life.event.stage("prepare"):
+        image = backend.prepare_image(request.image)
     container = Container(
-        image=backend.prepare_image(request.image),
+        image=image,
         command=("bash", request.bench_script_override),
         gpus=request.gpu_count,
         time_limit_min=time_limit,

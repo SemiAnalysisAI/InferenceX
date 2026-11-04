@@ -357,6 +357,14 @@ def test_processor_emits_nested_request_and_server_metrics(tmp_path: Path):
     _assert_stable_server_metrics_schema(agg)
 
 
+def test_processor_records_run_attempt(tmp_path: Path):
+    result_dir = _write_fixture(tmp_path)
+    retried = _run_processor(result_dir, tmp_path / "a", {"GITHUB_RUN_ATTEMPT": "4"})
+    assert retried["run_attempt"] == 4
+    local = _run_processor(result_dir, tmp_path / "b", {"GITHUB_RUN_ATTEMPT": ""})
+    assert "run_attempt" not in local
+
+
 def test_processor_preserves_dataset_provenance(tmp_path: Path):
     result_dir = _write_fixture(tmp_path)
     output_dir = tmp_path / "out"
@@ -1597,6 +1605,37 @@ def test_processor_normalizes_dynamo_server_metrics(tmp_path: Path):
     assert agg["server_metrics"]["cache"]["frontend_cache_hit_rate"] == pytest.approx(0.5)
     assert agg["server_metrics"]["cache"]["router_shared_cache_hit_rate"] == pytest.approx(0.55)
     assert any(source["role"] == "prefill" for source in agg["server_metrics"]["sources"])
+
+
+@pytest.mark.parametrize(("cached", "router_shared", "expected"), [
+    (0.0, 0.55, 0.0),
+    (25.0, None, 0.25),
+    (None, 0.55, 0.55),
+])
+def test_dynamo_overall_cache_hit_rate_falls_back_to_frontend_then_router(
+    cached, router_shared, expected,
+):
+    metrics = {
+        "dynamo_frontend_input_sequence_tokens": {
+            "type": "counter", "series": [{"stats": {"total": 100.0}}],
+        },
+    }
+    if cached is not None:
+        metrics["dynamo_frontend_cached_tokens"] = {
+            "type": "counter", "series": [{"stats": {"total": cached}}],
+        }
+    if router_shared is not None:
+        metrics["dynamo_component_router_shared_cache_hit_rate"] = {
+            "type": "gauge", "series": [{"stats": {"avg": router_shared}}],
+        }
+
+    _, nested, _ = compute_server_metrics(
+        {"metrics": metrics}, framework="dynamo-vllm", records=[],
+    )
+
+    assert nested["adapter"] == "dynamo-vllm"
+    assert nested["cache"]["overall_cache_hit_rate"] == pytest.approx(expected)
+
 
 
 def test_processor_uses_aiperf_theoretical_cache_metric(tmp_path: Path):

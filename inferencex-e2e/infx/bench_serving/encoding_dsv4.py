@@ -10,8 +10,6 @@ import json
 import re
 from typing import Any
 
-# Special Tokens
-
 bos_token: str = "<｜begin▁of▁sentence｜>"  # noqa: RUF001, S105
 eos_token: str = "<｜end▁of▁sentence｜>"  # noqa: RUF001, S105
 thinking_start_token: str = "<think>"  # noqa: S105
@@ -22,7 +20,6 @@ USER_SP_TOKEN = "<｜User｜>"  # noqa: RUF001, S105
 ASSISTANT_SP_TOKEN = "<｜Assistant｜>"  # noqa: RUF001, S105
 LATEST_REMINDER_SP_TOKEN = "<｜latest_reminder｜>"  # noqa: RUF001, S105
 
-# Task special tokens for internal classification tasks
 DS_TASK_SP_TOKENS = {
     "action": "<｜action｜>",  # noqa: RUF001
     "query": "<｜query｜>",  # noqa: RUF001
@@ -32,8 +29,6 @@ DS_TASK_SP_TOKENS = {
     "read_url": "<｜read_url｜>",  # noqa: RUF001
 }
 VALID_TASKS = set(DS_TASK_SP_TOKENS.keys())
-
-# Templates
 
 system_msg_template: str = "{content}"
 user_msg_template: str = "{content}"
@@ -83,8 +78,6 @@ Otherwise, output directly after {thinking_end_token} with tool calls or final r
 
 You MUST strictly follow the above defined tool name and parameter schemas to invoke tool calls.
 """
-
-# Utility Functions
 
 
 def to_json(value: Any) -> str:
@@ -159,6 +152,7 @@ def decode_dsml_to_arguments(
     """Convert param_name -> (value, is_string) pairs to OpenAI tool-call arguments."""
 
     def _decode_value(key: str, value: str, string: str) -> str:
+        """Render one ``"key": value`` JSON member, quoting ``value`` when ``string`` is "true"."""
         if string == "true":
             value = to_json(value)
         return f"{to_json(key)}: {value}"
@@ -193,9 +187,6 @@ def find_last_user_index(messages: list[dict[str, Any]]) -> int:
     return last_user_index
 
 
-# Message Rendering
-
-
 def render_message(
     index: int,
     messages: list[dict[str, Any]],
@@ -205,6 +196,8 @@ def render_message(
 ) -> str:
     """
     Render a single message at the given index into its encoded string form.
+
+    An assistant message that follows a task message is a task output and renders without thinking.
 
     Args:
         index: Index of the message to render.
@@ -323,7 +316,6 @@ def render_message(
         summary_content = content or ""
         rc = reasoning_content or ""
 
-        # Check if previous message has a task - if so, this is a task output (no thinking)
         prev_has_task = index - 1 >= 0 and messages[index - 1].get("task") is not None
 
         if thinking_mode == "thinking" and not prev_has_task:
@@ -379,9 +371,6 @@ def render_message(
     return prompt
 
 
-# Preprocessing
-
-
 def merge_tool_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Merge OpenAI tool messages into user-message content_blocks.
 
@@ -423,7 +412,6 @@ def merge_tool_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     "content": msg.get("content", ""),
                     "content_blocks": [text_block],
                 }
-                # Preserve extra fields (task, wo_eos, mask, etc.)
                 for key in ("task", "wo_eos", "mask"):
                     if key in msg:
                         new_msg[key] = msg[key]
@@ -469,9 +457,6 @@ def sort_tool_results_by_call_order(
     return messages
 
 
-# Main Encoding Function
-
-
 def encode_messages(
     messages: list[dict[str, Any]],
     thinking_mode: str,
@@ -513,8 +498,6 @@ def encode_messages(
 
     if thinking_mode == "thinking" and effective_drop_thinking:
         full_messages = _drop_thinking_messages(full_messages)
-        # After dropping, recalculate how many messages to render
-        # (context may have shrunk too)
         num_to_render = len(full_messages) - len(_drop_thinking_messages(context))
         context_len = len(full_messages) - num_to_render
     else:
@@ -555,12 +538,8 @@ def _drop_thinking_messages(messages: list[dict[str, Any]]) -> list[dict[str, An
             msg = copy.copy(msg)
             msg.pop("reasoning_content", None)
             result.append(msg)
-        # developer and other roles before last_user_idx are dropped
 
     return result
-
-
-# Parsing (Decoding model output)
 
 
 def _read_until_stop(index: int, text: str, stop: list[str]) -> tuple[int, str, str | None]:

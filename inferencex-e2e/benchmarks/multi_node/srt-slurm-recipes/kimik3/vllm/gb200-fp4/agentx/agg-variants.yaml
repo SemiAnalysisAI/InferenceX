@@ -106,7 +106,6 @@ base:
     container-remap-root: ""
   benchmark:
     env:
-      AIPERF_TRACE_IDLE_GAP_CAP_SECONDS: "300"
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
       AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: "14400"
 

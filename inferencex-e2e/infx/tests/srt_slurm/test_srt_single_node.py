@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from infx.srt_slurm.single_node import runtime_arguments, select_recipe, submission_fields
-from infx.srt_slurm.synthetic_acceptance import plan_commands
+from infx.srt_slurm.single_node import main, runtime_arguments, select_recipe, submission_fields
+from infx.srt_slurm.synthetic_acceptance import Planned, plan_commands
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "utils/srt-slurm/src"))
@@ -114,24 +114,53 @@ def test_ambiguous_native_variants_are_rejected(point):
         runtime_arguments(str(path), env)
 
 
-def test_mtp_binding_uses_real_verification_and_the_chat_template(point, tmp_path):
+def test_a_variant_missing_a_required_field_is_reported_not_raised(point):
+    path, recipe, env = point
+    broken = {"roles": {"agg": {"args": {"tensor-parallel-size": None}}}}
+    path.write_text(yaml.safe_dump({"base": recipe, "override_good": {}, "override_broken": broken}))
+    assert select_recipe(str(path), env)[0] == f"{path}:override_good"
+    with pytest.raises(ValueError, match="override_broken: .*'tensor-parallel-size'"):
+        select_recipe(f"{path}:override_broken", env)
+
+
+def test_prepare_refuses_an_arguments_file_named_like_the_bound_recipe(
+    point, tmp_path, monkeypatch, capsys
+):
+    path, _, env = point
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    output = tmp_path / "job" / "recipe.yaml"
+    output.parent.mkdir()
+    argv = ["single_node", "prepare", f"{path}:base", str(output), "--fabric", "{}"]
+    monkeypatch.setattr(sys, "argv", argv)
+    with pytest.raises(SystemExit) as exit_info:
+        main()
+    assert exit_info.value.code == 2
+    assert "would overwrite the bound recipe" in capsys.readouterr().err
+    assert not output.exists()
+
+
+@pytest.mark.parametrize("algorithm,spec_decoding", [("EAGLE", "mtp"), ("DFLASH", "draft_model")])
+def test_speculative_binding_uses_real_verification_and_the_chat_template(
+    point, tmp_path, algorithm, spec_decoding
+):
     path, recipe, env = point
     recipe["roles"]["agg"]["args"].update({
-        "expert-parallel-size": 4, "speculative-algorithm": "EAGLE",
+        "expert-parallel-size": 4, "speculative-algorithm": algorithm,
         "speculative-num-steps": 2, "speculative-num-draft-tokens": 3,
     })
     recipe["roles"]["agg"]["env"] = {"SGLANG_SIMULATE_ACC_LEN": "2.5"}
     path.write_text(yaml.safe_dump({"base": recipe}))
-    env = {**env, "EP_SIZE": "4", "SPEC_DECODING": "mtp"}
+    env = {**env, "EP_SIZE": "4", "SPEC_DECODING": spec_decoding}
     _, bound = select_recipe(f"{path}:base", env)
     assert bound["benchmark"]["env"]["USE_CHAT_TEMPLATE"] == "true"
     concrete = tmp_path / "bound.yaml"
     concrete.write_text(yaml.safe_dump(bound))
     argv = runtime_arguments(f"{path}:base", env)
-    assert plan_commands(str(concrete), "sglang", ["--json", *argv], env) == [[
+    assert plan_commands(str(concrete), "sglang", ["--json", *argv], env) == [Planned([
         "srtctl", "apply", "--json", *argv, "--file", str(concrete),
         "--unset", "roles.agg.env.SGLANG_SIMULATE_ACC_LEN",
-    ]]
+    ], None)]
 
 
 def test_concurrency_selects_its_variant_before_binding(point):
@@ -204,10 +233,10 @@ def test_trt_binding_keeps_engine_options_and_sets_eval_token_budget(point):
         "speculative_config": {"decoding_type": "MTP", "num_nextn_predict_layers": 3},
         "cuda_graph_config": {"batch_sizes": [1, 2, 4]},
     }
-    assert plan_commands(f"{path}:base", "trt", ["--json", *argv], env) == [[
+    assert plan_commands(f"{path}:base", "trt", ["--json", *argv], env) == [Planned([
         "srtctl", "apply", "--json", *argv, "--file", f"{path}:base",
         "--unset", "roles.agg.env.TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS",
-    ]]
+    ], None)]
     with pytest.raises(ValueError, match="moe_expert_parallel_size"):
         runtime_arguments(f"{path}:base", {**env, "EP_SIZE": "1"})
 
@@ -229,9 +258,9 @@ def test_atom_binding_uses_allocation_tp_and_native_mtp_arguments(point):
         "method": "mtp", "num-speculative-tokens": 3, "kv_cache_dtype": "fp8",
         "enable-expert-parallel": True, "enable-dp-attention": True, "max-model-len": 2048,
     }
-    assert plan_commands(f"{path}:base", "atom", ["--json", *argv], env) == [[
+    assert plan_commands(f"{path}:base", "atom", ["--json", *argv], env) == [Planned([
         "srtctl", "apply", "--json", *argv, "--file", f"{path}:base",
-    ]]
+    ], None)]
     for changes, error in [
         ({"EP_SIZE": "2"}, "expert parallelism"),
         ({"EP_SIZE": "1"}, "enable-expert-parallel"),
@@ -248,11 +277,22 @@ def test_atom_binding_uses_allocation_tp_and_native_mtp_arguments(point):
         runtime_arguments(f"{path}:base", env)
 
 
+@pytest.mark.parametrize("flag", ["dcp-size", "decode-context-parallel-size"])
+def test_sglang_decode_context_parallel_size_must_match_the_point(point, flag):
+    path, recipe, env = point
+    recipe["roles"]["agg"]["args"][flag] = 4
+    path.write_text(yaml.safe_dump({"base": recipe}))
+    runtime_arguments(f"{path}:base", {**env, "DCP_SIZE": "4"})
+    with pytest.raises(ValueError, match=r"DCP_SIZE: recipe/matrix '1' != '4'"):
+        runtime_arguments(f"{path}:base", env)
+
+
 @pytest.mark.parametrize("record,expected", [
     ({"status": "submitted", "slurm_job_id": "42", "output_dir": "/shared/42"}, ("42", "/shared/42")),
     ({"status": "error"}, None),
     ({"status": "submitted", "slurm_job_id": "42;43", "output_dir": "/shared/42"}, None),
     ({"status": "submitted", "slurm_job_id": "42", "output_dir": "relative"}, None),
+    (["42"], None),
 ])
 def test_submission_manifest(tmp_path, record, expected):
     path = tmp_path / "submission.json"

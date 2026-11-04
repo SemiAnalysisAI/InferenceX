@@ -1,0 +1,79 @@
+base:
+  schema: 2
+  name: musespark-fp4-h200-sglang-agentic
+  resources:
+    gpu_type: h200
+    gpus_per_node: 8
+  slurm:
+    time_limit: '4:00:00'
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        quantization: modelopt_fp4
+        moe-runner-backend: marlin
+        fp4-gemm-backend: marlin
+        attention-backend: fa3
+        kv-cache-dtype: fp8_e4m3
+        mem-fraction-static: 0.85
+        # DFlash2 verifies 8 tokens per step: the current token plus 7 drafts.
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: RadixArk/Muse-Spark-Open-DFlash2
+        speculative-draft-attention-backend: fa4
+        speculative-num-draft-tokens: 8
+        mm-feature-transport: cpu
+        reasoning-parser: muse
+        tool-call-parser: muse
+        watchdog-timeout: 3600
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        # Serve from the pre-seeded shared HF cache with no Hub API calls: every
+        # rank's revision lookup otherwise trips the 1000-per-5-min 429 limit
+        # when several points start together.
+        HF_HUB_OFFLINE: '1'
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  benchmark:
+    env:
+      # The gated Hub repo is unreadable to the client; use the staged checkpoint.
+      TOKENIZER: /model
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+
+zip_override_tp8_hicache:
+  roles:
+    agg:
+      args:
+        max-running-requests: [2, 4, 8, 16, 32, 48, 64, 96, 128]
+        cuda-graph-max-bs-decode: [2, 4, 8, 16, 32, 48, 64, 96, 128]
+        # The host pool keeps evicted agentic prefixes for reuse across turns.
+        # 160 GB per rank plus the ~30 GB DFlash draft pool exceeded the
+        # ~1.39 TiB cgroup across 8 ranks; 120 GB keeps the total near 1.2 TB.
+        enable-hierarchical-cache: true
+        hicache-size: 120
+  benchmark:
+    env:
+      CONC: ['1', '2', '4', '8', '16', '24', '32', '48', '64']
+      KV_OFFLOADING: dram

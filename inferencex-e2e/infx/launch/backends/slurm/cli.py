@@ -9,14 +9,18 @@ import re
 import subprocess
 import sys
 import time
-from collections.abc import Sequence
-from dataclasses import dataclass, field
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime
 from pathlib import Path
 
+from infx.bench.proc import echo
 from infx.launch import proc
 from infx.launch.backends.base import BackendError, Job, JobState, JobStatus
 
 _GRANTED = re.compile(r"Granted job allocation ([1-9][0-9]*)")
+SQUEUE_RETRY_S = 5.0
+CANCEL_NAMED_WAIT_S = 300.0
 
 
 class SlurmError(BackendError):
@@ -33,6 +37,7 @@ class ContainerSpec:
     env: dict[str, str] = field(default_factory=dict)
 
     def srun_args(self) -> list[str]:
+        """Return the ``srun`` container flags for this spec."""
         args = [f"--container-image={self.image}"]
         if self.mounts:
             args.append(
@@ -57,6 +62,7 @@ class Resources:
     exclude: Sequence[str] = ()
 
     def args(self) -> list[str]:
+        """Return the ``salloc``/``sbatch`` flags requesting these resources on one node."""
         args = [f"--partition={self.partition}"]
         if self.account:
             args.append(f"--account={self.account}")
@@ -123,15 +129,26 @@ def sbatch(
     return Job(job_id)
 
 
-def queue_state(job: Job, *, echo_command: bool = True) -> str | None:
-    """The job's squeue state, or None once squeue no longer lists it (or cannot run)."""
+def _listed_state(job: Job, *, echo_command: bool) -> str | None:
+    """The job's squeue state, or None if squeue answers without it or is not installed.
+
+    A failing squeue (a busy controller times out) is retried, then raises ``SlurmError``;
+    an id the controller has already purged is a definite answer, not a failure.
+    """
     argv = ["squeue", "-j", job.id, "--noheader", "--format=%i|%T"]
-    try:
-        result = proc.run(argv, capture=True, echo_command=echo_command)
-    except FileNotFoundError:
-        return None
-    if result.returncode != 0:
-        return None
+    for attempt in range(3):
+        if attempt:
+            time.sleep(SQUEUE_RETRY_S)
+        try:
+            result = proc.run(argv, capture=True, echo_command=echo_command)
+        except FileNotFoundError:
+            return None
+        if result.returncode == 0:
+            break
+        if "Invalid job id specified" in result.stderr:
+            return None
+    else:
+        raise SlurmError(f"squeue failed for job {job.id} (exit {result.returncode})")
     for line in result.stdout.splitlines():
         job_id, _, state = line.strip().partition("|")
         if job_id == job.id:
@@ -139,8 +156,20 @@ def queue_state(job: Job, *, echo_command: bool = True) -> str | None:
     return None
 
 
+def queue_state(job: Job, *, echo_command: bool = True) -> str | None:
+    """The job's squeue state, or None once squeue no longer lists it (or cannot run)."""
+    try:
+        return _listed_state(job, echo_command=echo_command)
+    except SlurmError:
+        return None
+
+
 def is_active(job: Job) -> bool:
-    return queue_state(job) is not None
+    """Whether squeue lists the job; a squeue that keeps failing cannot rule it out."""
+    try:
+        return _listed_state(job, echo_command=True) is not None
+    except SlurmError:
+        return True
 
 
 def cancel(job: Job) -> None:
@@ -149,26 +178,38 @@ def cancel(job: Job) -> None:
         proc.run(["scancel", job.id])
 
 
-def cancel_named(names: Sequence[str]) -> None:
-    """``scancel`` this user's jobs named any of ``names`` and wait until squeue drops them."""
+def cancel_named(names: Sequence[str], *, wait: bool = True) -> None:
+    """``scancel`` this user's jobs named any of ``names``; with ``wait``, until squeue drops them.
+
+    A job stuck in the queue (e.g. ``COMPLETING`` on a hung node) is given up on after
+    ``CANCEL_NAMED_WAIT_S`` with a warning.
+    """
     user = os.environ.get("USER") or getpass.getuser()
     for name in names:
         proc.run(["scancel", f"--user={user}", f"--name={name}"])
+    if not wait:
+        return
     query = ["squeue", f"--user={user}", "--name=" + ",".join(names), "--noheader", "--format=%i"]
+    deadline = time.monotonic() + CANCEL_NAMED_WAIT_S
     while True:
         result = subprocess.run(query, capture_output=True, text=True, check=False)
         if result.returncode != 0 or not result.stdout.strip():
             return
-        print(
-            f"Waiting for jobs {' '.join(result.stdout.split())} to leave the queue",
-            file=sys.stderr,
-        )
+        jobs = " ".join(result.stdout.split())
+        if time.monotonic() >= deadline:
+            print(
+                f"WARNING: jobs {jobs} still in the queue after {CANCEL_NAMED_WAIT_S:.0f}s",
+                file=sys.stderr,
+            )
+            return
+        print(f"Waiting for jobs {jobs} to leave the queue", file=sys.stderr)
         time.sleep(5)
 
 
-def _query(argv: list[str]) -> str:
+def _query(argv: list[str], env: Mapping[str, str] | None = None) -> str:
+    """Run a Slurm query and return its stdout, or an empty string if it fails or is absent."""
     try:
-        result = proc.run(argv, capture=True)
+        result = proc.run(argv, env=env, capture=True)
     except FileNotFoundError:
         return ""
     return result.stdout if result.returncode == 0 else ""
@@ -181,28 +222,64 @@ def default_account() -> str | None:
     return account.splitlines()[0] if account else None
 
 
-def _observe(job: Job) -> tuple[str, str]:
-    """One (state, exit code) reading: allocation accounting, else the controller's record."""
-    accounting = _query(["sacct", "-X", "-n", "-P", "-j", job.id, "--format=State,ExitCode"])
+def _time(text: str) -> datetime | None:
+    """A ``SLURM_TIME_FORMAT=%s`` timestamp; unset ones read ``Unknown``, ``None`` or 0."""
+    text = text.strip()
+    if not (text.isascii() and text.isdecimal()) or int(text) == 0:
+        return None
+    try:
+        return datetime.fromtimestamp(int(text), UTC)
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
+def observe(job: Job) -> JobStatus:
+    """One reading of the allocation: accounting (``sacct -X``), else the controller's record.
+
+    Never raises; a job neither knows reads as ``UNKNOWN``. Start and end times are dropped while
+    the job is not yet started or finished, since scontrol projects them from the time limit.
+    """
+    env = {**os.environ, "SLURM_TIME_FORMAT": "%s"}
+    argv = ["sacct", "-X", "-n", "-P", "-j", job.id]
+    accounting = _query([*argv, "--format=State,ExitCode,NodeList,Submit,Start,End"], env)
     first = accounting.splitlines()[0] if accounting.strip() else ""
-    state, _, exit_code = first.partition("|")
-    if state.strip():
-        return state.strip(), exit_code.strip()
-    fields = dict(
-        item.split("=", 1)
-        for item in _query(["scontrol", "show", "job", "-o", job.id]).split()
-        if "=" in item
+    state, exit_code, nodes, submitted, started, ended = [*first.split("|"), *[""] * 6][:6]
+    if not state.strip():
+        fields = dict(
+            item.split("=", 1)
+            for item in _query(["scontrol", "show", "job", "-o", job.id], env).split()
+            if "=" in item
+        )
+        if fields.get("JobId") != job.id:
+            fields = {}
+        state, exit_code, nodes, submitted, started, ended = (
+            fields.get(name, "")
+            for name in ("JobState", "ExitCode", "NodeList", "SubmitTime", "StartTime", "EndTime")
+        )
+    nodes, state = nodes.strip(), state.strip()
+    started = "" if state == "PENDING" else started
+    ended = "" if state in {"PENDING", "CONFIGURING", "RUNNING"} else ended
+    return replace(
+        job_status(state, exit_code.strip()),
+        nodes=None if nodes in {"", "None assigned", "(null)"} else nodes,
+        submitted_at=_time(submitted),
+        started_at=_time(started),
+        ended_at=_time(ended),
     )
-    if fields.get("JobId") != job.id:
-        return "", ""
-    return fields.get("JobState", ""), fields.get("ExitCode", "")
 
 
 def job_status(state: str, exit_code: str) -> JobStatus:
-    """Only ``COMPLETED`` with ``0:0`` succeeds; any other state after the job ran failed."""
-    code, _, _ = exit_code.partition(":")
+    """Only ``COMPLETED`` with ``0:0`` succeeds; any other state after the job ran failed.
+
+    Slurm's ``ExitCode`` is ``status:signal``, and a death by signal N reads as 128 + N.
+    Only signals 1 to 64 count, so OUT_OF_MEMORY's ``0:125`` marker is not read as a signal.
+    """
+    code, _, signal = exit_code.partition(":")
     raw = f"{state}|{exit_code}"
-    exit_status = int(code) if code.isdigit() else None
+    if signal.isdigit() and 0 < int(signal) <= 64:
+        exit_status: int | None = 128 + int(signal)
+    else:
+        exit_status = int(code) if code.isdigit() else None
     if state == "COMPLETED" and exit_code == "0:0":
         return JobStatus(JobState.SUCCEEDED, raw, 0)
     if not state:
@@ -223,43 +300,37 @@ def final_status(job: Job, *, attempts: int = 10, delay_s: float = 1.0) -> JobSt
     """The allocation's terminal status (``sacct -X``: never its steps); never raises.
 
     Accounting lags, so unsettled readings are retried; after ``attempts`` the last one is
-    returned. A non-success is also reported on stderr.
+    returned.
     """
-    state, exit_code = "", ""
-    for attempt in range(attempts):
-        state, exit_code = _observe(job)
-        if job_status(state, exit_code).state not in _UNSETTLED:
+    status = observe(job)
+    for _ in range(attempts - 1):
+        if status.state not in _UNSETTLED:
             break
-        if attempt + 1 < attempts:
-            time.sleep(delay_s)
-    status = job_status(state, exit_code)
-    if status.state in _UNSETTLED:
-        print(f"ERROR: could not verify terminal Slurm status for job {job.id}", file=sys.stderr)
-    elif not status.succeeded:
-        print(
-            f"ERROR: Slurm job {job.id} ended with state={state} exit_code={exit_code}",
-            file=sys.stderr,
-        )
+        time.sleep(delay_s)
+        status = observe(job)
     return status
 
 
-def stream_log(job: Job, path: Path, *, wait_s: float = 5.0) -> None:
-    """Wait for ``path``, then follow it until ``job`` leaves the queue.
+def wait_for_log(job: Job, path: Path, *, wait_s: float = 5.0) -> None:
+    """Wait until ``job`` creates ``path``.
 
     Raises ``SlurmError``, after printing ``scontrol show job``, if the job ends first.
     """
     while not path.exists():
-        if queue_state(job, echo_command=False) is None:
+        if queue_state(job, echo_command=False) is None and not path.exists():
             print(f"ERROR: job {job.id} failed before creating {path}", file=sys.stderr)
             with contextlib.suppress(FileNotFoundError):
                 proc.run(["scontrol", "show", "job", job.id])
             raise SlurmError(f"job {job.id} ended before creating {path}")
         time.sleep(wait_s)
 
+
+def follow_log(job: Job, path: Path) -> None:
+    """Print ``path`` as it grows until ``job`` leaves the queue."""
     sentinel = subprocess.Popen(["sleep", "2147483647"])
     print(f"Tailing {path}", file=sys.stderr, flush=True)
     tail_argv = ["tail", "-F", "-s", "2", "-n+1", str(path), f"--pid={sentinel.pid}"]
-    proc.echo(tail_argv)
+    echo(tail_argv)
     tail = subprocess.Popen(tail_argv, stderr=subprocess.DEVNULL)
     try:
         while queue_state(job, echo_command=False) is not None:

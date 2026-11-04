@@ -3,6 +3,11 @@
 UCCL-EP's `Buffer` is API-identical to DeepEP's legacy one, so both adapters drive the same
 low_latency_dispatch/low_latency_combine calls over a per-expert padded receive and differ only
 in how they construct the Buffer (`_create_ll_buffer`) and in their normal mode.
+
+The calls follow vLLM's DeepEPLLPrepareAndFinalize (prepare_finalize/deepep_ll.py): FP8 dispatch
+rounds its scales to powers of two and packs them as UE8M0 exactly where vLLM does, and an adapter
+that sets `ll_recv_hook` splits both collectives into send and receive kernels as vLLM's default
+(non-DBO) path does.
 """
 from __future__ import annotations
 
@@ -10,6 +15,69 @@ import types
 
 import torch
 import torch.distributed as dist
+
+# The kernels' per-128-channel cast constants (DeepEP csrc/kernels/legacy/utils.cuh: kFP8Margin,
+# kFinfoAmaxInvE4M3). The reciprocal is a float32 constant the kernel multiplies by; dividing by
+# 448 instead can land one ulp away and flip the power-of-two rounding at an exact boundary.
+_FP8_MARGIN = 1e-4
+_E4M3_MAX_INV = 1.0 / 448.0
+
+
+def _packed_ue8m0_scales(device) -> bool:
+    """Whether vLLM dispatches low-latency FP8 with power-of-two scales packed as UE8M0.
+
+    deepep_ll.py passes round_scale=use_ue8m0=True exactly when its expert kernel takes packed UE8M0
+    activation scales (post_init_setup). Only BatchedDeepGemmExperts does, and only with DeepGEMM
+    E8M0 in use (on by default) on a Blackwell-family GPU, CUDA capability 10.x or 12.x
+    (supports_packed_ue8m0_act_scales). Hopper and ROCm keep plain FP32 scales.
+    """
+    if getattr(torch.version, "hip", None):
+        return False
+    return torch.cuda.get_device_capability(device)[0] in (10, 12)
+
+
+def ue8m0_cast_to_fp8(x):
+    """The low-latency kernels' round_scale cast, bit for bit (calculate_fp8_scales).
+
+    Per 128-channel block: amax floored at 1e-4, times the float32 reciprocal of 448, rounded UP
+    to a power of two by exponent arithmetic (fast_log2_ceil); the values are cast at exactly that
+    power. Returns (e4m3fn [m, n], FP32 power-of-two scales [m, n/128]) -- the FP32 form the wire
+    carries, which the receive side only repacks as UE8M0 exponent bytes.
+    """
+    m, n = x.shape
+    blocks = x.float().view(m, n // 128, 128)
+    amax = blocks.abs().amax(dim=2).clamp(min=_FP8_MARGIN)
+    bits = (amax * torch.tensor(_E4M3_MAX_INV, dtype=torch.float32)).view(torch.int32)
+    exponent = ((bits >> 23) & 0xFF) - 127 + ((bits & 0x7FFFFF) != 0).to(torch.int32)
+    scale = ((127 - exponent) << 23).view(torch.float32)
+    values = (blocks * scale.unsqueeze(2)).to(torch.float8_e4m3fn).view(m, n)
+    return values, ((exponent + 127) << 23).view(torch.float32)
+
+
+def kernel_cast_to_fp8(x, fp8_dtype, fp8_max):
+    """The low-latency kernels' plain-scale cast, bit for bit (calculate_fp8_scales, round_scale off).
+
+    Per 128-channel block: amax floored at 1e-4, scale = fp8_max / amax as one correctly rounded
+    float32 division, values cast at that scale; the wire scale is amax times the float32
+    reciprocal constant. ``fp8_max / amax`` written with a Python float on the left is
+    ``amax.reciprocal() * fp8_max`` in torch, which rounds twice and lands one ulp off in about a
+    quarter of blocks. On the activation lattice that ulp decides values sitting exactly on an
+    FP8 rounding midpoint (105/126 of 240 is exactly 200, between codes 192 and 208), so the
+    model must divide tensor by tensor, as the kernel does.
+    """
+    m, n = x.shape
+    blocks = x.view(m, n // 128, 128)
+    amax = blocks.abs().float().amax(dim=2).clamp(min=_FP8_MARGIN)
+    scale = torch.full_like(amax, fp8_max) / amax
+    values = (blocks * scale.unsqueeze(2)).to(fp8_dtype).view(m, n)
+    return values, amax * torch.tensor(1.0 / fp8_max, dtype=torch.float32)
+
+
+def _ue8m0_to_fp32(packed):
+    """Packed UE8M0 receive scales (int32 [..., hidden/512], four exponent bytes each, column-major
+    in the last two dims) as the FP32 powers of two they encode: byte b reads as 2^(b - 127)."""
+    exponent = packed.contiguous().view(torch.uint8).to(torch.int32)
+    return (exponent << 23).view(torch.float32)
 
 
 @torch.compile(dynamic=False)
@@ -37,15 +105,29 @@ def _ll_dequant_static(fp8, scales):
 
 
 class LegacyBufferLL:
-    """Mixin (listed before EPBackend) for the legacy `Buffer` low-latency kernels. The adapter
-    keeps the mode branches of its timed methods inline and calls these `_ll_*` pieces; it provides
-    `_fp8`, `buffer` (from its `_create_ll_buffer`), `max_tokens` and `num_local_experts`, and calls
-    `_enable_ll` from `__init__`."""
+    """Mixin (listed before EPBackend) for the legacy `Buffer` low-latency kernels. It owns the
+    transport contract's public methods and routes each by mode: low-latency to the shared `_ll_*`
+    pieces here, normal to the adapter's `_normal_*` methods (`_normal_create_buffer`,
+    `_normal_dispatch`, `_normal_stage`, `_normal_combine`, `_normal_inspect_dispatch`,
+    `_normal_combine_transformed`, `_normal_recv_tokens`). The adapter builds its low-latency
+    `buffer` in `_create_ll_buffer` (sized by `_ll_geometry`) and calls `_enable_ll` from
+    `__init__`."""
+
+    # vLLM's default (non-DBO) path issues each collective as a send kernel plus a receive hook
+    # (deepep_ll.py: dispatch always passes return_recv_hook=True; finalize_async, the path the
+    # modular kernel takes for this prepare/finalize, passes it to combine). With nothing to overlap
+    # here the hook runs straight after the send, as it does when no shared expert is scheduled in
+    # between. Opt-in per adapter, because the adapter's own combine must route through
+    # `_ll_combine` for dispatch and combine to share the contract.
+    ll_recv_hook = False
+    _ll_ue8m0 = False
+    # Per-rank slots the low-latency receive is pre-allocated with; None sizes it at the ladder cap
+    # (LL_LADDER_CAP). An adapter that keeps the two apart sets it (see deepep-v2).
+    LL_BUFFER_CAP: "int | None" = None
 
     def _enable_ll(self, kernel_generation):
         # A distinct kernel family whose combine multiplies by the gate at the source (weighted),
         # not an unweighted rank sum, over a per-expert padded receive.
-        self.kernel_generation = kernel_generation
         self.receive_layout = "token-expert"
         self.combine_weight_semantics = "weighted-kernel-sum"
         # LL result tensors are double-buffered and single-use per dispatch (upstream: "you
@@ -53,41 +135,167 @@ class LegacyBufferLL:
         # every timed combine needs a fresh dispatch and every timed dispatch must be drained by
         # its combine.
         self.requires_fresh_pair = True
+        self._ll_ue8m0 = bool(self._fp8) and _packed_ue8m0_scales(self.device)
+        if self._ll_ue8m0:
+            # The kernel now casts at power-of-two scales, so the oracle's payload model follows
+            # it; the wire still carries one FP32 scale per 128-value block.
+            self._enable_fp8(self.dispatch_dtype, ue8m0_cast_to_fp8, self._fp8_codec[1])
+        # "-hook" marks the split send/receive kernels and "-ue8m0" the power-of-two FP8 cast.
+        self.kernel_generation = (
+            kernel_generation + ("-hook" if self.ll_recv_hook else "")
+            + ("-ue8m0" if self._ll_ue8m0 else "")
+        )
+
+    def implementation_details(self):
+        """Low-latency launch facts, shared by both adapters (see EPBackend.implementation_details)."""
+        details = super().implementation_details()
+        if self.mode == "low-latency":
+            details.update({
+                "receive_capacity": getattr(self, "max_tokens", None),
+                "num_qps_per_rank": getattr(self, "num_local_experts", None),
+                "return_recv_hook": bool(self.ll_recv_hook),
+                "zero_copy": False,
+                "fp8_scales": ("ue8m0-packed" if self._ll_ue8m0 else "fp32") if self._fp8 else None,
+            })
+        return details
+
+    # ---- transport contract, routed by mode ----------------------------------------------
+
+    def create_buffer(self, spec):
+        if self.mode == "low-latency":
+            return self._create_ll_buffer(spec)
+        return self._normal_create_buffer(spec)
+
+    def dispatch(self, p):
+        if self.mode == "low-latency":
+            return self._ll_dispatch(p)
+        return self._normal_dispatch(p)
+
+    def stage(self, p, h):
+        if self.mode == "low-latency":
+            # The timed combine sends the padded per-expert receive back as BF16 (dequant under
+            # FP8). Value correctness is exercised by the oracle's combine_transformed path; this
+            # only has to move the right shape for timing.
+            h.combine_input = self._ll_recv_bf16(h.recv_x)
+            return
+        self._normal_stage(p, h)
+
+    def combine(self, p, h):
+        if self.mode == "low-latency":
+            # The kernel applies topk_weights internally (weighted).
+            return self._ll_combine(p, h, h.combine_input)
+        return self._normal_combine(p, h)
+
+    def inspect_dispatch(self, p, h):
+        if self.mode == "low-latency":
+            return self._expert_major_view(h, self._ll_recv_bf16(h.recv_x), h.recv_count)
+        return self._normal_inspect_dispatch(p, h)
+
+    def combine_transformed(self, p, h, transformed):
+        if self.mode == "low-latency":
+            return self._ll_combine_transformed(p, h, transformed)
+        return self._normal_combine_transformed(p, h, transformed)
+
+    def recv_tokens(self, h):
+        if self.mode == "low-latency":
+            return int(h.recv_count.sum().item())
+        return self._normal_recv_tokens(h)
+
+    @staticmethod
+    def _normal_handle(recv_x, recv_topk_idx, recv_topk_weights, handle):
+        """The per-call handle a normal-mode dispatch returns."""
+        return types.SimpleNamespace(
+            recv_x=recv_x,
+            recv_topk_idx=recv_topk_idx,
+            recv_topk_weights=recv_topk_weights,
+            handle=handle,
+        )
+
+    # ---- shared low-latency pieces --------------------------------------------------------
+
+    def _ll_geometry(self, spec, buffer_cls, label):
+        """Fix the low-latency receive geometry and return the Buffer's RDMA byte count.
+
+        The receive is pre-allocated at a fixed per-rank slot count (LL_BUFFER_CAP, else the ladder
+        cap) and never follows the ladder, so a partial ladder runs the same receive plane as the
+        full one; a ladder that does not fit fails closed. Sets `max_tokens` and
+        `num_local_experts` (LL requires the QP-per-rank count to equal the latter).
+        """
+        args, world_size = self.args, self.world_size
+        cap = self.LL_BUFFER_CAP if self.LL_BUFFER_CAP is not None else self.LL_LADDER_CAP
+        if spec.max_tokens_per_rank > cap:
+            raise RuntimeError(
+                f"low-latency ladder maximum {spec.max_tokens_per_rank} exceeds the LL "
+                f"buffer cap {cap}"
+            )
+        assert args.experts % world_size == 0, (
+            "low-latency EP requires num_experts divisible by the EP size"
+        )
+        self.max_tokens = cap
+        self.num_local_experts = args.experts // world_size
+        if not hasattr(buffer_cls, "low_latency_dispatch") or not hasattr(
+            buffer_cls, "get_low_latency_rdma_size_hint"
+        ):
+            raise RuntimeError(
+                f"invalid {label} LL runtime: Buffer.low_latency_dispatch / "
+                "get_low_latency_rdma_size_hint absent"
+            )
+        return buffer_cls.get_low_latency_rdma_size_hint(
+            self.max_tokens, args.hidden, world_size, args.experts
+        )
 
     def _ll_recv_bf16(self, recv_x):
         """The padded per-expert receive as BF16 `[num_local_experts, cap*num_ranks, hidden]`.
 
         BF16 dispatch already returns that tensor; FP8 dispatch returns an (e4m3, per-128-block
-        FP32 scale) tuple, dequantized here with `_ll_dequant_static`. The low-latency fp8 scales
+        scale) tuple, dequantized here with `_ll_dequant_static`. The low-latency fp8 scales
         come back column-major in their last two dims (TMA compatibility), i.e. non-contiguous,
         so they are made contiguous before the per-block view — a plain `.view()` raises "view
         size is not compatible with ... stride" on the transposed layout (the fp8 tensor itself
         is row-major contiguous, so only the scales need it). Mirrors the upstream low-latency
-        test, which calls `.contiguous()` on the scales before dequant.
+        test, which calls `.contiguous()` on the scales before dequant. Packed UE8M0 scales are
+        first read back as the FP32 powers of two they encode.
         """
         if not self._fp8:
             return recv_x
         fp8, scales = recv_x
-        return _ll_dequant_static(fp8, scales.contiguous())
+        scales = _ue8m0_to_fp32(scales) if self._ll_ue8m0 else scales.contiguous()
+        return _ll_dequant_static(fp8, scales)
 
     def _ll_dispatch(self, p):
-        # Defaults async_finish=False / return_recv_hook=False => the kernel ensures the data has
-        # arrived, so the hook/event are inert and unused here.
-        recv_x, recv_count, ll_handle, _event, _hook = self.buffer.low_latency_dispatch(
+        # async_finish=False: the compute stream waits on the kernels, so the event is inert. Without
+        # the hook the one kernel ensures arrival; with it the receive kernel does, and both phases
+        # launch on the compute stream (DeepEP's hook mode skips the comm-stream hand-off).
+        recv_x, recv_count, ll_handle, _event, hook = self.buffer.low_latency_dispatch(
             p.dispatch_x,
             p.topk_idx,
             self.max_tokens,
             self.args.experts,
             use_fp8=self._fp8,
+            round_scale=self._ll_ue8m0,
+            use_ue8m0=self._ll_ue8m0,
+            async_finish=False,
+            return_recv_hook=self.ll_recv_hook,
         )
+        if self.ll_recv_hook:
+            hook()
         return types.SimpleNamespace(
             recv_x=recv_x,
             recv_count=recv_count,
             ll_handle=ll_handle,
         )
 
-    def _ll_inspect_dispatch(self, p, h):
-        return self._expert_major_view(h, self._ll_recv_bf16(h.recv_x), h.recv_count)
+    def _ll_combine(self, p, h, x):
+        """The weighted low-latency combine of `x`, the padded per-expert BF16 plane (the kernel
+        applies p.topk_weights). vLLM passes zero_copy=False and async_finish=False as here; its
+        `out=` only names the destination tensor."""
+        combined_x, _event, hook = self.buffer.low_latency_combine(
+            x, p.topk_idx, p.topk_weights, h.ll_handle,
+            zero_copy=False, async_finish=False, return_recv_hook=self.ll_recv_hook,
+        )
+        if self.ll_recv_hook:
+            hook()
+        return combined_x[: p.T]
 
     def _ll_combine_transformed(self, p, h, transformed):
         """Scatter the oracle-transformed rows back into a zeroed padded combine buffer at the
@@ -100,10 +308,7 @@ class LegacyBufferLL:
         else:
             combine_buf = torch.zeros_like(h.recv_x)
         combine_buf[h.slot_expert, h.slot_j] = transformed.to(combine_buf.dtype)
-        combined_x, _event, _hook = self.buffer.low_latency_combine(
-            combine_buf, p.topk_idx, p.topk_weights, h.ll_handle
-        )
-        return combined_x[: p.T]
+        return self._ll_combine(p, h, combine_buf)
 
     def finalize(self, rc):
         try:

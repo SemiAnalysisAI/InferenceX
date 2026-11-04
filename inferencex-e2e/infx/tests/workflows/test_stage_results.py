@@ -1,5 +1,7 @@
 import copy
+import io
 import json
+import zipfile
 
 import pytest
 
@@ -23,6 +25,7 @@ def staging(monkeypatch, tmp_path):
             "/collaborators/reviewer/permission": {"permission": "write", "role_name": "write"},
             "/pulls/7": {"labels": [{"name": "full-sweep-enabled"}], "head": {"ref": "feature"}},
             "/pulls/7/commits": [{"sha": "tested"}, {"sha": "new-head"}],
+            "/issues/7/comments": [],
             "/issues/7/timeline": [{"event": "labeled", "label": {"name": "full-sweep-enabled"},
                                     "created_at": "2026-09-01T11:00:00Z"}],
             "/actions/runs/123": run,
@@ -246,3 +249,84 @@ def test_incomplete_artifact_listing_cannot_approve_a_run(staging):
     staging["responses"]["/actions/runs/123/artifacts"]["total_count"] = 3
     with pytest.raises(github.ListingError, match="Incomplete GitHub listing"):
         stage_results.request("example/project", staging["event"], "token")
+
+
+EXTERNAL_HEAD = "75745991a66c" + "1" * 28
+
+
+def external_run(staging, monkeypatch, title_pr):
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as bundle:
+        bundle.writestr("source_identity.json", json.dumps({
+            "pr_number": title_pr, "head_sha": EXTERNAL_HEAD, "merge_sha": "2" * 40,
+            "evals_only": False, "agentx_fast": False, "all_evals": False, "fail_fast": True,
+        }))
+    monkeypatch.setattr(github, "download", lambda repo, path, token: (
+        buffer.getvalue() if path == "/actions/artifacts/5/zip" else None
+    ))
+    staging["responses"]["/actions/runs/123"].update(
+        event="workflow_dispatch", path=".github/workflows/e2e-tests.yml", head_branch="main",
+        head_sha="main-sha", display_title=f"e2e Test - External PR #{title_pr} @ 75745991a66c",
+    )
+    listing = staging["responses"]["/actions/runs/123/artifacts"]
+    listing["artifacts"].append({"name": "source-identity", "id": 5, "expired": False})
+    listing["total_count"] = 3
+
+
+@pytest.mark.parametrize("commits,title_pr,reason", [
+    ([EXTERNAL_HEAD], 7, ""),
+    (["new-head"], 7, "its tested head commit is not in the PR commit list"),
+    ([EXTERNAL_HEAD], 8, "it tested external PR #8, not PR #7"),
+])
+def test_pinned_trusted_external_run_stages_on_its_pr(
+    staging, monkeypatch, commits, title_pr, reason,
+):
+    external_run(staging, monkeypatch, title_pr)
+    staging["responses"]["/pulls/7/commits"] = [{"sha": sha} for sha in commits]
+    if not reason:
+        assert stage_results.request("example/project", staging["event"], "token")["run-id"] == "123"
+        return
+    with pytest.raises(RuntimeError, match=reason):
+        stage_results.request("example/project", staging["event"], "token")
+
+
+def recovery_pr(staging, association="MEMBER"):
+    staging["responses"]["/pulls/7"] = {"labels": [], "head": {"ref": "recovery"}, "state": "open"}
+    staging["responses"]["/pulls/7/commits"] = [{"sha": "recovery-head"}]
+    staging["responses"]["/issues/7/timeline"] = []
+    staging["responses"]["/issues/7/comments"] = [{
+        "id": 50, "created_at": "2026-09-02T00:00:00Z", "author_association": association,
+        "body": "/use 123",
+    }]
+
+
+@pytest.mark.parametrize("body", ["/use 123", "/stage-results", "/stage-results 123"])
+def test_recovery_pr_stages_accepted_reuse_source_without_full_sweep_label(
+    staging, monkeypatch, body,
+):
+    external_run(staging, monkeypatch, 900)
+    recovery_pr(staging)
+    staging["event"]["comment"]["body"] = body
+    assert stage_results.request("example/project", staging["event"], "token")["run-id"] == "123"
+    assert staging["comments"] == []
+
+
+def test_recovery_pr_only_stages_its_pinned_run(staging):
+    recovery_pr(staging)
+    staging["responses"]["/actions/runs/124"] = {
+        **staging["responses"]["/actions/runs/123"], "id": 124,
+    }
+    staging["event"]["comment"]["body"] = "/stage-results 124"
+    with pytest.raises(RuntimeError, match="it is not run 123 pinned by this PR's reuse request"):
+        stage_results.request("example/project", staging["event"], "token")
+
+
+def test_recovery_pr_rejects_unauthorized_or_invalid_reuse_source(staging):
+    recovery_pr(staging, association="CONTRIBUTOR")
+    with pytest.raises(RuntimeError, match="PR does not have a full-sweep label"):
+        stage_results.request("example/project", staging["event"], "token")
+    recovery_pr(staging)
+    staging["responses"]["/actions/runs/123"]["status"] = "in_progress"
+    with pytest.raises(RuntimeError, match="Pinned reuse source is not reusable: .*not completed"):
+        stage_results.request("example/project", staging["event"], "token")
+    assert "cannot be staged" in staging["comments"][-1]

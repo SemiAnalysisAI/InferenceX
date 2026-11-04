@@ -13,13 +13,14 @@ import json
 import os
 import re
 from collections.abc import Callable, Iterator, Mapping
-from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from infx import yamlio
 from infx.config import repository_root
+from infx.fastcopy import deepcopy
 from infx.results.metadata import parse_component_metadata
 from infx.srt_slurm.synthetic_acceptance import selected_recipes, spec_parameters
 
@@ -41,6 +42,7 @@ _POINT_KEYS = (
     ("benchmark", "concurrencies"),
     ("telemetry", "enabled"),
     ("telemetry", "dcgm_exporter", "port"),
+    ("telemetry", "cpu_power_exporter"),
 )
 _FIXED_ENV = ("MODEL", "ISL", "OSL", "CONC", "CONC_LIST", "RANDOM_RANGE_RATIO", "USE_CHAT_TEMPLATE")
 _AGENTIC_ENV = ("CONC", "CONC_LIST", "RESULT_DIR", "AGENTIC_OUTPUT_DIR", "HF_HUB_CACHE",
@@ -51,7 +53,7 @@ _WORKFLOW_ENV = (
     "POWER", "REQUIRE_POWER", "IS_AGENTIC", "SCENARIO_TYPE", "RUN_EVAL", "EVAL_ONLY",
 )  # fmt: skip
 _MULTINODE_ENV = (
-    "SPEC_DECODING", "KV_OFFLOADING", "TOTAL_CPU_DRAM_GB", "PREFILL_DWDP_SIZE",
+    "SPEC_DECODING", "KV_OFFLOADING", "TOTAL_CPU_DRAM_GB", "DECODE_CPU_DRAM_GB", "PREFILL_DWDP_SIZE",
     *(f"{role}_{field}" for role in ("PREFILL", "DECODE")
       for field in ("NUM_WORKERS", "TP", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "EP", "DP_ATTN")),
 )  # fmt: skip
@@ -80,7 +82,6 @@ FABRIC_REFERENCE = "@fabric."
 INSTALLERS = {
     "glm5.3-tilert-rocm.sh": ("router", "tilert-pd-router"),
     "kimik3-b300-mooncake.sh": ("kv-offload-backend", "mooncake"),
-    "lmcache-mp-rocm.sh": ("kv-offload-backend", "lmcache"),
     "vllm-mooncake.sh": ("kv-offload-backend", "mooncake"),
     "vllm-router.sh": ("router", "vllm-router"),
 }
@@ -108,6 +109,7 @@ def merge_blocks(shared: Mapping[str, Any], fragment: Mapping[str, Any]) -> dict
 
 
 def _lookup(block: Any, key: tuple[str, ...]) -> tuple[bool, Any]:
+    """Follow ``key`` into nested mappings and return whether it is present and its value."""
     for part in key:
         if not isinstance(block, Mapping) or part not in block:
             return False, None
@@ -158,7 +160,8 @@ def check_fragment(raw: Mapping[str, Any], source: Path, *, agentic: bool, multi
 
 
 def _block(path: Path) -> dict[str, Any]:
-    block = yaml.safe_load(path.read_text())
+    """Load the YAML mapping at ``path``, or raise ValueError if it is not a mapping."""
+    block = yamlio.safe_load(path.read_text())
     if not isinstance(block, dict):
         raise ValueError(f"{path}: shared block must be a mapping")
     return block
@@ -187,13 +190,15 @@ def compose_recipe(
     multinode: bool,
     root: Path,
     power_port: int | None = None,
+    cpu_power_source: str | None = None,
     native_power: bool = False,
 ) -> dict[str, Any]:
     """The fragment at ``path`` over its lane's shared block, under ``base`` for bundles.
 
-    ``power_port`` adds the DCGM telemetry block with its exporter on that port.
+    ``power_port`` adds the DCGM telemetry block with its exporter on that port, and
+    ``cpu_power_source`` the cluster's Grace CPU power exporter beside it.
     """
-    raw = yaml.safe_load(path.read_text())
+    raw = yamlio.safe_load(path.read_text())
     if not isinstance(raw, dict):
         raise ValueError(f"{path}: recipe must be a mapping")
     check_fragment(raw, path, agentic=agentic, multinode=multinode)
@@ -201,7 +206,9 @@ def compose_recipe(
     if native_power:
         shared = merge_blocks(shared, _block(root / NATIVE_TELEMETRY_BLOCK))
     if power_port is not None:
-        exporter = {"telemetry": {"dcgm_exporter": {"port": power_port}}}
+        exporter: dict[str, Any] = {"telemetry": {"dcgm_exporter": {"port": power_port}}}
+        if cpu_power_source is not None:
+            exporter["telemetry"]["cpu_power_exporter"] = {"source": cpu_power_source}
         shared = merge_blocks(shared, merge_blocks(_block(root / TELEMETRY_BLOCK), exporter))
     if "base" in raw:
         return {**raw, "base": merge_blocks(shared, raw["base"])}
@@ -209,6 +216,7 @@ def compose_recipe(
 
 
 def _required(environment: Mapping[str, str], name: str) -> str:
+    """Return the input ``name`` from ``environment``, or raise ValueError if it is blank."""
     value = environment.get(name, "")
     if not value.strip():
         raise ValueError(f"Missing workload input: {name}")
@@ -216,6 +224,7 @@ def _required(environment: Mapping[str, str], name: str) -> str:
 
 
 def _positive(value: str, name: str) -> int:
+    """Return ``value`` as a positive int, or raise ValueError naming ``name``."""
     if not value.isascii() or not value.isdecimal() or int(value) <= 0:
         raise ValueError(f"{name} must be a positive integer: {value!r}")
     return int(value)
@@ -351,13 +360,19 @@ def bind_multinode(
     root: Path,
     expand: Callable[..., list[tuple[str | None, dict[str, Any]]]] = selected_recipes,
     power_port: int | None = None,
+    cpu_power_source: str | None = None,
     client_env: Mapping[str, str] | None = None,
 ) -> tuple[str | None, dict[str, Any]]:
     """Bind the one variant ``recipe`` (``fragment[:selector]``) selects; return its name too."""
     agentic = environment["IS_AGENTIC"] == "1"
     path, _, selector = recipe.partition(":")
     composed = compose_recipe(
-        Path(path), agentic=agentic, multinode=True, root=root, power_port=power_port
+        Path(path),
+        agentic=agentic,
+        multinode=True,
+        root=root,
+        power_port=power_port,
+        cpu_power_source=cpu_power_source,
     )
     variants = expand(composed, selector or None)
     if len(variants) != 1:
@@ -407,6 +422,7 @@ def add_fabric_argument(parser: argparse.ArgumentParser) -> None:
 
 
 def _assignment(text: str) -> tuple[str, str]:
+    """Split a ``NAME=VALUE`` argument, or raise ArgumentTypeError if malformed."""
     name, separator, value = text.partition("=")
     if not separator or not name:
         raise argparse.ArgumentTypeError(f"expected NAME=VALUE, got {text!r}")
@@ -414,11 +430,17 @@ def _assignment(text: str) -> tuple[str, str]:
 
 
 def main(argv: list[str] | None = None) -> None:
+    """Bind the multi-node recipe variant ``argv`` names and write it to the output path."""
     parser = argparse.ArgumentParser(description="Bind one multi-node recipe variant")
     parser.add_argument("recipe", help="fragment[:selector]")
     parser.add_argument("output", type=Path)
     parser.add_argument(
         "--power-port", type=int, help="merge the DCGM telemetry block, its exporter on this port"
+    )
+    parser.add_argument(
+        "--cpu-power-source",
+        choices=("acpi",),
+        help="bind the cluster's Grace CPU power exporter with this source (needs --power-port)",
     )
     parser.add_argument(
         "--client-env",
@@ -437,6 +459,7 @@ def main(argv: list[str] | None = None) -> None:
             os.environ,
             root=root,
             power_port=args.power_port,
+            cpu_power_source=args.cpu_power_source,
             client_env=dict(args.client_env),
         )
         bound = resolve_fabric(bound, args.fabric)

@@ -15,6 +15,11 @@ from infx.workflows.reuse import write_outputs
 
 
 def required_owners(repo: str, pr: dict[str, Any], token: str) -> list[str]:
+    """Return the base CODEOWNERS owners of the PR's changed files who must sign off.
+
+    Skips the core team and admin users. Raises RuntimeError if files or CODEOWNERS cannot be read
+    reliably.
+    """
     files = github.paginate(repo, f"/pulls/{pr['number']}/files", token, "")
     if len({file["filename"] for file in files}) != pr["changed_files"]:
         raise RuntimeError("Incomplete changed-file list; cannot determine sign-off scope")
@@ -52,6 +57,10 @@ def required_owners(repo: str, pr: dict[str, Any], token: str) -> list[str]:
 
 
 def check_scope(repo: str, number: int, token: str) -> dict[str, str]:
+    """Return workflow outputs saying whether PR number needs a sign-off.
+
+    Raises RuntimeError if the PR changed during the check.
+    """
     pr = github.api(repo, f"/pulls/{number}", token)
     required = required_owners(repo, pr, token)
     current = github.api(repo, f"/pulls/{number}", token)
@@ -75,6 +84,10 @@ def check_scope(repo: str, number: int, token: str) -> dict[str, str]:
 
 
 def main() -> None:
+    """Find the PR from the GitHub event, check its sign-off scope and write the step outputs.
+
+    Raises ValueError if a dispatch pr-number does not match comment_url.
+    """
     event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
     number = (event.get("pull_request") or event.get("issue") or {}).get("number")
     if number is None:

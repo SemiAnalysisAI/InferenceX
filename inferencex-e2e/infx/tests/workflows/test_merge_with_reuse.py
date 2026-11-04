@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import git as gitpython
 import pytest
+import requests
 
 from infx.workflows.merge_with_reuse import (
     changelog_path,
@@ -20,6 +25,7 @@ from infx.workflows.merge_with_reuse import (
     _latest_statuses,
     _MergeState,
     _poll_pr_head,
+    _make_github,
     _resolve_token,
     _retry_delay,
     find_eligible_run,
@@ -100,6 +106,7 @@ def make_check_run(
     started_at: str = "2024-01-01T00:00:00Z",
     details_url: str = "",
     cr_id: int = 1,
+    check_suite_id: int | None = None,
 ) -> MagicMock:
     """Build a mock CheckRun."""
     cr = MagicMock()
@@ -109,6 +116,7 @@ def make_check_run(
     cr.started_at = started_at
     cr.details_url = details_url
     cr.id = cr_id
+    cr.check_suite_id = check_suite_id
     return cr
 
 
@@ -350,6 +358,95 @@ class TestWaitForCheck:
             result = wait_for_check("a" * 40, "check-changelog", gh_repo, timeout=60)
         assert result == 0
 
+    def test_unstarted_rerun_supersedes_completed_failure(self):
+        old = make_check_run(
+            name="check-changelog", conclusion="failure", started_at="2024-01-01T00:00:00Z", cr_id=10
+        )
+        queued = make_check_run(
+            name="check-changelog", status="queued", conclusion=None, started_at=None, cr_id=20
+        )
+        passed = make_check_run(
+            name="check-changelog", started_at="2024-01-01T01:00:00Z", cr_id=20
+        )
+        first, second = MagicMock(), MagicMock()
+        first.get_check_runs.return_value = [old, queued]
+        second.get_check_runs.return_value = [old, passed]
+        gh_repo = MagicMock()
+        gh_repo.get_commit.side_effect = [first, second]
+
+        with patch("infx.workflows.merge_with_reuse.time.sleep"):
+            result = wait_for_check("a" * 40, "check-changelog", gh_repo, timeout=60)
+
+        assert result == 0
+
+    def test_later_skipped_run_does_not_replace_verdict(self):
+        """An unrelated label event re-runs the workflow with check-changelog skipped."""
+        verdict = make_check_run(
+            name="check-changelog", started_at="2024-01-01T00:00:05Z", cr_id=10
+        )
+        skipped = make_check_run(
+            name="check-changelog", conclusion="skipped", started_at="2024-01-01T00:00:31Z",
+            cr_id=20,
+        )
+        gh_repo = MagicMock()
+        gh_repo.get_commit.return_value.get_check_runs.return_value = [verdict, skipped]
+
+        assert wait_for_check("a" * 40, "check-changelog", gh_repo, timeout=60) == 0
+
+    def test_server_errors_past_client_retries_are_retried(self, monkeypatch):
+        """PyGithub's own 5xx retries end in requests' RetryError, which must not abort."""
+        sha = "a" * 40
+        state = {"healthy": False, "check_polls": 0}
+
+        class GitHub(BaseHTTPRequestHandler):
+            def log_message(self, *_args):
+                pass
+
+            def do_GET(self):
+                base = f"http://127.0.0.1:{self.server.server_port}/repos/owner/repo"
+                path = self.path.partition("?")[0]
+                if path == "/repos/owner/repo":
+                    status, body = 200, {"full_name": "owner/repo", "url": base}
+                elif path == f"/repos/owner/repo/commits/{sha}":
+                    status, body = 200, {"sha": sha, "url": f"{base}/commits/{sha}"}
+                elif path == f"/repos/owner/repo/commits/{sha}/check-runs":
+                    state["check_polls"] += 1
+                    status, body = (200, {"total_count": 1, "check_runs": [{
+                        "id": 1, "name": "check-changelog", "status": "completed",
+                        "conclusion": "success", "started_at": "2024-01-01T00:00:00Z",
+                        "details_url": None,
+                    }]}) if state["healthy"] else (502, {"message": "Server Error"})
+                else:
+                    status, body = 404, {"message": "Not Found"}
+                data = json.dumps(body).encode()
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), GitHub)
+        thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01})
+        thread.start()
+        monkeypatch.setenv("GITHUB_API_URL", f"http://127.0.0.1:{server.server_port}")
+        # PyGithub throttles with time.sleep too, so only the helper's own sleep heals GitHub.
+        monkeypatch.setattr(
+            "infx.workflows.merge_with_reuse.time",
+            SimpleNamespace(
+                monotonic=time.monotonic, sleep=lambda _seconds: state.update(healthy=True)
+            ),
+        )
+        try:
+            gh_repo = _make_github("token").get_repo("owner/repo")
+            result = wait_for_check(sha, "check-changelog", gh_repo, timeout=60)
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+
+        assert result == 0
+        assert state["check_polls"] > 1
+
 
 
 
@@ -541,6 +638,63 @@ class TestWaitForChecks:
             result = wait_for_checks(pull, sha, gh_repo, timeout=60)
         assert result == 0
 
+    @pytest.mark.parametrize(
+        ("second_workflow_id", "expected"),
+        [(2, 1), (1, 0)],
+        ids=["other-workflow-failure-blocks", "same-workflow-rerun-supersedes"],
+    )
+    def test_same_job_name_in_two_workflows(self, second_workflow_id, expected):
+        gh_repo = MagicMock()
+        commit = MagicMock()
+        gh_repo.get_commit.return_value = commit
+        commit.get_check_runs.return_value = [
+            make_check_run(
+                name="setup",
+                conclusion="failure",
+                started_at="2024-01-01T00:00:00Z",
+                cr_id=10,
+                check_suite_id=100,
+            ),
+            make_check_run(
+                name="setup",
+                conclusion="success",
+                started_at="2024-01-01T01:00:00Z",
+                cr_id=20,
+                check_suite_id=200,
+            ),
+        ]
+        gh_repo.get_workflow_runs.return_value = [
+            SimpleNamespace(check_suite_id=100, workflow_id=1, event="pull_request"),
+            SimpleNamespace(
+                check_suite_id=200, workflow_id=second_workflow_id, event="pull_request"
+            ),
+        ]
+        commit.get_combined_status.return_value = SimpleNamespace(statuses=[])
+
+        result = wait_for_checks(MagicMock(), "a" * 40, gh_repo, timeout=10)
+
+        assert result == expected
+
+    def test_unstarted_rerun_supersedes_completed_failure(self):
+        old = make_check_run(
+            name="build", conclusion="failure", started_at="2024-01-01T00:00:00Z", cr_id=10
+        )
+        queued = make_check_run(
+            name="build", status="queued", conclusion=None, started_at=None, cr_id=20
+        )
+        passed = make_check_run(name="build", started_at="2024-01-01T01:00:00Z", cr_id=20)
+        first, second = MagicMock(), MagicMock()
+        first.get_check_runs.return_value = [old, queued]
+        second.get_check_runs.return_value = [old, passed]
+        for commit in (first, second):
+            commit.get_combined_status.return_value = SimpleNamespace(statuses=[])
+        gh_repo = MagicMock()
+        gh_repo.get_commit.side_effect = [first, second]
+
+        with patch("infx.workflows.merge_with_reuse.time.sleep"):
+            result = wait_for_checks(MagicMock(), "a" * 40, gh_repo, timeout=60)
+
+        assert result == 0
 
 
 
@@ -580,14 +734,36 @@ class TestTransientErrors:
         )
         assert _is_transient_error(exc) is True
 
+    @pytest.mark.parametrize(
+        ("exc_type", "message", "expected"),
+        [
+            ("GithubException", "Resource not accessible by integration", False),
+            ("RateLimitExceededException", "API rate limit exceeded for user", True),
+        ],
+    )
+    def test_github_403_is_transient_only_when_rate_limited(self, exc_type, message, expected):
+        import github
+
+        exc = getattr(github, exc_type)(status=403, data={"message": message}, headers={})
+        assert _is_transient_error(exc) is expected
+
     def test_github_404_is_not_transient(self):
         from github import GithubException
 
         exc = GithubException(status=404, data={"message": "Not Found"}, headers={})
         assert _is_transient_error(exc) is False
 
-    def test_connection_error_is_transient(self):
-        assert _is_transient_error(ConnectionError("refused")) is True
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            ConnectionError("refused"),
+            requests.exceptions.ConnectionError("refused"),
+            requests.exceptions.ReadTimeout("read timed out"),
+        ],
+        ids=["builtin", "requests-connection", "requests-read-timeout"],
+    )
+    def test_connection_error_is_transient(self, exc):
+        assert _is_transient_error(exc) is True
 
     def test_timeout_error_is_transient(self):
         assert _is_transient_error(TimeoutError("timed out")) is True

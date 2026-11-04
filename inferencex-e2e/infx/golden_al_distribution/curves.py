@@ -9,24 +9,32 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import yaml
+from infx import yamlio
 
 GOLDEN_DIR = Path(__file__).resolve().parent
 THINKING_MODES = ("thinking_on", "thinking_off")
+CURVE_NAME = re.compile(r"[a-z0-9_.-]+")
 
 
 @dataclass(frozen=True)
 class Curve:
-    """One committed curve: ``{thinking_mode: {num_speculative_tokens: AL}}``."""
+    """One committed curve: ``{thinking_mode: {num_speculative_tokens: AL}}``.
+
+    ``collection`` holds the SPEED-Bench client settings that measured the curve (the YAML's
+    reserved ``collection`` key), which the acceptance-length gate replays; None if unrecorded.
+    """
 
     name: str
     model: str
     modes: Mapping[str, Mapping[int, Any]]
+    collection: Mapping[str, Any] | None = None
 
     def tokens(self, thinking: str) -> list[int]:
+        """Return the sorted draft lengths measured for one thinking mode."""
         return sorted(self.modes.get(thinking) or {})
 
     def acceptance(self, thinking: str, tokens: int) -> float:
+        """Return the AL for a thinking mode and draft length, or raise ValueError if invalid."""
         try:
             value = float(self.modes[thinking][tokens])
         except (KeyError, TypeError, ValueError) as error:
@@ -39,9 +47,12 @@ class Curve:
 
 
 def curve_name(model: str, spec: Mapping[str, Any]) -> str:
-    """Map an InferenceX model prefix and speculative config to a curve file stem."""
+    """Map an InferenceX model prefix and speculative config to a curve file stem.
+
+    SGLang names native model MTP EAGLE or NEXTN, so those map to the model's own head curve.
+    Kimi DSpark has one curve per draft sampler and raises ValueError for any other sampler.
+    """
     method = str(spec.get("method", "")).lower()
-    # SGLang calls native model MTP EAGLE/NEXTN; the curve describes the model's head.
     if method in ("eagle", "nextn"):
         method = "eagle3" if model == "minimaxm3" else "mtp"
     curve = f"{model}_{method}"
@@ -51,31 +62,38 @@ def curve_name(model: str, spec: Mapping[str, Any]) -> str:
         if "gqa" in str(spec.get("model", "")).lower():
             curve += "_gqa"
     elif model == "kimik3" and method == "dspark":
-        # Kimi has distinct measured curves; require the recipe to choose its sampler.
         sampling = spec.get("draft_sample_method")
         if sampling == "probabilistic":
             curve += "_probabilistic_sample_method_block_rejection_sample_method"
         elif sampling != "greedy":
             raise ValueError(f"No Kimi DSpark golden curve for draft sampling {sampling!r}")
-    if not re.fullmatch(r"[a-z0-9_.-]+", curve):
+    if not CURVE_NAME.fullmatch(curve):
         raise ValueError(f"Invalid golden curve identity: {curve!r}")
     return curve
 
 
 def load_curve(name: str, golden_dir: Path = GOLDEN_DIR) -> Curve:
+    """Load ``<name>.yaml`` from ``golden_dir``, or raise ValueError if missing or malformed."""
+    if not CURVE_NAME.fullmatch(name):
+        raise ValueError(f"Invalid golden curve identity: {name!r}")
     path = golden_dir / f"{name}.yaml"
     if not path.is_file():
         raise ValueError(f"No committed golden curve {path.name} in {golden_dir}")
-    data = yaml.safe_load(path.read_text())
+    data = yamlio.safe_load(path.read_text())
+    collection = data.pop("collection", None) if isinstance(data, dict) else None
     if not isinstance(data, dict) or len(data) != 1:
         raise ValueError(f"Expected one model in golden curve {path.name}")
     [(model, modes)] = data.items()
     if not isinstance(modes, dict):
         raise ValueError(f"Expected thinking modes in golden curve {path.name}")
-    return Curve(name=name, model=str(model), modes=modes)
+    for mode, cells in modes.items():
+        if cells is not None and not isinstance(cells, dict):
+            raise ValueError(f"Expected draft lengths in {mode} of golden curve {path.name}")
+    return Curve(name=name, model=str(model), modes=modes, collection=collection)
 
 
 def list_curves(golden_dir: Path = GOLDEN_DIR) -> list[Curve]:
+    """Return every committed curve in ``golden_dir``, sorted by name."""
     return [load_curve(path.stem, golden_dir) for path in sorted(golden_dir.glob("*.yaml"))]
 
 

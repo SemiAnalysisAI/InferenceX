@@ -50,12 +50,11 @@ SINGLE = dict(IS_MULTINODE="false")
 
 
 @pytest.mark.parametrize(("cluster_id", "env", "path"), [
-    ("b200-nscale", dict(MULTI, MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="dynamo-sglang", SPEC_DECODING="mtp"), LaunchPath.SRT_NATIVE),
-    ("b200-nscale", dict(MULTI, MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="dynamo-sglang", SPEC_DECODING="eagle"), LaunchPath.SRT_MULTI),
+    ("b200-nscale", dict(MULTI, MODEL_PREFIX="glm5.2", PRECISION="fp4", FRAMEWORK="dynamo-sglang", SPEC_DECODING="mtp"), LaunchPath.SRT_NATIVE),
+    ("b200-nscale", dict(MULTI, MODEL_PREFIX="glm5.2", PRECISION="fp4", FRAMEWORK="dynamo-sglang", SPEC_DECODING="eagle"), LaunchPath.SRT_MULTI),
     ("b200-nscale", dict(MULTI, MODEL_PREFIX="glm5.3", PRECISION="fp8", FRAMEWORK="tilert", SPEC_DECODING="mtp"), LaunchPath.SRT_MULTI),
     ("mi355x-amds", dict(IS_MULTINODE="true", FRAMEWORK="atom-disagg"), LaunchPath.SRT_MULTI),
     ("mi355x-amds", dict(MULTI, FRAMEWORK="sglang-disagg"), LaunchPath.SRT_MULTI),
-    ("gb200-nv", dict(MULTI, FRAMEWORK="llmd-vllm", MODEL_PREFIX="dsv4", PRECISION="fp4", SPEC_DECODING="mtp"), LaunchPath.LLMD),
     ("gb200-nv", dict(MULTI, FRAMEWORK="tilert"), LaunchPath.SRT_MULTI),
     ("b300-dsxe", dict(SINGLE, MODEL_PREFIX="dsv41flash", FRAMEWORK="sglang", IS_AGENTIC="1"), LaunchPath.SRT_BATCH),
     ("b300-dsxe", dict(SINGLE, MODEL_PREFIX="dsv41flash", FRAMEWORK="sglang", IS_AGENTIC="1", INFX_BATCH_REENTRY="1"), LaunchPath.SRT_SINGLE),
@@ -69,8 +68,8 @@ def test_each_cluster_routes_requests_to_its_launch_path(cluster_id, env, path):
 
 
 def test_a_path_without_a_lane_on_the_cluster_is_refused():
-    with pytest.raises(LaunchError, match="cluster 'b200-cw' has no srt-multi srt-slurm lane"):
-        srt_lane("b200-cw", LaunchPath.SRT_MULTI)
+    with pytest.raises(LaunchError, match="cluster 'h100-cw' has no srt-multi srt-slurm lane"):
+        srt_lane("h100-cw", LaunchPath.SRT_MULTI)
 
 
 OVERRIDES = (
@@ -94,6 +93,15 @@ def test_models_resolve_by_basename_with_overrides(tmp_path, monkeypatch, env, p
     assert job_env(c, point, served_path(c, point, found)).get("SERVED_MODEL_NAME") == served
     assert single_node_model_path(c, point) == (str(tmp_path / path) if path else f"hf:{env['MODEL']}")
     assert single_node_model_path(cluster(tmp_path, "hub"), point) == f"hf:{env['MODEL']}"
+
+
+def test_single_node_staging_can_be_selected_for_one_workload(tmp_path, monkeypatch):
+    monkeypatch.setitem(models.OVERRIDES, "c", (
+        Override(Match(model_glob="org/M"), single_node_staged=True),
+    ))
+    c = cluster(tmp_path, "hub")
+    assert single_node_model_path(c, request(MODEL="org/M")) == str(tmp_path / "nvme/m")
+    assert single_node_model_path(c, request(MODEL="org/S")) == "hf:org/S"
 
 
 def test_a_checkpoint_that_must_be_readable_fails_before_submission(tmp_path, monkeypatch):
@@ -144,6 +152,18 @@ def test_matching_single_node_points_read_the_shared_hub_cache(tmp_path, monkeyp
 
     assert single_node_hf_cache(c, request(IS_AGENTIC="1")) == tmp_path / "shared-hub"
     assert single_node_hf_cache(c, request(IS_AGENTIC="0")) == tmp_path / "hub"
+
+
+@pytest.mark.parametrize(("model", "directory"), [
+    ("MiniMaxAI/MiniMax-M3.1-Flash", "shared-hub"),
+    ("amd/MiniMax-M3.1-Flash-MXFP4", "shared-hub"),
+    ("MiniMaxAI/MiniMax-M3-MXFP8", "hub"),
+    ("amd/MiniMax-M3-MXFP4", "hub"),
+])
+def test_minimax_shared_cache_keeps_m31_but_excludes_retired_m3(tmp_path, model, directory):
+    c = cluster(tmp_path)
+    c.bind_id("mi355x-amds")
+    assert single_node_hf_cache(c, request(MODEL=model, IS_AGENTIC="1")) == tmp_path / directory
 
 
 BUMP = TimeBump(Match(agentic=True), min_conc=64, minutes=1440)

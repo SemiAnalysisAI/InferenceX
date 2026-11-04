@@ -2,7 +2,7 @@
 
 English | [中文](README_zh.md)
 
-This directory contains the golden acceptance-length (AL) curves used to standardize speculative decoding moving forward in InferenceX. Each YAML maps a model, thinking mode, and draft length (`num_speculative_tokens`) to a mean AL measured on the **coding** category of the SPEED-Bench Qualitative split.
+This directory contains the golden acceptance-length (AL) curves used to standardize speculative decoding moving forward in InferenceX. Each YAML maps a model, thinking mode, and draft length (`num_speculative_tokens`) to a mean AL measured on the **coding** category of the SPEED-Bench Qualitative split, and records the [collection settings](#collection-settings) that produced those values.
 
 ## Why SPEED-Bench
 
@@ -23,6 +23,15 @@ AL is workload-dependent: a draft model's predictions are easier to accept in so
 ## Fairness Guidelines for AgentX
 
 Under the AgentX Guidelines, each model, thinking mode, and draft length has one committed golden AL. Once synthetic acceptance is enabled for a benchmark scenario, a submission may choose any supported draft length, but it may not substitute a different acceptance target. Different models keep their own SPEED-Bench-derived curves. All submissions evaluating the same model and mode use the same curve.
+
+For Qwen3.5 srt-slurm launches, the srt driver runs the
+`infx/srt_slurm/synthetic_acceptance.py` connector, which selects the committed curve
+from the generation role's `speculative-num-steps` and `THINKING_MODE` after
+caller overrides. The verification token is not an additional MTP step. For
+SGLang MTP synthetic throughput, the connector rejects a generation role whose
+`speculative-num-draft-tokens` is missing or is not an integer equal to
+`speculative-num-steps + 1`. Manual acceptance-length settings are not needed.
+Eval-only runs remove synthetic settings and use real verification.
 
 vLLM supports this through synthetic rejection sampling. For example, an EAGLE3 run can inject the selected YAML value through `synthetic_acceptance_length`:
 
@@ -76,11 +85,11 @@ This policy follows the same broad principle as MLPerf Inference: prescribe the 
 
 The push-button [`speedbench-al.yml`](../../../.github/workflows/speedbench-al.yml) workflow, introduced in [InferenceX#1650](https://github.com/SemiAnalysisAI/InferenceX/pull/1650) and extended to additional MTP and EAGLE3 models in [InferenceX#1706](https://github.com/SemiAnalysisAI/InferenceX/pull/1706), performs the following process. It superseded the early manually assembled reference in [InferenceX#1592](https://github.com/SemiAnalysisAI/InferenceX/pull/1592), making the exact commands, logs, outputs, and generated YAML auditable from one run.
 
-1. A maintainer dispatches the workflow with a model, model prefix, vLLM image, draft lengths (normally 1–8), thinking modes, `category=coding`, and `output-len=4096`.
-2. The workflow launches the model on a B300 runner and selects the matching collector under [`benchmarks/single_node/speedbench/`](../../benchmarks/single_node/speedbench).
-3. For every `(thinking mode, draft length)` cell, the collector starts a clean vLLM server with real MTP or EAGLE3 decoding and the model's production sampling/chat-template settings.
-4. The collector snapshots vLLM's cumulative accepted-token and verification-draft counters, runs every prompt in the SPEED-Bench Qualitative `coding` category through `vllm bench serve`, and snapshots the counters again.
-5. It computes the mean acceptance length as:
+1. A maintainer dispatches the workflow with a model, model prefix, serving framework (`vllm` or `sglang`), image, draft lengths (normally 1–8), thinking modes, `category=coding`, and `output-len=4096`.
+2. The workflow launches the model on a B300 runner and selects the matching `<model-prefix>_fp4_b300_<framework>.sh` collector under [`benchmarks/single_node/speedbench/`](../../benchmarks/single_node/speedbench). A non-empty `collector-variant` input selects `<model-prefix>_fp4_b300_<framework>_<collector-variant>.sh` instead. For example, `model-prefix=kimik3` with `collector-variant=probabilistic_sample_method_block_rejection_sample_method` runs the Kimi K3 probabilistic-draft collector. The run fails before launch if the selected script does not exist.
+3. For every `(thinking mode, draft length)` cell, the collector starts a clean vLLM or SGLang server with real speculative decoding and the model's production sampling/chat-template settings.
+4. A vLLM collector snapshots vLLM's cumulative accepted-token and verification-draft counters, runs every prompt in the SPEED-Bench Qualitative `coding` category through `vllm bench serve`, and snapshots the counters again. The SGLang collector runs the same prompts through `sglang.bench_serving` and records the `accept_length` it reports.
+5. A vLLM collector computes the mean acceptance length as:
 
    ```text
    AL = 1 + (delta accepted draft tokens / delta verification drafts)
@@ -89,9 +98,27 @@ The push-button [`speedbench-al.yml`](../../../.github/workflows/speedbench-al.y
    The `1` is the target model's guaranteed verification token. Values are rounded to two decimal places.
 6. The collector emits a YAML matrix. The workflow publishes it in the GitHub Actions step summary and uploads it as a `speedbench-reference-al-<model-prefix>` artifact.
 7. Server logs and detailed per-request results are retained so reviewers can confirm sensible output, correct thinking mode, and the absence of silent server or chat-template failures.
-8. After review, the matrix is committed here with its exact sampling metadata and source Actions run URL.
+8. After review, the matrix is committed here with its exact sampling metadata, its [collection settings](#collection-settings), and source Actions run URL. With `open-pr=true` and `golden-curve=<curve stem>` (for example `dsv4_mtp`), the workflow writes `<curve stem>.yaml` here with the source run URL on its first line. It loads the file through `python -m infx.golden_al_distribution show` and then opens the PR. The whole file is replaced, so cells the run did not collect are dropped.
 
 The collection measures real head quality only to establish the golden curve. AgentX then uses that committed curve as the synthetic acceptance target for every comparable submission.
+
+## Collection settings
+
+Each curve YAML records the SPEED-Bench client settings of its collection in a reserved top-level `collection` key beside the model key, and `load_curve(name).collection` returns them (`None` for a curve without the block). In `run-sweep.yml` PR sweeps, the report-only acceptance-length gate replays these settings with real verification against each speculative AgentX deployment and compares the measured AL with the golden AL; see [the speculative acceptance gate](../../../.github/workflows/README.md#speculative-acceptance-gate).
+
+```yaml
+collection:
+  renderer: chat_template  # or deepseek_v4
+  modes:                   # one entry per thinking mode with AL values
+    thinking_on:
+      chat_template_kwargs: {enable_thinking: true}  # null when the collector passed none
+      sampling: {temperature: 0.6, top_p: 0.95, top_k: 20, presence_penalty: 0.0, repetition_penalty: 1.0}
+```
+
+- `renderer` is how the client turned each prompt into text. `chat_template` applies the served model's Hugging Face chat template to one user message, with the generation prompt and `chat_template_kwargs`. `deepseek_v4` is vLLM's tokenizer mode of that name; the gate uses the equivalent [encoder](../bench_serving/encoding_dsv4.py) in this repository, with `chat_template_kwargs` as its thinking options.
+- `sampling` lists every sampling parameter the requests carried, including the `repetition_penalty: 1.0` that `vllm bench serve` adds. A parameter that is not listed was not sent, so the server used its own default.
+- Everything else is the same for every collection: the 80 prompts of the SPEED-Bench Qualitative `coding` category, in the order vLLM's loader sends them, as streaming `/v1/completions` requests with `max_tokens` 4096 and no `ignore_eos`. Collections ran at different concurrencies; the gate always replays at 64, treating AL as independent of concurrency.
+- New curves must include the block. Two curves have none, so the gate lists their points as unresolved. [`dsv41flash_dspark.yaml`](dsv41flash_dspark.yaml) needs a DeepSeek V4.1 renderer before the gate can render its prompts. [`musespark_dflash.yaml`](musespark_dflash.yaml) was collected with SGLang's `bench_serving` client on its native `/generate` endpoint, which the gate's `/v1/completions` replay does not reproduce. [`glm5.3_mtp.yaml`](glm5.3_mtp.yaml) is provisional and carries GLM-5.2's settings.
 
 ## Reproducing a collection
 
@@ -118,6 +145,7 @@ Before accepting an updated curve, reviewers should verify:
 - Detailed outputs are coherent and use the intended thinking mode.
 - Server logs contain no fallback, draft-disable, or chat-template errors.
 - The YAML metadata matches the dispatched image, sampling settings, model, and speculative method.
+- The `collection` block matches the collector's concurrency, prompt rendering, and per-mode settings.
 - The source Actions run is linked at the first line of the YAML.
 - The committed values exactly match the workflow artifact.
 
@@ -136,6 +164,7 @@ Before accepting an updated curve, reviewers should verify:
 | GLM-5.2 | MTP | [`glm5.2_mtp.yaml`](glm5.2_mtp.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479) |
 | GLM-5.3 | MTP (provisional, K=3 copied from GLM-5.2) | [`glm5.3_mtp.yaml`](glm5.3_mtp.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479) (GLM-5.2) |
 | Qwen3.8-Flash-Next | MTP (native) | [`qwen3.8next_mtp.yaml`](qwen3.8next_mtp.yaml) | [33034290269](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/33034290269) |
+| Muse Spark Open | DFlash2 | [`musespark_dflash.yaml`](musespark_dflash.yaml) | [38808046215](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/38808046215) |
 
 ## Using golden curves in srt-slurm runs
 
@@ -156,7 +185,7 @@ python -m infx.golden_al_distribution lookup qwen3.5 mtp 3          # 3.39 (thin
 python -m infx.golden_al_distribution lookup kimik3 dspark 7 --draft-sample-method probabilistic --json
 ```
 
-`lookup` takes the InferenceX model prefix, the engine's method name (`mtp`, `eagle`, `nextn`, `eagle3`, `dspark`) and `num_speculative_tokens`. `--draft-model` selects the MiniMax GQA curve, and `--draft-sample-method` chooses between the two Kimi DSpark curves. A missing curve or cell exits non-zero, exactly as a launch would fail.
+`lookup` takes the InferenceX model prefix, the engine's method name (`mtp`, `eagle`, `nextn`, `eagle3`, `dspark`, `dflash`) and `num_speculative_tokens`. `--draft-model` selects the MiniMax GQA curve, and `--draft-sample-method` chooses between the two Kimi DSpark curves. A missing curve or cell exits non-zero, exactly as a launch would fail.
 
 ## Primary references
 

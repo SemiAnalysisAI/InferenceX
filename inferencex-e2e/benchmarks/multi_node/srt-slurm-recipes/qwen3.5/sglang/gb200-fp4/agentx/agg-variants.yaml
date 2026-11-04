@@ -16,9 +16,8 @@ base:
       options:
         max_payload_mb: 8
   dynamo:
-    install: true
-    source:
-      wheel: 1.4.2
+    # The v0.5.22 image ships ai-dynamo 1.6.0.dev20261015.
+    install: false
     request_plane: tcp
   environment:
     PIP_BREAK_SYSTEM_PACKAGES: "1"
@@ -61,7 +60,7 @@ base:
         speculative-num-steps: 5
         speculative-eagle-topk: 1
         speculative-num-draft-tokens: 6
-        cuda-graph-max-bs: 64
+        cuda-graph-max-bs-decode: 64
         max-running-requests: 80
         max-prefill-tokens: 16384
         chunked-prefill-size: 16384
@@ -93,7 +92,7 @@ override_tp4:
         tensor-parallel-size: 4
         expert-parallel-size: 1
         enable-symm-mem: true
-        mamba-scheduler-strategy: extra_buffer
+        mamba-radix-cache-strategy: extra_buffer
         mamba-track-interval: 8192
         mem-fraction-static: 0.80
         max-mamba-cache-size: 360
@@ -107,10 +106,10 @@ override_tp4_parity:
         tensor-parallel-size: 4
         expert-parallel-size: 1
         enable-symm-mem: true
-        mamba-scheduler-strategy: extra_buffer_lazy
+        mamba-radix-cache-strategy: extra_buffer_lazy
         linear-attn-prefill-backend: flashinfer
         enable-linear-replayssm-spec: true
-        linear-replayssm-cache-len: 8
+        linear-replayssm-cache-len: 16
         mem-fraction-static: 0.80
         max-mamba-cache-size: 360
 
@@ -122,7 +121,7 @@ override_tp4_no_symm:
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
-        mamba-scheduler-strategy: extra_buffer
+        mamba-radix-cache-strategy: extra_buffer
         mamba-track-interval: 8192
         mem-fraction-static: 0.80
         max-mamba-cache-size: 360
@@ -142,7 +141,7 @@ override_tp2ep2_hicache:
         linear-attn-prefill-backend: flashinfer
         speculative-moe-runner-backend: flashinfer_trtllm
         enable-linear-replayssm-spec: true
-        linear-replayssm-cache-len: 8
+        linear-replayssm-cache-len: 16
         mem-fraction-static: 0.88
         # extra_buffer_lazy uses four physical Mamba state slots per running request.
         # This layout is the measured K5 middle frontier through C28.
@@ -172,8 +171,8 @@ override_tp2ep2_hicache_cap48:
         speculative-num-steps: 3
         speculative-num-draft-tokens: 4
         enable-linear-replayssm-spec: true
-        linear-replayssm-cache-len: 8
-        cuda-graph-max-bs: 48
+        linear-replayssm-cache-len: 16
+        cuda-graph-max-bs-decode: 48
         max-running-requests: 48
         mem-fraction-static: 0.88
         max-mamba-cache-size: 192
@@ -202,7 +201,7 @@ override_tp2ep2_hicache_k3_baseline:
         speculative-num-steps: 3
         speculative-num-draft-tokens: 4
         enable-linear-replayssm-spec: true
-        linear-replayssm-cache-len: 8
+        linear-replayssm-cache-len: 16
         mem-fraction-static: 0.88
         max-mamba-cache-size: 320
         tokenizer-worker-num: 1

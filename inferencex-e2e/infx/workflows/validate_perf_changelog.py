@@ -12,9 +12,8 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from yaml.constructor import ConstructorError
-from yaml.resolver import BaseResolver
 
+from infx import yamlio
 from infx.config import git_path_at_ref
 from infx.matrix.validation import ChangelogEntry
 
@@ -27,45 +26,6 @@ PR_LINK_PLACEHOLDERS = {
 
 class ChangelogValidationError(ValueError):
     """Raised when the changelog or its git diff violates repository rules."""
-
-
-class UniqueKeyLoader(yaml.SafeLoader):
-    """Safe YAML loader that rejects duplicate mapping keys."""
-
-
-def construct_unique_mapping(
-    loader: UniqueKeyLoader,
-    node: yaml.MappingNode,
-    deep: bool = False,
-) -> dict[Any, Any]:
-    """Construct a mapping while rejecting keys that would overwrite values."""
-    mapping: dict[Any, Any] = {}
-    for key_node, value_node in node.value:
-        key = loader.construct_object(key_node, deep=deep)
-        try:
-            duplicate = key in mapping
-        except TypeError as exc:
-            raise ConstructorError(
-                "while constructing a mapping",
-                node.start_mark,
-                f"found unhashable key {key!r}",
-                key_node.start_mark,
-            ) from exc
-        if duplicate:
-            raise ConstructorError(
-                "while constructing a mapping",
-                node.start_mark,
-                f"found duplicate key {key!r}",
-                key_node.start_mark,
-            )
-        mapping[key] = loader.construct_object(value_node, deep=deep)
-    return mapping
-
-
-UniqueKeyLoader.add_constructor(
-    BaseResolver.DEFAULT_MAPPING_TAG,
-    construct_unique_mapping,
-)
 
 
 def read_git_file(ref: str, path: str) -> bytes:
@@ -86,7 +46,11 @@ def read_git_file(ref: str, path: str) -> bytes:
 
 
 def parse_changelog(raw: bytes, label: str) -> list[dict[str, Any]]:
-    """Validate file-level invariants and return raw YAML entry mappings."""
+    """Validate file-level invariants and return raw YAML entry mappings.
+
+    Rejects NEL, LS and PS because YAML breaks lines there while the
+    byte-level append checks only see newlines.
+    """
     if not raw.endswith(b"\n"):
         raise ChangelogValidationError(f"{label} does not end with a newline")
     if b"\r" in raw:
@@ -100,9 +64,11 @@ def parse_changelog(raw: bytes, label: str) -> list[dict[str, Any]]:
         text = raw.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise ChangelogValidationError(f"{label} is not UTF-8: {exc}") from exc
+    if any(line_break in text for line_break in "\x85\u2028\u2029"):
+        raise ChangelogValidationError(f"{label} contains a line break other than newline")
 
     try:
-        data = yaml.load(text, Loader=UniqueKeyLoader)  # noqa: S506
+        data = yamlio.load(text, yamlio.UniqueKeyLoader)
     except yaml.YAMLError as exc:
         raise ChangelogValidationError(f"{label} is not valid YAML: {exc}") from exc
 
@@ -230,7 +196,7 @@ def validate_raw_change(
                 raise ChangelogValidationError(
                     "appended changelog entries must have exactly one empty separator line"
                 )
-        if head_raw.endswith(b"\n\n"):
+        if re.search(rb"\n *\n\Z", head_raw):
             raise ChangelogValidationError(
                 "the final appended changelog entry must end with one newline"
             )

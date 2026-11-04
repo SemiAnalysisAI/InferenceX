@@ -8,5 +8,52 @@ updates:
     github-actions:
       patterns:
         - "*"
+    security:
+      applies-to: security-updates
+      patterns: ["*"]
+  cooldown:
+    default-days: 7
+- package-ecosystem: "uv"
+  directory: "/inferencex-e2e"
+  schedule:
+    interval: "weekly"
+  open-pull-requests-limit: 0
+  groups:
+    security:
+      applies-to: security-updates
+      patterns: ["*"]
+  cooldown:
+    default-days: 7
+- package-ecosystem: "uv"
+  directory: "/operatorx"
+  schedule:
+    interval: "weekly"
+  open-pull-requests-limit: 0
+  groups:
+    security:
+      applies-to: security-updates
+      patterns: ["*"]
+  cooldown:
+    default-days: 7
+- package-ecosystem: "pip"
+  directory: "/inferencex-e2e/infx/bench/agentic"
+  schedule:
+    interval: "weekly"
+  open-pull-requests-limit: 0
+  groups:
+    security:
+      applies-to: security-updates
+      patterns: ["*"]
+  cooldown:
+    default-days: 7
+- package-ecosystem: "pip"
+  directory: "/power_model"
+  schedule:
+    interval: "weekly"
+  open-pull-requests-limit: 0
+  groups:
+    security:
+      applies-to: security-updates
+      patterns: ["*"]
   cooldown:
     default-days: 7

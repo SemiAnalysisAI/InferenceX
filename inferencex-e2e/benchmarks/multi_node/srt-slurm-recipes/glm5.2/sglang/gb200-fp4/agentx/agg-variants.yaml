@@ -1,0 +1,134 @@
+schema: 2
+
+base:
+  name: glm5.2-fp4-gb200-dynamo-sglang-agentx-agg
+  identity:
+    model: {}
+    container: {}
+    frameworks:
+      dynamo: 1.6.0.dev20261019
+      sglang: 0.0.0.dev1+gab580b2e0
+  resources:
+    gpu_type: gb200
+    gpus_per_node: 4
+  dynamo:
+    install: false
+  # Tachometer's per-node exporters slow decode steps and add host memory;
+  # InferenceX does not read its output.
+  observability:
+    tachometer:
+      enabled: false
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+    env:
+      PIP_BREAK_SYSTEM_PACKAGES: '1'
+    args:
+      router-mode: kv
+      active-decode-blocks-threshold: None
+      active-prefill-tokens-threshold: None
+      active-prefill-tokens-threshold-frac: None
+      router-session-affinity-ttl-secs: '3600'
+  engine: sglang
+  roles:
+    agg:
+      workers: 1
+      env:
+        TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+        PYTHONUNBUFFERED: '1'
+        PYTHONNOUSERSITE: '1'
+        PIP_BREAK_SYSTEM_PACKAGES: '1'
+        DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+      args:
+        served-model-name: nvidia/GLM-5.2-NVFP4
+        trust-remote-code: true
+        quantization: modelopt_fp4
+        kv-cache-dtype: fp8_e4m3
+        expert-parallel-size: 1
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        context-length: 1048576
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 5
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 6
+        weight-loader-prefetch-checkpoints: true
+        model-loader-extra-config: '{"enable_multithread_load":true}'
+        enable-hierarchical-cache: true
+        hicache-size: 100
+        hicache-write-policy: write_back
+        hicache-io-backend: direct
+        enable-metrics: true
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 10
+  benchmark:
+    env:
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      # The client splits this value on whitespace, so it has none.
+      AIPERF_EXTRA_INPUTS: '{"chat_template_kwargs":{"enable_thinking":true},"temperature":1,"top_p":0.95}'
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+    - name: nats
+      type: nats
+      placement:
+        node: infra
+      options:
+        max_payload_mb: 64
+    # Disables Dynamo's per-request lifecycle span export; InferenceX does not read it.
+    - name: otel-collector
+      type: otel-collector
+      enabled: false
+  sbatch_directives:
+    mem: '0'
+    cpus-per-task: '144'
+  srun_options:
+    mem: '0'
+    container-remap-root: ''
+
+override_tp4_c1:
+  name: glm5.2-fp4-gb200-dynamo-sglang-agentx-agg-tp4-c1-mtp5
+  roles:
+    agg:
+      nodes: 1
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        bf16-gemm-backend: cutedsl
+        tool-call-parser: glm47
+        reasoning-parser: glm45
+        mem-fraction-static: 0.85
+        max-running-requests: 4
+        cuda-graph-max-bs-decode: 4
+        hicache-mem-layout: page_first_direct
+        watchdog-timeout: 1800
+
+override_tp8_c1:
+  name: glm5.2-fp4-gb200-dynamo-sglang-agentx-agg-tp8-c1-mtp5
+  roles:
+    agg:
+      nodes: 2
+      gpus: 8
+      env:
+        MC_TE_METRIC: 'true'
+        MC_FORCE_MNNVL: '1'
+        NCCL_MNNVL_ENABLE: '1'
+        NCCL_CUMEM_ENABLE: '1'
+        NVSHMEM_REMOTE_TRANSPORT: none
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+        SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+        SGLANG_CLIP_MAX_NEW_TOKENS_ESTIMATION: '8'
+      args:
+        tensor-parallel-size: 8
+        data-parallel-size: 1
+        fp4-gemm-backend: flashinfer_trtllm
+        mem-fraction-static: 0.8
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+        watchdog-timeout: 1000000
+        enable-cache-report: true

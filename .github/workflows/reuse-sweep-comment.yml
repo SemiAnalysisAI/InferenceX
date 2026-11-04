@@ -2,7 +2,7 @@ name: Acknowledge Sweep Reuse
 run-name: Check sweep reuse for PR #${{ github.event.issue.number }}
 
 on:
-  issue_comment:
+  issue_comment: # zizmor: ignore[dangerous-triggers] runs trusted default-branch code; reuse_comment.py authorizes the commenter and reacts to the comment
     types: [created, edited]
 
 permissions: {}
@@ -31,7 +31,7 @@ jobs:
       - name: Checkout trusted workflow code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.sha }} # issue_comment uses the default-branch commit
+          ref: ${{ github.sha }}
           persist-credentials: false
 
       - name: Validate request and update reaction

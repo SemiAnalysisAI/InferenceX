@@ -18,17 +18,13 @@ def matrix(**options):
 
 
 class MatrixTests(unittest.TestCase):
-    def test_nccl_fp8_only_low_latency_decode(self):
+    def test_nccl_fp8_low_latency_prefill_and_decode(self):
         document = matrix(backend="nccl-ep", precisions="fp8")
         cases = [case for shard in document["include"] for case in shard["cases"]]
         self.assertTrue(cases)
-        self.assertEqual({case["phase"] for case in cases}, {"decode"})
+        self.assertEqual({case["phase"] for case in cases}, {"prefill", "decode"})
         self.assertEqual({case["precision"] for case in cases}, {"fp8"})
         self.assertEqual({case["mode"] for case in cases}, {"low-latency"})
-
-    def test_nccl_normal_fp8_emits_no_shards(self):
-        document = matrix(backend="nccl-ep", precisions="fp8", modes="normal")
-        self.assertEqual(document["include"], [])
 
     def test_every_shard_has_an_exact_positive_node_request(self):
         document = matrix(backend="all")
@@ -42,11 +38,6 @@ class MatrixTests(unittest.TestCase):
                     {case["nodes"] for case in shard["cases"]},
                     {shard["nodes"]},
                 )
-
-    def test_shards_run_on_the_registry_runner_label_else_the_sku(self):
-        runners = {shard["sku"]: shard["runner"] for shard in matrix(backend="all")["include"]}
-        self.assertEqual(runners["mi325x"], "cluster:mi325x-amds")
-        self.assertEqual(runners["h200-dgxc"], "h200-dgxc")
 
     def test_only_real_platform_cells_are_unsupported(self):
         platform = {
@@ -68,14 +59,60 @@ class MatrixTests(unittest.TestCase):
         for shard in document["include"]:
             self.assertEqual({case["ep"] for case in shard["cases"]}, {8})
 
+    def test_nccl_prefill_uses_ll_and_preserves_mode_filtering(self):
+        platform = {
+            "product": "test-gpu", "gpus_per_node": 4, "scale_up_domain": 72,
+            "scale_up_transport": "mnnvl", "launcher": "test-launcher",
+            "backends": {"nccl-ep": [8]}, "ll_backends": {"nccl-ep": [8]},
+        }
+        with mock.patch.object(sweep_matrix, "PLATFORMS", {"test-sku": platform}), \
+                mock.patch.dict(sweep_matrix.SWEEP, {"ep_degrees": [8]}):
+            full = matrix(backend="nccl-ep")
+            normal = matrix(backend="nccl-ep", modes="normal")
+            ll = matrix(backend="nccl-ep", modes="low-latency")
+        def phases(document):
+            return {(case["mode"], case["phase"])
+                    for shard in document["include"] for case in shard["cases"]}
+        self.assertEqual(phases(full), {
+            ("normal", "decode"), ("normal", "prefill"),
+            ("low-latency", "decode"), ("low-latency", "prefill"),
+        })
+        self.assertEqual(phases(normal), {("normal", "decode"), ("normal", "prefill")})
+        self.assertEqual(phases(ll), {("low-latency", "decode"), ("low-latency", "prefill")})
+
+    def test_phase_overrides_replace_defaults_for_any_backend(self):
+        for backend in ("nccl-ep", "deepep-v2"):
+            for overrides, expected in (
+                ({}, {"decode"}),
+                ({backend: {"low-latency": ["prefill"]}}, {"prefill"}),
+                ({backend: {"low-latency": []}}, set()),
+            ):
+                with self.subTest(backend=backend, overrides=overrides), \
+                        mock.patch.dict(sweep_matrix.SWEEP, {"backend_mode_phases": overrides}):
+                    document = matrix(backend=backend, modes="low-latency")
+                    self.assertEqual({case["phase"] for shard in document["include"]
+                                      for case in shard["cases"]}, expected)
+
+    def test_invalid_phase_overrides_fail_before_matrix_generation(self):
+        for overrides, message in (
+            ([], "must be an object"),
+            ({"unknown": {}}, "unknown.*backend"),
+            ({"nccl-ep": []}, "must be an object"),
+            ({"nccl-ep": {"turbo": []}}, "unknown.*mode"),
+            ({"nccl-ep": {"low-latency": ["unknown"]}}, "invalid.*phases"),
+            ({"nccl-ep": {"low-latency": "decode"}}, "invalid.*phases"),
+            ({"nccl-ep": {"low-latency": [{}]}}, "invalid.*phases"),
+        ):
+            with self.subTest(overrides=overrides), \
+                    mock.patch.dict(sweep_matrix.SWEEP, {"backend_mode_phases": overrides}), \
+                    self.assertRaisesRegex(SystemExit, message):
+                matrix()
+
     def test_case_ids_are_unique_across_the_matrix(self):
-        # precision is part of case_id, so a cell's bf16 and fp8 attempts are distinct
-        # identities. Without precision in the id the two would collide; assert the full
-        # matrix carries no duplicate case_id so that identity property stays testable.
+        # A cell's bf16 and fp8 attempts are distinct identities only while precision is in the id.
         document = matrix(backend="all")
         ids = [item["case"]["case_id"] for item in document["requested_cases"]]
         self.assertEqual(len(ids), len(set(ids)))
-
 
     def test_off_path_precisions_require_explicit_opt_in(self):
         with mock.patch.object(sweep_matrix, "OFF_PATH_PRECISIONS", {"deepep-v2": ("fp8",)}):
@@ -94,8 +131,6 @@ class MatrixTests(unittest.TestCase):
 
     def test_invalid_filters_fail_closed(self):
         for options in (
-            {"exclude_skus": "unknown"},
-            {"only_sku": "b300", "exclude_skus": "b300"},
             {"ep_sizes": "0"},
             {"ep_sizes": "eight"},
             {"precisions": "fp4"},
@@ -107,9 +142,7 @@ class MatrixTests(unittest.TestCase):
 
 
 class UndeclaredPrecisionsFailClosed(unittest.TestCase):
-    # A backend in platform_config but missing from BACKEND_PRECISIONS must stop the matrix
-    # rather than resolve to bf16-only: that yields a MISSING case, not a mislabelled one, and
-    # run_sweep's non-bf16-dispatch guard can only catch cases that ran.
+    # Resolving an undeclared backend to bf16-only would silently drop its other precisions.
     def test_a_backend_without_declared_precisions_stops_the_matrix(self):
         pruned = {
             name: value for name, value in sweep_matrix.BACKEND_PRECISIONS.items()
@@ -126,7 +159,7 @@ class SwapSuiteTests(unittest.TestCase):
     PLATFORMS = {
         "amd-test": {"arch": "gfx942", "launcher": "mi-amds"},
         "cuda-test": {"arch": "sm100", "launcher": "single-slurm",
-                      "runner_label": "cluster:cuda-pool"},
+                      "runner_label": "cluster:cuda-pool", "runner_partition": "batch_1"},
     }
 
     def _swap(self, **options):
@@ -138,7 +171,10 @@ class SwapSuiteTests(unittest.TestCase):
         self.assertEqual(set(shards), {"amd-test", "cuda-test"})
         amd, cuda = shards["amd-test"], shards["cuda-test"]
         self.assertEqual((amd["launcher"], cuda["launcher"]), ("mi-amds", "single-slurm"))
-        self.assertEqual(cuda["runner"], "cluster:cuda-pool")
+        # runs-on: the registry's runner_label where it names one, else the SKU, plus its partition.
+        self.assertEqual((amd["runner"], cuda["runner"]), ("amd-test", "cluster:cuda-pool"))
+        self.assertEqual((amd["runner_partition"], cuda["runner_partition"]),
+                         ("", "partition:batch_1"))
         self.assertEqual(amd["image"], sweep_matrix.SWAP_SWEEP["images"]["amd"])
         self.assertEqual(cuda["image"], sweep_matrix.SWAP_SWEEP["images"]["nvidia"])
         for shard in shards.values():
@@ -148,24 +184,28 @@ class SwapSuiteTests(unittest.TestCase):
             self.assertNotIn("staged_image_dir", shard)
 
     def test_a_pinned_pool_carries_its_image_and_staged_cache(self):
-        pinned = sweep_matrix.SWAP_SWEEP["sku_images"]["h100-dgxc"]
-        shard, = matrix(suites="swap-blocks", only_sku="h100-dgxc")["include"]
-        self.assertEqual(shard["image"], pinned["image"])
-        self.assertEqual(shard["staged_image_dir"], pinned["staged_image_dir"])
+        pinned = {"cuda-test": {"image": "pinned/swap:1", "staged_image_dir": "/staged"}}
+        with mock.patch.dict(sweep_matrix.SWAP_SWEEP, {"sku_images": pinned}):
+            shard, = self._swap(only_sku="cuda-test")["include"]
+        self.assertEqual((shard["image"], shard["staged_image_dir"]), ("pinned/swap:1", "/staged"))
 
     def test_the_profile_sets_the_grid(self):
-        for name, profile in sweep_matrix.SWAP_SWEEP["profiles"].items():
-            with self.subTest(profile=name):
-                case = self._swap(swap_profile=name)["include"][0]["cases"][0]
-                self.assertEqual(case["block_bytes"], " ".join(map(str, profile["block_bytes"])))
-                self.assertEqual(case["iterations"], profile["iterations"])
-                self.assertEqual(case["case_id"], f"amd-test-swap-blocks-{name}-contiguous")
+        tiny = {"block_bytes": [8, 64], "num_blocks": [1, 4], "max_payload_bytes": 256,
+                "warmup": 2, "iterations": 5}
+        with mock.patch.dict(sweep_matrix.SWAP_SWEEP, {"profiles": {"tiny": tiny},
+                                                       "layouts": ["random"]}):
+            case, = self._swap(swap_profile="tiny", only_sku="amd-test")["include"][0]["cases"]
+        self.assertEqual(
+            (case["block_bytes"], case["num_blocks"], case["max_payload_bytes"], case["warmup"],
+             case["iterations"], case["case_id"]),
+            ("8 64", "1 4", 256, 2, 5, "amd-test-swap-blocks-tiny-random"),
+        )
 
     def test_sku_selection_and_bad_requests_fail_closed(self):
-        self.assertEqual([s["sku"] for s in self._swap(exclude_skus="amd-test")["include"]],
+        self.assertEqual([s["sku"] for s in self._swap(only_sku="cuda-test")["include"]],
                          ["cuda-test"])
         for options in (
-            {"swap_profile": "huge"}, {"only_sku": "missing"}, {"exclude_skus": "missing"},
+            {"swap_profile": "huge"}, {"only_sku": "missing"},
             {"modes": "normal"}, {"ep_sizes": "8"}, {"backend": "mori"},
         ):
             with self.subTest(options=options), self.assertRaises(SystemExit):

@@ -30,10 +30,12 @@ class ArtifactError(RuntimeError):
 
 
 def _say(message: str) -> None:
+    """Print ``message`` to stdout and flush."""
     print(message, flush=True)
 
 
 def _warn(message: str) -> None:
+    """Print ``message`` to stderr and flush."""
     print(message, file=sys.stderr, flush=True)
 
 
@@ -61,6 +63,7 @@ _POINT_FIELDS = (
 
 
 def _point_fields(filename: str) -> list[str]:
+    """Return the concurrency, GPU, ctx and gen fields of a result filename, blank if absent."""
     return [match.group(1) if (match := p.search(filename)) else "" for p in _POINT_FIELDS]
 
 
@@ -77,15 +80,18 @@ def _result_subdirs(logs_dir: Path) -> list[Path]:
 
 
 def copy_fixed_sequence_results(logs_dir: Path, workspace: Path, result_filename: str) -> None:
-    """Copy srt-slurm's ``results_concurrency_*.json`` points under bounded workspace names."""
+    """Copy srt-slurm's ``results_concurrency_*.json`` points under bounded workspace names.
+
+    Skips benchmark_serving's ``.pytorch.json`` sidecars, which share a point's name prefix.
+    """
     subdirs = _result_subdirs(logs_dir)
     if not subdirs:
-        _say(f"Warning: No result subdirectories found in {logs_dir}")
+        _warn(f"WARNING: no result subdirectories found in {logs_dir}")
     for subdir in subdirs:
         _say(f"Processing result subdirectory: {subdir}")
         config_name = subdir.name
         for result_file in sorted(subdir.rglob("results_concurrency_*.json")):
-            if not result_file.is_file():
+            if not result_file.is_file() or result_file.name.endswith(".pytorch.json"):
                 continue
             concurrency, gpus, ctx, gen = _point_fields(result_file.name)
             _say(
@@ -103,6 +109,7 @@ def copy_fixed_sequence_results(logs_dir: Path, workspace: Path, result_filename
 
 
 def _top_level_files(directory: Path, pattern: str = "*") -> list[Path]:
+    """Return regular, non-symlink files directly in ``directory`` matching ``pattern``, sorted."""
     return sorted(
         entry
         for entry in directory.iterdir()
@@ -120,6 +127,20 @@ def copy_agentic_results(source_dir: Path, workspace: Path, result_filename: str
     if not files:
         raise ArtifactError(f"no {result_filename}_conc*.json results found in {source_dir}")
     _say(f"Copied {len(files)} agentic result file(s)")
+
+
+def copy_gate_results(logs_dir: Path, workspace: Path, result_filename: str) -> None:
+    """Copy the acceptance gate's raw ``al_gate/`` files, then its verdict, which must exist."""
+    raw = logs_dir / "al_gate"
+    try:
+        if raw.is_dir():
+            shutil.copytree(raw, workspace / raw.name, symlinks=True, dirs_exist_ok=True)
+    except OSError as error:
+        raise ArtifactError(f"failed to stage {raw}: {error}") from error
+    verdict = logs_dir / f"al_gate_{result_filename}.json"
+    if not verdict.is_file() or verdict.stat().st_size == 0:
+        raise ArtifactError(f"acceptance gate result {verdict} is missing or empty")
+    copy_to_workspace(verdict, workspace / verdict.name)
 
 
 def copy_eval_artifacts(eval_dir: Path, workspace: Path) -> None:
@@ -153,6 +174,7 @@ def collect_agentic_power_results(
     concurrencies: Sequence[int],
     *,
     results_python: str | None,
+    expected_cpu: bool = False,
 ) -> int:
     """Stage the AgentX power audit inputs and validate each concurrency's power window.
 
@@ -175,7 +197,7 @@ def collect_agentic_power_results(
 
     if step := validate_agentic_power(
         logs_dir, workspace, result_filename, producer_sha, concurrencies,
-        results_python=results_python, require_power=True,
+        results_python=results_python, require_power=True, expected_cpu=expected_cpu,
     ):  # fmt: skip
         rc = step
     return rc
@@ -190,10 +212,12 @@ def validate_agentic_power(
     *,
     results_python: str | None,
     require_power: bool,
+    expected_cpu: bool = False,
 ) -> int:
     """Run the AgentX power adapter for every concurrency; return the last failing code.
 
-    With ``require_power`` a concurrency without a valid power window fails.
+    With ``require_power`` a concurrency without a valid power window fails, and with
+    ``expected_cpu`` one without a valid Grace CPU leg fails too.
     """
     logs_dir = logs_dir.resolve()
     workspace = workspace.resolve()
@@ -207,7 +231,10 @@ def validate_agentic_power(
             results_python, workspace, logs_dir,
             logs_dir / "agentic" / f"conc_{concurrency}",
             workspace / f"{result_filename}_conc{concurrency}.json",
-            producer_sha, require_power=require_power,
+            producer_sha,
+            "--audit-source", f"LOGS/agentic/conc_{concurrency}/power_validation.json",
+            *(["--expected-cpu-power"] if expected_cpu else []),
+            require_power=require_power,
         ):  # fmt: skip
             rc = step
     return rc

@@ -1,6 +1,4 @@
-"""NVIDIA-specific runtime probes. ``collect()`` returns software/driver
-versions to merge into RunInfo.software. Empty dict when not on NVIDIA or
-when probes fail."""
+"""NVIDIA driver version for RunInfo.software; empty when the probe fails."""
 from __future__ import annotations
 
 

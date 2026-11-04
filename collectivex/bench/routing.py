@@ -87,7 +87,7 @@ def activations_for_source_ids(source, hidden: int, seed: int, dtype=torch.bfloa
     return output
 
 
-def decode_source_ids(payload, seed: int):
+def decode_source_ids(payload):
     """Decode and validate source IDs carried by rank_activations."""
     if payload.ndim != 2 or payload.shape[1] < SOURCE_ID_COLUMNS:
         raise ValueError("received payload cannot carry the source-token prefix")

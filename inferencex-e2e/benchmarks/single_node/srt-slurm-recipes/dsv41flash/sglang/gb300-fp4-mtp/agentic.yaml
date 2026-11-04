@@ -29,6 +29,7 @@ base:
         cuda-graph-max-bs-decode: 64
         reasoning-parser: auto
         tool-call-parser: auto
+        tokenizer-backend: fastokens
         # Draft passes under long-context load outlast the 1800 s default watchdog.
         watchdog-timeout: 3600
         enable-metrics: true
@@ -56,15 +57,6 @@ base:
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
-# One variant per point. Admission is 2x CONC, capped at the graph batch. SWA
-# prefix tails are 64x CONC up to 4096. TP2 keeps row-sharded Engram tables in
-# host DRAM and runs 16K chunks with decoder SWA bounded replay and a longer
-# prefill-decode interval. c64 and c128 run DEP2 (DP attention with MegaMoE)
-# behind the SGLang router with shortest-prefill-first scheduling. TP4 uses
-# static ragged verify and 16K chunks; c1 keeps Engram in HBM with no
-# prefill-decode interval. TP4/EP1 c4 and c16 keep Engram in host DRAM with 4096
-# SWA tails and a 128 graph batch; c16 adds a 192-step interval. Saturation
-# points get a longer warmup drain.
 override_tp2_c16:
   roles:
     agg:
@@ -72,6 +64,8 @@ override_tp2_c16:
       args:
         tensor-parallel-size: 2
         expert-parallel-size: 2
+        # auto resolves to MegaAttention, which zero-pads per-rank heads to 64 (2x at TP2, 4x at TP4).
+        dsv4-attn-backend: flashmla
         <<: &tp2_bounded_replay
           chunked-prefill-size: 16384
           enable-decoder-swa-bounded-replay: true
@@ -98,6 +92,7 @@ override_tp2_c32:
       args:
         tensor-parallel-size: 2
         expert-parallel-size: 2
+        dsv4-attn-backend: flashmla
         <<: *tp2_bounded_replay
         prefill-decode-interval: 48
         tokenizer-worker-num: 4
@@ -137,6 +132,7 @@ override_dep2_c64:
           tokenizer-worker-num: 4
           chunked-prefill-size: 16384
           swa-prefix-tails: 4096
+          enable-decoder-swa-bounded-replay: true
         prefill-decode-interval: 24
         max-running-requests: 128
       env: &dep2_env
@@ -169,6 +165,24 @@ override_dep2_c128:
       <<: *dep2_client
       CONC: '128'
 
+override_dep2_c160:
+  frontend: *dep2_frontend
+  roles:
+    agg:
+      gpus: 2
+      args:
+        <<: *dep2_args
+        prefill-decode-interval: 8
+        mem-fraction-static: 0.85
+        max-running-requests: 256
+        cuda-graph-max-bs-decode: 128
+        tokenizer-backend: huggingface
+      env: *dep2_env
+  benchmark:
+    env:
+      <<: *dep2_client
+      CONC: '160'
+
 override_tp4_c1:
   roles:
     agg:
@@ -176,12 +190,31 @@ override_tp4_c1:
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
+        mem-fraction-static: 0.91
+        kv-cache-dtype: fp8_e4m3
+        dsv4-attn-backend: flashmla
+        moe-a2a-backend: none
+        enable-nvidia-megakernel: true
+        startup-weight-load-mode: serial
+        enable-decoder-swa-bounded-replay: true
+        context-length: 1048576
+        max-running-requests: 1
+        cuda-graph-max-bs-decode: 1
+        prefill-decode-interval: 16
+        schedule-policy: lpm
+        swa-prefix-tails: 128
         chunked-prefill-size: 16384
-        prefill-decode-interval: 0
-        max-running-requests: 2
+        enable-metrics-for-all-schedulers: true
       env:
-        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
-        SGLANG_RAGGED_VERIFY_MODE: static
+        SGLANG_SPEC_TP_SYNC: rng,-dspark-accept-sample
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+        SGLANG_NVIDIA_MEGAKERNEL_SLOTS: hop_a,moe,gate,attn,embed,two_shot,markov,draft_lm_head,aux_mean_stats,gate_wide,shared_ll,hop_a_batch2,engram,attn_qkv_a,attn_qkv_a_bf16,index_q_mxfp8_in,attn_indexer,hc_prenorm,hop_b,hop_b_wide,early_trigger,hop_b_start_trigger,draft,draft_moe,draft_gate,draft_tail,draft_post,draft_seam,draft_attn,draft_qfront,draft_wo_a,draft_swapab,draft_qkv_a,draft_prenorm,draft_qkv_a_ll,draft_wo_b_ll,sched_ahead,req_pos_once,kv_before_wait,target_lm_head,hop_b_quad_trigger,lm_head_pinned_tactic
+        SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION: '1'
+        SGLANG_SIMULATE_ACC_GREEDY: '0'
+        SGLANG_OPT_DSV41_DSPARK_SIM_DRAW_AHEAD: '1'
+        NCCL_CUMEM_ENABLE: '0'
+        NCCL_MNNVL_ENABLE: '0'
   benchmark:
     env:
       CONC: '1'
@@ -194,6 +227,7 @@ override_tp4_c4:
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
+        dsv4-attn-backend: flashmla
         chunked-prefill-size: 16384
         prefill-decode-interval: 0
         swa-prefix-tails: 4096
@@ -215,6 +249,7 @@ override_tp4_c16:
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
+        dsv4-attn-backend: flashmla
         chunked-prefill-size: 16384
         prefill-decode-interval: 192
         tokenizer-worker-num: 4
