@@ -460,13 +460,13 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
     assert outputs.exists() is not outputs.is_relative_to(checkout)
 
 
-@pytest.mark.parametrize(("model_prefix", "precision", "framework", "model", "require_power", "lane"), [
-    ("kimik3", "fp4", "vllm", "moonshotai/Kimi-K3", "0", "agentx"),
-    ("glm5.2", "fp8", "dynamo-sglang", "zai-org/GLM-5.2-FP8", "1", "adapter"),
-    ("glm5.2", "fp8", "dynamo-sglang", "zai-org/GLM-5.2-FP8", "0", "adapter"),
+@pytest.mark.parametrize(("cluster", "precision", "model", "require_power", "lane"), [
+    ("gb200-nv", "fp4", "zai-org/GLM-5.2", "0", "agentx"),
+    ("h200-dgxc", "fp8", "zai-org/GLM-5.2-FP8", "1", "adapter"),
+    ("h200-dgxc", "fp8", "zai-org/GLM-5.2-FP8", "0", "adapter"),
 ])  # fmt: skip
 def test_power_lane_stages_provenance_and_validates_each_concurrency(
-    harness, model_prefix, precision, framework, model, require_power, lane
+    harness, cluster, precision, model, require_power, lane
 ):
     adapter = harness.tmp / "results-python"
     adapter.write_text(
@@ -474,8 +474,8 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     )
     adapter.chmod(0o755)
     env = lane_env(
-        harness, "h200-dgxc", LANE_FRAGMENT + POWER_TELEMETRY,
-        MODEL_PREFIX=model_prefix, PRECISION=precision, FRAMEWORK=framework, MODEL=model,
+        harness, cluster, LANE_FRAGMENT + POWER_TELEMETRY,
+        MODEL_PREFIX="glm5.2", PRECISION=precision, FRAMEWORK="dynamo-sglang", MODEL=model,
         IS_AGENTIC="1", ISL="0", OSL="0", CONC="4", CONC_LIST="4", FAKE_RESULTS="agentic",
         REQUIRE_POWER=require_power, INFERENCEX_RESULTS_PYTHON=str(adapter), POWER="1",
     )  # fmt: skip
@@ -484,7 +484,8 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     workspace = harness.workspace
     commit = harness.env["FAKE_SRT_COMMIT"]
     assert (workspace / "power-producer-sha.txt").read_text() == commit + "\n"
-    [checkout] = workspace.glob("srt-slurm-9001-*")
+    [call] = srtctl_calls(harness.logs)
+    checkout = Path(call["cwd"]).resolve()
     exporter = srtslurm(checkout)["containers"]["dcgm-exporter"]
     provenance = (workspace / "exporter-image.sha256").read_text()
     assert provenance.endswith(f"  {exporter}\n")
@@ -541,7 +542,7 @@ def test_single_node_gate_measures_the_selected_variant_with_real_verification(h
     (workspace / "recipe.yaml").write_text(yaml.safe_dump(raw))
     env = {
         **harness.env, **POINT_ENV, **GATE_ENV, "RUNNER_NAME": runner_for("h200-dgxc"), "MODEL_PREFIX": "dsv4",
-        "SPEC_DECODING": "mtp", "DURATION": "600", "AL_GATE_CURVE": "dsv4_mtp", "AL_GATE_DRAFT_TOKENS": "3",
+        "SPEC_DECODING": "mtp", "DURATION": "600", "AL_GATE_CURVE": "deepseek-v4-pro__mtp__native__default-default", "AL_GATE_DRAFT_TOKENS": "3",
     }  # fmt: skip
     download_gate_prompts(workspace)
     assert_ok(launch(env, harness.config, workspace))
@@ -579,7 +580,7 @@ def lane_gate_env(harness) -> dict[str, str]:
     return lane_env(
         harness, "h200-dgxc", AGENTX_LANE_RECIPE + POWER_TELEMETRY, **GATE_ENV,
         MODEL_PREFIX="kimik3", PRECISION="fp4", FRAMEWORK="vllm", MODEL="moonshotai/Kimi-K3", ISL="0", OSL="0",
-        CONC="4", SPEC_DECODING="dspark", AL_GATE_CURVE="kimik3_dspark", AL_GATE_DRAFT_TOKENS="3",
+        CONC="4", SPEC_DECODING="dspark", AL_GATE_CURVE="kimi-k3__dspark__kimi-k3-dspark__default-default", AL_GATE_DRAFT_TOKENS="3",
     )  # fmt: skip
 
 
@@ -739,7 +740,7 @@ def test_a_batch_wrapped_point_exits_with_the_wrapped_launchs_code(harness):
 def test_tilert_uses_upstream_submission_and_prepared_weights(harness):
     env = lane_env(
         harness, "mi355x-amds", MODEL_PREFIX="glm5.3", PRECISION="fp8", FRAMEWORK="tilert",
-        MODEL="zai-org/GLM-5.3", SPEC_DECODING="mtp", PREFILL_IMAGE="prefill:tag",
+        MODEL="zai-org/GLM-5.3", SPEC_DECODING="none", PREFILL_IMAGE="prefill:tag",
     )  # fmt: skip
     assert_ok(launch(env, harness.config, harness.workspace))
 
@@ -770,7 +771,7 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
     }  # fmt: skip
     env = lane_env(
         harness, "gb300-nv", MODEL_PREFIX="glm5.2", PRECISION="fp4", FRAMEWORK="dynamo-trt",
-        MODEL="nvidia/GLM-5.2-NVFP4", IS_AGENTIC="1", SPEC_DECODING="mtp", ISL="0", OSL="0",
+        MODEL="nvidia/GLM-5.2-NVFP4", IS_AGENTIC="1", SPEC_DECODING="none", ISL="0", OSL="0",
         EVAL_ONLY="true", EVAL_SRT_RECIPE=f"{MIRROR}/test/eval.yaml", FAKE_RESULTS="eval",
         EVAL_CONC="4 8", RECIPE_FINGERPRINT="recipe-fixture", FAKE_EVAL_META=json.dumps(staged),
     )  # fmt: skip
