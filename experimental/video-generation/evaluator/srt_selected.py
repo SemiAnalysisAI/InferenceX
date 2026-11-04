@@ -9,7 +9,7 @@ import time
 import uuid
 from pathlib import Path
 
-from infx.bench.video import CREDENTIAL_ENV, cell_dir, window_file, write_json
+from infx.bench.video import CREDENTIAL_ENV, cell_dir, read_object, window_file, write_json
 from specs import h3_spec
 
 from .runner import run_plan, validate_plan
@@ -222,6 +222,45 @@ def _sglang_main() -> None:
     main()
 
 
+def _check_sealed_launch(
+    path: Path, plan: dict, *, runtime: str, runtime_revision: str, gpus: int
+) -> dict:
+    try:
+        launch = read_object(path)
+    except (OSError, ValueError) as error:
+        raise ValueError("v0.1 requires the sealed server launch before client requests") from error
+    expected = {
+        "runtime": runtime,
+        "runtime_revision": runtime_revision,
+        "model_revision": plan["model_revision"],
+        "plan_sha256": h3_spec.plan_sha256(plan),
+    }
+    for key, value in expected.items():
+        if launch.get(key) != value:
+            raise ValueError(f"sealed server launch {key} differs from the selected v0.1 plan")
+    uuids = launch.get("gpu_uuids")
+    if not isinstance(uuids, list) or len(uuids) != gpus:
+        raise ValueError(f"sealed server launch must record {gpus} GPU UUIDs")
+    if not all(isinstance(uuid, str) and uuid for uuid in uuids):
+        raise ValueError("sealed server launch has an empty or non-text GPU UUID")
+    argv = launch.get("argv")
+    if not isinstance(argv, list) or not argv or not all(isinstance(a, str) and a for a in argv):
+        raise ValueError("sealed server launch lacks a complete engine command")
+    environment = launch.get("environment")
+    if (
+        not isinstance(environment, dict)
+        or not environment
+        or not all(isinstance(k, str) and isinstance(v, str) for k, v in environment.items())
+    ):
+        raise ValueError("sealed server launch lacks its recorded text environment")
+    digest = launch.get("image_digest")
+    if digest is not None and not (
+        isinstance(digest, str) and re.fullmatch(r"[0-9a-f]{64}", digest)
+    ):
+        raise ValueError("sealed server launch has an invalid image digest")
+    return launch
+
+
 def run_matrix(
     plan: dict,
     *,
@@ -238,54 +277,19 @@ def run_matrix(
         raise ValueError("unsupported native video runtime")
     numerical_identity = None
     if "fairness" in plan:
-        launch_path = output / "server" / "launch.json"
-        try:
-            launch = json.loads(launch_path.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as error:
-            raise ValueError(
-                "v0.1 requires the sealed server launch before client requests"
-            ) from error
-        if (
-            any(
-                launch.get(key) != value
-                for key, value in (
-                    ("runtime", runtime),
-                    ("runtime_revision", runtime_revision),
-                    ("model_revision", plan["model_revision"]),
-                    ("plan_sha256", h3_spec.plan_sha256(plan)),
-                )
-            )
-            or not isinstance(launch.get("gpu_uuids"), list)
-            or len(launch["gpu_uuids"]) != gpus
-            or not all(isinstance(uuid, str) and uuid for uuid in launch["gpu_uuids"])
-        ):
-            raise ValueError(
-                "sealed server launch differs from the selected v0.1 plan or GPU shape"
-            )
-        argv, environment = launch.get("argv"), launch.get("environment")
-        if (
-            not isinstance(argv, list)
-            or not argv
-            or not all(isinstance(arg, str) and arg for arg in argv)
-            or not isinstance(environment, dict)
-            or not environment
-            or not all(
-                isinstance(key, str) and isinstance(value, str)
-                for key, value in environment.items()
-            )
-        ):
-            raise ValueError("sealed server launch lacks complete command or environment")
-        image_digest = launch.get("image_digest")
-        if image_digest is not None and (
-            not isinstance(image_digest, str) or not re.fullmatch(r"[0-9a-f]{64}", image_digest)
-        ):
-            raise ValueError("sealed server launch has an invalid image digest")
-        if image_digest is not None:
+        launch = _check_sealed_launch(
+            output / "server" / "launch.json",
+            plan,
+            runtime=runtime,
+            runtime_revision=runtime_revision,
+            gpus=gpus,
+        )
+        if launch.get("image_digest") is not None:
             numerical_identity = {
                 "runtime_revision": runtime_revision,
-                "image_digest": image_digest,
-                "server_argv": argv,
-                "server_environment": environment,
+                "image_digest": launch["image_digest"],
+                "server_argv": launch["argv"],
+                "server_environment": launch["environment"],
                 "gpu_topology": {"gpu_uuids": launch["gpu_uuids"]},
                 "algorithm_config": {
                     "generation": plan["generation"],

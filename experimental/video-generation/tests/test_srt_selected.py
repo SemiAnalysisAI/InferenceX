@@ -287,6 +287,51 @@ def test_v01_client_requires_matching_sealed_launch_before_requests(tmp_path, mo
     assert seen[0]["numerical_identity"] is None
 
 
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("runtime", "sglang", "runtime differs"),
+        ("runtime_revision", "b" * 40, "runtime_revision differs"),
+        ("model_revision", "c" * 40, "model_revision differs"),
+        ("gpu_uuids", ["GPU-0", "GPU-1"], "must record 4 GPU UUIDs"),
+        ("gpu_uuids", ["GPU-0", "", "GPU-2", "GPU-3"], "empty or non-text GPU UUID"),
+        ("argv", [], "complete engine command"),
+        ("environment", {"KEY": 1}, "text environment"),
+        ("image_digest", "sha256:" + "a" * 64, "invalid image digest"),
+    ],
+)
+def test_v01_client_names_the_sealed_launch_field_it_rejects(
+    tmp_path, monkeypatch, field, value, message
+):
+    plan = h3_spec.plan_for(h3_spec.load_spec(PACKAGE / "specs/h3-v0.1.yaml"), "release-v1")
+    monkeypatch.setattr(srt_selected, "run_plan", lambda *args, **kwargs: pytest.fail("ran"))
+    launch = {
+        "runtime": "vllm-omni",
+        "runtime_revision": "a" * 40,
+        "model_revision": plan["model_revision"],
+        "plan_sha256": h3_spec.plan_sha256(plan),
+        "image_digest": "a" * 64,
+        "gpu_uuids": [f"GPU-{index}" for index in range(4)],
+        "argv": ["vllm", "serve", "/model"],
+        "environment": {"OMNI_DIFFUSION_PROMPT_EMBED_CACHE": "0"},
+        field: value,
+    }
+    (tmp_path / "server").mkdir()
+    (tmp_path / "server/launch.json").write_text(json.dumps(launch))
+    with pytest.raises(ValueError, match=message):
+        srt_selected.run_matrix(
+            plan,
+            runtime="vllm-omni",
+            runtime_revision="a" * 40,
+            endpoint="http://localhost:30283",
+            output=tmp_path,
+            concurrencies=[1],
+            gpus=4,
+            window_dir=tmp_path / "window",
+            request_seconds=1200,
+        )
+
+
 def test_vllm_view_checks_snapshot_before_creating_runtime_directories(tmp_path, monkeypatch):
     plan = h3_spec.plan_for(h3_spec.load_spec(PACKAGE / "specs/h3.yaml"), "release-v1")
     model = tmp_path / "model"
