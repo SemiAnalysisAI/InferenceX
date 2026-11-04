@@ -32,9 +32,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from specs.h3_spec import canonical_json_bytes
+from specs.h3_spec import canonical_json_bytes, schema_version
 
-from .media import H3_ENCODING
 from .serving import settings as serving_settings, summarize as serving_summary
 
 
@@ -51,6 +50,30 @@ _FAILED_STATUSES = {"failed", "cancelled", "canceled"}
 _TERMINAL_STATUSES = _FAILED_STATUSES | {"completed", "succeeded", "success"}
 _CHUNK_BYTES = 64 * 1024
 _EVENT_LOCK = threading.Lock()
+_CASE_FIELDS = {"case_id", "prompt", "seed", "requires_motion", "requires_sound"}
+_GENERATION_CONTROLS = {
+    "duration_seconds",
+    "aspect_ratio",
+    "width",
+    "height",
+    "frame_count",
+    "fps",
+    "audio_sample_rate_hz",
+    "audio_channels",
+    "num_inference_steps",
+    "flow_shift",
+    "audio_flow_shift",
+}
+_H3_CELL = {
+    "aspect_ratio": "16:9",
+    "width": 1344,
+    "height": 768,
+    "fps": 24,
+    "audio_sample_rate_hz": 32000,
+    "audio_channels": 2,
+}
+# H3 snaps each requested duration to its own delivered frame count.
+_H3_DURATION_FRAMES = ((4, 107), (5, 124), (8, 192))
 _PROTOCOL_SOURCES = {
     "sglang": {
         "repository": "https://github.com/sgl-project/sglang",
@@ -93,20 +116,14 @@ def _text(value: Any, name: str, *, limit: int = 1000) -> None:
         raise ValueError(f"{name} must be a nonempty string of at most {limit} characters")
 
 
-def valid_numerical_identity(identity: Any, plan: dict[str, Any], runtime_revision: str) -> bool:
-    if (
-        "fairness" not in plan
-        or not isinstance(identity, dict)
-        or set(identity)
-        != {
-            "runtime_revision",
-            "image_digest",
-            "server_argv",
-            "server_environment",
-            "gpu_topology",
-            "algorithm_config",
-        }
-    ):
+def valid_numerical_identity(identity: Any, runtime_revision: str) -> bool:
+    if not isinstance(identity, dict) or set(identity) != {
+        "runtime_revision",
+        "image_digest",
+        "server_argv",
+        "server_environment",
+        "gpu_topology",
+    }:
         return False
     argv, environment, topology = (
         identity["server_argv"],
@@ -132,17 +149,27 @@ def valid_numerical_identity(identity: Any, plan: dict[str, Any], runtime_revisi
         and bool(topology["gpu_uuids"])
         and all(isinstance(uuid, str) and bool(uuid) for uuid in topology["gpu_uuids"])
         and len(set(topology["gpu_uuids"])) == len(topology["gpu_uuids"])
-        and isinstance(identity["algorithm_config"], dict)
-        and identity["algorithm_config"]
-        == {"generation": plan["generation"], "fairness": plan["fairness"]}
     )
 
 
-def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
-    """Validate the supported frozen T2VA subset without making a request.
+def _case(case: Any, name: str) -> None:
+    if not isinstance(case, dict) or set(case) != _CASE_FIELDS:
+        raise ValueError(f"{name} must declare exactly {sorted(_CASE_FIELDS)}")
+    _text(case["case_id"], f"{name}.case_id", limit=200)
+    _text(case["prompt"], f"{name}.prompt", limit=32000)
+    seed = case["seed"]
+    if isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed < 2**63:
+        raise ValueError(f"{name}.seed must be an integer in [0, 2**63)")
+    for field in ("requires_motion", "requires_sound"):
+        if not isinstance(case[field], bool):
+            raise ValueError(f"{name}.{field} must be an explicit boolean")
 
-    This is the execution safety contract; the broader study/registry schemas
-    remain separate. Unknown root metadata is preserved in the plan digest.
+
+def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
+    """Check the structure a run needs, without making a request.
+
+    Workload policy, such as the v0.1 prompt count and warmup rules, is validated once
+    by ``specs/h3_spec.py``. Unknown root metadata is preserved in the plan digest.
     """
     if not isinstance(plan, dict):
         raise ValueError("plan must be an object")
@@ -153,192 +180,49 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
     for field in ("plan_id", "model_id", "model_revision"):
         _text(frozen.get(field), field)
     if frozen["model_id"] != MODEL_ID:
-        raise ValueError(f"this narrow MVP supports only {MODEL_ID}")
+        raise ValueError(f"this runner supports only {MODEL_ID}")
     if not re.fullmatch(r"[a-fA-F0-9]{40}", frozen["model_revision"]):
         raise ValueError("model_revision must be an immutable 40-character commit")
+    if schema_version(frozen) not in (1, 2):
+        raise ValueError("schema_version must be 1 or 2")
     generation = frozen.get("generation")
     if not isinstance(generation, dict):
         raise ValueError("generation must be an object with explicit controls")
-    allowed_controls = {
-        "duration_seconds",
-        "aspect_ratio",
-        "width",
-        "height",
-        "frame_count",
-        "fps",
-        "audio_sample_rate_hz",
-        "audio_channels",
-        "num_inference_steps",
-        "flow_shift",
-        "audio_flow_shift",
-    }
-    if set(generation) - allowed_controls:
+    if set(generation) - _GENERATION_CONTROLS:
         raise ValueError("unsupported generation controls must not be silently ignored")
-    for field, maximum in (
-        ("width", 8192),
-        ("height", 8192),
-        ("frame_count", 10000),
-        ("fps", 240),
-        ("audio_sample_rate_hz", 192000),
-        ("audio_channels", 8),
-        ("num_inference_steps", 1000),
-    ):
-        _positive(generation.get(field), f"generation.{field}", maximum=maximum, integer=True)
-    for field, maximum in (
-        ("duration_seconds", 15),
-        ("flow_shift", 1000),
-        ("audio_flow_shift", 1000),
-    ):
-        _positive(generation.get(field), f"generation.{field}", maximum=maximum)
-    if generation["duration_seconds"] < 4:
-        raise ValueError("H3 duration_seconds must be between 4 and 15")
-    _text(generation.get("aspect_ratio"), "generation.aspect_ratio", limit=20)
-    if not re.fullmatch(r"[1-9][0-9]?:[1-9][0-9]?", generation["aspect_ratio"]):
-        raise ValueError("generation.aspect_ratio must be an explicit positive ratio")
+    _positive(
+        generation.get("num_inference_steps"),
+        "generation.num_inference_steps",
+        maximum=1000,
+        integer=True,
+    )
+    for field in ("flow_shift", "audio_flow_shift"):
+        _positive(generation.get(field), f"generation.{field}", maximum=1000)
     if (
-        generation["fps"] != 24
-        or generation["audio_sample_rate_hz"] != 32000
-        or generation["audio_channels"] != 2
-    ):
-        raise ValueError("the H3 contract requires 24 fps and 32000 Hz stereo audio")
-    # H3 rounds delivery frames differently for these two requested durations.
-    audited_frames = {4: 107, 8: 192}
-    audited_cell = {
-        "aspect_ratio": "16:9",
-        "width": 1344,
-        "height": 768,
-    }
-    if (
-        any(generation[key] != value for key, value in audited_cell.items())
-        or {**audited_frames, 5: 124}.get(generation["duration_seconds"])
-        != generation["frame_count"]
+        any(generation.get(key) != value for key, value in _H3_CELL.items())
+        or (
+            generation.get("duration_seconds"),
+            generation.get("frame_count"),
+        )
+        not in _H3_DURATION_FRAMES
     ):
         raise ValueError(
-            "this MVP requires a 16:9, 1344x768 H3 cell: 4s/107, 5s/124, or 8s/192 frames"
+            "this runner supports the 16:9 1344x768 24 fps H3 cell with 32 kHz stereo audio"
+            " and 4s/107, 5s/124, or 8s/192 frames"
         )
-    fairness = frozen.get("fairness")
-    if "fairness" in frozen:
-        if not isinstance(fairness, dict) or set(fairness) != {
-            "schedule",
-            "encoding",
-            "conditioning_cache",
-            "reference_identity",
-        }:
-            raise ValueError(
-                "fairness requires explicit schedule, encoding, conditioning_cache, and reference_identity"
-            )
-        schedule = fairness["schedule"]
-        if (
-            not isinstance(schedule, dict)
-            or set(schedule)
-            != {"sigma_points", "denoising_updates", "video_flow_shift", "audio_flow_shift"}
-            or any(
-                isinstance(schedule[key], bool) or not isinstance(schedule[key], (int, float))
-                for key in schedule
-            )
-            or (
-                schedule["sigma_points"] != schedule["denoising_updates"] + 1
-                or schedule["denoising_updates"] != generation["num_inference_steps"]
-                or schedule["video_flow_shift"] != generation["flow_shift"]
-                or schedule["audio_flow_shift"] != generation["audio_flow_shift"]
-            )
-        ):
-            raise ValueError("fairness.schedule must match request updates and flow shifts")
-        if fairness["encoding"] != {
-            **H3_ENCODING,
-            "audio_sample_rate_hz": generation["audio_sample_rate_hz"],
-            "audio_channels": generation["audio_channels"],
-        }:
-            raise ValueError("fairness.encoding must declare the supported H3 encoder options")
-        if fairness["conditioning_cache"] != "disabled_across_requests":
-            raise ValueError("fairness.conditioning_cache must be disabled_across_requests")
-        identity = fairness["reference_identity"]
-        if (
-            not isinstance(identity, dict)
-            or set(identity)
-            != {
-                "implementation",
-                "minimax_code_revision",
-                "diffusers_revision",
-                "model_revision",
-                "rng_policy",
-            }
-            or identity["model_revision"] != frozen["model_revision"]
-            or any(
-                not isinstance(identity[key], str)
-                or not re.fullmatch(r"[0-9a-f]{40}", identity[key])
-                for key in ("minimax_code_revision", "diffusers_revision", "model_revision")
-            )
-            or identity["implementation"] != "official-diffusers-t2va"
-            or identity["rng_policy"] != "cpu_generator_float32_video_then_audio"
-        ):
-            raise ValueError(
-                "fairness.reference_identity must pin the official source and RNG proposal"
-            )
-        if (
-            generation["duration_seconds"] != 5
-            or generation["frame_count"] != 124
-            or generation["num_inference_steps"] != 49
-            or generation["flow_shift"] != 12
-            or generation["audio_flow_shift"] != 3
-        ):
-            raise ValueError("fairness requires the 5s/124-frame/49-update H3 request")
     cases = frozen.get("cases")
     if not isinstance(cases, list) or not cases:
         raise ValueError("cases must be a nonempty array")
-    ids: set[str] = set()
-    for case in cases:
-        if not isinstance(case, dict):
-            raise ValueError("every case must be an object")
-        if set(case) - {"case_id", "prompt", "seed", "requires_motion", "requires_sound"}:
-            raise ValueError("unsupported per-case controls must not be silently ignored")
-        _text(case.get("case_id"), "case_id", limit=200)
-        _text(case.get("prompt"), "prompt", limit=32000)
-        if case["case_id"] in ids:
-            raise ValueError("case_id must be unique")
-        ids.add(case["case_id"])
-        seed = case.get("seed")
-        if isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed < 2**63:
-            raise ValueError("case.seed must be an integer in [0, 2**63)")
-        for field in ("requires_motion", "requires_sound"):
-            if not isinstance(case.get(field), bool):
-                raise ValueError(f"case.{field} must be an explicit boolean")
-    warmup_case = frozen.get("warmup_case")
-    if warmup_case is not None:
-        if not isinstance(warmup_case, dict) or set(warmup_case) != {
-            "case_id",
-            "prompt",
-            "seed",
-            "requires_motion",
-            "requires_sound",
-        }:
-            raise ValueError("warmup_case must be a complete case")
-        _text(warmup_case["case_id"], "warmup_case.case_id", limit=200)
-        _text(warmup_case["prompt"], "warmup_case.prompt", limit=32000)
-        if warmup_case["case_id"] in ids or warmup_case["prompt"] in {
-            case["prompt"] for case in cases
-        }:
-            raise ValueError("warmup_case must be disjoint from measurements")
-        if (
-            isinstance(warmup_case["seed"], bool)
-            or not isinstance(warmup_case["seed"], int)
-            or not 0 <= warmup_case["seed"] < 2**63
-        ):
-            raise ValueError("warmup_case.seed must be an integer in [0, 2**63)")
-        for field in ("requires_motion", "requires_sound"):
-            if not isinstance(warmup_case[field], bool):
-                raise ValueError(f"warmup_case.{field} must be a boolean")
+    for index, case in enumerate(cases):
+        _case(case, f"cases[{index}]")
+    if len({case["case_id"] for case in cases}) != len(cases):
+        raise ValueError("case_id must be unique")
+    if frozen.get("warmup_case") is not None:
+        _case(frozen["warmup_case"], "warmup_case")
     _positive(frozen.get("repetitions"), "repetitions", maximum=MAX_SLOTS, integer=True)
     warmups = frozen.get("warmup_runs")
     if isinstance(warmups, bool) or not isinstance(warmups, int) or warmups < 0:
         raise ValueError("warmup_runs must be an explicit nonnegative integer")
-    if fairness is not None and (
-        len(cases) != 20
-        or len({case["prompt"] for case in cases}) != 20
-        or warmups != 1
-        or warmup_case is None
-    ):
-        raise ValueError("fairness requires 20 distinct prompts and one disjoint warmup")
     if len(cases) * frozen["repetitions"] + warmups > MAX_SLOTS:
         raise ValueError(f"plan exceeds {MAX_SLOTS} total requests")
     return frozen
@@ -759,7 +643,6 @@ def run_plan(
     runtime: str = "sglang",
     runtime_revision: str,
     hardware_label: str,
-    model_revision: str,
     timeout_seconds: float = 3600,
     api_key_env: str | None = None,
     serving_concurrency: int | None = None,
@@ -785,17 +668,14 @@ def run_plan(
     for field, value in (
         ("runtime_revision", runtime_revision),
         ("hardware_label", hardware_label),
-        ("model_revision", model_revision),
     ):
         _text(value, field)
     if not re.fullmatch(r"[a-fA-F0-9]{40}", runtime_revision):
         raise ValueError(
             "runtime_revision must be an operator-declared immutable 40-character commit"
         )
-    if model_revision != frozen["model_revision"]:
-        raise ValueError("operator model_revision does not match the frozen plan")
     if numerical_identity is not None:
-        if not valid_numerical_identity(numerical_identity, frozen, runtime_revision):
+        if not valid_numerical_identity(numerical_identity, runtime_revision):
             raise ValueError(
                 "numerical_identity must contain a complete matching server configuration"
             )
@@ -838,7 +718,7 @@ def run_plan(
         "runtime_revision": runtime_revision,
         "hardware_label": hardware_label,
         "model_id": frozen["model_id"],
-        "model_revision": model_revision,
+        "model_revision": frozen["model_revision"],
         "endpoint": safe_endpoint,
         "identity_verification": "operator_declared",
         "plan_sha256": plan_sha256,

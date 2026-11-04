@@ -235,7 +235,6 @@ def execute(plan, output_dir, endpoint, **kwargs):
         endpoint=endpoint,
         runtime_revision="253020450290328e9deb307eece1e402fa17f35e",
         hardware_label="LOCAL HTTP FIXTURE; no GPU and no H3 execution",
-        model_revision=MODEL_REVISION,
         **kwargs,
     )
 
@@ -350,7 +349,6 @@ def test_fairness_request_and_disjoint_warmup_reach_local_http_fixture(
         "server_argv": ["serve", runtime],
         "server_environment": {"CACHE": "0"},
         "gpu_topology": {"gpu_uuids": ["GPU-fixture"]},
-        "algorithm_config": {"generation": plan["generation"], "fairness": plan["fairness"]},
     }
     run = execute(plan, tmp_path / runtime, endpoint, runtime=runtime, numerical_identity=identity)
     assert run["summary"]["valid"] == 20
@@ -518,16 +516,13 @@ def test_untrusted_job_id_cannot_change_download_destination(
     assert all(record["artifact_path"] is None for record in run["records"])
 
 
-def test_missing_controls_and_revision_drift_fail_before_output(plan, tmp_path, mocked_media):
-    invalid = copy.deepcopy(plan)
-    del invalid["generation"]["num_inference_steps"]
+def test_missing_controls_fail_before_output(plan, tmp_path, mocked_media):
+    del plan["generation"]["num_inference_steps"]
     with pytest.raises(ValueError, match="num_inference_steps"):
-        runner.preview_plan(invalid)
-    invalid = copy.deepcopy(plan)
-    invalid["model_revision"] = "1" * 40
+        runner.preview_plan(plan)
     output = tmp_path / "not-created"
-    with pytest.raises(ValueError, match="does not match"):
-        execute(invalid, output, "http://127.0.0.1:1")
+    with pytest.raises(ValueError, match="num_inference_steps"):
+        execute(plan, output, "http://127.0.0.1:1")
     assert not output.exists()
 
 

@@ -15,10 +15,10 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
-from specs.h3_spec import canonical_json_bytes, plan_sha256
+from specs.h3_spec import canonical_json_bytes, plan_sha256, schema_version
 
 from .media import analyze_media, compare_media
-from .runner import _slots, valid_numerical_identity, validate_plan
+from .runner import _slots, valid_numerical_identity
 
 
 _POLICY_NUMBERS = {
@@ -82,8 +82,6 @@ def _policy(policy: dict) -> dict:
 
 
 def _planned_slots(plan: dict) -> tuple[dict[str, dict], dict[str, dict]]:
-    if "fairness" in plan and plan.get("model_id") == "MiniMaxAI/MiniMax-H3":
-        validate_plan(plan)
     for field in ("plan_id", "model_id", "model_revision"):
         _text(plan, field, "plan")
     cases = plan.get("cases")
@@ -788,11 +786,11 @@ def compare_runs(baseline_dir: Path, candidate_dir: Path, *, policy: dict) -> di
     )
     imported_only = evidence_kind == "imported_media"
     plan = baseline_run["plan"]
-    fairness_comparison = "fairness" in plan
+    fairness_comparison = schema_version(plan) == 2
     left_config, right_config = baseline_run["configuration"], candidate_run["configuration"]
     numerical_identity = left_config.get("numerical_identity")
     complete_identity = valid_numerical_identity(
-        numerical_identity, plan, left_config["runtime_revision"]
+        numerical_identity, left_config["runtime_revision"]
     )
     numerical_regression = fairness_comparison and (
         left_config["runtime"] == right_config["runtime"]

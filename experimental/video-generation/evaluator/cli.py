@@ -66,7 +66,6 @@ def _mvp_command(arguments: argparse.Namespace) -> int:
                 "endpoint",
                 "runtime_revision",
                 "hardware_label",
-                "model_revision",
                 "output",
             )
             missing = [name.replace("_", "-") for name in required if not getattr(arguments, name)]
@@ -87,7 +86,6 @@ def _mvp_command(arguments: argparse.Namespace) -> int:
                     runtime=arguments.runtime,
                     runtime_revision=arguments.runtime_revision,
                     hardware_label=arguments.hardware_label,
-                    model_revision=arguments.model_revision,
                     timeout_seconds=arguments.timeout_seconds,
                     api_key_env=arguments.api_key_env,
                     serving_concurrency=arguments.serving_concurrency,
@@ -148,9 +146,6 @@ def _parser() -> argparse.ArgumentParser:
     )
     run.add_argument(
         "--hardware-label", help="operator-declared hardware, precision, and topology label"
-    )
-    run.add_argument(
-        "--model-revision", help="operator-declared exact checkpoint revision matching the plan"
     )
     run.add_argument(
         "--output", type=Path, help="new output directory; existing paths are never overwritten"

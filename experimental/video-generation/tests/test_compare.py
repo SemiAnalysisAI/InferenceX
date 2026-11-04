@@ -288,7 +288,7 @@ def test_fairness_cross_engine_pixel_difference_is_diagnostic_and_quality_unjudg
         (baseline, left, "sglang"),
         (candidate, right, "vllm-omni"),
     ):
-        document["plan"]["fairness"] = copy.deepcopy(FAIRNESS)
+        document["plan"].update(schema_version=2, fairness=copy.deepcopy(FAIRNESS))
         document["plan_sha256"] = digest(document["plan"])
         document["configuration"]["runtime"] = runtime
         document["configuration_sha256"] = digest(document["configuration"])
@@ -309,7 +309,7 @@ def test_fairness_numerical_regression_requires_matching_server_identity(tmp_pat
     baseline, left = bundle(tmp_path, "baseline")
     candidate, right = bundle(tmp_path, "candidate")
     for directory, document in ((baseline, left), (candidate, right)):
-        document["plan"]["fairness"] = copy.deepcopy(FAIRNESS)
+        document["plan"].update(schema_version=2, fairness=copy.deepcopy(FAIRNESS))
         document["plan_sha256"] = digest(document["plan"])
         document["configuration"]["runtime_revision"] = "same-runtime-revision"
         document["configuration"]["numerical_identity"] = {
@@ -318,10 +318,6 @@ def test_fairness_numerical_regression_requires_matching_server_identity(tmp_pat
             "server_argv": ["serve", "--usp", "4"],
             "server_environment": {"CACHE": "0"},
             "gpu_topology": {"gpu_uuids": ["GPU-1", "GPU-2"]},
-            "algorithm_config": {
-                "generation": document["plan"]["generation"],
-                "fairness": document["plan"]["fairness"],
-            },
         }
         document["configuration_sha256"] = digest(document["configuration"])
         write_bundle(directory, document)
@@ -340,7 +336,6 @@ def test_fairness_numerical_regression_requires_matching_server_identity(tmp_pat
         "server_argv": True,
         "server_environment": True,
         "gpu_topology": True,
-        "algorithm_config": True,
     }
     for directory, document in ((baseline, left), (candidate, right)):
         document["configuration"]["numerical_identity"] = copy.deepcopy(placeholder)
