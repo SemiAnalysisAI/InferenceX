@@ -206,7 +206,8 @@ def collect(
                     infmax,
                     *audit,
                     results_python=python,
-                    expected_cpu=power.cpu,
+                    require_power=not power.best_effort,
+                    expected_cpu=power.expect_cpu,
                 )
             else:
                 power_rc = validate_agentic_power(
@@ -214,7 +215,7 @@ def collect(
                     *audit,
                     results_python=python,
                     require_power=request.require_power,
-                    expected_cpu=power.cpu,
+                    expected_cpu=power.expect_cpu,
                 )
             if power_rc:
                 event.fail(

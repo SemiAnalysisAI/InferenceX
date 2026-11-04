@@ -23,6 +23,7 @@ from infx.config import repository_root
 from infx.fastcopy import deepcopy
 from infx.results.metadata import parse_component_metadata
 from infx.srt_slurm.synthetic_acceptance import selected_recipes, spec_parameters
+from infx.srt_slurm.variants import expand_variants
 
 SHARED_BLOCKS = {
     (False, False): Path("configs/srt-recipes/fixed-sequence-single.yaml"),
@@ -364,6 +365,29 @@ def bind_multinode(
 ) -> tuple[str | None, dict[str, Any]]:
     """Bind the one variant ``recipe`` (``fragment[:selector]``) selects; return its name too."""
     agentic = environment["IS_AGENTIC"] == "1"
+    name, selected = select_multinode(
+        recipe,
+        agentic=agentic,
+        root=root,
+        expand=expand,
+        power_port=power_port,
+        cpu_power_source=cpu_power_source,
+    )
+    return name, bind_workload(
+        selected, environment, agentic=agentic, multinode=True, client_env=client_env
+    )
+
+
+def select_multinode(
+    recipe: str,
+    *,
+    agentic: bool,
+    root: Path,
+    expand: Callable[..., list[tuple[str | None, dict[str, Any]]]] = selected_recipes,
+    power_port: int | None = None,
+    cpu_power_source: str | None = None,
+) -> tuple[str | None, dict[str, Any]]:
+    """The one composed, unbound variant ``recipe`` (``fragment[:selector]``) selects."""
     path, _, selector = recipe.partition(":")
     composed = compose_recipe(
         Path(path),
@@ -376,10 +400,37 @@ def bind_multinode(
     variants = expand(composed, selector or None)
     if len(variants) != 1:
         raise ValueError(f"{recipe} selects {len(variants)} variants, not one")
-    name, selected = variants[0]
-    return name, bind_workload(
-        selected, environment, agentic=agentic, multinode=True, client_env=client_env
-    )
+    return variants[0]
+
+
+def discovery_on_dedicated_node(recipe: Mapping[str, Any]) -> bool:
+    """Whether ``recipe`` runs etcd and NATS on a node of their own.
+
+    srtctl then refuses GPU power telemetry: its samples would leave the benchmark's clock.
+    """
+    discovery = [
+        service
+        for service in recipe.get("services") or []
+        if service.get("enabled", True) and service.get("type") in ("etcd", "nats")
+    ]
+    if not discovery:
+        return bool((recipe.get("infra") or {}).get("etcd_nats_dedicated_node", False))
+    placements = {
+        (service.get("placement") or {}).get("node") == "dedicated" for service in discovery
+    }
+    if len(placements) != 1:
+        raise ValueError("Recipe etcd and nats must agree on dedicated placement")
+    return placements.pop()
+
+
+def selects_dedicated_discovery(recipe: str, *, agentic: bool, root: Path) -> bool:
+    """Whether the variant ``recipe`` (``fragment[:selector]``) selects runs etcd and NATS on a
+    node of their own.
+
+    Expands variants without srtctl, which the launcher's environment does not install.
+    """
+    _, selected = select_multinode(recipe, agentic=agentic, root=root, expand=expand_variants)
+    return discovery_on_dedicated_node(selected)
 
 
 def resolve_fabric(node: Any, fabric: Mapping[str, str | None], where: str = "") -> Any:

@@ -15,7 +15,7 @@ from infx.launch.lifecycle import Lifecycle
 from infx.launch.policy import LaunchPath, Match, salloc_time_limit
 from infx.launch.request import LaunchRequest, MultiNodeRequest, RequestError
 
-DCGM, AGENTX, ADAPTER, ERR = "dcgm", "agentx", "adapter", "error"
+AGENTX, ADAPTER, ERR = "agentx", "adapter", "error"
 MULTI, NATIVE = LaunchPath.SRT_MULTI, LaunchPath.SRT_NATIVE
 
 
@@ -32,13 +32,6 @@ def _multinode(**env):
 
 
 CASES = [
-    ("gb200-nv", MULTI, "1", "glm5.2", "fp4", "dynamo-sglang", AGENTX),
-    ("gb200-nv", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", ERR),
-    ("gb200-nv", MULTI, "0", "dsr1", "fp8", "dynamo-sglang", DCGM),
-    ("gb200-nv", MULTI, "0", "dsv4", "fp4", "dynamo-vllm", ERR),
-    ("gb300-nv", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", ERR),
-    ("gb300-nv", MULTI, "1", "glm5.2", "fp4", "dynamo-sglang", DCGM),
-    ("gb300-nv", MULTI, "0", "qwen3.5", "fp8", "dynamo-trt", ERR),
     ("b300-dsxe", MULTI, "0", "dsv4", "fp4", "dynamo-vllm", ERR),
     ("b200-nscale", NATIVE, "1", "kimik3", "fp4", "dynamo-vllm", ERR),
     ("b200-nscale", NATIVE, "1", "glm5.2", "fp4", "dynamo-sglang", AGENTX),
@@ -77,11 +70,39 @@ def test_power_eligibility_of_each_cluster_lane(
     assert not decide_power(cluster, path, _multinode(**env, POWER="0")).dcgm
 
 
-def test_gb200_reports_agentic_misses_distinctly():
-    request = _multinode(IS_AGENTIC="1", MODEL_PREFIX="dsv4", PRECISION="fp4",
-                         FRAMEWORK="dynamo-sglang", CONC="4", CONC_LIST="4", POWER="1")  # fmt: skip
-    with pytest.raises(PowerPolicyError, match="AgentX dcgm-power requires GLM-5.2"):
-        decide_power("gb200-nv", MULTI, request)
+def _nvl72_point(agentic: str, prefix: str, framework: str, **env) -> MultiNodeRequest:
+    if agentic == "1":
+        env.update(CONC="4", CONC_LIST="4", IS_MULTINODE="true")
+    return _multinode(
+        IS_AGENTIC=agentic, MODEL_PREFIX=prefix, PRECISION="fp4", FRAMEWORK=framework, **env
+    )
+
+
+@pytest.mark.parametrize("cluster", ["gb200-nv", "gb300-nv"])
+@pytest.mark.parametrize(("agentic", "prefix", "framework"), [
+    ("1", "qwen3.5", "dynamo-trt"),
+    ("1", "minimaxm31flash", "dynamo-vllm"),
+    ("0", "dsv4", "dynamo-vllm"),
+])  # fmt: skip
+def test_nvl72_measures_every_benchmark_point_without_failing_it(
+    cluster, agentic, prefix, framework
+):
+    point = _nvl72_point(agentic, prefix, framework)
+    assert decide_power(cluster, MULTI, point) == power.PowerDecision(
+        dcgm=True, agentx=agentic == "1", cpu=True, best_effort=True
+    )
+    assert decide_power(cluster, MULTI, point, lambda: True) == power.NO_POWER
+    evaluation = _nvl72_point(agentic, prefix, framework, EVAL_ONLY="true")
+    assert decide_power(cluster, MULTI, evaluation) == power.NO_POWER
+
+
+def test_nvl72_power_field_keeps_invalid_power_fatal():
+    explicit = _nvl72_point("1", "glm5.2", "dynamo-sglang", POWER="1", CPU_POWER="1")
+    assert decide_power("gb200-nv", MULTI, explicit) == power.PowerDecision(
+        dcgm=True, agentx=True, cpu=True, expect_cpu=True
+    )
+    workflow = _nvl72_point("1", "glm5.2", "dynamo-sglang", REQUIRE_POWER="1")
+    assert not decide_power("gb200-nv", MULTI, workflow).best_effort
 
 
 def test_a_power_lane_needs_its_clusters_exporter_port(monkeypatch):
@@ -95,6 +116,13 @@ def test_a_power_lane_needs_its_clusters_exporter_port(monkeypatch):
         "POWER_LANES['c', srt-multi]: no srt-slurm.power-exporter-port"
     ]
     srt["power-exporter-port"] = 9401
+    clusters = load_inventory({"labels": labels, "clusters": {"c": record}}).clusters
+    assert drivers.srt.table_problems(clusters, "c") == []
+    monkeypatch.setitem(power.POWER_LANES, ("c", MULTI), power.PowerLane(rules=(), default_on=True))
+    assert drivers.srt.table_problems(clusters, "c") == [
+        "POWER_LANES['c', srt-multi]: no srt-slurm.cpu-power-exporter"
+    ]
+    srt["cpu-power-exporter"] = {"source": "acpi"}
     clusters = load_inventory({"labels": labels, "clusters": {"c": record}}).clusters
     assert drivers.srt.table_problems(clusters, "c") == []
 

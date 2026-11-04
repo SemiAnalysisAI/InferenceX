@@ -497,8 +497,9 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     assert bound["benchmark"]["env"]["REQUIRE_POWER"] == require_power
     assert bound["telemetry"]["collector_join_timeout_seconds"] == 12
     assert (bound["telemetry"]["enabled"], bound["telemetry"]["dcgm_exporter"]["port"]) == (True, 9401)
-    assert "cpu_power_exporter" not in bound["telemetry"]
-    assert all("CPU_POWER_EXPORTER_RELEASE" not in call for call in lines(harness.logs, "make"))
+    nvl72 = cluster == "gb200-nv"
+    assert ("cpu_power_exporter" in bound["telemetry"]) is nvl72
+    assert any("CPU_POWER_EXPORTER_RELEASE" in call for call in lines(harness.logs, "make")) is nvl72
 
     runs = lines(harness.logs, "adapter")
     assert [run.split("--result-dir ")[1].split()[0].rsplit("/", 1)[1] for run in runs] == ["conc_4"]
@@ -508,6 +509,50 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     if lane == "agentx":
         status = (workspace / "LOGS/power/native-job-status.txt").read_text()
         assert status == "42|COMPLETED|0:0\n"
+
+
+@pytest.mark.parametrize(("point", "required"), [
+    ({"MODEL_PREFIX": "qwen3.5", "FRAMEWORK": "dynamo-trt", "MODEL": "nvidia/Qwen3.5-397B-A17B-NVFP4"}, False),
+    ({"MODEL_PREFIX": "qwen3.5", "FRAMEWORK": "dynamo-trt", "MODEL": "nvidia/Qwen3.5-397B-A17B-NVFP4", "REQUIRE_POWER": "1"}, True),
+])  # fmt: skip
+def test_nvl72_agentx_point_measures_gpu_and_cpu_power_by_default(harness, point, required):
+    adapter = harness.tmp / "results-python"
+    adapter.write_text("#!/bin/bash\nprintf '%s\\n' \"$*\" >> \"$FAKE_LOG_DIR/adapter.log\"\n")
+    adapter.chmod(0o755)
+    env = lane_env(
+        harness, "gb300-nv", LANE_FRAGMENT + POWER_TELEMETRY, PRECISION="fp4", IS_AGENTIC="1",
+        ISL="0", OSL="0", CONC="4", CONC_LIST="4", FAKE_RESULTS="agentic",
+        INFERENCEX_RESULTS_PYTHON=str(adapter), **point,
+    )  # fmt: skip
+    assert_ok(launch(env, harness.config, harness.workspace))
+
+    [checkout] = harness.workspace.glob("srt-slurm-9001-*")
+    bound = yaml.safe_load((checkout / "recipe.yaml").read_text())
+    assert bound["telemetry"]["dcgm_exporter"]["port"] == 19401
+    assert bound["telemetry"]["cpu_power_exporter"] == {"source": "acpi"}
+    assert bound["benchmark"]["env"]["ENABLE_AGENTX_POWER"] == "1"
+    assert bound["benchmark"]["env"]["REQUIRE_POWER"] == ("1" if required else "0")
+    [setup] = [call for call in lines(harness.logs, "make") if call.startswith("setup ")]
+    assert f"CPU_POWER_EXPORTER_RELEASE={CPU_POWER_EXPORTER_RELEASE}" in setup.split()
+    runs = lines(harness.logs, "adapter")
+    assert runs and all(run.endswith("--require-power") is required for run in runs)
+    assert all("--expected-cpu-power" not in run for run in runs)
+
+
+def test_nvl72_point_with_dedicated_discovery_skips_default_power(harness):
+    dedicated = "services:\n" + "".join(
+        f"  - type: {kind}\n    placement:\n      node: dedicated\n" for kind in ("etcd", "nats")
+    )
+    env = lane_env(
+        harness, "gb300-nv", LANE_FRAGMENT + dedicated, MODEL_PREFIX="qwen3.5", PRECISION="fp8",
+        FRAMEWORK="dynamo-sglang", MODEL="Qwen/Qwen3.5-397B-A17B-FP8",
+    )  # fmt: skip
+    assert_ok(launch(env, harness.config, harness.workspace))
+
+    [checkout] = harness.workspace.glob("srt-slurm-9001-*")
+    assert "telemetry" not in yaml.safe_load((checkout / "recipe.yaml").read_text())
+    [setup] = [call for call in lines(harness.logs, "make") if call.startswith("setup ")]
+    assert "CPU_POWER_EXPORTER_RELEASE" not in setup
 
 
 GATE_DATASET = "al_gate_dataset/speedbench_coding.jsonl"

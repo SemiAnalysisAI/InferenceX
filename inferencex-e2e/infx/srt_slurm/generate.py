@@ -23,7 +23,12 @@ from infx.matrix.generate import expand_config_keys, generate_config_matrix
 from infx.matrix.validation import config_root, load_config_files, load_runner_file
 from infx.srt_slurm.single_node import select_recipe
 from infx.srt_slurm.synthetic_acceptance import build_overrides, selected_recipes
-from infx.srt_slurm.workload import bind_multinode, check_setup_script, resolve_fabric
+from infx.srt_slurm.workload import (
+    bind_multinode,
+    check_setup_script,
+    resolve_fabric,
+    selects_dedicated_discovery,
+)
 
 if TYPE_CHECKING:
     from infx.clusters import Cluster, RunnerInventory
@@ -105,10 +110,11 @@ def _binder_inputs(
     Raises ``ValueError`` when they depend on a cluster the runner label does not single out,
     or the cluster's lanes refuse the point.
     """
-    agentic = environment["IS_AGENTIC"] == "1"
-    if "prefill" not in point or not (agentic or point.get("power")):
+    if "prefill" not in point:
         return None, None, {}
     if placement is None:
+        if not (environment["IS_AGENTIC"] == "1" or point.get("power")):
+            return None, None, {}
         raise ValueError(
             f"runner {point['runner']!r} must schedule on one cluster to bind the cluster's "
             "power telemetry and AgentX client paths"
@@ -127,7 +133,14 @@ def _binder_inputs(
     try:
         path = launch_path(cluster.id, request)
         lane = lanes.srt_lane(cluster.id, path)
-        decision = power.decide_power(cluster.id, path, request)
+        decision = power.decide_power(
+            cluster.id,
+            path,
+            request,
+            lambda: selects_dedicated_discovery(
+                str(root / point["srt-recipe"]), agentic=request.is_agentic, root=root
+            ),
+        )
         return config.binder_inputs(cluster, srt, lane, request, decision)
     except LaunchError as error:
         raise ValueError(f"cluster {cluster.id!r}: {error}") from error

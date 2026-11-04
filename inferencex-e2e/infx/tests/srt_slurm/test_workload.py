@@ -18,6 +18,7 @@ from infx.srt_slurm.workload import (
     compose_recipe,
     parse_concurrencies,
     resolve_fabric,
+    selects_dedicated_discovery,
 )
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -153,6 +154,19 @@ def test_agentx_binding_writes_the_launchers_client_paths_without_lengths():
     own_layout = {"benchmark": {"env": {"HF_HOME": "/logs/hf"}}}
     bound = bind_workload(own_layout, AGENTX_ENV, agentic=True, multinode=True, client_env=CLIENT_ENV)
     assert bound["benchmark"]["env"] == {"HF_HOME": "/logs/hf", "RESULT_DIR": "/logs/agentic"}
+
+
+def test_the_launcher_reads_dedicated_discovery_without_srtctl(project, monkeypatch):
+    monkeypatch.setitem(sys.modules, "srtctl.core.config", None)
+    dedicated = [{"type": kind, "placement": {"node": "dedicated"}} for kind in ("etcd", "nats")]
+    path = fragment(project, {
+        "base": {"name": "bundle"},
+        "override_head": {"roles": {"agg": {"nodes": 2}}},
+        "override_infra": {"services": dedicated},
+    })
+
+    assert selects_dedicated_discovery(f"{path}:override_infra", agentic=True, root=project)
+    assert not selects_dedicated_discovery(f"{path}:override_head", agentic=True, root=project)
 
 
 def test_a_power_point_gets_telemetry_and_its_concurrencies_on_a_bundle_variant(project):
