@@ -104,7 +104,7 @@ The below list describes what each field is:
     - `osl`: An integer representing the output sequence length, e.g., `1024`
     - PR sweeps run only `isl`/`osl` pairs 1024/1024 and 8192/1024; the changelog planner rejects any other pair.
     - `search-space`: A list of configurations to run with respective `isl` and `osl`, each entry must be a dict with the following fields:
-      - `tp`: A positive integer representing the benchmark's parallel width. In native single-node SRT recipes, its mapping depends on the engine: TokenSpeed and vLLM use attention TP/TP times data parallelism, while SGLang and TensorRT-LLM compare their TP fields directly. See [single-node parallelism validation](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md#single-node-parallelism-validation) for the full mapping and mismatch behavior.
+      - `tp`: A positive integer representing the tensor parallelism level that the configuration will be served at.
       - `conc-start`: An integer representing the starting level of concurrency e.g., `4`
       - `conc-end`: An integer representing the ending level of concurrency (inclusive) e.g., `128`
       - Note: the step factor between `conc-start` and `conc-end` is 2, so if `conc-start` is 4 and `conc-end` is 128, all concurrencies `4, 8, 16, 32, ..., 128` will be run.

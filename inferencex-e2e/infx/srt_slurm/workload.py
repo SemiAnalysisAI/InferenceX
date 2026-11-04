@@ -82,7 +82,6 @@ FABRIC_REFERENCE = "@fabric."
 INSTALLERS = {
     "tokenspeed-nightly.sh": ("router", "smg"),
     "glm5.3-tilert-rocm.sh": ("router", "tilert-pd-router"),
-    "kimik3-b300-mooncake.sh": ("kv-offload-backend", "mooncake"),
     "vllm-mooncake.sh": ("kv-offload-backend", "mooncake"),
     "vllm-router.sh": ("router", "vllm-router"),
 }

@@ -49,47 +49,13 @@ Keep the recipe and master configuration synchronized. The launcher executes the
 
 All referenced recipes must be checked in: srt-slurm 2 ships curated examples instead of the historical `recipes/` archive. The initial migration restores 204 previously external recipes and two still-referenced AgentX recipes from InferenceX history. Master-config paths follow the layout above; existing override selectors are preserved.
 
-## Single-node parallelism validation
-
-The master search-space fields `tp`, `ep`, and `dp-attn` become `TP`, `EP_SIZE`,
-and `DP_ATTENTION` in the benchmark environment. Each engine's recipe retains
-its native argument names and parallelism conventions.
-[`parallelism_constraints` and `validate_recipe`](../../../infx/srt_slurm/single_node.py)
-compare the recipe with that metadata. The former returns named
-`(actual, expected)` pairs; the latter raises `ValueError` on a mismatch.
-Variant selection requires exactly one matching recipe before launch.
-These checks never rewrite the recipe's parallelism settings or launch flags.
-
-| Engine | Recipe value compared with `tp` | Check against `ep` | Check against `dp-attn` |
-|---|---|---|---|
-| TokenSpeed | `attn-tp-size * data-parallel-size` | `ep-size == ep` | `(data-parallel-size > 1) == dp-attn` |
-| SGLang | `tensor-parallel-size` | `expert-parallel-size`, or `ep-size` | `enable-dp-attention == dp-attn`; `data-parallel-size` must equal `tp` when enabled, otherwise 1 |
-| TensorRT-LLM (`trt` in the master) | `tensor_parallel_size` | `moe_expert_parallel_size == ep` | `enable_attention_dp == dp-attn` |
-| vLLM | `tensor-parallel-size * data-parallel-size` | `enable-expert-parallel == (ep > 1)` | `(data-parallel-size > 1) == dp-attn` |
-| ATOM | `roles.agg.gpus` | `enable-expert-parallel == (ep > 1)`; `ep` must be 1 or `tp` | `enable-dp-attention == dp-attn` |
-
-For example, a master row with `tp: 4`, `ep: 4`, and `dp-attn: true` matches
-TokenSpeed arguments `attn-tp-size: 1`, `data-parallel-size: 4`, and `ep-size: 4`:
-one GPU per attention group times four groups gives the four-GPU width.
-The matching SGLang arguments are `tensor-parallel-size: 4`,
-`data-parallel-size: 4`, `expert-parallel-size: 4`, and
-`enable-dp-attention: true`. This validator compares SGLang's TP directly;
-it does not multiply that TP by DP. Comparing literal TP flags across engines
-would incorrectly reject the TokenSpeed recipe because its attention TP is 1.
-
-The single-node launcher requires pipeline parallelism 1. vLLM's EP check
-verifies the enable flag, not an exact numerical expert group size. `dp-attn`
-is a boolean, not a count, so these checks do not encode every possible engine
-topology. They prevent running and labeling a benchmark with inconsistent
-recipe and master settings; the recipe still owns the native configuration.
-
 ## Recipe fragments
 
 Active recipes, fixed-sequence and AgentX, single- and multi-node, are fragments: native srt-slurm YAML holding only recipe-specific settings. At launch the fragment is composed and bound:
 
 1. The lane's shared block in [`configs/srt-recipes/`](../../../configs/srt-recipes) (`fixed-sequence-{single,multi}.yaml` or `agentic.yaml`) is merged under the fragment (under `base` for bundles). A multi-node row with `power: true` also gets [`telemetry-dcgm.yaml`](../../../configs/srt-recipes/telemetry-dcgm.yaml), its exporter on the cluster's `srt-slurm.power-exporter-port`; the lane must allow power (`POWER_LANES`). The fragment wins: mappings merge and lists replace, so a fragment may keep telemetry tunables such as `collector_join_timeout_seconds`. Native single-node benchmarks also get [`telemetry-native.yaml`](../../../configs/srt-recipes/telemetry-native.yaml) before variant selection. That block enables best-effort power collection with the cluster's `default_gpu_exporter`; eval-only points omit collection. The binder sets `telemetry.required` from `REQUIRE_POWER`, so a single-node fragment may not set it, and gives AgentX clients matching power switches.
 2. The row's selector picks the variant. A single-node variant may name its `benchmark.env.CONC`, which keeps that concurrency paired with its tuning.
-3. The binder ([`workload.py`](../../../infx/srt_slurm/workload.py)) writes the matrix point into the selected recipe: `model.path: hf:<model>`, `model.container: <image>`, `model.precision`, `identity.container.image` (as a registry reference) and `identity.model.repo` when the fragment declares `identity.container`/`identity.model`, and `benchmark.concurrencies` when telemetry is enabled. Fixed-sequence recipes also get `benchmark.env.ISL`/`OSL`; single-node recipes get `MODEL` and `CONC`, and fixed-sequence ones `RANDOM_RANGE_RATIO` and `USE_CHAT_TEMPLATE` (`true` exactly when the recipe speculates). Multi-node AgentX recipes get the client's `RESULT_DIR`, `AIPERF_DATASET_MMAP_CACHE_DIR` and `HF_HUB_CACHE` from the launcher, which derives them from the volumes it mounts (`volume-mounts`, `agentic-volume-mounts`, lane mounts); a fragment that sets `HF_HOME` keeps its own cache. They also get `IS_MULTINODE: "true"` and `ENABLE_AGENTX_POWER`, `"1"` exactly when the launcher collects the point's AgentX power (a `power: true` row whose lane rule collects AgentX or adapter power) and `"0"` otherwise, and `REQUIRE_POWER`, `"1"` when the workflow requires power or the lane rule marks the point `require` (GB200 and GB300 Kimi-K3 AgentX), so the client fails a point whose power is invalid. The multi-node client reads `CONC_LIST`, `CONC`, `MODEL` and the other matrix inputs, prefill and decode topology included, from the job environment, so fragments do not copy them (`TP`, `PP_SIZE`, `PCP_SIZE` and `EP_SIZE` describe single-node points only); single-node AgentX points get them as runtime arguments.
+3. The binder ([`workload.py`](../../../infx/srt_slurm/workload.py)) writes the matrix point into the selected recipe: `model.path: hf:<model>`, `model.container: <image>`, `model.precision`, `identity.container.image` (as a registry reference) and `identity.model.repo` when the fragment declares `identity.container`/`identity.model`, and `benchmark.concurrencies` when telemetry is enabled. Fixed-sequence recipes also get `benchmark.env.ISL`/`OSL`; single-node recipes get `MODEL` and `CONC`, and fixed-sequence ones `RANDOM_RANGE_RATIO` and `USE_CHAT_TEMPLATE` (`true` exactly when the recipe speculates). Multi-node AgentX recipes get the client's `RESULT_DIR`, `AIPERF_DATASET_MMAP_CACHE_DIR` and `HF_HUB_CACHE` from the launcher, which derives them from the volumes it mounts (`volume-mounts`, `agentic-volume-mounts`, lane mounts); a fragment that sets `HF_HOME` keeps its own cache. They also get `IS_MULTINODE: "true"` and `ENABLE_AGENTX_POWER`, `"1"` exactly when the launcher collects the point's AgentX power (a `power: true` row whose lane rule collects AgentX or adapter power) and `"0"` otherwise, and `REQUIRE_POWER`, `"1"` when the workflow requires power or the lane rule marks the point `require`, so the client fails a point whose power is invalid. The multi-node client reads `CONC_LIST`, `CONC`, `MODEL` and the other matrix inputs, prefill and decode topology included, from the job environment, so fragments do not copy them (`TP`, `PP_SIZE`, `PCP_SIZE` and `EP_SIZE` describe single-node points only); single-node AgentX points get them as runtime arguments.
 4. A component a repository setup script installs gets the master config's version. When `setup_script`, or a service `preamble` that runs `/configs/<script>`, is one of the installers in the binder's `INSTALLERS`, the binder writes the point's `router` or `kv-offload-backend` version as `ROUTER_VERSION` or `KV_OFFLOAD_BACKEND_VERSION` into the top-level `environment` (workers and static routers) or into that service's `env` (services do not inherit `environment`). A point that does not declare the version fails, and a `vllm-router==` pin in `SETUP_PIP_PACKAGES` must equal the master router version.
 
 A fragment that sets a key the binder or launcher writes, or that the workflow exports from the matrix point (`_POINT_KEYS`, `BOUND_ENV` in `workload.py`, and `ROUTER_VERSION` or `KV_OFFLOAD_BACKEND_VERSION` in any env; single-node variants may still name `CONC`), fails before submission, even with the bound value. Values `benchmarks/runtime_settings.sh` and the multi-node `FRAMEWORK` settings export reach every process through the job environment, so a fragment sets one only to override it (an AgentX client `TOKENIZER` names a local checkpoint while `MODEL` stays the published Hugging Face id). `hf:<model>` resolves to the cluster's staged checkpoint (`models.entries`) unless a `models.OVERRIDES` row serves the Hub snapshot, and the master image to its staged container. A multi-node fixed-sequence point with neither checkpoint nor Hub row fails before submission.

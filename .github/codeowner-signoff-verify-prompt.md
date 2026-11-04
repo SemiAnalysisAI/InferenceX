@@ -559,7 +559,7 @@ Verify BOTH:
   Name the config/script and line.
 - (b) AL VALUE MATCHES THE GOLDEN CURVE. Read the committed golden AL YAML for the
   model in `inferencex-e2e/infx/golden_al_distribution/` on the default-branch checkout. Examples include
-  `qwen3.5_mtp.yaml` and `minimaxm3_eagle3.yaml`. Confirm the pinned AL equals the golden value for that
+  `qwen3.5-397b-a17b-nvfp4__mtp__native__default-default.yaml` and `minimax-m3__eagle3__minimax-m3-eagle3__default-default.yaml`. Confirm the pinned AL equals the golden value for that
   model, thinking mode, and the config's `num_speculative_tokens` / MTP level (e.g.
   qwen3.5 thinking_on with 3 speculative tokens -> 3.39; `signoff_facts golden-al` returns
   the expected value and setting). For TRT-LLM configs, compare
