@@ -1,5 +1,6 @@
 """The native YAML route preserves the selected request and model-view contract."""
 
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -35,6 +36,20 @@ def test_selected_plan_binds_requested_set_and_digest(tmp_path):
     assert (len(plan["cases"]), plan["repetitions"], plan["warmup_runs"]) == (1, 2, 0)
     with pytest.raises(ValueError, match="plan_sha256"):
         srt_selected.selected_plan(path, "release-v1", "0" * 64)
+
+
+def test_measurement_window_hashes_the_run_as_the_runner_writes_it():
+    run = {
+        "measurement": {
+            "concurrency": 1,
+            "start_monotonic_seconds": 1.0,
+            "end_monotonic_seconds": 3.0,
+        },
+        "summary": {"scheduled": 1, "valid": 1, "failed": 0},
+        "plan": {"cases": [{"prompt": "un café à Montréal"}]},
+    }
+    window = srt_selected.benchmark_window(run, utc_minus_monotonic=100.0)
+    assert window["run_sha256"] == hashlib.sha256(h3_spec.canonical_json_bytes(run)).hexdigest()
 
 
 def test_h3_vllm_model_view_exposes_only_tested_partition(tmp_path):

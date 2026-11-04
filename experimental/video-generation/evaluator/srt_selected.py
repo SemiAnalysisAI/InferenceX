@@ -88,9 +88,7 @@ def benchmark_window(run: dict, *, utc_minus_monotonic: float) -> dict:
         "energy_normalization": "clips",
         "clock": {"utc_minus_monotonic_seconds": utc_minus_monotonic},
         "run_path": "baseline/run.json",
-        "run_sha256": hashlib.sha256(
-            json.dumps(run, sort_keys=True, separators=(",", ":")).encode()
-        ).hexdigest(),
+        "run_sha256": hashlib.sha256(h3_spec.canonical_json_bytes(run)).hexdigest(),
     }
 
 
