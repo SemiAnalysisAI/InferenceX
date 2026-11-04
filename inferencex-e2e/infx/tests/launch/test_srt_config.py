@@ -134,6 +134,13 @@ def test_a_rapl_cpu_exporter_grants_after_the_cluster_hook_and_restores_at_teard
     assert not resolved.get("ignore_failure")
 
 
+def test_a_rapl_cpu_exporter_refuses_a_shared_node():
+    shared = cluster(srt={"single-node-exclusive": False})
+    assert render(shared, job(single_node=True))["use_exclusive_sbatch_directive"] is False
+    with pytest.raises(LaunchError, match="RAPL CPU power on shared nodes"):
+        render(shared, job(single_node=True, cpu_power_source="rapl"))
+
+
 @pytest.fixture
 def run_rapl_grant(tmp_path):
     """Run the rendered grant under bash against counters in ``tmp_path`` with a fake sudo."""

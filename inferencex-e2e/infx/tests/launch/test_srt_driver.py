@@ -99,8 +99,9 @@ def single_node_env(harness, cluster_id: str, **overrides: str) -> dict[str, str
 
 
 def set_cpu_power_exporter(config: Path, cluster_id: str, exporter: dict) -> None:
-    """Give ``cluster_id``'s srt-slurm record the CPU power exporter ``exporter``."""
+    """Give ``cluster_id`` the CPU power exporter ``exporter`` on exclusive nodes."""
     records = yaml.safe_load(config.read_text())
+    records["clusters"][cluster_id]["slurm"]["exclusive"] = True
     records["clusters"][cluster_id]["slurm"]["srt-slurm"]["cpu-power-exporter"] = exporter
     config.write_text(yaml.safe_dump(records))
 
