@@ -7586,7 +7586,7 @@ h3-bf16-h100-sglang-video:
   srt-recipe-dir: h3/sglang/h100-bf16
   scenarios:
     video-generation:
-      - spec: h3-v0.1.yaml
+      - spec: h3-v2.yaml
         set: release-v1
         search-space:
           - gpus: 4
@@ -7604,7 +7604,7 @@ h3-bf16-b200-sglang-video:
   srt-recipe-dir: h3/sglang/b200-bf16
   scenarios:
     video-generation:
-      - spec: h3-v0.1.yaml
+      - spec: h3-v2.yaml
         set: release-v1
         search-space:
           - gpus: 4

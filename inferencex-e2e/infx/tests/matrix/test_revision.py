@@ -220,14 +220,14 @@ def test_nested_snapshot_keeps_the_video_specs_the_binder_loads(generation_repo,
     (root / "inferencex-e2e").mkdir()
     git("mv", "infx", "configs", "benchmarks", "inferencex-e2e/")
     (root / VIDEO_SPEC_DIR).mkdir(parents=True)
-    for name in ("video_spec.py", "h3-v0.1.yaml"):
+    for name in ("video_spec.py", "h3-v2.yaml"):
         shutil.copy(ROOT.parent / VIDEO_SPEC_DIR / name, root / VIDEO_SPEC_DIR / name)
     git("add", ".")
     git("commit", "-qm", "relocate project beside the video harness")
     monkeypatch.chdir(root / "inferencex-e2e")
-    expected = video.load_spec("h3-v0.1.yaml", root=ROOT, set_id="release-v1")
+    expected = video.load_spec("h3-v2.yaml", root=ROOT, set_id="release-v1")
     with revision.snapshot("HEAD") as inputs:
-        assert video.load_spec("h3-v0.1.yaml", root=inputs.root, set_id="release-v1") == expected
+        assert video.load_spec("h3-v2.yaml", root=inputs.root, set_id="release-v1") == expected
 
 
 LEGACY_GENERATOR = """\

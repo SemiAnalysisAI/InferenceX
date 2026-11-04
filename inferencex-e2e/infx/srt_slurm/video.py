@@ -32,7 +32,7 @@ from infx.srt_slurm.workload import (
     resolve_fabric,
 )
 
-VIDEO_PACKAGE = "experimental/video-generation"
+VIDEO_PACKAGE = "video-generation"
 SPEC_DIR = "specs"
 PACKAGE_MOUNT = "/video-package"
 RESULT_DIR = "/logs/video"

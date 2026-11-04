@@ -2,7 +2,7 @@
 
 The `video-generation` scenario schedules one server job per deployment. H100
 and B200 SGLang select four-GPU C1 deployments using
-`h3-v0.1.yaml`: 20 distinct measured prompts, a separate warmup, 49 denoising
+`h3-v2.yaml`: 20 distinct measured prompts, a separate warmup, 49 denoising
 updates, and 124 frames at 24 fps and 1344×768. A five-second request produces
 124/24 seconds of video. Config presence is not GPU or quality qualification.
 Each deployment's image pin is its `*-video` entry in

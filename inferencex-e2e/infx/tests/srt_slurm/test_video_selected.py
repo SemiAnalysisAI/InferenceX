@@ -71,7 +71,7 @@ def test_both_engines_bind_the_same_selected_plan(native_fragment):
 
 def test_fairness_sglang_requires_disabled_cross_request_cache(native_fragment):
     raw, write = native_fragment
-    selected = {**ENV, "FRAMEWORK": "sglang", "VIDEO_SPEC": "h3-v0.1.yaml", "GPU_COUNT": "4"}
+    selected = {**ENV, "FRAMEWORK": "sglang", "VIDEO_SPEC": "h3-v2.yaml", "GPU_COUNT": "4"}
     with pytest.raises(ValueError, match="--disable-conditioning-cache"):
         video.prepare(write(), selected, root=ROOT)
 
@@ -86,7 +86,7 @@ def test_fairness_sglang_requires_disabled_cross_request_cache(native_fragment):
 def test_fairness_vllm_requires_disabled_prompt_embedding_cache(native_fragment):
     raw, write = native_fragment
     _as_vllm(raw)
-    selected = {**ENV, "VIDEO_SPEC": "h3-v0.1.yaml", "GPU_COUNT": "4"}
+    selected = {**ENV, "VIDEO_SPEC": "h3-v2.yaml", "GPU_COUNT": "4"}
     with pytest.raises(ValueError, match="OMNI_DIFFUSION_PROMPT_EMBED_CACHE=0"):
         video.prepare(write(raw), selected, root=ROOT)
 

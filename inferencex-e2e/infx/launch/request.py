@@ -217,7 +217,7 @@ class SingleNodeRequest(SrtRequest):
 class VideoRequest(SrtRequest):
     """One native video-generation job: one server, every CONC_LIST concurrency in turn.
 
-    The video client and server come from ``experimental/video-generation`` (``VIDEO_SPEC`` names
+    The video client and server come from ``video-generation`` (``VIDEO_SPEC`` names
     the YAML workload under its ``specs/`` and ``VIDEO_SET`` its selected set); the model is
     served from the HF hub cache.
     """

@@ -22,7 +22,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from evaluator import runner
+from evaluator import cli, runner
 from specs import video_spec
 
 
@@ -325,7 +325,7 @@ def test_local_http_fixture_lifecycle_and_identity(
 def test_fairness_request_and_disjoint_warmup_reach_local_http_fixture(
     tmp_path, mocked_media, fixture_server, runtime
 ):
-    path = Path(__file__).resolve().parents[1] / "specs/h3-v0.1.yaml"
+    path = Path(__file__).resolve().parents[1] / "specs/h3-v2.yaml"
     plan = video_spec.plan_for(video_spec.load_spec(path), "release-v1")
     plan["cases"] = [
         {
@@ -379,8 +379,45 @@ def test_fairness_request_and_disjoint_warmup_reach_local_http_fixture(
         )
 
 
+def test_cli_run_records_the_declared_numerical_identity(
+    plan, tmp_path, mocked_media, fixture_server
+):
+    endpoint, _ = fixture_server()
+    identity = {
+        "runtime_revision": "253020450290328e9deb307eece1e402fa17f35e",
+        "image_digest": "a" * 64,
+        "server_argv": ["serve", "sglang"],
+        "server_environment": {"CACHE": "0"},
+        "gpu_topology": {"gpu_uuids": ["GPU-fixture"]},
+    }
+    plan_path, identity_path = tmp_path / "plan.json", tmp_path / "identity.json"
+    plan_path.write_text(json.dumps(plan))
+    identity_path.write_text(json.dumps(identity))
+    output = tmp_path / "run"
+    code = cli.main(
+        [
+            "run",
+            str(plan_path),
+            "--execute",
+            "--endpoint",
+            endpoint,
+            "--runtime-revision",
+            identity["runtime_revision"],
+            "--hardware-label",
+            "LOCAL HTTP FIXTURE",
+            "--output",
+            str(output),
+            "--numerical-identity",
+            str(identity_path),
+        ]
+    )
+    assert code == 0
+    run = json.loads((output / "run.json").read_text())
+    assert run["configuration"]["numerical_identity"] == identity
+
+
 def test_request_encoding_comes_from_the_plan(tmp_path):
-    path = Path(__file__).resolve().parents[1] / "specs/h3-v0.1.yaml"
+    path = Path(__file__).resolve().parents[1] / "specs/h3-v2.yaml"
     plan = video_spec.plan_for(video_spec.load_spec(path), "release-v1")
     plan["fairness"]["encoding"]["preset"] = "veryfast"
     sglang = runner.preview_plan(plan, runtime="sglang")["slots"][0]["request"]

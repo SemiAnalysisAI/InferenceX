@@ -123,7 +123,7 @@ prompts:
     requires_sound: true
 sets:
   release-v1:
-    plan_id: h3-native-engine-release-v0.1
+    plan_id: h3-native-engine-release-v2
     repetitions: 1
     warmup_runs: 1
     warmup_case: {case_id: warmup-only, prompt: warmup-only, seed: 11}

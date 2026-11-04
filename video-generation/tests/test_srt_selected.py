@@ -201,7 +201,7 @@ def test_selected_server_requires_the_recipe_gpus_and_runtime(tmp_path, monkeypa
 
 
 def test_v01_vllm_four_gpu_server_records_sealed_launch(tmp_path, monkeypatch):
-    plan = video_spec.plan_for(video_spec.load_spec(PACKAGE / "specs/h3-v0.1.yaml"), "release-v1")
+    plan = video_spec.plan_for(video_spec.load_spec(PACKAGE / "specs/h3-v2.yaml"), "release-v1")
     model = _snapshot(tmp_path / "model")
     uuids = [f"GPU-{index}" for index in range(4)]
     monkeypatch.setattr(srt_selected, "cuda_devices", lambda: uuids)
@@ -261,7 +261,7 @@ def test_v01_vllm_four_gpu_server_records_sealed_launch(tmp_path, monkeypatch):
 
 
 def test_v01_client_requires_matching_sealed_launch_before_requests(tmp_path, monkeypatch):
-    plan = video_spec.plan_for(video_spec.load_spec(PACKAGE / "specs/h3-v0.1.yaml"), "release-v1")
+    plan = video_spec.plan_for(video_spec.load_spec(PACKAGE / "specs/h3-v2.yaml"), "release-v1")
     seen = []
 
     def stop_after_preflight(*args, **kwargs):
@@ -326,7 +326,7 @@ INCOMPLETE_IDENTITY = "numerical_identity must contain a complete matching serve
     ],
 )
 def test_client_rejects_a_mismatched_sealed_launch_before_requests(tmp_path, field, value, message):
-    plan = video_spec.plan_for(video_spec.load_spec(PACKAGE / "specs/h3-v0.1.yaml"), "release-v1")
+    plan = video_spec.plan_for(video_spec.load_spec(PACKAGE / "specs/h3-v2.yaml"), "release-v1")
     launch = {
         "runtime": "vllm-omni",
         "runtime_revision": "a" * 40,

@@ -14,7 +14,7 @@ diffusion 引擎在单节点上提供服务，选定的冻结 YAML 工作负载�
 `python3 -m infx.bench video serve` 把引擎作为 generic service 启动，
 并以 `benchmark.type: custom` 运行 `python3 -m infx.bench video client`。
 本目录以 `/video-package` 挂载进任务。H100 与 B200 选用
-`h3-v0.1.yaml/release-v1`，在 C1 测量 20 个不同 prompt。
+`h3-v2.yaml/release-v1`，在 C1 测量 20 个不同 prompt。
 产物身份、复用校验与合并后发布见
 [原生视频交付](../../inferencex-e2e/docs/video-generation.md)。
 
@@ -39,7 +39,7 @@ diffusion 引擎在单节点上提供服务，选定的冻结 YAML 工作负载�
 离线 Diffusers 参考媒体使用[固定依赖与生成命令](reference/README.md)。
 参考生成与服务延迟测试分开，跨引擎质量仍为未评估。
 
-[`specs/h3-v0.1.yaml`](specs/h3-v0.1.yaml) 提供独立的 H3 5 秒、20 个不同
+[`specs/h3-v2.yaml`](specs/h3-v2.yaml) 提供独立的 H3 5 秒、20 个不同
 prompt 合同，集合选择器为 `release-v1`。请求使用 49 次去噪更新，预期输出
 124 帧，warmup prompt 与测量集不重叠。runner 按引擎发送显式 H.264 参数，
 并把编码策略计入计划哈希。媒体解码只验证可观察的流属性；preset、CRF、
@@ -49,7 +49,7 @@ prompt 合同，集合选择器为 `release-v1`。请求使用 49 次去噪更�
 ## 本地检查
 
 ```bash
-cd experimental/video-generation
+cd video-generation
 PYTHONPATH=../../inferencex-e2e uv run --no-project --python 3.12 \
   --with 'av==16.1.0' --with 'numpy==2.3.5' \
   --with 'pyyaml>=6,<7' --with 'pytest>=8,<9' python -m pytest -q

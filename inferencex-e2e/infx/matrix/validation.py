@@ -435,11 +435,11 @@ def validate_agentic_matrix_entry(entry: dict) -> dict:
     return entry
 
 
-VIDEO_SPEC_DIR = "experimental/video-generation/specs"
+VIDEO_SPEC_DIR = "video-generation/specs"
 
 
 def _video_spec_path(value: str) -> str:
-    """A YAML workload file name under experimental/video-generation/specs, without directories."""
+    """A YAML workload file name under video-generation/specs, without directories."""
     if not value or value != PurePosixPath(value).name or not value.endswith((".yaml", ".yml")):
         raise ValueError(f"{value!r} must be a YAML file name under {VIDEO_SPEC_DIR}")
     return value

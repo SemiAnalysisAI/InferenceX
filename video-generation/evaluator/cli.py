@@ -104,6 +104,11 @@ def _mvp_command(arguments: argparse.Namespace) -> int:
                     api_key_env=arguments.api_key_env,
                     serving_concurrency=arguments.serving_concurrency,
                     delivery_deadline_seconds=arguments.delivery_deadline_seconds,
+                    numerical_identity=(
+                        _load_mvp_object(arguments.numerical_identity)
+                        if arguments.numerical_identity
+                        else None
+                    ),
                 )
             finally:
                 signal.signal(signal.SIGTERM, previous_sigterm)
@@ -188,6 +193,11 @@ def _parser() -> argparse.ArgumentParser:
         "--delivery-deadline-seconds",
         type=float,
         help="optional submit-to-downloaded-media deadline for technical goodput; not an attempt timeout",
+    )
+    run.add_argument(
+        "--numerical-identity",
+        type=Path,
+        help="JSON server identity (image digest, argv, environment, GPU topology) that lets compare gate same-configuration fidelity",
     )
 
     compare = subparsers.add_parser(

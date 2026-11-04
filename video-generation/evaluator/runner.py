@@ -158,7 +158,7 @@ def _case(case: Any, name: str) -> None:
 def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
     """Check the structure a run needs, without making a request.
 
-    Workload policy, such as the v0.1 prompt count and warmup rules, is validated once
+    Workload policy, such as the schema version 2 prompt count and warmup rules, is validated once
     by ``specs/video_spec.py``. Unknown root metadata is preserved in the plan digest.
     """
     if not isinstance(plan, dict):

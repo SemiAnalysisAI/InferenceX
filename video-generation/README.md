@@ -16,7 +16,7 @@ the SKU recipe under `benchmarks/single_node/srt-slurm-recipes/h3/` starts the
 engine through `python3 -m infx.bench video serve` as a generic service and runs
 `python3 -m infx.bench video client` as `benchmark.type: custom`. This directory
 is mounted into the job as `/video-package`. H100 and B200 select
-`h3-v0.1.yaml/release-v1`: 20 distinct measured prompts at C1. See
+`h3-v2.yaml/release-v1`: 20 distinct measured prompts at C1. See
 [native video delivery](../../inferencex-e2e/docs/video-generation.md) for
 artifact identity, reuse validation and post-merge publication.
 
@@ -43,7 +43,7 @@ For offline Diffusers reference media, use the [pinned environment and generatio
 command](reference/README.md). Reference generation is separate from serving
 latency and leaves cross-engine quality unjudged.
 
-[`specs/h3-v0.1.yaml`](specs/h3-v0.1.yaml) supplies a separate 20-prompt,
+[`specs/h3-v2.yaml`](specs/h3-v2.yaml) supplies a separate 20-prompt,
 5-second H3 contract under the `release-v1` selector. It requests 49 denoising
 updates, expects 124 delivered frames, and uses a disjoint warmup. The runner
 sends each engine's explicit H.264 options and records the encoding policy in
@@ -56,7 +56,7 @@ environment, GPU and algorithm identity.
 ## Local checks
 
 ```bash
-cd experimental/video-generation
+cd video-generation
 PYTHONPATH=../../inferencex-e2e uv run --no-project --python 3.12 \
   --with 'av==16.1.0' --with 'numpy==2.3.5' \
   --with 'pyyaml>=6,<7' --with 'pytest>=8,<9' python -m pytest -q

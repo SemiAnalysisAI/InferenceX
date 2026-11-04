@@ -219,10 +219,10 @@ def video_env(harness, cluster_id: str, **overrides: str) -> dict[str, str]:
     mirror = harness.workspace / VIDEO_ENV["SRT_RECIPE"]
     mirror.parent.mkdir(parents=True, exist_ok=True)
     mirror.write_text(recipe.read_text())
-    package = harness.workspace.parent / "experimental/video-generation"
+    package = harness.workspace.parent / "video-generation"
     package.parent.mkdir(parents=True, exist_ok=True)
     if not package.exists():
-        package.symlink_to(ROOT.parent / "experimental/video-generation", target_is_directory=True)
+        package.symlink_to(ROOT.parent / "video-generation", target_is_directory=True)
     runner = overrides.pop("RUNNER_NAME", None) or runner_for(cluster_id)
     return {**harness.env, **VIDEO_ENV, "RUNNER_NAME": runner, **overrides}
 
@@ -249,7 +249,7 @@ def test_video_point_serves_the_video_service_and_stages_every_concurrency(harne
     rendered = srtslurm(workspace)
     ClusterConfig.Schema().load(rendered)
     mounts = rendered["default_mounts"]
-    assert mounts[str(workspace.parent / "experimental/video-generation")] == "/video-package"
+    assert mounts[str(workspace.parent / "video-generation")] == "/video-package"
     assert rendered["default_time_limit"] == "75"
     assert "/mnt/hf_hub_cache/" in mounts.values()
     assert rendered["containers"][rendered["default_gpu_exporter"]["container_image"]]
