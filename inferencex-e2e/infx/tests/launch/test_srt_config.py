@@ -12,7 +12,7 @@ import yaml
 from infx.clusters import Cluster, load_inventory
 from infx.clusters.slurm import slurm_settings
 from infx.launch.backends.slurm import SlurmBackend
-from infx.launch.context import Launch
+from infx.launch.context import Launch, LaunchError
 from infx.launch.drivers.srt.checkout import Checkout, compute_workspace
 from infx.launch.drivers.srt.config import SrtJob, binder_inputs, pyxis_spelling, render, write
 from infx.launch.drivers.srt.lanes import SrtLane
@@ -251,7 +251,9 @@ def test_the_cpu_request_follows_the_clusters_unit():
 @pytest.mark.skipif(shutil.which("rsync") is None, reason="needs rsync")
 def test_the_staged_workspace_drops_run_artifacts_but_keeps_srt_slurm_sources(tmp_path):
     workspace = tmp_path / "workspace"
-    kept = ["runners/srt-slurm/hooks/common.sh", "benchmarks/multi_node/srt-slurm-recipes/r.yaml"]
+    # The acceptance gate's container reads the run's prepared prompts from the workspace.
+    kept = ["runners/srt-slurm/hooks/common.sh", "benchmarks/multi_node/srt-slurm-recipes/r.yaml",
+            "al_gate_dataset/speedbench_coding.jsonl"]  # fmt: skip
     dropped = ["srt-slurm-1-1-abc/recipe.yaml", "utils/srt-slurm/pyproject.toml", ".venv/bin/python",
                "outputs/42/log", "LOGS/sweep.log", "image.sqsh"]  # fmt: skip
     for name in kept + dropped:
@@ -292,9 +294,10 @@ def test_the_agentx_client_measures_power_exactly_when_the_launcher_collects_it(
         "CONC_LIST": "4",
     })  # fmt: skip
 
-    port, client_env = binder_inputs(
+    port, cpu_source, client_env = binder_inputs(
         record, slurm_settings(record).srt_slurm, SrtLane(), request, decision
     )
+    assert cpu_source is None
 
     switches = (
         client_env.get("IS_MULTINODE"),
@@ -302,3 +305,26 @@ def test_the_agentx_client_measures_power_exactly_when_the_launcher_collects_it(
         client_env.get("REQUIRE_POWER"),
     )
     assert (port, *switches) == expected
+
+
+@pytest.mark.parametrize("declared", [True, False])
+def test_cpu_power_binds_the_clusters_grace_exporter_or_fails_before_binding(tmp_path, declared):
+    srt = {"power-exporter-port": 9401}
+    if declared:
+        srt["cpu-power-exporter"] = {"source": "acpi"}
+    record = cluster(srt=srt)
+    request = MultiNodeRequest.from_env({
+        "RUNNER_NAME": "c_0", "GITHUB_WORKSPACE": str(tmp_path), "IMAGE": "i",
+        "FRAMEWORK": "dynamo-sglang", "MODEL_PREFIX": "m", "PRECISION": "fp8",
+        "SPEC_DECODING": "none", "RESULT_FILENAME": "r", "IS_AGENTIC": "0", "RUN_EVAL": "false",
+        "EVAL_ONLY": "false", "SRT_RECIPE": "r.yaml",
+    })  # fmt: skip
+    settings = slurm_settings(record).srt_slurm
+    cpu = PowerDecision(dcgm=True, agentx=False, cpu=True)
+    if not declared:
+        with pytest.raises(LaunchError, match=r"no srt-slurm\.cpu-power-exporter"):
+            binder_inputs(record, settings, SrtLane(), request, cpu)
+        return
+    assert binder_inputs(record, settings, SrtLane(), request, cpu)[:2] == (9401, "acpi")
+    gpu_only = PowerDecision(dcgm=True, agentx=False)
+    assert binder_inputs(record, settings, SrtLane(), request, gpu_only)[:2] == (9401, None)
