@@ -45,14 +45,11 @@ base:
         SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
         NCCL_MNNVL_ENABLE: '1'
         NCCL_CUMEM_ENABLE: '1'
-        SGLANG_DCP_PUSH_COMBINE_MAX_ROWS: '1536'
-        SGLANG_CUSTOM_ALL_REDUCE_V2_MAX_SIZE_KB: '32768'
       args:
         served-model-name: moonshotai/Kimi-K3.1-Pro
         trust-remote-code: true
         tensor-parallel-size: 16
         dcp-size: 16
-        dcp-comm-backend: fi_a2a
         expert-parallel-size: 1
         kv-cache-dtype: fp8_e4m3
         # Week-1 K3.1 precision policy: FP32 KDA recurrent state.
