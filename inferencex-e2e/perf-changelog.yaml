@@ -11946,6 +11946,24 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
+    - minimaxm31flash-fp4-b300-sglang-agentic-dspark
+  description:
+    - "Add TP4 points with DRAM KV offload at conc 20, 44, 52 and 60, and a TP4 point without offload at conc 16, using shortest-prefill-first with a prefill-decode interval of 32."
+    - "Add a TP2 point with DRAM KV offload at conc 44 using shortest-prefill-first with a prefill-decode interval of 32."
+    - "Add TP2 points with DRAM KV offload and a larger HBM KV pool (mem-fraction-static 0.93) at conc 50 and 52 using shortest-prefill-first with a prefill-decode interval of 20."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4726
+  scenario-type: [agentic-coding]
+  append-only: true
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-vllm-agentic-dspark
+  description:
+    - "Retune TP4 c8 and c16 with CUDA graph capture sizes, add TP4 c24 and c40 points, and add TP2 c28, c32 and c36 points with CPU KV offload."
+    - "Image and speculative config are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4662
+  scenario-type: [agentic-coding]
+
+- config-keys:
     - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
   scenario-type:
     - agentic-coding
