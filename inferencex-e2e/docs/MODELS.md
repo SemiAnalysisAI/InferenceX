@@ -123,24 +123,24 @@ Other offloading tiers, including NVMe KV cache offloading, are outside the init
 
 Agreed by the vLLM and SGLang communities for week-1 official AgentX results. "Native" means the precision of the original released checkpoint.
 
-| Component | Required / allowed precision |
+| Component | Rule |
 |---|---|
-| Linear ops | Native (BF16) |
-| Shared expert | Native (BF16) |
+| Linear ops | Must match native (BF16) |
+| Shared expert | Must match native (BF16) |
 | MoE weights | MXFP4 or NVFP4 |
 | MoE activations | A4W4 allowed |
 | MoE dispatch | MX/NV-style quantization allowed |
-| MoE combine | Native (BF16) |
-| AllReduce / AG / RS | Native (BF16) |
+| MoE combine | Must match native (BF16) |
+| AllReduce / AG / RS | Must match native (BF16) |
 | KDA cache | FP32 |
 | Conv cache | Native (BF16) |
-| Indexer cache | FP4 |
-| KV cache | FP8. FP4 only if the native checkpoint ships an FP4 KV cache |
+| Indexer cache | FP4 allowed |
+| KV cache | FP8 allowed. FP4 only if the native checkpoint ships an FP4 KV cache |
 
 - EPLB: dynamic only, static EPLB not allowed.
-- A4W4 and NVFP4 MoE are allowed because AMD does not support A4W8.
-- FP4 KV cache without native support is excluded from official AgentX results. Unofficial results (e.g. vendor blogs on the AgentX harness) must be labeled unofficial and include the full KVV suite.
-- Engines outside vLLM, SGLang, TileRT and TokenSpeed on widely available hardware (i.e. not MI455X, Rubin, etc.) must first pass KVV (and/or TB 4.0) before submitting.
+- A4W4 and NVFP4 MoE are allowed because AMD has no W4A8 (FP4 weight, FP8 activation) MoE kernel.
+- FP4 KV cache without native support is not allowed in official AgentX results for week 1; it may be reconsidered once it passes KVV (and/or TB 4.0). Vendor blogs may still show it on the AgentX harness: such results must be labeled unofficial per the InferenceX/AgentX trademark and should include the full KVV suite showing FP4 KV cache passes or is near every KVV eval.
+- Engines outside vLLM, SGLang, TileRT and TokenSpeed on widely available hardware (i.e. not MI455X, Rubin, etc.) must first pass KVV (and/or TB 4.0), with logs and reproduction scripts, before submitting.
 - Any rule may be revisited after week 1 with a passing KVV (and/or TB 4.0) result. Passing requires public reproduction scripts and full logs.
 
 ## Model support matrix
