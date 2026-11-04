@@ -308,11 +308,13 @@ def bind_video(
         raise ValueError("invalid video client arguments") from error
     workload = benchmark.setdefault("env", {})
     readiness = (service.get("readiness") or {}).get("http") or {}
-    port = str(readiness.get("port", ""))
+    port = readiness.get("port")
+    if type(port) is not int or not 0 < port <= 65535:
+        raise ValueError(f"the server service must probe a TCP port, not {port!r}")
+    port = str(port)
     if (
         str(workload.get("H3_SERVER_PORT")) != port
         or str((service.get("env") or {}).get("H3_SERVER_PORT")) != port
-        or str(readiness.get("port")) != port
         or readiness.get("path") != READINESS_PATH
     ):
         raise ValueError(
@@ -388,7 +390,7 @@ def prepare(recipe: Path, environment: Mapping[str, str], *, root: Path) -> dict
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser()
     commands = parser.add_subparsers(dest="command", required=True)
     command = commands.add_parser("prepare")
     command.add_argument("recipe", type=Path)

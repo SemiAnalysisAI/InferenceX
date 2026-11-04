@@ -114,6 +114,17 @@ def test_invalid_selected_plan_or_runtime_fails_before_submission(native_fragmen
         )
 
 
+@pytest.mark.parametrize("port", [0, 65536])
+def test_server_port_must_be_a_tcp_port_before_submission(native_fragment, port):
+    raw, write = native_fragment
+    [server] = raw["services"]
+    server["args"][server["args"].index("--port") + 1] = str(port)
+    server["env"]["H3_SERVER_PORT"] = raw["benchmark"]["env"]["H3_SERVER_PORT"] = str(port)
+    server["readiness"]["http"]["port"] = port
+    with pytest.raises(ValueError, match="TCP port"):
+        video.prepare(write(raw), {**ENV, "FRAMEWORK": "sglang"}, root=ROOT)
+
+
 @pytest.fixture
 def native_fragment(tmp_path):
     """A small recipe whose engine settings remain owned by the recipe."""
