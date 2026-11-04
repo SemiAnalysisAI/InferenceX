@@ -11977,5 +11977,5 @@
   description:
     - "Try SMG 1.11.0 instead of vllm-router 0.1.14 for the single-node DP2/EP2 points at concurrency 8, 16, 32, 64, 128 and 192, using SMG's consistent_hashing policy."
     - "Expose one vLLM HTTP server per DP rank with data-parallel-external-lb so SMG routes across both ranks; retain the image, attention backends, Engram offload and speculative settings."
-  pr-link: XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4774
   scenario-type: [agentic-coding]
