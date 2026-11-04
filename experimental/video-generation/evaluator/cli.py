@@ -47,44 +47,8 @@ def _load_mvp_object(path: Path) -> dict[str, Any]:
     return result
 
 
-def _engine_command(raw: list[str]) -> list[str]:
-    if not raw:
-        raise ValueError("the native server requires an engine command after --")
-    if raw[0] != "--" or len(raw) == 1:
-        raise ValueError("the engine command must follow --")
-    return raw[1:]
-
-
 def _mvp_command(arguments: argparse.Namespace) -> int:
     try:
-        if arguments.command == "srt-yaml-serve":
-            from .srt_selected import selected_plan, serve
-
-            plan = selected_plan(arguments.spec, arguments.set, arguments.plan_sha256)
-            serve(
-                plan, runtime=arguments.runtime, runtime_revision=arguments.runtime_revision,
-                model_path=arguments.model_path, port=arguments.port,
-                gpus=arguments.gpus, output=arguments.record,
-                command=_engine_command(arguments.engine_command), model_view=arguments.model_view,
-            )
-            return 0
-
-        if arguments.command == "srt-yaml-client":
-            from .srt_selected import run_matrix, selected_plan
-
-            plan = selected_plan(arguments.spec, arguments.set, arguments.plan_sha256)
-            runs = run_matrix(
-                plan, runtime=arguments.runtime, runtime_revision=arguments.runtime_revision,
-                endpoint=arguments.endpoint, output=arguments.output,
-                concurrencies=arguments.concurrencies, gpus=arguments.gpus,
-                window_dir=arguments.window_dir, request_seconds=arguments.request_seconds,
-            )
-            for concurrency, run in runs.items():
-                print(json.dumps({"concurrency": concurrency, "summary": run.get("summary"),
-                                  "status": run.get("status")}, indent=2, sort_keys=True))
-            return 0 if all(run["summary"]["valid"] == run["summary"]["scheduled"]
-                            and run["summary"]["scheduled"] for run in runs.values()) else 1
-
         if arguments.command == "srt-finalize":
             from .srt_bundle import build_bundle
 
@@ -159,33 +123,6 @@ def _mvp_command(arguments: argparse.Namespace) -> int:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="vgbench")
     subparsers = parser.add_subparsers(dest="command", required=True)
-
-    selected_server = subparsers.add_parser("srt-yaml-serve", help="serve a selected YAML video workload")
-    selected_server.add_argument("--spec", required=True, type=Path)
-    selected_server.add_argument("--set", required=True)
-    selected_server.add_argument("--plan-sha256", required=True)
-    selected_server.add_argument("--runtime", required=True, choices=("sglang", "vllm-omni"))
-    selected_server.add_argument("--runtime-revision", required=True)
-    selected_server.add_argument("--model-path", required=True, type=Path)
-    selected_server.add_argument("--model-view", required=True, choices=("snapshot", "h3-fl2va"))
-    selected_server.add_argument("--port", required=True, type=int)
-    selected_server.add_argument("--gpus", required=True, type=int)
-    selected_server.add_argument("--record", required=True, type=Path)
-    selected_server.add_argument("engine_command", nargs=argparse.REMAINDER,
-                                 help="complete engine argv after --")
-
-    selected_client = subparsers.add_parser("srt-yaml-client", help="measure a selected YAML video workload")
-    selected_client.add_argument("--spec", required=True, type=Path)
-    selected_client.add_argument("--set", required=True)
-    selected_client.add_argument("--plan-sha256", required=True)
-    selected_client.add_argument("--runtime", required=True, choices=("sglang", "vllm-omni"))
-    selected_client.add_argument("--runtime-revision", required=True)
-    selected_client.add_argument("--endpoint", required=True)
-    selected_client.add_argument("--output", required=True, type=Path)
-    selected_client.add_argument("--concurrencies", required=True, nargs="+", type=int)
-    selected_client.add_argument("--gpus", required=True, type=int)
-    selected_client.add_argument("--window-dir", required=True, type=Path)
-    selected_client.add_argument("--request-seconds", required=True, type=float)
 
     srt_finalize = subparsers.add_parser(
         "srt-finalize",

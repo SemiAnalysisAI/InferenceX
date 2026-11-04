@@ -3,7 +3,6 @@ from __future__ import annotations
 import ctypes
 import hashlib
 import json
-import math
 import os
 import re
 import time
@@ -217,10 +216,6 @@ def run_matrix(
 ) -> dict[int, dict]:
     if runtime not in {"sglang", "vllm-omni"}:
         raise ValueError("unsupported native video runtime")
-    if not math.isfinite(request_seconds) or request_seconds <= 0:
-        raise ValueError("request_seconds must be a positive finite number")
-    if not concurrencies or len(set(concurrencies)) != len(concurrencies) or any(c < 1 for c in concurrencies):
-        raise ValueError("concurrencies must be distinct positive integers")
     numerical_identity = None
     if "fairness" in plan:
         launch_path = output / "server" / "launch.json"

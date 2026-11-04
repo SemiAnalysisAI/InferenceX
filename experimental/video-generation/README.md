@@ -35,8 +35,6 @@ check its `plan_sha256` against the bound value.
 After the job, the launcher runs `python -m evaluator.cli srt-finalize`. It joins
 the cells, their power validation sidecars and the server record into the
 `h3-results-<run>-<attempt>-<recipe-fingerprint>` bundle the dashboard ingests.
-`evaluator.cli` (`vgbench`) also exposes the serve and client steps as
-`srt-yaml-serve` and `srt-yaml-client` for manual runs.
 
 `specs/h3_spec.py` loads the YAML workload, validates it and hashes the
 selected plan; `infx.srt_slurm.video` imports it when binding a point.

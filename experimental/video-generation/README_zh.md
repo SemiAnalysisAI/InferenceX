@@ -32,8 +32,6 @@ diffusion 引擎在单节点上提供服务，选定的冻结 YAML 工作负载�
 任务结束后，launcher 运行 `python -m evaluator.cli srt-finalize`，把各单元、
 其功耗校验边车与服务端记录合并为仪表盘摄入的
 `h3-results-<run>-<attempt>-<recipe-fingerprint>` 包。
-`evaluator.cli`（`vgbench`）也以 `srt-yaml-serve` 与 `srt-yaml-client`
-提供同样的服务端与客户端步骤，供手动运行。
 
 `specs/h3_spec.py` 加载 YAML 工作负载、校验并对选定计划做哈希；
 `infx.srt_slurm.video` 在绑定测试点时导入它。

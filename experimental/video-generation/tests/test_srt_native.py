@@ -75,7 +75,7 @@ def _native_job(tmp_path, concurrencies=(1, 2), power_valid=True):
     logs = tmp_path / "logs"
     h3, power = logs / "h3", logs / "power"
     (h3 / "server").mkdir(parents=True)
-    # The record srt-yaml-serve seals before it execs the engine.
+    # The record srt_selected.serve seals before it execs the engine.
     bound = {"schema_version": "0.1.0", "plan": PLAN, "serving": {"mode": "closed_loop"},
              "gpu_uuids": ["GPU-11111111-1111-1111-1111-111111111111", "GPU-22222222-2222-2222-2222-222222222222"],
              "baseline": {"name": "sglang", "revision": "7" * 40, "model_path": "/model",

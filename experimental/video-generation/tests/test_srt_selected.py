@@ -10,7 +10,7 @@ import yaml
 PACKAGE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PACKAGE))
 
-from evaluator import cli, srt_selected  # noqa: E402
+from evaluator import srt_selected  # noqa: E402
 from specs import h3_spec  # noqa: E402
 
 
@@ -212,25 +212,6 @@ def test_vllm_view_checks_snapshot_before_creating_runtime_directories(tmp_path,
             model_path=model, port=30283, gpus=2, output=output,
             command=["vllm", "serve", str(model)], model_view="h3-fl2va")
     assert not storage.exists() and not output.exists()
-
-
-def test_selected_cli_forwards_engine_command_after_separator(tmp_path, monkeypatch):
-    path = PACKAGE / "specs/h3.yaml"
-    plan = h3_spec.plan_for(h3_spec.load_spec(path), "release-v1")
-    digest = h3_spec.plan_sha256(plan)
-    model = tmp_path / "model"
-    model.mkdir()
-    output = tmp_path / "server"
-    monkeypatch.setattr(srt_selected, "cuda_devices", lambda: ["GPU-1", "GPU-2"])
-    monkeypatch.setattr(srt_selected.os, "execvpe", lambda *args: None)
-    command = ["python3", "-m", "engine", "--model-path", str(model), "--tp-size", "3"]
-    assert cli.main(["srt-yaml-serve", "--spec", str(path), "--set", "release-v1",
-        "--plan-sha256", digest, "--runtime", "sglang", "--runtime-revision", "a" * 40,
-        "--model-path", str(model), "--model-view", "snapshot", "--port", "30283",
-        "--gpus", "2", "--record", str(output), "--", *command]) == 0
-    launch = json.loads((output / "launch.json").read_text())
-    assert launch["argv"] == command
-    assert launch["plan_sha256"] == digest
 
 
 def test_sglang_child_rechecks_uuid_order_before_import(monkeypatch):
