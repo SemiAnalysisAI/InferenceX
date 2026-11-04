@@ -87,7 +87,7 @@ def _gate(
         return None
     if row["framework"] == "dynamo-vllm" and leader_only_metrics(role, recipe, row["runner"]):
         return LEADER_ONLY_METRICS
-    curve = curve_name(row["model-prefix"], spec)
+    curve = curve_name(row["model-prefix"], spec, golden_dir)
     golden = golden_length(row["model-prefix"], spec, thinking_mode, golden_dir)
     if load_curve(curve, golden_dir).collection is None:
         return f"golden curve {curve} records no collection settings to replay"
