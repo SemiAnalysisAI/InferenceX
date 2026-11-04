@@ -6186,11 +6186,8 @@ dsv41flash-fp4-b200-vllm-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      # TP4 covers low concurrency behind vLLM's own frontend with an active-request cap.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [4, 10, 16, 24], srt-recipe: agentic.yaml }
-      # DEP4 is native TP1 x DP4 + EP4 with MegaMoE and FlashMLA mega-attention behind a consistent-hash vLLM Router.
       - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [66], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
-      # DEP8 is the same engine on all eight GPUs (TP1 x DP8 + EP8).
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [224, 256, 384, 512, 544, 576], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
 
 dsv41flash-fp4-b200-sglang-agentic-dspark:
