@@ -494,7 +494,7 @@ def build_bundle(
         "source_sha": source_sha,
         "started_at": started,
         "finished_at": finished,
-        "phase": "complete",
+        "phase": status,
         "mode": MODE,
         "launcher": "srt-slurm",
         "evidence_kind": EVIDENCE_KIND,

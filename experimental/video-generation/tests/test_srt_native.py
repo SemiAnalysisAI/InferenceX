@@ -293,6 +293,7 @@ def test_bundle_joins_cells_power_and_identity_into_the_app_layout(tmp_path):
     ]
     assert matrix["completion"]["valid"] == 8 and matrix["scheduled"] == 8
     assert (manifest["run_id"], manifest["run_attempt"], ci["run_id"]) == ("123", "2", "123")
+    assert ci["phase"] == "complete"
     assert (
         manifest["git_commit"] == ci["source_sha"] and manifest["workload_plan"] == matrix["plan"]
     )
@@ -433,6 +434,7 @@ def test_bundle_marks_a_missing_or_short_cell_failed(tmp_path):
         environ={"PATH": os.environ["PATH"]},
     )
     assert result["status"] == "failed"
+    assert json.loads((output / "ci.json").read_text())["phase"] == "failed"
     cells = {
         c["concurrency"]: c
         for c in json.loads((output / "serving-smoke.json").read_text())["cells"]
