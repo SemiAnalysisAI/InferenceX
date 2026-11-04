@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 set -eo pipefail
 source /infmax-workspace/benchmarks/check_env.sh
-check_env_vars TOKENSPEED_WHEEL_URL TOKENSPEED_KERNEL_WHEEL_URL TOKENSPEED_SCHEDULER_VERSION ROUTER_VERSION
+check_env_vars TOKENSPEED_WHEEL_URL TOKENSPEED_KERNEL_WHEEL_URL TOKENSPEED_ENGINE_WHEEL_URL TOKENSPEED_SCHEDULER_VERSION ROUTER_VERSION
 
-python3 -m pip install --upgrade \
+pip_install=(python3 -m pip install)
+if python3 -m pip install --help 2>/dev/null | grep -q -- --break-system-packages; then
+    pip_install+=(--break-system-packages)
+fi
+"${pip_install[@]}" --upgrade \
     --index-url https://pypi.org/simple \
-    --extra-index-url https://lightseek.org/whl/nightly \
-    --extra-index-url https://download.pytorch.org/whl/cu130 \
-    "$TOKENSPEED_WHEEL_URL" "$TOKENSPEED_KERNEL_WHEEL_URL" \
+    "$TOKENSPEED_WHEEL_URL" "$TOKENSPEED_KERNEL_WHEEL_URL" "$TOKENSPEED_ENGINE_WHEEL_URL" \
     "tokenspeed-scheduler==$TOKENSPEED_SCHEDULER_VERSION" \
     "tokenspeed-smg==$ROUTER_VERSION"
 python3 -m pip check
