@@ -119,6 +119,30 @@ The 3 TB limit prevents an unrealistic memory-capacity race in which hardware ve
 
 Other offloading tiers, including NVMe KV cache offloading, are outside the initial scope and may be introduced after the InferenceX v3 release. NVMe KV cache offloading is tentatively targeted as a fast follow-up in InferenceX v3.5 or as part of InferenceX v4.
 
+### Kimi K3.1 Pro week-1 precision policy
+
+Agreed by the vLLM and SGLang communities for week-1 official AgentX results. "Native" means the precision of the original released checkpoint.
+
+| Component | Required / allowed precision |
+|---|---|
+| Linear ops | Native (BF16) |
+| Shared expert | Native (BF16) |
+| MoE weights | MXFP4 or NVFP4 |
+| MoE activations | A4W4 allowed |
+| MoE dispatch | MX/NV-style quantization allowed |
+| MoE combine | Native (BF16) |
+| AllReduce / AG / RS | Native (BF16) |
+| KDA cache | FP32 |
+| Conv cache | Native (BF16) |
+| Indexer cache | FP4 |
+| KV cache | FP8. FP4 only if the native checkpoint ships an FP4 KV cache |
+
+- EPLB: dynamic only, static EPLB not allowed.
+- A4W4 and NVFP4 MoE are allowed because AMD does not support A4W8.
+- FP4 KV cache without native support is excluded from official AgentX results. Unofficial results (e.g. vendor blogs on the AgentX harness) must be labeled unofficial and include the full KVV suite.
+- Engines outside vLLM, SGLang, TileRT and TokenSpeed on widely available hardware (i.e. not MI455X, Rubin, etc.) must first pass KVV (and/or TB 4.0) before submitting.
+- Any rule may be revisited after week 1 with a passing KVV (and/or TB 4.0) result. Passing requires public reproduction scripts and full logs.
+
 ## Model support matrix
 
 | Model architecture class | Prefix | Date added | Active scenarios | Deprecated scenarios |
