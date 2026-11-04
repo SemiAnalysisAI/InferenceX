@@ -852,7 +852,7 @@ glm5.2-fp8-mi355x-sglang-agentic-mtp:
 # K3 (ROCm/ATOM PR 2736) and C4 stays at K5.
 glm5.2-fp4-mi355x-atom-agentic-mtp:
   image: rocm/atom-dev:nightly_202610271459
-  model: amd/GLM-5.2-MXFP4
+  model: amd/GLM-5.2-Quark-MXFP4-AttnFP8
   model-prefix: glm5.2
   runner: cluster:mi355x-amds
   precision: fp4

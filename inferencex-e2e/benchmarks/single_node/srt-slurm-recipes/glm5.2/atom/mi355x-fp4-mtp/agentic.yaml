@@ -18,12 +18,9 @@ base:
       nodes: 1
       workers: 1
       args:
-        served-model-name: amd/GLM-5.2-MXFP4
+        served-model-name: amd/GLM-5.2-Quark-MXFP4-AttnFP8
         gpu-memory-utilization: 0.95
         enable_prefix_caching: true
-        # model.layers.78 is the MTP head, shipped in BF16; excluding it keeps
-        # online ptpc_fp8 quantization off the draft while experts stay MXFP4.
-        online_quant_config: '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","*.mlp.gate","model.layers.[0-9].mlp.*expert*","model.layers.[1-6][0-9].mlp.*expert*","model.layers.7[0-7].mlp.*expert*","model.layers.78.*"]}'
         max-num-batched-tokens: 16384
         kv_cache_dtype: fp8
         index_cache_dtype: fp4
@@ -31,7 +28,6 @@ base:
         method: mtp
       env:
         PYTHONNOUSERSITE: '1'
-        AITER_QUICK_REDUCE_QUANTIZATION: INT4
         AITER_USE_FLYDSL_MOE_SORTING: '1'
         # GLM-5.2 mono decode is on by default in ATOM; only TP4/TP8 C1/C2 run it.
         ATOM_MONO_ENABLE: '0'
