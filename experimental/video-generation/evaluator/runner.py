@@ -78,24 +78,6 @@ _H3_CELL = {
 _H3_DURATION_FRAMES = ((4, 107), (5, 124), (8, 192))
 # SGLang has no crf field; it encodes with crf = int((1 - output_compression / 100) * 51).
 SGLANG_OUTPUT_COMPRESSION = {18: 63}
-_PROTOCOL_SOURCES = {
-    "sglang": {
-        "repository": "https://github.com/sgl-project/sglang",
-        "revision": "253020450290328e9deb307eece1e402fa17f35e",
-        "files": [
-            "python/sglang/multimodal_gen/runtime/entrypoints/openai/video_api.py",
-            "python/sglang/multimodal_gen/runtime/pipelines_core/stages/model_specific_stages/minimax_h3/video_adapter.py",
-        ],
-    },
-    "vllm-omni": {
-        "repository": "https://github.com/vllm-project/vllm-omni",
-        "revision": "eb11446b7f2e30ca582f8aff3afe12e9a2e66f6c",
-        "files": [
-            "vllm_omni/entrypoints/openai/api_server.py",
-            "vllm_omni/entrypoints/openai/serving_video.py",
-        ],
-    },
-}
 
 
 def _digest(value: Any) -> str:
@@ -749,7 +731,6 @@ def run_plan(
         "endpoint": safe_endpoint,
         "identity_verification": "operator_declared",
         "plan_sha256": plan_sha256,
-        "protocol_source": _PROTOCOL_SOURCES[runtime],
         "client_source_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         "media_evaluator": media_evaluator,
         "client_environment": {
