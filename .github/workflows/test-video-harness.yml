@@ -1,12 +1,12 @@
-name: Test H3 Video Harness
+name: Test Video Harness
 
 on:
   pull_request:
-    paths: &h3-video-paths
+    paths: &video-harness-paths
       - 'experimental/video-generation/**'
-      - '.github/workflows/test-h3-spec.yml'
+      - '.github/workflows/test-video-harness.yml'
   push:
-    paths: *h3-video-paths
+    paths: *video-harness-paths
 
 permissions:
   contents: read
@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   test:
-    name: H3 harness, spec loader and hashes
+    name: Video harness, spec loader and hashes
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

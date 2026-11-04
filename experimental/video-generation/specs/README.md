@@ -1,7 +1,7 @@
-# H3 workload spec
+# Video workload specs
 
 `h3.yaml` defines the MiniMax-H3 text-to-video-and-audio workload that SGLang and vLLM-Omni both run.
-`h3_spec.py` loads and validates it, then builds the plan object that `evaluator/runner.py` (#4658) executes and hashes.
+`video_spec.py` loads and validates it, then builds the plan object that `evaluator/runner.py` (#4658) executes and hashes.
 `h3-vllm-omni-serving.md` records the pinned vLLM-Omni image, server command, parallelism and attention backend that served this workload on 2x H100.
 
 `h3-v0.1.yaml` is a separate proposed 5-second H3 workload. Its `release-v1` set contains 20 distinct measured prompts with fixed seeds and a disjoint warmup prompt. The expected delivered clip is 124 frames at 24 fps (124/24 seconds), 1344×768, with 32 kHz stereo audio. The request uses 49 denoising updates; the frozen schedule identity records 50 sigma points and video/audio shifts 12/3.
@@ -30,7 +30,7 @@ Code that needs the version calls `schema_version(plan)` instead of testing whic
 Both hashes below and the runner's recorded `plan_sha256` are SHA-256 over those bytes.
 
 - `plan_sha256(plan_for(spec, set_id))` equals the `plan_sha256` that the runner records for the same plan.
-  The `frozen-c124` set reproduces the `h3-serving-2gpu-c124-v1` plan that the reference run recorded, whose hash is `8d51a472caa7db0f5d4c33adec1e9c9f852e7144cf25356085802edaf7d80d68`; `test_h3_spec.py` asserts it.
+  The `frozen-c124` set reproduces the `h3-serving-2gpu-c124-v1` plan that the reference run recorded, whose hash is `8d51a472caa7db0f5d4c33adec1e9c9f852e7144cf25356085802edaf7d80d68`; `test_video_spec.py` asserts it.
 - `spec_sha256(spec)` covers the model, the generation values, and each set's resolved cases and counts.
 - For `h3-v0.1.yaml`, both hashes also cover `warmup_case` and `fairness`, and the plan hash covers `schema_version`.
 - `reference`, YAML key order, comments, and formatting are outside both hashes.
@@ -43,8 +43,8 @@ Both hashes below and the runner's recorded `plan_sha256` are SHA-256 over those
 From the repository root:
 
 ```bash
-uv run --no-project --python 3.12 --with 'pyyaml>=6,<7' --with 'pytest>=8,<9' python -m pytest experimental/video-generation/tests/test_h3_spec.py -q
-uv run --no-project --python 3.12 --with 'pyyaml>=6,<7' python experimental/video-generation/specs/h3_spec.py
+uv run --no-project --python 3.12 --with 'pyyaml>=6,<7' --with 'pytest>=8,<9' python -m pytest experimental/video-generation/tests/test_video_spec.py -q
+uv run --no-project --python 3.12 --with 'pyyaml>=6,<7' python experimental/video-generation/specs/video_spec.py
 ```
 
 The second command prints `spec_sha256` and each set's `plan_id` and `plan_sha256` as JSON.
