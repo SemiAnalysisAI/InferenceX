@@ -812,6 +812,7 @@ def run_plan(
     abort_reason = None
     abort_code = "not_started_after_uncertain_remote_completion"
     interrupted = None
+    stop = threading.Event()
 
     def validate_media(record: dict, deadline: float) -> None:
         validation_started = time.monotonic()
@@ -938,7 +939,9 @@ def run_plan(
                         raise _RequestError("provider job returned an unsupported status")
                     if poll == MAX_POLLS:
                         raise _RequestError("job exceeded maximum polling requests")
-                    time.sleep(min(POLL_INTERVAL_SECONDS, _remaining(deadline)))
+                    # Signals reach only the main thread; pool workers learn of the interrupt here.
+                    if stop.wait(min(POLL_INTERVAL_SECONDS, _remaining(deadline))):
+                        raise KeyboardInterrupt
                     reply = _json_request(
                         parts,
                         "GET",
@@ -978,7 +981,7 @@ def run_plan(
                 if not remote_terminal:
                     abort_reason = record["error"]
                 if isinstance(exc, KeyboardInterrupt):
-                    interrupted = exc
+                    interrupted = interrupted or exc
                     abort_reason = record["error"]
             finally:
                 record["latency_seconds"] = max(0.0, time.monotonic() - start)
@@ -1027,36 +1030,37 @@ def run_plan(
             while pending:
                 try:
                     done, _ = wait(pending, timeout=0.1, return_when=FIRST_COMPLETED)
+                    for future in done:
+                        pending.remove(future)
+                        record = future.result()
+                        if record["outcome"] == "downloaded":
+                            try:
+                                _event(journal, "validation_started", slot_id=record["slot_id"])
+                                validate_media(record, time.monotonic() + timeout_seconds)
+                            except (Exception, KeyboardInterrupt) as exc:
+                                record["error"] = _safe_error(exc)
+                                record["outcome"] = (
+                                    "timed_out"
+                                    if isinstance(exc, (TimeoutError, socket.timeout))
+                                    else "validation_error"
+                                )
+                                if isinstance(exc, KeyboardInterrupt):
+                                    record["outcome"] = "interrupted"
+                                    interrupted, abort_reason = exc, record["error"]
+                                    stop.set()
+                            finally:
+                                record["latency_seconds"] = (
+                                    time.monotonic()
+                                    - record["timing_window"]["start_monotonic_seconds"]
+                                )
+                                record["timing_window"]["end_monotonic_seconds"] = (
+                                    record["timing_window"]["start_monotonic_seconds"]
+                                    + record["latency_seconds"]
+                                )
+                        retain(record)
                 except KeyboardInterrupt as exc:
                     interrupted, abort_reason = exc, "interrupted by operator"
-                    continue
-                for future in done:
-                    pending.remove(future)
-                    record = future.result()
-                    if record["outcome"] == "downloaded":
-                        _event(journal, "validation_started", slot_id=record["slot_id"])
-                        try:
-                            validate_media(record, time.monotonic() + timeout_seconds)
-                        except (Exception, KeyboardInterrupt) as exc:
-                            record["error"] = _safe_error(exc)
-                            record["outcome"] = (
-                                "timed_out"
-                                if isinstance(exc, (TimeoutError, socket.timeout))
-                                else "validation_error"
-                            )
-                            if isinstance(exc, KeyboardInterrupt):
-                                record["outcome"] = "interrupted"
-                                interrupted, abort_reason = exc, record["error"]
-                        finally:
-                            record["latency_seconds"] = (
-                                time.monotonic()
-                                - record["timing_window"]["start_monotonic_seconds"]
-                            )
-                            record["timing_window"]["end_monotonic_seconds"] = (
-                                record["timing_window"]["start_monotonic_seconds"]
-                                + record["latency_seconds"]
-                            )
-                    retain(record)
+                    stop.set()
         end = max(
             (
                 r.get("timing_window", {}).get("transport_end_monotonic_seconds", measured_start)
