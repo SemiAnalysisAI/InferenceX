@@ -1,7 +1,7 @@
 # Native video delivery
 
-The `video-generation` scenario schedules one server job per deployment. H100,
-H200, and B200 SGLang select four-GPU C1 deployments using
+The `video-generation` scenario schedules one server job per deployment. H100
+and B200 SGLang select four-GPU C1 deployments using
 `h3-v0.1.yaml`: 20 distinct measured prompts, a separate warmup, 49 denoising
 updates, and 124 frames at 24 fps and 1344×768. A five-second request produces
 124/24 seconds of video. Config presence is not GPU or quality qualification.
@@ -108,7 +108,7 @@ Their presence does not establish final-head GPU qualification.
 2. Change the existing row in `configs/nvidia-master.yaml`, or copy it with a
    distinct key and recipe for a deployment that must remain separately selectable.
    Pin the image by digest and use its real interpreter and architecture. The
-   H100/H200/B200 SGLang rows use the public amd64 image. A shared image does
+   H100/B200 SGLang rows use the public amd64 image. A shared image does
    not qualify a different topology or SKU: validate
    the selected deployments through their sweep. Maintainers stage model snapshots in the runner's
    existing HF cache; contributors do not patch the cache or SSH extra launch flags.

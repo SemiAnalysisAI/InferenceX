@@ -208,7 +208,7 @@ VIDEO_ENV = {
     "MODEL_PREFIX": "h3", "SPEC_DECODING": "none", "IS_AGENTIC": "0", "ISL": "0", "OSL": "0",
     "SCENARIO_TYPE": "video-generation", "IS_MULTINODE": "false", "GPU_COUNT": "2",
     "CONC_LIST": "1 2", "VIDEO_SPEC": "h3.yaml", "VIDEO_SET": "release-v1", "HF_HUB_CACHE": "/mnt/hf_hub_cache/",
-    "SRT_RECIPE": "benchmarks/single_node/srt-slurm-recipes/h3/sglang/h200-bf16/serving-client.yaml",
+    "SRT_RECIPE": "benchmarks/single_node/srt-slurm-recipes/h3/sglang/b200-bf16/serving-client.yaml",
     "FAKE_RESULTS": "video",
 }  # fmt: skip
 
