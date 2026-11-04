@@ -11968,5 +11968,6 @@
   description:
     - "Try SMG 1.11.0 instead of sglang-router for the single-node TP2 DP-attention points at concurrency 32 and 64, preserving cache-aware routing."
     - "Remove connect-timeout-secs because SMG 1.11.0 does not accept that flag; keep the request timeout and worker settings unchanged."
+    - "Serialize SMG installation with a UID-scoped writable container-local lock rather than locking a potentially shared-filesystem script."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4770
   scenario-type: [agentic-coding]

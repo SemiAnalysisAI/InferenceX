@@ -186,6 +186,8 @@ override_tp2_c64:
 
 override_tp2_c32_dp:
   setup_script: smg.sh
+  environment:
+    SMG_INSTALL_LOCK_DIR: /tmp
   frontend:
     type: smg
     args:
@@ -228,6 +230,8 @@ override_tp2_c32_dp:
 
 override_tp2_c64_dp:
   setup_script: smg.sh
+  environment:
+    SMG_INSTALL_LOCK_DIR: /tmp
   frontend:
     type: smg
     args:

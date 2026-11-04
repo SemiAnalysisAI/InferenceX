@@ -36,6 +36,7 @@ def run(tmp_path: Path, script: str, env: dict[str, str]) -> tuple[subprocess.Co
             "BASH_ENV": str(tmp_path / "mount.sh"),
             "STUB_WORKSPACE": str(ROOT),
             "STUB_PYTHON3_TRACE": str(trace),
+            "SMG_INSTALL_LOCK_DIR": str(tmp_path),
             **env,
         },
         capture_output=True,
