@@ -75,10 +75,19 @@ def test_frozen_plan_reproduces_the_hash_its_reference_run_recorded() -> None:
     recorded = spec["reference"]["sglang"]
     plan = h3_spec.plan_for(spec, "frozen-c124")
     assert plan["plan_id"] == recorded["plan_id"]
+    assert h3_spec.schema_version(plan) == 1
     assert (
         h3_spec.plan_sha256(plan) == recorded["recorded_plan_sha256"] == RECORDED_FROZEN_PLAN_SHA256
     )
     assert RECORDED_FROZEN_PLAN_SHA256 in (SPECS / "README.md").read_text()
+
+
+def test_v01_plan_declares_schema_2_with_its_fairness_and_warmup() -> None:
+    spec = h3_spec.load_spec(SPECS / "h3-v0.1.yaml")
+    plan = h3_spec.plan_for(spec, "release-v1")
+    assert h3_spec.schema_version(plan) == 2
+    assert plan["fairness"] == spec["fairness"]
+    assert plan["warmup_case"]["case_id"] == "warmup-only"
 
 
 def _reuse_text(source: str, target: str) -> Callable[[dict[str, Any]], None]:
@@ -86,24 +95,49 @@ def _reuse_text(source: str, target: str) -> Callable[[dict[str, Any]], None]:
 
 
 @pytest.mark.parametrize(
-    ("mutate", "message"),
+    ("name", "mutate", "message"),
     [
         (
-            lambda doc: doc["sets"]["release-v1"]["warmup_case"].update(prompt="ceramic-wheel"),
-            "warmup_case prompt must be disjoint",
+            "h3-v0.1.yaml",
+            lambda doc: doc.update(schema_version=1),
+            "spec must be a mapping with exactly the keys",
         ),
         (
+            "h3-v0.1.yaml",
+            lambda doc: doc["sets"]["release-v1"]["cases"].pop(),
+            "needs 20 distinct measured prompts",
+        ),
+        (
+            "h3-v0.1.yaml",
+            _reuse_text("ceramic-wheel", "paper-fold"),
+            "needs 20 distinct measured prompts",
+        ),
+        (
+            "h3-v0.1.yaml",
+            lambda doc: doc["sets"]["release-v1"]["warmup_case"].update(prompt="ceramic-wheel"),
+            "warmup_case must be disjoint",
+        ),
+        (
+            "h3-v0.1.yaml",
+            _reuse_text("ceramic-wheel", "warmup-only"),
+            "warmup_case must be disjoint",
+        ),
+        (
+            "h3-v0.1.yaml",
             lambda doc: doc["fairness"]["schedule"].update(denoising_updates=50),
             "fairness.schedule must match",
         ),
-        (_reuse_text("ceramic-wheel", "paper-fold"), "cases must resolve to distinct prompt text"),
-        (_reuse_text("ceramic-wheel", "warmup-only"), "warmup_case text must be disjoint"),
+        (
+            "h3.yaml",
+            lambda doc: doc["sets"]["engine-compare-v1"]["cases"][1].update(seed=11),
+            "cases must not repeat a prompt text with the same seed",
+        ),
     ],
 )
-def test_fairness_spec_rejects_invalid_workloads(
-    tmp_path: Path, mutate: Callable[[dict[str, Any]], None], message: str
+def test_loader_rejects_invalid_workloads(
+    tmp_path: Path, name: str, mutate: Callable[[dict[str, Any]], None], message: str
 ) -> None:
-    document = yaml.safe_load((SPECS / "h3-v0.1.yaml").read_text())
+    document = yaml.safe_load((SPECS / name).read_text())
     mutate(document)
     path = tmp_path / "bad.yaml"
     path.write_text(yaml.safe_dump(document))
