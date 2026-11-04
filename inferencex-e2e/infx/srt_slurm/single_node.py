@@ -124,7 +124,7 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
         raise ValueError(
             "Single-node SRT supports only native MTP, EAGLE3, DSpark, DFlash or no speculation"
         )
-    speculation = "mtp" if spec else workload.get("SPEC_DECODING", "none")
+    speculation = "mtp" if spec else "none"
     agentic = environment["IS_AGENTIC"] == "1"
     expected = {
         "engine": (engine, SINGLE_NODE_ENGINES[environment["FRAMEWORK"]]),

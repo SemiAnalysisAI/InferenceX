@@ -22,7 +22,12 @@ from infx import yamlio
 from infx.config import repository_root
 from infx.fastcopy import deepcopy
 from infx.results.metadata import parse_component_metadata
-from infx.srt_slurm.synthetic_acceptance import selected_recipes, spec_parameters
+from infx.srt_slurm.synthetic_acceptance import (
+    ENGINES,
+    generation_role,
+    selected_recipes,
+    spec_parameters,
+)
 
 SHARED_BLOCKS = {
     (False, False): Path("configs/srt-recipes/fixed-sequence-single.yaml"),
@@ -57,7 +62,9 @@ _MULTINODE_ENV = (
     *(f"{role}_{field}" for role in ("PREFILL", "DECODE")
       for field in ("NUM_WORKERS", "TP", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "EP", "DP_ATTN")),
 )  # fmt: skip
-_SINGLE_NODE_ENV = ("TP", "EP_SIZE", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "DP_ATTENTION", "GPU_COUNT")
+_SINGLE_NODE_ENV = (
+    "TP", "EP_SIZE", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "DP_ATTENTION", "GPU_COUNT", "SPEC_DECODING",
+)  # fmt: skip
 BOUND_ENV = {
     (False, False): (*_FIXED_ENV, *_WORKFLOW_ENV, *_SINGLE_NODE_ENV),
     (False, True): (*_FIXED_ENV, *_WORKFLOW_ENV, *_MULTINODE_ENV),
@@ -377,9 +384,26 @@ def bind_multinode(
     if len(variants) != 1:
         raise ValueError(f"{recipe} selects {len(variants)} variants, not one")
     name, selected = variants[0]
-    return name, bind_workload(
+    bound = bind_workload(
         selected, environment, agentic=agentic, multinode=True, client_env=client_env
     )
+    check_speculation(bound, environment)
+    return name, bound
+
+
+def check_speculation(recipe: Mapping[str, Any], environment: Mapping[str, str]) -> None:
+    """Fail unless the matrix's SPEC_DECODING says whether the generation worker drafts."""
+    engine = recipe.get("engine")
+    engine = ENGINES.get(environment["FRAMEWORK"]) or (
+        engine.get("type") if isinstance(engine, Mapping) else engine
+    )
+    drafts = bool(spec_parameters(generation_role(recipe), engine))
+    label = environment["SPEC_DECODING"]
+    if drafts != (label != "none"):
+        raise ValueError(
+            f"SPEC_DECODING: matrix {label!r}, but the generation worker "
+            f"{'drafts' if drafts else 'does not draft'}"
+        )
 
 
 def resolve_fabric(node: Any, fabric: Mapping[str, str | None], where: str = "") -> Any:
