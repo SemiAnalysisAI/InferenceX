@@ -21,16 +21,15 @@ Eval-only and fixed-sequence runs remove synthetic acceptance and select
 FlashInfer sampling for real verification. No acceptance length is stored in
 the recipe.
 
-## Draft integration blocker
+## srt-slurm integration
 
-The pinned srt-slurm TokenSpeed backend launches
-`python3 -m smg_grpc_servicer.tokenspeed`. The current daily wheel serves
-through `ts serve` and SMG's ZMQ path and no longer contains
-`tokenspeed.runtime.engine.async_llm`, which the gRPC launcher imports.
-The existing srt-slurm SMG metrics discovery also targets the worker's gRPC
-port rather than TokenSpeed's separate HTTP metrics listener.
+The job-local srt-slurm checkout applies
+[`640-tokenspeed-smg-zmq.patch`](../../../../../../runners/srt-slurm/patches/640-tokenspeed-smg-zmq.patch),
+the complete [NVIDIA/srt-slurm#640](https://github.com/NVIDIA/srt-slurm/pull/640)
+diff at `07e090a957067fec5557e2f3aeb6997ec7e8d688`. Workers launch through
+`python3 -m tokenspeed.cli serve --headless` with SMG's ZMQ transport.
+The gateway waits for healthy worker registrations, and metrics collection
+uses each worker's separate HTTP listener. The TokenSpeed daily wheel stays
+unmodified.
 
-This recipe needs srt-slurm support for the current serving entrypoint and
-engine metrics discovery before a benchmark sweep can run. Keep the PR in
-draft until those integrations and a GB300 sweep with real-verification
-evals are complete. The daily wheel must remain unmodified.
+A GB300 sweep with real-verification evals is required before merging.
