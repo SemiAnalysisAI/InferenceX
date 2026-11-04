@@ -7,11 +7,9 @@ import itertools
 import json
 import math
 import sys
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-
-from . import POWER_METRIC_SCHEMA_VERSION, with_power_metrics
 
 
 @dataclass(frozen=True)
@@ -29,6 +27,11 @@ class BenchmarkData:
     def integration_duration_s(self) -> float:
         """Seconds between the benchmark start and end timestamps."""
         return self.end_unix - self.start_unix
+
+
+# Widest gap between consecutive samples inside the integration window that
+# still counts as continuous coverage (srt-slurm contract.MAX_SAMPLE_GAP_SECONDS).
+MAX_SAMPLE_GAP_SECONDS = 3.0
 
 
 def _append_reason(reasons: list[str], reason: str) -> None:
@@ -52,6 +55,16 @@ def _interpolate_power(samples: list[tuple[float, float]], timestamp: float) -> 
     right_time, right_power = samples[right_index]
     fraction = (timestamp - left_time) / (right_time - left_time)
     return left_power + fraction * (right_power - left_power)
+
+
+def _bracketing_sequence(times: tuple[float, ...], start: float, end: float) -> list[float] | None:
+    """Samples covering ``[start, end]``: the last at/before, the inside, the first at/after."""
+    before = [value for value in times if value <= start]
+    after = [value for value in times if value >= end]
+    if not before or not after:
+        return None
+    inside = [value for value in times if start < value < end]
+    return [before[-1], *inside, after[0]]
 
 
 def _integrate_device(
@@ -254,24 +267,3 @@ def audit_metrics(metrics: Mapping[str, float | None]) -> dict[str, float]:
         for key, value in metrics.items()
         if value is not None and math.isfinite(value)
     }
-
-
-def patch_power_metrics(
-    path: Path,
-    *,
-    metric_keys: Iterable[str],
-    power_valid: bool,
-    metrics: Mapping[str, float],
-) -> None:
-    """Validate replacement metrics before atomically updating an aggregate."""
-    data = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(data, dict):
-        raise ValueError(f"aggregate is not a JSON object: {path}")
-    data = with_power_metrics(
-        data,
-        metric_keys=metric_keys,
-        schema_version=POWER_METRIC_SCHEMA_VERSION,
-        power_valid=power_valid,
-        metrics=metrics,
-    )
-    _write_json_atomic(path, data)

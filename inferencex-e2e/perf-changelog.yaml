@@ -11964,6 +11964,15 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Collect Grace CPU power on the Kimi K3 GB300 aggregate AgentX recipe, with cpu-power-exporter v2.66.1."
+    - "Publish CPU socket, rail, SysIO and module power over the GPU window, independent of the GPU verdict, and per-host GPU power in workers[]."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3296
+
+- config-keys:
     - dsv41flash-fp4-gb300-vllm-agentic-dspark
   description:
     - "Update the vLLM image from nightly-dev-arm64-cu130-ac9126e58aa7 to the digest-pinned nightly-00b6c4c5."
