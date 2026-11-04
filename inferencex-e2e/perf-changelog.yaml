@@ -11990,4 +11990,4 @@
   description:
     - "Run H3 on the SGLang v0.5.23 release image (SGLang 297e54fd) instead of nightly 797af717 for B200 Ulysses4 and H100 TP2/Ulysses2."
     - "Engine flags, eager BF16 execution, the disabled conditioning cache and the v0.1 workload are unchanged."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4776
