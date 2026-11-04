@@ -17,7 +17,7 @@ _ROOT_KEYS = {
 
 
 def canonical_json_bytes(value: Any) -> bytes:
-    """The bytes every H3 hash covers: sorted keys, compact separators, UTF-8, no NaN."""
+    """The bytes every workload hash covers: sorted keys, compact separators, UTF-8, no NaN."""
     return json.dumps(
         value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
     ).encode("utf-8")

@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 import yaml
-from specs import h3_spec
+from specs import video_spec
 
 SPECS = Path(__file__).resolve().parents[1] / "specs"
 
@@ -33,15 +33,15 @@ def test_hashes_ignore_yaml_formatting(spec: dict[str, Any], tmp_path: Path) -> 
     body = yaml.safe_dump(spec, sort_keys=False, indent=4, width=50)
     rewritten = tmp_path / "h3.yaml"
     rewritten.write_text(f"# rewritten copy\n{body}# end\n\n", encoding="utf-8")
-    reloaded = h3_spec.load_spec(rewritten)
-    assert h3_spec.plan_sha256(h3_spec.plan_for(reloaded, "s")) == h3_spec.plan_sha256(
-        h3_spec.plan_for(spec, "s")
+    reloaded = video_spec.load_spec(rewritten)
+    assert video_spec.plan_sha256(video_spec.plan_for(reloaded, "s")) == video_spec.plan_sha256(
+        video_spec.plan_for(spec, "s")
     )
-    assert h3_spec.spec_sha256(reloaded) == h3_spec.spec_sha256(spec)
+    assert video_spec.spec_sha256(reloaded) == video_spec.spec_sha256(spec)
 
 
 def test_count_overrides_rename_the_plan_and_change_its_hash(spec: dict[str, Any]) -> None:
-    full = h3_spec.plan_for(spec, "s")
+    full = video_spec.plan_for(spec, "s")
     assert full == {
         "model_id": "org/model",
         "model_revision": "a" * 40,
@@ -59,33 +59,35 @@ def test_count_overrides_rename_the_plan_and_change_its_hash(spec: dict[str, Any
             }
         ],
     }
-    single = h3_spec.plan_for(spec, "s", repetitions=1, warmup_runs=0)
+    single = video_spec.plan_for(spec, "s", repetitions=1, warmup_runs=0)
     assert single == {**full, "plan_id": "plan-r1-w0", "repetitions": 1, "warmup_runs": 0}
-    assert h3_spec.plan_sha256(single) != h3_spec.plan_sha256(full)
-    assert h3_spec.plan_for(spec, "s", repetitions=2, warmup_runs=1) == full
+    assert video_spec.plan_sha256(single) != video_spec.plan_sha256(full)
+    assert video_spec.plan_for(spec, "s", repetitions=2, warmup_runs=1) == full
     with pytest.raises(ValueError, match=re.escape("repetitions must be an integer >= 1")):
-        h3_spec.plan_for(spec, "s", repetitions=0)
+        video_spec.plan_for(spec, "s", repetitions=0)
 
 
 RECORDED_FROZEN_PLAN_SHA256 = "8d51a472caa7db0f5d4c33adec1e9c9f852e7144cf25356085802edaf7d80d68"
 
 
 def test_frozen_plan_reproduces_the_hash_its_reference_run_recorded() -> None:
-    spec = h3_spec.load_spec(SPECS / "h3.yaml")
+    spec = video_spec.load_spec(SPECS / "h3.yaml")
     recorded = spec["reference"]["sglang"]
-    plan = h3_spec.plan_for(spec, "frozen-c124")
+    plan = video_spec.plan_for(spec, "frozen-c124")
     assert plan["plan_id"] == recorded["plan_id"]
-    assert h3_spec.schema_version(plan) == 1
+    assert video_spec.schema_version(plan) == 1
     assert (
-        h3_spec.plan_sha256(plan) == recorded["recorded_plan_sha256"] == RECORDED_FROZEN_PLAN_SHA256
+        video_spec.plan_sha256(plan)
+        == recorded["recorded_plan_sha256"]
+        == RECORDED_FROZEN_PLAN_SHA256
     )
     assert RECORDED_FROZEN_PLAN_SHA256 in (SPECS / "README.md").read_text()
 
 
 def test_v01_plan_declares_schema_2_with_its_fairness_and_warmup() -> None:
-    spec = h3_spec.load_spec(SPECS / "h3-v0.1.yaml")
-    plan = h3_spec.plan_for(spec, "release-v1")
-    assert h3_spec.schema_version(plan) == 2
+    spec = video_spec.load_spec(SPECS / "h3-v0.1.yaml")
+    plan = video_spec.plan_for(spec, "release-v1")
+    assert video_spec.schema_version(plan) == 2
     assert plan["fairness"] == spec["fairness"]
     assert plan["warmup_case"]["case_id"] == "warmup-only"
 
@@ -142,12 +144,13 @@ def test_loader_rejects_invalid_workloads(
     path = tmp_path / "bad.yaml"
     path.write_text(yaml.safe_dump(document))
     with pytest.raises(ValueError, match=re.escape(message)):
-        h3_spec.load_spec(path)
+        video_spec.load_spec(path)
 
 
 def test_canonical_json_bytes_is_sorted_compact_utf8_and_finite() -> None:
     assert (
-        h3_spec.canonical_json_bytes({"b": "é", "a": [1, 2.5]}) == '{"a":[1,2.5],"b":"é"}'.encode()
+        video_spec.canonical_json_bytes({"b": "é", "a": [1, 2.5]})
+        == '{"a":[1,2.5],"b":"é"}'.encode()
     )
     with pytest.raises(ValueError, match="Out of range float values"):
-        h3_spec.canonical_json_bytes({"a": float("nan")})
+        video_spec.canonical_json_bytes({"a": float("nan")})

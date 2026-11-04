@@ -22,7 +22,7 @@ from types import SimpleNamespace
 import pytest
 
 from evaluator import runner
-from specs import h3_spec
+from specs import video_spec
 
 
 MODEL_REVISION = "42ed227ee7df40d41602854ae760620d6eb651fe"
@@ -293,8 +293,8 @@ def test_local_http_fixture_lifecycle_and_identity(
         "ffmpeg_libraries": {"libavcodec": "62.1.2"},
     }
     digest = config.pop("configuration_sha256")
-    assert hashlib.sha256(h3_spec.canonical_json_bytes(config)).hexdigest() == digest
-    assert (output / "plan.json").read_bytes() == h3_spec.canonical_json_bytes(plan)
+    assert hashlib.sha256(video_spec.canonical_json_bytes(config)).hexdigest() == digest
+    assert (output / "plan.json").read_bytes() == video_spec.canonical_json_bytes(plan)
     assert json.loads((output / "run.json").read_text()) == run
     for record in run["records"]:
         assert (output / record["artifact_path"]).read_bytes() == FIXTURE_BYTES
@@ -320,7 +320,7 @@ def test_fairness_request_and_disjoint_warmup_reach_local_http_fixture(
     tmp_path, mocked_media, fixture_server, runtime
 ):
     path = Path(__file__).resolve().parents[1] / "specs/h3-v0.1.yaml"
-    plan = h3_spec.plan_for(h3_spec.load_spec(path), "release-v1")
+    plan = video_spec.plan_for(video_spec.load_spec(path), "release-v1")
     plan["cases"] = [
         {
             "case_id": f"measured-{i}",
@@ -375,7 +375,7 @@ def test_fairness_request_and_disjoint_warmup_reach_local_http_fixture(
 
 def test_request_encoding_comes_from_the_plan(tmp_path):
     path = Path(__file__).resolve().parents[1] / "specs/h3-v0.1.yaml"
-    plan = h3_spec.plan_for(h3_spec.load_spec(path), "release-v1")
+    plan = video_spec.plan_for(video_spec.load_spec(path), "release-v1")
     plan["fairness"]["encoding"]["preset"] = "veryfast"
     sglang = runner.preview_plan(plan, runtime="sglang")["slots"][0]["request"]
     vllm = runner.preview_plan(plan, runtime="vllm-omni")["slots"][0]["request"]

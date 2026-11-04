@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import numpy as np
 
-from specs import h3_spec
+from specs import video_spec
 
 REFERENCE = Path(__file__).resolve().parents[1] / "reference"
 COMPONENTS = (
@@ -168,7 +168,7 @@ def generate(args: argparse.Namespace, plan: dict, cases: list[dict], identity: 
         "quality_status": "unjudged",
         "release_qualified": False,
         "plan": plan,
-        "plan_sha256": h3_spec.plan_sha256(plan),
+        "plan_sha256": video_spec.plan_sha256(plan),
         "runtime": identity,
         "model_snapshot": {
             "path": str(snapshot),
@@ -302,7 +302,7 @@ def main() -> None:
     parser.add_argument("--encoder-threads", type=int)
     parser.add_argument("--audio-bitrate", type=int)
     args = parser.parse_args()
-    plan = h3_spec.plan_for(h3_spec.load_spec(args.spec), args.set)
+    plan = video_spec.plan_for(video_spec.load_spec(args.spec), args.set)
     cases = select_cases(plan, args.case)
     identity = runtime_identity(plan)
     from diffusers import ComponentsManager, ModularPipeline  # noqa: F401
@@ -313,7 +313,7 @@ def main() -> None:
             json.dumps(
                 {
                     "runtime": identity,
-                    "plan_sha256": h3_spec.plan_sha256(plan),
+                    "plan_sha256": video_spec.plan_sha256(plan),
                     "selected_cases": [c["case_id"] for c in cases],
                     "schedule": schedules(plan),
                 },

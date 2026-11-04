@@ -32,7 +32,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from specs.h3_spec import canonical_json_bytes, schema_version
+from specs.video_spec import canonical_json_bytes, schema_version
 
 from .serving import settings as serving_settings, summarize as serving_summary
 
@@ -177,7 +177,7 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
     """Check the structure a run needs, without making a request.
 
     Workload policy, such as the v0.1 prompt count and warmup rules, is validated once
-    by ``specs/h3_spec.py``. Unknown root metadata is preserved in the plan digest.
+    by ``specs/video_spec.py``. Unknown root metadata is preserved in the plan digest.
     """
     if not isinstance(plan, dict):
         raise ValueError("plan must be an object")
