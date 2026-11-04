@@ -73,10 +73,11 @@ agentic coverage, and `all-evals` wins over default eval coverage.
 ### Tool-use support contract
 
 The tool-use adapters are backend-independent clients of the local
-OpenAI-compatible endpoint. The deployment-smoke target set contains every
-generated Kimi K3 and MiniMax M3 agentic configuration in the NVIDIA and AMD
-master configs, including their single-node and multi-node vLLM and
-Dynamo-vLLM recipes. A configuration is verified only when the current PR head
+OpenAI-compatible endpoint. Kimi K3 and MiniMax M3 have no active master
+configs; their vendor suites and generator mappings remain available for
+explicit research configurations and historical results. The Kimi K3 and
+MiniMax M3 commands below require a caller-supplied config rather than the
+retired master entries. A configuration is verified only when the current PR head
 launches its tool-aware endpoint, the matching vendor smoke and `bfcl_smoke`
 complete their expected sample counts, and the native and
 `inferencex-eval-v1` artifacts are collected without `integration_error`.
