@@ -52,7 +52,8 @@ base:
         AITER_SITUV2_A4W4: '1'
         AITER_FLYDSL_STAGE2_FP8: '1'
         AITER_REUSE_IDENTICAL_COMM_GROUPS: '0'
-        ATOM_GDN_SSM_DTYPE: fp16
+        # KDA recurrent state in fp32, ATOM's default.
+        ATOM_GDN_SSM_DTYPE: fp32
         ATOM_USE_FLYDSL_GATHER_KV_B_PROJ: '1'
         # FlyDSL FP8 prefill attention; ATOM defaults it off.
         ATOM_USE_FLYDSL_FP8_PREFILL_ATTN: '1'
