@@ -384,3 +384,47 @@ def test_sglang_child_rechecks_uuid_order_before_import(monkeypatch):
     monkeypatch.setattr(srt_selected, "cuda_devices", lambda: ["GPU-2", "GPU-1"])
     with pytest.raises(RuntimeError, match="UUIDs differ"):
         srt_selected._sglang_main()
+
+
+def test_rocm_server_names_hip_devices_by_board_serial(tmp_path, monkeypatch):
+    plan = video_spec.plan_for(video_spec.load_spec(PACKAGE / "specs/h3-v2.yaml"), "release-v1")
+    model = _snapshot(tmp_path / "model")
+    kfd = tmp_path / "kfd"
+    kfd.touch()
+    buses = ["0000:f5:00.0", "0000:05:00.0"]
+    for bus, serial in zip(buses, ["PCB-F5", "PCB-05"], strict=True):
+        (tmp_path / "pci" / bus).mkdir(parents=True)
+        (tmp_path / "pci" / bus / "serial_number").write_text(serial + "\n")
+
+    class Hip:
+        def hipGetDeviceCount(self, count):
+            count._obj.value = len(buses)
+            return 0
+
+        def hipDeviceGetPCIBusId(self, bus, length, ordinal):
+            bus.value = buses[ordinal].encode()
+            return 0
+
+    monkeypatch.setattr(srt_selected, "KFD", kfd)
+    monkeypatch.setattr(srt_selected, "PCI_DEVICES", tmp_path / "pci")
+    monkeypatch.setattr(srt_selected.ctypes, "CDLL", {"libamdhip64.so": Hip()}.__getitem__)
+    executed = []
+    monkeypatch.setattr(
+        srt_selected.os, "execvpe", lambda file, argv, env: executed.append((argv, env))
+    )
+    monkeypatch.setenv("VIDEO_CONTAINER_IMAGE", "example/sglang:rocm@sha256:" + "c" * 64)
+    output = tmp_path / "server"
+    srt_selected.serve(
+        plan,
+        runtime="sglang",
+        runtime_revision="a" * 40,
+        model_path=model,
+        gpus=2,
+        output=output,
+        command=["/opt/venv/bin/python3", "-m", "evaluator.srt_selected", "serve", str(model)],
+        model_view="snapshot",
+    )
+    spec = json.loads((output / "spec.json").read_text())
+    launch = json.loads((output / "launch.json").read_text())
+    assert spec["gpu_uuids"] == launch["gpu_uuids"] == ["PCB-F5", "PCB-05"]
+    assert executed[0][1]["VGBENCH_GPU_UUIDS"] == "PCB-F5,PCB-05"
