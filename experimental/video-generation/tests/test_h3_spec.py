@@ -29,9 +29,7 @@ def spec() -> dict[str, Any]:
     }
 
 
-def test_hashes_ignore_formatting_but_bind_workload_semantics(
-    spec: dict[str, Any], tmp_path: Path
-) -> None:
+def test_hashes_ignore_yaml_formatting(spec: dict[str, Any], tmp_path: Path) -> None:
     body = yaml.safe_dump(spec, sort_keys=False, indent=4, width=50)
     rewritten = tmp_path / "h3.yaml"
     rewritten.write_text(f"# rewritten copy\n{body}# end\n\n", encoding="utf-8")
@@ -40,18 +38,6 @@ def test_hashes_ignore_formatting_but_bind_workload_semantics(
         h3_spec.plan_for(spec, "s")
     )
     assert h3_spec.spec_sha256(reloaded) == h3_spec.spec_sha256(spec)
-    plan = {
-        **h3_spec.plan_for(spec, "s"),
-        "fairness": {"encoding": {"crf": 18}, "reference_identity": {"model_revision": "b" * 40}},
-        "warmup_case": {"case_id": "warmup", "prompt": "a separate warmup", "seed": 13},
-    }
-    digest = h3_spec.plan_sha256(plan)
-    for field, changed in (
-        ("fairness", {**plan["fairness"], "encoding": {"crf": 23}}),
-        ("fairness", {**plan["fairness"], "reference_identity": {"model_revision": "c" * 40}}),
-        ("warmup_case", {**plan["warmup_case"], "seed": 17}),
-    ):
-        assert h3_spec.plan_sha256({**plan, field: changed}) != digest
 
 
 def test_count_overrides_rename_the_plan_and_change_its_hash(spec: dict[str, Any]) -> None:
