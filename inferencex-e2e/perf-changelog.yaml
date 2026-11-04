@@ -11971,3 +11971,14 @@
     - "Collect Grace CPU power on the Kimi K3 GB300 aggregate AgentX recipe, with cpu-power-exporter v2.66.1."
     - "Publish CPU socket, rail, SysIO and module power over the GPU window, independent of the GPU verdict, and per-host GPU power in workers[]."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3296
+
+- config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dep16-disagg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Collect Grace CPU power on the disaggregated Kimi K3 GB300 AgentX recipes and rerun the full curve, so every point carries GPU and CPU power."
+    - "Restores the 8 disaggregated points that the aggregate-only run of #3296 replaced on the dashboard."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
