@@ -7594,7 +7594,7 @@ h3-bf16-h100-sglang-video:
             conc-list: [1]
 
 h3-bf16-h200-sglang-video:
-  image: lmsysorg/sglang:nightly-dev-cu13-20261103-797af717@sha256:ccf61cf0262e29f002d42410e39583e702a23c9bfc92616b7f8195a7b4a6da29
+  image: lmsysorg/sglang:v0.5.23@sha256:f7876bef696ccf9cf75a2bf7ccb82970f5fac577f082fb8ca95c9a59d2160eb5
   model: MiniMaxAI/MiniMax-H3
   model-prefix: h3
   runner: cluster:h200-dgxc
