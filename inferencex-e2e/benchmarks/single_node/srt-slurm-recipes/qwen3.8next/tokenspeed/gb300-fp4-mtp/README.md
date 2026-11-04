@@ -9,11 +9,13 @@ write-back. PLE embeddings are offloaded to the host; in-forward state
 checkpoints and MTP index sharing are enabled.
 
 The recipe pins the public checkpoint revision and installs the unmodified
-TokenSpeed `0.1.1.post20261101` daily wheel and matching CUDA 13 ARM64/Python
-3.12 kernel wheel by SHA256. The base runner image is pinned by digest in
+TokenSpeed `0.1.1.post20261101` daily wheel, matching CUDA 13 ARM64/Python
+3.12 kernel wheel, and `tokenspeed-engine` wheel by SHA256. Scheduler `0.1.48`
+satisfies the daily wheel's minimum requirement. The base runner image is pinned by digest in
 the master config. Target quantization comes from checkpoint metadata; the
 embedded draft uses `modelopt_mixed` from the same checkpoint. The setup script
-installs SMG at the master config's router version.
+installs SMG at the master config's router version. Registry dependencies use
+PyPI only; private nightly wheels use direct URLs.
 
 The golden-AL connector derives throughput acceptance from the committed
 model curve and MTP step count and selects the required greedy sampler.
