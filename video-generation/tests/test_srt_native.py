@@ -461,33 +461,39 @@ def test_bundle_rejects_cells_with_different_workload(tmp_path):
         )
 
 
-def _sweep(tmp_path):
+def _bundle(tmp_path, artifacts, fingerprint, attempt):
+    name = f"h3-results-123-{attempt}-{fingerprint}"
+    fixture = tmp_path / name
+    fixture.mkdir()
+    logs, workspace = _native_job(fixture)
+    env = {
+        "GITHUB_RUN_ID": "123",
+        "GITHUB_RUN_ATTEMPT": attempt,
+        "GITHUB_HEAD_SHA": "c" * 40,
+        "GITHUB_SHA": "b" * 40,
+        "RECIPE_FINGERPRINT": fingerprint,
+        "VIDEO_ARTIFACT_NAME": name,
+    }
+    srt_bundle.build_bundle(
+        video_dir=logs / "video",
+        power_dir=logs / "power",
+        workspace=workspace,
+        result_filename="r",
+        concurrencies=[1, 2],
+        output=artifacts / name,
+        environ=env,
+    )
+
+
+def _sweep(tmp_path, attempts=("2", "2")):
     artifacts = tmp_path / "artifacts"
     artifacts.mkdir()
     rows = []
-    for index, runner in enumerate(("cluster:h200", "cluster:b200"), start=1):
-        fixture = tmp_path / runner.split(":")[1]
-        fixture.mkdir()
-        logs, workspace = _native_job(fixture)
+    for index, (runner, attempt) in enumerate(
+        zip(("cluster:h200", "cluster:b200"), attempts, strict=True), start=1
+    ):
         fingerprint = str(index) * 64
-        name = f"h3-results-123-2-{fingerprint}"
-        env = {
-            "GITHUB_RUN_ID": "123",
-            "GITHUB_RUN_ATTEMPT": "2",
-            "GITHUB_HEAD_SHA": "c" * 40,
-            "GITHUB_SHA": "b" * 40,
-            "RECIPE_FINGERPRINT": fingerprint,
-            "VIDEO_ARTIFACT_NAME": name,
-        }
-        srt_bundle.build_bundle(
-            video_dir=logs / "video",
-            power_dir=logs / "power",
-            workspace=workspace,
-            result_filename="r",
-            concurrencies=[1, 2],
-            output=artifacts / name,
-            environ=env,
-        )
+        _bundle(tmp_path, artifacts, fingerprint, attempt)
         rows.append(
             {
                 "recipe-fingerprint": fingerprint,
@@ -645,4 +651,42 @@ def test_partial_native_sweep_cannot_qualify_for_reuse(tmp_path):
     manifest["video-full-sweep"] = False
     path.write_text(json.dumps(manifest))
     with pytest.raises(ValueError, match="requires a full video sweep"):
+        validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40)
+
+
+def test_reuse_reads_each_deployment_from_its_newest_attempt(tmp_path):
+    from infx.results.video_artifacts import validate_video_artifacts
+
+    artifacts = _sweep(tmp_path, attempts=("1", "2"))
+    assert (
+        validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40) == 2
+    )
+
+
+@pytest.mark.parametrize(
+    "fault,match",
+    [("newer_attempt", "after the sweep manifest"), ("unselected", "extra=")],
+)
+def test_reuse_rejects_bundles_outside_the_selected_matrix(tmp_path, fault, match):
+    from infx.results.video_artifacts import validate_video_artifacts
+
+    if fault == "newer_attempt":
+        artifacts = _sweep(tmp_path, attempts=("2", "3"))
+    else:
+        artifacts = _sweep(tmp_path)
+        _bundle(tmp_path, artifacts, "3" * 64, "2")
+    with pytest.raises(ValueError, match=match):
+        validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40)
+
+
+def test_reuse_never_falls_back_to_an_older_attempt(tmp_path):
+    from infx.results.video_artifacts import validate_video_artifacts
+
+    artifacts = _sweep(tmp_path)
+    _bundle(tmp_path, artifacts, "2" * 64, "1")
+    assert (
+        validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40) == 2
+    )
+    next((artifacts / ("h3-results-123-2-" + "2" * 64)).rglob("*.mp4")).write_bytes(b"corrupted")
+    with pytest.raises(ValueError, match="checksum mismatch"):
         validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40)

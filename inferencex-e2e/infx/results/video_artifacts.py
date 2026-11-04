@@ -61,7 +61,8 @@ def validate_video_artifacts(
 
     The workflow supplies trusted run/head identity. ``git_commit`` remains the
     actual executed checkout, which can be the PR merge commit rather than its head.
-    Older attempts remain archived but do not fill holes in the selected attempt.
+    Each deployment counts only its newest bundle up to the manifest attempt, so a
+    rerun's measurement replaces the earlier one and an older attempt never fills a hole.
     """
     sweep = read_object(root / "video-sweep-manifest/sweep_manifest.json")
     source_run, attempt, head = str(sweep["run-id"]), str(sweep["run-attempt"]), sweep["head"]
@@ -81,18 +82,24 @@ def validate_video_artifacts(
         fingerprint = row.get("recipe-fingerprint", "")
         if not re.fullmatch(r"[0-9a-f]{64}", fingerprint):
             raise ValueError("selected video deployment is missing its recipe fingerprint")
-        name = f"h3-results-{source_run}-{attempt}-{fingerprint}"
-        if name in expected:
+        if fingerprint in expected:
             raise ValueError("duplicate selected video deployment")
-        expected[name] = row
-    actual = {
-        path.name for path in root.glob(f"h3-results-{source_run}-{attempt}-*") if path.is_dir()
-    }
-    if actual != expected.keys():
+        expected[fingerprint] = row
+    newest = {}
+    for path in root.glob(f"h3-results-{source_run}-*"):
+        match = VIDEO_ARTIFACT.fullmatch(path.name)
+        if not match or not path.is_dir():
+            continue
+        if int(match[2]) > int(attempt):
+            raise ValueError(f"{path.name}: bundle from an attempt after the sweep manifest")
+        newest[match[3]] = max(newest.get(match[3], "0"), match[2], key=int)
+    if newest.keys() != expected.keys():
         raise ValueError(
-            f"video deployment coverage mismatch: missing={sorted(expected.keys() - actual)}, extra={sorted(actual - expected.keys())}"
+            f"video deployment coverage mismatch: missing={sorted(expected.keys() - newest.keys())}, extra={sorted(newest.keys() - expected.keys())}"
         )
-    for name, row in expected.items():
+    for fingerprint, row in expected.items():
+        bundle_attempt = newest[fingerprint]
+        name = f"h3-results-{source_run}-{bundle_attempt}-{fingerprint}"
         bundle = root / name
         inventory = _inventory(bundle)
         manifest, ci, matrix = (
@@ -102,7 +109,7 @@ def validate_video_artifacts(
         if any(
             doc.get("artifact_name") != name
             or str(doc.get("run_id")) != source_run
-            or str(doc.get("run_attempt")) != attempt
+            or str(doc.get("run_attempt")) != bundle_attempt
             or doc.get("ci", {}).get("head_sha") != head
             for doc in (manifest, ci)
         ):

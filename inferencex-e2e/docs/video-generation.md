@@ -76,7 +76,7 @@ The `video-sweep-manifest` artifact retains the complete selected matrix for the
 current attempt and is replaced on rerun; earlier result bundles remain immutable.
 Only full video sweeps upload this reuse marker. PR
 validation and merge ingestion require every selected deployment and concurrency
-from the trusted run attempt, consistent CI identity, valid native power, the
+from each deployment's newest bundle up to the trusted run attempt, consistent CI identity, valid native power, the
 frozen plan’s full measured request population and matching media/file hashes. This checks retained evidence; it does not
 rerun media decoding or establish perceptual quality, comparison sample sufficiency,
 or production acceptance. Old unsuffixed bundles remain readable by the App but
