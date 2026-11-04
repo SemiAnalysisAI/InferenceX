@@ -875,7 +875,7 @@ def test_qwen_real_verification_does_not_require_mtp_window(
     assert result["roles"]["agg"]["env"] == {"KEEP": "worker"}
 
 
-GATE = {"AL_GATE": "true", "AL_GATE_CURVE": "dsv4_mtp", "AL_GATE_DRAFT_TOKENS": "3"}
+GATE = {"AL_GATE": "true", "AL_GATE_CURVE": "deepseek-v4-pro__mtp__native__default-default", "AL_GATE_DRAFT_TOKENS": "3"}
 
 
 def test_the_acceptance_gate_verifies_for_real(tmp_path: Path) -> None:
@@ -894,8 +894,8 @@ MTP3 = {"speculative-config": json.dumps({"method": "mtp", "num_speculative_toke
 @pytest.mark.parametrize(
     ("framework", "args", "gate", "error"),
     [
-        ("vllm", MTP3, {"AL_GATE_CURVE": "x"}, r"drafts \('dsv4_mtp', 3\), .* measures \('x', 3\)"),
-        ("vllm", MTP3, {"AL_GATE_DRAFT_TOKENS": "2"}, r"gate measures \('dsv4_mtp', 2\)"),
+        ("vllm", MTP3, {"AL_GATE_CURVE": "x"}, r"drafts \('deepseek-v4-pro__mtp__native__default-default', 3\), .* measures \('x', 3\)"),
+        ("vllm", MTP3, {"AL_GATE_DRAFT_TOKENS": "2"}, r"gate measures \('deepseek-v4-pro__mtp__native__default-default', 2\)"),
         ("vllm", {"tensor-parallel-size": 8}, {}, "the recipe drafts None"),
     ],
     ids=["other-curve", "other-draft-length", "no-drafting"],
