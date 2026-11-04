@@ -23,10 +23,11 @@ the recipe.
 
 ## srt-slurm integration
 
-The job-local srt-slurm checkout applies
-[`640-tokenspeed-smg-zmq.patch`](../../../../../../runners/srt-slurm/patches/640-tokenspeed-smg-zmq.patch),
-the complete [NVIDIA/srt-slurm#640](https://github.com/NVIDIA/srt-slurm/pull/640)
-diff at `07e090a957067fec5557e2f3aeb6997ec7e8d688`. Workers launch through
+The shared srt-slurm pin is
+[v2.66.2](https://github.com/NVIDIA/srt-slurm/releases/tag/v2.66.2)
+(`acfb4dcc3bd48fd6a1e7b615e849e7954c0c3852`), which includes
+[NVIDIA/srt-slurm#640](https://github.com/NVIDIA/srt-slurm/pull/640).
+Workers launch through
 `python3 -m tokenspeed.cli serve --headless` with SMG's ZMQ transport.
 The gateway waits for healthy worker registrations, and metrics collection
 uses each worker's separate HTTP listener. The TokenSpeed daily wheel stays
