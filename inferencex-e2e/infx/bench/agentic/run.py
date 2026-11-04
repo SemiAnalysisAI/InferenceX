@@ -138,6 +138,11 @@ def execute(plan: Plan, runtime: Runtime, environ: Mapping[str, str]) -> int:
     argv = replay_argv(cfg, runtime.agentx)
     (plan.result_dir / "benchmark_command.txt").write_text(f"{shlex.join(argv)}\n")
     log = plan.result_dir / "benchmark.log"
+    # Diagnostic branch only: widen the client node's ephemeral port range for the replay
+    # (20k lanes open ~30k connections to one frontend IP:port in the cache-pressure stage;
+    # the default 32768-60999 range holds 28,232). Needs CAP_NET_ADMIN in the host netns;
+    # a refusal is recorded and the run continues on the default range.
+    old_range = _set_port_range(plan, "1024 65535")
     # Diagnostic branch only: sample client-node memory, OOM events and sockets during the replay.
     stop = plan.result_dir / "monitor" / "stop"
     sampler = subprocess.Popen(
@@ -150,9 +155,28 @@ def execute(plan: Plan, runtime: Runtime, environ: Mapping[str, str]) -> int:
     stop.parent.mkdir(parents=True, exist_ok=True)
     stop.touch()
     sampler.wait(timeout=30)
+    if old_range is not None:
+        _set_port_range(plan, old_range)
     if signals.received:
         return 128 + signals.received
     return _score(plan, python, env, replay_rc)
+
+
+def _set_port_range(plan: Plan, value: str) -> str | None:
+    """Set net.ipv4.ip_local_port_range to ``value``; returns the previous value, or None
+    when it could not be read or written. Both outcomes are appended to sysctl.txt."""
+    key = "net.ipv4.ip_local_port_range"
+    log = plan.result_dir / "sysctl.txt"
+    try:
+        before = Path("/proc/sys/net/ipv4/ip_local_port_range").read_text().split()
+        before = " ".join(before)
+    except OSError as exc:
+        log.open("a").write(f"read {key}: {exc!r}\n")
+        return None
+    result = subprocess.run(["sysctl", "-w", f"{key}={value}"], capture_output=True, text=True)
+    after = " ".join(Path("/proc/sys/net/ipv4/ip_local_port_range").read_text().split())
+    log.open("a").write(f"{key}: before={before!r} wanted={value!r} after={after!r} rc={result.returncode} stderr={result.stderr.strip()!r}\n")
+    return before if after == value.replace("\t", " ") else None
 
 
 def _download_traces(cfg: ReplayConfig, runtime: Runtime, env: Mapping[str, str]) -> int:
