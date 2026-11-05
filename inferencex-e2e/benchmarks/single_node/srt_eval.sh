@@ -10,6 +10,11 @@ fi
 SRT_EVAL_STATUS_FILE="$2"
 trap 'rc=$?; printf "%s\n" "$rc" > "$SRT_EVAL_STATUS_FILE"' EXIT
 
+# An agentic eval's acceptance gate ran as this job's benchmark stage, which srt-slurm runs only
+# without EVAL_ONLY; the eval itself is still eval-only.
+if [[ "${EVAL_AL_GATE:-}" == true ]]; then
+    export EVAL_ONLY=true RUN_EVAL=false
+fi
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "$root/benchmarks/check_env.sh"
 check_env_vars MODEL MODEL_NAME CONC TP EP_SIZE DP_ATTENTION IS_MULTINODE IS_AGENTIC

@@ -126,8 +126,6 @@ class MoRIBackend(EPBackend):
 
     def __init__(self, args, rank, world_size, local_rank, device):
         super().__init__(args, rank, world_size, local_rank, device)
-        self._fp8 = self.precision == "fp8"
-        self.experts_per_rank = args.experts // world_size
         arch = _gfx_arch(device)
         scale_out = args.scope == "scale-out"
         if self.mode == "low-latency":
@@ -159,8 +157,7 @@ class MoRIBackend(EPBackend):
             )
             self._enable_fp8(label, *blockwise_fp8_codec(self._fp8_dtype, fp8_max))
         # External-input kernels consume the dispatch output directly, so stage has no copy of its
-        # own; under FP8 it dequantizes the received payload with its scales.
-        self.stage_device_work = self._fp8
+        # own; under FP8 it dequantizes the received payload with its scales (stage_device_work).
         self._library_config = {}
 
     def create_buffer(self, spec):
