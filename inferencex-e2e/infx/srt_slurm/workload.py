@@ -14,7 +14,7 @@ import os
 import re
 from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, get_args
 
 import yaml
 
@@ -38,6 +38,8 @@ SHARED_BLOCKS = {
 }
 BOUND_RECIPE = "recipe.yaml"
 TELEMETRY_BLOCK = Path("configs/srt-recipes/telemetry-dcgm.yaml")
+# The CPU power exporter sources a cluster declares (srt-slurm.cpu-power-exporter).
+CpuPowerSource = Literal["acpi", "rapl"]
 NATIVE_TELEMETRY_BLOCK = Path("configs/srt-recipes/telemetry-native.yaml")
 _POINT_KEYS = (
     ("model", "path"),
@@ -198,13 +200,13 @@ def compose_recipe(
     multinode: bool,
     root: Path,
     power_port: int | None = None,
-    cpu_power_source: str | None = None,
+    cpu_power_source: CpuPowerSource | None = None,
     native_power: bool = False,
 ) -> dict[str, Any]:
     """The fragment at ``path`` over its lane's shared block, under ``base`` for bundles.
 
     ``power_port`` adds the DCGM telemetry block with its exporter on that port, and
-    ``cpu_power_source`` the cluster's Grace CPU power exporter beside it.
+    ``cpu_power_source`` the cluster's CPU power exporter to the telemetry block.
     """
     raw = yamlio.safe_load(path.read_text())
     if not isinstance(raw, dict):
@@ -213,11 +215,14 @@ def compose_recipe(
     shared = _block(root / SHARED_BLOCKS[agentic, multinode])
     if native_power:
         shared = merge_blocks(shared, _block(root / NATIVE_TELEMETRY_BLOCK))
+    exporters: dict[str, Any] = {}
     if power_port is not None:
-        exporter: dict[str, Any] = {"telemetry": {"dcgm_exporter": {"port": power_port}}}
-        if cpu_power_source is not None:
-            exporter["telemetry"]["cpu_power_exporter"] = {"source": cpu_power_source}
-        shared = merge_blocks(shared, merge_blocks(_block(root / TELEMETRY_BLOCK), exporter))
+        exporters["dcgm_exporter"] = {"port": power_port}
+    if cpu_power_source is not None:
+        exporters["cpu_power_exporter"] = {"source": cpu_power_source}
+    if exporters:
+        dcgm = _block(root / TELEMETRY_BLOCK) if power_port is not None else {}
+        shared = merge_blocks(shared, merge_blocks(dcgm, {"telemetry": exporters}))
     if "base" in raw:
         return {**raw, "base": merge_blocks(shared, raw["base"])}
     return merge_blocks(shared, raw)
@@ -368,7 +373,7 @@ def bind_multinode(
     root: Path,
     expand: Callable[..., list[tuple[str | None, dict[str, Any]]]] = selected_recipes,
     power_port: int | None = None,
-    cpu_power_source: str | None = None,
+    cpu_power_source: CpuPowerSource | None = None,
     client_env: Mapping[str, str] | None = None,
 ) -> tuple[str | None, dict[str, Any]]:
     """Bind the one variant ``recipe`` (``fragment[:selector]``) selects; return its name too."""
@@ -451,6 +456,15 @@ def add_fabric_argument(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def add_cpu_power_source_argument(parser: argparse.ArgumentParser) -> None:
+    """``--cpu-power-source``: the cluster's CPU power exporter source, for a cpu-power point."""
+    parser.add_argument(
+        "--cpu-power-source",
+        choices=get_args(CpuPowerSource),
+        help="bind the cluster's CPU power exporter with this source",
+    )
+
+
 def _assignment(text: str) -> tuple[str, str]:
     """Split a ``NAME=VALUE`` argument, or raise ArgumentTypeError if malformed."""
     name, separator, value = text.partition("=")
@@ -467,11 +481,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--power-port", type=int, help="merge the DCGM telemetry block, its exporter on this port"
     )
-    parser.add_argument(
-        "--cpu-power-source",
-        choices=("acpi",),
-        help="bind the cluster's Grace CPU power exporter with this source (needs --power-port)",
-    )
+    add_cpu_power_source_argument(parser)
     parser.add_argument(
         "--client-env",
         type=_assignment,
