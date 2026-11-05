@@ -11786,4 +11786,4 @@
   description:
     - "Add a non-speculative GLM-5.3-Flash FP8 H100 comparison to PR #4717 by removing EAGLE/MTP launch arguments and setting spec-decoding to none, without synthetic acceptance."
     - "Retain the pinned image and checkpoint, TP8/EP8, BF16 KV, TileLang DSA, DeepGemm MoE, memory fraction 0.70, eager prefill, full 1M context, canonical AgentX workload, accuracy evaluation, and concurrency 1, 2, 4, 8, 12, 16, 24, and 32."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/0
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4817
