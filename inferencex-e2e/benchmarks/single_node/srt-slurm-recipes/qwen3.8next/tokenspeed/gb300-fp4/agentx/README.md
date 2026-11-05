@@ -1,6 +1,7 @@
 # Qwen3.8-Flash-Next NVFP4 on TokenSpeed
 
-The `qwen3.8next-fp4-gb300-tokenspeed-agentic-mtp` matrix uses one GB300
+The `agg-tp1-mtp3-kvstore.yaml` recipe backs the
+`qwen3.8next-fp4-gb300-tokenspeed-agentic-mtp` matrix. It uses one GB300
 serving GPU, TP1/EP1, concurrency 1/2/4/8/16/32/48/64, and the native AgentX
 client. Serving settings stay fixed across concurrency points: 256K context,
 96 request slots, 16K prefill chunks, BF16 KV and SSM state, three MTP steps,
@@ -22,7 +23,8 @@ The golden-AL connector derives throughput acceptance from the committed
 model curve and MTP step count and selects the required greedy sampler.
 Eval-only and fixed-sequence runs remove synthetic acceptance and select
 FlashInfer sampling for real verification. No acceptance length is stored in
-the recipe.
+the recipe. The report-only acceptance gate runs on the eval server with real
+verification before the eval. Result metadata records MTP with a native draft.
 
 ## srt-slurm integration
 

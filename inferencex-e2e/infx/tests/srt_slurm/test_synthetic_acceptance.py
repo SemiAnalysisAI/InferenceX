@@ -713,7 +713,7 @@ def test_variants_use_resolved_tokens_and_preserve_caller_arguments(
         golden_dir=golden_dir,
     )
     assert len(commands) == 2
-    for index, (command, length) in enumerate(commands):
+    for index, (command, length, *_) in enumerate(commands):
         assert command[:2] == ["srtctl", "apply"]
         assert command[command.index("--tags") + 1] == "x y"
         selector = f"zip_override_test[{index}]"
@@ -802,7 +802,7 @@ def test_cli_forwards_options_and_submission_failure(
         text=True,
     )
     assert result.returncode == returncode, result.stderr
-    assert json.loads(record.read_text()) == {"golden_acceptance_length": None}
+    assert json.loads(record.read_text()) == {"golden_acceptance_length": None, "al_gate": None}
     argv = json.loads(result.stdout)
     assert argv[:5] == ["apply", "-f", str(recipe), "--tags", "a b"]
     result_recipe = apply_native(yaml.safe_load(recipe.read_text()), argv)
@@ -969,55 +969,12 @@ def test_qwen_real_verification_does_not_require_mtp_window(
     assert result["roles"]["agg"]["env"] == {"KEEP": "worker"}
 
 
-GATE = {"AL_GATE": "true", "AL_GATE_CURVE": "deepseek-v4-pro__mtp__native__default-default", "AL_GATE_DRAFT_TOKENS": "3"}
-
-
-def test_the_acceptance_gate_verifies_for_real(tmp_path: Path) -> None:
+def test_an_eval_server_verifies_for_real(tmp_path: Path) -> None:
+    # An agentic eval and its acceptance gate measure the recipe's real acceptance.
     spec = {"method": "mtp", "num_speculative_tokens": 3}
     forced = {**spec, "rejection_sample_method": "synthetic", "synthetic_acceptance_length": 8}
     recipe = {"roles": {"agg": {"args": {"speculative-config": json.dumps(forced)}}}}
-    env = {**ENV, **GATE}
+    env = {**ENV, "EVAL_ONLY": "true", "EVAL_AL_GATE": "true"}
     overrides = build_overrides(recipe, "dynamo-vllm", env, golden_dir=tmp_path / "absent")
     real = apply_native(recipe, overrides)["roles"]["agg"]["args"]
     assert json.loads(real["speculative-config"]) == {**spec, "rejection_sample_method": "block"}
-
-
-MTP3 = {"speculative-config": json.dumps({"method": "mtp", "num_speculative_tokens": 3})}
-
-
-@pytest.mark.parametrize(
-    ("framework", "args", "gate", "error"),
-    [
-        ("vllm", MTP3, {"AL_GATE_CURVE": "x"}, r"drafts \('deepseek-v4-pro__mtp__native__default-default', 3\), .* measures \('x', 3\)"),
-        ("vllm", MTP3, {"AL_GATE_DRAFT_TOKENS": "2"}, r"gate measures \('deepseek-v4-pro__mtp__native__default-default', 2\)"),
-        ("vllm", {"tensor-parallel-size": 8}, {}, "the recipe drafts None"),
-    ],
-    ids=["other-curve", "other-draft-length", "no-drafting"],
-)
-def test_the_acceptance_gate_rejects_a_recipe_drafting_otherwise(
-    tmp_path: Path, framework: str, args: dict[str, Any], gate: dict[str, str], error: str
-) -> None:
-    recipe = tmp_path / "recipe.yaml"
-    recipe.write_text(yaml.safe_dump({"roles": {"agg": {"args": args}}}))
-    environment = {**ENV, **GATE, **gate}
-    with pytest.raises(ValueError, match=error):
-        plan_commands(str(recipe), framework, ["-f", str(recipe)], environment, golden_dir=tmp_path)
-
-
-@pytest.mark.parametrize(
-    ("verify", "curve"),
-    [
-        ({}, "kimi-k3__dspark__kimi-k3-dspark__probabilistic-default"),
-        ({"rejection_sample_method": "block"}, "kimi-k3__dspark__kimi-k3-dspark__probabilistic-block"),
-    ],
-    ids=["standard", "block"],
-)
-def test_the_acceptance_gate_checks_the_verifiers_curve(
-    tmp_path: Path, verify: dict[str, str], curve: str
-) -> None:
-    spec = {"method": "dspark", "num_speculative_tokens": 3, "draft_sample_method": "probabilistic"}
-    args = {"speculative-config": json.dumps({**spec, **verify})}
-    recipe = tmp_path / "recipe.yaml"
-    recipe.write_text(yaml.safe_dump({"roles": {"agg": {"args": args}}}))
-    environment = {**ENV, **GATE, "MODEL_PREFIX": "kimik3", "AL_GATE_CURVE": curve}
-    plan_commands(str(recipe), "vllm", ["-f", str(recipe)], environment, golden_dir=tmp_path)
