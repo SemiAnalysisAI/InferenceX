@@ -107,6 +107,7 @@ dsr1-fp8-mi300x-sglang:
         conc-start: 4
         conc-end: 64
         srt-recipe: 8k1k.yaml
+        cpu-power: true
 
 dsr1-fp8-mi325x-sglang:
   image: lmsysorg/sglang:v0.5.22-rocm720-mi30x@sha256:58b6bc333f527c88fe5ff1b4bd8d17e82214eabcb3044549117159878967c930
@@ -126,6 +127,7 @@ dsr1-fp8-mi325x-sglang:
         conc-start: 4
         conc-end: 64
         srt-recipe: 8k1k.yaml
+        cpu-power: true
 
 dsr1-fp8-mi355x-sglang:
   image: lmsysorg/sglang:v0.5.22-rocm720-mi35x@sha256:c4b61360b251d62bb17da63f175d571ab22479eb46a144548d79f3ed3998ea11
@@ -170,6 +172,7 @@ dsr1-fp8-mi355x-sglang-mtp:
         conc-end: 64
         spec-decoding: mtp
         srt-recipe: 8k1k.yaml
+        cpu-power: true
 
 # MI355X FP8 AgentX, TP4 only. The grid follows the TP4 band of the B200 FP8
 # AgentX arm so the two SKUs are directly comparable point for point, with the
@@ -938,8 +941,8 @@ dsv41flash-fp4-mi355x-atom-agentic-dspark:
       - { tp: 2, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 6, 8, 16, 32, 64], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 8, 32], srt-recipe: agentic.yaml }
 
-# The golden acceptance curve remains the provisional GLM-5.2-derived curve
-# documented in infx/golden_al_distribution/glm-5.3-fp8__mtp__native__default-default.yaml.
+# The golden acceptance curve is the GLM-5.3 NVFP4 SGLang curve in
+# infx/golden_al_distribution/glm-5.3-nvfp4__mtp__native__default-default.yaml.
 glm5.3-fp8-mi355x-tilert-agentic:
   image: ghcr.io/tile-ai/tilert-rocm-decode:0.1.6
   model: zai-org/GLM-5.3

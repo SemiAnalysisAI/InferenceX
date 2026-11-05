@@ -98,7 +98,7 @@ python -m atom.entrypoints.openai_server \
    其中 `1` 是目标模型保证生成的验证 token。结果四舍五入到小数点后两位。
 6. 收集脚本生成 YAML 矩阵。工作流将其发布到 GitHub Actions step summary，并上传为 `speedbench-reference-al-<model-prefix>` artifact。
 7. 工作流保留服务日志和逐请求详细结果，以便审阅者确认输出合理、思考模式正确，并且没有静默的服务或聊天模板故障。
-8. 审阅完成后，将矩阵连同准确的采样元数据、[收集设置](#收集设置)和源 Actions run URL 一并提交到本目录。设置 `open-pr=true` 和 `golden-curve=<曲线文件名>`（例如 `deepseek-v4-pro__mtp__native__default-default`）时，工作流会写入本目录下的 `<曲线文件名>.yaml`，首行为源 run URL，再通过 `python -m infx.golden_al_distribution show` 加载校验，然后开启 PR。它会替换整个文件，因此本次未收集的格子会被删除。
+8. 审阅完成后，将矩阵连同准确的采样元数据、[收集设置](#收集设置)和源 Actions run URL 一并提交到本目录。设置 `open-pr=true` 和 `golden-curve=<曲线文件名>`（例如 `deepseek-v4-pro__mtp__native__default-default`）时，工作流会写入本目录下的 `<曲线文件名>.yaml`，`source_run` 键为源 run URL，再通过 `python -m infx.golden_al_distribution show` 加载校验，然后开启 PR。它会替换整个文件，因此本次未收集的格子会被删除。
 
 收集过程仅通过测量真实草稿头质量来建立黄金曲线。之后，AgentX 对所有可比较提交使用该已提交曲线作为合成接受目标。
 
@@ -118,7 +118,7 @@ collection:
 - `renderer` 表示客户端如何把每个提示词渲染成文本。`chat_template` 对一条用户消息应用所服务模型的 Hugging Face 聊天模板，并带上生成提示和 `chat_template_kwargs`。`deepseek_v4` 是 vLLM 中同名的 tokenizer 模式；门禁使用本仓库中等效的[编码器](../bench_serving/encoding_dsv4.py)，并把 `chat_template_kwargs` 作为其思考选项。
 - `sampling` 列出请求携带的全部采样参数，其中包括 `vllm bench serve` 附加的 `repetition_penalty: 1.0`。未列出的参数即未发送，服务端使用了自身的默认值。
 - 其余设置对所有收集都相同：SPEED-Bench Qualitative `coding` 类别的 80 条提示词，按 vLLM 加载器的发送顺序，以流式 `/v1/completions` 请求发送，`max_tokens` 为 4096，且不设置 `ignore_eos`。各次收集的并发数不同；门禁始终以并发 64 重放，即视 AL 与并发无关。
-- 新曲线必须包含该块。目前有两条曲线没有该块，门禁会把它们的点列为未解析（unresolved）。[`deepseek-v4.1-flash__dspark__native__probabilistic-block.yaml`](deepseek-v4.1-flash__dspark__native__probabilistic-block.yaml) 需要等 DeepSeek V4.1 渲染器落地后，门禁才能渲染其提示词。[`muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml`](muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml) 使用 SGLang 的 `bench_serving` 客户端在其原生 `/generate` 端点上收集，门禁的 `/v1/completions` 重放无法复现该方式。[`glm-5.3-fp8__mtp__native__default-default.yaml`](glm-5.3-fp8__mtp__native__default-default.yaml) 是临时曲线，沿用 GLM-5.2 的设置。
+- 新曲线必须包含该块。目前有三条曲线没有该块，门禁会把它们的点列为未解析（unresolved）。[`deepseek-v4.1-flash__dspark__native__probabilistic-block.yaml`](deepseek-v4.1-flash__dspark__native__probabilistic-block.yaml) 需要等 DeepSeek V4.1 渲染器落地后，门禁才能渲染其提示词。[`muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml`](muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml) 使用 SGLang 的 `bench_serving` 客户端在其原生 `/generate` 端点上收集，门禁的 `/v1/completions` 重放无法复现该方式。[`glm-5.3-nvfp4__mtp__native__default-default.yaml`](glm-5.3-nvfp4__mtp__native__default-default.yaml) 的收集方式相同。
 
 ## 复现一次收集
 
@@ -146,25 +146,29 @@ gh workflow run speedbench-al.yml \
 - 服务日志中没有回退、禁用草稿或聊天模板错误。
 - YAML 元数据与触发时使用的镜像、采样设置、模型和推测方法一致。
 - `collection` 块与收集脚本的并发数、提示词渲染方式和各模式设置一致。
-- YAML 第一行链接了源 Actions run。
+- `source_run` 是生成该 artifact 的 Actions run。
 - 提交的数值与工作流 artifact 完全一致。
 
 ## 当前黄金曲线
 
-| 模型 | 方法 | 黄金 YAML | 源 run |
-| --- | --- | --- | --- |
-| DeepSeek V4 Pro | MTP | [`deepseek-v4-pro__mtp__native__default-default.yaml`](deepseek-v4-pro__mtp__native__default-default.yaml) | [27180633016](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27180633016) |
-| DeepSeek V4 Pro 0813 | DSpark（概率采样草稿） | [`deepseek-v4-pro-0813__dspark__native__probabilistic-default.yaml`](deepseek-v4-pro-0813__dspark__native__probabilistic-default.yaml) | [31742838308](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/31742838308) |
-| DeepSeek V4.1 Flash | DSpark（概率采样草稿 + 块验证） | [`deepseek-v4.1-flash__dspark__native__probabilistic-block.yaml`](deepseek-v4.1-flash__dspark__native__probabilistic-block.yaml) | [34493175056](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34493175056) |
-| Qwen3.5 397B-A17B | MTP | [`qwen3.5-397b-a17b-nvfp4__mtp__native__default-default.yaml`](qwen3.5-397b-a17b-nvfp4__mtp__native__default-default.yaml) | [27317114007](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27317114007) |
-| Kimi K3 | DSpark | [`kimi-k3__dspark__kimi-k3-dspark__default-default.yaml`](kimi-k3__dspark__kimi-k3-dspark__default-default.yaml) | [30304797750](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/30304797750) |
-| Kimi K3 | DSpark（概率采样草稿 + 块验证） | [`kimi-k3__dspark__kimi-k3-dspark__probabilistic-block.yaml`](kimi-k3__dspark__kimi-k3-dspark__probabilistic-block.yaml) | [30316471205](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/30316471205) |
-| MiniMax-M3 | EAGLE3 | [`minimax-m3__eagle3__minimax-m3-eagle3__default-default.yaml`](minimax-m3__eagle3__minimax-m3-eagle3__default-default.yaml) | [28061204145](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28061204145) |
-| MiniMax-M3 | EAGLE3（GQA） | [`minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default.yaml`](minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default.yaml) | [29784780049](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/29784780049) |
-| GLM-5.2 | MTP | [`glm-5.2-fp8__mtp__native__default-default.yaml`](glm-5.2-fp8__mtp__native__default-default.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479) |
-| GLM-5.3 | MTP（临时，K=3 取自 GLM-5.2） | [`glm-5.3-fp8__mtp__native__default-default.yaml`](glm-5.3-fp8__mtp__native__default-default.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479)（GLM-5.2） |
-| Qwen3.8-Flash-Next | MTP (native) | [`qwen3.8-flash-next-fp8__mtp__native__default-default.yaml`](qwen3.8-flash-next-fp8__mtp__native__default-default.yaml) | [33034290269](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/33034290269) |
-| Muse Spark Open | DFlash2 | [`muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml`](muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml) | [38808046215](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/38808046215) |
+| 模型 | 方法 | 黄金 YAML |
+| --- | --- | --- |
+| DeepSeek V4 Pro | MTP | [`deepseek-v4-pro__mtp__native__default-default.yaml`](deepseek-v4-pro__mtp__native__default-default.yaml) |
+| DeepSeek V4 Pro 0813 | DSpark（概率采样草稿） | [`deepseek-v4-pro-0813__dspark__native__probabilistic-default.yaml`](deepseek-v4-pro-0813__dspark__native__probabilistic-default.yaml) |
+| DeepSeek V4.1 Flash | DSpark（概率采样草稿 + 块验证） | [`deepseek-v4.1-flash__dspark__native__probabilistic-block.yaml`](deepseek-v4.1-flash__dspark__native__probabilistic-block.yaml) |
+| Qwen3.5 397B-A17B | MTP | [`qwen3.5-397b-a17b-nvfp4__mtp__native__default-default.yaml`](qwen3.5-397b-a17b-nvfp4__mtp__native__default-default.yaml) |
+| Kimi K3 | DSpark | [`kimi-k3__dspark__kimi-k3-dspark__default-default.yaml`](kimi-k3__dspark__kimi-k3-dspark__default-default.yaml) |
+| Kimi K3 | DSpark（概率采样草稿 + 块验证） | [`kimi-k3__dspark__kimi-k3-dspark__probabilistic-block.yaml`](kimi-k3__dspark__kimi-k3-dspark__probabilistic-block.yaml) |
+| Kimi K3 | DSpark（概率采样草稿） | [`kimi-k3__dspark__kimi-k3-dspark__probabilistic-default.yaml`](kimi-k3__dspark__kimi-k3-dspark__probabilistic-default.yaml) |
+| Kimi K3.1 Pro | DSpark（概率采样草稿 + 块验证） | [`kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark-preview__probabilistic-block.yaml`](kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark-preview__probabilistic-block.yaml) |
+| Kimi K3.1 Pro | DFLASH（RadixArk 草稿 + 块验证） | [`kimi-k3.1-pro__dflash__kimi-k3.1-dflash2-preview__default-block.yaml`](kimi-k3.1-pro__dflash__kimi-k3.1-dflash2-preview__default-block.yaml) |
+| MiniMax-M3 | EAGLE3 | [`minimax-m3__eagle3__minimax-m3-eagle3__default-default.yaml`](minimax-m3__eagle3__minimax-m3-eagle3__default-default.yaml) |
+| MiniMax-M3 | EAGLE3（GQA） | [`minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default.yaml`](minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default.yaml) |
+| MiniMax-M3 | EAGLE3（GQA + 块验证） | [`minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-block.yaml`](minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-block.yaml) |
+| GLM-5.2 | MTP | [`glm-5.2-fp8__mtp__native__default-default.yaml`](glm-5.2-fp8__mtp__native__default-default.yaml) |
+| GLM-5.3 | MTP（SGLang） | [`glm-5.3-nvfp4__mtp__native__default-default.yaml`](glm-5.3-nvfp4__mtp__native__default-default.yaml) |
+| Qwen3.8-Flash-Next | MTP (native) | [`qwen3.8-flash-next-fp8__mtp__native__default-default.yaml`](qwen3.8-flash-next-fp8__mtp__native__default-default.yaml) |
+| Muse Spark Open | DFlash2 | [`muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml`](muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml) |
 
 ## 在 srt-slurm 运行中使用黄金曲线
 
@@ -180,7 +184,7 @@ gh workflow run speedbench-al.yml \
 
 [`identities.yaml`](identities.yaml) 为每条曲线提供两个块。新曲线合并前必须同时具备二者；测试会据此检查每个文件名。
 
-`select` 决定哪些运行使用该曲线。`curve_name` 返回唯一匹配的曲线，没有或有多条匹配时报错。
+`select` 决定哪些运行使用该曲线。`curve_name` 返回最具体的匹配曲线（声明 `draft_family`、`draft_sample`、`verify` 最多的那条），没有匹配或最具体的多条并列时报错。
 
 | 键 | 含义 |
 | --- | --- |
@@ -188,6 +192,7 @@ gh workflow run speedbench-al.yml \
 | `method` | `mtp`、`eagle3`、`dspark` 或 `dflash`。SGLang 的 `EAGLE` 和 `NEXTN` 表示模型原生 `mtp` 头，MiniMax-M3 的 EAGLE 除外，其为 `eagle3` |
 | `draft_family` | 仅在同一模型的曲线因草稿模型而不同时设置：草稿模型名含 `gqa` 时为 `gqa`，否则为 `default` |
 | `draft_sample` | 仅在同一模型的曲线因草稿采样器而不同时设置：运行的 `draft_sample_method` 必须与之相等 |
+| `verify` | 仅在同一模型的曲线因验证器而不同时设置：`standard`、`block` 或 `relaxed`。运行的验证器按审计相同的方式读取；未知验证器（ATOM、TileRT）不会匹配设置了 `verify` 的曲线 |
 
 `collection` 记录曲线的测量方式：`engine`、`draft`、`draft_sample`（`greedy`、`probabilistic`）、`verify`（`standard`、`block`、`relaxed`）、`adaptive`、`topology`（`chain`、`tree-topk<N>`）、`draft_precision`（草稿权重的量化方式）、`draft_kv_cache_dtype` 和 `kv_cache_dtype`（目标模型的）。`provisional: true` 表示该曲线并非针对该模型测量。每项为 `{value, source}`：
 

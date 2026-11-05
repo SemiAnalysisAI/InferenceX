@@ -28,7 +28,7 @@ result = os.environ["RESULT_FILENAME"]
 Path(result + ".json").write_text("{}\\n")
 Path(result + "_conc1.json").write_text('{"num_requests_successful": 1}\\n')
 Path("profile_" + result + ".trace.json.gz").write_bytes(b"fixture trace")
-Path("speedbench-reference-al.yaml").write_text("fixture: 1\\n")
+Path("speedbench-reference-al.yaml").write_text("fixture:\\n  thinking_on:\\n    1: 1.50\\n")
 """
 
 
@@ -130,7 +130,7 @@ def test_launch_runs_the_python_entrypoint_from_the_project_root(tmp_path, workf
     exported = dict(line.split("=", 1) for line in github_env.read_text().splitlines())
     assert exported["INFERENCEX_E2E_ROOT"] == str(project.resolve())
     if workflow == "speedbench-al.yml":
-        assert "fixture: 1" in summary.read_text()
+        assert "    1: 1.50" in summary.read_text()
     else:
         assert (project / (exported["RESULT_FILENAME"] + ".json")).read_text() == "{}\n"
     if workflow == "profile.yml":

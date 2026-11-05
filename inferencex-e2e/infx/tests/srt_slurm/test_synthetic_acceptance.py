@@ -56,9 +56,15 @@ def golden_dir(tmp_path: Path) -> Path:
             "kimi-k3",
             2.9,
         ),
+        (
+            "kimi-k3__dspark__kimi-k3-dspark__probabilistic-default.yaml",
+            "kimi-k3",
+            3.0,
+        ),
         ("minimax-m3__eagle3__minimax-m3-eagle3__default-default.yaml", "minimax-m3", 2.5),
         ("minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default.yaml", "minimax-m3", 2.6),
-        ("glm-5.3-fp8__mtp__native__default-default.yaml", "glm-5.3", 3.2),
+        ("minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-block.yaml", "minimax-m3", 2.7),
+        ("glm-5.3-nvfp4__mtp__native__default-default.yaml", "glm-5.3", 3.2),
         (
             "muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml",
             "muse-spark-open",
@@ -188,9 +194,15 @@ def vllm_recipe(method: str = "mtp", **extra: Any) -> dict[str, Any]:
         ("dsv4", "mtp", {}, 2.4),
         ("dsv4", "dspark", {}, 2.7),
         ("kimik3", "dspark", {"draft_sample_method": "greedy"}, 2.8),
-        ("kimik3", "dspark", {"draft_sample_method": "probabilistic"}, 2.9),
+        ("kimik3", "dspark", {"draft_sample_method": "probabilistic"}, 3.0),
         ("minimaxm3", "eagle3", {"model": "Inferact/MiniMax-M3-EAGLE3"}, 2.5),
         ("minimaxm3", "eagle3", {"model": "Inferact/MiniMax-M3-EAGLE3-GQA"}, 2.6),
+        (
+            "minimaxm3",
+            "eagle3",
+            {"model": "Inferact/MiniMax-M3-EAGLE3-GQA", "rejection_sample_method": "block"},
+            2.7,
+        ),
     ],
 )
 def test_automatic_curve_selection_preserves_json(
@@ -990,3 +1002,22 @@ def test_the_acceptance_gate_rejects_a_recipe_drafting_otherwise(
     environment = {**ENV, **GATE, **gate}
     with pytest.raises(ValueError, match=error):
         plan_commands(str(recipe), framework, ["-f", str(recipe)], environment, golden_dir=tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("verify", "curve"),
+    [
+        ({}, "kimi-k3__dspark__kimi-k3-dspark__probabilistic-default"),
+        ({"rejection_sample_method": "block"}, "kimi-k3__dspark__kimi-k3-dspark__probabilistic-block"),
+    ],
+    ids=["standard", "block"],
+)
+def test_the_acceptance_gate_checks_the_verifiers_curve(
+    tmp_path: Path, verify: dict[str, str], curve: str
+) -> None:
+    spec = {"method": "dspark", "num_speculative_tokens": 3, "draft_sample_method": "probabilistic"}
+    args = {"speculative-config": json.dumps({**spec, **verify})}
+    recipe = tmp_path / "recipe.yaml"
+    recipe.write_text(yaml.safe_dump({"roles": {"agg": {"args": args}}}))
+    environment = {**ENV, **GATE, "MODEL_PREFIX": "kimik3", "AL_GATE_CURVE": curve}
+    plan_commands(str(recipe), "vllm", ["-f", str(recipe)], environment, golden_dir=tmp_path)

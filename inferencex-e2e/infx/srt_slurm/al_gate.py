@@ -21,6 +21,7 @@ from infx.srt_slurm.synthetic_acceptance import (
     ENGINES,
     generation_role,
     spec_parameters,
+    verifier,
 )
 
 # Points that differ only in these share a gate (KV offloading restores the same cache).
@@ -87,8 +88,9 @@ def _gate(
         return None
     if row["framework"] == "dynamo-vllm" and leader_only_metrics(role, recipe, row["runner"]):
         return LEADER_ONLY_METRICS
-    curve = curve_name(row["model-prefix"], spec, golden_dir)
-    golden = golden_length(row["model-prefix"], spec, thinking_mode, golden_dir)
+    verify = verifier(role, engine).value
+    curve = curve_name(row["model-prefix"], spec, golden_dir, verify)
+    golden = golden_length(row["model-prefix"], spec, thinking_mode, golden_dir, verify)
     if load_curve(curve, golden_dir).collection is None:
         return f"golden curve {curve} records no collection settings to replay"
     key = json.dumps([deployment_key(row), [spec.get(field) for field in SPEC_FIELDS]])
