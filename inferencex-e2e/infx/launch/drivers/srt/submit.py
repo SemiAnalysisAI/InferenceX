@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from infx.launch.drivers.srt.lanes import SrtLane
     from infx.launch.drivers.srt.run import SrtRun
     from infx.launch.request import SrtRequest
+    from infx.srt_slurm.workload import CpuPowerSource
 
 SINGLE_NODE_SUBMISSION = "srt-single-node-submission.json"
 VIDEO_SUBMISSION = "srt-video-submission.json"
@@ -89,12 +90,19 @@ def gate_args(request: SrtRequest) -> list[str]:
     return [*arguments, "--unset", "telemetry"]
 
 
-def bind_point(run: SrtRun, checkout: Checkout, arguments: Path) -> int:
-    """Bind the single-node recipe variant for this point; the binder writes ``arguments``."""
+def bind_point(
+    run: SrtRun, checkout: Checkout, arguments: Path, cpu_power_source: CpuPowerSource | None
+) -> int:
+    """Bind the single-node recipe variant for this point; the binder writes ``arguments``.
+
+    ``cpu_power_source`` adds the cluster's CPU power exporter to the native telemetry.
+    """
     prepare = [
         str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.single_node", "prepare",
         f"{run.workspace}/{run.request.srt_recipe}", str(arguments), *_fabric(run),
     ]  # fmt: skip
+    if cpu_power_source is not None:
+        prepare += ["--cpu-power-source", cpu_power_source]
     return _bind(run, prepare, checkout.root)
 
 
@@ -122,7 +130,7 @@ def bind_recipe(
     staged: str,
     output: str,
     power_port: int | None,
-    cpu_power_source: str | None,
+    cpu_power_source: CpuPowerSource | None,
     client_env: Mapping[str, str],
 ) -> int:
     """Compose and bind the staged fragment into ``output``, with telemetry if ``power_port``

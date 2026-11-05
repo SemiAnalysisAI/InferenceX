@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from collections.abc import Mapping
 from pathlib import Path
@@ -40,6 +41,17 @@ UNKNOWN = Fact(None, "unknown")
 CHAIN = Fact("chain", "documented")
 # Adaptive verification is an opt-in engine flag.
 NOT_ADAPTIVE = Fact(False, "documented")
+# A Hugging Face cache path names its repo as models--<org>--<name>.
+HF_CACHE_REPO = re.compile(r"models--([^/]+)--([^/]+)")
+
+
+def speculation_facts(model_prefix: str, spec: Mapping[str, Any]) -> tuple[str, str]:
+    """A drafting role's method in the identity vocabulary and its draft model: the repo the
+    engine loads, or ``native`` when the served checkpoint drafts for itself."""
+    model = str(spec.get("model") or "")
+    if cached := HF_CACHE_REPO.search(model):
+        model = f"{cached[1]}/{cached[2]}"
+    return normalize_method(model_prefix, str(spec.get("method", ""))), model or "native"
 
 
 def _set(value: Any) -> Fact:
