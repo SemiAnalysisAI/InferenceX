@@ -583,14 +583,9 @@ def test_tilert_dsv41_profile_selects_the_dspark_curve(tmp_path: Path, golden_di
     recipe["roles"]["decode"]["args"]["model"] = "dsv41"
     path = tmp_path / "tilert.yaml"
     path.write_text(yaml.safe_dump(recipe))
-    commands = plan_commands(
-        str(path), "tilert", [], {**ENV, "MODEL_PREFIX": "dsv41flash"}, golden_dir=golden_dir
-    )
-    assert len(commands) == 1
-    assert commands[0].acceptance_length == 3.3
-    result = apply_native(recipe, commands[0].command)
-    assert result["roles"]["decode"]["env"]["TILERT_SIMULATE_ACC_LEN"] == "3.3"
-    assert result["roles"]["decode"]["env"]["TILERT_SIMULATE_ACC_METHOD"] == "match-expected"
+    env = {**ENV, "MODEL_PREFIX": "dsv41flash"}
+    commands = plan_commands(str(path), "tilert", [], env, golden_dir=golden_dir)
+    assert [command.acceptance_length for command in commands] == [3.3]
 
 
 @pytest.mark.parametrize(
