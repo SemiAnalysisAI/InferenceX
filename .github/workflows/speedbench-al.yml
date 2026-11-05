@@ -86,7 +86,7 @@ env:
   PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
   INFERENCEX_E2E_ROOT: ${{ github.workspace }}
   DRAFT_SAMPLE_METHOD: greedy
-  PORT: '8888'
+  PORT: '18888'
   INFMAX_CONTAINER_WORKSPACE: '/workspace'
   ENROOT_IMPORT_TIME_LIMIT: '120'
   IS_MULTINODE: 'false'
