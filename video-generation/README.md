@@ -17,7 +17,7 @@ engine through `python3 -m infx.bench video serve` as a generic service and runs
 `python3 -m infx.bench video client` as `benchmark.type: custom`. This directory
 is mounted into the job as `/video-package`. H100 and B200 select
 `h3-v2.yaml/release-v1`: 20 distinct measured prompts at C1. See
-[native video delivery](../../inferencex-e2e/docs/video-generation.md) for
+[native video delivery](../inferencex-e2e/docs/video-generation.md) for
 artifact identity, reuse validation and post-merge publication.
 
 ## Entry points
@@ -57,11 +57,11 @@ environment, GPU and algorithm identity.
 
 ```bash
 cd video-generation
-PYTHONPATH=../../inferencex-e2e uv run --no-project --python 3.12 \
+PYTHONPATH=../inferencex-e2e uv run --no-project --python 3.12 \
   --with 'av==16.1.0' --with 'numpy==2.3.5' \
   --with 'pyyaml>=6,<7' --with 'pytest>=8,<9' python -m pytest -q
 ```
 
-[Test Video Harness](../../.github/workflows/test-video-harness.yml) runs these
+[Test Video Harness](../.github/workflows/test-video-harness.yml) runs these
 CPU checks on relevant changes. They make no model, scheduler or GPU calls;
 sweep artifacts are the acceptance evidence.
