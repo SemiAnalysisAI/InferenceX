@@ -12034,3 +12034,12 @@
   description:
     - "Add Kimi-K3.1-Pro day-0 vLLM AgentX on B300: TP8 x DCP8 with DSpark (Inferact/Kimi-K3.1-Pro-DSpark-preview) and Simple CPU KV offload, conc 1-70."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4796
+
+- config-keys:
+    - kimik3.1-fp4-mi355x-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi-K3.1-Pro MXFP4 AgentX on one 8x MI355X node with SGLang (lmsysorg/sglang:dev-kimi-k31-pro-mi35x) and the DFlash2 draft at 5 draft tokens with block verification."
+    - "TP8 monokernel at concurrency 1 and 4 with GPU-resident KV; TP8/DCP8 with the HiCache host tier at concurrency 8, 16, 32 and 48."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4808
