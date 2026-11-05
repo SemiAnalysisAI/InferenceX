@@ -102,6 +102,32 @@ kimi-k3__dspark__kimi-k3-dspark__probabilistic-default:
     draft_kv_cache_dtype: {value: null, source: default}
     kv_cache_dtype: {value: fp8, source: explicit}
 
+kimi-k3.1-pro__dflash__kimi-k3.1-dflash2-preview__default-block:
+  select: {model_prefixes: [kimik3.1], method: dflash}
+  collection:
+    engine: sglang
+    draft: RadixArk/Kimi-K3.1-Dflash2-Preview
+    draft_sample: {value: null, source: default}
+    verify: {value: block, source: explicit}
+    adaptive: {value: false, source: documented}
+    topology: {value: chain, source: documented}
+    draft_precision: {value: null, source: default}
+    draft_kv_cache_dtype: {value: fp8, source: explicit}
+    kv_cache_dtype: {value: fp8, source: explicit}
+
+kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark-preview__probabilistic-block:
+  select: {model_prefixes: [kimik3.1], method: dspark, draft_sample: probabilistic}
+  collection:
+    engine: vllm
+    draft: Inferact/Kimi-K3.1-Pro-DSpark-preview
+    draft_sample: {value: probabilistic, source: explicit}
+    verify: {value: block, source: explicit}
+    adaptive: {value: false, source: documented}
+    topology: {value: chain, source: documented}
+    draft_precision: {value: null, source: default}
+    draft_kv_cache_dtype: {value: null, source: default}
+    kv_cache_dtype: {value: fp8, source: explicit}
+
 minimax-m3__eagle3__minimax-m3-eagle3__default-default:
   select: {model_prefixes: [minimaxm3], method: eagle3, draft_family: default}
   collection:

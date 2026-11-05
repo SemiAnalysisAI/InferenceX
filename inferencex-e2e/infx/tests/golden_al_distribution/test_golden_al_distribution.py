@@ -2,6 +2,7 @@
 
 import json
 import math
+import re
 from pathlib import Path
 
 import pytest
@@ -17,12 +18,15 @@ from infx.golden_al_distribution import (
 )
 from infx.golden_al_distribution.__main__ import main
 
+SOURCE_RUN = r"https://github\.com/SemiAnalysisAI/InferenceX/actions/runs/\d+"
+
 
 def test_every_committed_curve_is_valid() -> None:
     curves = list_curves()
     stems = {path.stem for path in GOLDEN_DIR.glob("*.yaml")} - {"identities"}
     assert {curve.name for curve in curves} == stems
     for curve in curves:
+        assert re.fullmatch(SOURCE_RUN, curve.source_run or ""), curve.name
         assert set(curve.modes) <= set(THINKING_MODES), curve.name
         for mode in curve.modes:
             assert curve.tokens(mode), (curve.name, mode)
@@ -38,7 +42,11 @@ def test_collection_settings_sit_beside_the_model(tmp_path: Path) -> None:
         "modes": {"thinking_on": {"chat_template_kwargs": None, "sampling": {"temperature": 1.0}}},
     }
     curves = {
-        "recorded": {"deepseek-v4-pro": {"thinking_on": {3: 3.01}}, "collection": collection},
+        "recorded": {
+            "source_run": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/1",
+            "deepseek-v4-pro": {"thinking_on": {3: 3.01}},
+            "collection": collection,
+        },
         "unrecorded": {"kimi-k3": {"thinking_on": {7: 3.78}}},
         "two_models": {"a": {"thinking_on": {1: 1.5}}, "b": {}, "collection": collection},
     }
@@ -47,7 +55,9 @@ def test_collection_settings_sit_beside_the_model(tmp_path: Path) -> None:
     recorded = load_curve("recorded", tmp_path)
     assert (recorded.model, recorded.acceptance("thinking_on", 3)) == ("deepseek-v4-pro", 3.01)
     assert recorded.collection == collection
-    assert load_curve("unrecorded", tmp_path).collection is None
+    assert recorded.source_run == "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/1"
+    unrecorded = load_curve("unrecorded", tmp_path)
+    assert (unrecorded.collection, unrecorded.source_run) == (None, None)
     with pytest.raises(ValueError, match="Expected one model in golden curve two_models.yaml"):
         load_curve("two_models", tmp_path)
 
