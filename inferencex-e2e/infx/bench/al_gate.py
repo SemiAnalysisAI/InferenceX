@@ -13,6 +13,7 @@ import argparse
 import json
 import os
 import random
+import signal
 import time
 import urllib.request
 from collections.abc import Mapping
@@ -40,7 +41,15 @@ def main(argv: list[str]) -> int:
     """Run the ``al-gate`` command."""
     parser = argparse.ArgumentParser(prog="python3 -m infx.bench al-gate", description=__doc__)
     parser.parse_args(argv)
+    # The shim's timeout stops the gate at its cap; record that instead of dying silently.
+    signal.signal(signal.SIGTERM, _stopped)
     return run(os.environ, Runtime.for_job(os.environ))
+
+
+def _stopped(_signum: int, _frame: object) -> None:
+    """Raise when the shim's timeout stops the gate, so its result records why."""
+    cap = os.environ.get("AL_GATE_TIMEOUT_S", "?")
+    raise BenchError(f"stopped at the gate's {cap}s time cap")
 
 
 def run(env: Mapping[str, str], runtime: Runtime, golden_dir: Path | None = None) -> int:

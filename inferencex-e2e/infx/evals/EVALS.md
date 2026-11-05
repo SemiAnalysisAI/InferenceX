@@ -587,7 +587,7 @@ are gated.
   from the Actions cache, keyed on `infx/bench/speedbench.py`, or prepares them on a miss
   (digest-checked). It uploads them as the `al_gate_dataset` artifact. The agentic eval jobs
   of `run-sweep.yml` and `e2e-tests.yml` wait for it and download it; if it fails, they run
-  without the gate. Pushes to `main` and a weekly schedule keep the cache entry warm, because
+  without the gate; a sweep's call is capped at 30 minutes. Pushes to `main` and a weekly schedule keep the cache entry warm, because
   a cache saved by a PR run is visible only to that PR.
 - When the prompts are present, the srt driver sets `EVAL_AL_GATE=true`. The golden
   acceptance planner (`infx/srt_slurm/synthetic_acceptance.py`) reads the resolved recipe and
@@ -603,7 +603,8 @@ are gated.
   reads `AL = 1 + accepted draft tokens / verification steps` from the engine's own
   Prometheus counters, and writes `al_gate_<RESULT_FILENAME>.json` with `pass` (within 5% of
   golden), `below`, `above`, `no-counters`, `no-drafting` or `error`. The shim always exits 0,
-  so the eval runs after any outcome.
+  so the eval runs after any outcome. The eval shares the job's time limit, so the shim stops
+  the gate after `AL_GATE_TIMEOUT_S` (default 1800 s) and the gate records an `error`.
 - A gate that cannot run is `skipped` with its reason: no prompts, a curve without collection
   settings, TileRT (no streaming `/v1/completions`, no metrics), or a multi-node Dynamo
   vLLM data-parallel worker whose metrics srtctl exposes only on its leader. Dynamo TRT-LLM is

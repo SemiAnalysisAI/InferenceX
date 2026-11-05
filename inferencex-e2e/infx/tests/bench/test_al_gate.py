@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -50,6 +51,12 @@ printf '{"request_count": {"avg": 3}, "error_request_count": {"avg": %s}}\n' "$F
     > "$out/profile_export_aiperf.json"
 cp "$COUNTERS_AFTER" "$COUNTERS"
 """
+
+
+# The shim caps the gate with coreutils timeout, which serving images have.
+NEEDS_TIMEOUT = pytest.mark.skipif(
+    shutil.which("timeout", path="/usr/bin:/bin") is None, reason="needs coreutils timeout"
+)
 
 
 class Tokenizer:
@@ -244,6 +251,7 @@ def test_deepseek_v41_prompts_render_as_vllms_tokenizer_mode_did(kwargs, effort,
     assert prompt == f"{BOS}{prefix}{USER}Fix it.{ASSISTANT}{opening}"
 
 
+@NEEDS_TIMEOUT
 def test_the_srt_shim_records_a_gate_whose_inputs_are_missing_and_exits_0(tmp_path):
     tools = tmp_path / "tools"
     tools.mkdir()
@@ -268,3 +276,30 @@ def test_the_srt_shim_records_a_gate_whose_inputs_are_missing_and_exits_0(tmp_pa
         "testmodel_mtp", 3, "error",
     )  # fmt: skip
     assert missing in document["error"]
+
+
+@NEEDS_TIMEOUT
+def test_the_srt_shim_stops_a_stalled_gate_at_its_cap_so_the_eval_still_runs(tmp_path):
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    (tools / "python3").symlink_to(sys.executable)
+    # Prompts nobody writes: the gate blocks reading them, as a stalled replay would.
+    dataset = tmp_path / "speedbench_coding.jsonl"
+    os.mkfifo(dataset)
+    env = {
+        "PATH": f"{tools}:/usr/bin:/bin", "AL_GATE_TIMEOUT_S": "2", "AL_GATE": "true",
+        "AL_GATE_CURVE": "testmodel_mtp", "AL_GATE_DRAFT_TOKENS": "3", "AL_GATE_DATASET": str(dataset),
+        "AL_GATE_OUTPUT_DIR": str(tmp_path), "THINKING_MODE": "thinking_on", "RESULT_FILENAME": "gate",
+        "MODEL": "test/model", "FRAMEWORK": "vllm", "AIPERF_SERVER_URL": "http://frontend:8000",
+        "AIPERF_SERVER_METRICS_URLS": "http://worker:9090/metrics",
+    }  # fmt: skip
+
+    run = subprocess.run(
+        ["bash", str(REPO_ROOT / "benchmarks" / "srt_al_gate.sh")],
+        env=env, capture_output=True, text=True, timeout=60, check=False,
+    )  # fmt: skip
+
+    assert run.returncode == 0
+    assert "AL gate exited 124 (report-only)" in run.stderr
+    document = json.loads((tmp_path / "al_gate_gate.json").read_text())
+    assert (document["status"], document["error"]) == ("error", "stopped at the gate's 2s time cap")

@@ -33,6 +33,9 @@ jobs:
   warm:
     name: warm
     runs-on: ubuntu-latest
+    # A sweep's evals wait for this job: a stall ends it and they run without the gate.
+    timeout-minutes: ${{ inputs.upload && 30 || 360 }}
+    continue-on-error: ${{ inputs.upload == true }}
     # Cache warming runs one at a time; a sweep's call prepares its own prompts on a miss.
     concurrency:
       group: ${{ inputs.upload && format('al-gate-prompts-{0}-{1}', github.run_id, github.run_attempt) || 'al-gate-prompts' }}
