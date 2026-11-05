@@ -12106,4 +12106,4 @@
     - agentic-coding
   description:
     - "Re-run Kimi-K3.1-Pro vLLM AgentX on B300 with the tool and reasoning parsers off on synthetic-acceptance throughput servers (#4840); evals keep them."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4796
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4841
