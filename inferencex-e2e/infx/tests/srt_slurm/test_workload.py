@@ -180,13 +180,15 @@ def test_a_power_point_gets_telemetry_and_its_concurrencies_on_a_bundle_variant(
 
     composed = compose_recipe(path, agentic=True, multinode=True, root=project, power_port=19401)
     [(_, variant)] = selected_recipes(composed, "override_c8")
-    bound = bind_workload(variant, AGENTX_ENV, agentic=True, multinode=True)
+    bound = bind_workload(variant, {**AGENTX_ENV, "POWER": "1"}, agentic=True, multinode=True)
 
     assert bound["telemetry"] == {
         "collector_join_timeout_seconds": 12, "enabled": True, "required": True,
         "dcgm_exporter": {"container_image": "dcgm-exporter", "port": 19401},
     }  # fmt: skip
     assert bound["benchmark"]["concurrencies"] == [8]
+    by_default = bind_workload(variant, AGENTX_ENV, agentic=True, multinode=True)
+    assert by_default["telemetry"]["required"] is False
     with_cpu = compose_recipe(
         path, agentic=True, multinode=True, root=project, power_port=19401, cpu_power_source="acpi"
     )

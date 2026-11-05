@@ -176,9 +176,14 @@ def run_multinode(launch: Launch) -> int:
         if not recipe_mirror_path(request.workspace, srt_recipe).is_file():
             raise LaunchError(f"{srt_recipe} is not in the recipe mirror")
         mirrored = str(request.workspace / srt_recipe)
+        model = models.checkpoint(launch.cluster, request)
+        served = models.served_path(launch.cluster, request, model)
+        model_paths = models.model_paths(launch.cluster, request, served)
+        run = SrtRun.create(launch, request, models.job_env(launch.cluster, request, served))
         decision = power.decide_power(
             launch.cluster.id,
             launch.path,
+            run.srt,
             request,
             lambda: selects_dedicated_discovery(
                 mirrored, agentic=request.is_agentic, root=repository_root()
@@ -187,10 +192,6 @@ def run_multinode(launch: Launch) -> int:
         event.set(power=asdict(decision))
         if not request.eval_only and (decision.agentx or decision.adapter):
             require(request, "INFERENCEX_RESULTS_PYTHON")
-        model = models.checkpoint(launch.cluster, request)
-        served = models.served_path(launch.cluster, request, model)
-        model_paths = models.model_paths(launch.cluster, request, served)
-        run = SrtRun.create(launch, request, models.job_env(launch.cluster, request, served))
         preflight = run.srt.preflight and not (model_paths and model and model.node_local)
         if request.framework == "tilert":
             require(request, "PREFILL_IMAGE")
@@ -262,17 +263,14 @@ def table_problems(clusters: Mapping[str, Cluster], only: str | None = None) -> 
             problems.append(f"{where}: no srt-slurm.shared-run-root")
         if srt.default_time_limit is not None and (lane.time_limit or lane.long_time_limit):
             problems.append(f"{where}: its time limits are shadowed by default-time-limit")
-    for (cluster_id, path), power_lane in power.POWER_LANES.items():
+    for cluster_id, path in power.POWER_LANES:
         where = f"POWER_LANES[{cluster_id!r}, {path}]"
         if not scoped(cluster_id):
             continue
         if (cluster_id, path) not in lanes.SRT_LANES:
             problems.append(f"{where}: no SRT_LANES row")
-        elif srt := _srt_settings(clusters.get(cluster_id)):
-            if srt.power_exporter_port is None:
-                problems.append(f"{where}: no srt-slurm.power-exporter-port")
-            if power_lane.default_on and srt.cpu_power_exporter is None:
-                problems.append(f"{where}: no srt-slurm.cpu-power-exporter")
+        elif (srt := _srt_settings(clusters.get(cluster_id))) and srt.power_exporter_port is None:
+            problems.append(f"{where}: no srt-slurm.power-exporter-port")
     for cluster_id, overrides in models.OVERRIDES.items():
         if scoped(cluster_id) and profile("OVERRIDES", cluster_id) is not None:
             entries = clusters[cluster_id].models.entries

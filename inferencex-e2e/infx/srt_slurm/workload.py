@@ -355,9 +355,12 @@ def bind_workload(
     )
     if (bound.get("telemetry") or {}).get("enabled") is True:
         benchmark["concurrencies"] = concurrencies
+        required = environment.get("REQUIRE_POWER", "0") in {"1", "true", "TRUE", "yes", "YES"}
+        # A multi-node point measures power by default; only its power field makes srtctl skip
+        # the benchmark when telemetry fails.
+        required = required or (multinode and environment.get("POWER") == "1")
+        bound["telemetry"]["required"] = required
         if not multinode:
-            required = environment.get("REQUIRE_POWER", "0") in {"1", "true", "TRUE", "yes", "YES"}
-            bound["telemetry"]["required"] = required
             workload["REQUIRE_POWER"] = "1" if required else "0"
     if agentic and not multinode:
         workload["ENABLE_AGENTX_POWER"] = (

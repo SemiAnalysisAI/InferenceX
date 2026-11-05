@@ -143,6 +143,7 @@ def _binder_inputs(
         decision = power.decide_power(
             cluster.id,
             path,
+            srt,
             request,
             lambda: selects_dedicated_discovery(
                 str(root / point["srt-recipe"]), agentic=request.is_agentic, root=root
