@@ -12064,6 +12064,43 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4722
 
 - config-keys:
+    - kimik3.1-fp4-gb200-dynamo-sglang-agentic-dflash-agg
+    - kimik3.1-fp4-gb200-dynamo-sglang-agentic-dflash-disagg
+  description:
+    - "Add Kimi K3.1 Pro day-0 SGLang AgentX points on GB200: aggregated TP16 DCP16 and 1P1D TP16 DCP16, with RadixArk DFLASH block verification and HiCache CPU offload."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4804
+
+- config-keys:
+    - glm5.3flash-fp8-gb200-sglang-agentic-mtp
+    - glm5.3flash-fp4-gb200-sglang-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Add GLM-5.3-Flash FP8 (zai-org/GLM-5.3-Flash) and NVFP4 (nvidia/GLM-5.3-Flash-NVFP4) AgentX on one GB200 tray with pinned lmsysorg/sglang:v0.5.22-cu130, using the SGLang cookbook GB200 Low Latency recipe: TP4, FP8 KV with TRT-LLM DSA, flashinfer_trtllm MoE, EAGLE MTP 5/1/6 and auto parsers."
+    - "No KV offload at concurrency 1, 4, 8, 12 and 16; HiCache L1 + L2 with SGLang auto-sized host pools at concurrency 24 and 32 for FP8 and 24, 32, 40 and 48 for NVFP4. Native 1M context, shared golden-AL curve for throughput, real acceptance for evals."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4718
+
+- config-keys:
+    - glm5.3flash-fp8-mi300x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add native GLM-5.3-Flash FP8 AgentX on MI300X with the official digest-pinned SGLang v0.5.22 ROCm 10 MI30x image, TP4/EP4 and MTP (EAGLE 5/1/6)."
+    - "GPU-resident KV at concurrency 1, 2, 4, 8, 12 and 16; SGLang HiCache with the auto-sized host tier at concurrency 24, 32 and 40."
+    - "Use gfx942 TileLang DSA with Torch DSA top-k, AITER MoE and FP8 KV, and disable INT8 QuickReduce."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4721
+
+- config-keys:
+    - kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-disagg
+    - kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-agg-mk
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi-K3.1-Pro GB300 Dynamo+SGLang AgentX points on lmsysorg/sglang:dev-kimi-k31-pro with the RadixArk/Kimi-K3.1-Dflash2-Preview DFLASH draft."
+    - "Disaggregated: TP8/DCP8 prefill with a HiCache host tier feeding either one TP16 (DCP8 x attention DP2, EP16 MegaMoE) decode worker (3P1D c300, 2P1D c180, 1P1D c76) or TP8/DCP8 decode workers (1P3D c60 and c36, 1P4D c32)."
+    - "Aggregated low-latency points: one TP16 EP1 worker with the NVIDIA megakernel (--enable-nvidia-megakernel), max-running-requests equal to the concurrency (c1, c2, c4)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4811
+
+- config-keys:
     - qwen3.5-fp8-mi300x-sglang-agentic-mtp
   description:
     - "Update the SGLang image from v0.5.16-rocm720-mi30x-20260730 to v0.5.22-rocm720-mi30x-20261024, pinned by digest."
