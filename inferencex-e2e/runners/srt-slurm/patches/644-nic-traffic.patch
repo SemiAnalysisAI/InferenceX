@@ -731,29 +731,92 @@ index edbb2d26..0b9136d3 100755
          if config.telemetry.enabled:
              exporter = config.telemetry.dcgm_exporter
              details.add_row("telemetry", "provider", "dcgm-power")
+diff --git a/src/srtctl/core/cpu_power.py b/src/srtctl/core/cpu_power.py
+index 907b190f..f8bc18b0 100644
+--- a/src/srtctl/core/cpu_power.py
++++ b/src/srtctl/core/cpu_power.py
+@@ -31,8 +31,6 @@ import json
+ import logging
+ import math
+ import os
+-import signal
+-import socket
+ import sys
+ import time
+ from abc import ABC, abstractmethod
+@@ -40,6 +38,7 @@ from datetime import datetime
+ from pathlib import Path
+ from typing import Any, NamedTuple
+ 
++from srtctl.core.node_samples import create_capture_dirs, node_hostname, stop_on_signals
+ from srtctl.core.power.cpu_rails import (
+     COMPONENT_RAIL_COLUMN_NAMES,
+     COMPONENT_RAIL_KINDS,
+@@ -665,18 +664,9 @@ def create_reader(source: str) -> CpuPowerReader:
+ 
+ def collect(*, output_dir: Path, ready_dir: Path, source: str, interval_seconds: float) -> int:
+     """Collect until SIGTERM/SIGINT and leave node-local auditable artifacts."""
+-    os.umask(0o002)
+-    output_dir.mkdir(parents=True, exist_ok=True)
+-    ready_dir.mkdir(parents=True, exist_ok=True)
+-    hostname = os.environ.get("SLURMD_NODENAME") or socket.gethostname().split(".", 1)[0]
+-    stop = False
+-
+-    def request_stop(_signum: int, _frame: Any) -> None:
+-        nonlocal stop
+-        stop = True
+-
+-    signal.signal(signal.SIGTERM, request_stop)
+-    signal.signal(signal.SIGINT, request_stop)
++    create_capture_dirs(output_dir, ready_dir)
++    hostname = node_hostname()
++    stop = stop_on_signals()
+ 
+     try:
+         reader = create_reader(source)
+@@ -707,7 +697,7 @@ def collect(*, output_dir: Path, ready_dir: Path, source: str, interval_seconds:
+         handle.flush()
+         _atomic_json(ready_path, {"hostname": hostname, "source": reader.source_name, "ready_at_unix": time.time()})
+         next_sample = time.monotonic()
+-        while not stop:
++        while not stop.is_set():
+             timestamp = time.time()
+             timestamp_local = format_local_timestamp(timestamp)
+             try:
 diff --git a/src/srtctl/core/cpu_power_session.py b/src/srtctl/core/cpu_power_session.py
-index 1e502831..54cefe32 100644
+index 1e502831..097d7202 100644
 --- a/src/srtctl/core/cpu_power_session.py
 +++ b/src/srtctl/core/cpu_power_session.py
-@@ -5,16 +5,13 @@
+@@ -5,16 +5,12 @@
  
  from __future__ import annotations
  
 -import contextlib
 -import csv
 -import json
- import os
+-import os
  import time
  from dataclasses import dataclass
  from pathlib import Path
 -from typing import Any
  
  from srtctl.core.cpu_power import SAMPLES_HEADER
-+from srtctl.core.node_samples import merge_node_csvs, read_node_markers, read_node_metadata
++from srtctl.core.node_samples import create_capture_dirs, read_node_markers, read_node_metadata, stop_and_merge
  from srtctl.core.power.contract import atomic_write_json
  from srtctl.core.power.session import SessionOutcome
  from srtctl.core.processes import ManagedProcess
-@@ -60,20 +57,17 @@ class CpuPowerTelemetrySession:
+@@ -48,9 +44,7 @@ class CpuPowerTelemetrySession:
+         self._ready_nodes: tuple[str, ...] = ()
+ 
+     def initialize(self) -> None:
+-        os.umask(0o002)
+-        self.samples_dir.mkdir(parents=True, exist_ok=True)
+-        self.ready_dir.mkdir(parents=True, exist_ok=True)
++        create_capture_dirs(self.samples_dir, self.ready_dir)
+         self._write_manifest(status="starting", reasons=(), row_count=0, observed_nodes=())
+ 
+     def add_process(self, process: ManagedProcess) -> None:
+@@ -60,61 +54,41 @@ class CpuPowerTelemetrySession:
          deadline = time.monotonic() + self.settings.startup_timeout_seconds
          expected = set(self.settings.nodes)
          while time.monotonic() < deadline:
@@ -781,10 +844,10 @@ index 1e502831..54cefe32 100644
          self._write_manifest(status="failed", reasons=(reason,), row_count=0, observed_nodes=self._ready_nodes)
          return False
  
-@@ -81,38 +75,21 @@ class CpuPowerTelemetrySession:
-         prematurely_exited = [process.name for process in self._processes if not process.is_running]
-         for process in self._processes:
-             process.terminate()
+     def stop_and_finalize(self, *, interrupted: bool = False) -> SessionOutcome:
+-        prematurely_exited = [process.name for process in self._processes if not process.is_running]
+-        for process in self._processes:
+-            process.terminate()
 -        rows: list[list[str]] = []
 -        malformed = False
 -        observed_nodes: set[str] = set()
@@ -808,12 +871,15 @@ index 1e502831..54cefe32 100644
 -            writer = csv.writer(handle)
 -            writer.writerow(SAMPLES_HEADER)
 -            writer.writerows(rows)
-+        merged = merge_node_csvs(
++        capture = stop_and_merge(
++            self._processes,
++            self.settings.nodes,
 +            self.samples_dir,
 +            SAMPLES_HEADER,
 +            self.samples_path,
 +            sort_key=lambda row: (float(row[1]), row[3], row[5]),
 +        )
++        merged = capture.merged
          reasons: list[str] = []
          if interrupted:
              reasons.append("interrupted")
@@ -821,26 +887,33 @@ index 1e502831..54cefe32 100644
 +        if merged.malformed:
              reasons.append("cpu_samples_malformed")
 -        missing = sorted(set(self.settings.nodes) - observed_nodes)
-+        missing = sorted(set(self.settings.nodes) - set(merged.observed_nodes))
++        missing = capture.missing_nodes
          if missing:
              reasons.append("cpu_node_samples_missing")
 -        if not rows:
 +        if not merged.row_count:
              reasons.append("cpu_samples_empty")
-         failed_processes = prematurely_exited
+-        failed_processes = prematurely_exited
++        failed_processes = capture.exited_processes
          if failed_processes:
-@@ -122,8 +99,8 @@ class CpuPowerTelemetrySession:
+             reasons.append("cpu_collector_failed")
+         publication_valid = not reasons
+@@ -122,10 +96,10 @@ class CpuPowerTelemetrySession:
          self._write_manifest(
              status=status,
              reasons=tuple(dict.fromkeys(reasons)),
 -            row_count=len(rows),
 -            observed_nodes=tuple(sorted(observed_nodes)),
+-            missing_nodes=tuple(missing),
+-            failed_processes=tuple(failed_processes),
 +            row_count=merged.row_count,
 +            observed_nodes=merged.observed_nodes,
-             missing_nodes=tuple(missing),
-             failed_processes=tuple(failed_processes),
++            missing_nodes=missing,
++            failed_processes=failed_processes,
          )
-@@ -144,10 +121,6 @@ class CpuPowerTelemetrySession:
+         return SessionOutcome(
+             status=status,
+@@ -144,10 +118,6 @@ class CpuPowerTelemetrySession:
          missing_nodes: tuple[str, ...] = (),
          failed_processes: tuple[str, ...] = (),
      ) -> None:
@@ -851,7 +924,7 @@ index 1e502831..54cefe32 100644
          atomic_write_json(
              self.manifest_path,
              {
-@@ -165,7 +138,7 @@ class CpuPowerTelemetrySession:
+@@ -165,7 +135,7 @@ class CpuPowerTelemetrySession:
                  "reason_codes": list(reasons),
                  "failed_processes": list(failed_processes),
                  "producer_git_commit": self.settings.producer_git_commit,
@@ -862,10 +935,10 @@ index 1e502831..54cefe32 100644
          )
 diff --git a/src/srtctl/core/nic_traffic.py b/src/srtctl/core/nic_traffic.py
 new file mode 100644
-index 00000000..b204b5e1
+index 00000000..1bd148c2
 --- /dev/null
 +++ b/src/srtctl/core/nic_traffic.py
-@@ -0,0 +1,297 @@
+@@ -0,0 +1,272 @@
 +# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 +# SPDX-License-Identifier: Apache-2.0
 +
@@ -876,11 +949,6 @@ index 00000000..b204b5e1
 +per-node CSV. Rates are computed later, per benchmark window, by
 +``srtctl.analysis.nic_traffic_report``.
 +
-+It runs on the bare host and imports only the standard library, so it also
-+runs as a copied file::
-+
-+    timeout -s TERM 30 python3 nic_traffic.py --output-dir /tmp/nic
-+
 +Which sysfs counter carries RDMA payload bytes depends on the driver; the
 +``COUNTER_SOURCES`` table names it per driver.
 +"""
@@ -889,15 +957,15 @@ index 00000000..b204b5e1
 +
 +import argparse
 +import csv
-+import json
 +import math
 +import os
-+import signal
-+import socket
 +import time
 +from dataclasses import dataclass
 +from pathlib import Path
 +from typing import Any
++
++from srtctl.core.node_samples import create_capture_dirs, node_hostname, stop_on_signals
++from srtctl.core.power.contract import atomic_write_json
 +
 +SCHEMA_VERSION = 2
 +# timestamp_unix is the midpoint of that port's own counter reads; sample_seq
@@ -1050,31 +1118,11 @@ index 00000000..b204b5e1
 +    return ports, unsupported
 +
 +
-+def node_hostname() -> str:
-+    """The Slurm node name, which is what the head node expects in every row."""
-+    return os.environ.get("SLURMD_NODENAME") or socket.gethostname().split(".", 1)[0]
-+
-+
-+def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
-+    temp = path.with_suffix(path.suffix + ".tmp")
-+    temp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-+    os.replace(temp, path)
-+
-+
 +def collect(*, output_dir: Path, ready_dir: Path, interval_seconds: float, sysfs_root: Path) -> int:
 +    """Sample until SIGTERM/SIGINT into ``<output_dir>/<host>.csv`` and mark readiness in ``ready_dir``."""
-+    os.umask(0o002)
-+    output_dir.mkdir(parents=True, exist_ok=True)
-+    ready_dir.mkdir(parents=True, exist_ok=True)
++    create_capture_dirs(output_dir, ready_dir)
 +    hostname = node_hostname()
-+    stop = False
-+
-+    def request_stop(_signum: int, _frame: Any) -> None:
-+        nonlocal stop
-+        stop = True
-+
-+    signal.signal(signal.SIGTERM, request_stop)
-+    signal.signal(signal.SIGINT, request_stop)
++    stop = stop_on_signals()
 +
 +    ports, unsupported = discover_ports(sysfs_root)
 +    metadata_path = output_dir / f"{hostname}.metadata.json"
@@ -1087,9 +1135,9 @@ index 00000000..b204b5e1
 +        "devices": [port.describe() for port in ports],
 +        "unsupported": [entry.describe() for entry in unsupported],
 +    }
-+    _atomic_json(metadata_path, metadata)
++    atomic_write_json(metadata_path, metadata)
 +    if not ports:
-+        _atomic_json(
++        atomic_write_json(
 +            ready_dir / f"{hostname}.error.json",
 +            {"hostname": hostname, "error": "no RDMA port with readable byte counters"},
 +        )
@@ -1104,13 +1152,13 @@ index 00000000..b204b5e1
 +        writer = csv.writer(handle)
 +        writer.writerow(SAMPLES_HEADER)
 +        handle.flush()
-+        _atomic_json(
++        atomic_write_json(
 +            ready_dir / f"{hostname}.ready.json",
 +            {"hostname": hostname, "port_count": len(ports), "ready_at_unix": time.time()},
 +        )
 +        next_sample = time.monotonic()
 +        sample_seq = 0
-+        while not stop:
++        while not stop.is_set():
 +            for port in ports:
 +                # One ionic counter read can take ~100 ms, so a pass over many
 +                # ports can last hundreds of ms; stamp each row at its own reads.
@@ -1140,7 +1188,7 @@ index 00000000..b204b5e1
 +            next_sample += interval_seconds
 +            time.sleep(max(0.0, next_sample - time.monotonic()))
 +    metadata.update({"ended_at_unix": time.time(), "sample_row_count": row_count, "read_failure_count": read_failures})
-+    _atomic_json(metadata_path, metadata)
++    atomic_write_json(metadata_path, metadata)
 +    return 0
 +
 +
@@ -1165,10 +1213,10 @@ index 00000000..b204b5e1
 +    raise SystemExit(main())
 diff --git a/src/srtctl/core/nic_traffic_session.py b/src/srtctl/core/nic_traffic_session.py
 new file mode 100644
-index 00000000..b34fc92e
+index 00000000..65364b2a
 --- /dev/null
 +++ b/src/srtctl/core/nic_traffic_session.py
-@@ -0,0 +1,130 @@
+@@ -0,0 +1,125 @@
 +# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 +# SPDX-License-Identifier: Apache-2.0
 +
@@ -1181,18 +1229,28 @@ index 00000000..b34fc92e
 +
 +from __future__ import annotations
 +
-+import os
 +import time
 +from dataclasses import dataclass
 +from pathlib import Path
 +
 +from srtctl.core.nic_traffic import SAMPLES_HEADER, SCHEMA_VERSION
-+from srtctl.core.node_samples import merge_node_csvs, read_node_markers, read_node_metadata
++from srtctl.core.node_samples import (
++    MergedNodeCsvs,
++    NodeCapture,
++    create_capture_dirs,
++    read_node_markers,
++    read_node_metadata,
++    stop_and_merge,
++)
 +from srtctl.core.power.contract import atomic_write_json
 +from srtctl.core.processes import ManagedProcess
 +
 +TRAFFIC_FILENAME = "nic_traffic.csv"
 +MANIFEST_FILENAME = "nic_manifest.json"
++
++_NOTHING_MERGED = NodeCapture(
++    merged=MergedNodeCsvs(row_count=0, observed_nodes=(), malformed=False), missing_nodes=(), exited_processes=()
++)
 +
 +
 +@dataclass(frozen=True)
@@ -1223,60 +1281,45 @@ index 00000000..b34fc92e
 +        self._processes: list[ManagedProcess] = []
 +
 +    def initialize(self) -> None:
-+        os.umask(0o002)
-+        self.samples_dir.mkdir(parents=True, exist_ok=True)
-+        self.ready_dir.mkdir(parents=True, exist_ok=True)
-+        self._write_manifest(status="running", reasons=(), row_count=0, observed_nodes=())
++        create_capture_dirs(self.samples_dir, self.ready_dir)
++        self._write_manifest(status="running")
 +
 +    def add_process(self, process: ManagedProcess) -> None:
 +        self._processes.append(process)
 +
 +    def stop_and_finalize(self, *, interrupted: bool = False) -> NicTrafficOutcome:
 +        """Stop the samplers, merge their CSVs into ``nic_traffic.csv`` and write the final manifest."""
-+        exited_early = [process.name for process in self._processes if not process.is_running]
-+        for process in self._processes:
-+            process.terminate()
-+        merged = merge_node_csvs(
++        capture = stop_and_merge(
++            self._processes,
++            self.settings.nodes,
 +            self.samples_dir,
 +            SAMPLES_HEADER,
 +            self.traffic_path,
 +            sort_key=lambda row: (float(row[0]), row[2], row[3], row[4]),
 +        )
-+        markers = read_node_markers(self.ready_dir)
-+        missing = tuple(sorted(set(self.settings.nodes) - set(merged.observed_nodes)))
-+        reasons = [
++        node_errors = read_node_markers(self.ready_dir).errors
++        reasons = tuple(
 +            reason
 +            for reason, applies in (
 +                ("interrupted", interrupted),
-+                ("nic_counters_unavailable", bool(markers.errors)),
-+                ("nic_node_samples_missing", bool(missing)),
-+                ("nic_samples_malformed", merged.malformed),
-+                ("nic_sampler_exited", bool(exited_early)),
++                ("nic_counters_unavailable", bool(node_errors)),
++                ("nic_node_samples_missing", bool(capture.missing_nodes)),
++                ("nic_samples_malformed", capture.merged.malformed),
++                ("nic_sampler_exited", bool(capture.exited_processes)),
 +            )
 +            if applies
-+        ]
-+        status = "incomplete" if reasons else "complete"
-+        self._write_manifest(
-+            status=status,
-+            reasons=tuple(reasons),
-+            row_count=merged.row_count,
-+            observed_nodes=merged.observed_nodes,
-+            missing_nodes=missing,
-+            node_errors=markers.errors,
-+            exited_processes=tuple(exited_early),
 +        )
-+        return NicTrafficOutcome(status=status, reason_codes=tuple(reasons))
++        status = "incomplete" if reasons else "complete"
++        self._write_manifest(status=status, reasons=reasons, capture=capture, node_errors=node_errors)
++        return NicTrafficOutcome(status=status, reason_codes=reasons)
 +
 +    def _write_manifest(
 +        self,
 +        *,
 +        status: str,
-+        reasons: tuple[str, ...],
-+        row_count: int,
-+        observed_nodes: tuple[str, ...],
-+        missing_nodes: tuple[str, ...] = (),
++        reasons: tuple[str, ...] = (),
++        capture: NodeCapture = _NOTHING_MERGED,
 +        node_errors: dict[str, str] | None = None,
-+        exited_processes: tuple[str, ...] = (),
 +    ) -> None:
 +        atomic_write_json(
 +            self.manifest_path,
@@ -1288,12 +1331,12 @@ index 00000000..b34fc92e
 +                "traffic_csv": TRAFFIC_FILENAME,
 +                "sample_interval_seconds": self.settings.sample_interval_seconds,
 +                "expected_nodes": list(self.settings.nodes),
-+                "observed_nodes": list(observed_nodes),
-+                "missing_nodes": list(missing_nodes),
++                "observed_nodes": list(capture.merged.observed_nodes),
++                "missing_nodes": list(capture.missing_nodes),
 +                "node_errors": node_errors or {},
-+                "sample_row_count": row_count,
++                "sample_row_count": capture.merged.row_count,
 +                "reason_codes": list(reasons),
-+                "exited_processes": list(exited_processes),
++                "exited_processes": list(capture.exited_processes),
 +                "producer_git_commit": self.settings.producer_git_commit,
 +                "nodes": read_node_metadata(self.samples_dir),
 +                "updated_at_unix": time.time(),
@@ -1301,19 +1344,19 @@ index 00000000..b34fc92e
 +        )
 diff --git a/src/srtctl/core/node_samples.py b/src/srtctl/core/node_samples.py
 new file mode 100644
-index 00000000..63583392
+index 00000000..e07ced9d
 --- /dev/null
 +++ b/src/srtctl/core/node_samples.py
-@@ -0,0 +1,97 @@
+@@ -0,0 +1,148 @@
 +# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 +# SPDX-License-Identifier: Apache-2.0
 +
 +"""Per-node CSVs and readiness markers written by bare-host collectors.
 +
-+A host collector (``cpu_power``, ``nic_traffic``) runs once per node and
-+writes ``<nodes_dir>/<host>.csv`` plus ``<ready_dir>/<host>.ready.json`` or
-+``<host>.error.json``. The head node reads the markers to learn which nodes
-+started and merges the CSVs into one file at teardown.
++A host collector (``cpu_power``, ``nic_traffic``) runs once per node until
++SIGTERM and writes ``<nodes_dir>/<host>.csv`` plus ``<ready_dir>/<host>.ready.json``
++or ``<host>.error.json``. The head node reads the markers to learn which nodes
++started, then stops the collectors and merges the CSVs into one file.
 +"""
 +
 +from __future__ import annotations
@@ -1321,13 +1364,37 @@ index 00000000..63583392
 +import contextlib
 +import csv
 +import json
-+from collections.abc import Callable
++import os
++import signal
++import socket
++import threading
++from collections.abc import Callable, Iterable, Sequence
 +from dataclasses import dataclass
 +from pathlib import Path
-+from typing import Any
++from typing import TYPE_CHECKING, Any
 +
-+READY_SUFFIX = ".ready.json"
-+ERROR_SUFFIX = ".error.json"
++if TYPE_CHECKING:
++    from srtctl.core.processes import ManagedProcess
++
++
++def create_capture_dirs(*dirs: Path) -> None:
++    """Create ``dirs`` under a group-writable umask."""
++    os.umask(0o002)
++    for directory in dirs:
++        directory.mkdir(parents=True, exist_ok=True)
++
++
++def node_hostname() -> str:
++    """The Slurm node name, which the head node expects in every row and marker."""
++    return os.environ.get("SLURMD_NODENAME") or socket.gethostname().split(".", 1)[0]
++
++
++def stop_on_signals() -> threading.Event:
++    """An event that SIGTERM or SIGINT sets; the head node stops a collector with SIGTERM."""
++    stop = threading.Event()
++    for signum in (signal.SIGTERM, signal.SIGINT):
++        signal.signal(signum, lambda _signum, _frame: stop.set())
++    return stop
 +
 +
 +@dataclass(frozen=True)
@@ -1339,13 +1406,13 @@ index 00000000..63583392
 +
 +
 +def read_node_markers(ready_dir: Path) -> NodeMarkers:
-+    ready = frozenset(path.name.removesuffix(READY_SUFFIX) for path in ready_dir.glob(f"*{READY_SUFFIX}"))
++    ready = frozenset(path.name.removesuffix(".ready.json") for path in ready_dir.glob("*.ready.json"))
 +    errors: dict[str, str] = {}
-+    for path in sorted(ready_dir.glob(f"*{ERROR_SUFFIX}")):
++    for path in sorted(ready_dir.glob("*.error.json")):
 +        message = ""
 +        with contextlib.suppress(OSError, json.JSONDecodeError, AttributeError):
 +            message = str(json.loads(path.read_text()).get("error", ""))
-+        errors[path.name.removesuffix(ERROR_SUFFIX)] = message
++        errors[path.name.removesuffix(".error.json")] = message
 +    return NodeMarkers(ready=ready, errors=errors)
 +
 +
@@ -1402,18 +1469,45 @@ index 00000000..63583392
 +        writer.writerow(header)
 +        writer.writerows(rows)
 +    return MergedNodeCsvs(row_count=len(rows), observed_nodes=tuple(sorted(observed)), malformed=malformed)
++
++
++@dataclass(frozen=True)
++class NodeCapture:
++    """The merged samples, plus the expected nodes with no rows and the processes that exited before the stop."""
++
++    merged: MergedNodeCsvs
++    missing_nodes: tuple[str, ...]
++    exited_processes: tuple[str, ...]
++
++
++def stop_and_merge(
++    processes: Sequence[ManagedProcess],
++    expected_nodes: Iterable[str],
++    nodes_dir: Path,
++    header: tuple[str, ...],
++    output: Path,
++    *,
++    sort_key: Callable[[list[str]], Any],
++) -> NodeCapture:
++    """Terminate ``processes``, then merge ``nodes_dir``'s CSVs into ``output``."""
++    exited = tuple(process.name for process in processes if not process.is_running)
++    for process in processes:
++        process.terminate()
++    merged = merge_node_csvs(nodes_dir, header, output, sort_key=sort_key)
++    missing = tuple(sorted(set(expected_nodes) - set(merged.observed_nodes)))
++    return NodeCapture(merged=merged, missing_nodes=missing, exited_processes=exited)
 diff --git a/src/srtctl/core/schema.py b/src/srtctl/core/schema.py
-index 1e8d890d..66e244bb 100755
+index 1e8d890d..849dff2c 100755
 --- a/src/srtctl/core/schema.py
 +++ b/src/srtctl/core/schema.py
-@@ -95,6 +95,7 @@ def _dataclass_default(item: dataclasses.Field) -> Any:
- _BENCHMARK_TYPE_SA_BENCH = "sa-bench"
- _DCGM_POWER_MAX_SAMPLE_GAP_SECONDS = 3.0
- _CPU_POWER_MAX_SAMPLE_GAP_SECONDS = 3.0
-+_NIC_TRAFFIC_MAX_SAMPLE_GAP_SECONDS = 3.0
- _DCGM_POWER_COLLECT_CYCLE_TIMEOUT_GRACE_SECONDS = 1.0
- 
- 
+@@ -64,6 +64,7 @@ from srtctl.core.formatting import (
+ from srtctl.core.power.contract import (
+     CONTAINER_LOG_DIR,
+     GPU_UTIL_METRIC,
++    MAX_SAMPLE_GAP_SECONDS,
+     SM_ACTIVE_METRIC,
+     TEMPERATURE_METRIC,
+     UTILIZATION_METRICS,
 @@ -1889,6 +1890,49 @@ class NsysObservabilityConfig:
      Schema: ClassVar[type[Schema]] = Schema
  
@@ -1450,10 +1544,10 @@ index 1e8d890d..66e244bb 100755
 +    def __post_init__(self) -> None:
 +        if not _is_finite_positive(self.sample_interval_seconds):
 +            raise ValidationError("observability.nic_traffic.sample_interval_seconds must be finite and positive")
-+        if self.sample_interval_seconds > _NIC_TRAFFIC_MAX_SAMPLE_GAP_SECONDS:
++        if self.sample_interval_seconds > MAX_SAMPLE_GAP_SECONDS:
 +            raise ValidationError(
 +                f"observability.nic_traffic.sample_interval_seconds={self.sample_interval_seconds} exceeds the "
-+                f"{_NIC_TRAFFIC_MAX_SAMPLE_GAP_SECONDS:g}s sample gap a window boundary may have"
++                f"{MAX_SAMPLE_GAP_SECONDS:g}s sample gap a window boundary may have"
 +            )
 +        if not _is_safe_relative_subpath(self.storage_subdir):
 +            raise ValidationError(
