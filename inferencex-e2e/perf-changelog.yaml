@@ -12025,7 +12025,9 @@
 
 - config-keys:
     - kimik3.1-fp4-mi355x-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
   description:
-    - "Add Kimi K3.1 Pro MI355X SGLang AgentX day-0 points with the RadixArk DFLASH draft, following the SGLang cookbook's MI355X AgentX recipes."
-    - "c1 and c4 run TP8 on the decode monokernel without KV offload; c4-c60 run TP8 DCP8 with HiCache in host DRAM."
+    - "Add Kimi-K3.1-Pro MXFP4 AgentX on one 8x MI355X node with SGLang (lmsysorg/sglang:dev-kimi-k31-pro-mi35x) and the DFlash2 draft at 5 draft tokens with block verification."
+    - "TP8 monokernel at concurrency 1 and 4 with GPU-resident KV; TP8/DCP8 with the HiCache host tier at concurrency 8, 16, 32 and 48."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4808

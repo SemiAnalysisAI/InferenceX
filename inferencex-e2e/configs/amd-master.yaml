@@ -1020,8 +1020,7 @@ kimik3.1-fp4-mi355x-sglang-agentic-dflash:
   srt-recipe-dir: kimik3.1/sglang/mi355x-fp4-mtp
   scenarios:
     agentic-coding:
-    # 0.51 resolves to the ~190 GB per GPU that the recipe's HiCache host pools pin.
-    - dram-utilization: 0.51
+    - dram-utilization: 0.513
       search-space:
-      - { tp: 8, ep: 1, spec-decoding: draft_model, kv-offloading: none, conc-list: [1, 4], srt-recipe: agentic.yaml }
-      - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: draft_model, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [4, 10, 16, 24, 32, 48, 52, 60], srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4], srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [8, 16, 32, 48], srt-recipe: agentic.yaml }
