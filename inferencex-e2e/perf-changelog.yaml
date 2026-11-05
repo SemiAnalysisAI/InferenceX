@@ -12140,6 +12140,15 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
+  description:
+    - "Collect GPU-board power and require valid AgentX power for the seven existing GB200 Dynamo-SGLang disaggregated variants."
+    - "Rerun the two unchanged aggregated variants in the same sweep so the GB200 Dynamo-SGLang AgentX curve keeps all nine points."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4553
+  scenario-type: [agentic-coding]
+
+- config-keys:
     - kimik3.1-fp4-b300-vllm-agentic-dspark
   description:
     - "Kimi-K3.1-Pro B300 vLLM: enable the recipe's low-latency decode (decode_backend=latency_specialized) at every point and run c1-c2 at plain TP8 instead of TP8 x DCP8."
