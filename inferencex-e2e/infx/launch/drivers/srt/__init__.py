@@ -210,11 +210,11 @@ def run_multinode(launch: Launch) -> int:
         run.env["INFMAX_WORKSPACE"] = str(infmax)
 
         recipe = str(checkout.root / BOUND_RECIPE)
-        power_port, cpu_source, client_env = config.binder_inputs(
+        gpu_power, cpu_source, client_env = config.binder_inputs(
             run.cluster, run.srt, lane, request, decision
         )
         if rc := submit.bind_recipe(
-            run, checkout, staged, recipe, power_port, cpu_source, client_env
+            run, checkout, staged, recipe, gpu_power, cpu_source, client_env
         ):
             return rc
         prepare_recipe(Path(recipe), srtctl_job_name(request.runner_name), run.srt.dist_timeout_s)
@@ -269,8 +269,8 @@ def table_problems(clusters: Mapping[str, Cluster], only: str | None = None) -> 
             continue
         if (cluster_id, path) not in lanes.SRT_LANES:
             problems.append(f"{where}: no SRT_LANES row")
-        elif (srt := _srt_settings(clusters.get(cluster_id))) and srt.power_exporter_port is None:
-            problems.append(f"{where}: no srt-slurm.power-exporter-port")
+        elif (srt := _srt_settings(clusters.get(cluster_id))) and srt.gpu_exporter_image is None:
+            problems.append(f"{where}: no srt-slurm.extra.default_gpu_exporter")
     for cluster_id, overrides in models.OVERRIDES.items():
         if scoped(cluster_id) and profile("OVERRIDES", cluster_id) is not None:
             entries = clusters[cluster_id].models.entries

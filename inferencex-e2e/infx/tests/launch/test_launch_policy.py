@@ -35,8 +35,9 @@ def _srt(**settings) -> SrtSlurmSettings:
     return SrtSlurmSettings.model_validate({"network-interface": "", **settings})
 
 
-GPU_ONLY = _srt(**{"power-exporter-port": 9401})
-WITH_CPU = _srt(**{"power-exporter-port": 9401, "cpu-power-exporter": {"source": "acpi"}})
+EXPORTER = {"extra": {"default_gpu_exporter": {"container_image": "exporter:test"}}}
+GPU_ONLY = _srt(**EXPORTER, **{"power-exporter-port": 9401})
+WITH_CPU = _srt(**EXPORTER, **{"power-exporter-port": 9401, "cpu-power-exporter": {"source": "acpi"}})
 
 
 def _point(agentic: str, prefix: str = "dsv4", framework: str = "dynamo-vllm", **env):
@@ -64,7 +65,7 @@ def test_a_cluster_with_a_gpu_exporter_measures_every_benchmark_point_without_fa
 def test_power_the_cluster_cannot_measure_is_refused_only_when_the_point_asks_for_it():
     no_exporter = _srt()
     assert decide_power("c", MULTI, no_exporter, _point("1")) == power.NO_POWER
-    with pytest.raises(PowerPolicyError, match="measures no DCGM power"):
+    with pytest.raises(PowerPolicyError, match="measures no GPU power"):
         decide_power("c", MULTI, no_exporter, _point("1", POWER="1"))
     with pytest.raises(PowerPolicyError, match="no srt-slurm.cpu-power-exporter"):
         decide_power("c", MULTI, GPU_ONLY, _point("1", POWER="1", CPU_POWER="1"))
@@ -88,7 +89,7 @@ def test_a_lane_rule_changes_how_its_matching_agentx_points_measure_power():
     assert (other.agentx, other.adapter) == (True, False)
 
 
-def test_a_power_lane_needs_its_clusters_exporter_port(monkeypatch):
+def test_a_power_lane_needs_its_clusters_gpu_exporter(monkeypatch):
     labels = {"cluster:c": ["c_0"]}
     srt = {"network-interface": ""}
     record = {**RECORD, "slurm": {**RECORD["slurm"], "srt-slurm": srt}}
@@ -96,9 +97,9 @@ def test_a_power_lane_needs_its_clusters_exporter_port(monkeypatch):
     monkeypatch.setitem(drivers.srt.lanes.SRT_LANES, ("c", MULTI), drivers.srt.lanes.SrtLane())
     monkeypatch.setitem(power.POWER_LANES, ("c", MULTI), power.PowerLane(rules=()))
     assert drivers.srt.table_problems(clusters, "c") == [
-        "POWER_LANES['c', srt-multi]: no srt-slurm.power-exporter-port"
+        "POWER_LANES['c', srt-multi]: no srt-slurm.extra.default_gpu_exporter"
     ]
-    srt["power-exporter-port"] = 9401
+    srt.update(EXPORTER)
     clusters = load_inventory({"labels": labels, "clusters": {"c": record}}).clusters
     assert drivers.srt.table_problems(clusters, "c") == []
 

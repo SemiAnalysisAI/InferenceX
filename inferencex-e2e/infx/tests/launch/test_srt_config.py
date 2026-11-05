@@ -9,8 +9,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-import yaml
 from pydantic import ValidationError
+import yaml
 
 from infx.clusters import Cluster, load_inventory
 from infx.clusters.slurm import slurm_settings

@@ -273,34 +273,37 @@ def _drop_exporter_port(project: Path) -> None:
     runners.write_text(yaml.safe_dump(inventory))
 
 
-@pytest.mark.parametrize("exporter", [True, False])
-def test_a_multinode_agentx_point_without_power_measures_it_where_its_cluster_can(
-    project, power_lane, tmp_path, exporter
+@pytest.mark.parametrize("port", [True, False])
+def test_a_multinode_agentx_point_without_power_measures_it_with_its_clusters_exporter(
+    project, power_lane, tmp_path, port
 ):
     master = project / "configs/master.yaml"
     config = yaml.safe_load(master.read_text())
     del config["agentx-multi"]["scenarios"]["agentic-coding"][0]["search-space"][0]["power"]
     master.write_text(yaml.safe_dump(config))
-    if not exporter:
+    if not port:
         _drop_exporter_port(project)
     output = tmp_path / "out"
     assert generate(project, output, "agentx-multi") == 0
 
     [(_, recipe)] = written(output)
     env = recipe["benchmark"]["env"]
-    assert (env["ENABLE_AGENTX_POWER"], env["REQUIRE_POWER"]) == ("1" if exporter else "0", "0")
-    assert recipe.get("telemetry", {}).get("required", False) is False
-    assert ("telemetry" in recipe) == exporter
+    assert (env["ENABLE_AGENTX_POWER"], env["REQUIRE_POWER"]) == ("1", "0")
+    assert (recipe["telemetry"]["enabled"], recipe["telemetry"]["required"]) == (True, False)
+    assert recipe["telemetry"].get("dcgm_exporter", {}).get("port") == (9555 if port else None)
 
 
 def test_a_power_point_its_cluster_cannot_measure_fails_without_writing(
     project, power_lane, tmp_path, capsys
 ):
-    _drop_exporter_port(project)
+    runners = project / "configs/runners.yaml"
+    inventory = yaml.safe_load(runners.read_text())
+    del inventory["clusters"]["fixture"]["slurm"]["srt-slurm"]["extra"]
+    runners.write_text(yaml.safe_dump(inventory))
     output = tmp_path / "out"
     with pytest.raises(SystemExit):
         generate(project, output, "agentx-multi")
-    assert "measures no DCGM power" in capsys.readouterr().err
+    assert "measures no GPU power" in capsys.readouterr().err
     assert not output.exists()
 
 

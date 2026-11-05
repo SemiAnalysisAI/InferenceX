@@ -229,6 +229,14 @@ class SrtSlurmSettings(Record):
                 raise ValueError(f"workspace-mounts target must be absolute: {target}")
         return mounts
 
+    @property
+    def gpu_exporter_image(self) -> str | None:
+        """The image of the cluster's GPU exporter, srtctl's ``default_gpu_exporter``; None
+        where the cluster declares none.
+        """
+        exporter = self.extra.get("default_gpu_exporter")
+        return (exporter.get("container_image") or None) if isinstance(exporter, dict) else None
+
     @model_validator(mode="before")
     @classmethod
     def _host_setup_fabric(cls, data: Any) -> Any:
