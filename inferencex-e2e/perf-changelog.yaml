@@ -12022,3 +12022,13 @@
     - "Integrate each package over the formal GPU measurement window and emit cpu_power_valid, avg_cpu_socket_power_w, avg_total_cpu_power_w, and total_cpu_energy_j with sensor_kind rapl_package; RAPL reports no component rails. Concurrency points and evaluation coverage are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4154
   scenario-type: [fixed-seq-len]
+
+- config-keys:
+    - glm5.2-fp4-mi355x-atom-disagg-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GLM-5.2 MXFP4 on MI355X with ATOM prefill/decode disaggregation (AToMesh router, Mooncake transfer, MTP) on rocm/atom-dev:nightly_202610131249."
+    - "Target: MXFP4 routed experts, every other layer (including the MTP draft) in BF16 as shipped with no online quantization, BF16 all-reduce; FP8 KV cache."
+    - "One PP4 prefill with a Mooncake Store prefix tier; 1P1D with a DCP4 decode at concurrency 56-128, 1P2D with DCP4 decodes at 56, 1P3D with TP4 decodes at 12-24."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4045
