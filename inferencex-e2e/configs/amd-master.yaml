@@ -876,6 +876,37 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp8-c1:
       search-space:
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1], srt-recipe: agentic.yaml }
 
+# Kimi-K3.1 Pro AgentX on MI355X with ATOM. TP8 only: the 1.56 TB MXFP4
+# checkpoint is ~195 GB/GPU. Per-point serving follows the Kimi-K3 ATOM AgentX
+# recipe (InferenceX#4307) under the K3.1 week-1 precision policy:
+#   interactive (1, 4)        GPU-resident, dcp 1, DSpark 7, mono decode.
+#   mid         (14, 16)      dcp 8, DSpark 4, LMCache DRAM tier, ReplaySSM.
+#   throughput  (48, 56, 72)  as mid, with on-demand state checkpoints and a
+#                             128 GB state cap inside the LMCache pool.
+# Throughput runs use the kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark-preview__probabilistic-block
+# golden AL (3.21 at 7 drafts, 2.92 at 4). Two utilization blocks because the
+# per-rank LMCache pool differs, and the launcher divides the aggregate by TP:
+#   0.343 -> 1028 GB aggregate -> 128 GB/rank (conc 14 and 16).
+#   0.6   -> 1799 GB aggregate -> 224 GB/rank (conc 48, 56 and 72).
+kimik3.1-fp4-mi355x-atom-agentic-dspark:
+  image: rocm/atom-dev:kimi-k31-pro@sha256:9bf327d33e3bba8208a5679f10879e23d3eb63789790ef1f2b74353cd251e9fb
+  model: moonshotai/Kimi-K3.1-Pro
+  model-prefix: kimik3.1
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: atom
+  multinode: false
+  srt-recipe-dir: kimik3.1/atom/mi355x-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.343
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [1, 4], spec-decoding: mtp, srt-recipe: agentic.yaml }
+      - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.6.dev139+gf22dec28" }, conc-list: [14, 16], spec-decoding: mtp, srt-recipe: agentic.yaml }
+    - dram-utilization: 0.6
+      search-space:
+      - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.6.dev139+gf22dec28" }, conc-list: [48, 56, 72], spec-decoding: mtp, srt-recipe: agentic.yaml }
+
 # MiniMax-M3.1-Flash AgentX on MI355X: day-zero vLLM ROCm image from
 # https://vllm.ai/blog/2026-10-23-minimax-m31-flash, verified 2026-10-23.
 # AMD's Quark MXFP4 export (routed experts in MXFP4, W4A4 on the AITER MoE)

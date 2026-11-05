@@ -12034,3 +12034,13 @@
   description:
     - "Add Kimi-K3.1-Pro day-0 vLLM AgentX on B300: TP8 x DCP8 with DSpark (Inferact/Kimi-K3.1-Pro-DSpark-preview) and Simple CPU KV offload, conc 1-70."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4796
+
+- config-keys:
+    - kimik3.1-fp4-mi355x-atom-agentic-dspark
+  description:
+    - "Add Kimi-K3.1-Pro day-0 ATOM AgentX on MI355X: TP8 with DSpark at conc 1, 4, 14, 16, 48, 56 and 72 on rocm/atom-dev:kimi-k31-pro (ATOM main 083891e93 with the K3.1 alias and DSpark draft RoPE of ROCm/ATOM#3003, the state-offload gather of the DSA index-cache planes, and AITER BF16 GEMM rows for the K3.1 shapes)."
+    - "Per-point serving follows the Kimi-K3 ATOM AgentX recipe of InferenceX#4307: dcp 1 with 7 DSpark tokens and mono decode at conc 1 and 4 (max-num-seqs 2 and 8); dcp 8 with 4 tokens, ReplaySSM and a 128 GB/rank LMCache tier at conc 14 and 16 (prefill delayer at 16); dcp 8 with 4 tokens, on-demand state checkpoints and a 224 GB/rank LMCache tier with a 128 GB state cap at conc 48, 56 and 72 (dram-utilization 0.6). Throughput runs use the kimi-k3.1-pro DSpark golden AL (3.21 at 7 drafts, 2.92 at 4)."
+    - "Week-1 precision policy: BF16 linears and shared experts (no --online_quant_config), BF16 all-reduce (no AITER_QUICK_REDUCE_QUANTIZATION), BF16 MoE combine (no AITER_FLYDSL_STAGE2_FP8), MXFP4 MoE weights with A4W4 activations, FP32 KDA state on every point, FP8 KV and an FP8 DSA index cache; the published Inferact/Kimi-K3.1-Pro-DSpark-preview draft, staged by kimik3.1-atom-dspark-draft.sh."
+    - "DCP8 points set PYTORCH_HIP_ALLOC_CONF / PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True: without it, prefill of several-hundred-thousand-token contexts failed with HSA_STATUS_ERROR_OUT_OF_RESOURCES at conc 14 and 72."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  scenario-type: [agentic-coding]
