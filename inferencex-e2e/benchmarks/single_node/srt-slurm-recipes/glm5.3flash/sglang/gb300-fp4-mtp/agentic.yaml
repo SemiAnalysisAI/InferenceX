@@ -6,7 +6,7 @@ base:
       revision: 1d00738646cbb0c6d0a9eb403dac5f366f1473a7
     container: {}
     frameworks:
-      sglang: 0.5.23
+      sglang: 0.5.22
   resources:
     gpu_type: gb300
     gpus_per_node: 4
