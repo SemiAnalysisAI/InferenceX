@@ -12022,3 +12022,10 @@
     - "Integrate each package over the formal GPU measurement window and emit cpu_power_valid, avg_cpu_socket_power_w, avg_total_cpu_power_w, and total_cpu_energy_j with sensor_kind rapl_package; RAPL reports no component rails. Concurrency points and evaluation coverage are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4154
   scenario-type: [fixed-seq-len]
+
+- config-keys:
+    - qwen3.5-fp8-mi325x-sglang-agentic-mtp
+  description:
+    - "Update SGLang image from lmsysorg/sglang:v0.5.22-rocm720-mi30x to v0.5.23-rocm720-mi30x."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4822
+  scenario-type: [agentic-coding]
