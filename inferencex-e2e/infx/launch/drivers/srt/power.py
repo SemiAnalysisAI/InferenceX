@@ -89,7 +89,7 @@ def decide_power(
 
     Raises ``PowerPolicyError`` when the point asks for power the cluster cannot measure.
     """
-    if request.al_gate or request.eval_only:
+    if request.eval_only:
         return NO_POWER
     if srt.gpu_exporter_image is None:
         if request.power:
