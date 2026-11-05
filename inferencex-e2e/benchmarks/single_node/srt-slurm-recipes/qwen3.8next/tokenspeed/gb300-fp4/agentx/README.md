@@ -18,8 +18,10 @@ Scheduler `0.1.49` satisfies the daily wheel's minimum
 requirement. The base runner image is pinned by digest in the master config.
 Target quantization comes from checkpoint metadata; the
 embedded draft uses `modelopt_mixed` from the same checkpoint. The setup script
-installs SMG at the master config's router version. Registry dependencies use
-PyPI only; private nightly wheels use direct URLs.
+installs SMG at the master config's router version and the published FlashInfer
+`0.7.2.post1` CUDA 13 kernel caches matching the runtime dependency. Registry
+dependencies use PyPI; nightly wheels and prebuilt kernel caches use upstream
+release URLs.
 
 The golden-AL connector derives throughput acceptance from the committed
 model curve and MTP step count and selects the required greedy sampler.
