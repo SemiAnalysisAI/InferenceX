@@ -12099,3 +12099,17 @@
     - "Disaggregated: TP8/DCP8 prefill with a HiCache host tier feeding either one TP16 (DCP8 x attention DP2, EP16 MegaMoE) decode worker (3P1D c300, 2P1D c180, 1P1D c76) or TP8/DCP8 decode workers (1P3D c60 and c36, 1P4D c32)."
     - "Aggregated low-latency points: one TP16 EP1 worker with the NVIDIA megakernel (--enable-nvidia-megakernel), max-running-requests equal to the concurrency (c1, c2, c4)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4811
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-dynamo-trt-agentic-dspark-agg
+    - minimaxm31flash-fp4-gb300-dynamo-trt-agentic-dspark-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add MiniMax-M3.1-Flash NVFP4 GB300 AgentX configurations with Dynamo and TensorRT-LLM DSpark, native DRAM KV offload, and NIXL transfer."
+    - "Use NVFP4 KV cache and NVFP4 or FP8 indexer KV cache in the TensorRT-LLM workers."
+    - "Configure iteration and KV cache statistics for the aggregate, prefill, and decode workers."
+    - "Enable GPU and host CPU power collection for the AgentX configurations."
+    - "Configure fastokens and NUMA binding, least-loaded decode routing, prefill conversation affinity, and the KV transfer timeout."
+    - "Run the 1P2D TP4 disaggregated variant at concurrency 36, the 1P3D TP4 variant at 24, and the 1P4D TP4 variant at 40 and 36."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4751
