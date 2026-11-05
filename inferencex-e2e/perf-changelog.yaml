@@ -12069,3 +12069,11 @@
   description:
     - "Add Kimi K3.1 Pro day-0 SGLang AgentX points on GB200: aggregated TP16 DCP16 and 1P1D TP16 DCP16, with RadixArk DFLASH block verification and HiCache CPU offload."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4804
+
+- config-keys:
+    - kimik3.1-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Drop the vLLM tool and reasoning parsers on synthetic-acceptance throughput servers; evals keep them. The strict kimi_k3 parser returned empty content for 2-5% of synthetic turns at 5-7 draft tokens."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4836
