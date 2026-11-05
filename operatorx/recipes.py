@@ -135,5 +135,6 @@ def serve_argv(args: dict[str, Any]) -> list[str]:
             continue
         out.append(f"--{k}")
         if v is not True:
-            out.append(v if isinstance(v, str) else json.dumps(v))
+            # vLLM parses list-typed flags with nargs="+": one token per element
+            out.extend(x if isinstance(x, str) else json.dumps(x) for x in (v if isinstance(v, list) else [v]))
     return out
