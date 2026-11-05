@@ -6836,6 +6836,22 @@ musespark-fp4-b300-sglang-agentic-dflash:
       - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 7, 16, 20, 24], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [16, 28, 32, 38, 48], srt-recipe: agentic.yaml }
 
+kimik3.1-fp4-b300-sglang-agentic-dflash:
+  image: lmsysorg/sglang:dev-kimi-k31-pro@sha256:67fc77d1cbe67de27ca54d874c82757a4844743fea899ea7d0df547e30c2c391
+  model: moonshotai/Kimi-K3.1-Pro
+  model-prefix: kimik3.1
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: kimik3.1/sglang/b300-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.75
+      search-space:
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [1, 2, 4, 8, 16], srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 2, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [24, 32, 40, 48, 56, 70], srt-recipe: agentic.yaml }
+
 musespark-fp4-h100-sglang-agentic-dflash:
   image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
   model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
