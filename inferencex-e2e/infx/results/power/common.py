@@ -22,11 +22,21 @@ class BenchmarkData:
     completed: int
     total_input_tokens: int
     total_output_tokens: int
+    # "tokens": per-token energy needs positive token counts (the default).
+    # "clips": the result counts generated clips; it carries no tokens to normalize by.
+    energy_normalization: str = "tokens"
 
     @property
     def integration_duration_s(self) -> float:
         """Seconds between the benchmark start and end timestamps."""
         return self.end_unix - self.start_unix
+
+    @property
+    def per_token(self) -> bool:
+        return self.energy_normalization == "tokens"
+
+
+ENERGY_NORMALIZATIONS = ("tokens", "clips")
 
 
 # Widest gap between consecutive samples inside the integration window that
@@ -187,12 +197,18 @@ def _load_benchmark_data(
     if abs(duration - integration_duration) > duration_tolerance:
         _append_reason(reasons, "benchmark_duration_mismatch")
 
+    normalization = bench.get("energy_normalization", "tokens")
+    if normalization not in ENERGY_NORMALIZATIONS:
+        return None, ["invalid_energy_normalization"]
     counts: dict[str, int] = {}
     for key, reason in (
         ("completed", "invalid_successful_query_count"),
         ("total_input_tokens", "invalid_input_token_count"),
         ("total_output_tokens", "invalid_output_token_count"),
     ):
+        if normalization == "clips" and key != "completed":
+            counts[key] = 0
+            continue
         value = bench.get(key)
         if (
             not isinstance(value, int)
@@ -208,6 +224,7 @@ def _load_benchmark_data(
             start_unix=start,
             end_unix=end,
             reported_duration_s=duration,
+            energy_normalization=normalization,
             **counts,
         ),
         reasons,
@@ -224,11 +241,15 @@ def _write_json_atomic(path: Path, data: dict) -> None:
 
 def benchmark_window_payload(
     benchmark: BenchmarkData | None,
-) -> dict[str, float | int] | None:
-    """Serialize the common benchmark-window contract for validation sidecars."""
+) -> dict[str, float | int | str] | None:
+    """Serialize the common benchmark-window contract for validation sidecars.
+
+    Token-normalized windows keep the published shape; a window normalized per
+    clip names its normalization so the audit does not read token metrics into it.
+    """
     if benchmark is None:
         return None
-    return {
+    payload: dict[str, float | int | str] = {
         "start_time_unix": benchmark.start_unix,
         "end_time_unix": benchmark.end_unix,
         "reported_duration_s": benchmark.reported_duration_s,
@@ -237,6 +258,9 @@ def benchmark_window_payload(
         "total_input_tokens": benchmark.total_input_tokens,
         "total_output_tokens": benchmark.total_output_tokens,
     }
+    if not benchmark.per_token:
+        payload["energy_normalization"] = benchmark.energy_normalization
+    return payload
 
 
 def invalid_validation_payload(
