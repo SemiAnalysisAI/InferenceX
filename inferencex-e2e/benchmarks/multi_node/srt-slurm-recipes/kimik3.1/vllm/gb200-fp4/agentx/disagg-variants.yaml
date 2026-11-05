@@ -10,7 +10,8 @@ base:
   dynamo:
     install: true
     source:
-      wheel: "1.6.0.dev20261023"
+      # ai-dynamo/dynamo#18124: its frontend loads the kimi_k31 tokenizer and its SGLang args allow DSA DCP decode.
+      rev: "4b0850752a7370aa20706095558616488b5cef35"
 
   slurm:
     time_limit: "6:00:00"
@@ -82,6 +83,7 @@ base:
         max-model-len: 1048576
         max-num-batched-tokens: 16384
         kv-cache-dtype: fp8
+        attention-config: '{"indexer_kv_dtype":"mxfp4"}'
         mamba-ssm-cache-dtype: float32
         enable-prefix-caching: true
         dyn-tool-call-parser: kimi_k3
@@ -107,6 +109,7 @@ base:
         # Bounds the MoE autotune workspace to decode-sized batches.
         max-num-batched-tokens: 1024
         kv-cache-dtype: fp8
+        attention-config: '{"indexer_kv_dtype":"mxfp4"}'
         mamba-ssm-cache-dtype: float32
         enable-prefix-caching: true
         dyn-tool-call-parser: kimi_k3
