@@ -69,7 +69,7 @@ def run_single_node(launch: Launch) -> int:
             step_mib, job_mib = None, 0
         if (options := config.srun_options(run.backend.settings, step_mib)) is not None:
             run.env["SRT_SRUN_OPTIONS"] = options
-        native_power = not request.eval_only and not request.al_gate
+        native_power = not request.eval_only
         cpu_source = config.cpu_power_source(
             run.cluster, run.srt, native_power and request.cpu_power, default=native_power
         )
@@ -104,9 +104,9 @@ def run_single_node(launch: Launch) -> int:
     fetched = root / "fetched-outputs"
     submitted = submit.Submitted(manifest=run.workspace / submit.SINGLE_NODE_SUBMISSION)
     run.life.callback(collect.finish_single_node, run, submitted, fetched)
+    submit.request_al_gate(run)
     eval_args = submit.eval_args(run.env, submit.SINGLE_NODE_EVAL_COMMAND)
-    client_args = submit.gate_args(request) if request.al_gate else eval_args
-    arguments = ["--json", "--yes", "--output", str(root / "outputs"), *runtime_args, *client_args]
+    arguments = ["--json", "--yes", "--output", str(root / "outputs"), *runtime_args, *eval_args]
     applied = submit.apply(run, checkout, bound, arguments, stdout=submitted.manifest)
     if applied.returncode:
         sys.stderr.write(applied.stdout)
@@ -208,6 +208,7 @@ def run_multinode(launch: Launch) -> int:
         ):
             return rc
         prepare_recipe(Path(recipe), srtctl_job_name(request.runner_name), run.srt.dist_timeout_s)
+        submit.request_al_gate(run)
         arguments = submit.multinode_arguments(run, lane, recipe, overrides, preflight=preflight)
         manifest = run.workspace / submit.MULTINODE_SUBMISSION
         submitted = submit.Submitted(manifest=manifest)
