@@ -12043,3 +12043,12 @@
     - "Add Kimi-K3.1-Pro MXFP4 AgentX on one 8x MI355X node with SGLang (lmsysorg/sglang:dev-kimi-k31-pro-mi35x) and the DFlash2 draft at 5 draft tokens with block verification."
     - "TP8 monokernel at concurrency 1 and 4 with GPU-resident KV; TP8/DCP8 with the HiCache host tier at concurrency 8, 16, 32 and 48."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4808
+
+- config-keys:
+    - kimik3.1-fp4-b200-dynamo-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi K3.1 Pro B200 SGLang AgentX on lmsysorg/sglang:dev-kimi-k31-pro: one aggregated worker over two nodes, TP16 with DCP16, no KV offload, concurrency 1, 4, 8, 14, 24, 32, 48, 56, 72, 80 with DFLASH and 96 without speculation."
+    - "DFLASH uses RadixArk/Kimi-K3.1-Dflash2-Preview with block verification, 7 draft tokens through concurrency 14 and 4 above."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4801
