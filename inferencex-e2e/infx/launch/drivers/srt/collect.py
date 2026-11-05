@@ -21,6 +21,7 @@ from infx.launch.artifacts import (
     bundle_server_logs,
     collect_agentic_power_results,
     copy_agentic_results,
+    copy_al_gate_result,
     copy_eval_artifacts,
     copy_fixed_sequence_results,
     copy_to_workspace,
@@ -68,6 +69,7 @@ def finish_single_node(run: SrtRun, submitted: Submitted, fetched: Path) -> int:
         logs = output / "logs"
         power_rc = 0 if run.request.eval_only else _stage_power_package(run, logs)
         bundle_server_logs(output, run.workspace / SINGLE_NODE_LOGS)
+        copy_al_gate_result(logs, run.workspace, run.request.result_filename)
         result = logs / f"{run.request.result_filename}.json"
         if result.is_file():
             try:
@@ -107,7 +109,8 @@ def finalize_single_node_results(run: SrtRun, logs: Path, producer_sha: str) -> 
     A single-node point publishes the fixed-sequence bundle shape: the validation
     sidecar sits beside the result, named after it, and the audit names that file.
 
-    srt-slurm treats a failed post-benchmark eval as non-fatal; InferenceX does not.
+    srt-slurm treats a failed post-benchmark eval as non-fatal; InferenceX does not. An eval's
+    report-only acceptance gate never fails it.
     """
     request, event = run.request, run.life.event
     power_rc = 0
@@ -189,11 +192,22 @@ def collect(
             python = request.inferencex_results_python
             if power.agentx:
                 power_rc = collect_agentic_power_results(
-                    status, job.id, logs, infmax, *audit, results_python=python
+                    status,
+                    job.id,
+                    logs,
+                    infmax,
+                    *audit,
+                    results_python=python,
+                    require_power=not power.best_effort,
+                    expected_cpu=power.expect_cpu,
                 )
             else:
                 power_rc = validate_agentic_power(
-                    logs, *audit, results_python=python, require_power=request.require_power
+                    logs,
+                    *audit,
+                    results_python=python,
+                    require_power=request.require_power,
+                    expected_cpu=power.expect_cpu,
                 )
             if power_rc:
                 event.fail(
@@ -215,6 +229,7 @@ def collect(
                 event.error(error)
                 rc = rc or 1
         if request.run_eval or request.eval_only:
+            copy_al_gate_result(logs, run.workspace, request.result_filename)
             try:
                 copy_eval_artifacts(logs / "eval_results", run.workspace)
             except ArtifactError as error:
