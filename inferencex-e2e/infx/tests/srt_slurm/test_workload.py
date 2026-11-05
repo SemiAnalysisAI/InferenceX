@@ -13,11 +13,13 @@ import yaml
 from infx.clusters.slurm import Fabric
 from infx.srt_slurm.synthetic_acceptance import selected_recipes
 from infx.srt_slurm.workload import (
+    bind_multinode,
     bind_workload,
     check_setup_script,
     compose_recipe,
     parse_concurrencies,
     resolve_fabric,
+    selects_dedicated_discovery,
 )
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -110,6 +112,8 @@ def test_bundles_take_the_shared_block_under_base_and_keep_their_variants(projec
      True, True, "override_c.services[0].env.KV_OFFLOAD_BACKEND_VERSION (= '1')"),
     ({"benchmark": {"env": {"REQUIRE_POWER": "1", "MODEL": "/model"}}}, True, True,
      "benchmark.env.MODEL (= '/model'), benchmark.env.REQUIRE_POWER (= '1')"),
+    ({"base": {}, "override_c24": {"benchmark": {"env": {"SPEC_DECODING": "mtp"}}}}, True, False,
+     "override_c24.benchmark.env.SPEC_DECODING (= 'mtp')"),
 ])  # fmt: skip
 def test_a_fragment_that_sets_a_bound_key_is_rejected(project, data, agentic, multinode, reported):
     path = fragment(project, data)
@@ -155,23 +159,38 @@ def test_agentx_binding_writes_the_launchers_client_paths_without_lengths():
     assert bound["benchmark"]["env"] == {"HF_HOME": "/logs/hf", "RESULT_DIR": "/logs/agentic"}
 
 
+def test_the_launcher_reads_dedicated_discovery_without_srtctl(project, monkeypatch):
+    monkeypatch.setitem(sys.modules, "srtctl.core.config", None)
+    dedicated = [{"type": kind, "placement": {"node": "dedicated"}} for kind in ("etcd", "nats")]
+    path = fragment(project, {
+        "base": {"name": "bundle"},
+        "override_head": {"roles": {"agg": {"nodes": 2}}},
+        "override_infra": {"services": dedicated},
+    })
+
+    assert selects_dedicated_discovery(f"{path}:override_infra", agentic=True, root=project)
+    assert not selects_dedicated_discovery(f"{path}:override_head", agentic=True, root=project)
+
+
 def test_a_power_point_gets_telemetry_and_its_concurrencies_on_a_bundle_variant(project):
     path = fragment(project, {
         "base": {"name": "bundle", "telemetry": {"collector_join_timeout_seconds": 12}},
         "override_c8": {"roles": {"agg": {"nodes": 2}}},
     })
 
-    composed = compose_recipe(path, agentic=True, multinode=True, root=project, power_port=19401)
+    composed = compose_recipe(path, agentic=True, multinode=True, root=project, gpu_power=19401)
     [(_, variant)] = selected_recipes(composed, "override_c8")
-    bound = bind_workload(variant, AGENTX_ENV, agentic=True, multinode=True)
+    bound = bind_workload(variant, {**AGENTX_ENV, "POWER": "1"}, agentic=True, multinode=True)
 
     assert bound["telemetry"] == {
         "collector_join_timeout_seconds": 12, "enabled": True, "required": True,
         "dcgm_exporter": {"container_image": "dcgm-exporter", "port": 19401},
     }  # fmt: skip
     assert bound["benchmark"]["concurrencies"] == [8]
+    by_default = bind_workload(variant, AGENTX_ENV, agentic=True, multinode=True)
+    assert by_default["telemetry"]["required"] is False
     with_cpu = compose_recipe(
-        path, agentic=True, multinode=True, root=project, power_port=19401, cpu_power_source="acpi"
+        path, agentic=True, multinode=True, root=project, gpu_power=19401, cpu_power_source="acpi"
     )
     assert with_cpu["base"]["telemetry"]["cpu_power_exporter"] == {"source": "acpi"}
     unpowered = compose_recipe(path, agentic=True, multinode=True, root=project)["base"]
@@ -264,6 +283,7 @@ def test_the_multinode_binder_writes_the_one_selected_variant(project, tmp_path)
     })
     output = tmp_path / "bound.yaml"
     env = {**os.environ, **MULTI_ENV, "IS_AGENTIC": "0", "INFERENCEX_REPOSITORY_ROOT": str(project),
+           "FRAMEWORK": "dynamo-sglang", "SPEC_DECODING": "none",
            "PYTHONPATH": os.pathsep.join([str(ROOT), str(ROOT / "utils/srt-slurm/src")])}  # fmt: skip
 
     def bind(*arguments: str) -> subprocess.CompletedProcess[str]:
@@ -288,6 +308,35 @@ def test_the_multinode_binder_writes_the_one_selected_variant(project, tmp_path)
     bound = yaml.safe_load(output.read_text())
     assert bound["benchmark"]["command"] == "bash agentic.sh"
     assert bound["roles"]["decode"]["env"] == {"UCX": "mlx5_0:1,mlx5_1:1"}
+
+
+EAGLE = {"speculative-algorithm": "EAGLE", "speculative-num-steps": 3}
+DFLASH = {
+    "speculative-algorithm": "DFLASH", "speculative-num-steps": 7,
+    "speculative-draft-model-path": "/hf_hub_cache/models--Org--Drafter-DFlash2/snapshots/46c90f4",
+}  # fmt: skip
+
+
+@pytest.mark.parametrize(("label", "decode_args", "expected"), [
+    ("mtp", EAGLE, {"SPEC_ALGORITHM": "mtp", "SPEC_DRAFT_MODEL": "native"}),
+    ("draft_model", DFLASH, {"SPEC_ALGORITHM": "dflash", "SPEC_DRAFT_MODEL": "Org/Drafter-DFlash2"}),
+    ("none", {}, {}),
+    ("mtp", {}, "matrix 'mtp', but the generation worker does not draft"),
+    ("none", EAGLE, "matrix 'none', but the generation worker drafts"),
+])  # fmt: skip
+def test_a_multinode_spec_label_must_match_the_decode_worker(project, label, decode_args, expected):
+    path = fragment(project, {"name": "job", "roles": {
+        "prefill": {"args": {}}, "decode": {"args": decode_args},
+    }})  # fmt: skip
+    env = {**MULTI_ENV, "IS_AGENTIC": "1", "FRAMEWORK": "dynamo-sglang", "MODEL_PREFIX": "glm5.2",
+           "SPEC_DECODING": label}  # fmt: skip
+    if isinstance(expected, str):
+        with pytest.raises(ValueError, match=re.escape(expected)):
+            bind_multinode(str(path), env, root=project)
+        return
+    _, bound = bind_multinode(str(path), env, root=project)
+    workload = bound["benchmark"]["env"]
+    assert {key: workload[key] for key in workload if key.startswith("SPEC_")} == expected
 
 
 def test_fabric_references_take_the_clusters_rendering_in_env_args_and_services():
