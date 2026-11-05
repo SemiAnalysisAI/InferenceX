@@ -12024,8 +12024,8 @@
   scenario-type: [fixed-seq-len]
 
 - config-keys:
-    - kimik3.1-fp4-gb200-dynamo-vllm-agentic-dspark-tp8pp2-agg
-    - kimik3.1-fp4-gb200-dynamo-vllm-agentic-dspark-tp16-disagg
+    - kimik3.1-fp4-gb200-vllm-agentic-dspark-tp8pp2-agg
+    - kimik3.1-fp4-gb200-vllm-agentic-dspark-tp16-disagg
   scenario-type:
     - agentic-coding
   description:

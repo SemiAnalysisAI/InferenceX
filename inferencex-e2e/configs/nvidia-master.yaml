@@ -6983,13 +6983,13 @@ minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-disagg:
         prefill: { num-worker: 2, tp: 4, ep: 4, dp-attn: true }
         decode: { num-worker: 1, tp: 8, ep: 8, dp-attn: true }
 
-kimik3.1-fp4-gb200-dynamo-vllm-agentic-dspark-tp8pp2-agg:
+kimik3.1-fp4-gb200-vllm-agentic-dspark-tp8pp2-agg:
   image: vllm/vllm-openai:kimi-k31-arm64-cu130@sha256:52b793567651780dc529647a211a3d15cec11ebc872ac7492636d7d75340eab4
   model: moonshotai/Kimi-K3.1-Pro
   model-prefix: kimik3.1
   runner: cluster:gb200-nv
   precision: fp4
-  framework: dynamo-vllm
+  framework: vllm
   multinode: true
   disagg: false
   srt-recipe-dir: kimik3.1/vllm/gb200-fp4/agentx
@@ -7054,7 +7054,7 @@ kimik3.1-fp4-gb200-dynamo-vllm-agentic-dspark-tp8pp2-agg:
         power: true
         worker: { num-worker: 1, tp: 8, pp: 2, dcp-size: 8, ep: 1, dp-attn: false }
 
-kimik3.1-fp4-gb200-dynamo-vllm-agentic-dspark-tp16-disagg:
+kimik3.1-fp4-gb200-vllm-agentic-dspark-tp16-disagg:
   image: vllm/vllm-openai:kimi-k31-arm64-cu130@sha256:52b793567651780dc529647a211a3d15cec11ebc872ac7492636d7d75340eab4
   model: moonshotai/Kimi-K3.1-Pro
   model-prefix: kimik3.1

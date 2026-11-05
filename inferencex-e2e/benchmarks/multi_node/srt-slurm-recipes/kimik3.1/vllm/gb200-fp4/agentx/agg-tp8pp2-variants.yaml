@@ -5,9 +5,6 @@ base:
     model: {}
     container: {}
 
-  dynamo:
-    install: false
-
   slurm:
     time_limit: "8:00:00"
 
@@ -79,7 +76,6 @@ base:
     env:
       AIPERF_SERVER_METRICS_URLS: "http://localhost:8000/metrics"
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
-      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
 
 # Admission is 2x CONC. Graph capture covers max-num-seqs x (1 + draft tokens).
 override_tp8pp2_c1:
