@@ -11973,11 +11973,74 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3296
 
 - config-keys:
+    - musespark-fp4-b300-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the Muse Spark Open B300 curve to lmsysorg/sglang:nightly-dev-cu13-20261030-302b78cc; run TP8/EP8 at concurrency 1, 4, 7, 16, 20, 24 and TP4/EP4 HiCache at concurrency 16, 28, 32, 38, 48."
+    - "Disable prefill CUDA graphs at TP4 with mem-fraction-static 0.92 and keep breakable prefill graphs at TP8; retune request admission, prefill-decode interval and stream interval per concurrency, with 250 GB per-rank HiCache and SWA/full ratio 0.2 at concurrency 32 and 38."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4725
+
+- config-keys:
+    - musespark-fp4-gb300-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the Muse Spark Open GB300 curve to lmsysorg/sglang:nightly-dev-cu13-20261030-302b78cc and retune request admission, prefill-decode interval, scheduling and host cache per concurrency."
+    - "Add TP4/EP4 concurrency 4 and 40; drop concurrency 5, 28 and 34."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4724
+
+- config-keys:
+    - kimik3-fp4-mi355x-atom-agentic-mtp
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+    - kimik3-fp4-mi355x-vllm-disagg-agentic
+    - kimik3-fp4-h200-vllm-agentic-latency
+    - kimik3-fp4-h200-vllm-agentic-balanced
+    - kimik3-fp4-h200-vllm-agentic-simple
+    - kimik3-fp4-b300-vllm-agentic-dspark
+    - kimik3-fp4-gb200-dynamo-vllm-agentic
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dep16-disagg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+    - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-disagg
+  description:
+    - "Retire all Kimi-K3 serving benchmarks and remove unused recipes and launch routing."
+    - "Keep historical results, SPEED-Bench collectors, golden AL curves, vendor evals and OperatorX shapes."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4762
+  retired: true
+
+- config-keys:
+    - dsr1-fp8-mi300x-sglang
+    - dsr1-fp8-mi325x-sglang
+    - dsr1-fp8-mi355x-sglang-mtp
+  description:
+    - "Collect per-socket AMD EPYC CPU package power beside GPU power on the MI300X, MI325X and MI355X srt-slurm clusters. Native power points on a cluster that declares a cpu-power-exporter measure CPU power by default; these 8k1k rows set cpu-power, so a missing CPU leg counts as invalid. RAPL jobs get the root-only counters until teardown, and setup installs the pinned cpu-power-exporter release."
+    - "Integrate each package over the formal GPU measurement window and emit cpu_power_valid, avg_cpu_socket_power_w, avg_total_cpu_power_w, and total_cpu_energy_j with sensor_kind rapl_package; RAPL reports no component rails. Concurrency points and evaluation coverage are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4154
+  scenario-type: [fixed-seq-len]
+
+- config-keys:
+    - kimik3.1-fp4-b300-sglang-agentic-dflash
+  description:
+    - "Add Kimi K3.1 Pro B300 SGLang AgentX day-0 points: TP8 (c1-c16) and TP8 DCP8 EP2 (c24-c70), HiCache host offload, RadixArk DFLASH draft with block verification."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4803
+
+- config-keys:
+    - kimik3.1-fp4-b300-vllm-agentic-dspark
+  description:
+    - "Add Kimi-K3.1-Pro day-0 vLLM AgentX on B300: TP8 x DCP8 with DSpark (Inferact/Kimi-K3.1-Pro-DSpark-preview) and Simple CPU KV offload, conc 1-70."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4796
+
+- config-keys:
     - glm5.3-fp4-mi355x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
   description:
-    - "Add GLM-5.3 MXFP4 MI355X AgentX on SGLang (amd/GLM-5.3-Quark-MXFP4-AttnFP8) with EAGLE MTP K5 and golden AL 3.61, on lmsysorg/sglang-rocm:v0.5.22-rocm10-mi35x-20261025 pinned by digest; the v0.5.22 release lacks sgl-project/sglang#40776, which this checkpoint needs to load."
+    - "Add GLM-5.3 MXFP4 MI355X AgentX on SGLang (amd/GLM-5.3-Quark-MXFP4-AttnFP8) with EAGLE MTP K5 and golden AL 3.48, on lmsysorg/sglang-rocm:v0.5.22-rocm10-mi35x-20261025 pinned by digest; the v0.5.22 release lacks sgl-project/sglang#40776, which this checkpoint needs to load."
     - "TP4/EP4 with a 180 GB/rank HiCache host tier and breakable prefill CUDA graphs at concurrency 4, 8, 10, 12, 14 and 16; TP8/EP1 without host offload at concurrency 1, 2 and 4."
     - "Draft data types: the NextN layer shipped in the checkpoint loads with its Quark config, as shipped (MXFP4 routed and shared experts, FP8 per-block attention and indexer wq_b/wk, BF16 eh_proj, router gate and indexer weights_proj)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4593
