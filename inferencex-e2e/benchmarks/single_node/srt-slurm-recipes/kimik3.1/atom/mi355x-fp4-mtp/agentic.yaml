@@ -193,7 +193,6 @@ override_tp8_dcp8_c48_lmcache:
   benchmark:
     env:
       CONC: '48'
-      SPEC_DECODING: mtp
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '1799'
 
@@ -218,7 +217,6 @@ override_tp8_dcp8_c56_lmcache:
   benchmark:
     env:
       CONC: '56'
-      SPEC_DECODING: mtp
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '1799'
 
@@ -243,6 +241,5 @@ override_tp8_dcp8_c72_lmcache:
   benchmark:
     env:
       CONC: '72'
-      SPEC_DECODING: mtp
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '1799'
