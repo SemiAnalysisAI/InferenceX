@@ -12138,3 +12138,12 @@
     - "DEP8 (TP1 x DP8 + EP8, the same engine on all eight GPUs) behind the same router at concurrency 224 and 256 (16 GiB KV pool), 384 (32 GiB), 512 (40 GiB), 544 (44 GiB) and 576 (48 GiB), each with a 65536-token prefill budget and long-prefill-token-threshold 8192. Removes TP4 at concurrency 1, 8, 32 and 128, TP2 at concurrency 1, DEP2 at concurrency 8-128 (including the native CPU KV offload points) and DEP4 at concurrency 96 and 128."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4786
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
+  description:
+    - "Collect GPU-board power and require valid AgentX power for the seven existing GB200 Dynamo-SGLang disaggregated variants."
+    - "Rerun the two unchanged aggregated variants in the same sweep so the GB200 Dynamo-SGLang AgentX curve keeps all nine points."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4553
+  scenario-type: [agentic-coding]

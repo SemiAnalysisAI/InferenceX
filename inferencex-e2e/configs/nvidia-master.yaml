@@ -5012,6 +5012,8 @@ glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg:
     - dram-utilization: 0.80
       search-space:
       - spec-decoding: mtp
+        power: true
+        require-power: true
         conc-list: [36]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -5029,6 +5031,8 @@ glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg:
           ep: 1
           dp-attn: false
       - spec-decoding: mtp
+        power: true
+        require-power: true
         conc-list: [48]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -5046,6 +5050,8 @@ glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg:
           ep: 1
           dp-attn: false
       - spec-decoding: mtp
+        power: true
+        require-power: true
         conc-list: [64]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -5063,6 +5069,8 @@ glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg:
           ep: 8
           dp-attn: true
       - spec-decoding: mtp
+        power: true
+        require-power: true
         conc-list: [96]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -5080,6 +5088,8 @@ glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg:
           ep: 8
           dp-attn: true
       - spec-decoding: mtp
+        power: true
+        require-power: true
         conc-list: [96]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -5097,6 +5107,8 @@ glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg:
           ep: 8
           dp-attn: true
       - spec-decoding: mtp
+        power: true
+        require-power: true
         conc-list: [224]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -5114,6 +5126,8 @@ glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg:
           ep: 16
           dp-attn: true
       - spec-decoding: mtp
+        power: true
+        require-power: true
         conc-list: [336]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
