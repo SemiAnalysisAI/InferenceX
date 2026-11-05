@@ -909,12 +909,14 @@ kimik3.1-fp4-mi355x-vllm-agentic-dspark:
   srt-recipe-dir: kimik3.1/vllm/mi355x-fp4-mtp
   scenarios:
     agentic-coding:
-    # 0.6 resolves to 1799 GB of host DRAM, which the recipe's Simple CPU offload splits across the 8 TP ranks.
+    # The recipe pins 2577 GB of host DRAM for Simple CPU offload, split across the 8 TP ranks.
+    # That is 86% of the node's 3000 GB, not the 60% this field asks for; the recipe's hardcoded
+    # cpu_bytes_to_use_per_rank wins, and 2577 is what the reference sweep ran with.
     - dram-utilization: 0.6
       search-space:
-      # The ~1.56 TB MXFP4 checkpoint needs all 8 GPUs. c1 and c4 keep the KV cache on the GPUs.
-      - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4], srt-recipe: agentic.yaml }
-      - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [4, 10, 16, 24, 32, 48, 52, 60], srt-recipe: agentic.yaml }
+      # The ~1.56 TB MXFP4 checkpoint needs all 8 GPUs. c1 keeps the KV cache on the GPUs.
+      - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [4, 10, 16, 24, 32, 48], srt-recipe: agentic.yaml }
 
 # MiniMax-M3.1-Flash AgentX on MI355X with SGLang: day-zero image from the SGLang
 # cookbook (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1),
