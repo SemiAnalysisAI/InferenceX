@@ -22,7 +22,13 @@ from infx import yamlio
 from infx.config import repository_root
 from infx.fastcopy import deepcopy
 from infx.results.metadata import parse_component_metadata
-from infx.srt_slurm.synthetic_acceptance import selected_recipes, spec_parameters
+from infx.srt_slurm.spec_identity import speculation_facts
+from infx.srt_slurm.synthetic_acceptance import (
+    ENGINES,
+    generation_role,
+    selected_recipes,
+    spec_parameters,
+)
 
 SHARED_BLOCKS = {
     (False, False): Path("configs/srt-recipes/fixed-sequence-single.yaml"),
@@ -51,13 +57,16 @@ _WORKFLOW_ENV = (
     "IMAGE", "MODEL_PREFIX", "FRAMEWORK", "PRECISION", "DISAGG", "DURATION", "MAX_MODEL_LEN",
     "KV_OFFLOAD_BACKEND", "KV_OFFLOAD_BACKEND_METADATA", "ROUTER_METADATA", "KV_P2P_TRANSFER",
     "POWER", "REQUIRE_POWER", "IS_AGENTIC", "SCENARIO_TYPE", "RUN_EVAL", "EVAL_ONLY",
+    "SPEC_ALGORITHM", "SPEC_DRAFT_MODEL",
 )  # fmt: skip
 _MULTINODE_ENV = (
     "SPEC_DECODING", "KV_OFFLOADING", "TOTAL_CPU_DRAM_GB", "DECODE_CPU_DRAM_GB", "PREFILL_DWDP_SIZE",
     *(f"{role}_{field}" for role in ("PREFILL", "DECODE")
       for field in ("NUM_WORKERS", "TP", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "EP", "DP_ATTN")),
 )  # fmt: skip
-_SINGLE_NODE_ENV = ("TP", "EP_SIZE", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "DP_ATTENTION", "GPU_COUNT")
+_SINGLE_NODE_ENV = (
+    "TP", "EP_SIZE", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "DP_ATTENTION", "GPU_COUNT", "SPEC_DECODING",
+)  # fmt: skip
 BOUND_ENV = {
     (False, False): (*_FIXED_ENV, *_WORKFLOW_ENV, *_SINGLE_NODE_ENV),
     (False, True): (*_FIXED_ENV, *_WORKFLOW_ENV, *_MULTINODE_ENV),
@@ -377,9 +386,31 @@ def bind_multinode(
     if len(variants) != 1:
         raise ValueError(f"{recipe} selects {len(variants)} variants, not one")
     name, selected = variants[0]
-    return name, bind_workload(
+    bound = bind_workload(
         selected, environment, agentic=agentic, multinode=True, client_env=client_env
     )
+    bind_speculation(bound, environment)
+    return name, bound
+
+
+def bind_speculation(recipe: dict[str, Any], environment: Mapping[str, str]) -> None:
+    """Fail unless the matrix's SPEC_DECODING says whether the generation worker drafts, and
+    give the client the algorithm and draft model it drafts with."""
+    engine = recipe.get("engine")
+    engine = ENGINES.get(environment["FRAMEWORK"]) or (
+        engine.get("type") if isinstance(engine, Mapping) else engine
+    )
+    spec = spec_parameters(generation_role(recipe), engine)
+    label = environment["SPEC_DECODING"]
+    if bool(spec) != (label != "none"):
+        raise ValueError(
+            f"SPEC_DECODING: matrix {label!r}, but the generation worker "
+            f"{'drafts' if spec else 'does not draft'}"
+        )
+    if spec:
+        algorithm, draft_model = speculation_facts(_required(environment, "MODEL_PREFIX"), spec)
+        workload = recipe.setdefault("benchmark", {}).setdefault("env", {})
+        workload.update(SPEC_ALGORITHM=algorithm, SPEC_DRAFT_MODEL=draft_model)
 
 
 def resolve_fabric(node: Any, fabric: Mapping[str, str | None], where: str = "") -> Any:

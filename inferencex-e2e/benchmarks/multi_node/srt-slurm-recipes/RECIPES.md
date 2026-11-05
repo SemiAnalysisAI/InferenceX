@@ -2,7 +2,7 @@
 
 InferenceX owns the recipes in this directory. For every NVIDIA srt-slurm launch, the srt driver ([`infx/launch/drivers/srt/checkout.py`](../../../infx/launch/drivers/srt/checkout.py)) makes a job-local Git clone of the pinned submodule and copies this entire tree into `recipes/`. It records the actual revision in `srt-slurm-sha.txt`; power lanes copy that revision into `power-producer-sha.txt` for result validation.
 
-The shared version is the Git submodule pointer at [`utils/srt-slurm`](../../../utils/srt-slurm), currently [v2.66.1](https://github.com/NVIDIA/srt-slurm/releases/tag/v2.66.1) (`96f1111ac6093619511d9e276635abf4cad78edf`). Update that submodule pointer when upgrading, then run the recipe and integration checks. Do not add model-specific checkout branches to launchers.
+The shared version is the Git submodule pointer at [`utils/srt-slurm`](../../../utils/srt-slurm), currently [v2.66.2](https://github.com/NVIDIA/srt-slurm/releases/tag/v2.66.2) (`acfb4dcc3bd48fd6a1e7b615e849e7954c0c3852`). Update that submodule pointer when upgrading, then run the recipe and integration checks. Do not add model-specific checkout branches to launchers.
 
 InferenceX requires srt-slurm 2.0 or newer and `schema: 2` recipes. Legacy recipe layouts are unsupported; migrate them before adding them to this tree.
 
@@ -48,6 +48,40 @@ Recipes use `schema: 2`, `engine`, and `roles`. Each worker role owns its node c
 Keep the recipe and master configuration synchronized. The launcher executes the recipe; the master configuration supplies result labels and scheduling metadata. For aggregate recipes use `roles.agg`; `roles.decode.nodes: colocate` shares prefill nodes and contributes no additional worker nodes to scheduling.
 
 All referenced recipes must be checked in: srt-slurm 2 ships curated examples instead of the historical `recipes/` archive. The initial migration restores 204 previously external recipes and two still-referenced AgentX recipes from InferenceX history. Master-config paths follow the layout above; existing override selectors are preserved.
+
+## Single-node parallelism validation
+
+The master search-space fields `tp`, `ep`, and `dp-attn` become `TP`, `EP_SIZE`,
+and `DP_ATTENTION` in the benchmark environment. Each engine's recipe retains
+its native argument names and parallelism conventions.
+[`parallelism_constraints` and `validate_recipe`](../../../infx/srt_slurm/single_node.py)
+compare the recipe with that metadata. The former returns named
+`(actual, expected)` pairs; the latter raises `ValueError` on a mismatch.
+Variant selection requires exactly one matching recipe before launch.
+These checks never rewrite the recipe's parallelism settings or launch flags.
+
+| Engine | Recipe value compared with `tp` | Check against `ep` | Check against `dp-attn` |
+|---|---|---|---|
+| TokenSpeed | `attn-tp-size * data-parallel-size` | `ep-size == ep` | `(data-parallel-size > 1) == dp-attn` |
+| SGLang | `tensor-parallel-size` | `expert-parallel-size`, or `ep-size` | `enable-dp-attention == dp-attn`; `data-parallel-size` must equal `tp` when enabled, otherwise 1 |
+| TensorRT-LLM (`trt` in the master) | `tensor_parallel_size` | `moe_expert_parallel_size == ep` | `enable_attention_dp == dp-attn` |
+| vLLM | `tensor-parallel-size * data-parallel-size` | `enable-expert-parallel == (ep > 1)` | `(data-parallel-size > 1) == dp-attn` |
+| ATOM | `roles.agg.gpus` | `enable-expert-parallel == (ep > 1)`; `ep` must be 1 or `tp` | `enable-dp-attention == dp-attn` |
+
+For example, a master row with `tp: 4`, `ep: 4`, and `dp-attn: true` matches
+TokenSpeed arguments `attn-tp-size: 1`, `data-parallel-size: 4`, and `ep-size: 4`:
+one GPU per attention group times four groups gives the four-GPU width.
+The matching SGLang arguments are `tensor-parallel-size: 4`,
+`data-parallel-size: 4`, `expert-parallel-size: 4`, and
+`enable-dp-attention: true`. This validator compares SGLang's TP directly;
+it does not multiply that TP by DP. Comparing literal TP flags across engines
+would incorrectly reject the TokenSpeed recipe because its attention TP is 1.
+
+The single-node launcher requires pipeline parallelism 1. vLLM's EP check
+verifies the enable flag, not an exact numerical expert group size. `dp-attn`
+is a boolean, not a count, so these checks do not encode every possible engine
+topology. They prevent running and labeling a benchmark with inconsistent
+recipe and master settings; the recipe still owns the native configuration.
 
 ## Recipe fragments
 
