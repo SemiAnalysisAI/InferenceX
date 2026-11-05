@@ -7182,10 +7182,19 @@ minimaxm31flash-fp4-gb300-dynamo-trt-agentic-dspark-disagg:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: {name: native, version: 1.4.0a0.dev202611010306}
-        conc-list: [36]
+        conc-list: [32, 28, 24]
         power: true
         cpu-power: true
-        srt-recipe: disagg-variants.yaml:override_disagg_1p3d_tp4_tp4_mtp7_c36
+        srt-recipe: disagg-variants.yaml:override_disagg_1p3d_tp4_tp4_mtp7
         prefill: {num-worker: 1, tp: 4, ep: 1, dp-attn: false}
         decode: {num-worker: 3, tp: 4, ep: 1, dp-attn: false}
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: {name: native, version: 1.4.0a0.dev202611010306}
+        conc-list: [40, 36, 32]
+        power: true
+        cpu-power: true
+        srt-recipe: disagg-variants.yaml:override_disagg_1p4d_tp4_tp4_mtp7
+        prefill: {num-worker: 1, tp: 4, ep: 1, dp-attn: false}
+        decode: {num-worker: 4, tp: 4, ep: 1, dp-attn: false}
   kv-p2p-transfer: nixl

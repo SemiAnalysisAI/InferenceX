@@ -397,8 +397,8 @@ override_disagg_1p3d_tp2_tp2_mtp7_c36:
           indexer_kv_dtype: nvfp4
   health_check:
     max_attempts: 720
-override_disagg_1p3d_tp4_tp4_mtp7_c36:
-  name: m31f-gb300-23c67f2-disagg-1p3d-tp4-tp4-mtp7-c36
+override_disagg_1p3d_tp4_tp4_mtp7:
+  name: m31f-gb300-23c67f2-disagg-1p3d-tp4-tp4-mtp7
   roles:
     prefill:
       gpus: 4
@@ -410,6 +410,31 @@ override_disagg_1p3d_tp4_tp4_mtp7_c36:
     decode:
       nodes: 3
       workers: 3
+      gpus: 4
+      args:
+        modeling_v2: require
+        tensor_parallel_size: 4
+        max_batch_size: 1
+        cuda_graph_config:
+          batch_sizes:
+          - 1
+        sparse_attention_config:
+          indexer_kv_dtype: fp8
+  health_check:
+    max_attempts: 1080
+override_disagg_1p4d_tp4_tp4_mtp7:
+  name: m31f-gb300-23c67f2-disagg-1p4d-tp4-tp4-mtp7
+  roles:
+    prefill:
+      gpus: 4
+      args:
+        modeling_v2: require
+        tensor_parallel_size: 4
+        sparse_attention_config:
+          indexer_kv_dtype: fp8
+    decode:
+      nodes: 4
+      workers: 4
       gpus: 4
       args:
         modeling_v2: require

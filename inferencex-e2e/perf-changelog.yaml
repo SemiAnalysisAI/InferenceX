@@ -12034,5 +12034,5 @@
     - "Configure iteration and KV cache statistics for the aggregate, prefill, and decode workers."
     - "Enable GPU and host CPU power collection for the AgentX configurations."
     - "Configure fastokens and NUMA binding, least-loaded decode routing, prefill conversation affinity, and the KV transfer timeout."
-    - "Set both TP4 disaggregated variants to concurrency 36."
+    - "Run the 1P2D TP4 disaggregated variant at concurrency 36, the 1P3D TP4 variant at 32, 28 and 24, and a new 1P4D TP4 variant at 40, 36 and 32."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4751
