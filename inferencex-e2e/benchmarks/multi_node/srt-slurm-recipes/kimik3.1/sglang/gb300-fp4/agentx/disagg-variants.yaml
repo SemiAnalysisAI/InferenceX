@@ -1,19 +1,13 @@
 schema: 2
 
 base:
-  name: kimik3.1-fp4-gb300-dynamo-sglang-agentx-disagg
+  name: kimik3.1-fp4-gb300-sglang-agentx-disagg
   identity:
     model: {}
     container: {}
   resources:
     gpu_type: gb300
     gpus_per_node: 4
-  # The K3.1 SGLang image ships no Dynamo.
-  dynamo:
-    install: true
-    source:
-      # ai-dynamo/dynamo#18124: its frontend loads the kimi_k31 tokenizer and its SGLang args allow DSA DCP decode.
-      rev: "4b0850752a7370aa20706095558616488b5cef35"
   environment:
     HF_HUB_CACHE: /hf_hub_cache
   observability:
@@ -24,38 +18,17 @@ base:
   health_check:
     max_attempts: 1440
     interval_seconds: 10
-  services:
-    - name: etcd
-      type: etcd
-      placement:
-        node: infra
-    - name: nats
-      type: nats
-      placement:
-        node: infra
-      options:
-        max_payload_mb: 64
-    - name: otel-collector
-      type: otel-collector
-      enabled: false
   frontend:
-    type: dynamo
+    type: sglang-router
+    # One gateway keeps a single prefix tree, so cache-aware routing sees every turn of a session.
     enable_multiple_frontends: false
-    env:
-      DYN_ROUTER_TEMPERATURE: "0"
-      DYN_ROUTER_QUEUE_THRESHOLD: None
-      DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: "3600"
-      DYN_TOKENIZER_CACHE: "1"
-      DYN_TOKENIZER_CACHE_BYTES: "8000000000"
     args:
-      # The Kimi tokenizer is remote code, so chat templating stays in SGLang.
-      dyn-chat-processor: sglang
-      dyn-preprocess-workers: 4
-      trust-remote-code: true
-      router-mode: kv
-      active-decode-blocks-threshold: "None"
-      active-prefill-tokens-threshold: "None"
-      active-prefill-tokens-threshold-frac: "None"
+      policy: cache_aware
+      request-id-headers: x-correlation-id
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
   engine: sglang
   roles:
     prefill:
@@ -109,18 +82,12 @@ base:
         speculative-num-draft-tokens: 7
         speculative-draft-kv-cache-dtype: fp8_e4m3
         speculative-draft-attention-backend: cutedsl_mla
-        router-mode: kv
-        router-session-affinity-ttl-secs: "14400"
-        router-host-cache-hit-weight: 1
-        router-kv-overlap-score-credit: 4
         reasoning-parser: kimi_k3
-        dyn-reasoning-parser: kimi_k3
-        dyn-tool-call-parser: kimi_k3
+        tool-call-parser: kimi_k3
         watchdog-timeout: 3600
         enable-metrics: true
         weight-loader-prefetch-checkpoints: true
         model-loader-extra-config: '{"enable_multithread_load":true}'
-      kv_events: true
     decode:
       nodes: 4
       workers: 2
@@ -162,13 +129,11 @@ base:
         speculative-draft-attention-backend: cutedsl_mla
         enable-linear-replayssm-spec: true
         reasoning-parser: kimi_k3
-        dyn-reasoning-parser: kimi_k3
-        dyn-tool-call-parser: kimi_k3
+        tool-call-parser: kimi_k3
         watchdog-timeout: 3600
         enable-metrics: true
         weight-loader-prefetch-checkpoints: true
         model-loader-extra-config: '{"enable_multithread_load":true}'
-      kv_events: false
   sbatch_directives:
     mem: "0"
   srun_options:
@@ -183,17 +148,17 @@ base:
       AIPERF_EXTRA_INPUTS: '{"temperature":1,"top_p":0.95}'
 
 override_1p3d_c16:
-  name: kimik3.1-fp4-gb300-dynamo-sglang-agentx-disagg-1p3d-c16
+  name: kimik3.1-fp4-gb300-sglang-agentx-disagg-1p3d-c16
   roles:
     decode:
       nodes: 6
       workers: 3
 
 override_1p2d_c24_c64:
-  name: kimik3.1-fp4-gb300-dynamo-sglang-agentx-disagg-1p2d-c24-c64
+  name: kimik3.1-fp4-gb300-sglang-agentx-disagg-1p2d-c24-c64
 
 override_2p3d_c240:
-  name: kimik3.1-fp4-gb300-dynamo-sglang-agentx-disagg-2p3d-c240
+  name: kimik3.1-fp4-gb300-sglang-agentx-disagg-2p3d-c240
   roles:
     prefill:
       nodes: 4
@@ -205,7 +170,7 @@ override_2p3d_c240:
         max-running-requests: 96
 
 override_3p4d_c240:
-  name: kimik3.1-fp4-gb300-dynamo-sglang-agentx-disagg-3p4d-c240
+  name: kimik3.1-fp4-gb300-sglang-agentx-disagg-3p4d-c240
   roles:
     prefill:
       nodes: 6

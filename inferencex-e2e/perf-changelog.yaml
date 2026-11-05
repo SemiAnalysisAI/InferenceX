@@ -12024,12 +12024,12 @@
   scenario-type: [fixed-seq-len]
 
 - config-keys:
-    - kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-agg
-    - kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-disagg
-    - kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-wideep-disagg
+    - kimik3.1-fp4-gb300-sglang-agentic-dflash-agg
+    - kimik3.1-fp4-gb300-sglang-agentic-dflash-disagg
+    - kimik3.1-fp4-gb300-sglang-agentic-dflash-wideep-disagg
   scenario-type:
     - agentic-coding
   description:
-    - "Add Kimi K3.1 Pro day-0 GB300 Dynamo SGLang AgentX on lmsysorg/sglang:dev-kimi-k31-pro with the RadixArk DFLASH draft and block verification."
+    - "Add Kimi K3.1 Pro day-0 GB300 SGLang AgentX on lmsysorg/sglang:dev-kimi-k31-pro with the RadixArk DFLASH draft and block verification, behind the SGLang Model Gateway (disaggregated) or a direct server (aggregated)."
     - "Aggregated TP8 DCP8 at concurrency 1; disaggregated TP8 DCP8 prefill with HiCache and TP8 DCP8 decode (1P3D, 1P2D, 2P3D, 3P4D) plus 3P1D with a TP16 DCP8 attention-DP2 EP16 decode."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4802

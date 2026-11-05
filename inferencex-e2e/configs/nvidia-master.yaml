@@ -6530,14 +6530,13 @@ musespark-fp4-gb300-dynamo-sglang-agentic-dflash:
           ep: 4
           dp-attn: false
 
-kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-agg:
+kimik3.1-fp4-gb300-sglang-agentic-dflash-agg:
   image: lmsysorg/sglang:dev-kimi-k31-pro@sha256:67fc77d1cbe67de27ca54d874c82757a4844743fea899ea7d0df547e30c2c391
   model: moonshotai/Kimi-K3.1-Pro
   model-prefix: kimik3.1
   runner: cluster:gb300-nv
   precision: fp4
-  framework: dynamo-sglang
-  router: { name: dynamo-router, version: "4b0850752a7370aa20706095558616488b5cef35" }
+  framework: sglang
   multinode: true
   disagg: false
   srt-recipe-dir: kimik3.1/sglang/gb300-fp4/agentx
@@ -6556,14 +6555,14 @@ kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-agg:
           ep: 1
           dp-attn: false
 
-kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-disagg:
+kimik3.1-fp4-gb300-sglang-agentic-dflash-disagg:
   image: lmsysorg/sglang:dev-kimi-k31-pro@sha256:67fc77d1cbe67de27ca54d874c82757a4844743fea899ea7d0df547e30c2c391
   model: moonshotai/Kimi-K3.1-Pro
   model-prefix: kimik3.1
   runner: cluster:gb300-nv
   precision: fp4
-  framework: dynamo-sglang
-  router: { name: dynamo-router, version: "4b0850752a7370aa20706095558616488b5cef35" }
+  framework: sglang
+  router: { name: sglang-router, version: "0.3.2" }
   kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
@@ -6642,14 +6641,14 @@ kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-disagg:
           ep: 2
           dp-attn: false
 
-kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-wideep-disagg:
+kimik3.1-fp4-gb300-sglang-agentic-dflash-wideep-disagg:
   image: lmsysorg/sglang:dev-kimi-k31-pro@sha256:67fc77d1cbe67de27ca54d874c82757a4844743fea899ea7d0df547e30c2c391
   model: moonshotai/Kimi-K3.1-Pro
   model-prefix: kimik3.1
   runner: cluster:gb300-nv
   precision: fp4
-  framework: dynamo-sglang
-  router: { name: dynamo-router, version: "4b0850752a7370aa20706095558616488b5cef35" }
+  framework: sglang
+  router: { name: sglang-router, version: "0.3.2" }
   kv-p2p-transfer: mooncake
   multinode: true
   disagg: true

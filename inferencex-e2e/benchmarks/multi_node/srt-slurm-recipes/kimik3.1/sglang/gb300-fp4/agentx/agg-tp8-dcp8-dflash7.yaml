@@ -1,17 +1,11 @@
 schema: 2
-name: kimik3.1-fp4-gb300-dynamo-sglang-agentx-agg-tp8-dcp8-dflash7
+name: kimik3.1-fp4-gb300-sglang-agentx-agg-tp8-dcp8-dflash7
 identity:
   model: {}
   container: {}
 resources:
   gpu_type: gb300
   gpus_per_node: 4
-# The K3.1 SGLang image ships no Dynamo.
-dynamo:
-  install: true
-  source:
-    # ai-dynamo/dynamo#18124: its frontend loads the kimi_k31 tokenizer and its SGLang args allow DSA DCP decode.
-    rev: "4b0850752a7370aa20706095558616488b5cef35"
 environment:
   HF_HUB_CACHE: /hf_hub_cache
 observability:
@@ -22,39 +16,9 @@ slurm:
 health_check:
   max_attempts: 1440
   interval_seconds: 10
-services:
-  - name: etcd
-    type: etcd
-    placement:
-      node: infra
-  - name: nats
-    type: nats
-    placement:
-      node: infra
-    options:
-      max_payload_mb: 64
-  - name: otel-collector
-    type: otel-collector
-    enabled: false
 frontend:
-  type: dynamo
+  type: sglang
   enable_multiple_frontends: false
-  env:
-    DYN_ROUTER_TEMPERATURE: "0"
-    DYN_ROUTER_QUEUE_THRESHOLD: None
-    DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: "3600"
-    DYN_TOKENIZER_CACHE: "1"
-    DYN_TOKENIZER_CACHE_BYTES: "8000000000"
-  args:
-    # The Kimi tokenizer is remote code, so chat templating stays in SGLang.
-    dyn-chat-processor: sglang
-    dyn-preprocess-workers: 4
-    trust-remote-code: true
-    router-mode: kv
-    router-session-affinity-ttl-secs: "14400"
-    active-decode-blocks-threshold: "None"
-    active-prefill-tokens-threshold: "None"
-    active-prefill-tokens-threshold-frac: "None"
 engine: sglang
 roles:
   agg:
@@ -95,13 +59,11 @@ roles:
       speculative-draft-attention-backend: cutedsl_mla
       enable-linear-replayssm-spec: true
       reasoning-parser: kimi_k3
-      dyn-reasoning-parser: kimi_k3
-      dyn-tool-call-parser: kimi_k3
+      tool-call-parser: kimi_k3
       watchdog-timeout: 3600
       enable-metrics: true
       weight-loader-prefetch-checkpoints: true
       model-loader-extra-config: '{"enable_multithread_load":true}'
-    kv_events: true
 sbatch_directives:
   mem: "0"
 srun_options:
