@@ -7122,46 +7122,78 @@ kimik3.1-fp4-gb300-vllm-agentic-dspark-disagg:
   srt-recipe-dir: kimik3.1/vllm/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    # The prefill tier's 4 x 128 GiB of host DRAM per tray.
-    - dram-utilization: 0.57
+    # Each GPU's 160 GB Mooncake segment: 4 x 160 GB of a tray's 920,000 MiB.
+    - dram-utilization: 0.66
       search-space:
       - spec-decoding: mtp
         kv-offloading: dram
-        kv-offload-backend: { name: vllm-simple }
-        conc-list: [16]
-        srt-recipe: disagg-variants.yaml:override_1p3d
+        kv-offload-backend: { name: mooncake, version: 0.3.14 }
+        conc-list: [1, 8, 64]
+        srt-recipe: disagg-variants.yaml:override_1p1d
         power: true
         prefill: { num-worker: 1, tp: 8, dcp-size: 8, ep: 8, dp-attn: false }
-        decode: { num-worker: 3, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
+        decode: { num-worker: 1, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
       - spec-decoding: mtp
         kv-offloading: dram
-        kv-offload-backend: { name: vllm-simple }
-        conc-list: [24, 32, 48, 64]
+        kv-offload-backend: { name: mooncake, version: 0.3.14 }
+        conc-list: [48]
         srt-recipe: disagg-variants.yaml:override_1p2d
         power: true
         prefill: { num-worker: 1, tp: 8, dcp-size: 8, ep: 8, dp-attn: false }
         decode: { num-worker: 2, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
       - spec-decoding: mtp
         kv-offloading: dram
-        kv-offload-backend: { name: vllm-simple }
-        conc-list: [240]
-        srt-recipe: disagg-variants.yaml:override_2p3d
+        kv-offload-backend: { name: mooncake, version: 0.3.14 }
+        conc-list: [64, 80]
+        srt-recipe: disagg-variants.yaml:override_1p2d_mns256
         power: true
-        prefill: { num-worker: 2, tp: 8, dcp-size: 8, ep: 8, dp-attn: false }
+        prefill: { num-worker: 1, tp: 8, dcp-size: 8, ep: 8, dp-attn: false }
+        decode: { num-worker: 2, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: 0.3.14 }
+        conc-list: [20, 32]
+        srt-recipe: disagg-variants.yaml:override_1p3d
+        power: true
+        prefill: { num-worker: 1, tp: 8, dcp-size: 8, ep: 8, dp-attn: false }
         decode: { num-worker: 3, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
       - spec-decoding: mtp
         kv-offloading: dram
-        kv-offload-backend: { name: vllm-simple }
-        conc-list: [240]
-        srt-recipe: disagg-variants.yaml:override_3p4d
+        kv-offload-backend: { name: mooncake, version: 0.3.14 }
+        conc-list: [56]
+        srt-recipe: disagg-variants.yaml:override_1p3d_mns256
         power: true
-        prefill: { num-worker: 3, tp: 8, dcp-size: 8, ep: 8, dp-attn: false }
-        decode: { num-worker: 4, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
+        prefill: { num-worker: 1, tp: 8, dcp-size: 8, ep: 8, dp-attn: false }
+        decode: { num-worker: 3, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
       - spec-decoding: mtp
         kv-offloading: dram
-        kv-offload-backend: { name: vllm-simple }
-        conc-list: [336]
+        kv-offload-backend: { name: mooncake, version: 0.3.14 }
+        conc-list: [160, 192]
+        srt-recipe: disagg-variants.yaml:override_hyb2_2p1d
+        power: true
+        prefill: { num-worker: 2, tp: 8, dcp-size: 8, ep: 8, dp-attn: false }
+        decode: { num-worker: 1, tp: 16, dcp-size: 8, ep: 16, dp-attn: true }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: 0.3.14 }
+        conc-list: [224, 320]
+        srt-recipe: disagg-variants.yaml:override_hyb2_3p1d
+        power: true
+        prefill: { num-worker: 3, tp: 8, dcp-size: 8, ep: 8, dp-attn: false }
+        decode: { num-worker: 1, tp: 16, dcp-size: 8, ep: 16, dp-attn: true }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: 0.3.14 }
+        conc-list: [384]
+        srt-recipe: disagg-variants.yaml:override_hyb4_3p1d
+        power: true
+        prefill: { num-worker: 3, tp: 8, dcp-size: 8, ep: 8, dp-attn: false }
+        decode: { num-worker: 1, tp: 32, dcp-size: 8, ep: 32, dp-attn: true }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: 0.3.14 }
+        conc-list: [300, 352]
         srt-recipe: disagg-dep16.yaml
         power: true
-        prefill: { num-worker: 3, tp: 8, ep: 8, dp-attn: false }
+        prefill: { num-worker: 1, tp: 16, ep: 16, dp-attn: true }
         decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: true }

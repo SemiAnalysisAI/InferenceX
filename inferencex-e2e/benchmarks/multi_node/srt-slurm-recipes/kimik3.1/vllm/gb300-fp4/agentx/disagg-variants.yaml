@@ -8,6 +8,21 @@ base:
   health_check:
     max_attempts: 720
     interval_seconds: 10
+  services:
+  - name: mooncake-master
+    type: mooncake-master
+    args:
+    - --default_kv_lease_ttl=60000
+    - --eviction_high_watermark_ratio=0.95
+    - --eviction_ratio=0.10
+    options:
+      store_config:
+        metadata_server: P2PHANDSHAKE
+        global_segment_size: 160GB
+        local_buffer_size: 4GB
+        protocol: rdma
+        device_name: '@fabric.rdma-devices'
+        enable_offload: false
   frontend:
     type: vllm-router
     enable_multiple_frontends: false
@@ -34,14 +49,35 @@ base:
         VLLM_SSM_CONV_STATE_LAYOUT: DS
         VLLM_ENGINE_READY_TIMEOUT_S: '3600'
         VLLM_RPC_TIMEOUT: '600000'
+        VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1800'
         # Outlast the router's pooled connections past Uvicorn's keep-alive.
         VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '600'
+        VLLM_WORKER_MULTIPROC_METHOD: spawn
+        VLLM_USE_V2_MODEL_RUNNER: '1'
+        VLLM_ENABLE_GEMM_RS: '1'
+        VLLM_ALLREDUCE_USE_FLASHINFER: '1'
+        VLLM_USE_NCCL_SYMM_MEM: '0'
+        VLLM_KIMI_K3_SHARD_SP_SHARED_EXPERT: '0'
+        VLLM_USE_DIRECT_DCP_A2A: '1'
+        VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
+        VLLM_MOONCAKE_LOAD_RECV_THREADS: '4'
+        MC_SLICE_SIZE: '1048576'
+        MC_MAX_MR_SIZE: '4294967296'
+        MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+        # GB300 hosts register GPU memory with Mooncake through dma-buf; nvidia-peermem is absent.
+        WITH_NVIDIA_PEERMEM: '0'
         NCCL_CUMEM_ENABLE: '1'
         NCCL_MNNVL_ENABLE: '1'
         NCCL_NVLS_ENABLE: '1'
+        NCCL_P2P_LEVEL: NVL
+        NCCL_NET_PLUGIN: none
         UCX_MEMTYPE_CACHE: 'n'
         UCX_MEMTYPE_REG_WHOLE: 'n'
-      args:
+        UCX_RCACHE_MAX_UNRELEASED: '1024'
+        UCX_TCP_AF_PRIO: inet
+        UCX_NET_DEVICES: '@fabric.rdma-device-ports'
+      args: &prefill_args
         served-model-name: moonshotai/Kimi-K3.1-Pro
         trust-remote-code: true
         language-model-only: true
@@ -49,29 +85,35 @@ base:
         kv-cache-dtype: fp8
         attention-config: '{"indexer_kv_dtype":"mxfp4"}'
         mamba-ssm-cache-dtype: float32
+        mamba-cache-dtype: float32
         enable-prefix-caching: true
+        prefix-match-unit: 128
         stream-interval: 10
         enable-auto-tool-choice: true
         tool-call-parser: kimi_k3
         reasoning-parser: kimi_k3
+        enable-cumem-allocator: true
+        no-enable-flashinfer-autotune: true
         tensor-parallel-size: 8
         decode-context-parallel-size: 8
+        dcp-comm-backend: a2a
         # FlashInfer MLA native DCP needs interleave 1 on both roles; NIXL otherwise raises it to the KV block size.
         cp-kv-cache-interleave-size: 1
         enable-expert-parallel: true
         moe-backend: deep_gemm_mega_moe
-        all2all-backend: flashinfer_nvlink_one_sided
-        gpu-memory-utilization: 0.92
+        gpu-memory-utilization: 0.95
         max-num-seqs: 32
-        max-num-batched-tokens: 16384
-        # 128 GiB of host DRAM per GPU, the upstream recipe's tested GB300 prefill tier.
-        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda"},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":137438953472,"lazy_offload":false}}]}}'
-        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","attention_backend":"FLASHINFER_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[4,8,12,16,20,24,32,40,48,64,80,96,128,160,256,384,512,640,768,896,1024,1152,1280,1408,1536,1664,1792,1920,2048,2304,2560,2816,3072,3328,3584,3840,4096,4608,5120,5632,6144,6656,7168,7680,8192]}'
+        max-cudagraph-capture-size: 8192
+        kv-transfer-config: &kv_transfer '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
+        speculative-config: &spec '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","attention_backend":"FLASHINFER_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
     decode:
       nodes: 2
       workers: 1
       gpus: 8
-      env: *worker_env
+      env:
+        <<: *worker_env
+        VLLM_ENABLE_GEMM_RS: '0'
       args:
         served-model-name: moonshotai/Kimi-K3.1-Pro
         trust-remote-code: true
@@ -80,22 +122,31 @@ base:
         kv-cache-dtype: fp8
         attention-config: '{"indexer_kv_dtype":"mxfp4"}'
         mamba-ssm-cache-dtype: float32
+        mamba-cache-dtype: float32
         enable-prefix-caching: true
+        prefix-match-unit: 128
         stream-interval: 10
         enable-auto-tool-choice: true
         tool-call-parser: kimi_k3
         reasoning-parser: kimi_k3
+        enable-cumem-allocator: true
+        no-enable-flashinfer-autotune: true
         tensor-parallel-size: 8
         decode-context-parallel-size: 8
+        dcp-comm-backend: a2a
         cp-kv-cache-interleave-size: 1
-        gpu-memory-utilization: 0.92
-        max-num-seqs: 128
-        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
-        kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda"}'
-        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","attention_backend":"FLASHINFER_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        # The fused CuTe DSL decode path; ReplaySSM replays the KDA state for rejected drafts.
+        additional-config: '{"decode_backend":"latency_specialized"}'
+        use-replayssm: true
+        gpu-memory-utilization: 0.95
+        max-num-seqs: 64
+        compilation-config: '{"cudagraph_capture_sizes":[5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100,105,110,115,120,125,130,135,140,145,150,155,160,165,170,175,180,185,190,195,200,205,210,215,220,225,230,235,240,245,250,255,260,265,270,275,280,285,290,295,300,305,310,315,320]}'
+        max-cudagraph-capture-size: 320
+        kv-transfer-config: *kv_transfer
+        speculative-config: *spec
   sbatch_directives:
     mem: '0'
-    cpus-per-task: '72'
+    cpus-per-task: '144'
   srun_options:
     mem: '0'
     container-remap-root: ''
@@ -107,11 +158,7 @@ base:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
-override_1p3d:
-  roles:
-    decode:
-      nodes: 6
-      workers: 3
+override_1p1d: {}
 
 override_1p2d:
   roles:
@@ -119,20 +166,68 @@ override_1p2d:
       nodes: 4
       workers: 2
 
-override_2p3d:
+override_1p3d:
   roles:
-    prefill:
-      nodes: 4
-      workers: 2
     decode:
       nodes: 6
       workers: 3
 
-override_3p4d:
+override_1p2d_mns256:
+  roles:
+    decode:
+      nodes: 4
+      workers: 2
+      args: &decode_mns256
+        max-num-seqs: 256
+        max-num-batched-tokens: 1280
+        compilation-config: '{"cudagraph_capture_sizes":[5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100,105,110,115,120,125,130,135,140,145,150,155,160,165,170,175,180,185,190,195,200,205,210,215,220,225,230,235,240,245,250,255,260,265,270,275,280,285,290,295,300,305,310,315,320,340,360,380,400,420,440,460,480,500,520,540,560,580,600,620,640,660,680,700,720,740,760,780,800,820,840,860,880,900,920,940,960,980,1000,1020,1040,1060,1080,1100,1120,1140,1160,1180,1200,1220,1240,1260,1280]}'
+        max-cudagraph-capture-size: 1280
+
+override_1p3d_mns256:
+  roles:
+    decode:
+      nodes: 6
+      workers: 3
+      args: *decode_mns256
+
+override_hyb2_2p1d:
+  roles:
+    prefill:
+      nodes: 4
+      workers: 2
+      args: &prefill_hyb
+        max-num-batched-tokens: 16384
+    decode:
+      nodes: 4
+      gpus: 16
+      args: &decode_hyb2
+        <<: *decode_mns256
+        data-parallel-size: 2
+        data-parallel-rpc-port: 13345
+        enable-expert-parallel: true
+        moe-backend: deep_gemm_mega_moe
+        gpu-memory-utilization: 0.92
+
+override_hyb2_3p1d:
   roles:
     prefill:
       nodes: 6
       workers: 3
+      args: *prefill_hyb
+    decode:
+      nodes: 4
+      gpus: 16
+      args: *decode_hyb2
+
+override_hyb4_3p1d:
+  roles:
+    prefill:
+      nodes: 6
+      workers: 3
+      args: *prefill_hyb
     decode:
       nodes: 8
-      workers: 4
+      gpus: 32
+      args:
+        <<: *decode_hyb2
+        data-parallel-size: 4

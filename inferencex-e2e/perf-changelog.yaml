@@ -12030,5 +12030,5 @@
     - agentic-coding
   description:
     - "Add Kimi-K3.1-Pro GB300 vLLM AgentX on vllm/vllm-openai:kimi-k31 with the Inferact/Kimi-K3.1-Pro-DSpark-preview draft."
-    - "Aggregated TP8 low-latency decode at concurrency 1; disaggregated TP8/DCP8 and DEP16 decode behind the vLLM Router with NIXL and Simple CPU KV offload on prefill at concurrency 16 to 336."
+    - "Aggregated TP8 low-latency decode at concurrency 1; disaggregated PD behind the vLLM Router with NIXL and a Mooncake Store KV tier on both roles: TP8/DCP8 prefill to TP8/DCP8 latency-specialized decode (1P1D-1P3D, concurrency 1 to 80), to TP8/DCP8 DP2/DP4 EP16/EP32 decode (2P1D-3P1D, concurrency 160 to 384), and DEP16 prefill to DEP16 decode (1P1D, concurrency 300 and 352)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4800
