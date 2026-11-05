@@ -36,6 +36,8 @@ base:
         MC_FORCE_MNNVL: '1'
         NCCL_MNNVL_ENABLE: '1'
         NCCL_CUMEM_ENABLE: '1'
+        # SGLang's K3 sharded MoE front has no output tile for TP16's N=1048 (k3_ar_fusion); this selects the engine's replicated fused front.
+        SGLANG_K3_SHARDED_MOE: '0'
       args:
         served-model-name: moonshotai/Kimi-K3.1-Pro
         trust-remote-code: true
@@ -86,6 +88,8 @@ base:
         MC_FORCE_MNNVL: '1'
         NCCL_MNNVL_ENABLE: '1'
         NCCL_CUMEM_ENABLE: '1'
+        # SGLang's K3 sharded MoE front has no output tile for TP16's N=1048 (k3_ar_fusion); this selects the engine's replicated fused front.
+        SGLANG_K3_SHARDED_MOE: '0'
       args:
         served-model-name: moonshotai/Kimi-K3.1-Pro
         trust-remote-code: true
