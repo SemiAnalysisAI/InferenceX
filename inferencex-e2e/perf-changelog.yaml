@@ -12043,3 +12043,13 @@
     - "Add Kimi-K3.1-Pro MXFP4 AgentX on one 8x MI355X node with SGLang (lmsysorg/sglang:dev-kimi-k31-pro-mi35x) and the DFlash2 draft at 5 draft tokens with block verification."
     - "TP8 monokernel at concurrency 1 and 4 with GPU-resident KV; TP8/DCP8 with the HiCache host tier at concurrency 8, 16, 32 and 48."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4808
+
+- config-keys:
+    - glm5.3flash-fp8-b300-sglang-agentic-mtp
+    - glm5.3flash-fp4-b300-sglang-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Add GLM-5.3-Flash FP8 (zai-org/GLM-5.3-Flash) and NVFP4 (nvidia/GLM-5.3-Flash-NVFP4) AgentX on one 8x B300 node with the digest-pinned official SGLang v0.5.22-cu130 image: TP8, EAGLE MTP 5/1/6, TRT-LLM DSA, FP8 KV and FlashInfer TRT-LLM MoE, as in the SGLang cookbook's B300 cells."
+    - "GPU-resident KV at concurrency 1/4/8/16/24/32/48 (FP8) and 4/8/16/24/32/48 (NVFP4); HiCache at concurrency 64/96 with auto-sized host pools (host-memory fraction 0.76, about 2.8 TB per node, within the 3 TB cap) instead of the cookbook's 32 GB per rank, which is smaller than the device pool, and max-running-requests 96, since SGLang otherwise resets admission to 48 under EAGLE. Engine defaults set the remaining memory, admission and CUDA graph sizes."
+    - "Acceptance comes from the glm5.3flash MTP golden curve; the shipped draft head is served as stored, with SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE off."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4710
