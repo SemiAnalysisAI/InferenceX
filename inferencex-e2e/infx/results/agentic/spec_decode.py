@@ -86,6 +86,9 @@ READERS: dict[str, Callable[[Increase], Reading]] = {
     "vllm": lambda c: _read(
         c, "vllm:spec_decode_num_accepted_tokens", "vllm:spec_decode_num_drafts"
     ),
+    "tokenspeed": lambda c: _read(
+        c, "tokenspeed:spec_decode_num_accepted_tokens", "tokenspeed:spec_decode_num_drafts"
+    ),
     "sglang": _sglang,
     # Every verification drafts a first token; deeper positions are drafted only sometimes.
     "trtllm": lambda c: _read(

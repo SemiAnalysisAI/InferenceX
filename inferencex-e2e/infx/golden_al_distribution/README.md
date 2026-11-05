@@ -33,6 +33,15 @@ SGLang MTP synthetic throughput, the connector rejects a generation role whose
 `speculative-num-steps + 1`. Manual acceptance-length settings are not needed.
 Eval-only runs remove synthetic settings and use real verification.
 
+TokenSpeed MTP recipes use the same automatic selection from
+`speculative-num-steps`, with `speculative-num-draft-tokens` equal to the step
+count plus one and `speculative-eagle-topk: 1`. The connector sets
+`synthetic-acceptance-length` and the required `sampling-backend: greedy` for
+AgentX throughput. Eval-only and fixed-sequence runs remove that length and
+select `sampling-backend: flashinfer` for real verification. TokenSpeed's
+connector accepts explicit MTP flags; other speculative algorithms and the
+JSON `speculative-config` shorthand are rejected.
+
 vLLM supports this through synthetic rejection sampling. For example, an EAGLE3 run can inject the selected YAML value through `synthetic_acceptance_length`:
 
 ```bash
@@ -104,21 +113,21 @@ The collection measures real head quality only to establish the golden curve. Ag
 
 ## Collection settings
 
-Each curve YAML records the SPEED-Bench client settings of its collection in a reserved top-level `collection` key beside the model key, and `load_curve(name).collection` returns them (`None` for a curve without the block). In `run-sweep.yml` PR sweeps, the report-only acceptance-length gate replays these settings with real verification against each speculative AgentX deployment and compares the measured AL with the golden AL; see [the speculative acceptance gate](../../../.github/workflows/README.md#speculative-acceptance-gate).
+Each curve YAML records the SPEED-Bench client settings of its collection in a reserved top-level `collection` key beside the model key, and `load_curve(name).collection` returns them (`None` for a curve without the block). Every agentic speculative eval runs the report-only acceptance-length gate first: it replays these settings with real verification on the eval's own server and compares the measured AL with the golden AL; see [the speculative acceptance gate](../evals/EVALS.md#speculative-acceptance-gate).
 
 ```yaml
 collection:
-  renderer: chat_template  # or deepseek_v4
+  renderer: chat_template  # or deepseek_v4, deepseek_v41
   modes:                   # one entry per thinking mode with AL values
     thinking_on:
       chat_template_kwargs: {enable_thinking: true}  # null when the collector passed none
       sampling: {temperature: 0.6, top_p: 0.95, top_k: 20, presence_penalty: 0.0, repetition_penalty: 1.0}
 ```
 
-- `renderer` is how the client turned each prompt into text. `chat_template` applies the served model's Hugging Face chat template to one user message, with the generation prompt and `chat_template_kwargs`. `deepseek_v4` is vLLM's tokenizer mode of that name; the gate uses the equivalent [encoder](../bench_serving/encoding_dsv4.py) in this repository, with `chat_template_kwargs` as its thinking options.
+- `renderer` is how the client turned each prompt into text. `chat_template` applies the served model's Hugging Face chat template to one user message, with the generation prompt and `chat_template_kwargs`. `deepseek_v4` and `deepseek_v41` are vLLM's tokenizer modes of those names; the gate uses the equivalent encoders in this repository ([V4](../bench_serving/encoding_dsv4.py), [V4.1](../bench_serving/encoding_dsv41.py)), with `chat_template_kwargs` as their thinking options. The V4.1 encoder is vLLM's from the week of the collection: later vLLM renders reasoning effort `high` as 75, not 50.
 - `sampling` lists every sampling parameter the requests carried, including the `repetition_penalty: 1.0` that `vllm bench serve` adds. A parameter that is not listed was not sent, so the server used its own default.
 - Everything else is the same for every collection: the 80 prompts of the SPEED-Bench Qualitative `coding` category, in the order vLLM's loader sends them, as streaming `/v1/completions` requests with `max_tokens` 4096 and no `ignore_eos`. Collections ran at different concurrencies; the gate always replays at 64, treating AL as independent of concurrency.
-- New curves must include the block. Three curves have none, so the gate lists their points as unresolved. [`deepseek-v4.1-flash__dspark__native__probabilistic-block.yaml`](deepseek-v4.1-flash__dspark__native__probabilistic-block.yaml) needs a DeepSeek V4.1 renderer before the gate can render its prompts. [`muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml`](muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml) was collected with SGLang's `bench_serving` client on its native `/generate` endpoint, which the gate's `/v1/completions` replay does not reproduce. [`glm-5.3-nvfp4__mtp__native__default-default.yaml`](glm-5.3-nvfp4__mtp__native__default-default.yaml) was collected the same way.
+- New curves must include the block; the gate skips a curve without one. [`muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml`](muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml) was collected with SGLang's `bench_serving` client on its native `/generate` endpoint, which sends no `repetition_penalty`; the gate replays the same rendered prompts and sampling on `/v1/completions`. [`glm-5.3-nvfp4__mtp__native__default-default.yaml`](glm-5.3-nvfp4__mtp__native__default-default.yaml) was collected the same way and has no block yet.
 
 ## Reproducing a collection
 
@@ -167,6 +176,7 @@ Before accepting an updated curve, reviewers should verify:
 | MiniMax-M3 | EAGLE3 (GQA, block verify) | [`minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-block.yaml`](minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-block.yaml) |
 | GLM-5.2 | MTP | [`glm-5.2-fp8__mtp__native__default-default.yaml`](glm-5.2-fp8__mtp__native__default-default.yaml) |
 | GLM-5.3 | MTP (SGLang) | [`glm-5.3-nvfp4__mtp__native__default-default.yaml`](glm-5.3-nvfp4__mtp__native__default-default.yaml) |
+| GLM-5.3-Flash | MTP | [`glm-5.3-flash__mtp__native__default-default.yaml`](glm-5.3-flash__mtp__native__default-default.yaml) |
 | Qwen3.8-Flash-Next | MTP (native) | [`qwen3.8-flash-next-fp8__mtp__native__default-default.yaml`](qwen3.8-flash-next-fp8__mtp__native__default-default.yaml) |
 | Muse Spark Open | DFlash2 | [`muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml`](muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml) |
 
