@@ -6880,7 +6880,7 @@ glm5.3flash-fp8-gb200-sglang-agentic-mtp:
     agentic-coding:
     - search-space:
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16], srt-recipe: agentic.yaml }
-    - dram-utilization: 0.61
+    - dram-utilization: 0.569
       search-space:
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [24, 32], srt-recipe: agentic.yaml }
 
@@ -6897,7 +6897,7 @@ glm5.3flash-fp4-gb200-sglang-agentic-mtp:
     agentic-coding:
     - search-space:
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16], srt-recipe: agentic.yaml }
-    - dram-utilization: 0.705
+    - dram-utilization: 0.652
       search-space:
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [24, 32, 40, 48], srt-recipe: agentic.yaml }
 
