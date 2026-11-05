@@ -12036,6 +12036,41 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4796
 
 - config-keys:
+    - kimik3.1-fp4-mi355x-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi-K3.1-Pro MXFP4 AgentX on one 8x MI355X node with SGLang (lmsysorg/sglang:dev-kimi-k31-pro-mi35x) and the DFlash2 draft at 5 draft tokens with block verification."
+    - "TP8 monokernel at concurrency 1 and 4 with GPU-resident KV; TP8/DCP8 with the HiCache host tier at concurrency 8, 16, 32 and 48."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4808
+
+- config-keys:
+    - kimik3.1-fp4-b200-dynamo-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi K3.1 Pro B200 SGLang AgentX on lmsysorg/sglang:dev-kimi-k31-pro: one aggregated worker over two nodes, TP16 with DCP16, no KV offload, concurrency 1, 4, 8, 14, 24, 32, 48, 56, 72, 80 with DFLASH and 96 without speculation."
+    - "DFLASH uses RadixArk/Kimi-K3.1-Dflash2-Preview with block verification, 7 draft tokens through concurrency 14 and 4 above."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4801
+
+- config-keys:
+    - glm5.3flash-fp8-mi325x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GLM-5.3-Flash native FP8 AgentX on MI325X with SGLang v0.5.22 ROCm10 mi30x (pinned by digest): TP4/EP4, BF16 KV, TileLang DSA, AITER MoE, MTP 5/1/6, 1M context."
+    - "GPU-resident KV at concurrency 1, 2, 4, 8 and 12; HiCache host tier (fraction 0.60, direct I/O, page_first_direct) at concurrency 16, 24 and 32."
+    - "Stage checkpoint revision 46a050bec13002ad29ee795c16e61cf4fa3c4a9c in the shared Hugging Face cache under a lock with a 400 GB disk budget."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4722
+
+- config-keys:
+    - kimik3.1-fp4-gb200-dynamo-sglang-agentic-dflash-agg
+    - kimik3.1-fp4-gb200-dynamo-sglang-agentic-dflash-disagg
+  description:
+    - "Add Kimi K3.1 Pro day-0 SGLang AgentX points on GB200: aggregated TP16 DCP16 and 1P1D TP16 DCP16, with RadixArk DFLASH block verification and HiCache CPU offload."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4804
+
+- config-keys:
     - qwen3.8next-fp4-mi355x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
