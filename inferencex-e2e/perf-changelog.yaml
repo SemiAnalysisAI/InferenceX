@@ -12069,3 +12069,12 @@
   description:
     - "Add Kimi K3.1 Pro day-0 SGLang AgentX points on GB200: aggregated TP16 DCP16 and 1P1D TP16 DCP16, with RadixArk DFLASH block verification and HiCache CPU offload."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4804
+
+- config-keys:
+    - glm5.3flash-fp8-gb200-sglang-agentic-mtp
+    - glm5.3flash-fp4-gb200-sglang-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Add GLM-5.3-Flash FP8 (zai-org/GLM-5.3-Flash) and NVFP4 (nvidia/GLM-5.3-Flash-NVFP4) AgentX on one GB200 tray with pinned lmsysorg/sglang:v0.5.22-cu130, using the SGLang cookbook GB200 Low Latency recipe: TP4, FP8 KV with TRT-LLM DSA, flashinfer_trtllm MoE, EAGLE MTP 5/1/6 and auto parsers."
+    - "No KV offload at concurrency 1, 4, 8, 12 and 16; HiCache L1 + L2 with SGLang auto-sized host pools at concurrency 24 and 32 for FP8 and 24, 32, 40 and 48 for NVFP4. Native 1M context, shared golden-AL curve for throughput, real acceptance for evals."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4718
