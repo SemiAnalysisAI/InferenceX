@@ -52,8 +52,8 @@ base:
         gpu-memory-utilization: 0.90
         stream-interval: 10
         disable-uvicorn-access-log: true
-        # TOTAL_CPU_DRAM_GB split across the 8 TP ranks.
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":322122547200,"lazy_offload":false}}'
+        # 224.875 GB per rank; TOTAL_CPU_DRAM_GB (1799) split across the 8 TP ranks.
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":224875000000,"lazy_offload":false}}'
       env:
         VLLM_ROCM_USE_AITER: '1'
         VLLM_ROCM_USE_AITER_MOE_SITUV2: '1'
@@ -77,13 +77,13 @@ base:
         VLLM_USE_DIRECT_DCP_KV_GATHER: '0'
         # The K3.1 policy and MODELS.md keep all-reduce in BF16, so quick reduce must not quantize.
         VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: NONE
-        # MXFP8 MoE stage 2, as the apex-1104 sweep runs it. Only MoE calls above
-        # 1024 tokens take this path, so the conc-1 decode is unaffected.
+        # MXFP8 MoE stage 2. Only MoE calls above 1024 tokens take this path,
+        # so the conc-1 decode is unaffected.
         AITER_FLYDSL_STAGE2_FP8: '1'
         AITER_BF16_FP8_MOE_BOUND: '0'
-        # Reclaim scratch between dispatches; the throughput points need the headroom.
-        HSA_NO_SCRATCH_RECLAIM: '0'
-        HSA_SCRATCH_SINGLE_LIMIT_ASYNC: '25769803776'
+        # MEC firmware 38 on this cluster cannot reclaim RCCL scratch, and the blocking
+        # release hangs the collective; vLLM's K3 recipe asks for this below firmware 177.
+        HSA_NO_SCRATCH_RECLAIM: '1'
         VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1200'
         PYTHONNOUSERSITE: '1'
         VLLM_ENGINE_READY_TIMEOUT_S: '7200'
@@ -94,7 +94,8 @@ base:
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
-# Admission and graph sizes follow the apex-1104 sweep: below CONC from c4 to c32, CONC at c1 and c48.
+# max-num-seqs stays below CONC from c4 to c32, and equals it at c1 and c48. The capture list is
+# the decode sizes, multiples of one plus the draft token count, then the prefill ladder.
 # Throughput runs replace block rejection with the golden acceptance length.
 override_gpu_kv_c1:
   roles:
@@ -106,10 +107,8 @@ override_gpu_kv_c1:
         speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":7,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         kv-transfer-config: null
       env:
-        # This point captures only the decode sizes, so breakable graphs buy nothing, and
-        # its single sequence leaves enough room to keep scratch allocated.
+        # This point captures only the decode sizes, so breakable graphs buy nothing.
         VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
-        HSA_NO_SCRATCH_RECLAIM: '1'
   benchmark:
     env:
       CONC: '1'
@@ -126,7 +125,7 @@ override_dram_c4:
     env:
       CONC: '4'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '2577'
+      TOTAL_CPU_DRAM_GB: '1799'
 
 override_dram_c10:
   roles:
@@ -139,33 +138,33 @@ override_dram_c10:
     env:
       CONC: '10'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '2577'
+      TOTAL_CPU_DRAM_GB: '1799'
 
 override_dram_c16:
   roles:
     agg:
       args:
         max-num-seqs: 10
-        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":16384,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[6,12,18,24,30,36,42,48,54,60,64,96,128,160,192,224,256,288,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240,12288,14336,16384]}'
-        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":5,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":16384,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[5,10,15,20,25,30,35,40,45,50,64,96,128,160,192,224,256,288,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240,12288,14336,16384]}'
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:
       CONC: '16'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '2577'
+      TOTAL_CPU_DRAM_GB: '1799'
 
 override_dram_c24:
   roles:
     agg:
       args:
         max-num-seqs: 16
-        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":16384,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[6,12,18,24,30,36,42,48,54,60,66,72,78,84,90,96,128,160,192,224,256,288,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240,12288,14336,16384]}'
-        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":5,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":16384,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,96,128,160,192,224,256,288,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240,12288,14336,16384]}'
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:
       CONC: '24'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '2577'
+      TOTAL_CPU_DRAM_GB: '1799'
 
 override_dram_c32:
   roles:
@@ -180,7 +179,7 @@ override_dram_c32:
     env:
       CONC: '32'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '2577'
+      TOTAL_CPU_DRAM_GB: '1799'
 
 override_dram_c48:
   roles:
@@ -195,5 +194,5 @@ override_dram_c48:
     env:
       CONC: '48'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '2577'
+      TOTAL_CPU_DRAM_GB: '1799'
 
