@@ -106,6 +106,7 @@ env:
   SALLOC_TIME_LIMIT: ${{ inputs.scenario-type == 'video-generation' && '150' || '480' }}
   IS_MULTINODE: 'false'
   REQUIRE_POWER: ${{ inputs.require-power && '1' || '0' }}
+  CPU_POWER: ${{ fromJSON(inputs.config)['cpu-power'] && '1' || '0' }}
   RANDOM_RANGE_RATIO: 0.8
   HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
