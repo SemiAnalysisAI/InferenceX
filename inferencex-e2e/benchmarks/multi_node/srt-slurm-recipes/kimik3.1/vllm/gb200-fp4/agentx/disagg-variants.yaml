@@ -4,14 +4,6 @@ base:
   identity:
     model: {}
     container: {}
-    frameworks:
-      dynamo: "1.6.0.dev20261023"
-
-  dynamo:
-    install: true
-    source:
-      # ai-dynamo/dynamo#18124: its frontend loads the kimi_k31 tokenizer and its SGLang args allow DSA DCP decode.
-      rev: "4b0850752a7370aa20706095558616488b5cef35"
 
   slurm:
     time_limit: "6:00:00"
@@ -28,23 +20,17 @@ base:
     # Identical prefixes must hash to identical block keys run-to-run.
     PYTHONHASHSEED: "0"
 
-  services:
-    - name: etcd
-      type: etcd
-    - name: nats
-      type: nats
-      options:
-        max_payload_mb: 32
-
   frontend:
-    type: dynamo
+    type: vllm-router
     enable_multiple_frontends: false
     args:
-      router-mode: kv
-      router-session-affinity-ttl-secs: 14400
-    env:
-      DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: "3600"
-      HF_HUB_CACHE: "/hf_hub_cache"
+      policy: consistent_hash
+      prometheus-host: 127.0.0.1
+      prometheus-port: 18000
+      request-timeout-secs: 14400
+      disable-retries: true
+
+  setup_script: vllm-router.sh
 
   engine:
     type: vllm
@@ -55,7 +41,6 @@ base:
       nodes: 4
       workers: 1
       gpus: 16
-      kv_events: true
       env: &kimi_env
         VLLM_ENGINE_READY_TIMEOUT_S: "3600"
         VLLM_RPC_TIMEOUT: "600000"
@@ -86,14 +71,14 @@ base:
         attention-config: '{"indexer_kv_dtype":"mxfp4"}'
         mamba-ssm-cache-dtype: float32
         enable-prefix-caching: true
-        dyn-tool-call-parser: kimi_k3
-        dyn-reasoning-parser: kimi_k3
+        enable-auto-tool-choice: true
+        tool-call-parser: kimi_k3
+        reasoning-parser: kimi_k3
         speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"method":"dspark","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
     decode:
       nodes: 4
       workers: 1
       gpus: 16
-      kv_events: true
       env:
         <<: *kimi_env
       args:
@@ -112,8 +97,9 @@ base:
         attention-config: '{"indexer_kv_dtype":"mxfp4"}'
         mamba-ssm-cache-dtype: float32
         enable-prefix-caching: true
-        dyn-tool-call-parser: kimi_k3
-        dyn-reasoning-parser: kimi_k3
+        enable-auto-tool-choice: true
+        tool-call-parser: kimi_k3
+        reasoning-parser: kimi_k3
         speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"method":"dspark","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
 
   sbatch_directives:
@@ -133,9 +119,6 @@ base:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
       AIPERF_HTTP_TCP_USER_TIMEOUT: "900000"
-      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
-      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
-      AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: "14400"
 
 # Admission is 2x CONC on both roles; decode graphs capture max-num-seqs x (1 + 4 draft tokens).
 override_1p1d_tp16_c16:

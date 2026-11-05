@@ -7060,8 +7060,8 @@ kimik3.1-fp4-gb200-dynamo-vllm-agentic-dspark-tp16-disagg:
   model-prefix: kimik3.1
   runner: cluster:gb200-nv
   precision: fp4
-  framework: dynamo-vllm
-  router: { name: dynamo-router, version: "4b0850752a7370aa20706095558616488b5cef35" }
+  framework: vllm
+  router: { name: vllm-router, version: "0.1.14" }
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true

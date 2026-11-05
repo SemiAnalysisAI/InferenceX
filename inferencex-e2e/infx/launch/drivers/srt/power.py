@@ -47,14 +47,16 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
                 agentx=True,
             ),
             PowerRule(
-                Match(any_of("kimik3.1"), any_of("fp4"), any_of("dynamo-vllm"), agentic=True),
+                Match(
+                    any_of("kimik3.1"), any_of("fp4"), any_of("dynamo-vllm", "vllm"), agentic=True
+                ),
                 agentx=True,
             ),
             PowerRule(Match(frameworks=any_of("dynamo-sglang"), agentic=False), agentx=False),
         ),
         error="dcgm-power requires dynamo-sglang",
         agentic_error=(
-            "AgentX dcgm-power requires GLM-5.2 FP4 dynamo-sglang or Kimi-K3.1 FP4 dynamo-vllm"
+            "AgentX dcgm-power requires GLM-5.2 FP4 dynamo-sglang or Kimi-K3.1 FP4 dynamo-vllm or vllm"
         ),
     ),
     ("gb300-nv", LaunchPath.SRT_MULTI): PowerLane(
