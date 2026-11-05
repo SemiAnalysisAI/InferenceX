@@ -11774,4 +11774,5 @@
   scenario-type: [agentic-coding]
   description:
     - "Add native FP8 GLM-5.3-Flash on H200 using the official pinned SGLang v0.5.22 image, Hopper TP8/EP8 TileLang DSA and DeepGemm MoE, embedded EAGLE MTP 5/1/6, and the full AgentX concurrency sweep."
+    - "Use eager prefill with decode CUDA graphs retained, as on H100, after a CUDA misaligned-address fault during ~336k-token single-request replay at c1."
   pr-link: "https://github.com/SemiAnalysisAI/InferenceX/pull/4719"
