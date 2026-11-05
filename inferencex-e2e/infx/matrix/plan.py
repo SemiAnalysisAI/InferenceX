@@ -403,6 +403,12 @@ def build_plan(
                     raise ValueError(f"retired configs still exist in head: {still_active}")
                 continue
             all_configs = get_config_keys_from_master(entry.config_keys, master_config)
+            video = [c for c in all_configs if "video-generation" in master_config[c]["scenarios"]]
+            if video and entry.scenario_type is None:
+                raise ValueError(
+                    "add scenario-type: [video-generation] to the changelog entry; "
+                    f"without it these video configs plan no jobs: {video}"
+                )
             resolved_entries.append((entry, all_configs))
 
         if has_append_only:

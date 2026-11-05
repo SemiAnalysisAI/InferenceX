@@ -34,6 +34,17 @@ def test_video_generation_and_smoke_keep_one_server_job(master):
         validate_matrix([{**row, "conc-list": [1, 1]}])
 
 
+def test_changelog_entry_for_a_video_config_must_name_video_generation(master, monkeypatch):
+    from infx.matrix import plan
+
+    monkeypatch.setattr(plan, "load_config_files", lambda *_, **__: master)
+    monkeypatch.setattr(plan, "load_runner_file", lambda *_: RUNNERS)
+    entry = {"config-keys": ["video"], "description": ["Add a video deployment"],
+             "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1"}
+    with pytest.raises(ValueError, match=r"scenario-type: \[video-generation\].*\['video'\]"):
+        plan.build_plan([entry], base_ref="base", head_ref="head", config_files=["configs/master.yaml"])
+
+
 def test_video_cannot_upload_without_a_renderable_recipe_fingerprint(master, tmp_path):
     [row] = generate_config_matrix(["video"], master, RUNNERS, scenario_types=VIDEO)
     with pytest.raises(ValueError, match="serve.yaml"):
