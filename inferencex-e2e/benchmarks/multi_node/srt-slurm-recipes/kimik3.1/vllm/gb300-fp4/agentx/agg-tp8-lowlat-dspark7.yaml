@@ -1,7 +1,5 @@
 schema: 2
 name: kimik3.1-gb300-agg-tp8-lowlat-dspark7
-dynamo:
-  install: false
 resources:
   gpu_type: gb300
   gpus_per_node: 4
@@ -55,7 +53,6 @@ telemetry:
   collector_join_timeout_seconds: 12
 benchmark:
   env:
-    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
   placement:
     node: head

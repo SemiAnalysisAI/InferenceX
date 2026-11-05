@@ -1,42 +1,21 @@
 schema: 2
 name: kimik3.1-gb300-disagg-tep8-dep16
-identity:
-  frameworks:
-    dynamo: 1.7.0.dev20261030
-dynamo:
-  install: true
-  source:
-    # ai-dynamo/dynamo#18124: its frontend loads the kimi_k31 tokenizer and its SGLang args allow DSA DCP decode.
-    rev: "4b0850752a7370aa20706095558616488b5cef35"
 resources:
   gpu_type: gb300
   gpus_per_node: 4
 health_check:
   max_attempts: 720
   interval_seconds: 10
-services:
-- name: etcd
-  type: etcd
-  placement:
-    node: infra
-- name: nats
-  type: nats
-  placement:
-    node: infra
-  options:
-    max_payload_mb: 32
 frontend:
-  type: dynamo
+  type: vllm-router
   enable_multiple_frontends: false
   args:
-    router-mode: kv
-    router-session-affinity-ttl-secs: 14400
-  env:
-    HF_HOME: /hf_hub_cache
-    HF_HUB_CACHE: /hf_hub_cache
-    DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: '3600'
-    DYN_TOKENIZER_CACHE_BYTES: '8589934592'
-    DYN_TCP_REQUEST_TIMEOUT: '120'
+    policy: consistent_hash
+    prometheus-host: 127.0.0.1
+    prometheus-port: 18000
+    request-timeout-secs: 14400
+    disable-retries: true
+setup_script: vllm-router.sh
 engine:
   type: vllm
   connector: null
@@ -46,7 +25,6 @@ roles:
     nodes: 6
     workers: 3
     gpus: 8
-    kv_events: true
     env: &worker_env
       HF_HOME: /hf_hub_cache
       HF_HUB_CACHE: /hf_hub_cache
@@ -54,11 +32,6 @@ roles:
       VLLM_SSM_CONV_STATE_LAYOUT: DS
       VLLM_ENGINE_READY_TIMEOUT_S: '3600'
       VLLM_RPC_TIMEOUT: '600000'
-      DYN_REQUEST_PLANE: tcp
-      DYN_TCP_REQUEST_TIMEOUT: '120'
-      ETCD_LEASE_TTL: '600'
-      DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: '1024'
-      DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT: '1024'
       NCCL_CUMEM_ENABLE: '1'
       NCCL_MNNVL_ENABLE: '1'
       NCCL_NVLS_ENABLE: '1'
@@ -74,8 +47,9 @@ roles:
       mamba-ssm-cache-dtype: float32
       enable-prefix-caching: true
       stream-interval: 10
-      dyn-tool-call-parser: kimi_k3
-      dyn-reasoning-parser: kimi_k3
+      enable-auto-tool-choice: true
+      tool-call-parser: kimi_k3
+      reasoning-parser: kimi_k3
       tensor-parallel-size: 8
       enable-expert-parallel: true
       moe-backend: deep_gemm_mega_moe
@@ -101,8 +75,9 @@ roles:
       mamba-ssm-cache-dtype: float32
       enable-prefix-caching: true
       stream-interval: 10
-      dyn-tool-call-parser: kimi_k3
-      dyn-reasoning-parser: kimi_k3
+      enable-auto-tool-choice: true
+      tool-call-parser: kimi_k3
+      reasoning-parser: kimi_k3
       tensor-parallel-size: 1
       data-parallel-size: 16
       data-parallel-rpc-port: 13345
@@ -129,7 +104,4 @@ benchmark:
   placement:
     node: head
   env:
-    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
-    AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
-    AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: '14400'
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
