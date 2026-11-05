@@ -12030,4 +12030,4 @@
   description:
     - "Add Kimi-K3.1-Pro MXFP4 AgentX on one 8x MI355X node with SGLang (lmsysorg/sglang:dev-kimi-k31-pro-mi35x) and the DFlash2 draft at 5 draft tokens with block verification."
     - "TP8 monokernel at concurrency 1 and 4 with GPU-resident KV; TP8/DCP8 with the HiCache host tier at concurrency 8, 16, 32 and 48."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4823
