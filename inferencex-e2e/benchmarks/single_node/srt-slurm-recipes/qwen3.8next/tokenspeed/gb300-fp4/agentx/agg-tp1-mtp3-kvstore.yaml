@@ -65,7 +65,6 @@ roles:
       kv-cache-dtype: bfloat16
       gpu-memory-utilization: 0.88
       max-num-seqs: 96
-      prefix-granularity: 64
       chunked-prefill-size: 16384
       max-prefill-tokens: 16384
       speculative-algorithm: MTP
