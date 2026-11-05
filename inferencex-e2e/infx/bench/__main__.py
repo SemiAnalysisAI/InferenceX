@@ -13,7 +13,7 @@ COMMANDS = {
     "fixed-seq": "infx.bench.fixed_seq",
     "agentic": "infx.bench.agentic.run",
     "eval": "infx.bench.eval",
-    "speedbench-al": "infx.bench.speedbench_al",
+    "al-gate": "infx.bench.al_gate",
 }
 
 
