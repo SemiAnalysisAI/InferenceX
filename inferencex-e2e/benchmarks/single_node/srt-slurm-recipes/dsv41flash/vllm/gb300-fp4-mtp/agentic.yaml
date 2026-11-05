@@ -56,7 +56,6 @@ zip_override_tp4:
         attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV41","indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
         engram-config: '{"cpu_offload":true,"use_thp":true}'
         kernel-config: '{"enable_flashinfer_autotune":true}'
-        # Specialized decode: the SM103 latency-specialized TP4 decode executor.
         additional-config: '{"decode_backend":"latency_specialized"}'
         max-num-seqs: [1, 8, 16, 64, 64, 64, 64]
         # Keeps decode batches small; max-num-seqs still sizes the runner and graphs.
@@ -102,12 +101,12 @@ zip_override_dep4:
         prefill-schedule-interval: 96
         max-num-batched-tokens: 65536
         # gpu-memory-utilization sizing reserves this prefill budget's activation peak and leaves too little KV.
-        kv-cache-memory: [25769803776, 30064771072, 34359738368, 42949672960, 51539607552, 60129542144, 77309411328, 103079215104, 120259084288, 137438953472]
+        kv-cache-memory-bytes: [25769803776, 30064771072, 34359738368, 42949672960, 51539607552, 60129542144, 77309411328, 103079215104, 120259084288, 137438953472]
         # A cold long prompt on one DP rank would otherwise stall the other ranks' decode for a full budget step.
         long-prefill-token-threshold: 8192
         compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048,2304,2560,2816,3072,3328,3584,3840,4096]}'
         max-cudagraph-capture-size: 8190
-        # Binds each DP rank's EngineCore and worker to its GPU's NUMA node.
+        # vLLM's automatic mode starts unbound on these hosts; GPUs 0-1 sit on NUMA node 0, GPUs 2-3 on node 1.
         numa-bind: true
         numa-bind-nodes: [[0, 0, 1, 1]]
       env:

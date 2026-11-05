@@ -25,7 +25,7 @@ FRAMEWORKS = ("vllm",)
 
 # Server arguments a layer benchmark does not apply: artifacts it never loads (weights,
 # tokenizer and the parsers built on it, draft model), the parallel layout (a case's own),
-# the KV tiers and prefix cache of a long-running server, and the frontend.
+# the KV tiers, prefix cache and NUMA placement of a long-running server, and the frontend.
 _NOT_APPLIED = {"model", "tokenizer", "tokenizer-mode", "reasoning-parser", "tool-call-parser",
                 "enable-auto-tool-choice", "speculative-config", "served-model-name", "load-format",
                 "safetensors-load-strategy", "skip-tokenizer-init", "tensor-parallel-size",
@@ -34,7 +34,7 @@ _NOT_APPLIED = {"model", "tokenizer", "tokenizer-mode", "reasoning-parser", "too
                 "distributed-executor-backend", "kv-transfer-config", "kv-events-config",
                 "enable-prefix-caching", "prefix-match-unit", "enable-cumem-allocator",
                 "gpu-memory-utilization", "kv-cache-memory-bytes", "max-num-seqs", "max-model-len",
-                "enforce-eager"}
+                "enforce-eager", "numa-bind", "numa-bind-nodes", "numa-bind-cpus"}
 
 
 @functools.cache
