@@ -978,3 +978,23 @@ def test_an_eval_server_verifies_for_real(tmp_path: Path) -> None:
     overrides = build_overrides(recipe, "dynamo-vllm", env, golden_dir=tmp_path / "absent")
     real = apply_native(recipe, overrides)["roles"]["agg"]["args"]
     assert json.loads(real["speculative-config"]) == {**spec, "rejection_sample_method": "block"}
+
+
+@pytest.mark.parametrize("eval_only", ["false", "true"])
+def test_synthetic_throughput_drops_vllm_parsers(golden_dir: Path, eval_only: str) -> None:
+    recipe = vllm_recipe("dspark", draft_sample_method="probabilistic")
+    parsers = {
+        "enable-auto-tool-choice": True,
+        "tool-call-parser": "kimi_k3",
+        "reasoning-parser": "kimi_k3",
+    }
+    recipe["roles"]["agg"]["args"].update(parsers, **{"kv-cache-dtype": "fp8"})
+    env = {**ENV, "MODEL_PREFIX": "kimik3", "SPEC_DECODING": "dspark", "EVAL_ONLY": eval_only}
+    overrides = build_overrides(recipe, "vllm", env, golden_dir=golden_dir)
+    args = apply_native(recipe, overrides)["roles"]["agg"]["args"]
+    assert args["kv-cache-dtype"] == "fp8"
+    if eval_only == "true":
+        assert parsers.items() <= args.items()
+    else:
+        assert parsers.keys().isdisjoint(args)
+
