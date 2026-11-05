@@ -20,7 +20,7 @@ roles:
     # multi-protocol Mooncake build and the ionic verbs provider of the TileRT ROCm decode
     # image, tagged with the tilert version as for GLM-5; the setup script adds the tilert
     # release (--no-deps) for the TileRT KV connector.
-    container: ghcr.io/tile-ai/tilert-rocm-prefill:0.1.7
+    container: ghcr.io/tile-ai/tilert-rocm-prefill:0.1.7@sha256:8a88e2aa51105facd103217b0dc353258f3fc9368318c3bb62f0400bb8dd1ed5
     nodes: 1
     workers: 1
     gpus: 4

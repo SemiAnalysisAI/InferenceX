@@ -1003,7 +1003,7 @@ dsv41flash-fp4-mi355x-tilert-agentic-dspark:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "PREFILL_IMAGE=ghcr.io/tile-ai/tilert-rocm-prefill:0.1.7"
+          - "PREFILL_IMAGE=ghcr.io/tile-ai/tilert-rocm-prefill:0.1.7@sha256:8a88e2aa51105facd103217b0dc353258f3fc9368318c3bb62f0400bb8dd1ed5"
         decode:
           num-worker: 1
           tp: 8
