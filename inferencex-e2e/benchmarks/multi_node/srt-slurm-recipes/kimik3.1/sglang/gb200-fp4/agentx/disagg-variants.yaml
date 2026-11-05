@@ -16,6 +16,9 @@ base:
     install: false
     request_plane: tcp
     event_plane: zmq
+  # The DFlash2 draft is read from the shared Hub cache.
+  environment:
+    HF_HUB_CACHE: /hf_hub_cache
   # Tachometer's per-node exporters slow decode steps and add host memory;
   # InferenceX does not read its output.
   observability:
