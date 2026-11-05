@@ -56,9 +56,9 @@ def _without(block: dict[str, Any], path: tuple[str, ...]) -> dict[str, Any]:
 
 def _concrete_recipes(entry: Mapping[str, Any], root: Path) -> list[dict[str, Any]]:
     """Render the row's bound srt recipe, minus the fields that vary per point or run."""
-    power_port = EXPORTER_PORT if entry.get("power") else None
+    gpu_power = EXPORTER_PORT if entry.get("power") else None
     _, recipe = bound_variant(
-        entry, point_environment(entry), root, expand=expand_variants, power_port=power_port
+        entry, point_environment(entry), root, expand=expand_variants, gpu_power=gpu_power
     )
     for path in RECIPE_EXCLUDED:
         recipe = _without(recipe, path)
