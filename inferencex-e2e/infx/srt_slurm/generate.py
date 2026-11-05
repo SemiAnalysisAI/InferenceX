@@ -26,9 +26,11 @@ from infx.srt_slurm.synthetic_acceptance import build_overrides, selected_recipe
 from infx.srt_slurm.video import prepare as prepare_video
 from infx.srt_slurm.workload import (
     CpuPowerSource,
+    GpuPower,
     bind_multinode,
     check_setup_script,
     resolve_fabric,
+    selects_dedicated_discovery,
 )
 
 if TYPE_CHECKING:
@@ -133,20 +135,19 @@ def _binder_inputs(
     environment: Mapping[str, str],
     placement: tuple[str, Cluster] | None,
     root: Path,
-) -> tuple[int | None, str | None, dict[str, str]]:
-    """The DCGM exporter port, CPU exporter source and AgentX client env the launcher binds a
+) -> tuple[GpuPower | None, str | None, dict[str, str]]:
+    """The GPU power telemetry, CPU exporter source and AgentX client env the launcher binds a
     point with; a single-node point gets only the CPU exporter source.
 
     Raises ``ValueError`` when they depend on a cluster the runner label does not single out,
     or the cluster's lanes refuse the point.
     """
-    agentic = environment["IS_AGENTIC"] == "1"
     single_node = "prefill" not in point
     cpu_power = bool(point.get("cpu-power"))
-    binds = (cpu_power or placement is not None) if single_node else agentic or point.get("power")
-    if not binds:
-        return None, None, {}
     if placement is None:
+        multinode_binds = environment["IS_AGENTIC"] == "1" or point.get("power")
+        if not (cpu_power if single_node else multinode_binds):
+            return None, None, {}
         raise ValueError(
             f"runner {point['runner']!r} must schedule on one cluster to bind the cluster's "
             "power telemetry and AgentX client paths"
@@ -170,7 +171,15 @@ def _binder_inputs(
     try:
         path = launch_path(cluster.id, request)
         lane = lanes.srt_lane(cluster.id, path)
-        decision = power.decide_power(cluster.id, path, request)
+        decision = power.decide_power(
+            cluster.id,
+            path,
+            srt,
+            request,
+            lambda: selects_dedicated_discovery(
+                str(root / point["srt-recipe"]), agentic=request.is_agentic, root=root
+            ),
+        )
         return config.binder_inputs(cluster, srt, lane, request, decision)
     except LaunchError as error:
         raise ValueError(f"cluster {cluster.id!r}: {error}") from error
@@ -182,14 +191,14 @@ def bound_variant(
     root: Path,
     *,
     expand: Callable[..., list[tuple[str | None, dict[str, Any]]]] = selected_recipes,
-    power_port: int | None = None,
+    gpu_power: GpuPower | None = None,
     cpu_power_source: CpuPowerSource | None = None,
     client_env: Mapping[str, str] | None = None,
 ) -> tuple[str | None, dict[str, Any]]:
     """The variant the launcher submits for ``point``, composed and bound.
 
     Variants get the CPU exporter on ``cpu_power_source``; multi-node variants also get the
-    DCGM telemetry block on ``power_port`` and the client paths ``client_env``: the binder
+    GPU telemetry ``gpu_power`` and the client paths ``client_env``: the binder
     inputs the launcher computes. ``'@fabric.<name>'`` values stay unresolved: recipe
     fingerprints hash them as written.
     """
@@ -209,7 +218,7 @@ def bound_variant(
         environment,
         root=root,
         expand=expand,
-        power_port=power_port,
+        gpu_power=gpu_power,
         cpu_power_source=cpu_power_source,
         client_env=client_env,
     )
@@ -263,7 +272,7 @@ def generate_recipes(
 ) -> dict[str, Any]:
     """Bind every srt-slurm point of ``config_keys``; write recipes and a manifest.
 
-    A multi-node point is bound with its cluster's DCGM exporter port and AgentX client
+    A multi-node point is bound with its cluster's GPU power telemetry and AgentX client
     paths; the manifest names that cluster, the one its runner label schedules on. A runner
     label on several clusters leaves ``'@fabric.<name>'`` values as written and the
     manifest's ``cluster`` null.
@@ -290,27 +299,24 @@ def generate_recipes(
         for point in points:
             environment = point_environment(point)
             placement = _placement(inventory, point["runner"])
-            power_port, cpu_source, client_env = _binder_inputs(point, environment, placement, root)
+            gpu_power, cpu_source, client_env = _binder_inputs(point, environment, placement, root)
             fabric = _cluster_fabric(placement[1]) if placement else None
             variant, recipe = bound_variant(
                 point, environment, root,
-                power_port=power_port, cpu_power_source=cpu_source, client_env=client_env,
+                gpu_power=gpu_power, cpu_power_source=cpu_source, client_env=client_env,
             )  # fmt: skip
             if fabric is not None:
                 recipe = resolve_fabric(recipe, fabric)
             check_setup_script(recipe, root / point["srt-recipe"].partition(":")[0], root)
-            if "prefill" not in point:
-                clusters = {
-                    inventory.cluster_for(runner).id: inventory.cluster_for(runner)
-                    for runner in inventory.labels[point["runner"]]
-                }
-                for cluster in clusters.values():
-                    srt = slurm_settings(cluster).srt_slurm
-                    _apply_acceptance_and_validate(
-                        recipe, environment, point["srt-recipe"], srt.extra if srt else None
-                    )
-            else:
-                _apply_acceptance_and_validate(recipe, environment, point["srt-recipe"])
+            clusters = {
+                inventory.cluster_for(runner).id: inventory.cluster_for(runner)
+                for runner in inventory.labels[point["runner"]]
+            }
+            for cluster in clusters.values():
+                srt = slurm_settings(cluster).srt_slurm
+                _apply_acceptance_and_validate(
+                    recipe, environment, point["srt-recipe"], srt.extra if srt else None
+                )
             identity = json.dumps({"point": point, "variant": variant}, sort_keys=True)
             digest = hashlib.sha256(identity.encode()).hexdigest()[:12]
             name = f"{re.sub(r'[^A-Za-z0-9_.-]', '_', key)}-{digest}.yaml"

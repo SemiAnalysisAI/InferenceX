@@ -19,6 +19,7 @@ from infx.clusters.slurm import slurm_settings
 from infx.launch.context import LaunchError
 from infx.launch.drivers.srt.lanes import srt_time_limit
 from infx.launch.drivers.srt.recipe import HEALTH_ATTEMPTS
+from infx.srt_slurm.workload import NATIVE
 
 if TYPE_CHECKING:
     from infx.clusters import Cluster
@@ -28,7 +29,7 @@ if TYPE_CHECKING:
     from infx.launch.drivers.srt.power import PowerDecision
     from infx.launch.drivers.srt.run import SrtRun
     from infx.launch.request import SrtRequest
-    from infx.srt_slurm.workload import CpuPowerSource
+    from infx.srt_slurm.workload import CpuPowerSource, GpuPower
 
 NGINX_IMAGE = "nginx:1.27.4"
 EXPORTER_PROVENANCE = "exporter-image.sha256"
@@ -149,10 +150,6 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
     elif srt.segment_directive is not None:
         config["use_segment_sbatch_directive"] = srt.segment_directive
     exclusive = srt.single_node_exclusive if job.single_node else settings.exclusive
-    if job.cpu_power_source == "rapl" and not exclusive:
-        # RAPL_RESTORE takes the counters back host-wide, so a shared host would cut off a
-        # concurrent RAPL job's CPU samples.
-        raise LaunchError(f"cluster {cluster.id!r} reads RAPL CPU power on shared nodes")
     config["use_exclusive_sbatch_directive"] = exclusive
     directives: dict[str, str] = {}
     if settings.exclude:
@@ -191,10 +188,9 @@ def write(path: Path, config: Mapping[str, Any]) -> None:
 
 def stage_gpu_exporter(run: SrtRun, *, single_node: bool = False) -> tuple[str, str]:
     """Stage the cluster's GPU exporter image: its recipe name and the reference jobs start from."""
-    exporter = run.srt.extra.get("default_gpu_exporter")
-    if not isinstance(exporter, dict) or not exporter.get("container_image"):
-        raise LaunchError("native power requires a cluster GPU exporter")
-    image = exporter["container_image"]
+    image = run.srt.gpu_exporter_image
+    if image is None:
+        raise LaunchError("power requires a cluster GPU exporter")
     staged = run.backend.stage_image(image, helper="dcgm-exporter", single_node=single_node)
     (run.workspace / EXPORTER_PROVENANCE).write_text(f"{run.backend.image_provenance(staged)}\n")
     return image, staged.reference
@@ -297,19 +293,23 @@ def binder_inputs(
     lane: SrtLane,
     request: SrtRequest,
     decision: PowerDecision,
-) -> tuple[int | None, str | None, dict[str, str]]:
-    """The DCGM exporter port, CPU exporter source and AgentX client env a recipe is bound with.
+) -> tuple[GpuPower | None, str | None, dict[str, str]]:
+    """The GPU power telemetry, CPU exporter source and AgentX client env a recipe is bound with.
 
-    The CPU source is the cluster's CPU exporter when the point selected cpu-power. The
-    client marks power windows exactly when the launcher collects the point's AgentX power,
-    and fails invalid power when the workflow or the lane's power rule requires it.
+    GPU power is the DCGM block on the cluster's ``power-exporter-port`` where it declares one,
+    else the cluster's own GPU exporter. The CPU source is the cluster's CPU exporter when the
+    point selected cpu-power. The client marks power windows exactly when the launcher collects
+    the point's AgentX power, and fails invalid power when the workflow or the lane's power rule
+    requires it.
     """
-    port = srt.power_exporter_port if decision.dcgm else None
+    gpu_power: GpuPower | None = None
+    if decision.dcgm:
+        gpu_power = NATIVE if srt.power_exporter_port is None else srt.power_exporter_port
     cpu_source = cpu_power_source(cluster, srt, decision.cpu)
     if not request.is_agentic:
-        return port, cpu_source, {}
+        return gpu_power, cpu_source, {}
     return (
-        port,
+        gpu_power,
         cpu_source,
         {
             **agentic_client_env(cluster, srt, lane, request),
