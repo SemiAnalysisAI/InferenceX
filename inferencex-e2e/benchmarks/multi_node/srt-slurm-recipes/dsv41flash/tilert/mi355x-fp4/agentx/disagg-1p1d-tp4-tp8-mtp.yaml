@@ -62,7 +62,7 @@ roles:
            "tilert_model":"dsv41","tilert_max_seq_len":1048576,"tilert_transport":"mooncake"}}
   decode:
     engine: tilert
-    container: ghcr.io/tile-ai/tilert-rocm-decode:0.1.6
+    container: ghcr.io/tile-ai/tilert-rocm-decode:0.1.6@sha256:48c30d7636a561b4edf781ac3c7712e09fa9a0b2f1292863b72c2d8e4bcb492a
     nodes: 1
     workers: 1
     gpus: 8
@@ -83,7 +83,7 @@ roles:
       num-mtp: 5
 frontend:
   type: tilert-router
-  container_image: ghcr.io/tile-ai/tilert-rocm-decode:0.1.6
+  container_image: ghcr.io/tile-ai/tilert-rocm-decode:0.1.6@sha256:48c30d7636a561b4edf781ac3c7712e09fa9a0b2f1292863b72c2d8e4bcb492a
   enable_multiple_frontends: false
   env:
     TILERT_ROLE: router

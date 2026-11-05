@@ -980,7 +980,7 @@ glm5.3-fp8-mi355x-tilert-agentic:
 # drafts from the checkpoint's own head) over Mooncake, full 1M context; throughput
 # runs use the dsv41flash_dspark golden AL.
 dsv41flash-fp4-mi355x-tilert-agentic-dspark:
-  image: ghcr.io/tile-ai/tilert-rocm-decode:0.1.6
+  image: ghcr.io/tile-ai/tilert-rocm-decode:0.1.6@sha256:48c30d7636a561b4edf781ac3c7712e09fa9a0b2f1292863b72c2d8e4bcb492a
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds
