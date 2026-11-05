@@ -256,7 +256,7 @@ jobs:
                 path: .ci-priority
                 persist-credentials: false
 
-            - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+            - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
             - name: Classify priority criteria
               id: priority-criteria
               if: vars.PRIORITY_SCHEDULER_ENABLED == 'true' && !inputs.klaud-run
@@ -406,7 +406,7 @@ jobs:
 
             - name: Upload source identity
               if: ${{ inputs.source-pr-number != '' }}
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
               with:
                   name: source-identity
                   path: ${{ runner.temp }}/source_identity.json
@@ -414,7 +414,7 @@ jobs:
 
             - name: Upload selected video matrix
               if: ${{ steps.source-identity.outputs.video-manifest == 'true' }}
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
               with:
                   name: video-sweep-manifest
                   path: ${{ runner.temp }}/sweep_manifest.json
@@ -422,7 +422,7 @@ jobs:
 
             - name: Upload changelog artifact
               if: ${{ inputs.source-pr-number != '' }}
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
               with:
                   name: changelog-metadata
                   path: ${{ runner.temp }}/changelog_metadata.json
@@ -649,7 +649,7 @@ jobs:
               with:
                   persist-credentials: false
             # Matching the manifest too keeps one bundle in its named directory; a single match unpacks flat.
-            - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+            - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
               with:
                   pattern: '{h3-results-*,video-sweep-manifest}'
                   path: video-artifacts
@@ -759,7 +759,7 @@ jobs:
                   persist-credentials: false
 
             - name: Download results artifacts
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
               with:
                   path: ${{ env.RESULTS_DIR }}
                   pattern: results_*
@@ -774,7 +774,7 @@ jobs:
                 echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
 
             - name: Set up uv
-              uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+              uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
               with:
                   cache-dependency-glob: |
                       pyproject.toml
@@ -787,7 +787,7 @@ jobs:
                   uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked --extra workflows
                   python -m infx.workflows.calc_success_rate "$STATS_FILENAME"
 
-            - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+            - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
               with:
                   name: "run-stats"
                   path: ${{ env.STATS_FILENAME }}.json
