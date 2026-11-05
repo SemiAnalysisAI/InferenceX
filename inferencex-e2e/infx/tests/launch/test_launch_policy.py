@@ -33,14 +33,14 @@ def _multinode(**env):
 
 CASES = [
     ("gb200-nv", MULTI, "1", "glm5.2", "fp4", "dynamo-sglang", AGENTX),
-    ("gb200-nv", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", AGENTX),
+    ("gb200-nv", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", ERR),
     ("gb200-nv", MULTI, "0", "dsr1", "fp8", "dynamo-sglang", DCGM),
     ("gb200-nv", MULTI, "0", "dsv4", "fp4", "dynamo-vllm", ERR),
-    ("gb300-nv", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", AGENTX),
+    ("gb300-nv", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", ERR),
     ("gb300-nv", MULTI, "1", "glm5.2", "fp4", "dynamo-sglang", DCGM),
     ("gb300-nv", MULTI, "0", "qwen3.5", "fp8", "dynamo-trt", ERR),
     ("b300-dsxe", MULTI, "0", "dsv4", "fp4", "dynamo-vllm", ERR),
-    ("b200-nscale", NATIVE, "1", "kimik3", "fp4", "dynamo-vllm", AGENTX),
+    ("b200-nscale", NATIVE, "1", "kimik3", "fp4", "dynamo-vllm", ERR),
     ("b200-nscale", NATIVE, "1", "glm5.2", "fp4", "dynamo-sglang", AGENTX),
     ("b200-nscale", NATIVE, "0", "glm5.2", "fp4", "dynamo-sglang", ERR),
     ("b200-nscale", NATIVE, "0", "dsv4", "fp4", "dynamo-sglang", ERR),
@@ -48,7 +48,7 @@ CASES = [
     ("b200-nscale", MULTI, "1", "qwen3.5", "fp8", "dynamo-sglang", AGENTX),
     ("b200-nscale", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", ERR),
     ("b200-nscale", MULTI, "0", "dsv4", "fp4", "dynamo-vllm", ERR),
-    ("h200-dgxc", MULTI, "1", "kimik3", "fp4", "vllm", AGENTX),
+    ("h200-dgxc", MULTI, "1", "kimik3", "fp4", "vllm", ERR),
     ("h200-dgxc", MULTI, "1", "glm5.2", "fp8", "dynamo-sglang", ADAPTER),
     ("h200-dgxc", MULTI, "0", "glm5.2", "fp8", "dynamo-sglang", ERR),
     ("h200-dgxc", MULTI, "1", "dsv4", "fp8", "dynamo-sglang", ERR),
@@ -73,7 +73,7 @@ def test_power_eligibility_of_each_cluster_lane(
     assert (decision.dcgm, decision.agentx, decision.adapter) == (
         True, expected == AGENTX, expected == ADAPTER,
     )  # fmt: skip
-    assert decision.require is (prefix == "kimik3" and cluster in ("gb200-nv", "gb300-nv"))
+    assert not decision.require
     assert not decide_power(cluster, path, _multinode(**env, POWER="0")).dcgm
 
 

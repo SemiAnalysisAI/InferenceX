@@ -170,6 +170,7 @@ class SingleNodeMatrixEntry(BaseModel):
     eval_framework: str | None = Field(default=None, alias=Fields.EVAL_FRAMEWORK.value)
     eval_suite: str | None = Field(default=None, alias=Fields.EVAL_SUITE.value)
     router: ComponentMetadata | None = None
+    cpu_power: bool = Field(default=False, alias=Fields.CPU_POWER.value, strict=True)
     recipe_fingerprint: str | None = Field(
         default=None,
         alias=Fields.RECIPE_FINGERPRINT.value,
@@ -568,6 +569,8 @@ class SingleNodeSearchSpaceEntry(BaseModel):
     )
     dp_attn: bool | None = Field(default=None, alias=Fields.DP_ATTN.value)
     router: ComponentMetadata | None = None
+    # Native single-node points always measure GPU power; this adds the cluster's CPU exporter.
+    cpu_power: bool = Field(default=False, alias=Fields.CPU_POWER.value, strict=True)
     conc_start: int | None = Field(default=None, alias=Fields.CONC_START.value)
     conc_end: int | None = Field(default=None, alias=Fields.CONC_END.value)
     conc_list: list[int] | None = Field(default=None, alias=Fields.CONC_LIST.value)

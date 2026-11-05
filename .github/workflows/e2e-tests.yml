@@ -484,9 +484,24 @@ jobs:
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
             test-name: ${{ inputs.test-name }}
 
-    test-sweep-agentic-evals:
+    # Prompts for the report-only acceptance gate that agentic speculative evals run before their eval.
+    al-gate-prompts:
         needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.agentic-eval-config != '' && needs.get-jobs.outputs.agentic-eval-config != '[]' }}
+        if: >-
+            ${{
+              (needs.get-jobs.outputs.agentic-eval-config != '' && needs.get-jobs.outputs.agentic-eval-config != '[]') ||
+              (needs.get-jobs.outputs.multi-node-agentic-eval-config != '' && needs.get-jobs.outputs.multi-node-agentic-eval-config != '[]')
+            }}
+        uses: $/.github/workflows/al-gate-prompts.yml
+        secrets:
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+        with:
+            upload: true
+
+    test-sweep-agentic-evals:
+        needs: [get-jobs, al-gate-prompts]
+        # The acceptance gate is report-only: the evals run whether or not its prompts were prepared.
+        if: ${{ !cancelled() && needs.get-jobs.result == 'success' && needs.get-jobs.outputs.agentic-eval-config != '' && needs.get-jobs.outputs.agentic-eval-config != '[]' }}
         uses: $/.github/workflows/benchmark-tmpl.yml
         name: agentic eval /
         strategy:
@@ -543,8 +558,8 @@ jobs:
             test-name: ${{ inputs.test-name }}
 
     test-sweep-multi-node-agentic-evals:
-        needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.multi-node-agentic-eval-config != '' && needs.get-jobs.outputs.multi-node-agentic-eval-config != '[]' }}
+        needs: [get-jobs, al-gate-prompts]
+        if: ${{ !cancelled() && needs.get-jobs.result == 'success' && needs.get-jobs.outputs.multi-node-agentic-eval-config != '' && needs.get-jobs.outputs.multi-node-agentic-eval-config != '[]' }}
         uses: $/.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node agentic eval /
         strategy:

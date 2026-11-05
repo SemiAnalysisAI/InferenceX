@@ -18,6 +18,8 @@ RECIPE_EXCLUDED = (
     ("name",),
     ("benchmark", "concurrencies"),
     ("benchmark", "env", "CONC"),
+    ("benchmark", "env", "SPEC_ALGORITHM"),
+    ("benchmark", "env", "SPEC_DRAFT_MODEL"),
     ("telemetry", "dcgm_exporter", "port"),
 )
 BIND_ERRORS = (OSError, KeyError, TypeError, ValueError, yaml.YAMLError)
