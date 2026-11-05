@@ -1,35 +1,21 @@
 schema: 2
 
 base:
-  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-disagg
+  name: kimik3.1-fp4-gb200-sglang-agentx-disagg
   identity:
     model: {}
     container: {}
   resources:
     gpu_type: gb200
     gpus_per_node: 4
-  # The K3.1 SGLang image ships no Dynamo.
-  dynamo:
-    install: true
-    source:
-      # ai-dynamo/dynamo#18124: its frontend loads the kimi_k31 tokenizer and its SGLang args allow DSA DCP decode.
-      rev: "4b0850752a7370aa20706095558616488b5cef35"
   # Tachometer's per-node exporters slow decode steps and add host memory;
   # InferenceX does not read its output.
   observability:
     tachometer:
       enabled: false
   frontend:
-    type: dynamo
+    type: sglang-router
     enable_multiple_frontends: false
-    env:
-      PIP_BREAK_SYSTEM_PACKAGES: '1'
-    args:
-      router-mode: kv
-      active-decode-blocks-threshold: None
-      active-prefill-tokens-threshold: None
-      active-prefill-tokens-threshold-frac: None
-      router-session-affinity-ttl-secs: '3600'
   engine: sglang
   roles:
     prefill:
@@ -41,7 +27,6 @@ base:
         PYTHONUNBUFFERED: '1'
         PYTHONNOUSERSITE: '1'
         PIP_BREAK_SYSTEM_PACKAGES: '1'
-        DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
         SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
         SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '3600'
@@ -69,8 +54,8 @@ base:
         max-running-requests: 64
         weight-loader-prefetch-checkpoints: true
         model-loader-extra-config: '{"enable_multithread_load":true}'
-        dyn-reasoning-parser: kimi_k3
-        dyn-tool-call-parser: kimi_k3
+        reasoning-parser: kimi_k3
+        tool-call-parser: kimi_k3
         speculative-algorithm: DFLASH
         speculative-draft-model-path: RadixArk/Kimi-K3.1-Dflash2-Preview
         speculative-draft-kv-cache-dtype: fp8_e4m3
@@ -82,9 +67,6 @@ base:
         hicache-mem-layout: page_first_direct
         hicache-write-policy: write_back
         mamba-max-states-per-path: 1
-        # Advertised to the frontend's prefill router: a session's turns stay on one prefill worker.
-        router-mode: kv
-        router-session-affinity-ttl-secs: '3600'
         watchdog-timeout: 3600
         enable-metrics: true
     decode:
@@ -96,7 +78,6 @@ base:
         PYTHONUNBUFFERED: '1'
         PYTHONNOUSERSITE: '1'
         PIP_BREAK_SYSTEM_PACKAGES: '1'
-        DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
         SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
         SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '3600'
@@ -119,8 +100,8 @@ base:
         mem-fraction-static: 0.85
         weight-loader-prefetch-checkpoints: true
         model-loader-extra-config: '{"enable_multithread_load":true}'
-        dyn-reasoning-parser: kimi_k3
-        dyn-tool-call-parser: kimi_k3
+        reasoning-parser: kimi_k3
+        tool-call-parser: kimi_k3
         speculative-algorithm: DFLASH
         speculative-draft-model-path: RadixArk/Kimi-K3.1-Dflash2-Preview
         speculative-draft-kv-cache-dtype: fp8_e4m3
@@ -129,7 +110,6 @@ base:
         # Without ReplaySSM, DFLASH keeps one KDA state per draft token and the KV pool
         # collapses; prefill never verifies and rejects the flag.
         enable-linear-replayssm-spec: true
-        router-mode: kv
         watchdog-timeout: 3600
         enable-metrics: true
   health_check:
@@ -137,24 +117,8 @@ base:
     interval_seconds: 10
   benchmark:
     env:
-      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
-  services:
-    - name: etcd
-      type: etcd
-      placement:
-        node: infra
-    - name: nats
-      type: nats
-      placement:
-        node: infra
-      options:
-        max_payload_mb: 64
-    # Disables Dynamo's per-request lifecycle span export; InferenceX does not read it.
-    - name: otel-collector
-      type: otel-collector
-      enabled: false
   sbatch_directives:
     mem: '0'
     cpus-per-task: '144'
@@ -163,7 +127,7 @@ base:
     container-remap-root: ''
 
 override_1p1d_tp16_c16:
-  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-disagg-1p1d-tp16-c16-dflash7
+  name: kimik3.1-fp4-gb200-sglang-agentx-disagg-1p1d-tp16-c16-dflash7
   roles:
     prefill:
       args:
@@ -176,7 +140,7 @@ override_1p1d_tp16_c16:
         cuda-graph-max-bs-decode: 32
 
 override_1p1d_tp16_c32:
-  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-disagg-1p1d-tp16-c32-dflash5
+  name: kimik3.1-fp4-gb200-sglang-agentx-disagg-1p1d-tp16-c32-dflash5
   roles:
     prefill:
       args:
@@ -188,7 +152,7 @@ override_1p1d_tp16_c32:
         cuda-graph-max-bs-decode: 64
 
 override_1p1d_tp16_c48:
-  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-disagg-1p1d-tp16-c48-dflash5
+  name: kimik3.1-fp4-gb200-sglang-agentx-disagg-1p1d-tp16-c48-dflash5
   roles:
     prefill:
       args:
