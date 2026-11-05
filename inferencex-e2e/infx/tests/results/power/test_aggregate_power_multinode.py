@@ -11,10 +11,13 @@ import csv
 import json
 import shutil
 from pathlib import Path
+from typing import get_args
 
 import pytest
 
 from infx.results.power import multinode as apm
+from infx.results.power.cpu_side import SOCKET_METERS
+from infx.srt_slurm.workload import CpuPowerSource
 
 PRODUCER_SHA = "a" * 40
 WINDOW_START = 1000.0
@@ -812,14 +815,19 @@ RAILS_W = {"cpu_rail": 200.0, "soc": 50.0}
 # NVML superchip module power per socket, distinct from the Grace and rail
 # constants so a leak into a CPU key is visible.
 MODULE_W = 1500.0
-# srt-slurm cpu_rails.SENSOR_SUFFIXES: the Grace socket meter and the DCGM CPU rail.
+RAPL_W = 250.0
+# srt-slurm cpu_rails.SENSOR_SUFFIXES: the Grace socket meter, the DCGM CPU rail and the
+# AMD RAPL package counter.
 GRACE_SENSOR = "CPU{s}:cpuSidePowerUsageW"
 DCGM_SENSOR = "CPU{s}:cpuPowerUsageW"
+RAPL_SENSOR = "CPU{s}:packagePowerUsageW"
 
 
 def _cpu_row(ts, host, socket, kind, watts):
     if kind == "dcgm":
         return [2, repr(ts), host, "dcgm", DCGM_SENSOR.format(s=socket), socket, repr(watts), "", "", "", ""]
+    if kind == "rapl":
+        return [2, repr(ts), host, "rapl", RAPL_SENSOR.format(s=socket), socket, repr(watts), "", "", "", ""]
     rails = [repr(w) for w in RAILS_W.values()]
     return [2, repr(ts), host, "acpi", GRACE_SENSOR.format(s=socket), socket, repr(watts), *rails, "", ""]
 
@@ -911,6 +919,29 @@ class TestCpuSidePower:
             "sample_row_count": len(rows),
             "reason_codes": [],
         }
+
+    def test_rapl_package_emits_cpu_keys_without_rails(self, tmp_path):
+        from infx.results.power.audit import audit_summary
+
+        pkg = build_package(tmp_path)
+        add_cpu_package(pkg, _cpu_rows({host: {"rapl": RAPL_W} for host in CPU_HOSTS}))
+        assert pkg.run(require_power=True, expected_cpu=True) == 0
+
+        agg = pkg.agg()
+        assert agg["cpu_power_valid"] == 1
+        assert agg["avg_cpu_socket_power_w"] == 250.0
+        assert agg["avg_total_cpu_power_w"] == 1000.0
+        assert agg["total_cpu_energy_j"] == 60000.0
+        assert {key for key in apm.CPU_METRIC_KEYS if key in agg} == {
+            "avg_cpu_socket_power_w", "avg_total_cpu_power_w", "total_cpu_energy_j",
+        }  # fmt: skip
+        assert _gpu_fields(agg) == _reference_agg(tmp_path)
+        cpu = pkg.sidecar()["cpu"]
+        assert set(cpu["per_series_energy_j"]) == {
+            f"{host}/socket{socket}/rapl_package" for host in CPU_HOSTS for socket in (0, 1)
+        }
+        summary = audit_summary(pkg.sidecar(), "power_validation.json")["power_audit"]["cpu"]
+        assert (summary["sensor_kind"], summary["source"]) == ("rapl_package", "rapl")
 
     def test_rail_gap_drops_only_that_rail(self, tmp_path):
         pkg = build_package(tmp_path)
@@ -1027,6 +1058,8 @@ class TestCpuSidePower:
             rows = self._drop(rows, "node-d", 0, lambda ts: 1020.0 <= ts <= 1024.0)
         elif kind == "mixed":
             rows = _cpu_rows({"node-d": {"grace": None}, "node-p": {"dcgm": DCGM_W}})
+        elif kind == "mixed_meters":
+            rows = _cpu_rows({"node-d": {"grace": None}, "node-p": {"rapl": RAPL_W}})
         elif kind == "malformed":
             rows.append(_cpu_row(FIRST_TS, "node-d", 0, "grace", "n/a"))
         elif kind == "version":
@@ -1041,6 +1074,7 @@ class TestCpuSidePower:
             ("socket", "cpu_socket_count_mismatch"),
             ("gap", "cpu_sample_gap_exceeded"),
             ("mixed", "cpu_socket_count_mismatch"),
+            ("mixed_meters", "cpu_samples_malformed"),
             ("malformed", "cpu_samples_malformed"),
             ("version", "cpu_samples_malformed"),
         ],
@@ -1058,3 +1092,14 @@ class TestCpuSidePower:
         assert cpu["cpu_power_valid"] is False
         assert reason in cpu["reason_codes"]
         assert pkg.sidecar()["power_valid"] is True
+
+
+def test_each_cluster_cpu_source_reads_the_socket_meter_srt_slurm_writes(monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[4] / "utils/srt-slurm/src"))
+    from srtctl.core.power.cpu_rails import SENSOR_SUFFIXES
+    from srtctl.core.power.cpu_sample import PRIMARY_KIND_BY_SOURCE
+
+    sources = get_args(CpuPowerSource)
+    assert set(SOCKET_METERS) == set(sources)
+    for source in sources:
+        assert SOCKET_METERS[source].sensor_suffix == SENSOR_SUFFIXES[PRIMARY_KIND_BY_SOURCE[source]]
