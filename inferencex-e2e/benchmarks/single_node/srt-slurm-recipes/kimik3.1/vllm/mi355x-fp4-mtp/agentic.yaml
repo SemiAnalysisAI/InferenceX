@@ -46,8 +46,8 @@ base:
         additional-config: '{"kda_prefill_backend":"fused"}'
         # Prefix-cached prefill chunks end on K3.1's 1152-token packed DSA block, so 10240 tokens floor to 9216.
         max-num-batched-tokens: 10240
-        # Keeps the ~6 GiB per GPU free that the recipe asks for.
-        gpu-memory-utilization: 0.92
+        # MEC firmware 38 keeps scratch reclaim off (HSA_NO_SCRATCH_RECLAIM=1), so pinned prefill scratch needs headroom outside the budget.
+        gpu-memory-utilization: 0.90
         stream-interval: 10
         disable-uvicorn-access-log: true
         # TOTAL_CPU_DRAM_GB split across the 8 TP ranks.
