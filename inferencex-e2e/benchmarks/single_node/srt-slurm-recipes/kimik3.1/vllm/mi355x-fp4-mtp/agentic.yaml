@@ -60,8 +60,10 @@ base:
         SAFETENSORS_FAST_GPU: '1'
         VLLM_USE_V2_MODEL_RUNNER: '1'
         VLLM_FASTSAFETENSORS_QUEUE_SIZE: '-1'
-        # K3.1 has no torch.compile submodule; only breakable graphs capture the prefill sizes.
-        VLLM_USE_BREAKABLE_CUDAGRAPH: '1'
+        # K3.1 has no torch.compile submodule, so FULL_AND_PIECEWISE resolves to decode-only
+        # capture. Breakable graphs are what would also capture the prefill sizes; with them
+        # off, the capture-list entries above the decode range are inert.
+        VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
         VLLM_ROCM_AITER_MLA_ASM_PADDING: asm
         # Verify the draft tokens with the AITER assembly DCP kernel.
         VLLM_ROCM_AITER_MLA_DCP_VERIFY: asm
@@ -77,8 +79,8 @@ base:
         # The K3.1 policy and MODELS.md keep all-reduce in BF16, so quick reduce must not quantize.
         VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: NONE
         AITER_BF16_FP8_MOE_BOUND: '0'
-        # vLLM's K3.1 mi355x_agentx env; reclaim overrides the image's HSA_NO_SCRATCH_RECLAIM=1.
-        HSA_NO_SCRATCH_RECLAIM: '0'
+        # Keep scratch reclaim on, as the image sets it. The reference sweep turns it off.
+        HSA_NO_SCRATCH_RECLAIM: '1'
         HSA_SCRATCH_SINGLE_LIMIT_ASYNC: '25769803776'
         VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1200'
         PYTHONNOUSERSITE: '1'
@@ -98,7 +100,8 @@ override_gpu_kv_c1:
       args:
         max-num-seqs: 1
         compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":16,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[2,4,6,8,10,12,14,16]}'
-        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":5,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        additional-config: '{"decode_backend":"latency_specialized","kda_prefill_backend":"fused"}'
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":7,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         kv-transfer-config: null
   benchmark:
     env:
