@@ -69,12 +69,16 @@ def run_single_node(launch: Launch) -> int:
             step_mib, job_mib = None, 0
         if (options := config.srun_options(run.backend.settings, step_mib)) is not None:
             run.env["SRT_SRUN_OPTIONS"] = options
-        if rc := submit.bind_point(run, checkout, root / "arguments"):
+        native_power = not request.eval_only and not request.al_gate
+        cpu_source = config.cpu_power_source(
+            run.cluster, run.srt, native_power and request.cpu_power, default=native_power
+        )
+        if rc := submit.bind_point(run, checkout, root / "arguments", cpu_source):
             return rc
         selected, bound, runtime_args = submit.bound_arguments(root / "arguments")
         event.set(recipe=selected.removeprefix(f"{run.workspace}/"))
         containers = {}
-        if not request.eval_only and not request.al_gate:
+        if native_power:
             image, reference = config.stage_gpu_exporter(run, single_node=True)
             containers[image] = reference
         job_config = config.SrtJob(
@@ -90,10 +94,11 @@ def run_single_node(launch: Launch) -> int:
             single_node=True,
             account=run.account,
             mem_mib=job_mib,
+            cpu_power_source=cpu_source,
         )
         config.create_volume_mounts(run)
         config.write(checkout.root / "srtslurm.yaml", config.render(run.cluster, job_config))
-        if rc := run_setup(run, checkout):
+        if rc := run_setup(run, checkout, cpu_power_exporter=cpu_source is not None):
             return rc
 
     fetched = root / "fetched-outputs"
@@ -114,7 +119,7 @@ def run_single_node(launch: Launch) -> int:
     status = run.backend.state(job)
     with event.stage("collect"):
         logs = run.backend.fetch_outputs(job, fetched) / "logs"
-        if not request.eval_only and not request.al_gate:
+        if native_power:
             (logs / "power").mkdir(parents=True, exist_ok=True)
             (logs / "power/native-job-status.txt").write_text(f"{job.id}|{status.raw}\n")
         rc = collect.finalize_single_node_results(run, logs, checkout.commit)
