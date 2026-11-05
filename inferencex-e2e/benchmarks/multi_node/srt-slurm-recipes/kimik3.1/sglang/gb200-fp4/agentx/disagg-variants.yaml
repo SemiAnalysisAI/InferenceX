@@ -1,21 +1,46 @@
 schema: 2
 
 base:
-  name: kimik3.1-fp4-gb200-sglang-agentx-disagg
+  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-disagg
   identity:
     model: {}
     container: {}
+    frameworks:
+      dynamo: "1.6.0"
+      sglang: "0.0.0.dev1+ge79de62d2.d20261104"
   resources:
     gpu_type: gb200
     gpus_per_node: 4
+  # The K3.1 image's Dynamo 1.6.0 lets Kimi-K3.1 decode with DCP on its DSA backend.
+  dynamo:
+    install: false
+    request_plane: tcp
+    event_plane: zmq
   # Tachometer's per-node exporters slow decode steps and add host memory;
   # InferenceX does not read its output.
   observability:
     tachometer:
       enabled: false
   frontend:
-    type: sglang-router
+    type: dynamo
     enable_multiple_frontends: false
+    env:
+      DYN_ROUTER_TEMPERATURE: '0'
+      DYN_ROUTER_QUEUE_THRESHOLD: None
+      DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: '3600'
+      DYN_TCP_CHANNEL_BUFFER: '128'
+      DYN_TCP_REQUEST_TIMEOUT: '60'
+      DYN_TOKENIZER_CACHE: '1'
+      DYN_TOKENIZER_CACHE_BYTES: '8000000000'
+    args:
+      router-mode: kv
+      # The frontend's own tokenizer cannot load kimi_k31; SGLang's chat processor renders requests.
+      dyn-chat-processor: sglang
+      dyn-preprocess-workers: '4'
+      trust-remote-code: true
+      active-decode-blocks-threshold: None
+      active-prefill-tokens-threshold: None
+      active-prefill-tokens-threshold-frac: None
   engine: sglang
   roles:
     prefill:
@@ -56,8 +81,8 @@ base:
         max-running-requests: 64
         weight-loader-prefetch-checkpoints: true
         model-loader-extra-config: '{"enable_multithread_load":true}'
-        reasoning-parser: kimi_k3
-        tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
         speculative-algorithm: DFLASH
         speculative-draft-model-path: RadixArk/Kimi-K3.1-Dflash2-Preview
         speculative-draft-kv-cache-dtype: fp8_e4m3
@@ -69,8 +94,14 @@ base:
         hicache-mem-layout: page_first_direct
         hicache-write-policy: write_back
         mamba-max-states-per-path: 1
+        # A session's turns stay on one prefill worker.
+        router-mode: kv
+        router-host-cache-hit-weight: 1
+        router-kv-overlap-score-credit: 4
+        router-session-affinity-ttl-secs: '14400'
         watchdog-timeout: 3600
         enable-metrics: true
+      kv_events: true
     decode:
       nodes: 4
       workers: 1
@@ -104,8 +135,8 @@ base:
         mem-fraction-static: 0.85
         weight-loader-prefetch-checkpoints: true
         model-loader-extra-config: '{"enable_multithread_load":true}'
-        reasoning-parser: kimi_k3
-        tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
         speculative-algorithm: DFLASH
         speculative-draft-model-path: RadixArk/Kimi-K3.1-Dflash2-Preview
         speculative-draft-kv-cache-dtype: fp8_e4m3
@@ -116,13 +147,25 @@ base:
         enable-linear-replayssm-spec: true
         watchdog-timeout: 3600
         enable-metrics: true
+      kv_events: false
   health_check:
     max_attempts: 1440
     interval_seconds: 10
   benchmark:
     env:
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+    # Disables Dynamo's per-request lifecycle span export; InferenceX does not read it.
+    - name: otel-collector
+      type: otel-collector
+      enabled: false
   sbatch_directives:
     mem: '0'
     cpus-per-task: '144'
@@ -131,7 +174,7 @@ base:
     container-remap-root: ''
 
 override_1p1d_tp16_c16:
-  name: kimik3.1-fp4-gb200-sglang-agentx-disagg-1p1d-tp16-c16-dflash7
+  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-disagg-1p1d-tp16-c16-dflash7
   roles:
     prefill:
       args:
@@ -144,7 +187,7 @@ override_1p1d_tp16_c16:
         cuda-graph-max-bs-decode: 32
 
 override_1p1d_tp16_c32:
-  name: kimik3.1-fp4-gb200-sglang-agentx-disagg-1p1d-tp16-c32-dflash5
+  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-disagg-1p1d-tp16-c32-dflash5
   roles:
     prefill:
       args:
@@ -156,7 +199,7 @@ override_1p1d_tp16_c32:
         cuda-graph-max-bs-decode: 64
 
 override_1p1d_tp16_c48:
-  name: kimik3.1-fp4-gb200-sglang-agentx-disagg-1p1d-tp16-c48-dflash5
+  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-disagg-1p1d-tp16-c48-dflash5
   roles:
     prefill:
       args:

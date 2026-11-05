@@ -12024,8 +12024,8 @@
   scenario-type: [fixed-seq-len]
 
 - config-keys:
-    - kimik3.1-fp4-gb200-sglang-agentic-dflash-agg
-    - kimik3.1-fp4-gb200-sglang-agentic-dflash-disagg
+    - kimik3.1-fp4-gb200-dynamo-sglang-agentic-dflash-agg
+    - kimik3.1-fp4-gb200-dynamo-sglang-agentic-dflash-disagg
   description:
     - "Add Kimi K3.1 Pro day-0 SGLang AgentX points on GB200: aggregated TP16 DCP16 and 1P1D TP16 DCP16, with RadixArk DFLASH block verification and HiCache CPU offload."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4804
