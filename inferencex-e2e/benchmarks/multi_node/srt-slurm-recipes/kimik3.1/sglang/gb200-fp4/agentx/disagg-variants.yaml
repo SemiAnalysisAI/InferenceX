@@ -8,7 +8,7 @@ base:
   resources:
     gpu_type: gb200
     gpus_per_node: 4
-  # The K3.1 image ships its patched Dynamo 1.6.0 for dynamo.sglang.
+  # The K3.1 SGLang image ships no Dynamo.
   dynamo:
     install: true
     source:
