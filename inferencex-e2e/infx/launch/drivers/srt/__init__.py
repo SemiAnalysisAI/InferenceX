@@ -106,7 +106,7 @@ def run_single_node(launch: Launch) -> int:
             (logs / "power/native-job-status.txt").write_text(f"{job_id}|{status.raw}\n")
         return collect.finalize_single_node_results(run, logs, checkout.commit)
 
-    arguments = [*runtime_args, *eval_args]
+    arguments = ["--set", "benchmark.stream_output=true", *runtime_args, *eval_args]
     return follow_single_node(run, checkout, root, bound, arguments, submitted, fetched, finalize)
 
 
