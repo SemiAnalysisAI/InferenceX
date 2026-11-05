@@ -139,8 +139,6 @@ override_tp8_dcp8_c16:
       args:
         dcp-size: 8
         dcp-comm-backend: a2a
-        # Room for the full shared-expert weights the row-sharded MoE front gathers (~24 GB per GPU).
-        mem-fraction-static: 0.90
         mamba-full-memory-ratio: 0.65
         enable-hierarchical-cache: true
         hicache-write-policy: write_back
@@ -149,9 +147,6 @@ override_tp8_dcp8_c16:
         cuda-graph-max-bs-decode: 16
       env:
         SGLANG_ROCM_RUNTIME_RESERVE_GB: '10'
-        # Prefill batches of 4096+ tokens: MoE front and the residual stream on row shards.
-        SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_FRONT: '1'
-        SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_STREAM: '1'
         SGLANG_HICACHE_MAMBA_HOST_RATIO: '12'
         RUSTUP_TOOLCHAIN: stable
   benchmark:
@@ -165,8 +160,6 @@ override_tp8_dcp8_c32:
       args:
         dcp-size: 8
         dcp-comm-backend: a2a
-        # Room for the full shared-expert weights the row-sharded MoE front gathers (~24 GB per GPU).
-        mem-fraction-static: 0.90
         mamba-full-memory-ratio: 0.65
         enable-hierarchical-cache: true
         hicache-write-policy: write_back
@@ -175,9 +168,6 @@ override_tp8_dcp8_c32:
         cuda-graph-max-bs-decode: 32
       env:
         SGLANG_ROCM_RUNTIME_RESERVE_GB: '10'
-        # Prefill batches of 4096+ tokens: MoE front and the residual stream on row shards.
-        SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_FRONT: '1'
-        SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_STREAM: '1'
         SGLANG_HICACHE_MAMBA_HOST_RATIO: '12'
         RUSTUP_TOOLCHAIN: stable
   benchmark:
@@ -191,8 +181,6 @@ override_tp8_dcp8_c48:
       args:
         dcp-size: 8
         dcp-comm-backend: a2a
-        # Room for the full shared-expert weights the row-sharded MoE front gathers (~24 GB per GPU).
-        mem-fraction-static: 0.90
         mamba-full-memory-ratio: 0.65
         enable-hierarchical-cache: true
         hicache-write-policy: write_back
@@ -201,9 +189,6 @@ override_tp8_dcp8_c48:
         cuda-graph-max-bs-decode: 48
       env:
         SGLANG_ROCM_RUNTIME_RESERVE_GB: '10'
-        # Prefill batches of 4096+ tokens: MoE front and the residual stream on row shards.
-        SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_FRONT: '1'
-        SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_STREAM: '1'
         SGLANG_HICACHE_MAMBA_HOST_RATIO: '12'
         RUSTUP_TOOLCHAIN: stable
   benchmark:
