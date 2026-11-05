@@ -65,6 +65,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref || github.sha }}
+          fetch-depth: 0
           persist-credentials: false
       - name: Checkout priority scheduler tooling
         if: ${{ inputs.ref && inputs.ref != '' }}
@@ -75,6 +76,15 @@ jobs:
           persist-credentials: false
 
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: Classify priority criteria
+        id: priority-criteria
+        if: vars.PRIORITY_SCHEDULER_ENABLED == 'true' && !inputs.moe-debug
+        uses: $/.github/actions/classify-priority
+        with:
+          head-ref: HEAD
+          scope: patchwork
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
+          github-token: ${{ github.token }}
       - id: gen
         name: Generate matrix via script
         run: |
@@ -113,7 +123,7 @@ jobs:
           echo "raw=$CONFIG_JSON" >> "$GITHUB_OUTPUT"
 
         env:
-          PRIORITY_CRITERIA: ${{ inputs.moe-debug && '["patchwork"]' || '' }}
+          PRIORITY_CRITERIA: ${{ inputs.moe-debug && '["patchwork"]' || steps.priority-criteria.outputs.criteria || '' }}
           INPUTS_CONFIG_FILE: ${{ inputs.config-file }}
           INPUTS_CONFIG_KEY: ${{ inputs.config-key }}
           INPUTS_CONC: ${{ inputs.conc }}
