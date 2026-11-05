@@ -22,13 +22,14 @@ from pydantic import (
 
 from infx import yamlio
 from infx.clusters.base import Record, SchedulerSettings
+from infx.clusters.native import NativeSettings
 from infx.clusters.slurm import Fabric, SlurmSettings
 from infx.config import RUNNER_CONFIG, repository_root
 from infx.srt_slurm.workload import resolve_fabric
 
 CLUSTER_LABEL_PREFIX = "cluster:"
 
-SCHEDULERS: dict[str, type[SchedulerSettings]] = {"slurm": SlurmSettings}
+SCHEDULERS: dict[str, type[SchedulerSettings]] = {"slurm": SlurmSettings, "native": NativeSettings}
 
 
 class ModelEntry(Record):
@@ -74,6 +75,7 @@ class Cluster(Record):
     gpus_per_node: int = Field(alias="gpus-per-node", gt=0)
     available_cpu_dram_mib: int | None = Field(default=None, alias="available-cpu-dram-mib", gt=0)
     arch: Literal["x86_64", "aarch64"]
+    os: Literal["linux", "darwin"] = "linux"
     env: dict[str, str] = Field(default_factory=dict)
     models: ClusterModels = Field(default_factory=ClusterModels)
     scheduler: str
@@ -85,6 +87,14 @@ class Cluster(Record):
     def id(self) -> str:
         """Return the cluster id this record was bound to, or an empty string."""
         return self._id
+
+    @property
+    def has_srt_slurm(self) -> bool:
+        """Whether this cluster has an srt-slurm profile."""
+        return (
+            isinstance(self.scheduler_settings, SlurmSettings)
+            and self.scheduler_settings.srt_slurm is not None
+        )
 
     def bind_id(self, cluster_id: str) -> None:
         """Record ``cluster_id`` as this cluster's id."""

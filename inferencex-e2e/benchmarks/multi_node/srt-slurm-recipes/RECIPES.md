@@ -16,7 +16,7 @@ glm5.2/sglang/h200-fp8/agentx/disagg-1p1d-pcp8-tp8-dp8-mtp6-hicache.yaml
 qwen3.5/trtllm/gb300-fp4/agentx/disagg-variants.yaml
 ```
 
-- Use the master config's `model-prefix` and `precision` labels. Engines are `sglang`, `vllm`, `trtllm`, `atom`, and `tilert`. Frontend selection remains explicit inside the recipe. Hardware directories use GPU types such as `b200` and `gb300`, rather than cluster names.
+- Use the master config's `model-prefix` and `precision` labels. Engines are `sglang`, `vllm`, `trtllm`, `atom`, `tilert`, and `llamacpp`. Frontend selection remains explicit inside the recipe. Hardware directories use GPU types such as `b200` and `gb300`, rather than cluster names.
 - Workloads are `1k1k`, `8k1k`, or `agentx`.
 - Use lowercase, hyphen-separated filenames beginning with `agg` or `disagg`. Include topology and the settings that distinguish sibling recipes, such as parallelism, batch size, concurrency, MTP, offload, or cache configuration. Avoid dates, numbered latency/throughput labels, and repeating the model or hardware already in the path.
 - In topology names, `1p4d` denotes prefill/decode worker counts, not necessarily physical nodes. Role-qualified `p-tp4` and `d-tp8` identify prefill/decode TP; `b` denotes batch size and `c` concurrency. The YAML is authoritative for runtime settings.
@@ -67,6 +67,7 @@ These checks never rewrite the recipe's parallelism settings or launch flags.
 | TensorRT-LLM (`trt` in the master) | `tensor_parallel_size` | `moe_expert_parallel_size == ep` | `enable_attention_dp == dp-attn` |
 | vLLM | `tensor-parallel-size * data-parallel-size` | `enable-expert-parallel == (ep > 1)` | `(data-parallel-size > 1) == dp-attn` |
 | ATOM | `roles.agg.gpus` | `enable-expert-parallel == (ep > 1)`; `ep` must be 1 or `tp` | `enable-dp-attention == dp-attn` |
+| llama.cpp | always 1 | `ep` must be 1 | `dp-attn` must be false |
 
 For example, a master row with `tp: 4`, `ep: 4`, and `dp-attn: true` matches
 TokenSpeed arguments `attn-tp-size: 1`, `data-parallel-size: 4`, and `ep-size: 4`:

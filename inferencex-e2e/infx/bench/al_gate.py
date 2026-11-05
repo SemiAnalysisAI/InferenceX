@@ -122,7 +122,10 @@ def _measure(
         return 0
 
     renderer, kwargs = collection["renderer"], mode["chat_template_kwargs"] or {}
-    tokenizer = _tokenizer(values["MODEL"]) if renderer == "chat_template" else None
+    # A recipe's TOKENIZER replaces the Hub id: its checkpoint's path, or another repo's id for a
+    # GGUF repo, which holds no tokenizer.
+    tokenizer_name = inputs.optional("TOKENIZER", env) or values["MODEL"]
+    tokenizer = _tokenizer(tokenizer_name) if renderer == "chat_template" else None
     # vllm bench serve's SPEED-Bench loader order: random.seed(0); random.shuffle(prompts).
     random.Random(0).shuffle(prompts)  # noqa: S311
     raw = Path(values["AL_GATE_OUTPUT_DIR"]) / "al_gate"
@@ -134,7 +137,7 @@ def _measure(
     argv = [
         str(runtime.aiperf), "profile", "--endpoint-type", "completions", "--streaming",
         "--url", server, "--model", env.get("SERVED_MODEL_NAME") or values["MODEL"],
-        "--tokenizer", values["MODEL"], "--tokenizer-trust-remote-code",
+        "--tokenizer", tokenizer_name, "--tokenizer-trust-remote-code",
         "--custom-dataset-type", "single_turn", "--input-file", str(raw / "prompts.jsonl"),
         "--dataset-sampling-strategy", "sequential", "--request-count", str(len(prompts)),
         "--concurrency", str(speedbench.REPLAY_CONCURRENCY),

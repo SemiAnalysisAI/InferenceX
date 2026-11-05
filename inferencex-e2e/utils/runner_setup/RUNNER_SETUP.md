@@ -13,7 +13,9 @@ InferenceX benchmark jobs on the GPU clusters.
 > listener processes all run on the **login/controller node** and each benchmark job is
 > dispatched onto the **compute nodes** via `srun`. The same runners can also be brought
 > up on a **bare-metal single node** (with Docker) or on **Kubernetes**. Those setups
-> differ enough that they aren't covered here yet (more docs to be added in future).
+> differ enough that they aren't covered here yet (more docs to be added in future). A Mac runs
+> its runner and each job on the host (see
+> [Apple silicon hosts](#apple-silicon-hosts-without-a-container-runtime-scheduler-native)).
 
 > **Runner setup is node-specific and varies a lot from cluster to cluster.**
 > Storage mounts, the runner user, weight-staging paths, container runtime, and Slurm
@@ -239,6 +241,31 @@ must also leave room. Enroot's `/tmp` is a tmpfs in that memory, so the
 `container_scope=job` so a job's root filesystem is removed when it ends. On Ubuntu 24.04,
 `enroot-nsenter` needs the AppArmor profile the enroot package installs to create user namespaces.
 
+## Apple silicon hosts without a container runtime (`scheduler: native`)
+
+A Mac runs its runner and each benchmark on the host, under the runner account (see
+[Native clusters](../../configs/CONFIGS.md#native-clusters)). The setup above assumes Linux and
+tmux; on the Mac:
+
+1. Create a standard (non-admin) macOS user for the runner. It owns `native.root` and the volumes,
+   including the staged GGUFs. Run nothing else on the host while it serves.
+2. As an administrator, run `xcode-select --install`, for `git` and `/usr/bin/python3`, and give the
+   account passwordless `sudo` for `/usr/bin/powermetrics`, which
+   [records power](../../configs/CONFIGS.md#the-serve-path).
+3. As the account, run `setup.sh` as above, with indices `0 0` and the macOS ARM64 tarball from
+   [the new runner page](https://github.com/SemiAnalysisAI/InferenceX/settings/actions/runners/new?arch=arm64&os=osx),
+   for example named `m5ultra-exo` with tag `cluster:m5ultra-exo`. Register only one runner per
+   host: a second would fail the jobs it picks up.
+4. Run `./svc.sh install && ./svc.sh start` in `~/gharunners/gharunner00/actions-runner`. The launch
+   agent this installs starts only when the account logs in, so either log in automatically at boot
+   (FileVault must be off) or have an administrator install the same plist under
+   `/Library/LaunchDaemons` with `UserName` set to the account. Check that the plist sets
+   `ProcessType` to `Interactive`: launchd throttles a job without it, which skews benchmarks.
+5. As an administrator, run `sudo pmset -a sleep 0 disksleep 0 powernap 0` to keep the Mac awake and
+   `sudo pmset -a autorestart 1` to restart it after a power failure.
+6. A launch run by hand needs `uv` on its `PATH` (CI installs it). To recover by hand, run
+   `python -m infx.launch cleanup` with `RUNNER_NAME` set, as the account.
+
 ## Storage layout
 
 ### GB300: one cluster, two allocation partitions
@@ -343,6 +370,9 @@ The host side of each is defined in that cluster's `clusters.<id>` record in `co
    storage because pyxis reads the file on the **compute** node, and it lets concurrent
    jobs reuse one import instead of each pulling the registry image. Note
    `ENROOT_CACHE_PATH` (import scratch space) defaults under `$HOME/.cache/enroot`.
+
+A `native` cluster names these paths in `native.volumes`. Allow about 7 GB under `native.root` for
+a running AgentX job.
 
 Size accordingly: weights run hundreds of GB to TB per model, `.sqsh` files are
 ~20–40 GB each and accumulate one per image tag (clean old tags periodically), and the

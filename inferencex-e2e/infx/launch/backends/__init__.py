@@ -11,7 +11,10 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from infx.launch.backends.base import Backend
 
-BACKENDS: dict[str, str] = {"slurm": "infx.launch.backends.slurm:SlurmBackend"}
+BACKENDS: dict[str, str] = {
+    "slurm": "infx.launch.backends.slurm:SlurmBackend",
+    "native": "infx.launch.backends.native:NativeBackend",
+}
 
 
 def backend_class(scheduler: str) -> type[Backend]:

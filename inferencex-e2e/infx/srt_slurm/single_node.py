@@ -77,6 +77,8 @@ def parallelism_constraints(
             "enable-expert-parallel": (args.get("enable-expert-parallel", False), ep > 1),
             "DP_ATTENTION": (args.get("enable-dp-attention", False), dp_attention),
         }
+    if engine == "llamacpp":
+        return {"TP": (1, tp), "EP_SIZE": (1, ep), "DP_ATTENTION": (False, dp_attention)}
     raise ValueError(f"Unsupported single-node SRT engine: {engine!r}")
 
 
@@ -87,12 +89,14 @@ def select_recipe(
     root: Path | None = None,
     expand: Callable[..., list[tuple[str | None, dict[str, Any]]]] = selected_recipes,
     cpu_power_source: CpuPowerSource | None = None,
+    native_power: bool = True,
 ) -> tuple[str, dict[str, Any]]:
     """Resolve a matrix point to one native variant, never submit an entire sweep.
 
     Variants are composed with the shared block under ``root`` (default: this
     repository) and bound before they are validated. ``expand`` lists the selected
-    variants: srtctl at launch, ``variants.expand_variants`` in the planner.
+    variants: srtctl at launch, ``variants.expand_variants`` in the planner. A throughput
+    point measures native power unless ``native_power`` is off.
     ``cpu_power_source`` adds the cluster's CPU power exporter to the native telemetry.
     """
     path, _, selector = config.partition(":")
@@ -102,7 +106,7 @@ def select_recipe(
         agentic=agentic,
         multinode=False,
         root=root or repository_root(),
-        gpu_power=NATIVE if environment.get("EVAL_ONLY") != "true" else None,
+        gpu_power=NATIVE if native_power and environment.get("EVAL_ONLY") != "true" else None,
         cpu_power_source=cpu_power_source,
     )
     recipes = expand(raw, selector or None)
@@ -133,7 +137,7 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
     workload = benchmark["env"]
     engine_config = recipe["engine"]
     engine = engine_config["type"] if isinstance(engine_config, dict) else engine_config
-    if environment["FRAMEWORK"] not in {"sglang", "trt", "atom", "vllm", "tokenspeed"}:
+    if environment["FRAMEWORK"] not in {"sglang", "trt", "atom", "vllm", "tokenspeed", "llamacpp"}:
         raise ValueError(f"Unsupported single-node framework: {environment['FRAMEWORK']!r}")
     spec = spec_parameters(role, engine)
     if spec and spec["method"] not in {"eagle", "eagle3", "nextn", "mtp", "dspark", "dflash"}:

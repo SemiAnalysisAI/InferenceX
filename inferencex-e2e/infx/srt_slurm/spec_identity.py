@@ -33,6 +33,7 @@ from infx.srt_slurm.synthetic_acceptance import ENGINES, spec_parameters, verifi
 SPEC_ARGUMENTS = (
     "speculative", "with-mtp", "num-mtp", "method", "num-speculative-tokens", "draft-model",
     "kv-cache-dtype", "kv_cache_dtype", "kv_cache_config",
+    "spec-type", "spec-draft-n-max", "model-draft", "cache-type-",
 )  # fmt: skip
 # Spellings of one KV cache dtype; "auto" leaves the engine default.
 DTYPE_ALIASES = {"fp8_e4m3": "fp8", "bfloat16": "bf16", "auto": None}
@@ -105,6 +106,10 @@ def _tokenspeed(args: Mapping[str, Any]) -> dict[str, Fact]:
     return {"draft_sample": UNKNOWN, "adaptive": UNKNOWN, "topology": topology}
 
 
+def _llamacpp() -> dict[str, Fact]:
+    return {"draft_sample": DEFAULT, "adaptive": NOT_ADAPTIVE, "topology": CHAIN}
+
+
 def _dtype(value: Any) -> Fact:
     if isinstance(value, str):
         value = DTYPE_ALIASES.get(value.lower(), value.lower())
@@ -125,6 +130,9 @@ def _precision(args: Mapping[str, Any], spec: Mapping[str, Any], engine: str) ->
     elif engine == "tokenspeed":
         draft = args.get("speculative-draft-model-quantization")
         draft_kv = None
+    elif engine == "llamacpp":
+        target = args.get("cache-type-k")
+        draft, draft_kv = None, args.get("cache-type-k-draft")
     else:
         draft = draft_kv = None
     unread = engine == "tilert"  # TileRT's draft settings are not readable here
@@ -156,6 +164,7 @@ def run_collection(model_prefix: str, role: Mapping[str, Any], framework: str) -
         "atom": lambda: _atom(method),
         "tilert": _tilert,
         "tokenspeed": lambda: _tokenspeed(args),
+        "llamacpp": _llamacpp,
     }[engine]()
     facts |= _precision(args, spec, engine)
     facts["verify"] = verifier(role, engine)

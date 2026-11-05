@@ -62,6 +62,7 @@ class LaunchPath(StrEnum):
     SRT_BATCH = "srt-batch"
     SRT_VIDEO = "srt-video"
     SCRIPT = "script"
+    SERVE = "serve"
 
 
 NATIVE_SRT_LANES: dict[str, tuple[Match, ...]] = {
@@ -81,21 +82,27 @@ BATCH_WRAPPED_LANES: dict[str, Match] = {
 VIDEO_SCENARIO = "video-generation"
 
 
-def launch_path(cluster_id: str, request: LaunchRequest) -> LaunchPath:
-    """Return the launch path that runs ``request`` on the cluster ``cluster_id``."""
+def launch_path(cluster: Cluster, request: LaunchRequest) -> LaunchPath:
+    """Return the launch path that runs ``request`` on ``cluster``.
+
+    A single-node point runs through srt-slurm where the cluster has an srt-slurm profile,
+    else the launcher serves it itself.
+    """
     if request.scenario_type == VIDEO_SCENARIO:
         if request.is_multinode or request.is_agentic:
             raise LaunchError("video-generation points are single-node and not agentic")
         return LaunchPath.SRT_VIDEO
     if request.is_multinode:
-        if any(lane(request) for lane in NATIVE_SRT_LANES.get(cluster_id, ())):
+        if any(lane(request) for lane in NATIVE_SRT_LANES.get(cluster.id, ())):
             return LaunchPath.SRT_NATIVE
         return LaunchPath.SRT_MULTI
-    wrapped = BATCH_WRAPPED_LANES.get(cluster_id)
+    wrapped = BATCH_WRAPPED_LANES.get(cluster.id)
     if wrapped is not None and wrapped(request) and not request.batch_reentry:
         return LaunchPath.SRT_BATCH
     if request.bench_script_override:
         return LaunchPath.SCRIPT
+    if not cluster.has_srt_slurm:
+        return LaunchPath.SERVE
     return LaunchPath.SRT_SINGLE
 
 

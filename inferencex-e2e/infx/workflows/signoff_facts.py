@@ -16,12 +16,14 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import urllib.error
 import urllib.request
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from infx import github
+from infx.config import MASTER_CONFIGS
 from infx.golden_al_distribution import curves
 from infx.klaud import api
 
@@ -375,9 +377,7 @@ def matrix_at(rev: str, workdir: Path) -> tuple[dict, dict[str, str]]:
     from infx.matrix.validation import load_config_files, load_runner_file
 
     project = _extract(rev, workdir)
-    configs = [
-        str(project / "configs" / name) for name in ("amd-master.yaml", "nvidia-master.yaml")
-    ]
+    configs = [str(project / path) for path in MASTER_CONFIGS]
     master = load_config_files([path for path in configs if Path(path).is_file()], validate=False)
     runners = load_runner_file(str(project / "configs" / "runners.yaml"), validate=False)
     matrix, errors = {}, {}
@@ -575,7 +575,12 @@ def new_images(base: str, sha: str) -> list[str]:
 
 
 def inspect_image(image: str) -> dict[str, Any]:
-    """Resolve a reference; a ``tag@digest`` pin resolves by its digest, which is what runs."""
+    """Resolve a reference; a ``tag@digest`` pin resolves by its digest, which is what runs.
+
+    A native image is an archive URL, which resolves by answering; the launcher checks its digest.
+    """
+    if "://" in image:
+        return {"image": image, **_inspect_archive(image.partition("@")[0])}
     if "@" in image:
         name, _, digest = image.partition("@")
         repository = name.rsplit(":", 1)[0] if ":" in name.rpartition("/")[2] else name
@@ -597,6 +602,17 @@ def _inspect(reference: str) -> dict[str, Any]:
     if result.returncode == 0:
         return {"inspected": reference, "resolves": True}
     return {"inspected": reference, "resolves": False, "error": result.stderr.strip()[-300:]}
+
+
+def _inspect_archive(url: str) -> dict[str, Any]:
+    request = urllib.request.Request(url, method="HEAD")  # noqa: S310
+    try:
+        with urllib.request.urlopen(request, timeout=120):  # noqa: S310
+            return {"inspected": url, "resolves": True}
+    except urllib.error.HTTPError as error:
+        return {"inspected": url, "resolves": False, "error": str(error)}
+    except OSError as error:
+        return {"inspected": url, "resolves": None, "error": type(error).__name__}
 
 
 # --- Check 11(b): golden acceptance length --------------------------------------------

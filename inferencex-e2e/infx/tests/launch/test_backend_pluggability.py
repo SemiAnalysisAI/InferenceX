@@ -118,11 +118,13 @@ def test_a_failed_point_fails_the_launch_and_still_returns_its_result(fake, work
     assert result(workspace)["workload"] == "7"
 
 
-def test_points_without_a_script_refuse_a_non_slurm_cluster_before_any_work(fake, workspace):
+def test_multinode_points_refuse_a_non_slurm_cluster_before_any_work(fake, workspace):
     cluster = load_inventory(fake).clusters["local"]
-    srt_point = request(workspace, BENCH_SCRIPT_OVERRIDE="")
+    srt_point = request(workspace, BENCH_SCRIPT_OVERRIDE="", IS_MULTINODE="true")
 
-    with pytest.raises(LaunchError, match="needs a slurm cluster; 'local' uses scheduler 'fake'"), Lifecycle() as life:
+    with pytest.raises(
+        LaunchError, match="srt-multi needs a slurm cluster; 'local' uses scheduler 'fake'"
+    ), Lifecycle() as life:
         drivers.run(cluster, srt_point, life)
     assert not containers_dir(cluster.scheduler_settings).exists()
 

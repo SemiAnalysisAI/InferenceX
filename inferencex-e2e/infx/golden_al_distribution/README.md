@@ -88,6 +88,19 @@ Read the realized value back from `average_tokens_per_forward` on the server's `
 
 **DSpark note:** ATOM rejects forced acceptance combined with the DSpark confidence scheduler (`--dspark-config '{"confidence_schedule": true}'`), which sizes each request's verify length at runtime and can cap acceptance below the requested length with no way to detect it. The golden DSpark curves were themselves collected without adaptive verification, so leaving it off is also the comparable configuration.
 
+llama.cpp supports it through `llama-server --spec-synth-len`, which takes the golden AL directly:
+
+```bash
+llama-server \
+  --model MODEL.gguf \
+  --model-draft MTP_HEAD.gguf \
+  --spec-type draft-mtp \
+  --spec-draft-n-max 3 \
+  --spec-synth-len 2.48
+```
+
+srtctl runs no llama.cpp, so the launcher's [serve driver](../launch/drivers/serve.py), not the connector, sets this flag, and it refuses a recipe that sets `spec-synth-len` or `spec-synth-rates`.
+
 This policy follows the same broad principle as MLPerf Inference: prescribe the workload rules needed for comparable system measurements. InferenceX is evaluating inference-system performance, not the ability to fine-tune a benchmark-specific speculative head.
 
 ## How a golden AL curve is collected
@@ -218,7 +231,7 @@ Every curve file is named `<model>__<method>__<draft>__<draft_sample>-<verify>.y
 [`infx/srt_slurm/spec_identity.py`](../srt_slurm/spec_identity.py) describes a run's generation role in the same vocabulary and audits it against its selected curve without changing the selection. KV cache dtypes are normalized: `fp8_e4m3` is `fp8`, `bfloat16` is `bf16` and `auto` is the engine default. Findings are `mismatch` (both values known and different), `unverified` (an engine default or unknown on either side, other than the same engine's default on both), `adaptive` (no fixed-k curve applies), `provisional` and `engine`. To audit every speculative role of the sweep matrix:
 
 ```bash
-python -m infx.matrix.generate full-sweep --config-files configs/nvidia-master.yaml configs/amd-master.yaml --scenario-type agentic-coding > matrix.json
+python -m infx.matrix.generate full-sweep --config-files configs/nvidia-master.yaml configs/amd-master.yaml configs/apple-master.yaml --scenario-type agentic-coding > matrix.json
 python -m infx.srt_slurm.spec_identity snapshot matrix.json --root .
 ```
 

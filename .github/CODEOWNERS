@@ -6,6 +6,9 @@ inferencex-e2e/configs/amd-master.yaml @billishyahao @chunfangamd @seungrokj @1a
 # NVIDIA master config
 inferencex-e2e/configs/nvidia-master.yaml @ankur-singh @kedarpotdar-nv @wzhao18 @nvpohanh @RohitNagraj @SemiAnalysisAI/core
 
+# Apple master config
+inferencex-e2e/configs/apple-master.yaml @rltakashige @ciaranbor @SemiAnalysisAI/core
+
 # NVIDIA srt-slurm recipes in the single-node and multi-node trees
 /inferencex-e2e/benchmarks/*_node/srt-slurm-recipes/**/b200-*/ @ankur-singh @kedarpotdar-nv @wzhao18 @nvpohanh @RohitNagraj @SemiAnalysisAI/core
 /inferencex-e2e/benchmarks/*_node/srt-slurm-recipes/**/b300-*/ @ankur-singh @kedarpotdar-nv @wzhao18 @nvpohanh @RohitNagraj @SemiAnalysisAI/core
@@ -21,6 +24,9 @@ inferencex-e2e/configs/nvidia-master.yaml @ankur-singh @kedarpotdar-nv @wzhao18 
 /inferencex-e2e/benchmarks/*_node/srt-slurm-recipes/**/mi300x-*/ @billishyahao @chunfangamd @seungrokj @1am9trash @zijiecode @SemiAnalysisAI/core
 /inferencex-e2e/benchmarks/*_node/srt-slurm-recipes/**/mi325x-*/ @billishyahao @chunfangamd @seungrokj @1am9trash @zijiecode @SemiAnalysisAI/core
 /inferencex-e2e/benchmarks/*_node/srt-slurm-recipes/**/mi355x-*/ @billishyahao @chunfangamd @seungrokj @1am9trash @zijiecode @SemiAnalysisAI/core
+
+# Apple srt-slurm recipes in the single-node and multi-node trees
+/inferencex-e2e/benchmarks/*_node/srt-slurm-recipes/**/m5ultra-*/ @rltakashige @ciaranbor @SemiAnalysisAI/core
 
 # PoR for Models & general direction
 inferencex-e2e/docs/MODELS.md @ankur-singh @chunfangamd @SemiAnalysisAI/core

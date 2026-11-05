@@ -89,7 +89,7 @@ The below list describes what each field is:
   SKU or capacity label, so every search-space point runs on the same hardware
   fleet.
 - `precision`: The precision to run the benchmark. Launcher workload policy rows may also match on it.
-- `framework`: The framework (serving runtime) to serve the benchmark, e.g., `vllm`, `sglang`, `trt`.
+- `framework`: The framework (serving runtime) to serve the benchmark, e.g., `vllm`, `sglang`, `trt`, `llamacpp`.
 - `multinode`: Required. `true` selects the multinode schema with `prefill`/`decode` or `worker` blocks, and `false` the single-node schema with `tp` entries.
 - `disagg`: Enables disaggregated serving and may only be `true` when
   `multinode` is also `true`.
@@ -237,6 +237,9 @@ schema; unknown keys fail.
   rejected. Its `volumes` name the checkpoint roots and caches (`hf-home`,
   `hf-hub-cache`, `shared-hf-hub-cache`, `aiperf-cache`, `dynamo-wheels`),
   each `shared` (the default) or `node-local`.
+- `arch` (`x86_64` or `aarch64`) and `os` (`linux`, the default, or `darwin`) describe the
+  cluster's hosts.
+- `native:` runs jobs on the launching host; see [Native clusters](#native-clusters).
 - `slurm:` ([`infx/clusters/slurm.py`](../infx/clusters/slurm.py)) holds the partition,
   account, exclusivity, GRES, excluded nodes and extra `srun`/`salloc` options; its
   volumes are host `path`s that jobs see at the same place.
@@ -303,3 +306,48 @@ schema; unknown keys fail.
 - `slurm.srt-slurm.workspace-mounts` maps files relative to `inferencex-e2e/` into
   job containers. The renderer resolves each source against the job checkout;
   host-absolute paths belong in `mounts`, and volume aliases in `volume-mounts`.
+- A cluster without an srt-slurm profile, on any scheduler, runs single-node points through
+  [the serve path](#the-serve-path) and refuses multi-node ones.
+
+### Native clusters
+
+`native:` ([`infx/clusters/native.py`](../infx/clusters/native.py)) runs each job as a process
+group on the runner host, in the checkout. Its volumes are host `path`s; `root` is a host
+directory for unpacked images and job records. An `image` is a tar archive pinned by digest,
+`<archive url>@sha256:<hex>`, that unpacks to one directory, which goes first on the job's `PATH`.
+An argument or environment value that is one absolute container path is rewritten to the host
+path behind it; a path inside a longer value, such as `--log=/workspace/x`, is not. A host runs
+one native job at a time, and `python -m infx.launch cleanup` stops one an earlier launch left
+running. The digest only proves an archive is the one a reviewer pinned, not that it is safe.
+Nothing isolates a job from the runner account, so give that account nothing else to hold and
+review a new archive as you would code.
+
+### The serve path
+
+A cluster without an srt-slurm profile runs single-node AgentX points through the launcher's serve
+path ([`infx/launch/drivers/serve.py`](../infx/launch/drivers/serve.py)), which has a server for
+`llamacpp` and refuses other frameworks and fixed-sequence points. The point's `srt-recipe` variant
+is bound and validated as for srt-slurm, without its power telemetry. One container then starts the
+framework's server from the bound `roles.agg` args and runs the AgentX client and any eval.
+
+A recipe may set only the fields in `RECIPE_FIELDS`; the path also refuses `REQUIRE_POWER` on a
+cluster that is not a Mac, `'@fabric.<name>'` values, a point's own `MODEL_PATH`, and server args
+the launcher sets (`LAUNCHER_ARGS`). The server has `health_check`'s `max_attempts` x
+`interval_seconds` to become ready, 180 x 10 s by default. The cluster needs an `hf-hub-cache`
+volume, mounted at `HF_HUB_CACHE`, and serves a staged `models.entries` checkpoint when it has one.
+
+On a cluster with `os: darwin`, an AgentX point records its power automatically.
+`python3 -m infx.bench.powermetrics` samples GPU, CPU and ANE power about once a second, and the
+launcher joins the GPU samples to the benchmark window, writing the metrics to the result and a
+`power_validation_<result>.json` sidecar. The runner account needs passwordless
+`sudo` for `/usr/bin/powermetrics`. Invalid samples record `power_valid: 0`, and fail the point
+only under `REQUIRE_POWER=1`.
+
+A `llamacpp` point serves `llama-server` from a staged checkpoint. Its recipe names the GGUF file
+as `roles.agg.args.model`, a path inside the checkpoint (the first file of a split one), and sets
+`lazy-mode` and `flash-attn` to the string `on`, `off` or `auto`. Without a unified KV cache each
+of the `parallel` slots has `ctx-size / parallel` tokens. An MTP recipe sets `spec-type: draft-mtp`,
+`spec-draft-n-max` and, for a checkpoint with no embedded head, `model-draft`, the head's path
+inside the checkpoint. The launcher pins an AgentX point to the golden acceptance length with
+`spec-synth-len`; an eval-only point keeps its real acceptance and first runs the report-only
+[speculative acceptance gate](../infx/evals/EVALS.md#speculative-acceptance-gate).

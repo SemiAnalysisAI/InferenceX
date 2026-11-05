@@ -151,6 +151,17 @@ def test_the_gate_replays_the_golden_collection_and_reports_the_verdict(gate, af
     }  # fmt: skip
 
 
+def test_a_recipes_tokenizer_replaces_a_model_repo_that_holds_none(gate, monkeypatch):
+    monkeypatch.setattr(al_gate, "_tokenizer", {"org/tokenizer": gate.tokenizer}.get)
+
+    assert gate.run(TOKENIZER="org/tokenizer") == 0
+
+    argv = gate.argv.read_text().splitlines()
+    assert argv[argv.index("--tokenizer") + 1] == "org/tokenizer"
+    assert argv[argv.index("--model") + 1] == "served/model"
+    assert gate.document()["error"] is None
+
+
 def test_failed_requests_make_the_measurement_an_error(gate):
     with pytest.raises(BenchError, match="1 of 3 requests failed"):
         gate.run(FAILED="1")

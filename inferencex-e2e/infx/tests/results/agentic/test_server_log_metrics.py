@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from infx.results.agentic.backends.dynamo_vllm import DynamoVllmBackend
+from infx.results.agentic.backends.llamacpp import LlamaCppBackend
 from infx.results.agentic.backends.sglang import SglangBackend
 from infx.results.agentic.backends.vllm import VllmBackend
 from infx.results.agentic.artifacts import (
@@ -41,6 +44,27 @@ def test_kv_cache_pool_tokens_from_sglang_per_rank_lines() -> None:
     )
 
     assert SglangBackend.kv_cache_pool_tokens_from_server_log(log) == 2200
+
+
+def llamacpp_slots(slots: int, context: int, unified: bool) -> str:
+    """b11910's slot line: ``n_ctx_slot`` is a slot's context after every cap."""
+    shared = "true" if unified else "false"
+    return f"0.01.029.530 I srv    load_model: initializing, n_slots = {slots}, n_ctx_slot = {context}, kv_unified = '{shared}'"
+
+
+TRAINING_CAP = "0.01.029.529 W srv    load_model: the slot context ({}) exceeds the training context of the model (262144) - capping"
+SEQ_OVER_TRAINING = "0.00.951.004 W llama_context: n_ctx_seq ({}) > n_ctx_train (262144) -- possible training context overflow"
+
+
+@pytest.mark.parametrize(("lines", "tokens"), [
+    ([llamacpp_slots(4, 9472, False)], 4 * 9472),
+    ([llamacpp_slots(4, 32768, True)], 32768),
+    ([SEQ_OVER_TRAINING.format(524288), TRAINING_CAP.format(524288), llamacpp_slots(2, 262144, False)], 2 * 524288),
+    ([TRAINING_CAP.format(524288), llamacpp_slots(4, 262144, True)], 524288),
+    (["0.00.199.760 I srv  llama_server: initializing ..."], None),
+], ids=["a-cache-per-slot", "one-shared-cache", "per-slot-caches-capped-at-training", "shared-cache-capped-at-training-in-the-server-log", "no-slots-logged"])  # fmt: skip
+def test_llamacpp_kv_pool_is_the_cache_its_slots_were_allocated(lines, tokens) -> None:
+    assert LlamaCppBackend.kv_cache_pool_tokens_from_server_log("\n".join(lines)) == tokens
 
 
 def test_dynamo_vllm_uses_vllm_server_log_capacity_parser(tmp_path: Path) -> None:

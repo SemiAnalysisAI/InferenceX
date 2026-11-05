@@ -146,6 +146,24 @@ def test_each_point_gets_its_bound_variant_and_a_manifest_entry(project, tmp_pat
     assert recipe["roles"]["agg"]["env"] == {"NCCL_SOCKET_IFNAME": "eth7"}
 
 
+def test_a_key_on_a_cluster_without_an_srt_slurm_profile_is_skipped(project, tmp_path, capsys):
+    runners = yaml.safe_load((project / "configs/runners.yaml").read_text())
+    runners["labels"]["cluster:mac"] = ["mac_0"]
+    runners["clusters"]["mac"] = {
+        "gpus-per-node": 1, "arch": "aarch64", "os": "darwin", "scheduler": "native",
+        "native": {"root": "/srv/native"},
+    }  # fmt: skip
+    (project / "configs/runners.yaml").write_text(yaml.safe_dump(runners))
+    master = {**MASTER, "agentx-single-mac": {**MASTER["agentx-single"], "runner": "cluster:mac"}}
+    (project / "configs/master.yaml").write_text(yaml.safe_dump(master))
+    output = tmp_path / "out"
+
+    assert generate(project, output, "agentx-single*") == 0
+
+    assert [record["config-key"] for record, _ in written(output)] == ["agentx-single"]
+    assert "Skipping agentx-single-mac: " in capsys.readouterr().err
+
+
 def test_a_label_on_several_clusters_keeps_fabric_references(project, tmp_path):
     runners = yaml.safe_load((project / "configs/runners.yaml").read_text())
     runners["labels"] = {

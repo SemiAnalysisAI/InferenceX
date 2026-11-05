@@ -1,0 +1,27 @@
+qwen3.827b-q4_k_m-m5ultra-llamacpp-agentic:
+  image: https://github.com/ggml-org/llama.cpp/releases/download/b11910/llama-b11910-bin-macos-arm64.tar.gz@sha256:457f53b710cbdd65ce4e662d4e1aa49accee700110e99a5a49a818d47fc9152f
+  model: unsloth/Qwen3.8-27B-GGUF
+  model-prefix: qwen3.827b
+  runner: cluster:m5ultra-exo
+  precision: q4_k_m
+  framework: llamacpp
+  multinode: false
+  srt-recipe-dir: qwen3.827b/llamacpp/m5ultra-q4_k_m
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 1, ep: 1, kv-offloading: none, conc-list: [1, 2, 4], srt-recipe: agentic.yaml }
+
+qwen3.8next-iq4_xs-m5ultra-llamacpp-agentic:
+  image: https://github.com/ggml-org/llama.cpp/releases/download/b11910/llama-b11910-bin-macos-arm64.tar.gz@sha256:457f53b710cbdd65ce4e662d4e1aa49accee700110e99a5a49a818d47fc9152f
+  model: unsloth/Qwen3.8-Flash-Next-GGUF
+  model-prefix: qwen3.8next
+  runner: cluster:m5ultra-exo
+  precision: iq4_xs
+  framework: llamacpp
+  multinode: false
+  srt-recipe-dir: qwen3.8next/llamacpp/m5ultra-iq4_xs
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 1, ep: 1, kv-offloading: none, conc-list: [1, 2, 4], srt-recipe: agentic.yaml }

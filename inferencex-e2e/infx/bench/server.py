@@ -6,7 +6,9 @@ import argparse
 import codecs
 import http.client
 import json
+import math
 import os
+import subprocess
 import sys
 import time
 import urllib.error
@@ -44,6 +46,19 @@ def http_json(url: str) -> object | None:
         return None
 
 
+def _run_state(pid: int) -> str | None:
+    """``pid``'s one-letter run state, from ``/proc`` or else ``ps``; None when unknown."""
+    if Path("/proc/self").exists():
+        try:
+            return Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
+        except (FileNotFoundError, IndexError):
+            return None
+    ps = subprocess.run(
+        ["/bin/ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True, check=False
+    )
+    return ps.stdout.strip()[:1] or None
+
+
 def process_alive(pid: int) -> bool:
     """Whether ``pid`` is running, counting a zombie waiting to be reaped as dead."""
     try:
@@ -52,17 +67,22 @@ def process_alive(pid: int) -> bool:
         return False
     except PermissionError:
         return True
-    try:
-        state = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
-    except (FileNotFoundError, IndexError):
-        return True
-    return state not in {"Z", "X"}
+    return _run_state(pid) not in {"Z", "X"}
 
 
 def wait_ready(
-    url: str, *, pid: int | None = None, log: Path | None = None, poll_s: float = POLL_S
+    url: str,
+    *,
+    pid: int | None = None,
+    log: Path | None = None,
+    poll_s: float = POLL_S,
+    timeout_s: float | None = None,
 ) -> None:
-    """Poll ``url`` until it answers below 400, streaming ``log``; fail once ``pid`` exits."""
+    """Poll ``url`` until it answers below 400, streaming ``log``.
+
+    Fails once ``pid`` exits or ``timeout_s`` passes.
+    """
+    deadline = math.inf if timeout_s is None else time.monotonic() + timeout_s
     offset = 0
     inode: int | None = None
     decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
@@ -91,7 +111,10 @@ def wait_ready(
         if pid is not None and not process_alive(pid):
             stream()
             raise NotReadyError(f"process {pid} died before {url} became ready")
-        time.sleep(poll_s)
+        if (left := deadline - time.monotonic()) <= 0:
+            stream()
+            raise NotReadyError(f"{url} was not ready within {timeout_s:g}s")
+        time.sleep(min(poll_s, left))
 
 
 def chat_route_budget(environ: Mapping[str, str] = os.environ) -> tuple[int, int]:

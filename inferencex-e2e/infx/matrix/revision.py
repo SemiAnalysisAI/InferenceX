@@ -91,8 +91,12 @@ class Revision:
 
     @property
     def master_configs(self) -> list[str]:
-        """Paths of the revision's master config files."""
-        return [str(self._configs / Path(path).name) for path in MASTER_CONFIGS]
+        """Paths of the revision's master config files.
+
+        A revision older than a master config does not have that file, so it is left out.
+        """
+        paths = (self._configs / Path(config).name for config in MASTER_CONFIGS)
+        return [str(path) for path in paths if path.is_file()]
 
     @property
     def runner_config(self) -> str:
@@ -274,8 +278,11 @@ class _ForkServer:
         return self
 
     def kill(self) -> None:
-        """Kill the server and its forks, ignoring a server that already exited."""
-        with suppress(ProcessLookupError):
+        """Kill the server and its forks, ignoring a server that already exited.
+
+        macOS answers EPERM rather than ESRCH for a group holding only zombies.
+        """
+        with suppress(ProcessLookupError, PermissionError):
             os.killpg(self._process.pid, signal.SIGKILL)
 
     def __exit__(self, error_type: type[BaseException] | None, *_: object) -> None:

@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 from infx.launch import policy
 from infx.launch.backends import backend_class
 from infx.launch.context import Launch, LaunchError
-from infx.launch.drivers import script, srt
+from infx.launch.drivers import script, serve, srt
 from infx.launch.policy import LaunchPath, launch_path
 
 if TYPE_CHECKING:
@@ -37,6 +37,7 @@ ROUTES: dict[LaunchPath, Route] = {
     LaunchPath.SRT_NATIVE: Route("slurm", srt.run_multinode),
     LaunchPath.SRT_VIDEO: Route("slurm", srt.run_video),
     LaunchPath.SCRIPT: Route(None, script.run),
+    LaunchPath.SERVE: Route(None, serve.run),
 }
 
 
@@ -56,7 +57,7 @@ def run(cluster: Cluster, request: LaunchRequest, life: Lifecycle) -> int:
     path needs another scheduler than the cluster's.
     """
     check_tables({cluster.id: cluster}, only=cluster.id)
-    path = launch_path(cluster.id, request)
+    path = launch_path(cluster, request)
     life.event.set(launch_path=path.value)
     route = ROUTES[path]
     if route.scheduler not in (None, cluster.scheduler):

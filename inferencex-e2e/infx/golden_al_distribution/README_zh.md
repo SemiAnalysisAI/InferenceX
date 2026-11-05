@@ -79,6 +79,19 @@ python -m atom.entrypoints.openai_server \
 
 **DSpark 注意事项：** ATOM 禁止将强制接受与 DSpark 置信度调度器（`--dspark-config '{"confidence_schedule": true}'`）同时使用——后者在运行时决定每个请求的验证长度，可能把接受长度压到目标值以下，且无法提前检测。黄金 DSpark 曲线本身也是在未开启自适应验证的条件下收集的，因此关闭它同样是可比较的配置。
 
+llama.cpp 通过 `llama-server --spec-synth-len` 支持该策略，该参数直接接受黄金 AL：
+
+```bash
+llama-server \
+  --model MODEL.gguf \
+  --model-draft MTP_HEAD.gguf \
+  --spec-type draft-mtp \
+  --spec-draft-n-max 3 \
+  --spec-synth-len 2.48
+```
+
+srtctl 不运行 llama.cpp，因此该参数由启动器的 [serve 驱动](../launch/drivers/serve.py)而非连接器设置；方案若自行设置 `spec-synth-len` 或 `spec-synth-rates` 会被拒绝。
+
 这一策略遵循与 MLPerf Inference 相同的广义原则：规定可比较系统测量所需的工作负载规则。InferenceX 评估的是推理系统性能，而不是微调特定基准推测头的能力。
 
 ## 黄金 AL 曲线如何收集
@@ -208,7 +221,7 @@ gh workflow run speedbench-al.yml \
 [`infx/srt_slurm/spec_identity.py`](../srt_slurm/spec_identity.py) 用同一词汇描述运行的生成角色，并对照所选曲线进行审计，但不改变选择结果。KV cache dtype 会做归一化：`fp8_e4m3` 即 `fp8`，`bfloat16` 即 `bf16`，`auto` 为引擎默认值。结果类型包括 `mismatch`（双方值均已知且不同）、`unverified`（任一方为引擎默认值或未知，双方同为同一引擎默认值时除外）、`adaptive`（不适用固定 k 曲线）、`provisional` 和 `engine`。审计扫描矩阵中的每个推测解码角色：
 
 ```bash
-python -m infx.matrix.generate full-sweep --config-files configs/nvidia-master.yaml configs/amd-master.yaml --scenario-type agentic-coding > matrix.json
+python -m infx.matrix.generate full-sweep --config-files configs/nvidia-master.yaml configs/amd-master.yaml configs/apple-master.yaml --scenario-type agentic-coding > matrix.json
 python -m infx.srt_slurm.spec_identity snapshot matrix.json --root .
 ```
 

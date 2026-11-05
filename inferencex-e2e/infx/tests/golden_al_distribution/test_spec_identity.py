@@ -178,6 +178,33 @@ def test_tokenspeed_identity_keeps_unread_semantics_unknown(
     assert run.verify == run.draft_sample == run.adaptive == Fact(None, "unknown")
 
 
+@pytest.mark.parametrize(
+    ("args", "draft"),
+    [({}, "native"), ({"model-draft": "MTP/head.gguf"}, "MTP/head.gguf")],
+    ids=["embedded", "sidecar"],
+)
+def test_llamacpp_selects_by_method_alone_and_reports_its_kv_cache_as_a_mismatch(
+    tmp_path, args, draft
+) -> None:
+    identity = _identity("m")
+    identity["collection"]["kv_cache_dtype"] = {"value": "fp8", "source": "explicit"}
+    (tmp_path / "identities.yaml").write_text(yaml.safe_dump({"m_mtp": identity}))
+    (tmp_path / "m_mtp.yaml").write_text("m:\n  thinking_on:\n    3: 2.48\n")
+    role = _role(**{
+        "spec-type": "draft-mtp", "spec-draft-n-max": 3, "cache-type-k": "q8_0",
+        "cache-type-k-draft": "q8_0", **args,
+    })  # fmt: skip
+
+    run = run_collection("m", role, "llamacpp")
+    report = audit("m", role, "llamacpp", golden_dir=tmp_path)
+
+    assert (run.engine, run.draft) == ("llamacpp", draft)
+    assert (run.kv_cache_dtype.value, run.draft_kv_cache_dtype.value) == ("q8_0", "q8_0")
+    assert (report["curve"], report["draft_tokens"], report["golden"]) == ("m_mtp", 3, 2.48)
+    assert ["mismatch", "kv_cache_dtype", "q8_0 (explicit)", "fp8 (explicit)"] in report["findings"]
+    assert ["engine", "engine", "llamacpp", "vllm"] in report["findings"]
+
+
 def test_adaptive_run_is_reported() -> None:
     spec = {
         "method": "dspark", "num_speculative_tokens": 5, "draft_sample_method": "probabilistic",

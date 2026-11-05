@@ -62,7 +62,7 @@ for the pinned SHA. It ran no PR code. Each section is named for the check it se
 | `check_1_later_commits` | First-parent commits after it, with `merge` flag and changed files |
 | `check_2_eval_gaps` | Per run and eval row: gap and 2-sigma threshold against the best sibling and the closest ingested cohort |
 | `check_18g_points` | Generated points added and removed per config key, with measurements, dominance, and re-tuned deltas |
-| `check_18c_images` | Newly referenced images and whether `docker manifest inspect` resolves them (`tag@digest` pins by digest) |
+| `check_18c_images` | Newly referenced images and whether `docker manifest inspect` resolves them (`tag@digest` pins by digest; a native image's archive URL by HTTP HEAD) |
 
 Facts are inputs, not verdicts. Apply each check's rules to them, and spot-check a fact
 that looks wrong. When the file is missing or a section holds `"error"`, do that work
@@ -555,6 +555,8 @@ Verify BOTH:
     server/decode environment. The value counts accepted DRAFT tokens only and
     EXCLUDES the bonus/verification token, so it must be the golden AL minus 1
     (fractional values are allowed, e.g. golden AL 3.5 -> 2.5).
+  - llama.cpp: `llama-server --spec-synth-len <AL>`. The serve driver adds it from the
+    golden curve for a role with `spec-type: draft-mtp`, and refuses a recipe that sets it.
   FAIL if an agentic spec-decode config runs real (unsimulated) acceptance.
   Name the config/script and line.
 - (b) AL VALUE MATCHES THE GOLDEN CURVE. Read the committed golden AL YAML for the
@@ -964,7 +966,8 @@ shape to SGLang. Compare SGLang disaggregation with an accepted same-model peer.
 
 ### (c) Images resolve now
 Every newly referenced image must resolve now (`check_18c_images`; otherwise run
-`docker manifest inspect <image>` with `#` treated as `/`). A past green sweep does not
+`docker manifest inspect <image>` with `#` treated as `/`, or WebFetch a native image's
+archive URL without its `@sha256:` digest). A past green sweep does not
 prove a rolling or nightly tag still exists. A replaced tag needs its own validation,
 not an assumption of equivalence.
 

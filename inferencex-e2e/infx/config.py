@@ -4,7 +4,11 @@ import os
 import subprocess
 from pathlib import Path
 
-MASTER_CONFIGS = ["configs/amd-master.yaml", "configs/nvidia-master.yaml"]
+MASTER_CONFIGS = [
+    "configs/amd-master.yaml",
+    "configs/nvidia-master.yaml",
+    "configs/apple-master.yaml",
+]
 RUNNER_CONFIG = "configs/runners.yaml"
 
 

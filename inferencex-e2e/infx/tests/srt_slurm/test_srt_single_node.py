@@ -106,6 +106,38 @@ def test_tokenspeed_binding_preserves_native_args_and_eval_context(point):
         select_recipe(f"{path}:base", env)
 
 
+def llamacpp_point(point, args: dict | None = None, **change: str) -> tuple[str, dict[str, str]]:
+    """``point`` as a one-GPU llama.cpp recipe and environment, with ``change`` over the latter."""
+    path, recipe, env = point
+    role = {**recipe["roles"]["agg"], "gpus": 1, "args": {"n-gpu-layers": 999, **(args or {})}}
+    path.write_text(yaml.safe_dump({**recipe, "engine": "llamacpp", "roles": {"agg": role}}))
+    return str(path), {**env, "FRAMEWORK": "llamacpp", "TP": "1", "GPU_COUNT": "1", **change}
+
+
+@pytest.mark.parametrize(("change", "error"), [
+    ({"TP": "2"}, "TP: recipe/matrix 1 != 2"),
+    ({"EP_SIZE": "2"}, "EP_SIZE: recipe/matrix 1 != 2"),
+    ({"DP_ATTENTION": "true"}, "DP_ATTENTION: recipe/matrix False != True"),
+], ids=["tensor-parallel", "expert-parallel", "dp-attention"])  # fmt: skip
+def test_a_llamacpp_point_refuses_a_topology_llamacpp_does_not_run(point, change, error):
+    with pytest.raises(ValueError, match=error):
+        select_recipe(*llamacpp_point(point, **change))
+
+
+@pytest.mark.parametrize(("args", "draft"), [
+    ({}, "native"),
+    ({"model-draft": "MTP/head.gguf"}, "MTP/head.gguf"),
+], ids=["embedded", "sidecar"])  # fmt: skip
+def test_a_llamacpp_point_records_the_head_it_drafts_with(point, args, draft):
+    args = {"spec-type": "draft-mtp", "spec-draft-n-max": 3, **args}
+    path, env = llamacpp_point(point, args, SPEC_DECODING="mtp", MODEL_PREFIX="qwen3.827b")
+
+    _, bound = select_recipe(path, env)
+
+    workload = bound["benchmark"]["env"]
+    assert (workload["SPEC_ALGORITHM"], workload["SPEC_DRAFT_MODEL"]) == ("mtp", draft)
+
+
 @pytest.mark.parametrize("field,value,message", [
     ("TP", "2", "tensor-parallel-size"), ("RUN_EVAL", "yes", "RUN_EVAL"),
     ("PP_SIZE", "2", "PP_SIZE"), ("RESULT_FILENAME", "", "Missing runtime input"),

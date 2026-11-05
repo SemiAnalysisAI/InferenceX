@@ -98,4 +98,7 @@ READERS: dict[str, Callable[[Increase], Reading]] = {
         lambda s: s.get("token_position") == "0",
     ),
     "atom": lambda c: _read(c, "atom[:_]mtp_accepted_tokens", "atom[:_]mtp_decode_steps"),
+    "llamacpp": lambda c: _read(
+        c, "llamacpp:spec_decode_num_accepted_tokens", "llamacpp:spec_decode_num_drafts"
+    ),
 }

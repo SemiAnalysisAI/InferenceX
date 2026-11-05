@@ -330,6 +330,8 @@ labels:
     - mi355x-amds_09
   cluster:gb10-spark:
     - gb10-spark_00
+  cluster:m5ultra-exo:
+    - m5ultra-exo_00
 clusters:
   h100-cw:
     gpus-per-node: 8
@@ -876,3 +878,20 @@ clusters:
         volume-mounts:
           aiperf-cache: /aiperf_mmap_cache
           hf-hub-cache: /hf_hub_cache
+  m5ultra-exo:
+    gpus-per-node: 1
+    arch: aarch64
+    os: darwin
+    models:
+      entries:
+        Qwen3.8-27B-GGUF:
+          root: hf-hub-cache
+          dir: models--unsloth--Qwen3.8-27B-GGUF/snapshots/4ca720788d1e01f1bff70c033e0d0028fd02e502
+        Qwen3.8-Flash-Next-GGUF:
+          root: hf-hub-cache
+          dir: models--unsloth--Qwen3.8-Flash-Next-GGUF/snapshots/766911a6b7369840a91dbcd95f9f997acaab6cd6
+    scheduler: native
+    native:
+      root: ~/inferencex
+      volumes:
+        hf-hub-cache: {path: ~/.cache/huggingface/hub}

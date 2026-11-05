@@ -12233,3 +12233,12 @@
     - "Add Qwen3.8-27B NVFP4 AgentX on a DGX Spark (GB10) with vLLM MTP at 3 draft tokens at conc 1, 2 and 4."
     - "Add Qwen3.8-Flash-Next NVFP4 AgentX on a DGX Spark with SGLang MTP and an FP8 KV cache at conc 1 and 2, with its N-gram table file-backed on the NVMe."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - qwen3.827b-q4_k_m-m5ultra-llamacpp-agentic
+    - qwen3.8next-iq4_xs-m5ultra-llamacpp-agentic
+  scenario-type: [agentic-coding]
+  description:
+    - "Add Qwen3.8-27B Q4_K_M AgentX on an M5 Ultra Mac Studio with llama.cpp b11910 and a q8_0 KV cache at conc 1, 2 and 4, served natively from the unsloth GGUF."
+    - "Add Qwen3.8-Flash-Next IQ4_XS AgentX on the M5 Ultra with llama.cpp b11910 and a q8_0 KV cache at conc 1, 2 and 4, served natively from the unsloth GGUF."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

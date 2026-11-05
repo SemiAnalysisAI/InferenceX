@@ -95,14 +95,25 @@ def test_each_series_increase_survives_resets_new_series_and_shared_labels() -> 
             (500, 400),
         ),
         ("atom", "atom_mtp_decode_steps_total 40\natom_mtp_accepted_tokens_total 70\n", (70, 40)),
+        # llama-server b11910 also counts per position, which must not add to the accepted total.
+        (
+            "llamacpp",
+            "# TYPE llamacpp:spec_decode_num_draft_tokens_total counter\n"
+            "llamacpp:spec_decode_num_draft_tokens_total 3000\n"
+            "llamacpp:spec_decode_num_accepted_tokens_total 1480\n"
+            "llamacpp:spec_decode_num_drafts_total 1000\n"
+            'llamacpp:spec_decode_num_accepted_tokens_per_pos_total{position="0"} 800\n'
+            'llamacpp:spec_decode_num_accepted_tokens_per_pos_total{position="1"} 680\n',
+            (1480, 1000),
+        ),
     ],
-    ids=["vllm", "tokenspeed", "sglang-disagg", "trtllm", "atom", "atom-underscore"],
+    ids=["vllm", "tokenspeed", "sglang-disagg", "trtllm", "atom", "atom-underscore", "llamacpp"],
 )
 def test_each_engine_reads_its_accepted_drafts_and_verifications(engine, after, expected) -> None:
     assert READERS[engine](increase({WORKER: ""}, {WORKER: after})) == expected
 
 
-@pytest.mark.parametrize("engine", ["vllm", "tokenspeed", "sglang", "trtllm", "atom"])
+@pytest.mark.parametrize("engine", ["vllm", "tokenspeed", "sglang", "trtllm", "atom", "llamacpp"])
 def test_an_engine_without_its_counters_reads_nothing(engine) -> None:
     # Another engine's spec-decode families never give this one's reading.
     other = (

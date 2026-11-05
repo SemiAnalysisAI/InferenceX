@@ -3,11 +3,23 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Literal
+from pathlib import Path
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
 Visibility = Literal["shared", "node-local"]
+
+
+def _absolute(path: Path) -> Path:
+    """Expand a runner-home ``~`` and require an absolute host path."""
+    path = path.expanduser()
+    if not path.is_absolute():
+        raise ValueError(f"cluster path must be absolute: {path}")
+    return path
+
+
+HostPath = Annotated[Path, AfterValidator(_absolute)]
 
 
 class Record(BaseModel):
@@ -22,7 +34,24 @@ class Volume(Record):
     visibility: Visibility = "shared"
 
 
+class HostVolume(Volume):
+    """A directory on the cluster's storage, at ``path`` on the launching host and in jobs."""
+
+    path: HostPath
+
+
 class SchedulerSettings(Record):
     """Base of a ``<scheduler>:`` sub-record; subclasses narrow ``volumes`` to their own Volume."""
 
     volumes: Mapping[str, Volume] = Field(default_factory=dict)
+
+
+class HostVolumeSettings(SchedulerSettings):
+    """Scheduler facts of a cluster whose volumes are directories on the launching host."""
+
+    volumes: dict[str, HostVolume] = Field(default_factory=dict)
+
+    def path(self, volume: str) -> Path | None:
+        """Host path of volume ``volume``, or None when the cluster declares no such volume."""
+        declared = self.volumes.get(volume)
+        return None if declared is None else declared.path

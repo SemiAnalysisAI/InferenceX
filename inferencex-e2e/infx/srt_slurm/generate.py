@@ -169,7 +169,7 @@ def _binder_inputs(
     }
     request = MultiNodeRequest.from_env({**environment, **runtime})
     try:
-        path = launch_path(cluster.id, request)
+        path = launch_path(cluster, request)
         lane = lanes.srt_lane(cluster.id, path)
         decision = power.decide_power(
             cluster.id,
@@ -224,6 +224,11 @@ def bound_variant(
     )
 
 
+def _runs_srt_slurm(inventory: RunnerInventory, label: str) -> bool:
+    """Whether a cluster of ``label``'s runners has an srt-slurm profile."""
+    return any(inventory.cluster_for(runner).has_srt_slurm for runner in inventory.labels[label])
+
+
 def _cluster_fabric(cluster: Cluster) -> dict[str, str | None]:
     """``cluster``'s fabric as recipes read it."""
     srt = slurm_settings(cluster).srt_slurm
@@ -275,7 +280,8 @@ def generate_recipes(
     A multi-node point is bound with its cluster's GPU power telemetry and AgentX client
     paths; the manifest names that cluster, the one its runner label schedules on. A runner
     label on several clusters leaves ``'@fabric.<name>'`` values as written and the
-    manifest's ``cluster`` null.
+    manifest's ``cluster`` null. A key whose runner label is on no cluster with an srt-slurm
+    profile is skipped, with a line on stderr.
     """
     if output.exists() and (not output.is_dir() or any(output.iterdir())):
         raise ValueError(f"Output directory must be empty: {output}")
@@ -292,6 +298,9 @@ def generate_recipes(
     recipes: dict[str, dict[str, Any]] = {}
     records = []
     for key in expand_config_keys(config_keys, master):
+        if not _runs_srt_slurm(inventory, master[key]["runner"]):
+            print(f"Skipping {key}: the launcher's serve path runs its points", file=sys.stderr)
+            continue
         points = generate_config_matrix([key], master, runners, eval_mode="none", root=root)
         points = [point for point in points if point.get("srt-recipe")]
         if not points:

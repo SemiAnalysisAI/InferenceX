@@ -220,17 +220,19 @@ def sandbox_runner_config(sandbox: Path) -> Path:
     """Write configs/runners.yaml with every cluster host path moved under ``sandbox``."""
     data: dict[str, Any] = yaml.safe_load((ROOT / "configs/runners.yaml").read_text())
     for cluster in data["clusters"].values():
-        slurm = cluster["slurm"]
-        squash = slurm.get("squash") or {}
+        settings = cluster[cluster["scheduler"]]
+        if "root" in settings:
+            settings["root"] = _sandboxed(settings["root"], sandbox)
+        squash = settings.get("squash") or {}
         locations = [squash, *squash.get("framework-dirs", {}).values(), *squash.get("helper-dirs", {}).values()]
         for framework in squash.get("framework-dirs", {}).values():
             locations += framework.get("model-prefixes", {}).values()
         for location in locations:
             if "dir" in location:
                 location["dir"] = _sandboxed(location["dir"], sandbox)
-        for volume in slurm.get("volumes", {}).values():
+        for volume in settings.get("volumes", {}).values():
             volume["path"] = _sandboxed(volume["path"], sandbox)
-        srt = slurm.get("srt-slurm") or {}
+        srt = settings.get("srt-slurm") or {}
         for key in ("outputs", "shared-run-root", "uv-cache-root"):
             if key in srt:
                 srt[key] = _sandboxed(srt[key], sandbox)

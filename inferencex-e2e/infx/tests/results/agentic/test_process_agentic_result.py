@@ -1025,6 +1025,39 @@ def test_processor_falls_back_to_sglang_max_total_num_tokens(tmp_path: Path):
     _assert_stable_server_metrics_schema(agg)
 
 
+def test_processor_reads_llamacpp_counters_and_the_kv_pool_its_slots_hold(tmp_path: Path):
+    result_dir = _write_fixture(tmp_path)
+    counters = {
+        "llamacpp:prompt_tokens": 600.0,
+        "llamacpp:prompt_tokens_cached": 1400.0,
+        "llamacpp:tokens_predicted": 300.0,
+    }
+    server_metrics = {
+        "metrics": {
+            name: {"type": "counter", "series": [{"stats": {"total": total}}]}
+            for name, total in counters.items()
+        }
+    }
+    (result_dir / "aiperf_artifacts" / "server_metrics_export.json").write_text(
+        json.dumps(server_metrics)
+    )
+    (result_dir / "server.log").write_text(
+        "0.01.029.530 I srv    load_model: initializing, n_slots = 2, n_ctx_slot = 262144, "
+        "kv_unified = 'false'\n"
+    )
+
+    agg = _run_processor(result_dir, tmp_path / "out", env_overrides={"FRAMEWORK": "llamacpp"})
+
+    server = agg["server_metrics"]
+    assert server["adapter"] == "llamacpp"
+    assert (server["tokens"]["prompt_total"], server["tokens"]["generation_total"]) == (2000, 300)
+    assert server["cache"]["overall_cache_hit_rate"] == pytest.approx(0.7)
+    assert (server["cache"]["gpu_cache_hit_rate"], server["cache"]["cpu_cache_hit_rate"]) == (None, None)
+    assert server["tokens"]["prompt_by_source"]["gpu_cache_hit"] is None
+    assert agg["kv_cache_pool_tokens"] == 2 * 262144
+    _assert_stable_server_metrics_schema(agg)
+
+
 def test_server_metrics_reject_unknown_backend() -> None:
     with pytest.raises(ValueError, match="Unsupported agentic server metrics backend"):
         compute_server_metrics(

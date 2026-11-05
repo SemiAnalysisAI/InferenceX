@@ -25,6 +25,7 @@ from infx.srt_slurm.synthetic_acceptance import (
 
 COMMAND = "bash /infmax-workspace/benchmarks/srt_al_gate.sh"
 OUTPUT_DIR = "/logs"
+TIMEOUT_S = "1800"
 # srt-slurm runs the benchmark stage, then the eval, only without EVAL_ONLY.
 SRT_ENVIRONMENT = {"EVAL_ONLY": "false", "RUN_EVAL": "true"}
 EXEMPT_FRAMEWORKS = {
@@ -39,6 +40,19 @@ LEADER_ONLY_METRICS = (
 def requested(environment: Mapping[str, str]) -> bool:
     """Whether the launcher found the prompts for this agentic speculative eval."""
     return environment.get("EVAL_AL_GATE") == "true"
+
+
+def prompts_staged(environment: Mapping[str, str], workspace: Path) -> bool:
+    """Whether ``AL_GATE_DATASET`` names a file inside ``workspace``."""
+    dataset = environment.get("AL_GATE_DATASET", "")
+    root = workspace.resolve()
+    staged = (root / dataset).resolve()
+    return bool(
+        dataset
+        and not Path(dataset).is_absolute()
+        and staged.is_relative_to(root)
+        and staged.is_file()
+    )
 
 
 def leader_only_metrics(
@@ -108,18 +122,29 @@ def skipped(reason: str, environment: Mapping[str, str]) -> dict[str, Any]:
     }
 
 
-def overrides(gate: Mapping[str, Any], environment: Mapping[str, str]) -> list[str]:
-    """``srtctl apply`` arguments that run ``gate`` as the benchmark stage, without power.
+def skipped_without_prompts(environment: Mapping[str, str]) -> dict[str, Any]:
+    """The result document of a gate whose SPEED-Bench prompts are not staged."""
+    dataset = environment.get("AL_GATE_DATASET", "")
+    return skipped(f"no SPEED-Bench prompts at {dataset!r}", environment)
 
-    ``benchmark.env`` outranks the job environment. The container resolves the relative
-    ``AL_GATE_DATASET`` in ``/infmax-workspace``.
-    """
-    env = {
+
+def write_result(workspace: Path, result_filename: str, document: Mapping[str, object]) -> None:
+    """Write a gate result beside the eval's, where the workflow uploads it."""
+    path = workspace / f"al_gate_{result_filename}.json"
+    path.write_text(json.dumps(document, indent=2) + "\n")
+    print(f"AL gate (report-only): {document.get('status')}: {document.get('error')}", flush=True)
+
+
+def client_env(
+    gate: Mapping[str, Any], environment: Mapping[str, str], output_dir: str = OUTPUT_DIR
+) -> dict[str, str]:
+    """What ``python3 -m infx.bench al-gate`` reads to measure ``gate`` beyond the job's identity."""
+    return {
         "AL_GATE": "true",
         "AL_GATE_CURVE": gate["curve"],
         "AL_GATE_DRAFT_TOKENS": str(gate["draft_tokens"]),
         "AL_GATE_DATASET": environment["AL_GATE_DATASET"],
-        "AL_GATE_OUTPUT_DIR": OUTPUT_DIR,
+        "AL_GATE_OUTPUT_DIR": output_dir,
         "THINKING_MODE": environment["THINKING_MODE"],
         **{
             name: environment[name]
@@ -127,11 +152,19 @@ def overrides(gate: Mapping[str, Any], environment: Mapping[str, str]) -> list[s
             if environment.get(name)
         },
     }
+
+
+def overrides(gate: Mapping[str, Any], environment: Mapping[str, str]) -> list[str]:
+    """``srtctl apply`` arguments that run ``gate`` as the benchmark stage, without power.
+
+    ``benchmark.env`` outranks the job environment. The container resolves the relative
+    ``AL_GATE_DATASET`` in ``/infmax-workspace``.
+    """
     arguments = [
         "--set", 'benchmark.type="custom"',
         "--set", f"benchmark.command={json.dumps(COMMAND)}",
     ]  # fmt: skip
-    for name, value in env.items():
+    for name, value in client_env(gate, environment).items():
         arguments += ["--set", f"benchmark.env.{name}={json.dumps(value)}"]
     return [*arguments, "--unset", "telemetry"]
 

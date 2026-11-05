@@ -1,0 +1,68 @@
+base:
+  schema: 2
+  name: qwen3.8next-iq4_xs-m5ultra-llamacpp-agentic-mtp
+  resources:
+    gpu_type: m5ultra
+    gpus_per_node: 1
+  frontend:
+    type: llamacpp
+    enable_multiple_frontends: false
+  engine: llamacpp
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 1
+      args:
+        model: UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf
+        n-gpu-layers: all
+        flash-attn: 'on'
+        # Keeps the N-gram table on the SSD instead of in memory beside the weights.
+        lazy-mode: 'on'
+        no-kv-unified: true
+        # Eight separate slots of 262,144 tokens, since one trace runs subagents in parallel.
+        parallel: 8
+        ctx-size: 2097152
+        # llama.cpp has no FP8 KV cache: its nearest is q8_0, which saves memory in the same way.
+        cache-type-k: q8_0
+        cache-type-v: q8_0
+        # The 8-bit head from this GGUF's repo, as b11910 can't load its smaller shared heads.
+        # The launcher sets the golden acceptance length.
+        spec-type: draft-mtp
+        model-draft: MTP/mtp-Qwen3.8-Flash-Next-Q8_0.gguf
+        spec-draft-n-max: 3
+        cache-type-k-draft: q8_0
+        cache-type-v-draft: q8_0
+        # Tokenize as the client, vLLM and SGLang do: they use the regex of transformers'
+        # Qwen2Tokenizer, not the one this GGUF names.
+        override-kv: tokenizer.ggml.pre=str:qwen2
+        # 64 GiB of prompt cache; it shares unified memory with the KV cache.
+        cache-ram: 65536
+        # Don't copy idle slots to the prompt cache on each request: they keep their KV regardless.
+        no-cache-idle-slots: true
+        metrics: true
+  benchmark:
+    env:
+      TOKENIZER: Qwen/Qwen3.8-Flash-Next
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'llamacpp:'
+      # llama-server closes streamed connections while advertising keep-alive; a reused one fails.
+      AIPERF_HTTP_FORCE_CLOSE: 'true'
+      AIPERF_HTTP_KEEPALIVE_TIMEOUT: '0'
+      # Let responses still running when the window ends finish, for up to 30 minutes.
+      # No new requests start in that time.
+      AIPERF_BENCHMARK_GRACE_PERIOD: '1800'
+
+override_c1:
+  benchmark:
+    env:
+      CONC: '1'
+
+override_c2:
+  benchmark:
+    env:
+      CONC: '2'
+
+override_c4:
+  benchmark:
+    env:
+      CONC: '4'

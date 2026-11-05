@@ -883,6 +883,17 @@ workflows = [
 ]
 
 [package.dev-dependencies]
+client = [
+    { name = "aiohttp" },
+    { name = "huggingface-hub" },
+    { name = "jinja2" },
+    { name = "numpy" },
+    { name = "tokenizers" },
+    { name = "torch", version = "2.14.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
+    { name = "torch", version = "2.14.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
+    { name = "tqdm" },
+    { name = "transformers" },
+]
 test = [
     { name = "aiohttp" },
     { name = "matplotlib" },
@@ -914,6 +925,17 @@ requires-dist = [
 provides-extras = ["recipes", "workflows", "results"]
 
 [package.metadata.requires-dev]
+client = [
+    { name = "aiohttp", specifier = ">=3,<4" },
+    { name = "huggingface-hub", specifier = ">=1.5,<2" },
+    { name = "jinja2", specifier = ">=3.1,<4" },
+    { name = "numpy", specifier = ">=2,<3" },
+    { name = "tokenizers", specifier = ">=0.22,<1" },
+    { name = "torch", marker = "sys_platform != 'darwin'", specifier = ">=2,<3", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "torch", marker = "sys_platform == 'darwin'", specifier = ">=2,<3" },
+    { name = "tqdm", specifier = ">=4,<5" },
+    { name = "transformers", specifier = ">=5,<6" },
+]
 test = [
     { name = "aiohttp", specifier = ">=3,<4" },
     { name = "matplotlib", specifier = ">=3,<4" },

@@ -25,6 +25,13 @@ def test_echo_masks_credentials_but_not_token_count_settings(capsys):
     )
 
 
+def test_recorded_groups_skip_a_line_a_killed_writer_left_unfinished(tmp_path):
+    record = tmp_path / "groups"
+    record.write_text('{"pgid": 12, "started_at": 3.5}\n{"pgid": 13, "sta')
+
+    assert proc.recorded_groups(record) == [(12, 3.5)]
+
+
 def test_tee_reports_a_command_that_cannot_start(tmp_path, capsys):
     missing = str(tmp_path / "missing")
     log = tmp_path / "out.log"

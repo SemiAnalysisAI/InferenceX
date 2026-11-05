@@ -17,7 +17,7 @@ import sys
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import TYPE_CHECKING, override
 
 from infx.bench.proc import echo
@@ -31,6 +31,7 @@ from infx.launch.backends.base import (
     Job,
     JobState,
     JobStatus,
+    mounted_host_path,
 )
 from infx.launch.backends.slurm import cli
 from infx.launch.backends.slurm.squash import (
@@ -130,7 +131,7 @@ class SlurmBackend(Backend):
             if squash is not None and squash.policy().needs_job():
                 ensure_image(container.image.name, squash.policy(), job=allocation)
             for path in container.required_paths:
-                if cli.srun(allocation, ["test", "-r", str(_host_path(mounts, path))]) != 0:
+                if cli.srun(allocation, ["test", "-r", str(mounted_host_path(mounts, path))]) != 0:
                     raise BackendError(
                         f"readiness-blocked: {path} is unavailable on the allocated node"
                     )
@@ -430,11 +431,3 @@ class SlurmBackend(Backend):
             args.append("--exclude=" + ",".join(settings.exclude))
         squash_args = settings.squash.import_step_args if settings.squash else ()
         return [*args, *squash_args]
-
-
-def _host_path(mounts: Sequence[tuple[Path, PurePosixPath]], path: PurePosixPath) -> Path:
-    """Where the node sees container path ``path``: through the longest matching mount."""
-    for source, target in sorted(mounts, key=lambda mount: -len(mount[1].parts)):
-        if path.is_relative_to(target):
-            return source / path.relative_to(target)
-    return Path(path)

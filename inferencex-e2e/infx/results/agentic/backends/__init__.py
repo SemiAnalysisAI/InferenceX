@@ -7,6 +7,7 @@ from typing import Any
 from .atom import AtomBackend
 from .base import ServerMetricsBackend
 from .dynamo_vllm import DynamoVllmBackend
+from .llamacpp import LlamaCppBackend
 from .sglang import SglangBackend
 from .tokenspeed import TokenSpeedBackend
 from .trtllm import TrtllmBackend
@@ -19,6 +20,7 @@ BACKENDS: tuple[ServerMetricsBackend, ...] = (
     SglangBackend(),
     TokenSpeedBackend(),
     VllmBackend(),
+    LlamaCppBackend(),
 )
 
 

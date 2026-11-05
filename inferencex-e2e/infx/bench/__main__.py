@@ -10,6 +10,7 @@ from infx.bench.env import BenchError
 
 COMMANDS = {
     "wait": "infx.bench.server",
+    "serve": "infx.bench.serve",
     "fixed-seq": "infx.bench.fixed_seq",
     "agentic": "infx.bench.agentic.run",
     "eval": "infx.bench.eval",

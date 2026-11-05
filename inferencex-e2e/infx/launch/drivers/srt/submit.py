@@ -64,25 +64,11 @@ def request_al_gate(run: SrtRun) -> None:
         request.eval_only and request.is_agentic and request.spec_decoding not in (None, "none")
     ):
         return
-    dataset = run.env.get("AL_GATE_DATASET", "")
-    workspace = run.workspace.resolve()
-    staged = (workspace / dataset).resolve()
-    if (
-        dataset
-        and not Path(dataset).is_absolute()
-        and staged.is_relative_to(workspace)
-        and staged.is_file()
-    ):
+    if al_gate.prompts_staged(run.env, run.workspace):
         run.env["EVAL_AL_GATE"] = "true"
         return
-    write_al_gate(run, al_gate.skipped(f"no SPEED-Bench prompts at {dataset!r}", run.env))
-
-
-def write_al_gate(run: SrtRun, document: Mapping[str, object]) -> None:
-    """Write an acceptance gate result beside the eval's, where the workflow uploads it."""
-    path = run.workspace / f"al_gate_{run.request.result_filename}.json"
-    path.write_text(json.dumps(document, indent=2) + "\n")
-    print(f"AL gate (report-only): {document.get('status')}: {document.get('error')}", flush=True)
+    gate = al_gate.skipped_without_prompts(run.env)
+    al_gate.write_result(run.workspace, run.request.result_filename, gate)
 
 
 def eval_args(env: Mapping[str, str], command: str) -> list[str]:
@@ -223,7 +209,7 @@ def apply(
         event.set(golden_acceptance_length=planned["golden_acceptance_length"])
         gate = planned.get("al_gate")
         if isinstance(gate, dict) and gate.get("status") == "skipped":
-            write_al_gate(run, gate)
+            al_gate.write_result(run.workspace, run.request.result_filename, gate)
     if rc:
         event.fail("SubmitFailed", f"srtctl apply exited {rc}")
     return subprocess.CompletedProcess(argv, rc, stdout.read_text(errors="replace"), "")

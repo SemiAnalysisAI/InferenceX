@@ -35,6 +35,7 @@ ENGINES = {
     "atom-disagg": "atom",
     "tilert": "tilert",
     "tokenspeed": "tokenspeed",
+    "llamacpp": "llamacpp",
 }
 SGLANG_VARIABLES = (
     "SGLANG_SIMULATE_ACC_LEN",
@@ -67,6 +68,14 @@ def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
         return {
             "method": "mtp",
             "num_speculative_tokens": args.get("speculative-num-steps"),
+        }
+    if engine == "llamacpp":
+        if args.get("spec-type") != "draft-mtp":
+            return {}
+        return {
+            "method": "mtp",
+            "num_speculative_tokens": args.get("spec-draft-n-max"),
+            "model": args.get("model-draft", ""),
         }
     if engine == "tilert":
         if args.get("with-mtp") is not True:
@@ -254,9 +263,12 @@ def build_overrides(
     *,
     golden_dir: Path = GOLDEN_DIR,
 ) -> list[str]:
-    """Infer acceptance from generation parameters; never accept a caller AL."""
+    """Infer acceptance from generation parameters; never accept a caller AL.
+
+    srtctl runs no llama.cpp, so the serve driver sets that engine's acceptance itself.
+    """
     engine = ENGINES.get(framework)
-    if engine is None:
+    if engine in (None, "llamacpp"):
         return []
     roles = recipe.get("roles", {})
     al = _simulated_length(recipe, framework, environment, golden_dir=golden_dir)

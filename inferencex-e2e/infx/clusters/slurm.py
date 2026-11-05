@@ -12,22 +12,11 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
 from pydantic import AfterValidator, Field, PlainSerializer, field_validator, model_validator
 
-from infx.clusters.base import Record, SchedulerSettings, Visibility, Volume
+from infx.clusters.base import HostPath, HostVolumeSettings, Record, Visibility
 from infx.srt_slurm.workload import CpuPowerSource, resolve_fabric
 
 if TYPE_CHECKING:
     from infx.clusters import Cluster
-
-
-def _absolute(path: Path) -> Path:
-    """Expand a runner-home ``~`` and require an absolute host path."""
-    path = path.expanduser()
-    if not path.is_absolute():
-        raise ValueError(f"cluster path must be absolute: {path}")
-    return path
-
-
-HostPath = Annotated[Path, AfterValidator(_absolute)]
 
 
 def _long_option(arg: str) -> str:
@@ -43,12 +32,6 @@ KeyStyle = Literal["underscore", "plus", "plus-strip-nvcr"]
 ImportMode = Literal["submit-host", "compute", "all-nodes", "pre-staged", "unchecked"]
 LockFile = Literal["beside-squash", "locks-dir"]
 HelperImage = Literal["nginx", "dcgm-exporter"]
-
-
-class HostVolume(Volume):
-    """A directory on the cluster's storage, at ``path`` on the launching host and in jobs."""
-
-    path: HostPath
 
 
 @dataclass(frozen=True)
@@ -249,10 +232,9 @@ class SrtSlurmSettings(Record):
         return {**data, "host-setup": {**setup, "env": env}}
 
 
-class SlurmSettings(SchedulerSettings):
+class SlurmSettings(HostVolumeSettings):
     """Scheduler facts shared by every Slurm submission on the cluster."""
 
-    volumes: dict[str, HostVolume] = Field(default_factory=dict)
     partition: str = Field(min_length=1)
     partitions: tuple[Annotated[str, Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]*$")], ...] = ()
     account: str | None = Field(default=None, min_length=1)
@@ -329,11 +311,6 @@ class SlurmSettings(SchedulerSettings):
     def gres_for(self, gpus: int) -> str | None:
         """Render the GRES request for ``gpus`` GPUs, or None when the cluster sets none."""
         return None if self.gres is None else self.gres.format(gpus=gpus)
-
-    def path(self, volume: str) -> Path | None:
-        """Host path of volume ``volume``, or None when the cluster declares no such volume."""
-        declared = self.volumes.get(volume)
-        return None if declared is None else declared.path
 
 
 def slurm_settings(cluster: Cluster) -> SlurmSettings:

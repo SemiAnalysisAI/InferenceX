@@ -7,6 +7,8 @@ state, and cancelling every job it starts when the launch's Lifecycle ends.
 
 from __future__ import annotations
 
+import fnmatch
+import re
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -96,9 +98,9 @@ class Container:
     ``required_paths`` must be readable where the container runs, or it never starts.
     Each container receives the launching environment's non-empty, exportable variables
     except host state (paths, interpreters, runner credentials), with ``env`` over them;
-    workloads rely on no more, though a backend may pass more. ``env`` may carry
-    credentials, which a backend must expose no more widely than the launching environment
-    does.
+    the ``RUN_IDENTITY`` variables pass even so, because results built inside containers record
+    them. Workloads rely on no more, though a backend may pass more. ``env`` may carry
+    credentials, which a backend must expose no more widely than the launching environment does.
     """
 
     image: Image
@@ -114,6 +116,38 @@ class Container:
     exclude: Sequence[str] = ()
 
 
+HOST_ENV = (
+    "PATH", "HOME", "USER", "LOGNAME", "PWD", "OLDPWD", "SHELL", "SHLVL", "TERM", "TMPDIR",
+    "HOSTNAME", "_", "LANG", "LC_*", "LD_*", "PYTHON*", "VIRTUAL_ENV", "CONDA_*", "UV_*",
+    "GITHUB_*", "RUNNER_*", "ACTIONS_*", "XDG_*", "SSH_*", "*_VISIBLE_DEVICES",
+    "BASH*", "SHELLOPTS", "UID", "EUID", "PPID",
+)  # fmt: skip
+RUN_IDENTITY = frozenset({"RUNNER_TYPE", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT"})
+_SHELL_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def container_env(env: Mapping[str, str]) -> dict[str, str]:
+    """The part of the launching environment ``env`` every container receives (see ``Container``)."""
+    return {
+        name: value
+        for name, value in env.items()
+        if value
+        and _SHELL_NAME.fullmatch(name)
+        and (
+            name in RUN_IDENTITY
+            or not any(fnmatch.fnmatchcase(name, pattern) for pattern in HOST_ENV)
+        )
+    }
+
+
+def mounted_host_path(mounts: Sequence[tuple[Path, PurePosixPath]], path: PurePosixPath) -> Path:
+    """Where the host sees container path ``path``: through the longest matching mount."""
+    for source, target in sorted(mounts, key=lambda mount: -len(mount[1].parts)):
+        if path.is_relative_to(target):
+            return source / path.relative_to(target)
+    return Path(path)
+
+
 class Backend(ABC):
     """Runs containers and follows jobs on one cluster's scheduler for one launch."""
 
@@ -125,7 +159,7 @@ class Backend(ABC):
 
     @abstractmethod
     def prepare_image(self, image: str) -> Image:
-        """Make the registry image ``image`` available to this backend's containers."""
+        """Make the image reference ``image`` available to this backend's containers."""
 
     @abstractmethod
     def run_container(self, container: Container) -> Job:

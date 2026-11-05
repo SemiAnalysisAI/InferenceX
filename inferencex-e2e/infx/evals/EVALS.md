@@ -610,6 +610,11 @@ are gated.
   vLLM data-parallel worker whose metrics srtctl exposes only on its leader. Dynamo TRT-LLM is
   gated: srtctl publishes TensorRT-LLM metrics by default, and a recipe that turns them off
   (`backend.publish_metrics: false`) reports `no-counters`.
+- On the launcher's [serve path](../../configs/CONFIGS.md#the-serve-path), one container serves the
+  point, so `infx.bench serve` runs `al-gate` itself once the server is ready and before the eval.
+  It stops the gate's process group after `AL_GATE_TIMEOUT_S` and ignores its status, as the shim
+  does. llama-server exports the counters as `llamacpp:spec_decode_num_accepted_tokens_total` and
+  `llamacpp:spec_decode_num_drafts_total`.
 - The result travels in the eval artifact; the raw replay files (`al_gate/`) are in the eval
   server logs. `collect-evals` adds a "Speculative acceptance gate" table to its step summary.
 

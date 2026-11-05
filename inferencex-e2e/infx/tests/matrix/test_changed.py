@@ -42,6 +42,7 @@ def test_keys_with_changed_recipes_or_points_are_listed(tmp_path, monkeypatch, c
     (tmp_path / RECIPES).mkdir(parents=True)
     write_shared_blocks(tmp_path)
     (tmp_path / "configs/amd-master.yaml").write_text("{}\n")
+    (tmp_path / "configs/apple-master.yaml").write_text("{}\n")
     (tmp_path / "configs/runners.yaml").write_text(yaml.safe_dump({
         "labels": {"cluster:fixture": ["node-a"]},
         "clusters": {"fixture": {"gpus-per-node": 8, "arch": "x86_64", "scheduler": "slurm",

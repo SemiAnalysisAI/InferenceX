@@ -12,9 +12,10 @@ Inputs from `$ARGUMENTS` (links first, then SKU. The rest are optional and order
   `https://huggingface.co/moonshotai/Kimi-K3`. Derive from it: the `model:` id
   (`org/repo`), the **precision** (from the repo name, where `MXFP8`/`FP8`→`fp8`, `NVFP4`/`FP4`→`fp4`,
   `INT4`→`int4`, else `bf16`), and the **model-prefix** (e.g. `kimik3`).
-- **gpu-sku** (required). Choose from `b200 | b300 | h100 | h200 | gb200 | mi300x | mi325x | mi355x`.
-  Determines the master config (`mi*`→`amd-master.yaml`, else `nvidia-master.yaml`), the image
-  repo (`vllm/vllm-openai` vs `vllm/vllm-openai-rocm`), and the launcher.
+- **gpu-sku** (required). Choose from `b200 | b300 | h100 | h200 | gb10 | gb200 | mi300x | mi325x | mi355x | m5ultra`.
+  Determines the master config (`mi*`→`amd-master.yaml`, `m5*`→`apple-master.yaml`, else
+  `nvidia-master.yaml`), the image (the repo `vllm/vllm-openai` or `vllm/vllm-openai-rocm`, or for
+  `m5*` an archive URL pinned as `<url>@sha256:<hex>`), and the launcher.
 - **recipes-link** (optional). The model's `recipes.vllm.ai` page (or a vendor recipe commit).
   Consult it for the authoritative serve flags (block size, parsers, attention backend,
   parallelism guidance). If omitted, copy the sibling recipe's flags.
@@ -43,7 +44,7 @@ Check `inferencex-e2e/docs/MODELS.md` before choosing a model, scenario, or prec
 # similar srt-slurm recipes: same model on other SKUs, AND same SKU on other models
 ls -d inferencex-e2e/benchmarks/single_node/srt-slurm-recipes/<model>/*/* inferencex-e2e/benchmarks/single_node/srt-slurm-recipes/*/*/<sku>-*
 # similar master-config entries (search spaces, image, parallelism), this model + analogues
-grep -nE "<model>-|.*-<sku>-" inferencex-e2e/configs/{nvidia,amd}-master.yaml
+grep -nE "<model>-|.*-<sku>-" inferencex-e2e/configs/{nvidia,amd,apple}-master.yaml
 # how a matrix point selects exactly one recipe variant (TP, GPUs, CONC, KV_OFFLOADING, image)
 sed -n '/def select_recipe/,/^def runtime_arguments/p' inferencex-e2e/infx/srt_slurm/single_node.py
 ```
@@ -74,8 +75,9 @@ This research directly feeds Step 2 (recipe args/env) and Step 3 (search space).
 
 1. `inferencex-e2e/benchmarks/single_node/srt-slurm-recipes/<model-prefix>/<engine>/<sku>-<precision>[-mtp]/8k1k.yaml`
    (an `agentic.yaml` beside it for AgentX)
-2. an entry in either master config, **`inferencex-e2e/configs/nvidia-master.yaml`** (b*/h*/gb* SKUs) or
-   **`inferencex-e2e/configs/amd-master.yaml`** (mi* SKUs), with `srt-recipe-dir:` (the directory above,
+2. an entry in one master config, **`inferencex-e2e/configs/nvidia-master.yaml`** (b*/h*/gb* SKUs),
+   **`inferencex-e2e/configs/amd-master.yaml`** (mi* SKUs) or **`inferencex-e2e/configs/apple-master.yaml`**
+   (m5* SKUs), with `srt-recipe-dir:` (the directory above,
    relative to `srt-slurm-recipes/`) on the entry and `srt-recipe:` (the file name) on every search-space row
 3. a `inferencex-e2e/perf-changelog.yaml` entry (this diff vs main is what selects the sweep)
 
@@ -87,7 +89,7 @@ git checkout -b feat/<model>-<sku>[-mtp]-dayzero
 # nearest sibling: same model other SKU, or same SKU other model
 ls -d inferencex-e2e/benchmarks/single_node/srt-slurm-recipes/<model>/*/*      # same model, other hardware
 ls -d inferencex-e2e/benchmarks/single_node/srt-slurm-recipes/*/*/<sku>-*       # same hardware, other model
-grep -n "<model>-<precision>-<sku>" inferencex-e2e/configs/{nvidia,amd}-master.yaml
+grep -n "<model>-<precision>-<sku>" inferencex-e2e/configs/{nvidia,amd,apple}-master.yaml
 ```
 Read the closest sibling recipe **and** its master-config entry. Copy their flag shapes and
 search-space structure rather than inventing. The right model is "same model on a sibling SKU,
@@ -130,7 +132,7 @@ Append `<model>-<precision>-<sku>[-<engine>][-mtp]` after the sibling, with the 
 - Latency (TP-only) rows should start at conc 1. TEP/DEP rows start higher (they only pay off
   at scale).
 
-Confirm which master file by SKU: `mi*` → `amd-master.yaml`, everything else → `nvidia-master.yaml`.
+Confirm which master file by SKU: `mi*` → `amd-master.yaml`, `m5*` → `apple-master.yaml`, everything else → `nvidia-master.yaml`.
 
 ## Step 4 — no launcher routing
 
@@ -149,12 +151,12 @@ new entry is **required** for CI to run your config.
 
 ```bash
 python3 -c "import yaml; yaml.safe_load(open('inferencex-e2e/benchmarks/single_node/srt-slurm-recipes/<recipe>'))"
-python3 -c "import yaml; yaml.safe_load(open('inferencex-e2e/configs/<nvidia|amd>-master.yaml')); yaml.safe_load(open('inferencex-e2e/perf-changelog.yaml'))"
+python3 -c "import yaml; yaml.safe_load(open('inferencex-e2e/configs/<nvidia|amd|apple>-master.yaml')); yaml.safe_load(open('inferencex-e2e/perf-changelog.yaml'))"
 (
   cd inferencex-e2e
   uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
     python -m infx.matrix.generate test-config \
-    --config-files configs/<nvidia|amd>-master.yaml --config-keys <key>
+    --config-files configs/<nvidia|amd|apple>-master.yaml --config-keys <key>
 )
 ```
 Sanity-check the generated matrix: expected layouts/concurrencies, `max-model-len` = scenario

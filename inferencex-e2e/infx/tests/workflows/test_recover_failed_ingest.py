@@ -405,6 +405,7 @@ def test_build_recovery_config_from_current_and_historical_projects(
         ROOT / "infx", project / "infx", ignore=shutil.ignore_patterns("tests", "__pycache__"),
     )
     (configs / "amd-master.yaml").write_text("{}\n")
+    (configs / "apple-master.yaml").write_text("{}\n")
     (configs / "runners.yaml").write_text(
         "labels: {fixture: [node-a], 'cluster:fixture': [node-a]}\n"
         "clusters:\n  fixture: {gpus-per-node: 8, arch: x86_64, scheduler: slurm,\n"

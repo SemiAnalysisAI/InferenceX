@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import contextlib
 import io
+import json
 import os
 import re
 import shlex
 import signal
 import subprocess
 import sys
-from collections.abc import Mapping, Sequence
+import time
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path
 from types import FrameType
 from typing import TYPE_CHECKING, Any, cast
@@ -92,6 +95,50 @@ def pythonpath(environ: Mapping[str, str] = os.environ) -> str:
         path for path in environ.get("PYTHONPATH", "").split(os.pathsep) if path not in {"", root}
     ]
     return os.pathsep.join([root, *rest])
+
+
+GROUP_RECORD_ENV = "INFX_GROUP_RECORD"
+
+
+@contextlib.contextmanager
+def group_recorder(path: str | os.PathLike[str] | None) -> Iterator[Callable[[], None] | None]:
+    """Yield a ``preexec_fn`` that appends the child's process group and start time to ``path``.
+
+    The child must start with ``start_new_session`` so that it leads its own group. The JSON line
+    is written before the child's program runs. Yields None when ``path`` is empty or None.
+    """
+    if not path:
+        yield None
+        return
+    fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_CLOEXEC, 0o644)
+
+    def record() -> None:
+        """Append this process's group and the time to the record."""
+        os.write(
+            fd, (json.dumps({"pgid": os.getpgrp(), "started_at": time.time()}) + "\n").encode()
+        )
+
+    try:
+        yield record
+    finally:
+        os.close(fd)
+
+
+def recorded_groups(path: Path) -> list[tuple[int, float]]:
+    """The process groups ``group_recorder`` appended to ``path``, each with when it started.
+
+    A line a killed writer left unfinished is skipped.
+    """
+    try:
+        lines = path.read_text().splitlines()
+    except FileNotFoundError:
+        return []
+    groups = []
+    for line in lines:
+        with contextlib.suppress(ValueError, KeyError, TypeError):
+            entry = json.loads(line)
+            groups.append((int(entry["pgid"]), float(entry["started_at"])))
+    return groups
 
 
 SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)

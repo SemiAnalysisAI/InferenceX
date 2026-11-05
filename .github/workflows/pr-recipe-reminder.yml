@@ -6,6 +6,7 @@ on:
     paths:
       - 'inferencex-e2e/configs/amd-master.yaml'
       - 'inferencex-e2e/configs/nvidia-master.yaml'
+      - 'inferencex-e2e/configs/apple-master.yaml'
       - 'inferencex-e2e/benchmarks/**'
       - 'inferencex-e2e/perf-changelog.yaml'
 

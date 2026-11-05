@@ -115,6 +115,17 @@ def test_wait_streams_what_a_dying_server_wrote_before_failing(http_server, tmp_
     assert capsys.readouterr().out == "loading\nCUDA out of memory\n"
 
 
+def test_wait_fails_once_the_server_is_a_zombie_its_parent_has_not_reaped(http_server):
+    zombie = subprocess.Popen(["true"], stdout=subprocess.PIPE)
+    try:
+        # EOF on the pipe means the child has exited; it stays a zombie until the wait below.
+        assert zombie.stdout.read() == b""
+        with pytest.raises(server.NotReadyError, match=f"process {zombie.pid} died before"):
+            server.wait_ready(f"{http_server(lambda *_: (503, {}))}/health", pid=zombie.pid, poll_s=0.01)
+    finally:
+        zombie.wait()
+
+
 @pytest.mark.parametrize(
     ("models", "health", "stabilization_s", "waiting"),
     [(["m"], 503, 0, False), (["other"], 200, 1, True)],

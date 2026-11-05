@@ -45,6 +45,16 @@ def cluster(tmp_path, single_node_models: str = "staged") -> Cluster:
     return load_inventory({"labels": {"cluster:c": ["c_0"]}, "clusters": {"c": record}}).clusters["c"]
 
 
+def slurm_cluster(cluster_id: str, *, srt_slurm: bool = True) -> Cluster:
+    """A Slurm cluster ``cluster_id``, with or without an srt-slurm profile."""
+    slurm = {"partition": "p", "exclusive": True}
+    if srt_slurm:
+        slurm["srt-slurm"] = {"network-interface": ""}
+    record = {"gpus-per-node": 8, "arch": "x86_64", "scheduler": "slurm", "slurm": slurm}
+    inventory = {"labels": {f"cluster:{cluster_id}": [f"{cluster_id}_0"]}, "clusters": {cluster_id: record}}
+    return load_inventory(inventory).clusters[cluster_id]
+
+
 MULTI = dict(IS_MULTINODE="true")
 SINGLE = dict(IS_MULTINODE="false")
 
@@ -64,7 +74,16 @@ SINGLE = dict(IS_MULTINODE="false")
     ("b300-dsxe", dict(MULTI, FRAMEWORK="dynamo-trt", BENCH_SCRIPT_OVERRIDE="x.sh"), LaunchPath.SRT_MULTI),
 ])  # fmt: skip
 def test_each_cluster_routes_requests_to_its_launch_path(cluster_id, env, path):
-    assert launch_path(cluster_id, request(**env)) is path
+    assert launch_path(slurm_cluster(cluster_id), request(**env)) is path
+
+
+@pytest.mark.parametrize(("env", "path"), [
+    (dict(SINGLE, FRAMEWORK="vllm"), LaunchPath.SERVE),
+    (dict(SINGLE, BENCH_SCRIPT_OVERRIDE="benchmarks/single_node/speedbench/x.sh"), LaunchPath.SCRIPT),
+    (dict(MULTI, FRAMEWORK="dynamo-vllm"), LaunchPath.SRT_MULTI),
+])  # fmt: skip
+def test_a_cluster_without_srt_slurm_serves_its_single_node_points(env, path):
+    assert launch_path(slurm_cluster("plain", srt_slurm=False), request(**env)) is path
 
 
 def test_a_path_without_a_lane_on_the_cluster_is_refused():

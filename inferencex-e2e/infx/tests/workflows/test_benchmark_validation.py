@@ -17,7 +17,8 @@ ROOT = Path(__file__).resolve().parents[3]
 @pytest.fixture(scope="module")
 def validation_python(tmp_path_factory):
     root = tmp_path_factory.mktemp("validation-python")
-    venv.EnvBuilder(with_pip=False).create(root)
+    # On macOS, a copied interpreter cannot find the libpython it loads relative to itself.
+    venv.EnvBuilder(with_pip=False, symlinks=True).create(root)
     return root / "bin" / "python"
 
 
