@@ -29,7 +29,6 @@ base:
         kv-cache-dtype: fp8_e4m3
         attention-backend: trtllm_mha
         page-size: 128
-        cuda-graph-backend-prefill: breakable
         # DFlash2 verifies 8 tokens per step: the current token plus 7 drafts.
         speculative-algorithm: DFLASH
         speculative-draft-model-path: RadixArk/Muse-Spark-Open-DFlash2
@@ -75,6 +74,7 @@ override_tp8_c1:
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 8
+        cuda-graph-backend-prefill: breakable
         mem-fraction-static: 0.88
         max-running-requests: 1
         cuda-graph-max-bs-decode: 1
@@ -94,12 +94,14 @@ override_tp8_c4:
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 8
+        cuda-graph-backend-prefill: breakable
         mem-fraction-static: 0.88
-        max-running-requests: 2
-        cuda-graph-max-bs-decode: 2
-        prefill-decode-interval: 64
+        max-running-requests: 1
+        cuda-graph-max-bs-decode: 1
         swa-full-tokens-ratio: 0.3
-        stream-interval: 20
+        stream-interval: 40
+        schedule-policy: shortest-prefill-first
+        speculative-draft-attention-backend: fa4
       env:
         PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
   benchmark:
@@ -107,63 +109,26 @@ override_tp8_c4:
       CONC: '4'
       KV_OFFLOADING: none
 
-override_tp8_c8:
+override_tp8_c7:
   roles:
     agg:
       gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 8
+        cuda-graph-backend-prefill: breakable
         mem-fraction-static: 0.88
         max-running-requests: 2
         cuda-graph-max-bs-decode: 2
         prefill-decode-interval: 64
         swa-full-tokens-ratio: 0.3
-      env:
-        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
-  benchmark:
-    env:
-      CONC: '8'
-      KV_OFFLOADING: none
-
-override_tp8_c10:
-  roles:
-    agg:
-      gpus: 8
-      args:
-        tensor-parallel-size: 8
-        expert-parallel-size: 8
-        mem-fraction-static: 0.88
-        max-running-requests: 2
-        cuda-graph-max-bs-decode: 2
-        prefill-decode-interval: 64
-        swa-full-tokens-ratio: 0.3
+        stream-interval: 40
         schedule-policy: shortest-prefill-first
       env:
         PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
   benchmark:
     env:
-      CONC: '10'
-      KV_OFFLOADING: none
-
-override_tp8_c14:
-  roles:
-    agg:
-      gpus: 8
-      args:
-        tensor-parallel-size: 8
-        expert-parallel-size: 8
-        mem-fraction-static: 0.88
-        max-running-requests: 3
-        cuda-graph-max-bs-decode: 3
-        prefill-decode-interval: 64
-        swa-full-tokens-ratio: 0.3
-        schedule-policy: shortest-prefill-first
-      env:
-        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
-  benchmark:
-    env:
-      CONC: '14'
+      CONC: '7'
       KV_OFFLOADING: none
 
 override_tp8_c16:
@@ -173,12 +138,15 @@ override_tp8_c16:
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 8
+        cuda-graph-backend-prefill: breakable
         mem-fraction-static: 0.88
-        max-running-requests: 4
-        cuda-graph-max-bs-decode: 4
-        prefill-decode-interval: 64
+        max-running-requests: 3
+        cuda-graph-max-bs-decode: 3
+        prefill-decode-interval: 88
         swa-full-tokens-ratio: 0.3
         schedule-policy: shortest-prefill-first
+        stream-interval: 40
+        incremental-streaming-output: true
       env:
         PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
   benchmark:
@@ -193,10 +161,11 @@ override_tp8_c20:
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 8
+        cuda-graph-backend-prefill: breakable
         mem-fraction-static: 0.88
         max-running-requests: 6
         cuda-graph-max-bs-decode: 6
-        prefill-decode-interval: 64
+        prefill-decode-interval: 48
         swa-full-tokens-ratio: 0.3
         schedule-policy: shortest-prefill-first
         stream-interval: 20
@@ -214,10 +183,11 @@ override_tp8_c24:
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 8
+        cuda-graph-backend-prefill: breakable
         mem-fraction-static: 0.88
         max-running-requests: 8
         cuda-graph-max-bs-decode: 8
-        prefill-decode-interval: 64
+        prefill-decode-interval: 80
         swa-full-tokens-ratio: 0.3
         schedule-policy: shortest-prefill-first
         stream-interval: 20
@@ -232,7 +202,7 @@ override_tp4_c16:
   roles:
     agg:
       args:
-        mem-fraction-static: 0.95
+        mem-fraction-static: 0.92
         max-running-requests: 12
         cuda-graph-max-bs-decode: 12
         chunked-prefill-size: 8192
@@ -244,6 +214,9 @@ override_tp4_c16:
         enable-megamoe-for-layernorm-sp: true
         enable-hierarchical-cache: true
         hicache-size: 120
+        scheduler-recv-interval: 20
+        stream-interval: 20
+        disable-prefill-cuda-graph: true
       env:
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '2048'
   benchmark:
@@ -255,19 +228,20 @@ override_tp4_c28:
   roles:
     agg:
       args:
-        mem-fraction-static: 0.95
+        mem-fraction-static: 0.92
         max-running-requests: 56
         cuda-graph-max-bs-decode: 56
         chunked-prefill-size: 16384
         max-prefill-tokens: 16384
         schedule-policy: shortest-prefill-first
-        prefill-decode-interval: 128
+        prefill-decode-interval: 104
         swa-full-tokens-ratio: 0.1
         enable-layernorm-sp: true
         enable-megamoe-for-layernorm-sp: true
         enable-hierarchical-cache: true
         hicache-size: 170
         stream-interval: 20
+        disable-prefill-cuda-graph: true
       env:
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '4096'
   benchmark:
@@ -279,33 +253,9 @@ override_tp4_c32:
   roles:
     agg:
       args:
-        mem-fraction-static: 0.95
+        mem-fraction-static: 0.92
         max-running-requests: 64
         cuda-graph-max-bs-decode: 64
-        chunked-prefill-size: 16384
-        max-prefill-tokens: 16384
-        schedule-policy: shortest-prefill-first
-        prefill-decode-interval: 128
-        swa-full-tokens-ratio: 0.1
-        enable-layernorm-sp: true
-        enable-megamoe-for-layernorm-sp: true
-        enable-hierarchical-cache: true
-        hicache-size: 170
-        stream-interval: 20
-      env:
-        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '4096'
-  benchmark:
-    env:
-      CONC: '32'
-      KV_OFFLOADING: dram
-
-override_tp4_c40:
-  roles:
-    agg:
-      args:
-        mem-fraction-static: 0.95
-        max-running-requests: 80
-        cuda-graph-max-bs-decode: 80
         chunked-prefill-size: 16384
         max-prefill-tokens: 16384
         schedule-policy: shortest-prefill-first
@@ -314,45 +264,49 @@ override_tp4_c40:
         enable-layernorm-sp: true
         enable-megamoe-for-layernorm-sp: true
         enable-hierarchical-cache: true
-        hicache-size: 170
+        hicache-size: 250
         stream-interval: 20
+        disable-prefill-cuda-graph: true
       env:
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '4096'
         SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '4'
   benchmark:
     env:
-      CONC: '40'
+      CONC: '32'
       KV_OFFLOADING: dram
 
-override_tp4_c44:
+override_tp4_c38:
   roles:
     agg:
       args:
-        mem-fraction-static: 0.95
-        max-running-requests: 24
-        cuda-graph-max-bs-decode: 24
+        mem-fraction-static: 0.92
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 76
         chunked-prefill-size: 16384
         max-prefill-tokens: 16384
-        swa-full-tokens-ratio: 0.1
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 56
+        swa-full-tokens-ratio: 0.2
         enable-layernorm-sp: true
         enable-megamoe-for-layernorm-sp: true
         enable-hierarchical-cache: true
-        hicache-size: 170
-        hicache-write-policy: write_back
+        hicache-size: 250
         stream-interval: 20
+        disable-prefill-cuda-graph: true
       env:
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '4096'
         SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '4'
+        SGLANG_DFLASH_EAGER_DRAFT_SAMPLER: '0'
   benchmark:
     env:
-      CONC: '44'
+      CONC: '38'
       KV_OFFLOADING: dram
 
 override_tp4_c48:
   roles:
     agg:
       args:
-        mem-fraction-static: 0.95
+        mem-fraction-static: 0.92
         max-running-requests: 26
         cuda-graph-max-bs-decode: 26
         chunked-prefill-size: 16384
@@ -364,6 +318,7 @@ override_tp4_c48:
         hicache-size: 170
         hicache-write-policy: write_back
         stream-interval: 20
+        disable-prefill-cuda-graph: true
       env:
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '4096'
         SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '4'
