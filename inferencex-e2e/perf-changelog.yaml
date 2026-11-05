@@ -12099,3 +12099,14 @@
     - "Disaggregated: TP8/DCP8 prefill with a HiCache host tier feeding either one TP16 (DCP8 x attention DP2, EP16 MegaMoE) decode worker (3P1D c300, 2P1D c180, 1P1D c76) or TP8/DCP8 decode workers (1P3D c60 and c36, 1P4D c32)."
     - "Aggregated low-latency points: one TP16 EP1 worker with the NVIDIA megakernel (--enable-nvidia-megakernel), max-running-requests equal to the concurrency (c1, c2, c4)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4811
+
+- config-keys:
+    - qwen3.8next-fp4-gb300-tokenspeed-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Qwen3.8-Flash-Next NVFP4 GB300 TP1/EP1 AgentX with TokenSpeed MTP and a 224 GB Host L2 KV store at concurrency 1, 2, 4, 8, 16, 32, 48, and 64."
+    - "Pin the matching November 2 TokenSpeed 0.1.1.post20261102, CUDA 13 ARM64 kernel 0.1.4.post20261102 and engine 0.1.0.post20261102 wheels by SHA256, scheduler 0.1.49, the runner image by digest, and the checkpoint revision. Keep BF16 KV/SSM state, in-forward state checkpoints, and Host L2 write-back."
+    - "Bind native TokenSpeed topology and select golden MTP acceptance automatically for throughput; use real verification for evals. Use the pinned engine's model-owned cache geometry."
+    - "Use srt-slurm v2.66.2 with native headless ZMQ workers, SMG readiness, and engine HTTP metrics discovery. Export NVIDIA runtime settings before Enroot creates the runner containers. Install matching published FlashInfer 0.7.2.post1 CUDA 13 caches. Resolve pinned lm-eval client dependencies and read the checkpoint's native text context for evaluation."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4780
