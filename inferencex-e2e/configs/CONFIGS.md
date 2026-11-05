@@ -268,7 +268,8 @@ schema; unknown keys fail.
   volumes for multi-node AgentX jobs, `power-exporter-port` is the DCGM exporter port
   of power points, `cpu-power-exporter` (`source: acpi` or `rapl`) is the CPU power exporter native
   single-node points and `cpu-power` rows bind beside it (`make setup` installs it from the pinned srt-slurm
-  release; a RAPL job's host setup gives the job user the RAPL counters until teardown),
+  release; a RAPL job's host setup gives the job user the RAPL counters until teardown, so `rapl`
+  needs `slurm.exclusive` and `single-node-exclusive`),
   `env` is the environment of the srt-slurm
   launch, `container-aliases` and `nginx-aliases` name the recipe containers that
   resolve to the main image and to the staged nginx, and `outputs`,

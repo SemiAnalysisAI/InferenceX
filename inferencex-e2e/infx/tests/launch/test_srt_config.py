@@ -10,6 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 import yaml
+from pydantic import ValidationError
 
 from infx.clusters import Cluster, load_inventory
 from infx.clusters.slurm import slurm_settings
@@ -134,11 +135,12 @@ def test_a_rapl_cpu_exporter_grants_after_the_cluster_hook_and_restores_at_teard
     assert not resolved.get("ignore_failure")
 
 
-def test_a_rapl_cpu_exporter_refuses_a_shared_node():
-    shared = cluster(srt={"single-node-exclusive": False})
-    assert render(shared, job(single_node=True))["use_exclusive_sbatch_directive"] is False
-    with pytest.raises(LaunchError, match="RAPL CPU power on shared nodes"):
-        render(shared, job(single_node=True, cpu_power_source="rapl"))
+@pytest.mark.parametrize(("slurm", "srt"), [({"exclusive": False}, {}), ({}, {"single-node-exclusive": False})])
+def test_a_rapl_cpu_exporter_on_shared_nodes_fails_the_inventory(slurm, srt):
+    rapl = {"cpu-power-exporter": {"source": "rapl"}}
+    with pytest.raises(ValidationError, match="rapl cpu-power-exporter needs exclusive"):
+        cluster(slurm=slurm, srt={**rapl, **srt})
+    assert cluster(slurm=slurm, srt={**srt, "cpu-power-exporter": {"source": "acpi"}})
 
 
 @pytest.fixture

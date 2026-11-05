@@ -149,10 +149,6 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
     elif srt.segment_directive is not None:
         config["use_segment_sbatch_directive"] = srt.segment_directive
     exclusive = srt.single_node_exclusive if job.single_node else settings.exclusive
-    if job.cpu_power_source == "rapl" and not exclusive:
-        # RAPL_RESTORE takes the counters back host-wide, so a shared host would cut off a
-        # concurrent RAPL job's CPU samples.
-        raise LaunchError(f"cluster {cluster.id!r} reads RAPL CPU power on shared nodes")
     config["use_exclusive_sbatch_directive"] = exclusive
     directives: dict[str, str] = {}
     if settings.exclude:

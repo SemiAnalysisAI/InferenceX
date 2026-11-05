@@ -290,6 +290,20 @@ class SlurmSettings(SchedulerSettings):
         return self
 
     @model_validator(mode="after")
+    def _rapl_on_exclusive_nodes(self) -> Self:
+        """A RAPL CPU exporter needs exclusive nodes: the teardown takes the counters back
+        host-wide, which would cut off a concurrent job's CPU samples on a shared node.
+        """
+        srt = self.srt_slurm
+        exporter = None if srt is None else srt.cpu_power_exporter
+        shared = not (self.exclusive and srt is not None and srt.single_node_exclusive)
+        if exporter is not None and exporter.source == "rapl" and shared:
+            raise ValueError(
+                "a rapl cpu-power-exporter needs exclusive single- and multi-node jobs"
+            )
+        return self
+
+    @model_validator(mode="after")
     def _one_cpu_request(self) -> Self:
         """Slurm rejects --cpus-per-task together with --cpus-per-gpu."""
         if self.cpus_per_task is not None and self.cpus_per_gpu is not None:
