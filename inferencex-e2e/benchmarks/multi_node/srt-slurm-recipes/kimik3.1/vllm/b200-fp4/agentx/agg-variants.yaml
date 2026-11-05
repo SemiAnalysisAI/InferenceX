@@ -101,6 +101,7 @@ override_tp8pp2_c8:
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[8,16,24,32,48,64]}'
 
 override_tp8pp2_c14:
+  setup_script: vllm-synthetic-target-resample.sh
   roles:
     agg:
       args:
