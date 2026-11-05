@@ -291,11 +291,7 @@ def recipe_node_count(root: Path, srt_recipe: str) -> int | None:
             0 if role["nodes"] == "colocate" else int(role["nodes"]) for role in roles.values()
         )
         return worker_nodes + recipe_auxiliary_node_count(recipe)
-    # Services-only recipes (frontend.type: none, services[].nodes) have no engine roles.
-    auxiliary = recipe_auxiliary_node_count(recipe)
-    if auxiliary:
-        return auxiliary
-    raise ValueError(f"Recipe has no worker roles or service pools: {recipe_path}")
+    raise ValueError(f"Recipe has no worker roles: {recipe_path}")
 
 
 def _label_fabrics(label: str, runner_data: dict) -> dict[str, Fabric]:
