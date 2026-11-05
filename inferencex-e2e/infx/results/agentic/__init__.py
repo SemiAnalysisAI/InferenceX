@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-from infx.results.metadata import parse_component_metadata
+from infx.results.metadata import parse_component_metadata, speculation_fields
 from infx.results.topology import Parallelism, validate_parallelism
 
 from .request_metrics import compute_request_metrics
@@ -208,6 +208,7 @@ def build_result(
         "request_accounting": request_accounting,
     }
     agg.update(multinode_fields)
+    agg.update(speculation_fields(env))
     if decode_cpu_dram_gb := _env_int(env, "DECODE_CPU_DRAM_GB", 0):
         agg["decode_allocated_cpu_dram_gb"] = decode_cpu_dram_gb
 

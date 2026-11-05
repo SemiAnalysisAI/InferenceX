@@ -14,7 +14,7 @@ import os
 import re
 from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, get_args
 
 import yaml
 
@@ -22,7 +22,13 @@ from infx import yamlio
 from infx.config import repository_root
 from infx.fastcopy import deepcopy
 from infx.results.metadata import parse_component_metadata
-from infx.srt_slurm.synthetic_acceptance import selected_recipes, spec_parameters
+from infx.srt_slurm.spec_identity import speculation_facts
+from infx.srt_slurm.synthetic_acceptance import (
+    ENGINES,
+    generation_role,
+    selected_recipes,
+    spec_parameters,
+)
 
 SHARED_BLOCKS = {
     (False, False): Path("configs/srt-recipes/fixed-sequence-single.yaml"),
@@ -32,6 +38,8 @@ SHARED_BLOCKS = {
 }
 BOUND_RECIPE = "recipe.yaml"
 TELEMETRY_BLOCK = Path("configs/srt-recipes/telemetry-dcgm.yaml")
+# The CPU power exporter sources a cluster declares (srt-slurm.cpu-power-exporter).
+CpuPowerSource = Literal["acpi", "rapl"]
 NATIVE_TELEMETRY_BLOCK = Path("configs/srt-recipes/telemetry-native.yaml")
 _POINT_KEYS = (
     ("model", "path"),
@@ -51,13 +59,16 @@ _WORKFLOW_ENV = (
     "IMAGE", "MODEL_PREFIX", "FRAMEWORK", "PRECISION", "DISAGG", "DURATION", "MAX_MODEL_LEN",
     "KV_OFFLOAD_BACKEND", "KV_OFFLOAD_BACKEND_METADATA", "ROUTER_METADATA", "KV_P2P_TRANSFER",
     "POWER", "REQUIRE_POWER", "IS_AGENTIC", "SCENARIO_TYPE", "RUN_EVAL", "EVAL_ONLY",
+    "SPEC_ALGORITHM", "SPEC_DRAFT_MODEL",
 )  # fmt: skip
 _MULTINODE_ENV = (
     "SPEC_DECODING", "KV_OFFLOADING", "TOTAL_CPU_DRAM_GB", "DECODE_CPU_DRAM_GB", "PREFILL_DWDP_SIZE",
     *(f"{role}_{field}" for role in ("PREFILL", "DECODE")
       for field in ("NUM_WORKERS", "TP", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "EP", "DP_ATTN")),
 )  # fmt: skip
-_SINGLE_NODE_ENV = ("TP", "EP_SIZE", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "DP_ATTENTION", "GPU_COUNT")
+_SINGLE_NODE_ENV = (
+    "TP", "EP_SIZE", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "DP_ATTENTION", "GPU_COUNT", "SPEC_DECODING",
+)  # fmt: skip
 BOUND_ENV = {
     (False, False): (*_FIXED_ENV, *_WORKFLOW_ENV, *_SINGLE_NODE_ENV),
     (False, True): (*_FIXED_ENV, *_WORKFLOW_ENV, *_MULTINODE_ENV),
@@ -81,7 +92,6 @@ BOUND_ENV = {
 FABRIC_REFERENCE = "@fabric."
 INSTALLERS = {
     "glm5.3-tilert-rocm.sh": ("router", "tilert-pd-router"),
-    "kimik3-b300-mooncake.sh": ("kv-offload-backend", "mooncake"),
     "vllm-mooncake.sh": ("kv-offload-backend", "mooncake"),
     "vllm-router.sh": ("router", "vllm-router"),
 }
@@ -190,13 +200,13 @@ def compose_recipe(
     multinode: bool,
     root: Path,
     power_port: int | None = None,
-    cpu_power_source: str | None = None,
+    cpu_power_source: CpuPowerSource | None = None,
     native_power: bool = False,
 ) -> dict[str, Any]:
     """The fragment at ``path`` over its lane's shared block, under ``base`` for bundles.
 
     ``power_port`` adds the DCGM telemetry block with its exporter on that port, and
-    ``cpu_power_source`` the cluster's Grace CPU power exporter beside it.
+    ``cpu_power_source`` the cluster's CPU power exporter to the telemetry block.
     """
     raw = yamlio.safe_load(path.read_text())
     if not isinstance(raw, dict):
@@ -205,11 +215,14 @@ def compose_recipe(
     shared = _block(root / SHARED_BLOCKS[agentic, multinode])
     if native_power:
         shared = merge_blocks(shared, _block(root / NATIVE_TELEMETRY_BLOCK))
+    exporters: dict[str, Any] = {}
     if power_port is not None:
-        exporter: dict[str, Any] = {"telemetry": {"dcgm_exporter": {"port": power_port}}}
-        if cpu_power_source is not None:
-            exporter["telemetry"]["cpu_power_exporter"] = {"source": cpu_power_source}
-        shared = merge_blocks(shared, merge_blocks(_block(root / TELEMETRY_BLOCK), exporter))
+        exporters["dcgm_exporter"] = {"port": power_port}
+    if cpu_power_source is not None:
+        exporters["cpu_power_exporter"] = {"source": cpu_power_source}
+    if exporters:
+        dcgm = _block(root / TELEMETRY_BLOCK) if power_port is not None else {}
+        shared = merge_blocks(shared, merge_blocks(dcgm, {"telemetry": exporters}))
     if "base" in raw:
         return {**raw, "base": merge_blocks(shared, raw["base"])}
     return merge_blocks(shared, raw)
@@ -360,7 +373,7 @@ def bind_multinode(
     root: Path,
     expand: Callable[..., list[tuple[str | None, dict[str, Any]]]] = selected_recipes,
     power_port: int | None = None,
-    cpu_power_source: str | None = None,
+    cpu_power_source: CpuPowerSource | None = None,
     client_env: Mapping[str, str] | None = None,
 ) -> tuple[str | None, dict[str, Any]]:
     """Bind the one variant ``recipe`` (``fragment[:selector]``) selects; return its name too."""
@@ -378,9 +391,31 @@ def bind_multinode(
     if len(variants) != 1:
         raise ValueError(f"{recipe} selects {len(variants)} variants, not one")
     name, selected = variants[0]
-    return name, bind_workload(
+    bound = bind_workload(
         selected, environment, agentic=agentic, multinode=True, client_env=client_env
     )
+    bind_speculation(bound, environment)
+    return name, bound
+
+
+def bind_speculation(recipe: dict[str, Any], environment: Mapping[str, str]) -> None:
+    """Fail unless the matrix's SPEC_DECODING says whether the generation worker drafts, and
+    give the client the algorithm and draft model it drafts with."""
+    engine = recipe.get("engine")
+    engine = ENGINES.get(environment["FRAMEWORK"]) or (
+        engine.get("type") if isinstance(engine, Mapping) else engine
+    )
+    spec = spec_parameters(generation_role(recipe), engine)
+    label = environment["SPEC_DECODING"]
+    if bool(spec) != (label != "none"):
+        raise ValueError(
+            f"SPEC_DECODING: matrix {label!r}, but the generation worker "
+            f"{'drafts' if spec else 'does not draft'}"
+        )
+    if spec:
+        algorithm, draft_model = speculation_facts(_required(environment, "MODEL_PREFIX"), spec)
+        workload = recipe.setdefault("benchmark", {}).setdefault("env", {})
+        workload.update(SPEC_ALGORITHM=algorithm, SPEC_DRAFT_MODEL=draft_model)
 
 
 def resolve_fabric(node: Any, fabric: Mapping[str, str | None], where: str = "") -> Any:
@@ -421,6 +456,15 @@ def add_fabric_argument(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def add_cpu_power_source_argument(parser: argparse.ArgumentParser) -> None:
+    """``--cpu-power-source``: the cluster's CPU power exporter source, for a cpu-power point."""
+    parser.add_argument(
+        "--cpu-power-source",
+        choices=get_args(CpuPowerSource),
+        help="bind the cluster's CPU power exporter with this source",
+    )
+
+
 def _assignment(text: str) -> tuple[str, str]:
     """Split a ``NAME=VALUE`` argument, or raise ArgumentTypeError if malformed."""
     name, separator, value = text.partition("=")
@@ -437,11 +481,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--power-port", type=int, help="merge the DCGM telemetry block, its exporter on this port"
     )
-    parser.add_argument(
-        "--cpu-power-source",
-        choices=("acpi",),
-        help="bind the cluster's Grace CPU power exporter with this source (needs --power-port)",
-    )
+    add_cpu_power_source_argument(parser)
     parser.add_argument(
         "--client-env",
         type=_assignment,
