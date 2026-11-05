@@ -6,9 +6,9 @@ base:
       revision: fc694b54fb0174e0913e6adf86691ef85a4ead47
     container: {}
     frameworks:
-      tokenspeed: 0.1.1.post20261101
-      tokenspeed-kernel: 0.1.4.post20261101
-      tokenspeed-engine: 0.1.0.post20261101
+      tokenspeed: 0.1.1.post20261104
+      tokenspeed-kernel: 0.1.4.post20261104
+      tokenspeed-engine: 0.1.0.post20261102
   resources:
     gpu_type: gb300
     gpus_per_node: 4
@@ -30,10 +30,10 @@ base:
     PYTHONUNBUFFERED: '1'
     PYTHONSAFEPATH: '1'
     NO_COLOR: '1'
-    TOKENSPEED_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-nightly-v0.1.1.post20261101/tokenspeed-0.1.1.post20261101-py3-none-any.whl#sha256=b713fdb8433539078569703d2dcbea29387b4872a3ecbbadd03002aa57d51649
-    TOKENSPEED_KERNEL_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-nightly-v0.1.4.post20261101-cu130/tokenspeed_kernel-0.1.4.post20261101-cp312-cp312-manylinux_2_28_aarch64.whl#sha256=6e475d4263e7ef02ee591af1988661907f96fafc5c91983987ba696919176b0e
-    TOKENSPEED_ENGINE_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-engine-nightly-v0.1.0.post20261101/tokenspeed_engine-0.1.0.post20261101-cp312-cp312-linux_aarch64.whl#sha256=16cb8c3989abdabc122aeb31783d78ebba216a8f080046b7205ca275b8b89493
-    TOKENSPEED_SCHEDULER_VERSION: 0.1.48
+    TOKENSPEED_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-nightly-v0.1.1.post20261104/tokenspeed-0.1.1.post20261104-py3-none-any.whl#sha256=b0bb61d86f5497317ea3a107975034ab3be928a4cb9011fd4bf6d354333c75e0
+    TOKENSPEED_KERNEL_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-nightly-v0.1.4.post20261104-cu130/tokenspeed_kernel-0.1.4.post20261104-cp312-cp312-manylinux_2_28_aarch64.whl#sha256=f2f07c00f84c6591c8c5204954cac9bd8436e264422061414a63cbb7ead63067
+    TOKENSPEED_ENGINE_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-engine-nightly-v0.1.0.post20261102/tokenspeed_engine-0.1.0.post20261102-cp312-cp312-linux_aarch64.whl#sha256=c4fbfdbda25db1495a01431d3e115da235faa94b1050c2558762f5f468402b2e
+    TOKENSPEED_SCHEDULER_VERSION: 0.1.49
   roles:
     agg:
       nodes: 1
