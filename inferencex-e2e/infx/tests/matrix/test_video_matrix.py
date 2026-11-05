@@ -41,8 +41,15 @@ def test_changelog_entry_for_a_video_config_must_name_video_generation(master, m
     monkeypatch.setattr(plan, "load_runner_file", lambda *_: RUNNERS)
     entry = {"config-keys": ["video"], "description": ["Add a video deployment"],
              "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1"}
-    with pytest.raises(ValueError, match=r"scenario-type: \[video-generation\].*\['video'\]"):
-        plan.build_plan([entry], base_ref="base", head_ref="head", config_files=["configs/master.yaml"])
+
+    def build(**fields):
+        return plan.build_plan([{**entry, **fields}], base_ref="base", head_ref="head",
+                               config_files=["configs/master.yaml"])
+
+    for fields in ({}, {"scenario-type": ["fixed-seq-len"]}):
+        with pytest.raises(ValueError, match=r"add video-generation.*plan no jobs: \['video'\]"):
+            build(**fields)
+    build(**{"config-keys": ["*"]})
 
 
 def test_video_cannot_upload_without_a_renderable_recipe_fingerprint(master, tmp_path):
