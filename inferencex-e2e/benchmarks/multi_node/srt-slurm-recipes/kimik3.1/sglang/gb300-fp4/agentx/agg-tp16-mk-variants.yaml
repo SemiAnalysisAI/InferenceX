@@ -1,0 +1,157 @@
+schema: 2
+
+base:
+  name: kimik3.1-fp4-gb300-dynamo-sglang-agentx-agg-tp16-mk
+  identity:
+    model: {}
+    container: {}
+    frameworks:
+      dynamo: "1.6.0"
+      sglang: "0.0.0.dev1+ge79de62d2.d20261104"
+  dynamo:
+    install: false
+    request_plane: tcp
+    event_plane: zmq
+  # The DFlash2 draft is read from the shared Hub cache.
+  environment:
+    HF_HUB_CACHE: /hf_hub_cache
+  # Tachometer's per-node exporters slow decode steps and add host memory;
+  # InferenceX does not read its output.
+  observability:
+    tachometer:
+      enabled: false
+  slurm:
+    time_limit: "6:00:00"
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 10
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+    # Disables Dynamo's per-request lifecycle span export; InferenceX does not read it.
+    - name: otel-collector
+      type: otel-collector
+      enabled: false
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+    placement:
+      node: dedicated
+    env:
+      DYN_ROUTER_TEMPERATURE: "0"
+      DYN_ROUTER_QUEUE_THRESHOLD: None
+      DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: "3600"
+      DYN_TCP_CHANNEL_BUFFER: "128"
+      DYN_TCP_REQUEST_TIMEOUT: "60"
+      DYN_TOKENIZER_CACHE: "1"
+      DYN_TOKENIZER_CACHE_BYTES: "8000000000"
+    args:
+      router-mode: kv
+      router-session-affinity-ttl-secs: "14400"
+      dyn-chat-processor: sglang
+      dyn-preprocess-workers: "4"
+      trust-remote-code: true
+      active-decode-blocks-threshold: "None"
+      active-prefill-tokens-threshold: "None"
+      active-prefill-tokens-threshold-frac: "None"
+  engine: sglang
+  roles:
+    agg:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      env:
+        PYTHONUNBUFFERED: "1"
+        SGLANG_CUSTOM_ALL_REDUCE_V2_MAX_SIZE_KB: "32768"
+        SGLANG_DCP_PUSH_COMBINE_MAX_ROWS: "1536"
+        # At TP16 the sharded MoE front's per-rank N (1048) has no split-K tile for captured
+        # batches of 18-32 rows; the unsharded front captures every batch.
+        SGLANG_K3_SHARDED_MOE: "0"
+        NCCL_MNNVL_ENABLE: "1"
+        NCCL_CUMEM_ENABLE: "1"
+      args:
+        served-model-name: moonshotai/Kimi-K3.1-Pro
+        trust-remote-code: true
+        tensor-parallel-size: 16
+        expert-parallel-size: 1
+        # The K3.1 megakernel serves TP16 verify steps of 1, 2 or 4 requests with the trtllm
+        # DSA backends, MXFP4 MoE, FP8 KV and 64-token pages; larger batches run eager.
+        enable-nvidia-megakernel: true
+        # The megakernel spec requires a text-only model and an explicit context length.
+        language-only: true
+        context-length: 1048576
+        dsa-prefill-backend: trtllm
+        dsa-decode-backend: trtllm
+        moe-runner-backend: flashinfer_mxfp4
+        kv-cache-dtype: fp8_e4m3
+        page-size: 64
+        mem-fraction-static: 0.88
+        chunked-prefill-size: 16384
+        mamba-radix-cache-strategy: extra_buffer
+        mamba-track-interval: 256
+        enable-linear-replayssm-spec: true
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: RadixArk/Kimi-K3.1-Dflash2-Preview
+        speculative-draft-model-revision: d0d8bc2e3c6d0a195d2e00a49017e71ca8d881f1
+        speculative-draft-attention-backend: cutedsl_mla
+        speculative-draft-kv-cache-dtype: fp8_e4m3
+        # The golden AL curve was collected with block verification.
+        speculative-use-block-verification: true
+        # DFlash2 verifies the current token plus 7 drafts.
+        speculative-num-draft-tokens: 8
+        dyn-reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        # Full collections run 100x less often than with the default threshold.
+        gc-threshold: [700, 10, 1000]
+        model-loader-extra-config: '{"enable_multithread_load":true,"num_threads":4}'
+        weight-loader-disable-mmap: true
+        weight-loader-prefetch-checkpoints: false
+        watchdog-timeout: 3600
+        enable-metrics: true
+        enable-cache-report: true
+      kv_events: false
+  sbatch_directives:
+    mem: "0"
+    exclusive: ""
+  srun_options:
+    container-remap-root: ""
+    mem: "0"
+  benchmark:
+    placement:
+      node: dedicated
+    colocate_with_frontend: true
+    env:
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
+      # The client splits this value on whitespace, so it has none.
+      AIPERF_EXTRA_INPUTS: '{"chat_template_kwargs":{"thinking":true},"temperature":1,"top_p":0.95}'
+      AIPERF_DATASET_MMAP_CACHE_ENABLED: "true"
+      AGENTIC_WARMUP_GRACE_PERIOD: "1800"
+
+# max-running-requests equals the concurrency, so every verify step stays on a megakernel graph.
+override_tp16_c1:
+  name: kimik3.1-fp4-gb300-dynamo-sglang-agentx-agg-tp16-mk-c1
+  roles:
+    agg:
+      args:
+        max-running-requests: 1
+
+override_tp16_c2:
+  name: kimik3.1-fp4-gb300-dynamo-sglang-agentx-agg-tp16-mk-c2
+  roles:
+    agg:
+      args:
+        max-running-requests: 2
+
+override_tp16_c4:
+  name: kimik3.1-fp4-gb300-dynamo-sglang-agentx-agg-tp16-mk-c4
+  roles:
+    agg:
+      args:
+        max-running-requests: 4
