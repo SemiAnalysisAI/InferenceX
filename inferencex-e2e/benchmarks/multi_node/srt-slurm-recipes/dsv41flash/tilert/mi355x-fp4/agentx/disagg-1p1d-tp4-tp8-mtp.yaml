@@ -16,9 +16,11 @@ roles:
     engine:
       type: vllm
       set_visible_devices: true
-    # The validated MI355X DeepSeek-V4.1-Flash vLLM image; the setup script adds the
-    # tilert release (--no-deps) for the TileRT KV connector.
-    container: vllm/vllm-openai-rocm:nightly-e68efc685ab1e6f1eda004ced7157e3ca411da2f@sha256:520e098f54ec96837228aaddea0a833cbf6374dbdffd480c1d65f26ffab7701b
+    # The validated MI355X DeepSeek-V4.1-Flash vLLM image (nightly e68efc68) plus the
+    # multi-protocol Mooncake build and the ionic verbs provider of the TileRT ROCm decode
+    # image, tagged with the tilert version as for GLM-5; the setup script adds the tilert
+    # release (--no-deps) for the TileRT KV connector.
+    container: ghcr.io/tile-ai/tilert-rocm-prefill:0.1.7
     nodes: 1
     workers: 1
     gpus: 4
