@@ -14,10 +14,11 @@ base:
   engine:
     type: vllm
     connector: null
-  # ~1.56 TB of MXFP4 shards may take the full VLLM_ENGINE_READY_TIMEOUT_S.
+  # Loading ~1.56 TB of MXFP4 shards plus the latency_specialized decode autotune can take
+  # most of VLLM_ENGINE_READY_TIMEOUT_S.
   health_check:
     interval_seconds: 10
-    max_attempts: 360
+    max_attempts: 720
   roles:
     agg:
       nodes: 1
@@ -46,7 +47,7 @@ base:
         # TOTAL_CPU_DRAM_GB split across the 8 TP ranks.
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":281125000000,"lazy_offload":false}}'
       env:
-        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
         PYTHONUNBUFFERED: '1'
         # Identical prefixes must hash to identical block keys run-to-run.
         PYTHONHASHSEED: '42'
