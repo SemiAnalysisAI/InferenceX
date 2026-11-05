@@ -69,12 +69,16 @@ def run_single_node(launch: Launch) -> int:
             step_mib, job_mib = None, 0
         if (options := config.srun_options(run.backend.settings, step_mib)) is not None:
             run.env["SRT_SRUN_OPTIONS"] = options
-        if rc := submit.bind_point(run, checkout, root / "arguments"):
+        native_power = not request.eval_only
+        cpu_source = config.cpu_power_source(
+            run.cluster, run.srt, native_power and request.cpu_power, default=native_power
+        )
+        if rc := submit.bind_point(run, checkout, root / "arguments", cpu_source):
             return rc
         selected, bound, runtime_args = submit.bound_arguments(root / "arguments")
         event.set(recipe=selected.removeprefix(f"{run.workspace}/"))
         containers = {}
-        if not request.eval_only and not request.al_gate:
+        if native_power:
             image, reference = config.stage_gpu_exporter(run, single_node=True)
             containers[image] = reference
         job_config = config.SrtJob(
@@ -90,18 +94,19 @@ def run_single_node(launch: Launch) -> int:
             single_node=True,
             account=run.account,
             mem_mib=job_mib,
+            cpu_power_source=cpu_source,
         )
         config.create_volume_mounts(run)
         config.write(checkout.root / "srtslurm.yaml", config.render(run.cluster, job_config))
-        if rc := run_setup(run, checkout):
+        if rc := run_setup(run, checkout, cpu_power_exporter=cpu_source is not None):
             return rc
 
     fetched = root / "fetched-outputs"
     submitted = submit.Submitted(manifest=run.workspace / submit.SINGLE_NODE_SUBMISSION)
     run.life.callback(collect.finish_single_node, run, submitted, fetched)
+    submit.request_al_gate(run)
     eval_args = submit.eval_args(run.env, submit.SINGLE_NODE_EVAL_COMMAND)
-    client_args = submit.gate_args(request) if request.al_gate else eval_args
-    arguments = ["--json", "--yes", "--output", str(root / "outputs"), *runtime_args, *client_args]
+    arguments = ["--json", "--yes", "--output", str(root / "outputs"), *runtime_args, *eval_args]
     applied = submit.apply(run, checkout, bound, arguments, stdout=submitted.manifest)
     if applied.returncode:
         sys.stderr.write(applied.stdout)
@@ -114,7 +119,7 @@ def run_single_node(launch: Launch) -> int:
     status = run.backend.state(job)
     with event.stage("collect"):
         logs = run.backend.fetch_outputs(job, fetched) / "logs"
-        if not request.eval_only and not request.al_gate:
+        if native_power:
             (logs / "power").mkdir(parents=True, exist_ok=True)
             (logs / "power/native-job-status.txt").write_text(f"{job.id}|{status.raw}\n")
         rc = collect.finalize_single_node_results(run, logs, checkout.commit)
@@ -203,6 +208,7 @@ def run_multinode(launch: Launch) -> int:
         ):
             return rc
         prepare_recipe(Path(recipe), srtctl_job_name(request.runner_name), run.srt.dist_timeout_s)
+        submit.request_al_gate(run)
         arguments = submit.multinode_arguments(run, lane, recipe, overrides, preflight=preflight)
         manifest = run.workspace / submit.MULTINODE_SUBMISSION
         submitted = submit.Submitted(manifest=manifest)

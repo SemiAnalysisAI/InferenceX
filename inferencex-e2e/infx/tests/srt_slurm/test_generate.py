@@ -227,6 +227,49 @@ def test_a_cpu_power_point_binds_the_clusters_grace_exporter_or_fails(
     assert recipe["telemetry"]["dcgm_exporter"]["port"] == 9555
 
 
+@pytest.mark.parametrize("declared", [True, False])
+def test_a_single_node_cpu_power_point_binds_the_clusters_rapl_exporter_or_fails(
+    project, tmp_path, capsys, declared
+):
+    master = project / "configs/master.yaml"
+    config = yaml.safe_load(master.read_text())
+    config["fixture-sglang"]["scenarios"]["fixed-seq-len"][0]["search-space"][0]["cpu-power"] = True
+    master.write_text(yaml.safe_dump(config))
+    if declared:
+        runners = project / "configs/runners.yaml"
+        inventory = yaml.safe_load(runners.read_text())
+        inventory["clusters"]["fixture"]["slurm"]["srt-slurm"]["cpu-power-exporter"] = {"source": "rapl"}
+        runners.write_text(yaml.safe_dump(inventory))
+    output = tmp_path / "out"
+
+    if not declared:
+        with pytest.raises(SystemExit):
+            generate(project, output, "fixture-sglang")
+        assert "declares no srt-slurm.cpu-power-exporter" in capsys.readouterr().err
+        assert not output.exists()
+        return
+    assert generate(project, output, "fixture-sglang") == 0
+    recipes = [recipe for _, recipe in written(output)]
+    assert [recipe["telemetry"]["cpu_power_exporter"] for recipe in recipes] == [{"source": "rapl"}] * 2
+
+
+@pytest.mark.parametrize("declared", [True, False])
+def test_a_single_node_point_measures_cpu_power_by_default_where_its_cluster_declares_it(
+    project, tmp_path, declared
+):
+    if declared:
+        runners = project / "configs/runners.yaml"
+        inventory = yaml.safe_load(runners.read_text())
+        inventory["clusters"]["fixture"]["slurm"]["srt-slurm"]["cpu-power-exporter"] = {"source": "rapl"}
+        runners.write_text(yaml.safe_dump(inventory))
+    output = tmp_path / "out"
+
+    assert generate(project, output, "fixture-sglang") == 0
+    recipes = [recipe for _, recipe in written(output)]
+    exporters = [recipe.get("telemetry", {}).get("cpu_power_exporter") for recipe in recipes]
+    assert exporters == [{"source": "rapl"} if declared else None] * 2
+
+
 def test_a_multinode_agentx_point_without_power_turns_its_clients_power_off(
     project, power_lane, tmp_path
 ):
