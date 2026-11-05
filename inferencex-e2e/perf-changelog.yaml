@@ -12043,3 +12043,9 @@
     - "Add Kimi-K3.1-Pro MXFP4 AgentX on one 8x MI355X node with SGLang (lmsysorg/sglang:dev-kimi-k31-pro-mi35x) and the DFlash2 draft at 5 draft tokens with block verification."
     - "TP8 monokernel at concurrency 1 and 4 with GPU-resident KV; TP8/DCP8 with the HiCache host tier at concurrency 8, 16, 32 and 48."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4808
+
+- config-keys:
+    - kimik3.1-fp4-b300-vllm-agentic-dspark
+  description:
+    - "Kimi-K3.1-Pro B300 vLLM: enable the recipe's low-latency decode (decode_backend=latency_specialized) at every point, run c1-c2 at plain TP8 instead of TP8 x DCP8, and raise the c1 and c70 graph caps to 16 and 432 so the full decode step is captured."
+  pr-link: TBD
