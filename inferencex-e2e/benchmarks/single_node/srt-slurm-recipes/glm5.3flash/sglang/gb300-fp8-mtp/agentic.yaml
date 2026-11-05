@@ -1,6 +1,12 @@
 base:
   schema: 2
   name: glm5.3flash-fp8-gb300-sglang-agentic-mtp
+  identity:
+    model:
+      revision: 46a050bec13002ad29ee795c16e61cf4fa3c4a9c
+    container: {}
+    frameworks:
+      sglang: 0.5.23
   resources:
     gpu_type: gb300
     gpus_per_node: 4
