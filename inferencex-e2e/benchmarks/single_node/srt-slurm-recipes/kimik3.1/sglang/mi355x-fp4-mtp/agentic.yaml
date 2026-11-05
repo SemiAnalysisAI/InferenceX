@@ -63,6 +63,8 @@ base:
         ROCM_QUICK_REDUCE_QUANTIZATION: NONE
         PYTORCH_HIP_ALLOC_CONF: garbage_collection_threshold:0.95
         SGLANG_OPT_MAMBA_SKIP_DECODE_LOCK: '1'
+        # Split-K HIP sparse MLA decode and verify for 16 to 512 rows.
+        SGLANG_ROCM_SPARSE_MLA_DECODE_HIP: '1'
         # Pinned host pools; registered pageable pools stall every GPU queue on page migration.
         HSA_USERPTR_FOR_PAGED_MEM: '0'
         # The MI355X nodes report MEC firmware 38, below the 177 that fixes the
@@ -81,7 +83,8 @@ override_tp8_c1:
         enable-amd-monokernel: true
         max-running-requests: 4
         cuda-graph-max-bs-decode: 4
-        max-mamba-cache-size: 60
+        # 150 state slots keep agent sessions' prefixes cached (hit 0.88 -> 0.95 at conc 4).
+        max-mamba-cache-size: 150
       env:
         SGLANG_AMD_MONO_K31_WIDE: '1'
         SGLANG_ROCM_RUNTIME_RESERVE_GB: '6'
@@ -97,7 +100,8 @@ override_tp8_c4:
         enable-amd-monokernel: true
         max-running-requests: 4
         cuda-graph-max-bs-decode: 4
-        max-mamba-cache-size: 60
+        # 150 state slots keep agent sessions' prefixes cached (hit 0.88 -> 0.95 at conc 4).
+        max-mamba-cache-size: 150
       env:
         SGLANG_AMD_MONO_K31_WIDE: '1'
         SGLANG_ROCM_RUNTIME_RESERVE_GB: '6'

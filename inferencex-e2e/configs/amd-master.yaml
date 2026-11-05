@@ -1034,7 +1034,7 @@ musespark-fp4-mi355x-sglang-agentic-dflash:
       - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [10, 16, 24, 28, 36, 40], srt-recipe: agentic.yaml }
 
 kimik3.1-fp4-mi355x-sglang-agentic-dflash:
-  image: lmsysorg/sglang:dev-kimi-k31-pro-mi35x@sha256:6af91676b98cb98246aab7da6ab5a8cdaa0f30d9e0f4a9d44e6b19c9f99e87a0
+  image: lmsysorg/sglang-rocm:dev-kimi-k31-pro-mi35x-1105@sha256:37cc767d0fef1fbd7f0ae0f54faf47c0cb4be373a21f52abbd52a6eac0a351cc
   model: moonshotai/Kimi-K3.1-Pro
   model-prefix: kimik3.1
   runner: cluster:mi355x-amds

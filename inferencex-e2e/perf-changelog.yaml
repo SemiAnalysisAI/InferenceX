@@ -12110,3 +12110,12 @@
     - "Bind native TokenSpeed topology and select golden MTP acceptance automatically for throughput; use real verification for evals. Use the pinned engine's model-owned cache geometry."
     - "Use srt-slurm v2.66.2 with native headless ZMQ workers, SMG readiness, and engine HTTP metrics discovery. Export NVIDIA runtime settings before Enroot creates the runner containers. Install matching published FlashInfer 0.7.2.post1 CUDA 13 caches. Resolve pinned lm-eval client dependencies and read the checkpoint's native text context for evaluation."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4780
+
+- config-keys:
+    - kimik3.1-fp4-mi355x-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump to lmsysorg/sglang-rocm:dev-kimi-k31-pro-mi35x-1105: SGLang kimi-k3.1-day-0-amd with split-K HIP sparse MLA decode/verify, DFLASH fc row-sharding in prefill and MoE small sort up to 1024 pairs; sgl-amd-mono e52803f9d2."
+    - "Concurrency 1 and 4: max-mamba-cache-size 60 -> 150."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
