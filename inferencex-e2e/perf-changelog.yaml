@@ -12140,6 +12140,15 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
+  description:
+    - "Collect GPU-board power and require valid AgentX power for the seven existing GB200 Dynamo-SGLang disaggregated variants."
+    - "Rerun the two unchanged aggregated variants in the same sweep so the GB200 Dynamo-SGLang AgentX curve keeps all nine points."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4553
+  scenario-type: [agentic-coding]
+
+- config-keys:
     - h3-bf16-mi355x-sglang-video
   scenario-type: [video-generation]
   description:
