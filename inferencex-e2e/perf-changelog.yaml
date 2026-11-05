@@ -12088,3 +12088,14 @@
     - "GPU-resident KV at concurrency 1, 2, 4, 8, 12 and 16; SGLang HiCache with the auto-sized host tier at concurrency 24, 32 and 40."
     - "Use gfx942 TileLang DSA with Torch DSA top-k, AITER MoE and FP8 KV, and disable INT8 QuickReduce."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4721
+
+- config-keys:
+    - kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-disagg
+    - kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-agg-mk
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi-K3.1-Pro GB300 Dynamo+SGLang AgentX points on lmsysorg/sglang:dev-kimi-k31-pro with the RadixArk/Kimi-K3.1-Dflash2-Preview DFLASH draft."
+    - "Disaggregated: TP8/DCP8 prefill with a HiCache host tier feeding either one TP16 (DCP8 x attention DP2, EP16 MegaMoE) decode worker (3P1D c300, 2P1D c180, 1P1D c76) or TP8/DCP8 decode workers (1P3D c60 and c36, 1P4D c32)."
+    - "Aggregated low-latency points: one TP16 EP1 worker with the NVIDIA megakernel (--enable-nvidia-megakernel), max-running-requests equal to the concurrency (c1, c2, c4)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4811
