@@ -292,6 +292,30 @@ qwen3.5-fp8-mi300x-sglang-agentic-mtp:
       - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [4, 16, 20, 24, 32], srt-recipe: agentic.yaml }
       - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [4, 16, 20, 24, 32], srt-recipe: agentic.yaml }
 
+glm5.3flash-fp8-mi300x-sglang-agentic-mtp:
+  image: lmsysorg/sglang:v0.5.22-rocm10-mi30x@sha256:5658cd0d8de0c68de10d2e349296f55ceff98053182fa87b2a7e942e5e7f3c2a
+  model: zai-org/GLM-5.3-Flash
+  model-prefix: glm5.3flash
+  runner: cluster:mi300x-amd
+  precision: fp8
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: glm5.3flash/sglang/mi300x-fp8
+  scenarios:
+    agentic-coding:
+    # 570 GB covers the largest measured HiCache host allocation: conc 24, 4 x 140.85 GB/rank (KV + Mamba + indexer).
+    - dram-utilization: 0.71
+      search-space:
+      - { tp: 4, ep: 4, conc-list: [1], spec-decoding: mtp, kv-offloading: none, srt-recipe: agentx/agg-variants.yaml:override_tp4_ep4_c1 }
+      - { tp: 4, ep: 4, conc-list: [2], spec-decoding: mtp, kv-offloading: none, srt-recipe: agentx/agg-variants.yaml:override_tp4_ep4_c2 }
+      - { tp: 4, ep: 4, conc-list: [4], spec-decoding: mtp, kv-offloading: none, srt-recipe: agentx/agg-variants.yaml:override_tp4_ep4_c4 }
+      - { tp: 4, ep: 4, conc-list: [8], spec-decoding: mtp, kv-offloading: none, srt-recipe: agentx/agg-variants.yaml:override_tp4_ep4_c8 }
+      - { tp: 4, ep: 4, conc-list: [12], spec-decoding: mtp, kv-offloading: none, srt-recipe: agentx/agg-variants.yaml:override_tp4_ep4_c12 }
+      - { tp: 4, ep: 4, conc-list: [16], spec-decoding: mtp, kv-offloading: none, srt-recipe: agentx/agg-variants.yaml:override_tp4_ep4_c16 }
+      - { tp: 4, ep: 4, conc-list: [24], spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, srt-recipe: agentx/agg-variants.yaml:override_tp4_ep4_c24_hicache }
+      - { tp: 4, ep: 4, conc-list: [32], spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, srt-recipe: agentx/agg-variants.yaml:override_tp4_ep4_c32_hicache }
+      - { tp: 4, ep: 4, conc-list: [40], spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, srt-recipe: agentx/agg-variants.yaml:override_tp4_ep4_c40_hicache }
+
 dsr1-fp8-mi355x-atom:
   image: rocm/atom-dev:nightly_202610161458@sha256:7782d69e15b5cf88ad550095a8ec18429af852d07897824b8c35f9ce32f89f33
   model: deepseek-ai/DeepSeek-R1-0528
