@@ -9,10 +9,10 @@ Install the pinned PyPI release in a Python 3.11–3.13 virtual environment:
 ```bash
 python3 -m venv .venv-agentx
 source .venv-agentx/bin/activate
-python -m pip install 'agentx-harness==1.0.12'
+python -m pip install 'agentx-harness==1.0.13'
 ```
 
-The package version matches the `agentx-v1.0.12` GitHub release. The `agentx`
+The package version matches the `agentx-v1.0.13` GitHub release. The `agentx`
 command selects the `agentx` scenario by default.
 
 ## Run
@@ -20,8 +20,8 @@ command selects the `agentx` scenario by default.
 ```bash
 set -eo pipefail
 SERVER_URL="http://127.0.0.1:8000"
-SERVED_MODEL_NAME="moonshotai/Kimi-K3"
-TOKENIZER="moonshotai/Kimi-K3"
+SERVED_MODEL_NAME="deepseek-ai/DeepSeek-V4.1-Flash"
+TOKENIZER="deepseek-ai/DeepSeek-V4.1-Flash"
 DATASET="semianalysis_cc_traces_weka_062126"
 CONC=8
 OUTPUT_DIR="$PWD/results/agentx-c${CONC}-$(date -u +%Y%m%dT%H%M%SZ)"

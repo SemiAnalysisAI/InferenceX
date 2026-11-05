@@ -162,7 +162,7 @@ test-config --config-keys dsr1-fp8-h200-sglang --evals-only --all-evals --config
 
 ## PR Sweep Labels
 
-`run-sweep.yml` sweeps only same-repository PRs, including stacked PRs, that change
+`run-sweep.yml` sweeps only same-repository PRs that change
 `inferencex-e2e/perf-changelog.yaml`, using the appended entries as the matrix.
 Apply exactly one primary label, normally `full-sweep-fail-fast`.
 Fork PRs use the [trusted dispatch](#trusted-external-fork-sweep-dispatch-poc).
@@ -186,8 +186,16 @@ Labels authorize same-repository sweeps on draft or ready PRs. Marking ready
 does not dispatch a sweep. Changing a recognized primary or modifier label
 cancels the active sweep; another starts only if a primary label remains.
 To retrigger an already-labeled PR, remove and reapply its primary label.
-Merge conflicts block sweeps. Queue priority comes from the PR diff and
-review state, not priority labels.
+Merge conflicts block sweeps. Queue priority comes from the PR diff and the
+PR description's checklist, not priority labels. A PR gets a small bonus when
+every item under its `Checklist` heading is checked, except conditional items
+("If ...", "Before merging ...") that do not apply yet. The checklist is read
+when the sweep starts, so later edits count from the next sweep. Trusted
+external sweeps classify the approved PR diff the same way. Manual
+`e2e-tests.yml` and `profile.yml` dispatches of a revision not yet on `main`
+classify its diff from the merge
+base only for patchwork, so engine-patching branches still run last. Klaud runs
+and revisions already on `main` keep unclassified scoring.
 
 The canary is the lowest-concurrency non-eval candidate among single-node
 fixed-sequence 1k/1k, 8k/1k, or AgentX entries, falling back to multi-node AgentX.
@@ -196,6 +204,10 @@ without a canary; otherwise all matrices require canary success. Fail-fast
 cancels siblings within each matrix family, not every independent family.
 Find the first actual failure before treating a cancelled run as a flake.
 Manual `e2e-tests.yml` has no canary and defaults `fail-fast` to false.
+
+## Speculative acceptance gate
+
+AgentX throughput forces speculative acceptance to the committed golden acceptance length (AL). The acceptance gate, milestone M1 of [#1651](https://github.com/SemiAnalysisAI/InferenceX/issues/1651), measures each agentic speculative eval's real AL on the eval's own server, in the same Slurm job, before the eval runs. `run-sweep.yml` and `e2e-tests.yml` call [`al-gate-prompts.yml`](al-gate-prompts.yml) for the SPEED-Bench prompts before their agentic eval jobs, and `collect-evals.yml` tabulates the verdicts. The gate is report-only: a verdict, a skipped gate or a failed measurement never fails the eval or the run. See [the speculative acceptance gate](../../inferencex-e2e/infx/evals/EVALS.md#speculative-acceptance-gate) for how it is planned, run, and skipped.
 
 ## Changelog Conflict Recovery
 
