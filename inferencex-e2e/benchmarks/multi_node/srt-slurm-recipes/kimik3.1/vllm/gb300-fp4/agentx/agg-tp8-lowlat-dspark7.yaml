@@ -33,6 +33,7 @@ roles:
       language-model-only: true
       load-format: fastsafetensors
       kv-cache-dtype: fp8
+      attention-config: '{"indexer_kv_dtype":"mxfp4"}'
       mamba-ssm-cache-dtype: float32
       enable-prefix-caching: true
       stream-interval: 10

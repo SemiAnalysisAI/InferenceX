@@ -8,7 +8,8 @@ base:
   dynamo:
     install: true
     source:
-      wheel: 1.7.0.dev20261030
+      # ai-dynamo/dynamo#18124: its frontend loads the kimi_k31 tokenizer and its SGLang args allow DSA DCP decode.
+      rev: "4b0850752a7370aa20706095558616488b5cef35"
   resources:
     gpu_type: gb300
     gpus_per_node: 4
@@ -71,6 +72,7 @@ base:
         language-model-only: true
         load-format: fastsafetensors
         kv-cache-dtype: fp8
+        attention-config: '{"indexer_kv_dtype":"mxfp4"}'
         mamba-ssm-cache-dtype: float32
         enable-prefix-caching: true
         stream-interval: 10
@@ -100,6 +102,7 @@ base:
         language-model-only: true
         load-format: fastsafetensors
         kv-cache-dtype: fp8
+        attention-config: '{"indexer_kv_dtype":"mxfp4"}'
         mamba-ssm-cache-dtype: float32
         enable-prefix-caching: true
         stream-interval: 10
