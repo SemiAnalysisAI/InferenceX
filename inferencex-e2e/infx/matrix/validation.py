@@ -79,6 +79,7 @@ class Fields(Enum):
     DURATION = "duration"
     REQUIRE_POWER = "require-power"
     POWER = "power"
+    CPU_POWER = "cpu-power"
 
     CONC = "conc"
     MAX_MODEL_LEN = "max-model-len"
@@ -169,6 +170,7 @@ class SingleNodeMatrixEntry(BaseModel):
     eval_framework: str | None = Field(default=None, alias=Fields.EVAL_FRAMEWORK.value)
     eval_suite: str | None = Field(default=None, alias=Fields.EVAL_SUITE.value)
     router: ComponentMetadata | None = None
+    cpu_power: bool = Field(default=False, alias=Fields.CPU_POWER.value, strict=True)
     recipe_fingerprint: str | None = Field(
         default=None,
         alias=Fields.RECIPE_FINGERPRINT.value,
@@ -263,6 +265,7 @@ class MultiNodeMatrixEntry(BaseModel):
     osl: int
     require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     power: bool = Field(default=False, strict=True)
+    cpu_power: bool = Field(default=False, alias=Fields.CPU_POWER.value, strict=True)
     prefill: WorkerConfig
     decode: WorkerConfig
     conc: list[int]
@@ -366,6 +369,7 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     )
     node_count: int = Field(alias=Fields.NODE_COUNT.value, gt=0, strict=True)
     power: bool = Field(default=False, strict=True)
+    cpu_power: bool = Field(default=False, alias=Fields.CPU_POWER.value, strict=True)
     prefill: WorkerConfig
     decode: WorkerConfig
     conc: list[int]
@@ -565,6 +569,8 @@ class SingleNodeSearchSpaceEntry(BaseModel):
     )
     dp_attn: bool | None = Field(default=None, alias=Fields.DP_ATTN.value)
     router: ComponentMetadata | None = None
+    # Native single-node points always measure GPU power; this adds the cluster's CPU exporter.
+    cpu_power: bool = Field(default=False, alias=Fields.CPU_POWER.value, strict=True)
     conc_start: int | None = Field(default=None, alias=Fields.CONC_START.value)
     conc_end: int | None = Field(default=None, alias=Fields.CONC_END.value)
     conc_list: list[int] | None = Field(default=None, alias=Fields.CONC_LIST.value)
@@ -578,6 +584,13 @@ class SingleNodeSearchSpaceEntry(BaseModel):
     def validate_single_node_topology(self) -> Self:
         """Return the entry, raising ValueError unless TP is divisible by DCP size."""
         return _validate_tp_context_topology(self)
+
+
+def _cpu_power_rides_on_power(self: Any) -> Any:
+    """``cpu-power`` adds the cluster's Grace CPU exporter to a point that measures power."""
+    if self.cpu_power and not self.power:
+        raise ValueError(f"{Fields.CPU_POWER.value} requires {Fields.POWER.value} on the entry")
+    return self
 
 
 class MultiNodeSearchSpaceEntry(BaseModel):
@@ -594,6 +607,7 @@ class MultiNodeSearchSpaceEntry(BaseModel):
         default=None, alias=Fields.EVAL_SRT_RECIPE.value
     )
     power: bool = Field(default=False, strict=True)
+    cpu_power: bool = Field(default=False, alias=Fields.CPU_POWER.value, strict=True)
     num_nodes: int | None = Field(default=None, alias=Fields.NUM_NODES.value, gt=0, strict=True)
     router: ComponentMetadata | None = None
     kv_p2p_transfer: str | None = Field(
@@ -602,6 +616,10 @@ class MultiNodeSearchSpaceEntry(BaseModel):
     conc_start: int | None = Field(default=None, alias=Fields.CONC_START.value)
     conc_end: int | None = Field(default=None, alias=Fields.CONC_END.value)
     conc_list: list[int] | None = Field(default=None, alias=Fields.CONC_LIST.value)
+
+    @model_validator(mode="after")
+    def validate_cpu_power(self) -> Self:
+        return _cpu_power_rides_on_power(self)
 
     @model_validator(mode="after")
     def validate_conc_fields(self) -> Self:
@@ -653,6 +671,7 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
         default=None, alias=Fields.EVAL_SRT_RECIPE.value
     )
     power: bool = Field(default=False, strict=True)
+    cpu_power: bool = Field(default=False, alias=Fields.CPU_POWER.value, strict=True)
     pp: int = Field(default=1, gt=0, strict=True)
     dcp_size: int = Field(default=1, alias=Fields.DCP_SIZE.value, gt=0, strict=True)
     pcp_size: int = Field(default=1, alias=Fields.PCP_SIZE.value, gt=0, strict=True)
@@ -719,6 +738,7 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
                     f"Only multinode entries measure DCGM power; remove {Fields.POWER.value}"
                 )
             _validate_tp_context_topology(self)
+        _cpu_power_rides_on_power(self)
         if has_aggregate_worker or has_complete_multinode:
             explicitly_single_node_fields = {
                 "pp",
