@@ -107,7 +107,7 @@ The push-button [`speedbench-al.yml`](../../../.github/workflows/speedbench-al.y
    The `1` is the target model's guaranteed verification token. Values are rounded to two decimal places.
 6. The collector emits a YAML matrix. The workflow publishes it in the GitHub Actions step summary and uploads it as a `speedbench-reference-al-<model-prefix>` artifact.
 7. Server logs and detailed per-request results are retained so reviewers can confirm sensible output, correct thinking mode, and the absence of silent server or chat-template failures.
-8. After review, the matrix is committed here with its exact sampling metadata, its [collection settings](#collection-settings), and source Actions run URL. With `open-pr=true` and `golden-curve=<curve stem>` (for example `deepseek-v4-pro__mtp__native__default-default`), the workflow writes `<curve stem>.yaml` here with the source run URL on its first line. It loads the file through `python -m infx.golden_al_distribution show` and then opens the PR. The whole file is replaced, so cells the run did not collect are dropped.
+8. After review, the matrix is committed here with its exact sampling metadata, its [collection settings](#collection-settings), and source Actions run URL. With `open-pr=true` and `golden-curve=<curve stem>` (for example `deepseek-v4-pro__mtp__native__default-default`), the workflow writes `<curve stem>.yaml` here with the source run URL in its `source_run` key. It loads the file through `python -m infx.golden_al_distribution show` and then opens the PR. The whole file is replaced, so cells the run did not collect are dropped.
 
 The collection measures real head quality only to establish the golden curve. AgentX then uses that committed curve as the synthetic acceptance target for every comparable submission.
 
@@ -127,7 +127,7 @@ collection:
 - `renderer` is how the client turned each prompt into text. `chat_template` applies the served model's Hugging Face chat template to one user message, with the generation prompt and `chat_template_kwargs`. `deepseek_v4` is vLLM's tokenizer mode of that name; the gate uses the equivalent [encoder](../bench_serving/encoding_dsv4.py) in this repository, with `chat_template_kwargs` as its thinking options.
 - `sampling` lists every sampling parameter the requests carried, including the `repetition_penalty: 1.0` that `vllm bench serve` adds. A parameter that is not listed was not sent, so the server used its own default.
 - Everything else is the same for every collection: the 80 prompts of the SPEED-Bench Qualitative `coding` category, in the order vLLM's loader sends them, as streaming `/v1/completions` requests with `max_tokens` 4096 and no `ignore_eos`. Collections ran at different concurrencies; the gate always replays at 64, treating AL as independent of concurrency.
-- New curves must include the block. Two curves have none, so the gate lists their points as unresolved. [`deepseek-v4.1-flash__dspark__native__probabilistic-block.yaml`](deepseek-v4.1-flash__dspark__native__probabilistic-block.yaml) needs a DeepSeek V4.1 renderer before the gate can render its prompts. [`muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml`](muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml) was collected with SGLang's `bench_serving` client on its native `/generate` endpoint, which the gate's `/v1/completions` replay does not reproduce. [`glm-5.3-fp8__mtp__native__default-default.yaml`](glm-5.3-fp8__mtp__native__default-default.yaml) is provisional and carries GLM-5.2's settings.
+- New curves must include the block. Three curves have none, so the gate lists their points as unresolved. [`deepseek-v4.1-flash__dspark__native__probabilistic-block.yaml`](deepseek-v4.1-flash__dspark__native__probabilistic-block.yaml) needs a DeepSeek V4.1 renderer before the gate can render its prompts. [`muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml`](muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml) was collected with SGLang's `bench_serving` client on its native `/generate` endpoint, which the gate's `/v1/completions` replay does not reproduce. [`glm-5.3-nvfp4__mtp__native__default-default.yaml`](glm-5.3-nvfp4__mtp__native__default-default.yaml) was collected the same way.
 
 ## Reproducing a collection
 
@@ -155,25 +155,29 @@ Before accepting an updated curve, reviewers should verify:
 - Server logs contain no fallback, draft-disable, or chat-template errors.
 - The YAML metadata matches the dispatched image, sampling settings, model, and speculative method.
 - The `collection` block matches the collector's concurrency, prompt rendering, and per-mode settings.
-- The source Actions run is linked at the first line of the YAML.
+- `source_run` is the Actions run that produced the artifact.
 - The committed values exactly match the workflow artifact.
 
 ## Current golden curves
 
-| Model | Method | Golden YAML | Source run |
-| --- | --- | --- | --- |
-| DeepSeek V4 Pro | MTP | [`deepseek-v4-pro__mtp__native__default-default.yaml`](deepseek-v4-pro__mtp__native__default-default.yaml) | [27180633016](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27180633016) |
-| DeepSeek V4 Pro 0813 | DSpark (probabilistic draft) | [`deepseek-v4-pro-0813__dspark__native__probabilistic-default.yaml`](deepseek-v4-pro-0813__dspark__native__probabilistic-default.yaml) | [31742838308](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/31742838308) |
-| DeepSeek V4.1 Flash | DSpark (probabilistic draft, block verify) | [`deepseek-v4.1-flash__dspark__native__probabilistic-block.yaml`](deepseek-v4.1-flash__dspark__native__probabilistic-block.yaml) | [34493175056](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34493175056) |
-| Qwen3.5 397B-A17B | MTP | [`qwen3.5-397b-a17b-nvfp4__mtp__native__default-default.yaml`](qwen3.5-397b-a17b-nvfp4__mtp__native__default-default.yaml) | [27317114007](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27317114007) |
-| Kimi K3 | DSpark | [`kimi-k3__dspark__kimi-k3-dspark__default-default.yaml`](kimi-k3__dspark__kimi-k3-dspark__default-default.yaml) | [30304797750](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/30304797750) |
-| Kimi K3 | DSpark (probabilistic draft, block verify) | [`kimi-k3__dspark__kimi-k3-dspark__probabilistic-block.yaml`](kimi-k3__dspark__kimi-k3-dspark__probabilistic-block.yaml) | [30316471205](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/30316471205) |
-| MiniMax-M3 | EAGLE3 | [`minimax-m3__eagle3__minimax-m3-eagle3__default-default.yaml`](minimax-m3__eagle3__minimax-m3-eagle3__default-default.yaml) | [28061204145](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28061204145) |
-| MiniMax-M3 | EAGLE3 (GQA) | [`minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default.yaml`](minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default.yaml) | [29784780049](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/29784780049) |
-| GLM-5.2 | MTP | [`glm-5.2-fp8__mtp__native__default-default.yaml`](glm-5.2-fp8__mtp__native__default-default.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479) |
-| GLM-5.3 | MTP (provisional, K=3 copied from GLM-5.2) | [`glm-5.3-fp8__mtp__native__default-default.yaml`](glm-5.3-fp8__mtp__native__default-default.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479) (GLM-5.2) |
-| Qwen3.8-Flash-Next | MTP (native) | [`qwen3.8-flash-next-fp8__mtp__native__default-default.yaml`](qwen3.8-flash-next-fp8__mtp__native__default-default.yaml) | [33034290269](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/33034290269) |
-| Muse Spark Open | DFlash2 | [`muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml`](muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml) | [38808046215](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/38808046215) |
+| Model | Method | Golden YAML |
+| --- | --- | --- |
+| DeepSeek V4 Pro | MTP | [`deepseek-v4-pro__mtp__native__default-default.yaml`](deepseek-v4-pro__mtp__native__default-default.yaml) |
+| DeepSeek V4 Pro 0813 | DSpark (probabilistic draft) | [`deepseek-v4-pro-0813__dspark__native__probabilistic-default.yaml`](deepseek-v4-pro-0813__dspark__native__probabilistic-default.yaml) |
+| DeepSeek V4.1 Flash | DSpark (probabilistic draft, block verify) | [`deepseek-v4.1-flash__dspark__native__probabilistic-block.yaml`](deepseek-v4.1-flash__dspark__native__probabilistic-block.yaml) |
+| Qwen3.5 397B-A17B | MTP | [`qwen3.5-397b-a17b-nvfp4__mtp__native__default-default.yaml`](qwen3.5-397b-a17b-nvfp4__mtp__native__default-default.yaml) |
+| Kimi K3 | DSpark | [`kimi-k3__dspark__kimi-k3-dspark__default-default.yaml`](kimi-k3__dspark__kimi-k3-dspark__default-default.yaml) |
+| Kimi K3 | DSpark (probabilistic draft, block verify) | [`kimi-k3__dspark__kimi-k3-dspark__probabilistic-block.yaml`](kimi-k3__dspark__kimi-k3-dspark__probabilistic-block.yaml) |
+| Kimi K3 | DSpark (probabilistic draft) | [`kimi-k3__dspark__kimi-k3-dspark__probabilistic-default.yaml`](kimi-k3__dspark__kimi-k3-dspark__probabilistic-default.yaml) |
+| Kimi K3.1 Pro | DSpark (probabilistic draft, block verify) | [`kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark-preview__probabilistic-block.yaml`](kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark-preview__probabilistic-block.yaml) |
+| Kimi K3.1 Pro | DFLASH (RadixArk draft, block verify) | [`kimi-k3.1-pro__dflash__kimi-k3.1-dflash2-preview__default-block.yaml`](kimi-k3.1-pro__dflash__kimi-k3.1-dflash2-preview__default-block.yaml) |
+| MiniMax-M3 | EAGLE3 | [`minimax-m3__eagle3__minimax-m3-eagle3__default-default.yaml`](minimax-m3__eagle3__minimax-m3-eagle3__default-default.yaml) |
+| MiniMax-M3 | EAGLE3 (GQA) | [`minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default.yaml`](minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default.yaml) |
+| MiniMax-M3 | EAGLE3 (GQA, block verify) | [`minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-block.yaml`](minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-block.yaml) |
+| GLM-5.2 | MTP | [`glm-5.2-fp8__mtp__native__default-default.yaml`](glm-5.2-fp8__mtp__native__default-default.yaml) |
+| GLM-5.3 | MTP (SGLang) | [`glm-5.3-nvfp4__mtp__native__default-default.yaml`](glm-5.3-nvfp4__mtp__native__default-default.yaml) |
+| Qwen3.8-Flash-Next | MTP (native) | [`qwen3.8-flash-next-fp8__mtp__native__default-default.yaml`](qwen3.8-flash-next-fp8__mtp__native__default-default.yaml) |
+| Muse Spark Open | DFlash2 | [`muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml`](muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml) |
 
 ## Using golden curves in srt-slurm runs
 
@@ -189,7 +193,7 @@ Every curve file is named `<model>__<method>__<draft>__<draft_sample>-<verify>.y
 
 [`identities.yaml`](identities.yaml) gives each curve two blocks. A new curve needs both before it merges; a test checks each file name against them.
 
-`select` decides which runs use the curve. `curve_name` returns the one curve whose block matches and fails when none or several do.
+`select` decides which runs use the curve. `curve_name` returns the most specific matching curve (the one declaring the most of `draft_family`, `draft_sample` and `verify`) and fails when none match or the most specific ones tie.
 
 | Key | Meaning |
 | --- | --- |
@@ -197,6 +201,7 @@ Every curve file is named `<model>__<method>__<draft>__<draft_sample>-<verify>.y
 | `method` | `mtp`, `eagle3`, `dspark` or `dflash`. SGLang `EAGLE` and `NEXTN` mean the model's native `mtp` head, except MiniMax-M3's EAGLE, which is `eagle3` |
 | `draft_family` | Only where one model's curves differ by draft: `gqa` when the draft model id contains `gqa`, else `default` |
 | `draft_sample` | Only where one model's curves differ by draft sampler: the run's `draft_sample_method` must equal it |
+| `verify` | Only where one model's curves differ by verifier: `standard`, `block` or `relaxed`. The run's verifier is read as the audit reads it; an unknown verifier (ATOM, TileRT) never matches a curve that sets `verify` |
 
 `collection` records how the curve was measured: `engine`, `draft`, `draft_sample` (`greedy`, `probabilistic`), `verify` (`standard`, `block`, `relaxed`), `adaptive`, `topology` (`chain`, `tree-topk<N>`), `draft_precision` (the draft weights' quantization), `draft_kv_cache_dtype` and `kv_cache_dtype` (the target's). `provisional: true` marks a curve not measured for its model. Each fact is `{value, source}`:
 

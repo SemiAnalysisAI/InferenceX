@@ -7,8 +7,8 @@
 # golden_al_distribution shape. DSpark ships as a separate checkpoint
 # (deepseek-ai/DeepSeek-V4-Pro-DSpark, 960 GB) with the draft baked in, so there is no
 # external draft head and no "model" key in the speculative-config. Every flag that
-# affects drafting is byte-identical to the DSV4 MTP collector so the two AL curves
-# stay comparable.
+# affects drafting matches the DSV4 MTP collector so the two AL curves stay comparable,
+# except the attention config, which follows the newer vLLM image the DSpark recipes use.
 #
 # Dispatch this collector through speedbench-al.yml.
 #
@@ -81,8 +81,17 @@ else
     if [[ "$SERVE_MODEL" != /* ]]; then hf download "$SERVE_MODEL"; fi
 fi
 
+# Some nodes run another service on the default port; serve on a free one instead.
+if ! python3 -c 'import socket, sys; socket.socket().bind(("0.0.0.0", int(sys.argv[1])))' "$PORT" 2>/dev/null; then
+    busy_port="$PORT"
+    PORT="$(python3 -c 'import socket; s = socket.socket(); s.bind(("0.0.0.0", 0)); print(s.getsockname()[1])')"
+    echo "Port $busy_port is in use on $(hostname); serving on $PORT"
+fi
+
 echo "=== Downloading SPEED-Bench dataset ==="
-pip install -q datasets tiktoken
+# Pin the image's Hugging Face stack: an unconstrained install can pull huggingface-hub 2.x,
+# which transformers 5.x rejects, and then no server starts.
+pip install -q -c <(pip freeze | grep -iE '^(huggingface[-_]hub|transformers|tokenizers)==') datasets tiktoken
 curl -LsSf https://raw.githubusercontent.com/NVIDIA-NeMo/Skills/refs/heads/main/nemo_skills/dataset/speed-bench/prepare.py \
   | python3 - --config qualitative --output_dir "$SPEEDBENCH_DIR"
 
@@ -173,7 +182,9 @@ run_cell() {
         "${EP_ARGS[@]}"
         "${MOE_ARGS[@]}"
         --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
-        --attention_config.use_fp4_indexer_cache True
+        # Same attention config as the 0813 DSpark recipes on the 20ebb28 nightly, which
+        # renamed use_fp4_indexer_cache to indexer_kv_dtype=mxfp4.
+        --attention-config '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"indexer_kv_dtype":"mxfp4"}'
         --tokenizer-mode deepseek_v4
         --tool-call-parser deepseek_v4
         --enable-auto-tool-choice
