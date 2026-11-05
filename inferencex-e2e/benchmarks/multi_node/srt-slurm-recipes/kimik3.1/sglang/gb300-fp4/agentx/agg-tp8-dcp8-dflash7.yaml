@@ -10,7 +10,8 @@ resources:
 dynamo:
   install: true
   source:
-    wheel: 1.6.0.dev20261016
+    # ai-dynamo/dynamo#18124: its frontend loads the kimi_k31 tokenizer and its SGLang args allow DSA DCP decode.
+    rev: "4b0850752a7370aa20706095558616488b5cef35"
 environment:
   HF_HUB_CACHE: /hf_hub_cache
 observability:
