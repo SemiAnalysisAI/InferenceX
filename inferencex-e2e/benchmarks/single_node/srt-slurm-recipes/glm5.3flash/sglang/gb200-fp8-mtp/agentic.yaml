@@ -1,0 +1,105 @@
+base:
+  schema: 2
+  name: glm5.3flash-fp8-gb200-sglang-agentic
+  resources:
+    gpu_type: gb200
+    gpus_per_node: 4
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  health_check:
+    # Weight load plus prefill CUDA graph capture takes about 25 minutes.
+    max_attempts: 1440
+    interval_seconds: 5
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        served-model-name: zai-org/GLM-5.3-Flash
+        tensor-parallel-size: 4
+        dsa-prefill-backend: trtllm
+        dsa-decode-backend: trtllm
+        kv-cache-dtype: fp8_e4m3
+        moe-runner-backend: flashinfer_trtllm
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 5
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 6
+        reasoning-parser: auto
+        tool-call-parser: auto
+        context-length: 1048576
+        watchdog-timeout: 1800
+        enable-cache-report: true
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        HF_HUB_OFFLINE: '1'
+        TRANSFORMERS_OFFLINE: '1'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        # Pin the image's off defaults so a host export cannot requantize the BF16 NextN draft.
+        SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
+        SGLANG_GLM_NEXTN_MOE_PTPC: '0'
+  benchmark:
+    env:
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+override_c1:
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_c4:
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_c8:
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
+override_c12:
+  benchmark:
+    env:
+      CONC: '12'
+      KV_OFFLOADING: none
+
+override_c16:
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: none
+
+override_c24:
+  roles:
+    agg:
+      args:
+        enable-hierarchical-cache: true
+        # Auto-sized host tier; a 32 GB/rank tier is smaller than the 43 GB/rank device KV pool.
+  benchmark:
+    env:
+      CONC: '24'
+      KV_OFFLOADING: dram
+
+override_c32:
+  roles:
+    agg:
+      args:
+        enable-hierarchical-cache: true
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: dram

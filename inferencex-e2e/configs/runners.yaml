@@ -577,6 +577,8 @@ clusters:
         deepseek-r1-0528: {root: lustre-models, dir: deepseek-r1-0528}
         deepseek-r1-0528-fp4-v2: {root: lustre-models, dir: deepseek-r1-0528-fp4-v2}
         MiniMax-M3.1-Flash: {root: lustre-models, dir: MiniMax-M3.1-Flash}
+        GLM-5.3-Flash: {root: lustre-models, dir: GLM-5.3-Flash}
+        GLM-5.3-Flash-NVFP4: {root: lustre-models, dir: GLM-5.3-Flash-NVFP4}
         Qwen3.5-397B-A17B-NVFP4-V2: {root: lustre-models, dir: Qwen3.5-397B-A17B-NVFP4-V2}
         Muse-Spark-Open-816B-A42B-NVFP4: {root: lustre-models, dir: Muse-Spark-Open-816B-A42B-NVFP4}
         GLM-5.2-NVFP4: {root: sa-shared-models, dir: GLM-5.2-NVFP4}
@@ -647,6 +649,9 @@ clusters:
       partitions: [batch_1, batch_3]
       account: benchmark
       exclusive: false
+      # 2026-11-05: c003's local NVMe extracted containers with zero-filled blocks (libcuda stub),
+      # and c008 twice read back empty Triton cache files. Remove after ops checks both disks.
+      exclude: [im-gb300-r01-c003, im-gb300-r01-c008]
       volumes:
         hf-hub-cache: {path: /data/home/sa-shared/gharunners/hf-hub-cache}
         aiperf-cache: {path: /data/home/sa-shared/gharunners/ai-perf-cache}
@@ -709,6 +714,7 @@ clusters:
         single-node-time-limit: 180
         gpus-per-node-directive: true
         segment-directive: false
+        cpu-power-exporter: {source: rapl}
         host-setup:
           script: runners/srt-slurm/hooks/mi300x-amd/setup.sh
         mounts:
@@ -758,6 +764,7 @@ clusters:
         single-node-time-limit: 480
         gpus-per-node-directive: true
         segment-directive: false
+        cpu-power-exporter: {source: rapl}
         mounts:
           /dev/kfd: /dev/kfd
           /dev/dri: /dev/dri
@@ -807,11 +814,13 @@ clusters:
         gpus-per-node-directive: true
         segment-directive: false
         outputs: /it-share/gharunners2/srt-slurm/outputs
+        cpu-power-exporter: {source: rapl}
         host-setup:
           script: runners/srt-slurm/hooks/mi355x-amds/setup.sh
           env:
             IBDEVICES: '@fabric.rdma-devices'
-          timeout-s: 1200
+          # Covers the hook's 60-minute wait for prior-job VRAM to drain.
+          timeout-s: 4200
           nodes: all
         volume-mounts:
           shared-hf-hub-cache: /hf_hub_cache/hub
