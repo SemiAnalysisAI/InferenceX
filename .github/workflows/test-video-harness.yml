@@ -4,6 +4,9 @@ on:
   pull_request:
     paths: &video-harness-paths
       - 'video-generation/**'
+      - 'inferencex-e2e/infx/bench/video.py'
+      - 'inferencex-e2e/infx/results/power/**'
+      - 'inferencex-e2e/infx/results/video_artifacts.py'
       - '.github/workflows/test-video-harness.yml'
   push:
     paths: *video-harness-paths
@@ -27,6 +30,8 @@ jobs:
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       - name: Test the harness, spec loader and hashes
         working-directory: video-generation
+        env:
+          PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
         run: >-
           uv run --no-project --python 3.12
           --with 'av==16.1.0' --with 'numpy==2.3.5'

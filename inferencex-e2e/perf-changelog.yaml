@@ -12110,3 +12110,12 @@
     - "Bind native TokenSpeed topology and select golden MTP acceptance automatically for throughput; use real verification for evals. Use the pinned engine's model-owned cache geometry."
     - "Use srt-slurm v2.66.2 with native headless ZMQ workers, SMG readiness, and engine HTTP metrics discovery. Export NVIDIA runtime settings before Enroot creates the runner containers. Install matching published FlashInfer 0.7.2.post1 CUDA 13 caches. Resolve pinned lm-eval client dependencies and read the checkpoint's native text context for evaluation."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4780
+
+- config-keys:
+    - h3-bf16-h100-sglang-video
+    - h3-bf16-b200-sglang-video
+  scenario-type: [video-generation]
+  description:
+    - "Run native H3 C1 sweeps on four GPUs: H100 SGLang TP2/Ulysses2 and B200 SGLang Ulysses4."
+    - "Select 20 distinct measured prompts, a disjoint warmup, 124 frames, 49 denoising updates, SGLang v0.5.23 (297e54fd), and explicit cross-request conditioning-cache policy."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916

@@ -241,10 +241,15 @@ def observe(job: Job) -> JobStatus:
     """
     env = {**os.environ, "SLURM_TIME_FORMAT": "%s"}
     argv = ["sacct", "-X", "-n", "-P", "-j", job.id]
-    accounting = _query([*argv, "--format=State,ExitCode,NodeList,Submit,Start,End"], env)
+    accounting = _query([*argv, "--format=State,ExitCode,NodeList,Submit,Start,End,AllocTRES"], env)
     first = accounting.splitlines()[0] if accounting.strip() else ""
-    state, exit_code, nodes, submitted, started, ended = [*first.split("|"), *[""] * 6][:6]
-    if not state.strip():
+    state, exit_code, nodes, submitted, started, ended, alloc_tres = [*first.split("|"), *[""] * 7][
+        :7
+    ]
+    alloc_tres = alloc_tres.strip()
+    if alloc_tres in {"Unknown", "None", "(null)"}:
+        alloc_tres = ""
+    if not state.strip() or not alloc_tres:
         fields = dict(
             item.split("=", 1)
             for item in _query(["scontrol", "show", "job", "-o", job.id], env).split()
@@ -252,10 +257,22 @@ def observe(job: Job) -> JobStatus:
         )
         if fields.get("JobId") != job.id:
             fields = {}
-        state, exit_code, nodes, submitted, started, ended = (
-            fields.get(name, "")
-            for name in ("JobState", "ExitCode", "NodeList", "SubmitTime", "StartTime", "EndTime")
-        )
+        if not state.strip():
+            state, exit_code, nodes, submitted, started, ended = (
+                fields.get(name, "")
+                for name in (
+                    "JobState",
+                    "ExitCode",
+                    "NodeList",
+                    "SubmitTime",
+                    "StartTime",
+                    "EndTime",
+                )
+            )
+        if not alloc_tres:
+            alloc_tres = fields.get("AllocTRES", "").strip()
+            if alloc_tres in {"Unknown", "None", "(null)"}:
+                alloc_tres = ""
     nodes, state = nodes.strip(), state.strip()
     started = "" if state == "PENDING" else started
     ended = "" if state in {"PENDING", "CONFIGURING", "RUNNING"} else ended
@@ -265,6 +282,7 @@ def observe(job: Job) -> JobStatus:
         submitted_at=_time(submitted),
         started_at=_time(started),
         ended_at=_time(ended),
+        alloc_tres=alloc_tres or None,
     )
 
 

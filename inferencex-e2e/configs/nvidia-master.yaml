@@ -7193,6 +7193,42 @@ glm5.3flash-fp4-gb200-sglang-agentic-mtp:
       search-space:
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [24, 32, 40, 48], srt-recipe: agentic.yaml }
 
+h3-bf16-h100-sglang-video:
+  image: lmsysorg/sglang:v0.5.23@sha256:f7876bef696ccf9cf75a2bf7ccb82970f5fac577f082fb8ca95c9a59d2160eb5
+  model: MiniMaxAI/MiniMax-H3
+  model-prefix: h3
+  runner: cluster:h100-dsxe
+  precision: bf16
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: h3/sglang/h100-bf16
+  scenarios:
+    video-generation:
+      - spec: h3-v2.yaml
+        set: release-v1
+        search-space:
+          - gpus: 4
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
+
+h3-bf16-b200-sglang-video:
+  image: lmsysorg/sglang:v0.5.23@sha256:f7876bef696ccf9cf75a2bf7ccb82970f5fac577f082fb8ca95c9a59d2160eb5
+  model: MiniMaxAI/MiniMax-H3
+  model-prefix: h3
+  runner: cluster:b200-nscale
+  precision: bf16
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: h3/sglang/b200-bf16
+  scenarios:
+    video-generation:
+      - spec: h3-v2.yaml
+        set: release-v1
+        search-space:
+          - gpus: 4
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
+
 glm5.3-fp4-b300-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.20-cu130@sha256:b27fce60bc5494c118c4910702812bcfa8cee67abcdd1ff8b0902f21647552f4
   model: nvidia/GLM-5.3-NVFP4

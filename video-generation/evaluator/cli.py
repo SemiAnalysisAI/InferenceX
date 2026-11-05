@@ -49,6 +49,20 @@ def _load_mvp_object(path: Path) -> dict[str, Any]:
 
 def _mvp_command(arguments: argparse.Namespace) -> int:
     try:
+        if arguments.command == "srt-finalize":
+            from .srt_bundle import build_bundle
+
+            result = build_bundle(
+                video_dir=arguments.video_dir,
+                power_dir=arguments.power_dir,
+                workspace=arguments.workspace,
+                result_filename=arguments.result_filename,
+                concurrencies=arguments.concurrencies,
+                output=arguments.output,
+            )
+            print(json.dumps(result, indent=2, sort_keys=True, allow_nan=False))
+            return 0 if result["status"] == "complete" else 1
+
         if arguments.command == "run":
             from .runner import preview_plan, run_plan
 
@@ -138,6 +152,17 @@ def _mvp_command(arguments: argparse.Namespace) -> int:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="vgbench")
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    srt_finalize = subparsers.add_parser(
+        "srt-finalize",
+        help="assemble the app bundle from an srt-slurm video job and its power validation",
+    )
+    srt_finalize.add_argument("--video-dir", required=True, type=Path)
+    srt_finalize.add_argument("--power-dir", required=True, type=Path)
+    srt_finalize.add_argument("--workspace", required=True, type=Path)
+    srt_finalize.add_argument("--result-filename", required=True)
+    srt_finalize.add_argument("--concurrencies", nargs="+", type=int, required=True)
+    srt_finalize.add_argument("--output", required=True, type=Path)
 
     run = subparsers.add_parser("run", help="preview a video plan; --execute explicitly submits it")
     run.add_argument("plan", type=Path)
