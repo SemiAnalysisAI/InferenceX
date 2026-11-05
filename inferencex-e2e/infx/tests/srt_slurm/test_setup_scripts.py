@@ -74,6 +74,8 @@ def test_tokenspeed_installer_uses_direct_private_wheels_and_one_public_index(tm
         "TOKENSPEED_KERNEL_WHEEL_URL": "https://example.test/kernel.whl#sha256=def",
         "TOKENSPEED_ENGINE_WHEEL_URL": "https://example.test/engine.whl#sha256=123",
         "TOKENSPEED_SCHEDULER_VERSION": "0.1.48",
+        "TOKENSPEED_FLASHINFER_VERSION": "0.7.2.post1",
+        "TOKENSPEED_CUDA_VERSION": "13.0",
         "ROUTER_VERSION": "1.13.0.post20261027",
     })
 
@@ -87,3 +89,9 @@ def test_tokenspeed_installer_uses_direct_private_wheels_and_one_public_index(tm
         "tokenspeed-scheduler==0.1.48",
         "tokenspeed-smg==1.13.0.post20261027",
     ]]
+    calls = [json.loads(line) for line in (tmp_path / "python3.jsonl").read_text().splitlines()]
+    assert calls[-2:] == [
+        ["-m", "flashinfer", "download-kernels", "--cuda-version", "13.0",
+         "--flashinfer-version", "0.7.2.post1"],
+        ["-m", "pip", "check"],
+    ]
