@@ -12038,4 +12038,4 @@
   description:
     - "Sweep H3 C1 latency across GPU counts: MI355X and H200 on 1, 2, 4 and 8 GPUs with SGLang Ulysses across all GPUs, H100 on 2, 4 and 8 GPUs with TP2."
     - "Restore the H200 row; H100 starts at 2 GPUs because the model does not fit one 80 GB GPU."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4818
