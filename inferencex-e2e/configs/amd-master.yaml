@@ -256,7 +256,7 @@ qwen3.5-fp4-mi355x-sglang-agentic-mtp:
 # Qwen3.8-Flash-Next Quark MXFP4 MoE (MTP experts included), FP8 attention and
 # FP8 PLE, AgentX on MI355X via SGLang with native NEXTN MTP (3 steps,
 # eagle-topk 1, 4 draft tokens). TP1: the ~116 GiB checkpoint fits on one MI355X.
-# Concurrency 1-8 and 16 serve from GPU KV; 12, 24, 48 and 80 add an FP8 KV cache and
+# Concurrency 1 and 2 serve from GPU KV; 12, 24, 48 and 80 add an FP8 KV cache and
 # HiCache host-DRAM offload.
 qwen3.8next-fp4-mi355x-sglang-agentic-mtp:
   image: lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261102@sha256:acf1fee05096c6eb757d4642e3b87c36766bce1334277e49b917afc2f06c7b5a
@@ -271,7 +271,7 @@ qwen3.8next-fp4-mi355x-sglang-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 1, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 16], srt-recipe: agentic.yaml }
+      - { tp: 1, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2], srt-recipe: agentic.yaml }
       - { tp: 1, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [12, 24, 48, 80], srt-recipe: agentic.yaml }
 
 # AgentX Pareto sweep for Qwen3.5 FP8 on MI300X. The fast discovery run peaks

@@ -80,15 +80,13 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
 
-# c1, c2, c4 and c8 run the FlyDSL monokernel (--enable-amd-monokernel) for MTP
-# target verify and draft. Its verify writes the per-draft intermediate SSM
-# states, so ReplaySSM is off, and its prelude reads the PLE table on the GPU,
-# so the table is not offloaded. Admission equals the concurrency. These points
-# also set SGLANG_USE_AITER, which the monokernel requires (the image sets it
-# too), so they form their own GSM8K eval group. c16 keeps ReplaySSM, the PLE offload
-# and 2x CONC admission, captures decode graphs up to its admission, and uses
-# mem-fraction-static 0.9 as given. Every point uses mem-fraction-static as given
-# instead of the aiter backend's 0.85 scaling.
+# c1 and c2 run the FlyDSL monokernel (--enable-amd-monokernel) for MTP target verify
+# and draft. Its verify writes the per-draft intermediate SSM states, so ReplaySSM is
+# off, and its prelude reads the PLE table on the GPU, so the table is not offloaded.
+# Admission equals the concurrency. These points also set SGLANG_USE_AITER, which the
+# monokernel requires (the image sets it too), so they form their own GSM8K eval group.
+# Every point uses mem-fraction-static as given instead of the aiter backend's 0.85
+# scaling.
 override_c1:
   roles:
     agg:
@@ -121,40 +119,6 @@ override_c2:
   benchmark:
     env:
       CONC: '2'
-      KV_OFFLOADING: none
-
-override_c4:
-  roles:
-    agg:
-      args:
-        enable-linear-replayssm-spec: null
-        ple-offload-embedding: null
-        enable-amd-monokernel: true
-        max-running-requests: 4
-        cuda-graph-max-bs-decode: 4
-      env:
-        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
-        SGLANG_USE_AITER: '1'
-  benchmark:
-    env:
-      CONC: '4'
-      KV_OFFLOADING: none
-
-override_c8:
-  roles:
-    agg:
-      args:
-        enable-linear-replayssm-spec: null
-        ple-offload-embedding: null
-        enable-amd-monokernel: true
-        max-running-requests: 8
-        cuda-graph-max-bs-decode: 8
-      env:
-        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
-        SGLANG_USE_AITER: '1'
-  benchmark:
-    env:
-      CONC: '8'
       KV_OFFLOADING: none
 
 # c12, c24, c48 and c80 keep ReplaySSM and the PLE offload, store the target and draft KV
@@ -193,20 +157,6 @@ override_c12:
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '299'
       CONC: '12'
-
-override_c16:
-  roles:
-    agg:
-      args:
-        max-running-requests: 32
-        cuda-graph-max-bs-decode: 32
-        mem-fraction-static: 0.9
-      env:
-        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
-  benchmark:
-    env:
-      CONC: '16'
-      KV_OFFLOADING: none
 
 override_c24:
   roles:
