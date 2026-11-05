@@ -13,8 +13,8 @@ from infx.launch.artifacts import (
     bundle_server_logs,
     collect_agentic_power_results,
     copy_agentic_results,
+    copy_al_gate_result,
     copy_fixed_sequence_results,
-    copy_gate_results,
     copy_to_workspace,
 )
 from infx.launch.backends.base import JobState, JobStatus
@@ -68,15 +68,17 @@ def test_agentic_results_require_a_match(tmp_path):
         copy_agentic_results(tmp_path / "src", tmp_path, "point")
 
 
-def test_gate_raw_files_are_staged_even_without_a_verdict(tmp_path):
+def test_an_eval_gate_verdict_is_staged_when_the_job_ran_one(tmp_path):
     logs, workspace = tmp_path / "logs", tmp_path / "ws"
-    (logs / "al_gate" / "scrapes").mkdir(parents=True)
-    (logs / "al_gate" / "scrapes" / "before.prom").write_text("vllm:spec_decode_num_drafts_total 7\n")
-    (logs / "al_gate_point.json").write_text("")
+    logs.mkdir()
     workspace.mkdir()
-    with pytest.raises(ArtifactError, match="al_gate_point.json is missing or empty"):
-        copy_gate_results(logs, workspace, "point")
-    assert (workspace / "al_gate/scrapes/before.prom").read_text() == "vllm:spec_decode_num_drafts_total 7\n"
+    copy_al_gate_result(logs, workspace, "point")
+    assert not (workspace / "al_gate_point.json").exists()
+    (logs / "al_gate" / "scrapes").mkdir(parents=True)
+    (logs / "al_gate_point.json").write_text('{"status": "pass"}\n')
+    copy_al_gate_result(logs, workspace, "point")
+    assert (workspace / "al_gate_point.json").read_text() == '{"status": "pass"}\n'
+    assert not (workspace / "al_gate").exists()  # raw replay files stay in the server logs
 
 
 def test_bundle_skips_empty_logs_and_archives_contents(tmp_path):
