@@ -814,7 +814,8 @@ clusters:
           script: runners/srt-slurm/hooks/mi355x-amds/setup.sh
           env:
             IBDEVICES: '@fabric.rdma-devices'
-          timeout-s: 1200
+          # Covers the hook's 30-minute wait for prior-job VRAM to drain.
+          timeout-s: 2400
           nodes: all
         volume-mounts:
           shared-hf-hub-cache: /hf_hub_cache/hub
