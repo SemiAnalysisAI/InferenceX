@@ -67,6 +67,8 @@ base:
       # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+      # SGLang serves the port itself; conversation-aware routing needs a Dynamo frontend.
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
   sbatch_directives:
     mem: '0'
   srun_options:
