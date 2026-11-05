@@ -6880,8 +6880,8 @@ glm5.3flash-fp8-h100-sglang-agentic-mtp:
     agentic-coding:
     - search-space:
       - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2], srt-recipe: 'agentic.yaml:override_none' }
-    # 401 GB per node holds 32 GB of host KV per rank plus its Mamba-state and indexer host pools.
-    - dram-utilization: 0.20
+    # 321 GB per node: 32 GB host KV + ~7 GB Mamba state + ~1 GB indexer per rank, x8 ranks.
+    - dram-utilization: 0.16
       search-space:
       - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [4, 8, 10, 12, 16], srt-recipe: 'agentic.yaml:override_hicache' }
 
