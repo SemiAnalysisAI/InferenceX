@@ -23,7 +23,12 @@ from infx.matrix.generate import expand_config_keys, generate_config_matrix
 from infx.matrix.validation import config_root, load_config_files, load_runner_file
 from infx.srt_slurm.single_node import select_recipe
 from infx.srt_slurm.synthetic_acceptance import build_overrides, selected_recipes
-from infx.srt_slurm.workload import bind_multinode, check_setup_script, resolve_fabric
+from infx.srt_slurm.workload import (
+    CpuPowerSource,
+    bind_multinode,
+    check_setup_script,
+    resolve_fabric,
+)
 
 if TYPE_CHECKING:
     from infx.clusters import Cluster, RunnerInventory
@@ -100,13 +105,16 @@ def _binder_inputs(
     root: Path,
 ) -> tuple[int | None, str | None, dict[str, str]]:
     """The DCGM exporter port, CPU exporter source and AgentX client env the launcher binds a
-    multi-node point with.
+    point with; a single-node point gets only the CPU exporter source.
 
     Raises ``ValueError`` when they depend on a cluster the runner label does not single out,
     or the cluster's lanes refuse the point.
     """
     agentic = environment["IS_AGENTIC"] == "1"
-    if "prefill" not in point or not (agentic or point.get("power")):
+    single_node = "prefill" not in point
+    cpu_power = bool(point.get("cpu-power"))
+    binds = (cpu_power or placement is not None) if single_node else agentic or point.get("power")
+    if not binds:
         return None, None, {}
     if placement is None:
         raise ValueError(
@@ -118,6 +126,11 @@ def _binder_inputs(
     srt = slurm_settings(cluster).srt_slurm
     if srt is None:
         raise ValueError(f"cluster {cluster.id!r} has no slurm.srt-slurm settings")
+    if single_node:
+        try:
+            return None, config.cpu_power_source(cluster, srt, cpu_power, default=True), {}
+        except LaunchError as error:
+            raise ValueError(str(error)) from error
     runtime = {
         "RUNNER_NAME": runner,
         "GITHUB_WORKSPACE": str(root),
@@ -140,19 +153,23 @@ def bound_variant(
     *,
     expand: Callable[..., list[tuple[str | None, dict[str, Any]]]] = selected_recipes,
     power_port: int | None = None,
-    cpu_power_source: str | None = None,
+    cpu_power_source: CpuPowerSource | None = None,
     client_env: Mapping[str, str] | None = None,
 ) -> tuple[str | None, dict[str, Any]]:
     """The variant the launcher submits for ``point``, composed and bound.
 
-    Multi-node variants get the DCGM telemetry block on ``power_port``, the Grace CPU exporter
-    on ``cpu_power_source``, and the client paths ``client_env``: the binder inputs the launcher
-    computes. ``'@fabric.<name>'`` values stay unresolved: recipe fingerprints hash them as
-    written.
+    Variants get the CPU exporter on ``cpu_power_source``; multi-node variants also get the
+    DCGM telemetry block on ``power_port`` and the client paths ``client_env``: the binder
+    inputs the launcher computes. ``'@fabric.<name>'`` values stay unresolved: recipe
+    fingerprints hash them as written.
     """
     if "prefill" not in point:
         selected, recipe = select_recipe(
-            str(root / point["srt-recipe"]), environment, root=root, expand=expand
+            str(root / point["srt-recipe"]),
+            environment,
+            root=root,
+            expand=expand,
+            cpu_power_source=cpu_power_source,
         )
         return selected.partition(":")[2] or None, recipe
     return bind_multinode(

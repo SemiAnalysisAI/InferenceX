@@ -107,6 +107,7 @@ dsr1-fp8-mi300x-sglang:
         conc-start: 4
         conc-end: 64
         srt-recipe: 8k1k.yaml
+        cpu-power: true
 
 dsr1-fp8-mi325x-sglang:
   image: lmsysorg/sglang:v0.5.22-rocm720-mi30x@sha256:58b6bc333f527c88fe5ff1b4bd8d17e82214eabcb3044549117159878967c930
@@ -126,6 +127,7 @@ dsr1-fp8-mi325x-sglang:
         conc-start: 4
         conc-end: 64
         srt-recipe: 8k1k.yaml
+        cpu-power: true
 
 dsr1-fp8-mi355x-sglang:
   image: lmsysorg/sglang:v0.5.22-rocm720-mi35x@sha256:c4b61360b251d62bb17da63f175d571ab22479eb46a144548d79f3ed3998ea11
@@ -170,6 +172,7 @@ dsr1-fp8-mi355x-sglang-mtp:
         conc-end: 64
         spec-decoding: mtp
         srt-recipe: 8k1k.yaml
+        cpu-power: true
 
 # MI355X FP8 AgentX, TP4 only. The grid follows the TP4 band of the B200 FP8
 # AgentX arm so the two SKUs are directly comparable point for point, with the
@@ -447,72 +450,6 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
           tp: 8
           ep: 1
           dp-attn: false
-
-# Kimi-K3 MXFP4 agentic-coding benchmark on MI355X via ATOM with DSpark
-# speculative decoding. Acceptance is pinned to the committed golden curve in
-# infx/golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml
-# at both draft lengths used here: 7 draft tokens -> AL 3.84 at concurrency 1 and 4,
-# 4 draft tokens -> AL 3.36 from concurrency 14 up.
-# Companion to kimik3-fp4-mi355x-vllm-agentic-mtp: same checkpoint, same runner.
-# TP8 only -- the 1.56 TB MXFP4 checkpoint is ~195 GB/GPU and TP4 cannot load,
-# which is also why there is no DP-attention arm.
-# Three serving bands, tracking the ATOM recipe:
-#   interactive (1, 4)        the latency floor, GPU-resident, dcp 1.
-#   mid         (14, 16)      decode is KV-bandwidth-bound over 100k+ token
-#                             contexts, so dcp-size 8 shards the KV read across
-#                             all 8 GPUs and the LMCache DRAM tier backs the
-#                             paged KV.
-#   throughput  (48, 56, 72)  same shape, with the draft model.
-# Two utilization blocks because the per-rank LMCache pool differs, and the
-# launcher divides the aggregate budget by TP:
-#   0.343 -> 1028 GB aggregate -> 128 GB/rank (conc 14 through 48).
-#   0.513 -> 1538 GB aggregate -> 192 GB/rank (conc 56 and 72), where the
-#            wider in-flight window needs the deeper pool to keep the paged KV
-#            resident.
-kimik3-fp4-mi355x-atom-agentic-mtp:
-  image: rocm/atom-dev:nightly_202610131505
-  model: moonshotai/Kimi-K3
-  model-prefix: kimik3
-  runner: cluster:mi355x-amds
-  precision: fp4
-  framework: atom
-  multinode: false
-  srt-recipe-dir: kimik3/atom/mi355x-fp4-mtp
-  scenarios:
-    agentic-coding:
-    - dram-utilization: 0.343
-      search-space:
-      - { tp: 8, kv-offloading: none, conc-list: [1, 4], spec-decoding: mtp, srt-recipe: agentic.yaml }
-      - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [14, 16, 48], spec-decoding: mtp, srt-recipe: agentic.yaml }
-    - dram-utilization: 0.513
-      search-space:
-      - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [56, 72], spec-decoding: mtp, srt-recipe: agentic.yaml }
-
-# Kimi-K3 MXFP4 agentic-coding on MI355X via vLLM with DSpark speculative
-# decoding. Companion to kimik3-fp4-mi355x-atom-agentic-mtp: same checkpoint and
-# runner. TP8 only -- the 1.56 TB MXFP4 checkpoint is ~195 GB/GPU. Three bands:
-#   interactive (1, 4)   GPU-resident, dcp 8, DSpark draft; 1 runs the
-#                        latency_specialized decode (vllm-project/vllm#60683).
-#   mid         (4-32)   dcp 8, DSpark draft, SimpleCPUOffload DRAM tier.
-#   throughput  (48-60)  dcp 8 shards the KV read across all 8 GPUs, DRAM
-#                        offload, 4-token DSpark draft with synthetic acceptance.
-# dram-utilization 0.6 -> TOTAL_CPU_DRAM_GB 1799 at TP8 (node cap 2861022 MiB),
-# split evenly across the eight ranks by the launcher.
-kimik3-fp4-mi355x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:nightly-rocm100-df6603f0583375f244d1ac6d36265462b7490392
-  model: moonshotai/Kimi-K3
-  model-prefix: kimik3
-  runner: cluster:mi355x-amds
-  precision: fp4
-  framework: vllm
-  multinode: false
-  srt-recipe-dir: kimik3/vllm/mi355x-fp4-mtp
-  scenarios:
-    agentic-coding:
-    - dram-utilization: 0.6
-      search-space:
-      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: none, conc-list: [1, 4], spec-decoding: mtp, srt-recipe: agentic.yaml }
-      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [4, 10, 16, 24, 32, 48, 52, 60], spec-decoding: mtp, srt-recipe: agentic.yaml }
 
 dsr1-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809
@@ -816,7 +753,7 @@ glm5.2-fp4-mi355x-sglang-agentic-mtp:
 # decoding: the FP8 precision sibling of glm5.2-fp4-mi355x-sglang-agentic-mtp,
 # serving the upstream zai-org/GLM-5.2-FP8 checkpoint (~756 GB block-FP8).
 # Same EAGLE shape as the MXFP4 sibling (num-steps 5, 6 draft tokens) with
-# acceptance pinned to the golden AL 3.61 (glm5.2_mtp.yaml, thinking_on, K=5,
+# acceptance pinned to the golden AL 3.61 (glm-5.2-fp8__mtp__native__default-default.yaml, thinking_on, K=5,
 # measured on glm-5.2-fp8). TP8-only: ~94.5 GB/rank of weights leaves a ~150
 # GB/rank fp8 KV pool at --mem-fraction-static 0.85; TP4 would leave ~56 GB/rank
 # and is not attempted on day zero (the MI325X FP8 sibling is TP8-only too).
@@ -944,7 +881,7 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp8-c1:
 # AMD's Quark MXFP4 export (routed experts in MXFP4, W4A4 on the AITER MoE)
 # at TP4 with native DSpark: 7 drafts, mono decode and an FP8 KV cache at
 # c1-c8; 7 drafts, an NVFP4 KV cache and DBO at c16-c32; 3 drafts, DBO and a
-# CPU KV tier at c64. Throughput runs use the minimaxm31flash_dspark golden AL.
+# CPU KV tier at c64. Throughput runs use the minimax-m3.1-flash__dspark__native__probabilistic-block golden AL.
 minimaxm31flash-fp4-mi355x-vllm-agentic-dspark:
   image: vllm/vllm-openai-rocm:minimax-m31-flash@sha256:ae8681212aa5291d8c27f06e90016435e3fca144a68fd5c439231f6475f74569
   model: amd/MiniMax-M3.1-Flash-Quark-MXFP4
@@ -967,7 +904,7 @@ minimaxm31flash-fp4-mi355x-vllm-agentic-dspark:
 # MI355X Low-Latency (TP4) cell. Its High-Throughput cell (HiCache) crashes on MI355X
 # with this image, so concurrency 48-64 stays GPU-resident on the Low-Latency cell.
 # Seven-token DSpark (bundled draft); synthetic acceptance follows
-# infx/golden_al_distribution/minimaxm31flash_dspark.yaml.
+# infx/golden_al_distribution/minimax-m3.1-flash__dspark__native__probabilistic-block.yaml.
 minimaxm31flash-fp4-mi355x-sglang-agentic-dspark:
   image: lmsysorg/sglang:dev-minimax-m31-flash-mi35x@sha256:2d74f6ea339964befdfc97f8d74d9ce5bbecd4a29b343f2868a29d13d51ec3f8
   model: MiniMaxAI/MiniMax-M3.1-Flash
@@ -1004,8 +941,8 @@ dsv41flash-fp4-mi355x-atom-agentic-dspark:
       - { tp: 2, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 6, 8, 16, 32, 64], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 8, 32], srt-recipe: agentic.yaml }
 
-# The golden acceptance curve remains the provisional GLM-5.2-derived curve
-# documented in infx/golden_al_distribution/glm5.3_mtp.yaml.
+# The golden acceptance curve is the GLM-5.3 NVFP4 SGLang curve in
+# infx/golden_al_distribution/glm-5.3-nvfp4__mtp__native__default-default.yaml.
 glm5.3-fp8-mi355x-tilert-agentic:
   image: ghcr.io/tile-ai/tilert-rocm-decode:0.1.6
   model: zai-org/GLM-5.3
@@ -1071,107 +1008,3 @@ musespark-fp4-mi355x-sglang-agentic-dflash:
       search-space:
       - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 8, 13], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [10, 16, 24, 28, 36, 40], srt-recipe: agentic.yaml }
-
-# Native Kimi-K3 PD with TP8 workers and MoRIIO READ.
-kimik3-fp4-mi355x-vllm-disagg-agentic:
-  image: vllm/vllm-openai-rocm:nightly-81198e97ba7eee2a22540caaa756b7fdddcb4d93@sha256:a401e4f46872dcde77e07ae3d7fa2d3a71b7f2773714316116532e2b39deb179
-  model: moonshotai/Kimi-K3
-  model-prefix: kimik3
-  runner: cluster:mi355x-amds
-  precision: fp4
-  framework: vllm-disagg
-  router: { name: vllm-router, version: nightly-20260913-83944c4 }
-  kv-p2p-transfer: moriio
-  multinode: true
-  disagg: true
-  srt-recipe-dir: kimik3/vllm/mi355x-fp4/agentx
-  scenarios:
-    agentic-coding:
-    - dram-utilization: 0.6
-      search-space:
-      - spec-decoding: mtp
-        conc-list: [12]
-        kv-offloading: dram
-        kv-offload-backend: { name: vllm-simple }
-        srt-recipe: disagg-variants.yaml:override_1p3d_c12
-        prefill:
-          num-worker: 1
-          tp: 8
-          dcp-size: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - TOTAL_CPU_DRAM_GB=1799
-        decode: { num-worker: 3, tp: 8, dcp-size: 1, ep: 1, dp-attn: false }
-      - spec-decoding: mtp
-        conc-list: [24]
-        kv-offloading: dram
-        kv-offload-backend: { name: vllm-simple }
-        srt-recipe: disagg-variants.yaml:override_1p3d_c24
-        prefill:
-          num-worker: 1
-          tp: 8
-          dcp-size: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - TOTAL_CPU_DRAM_GB=1799
-        decode: { num-worker: 3, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
-      - spec-decoding: mtp
-        conc-list: [24]
-        kv-offloading: dram
-        kv-offload-backend: { name: vllm-simple }
-        srt-recipe: disagg-variants.yaml:override_1p2d_c24
-        prefill:
-          num-worker: 1
-          tp: 8
-          dcp-size: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - TOTAL_CPU_DRAM_GB=1799
-        decode: { num-worker: 2, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
-      - spec-decoding: mtp
-        conc-list: [48]
-        kv-offloading: dram
-        kv-offload-backend: { name: vllm-simple }
-        srt-recipe: disagg-variants.yaml:override_1p1d_c48
-        prefill:
-          num-worker: 1
-          tp: 8
-          dcp-size: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          # Recipe enables P-only scratch reclaim; D and GMU0.90 are unchanged.
-          - TOTAL_CPU_DRAM_GB=1799
-        decode: { num-worker: 1, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
-      - spec-decoding: mtp
-        conc-list: [56]
-        kv-offloading: dram
-        kv-offload-backend: { name: vllm-simple }
-        srt-recipe: disagg-variants.yaml:override_1p1d_c56
-        prefill:
-          num-worker: 1
-          tp: 8
-          dcp-size: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - TOTAL_CPU_DRAM_GB=1799
-        decode: { num-worker: 1, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
-      - spec-decoding: mtp
-        conc-list: [48]
-        kv-offloading: dram
-        kv-offload-backend: { name: vllm-simple }
-        srt-recipe: disagg-variants.yaml:override_1p2d_c48
-        prefill:
-          num-worker: 1
-          tp: 8
-          dcp-size: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          # Inherits the same P-only scratch-reclaim setting as 1P1D c48.
-          - TOTAL_CPU_DRAM_GB=1799
-        decode: { num-worker: 2, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
