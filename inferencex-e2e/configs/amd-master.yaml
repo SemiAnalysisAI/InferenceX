@@ -943,6 +943,19 @@ dsv41flash-fp4-mi355x-atom-agentic-dspark:
 
 # The golden acceptance curve is the GLM-5.3 NVFP4 SGLang curve in
 # infx/golden_al_distribution/glm-5.3-nvfp4__mtp__native__default-default.yaml.
+glm5.3-fp8-mi355x-sglang-agentic-mtp:
+  image: lmsysorg/sglang-rocm:v0.5.23-rocm720-mi35x-20261104@sha256:7b856e0cd974e9b71f96d0d1e5e33816d88608fb2fe2b33a1b8bca2973eb3385
+  model: zai-org/GLM-5.3
+  model-prefix: glm5.3
+  runner: cluster:mi355x-amds
+  precision: fp8
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: glm5.3/sglang/mi355x-fp8-mtp
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 10], spec-decoding: mtp, srt-recipe: agentic.yaml }
 glm5.3-fp8-mi355x-tilert-agentic:
   image: ghcr.io/tile-ai/tilert-rocm-decode:0.1.6
   model: zai-org/GLM-5.3
