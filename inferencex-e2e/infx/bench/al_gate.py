@@ -1,8 +1,9 @@
 """``al-gate``: replay a curve's golden SPEED-Bench collection, then judge the realized AL.
 
-The generation engine's own Prometheus counters, scraped before and after the replay, give
-``AL = 1 + accepted draft tokens / verification steps``; the verdict compares it with the
-curve's golden AL. Report-only: every measured verdict exits 0. A measurement that could not
+An agentic eval job runs it as its srt-slurm benchmark stage, against the server its eval
+then uses. The generation engine's own Prometheus counters, scraped before and after the
+replay, give ``AL = 1 + accepted draft tokens / verification steps``; the verdict compares it
+with the curve's golden AL. Report-only: every measured verdict exits 0. A measurement that could not
 run exits non-zero, and its result document records the error.
 """
 
@@ -12,6 +13,7 @@ import argparse
 import json
 import os
 import random
+import signal
 import time
 import urllib.request
 from collections.abc import Mapping
@@ -39,7 +41,15 @@ def main(argv: list[str]) -> int:
     """Run the ``al-gate`` command."""
     parser = argparse.ArgumentParser(prog="python3 -m infx.bench al-gate", description=__doc__)
     parser.parse_args(argv)
+    # The shim's timeout stops the gate at its cap; record that instead of dying silently.
+    signal.signal(signal.SIGTERM, _stopped)
     return run(os.environ, Runtime.for_job(os.environ))
+
+
+def _stopped(_signum: int, _frame: object) -> None:
+    """Raise when the shim's timeout stops the gate, so its result records why."""
+    cap = os.environ.get("AL_GATE_TIMEOUT_S", "?")
+    raise BenchError(f"stopped at the gate's {cap}s time cap")
 
 
 def run(env: Mapping[str, str], runtime: Runtime, golden_dir: Path | None = None) -> int:
@@ -47,6 +57,7 @@ def run(env: Mapping[str, str], runtime: Runtime, golden_dir: Path | None = None
     tokens = env.get("AL_GATE_DRAFT_TOKENS", "")
     document: dict[str, Any] = {
         "result_filename": env.get("RESULT_FILENAME"), "framework": env.get("FRAMEWORK"),
+        "eval_framework": env.get("EVAL_FRAMEWORK"), "eval_suite": env.get("EVAL_SUITE"),
         "curve": env.get("AL_GATE_CURVE"), "thinking_mode": env.get("THINKING_MODE"),
         "draft_tokens": int(tokens) if tokens.isdecimal() else None,
         "golden_acceptance_length": None, "acceptance_length": None, "ratio": None,
@@ -167,8 +178,12 @@ def render(prompt: str, renderer: str, kwargs: Mapping[str, Any], tokenizer: Any
         from infx.bench_serving.encoding_dsv4 import encode_messages
 
         return encode_messages(turn, **dsv4_options(kwargs))
+    if renderer == "deepseek_v41":
+        from infx.bench_serving.encoding_dsv41 import encode_messages
+
+        return encode_messages(turn, **dsv41_options(kwargs))
     if renderer != "chat_template":
-        raise BenchError(f"renderer {renderer!r} is neither chat_template nor deepseek_v4")
+        raise BenchError(f"renderer {renderer!r} is not chat_template, deepseek_v4 or deepseek_v41")
     return tokenizer.apply_chat_template(turn, add_generation_prompt=True, tokenize=False, **kwargs)
 
 
@@ -188,6 +203,25 @@ def dsv4_options(kwargs: Mapping[str, Any]) -> dict[str, Any]:
         effort = "max" if effort in ("max", "xhigh") else "high"
     drop = kwargs.get("drop_thinking", True)
     return {"thinking_mode": mode, "drop_thinking": drop, "reasoning_effort": effort}
+
+
+def dsv41_options(kwargs: Mapping[str, Any]) -> dict[str, Any]:
+    """``encode_messages`` options for chat_template_kwargs, as vLLM's deepseek_v41 maps them.
+
+    Thinking is on unless ``thinking`` or ``enable_thinking`` is given and falsy; reasoning effort
+    ``none`` turns it off, and no effort means ``high``.
+    """
+    thinking = bool(kwargs.get("thinking") or kwargs.get("enable_thinking"))
+    if "thinking" not in kwargs and "enable_thinking" not in kwargs:
+        thinking = True
+    effort = kwargs.get("reasoning_effort")
+    if effort == "none":
+        thinking, effort = False, None
+    return {
+        "thinking_mode": "thinking" if thinking else "chat",
+        "drop_thinking": kwargs.get("drop_thinking", True),
+        "reasoning_effort": "high" if effort is None else effort,
+    }
 
 
 def _tokenizer(model: str) -> Any:
