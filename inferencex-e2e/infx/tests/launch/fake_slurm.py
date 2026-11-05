@@ -97,7 +97,7 @@ import json, os, pathlib, sys
 import yaml
 argv = sys.argv[1:]
 keep = ("RUNNER_NAME", "INFMAX_WORKSPACE", "MODEL_PATH", "SERVED_MODEL_NAME", "VIRTUAL_ENV",
-        "UCX_NET_DEVICES", "ENROOT_ROOTFS_WRITABLE", "SRT_SRUN_OPTIONS")
+        "UCX_NET_DEVICES", "ENROOT_ROOTFS_WRITABLE", "SRT_SRUN_OPTIONS", "EVAL_ONLY", "RUN_EVAL")
 record = {"argv": argv, "cwd": os.getcwd(), "env": {name: os.environ.get(name) for name in keep}}
 with open(os.path.join(os.environ["FAKE_LOG_DIR"], "srtctl.jsonl"), "a") as handle:
     handle.write(json.dumps(record) + "\n")
@@ -129,7 +129,7 @@ elif mode == "agentic":
         (workspace / f"{result}_conc{conc}.json").write_text(json.dumps({"conc": int(conc)}))
         (logs / "agentic" / f"conc_{conc}").mkdir(parents=True)
 elif mode == "gate":
-    # What the acceptance gate writes to AL_GATE_OUTPUT_DIR (/logs in the container).
+    # What an eval's acceptance gate writes to AL_GATE_OUTPUT_DIR (/logs in the container).
     (logs / f"al_gate_{result}.json").write_text(json.dumps({"status": "below", "result_filename": result}))
     (logs / "al_gate" / "aiperf_artifacts").mkdir(parents=True)
     (logs / "al_gate" / "aiperf_artifacts" / "server_metrics_export.json").write_text("{}")

@@ -16,3 +16,10 @@ muse-spark-open-816b-a42b-nvfp4:
     5: 3.70
     6: 3.93
     7: 4.05
+
+collection:
+  renderer: chat_template
+  modes:
+    thinking_on:
+      chat_template_kwargs: null
+      sampling: {temperature: 1.0, top_p: 0.95}
