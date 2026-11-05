@@ -3982,7 +3982,7 @@ qwen3.5-fp8-h100-sglang-agentic:
 # qwen3.5-fp8-h100-sglang-agentic: same TP8/EP8 GPU-resident and HiCache arms,
 # plus SGLang EAGLE MTP (num-steps 3, eagle-topk 1, 4 draft tokens = 3
 # speculative tokens) with simulated acceptance pinned to the golden AL 3.39
-# (infx/golden_al_distribution/qwen3.5_mtp.yaml, thinking_on, K=3) -- the same value
+# (infx/golden_al_distribution/qwen3.5-397b-a17b-nvfp4__mtp__native__default-default.yaml, thinking_on, K=3) -- the same value
 # the GB300 Qwen3.5 AgentX srt-slurm recipes use. Image moves to
 # lmsysorg/sglang:v0.5.16-cu130 because SGLANG_SIMULATE_ACC_TOKEN_MODE only
 # exists from v0.5.16; v0.5.14 is the version the fixed-seq-len H100 MTP entry
@@ -3992,7 +3992,7 @@ qwen3.5-fp8-h100-sglang-agentic:
 # policy that new agentic arms enable speculative decoding rather than running a
 # separate STP baseline (docs/MODELS.md). SGLang EAGLE MTP (num-steps 3, eagle-topk 1,
 # 4 draft tokens = 3 speculative tokens) with simulated acceptance pinned to the
-# golden AL 3.39 (infx/golden_al_distribution/qwen3.5_mtp.yaml, thinking_on, K=3).
+# golden AL 3.39 (infx/golden_al_distribution/qwen3.5-397b-a17b-nvfp4__mtp__native__default-default.yaml, thinking_on, K=3).
 # Image is lmsysorg/sglang:v0.5.16-cu130: SGLANG_SIMULATE_ACC_TOKEN_MODE only
 # exists from v0.5.16, and v0.5.14 is what the fixed-seq-len H200 MTP entry runs.
 # Search space is the H100 AgentX shape widened for H200's 141 GB: the
@@ -4074,7 +4074,7 @@ qwen3.5-fp8-h100-sglang-agentic-mtp:
 # 2026-10-23 (amd64 is minimax-m31-flash-x86_64-cu134). Serve flags follow the
 # Hopper TP8 recipe: FP8 KV and indexer caches, NVFP4 experts on Marlin MoE.
 # Upstream does not enable DSpark on Hopper; this adds the GB200 recipe's
-# three-token DSpark, with synthetic acceptance from minimaxm31flash_dspark.yaml.
+# three-token DSpark, with synthetic acceptance from minimax-m3.1-flash__dspark__native__probabilistic-block.yaml.
 minimaxm31flash-fp4-h100-vllm-agentic-dspark:
   image: vllm/vllm-openai:minimax-m31-flash@sha256:86f582dae25ea92802353727164ae4eb03b37b18baf9119b805ffaec2a7ef07c
   model: MiniMaxAI/MiniMax-M3.1-Flash
@@ -4097,7 +4097,7 @@ minimaxm31flash-fp4-h100-vllm-agentic-dspark:
 # 2026-10-23 (amd64 is minimax-m31-flash-x86_64-cu134). Serve flags follow the
 # Hopper TP8 recipe: FP8 KV and indexer caches, NVFP4 experts on Marlin MoE.
 # Upstream does not enable DSpark on Hopper; this adds the GB200 recipe's
-# three-token DSpark, with synthetic acceptance from minimaxm31flash_dspark.yaml.
+# three-token DSpark, with synthetic acceptance from minimax-m3.1-flash__dspark__native__probabilistic-block.yaml.
 minimaxm31flash-fp4-h200-vllm-agentic-dspark:
   image: vllm/vllm-openai:minimax-m31-flash@sha256:86f582dae25ea92802353727164ae4eb03b37b18baf9119b805ffaec2a7ef07c
   model: MiniMaxAI/MiniMax-M3.1-Flash
@@ -4257,7 +4257,7 @@ minimaxm31flash-fp4-b200-vllm-agentic-dspark:
 # cookbook (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1),
 # manifest digest verified 2026-10-24.
 # Seven-token DSpark (bundled draft); synthetic acceptance follows
-# infx/golden_al_distribution/minimaxm31flash_dspark.yaml.
+# infx/golden_al_distribution/minimax-m3.1-flash__dspark__native__probabilistic-block.yaml.
 minimaxm31flash-fp4-b200-sglang-agentic-dspark:
   image: lmsysorg/sglang:dev-minimax-m31-flash@sha256:614b1509bcb729c653528d448bff9850f8977fcad9d12ba56bd6dbe3d7985e87
   model: MiniMaxAI/MiniMax-M3.1-Flash
@@ -4300,7 +4300,7 @@ minimaxm31flash-fp4-gb200-vllm-agentic-dspark:
 minimaxm31flash-fp4-b300-vllm-agentic-dspark:
   # Day-0 vLLM image for MiniMax-M3.1-Flash (vllm.ai/blog/2026-10-23-minimax-m31-flash).
   # DSpark uses the checkpoint's built-in drafter; synthetic acceptance follows
-  # infx/golden_al_distribution/minimaxm31flash_dspark.yaml.
+  # infx/golden_al_distribution/minimax-m3.1-flash__dspark__native__probabilistic-block.yaml.
   image: vllm/vllm-openai:minimax-m31-flash@sha256:86f582dae25ea92802353727164ae4eb03b37b18baf9119b805ffaec2a7ef07c
   model: MiniMaxAI/MiniMax-M3.1-Flash
   model-prefix: minimaxm31flash
@@ -4332,7 +4332,7 @@ minimaxm31flash-fp4-b300-vllm-agentic-dspark:
 # cookbook (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1),
 # manifest digest verified 2026-10-24.
 # Seven-token DSpark (bundled draft); synthetic acceptance follows
-# infx/golden_al_distribution/minimaxm31flash_dspark.yaml.
+# infx/golden_al_distribution/minimax-m3.1-flash__dspark__native__probabilistic-block.yaml.
 minimaxm31flash-fp4-gb200-sglang-agentic-dspark:
   image: lmsysorg/sglang:dev-minimax-m31-flash@sha256:614b1509bcb729c653528d448bff9850f8977fcad9d12ba56bd6dbe3d7985e87
   model: MiniMaxAI/MiniMax-M3.1-Flash
@@ -4575,7 +4575,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg:
 # AgentX speculative-decoding policy in docs/MODELS.md. SGLang EAGLE runs off
 # GLM-5.2's built-in nextn head (eagle-topk 1): K=5 / 6 draft tokens at
 # c1/c4/c8/c20, K=3 / 4 draft tokens elsewhere. The connector selects golden
-# AL 3.61 or 2.99 respectively from infx/golden_al_distribution/glm5.2_mtp.yaml
+# AL 3.61 or 2.99 respectively from infx/golden_al_distribution/glm-5.2-fp8__mtp__native__default-default.yaml
 # for thinking_on; evals retain real verification. The pinned nightly includes FlashInfer
 # 0.6.18's BF16 TRTLLM MoE allocation fix for small-batch Blackwell execution
 # in GLM-5.2's unquantized EAGLE draft head.
@@ -4624,7 +4624,7 @@ glm5.2-fp8-b300-sglang-agentic-mtp:
 # policy that agentic arms enable speculative decoding rather than running a
 # separate STP baseline (docs/MODELS.md). SGLang EAGLE off GLM-5.2's built-in nextn
 # head (num-steps 3, eagle-topk 1, 4 draft tokens = 3 speculative tokens) with
-# acceptance pinned to the golden AL 2.99 (infx/golden_al_distribution/glm5.2_mtp.yaml,
+# acceptance pinned to the golden AL 2.99 (infx/golden_al_distribution/glm-5.2-fp8__mtp__native__default-default.yaml,
 # thinking_on, K=3) through SGLANG_SIMULATE_ACC_*. SGLang v0.5.16 is the first
 # release that reads SGLANG_SIMULATE_ACC_TOKEN_MODE. The pinned 2026-09-01
 # nightly includes FlashInfer 0.6.18's BF16 TRTLLM MoE allocation fix, which is
@@ -4668,7 +4668,7 @@ glm5.2-fp8-b200-sglang-agentic-mtp:
 
 # GLM-5.2 NVFP4 B200 AgentX on Dynamo + SGLang. EAGLE uses the model's
 # built-in nextn head, with acceptance pinned to the golden thinking-on AL in
-# infx/golden_al_distribution/glm5.2_mtp.yaml. Both arms use HiCache write-back
+# infx/golden_al_distribution/glm-5.2-fp8__mtp__native__default-default.yaml. Both arms use HiCache write-back
 # DRAM offload for the agentic working set.
 glm5.2-fp4-b200-dynamo-sglang-agentic-agg:
   image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
@@ -5446,6 +5446,23 @@ dsv41flash-fp4-b300-vllm-agentic-dspark:
       - { tp: 2, ep: 2, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [8, 16, 32, 64], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
       - { tp: 2, ep: 2, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [128, 192], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
 
+kimik3.1-fp4-b300-vllm-agentic-dspark:
+  image: vllm/vllm-openai:kimi-k31@sha256:904520f3fefc32414abcedf6ba8dadc9c5978db1bcdaf40f58d6b9036ef30a99
+  model: moonshotai/Kimi-K3.1-Pro
+  model-prefix: kimik3.1
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: vllm
+  multinode: false
+  srt-recipe-dir: kimik3.1/vllm/b300-fp4-mtp
+  scenarios:
+    agentic-coding:
+    # 0.75 resolves to 2249 GB of host DRAM, which the recipe's Simple CPU offload splits across the 8 TP ranks.
+    - dram-utilization: 0.75
+      search-space:
+      # The ~1.56 TB MXFP4 checkpoint needs all 8 GPUs. DSpark drafts 5 tokens up to conc 8, then 4, 3 and 2.
+      - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 70], srt-recipe: agentic.yaml }
+
 dsv41flash-fp4-b200-vllm-agentic-dspark:
   image: vllm/vllm-openai:v0.32.0@sha256:befccf0e7e4089aa23926bb6f887a85c0d46c2a99e6de5c5ffdf5cb7957c5b34
   model: deepseek-ai/DeepSeek-V4.1-Flash
@@ -5542,7 +5559,7 @@ minimaxm31flash-fp4-gb300-vllm-agentic-dspark:
 # GB300 Balanced (TP4), High-Throughput (TP4, EP4; HiCache above conc 32) and
 # Low-Latency (MonoKernel, conc 1).
 # Seven-token DSpark (bundled draft); synthetic acceptance follows
-# infx/golden_al_distribution/minimaxm31flash_dspark.yaml.
+# infx/golden_al_distribution/minimax-m3.1-flash__dspark__native__probabilistic-block.yaml.
 minimaxm31flash-fp4-gb300-sglang-agentic-dspark:
   image: lmsysorg/sglang:dev-minimax-m31-flash@sha256:614b1509bcb729c653528d448bff9850f8977fcad9d12ba56bd6dbe3d7985e87
   model: MiniMaxAI/MiniMax-M3.1-Flash
@@ -6095,7 +6112,7 @@ dsv41flash-fp4-b300-sglang-agentic-dspark-lowconc:
 # cookbook (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1),
 # manifest digest verified 2026-10-24.
 # Seven-token DSpark (bundled draft); synthetic acceptance follows
-# infx/golden_al_distribution/minimaxm31flash_dspark.yaml.
+# infx/golden_al_distribution/minimax-m3.1-flash__dspark__native__probabilistic-block.yaml.
 minimaxm31flash-fp4-b300-sglang-agentic-dspark:
   image: lmsysorg/sglang:dev-minimax-m31-flash@sha256:614b1509bcb729c653528d448bff9850f8977fcad9d12ba56bd6dbe3d7985e87
   model: MiniMaxAI/MiniMax-M3.1-Flash
@@ -6719,7 +6736,7 @@ qwen3.5-fp8-gb300-dynamo-sglang-agentic-pp-midcurve:
 # aggregated TP4 engine on 4 of the node's 8 GPUs per point, so tok/s/GPU is
 # per 4 GPUs. EAGLE runs off the built-in nextn head at K=5, with acceptance
 # pinned to the golden thinking-on AL 3.61 (infx/golden_al_distribution/
-# glm5.2_mtp.yaml). Same image as glm5.2-fp4-b300-sglang-agentic-mtp; the
+# glm-5.2-fp8__mtp__native__default-default.yaml). Same image as glm5.2-fp4-b300-sglang-agentic-mtp; the
 # Dynamo 1.5.0.dev20260903 wheels install at job start. c1-c20 run plain TP4;
 # c24-c48 add DP4 attention and the prefill delayer. HiCache keeps 270-295
 # GB/rank in host DRAM; with the DSA indexer pools that is about 1.3-1.42 TB
@@ -6832,6 +6849,22 @@ musespark-fp4-b300-sglang-agentic-dflash:
       search-space:
       - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 7, 16, 20, 24], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [16, 28, 32, 38, 48], srt-recipe: agentic.yaml }
+
+kimik3.1-fp4-b300-sglang-agentic-dflash:
+  image: lmsysorg/sglang:dev-kimi-k31-pro@sha256:67fc77d1cbe67de27ca54d874c82757a4844743fea899ea7d0df547e30c2c391
+  model: moonshotai/Kimi-K3.1-Pro
+  model-prefix: kimik3.1
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: kimik3.1/sglang/b300-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.75
+      search-space:
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [1, 2, 4, 8, 16], srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 2, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [24, 32, 40, 48, 56, 70], srt-recipe: agentic.yaml }
 
 musespark-fp4-h100-sglang-agentic-dflash:
   image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
