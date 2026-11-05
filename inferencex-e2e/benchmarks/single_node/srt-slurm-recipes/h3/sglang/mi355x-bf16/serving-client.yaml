@@ -35,6 +35,8 @@ services:
       - "4"
       - --tp-size
       - "1"
+      - --attention-backend
+      - aiter
       - --encoder-parallel
       - auto
       - --warmup-resolutions
@@ -57,6 +59,7 @@ services:
       VIDEO_RUNTIME_REVISION: 297e54fd105e974cdf401e5b4d20253a22c16f90
       HF_HUB_OFFLINE: "1"
       TRANSFORMERS_OFFLINE: "1"
+      SGLANG_USE_AITER: "1"
       # The image defaults quick all-reduce to INT8.
       ROCM_QUICK_REDUCE_QUANTIZATION: NONE
     readiness:
