@@ -25,6 +25,9 @@ frontend:
 engine: tokenspeed
 setup_script: tokenspeed-nightly.sh
 environment:
+  # Enroot needs these before container creation because the base image omits them.
+  NVIDIA_VISIBLE_DEVICES: all
+  NVIDIA_DRIVER_CAPABILITIES: compute,utility
   PYTHONNOUSERSITE: '1'
   PYTHONUNBUFFERED: '1'
   PYTHONSAFEPATH: '1'

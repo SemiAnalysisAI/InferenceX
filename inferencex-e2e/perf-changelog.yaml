@@ -12043,5 +12043,5 @@
     - "Add Qwen3.8-Flash-Next NVFP4 GB300 TP1/EP1 AgentX with TokenSpeed MTP and a 224 GB Host L2 KV store at concurrency 1, 2, 4, 8, 16, 32, 48, and 64."
     - "Pin TokenSpeed 0.1.1.post20261104, CUDA 13 ARM64 kernel 0.1.4.post20261104 and engine 0.1.0.post20261102 wheels by SHA256, scheduler 0.1.49, the runner image by digest, and the checkpoint revision. Keep BF16 KV/SSM state, in-forward state checkpoints, and Host L2 write-back."
     - "Bind native TokenSpeed topology and select golden MTP acceptance automatically for throughput; use real verification for evals."
-    - "Use srt-slurm v2.66.2 with native headless ZMQ workers, SMG readiness, and engine HTTP metrics discovery."
+    - "Use srt-slurm v2.66.2 with native headless ZMQ workers, SMG readiness, and engine HTTP metrics discovery. Export NVIDIA runtime settings before Enroot creates the runner containers."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4780
