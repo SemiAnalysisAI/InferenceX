@@ -12045,3 +12045,21 @@
     - "Size the Simple CPU offload at 224.875 GB per rank, 1799 GB across the 8 TP ranks, which is what dram-utilization 0.6 resolves to on these nodes."
     - "Precision and speculative settings on the day-0 image: block rejection with the published Inferact/Kimi-K3.1-Pro-DSpark-preview draft (throughput points replace it with the golden acceptance length for their token count, 3.21 at conc 1, 3.08 at conc 4-10, 2.92 at conc 16-24 and 2.70 at conc 32-48; evals and AL gates verify for real), FP32 KDA recurrent state, BF16 all-reduce (no INT4 quick reduce, so the AITER AR+RMSNorm fusion keeps every payload), the default MLA prefill backend at every point, and no FP8 indexer override or KDA input-projection quantization."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4806
+
+- config-keys:
+    - kimik3.1-fp4-mi355x-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi-K3.1-Pro MXFP4 AgentX on one 8x MI355X node with SGLang (lmsysorg/sglang:dev-kimi-k31-pro-mi35x) and the DFlash2 draft at 5 draft tokens with block verification."
+    - "TP8 monokernel at concurrency 1 and 4 with GPU-resident KV; TP8/DCP8 with the HiCache host tier at concurrency 8, 16, 32 and 48."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4808
+
+- config-keys:
+    - kimik3.1-fp4-b200-dynamo-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi K3.1 Pro B200 SGLang AgentX on lmsysorg/sglang:dev-kimi-k31-pro: one aggregated worker over two nodes, TP16 with DCP16, no KV offload, concurrency 1, 4, 8, 14, 24, 32, 48, 56, 72, 80 with DFLASH and 96 without speculation."
+    - "DFLASH uses RadixArk/Kimi-K3.1-Dflash2-Preview with block verification, 7 draft tokens through concurrency 14 and 4 above."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4801
