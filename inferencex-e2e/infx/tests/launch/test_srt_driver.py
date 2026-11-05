@@ -23,6 +23,7 @@ from infx.launch.drivers.srt.checkout import CPU_POWER_EXPORTER_RELEASE
 from infx.launch.drivers.srt.lanes import LaneMount, SrtLane
 from infx.launch.drivers.srt.models import Override
 from infx.launch.policy import LaunchPath, Match
+from infx.srt_slurm.workload import BOUND_RECIPE
 from infx.tests.launch.fake_slurm import (
     ROOT,
     base_env,
@@ -812,7 +813,13 @@ def test_tilert_uses_upstream_submission_and_prepared_weights(harness):
     assert "--no-preflight" not in call["argv"]
     config = srtslurm(Path(call["cwd"]))
     assert config["default_health_check"]["max_attempts"] > 0
-    assert {"test:tag", "prefill:tag"} <= set(config["containers"])
+    assert {"test:tag", "prefill:tag", config["default_gpu_exporter"]["container_image"]} <= set(
+        config["containers"]
+    )
+    telemetry = yaml.safe_load((Path(call["cwd"]) / BOUND_RECIPE).read_text())["telemetry"]
+    assert (telemetry["enabled"], telemetry["required"], "dcgm_exporter" in telemetry) == (
+        True, False, False,
+    )
     assert config["default_mounts"][str(harness.workspace)] == "/infmax-workspace"
     assert "/models" in config["default_mounts"].values()
     [point] = harness.workspace.glob("point-identity_sweep_*.json")

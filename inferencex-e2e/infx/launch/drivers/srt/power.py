@@ -1,7 +1,7 @@
-"""DCGM power eligibility of the srt-slurm multi-node lanes.
+"""Power eligibility of the srt-slurm multi-node lanes.
 
-Every multi-node benchmark point on a cluster with a GPU exporter port measures GPU power, and
-CPU power where the cluster declares a CPU exporter, unless its recipe runs etcd and NATS on a
+Every multi-node benchmark point on a cluster with a GPU exporter measures GPU power, and CPU
+power where the cluster declares a CPU exporter, unless its recipe runs etcd and NATS on a
 dedicated node. A point without ``power`` keeps its result when telemetry fails. A lane rule
 the point matches changes how its AgentX power is measured.
 """
@@ -60,6 +60,8 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
 class PowerDecision:
     """Outcome of power eligibility for one launch."""
 
+    # GPU power is measured: DCGM, or the cluster's own exporter where it sets no DCGM port.
+    # The name is the job-event schema's (``event.Power.dcgm``).
     dcgm: bool
     agentx: bool
     adapter: bool = False
@@ -82,16 +84,16 @@ def decide_power(
     request: MultiNodeRequest,
     dedicated_discovery: Callable[[], bool] = lambda: False,
 ) -> PowerDecision:
-    """Measure power on every benchmark point of a cluster with a GPU exporter port, except one
+    """Measure power on every benchmark point of a cluster with a GPU exporter, except one
     without ``power`` whose recipe runs ``dedicated_discovery``.
 
     Raises ``PowerPolicyError`` when the point asks for power the cluster cannot measure.
     """
     if request.al_gate or request.eval_only:
         return NO_POWER
-    if srt.power_exporter_port is None:
+    if srt.gpu_exporter_image is None:
         if request.power:
-            raise PowerPolicyError(f"cluster {cluster_id!r} measures no DCGM power on {path}")
+            raise PowerPolicyError(f"cluster {cluster_id!r} measures no GPU power on {path}")
         return NO_POWER
     if request.cpu_power and srt.cpu_power_exporter is None:
         raise PowerPolicyError(

@@ -16,6 +16,7 @@ from infx.config import repository_root
 from infx.srt_slurm.synthetic_acceptance import ENGINES, selected_recipes, spec_parameters
 from infx.srt_slurm.workload import (
     BOUND_RECIPE,
+    NATIVE,
     CpuPowerSource,
     add_cpu_power_source_argument,
     add_fabric_argument,
@@ -93,7 +94,7 @@ def select_recipe(
         agentic=agentic,
         multinode=False,
         root=root or repository_root(),
-        native_power=environment.get("EVAL_ONLY") != "true",
+        gpu_power=NATIVE if environment.get("EVAL_ONLY") != "true" else None,
         cpu_power_source=cpu_power_source,
     )
     recipes = expand(raw, selector or None)

@@ -178,7 +178,7 @@ def test_a_power_point_gets_telemetry_and_its_concurrencies_on_a_bundle_variant(
         "override_c8": {"roles": {"agg": {"nodes": 2}}},
     })
 
-    composed = compose_recipe(path, agentic=True, multinode=True, root=project, power_port=19401)
+    composed = compose_recipe(path, agentic=True, multinode=True, root=project, gpu_power=19401)
     [(_, variant)] = selected_recipes(composed, "override_c8")
     bound = bind_workload(variant, {**AGENTX_ENV, "POWER": "1"}, agentic=True, multinode=True)
 
@@ -190,7 +190,7 @@ def test_a_power_point_gets_telemetry_and_its_concurrencies_on_a_bundle_variant(
     by_default = bind_workload(variant, AGENTX_ENV, agentic=True, multinode=True)
     assert by_default["telemetry"]["required"] is False
     with_cpu = compose_recipe(
-        path, agentic=True, multinode=True, root=project, power_port=19401, cpu_power_source="acpi"
+        path, agentic=True, multinode=True, root=project, gpu_power=19401, cpu_power_source="acpi"
     )
     assert with_cpu["base"]["telemetry"]["cpu_power_exporter"] == {"source": "acpi"}
     unpowered = compose_recipe(path, agentic=True, multinode=True, root=project)["base"]
