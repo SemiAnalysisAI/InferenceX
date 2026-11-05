@@ -1,0 +1,1537 @@
+diff --git a/src/srtctl/analysis/nic_traffic_report.py b/src/srtctl/analysis/nic_traffic_report.py
+new file mode 100644
+index 00000000..4f65f70e
+--- /dev/null
++++ b/src/srtctl/analysis/nic_traffic_report.py
+@@ -0,0 +1,225 @@
++# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
++# SPDX-License-Identifier: Apache-2.0
++
++"""Per-concurrency-window RDMA NIC traffic from the merged ``nic_traffic.csv``.
++
++For each benchmark window, each NIC's window is snapped to its nearest sample
++on each side, as the power report does. Between consecutive samples the
++counter delta over the elapsed time is that interval's rate. An interval where
++either counter decreased spans a counter reset (driver reload, port reset) and
++is dropped. Over the remaining intervals:
++
++* mean Gbit/s = summed byte deltas / summed interval time;
++* peak Gbit/s = the highest single-interval rate.
++
++A node's mean is the sum of its NICs' means. A node's peak sums the rates of
++the NIC intervals that end at the same sampler pass (``sample_seq``) and takes
++the maximum. Timestamps cannot identify a pass, because each row is stamped
++at its own counter reads and a NIC read late in a pass is stamped up to
++hundreds of milliseconds after the first.
++"""
++
++from __future__ import annotations
++
++import csv
++from collections import defaultdict
++from dataclasses import dataclass
++from pathlib import Path
++
++import numpy as np
++
++from srtctl.analysis.power_energy_report import ConcurrencyWindow, discover_concurrency_windows, nearest_sample_index
++from srtctl.core.nic_traffic import SAMPLES_HEADER
++from srtctl.core.nic_traffic_session import TRAFFIC_FILENAME
++from srtctl.core.power.contract import MAX_SAMPLE_GAP_SECONDS
++
++SUMMARY_FILENAME = "nic_traffic_summary.csv"
++SUMMARY_HEADER = (
++    "concurrency",
++    "window_start_unix",
++    "window_end_unix",
++    "scope",
++    "hostname",
++    "device",
++    "port",
++    "netdev",
++    "driver",
++    "intervals",
++    "dropped_intervals",
++    "mean_tx_gbps",
++    "mean_rx_gbps",
++    "peak_tx_gbps",
++    "peak_rx_gbps",
++)
++
++_BITS_PER_GBIT = 1e9
++
++
++@dataclass(frozen=True)
++class NicSeries:
++    """One RDMA port's cumulative byte counters, sorted by sample time."""
++
++    hostname: str
++    device: str
++    port: str
++    netdev: str
++    driver: str
++    times: np.ndarray
++    sample_seqs: np.ndarray
++    tx_bytes: np.ndarray
++    rx_bytes: np.ndarray
++
++
++@dataclass(frozen=True)
++class WindowTraffic:
++    """One NIC's or one node's traffic over one window."""
++
++    intervals: int
++    dropped_intervals: int
++    mean_tx_gbps: float
++    mean_rx_gbps: float
++    peak_tx_gbps: float
++    peak_rx_gbps: float
++
++
++@dataclass(frozen=True)
++class _NicWindow:
++    traffic: WindowTraffic
++    # Each valid interval's ending sampler pass and its (tx, rx) rates, for summing across a node's NICs.
++    end_seqs: np.ndarray
++    tx_gbps: np.ndarray
++    rx_gbps: np.ndarray
++
++
++def load_nic_series(path: Path) -> list[NicSeries]:
++    """Group the merged CSV's rows into one series per (host, device, port)."""
++    rows: dict[tuple[str, str, str], list[dict[str, str]]] = defaultdict(list)
++    with path.open(newline="", encoding="utf-8") as handle:
++        reader = csv.DictReader(handle)
++        if tuple(reader.fieldnames or ()) != SAMPLES_HEADER:
++            raise ValueError(f"{path}: header is not {','.join(SAMPLES_HEADER)}")
++        for row in reader:
++            rows[(row["hostname"], row["device"], row["port"])].append(row)
++    series = []
++    for (hostname, device, port), group in sorted(rows.items()):
++        group.sort(key=lambda row: float(row["timestamp_unix"]))
++        series.append(
++            NicSeries(
++                hostname=hostname,
++                device=device,
++                port=port,
++                netdev=group[-1]["netdev"],
++                driver=group[-1]["driver"],
++                times=np.array([float(row["timestamp_unix"]) for row in group]),
++                sample_seqs=np.array([int(row["sample_seq"]) for row in group], dtype=np.int64),
++                tx_bytes=np.array([int(row["tx_bytes"]) for row in group], dtype=np.int64),
++                rx_bytes=np.array([int(row["rx_bytes"]) for row in group], dtype=np.int64),
++            )
++        )
++    return series
++
++
++def _nic_window(series: NicSeries, start: float, end: float) -> _NicWindow | None:
++    """The NIC's traffic over ``[start, end]``, or None when samples do not cover the window."""
++    first = nearest_sample_index(series.times, start)
++    last = nearest_sample_index(series.times, end)
++    if (
++        last <= first
++        or abs(series.times[first] - start) > MAX_SAMPLE_GAP_SECONDS
++        or abs(series.times[last] - end) > MAX_SAMPLE_GAP_SECONDS
++    ):
++        return None
++    times = series.times[first : last + 1]
++    seconds = np.diff(times)
++    tx = np.diff(series.tx_bytes[first : last + 1])
++    rx = np.diff(series.rx_bytes[first : last + 1])
++    valid = (seconds > 0) & (tx >= 0) & (rx >= 0)
++    if not valid.any():
++        return None
++    seconds, tx, rx = seconds[valid], tx[valid], rx[valid]
++    tx_gbps = tx * 8 / seconds / _BITS_PER_GBIT
++    rx_gbps = rx * 8 / seconds / _BITS_PER_GBIT
++    elapsed = float(seconds.sum())
++    return _NicWindow(
++        traffic=WindowTraffic(
++            intervals=int(valid.sum()),
++            dropped_intervals=int((~valid).sum()),
++            mean_tx_gbps=float(tx.sum()) * 8 / elapsed / _BITS_PER_GBIT,
++            mean_rx_gbps=float(rx.sum()) * 8 / elapsed / _BITS_PER_GBIT,
++            peak_tx_gbps=float(tx_gbps.max()),
++            peak_rx_gbps=float(rx_gbps.max()),
++        ),
++        end_seqs=series.sample_seqs[first + 1 : last + 1][valid],
++        tx_gbps=tx_gbps,
++        rx_gbps=rx_gbps,
++    )
++
++
++def _node_window(nics: list[_NicWindow]) -> WindowTraffic:
++    rates: dict[int, list[float]] = defaultdict(lambda: [0.0, 0.0])
++    for nic in nics:
++        for end_seq, tx, rx in zip(nic.end_seqs.tolist(), nic.tx_gbps.tolist(), nic.rx_gbps.tolist(), strict=True):
++            rates[end_seq][0] += tx
++            rates[end_seq][1] += rx
++    return WindowTraffic(
++        intervals=len(rates),
++        dropped_intervals=sum(nic.traffic.dropped_intervals for nic in nics),
++        mean_tx_gbps=sum(nic.traffic.mean_tx_gbps for nic in nics),
++        mean_rx_gbps=sum(nic.traffic.mean_rx_gbps for nic in nics),
++        peak_tx_gbps=max(tx for tx, _ in rates.values()),
++        peak_rx_gbps=max(rx for _, rx in rates.values()),
++    )
++
++
++@dataclass(frozen=True)
++class NicTrafficSummary:
++    rows: list[tuple[object, ...]]
++    # "<host>/<device>/<port> @ concurrency <n>" for NICs whose samples do not cover a window.
++    uncovered: list[str]
++
++
++def summarize(series: list[NicSeries], windows: list[ConcurrencyWindow]) -> NicTrafficSummary:
++    """One ``nic`` row per covered NIC and one ``node`` row per host, per window."""
++    rows: list[tuple[object, ...]] = []
++    uncovered: list[str] = []
++    for window in windows:
++        head = (window.concurrency, window.start_unix, window.end_unix)
++        by_node: dict[str, list[_NicWindow]] = defaultdict(list)
++        for nic in series:
++            result = _nic_window(nic, window.start_unix, window.end_unix)
++            if result is None:
++                uncovered.append(f"{nic.hostname}/{nic.device}/{nic.port} @ concurrency {window.concurrency}")
++                continue
++            by_node[nic.hostname].append(result)
++            rows.append(
++                (*head, "nic", nic.hostname, nic.device, nic.port, nic.netdev, nic.driver, *_values(result.traffic))
++            )
++        for hostname, nics in sorted(by_node.items()):
++            rows.append((*head, "node", hostname, "", "", "", "", *_values(_node_window(nics))))
++    return NicTrafficSummary(rows=rows, uncovered=uncovered)
++
++
++def _values(traffic: WindowTraffic) -> tuple[object, ...]:
++    return (
++        traffic.intervals,
++        traffic.dropped_intervals,
++        round(traffic.mean_tx_gbps, 6),
++        round(traffic.mean_rx_gbps, 6),
++        round(traffic.peak_tx_gbps, 6),
++        round(traffic.peak_rx_gbps, 6),
++    )
++
++
++def write_run_summary(log_dir: Path, nic_dir: Path) -> NicTrafficSummary:
++    """Summarize ``<nic_dir>/nic_traffic.csv`` over the run's windows into ``nic_traffic_summary.csv``.
++
++    Raises:
++        PowerReportError: The run has no benchmark windows to summarize over.
++    """
++    windows = discover_concurrency_windows(log_dir)
++    summary = summarize(load_nic_series(nic_dir / TRAFFIC_FILENAME), windows)
++    with (nic_dir / SUMMARY_FILENAME).open("w", newline="", encoding="utf-8") as handle:
++        writer = csv.writer(handle)
++        writer.writerow(SUMMARY_HEADER)
++        writer.writerows(summary.rows)
++    return summary
+diff --git a/src/srtctl/analysis/power_energy_report.py b/src/srtctl/analysis/power_energy_report.py
+index 4fb12dda..aef8af49 100644
+--- a/src/srtctl/analysis/power_energy_report.py
++++ b/src/srtctl/analysis/power_energy_report.py
+@@ -136,9 +136,7 @@ def discover_run(log_dir: Path, *, cpu_samples_csv: Path | None = None) -> RunPa
+     legs (scraper under ``power/cpu/``, host collector under ``cpu_power/``)
+     wrote a ``samples.csv`` for the same run.
+     """
+-    benchmark_out = log_dir / "benchmark.out"
+-    if not benchmark_out.is_file():
+-        raise PowerReportError(f"{benchmark_out}: not found")
++    benchmark_out = _require_benchmark_out(log_dir)
+ 
+     all_matches = sorted(log_dir.rglob("samples.csv"))
+     cpu_matches = [p for p in all_matches if p.parent.name in CPU_SAMPLES_DIRNAMES]
+@@ -164,6 +162,30 @@ def discover_run(log_dir: Path, *, cpu_samples_csv: Path | None = None) -> RunPa
+         candidate = gpu_samples_csv.with_name("manifest.json")
+         gpu_manifest = candidate if candidate.is_file() else None
+ 
++    return RunPaths(
++        benchmark_out=benchmark_out,
++        cpu_samples_csv=cpu_samples_csv,
++        gpu_samples_csv=gpu_samples_csv,
++        gpu_manifest=gpu_manifest,
++        concurrency_sources=_concurrency_sources(log_dir, benchmark_out),
++    )
++
++
++def discover_concurrency_windows(log_dir: Path) -> list[ConcurrencyWindow]:
++    """Every measured concurrency window of the run, whether or not power was sampled."""
++    benchmark_out = _require_benchmark_out(log_dir)
++    sources = _concurrency_sources(log_dir, benchmark_out)
++    return load_concurrency_windows(RunPaths(benchmark_out, None, None, None, sources))
++
++
++def _require_benchmark_out(log_dir: Path) -> Path:
++    benchmark_out = log_dir / "benchmark.out"
++    if not benchmark_out.is_file():
++        raise PowerReportError(f"{benchmark_out}: not found")
++    return benchmark_out
++
++
++def _concurrency_sources(log_dir: Path, benchmark_out: Path) -> tuple[tuple[int, Path], ...]:
+     benchmark_type = detect_benchmark_type(benchmark_out)
+     if benchmark_type == BENCHMARK_TYPE_AIPERF:
+         sources = _discover_aiperf_sources(log_dir)
+@@ -171,14 +193,7 @@ def discover_run(log_dir: Path, *, cpu_samples_csv: Path | None = None) -> RunPa
+         sources = _discover_sa_bench_sources(log_dir)
+     if not sources:
+         raise PowerReportError(f"no {benchmark_type} result artifacts found below {log_dir}")
+-
+-    return RunPaths(
+-        benchmark_out=benchmark_out,
+-        cpu_samples_csv=cpu_samples_csv,
+-        gpu_samples_csv=gpu_samples_csv,
+-        gpu_manifest=gpu_manifest,
+-        concurrency_sources=tuple(sorted(sources)),
+-    )
++    return tuple(sorted(sources))
+ 
+ 
+ def _discover_aiperf_sources(log_dir: Path) -> list[tuple[int, Path]]:
+@@ -637,7 +652,7 @@ class EnergyBreakdown:
+ POWER_STAT_FIELDS = ("mean_w", "min_w", "p5_w", "p50_w", "p95_w", "p99_w", "max_w")
+ 
+ 
+-def _nearest_index(times: np.ndarray, target: float) -> int:
++def nearest_sample_index(times: np.ndarray, target: float) -> int:
+     idx = int(np.searchsorted(times, target))
+     if idx <= 0:
+         return 0
+@@ -658,8 +673,8 @@ def windowed_energy(label: str, times: np.ndarray, watts: np.ndarray, start: flo
+     """
+     if len(times) == 0:
+         raise PowerReportError(f"{label}: no power samples available")
+-    start_i = _nearest_index(times, start)
+-    end_i = _nearest_index(times, end)
++    start_i = nearest_sample_index(times, start)
++    end_i = nearest_sample_index(times, end)
+     start_gap = abs(times[start_i] - start)
+     end_gap = abs(times[end_i] - end)
+     if start_gap > MAX_SAMPLE_GAP_SECONDS:
+diff --git a/src/srtctl/cli/do_sweep.py b/src/srtctl/cli/do_sweep.py
+index ba537850..592190d2 100644
+--- a/src/srtctl/cli/do_sweep.py
++++ b/src/srtctl/cli/do_sweep.py
+@@ -900,6 +900,8 @@ class SweepOrchestrator(
+                     self.start_cpu_power_host_telemetry(registry)
+                     self.start_incremental_power_report()
+ 
++            self.start_nic_traffic(registry)
++
+             # Tachometer capture aligns with the load window: benchmark runs
+             # start it inside run_benchmark once the server is healthy and
+             # stop it gracefully when the client exits (see
+@@ -953,6 +955,7 @@ class SweepOrchestrator(
+             exit_code = self.finalize_power_telemetry(exit_code, interrupted=stop_event.is_set())
+             exit_code = self.finalize_cpu_power_telemetry(exit_code, interrupted=stop_event.is_set())
+             exit_code = self.finalize_cpu_power_host_telemetry(exit_code, interrupted=stop_event.is_set())
++            self.finalize_nic_traffic(interrupted=stop_event.is_set())
+             stop_event.set()
+             registry.cleanup()
+             # After cleanup so the GPUs are idle before node state is reverted.
+diff --git a/src/srtctl/cli/mixins/postprocess_stage.py b/src/srtctl/cli/mixins/postprocess_stage.py
+index c2af7a89..ec789ea5 100644
+--- a/src/srtctl/cli/mixins/postprocess_stage.py
++++ b/src/srtctl/cli/mixins/postprocess_stage.py
+@@ -29,6 +29,7 @@ from srtctl.benchmarks.base import SCRIPTS_DIR
+ from srtctl.core.config import load_cluster_config
+ from srtctl.core.git_state import GIT_STATE_FILENAME
+ from srtctl.core.lockfile import collect_worker_fingerprints, generate_reproduction_report, write_lockfile
++from srtctl.core.nic_traffic_session import TRAFFIC_FILENAME
+ from srtctl.core.schema import DEFAULT_S3_ARCHIVE, DEFAULT_S3_EXCLUDE, AIAnalysisConfig, S3Config
+ from srtctl.core.slurm import AllocationShrink, get_batch_host, shrink_job_allocation, start_srun_process
+ 
+@@ -371,6 +372,7 @@ class PostProcessStageMixin:
+         # Best-effort CPU/GPU energy-per-token report. Must land before the S3
+         # sync so it ships with the rest of the log directory.
+         self._build_power_energy_report()
++        self._build_nic_traffic_summary()
+ 
+         # Everything above reads the job's SLURM_* environment, which a release
+         # rewrites; the upload and AI analysis below run on the retained node.
+@@ -440,6 +442,35 @@ class PostProcessStageMixin:
+             output_path,
+         )
+ 
++    def _build_nic_traffic_summary(self) -> None:
++        """Best-effort per-window NIC traffic summary, written next to ``nic_traffic.csv``.
++
++        Independent of power telemetry: it needs only the merged NIC samples
++        and the benchmark's own window timestamps. A run without NIC samples
++        or without benchmark windows (serve-only, eval-only) skips quietly.
++        """
++        nic_dir = self.runtime.log_dir / self.config.observability.nic_traffic.storage_subdir
++        if not (nic_dir / TRAFFIC_FILENAME).is_file():
++            return
++        try:
++            from srtctl.analysis.nic_traffic_report import SUMMARY_FILENAME, write_run_summary
++            from srtctl.analysis.power_energy_report import PowerReportError
++        except ImportError as e:
++            logger.warning("NIC traffic summary unavailable (import failed): %s", e)
++            return
++
++        try:
++            summary = write_run_summary(self.runtime.log_dir, nic_dir)
++        except PowerReportError as e:
++            logger.info("NIC traffic summary skipped (no benchmark windows): %s", e)
++            return
++        except Exception as e:  # noqa: BLE001 - post-processing must never fail the benchmark
++            logger.warning("NIC traffic summary failed: %s", e)
++            return
++        if summary.uncovered:
++            logger.warning("NIC traffic summary: samples do not cover %s", "; ".join(summary.uncovered))
++        logger.info("NIC traffic summary: %d row(s) -> %s", len(summary.rows), nic_dir / SUMMARY_FILENAME)
++
+     def start_incremental_power_report(self) -> None:
+         """Start per-case energy emission for the duration of the benchmark.
+ 
+diff --git a/src/srtctl/cli/mixins/telemetry_stage.py b/src/srtctl/cli/mixins/telemetry_stage.py
+index d64604ef..ebc92fc8 100644
+--- a/src/srtctl/cli/mixins/telemetry_stage.py
++++ b/src/srtctl/cli/mixins/telemetry_stage.py
+@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
+ from srtctl.core.cpu_power_session import CpuPowerSessionSettings as CpuPowerHostSessionSettings
+ from srtctl.core.cpu_power_session import CpuPowerTelemetrySession
+ from srtctl.core.git_state import head_commit
++from srtctl.core.nic_traffic_session import NicTrafficSession, NicTrafficSessionSettings
+ from srtctl.core.power.contract import Reason
+ from srtctl.core.power.cpu_session import CpuPowerCollector, CpuPowerSessionSettings
+ from srtctl.core.power.identity import WORKER_PROBE_SCRIPTS, WorkerGpuIdentity, WorkerIdentityProof, parse_node_probe
+@@ -47,6 +48,8 @@ logger = logging.getLogger(__name__)
+ # Time tachometer gets after SIGTERM to compact its in-memory arrow rows to parquet.
+ TACHOMETER_STEP_NAME = "tachometer"
+ 
++NIC_TRAFFIC_STEP_NAME = "telemetry_nic_traffic"
++
+ # Lowest DCGM sampling interval measured at parity with no telemetry on GB300
+ # decode (A/F chain); 100ms measured ~2% ITL p50 overhead. Sampling faster than
+ # this is allowed but warned about at launch.
+@@ -83,6 +86,7 @@ class TelemetryStageMixin:
+ 
+     config: SrtConfig
+     runtime: RuntimeContext
++    _nic_traffic_session: NicTrafficSession | None = None
+ 
+     @property
+     def backend_processes(self) -> list[Process]:
+@@ -131,25 +135,14 @@ class TelemetryStageMixin:
+         partial launch stays reachable by the outer cleanup path.
+         """
+         cmd_str = resolve_exporter_command(exporter_config, default_command_template)
+-
+-        if self.runtime.nodes.het:
+-            groups: dict[int, list[str]] = {}
+-            for node in nodelist:
+-                g = self.runtime.nodes.het_group_for(node)
+-                if g is None:
+-                    raise RuntimeError(f"node {node!r} not in any het component")
+-                groups.setdefault(g, []).append(node)
+-            chunks = sorted(groups.items())
+-        else:
+-            chunks = [(-1, nodelist)]  # sentinel: no --het-group
++        chunks = self._het_chunks(nodelist)
+ 
+         # Host-native exporters (``binary`` set) run straight on the node: no
+         # container image, no mounts -- the command already carries host paths.
+         host_native = bool(exporter_config.binary)
+         managed: list[ManagedProcess] = []
+-        for group_id, nodes in chunks:
+-            het_group = group_id if group_id >= 0 else None
+-            chunk_log = log_file if len(chunks) == 1 else log_file.with_suffix(f".g{group_id}.out")
++        for het_group, nodes in chunks:
++            chunk_log = log_file if len(chunks) == 1 else log_file.with_suffix(f".g{het_group}.out")
+             proc = start_srun_process(
+                 command=shlex.split(cmd_str),
+                 nodes=len(nodes),
+@@ -164,7 +157,7 @@ class TelemetryStageMixin:
+                 het_group=het_group,
+                 use_bash_wrapper=use_bash_wrapper,
+             )
+-            chunk_name = name if len(chunks) == 1 else f"{name}_g{group_id}"
++            chunk_name = name if len(chunks) == 1 else f"{name}_g{het_group}"
+             process = ManagedProcess(
+                 name=chunk_name,
+                 popen=proc,
+@@ -177,6 +170,70 @@ class TelemetryStageMixin:
+             managed.append(process)
+         return managed
+ 
++    def _het_chunks(self, nodes: list[str]) -> list[tuple[int | None, list[str]]]:
++        """Split ``nodes`` into one ``(het_group, nodes)`` srun per het component.
++
++        A single srun cannot span het components; outside a het job this is one
++        chunk with ``het_group=None``.
++
++        Raises:
++            RuntimeError: A node belongs to no het component.
++        """
++        if not self.runtime.nodes.het:
++            return [(None, nodes)]
++        groups: dict[int, list[str]] = {}
++        for node in nodes:
++            group = self.runtime.nodes.het_group_for(node)
++            if group is None:
++                raise RuntimeError(f"node {node!r} not in any het component")
++            groups.setdefault(group, []).append(node)
++        return [(group, chunk) for group, chunk in sorted(groups.items())]
++
++    def _start_host_collectors(
++        self,
++        *,
++        name: str,
++        command: list[str],
++        nodes: list[str],
++        registry: ProcessRegistry,
++        on_started: Callable[[ManagedProcess], None],
++        slurm_step: bool = False,
++    ) -> None:
++        """Run ``command`` once per node on the bare host, one srun per het component.
++
++        Each process is non-critical and registered before the next launch, so a
++        partial launch stays reachable by cleanup. ``slurm_step`` names the step
++        after the process, which lets ``terminate()`` deliver SIGTERM to the task
++        instead of the srun client (whose abort SIGKILLs it).
++        """
++        chunks = self._het_chunks(nodes)
++        for het_group, chunk in chunks:
++            suffix = "" if len(chunks) == 1 else f".g{het_group}"
++            chunk_name = name if len(chunks) == 1 else f"{name}_g{het_group}"
++            log_file = self.runtime.log_dir / f"{name}{suffix}.%N.out"
++            step_name = chunk_name if slurm_step else None
++            proc = start_srun_process(
++                command=command,
++                nodes=len(chunk),
++                ntasks=len(chunk),
++                nodelist=chunk,
++                output=str(log_file),
++                srun_options=self.runtime.srun_options,
++                het_group=het_group,
++                use_bash_wrapper=False,  # bare host, no container
++                step_name=step_name,
++            )
++            process = ManagedProcess(
++                name=chunk_name,
++                popen=proc,
++                log_file=log_file,
++                node=",".join(chunk),
++                critical=False,
++                step_name=step_name,
++            )
++            registry.add_process(process)
++            on_started(process)
++
+     def start_power_telemetry(self, registry: ProcessRegistry) -> PowerTelemetrySession | None:
+         """Start GPU power telemetry when it is enabled.
+ 
+@@ -393,42 +450,13 @@ class TelemetryStageMixin:
+                 )
+ 
+         try:
+-            if self.runtime.nodes.het:
+-                groups: dict[int, list[str]] = {}
+-                for node in worker_nodes:
+-                    group_id = self.runtime.nodes.het_group_for(node)
+-                    if group_id is None:
+-                        raise RuntimeError(f"node {node!r} not in any het component")
+-                    groups.setdefault(group_id, []).append(node)
+-                chunks = sorted(groups.items())
+-            else:
+-                chunks = [(-1, worker_nodes)]
+-
+-            for group_id, nodes in chunks:
+-                suffix = "" if len(chunks) == 1 else f".g{group_id}"
+-                log_file = self.runtime.log_dir / f"telemetry_cpu_power_exporter{suffix}.%N.out"
+-                proc = start_srun_process(
+-                    command=exporter_command,
+-                    nodes=len(nodes),
+-                    ntasks=len(nodes),
+-                    nodelist=nodes,
+-                    output=str(log_file),
+-                    srun_options=self.runtime.srun_options,
+-                    het_group=group_id if group_id >= 0 else None,
+-                    use_bash_wrapper=False,  # bare host, no container
+-                )
+-                name = (
+-                    "telemetry_cpu_power_exporter" if len(chunks) == 1 else f"telemetry_cpu_power_exporter_g{group_id}"
+-                )
+-                process = ManagedProcess(
+-                    name=name,
+-                    popen=proc,
+-                    log_file=log_file,
+-                    node=",".join(nodes),
+-                    critical=False,
+-                )
+-                registry.add_process(process)
+-                collector.add_exporter(process)
++            self._start_host_collectors(
++                name="telemetry_cpu_power_exporter",
++                command=exporter_command,
++                nodes=worker_nodes,
++                registry=registry,
++                on_started=collector.add_exporter,
++            )
+         except Exception:
+             logger.exception("CPU power exporter launch failed")
+             return collector
+@@ -469,17 +497,6 @@ class TelemetryStageMixin:
+         self._cpu_power_host_ready = False
+         session.initialize()
+ 
+-        if self.runtime.nodes.het:
+-            groups: dict[int, list[str]] = {}
+-            for node in worker_nodes:
+-                group_id = self.runtime.nodes.het_group_for(node)
+-                if group_id is None:
+-                    raise RuntimeError(f"node {node!r} not in any het component")
+-                groups.setdefault(group_id, []).append(node)
+-            chunks = sorted(groups.items())
+-        else:
+-            chunks = [(-1, worker_nodes)]
+-
+         command = [
+             sys.executable,
+             "-m",
+@@ -494,28 +511,13 @@ class TelemetryStageMixin:
+             str(cpu_power.sample_interval_seconds),
+         ]
+         try:
+-            for group_id, nodes in chunks:
+-                suffix = "" if len(chunks) == 1 else f".g{group_id}"
+-                log_file = self.runtime.log_dir / f"telemetry_cpu_power{suffix}.%N.out"
+-                proc = start_srun_process(
+-                    command=command,
+-                    nodes=len(nodes),
+-                    ntasks=len(nodes),
+-                    nodelist=nodes,
+-                    output=str(log_file),
+-                    srun_options=self.runtime.srun_options,
+-                    het_group=group_id if group_id >= 0 else None,
+-                    use_bash_wrapper=False,  # bare host, no container
+-                )
+-                process = ManagedProcess(
+-                    name="telemetry_cpu_power" if len(chunks) == 1 else f"telemetry_cpu_power_g{group_id}",
+-                    popen=proc,
+-                    log_file=log_file,
+-                    node=",".join(nodes),
+-                    critical=False,
+-                )
+-                registry.add_process(process)
+-                session.add_process(process)
++            self._start_host_collectors(
++                name="telemetry_cpu_power",
++                command=command,
++                nodes=worker_nodes,
++                registry=registry,
++                on_started=session.add_process,
++            )
+         except Exception:
+             logger.exception("CPU power collector launch failed")
+             return session
+@@ -624,6 +626,72 @@ class TelemetryStageMixin:
+             return 1
+         return exit_code
+ 
++    def start_nic_traffic(self, registry: ProcessRegistry) -> NicTrafficSession | None:
++        """Start one RDMA NIC traffic sampler per node on the bare host.
++
++        Best-effort: any failure is logged and the run continues, and the
++        capture never decides whether the benchmark runs.
++        """
++        if not self.config.nic_traffic_enabled:
++            return None
++        nic_traffic = self.config.observability.nic_traffic
++        try:
++            session = NicTrafficSession(
++                NicTrafficSessionSettings(
++                    nic_dir=self.runtime.log_dir / nic_traffic.storage_subdir,
++                    job_id=self.runtime.job_id,
++                    run_name=self.runtime.run_name,
++                    nodes=tuple(self._telemetry_nodes()),
++                    sample_interval_seconds=nic_traffic.sample_interval_seconds,
++                    producer_git_commit=read_producer_commit(),
++                )
++            )
++            self._nic_traffic_session = session
++            session.initialize()
++            self._start_host_collectors(
++                name=NIC_TRAFFIC_STEP_NAME,
++                command=[
++                    sys.executable,
++                    "-m",
++                    "srtctl.core.nic_traffic",
++                    "--output-dir",
++                    str(session.samples_dir),
++                    "--ready-dir",
++                    str(session.ready_dir),
++                    "--interval-seconds",
++                    str(nic_traffic.sample_interval_seconds),
++                ],
++                nodes=list(session.settings.nodes),
++                registry=registry,
++                on_started=session.add_process,
++                slurm_step=True,
++            )
++        except Exception:
++            logger.exception("NIC traffic capture failed to start; continuing without it")
++            return self._nic_traffic_session
++        logger.info(
++            "NIC traffic capture started on %d node(s) (artifacts under %s)",
++            len(session.settings.nodes),
++            session.settings.nic_dir,
++        )
++        return session
++
++    def finalize_nic_traffic(self, *, interrupted: bool = False) -> None:
++        """Stop the samplers and merge their CSVs; never affects the exit code."""
++        session = self._nic_traffic_session
++        if session is None:
++            return
++        try:
++            outcome = session.stop_and_finalize(interrupted=interrupted)
++        except Exception:
++            logger.exception("NIC traffic finalization failed")
++            return
++        logger.info(
++            "NIC traffic: status=%s reasons=%s",
++            outcome.status,
++            ",".join(outcome.reason_codes) or "none",
++        )
++
+     def _resolve_bundled_binary(self, name: str) -> str:
+         """Resolve a bare binary name against the checkout's ``bin/``.
+ 
+diff --git a/src/srtctl/cli/submit.py b/src/srtctl/cli/submit.py
+index edbb2d26..0b9136d3 100755
+--- a/src/srtctl/cli/submit.py
++++ b/src/srtctl/cli/submit.py
+@@ -667,6 +667,7 @@ def show_config_details(config: SrtConfig) -> None:
+         or config.benchmark.container_image
+         or config.observability.enabled
+         or config.observability.tachometer.enabled
++        or config.nic_traffic_enabled
+         or config.telemetry.enabled
+         or mooncake_cfg is not None
+         or config.profiling.enabled
+@@ -785,6 +786,15 @@ def show_config_details(config: SrtConfig) -> None:
+                 launch = f"host binary {proc.binary}" if proc.binary else proc.container_image
+                 details.add_row("observability", "process_exporter", f"{launch} :{proc.port}")
+ 
++        if config.nic_traffic_enabled:
++            nic_traffic = config.observability.nic_traffic
++            details.add_row(
++                "observability",
++                "nic_traffic",
++                f"RDMA byte counters every {nic_traffic.sample_interval_seconds:g}s on each node's bare host "
++                f"-> <log_dir>/{nic_traffic.storage_subdir}",
++            )
++
+         if config.telemetry.enabled:
+             exporter = config.telemetry.dcgm_exporter
+             details.add_row("telemetry", "provider", "dcgm-power")
+diff --git a/src/srtctl/core/cpu_power_session.py b/src/srtctl/core/cpu_power_session.py
+index 1e502831..54cefe32 100644
+--- a/src/srtctl/core/cpu_power_session.py
++++ b/src/srtctl/core/cpu_power_session.py
+@@ -5,16 +5,13 @@
+ 
+ from __future__ import annotations
+ 
+-import contextlib
+-import csv
+-import json
+ import os
+ import time
+ from dataclasses import dataclass
+ from pathlib import Path
+-from typing import Any
+ 
+ from srtctl.core.cpu_power import SAMPLES_HEADER
++from srtctl.core.node_samples import merge_node_csvs, read_node_markers, read_node_metadata
+ from srtctl.core.power.contract import atomic_write_json
+ from srtctl.core.power.session import SessionOutcome
+ from srtctl.core.processes import ManagedProcess
+@@ -60,20 +57,17 @@ class CpuPowerTelemetrySession:
+         deadline = time.monotonic() + self.settings.startup_timeout_seconds
+         expected = set(self.settings.nodes)
+         while time.monotonic() < deadline:
+-            ready = {path.name.removesuffix(".ready.json") for path in self.ready_dir.glob("*.ready.json")}
+-            errors = list(self.ready_dir.glob("*.error.json"))
+-            if expected <= ready:
+-                self._ready_nodes = tuple(sorted(ready))
++            markers = read_node_markers(self.ready_dir)
++            if expected <= markers.ready:
++                self._ready_nodes = tuple(sorted(markers.ready))
+                 self._write_manifest(status="running", reasons=(), row_count=0, observed_nodes=self._ready_nodes)
+                 return True
+-            if errors or any(process.exit_code not in (None, 0) for process in self._processes):
++            if markers.errors or any(process.exit_code not in (None, 0) for process in self._processes):
+                 break
+             time.sleep(0.1)
+-        ready = {path.name.removesuffix(".ready.json") for path in self.ready_dir.glob("*.ready.json")}
+-        self._ready_nodes = tuple(sorted(ready))
+-        reason = (
+-            "cpu_power_source_unavailable" if list(self.ready_dir.glob("*.error.json")) else "cpu_power_startup_timeout"
+-        )
++        markers = read_node_markers(self.ready_dir)
++        self._ready_nodes = tuple(sorted(markers.ready))
++        reason = "cpu_power_source_unavailable" if markers.errors else "cpu_power_startup_timeout"
+         self._write_manifest(status="failed", reasons=(reason,), row_count=0, observed_nodes=self._ready_nodes)
+         return False
+ 
+@@ -81,38 +75,21 @@ class CpuPowerTelemetrySession:
+         prematurely_exited = [process.name for process in self._processes if not process.is_running]
+         for process in self._processes:
+             process.terminate()
+-        rows: list[list[str]] = []
+-        malformed = False
+-        observed_nodes: set[str] = set()
+-        for path in sorted(self.samples_dir.glob("*.csv")):
+-            try:
+-                with path.open(newline="", encoding="utf-8") as handle:
+-                    reader = csv.reader(handle)
+-                    if tuple(next(reader, ())) != SAMPLES_HEADER:
+-                        malformed = True
+-                        continue
+-                    for row in reader:
+-                        if len(row) != len(SAMPLES_HEADER):
+-                            malformed = True
+-                            continue
+-                        rows.append(row)
+-                        observed_nodes.add(row[3])
+-            except (OSError, csv.Error, UnicodeDecodeError):
+-                malformed = True
+-        rows.sort(key=lambda row: (float(row[1]), row[3], row[5]))
+-        with self.samples_path.open("w", newline="", encoding="utf-8") as handle:
+-            writer = csv.writer(handle)
+-            writer.writerow(SAMPLES_HEADER)
+-            writer.writerows(rows)
++        merged = merge_node_csvs(
++            self.samples_dir,
++            SAMPLES_HEADER,
++            self.samples_path,
++            sort_key=lambda row: (float(row[1]), row[3], row[5]),
++        )
+         reasons: list[str] = []
+         if interrupted:
+             reasons.append("interrupted")
+-        if malformed:
++        if merged.malformed:
+             reasons.append("cpu_samples_malformed")
+-        missing = sorted(set(self.settings.nodes) - observed_nodes)
++        missing = sorted(set(self.settings.nodes) - set(merged.observed_nodes))
+         if missing:
+             reasons.append("cpu_node_samples_missing")
+-        if not rows:
++        if not merged.row_count:
+             reasons.append("cpu_samples_empty")
+         failed_processes = prematurely_exited
+         if failed_processes:
+@@ -122,8 +99,8 @@ class CpuPowerTelemetrySession:
+         self._write_manifest(
+             status=status,
+             reasons=tuple(dict.fromkeys(reasons)),
+-            row_count=len(rows),
+-            observed_nodes=tuple(sorted(observed_nodes)),
++            row_count=merged.row_count,
++            observed_nodes=merged.observed_nodes,
+             missing_nodes=tuple(missing),
+             failed_processes=tuple(failed_processes),
+         )
+@@ -144,10 +121,6 @@ class CpuPowerTelemetrySession:
+         missing_nodes: tuple[str, ...] = (),
+         failed_processes: tuple[str, ...] = (),
+     ) -> None:
+-        metadata: dict[str, Any] = {}
+-        for path in sorted(self.samples_dir.glob("*.metadata.json")):
+-            with contextlib.suppress(OSError, json.JSONDecodeError):
+-                metadata[path.name.removesuffix(".metadata.json")] = json.loads(path.read_text())
+         atomic_write_json(
+             self.manifest_path,
+             {
+@@ -165,7 +138,7 @@ class CpuPowerTelemetrySession:
+                 "reason_codes": list(reasons),
+                 "failed_processes": list(failed_processes),
+                 "producer_git_commit": self.settings.producer_git_commit,
+-                "node_metadata": metadata,
++                "node_metadata": read_node_metadata(self.samples_dir),
+                 "updated_at_unix": time.time(),
+             },
+         )
+diff --git a/src/srtctl/core/nic_traffic.py b/src/srtctl/core/nic_traffic.py
+new file mode 100644
+index 00000000..b204b5e1
+--- /dev/null
++++ b/src/srtctl/core/nic_traffic.py
+@@ -0,0 +1,297 @@
++# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
++# SPDX-License-Identifier: Apache-2.0
++
++"""Per-node RDMA NIC traffic sampler.
++
++Reads every RDMA port's cumulative transmit and receive byte counters from
++sysfs once per interval and appends them, as raw cumulative bytes, to a
++per-node CSV. Rates are computed later, per benchmark window, by
++``srtctl.analysis.nic_traffic_report``.
++
++It runs on the bare host and imports only the standard library, so it also
++runs as a copied file::
++
++    timeout -s TERM 30 python3 nic_traffic.py --output-dir /tmp/nic
++
++Which sysfs counter carries RDMA payload bytes depends on the driver; the
++``COUNTER_SOURCES`` table names it per driver.
++"""
++
++from __future__ import annotations
++
++import argparse
++import csv
++import json
++import math
++import os
++import signal
++import socket
++import time
++from dataclasses import dataclass
++from pathlib import Path
++from typing import Any
++
++SCHEMA_VERSION = 2
++# timestamp_unix is the midpoint of that port's own counter reads; sample_seq
++# numbers the sampler passes from 0 and is shared by every port read in a pass.
++SAMPLES_HEADER = (
++    "timestamp_unix",
++    "sample_seq",
++    "hostname",
++    "device",
++    "port",
++    "netdev",
++    "driver",
++    "tx_bytes",
++    "rx_bytes",
++)
++
++
++@dataclass(frozen=True)
++class CounterSource:
++    """Where a driver exposes a port's cumulative RDMA byte counters.
++
++    Paths are relative to ``/sys/class/infiniband/<device>/ports/<port>/``;
++    a reading times ``bytes_per_unit`` is bytes.
++    """
++
++    name: str
++    tx_path: str
++    rx_path: str
++    bytes_per_unit: int
++
++
++# The IB core's PMA counters, which the kernel creates for every driver that
++# implements process_mad (mlx5 and the other InfiniBand and RoCE drivers). The
++# kernel ABI defines port_xmit_data and port_rcv_data as data octets divided by 4.
++PORT_DATA_COUNTERS = CounterSource(
++    name="counters/port_data",
++    tx_path="counters/port_xmit_data",
++    rx_path="counters/port_rcv_data",
++    bytes_per_unit=4,
++)
++
++# Keyed by the driver bound to /sys/class/infiniband/<device>/device. A driver
++# without a row reads PORT_DATA_COUNTERS.
++COUNTER_SOURCES: dict[str, CounterSource] = {
++    # AMD Pollara: ionic implements no process_mad, so the port has no counters/
++    # directory; its firmware-named hw_counters carry the RDMA payload. Unicast
++    # bytes matched an ib_write_bw payload exactly. The multicast, ccl_cts and
++    # retransmit byte counters are left out: their overlap with unicast is
++    # undocumented, and retransmits would count the same payload twice.
++    "ionic": CounterSource(
++        name="hw_counters/rdma_ucast_bytes",
++        tx_path="hw_counters/tx_rdma_ucast_bytes",
++        rx_path="hw_counters/rx_rdma_ucast_bytes",
++        bytes_per_unit=1,
++    ),
++}
++
++
++@dataclass(frozen=True)
++class RdmaPort:
++    """One RDMA port whose byte counters were readable at startup."""
++
++    device: str
++    port: str
++    netdev: str
++    driver: str
++    source: CounterSource
++    port_dir: Path
++
++    def read_bytes(self) -> tuple[int, int]:
++        """Cumulative (tx, rx) bytes."""
++        scale = self.source.bytes_per_unit
++        return (
++            _read_counter(self.port_dir / self.source.tx_path) * scale,
++            _read_counter(self.port_dir / self.source.rx_path) * scale,
++        )
++
++    def describe(self) -> dict[str, Any]:
++        return {
++            "device": self.device,
++            "port": self.port,
++            "netdev": self.netdev,
++            "driver": self.driver,
++            "counter_source": self.source.name,
++            "tx_counter": self.source.tx_path,
++            "rx_counter": self.source.rx_path,
++            "bytes_per_unit": self.source.bytes_per_unit,
++        }
++
++
++@dataclass(frozen=True)
++class UnsupportedPort:
++    """A device or port without readable byte counters, recorded once at startup."""
++
++    device: str
++    port: str
++    driver: str
++    reason: str
++
++    def describe(self) -> dict[str, Any]:
++        return {"device": self.device, "port": self.port, "driver": self.driver, "reason": self.reason}
++
++
++def _read_counter(path: Path) -> int:
++    return int(path.read_text().strip())
++
++
++def _driver_name(device_dir: Path) -> str:
++    try:
++        return os.path.basename(os.readlink(device_dir / "device" / "driver"))
++    except OSError:
++        return ""
++
++
++def _netdev_name(device_dir: Path) -> str:
++    try:
++        return "+".join(sorted(entry.name for entry in (device_dir / "device" / "net").iterdir()))
++    except OSError:
++        return ""
++
++
++def _port_order(port_dir: Path) -> tuple[int, str]:
++    return (int(port_dir.name), "") if port_dir.name.isdigit() else (0, port_dir.name)
++
++
++def discover_ports(sysfs_root: Path) -> tuple[list[RdmaPort], list[UnsupportedPort]]:
++    """Every RDMA port under ``<sysfs_root>/class/infiniband``, split by whether its counters read."""
++    try:
++        device_dirs = sorted((sysfs_root / "class" / "infiniband").iterdir())
++    except OSError:
++        return [], []
++    ports: list[RdmaPort] = []
++    unsupported: list[UnsupportedPort] = []
++    for device_dir in device_dirs:
++        driver = _driver_name(device_dir)
++        source = COUNTER_SOURCES.get(driver, PORT_DATA_COUNTERS)
++        try:
++            port_dirs = sorted((device_dir / "ports").iterdir(), key=_port_order)
++        except OSError as exc:
++            unsupported.append(UnsupportedPort(device_dir.name, "", driver, f"no ports directory: {exc}"))
++            continue
++        for port_dir in port_dirs:
++            try:
++                _read_counter(port_dir / source.tx_path)
++                _read_counter(port_dir / source.rx_path)
++            except (OSError, ValueError) as exc:
++                unsupported.append(UnsupportedPort(device_dir.name, port_dir.name, driver, f"{source.name}: {exc}"))
++                continue
++            ports.append(RdmaPort(device_dir.name, port_dir.name, _netdev_name(device_dir), driver, source, port_dir))
++    return ports, unsupported
++
++
++def node_hostname() -> str:
++    """The Slurm node name, which is what the head node expects in every row."""
++    return os.environ.get("SLURMD_NODENAME") or socket.gethostname().split(".", 1)[0]
++
++
++def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
++    temp = path.with_suffix(path.suffix + ".tmp")
++    temp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
++    os.replace(temp, path)
++
++
++def collect(*, output_dir: Path, ready_dir: Path, interval_seconds: float, sysfs_root: Path) -> int:
++    """Sample until SIGTERM/SIGINT into ``<output_dir>/<host>.csv`` and mark readiness in ``ready_dir``."""
++    os.umask(0o002)
++    output_dir.mkdir(parents=True, exist_ok=True)
++    ready_dir.mkdir(parents=True, exist_ok=True)
++    hostname = node_hostname()
++    stop = False
++
++    def request_stop(_signum: int, _frame: Any) -> None:
++        nonlocal stop
++        stop = True
++
++    signal.signal(signal.SIGTERM, request_stop)
++    signal.signal(signal.SIGINT, request_stop)
++
++    ports, unsupported = discover_ports(sysfs_root)
++    metadata_path = output_dir / f"{hostname}.metadata.json"
++    metadata: dict[str, Any] = {
++        "schema_version": SCHEMA_VERSION,
++        "hostname": hostname,
++        "sysfs_root": str(sysfs_root),
++        "sample_interval_seconds": interval_seconds,
++        "started_at_unix": time.time(),
++        "devices": [port.describe() for port in ports],
++        "unsupported": [entry.describe() for entry in unsupported],
++    }
++    _atomic_json(metadata_path, metadata)
++    if not ports:
++        _atomic_json(
++            ready_dir / f"{hostname}.error.json",
++            {"hostname": hostname, "error": "no RDMA port with readable byte counters"},
++        )
++        # Exit 0: a node without RDMA counters is a recorded outcome, not a
++        # sampler failure, and a nonzero task exit can end the other nodes'
++        # samplers in the same step on clusters that set KillOnBadExit.
++        return 0
++
++    row_count = 0
++    read_failures = 0
++    with (output_dir / f"{hostname}.csv").open("w", newline="", encoding="utf-8") as handle:
++        writer = csv.writer(handle)
++        writer.writerow(SAMPLES_HEADER)
++        handle.flush()
++        _atomic_json(
++            ready_dir / f"{hostname}.ready.json",
++            {"hostname": hostname, "port_count": len(ports), "ready_at_unix": time.time()},
++        )
++        next_sample = time.monotonic()
++        sample_seq = 0
++        while not stop:
++            for port in ports:
++                # One ionic counter read can take ~100 ms, so a pass over many
++                # ports can last hundreds of ms; stamp each row at its own reads.
++                read_start = time.time()
++                try:
++                    tx_bytes, rx_bytes = port.read_bytes()
++                except (OSError, ValueError):
++                    read_failures += 1
++                    continue
++                timestamp = (read_start + time.time()) / 2
++                writer.writerow(
++                    (
++                        repr(timestamp),
++                        sample_seq,
++                        hostname,
++                        port.device,
++                        port.port,
++                        port.netdev,
++                        port.driver,
++                        tx_bytes,
++                        rx_bytes,
++                    )
++                )
++                row_count += 1
++            handle.flush()
++            sample_seq += 1
++            next_sample += interval_seconds
++            time.sleep(max(0.0, next_sample - time.monotonic()))
++    metadata.update({"ended_at_unix": time.time(), "sample_row_count": row_count, "read_failure_count": read_failures})
++    _atomic_json(metadata_path, metadata)
++    return 0
++
++
++def main() -> int:
++    parser = argparse.ArgumentParser(description="Sample RDMA NIC byte counters from sysfs until SIGTERM.")
++    parser.add_argument("--output-dir", type=Path, required=True, help="Directory for <host>.csv and metadata")
++    parser.add_argument("--ready-dir", type=Path, help="Directory for the ready/error marker (default: output dir)")
++    parser.add_argument("--interval-seconds", type=float, default=1.0)
++    parser.add_argument("--sysfs-root", type=Path, default=Path("/sys"))
++    args = parser.parse_args()
++    if not math.isfinite(args.interval_seconds) or args.interval_seconds <= 0:
++        parser.error("--interval-seconds must be finite and positive")
++    return collect(
++        output_dir=args.output_dir,
++        ready_dir=args.ready_dir or args.output_dir,
++        interval_seconds=args.interval_seconds,
++        sysfs_root=args.sysfs_root,
++    )
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())
+diff --git a/src/srtctl/core/nic_traffic_session.py b/src/srtctl/core/nic_traffic_session.py
+new file mode 100644
+index 00000000..b34fc92e
+--- /dev/null
++++ b/src/srtctl/core/nic_traffic_session.py
+@@ -0,0 +1,130 @@
++# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
++# SPDX-License-Identifier: Apache-2.0
++
++"""Head-node side of the RDMA NIC traffic capture: merge node CSVs and write the manifest.
++
++The artifact names are deliberately not ``samples.csv`` or ``manifest.json``:
++the power report and downstream consumers treat any file with those names
++below the log directory as power evidence.
++"""
++
++from __future__ import annotations
++
++import os
++import time
++from dataclasses import dataclass
++from pathlib import Path
++
++from srtctl.core.nic_traffic import SAMPLES_HEADER, SCHEMA_VERSION
++from srtctl.core.node_samples import merge_node_csvs, read_node_markers, read_node_metadata
++from srtctl.core.power.contract import atomic_write_json
++from srtctl.core.processes import ManagedProcess
++
++TRAFFIC_FILENAME = "nic_traffic.csv"
++MANIFEST_FILENAME = "nic_manifest.json"
++
++
++@dataclass(frozen=True)
++class NicTrafficSessionSettings:
++    nic_dir: Path
++    job_id: str
++    run_name: str
++    nodes: tuple[str, ...]
++    sample_interval_seconds: float
++    producer_git_commit: str | None = None
++
++
++@dataclass(frozen=True)
++class NicTrafficOutcome:
++    status: str
++    reason_codes: tuple[str, ...]
++
++
++class NicTrafficSession:
++    """Owns the capture directory and its manifest; ``ProcessRegistry`` owns the sampler processes."""
++
++    def __init__(self, settings: NicTrafficSessionSettings) -> None:
++        self.settings = settings
++        self.samples_dir = settings.nic_dir / "nodes"
++        self.ready_dir = settings.nic_dir / "ready"
++        self.traffic_path = settings.nic_dir / TRAFFIC_FILENAME
++        self.manifest_path = settings.nic_dir / MANIFEST_FILENAME
++        self._processes: list[ManagedProcess] = []
++
++    def initialize(self) -> None:
++        os.umask(0o002)
++        self.samples_dir.mkdir(parents=True, exist_ok=True)
++        self.ready_dir.mkdir(parents=True, exist_ok=True)
++        self._write_manifest(status="running", reasons=(), row_count=0, observed_nodes=())
++
++    def add_process(self, process: ManagedProcess) -> None:
++        self._processes.append(process)
++
++    def stop_and_finalize(self, *, interrupted: bool = False) -> NicTrafficOutcome:
++        """Stop the samplers, merge their CSVs into ``nic_traffic.csv`` and write the final manifest."""
++        exited_early = [process.name for process in self._processes if not process.is_running]
++        for process in self._processes:
++            process.terminate()
++        merged = merge_node_csvs(
++            self.samples_dir,
++            SAMPLES_HEADER,
++            self.traffic_path,
++            sort_key=lambda row: (float(row[0]), row[2], row[3], row[4]),
++        )
++        markers = read_node_markers(self.ready_dir)
++        missing = tuple(sorted(set(self.settings.nodes) - set(merged.observed_nodes)))
++        reasons = [
++            reason
++            for reason, applies in (
++                ("interrupted", interrupted),
++                ("nic_counters_unavailable", bool(markers.errors)),
++                ("nic_node_samples_missing", bool(missing)),
++                ("nic_samples_malformed", merged.malformed),
++                ("nic_sampler_exited", bool(exited_early)),
++            )
++            if applies
++        ]
++        status = "incomplete" if reasons else "complete"
++        self._write_manifest(
++            status=status,
++            reasons=tuple(reasons),
++            row_count=merged.row_count,
++            observed_nodes=merged.observed_nodes,
++            missing_nodes=missing,
++            node_errors=markers.errors,
++            exited_processes=tuple(exited_early),
++        )
++        return NicTrafficOutcome(status=status, reason_codes=tuple(reasons))
++
++    def _write_manifest(
++        self,
++        *,
++        status: str,
++        reasons: tuple[str, ...],
++        row_count: int,
++        observed_nodes: tuple[str, ...],
++        missing_nodes: tuple[str, ...] = (),
++        node_errors: dict[str, str] | None = None,
++        exited_processes: tuple[str, ...] = (),
++    ) -> None:
++        atomic_write_json(
++            self.manifest_path,
++            {
++                "schema_version": SCHEMA_VERSION,
++                "job_id": self.settings.job_id,
++                "run_name": self.settings.run_name,
++                "status": status,
++                "traffic_csv": TRAFFIC_FILENAME,
++                "sample_interval_seconds": self.settings.sample_interval_seconds,
++                "expected_nodes": list(self.settings.nodes),
++                "observed_nodes": list(observed_nodes),
++                "missing_nodes": list(missing_nodes),
++                "node_errors": node_errors or {},
++                "sample_row_count": row_count,
++                "reason_codes": list(reasons),
++                "exited_processes": list(exited_processes),
++                "producer_git_commit": self.settings.producer_git_commit,
++                "nodes": read_node_metadata(self.samples_dir),
++                "updated_at_unix": time.time(),
++            },
++        )
+diff --git a/src/srtctl/core/node_samples.py b/src/srtctl/core/node_samples.py
+new file mode 100644
+index 00000000..63583392
+--- /dev/null
++++ b/src/srtctl/core/node_samples.py
+@@ -0,0 +1,97 @@
++# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
++# SPDX-License-Identifier: Apache-2.0
++
++"""Per-node CSVs and readiness markers written by bare-host collectors.
++
++A host collector (``cpu_power``, ``nic_traffic``) runs once per node and
++writes ``<nodes_dir>/<host>.csv`` plus ``<ready_dir>/<host>.ready.json`` or
++``<host>.error.json``. The head node reads the markers to learn which nodes
++started and merges the CSVs into one file at teardown.
++"""
++
++from __future__ import annotations
++
++import contextlib
++import csv
++import json
++from collections.abc import Callable
++from dataclasses import dataclass
++from pathlib import Path
++from typing import Any
++
++READY_SUFFIX = ".ready.json"
++ERROR_SUFFIX = ".error.json"
++
++
++@dataclass(frozen=True)
++class NodeMarkers:
++    """Nodes that published a ready marker, and each node's error-marker message."""
++
++    ready: frozenset[str]
++    errors: dict[str, str]
++
++
++def read_node_markers(ready_dir: Path) -> NodeMarkers:
++    ready = frozenset(path.name.removesuffix(READY_SUFFIX) for path in ready_dir.glob(f"*{READY_SUFFIX}"))
++    errors: dict[str, str] = {}
++    for path in sorted(ready_dir.glob(f"*{ERROR_SUFFIX}")):
++        message = ""
++        with contextlib.suppress(OSError, json.JSONDecodeError, AttributeError):
++            message = str(json.loads(path.read_text()).get("error", ""))
++        errors[path.name.removesuffix(ERROR_SUFFIX)] = message
++    return NodeMarkers(ready=ready, errors=errors)
++
++
++def read_node_metadata(nodes_dir: Path) -> dict[str, Any]:
++    """Each node's ``<host>.metadata.json``, by host; unreadable files are left out."""
++    metadata: dict[str, Any] = {}
++    for path in sorted(nodes_dir.glob("*.metadata.json")):
++        with contextlib.suppress(OSError, json.JSONDecodeError):
++            metadata[path.name.removesuffix(".metadata.json")] = json.loads(path.read_text())
++    return metadata
++
++
++@dataclass(frozen=True)
++class MergedNodeCsvs:
++    row_count: int
++    observed_nodes: tuple[str, ...]
++    malformed: bool
++
++
++def merge_node_csvs(
++    nodes_dir: Path,
++    header: tuple[str, ...],
++    output: Path,
++    *,
++    sort_key: Callable[[list[str]], Any],
++) -> MergedNodeCsvs:
++    """Concatenate every ``<nodes_dir>/*.csv`` whose header is ``header`` into ``output``.
++
++    A file with another header, a row of the wrong width, or an unreadable file
++    is skipped and reported as ``malformed``; the rows that do parse still merge.
++    """
++    hostname_column = header.index("hostname")
++    rows: list[list[str]] = []
++    observed: set[str] = set()
++    malformed = False
++    for path in sorted(nodes_dir.glob("*.csv")):
++        try:
++            with path.open(newline="", encoding="utf-8") as handle:
++                reader = csv.reader(handle)
++                if tuple(next(reader, ())) != header:
++                    malformed = True
++                    continue
++                for row in reader:
++                    if len(row) != len(header):
++                        malformed = True
++                        continue
++                    rows.append(row)
++                    observed.add(row[hostname_column])
++        except (OSError, csv.Error, UnicodeDecodeError):
++            malformed = True
++    rows.sort(key=sort_key)
++    with output.open("w", newline="", encoding="utf-8") as handle:
++        writer = csv.writer(handle)
++        writer.writerow(header)
++        writer.writerows(rows)
++    return MergedNodeCsvs(row_count=len(rows), observed_nodes=tuple(sorted(observed)), malformed=malformed)
+diff --git a/src/srtctl/core/schema.py b/src/srtctl/core/schema.py
+index 1e8d890d..66e244bb 100755
+--- a/src/srtctl/core/schema.py
++++ b/src/srtctl/core/schema.py
+@@ -95,6 +95,7 @@ def _dataclass_default(item: dataclasses.Field) -> Any:
+ _BENCHMARK_TYPE_SA_BENCH = "sa-bench"
+ _DCGM_POWER_MAX_SAMPLE_GAP_SECONDS = 3.0
+ _CPU_POWER_MAX_SAMPLE_GAP_SECONDS = 3.0
++_NIC_TRAFFIC_MAX_SAMPLE_GAP_SECONDS = 3.0
+ _DCGM_POWER_COLLECT_CYCLE_TIMEOUT_GRACE_SECONDS = 1.0
+ 
+ 
+@@ -1889,6 +1890,49 @@ class NsysObservabilityConfig:
+     Schema: ClassVar[type[Schema]] = Schema
+ 
+ 
++@dataclass(frozen=True)
++class NicTrafficConfig:
++    """Per-node RDMA NIC traffic capture (``srtctl.core.nic_traffic``).
++
++    One sampler per node reads every RDMA port's cumulative transmit and
++    receive byte counters from sysfs on the bare host; the head node merges
++    them at teardown, and post-processing reports each concurrency window's
++    mean and peak Gbit/s per NIC and per node. Capture is best-effort: it
++    never fails or skips the benchmark. ``SrtConfig.nic_traffic_enabled``
++    resolves the switch.
++
++    Attributes:
++        enabled: ``None`` (the default) captures when the job spans more than
++            one node; ``true`` forces capture on a single node; ``false`` opts out.
++            Independent of ``observability.enabled`` and ``telemetry.enabled``.
++        sample_interval_seconds: Seconds between counter reads on each node; the
++            window peak is the highest rate over one such interval.
++        storage_subdir: Directory below the run log directory for the per-node
++            samples, the merged ``nic_traffic.csv``, ``nic_manifest.json`` and
++            the per-window ``nic_traffic_summary.csv``. Must not overlap another
++            capture directory.
++    """
++
++    enabled: bool | None = None
++    sample_interval_seconds: float = 1.0
++    storage_subdir: str = "nic_traffic"
++
++    Schema: ClassVar[type[Schema]] = Schema
++
++    def __post_init__(self) -> None:
++        if not _is_finite_positive(self.sample_interval_seconds):
++            raise ValidationError("observability.nic_traffic.sample_interval_seconds must be finite and positive")
++        if self.sample_interval_seconds > _NIC_TRAFFIC_MAX_SAMPLE_GAP_SECONDS:
++            raise ValidationError(
++                f"observability.nic_traffic.sample_interval_seconds={self.sample_interval_seconds} exceeds the "
++                f"{_NIC_TRAFFIC_MAX_SAMPLE_GAP_SECONDS:g}s sample gap a window boundary may have"
++            )
++        if not _is_safe_relative_subpath(self.storage_subdir):
++            raise ValidationError(
++                "observability.nic_traffic.storage_subdir must be a safe relative path below the run log directory"
++            )
++
++
+ @dataclass(frozen=True)
+ class ObservabilityConfig:
+     """Optional analytics capture and external OTEL export.
+@@ -1949,6 +1993,9 @@ class ObservabilityConfig:
+         tachometer: Native Tachometer capture configuration. Collects on every run,
+             independent of ``enabled``, unless ``tachometer.enabled: false`` (see
+             :class:`TachometerConfig`).
++        nic_traffic: Per-node RDMA NIC byte-counter capture. On for every
++            multi-node job, independent of ``enabled``, unless
++            ``nic_traffic.enabled: false`` (see :class:`NicTrafficConfig`).
+ 
+     The retired ``scrape_metrics`` / ``scrape_interval_seconds`` /
+     ``scrape_output`` knobs (the in-job RAW Prometheus scraper) are rejected
+@@ -1961,6 +2008,7 @@ class ObservabilityConfig:
+ 
+     tachometer: TachometerConfig = field(default_factory=TachometerConfig)
+     nsys: NsysObservabilityConfig = field(default_factory=NsysObservabilityConfig)
++    nic_traffic: NicTrafficConfig = field(default_factory=NicTrafficConfig)
+ 
+     Schema: ClassVar[type[Schema]] = Schema
+ 
+@@ -2895,6 +2943,7 @@ class SrtConfig:
+         self._validate_profiling()
+         self._validate_observability()
+         self._validate_telemetry()
++        self._validate_nic_traffic()
+         self._validate_mooncake_kv_store()
+         self._validate_het_jobs()
+         self._validate_colocated_decode()
+@@ -4092,6 +4141,27 @@ class SrtConfig:
+         self._validate_collector_budget()
+         self._validate_cpu_power_exporter()
+ 
++    def _validate_nic_traffic(self) -> None:
++        """Keep the NIC traffic directory apart from every other capture directory.
++
++        Nested directories count as overlap: the power report treats any
++        ``samples.csv`` below a capture directory as power, and window files
++        are read from ``<telemetry.storage_subdir>/windows/``.
++        """
++        nic_dir = PurePosixPath(self.observability.nic_traffic.storage_subdir)
++        others = {
++            "observability.tachometer.storage_subdir": self.observability.tachometer.storage_subdir,
++            "telemetry.storage_subdir": self.telemetry.storage_subdir,
++            "telemetry.cpu_power.storage_subdir": self.telemetry.cpu_power.storage_subdir,
++        }
++        for name, value in others.items():
++            other = PurePosixPath(value)
++            if nic_dir == other or nic_dir in other.parents or other in nic_dir.parents:
++                raise ValidationError(
++                    f"observability.nic_traffic.storage_subdir={nic_dir} overlaps {name}={other}; "
++                    "use a directory of its own"
++                )
++
+     @classmethod
+     def from_yaml(cls, yaml_path: Path) -> "SrtConfig":
+         """Load a recipe file without cluster defaults (``load_config`` applies them).
+@@ -4159,6 +4229,16 @@ class SrtConfig:
+         """Node count of the job: the engine roles' nodes plus every service pool, at least one."""
+         return (self.engine_node_count + (self.services_node_count or 0)) or 1
+ 
++    @property
++    def nic_traffic_enabled(self) -> bool:
++        """Resolved ``observability.nic_traffic.enabled``: unset captures when the job spans more than one node.
++
++        RDMA traffic between nodes (KV cache transfer, collectives) is what the
++        capture is for, so a single-node job opts in explicitly.
++        """
++        enabled = self.observability.nic_traffic.enabled
++        return self.total_nodes > 1 if enabled is None else enabled
++
+     def _engine_total_nodes(self) -> int:
+         """Worker node count of the engine roles, adjusted for backend-specific packing."""
+         topology = self.topology

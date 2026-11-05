@@ -435,6 +435,14 @@ jobs:
             ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/power_validation.json
           if-no-files-found: ignore
 
+      - name: Upload NIC traffic
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: nic_traffic_${{ env.RESULT_FILENAME }}
+          path: ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/nic_traffic/**
+          if-no-files-found: ignore
+
       - name: Upload server logs
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
