@@ -1581,9 +1581,10 @@ def _expand_configs(
                         root=root,
                     )
                 )
+        # Video is opt-in: a selection that names no scenario type keeps the LLM scenarios.
         video = (
             config[Fields.SCENARIOS.value].get(Fields.VIDEO_GENERATION.value, [])
-            if not scenario_types or "video-generation" in scenario_types
+            if scenario_types and "video-generation" in scenario_types
             else []
         )
         for scenario in video:
@@ -1802,7 +1803,7 @@ def main() -> list[dict]:
         nargs="+",
         choices=["fixed-seq-len", "agentic-coding", "video-generation"],
         required=False,
-        help="Scenario type(s) to include. If not specified, all scenario types are generated.",
+        help="Scenario type(s) to include. If not specified, fixed-seq-len and agentic-coding are generated; video-generation runs only when named.",
     )
 
     parser = argparse.ArgumentParser(
