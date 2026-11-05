@@ -297,9 +297,10 @@ def binder_inputs(
     """The GPU power telemetry, CPU exporter source and AgentX client env a recipe is bound with.
 
     GPU power is the DCGM block on the cluster's ``power-exporter-port`` where it declares one,
-    else the cluster's own GPU exporter. The CPU source is the cluster's CPU exporter when the point selected cpu-power. The
-    client marks power windows exactly when the launcher collects the point's AgentX power,
-    and fails invalid power when the workflow or the lane's power rule requires it.
+    else the cluster's own GPU exporter. The CPU source is the cluster's CPU exporter when the
+    point selected cpu-power. The client marks power windows exactly when the launcher collects
+    the point's AgentX power, and fails invalid power when the workflow or the lane's power rule
+    requires it.
     """
     gpu_power: GpuPower | None = None
     if decision.dcgm:

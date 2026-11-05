@@ -1,7 +1,7 @@
 """Compose srt-slurm recipe fragments and bind the master-owned workload into them.
 
 A fragment holds only recipe-specific srt-slurm settings. Its lane's shared block, and the
-DCGM telemetry block for a point that measures power, is merged under it, a variant is
+GPU telemetry block for a point that measures power, is merged under it, a variant is
 selected, and the binder then writes the matrix point's and the launcher's values and
 replaces ``'@fabric.<name>'`` values with the job's cluster facts.
 """
@@ -525,15 +525,7 @@ def add_cpu_power_source_argument(parser: argparse.ArgumentParser) -> None:
 
 def _gpu_power(text: str) -> GpuPower:
     """Parse ``--gpu-power``: a DCGM exporter port, or NATIVE."""
-    if text == NATIVE:
-        return NATIVE
-    try:
-        port = int(text)
-    except ValueError:
-        port = 0
-    if port <= 0:
-        raise argparse.ArgumentTypeError(f"expected a port or {NATIVE!r}, got {text!r}")
-    return port
+    return NATIVE if text == NATIVE else int(text)
 
 
 def _assignment(text: str) -> tuple[str, str]:

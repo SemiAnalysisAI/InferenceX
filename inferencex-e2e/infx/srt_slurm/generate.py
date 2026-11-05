@@ -272,19 +272,12 @@ def generate_recipes(
             if fabric is not None:
                 recipe = resolve_fabric(recipe, fabric)
             check_setup_script(recipe, root / point["srt-recipe"].partition(":")[0], root)
-            if "prefill" not in point:
-                clusters = {
-                    inventory.cluster_for(runner).id: inventory.cluster_for(runner)
-                    for runner in inventory.labels[point["runner"]]
-                }
-                for cluster in clusters.values():
-                    srt = slurm_settings(cluster).srt_slurm
-                    _apply_acceptance_and_validate(
-                        recipe, environment, point["srt-recipe"], srt.extra if srt else None
-                    )
-            else:
-                # The placed cluster's defaults supply a native GPU exporter, as srtslurm.yaml does.
-                srt = slurm_settings(placement[1]).srt_slurm if placement else None
+            clusters = {
+                inventory.cluster_for(runner).id: inventory.cluster_for(runner)
+                for runner in inventory.labels[point["runner"]]
+            }
+            for cluster in clusters.values():
+                srt = slurm_settings(cluster).srt_slurm
                 _apply_acceptance_and_validate(
                     recipe, environment, point["srt-recipe"], srt.extra if srt else None
                 )

@@ -286,9 +286,11 @@ schema; unknown keys fail.
   same way; they resolve when the record loads, and `env` still rejects the commas of a
   list.
 - `slurm.srt-slurm.extra.default_gpu_exporter` is the cluster's native power exporter.
-  Native single-node throughput and AgentX jobs inherit it when the bound recipe
-  enables telemetry without selecting its own exporter; eval-only jobs collect no power.
-  A cluster without the block stops preparation before the benchmark starts. An invalid
+  Native single-node throughput and AgentX jobs, and multi-node points on a cluster
+  without `power-exporter-port`, inherit it when the bound recipe enables telemetry
+  without selecting its own exporter; eval-only jobs collect no power. A single-node job
+  on a cluster without the block stops preparation before the benchmark starts; a
+  multi-node point measures no GPU power and keeps its result. An invalid
   measurement fails the job under `REQUIRE_POWER=1` and otherwise records an invalid
   verdict without energy metrics. NVIDIA clusters run `dcgm-exporter`; AMD clusters use
   srt-slurm's

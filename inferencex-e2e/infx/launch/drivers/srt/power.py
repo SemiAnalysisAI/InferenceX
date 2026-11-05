@@ -61,6 +61,7 @@ class PowerDecision:
     """Outcome of power eligibility for one launch."""
 
     # GPU power is measured: DCGM, or the cluster's own exporter where it sets no DCGM port.
+    # The name is the job-event schema's (``event.Power.dcgm``).
     dcgm: bool
     agentx: bool
     adapter: bool = False

@@ -266,10 +266,10 @@ def test_a_single_node_point_measures_cpu_power_by_default_where_its_cluster_dec
     assert exporters == [{"source": "rapl"} if declared else None] * 2
 
 
-def _drop_exporter_port(project: Path) -> None:
+def _drop_srt_slurm(project: Path, key: str) -> None:
     runners = project / "configs/runners.yaml"
     inventory = yaml.safe_load(runners.read_text())
-    del inventory["clusters"]["fixture"]["slurm"]["srt-slurm"]["power-exporter-port"]
+    del inventory["clusters"]["fixture"]["slurm"]["srt-slurm"][key]
     runners.write_text(yaml.safe_dump(inventory))
 
 
@@ -282,7 +282,7 @@ def test_a_multinode_agentx_point_without_power_measures_it_with_its_clusters_ex
     del config["agentx-multi"]["scenarios"]["agentic-coding"][0]["search-space"][0]["power"]
     master.write_text(yaml.safe_dump(config))
     if not port:
-        _drop_exporter_port(project)
+        _drop_srt_slurm(project, "power-exporter-port")
     output = tmp_path / "out"
     assert generate(project, output, "agentx-multi") == 0
 
@@ -296,10 +296,7 @@ def test_a_multinode_agentx_point_without_power_measures_it_with_its_clusters_ex
 def test_a_power_point_its_cluster_cannot_measure_fails_without_writing(
     project, power_lane, tmp_path, capsys
 ):
-    runners = project / "configs/runners.yaml"
-    inventory = yaml.safe_load(runners.read_text())
-    del inventory["clusters"]["fixture"]["slurm"]["srt-slurm"]["extra"]
-    runners.write_text(yaml.safe_dump(inventory))
+    _drop_srt_slurm(project, "extra")
     output = tmp_path / "out"
     with pytest.raises(SystemExit):
         generate(project, output, "agentx-multi")
