@@ -12030,5 +12030,5 @@
     - "DSpark with the built-in drafter, 7 draft tokens (golden AL 4.04), DeepGEMM MegaMoE, NIXL prefill-to-decode transfer and the Dynamo KV router with session affinity."
     - "Prefix cache in a shared MooncakeStore pool served by standalone stores, one per socket on the prefill and decode nodes (4 x 1646 GiB, 6584 GiB in all); prefill workers are store clients and decode takes KV over NIXL only."
     - "The pool uses most of both nodes' DRAM, more than the 749 GB prefill and 1499 GB decode shares recorded as allocated_cpu_dram_gb and decode_allocated_cpu_dram_gb."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4825
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4826
   scenario-type: [agentic-coding]
