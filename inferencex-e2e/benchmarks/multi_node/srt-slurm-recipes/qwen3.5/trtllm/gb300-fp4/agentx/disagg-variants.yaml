@@ -516,7 +516,6 @@ override_3p1d_tep2_tep8_b128:
           free_gpu_memory_fraction: 0.8
         max_batch_size: 128
         max_num_tokens: 896
-        mnnvl_allreduce_fp8_payload: true
 
 override_3p2d_dep4_dep4_c720:
   name: disagg-gb300-3p2d-dep4-dep4-c720-b36-mnt252-mtp6-kvoffload
