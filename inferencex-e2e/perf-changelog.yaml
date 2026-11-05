@@ -12024,6 +12024,94 @@
   scenario-type: [fixed-seq-len]
 
 - config-keys:
+    - kimik3.1-fp4-b300-sglang-agentic-dflash
+  description:
+    - "Add Kimi K3.1 Pro B300 SGLang AgentX day-0 points: TP8 (c1-c16) and TP8 DCP8 EP2 (c24-c70), HiCache host offload, RadixArk DFLASH draft with block verification."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4803
+
+- config-keys:
+    - kimik3.1-fp4-b300-vllm-agentic-dspark
+  description:
+    - "Add Kimi-K3.1-Pro day-0 vLLM AgentX on B300: TP8 x DCP8 with DSpark (Inferact/Kimi-K3.1-Pro-DSpark-preview) and Simple CPU KV offload, conc 1-70."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4796
+
+- config-keys:
+    - kimik3.1-fp4-mi355x-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi-K3.1-Pro MXFP4 AgentX on one 8x MI355X node with SGLang (lmsysorg/sglang:dev-kimi-k31-pro-mi35x) and the DFlash2 draft at 5 draft tokens with block verification."
+    - "TP8 monokernel at concurrency 1 and 4 with GPU-resident KV; TP8/DCP8 with the HiCache host tier at concurrency 8, 16, 32 and 48."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4808
+
+- config-keys:
+    - kimik3.1-fp4-b200-dynamo-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi K3.1 Pro B200 SGLang AgentX on lmsysorg/sglang:dev-kimi-k31-pro: one aggregated worker over two nodes, TP16 with DCP16, no KV offload, concurrency 1, 4, 8, 14, 24, 32, 48, 56, 72, 80 with DFLASH and 96 without speculation."
+    - "DFLASH uses RadixArk/Kimi-K3.1-Dflash2-Preview with block verification, 7 draft tokens through concurrency 14 and 4 above."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4801
+
+- config-keys:
+    - glm5.3flash-fp8-mi325x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GLM-5.3-Flash native FP8 AgentX on MI325X with SGLang v0.5.22 ROCm10 mi30x (pinned by digest): TP4/EP4, BF16 KV, TileLang DSA, AITER MoE, MTP 5/1/6, 1M context."
+    - "GPU-resident KV at concurrency 1, 2, 4, 8 and 12; HiCache host tier (fraction 0.60, direct I/O, page_first_direct) at concurrency 16, 24 and 32."
+    - "Stage checkpoint revision 46a050bec13002ad29ee795c16e61cf4fa3c4a9c in the shared Hugging Face cache under a lock with a 400 GB disk budget."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4722
+
+- config-keys:
+    - kimik3.1-fp4-gb200-dynamo-sglang-agentic-dflash-agg
+    - kimik3.1-fp4-gb200-dynamo-sglang-agentic-dflash-disagg
+  description:
+    - "Add Kimi K3.1 Pro day-0 SGLang AgentX points on GB200: aggregated TP16 DCP16 and 1P1D TP16 DCP16, with RadixArk DFLASH block verification and HiCache CPU offload."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4804
+
+- config-keys:
+    - glm5.3flash-fp8-gb200-sglang-agentic-mtp
+    - glm5.3flash-fp4-gb200-sglang-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Add GLM-5.3-Flash FP8 (zai-org/GLM-5.3-Flash) and NVFP4 (nvidia/GLM-5.3-Flash-NVFP4) AgentX on one GB200 tray with pinned lmsysorg/sglang:v0.5.22-cu130, using the SGLang cookbook GB200 Low Latency recipe: TP4, FP8 KV with TRT-LLM DSA, flashinfer_trtllm MoE, EAGLE MTP 5/1/6 and auto parsers."
+    - "No KV offload at concurrency 1, 4, 8, 12 and 16; HiCache L1 + L2 with SGLang auto-sized host pools at concurrency 24 and 32 for FP8 and 24, 32, 40 and 48 for NVFP4. Native 1M context, shared golden-AL curve for throughput, real acceptance for evals."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4718
+
+- config-keys:
+    - glm5.3flash-fp8-mi300x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add native GLM-5.3-Flash FP8 AgentX on MI300X with the official digest-pinned SGLang v0.5.22 ROCm 10 MI30x image, TP4/EP4 and MTP (EAGLE 5/1/6)."
+    - "GPU-resident KV at concurrency 1, 2, 4, 8, 12 and 16; SGLang HiCache with the auto-sized host tier at concurrency 24, 32 and 40."
+    - "Use gfx942 TileLang DSA with Torch DSA top-k, AITER MoE and FP8 KV, and disable INT8 QuickReduce."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4721
+
+- config-keys:
+    - kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-disagg
+    - kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-agg-mk
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi-K3.1-Pro GB300 Dynamo+SGLang AgentX points on lmsysorg/sglang:dev-kimi-k31-pro with the RadixArk/Kimi-K3.1-Dflash2-Preview DFLASH draft."
+    - "Disaggregated: TP8/DCP8 prefill with a HiCache host tier feeding either one TP16 (DCP8 x attention DP2, EP16 MegaMoE) decode worker (3P1D c300, 2P1D c180, 1P1D c76) or TP8/DCP8 decode workers (1P3D c60 and c36, 1P4D c32)."
+    - "Aggregated low-latency points: one TP16 EP1 worker with the NVIDIA megakernel (--enable-nvidia-megakernel), max-running-requests equal to the concurrency (c1, c2, c4)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4811
+
+- config-keys:
+    - qwen3.8next-fp4-gb300-tokenspeed-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Qwen3.8-Flash-Next NVFP4 GB300 TP1/EP1 AgentX with TokenSpeed MTP and a 224 GB Host L2 KV store at concurrency 1, 2, 4, 8, 16, 32, 48, and 64."
+    - "Pin the matching November 2 TokenSpeed 0.1.1.post20261102, CUDA 13 ARM64 kernel 0.1.4.post20261102 and engine 0.1.0.post20261102 wheels by SHA256, scheduler 0.1.49, the runner image by digest, and the checkpoint revision. Keep BF16 KV/SSM state, in-forward state checkpoints, and Host L2 write-back."
+    - "Bind native TokenSpeed topology and select golden MTP acceptance automatically for throughput; use real verification for evals. Use the pinned engine's model-owned cache geometry."
+    - "Use srt-slurm v2.66.2 with native headless ZMQ workers, SMG readiness, and engine HTTP metrics discovery. Export NVIDIA runtime settings before Enroot creates the runner containers. Install matching published FlashInfer 0.7.2.post1 CUDA 13 caches. Resolve pinned lm-eval client dependencies and read the checkpoint's native text context for evaluation."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4780
+
+- config-keys:
     - h3-bf16-h100-sglang-video
     - h3-bf16-b200-sglang-video
   scenario-type: [video-generation]

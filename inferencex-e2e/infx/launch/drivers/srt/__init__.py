@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from infx.clusters.slurm import SlurmSettings
+from infx.config import repository_root
 from infx.launch import policy
 from infx.launch.backends.base import BackendError, JobStatus
 from infx.launch.backends.slurm import srtctl_job_name
@@ -45,7 +46,7 @@ from infx.launch.request import (
     VideoRequest,
 )
 from infx.srt_slurm.video import PACKAGE_MOUNT, video_package
-from infx.srt_slurm.workload import BOUND_RECIPE
+from infx.srt_slurm.workload import BOUND_RECIPE, selects_dedicated_discovery
 
 if TYPE_CHECKING:
     from infx.clusters import Cluster
@@ -66,7 +67,7 @@ def run_single_node(launch: Launch) -> int:
         time_limit = lanes.srt_time_limit(run.cluster.id, request, None, run.srt)
         root = Path(tempfile.mkdtemp(prefix="srt-single.", dir=run.workspace))
         checkout, job_mib = prepare_single_node(run, request, root, power=not request.eval_only)
-        native_power = not request.eval_only and not request.al_gate
+        native_power = not request.eval_only
         cpu_source = config.cpu_power_source(
             run.cluster, run.srt, native_power and request.cpu_power, default=native_power
         )
@@ -96,8 +97,8 @@ def run_single_node(launch: Launch) -> int:
     fetched = root / "fetched-outputs"
     submitted = submit.Submitted(manifest=run.workspace / submit.SINGLE_NODE_SUBMISSION)
     run.life.callback(collect.finish_single_node, run, submitted, fetched)
+    submit.request_al_gate(run)
     eval_args = submit.eval_args(run.env, submit.SINGLE_NODE_EVAL_COMMAND)
-    client_args = submit.gate_args(request) if request.al_gate else eval_args
 
     def finalize(logs: Path, job_id: str, status: JobStatus) -> int:
         if native_power:
@@ -105,7 +106,7 @@ def run_single_node(launch: Launch) -> int:
             (logs / "power/native-job-status.txt").write_text(f"{job_id}|{status.raw}\n")
         return collect.finalize_single_node_results(run, logs, checkout.commit)
 
-    arguments = [*runtime_args, *client_args]
+    arguments = ["--set", "benchmark.stream_output=true", *runtime_args, *eval_args]
     return follow_single_node(run, checkout, root, bound, arguments, submitted, fetched, finalize)
 
 
@@ -272,14 +273,23 @@ def run_multinode(launch: Launch) -> int:
         staged = staged_recipe(srt_recipe)
         if not recipe_mirror_path(request.workspace, srt_recipe).is_file():
             raise LaunchError(f"{srt_recipe} is not in the recipe mirror")
-        decision = power.decide_power(launch.cluster.id, launch.path, request)
-        event.set(power=asdict(decision))
-        if not request.eval_only and (decision.agentx or decision.adapter):
-            require(request, "INFERENCEX_RESULTS_PYTHON")
+        mirrored = str(request.workspace / srt_recipe)
         model = models.checkpoint(launch.cluster, request)
         served = models.served_path(launch.cluster, request, model)
         model_paths = models.model_paths(launch.cluster, request, served)
         run = SrtRun.create(launch, request, models.job_env(launch.cluster, request, served))
+        decision = power.decide_power(
+            launch.cluster.id,
+            launch.path,
+            run.srt,
+            request,
+            lambda: selects_dedicated_discovery(
+                mirrored, agentic=request.is_agentic, root=repository_root()
+            ),
+        )
+        event.set(power=asdict(decision))
+        if not request.eval_only and (decision.agentx or decision.adapter):
+            require(request, "INFERENCEX_RESULTS_PYTHON")
         preflight = run.srt.preflight and not (model_paths and model and model.node_local)
         if request.framework == "tilert":
             require(request, "PREFILL_IMAGE")
@@ -298,14 +308,15 @@ def run_multinode(launch: Launch) -> int:
         run.env["INFMAX_WORKSPACE"] = str(infmax)
 
         recipe = str(checkout.root / BOUND_RECIPE)
-        power_port, cpu_source, client_env = config.binder_inputs(
+        gpu_power, cpu_source, client_env = config.binder_inputs(
             run.cluster, run.srt, lane, request, decision
         )
         if rc := submit.bind_recipe(
-            run, checkout, staged, recipe, power_port, cpu_source, client_env
+            run, checkout, staged, recipe, gpu_power, cpu_source, client_env
         ):
             return rc
         prepare_recipe(Path(recipe), srtctl_job_name(request.runner_name), run.srt.dist_timeout_s)
+        submit.request_al_gate(run)
         arguments = submit.multinode_arguments(run, lane, recipe, overrides, preflight=preflight)
         manifest = run.workspace / submit.MULTINODE_SUBMISSION
         submitted = submit.Submitted(manifest=manifest)
@@ -357,8 +368,8 @@ def table_problems(clusters: Mapping[str, Cluster], only: str | None = None) -> 
             continue
         if (cluster_id, path) not in lanes.SRT_LANES:
             problems.append(f"{where}: no SRT_LANES row")
-        elif (srt := _srt_settings(clusters.get(cluster_id))) and srt.power_exporter_port is None:
-            problems.append(f"{where}: no srt-slurm.power-exporter-port")
+        elif (srt := _srt_settings(clusters.get(cluster_id))) and srt.gpu_exporter_image is None:
+            problems.append(f"{where}: no srt-slurm.extra.default_gpu_exporter")
     for cluster_id, overrides in models.OVERRIDES.items():
         if scoped(cluster_id) and profile("OVERRIDES", cluster_id) is not None:
             entries = clusters[cluster_id].models.entries

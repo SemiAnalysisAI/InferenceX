@@ -16,6 +16,7 @@ from infx.config import repository_root
 from infx.srt_slurm.synthetic_acceptance import ENGINES, selected_recipes, spec_parameters
 from infx.srt_slurm.workload import (
     BOUND_RECIPE,
+    NATIVE,
     CpuPowerSource,
     add_cpu_power_source_argument,
     add_fabric_argument,
@@ -40,6 +41,14 @@ def parallelism_constraints(
     """Read each engine's native topology fields without translating the recipe."""
     tp, ep = int(environment["TP"]), int(environment["EP_SIZE"])
     dp_attention = environment["DP_ATTENTION"] == "true"
+    if engine == "tokenspeed":
+        data_parallel = args["data-parallel-size"]
+        return {
+            "attention TP x DP": (args["attn-tp-size"] * data_parallel, tp),
+            "DP_ATTENTION": (data_parallel > 1, dp_attention),
+            "ep-size": (args["ep-size"], ep),
+            "pipeline-parallel-size": (args["pipeline-parallel-size"], 1),
+        }
     if engine == "sglang":
         return {
             "tensor-parallel-size": (args["tensor-parallel-size"], tp),
@@ -93,7 +102,7 @@ def select_recipe(
         agentic=agentic,
         multinode=False,
         root=root or repository_root(),
-        native_power=environment.get("EVAL_ONLY") != "true",
+        gpu_power=NATIVE if environment.get("EVAL_ONLY") != "true" else None,
         cpu_power_source=cpu_power_source,
     )
     recipes = expand(raw, selector or None)
@@ -124,7 +133,7 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
     workload = benchmark["env"]
     engine_config = recipe["engine"]
     engine = engine_config["type"] if isinstance(engine_config, dict) else engine_config
-    if environment["FRAMEWORK"] not in {"sglang", "trt", "atom", "vllm"}:
+    if environment["FRAMEWORK"] not in {"sglang", "trt", "atom", "vllm", "tokenspeed"}:
         raise ValueError(f"Unsupported single-node framework: {environment['FRAMEWORK']!r}")
     spec = spec_parameters(role, engine)
     if spec and spec["method"] not in {"eagle", "eagle3", "nextn", "mtp", "dspark", "dflash"}:
@@ -209,6 +218,7 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
             "trt": ("max_seq_len", "max_num_tokens"),
             "atom": ("max-model-len",),
             "vllm": ("max-model-len",),
+            "tokenspeed": ("max-model-len",),
         }[environment["FRAMEWORK"]]
         for key in context_keys:
             overrides += ["--set", f"roles.agg.args.{key}={context}"]

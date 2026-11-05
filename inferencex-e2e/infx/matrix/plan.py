@@ -28,6 +28,8 @@ from .validation import (
 )
 
 SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding", "video-generation")
+# An entry without scenario-type reruns these; video runs only for entries that name it.
+DEFAULT_SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding")
 
 
 def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
@@ -409,7 +411,9 @@ def build_plan(
             selected_config_scenarios: dict[str, set[str]] = defaultdict(set)
             for entry, configs in resolved_entries:
                 for config in configs:
-                    selected_config_scenarios[config].update(entry.scenario_type or SCENARIO_TYPES)
+                    selected_config_scenarios[config].update(
+                        entry.scenario_type or DEFAULT_SCENARIO_TYPES
+                    )
             selected_configs = selected_config_scenarios.keys()
             missing_from_base = selected_configs - base_master.keys()
             if missing_from_base:
@@ -426,7 +430,7 @@ def build_plan(
         resolved_entries.sort(key=lambda item: not item[0].all_evals)
 
         for entry, all_configs in resolved_entries:
-            entry_scenarios = tuple(entry.scenario_type or SCENARIO_TYPES)
+            entry_scenarios = tuple(entry.scenario_type or DEFAULT_SCENARIO_TYPES)
             expand_all_evals = all_evals or entry.all_evals
             suppress_throughput = evals_only or entry.evals_only or entry.all_evals
 
@@ -435,7 +439,7 @@ def build_plan(
                     all_configs, entry_scenarios, benchmark_scenarios_seen
                 )
                 for scenarios, benchmark_configs in benchmark_groups.items():
-                    selection = scenarios if scenarios != SCENARIO_TYPES else None
+                    selection = scenarios if scenarios != DEFAULT_SCENARIO_TYPES else None
                     head_results = generate_current(benchmark_configs, "none", selection)
                     if entry.append_only:
                         if base is None:
