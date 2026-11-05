@@ -56,6 +56,7 @@ def test_selected_server_executes_recipe_command_and_records_selected_environmen
     model = _snapshot(tmp_path / "model")
     uuids = ["GPU-1", "GPU-2"]
     monkeypatch.setattr(srt_selected, "cuda_devices", lambda: uuids)
+    monkeypatch.setattr(srt_selected, "KFD", tmp_path / "no-kfd")
     executed = []
     monkeypatch.setattr(
         srt_selected.os, "execvpe", lambda file, argv, env: executed.append((file, argv, env))
@@ -142,6 +143,7 @@ def test_selected_server_requires_the_recipe_gpus_and_runtime(tmp_path, monkeypa
     plan = video_spec.plan_for(video_spec.load_spec(PACKAGE / "specs/h3.yaml"), "release-v1")
     model = _snapshot(tmp_path / "model")
     monkeypatch.setattr(srt_selected, "cuda_devices", lambda: ["GPU-1", "GPU-2"])
+    monkeypatch.setattr(srt_selected, "KFD", tmp_path / "no-kfd")
     kwargs = {
         "runtime_revision": "a" * 40,
         "model_path": model,
