@@ -12099,3 +12099,11 @@
     - "Disaggregated: TP8/DCP8 prefill with a HiCache host tier feeding either one TP16 (DCP8 x attention DP2, EP16 MegaMoE) decode worker (3P1D c300, 2P1D c180, 1P1D c76) or TP8/DCP8 decode workers (1P3D c60 and c36, 1P4D c32)."
     - "Aggregated low-latency points: one TP16 EP1 worker with the NVIDIA megakernel (--enable-nvidia-megakernel), max-running-requests equal to the concurrency (c1, c2, c4)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4811
+
+- config-keys:
+    - kimik3.1-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Re-run Kimi-K3.1-Pro vLLM AgentX on B300 with the tool and reasoning parsers off on synthetic-acceptance throughput servers (#4840); evals keep them."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4796
