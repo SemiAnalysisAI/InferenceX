@@ -127,6 +127,10 @@ def resolve_run(
             return "it has no unexpired changelog-metadata artifact"
         if not sweep_runs.has_reusable_result_artifacts(names):
             return "it has no unexpired benchmark result artifacts"
+        try:
+            sweep_runs.validate_video_run(repo, run, token, names)
+        except sweep_runs.VideoValidationError as error:
+            return str(error)
         return ""
 
     if requested_id is not None:

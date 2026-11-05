@@ -23,6 +23,7 @@ from infx import github
 
 from .sweep_runs import (
     REUSABLE_AGGREGATE_ARTIFACTS as REUSABLE_AGGREGATE_ARTIFACTS,
+    VideoValidationError,
     artifact_names as artifact_names,
     completed_pr_runs,
     has_reusable_result_artifacts as has_reusable_result_artifacts,
@@ -31,6 +32,7 @@ from .sweep_runs import (
     source_head_sha as source_head_sha,
     source_identity,
     trusted_external_pr,
+    validate_video_run,
 )
 
 DEFAULT_ALLOWED_AUTHOR_ASSOCIATIONS = ("OWNER", "MEMBER", "COLLABORATOR")
@@ -157,6 +159,10 @@ def find_latest_successful_pr_run(
         names = artifact_names(repo, int(run["id"]), token)
         if not has_reusable_result_artifacts(names):
             continue
+        try:
+            validate_video_run(repo, run, token, names)
+        except VideoValidationError:
+            continue
         return run
     return None
 
@@ -204,6 +210,8 @@ def validate_reusable_run(
         raise RuntimeError(
             f"Reusable source run {run_id} has no benchmark, eval, or agentic result artifact."
         )
+
+    validate_video_run(repo, run, token, names)
 
 
 def resolve_reusable_run(
