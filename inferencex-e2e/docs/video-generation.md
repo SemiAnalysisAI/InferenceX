@@ -129,7 +129,8 @@ Their presence does not establish final-head GPU qualification.
    proves schema/binding, not model execution. Run the focused binder, entrypoint,
    matrix and result tests for changed behavior.
 4. Append the PR's single `perf-changelog.yaml` entry with every affected config
-   key. Follow [the contribution workflow](../../CONTRIBUTING.md) for review,
+   key and a `scenario-type` that lists `video-generation`. The planner rejects an
+   entry whose named video config would otherwise plan no jobs. Follow [the contribution workflow](../../CONTRIBUTING.md) for review,
    CODEOWNER sign-off, the primary sweep label and trusted reuse. A maintainer
    controls fork scheduling. Use the final PR-selected matrix and preserve failed
    attempts; an ad-hoc diagnostic cannot replace its qualifying sweep.
