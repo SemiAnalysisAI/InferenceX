@@ -38,6 +38,9 @@ jobs:
           echo "== hsmp device"; ls -l /dev/hsmp* 2>&1
           echo "== hsmp sysfs"; ls /sys/devices/platform 2>/dev/null | grep -i -E "hsmp|amd_hsmp" || echo none
           for f in /sys/devices/platform/amd_hsmp/*/protocol_version /sys/devices/platform/AMDI0097*/protocol_version; do [ -r "$f" ] && echo "$f: $(cat $f)"; done
+          echo "== hsmp availability"; t modinfo -F filename amd_hsmp; t modinfo -F filename hsmp_acpi; grep -E "CONFIG_AMD_HSMP" /boot/config-$(uname -r) 2>&1
+          echo "== acpi hsmp device (BIOS enablement)"; ls /sys/bus/acpi/devices 2>/dev/null | grep -i AMDI0097 || echo "no AMDI0097 ACPI device"
+          echo "== amd-smi cpu options"; amd-smi metric -h 2>&1 | grep -i -E "cpu|dimm" | head -20
           echo "== tools"; for c in amd-smi e_smi_tool ipmitool dmidecode; do printf "%s: " $c; command -v $c || echo missing; done
           echo "== sudo"; sudo -n true 2>&1 && echo "sudo ok" || echo "no passwordless sudo"
           echo "== dimm inventory"; sudo -n dmidecode -t 17 2>/dev/null | grep -E "^\s+(Size|Locator|Manufacturer|Part Number|Configured Memory Speed|Type):" | grep -v "No Module" | sed "s/^\s*//" | sort | uniq -c | sort -rn | head -40
