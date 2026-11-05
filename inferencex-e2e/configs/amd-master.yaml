@@ -303,6 +303,7 @@ glm5.3flash-fp8-mi300x-sglang-agentic-mtp:
   srt-recipe-dir: glm5.3flash/sglang/mi300x-fp8
   scenarios:
     agentic-coding:
+    # 570 GB covers the largest measured HiCache host allocation: conc 24, 4 x 140.85 GB/rank (KV + Mamba + indexer).
     - dram-utilization: 0.71
       search-space:
       - { tp: 4, ep: 4, conc-list: [1], spec-decoding: mtp, kv-offloading: none, srt-recipe: agentx/agg-variants.yaml:override_tp4_ep4_c1 }

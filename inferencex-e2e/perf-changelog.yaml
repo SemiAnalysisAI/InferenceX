@@ -12077,5 +12077,5 @@
   description:
     - "Add native GLM-5.3-Flash FP8 AgentX on MI300X with the official digest-pinned SGLang v0.5.22 ROCm 10 MI30x image, TP4/EP4 and MTP (EAGLE 5/1/6)."
     - "GPU-resident KV at concurrency 1, 2, 4, 8, 12 and 16; SGLang HiCache with the auto-sized host tier at concurrency 24, 32 and 40."
-    - "Stage the pinned checkpoint in the node-local Hugging Face cache under an exclusive lock and a 400 GB disk budget; use gfx942 Torch DSA top-k and disable INT8 QuickReduce."
+    - "Use gfx942 TileLang DSA with Torch DSA top-k, AITER MoE and FP8 KV, and disable INT8 QuickReduce."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4721

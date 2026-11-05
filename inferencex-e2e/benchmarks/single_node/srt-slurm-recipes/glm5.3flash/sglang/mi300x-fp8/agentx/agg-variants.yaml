@@ -10,12 +10,6 @@ base:
   resources:
     gpu_type: mi300x
     gpus_per_node: 8
-  setup_script: stage-hf-checkpoint.sh
-  environment:
-    HF_CHECKPOINT_REPO: zai-org/GLM-5.3-Flash
-    HF_CHECKPOINT_REVISION: 46a050bec13002ad29ee795c16e61cf4fa3c4a9c
-    # The 328 GB checkpoint needs download and metadata headroom.
-    HF_CHECKPOINT_BUDGET_BYTES: '400000000000'
   frontend:
     type: sglang
     enable_multiple_frontends: false
@@ -30,7 +24,6 @@ base:
       workers: 1
       gpus: 4
       env:
-        # Setup alone goes online; serving reads the staged pinned snapshot.
         HF_HUB_OFFLINE: '1'
         TRANSFORMERS_OFFLINE: '1'
         PYTHONNOUSERSITE: '1'
@@ -56,7 +49,7 @@ base:
         expert-parallel-size: 4
         quantization: fp8
         context-length: 1048576
-        page-size: 64
+        page-size: 256
         mem-fraction-static: 0.82
         chunked-prefill-size: 8192
         max-prefill-tokens: 8192
