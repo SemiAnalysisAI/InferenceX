@@ -75,8 +75,11 @@ roles:
       TILERT_DECODE_POLL_MS: "2"
     args:
       model: dsv41
-      # TileRT reads the Hugging Face checkpoint directly; no converted weights.
-      model-weights-dir: /model
+      # TileRT reads the Hugging Face checkpoint directly; no converted weights. The cluster
+      # stages no DeepSeek-V4.1-Flash checkpoint, so the job is in Hub mode and mounts nothing
+      # at /model: read the shared Hub cache's snapshot instead (refs/main, the revision the
+      # prefill's vLLM loads and the chat template is based on).
+      model-weights-dir: /hf_hub_cache/hub/models--deepseek-ai--DeepSeek-V4.1-Flash/snapshots/314113f8a7dadb388215396ba5fbee2c610a04d6
       max-seq-len: 1048576
       transport: mooncake
       with-mtp: true
@@ -89,7 +92,7 @@ frontend:
     TILERT_ROLE: router
   args:
     parser: none
-    model-path: /model
+    model-path: /hf_hub_cache/hub/models--deepseek-ai--DeepSeek-V4.1-Flash/snapshots/314113f8a7dadb388215396ba5fbee2c610a04d6
     queue-timeout: 1800
     # The router renders the chat template and tokenizes each request itself, so the prefill
     # receives token ids. The template must render exactly what the prefill's vLLM renders; the
@@ -107,7 +110,7 @@ health_check:
   interval_seconds: 5
 benchmark:
   env:
-    TOKENIZER: /model
+    TOKENIZER: /hf_hub_cache/hub/models--deepseek-ai--DeepSeek-V4.1-Flash/snapshots/314113f8a7dadb388215396ba5fbee2c610a04d6
     SERVED_MODEL_NAME: deepseek-ai/DeepSeek-V4.1-Flash
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
     # Same request fields as the board's GB300 DeepSeek-V4.1-Flash recipes (the model's
