@@ -12014,6 +12014,16 @@
   retired: true
 
 - config-keys:
+    - dsr1-fp8-mi300x-sglang
+    - dsr1-fp8-mi325x-sglang
+    - dsr1-fp8-mi355x-sglang-mtp
+  description:
+    - "Collect per-socket AMD EPYC CPU package power beside GPU power on the MI300X, MI325X and MI355X srt-slurm clusters. Native power points on a cluster that declares a cpu-power-exporter measure CPU power by default; these 8k1k rows set cpu-power, so a missing CPU leg counts as invalid. RAPL jobs get the root-only counters until teardown, and setup installs the pinned cpu-power-exporter release."
+    - "Integrate each package over the formal GPU measurement window and emit cpu_power_valid, avg_cpu_socket_power_w, avg_total_cpu_power_w, and total_cpu_energy_j with sensor_kind rapl_package; RAPL reports no component rails. Concurrency points and evaluation coverage are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4154
+  scenario-type: [fixed-seq-len]
+
+- config-keys:
     - kimik3.1-fp4-mi355x-vllm-agentic-dspark
   description:
     - "Add Kimi-K3.1-Pro day-0 vLLM AgentX on MI355X: TP8 x DCP8 with DSpark (Inferact/Kimi-K3.1-Pro-DSpark-preview), GPU-resident KV at conc 1 and 4 and Simple CPU KV offload at conc 4-60."
