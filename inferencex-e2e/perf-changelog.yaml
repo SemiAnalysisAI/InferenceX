@@ -12036,6 +12036,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4796
 
 - config-keys:
+    - kimik3.1-fp4-mi355x-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi-K3.1-Pro MXFP4 AgentX on one 8x MI355X node with SGLang (lmsysorg/sglang:dev-kimi-k31-pro-mi35x) and the DFlash2 draft at 5 draft tokens with block verification."
+    - "TP8 monokernel at concurrency 1 and 4 with GPU-resident KV; TP8/DCP8 with the HiCache host tier at concurrency 8, 16, 32 and 48."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4808
+
+- config-keys:
     - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
   description:
     - "Update the SGLang image from v0.5.22-cu130 to nightly-dev-cu13-20261025-65633129, pinned by digest."
