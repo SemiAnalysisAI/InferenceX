@@ -83,7 +83,7 @@ override_tp8_c1:
         enable-amd-monokernel: true
         max-running-requests: 4
         cuda-graph-max-bs-decode: 4
-        # 150 state slots keep agent sessions' prefixes cached (hit 0.88 -> 0.95 at conc 4).
+        # 150 state slots keep agent sessions' prefixes cached.
         max-mamba-cache-size: 150
       env:
         SGLANG_AMD_MONO_K31_WIDE: '1'
@@ -100,7 +100,7 @@ override_tp8_c4:
         enable-amd-monokernel: true
         max-running-requests: 4
         cuda-graph-max-bs-decode: 4
-        # 150 state slots keep agent sessions' prefixes cached (hit 0.88 -> 0.95 at conc 4).
+        # 150 state slots keep agent sessions' prefixes cached.
         max-mamba-cache-size: 150
       env:
         SGLANG_AMD_MONO_K31_WIDE: '1'
