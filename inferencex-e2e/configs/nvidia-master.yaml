@@ -4992,7 +4992,7 @@ kimik3.1-fp4-gb200-dynamo-sglang-agentic-dflash-agg:
   runner: cluster:gb200-nv
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "1.6.0" }
+  router: { name: dynamo-router, version: "4b0850752a7370aa20706095558616488b5cef35" }
   multinode: true
   disagg: false
   srt-recipe-dir: kimik3.1/sglang/gb200-fp4/agentx
@@ -5099,7 +5099,7 @@ kimik3.1-fp4-gb200-dynamo-sglang-agentic-dflash-disagg:
   runner: cluster:gb200-nv
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "1.6.0" }
+  router: { name: dynamo-router, version: "4b0850752a7370aa20706095558616488b5cef35" }
   kv-p2p-transfer: mooncake
   multinode: true
   disagg: true

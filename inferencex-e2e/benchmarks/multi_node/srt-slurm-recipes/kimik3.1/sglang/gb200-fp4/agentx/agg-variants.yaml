@@ -10,7 +10,10 @@ base:
     gpus_per_node: 4
   # The K3.1 image ships its patched Dynamo 1.6.0 for dynamo.sglang.
   dynamo:
-    install: false
+    install: true
+    source:
+      # ai-dynamo/dynamo#18124: its frontend loads the kimi_k31 tokenizer and its SGLang args allow DSA DCP decode.
+      rev: "4b0850752a7370aa20706095558616488b5cef35"
   # Tachometer's per-node exporters slow decode steps and add host memory;
   # InferenceX does not read its output.
   observability:
