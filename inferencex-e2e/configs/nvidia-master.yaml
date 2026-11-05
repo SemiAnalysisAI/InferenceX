@@ -4826,6 +4826,151 @@ glm5.2-fp4-b200-dynamo-sglang-agentic-disagg:
           ep: 8
           dp-attn: true
 
+kimik3.1-fp4-b200-dynamo-sglang-agentic-dflash:
+  image: lmsysorg/sglang:dev-kimi-k31-pro@sha256:67fc77d1cbe67de27ca54d874c82757a4844743fea899ea7d0df547e30c2c391
+  model: moonshotai/Kimi-K3.1-Pro
+  model-prefix: kimik3.1
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: dynamo-sglang
+  multinode: true
+  disagg: false
+  srt-recipe-dir: kimik3.1/sglang/b200-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: draft_model
+        kv-offloading: none
+        conc-list: [1]
+        num-nodes: 2
+        srt-recipe: agg-variants.yaml:override_tp16_c1
+        power: true
+        worker:
+          num-worker: 1
+          tp: 16
+          dcp-size: 16
+          ep: 1
+          dp-attn: false
+      - spec-decoding: draft_model
+        kv-offloading: none
+        conc-list: [4]
+        num-nodes: 2
+        srt-recipe: agg-variants.yaml:override_tp16_c4
+        power: true
+        worker:
+          num-worker: 1
+          tp: 16
+          dcp-size: 16
+          ep: 1
+          dp-attn: false
+      - spec-decoding: draft_model
+        kv-offloading: none
+        conc-list: [8]
+        num-nodes: 2
+        srt-recipe: agg-variants.yaml:override_tp16_c8
+        power: true
+        worker:
+          num-worker: 1
+          tp: 16
+          dcp-size: 16
+          ep: 1
+          dp-attn: false
+      - spec-decoding: draft_model
+        kv-offloading: none
+        conc-list: [14]
+        num-nodes: 2
+        srt-recipe: agg-variants.yaml:override_tp16_c14
+        power: true
+        worker:
+          num-worker: 1
+          tp: 16
+          dcp-size: 16
+          ep: 1
+          dp-attn: false
+      - spec-decoding: draft_model
+        kv-offloading: none
+        conc-list: [24]
+        num-nodes: 2
+        srt-recipe: agg-variants.yaml:override_tp16_c24
+        power: true
+        worker:
+          num-worker: 1
+          tp: 16
+          dcp-size: 16
+          ep: 1
+          dp-attn: false
+      - spec-decoding: draft_model
+        kv-offloading: none
+        conc-list: [32]
+        num-nodes: 2
+        srt-recipe: agg-variants.yaml:override_tp16_c32
+        power: true
+        worker:
+          num-worker: 1
+          tp: 16
+          dcp-size: 16
+          ep: 1
+          dp-attn: false
+      - spec-decoding: draft_model
+        kv-offloading: none
+        conc-list: [48]
+        num-nodes: 2
+        srt-recipe: agg-variants.yaml:override_tp16_c48
+        power: true
+        worker:
+          num-worker: 1
+          tp: 16
+          dcp-size: 16
+          ep: 1
+          dp-attn: false
+      - spec-decoding: draft_model
+        kv-offloading: none
+        conc-list: [56]
+        num-nodes: 2
+        srt-recipe: agg-variants.yaml:override_tp16_c56
+        power: true
+        worker:
+          num-worker: 1
+          tp: 16
+          dcp-size: 16
+          ep: 1
+          dp-attn: false
+      - spec-decoding: draft_model
+        kv-offloading: none
+        conc-list: [72]
+        num-nodes: 2
+        srt-recipe: agg-variants.yaml:override_tp16_c72
+        power: true
+        worker:
+          num-worker: 1
+          tp: 16
+          dcp-size: 16
+          ep: 1
+          dp-attn: false
+      - spec-decoding: draft_model
+        kv-offloading: none
+        conc-list: [80]
+        num-nodes: 2
+        srt-recipe: agg-variants.yaml:override_tp16_c80
+        power: true
+        worker:
+          num-worker: 1
+          tp: 16
+          dcp-size: 16
+          ep: 1
+          dp-attn: false
+      - kv-offloading: none
+        conc-list: [96]
+        num-nodes: 2
+        srt-recipe: agg-variants.yaml:override_tp16_c96_nospec
+        power: true
+        worker:
+          num-worker: 1
+          tp: 16
+          dcp-size: 16
+          ep: 1
+          dp-attn: false
+
 glm5.2-fp4-gb200-dynamo-sglang-agentic-agg:
   image: lmsysorg/sglang:nightly-dev-20261020-ab580b2e@sha256:0af411bb320a95bb5e1c58b4c20c9852920a19aa9f12f148f69731b0dca3b576
   model: nvidia/GLM-5.2-NVFP4
