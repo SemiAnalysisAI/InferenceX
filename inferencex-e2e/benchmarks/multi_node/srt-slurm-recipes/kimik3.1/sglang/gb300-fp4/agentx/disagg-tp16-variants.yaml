@@ -7,7 +7,7 @@ base:
     container: {}
     frameworks:
       dynamo: "1.6.0"
-      sglang: "0.0.0.dev1+gafcd7d6b4.d20261104"
+      sglang: "0.0.0.dev1+ge79de62d2.d20261104"
   dynamo:
     install: false
     request_plane: tcp
@@ -110,6 +110,8 @@ base:
         speculative-draft-model-revision: d0d8bc2e3c6d0a195d2e00a49017e71ca8d881f1
         speculative-draft-attention-backend: cutedsl_mla
         speculative-draft-kv-cache-dtype: fp8_e4m3
+        # The golden AL curve was collected with block verification.
+        speculative-use-block-verification: true
         # DFlash2 verifies the current token plus 7 drafts.
         speculative-num-draft-tokens: 8
         dyn-reasoning-parser: kimi_k3
@@ -174,6 +176,7 @@ base:
         speculative-draft-model-revision: d0d8bc2e3c6d0a195d2e00a49017e71ca8d881f1
         speculative-draft-attention-backend: cutedsl_mla
         speculative-draft-kv-cache-dtype: fp8_e4m3
+        speculative-use-block-verification: true
         speculative-num-draft-tokens: 8
         dyn-reasoning-parser: kimi_k3
         dyn-tool-call-parser: kimi_k3

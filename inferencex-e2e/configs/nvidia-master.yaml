@@ -7087,7 +7087,7 @@ minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg:
         decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: true }
 
 kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-disagg:
-  image: lmsysorg/sglang:dev-kimi-k31-pro-cu134@sha256:a42079a8d1299b94824eab821de5f261c016797434cf69dc1fb3b15bdfddfc0e
+  image: lmsysorg/sglang:dev-kimi-k31-pro@sha256:67fc77d1cbe67de27ca54d874c82757a4844743fea899ea7d0df547e30c2c391
   model: moonshotai/Kimi-K3.1-Pro
   model-prefix: kimik3.1
   runner: cluster:gb300-nv
