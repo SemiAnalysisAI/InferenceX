@@ -59,7 +59,8 @@ base:
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '2249'
 
-# Admission is 2x CONC. The largest decode graph covers max-num-seqs x (1 + draft tokens),
+# Admission is 2x CONC. DSpark drafts match the SGLang recipe's DFLASH drafts: 7 through c8,
+# 6 at c16, 5 at c24-c40 and 4 from c48. The largest decode graph covers max-num-seqs x (1 + drafts),
 # rounded up to a default capture size; throughput runs replace block rejection with the
 # golden acceptance length. Plain TP8 at c1-c2, where the KV fits on GPU and DCP's decode
 # collectives cost most; DCP8 from c4 for ~7x the KV tokens.
@@ -69,7 +70,7 @@ override_tp8_c1:
       args:
         max-num-seqs: 2
         max-cudagraph-capture-size: 16
-        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:
       CONC: '1'
@@ -79,8 +80,8 @@ override_tp8_c2:
     agg:
       args:
         max-num-seqs: 4
-        max-cudagraph-capture-size: 24
-        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        max-cudagraph-capture-size: 32
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:
       CONC: '2'
@@ -91,8 +92,8 @@ override_dcp8_c4:
       args:
         decode-context-parallel-size: 8
         max-num-seqs: 8
-        max-cudagraph-capture-size: 48
-        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        max-cudagraph-capture-size: 64
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:
       CONC: '4'
@@ -103,8 +104,8 @@ override_dcp8_c8:
       args:
         decode-context-parallel-size: 8
         max-num-seqs: 16
-        max-cudagraph-capture-size: 96
-        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        max-cudagraph-capture-size: 128
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:
       CONC: '8'
@@ -115,8 +116,8 @@ override_dcp8_c16:
       args:
         decode-context-parallel-size: 8
         max-num-seqs: 32
-        max-cudagraph-capture-size: 160
-        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        max-cudagraph-capture-size: 224
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":6,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:
       CONC: '16'
@@ -127,8 +128,8 @@ override_dcp8_c24:
       args:
         decode-context-parallel-size: 8
         max-num-seqs: 48
-        max-cudagraph-capture-size: 240
-        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        max-cudagraph-capture-size: 288
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:
       CONC: '24'
@@ -139,8 +140,8 @@ override_dcp8_c32:
       args:
         decode-context-parallel-size: 8
         max-num-seqs: 64
-        max-cudagraph-capture-size: 256
-        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":3,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        max-cudagraph-capture-size: 384
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:
       CONC: '32'
@@ -151,8 +152,8 @@ override_dcp8_c40:
       args:
         decode-context-parallel-size: 8
         max-num-seqs: 80
-        max-cudagraph-capture-size: 320
-        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":3,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        max-cudagraph-capture-size: 480
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:
       CONC: '40'
@@ -163,8 +164,8 @@ override_dcp8_c48:
       args:
         decode-context-parallel-size: 8
         max-num-seqs: 96
-        max-cudagraph-capture-size: 384
-        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":3,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        max-cudagraph-capture-size: 480
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:
       CONC: '48'
@@ -175,8 +176,8 @@ override_dcp8_c56:
       args:
         decode-context-parallel-size: 8
         max-num-seqs: 112
-        max-cudagraph-capture-size: 336
-        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":2,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        max-cudagraph-capture-size: 560
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:
       CONC: '56'
@@ -187,8 +188,8 @@ override_dcp8_c70:
       args:
         decode-context-parallel-size: 8
         max-num-seqs: 140
-        max-cudagraph-capture-size: 432
-        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":2,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        max-cudagraph-capture-size: 704
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:
       CONC: '70'

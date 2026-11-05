@@ -5446,7 +5446,7 @@ kimik3.1-fp4-b300-vllm-agentic-dspark:
     # 0.75 resolves to 2249 GB of host DRAM, which the recipe's Simple CPU offload splits across the 8 TP ranks.
     - dram-utilization: 0.75
       search-space:
-      # The ~1.56 TB MXFP4 checkpoint needs all 8 GPUs. DSpark drafts 5 tokens up to conc 8, then 4, 3 and 2.
+      # The ~1.56 TB MXFP4 checkpoint needs all 8 GPUs. DSpark drafts 7 tokens up to conc 8, then 6, 5 and 4.
       - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 2], srt-recipe: agentic.yaml }
       - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [4, 8, 16, 24, 32, 40, 48, 56, 70], srt-recipe: agentic.yaml }
 
