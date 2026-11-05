@@ -138,6 +138,7 @@ class SrtRequest(LaunchRequest):
     eval_only: TrueFlag = Field(alias="EVAL_ONLY")
     thinking_mode: str | None = Field(None, alias="THINKING_MODE")
     require_power: PowerFlag = Field(False, alias="REQUIRE_POWER")
+    cpu_power: OneFlag = Field(False, alias="CPU_POWER")
     inferencex_results_python: str | None = Field(None, alias="INFERENCEX_RESULTS_PYTHON")
 
     @model_validator(mode="after")
@@ -155,7 +156,6 @@ class MultiNodeRequest(SrtRequest):
     srt_recipe: str = Field(alias="SRT_RECIPE")
     eval_srt_recipe: str | None = Field(None, alias="EVAL_SRT_RECIPE")
     power: OneFlag = Field(False, alias="POWER")
-    cpu_power: OneFlag = Field(False, alias="CPU_POWER")
 
 
 class SingleNodeRequest(SrtRequest):
