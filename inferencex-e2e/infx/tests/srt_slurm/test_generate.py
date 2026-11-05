@@ -7,8 +7,8 @@ import pytest
 import yaml
 
 from infx.cli import main
-from infx.launch.drivers.srt import lanes, power
-from infx.launch.policy import LaunchPath, Match
+from infx.launch.drivers.srt import lanes
+from infx.launch.policy import LaunchPath
 
 ROOT = Path(__file__).resolve().parents[3]
 FRAGMENT = {
@@ -105,13 +105,9 @@ def project(tmp_path):
 
 @pytest.fixture
 def power_lane(monkeypatch):
-    """The fixture cluster's multi-node lane, measuring AgentX power."""
+    """The fixture cluster's multi-node lane."""
     monkeypatch.setitem(
         lanes.SRT_LANES, ("fixture", LaunchPath.SRT_MULTI), lanes.SrtLane(agentic_result_dir="/results")
-    )
-    rules = (power.PowerRule(Match(agentic=True), agentx=True),)
-    monkeypatch.setitem(
-        power.POWER_LANES, ("fixture", LaunchPath.SRT_MULTI), power.PowerLane(rules, error="no power")
     )
 
 
@@ -189,7 +185,7 @@ def test_a_multinode_agentx_power_point_gets_its_clusters_exporter_port_and_clie
 
     [(record, recipe)] = written(output)
     assert record["cluster"] == "fixture"
-    assert recipe["telemetry"] == {"enabled": True, "dcgm_exporter": {
+    assert recipe["telemetry"] == {"enabled": True, "required": True, "dcgm_exporter": {
         "container_image": "dcgm-exporter", "command": "dcgm-exporter --address :{port}", "port": 9555,
     }}  # fmt: skip
     assert recipe["benchmark"]["env"] == {
@@ -270,29 +266,41 @@ def test_a_single_node_point_measures_cpu_power_by_default_where_its_cluster_dec
     assert exporters == [{"source": "rapl"} if declared else None] * 2
 
 
-def test_a_multinode_agentx_point_without_power_turns_its_clients_power_off(
-    project, power_lane, tmp_path
+def _drop_srt_slurm(project: Path, key: str) -> None:
+    runners = project / "configs/runners.yaml"
+    inventory = yaml.safe_load(runners.read_text())
+    del inventory["clusters"]["fixture"]["slurm"]["srt-slurm"][key]
+    runners.write_text(yaml.safe_dump(inventory))
+
+
+@pytest.mark.parametrize("port", [True, False])
+def test_a_multinode_agentx_point_without_power_measures_it_with_its_clusters_exporter(
+    project, power_lane, tmp_path, port
 ):
     master = project / "configs/master.yaml"
     config = yaml.safe_load(master.read_text())
     del config["agentx-multi"]["scenarios"]["agentic-coding"][0]["search-space"][0]["power"]
     master.write_text(yaml.safe_dump(config))
+    if not port:
+        _drop_srt_slurm(project, "power-exporter-port")
     output = tmp_path / "out"
     assert generate(project, output, "agentx-multi") == 0
 
     [(_, recipe)] = written(output)
-    assert recipe["benchmark"]["env"]["ENABLE_AGENTX_POWER"] == "0"
+    env = recipe["benchmark"]["env"]
+    assert (env["ENABLE_AGENTX_POWER"], env["REQUIRE_POWER"]) == ("1", "0")
+    assert (recipe["telemetry"]["enabled"], recipe["telemetry"]["required"]) == (True, False)
+    assert recipe["telemetry"].get("dcgm_exporter", {}).get("port") == (9555 if port else None)
 
 
-def test_a_power_point_its_lane_refuses_fails_without_writing(
-    project, power_lane, monkeypatch, tmp_path, capsys
+def test_a_power_point_its_cluster_cannot_measure_fails_without_writing(
+    project, power_lane, tmp_path, capsys
 ):
-    refusing = power.PowerLane(rules=(), error="this lane measures no AgentX power")
-    monkeypatch.setitem(power.POWER_LANES, ("fixture", LaunchPath.SRT_MULTI), refusing)
+    _drop_srt_slurm(project, "extra")
     output = tmp_path / "out"
     with pytest.raises(SystemExit):
         generate(project, output, "agentx-multi")
-    assert "this lane measures no AgentX power" in capsys.readouterr().err
+    assert "measures no GPU power" in capsys.readouterr().err
     assert not output.exists()
 
 

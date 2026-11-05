@@ -17,7 +17,7 @@ import yaml
 
 from infx import yamlio
 from infx.bench.proc import status
-from infx.golden_al_distribution import GOLDEN_DIR, curve_name, golden_length
+from infx.golden_al_distribution import GOLDEN_DIR, golden_length
 from infx.golden_al_distribution.identity import Fact
 from infx.srt_slurm.variants import ZIP_VARIANT, without_nulls
 
@@ -34,6 +34,7 @@ ENGINES = {
     "atom": "atom",
     "atom-disagg": "atom",
     "tilert": "tilert",
+    "tokenspeed": "tokenspeed",
 }
 SGLANG_VARIABLES = (
     "SGLANG_SIMULATE_ACC_LEN",
@@ -42,6 +43,8 @@ SGLANG_VARIABLES = (
 )
 TRT_VARIABLE = "TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS"
 TILERT_VARIABLES = ("TILERT_SIMULATE_ACC_LEN", "TILERT_SIMULATE_ACC_METHOD")
+# Synthetic acceptance streams unverified draft tokens. Kimi's parsers stop streaming on them.
+KIMI_VLLM_PARSER_ARGS = ("enable-auto-tool-choice", "tool-call-parser", "reasoning-parser")
 
 
 def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
@@ -51,6 +54,20 @@ def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
     current token. Raises ValueError on a malformed or conflicting config.
     """
     args = role.get("args", {})
+    if engine == "tokenspeed":
+        if "speculative-config" in args:
+            raise ValueError(
+                "TokenSpeed AgentX requires explicit MTP flags, not speculative-config"
+            )
+        algorithm = str(args.get("speculative-algorithm", "")).lower()
+        if not algorithm:
+            return {}
+        if algorithm != "mtp":
+            raise ValueError("TokenSpeed AgentX currently supports only MTP speculation")
+        return {
+            "method": "mtp",
+            "num_speculative_tokens": args.get("speculative-num-steps"),
+        }
     if engine == "tilert":
         if args.get("with-mtp") is not True:
             return {}
@@ -187,6 +204,19 @@ def _simulated_length(
         golden_dir,
         verifier(generation, engine).value,
     )
+    if engine == "tokenspeed":
+        args = generation.get("args", {})
+        drafts = args.get("speculative-num-draft-tokens")
+        if (
+            not isinstance(drafts, int)
+            or isinstance(drafts, bool)
+            or drafts != spec["num_speculative_tokens"] + 1
+        ):
+            raise ValueError(
+                "TokenSpeed speculative-num-draft-tokens must equal speculative-num-steps + 1"
+            )
+        if args.get("speculative-eagle-topk") != 1:
+            raise ValueError("TokenSpeed synthetic acceptance requires speculative-eagle-topk 1")
     if (
         engine == "sglang"
         and environment["MODEL_PREFIX"] == "qwen3.5"
@@ -202,32 +232,13 @@ def _simulated_length(
     return al
 
 
-def is_gate(environment: Mapping[str, str]) -> bool:
-    """Whether the run is the acceptance gate, which measures real AgentX acceptance."""
-    return environment.get("AL_GATE") == "true"
-
-
 def is_synthetic(environment: Mapping[str, str]) -> bool:
-    """AgentX speculative throughput forces golden acceptance; evals and the gate verify."""
+    """AgentX speculative throughput forces golden acceptance; evals verify for real."""
     return (
-        not is_gate(environment)
-        and environment["EVAL_ONLY"].lower() != "true"
+        environment["EVAL_ONLY"].lower() != "true"
         and environment["IS_AGENTIC"].lower() in ("1", "true")
         and environment["SPEC_DECODING"] != "none"
     )
-
-
-def check_gate(
-    spec: Mapping[str, Any], environment: Mapping[str, str], verify: str | None = None
-) -> None:
-    """Fail unless the generation worker drafts the golden curve and length the gate uses."""
-    tokens = spec.get("num_speculative_tokens")
-    drafted = (
-        (curve_name(environment["MODEL_PREFIX"], spec, verify=verify), tokens) if spec else None
-    )
-    gate = (environment["AL_GATE_CURVE"], int(environment["AL_GATE_DRAFT_TOKENS"]))
-    if drafted != gate:
-        raise ValueError(f"the recipe drafts {drafted}, but the acceptance gate measures {gate}")
 
 
 def generation_role(recipe: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -248,11 +259,6 @@ def build_overrides(
     if engine is None:
         return []
     roles = recipe.get("roles", {})
-    if is_gate(environment):
-        generation = generation_role(recipe)
-        check_gate(
-            spec_parameters(generation, engine), environment, verifier(generation, engine).value
-        )
     al = _simulated_length(recipe, framework, environment, golden_dir=golden_dir)
     overrides = []
     variables = {
@@ -295,6 +301,10 @@ def build_overrides(
                 worker_spec.update(
                     rejection_sample_method="synthetic", synthetic_acceptance_length=worker_al
                 )
+                if environment["MODEL_PREFIX"].startswith("kimi"):
+                    for key in KIMI_VLLM_PARSER_ARGS:
+                        if key in (role.get("args") or {}):
+                            overrides += ["--unset", f"{prefix}.args.{key}"]
             elif (
                 worker_spec.get("rejection_sample_method") == "synthetic"
                 or "synthetic_acceptance_length" in worker_spec
@@ -307,6 +317,16 @@ def build_overrides(
                 "--set",
                 f"{prefix}.args.speculative-config={json.dumps(worker_spec)}",
             ]
+        elif worker_engine == "tokenspeed":
+            key = "synthetic-acceptance-length"
+            if worker_al is not None and worker_spec:
+                overrides += ["--set", f"{prefix}.args.{key}={worker_al:g}"]
+                overrides += ["--set", f'{prefix}.args.sampling-backend="greedy"']
+            else:
+                if key in (role.get("args") or {}):
+                    overrides += ["--unset", f"{prefix}.args.{key}"]
+                if worker_spec:
+                    overrides += ["--set", f'{prefix}.args.sampling-backend="flashinfer"']
         elif worker_engine == "atom":
             key = "spec-decode-acceptance-length"
             if worker_al is not None and worker_spec:
@@ -369,10 +389,16 @@ def selected_recipes(
 
 
 class Planned(NamedTuple):
-    """One ``srtctl apply`` command and the golden AL it simulates (None: real acceptance)."""
+    """One ``srtctl apply`` command and the golden AL it simulates (None: real acceptance).
+
+    ``al_gate`` is an agentic eval's acceptance gate (``al_gate.plan``), which ``environment``
+    adds to the submission's environment to run; None without one.
+    """
 
     command: list[str]
     acceptance_length: float | None
+    al_gate: dict[str, Any] | None = None
+    environment: tuple[tuple[str, str], ...] = ()
 
 
 def plan_commands(
@@ -384,9 +410,12 @@ def plan_commands(
     golden_dir: Path = GOLDEN_DIR,
 ) -> list[Planned]:
     """Build native arguments for every selected variant before submitting jobs."""
+    from infx.srt_slurm import al_gate
+
     command = ["srtctl", "apply", *arguments]
     if framework not in ENGINES:
-        return [Planned([*command, "--file", config], None)]
+        gate = al_gate.plan({}, framework, environment) if al_gate.requested(environment) else None
+        return [Planned([*command, "--file", config], None, gate)]
     from srtctl.core.overrides import apply_overrides_to_recipe, parse_overrides
 
     path, _, selector = config.partition(":")
@@ -415,7 +444,14 @@ def plan_commands(
         selected_recipes(materialized, variant)
         selected_file = f"{path}:{variant}" if variant is not None else path
         length = acceptance_length(recipe, framework, environment, golden_dir=golden_dir)
-        plans.append(Planned([*command, "--file", selected_file, *arguments_to_add], length))
+        gate, srt_environment = None, {}
+        if al_gate.requested(environment):
+            gate = al_gate.plan(recipe, framework, environment, golden_dir=golden_dir)
+            if gate is not None and gate.get("status") != "skipped":
+                arguments_to_add = [*arguments_to_add, *al_gate.overrides(gate, environment)]
+                srt_environment = al_gate.SRT_ENVIRONMENT
+        argv = [*command, "--file", selected_file, *arguments_to_add]
+        plans.append(Planned(argv, length, gate, tuple(srt_environment.items())))
     return plans
 
 
@@ -423,7 +459,9 @@ def main(argv: list[str] | None = None) -> int:
     """Plan srtctl commands with golden acceptance from ``argv``, run them and return the rc."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--record", type=Path, help="write the plan's golden acceptance length here as JSON"
+        "--record",
+        type=Path,
+        help="write the plan's golden acceptance length and acceptance gate here as JSON",
     )
     parser.add_argument("config")
     parser.add_argument("framework")
@@ -438,9 +476,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.record is not None:
         lengths = {plan.acceptance_length for plan in plans}
         length = lengths.pop() if len(lengths) == 1 else None
-        args.record.write_text(json.dumps({"golden_acceptance_length": length}) + "\n")
+        gate = next((plan.al_gate for plan in plans if plan.al_gate is not None), None)
+        record = {"golden_acceptance_length": length, "al_gate": gate}
+        args.record.write_text(json.dumps(record) + "\n")
     for plan in plans:
-        result = subprocess.run(plan.command, check=False)
+        result = subprocess.run(
+            plan.command, env={**os.environ, **dict(plan.environment)}, check=False
+        )
         if result.returncode:
             return status(result.returncode)
     return 0
