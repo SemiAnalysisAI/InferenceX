@@ -11774,6 +11774,6 @@
     - glm5.3flash-fp8-mi325x-sglang-agentic-mtp
   scenario-type: [agentic-coding]
   description:
-    - "Add native GLM-5.3-Flash FP8 AgentX on MI325X with immutable official SGLang v0.5.21 ROCm10 gfx942, TP4/EP4, native MTP5, full 1M context, and concurrency 1, 2, 4, 8, 12, and 16."
+    - "Add native GLM-5.3-Flash FP8 AgentX on MI325X with immutable official SGLang v0.5.22 ROCm10 gfx942 (the image of the MI325X HiCache comparison), TP4/EP4, native MTP5, full 1M context, and concurrency 1, 2, 4, 8, 12, and 16."
     - "Stage checkpoint revision 46a050bec13002ad29ee795c16e61cf4fa3c4a9c in the canonical shared Hugging Face cache with locking and a 400 GB disk budget; use shared golden acceptance for throughput and canonical real-verification accuracy evaluation."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4722
