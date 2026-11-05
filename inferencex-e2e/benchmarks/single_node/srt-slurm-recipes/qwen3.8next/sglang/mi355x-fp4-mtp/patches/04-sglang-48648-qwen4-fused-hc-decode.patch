@@ -1,26 +1,6 @@
-From d8e8d2a57db745f141c2df0de44c56822fde76a7 Mon Sep 17 00:00:00 2001
-From: Christian Gilli <272772515+amd-cgilli@users.noreply.github.com>
-Date: Tue, 3 Nov 2026 16:54:57 +0000
-Subject: [PATCH] [Perf] [AMD] Qwen4-Exp HC: fuse decode-sized hyper-connection
- norm and inject into FlyDSL mix
-
-On gfx950, behind SGLANG_OPT_QWEN4_FUSED_HC, HC sites with <= 128 rows fold
-the per-branch Gemma RMSNorm and the combine's inject GEMV into a FlyDSL HC
-mix (down split-K -> reduce + SiLU -> up + gate). The mix hands its combine
-the inject logits as gate partials, so the combine is one elementwise kernel
-that also returns the sums of squares the next mix needs.
-
-Qwen K=10240, R=320, mix + combine per site: 33 -> 11 us at M=1,
-34 -> 15 us at M=24, 45 -> 25 us at M=96. Not bit-exact (BF16 rounding
-points of the normed input and (1 + w) move).
----
- .../kernels/ops/gemm/hc_fused_flydsl.py       | 549 ++++++++++++++++++
- python/sglang/srt/environ.py                  |   3 +
- python/sglang/srt/layers/hyperconnection.py   |  69 +++
- .../kernels/ops/gemm/test_hc_fused_flydsl.py  |  72 +++
- 4 files changed, 693 insertions(+)
- create mode 100644 python/sglang/kernels/ops/gemm/hc_fused_flydsl.py
- create mode 100644 test/registered/kernels/ops/gemm/test_hc_fused_flydsl.py
+# [Perf] [AMD] Qwen4-Exp HC: fuse decode-sized hyper-connection norm and inject into FlyDSL mix
+# https://github.com/sgl-project/sglang/pull/48648  (PR head f6f9c1c41678ec6087a58cf51145b8041460364b)
+# Generated against the SGLang checkout of the image (1ced9a9eb0); source files only (tests, benchmarks, AOT registry and docs dropped).
 
 diff --git a/python/sglang/kernels/ops/gemm/hc_fused_flydsl.py b/python/sglang/kernels/ops/gemm/hc_fused_flydsl.py
 new file mode 100644
@@ -578,10 +558,10 @@ index 0000000000..0d47a1d2b8
 +    )
 +    return out, ss
 diff --git a/python/sglang/srt/environ.py b/python/sglang/srt/environ.py
-index f4f273a60a..e9e32e7311 100644
+index 24eb383d96..f09344c04a 100644
 --- a/python/sglang/srt/environ.py
 +++ b/python/sglang/srt/environ.py
-@@ -1027,6 +1027,9 @@ class Envs:
+@@ -1018,6 +1018,9 @@ class Envs:
      SGLANG_AITER_INTREE_GEMM_TUNE = EnvBool(True)
      # TODO(aiter#6030): remove once ROCm/aiter#6030 is in the aiter pin
      SGLANG_AITER_INTREE_MHC_TILE_M16 = EnvBool(True)
@@ -711,84 +691,3 @@ index 13100b34e9..c0448ccac9 100644
          if partials is not None:
              from sglang.kernels.ops.elementwise.hc_combine_decode import (
                  hc_combine_apply,
-diff --git a/test/registered/kernels/ops/gemm/test_hc_fused_flydsl.py b/test/registered/kernels/ops/gemm/test_hc_fused_flydsl.py
-new file mode 100644
-index 0000000000..99e5a4e30d
---- /dev/null
-+++ b/test/registered/kernels/ops/gemm/test_hc_fused_flydsl.py
-@@ -0,0 +1,72 @@
-+import sys
-+
-+import pytest
-+import torch
-+
-+from sglang.srt.environ import envs
-+from sglang.test.ci.ci_register import register_amd_ci
-+
-+register_amd_ci(est_time=60, suite="stage-b-test-1-gpu-small-amd")
-+
-+pytestmark = pytest.mark.skipif(
-+    not torch.cuda.is_available() or torch.version.hip is None,
-+    reason="Requires ROCm gfx950",
-+)
-+
-+
-+def _layers():
-+    if torch.cuda.get_device_properties().gcnArchName.split(":")[0] != "gfx950":
-+        pytest.skip("Requires gfx950")
-+    from sglang.srt.layers.hyperconnection import GatedResidual, HyperConnectionConfig
-+
-+    # Qwen4-Exp shapes: HS=2560, HC=4, R=320.
-+    cfg = HyperConnectionConfig(
-+        hidden_size=2560, hc_lowrank=320, hc_per_branch_norm=True
-+    )
-+    torch.manual_seed(0)
-+    ref = GatedResidual(cfg).cuda().bfloat16()
-+    with torch.no_grad():
-+        for p in ref.parameters():
-+            p.copy_(torch.randn_like(p) * 0.02)
-+    with envs.SGLANG_OPT_QWEN4_FUSED_HC.override(True):
-+        fused = GatedResidual(cfg).cuda().bfloat16()
-+    fused.load_state_dict(ref.state_dict())
-+    assert fused._fused_hc_ok and not ref._fused_hc_ok
-+    return ref, fused
-+
-+
-+@pytest.mark.parametrize("rows", [1, 24, 96, 128])
-+def test_fused_hc_matches_unfused(rows):
-+    ref, fused = _layers()
-+    h = torch.randn(rows, 10240, device="cuda", dtype=torch.bfloat16)
-+    y = torch.randn(rows, 2560, device="cuda", dtype=torch.bfloat16)
-+    with torch.no_grad():
-+        m_ref, res_ref = ref.mix(h)
-+        out_ref = ref.combine_and_normalize(y, res_ref, ref.hc_norm)[0]
-+        m, res = fused.mix(h)
-+        assert res[2] is not None
-+        out = fused.combine_and_normalize(y, res, fused.hc_norm)[0]
-+        # Mix again on the combined residual: reuses the combine's sums of squares.
-+        m2_ref, _ = ref.mix(out_ref)
-+        m2, _ = fused.mix(out)
-+    # Only the rounding points differ (normed input and (1 + w) are not rounded to
-+    # BF16 separately), so allow a few BF16 ulps.
-+    for a, b in ((m, m_ref), (out, out_ref), (m2, m2_ref)):
-+        torch.testing.assert_close(a, b, atol=0.02, rtol=0.02)
-+
-+
-+def test_fused_hc_falls_back_past_max_rows():
-+    ref, fused = _layers()
-+    h = torch.randn(129, 10240, device="cuda", dtype=torch.bfloat16)
-+    y = torch.randn(129, 2560, device="cuda", dtype=torch.bfloat16)
-+    with torch.no_grad():
-+        m, res = fused.mix(h)
-+        assert res[2] is None
-+        out = fused.combine_and_normalize(y, res, fused.hc_norm)[0]
-+        m_ref, res_ref = ref.mix(h)
-+        out_ref = ref.combine(y, res_ref)
-+    assert torch.equal(m, m_ref) and torch.equal(out, out_ref)
-+
-+
-+if __name__ == "__main__":
-+    sys.exit(pytest.main([__file__, "-v"]))
--- 
-2.43.0
-

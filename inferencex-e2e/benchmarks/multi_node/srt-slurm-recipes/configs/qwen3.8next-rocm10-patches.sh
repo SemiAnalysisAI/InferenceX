@@ -1,25 +1,26 @@
 #!/usr/bin/env bash
 # Qwen3.8-Flash-Next kernels on lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261102,
-# applied to its editable AITER (285579b6) and SGLang (1ced9a9eb0) checkouts. The
-# patch set is the "v2" stack (2026-11-04, amd-cgilli/sglang qwen38-submission-v2),
-# 2 AITER and 5 SGLang patches that apply cleanly on these two checkouts:
+# applied to its editable AITER (285579b6) and SGLang (1ced9a9eb0) checkouts. Each
+# patch is the source-only diff of an open upstream PR (tests, benchmarks and AITER's
+# AOT registry dropped; the header of each file names the PR and its head commit).
 #   AITER
-#   - 03 FlyDSL varlen causal conv1d prefill kernel
-#   - 04 FlyDSL single-kernel GDN fused chunked prefill (ROCm/aiter#6496)
+#   - 01 ROCm/aiter#5992  FlyDSL causal conv1d prefill, GDN decode/verify kernels
+#   - 02 ROCm/aiter#6670  FlyDSL fused QSA sparse decode (needed by sglang#45196)
+#   - 03 ROCm/aiter#6496  FlyDSL single-kernel GDN fused chunked prefill
 #   SGLang
-#   - 05 fused FlyDSL QSA sparse decode on gfx950 (sgl-project/sglang#45196),
-#     SGLANG_ENABLE_QSA_FLYDSL_DECODE, default on
-#   - 07 GDN prefill on the AITER conv (03) and fused chunked delta rule (04)
-#     (sgl-project/sglang#44103, #41879): SGLANG_AITER_GDN_CONV, SGLANG_AITER_GDN_PREFILL
-#   - 08 fused decode-sized hyper-connection norm + inject into the FlyDSL mix,
-#     opt-in with SGLANG_OPT_QWEN4_FUSED_HC
-#   - 11 pad the decode index Q to the ROCm MFMA width
-#   - 13 zero-copy GDN prefill projection views on HIP (sgl-project/sglang#47128, #41683)
-# 07 needs AITER 03 and 04, so the AITER patches go first. The image already has the
-# monokernel (--enable-amd-monokernel), the AITER topk_gating router (sglang#40708),
-# ratio-3 GDN packing (sglang#44302), the 128-row hc_mix (sglang#41880) and
-# ROCm/aiter#6225, #5804, #6050, #6165, #6467, so none of them is patched.
-# All Python. A patch that no longer applies fails the worker.
+#   - 04 sglang#48648  fused decode-sized hyper-connection norm + inject, SGLANG_OPT_QWEN4_FUSED_HC
+#   - 05 sglang#45196  QSA sparse decode on the AITER FlyDSL kernel (on with SGLANG_USE_AITER)
+#   - 06 sglang#48649  faster QSA decode MQA logits (padded Q, group-strided launch)
+#   - 07 sglang#45529  fused QK norm + RoPE + gate for Qwen3.5 self-attention on gfx950
+#   - 08 sglang#41683  strided GDN prefill projection views on HIP
+#   - 09 sglang#41879  GDN prefill conv on AITER FlyDSL, SGLANG_AITER_GDN_CONV
+#   - 10 sglang#44103  GDN chunked prefill on AITER, SGLANG_AITER_GDN_PREFILL[_H]
+# AITER 01 is needed by 09, 02 by 05 and 03 by 10 with SGLANG_AITER_GDN_PREFILL_H=fused,
+# so the AITER patches go first. The image already has the monokernel
+# (--enable-amd-monokernel), the AITER topk_gating router (sglang#40708), ratio-3 GDN
+# packing (sglang#44302), the 128-row hc_mix (sglang#41880) and ROCm/aiter#6225, #5804,
+# #6050, #6165, #6467, so none of them is patched. All Python. A patch that no longer
+# applies fails the worker.
 set -euo pipefail
 # srtctl only looks up setup_script here; the patches live with the single-node
 # recipe and are read through the workspace mount.
@@ -43,12 +44,15 @@ apply() {
     echo "qwen3.8next patch applied: $2"
 }
 
-apply /sgl-workspace/aiter 03-aiter-causal-conv1d-prefill.patch
-apply /sgl-workspace/aiter 04-aiter-gdn-fused-prefill.patch
-apply /sgl-workspace/sglang 05-qsa-flydsl-decode.patch
-apply /sgl-workspace/sglang 07-gdn-aiter-prefill.patch
-apply /sgl-workspace/sglang 08-fused-hc-decode.patch
-apply /sgl-workspace/sglang 11-qsa-indexer-q-pad.patch
-apply /sgl-workspace/sglang 13-gdn-prefill-views.patch
+apply /sgl-workspace/aiter 01-aiter-5992-flydsl-causal-conv1d-prefill.patch
+apply /sgl-workspace/aiter 02-aiter-6670-flydsl-qsa-sparse-decode.patch
+apply /sgl-workspace/aiter 03-aiter-6496-flydsl-gdn-fused-prefill.patch
+apply /sgl-workspace/sglang 04-sglang-48648-qwen4-fused-hc-decode.patch
+apply /sgl-workspace/sglang 05-sglang-45196-qsa-flydsl-sparse-decode.patch
+apply /sgl-workspace/sglang 06-sglang-48649-qsa-decode-mqa-launch.patch
+apply /sgl-workspace/sglang 07-sglang-45529-qwen35-fuse-selfattn-prepare.patch
+apply /sgl-workspace/sglang 08-sglang-41683-gdn-prefill-strided-views.patch
+apply /sgl-workspace/sglang 09-sglang-41879-aiter-gdn-conv-prefill.patch
+apply /sgl-workspace/sglang 10-sglang-44103-aiter-gdn-chunked-prefill.patch
 
 echo "$digest" > "$marker"
