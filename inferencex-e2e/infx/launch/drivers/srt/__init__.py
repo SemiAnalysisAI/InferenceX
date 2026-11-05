@@ -107,7 +107,16 @@ def run_single_node(launch: Launch) -> int:
     run.life.callback(collect.finish_single_node, run, submitted, fetched)
     submit.request_al_gate(run)
     eval_args = submit.eval_args(run.env, submit.SINGLE_NODE_EVAL_COMMAND)
-    arguments = ["--json", "--yes", "--output", str(root / "outputs"), *runtime_args, *eval_args]
+    arguments = [
+        "--json",
+        "--yes",
+        "--output",
+        str(root / "outputs"),
+        "--set",
+        "benchmark.stream_output=true",
+        *runtime_args,
+        *eval_args,
+    ]
     applied = submit.apply(run, checkout, bound, arguments, stdout=submitted.manifest)
     if applied.returncode:
         sys.stderr.write(applied.stdout)
