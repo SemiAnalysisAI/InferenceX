@@ -44,6 +44,8 @@ base:
       env: &kimi_env
         VLLM_ENGINE_READY_TIMEOUT_S: "3600"
         VLLM_RPC_TIMEOUT: "600000"
+        # Outlast the router's pooled-connection idle gaps (disable-retries makes a reset fatal).
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "600"
         # NIXL moves the KDA short-conv state in three reads, which needs the DS layout.
         VLLM_SSM_CONV_STATE_LAYOUT: "DS"
         NCCL_CUMEM_ENABLE: "1"
