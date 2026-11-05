@@ -44,7 +44,8 @@ class JobStatus:
     ``exit_code`` is the shell-style status (128 + N after signal N) when the scheduler
     reports one. Only ``state`` decides success: Slurm reports a cancelled job as ``0:0``.
     ``nodes`` names the hosts the job ran on, in the scheduler's notation, and the ``*_at``
-    times are when it was submitted, started and ended, when the scheduler says.
+    times are when it was submitted, started and ended, when the scheduler says. ``alloc_tres``
+    preserves Slurm's raw allocation when accounting or the controller reports it.
     """
 
     state: JobState
@@ -54,6 +55,7 @@ class JobStatus:
     submitted_at: datetime | None = None
     started_at: datetime | None = None
     ended_at: datetime | None = None
+    alloc_tres: str | None = None
 
     @property
     def succeeded(self) -> bool:

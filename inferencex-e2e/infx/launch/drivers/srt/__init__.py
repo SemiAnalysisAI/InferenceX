@@ -11,19 +11,20 @@ import os
 import shlex
 import sys
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import asdict
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from infx.clusters.slurm import SlurmSettings
 from infx.config import repository_root
 from infx.launch import policy
-from infx.launch.backends.base import BackendError
+from infx.launch.backends.base import BackendError, JobStatus
 from infx.launch.backends.slurm import srtctl_job_name
 from infx.launch.context import Launch, LaunchError
 from infx.launch.drivers.srt import collect, config, lanes, models, power, submit
 from infx.launch.drivers.srt.checkout import (
+    Checkout,
     checkout_dir,
     compute_workspace,
     install_srtctl,
@@ -42,7 +43,9 @@ from infx.launch.request import (
     MultiNodeRequest,
     RequestError,
     SingleNodeRequest,
+    VideoRequest,
 )
+from infx.srt_slurm.video import PACKAGE_MOUNT, video_package
 from infx.srt_slurm.workload import BOUND_RECIPE, selects_dedicated_discovery
 
 if TYPE_CHECKING:
@@ -63,13 +66,7 @@ def run_single_node(launch: Launch) -> int:
         hf_cache = models.single_node_hf_cache(run.cluster, request)
         time_limit = lanes.srt_time_limit(run.cluster.id, request, None, run.srt)
         root = Path(tempfile.mkdtemp(prefix="srt-single.", dir=run.workspace))
-        checkout = prepare_checkout(run, root / "checkout", power=not request.eval_only)
-        install_srtctl(run, checkout)
-        step_mib = job_mib = config.gpu_share_mib(run.cluster, request.gpu_count)
-        if run.srt.single_node_exclusive and job_mib is not None:
-            step_mib, job_mib = None, 0
-        if (options := config.srun_options(run.backend.settings, step_mib)) is not None:
-            run.env["SRT_SRUN_OPTIONS"] = options
+        checkout, job_mib = prepare_single_node(run, request, root, power=not request.eval_only)
         native_power = not request.eval_only
         cpu_source = config.cpu_power_source(
             run.cluster, run.srt, native_power and request.cpu_power, default=native_power
@@ -82,23 +79,18 @@ def run_single_node(launch: Launch) -> int:
         if native_power:
             image, reference = config.stage_gpu_exporter(run, single_node=True)
             containers[image] = reference
-        job_config = config.SrtJob(
-            srtctl_root=checkout.root,
-            workspace=run.workspace,
-            time_limit=time_limit,
-            image=request.image,
-            container=run.backend.stage_image(request.image, single_node=True).reference,
+        write_single_node_job(
+            run,
+            request,
+            checkout,
+            time_limit,
+            job_mib,
             nginx=config.NGINX_IMAGE if run.srt.nginx_aliases else None,
             containers=containers,
             model_paths={f"hf:{request.model}": model_path},
             mounts=[(str(hf_cache), request.hf_hub_cache)],
-            single_node=True,
-            account=run.account,
-            mem_mib=job_mib,
             cpu_power_source=cpu_source,
         )
-        config.create_volume_mounts(run)
-        config.write(checkout.root / "srtslurm.yaml", config.render(run.cluster, job_config))
         if rc := run_setup(run, checkout, cpu_power_exporter=cpu_source is not None):
             return rc
 
@@ -107,16 +99,116 @@ def run_single_node(launch: Launch) -> int:
     run.life.callback(collect.finish_single_node, run, submitted, fetched)
     submit.request_al_gate(run)
     eval_args = submit.eval_args(run.env, submit.SINGLE_NODE_EVAL_COMMAND)
-    arguments = [
-        "--json",
-        "--yes",
-        "--output",
-        str(root / "outputs"),
-        "--set",
-        "benchmark.stream_output=true",
-        *runtime_args,
-        *eval_args,
-    ]
+
+    def finalize(logs: Path, job_id: str, status: JobStatus) -> int:
+        if native_power:
+            (logs / "power").mkdir(parents=True, exist_ok=True)
+            (logs / "power/native-job-status.txt").write_text(f"{job_id}|{status.raw}\n")
+        return collect.finalize_single_node_results(run, logs, checkout.commit)
+
+    arguments = ["--set", "benchmark.stream_output=true", *runtime_args, *eval_args]
+    return follow_single_node(run, checkout, root, bound, arguments, submitted, fetched, finalize)
+
+
+def run_video(launch: Launch) -> int:
+    """One native video-generation job: bind the services-only recipe, submit, follow, verify.
+
+    The video server is a recipe service on the job's GPUs and the video client its custom
+    benchmark; the harness is mounted beside the workspace and the model is served from
+    the mounted HF hub cache. Power is always collected natively.
+    """
+    event = launch.life.event
+    with event.stage("prepare"):
+        request = VideoRequest.from_env(launch.request.env)
+        run = SrtRun.create(launch, request)
+        package = video_package(run.workspace)
+        if not package.is_dir():
+            raise LaunchError(f"video-generation harness not found at {package}")
+        hf_cache = models.single_node_hf_cache(run.cluster, request)
+        time_limit = str(request.salloc_time_limit)
+        root = Path(tempfile.mkdtemp(prefix="srt-video.", dir=run.workspace))
+        checkout, job_mib = prepare_single_node(run, request, root, power=True)
+        if rc := submit.bind_video(run, checkout, root / "arguments"):
+            return rc
+        selected, bound, runtime_args = submit.bound_arguments(root / "arguments")
+        event.set(recipe=selected.removeprefix(f"{run.workspace}/"))
+        collect.stage_video_identity(run, Path(bound))
+        fetched = root / "fetched-outputs"
+        submitted = submit.Submitted(manifest=run.workspace / submit.VIDEO_SUBMISSION)
+        run.life.callback(collect.finish_video, run, submitted, fetched)
+        image, reference = config.stage_gpu_exporter(run, single_node=True)
+        write_single_node_job(
+            run,
+            request,
+            checkout,
+            time_limit,
+            job_mib,
+            containers={image: reference},
+            model_paths={f"hf:{request.model}": f"hf:{request.model}"},
+            mounts=[(str(hf_cache), request.hf_hub_cache), (str(package), PACKAGE_MOUNT)],
+        )
+        if rc := run_setup(run, checkout):
+            return rc
+
+    def finalize(logs: Path, job_id: str, status: JobStatus) -> int:
+        collect.write_video_job_status(logs, job_id, status)
+        return collect.finalize_video_results(run, logs, checkout.commit)
+
+    return follow_single_node(
+        run, checkout, root, bound, runtime_args, submitted, fetched, finalize
+    )
+
+
+def prepare_single_node(
+    run: SrtRun, request: SingleNodeRequest | VideoRequest, root: Path, *, power: bool
+) -> tuple[Checkout, int | None]:
+    """Install srt-slurm under ``root`` and route the job's GPU share into srun's options."""
+    checkout = prepare_checkout(run, root / "checkout", power=power)
+    install_srtctl(run, checkout)
+    step_mib = job_mib = config.gpu_share_mib(run.cluster, request.gpu_count)
+    if run.srt.single_node_exclusive and job_mib is not None:
+        step_mib, job_mib = None, 0
+    if (options := config.srun_options(run.backend.settings, step_mib)) is not None:
+        run.env["SRT_SRUN_OPTIONS"] = options
+    return checkout, job_mib
+
+
+def write_single_node_job(
+    run: SrtRun,
+    request: SingleNodeRequest | VideoRequest,
+    checkout: Checkout,
+    time_limit: str,
+    job_mib: int | None,
+    **fields: Any,
+) -> None:
+    """Write the single-node srtslurm.yaml; ``fields`` are the job's own SrtJob inputs."""
+    job_config = config.SrtJob(
+        srtctl_root=checkout.root,
+        workspace=run.workspace,
+        time_limit=time_limit,
+        image=request.image,
+        container=run.backend.stage_image(request.image, single_node=True).reference,
+        single_node=True,
+        account=run.account,
+        mem_mib=job_mib,
+        **fields,
+    )
+    config.create_volume_mounts(run)
+    config.write(checkout.root / "srtslurm.yaml", config.render(run.cluster, job_config))
+
+
+def follow_single_node(
+    run: SrtRun,
+    checkout: Checkout,
+    root: Path,
+    bound: str,
+    runtime_args: list[str],
+    submitted: submit.Submitted,
+    fetched: Path,
+    finalize: Callable[[Path, str, JobStatus], int],
+) -> int:
+    """Apply the bound recipe, follow the job, then collect its logs through ``finalize``."""
+    arguments = ["--json", "--yes", "--output", str(root / "outputs"), *runtime_args]
     applied = submit.apply(run, checkout, bound, arguments, stdout=submitted.manifest)
     if applied.returncode:
         sys.stderr.write(applied.stdout)
@@ -127,12 +219,9 @@ def run_single_node(launch: Launch) -> int:
     except BackendError:
         return 1
     status = run.backend.state(job)
-    with event.stage("collect"):
+    with run.life.event.stage("collect"):
         logs = run.backend.fetch_outputs(job, fetched) / "logs"
-        if native_power:
-            (logs / "power").mkdir(parents=True, exist_ok=True)
-            (logs / "power/native-job-status.txt").write_text(f"{job.id}|{status.raw}\n")
-        rc = collect.finalize_single_node_results(run, logs, checkout.commit)
+        rc = finalize(logs, job.id, status)
     return rc or int(not status.succeeded)
 
 
