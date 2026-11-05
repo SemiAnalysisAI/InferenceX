@@ -12022,3 +12022,12 @@
     - "Integrate each package over the formal GPU measurement window and emit cpu_power_valid, avg_cpu_socket_power_w, avg_total_cpu_power_w, and total_cpu_energy_j with sensor_kind rapl_package; RAPL reports no component rails. Concurrency points and evaluation coverage are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4154
   scenario-type: [fixed-seq-len]
+
+- config-keys:
+    - kimik3.1-fp4-mi355x-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi-K3.1-Pro MXFP4 AgentX on one 8x MI355X node with SGLang (lmsysorg/sglang:dev-kimi-k31-pro-mi35x) and the DFlash2 draft at 5 draft tokens with block verification."
+    - "TP8 monokernel at concurrency 1 and 4 with GPU-resident KV; TP8/DCP8 with the HiCache host tier at concurrency 8, 16, 32 and 48."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
