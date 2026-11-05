@@ -179,7 +179,7 @@ def test_single_node_point_stages_workflow_artifacts(harness):
         "MODEL": "test/model", "CONC": "2", "USE_CHAT_TEMPLATE": "false",
     }
     assert recipe["roles"]["agg"]["env"] == {"NCCL_SOCKET_IFNAME": "eth9"}
-    assert {"--json", "--yes", "--output", WORKDIR} <= set(argv)
+    assert {"--json", "--yes", "--output", "benchmark.stream_output=true", WORKDIR} <= set(argv)
     assert (call["env"]["INFMAX_WORKSPACE"], call["env"]["VIRTUAL_ENV"]) == (str(workspace), None)
     assert call["env"]["RUNNER_NAME"] == f"inferencex-{env['RUNNER_NAME']}"
     assert "/hf" in srtslurm(workspace)["default_mounts"].values()
