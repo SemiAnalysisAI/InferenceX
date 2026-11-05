@@ -12049,7 +12049,7 @@
   scenario-type: [agentic-coding]
   description:
     - "Add native GLM-5.3-Flash FP8 AgentX on one 8x H100 node with the digest-pinned official SGLang v0.5.22-cu130 image and the SGLang cookbook H100 low-latency recipe: TP8/EP8, BF16 KV, TileLang DSA, DeepGEMM MoE, mem-fraction-static 0.70, and the embedded MTP head as EAGLE 5/1/6."
-    - "GPU-resident KV at concurrency 1 and 2; cookbook HiCache L1+L2 host tier (--hicache-size 32 per rank) at concurrency 4, 6, 8, 10 and 12."
+    - "GPU-resident KV at concurrency 1 and 2; cookbook HiCache L1+L2 host tier (--hicache-size 32 per rank) at concurrency 4, 6, 8 and 10."
     - "Prefill CUDA graphs are disabled because the image's default prefill graph faults with an illegal address during long-context replay on H100; decode CUDA graphs are unchanged."
     - "Stage the pinned checkpoint revision 46a050bec13002ad29ee795c16e61cf4fa3c4a9c into the shared H100 Hugging Face cache and serve it offline."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4717
