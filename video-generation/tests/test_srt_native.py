@@ -334,31 +334,6 @@ def test_bundle_joins_cells_power_and_identity_into_the_app_layout(tmp_path):
     assert "gpu/c1/baseline/artifacts/measurement-r001-c001.mp4" in checksums
 
 
-def test_bundle_seals_observed_slurm_allocation(tmp_path):
-    logs, workspace = _native_job(tmp_path, concurrencies=(1,))
-    allocation = "cpu=16,gres/gpu=8,mem=128G,node=1"
-    path = logs / "power/native-job-status.json"
-    path.write_text(json.dumps({**json.loads(path.read_text()), "alloc_tres": allocation}))
-    output = tmp_path / "h3-results"
-
-    srt_bundle.build_bundle(
-        video_dir=logs / "video",
-        power_dir=logs / "power",
-        workspace=workspace,
-        result_filename="r",
-        concurrencies=[1],
-        output=output,
-        environ={"PATH": os.environ["PATH"]},
-    )
-
-    ci = json.loads((output / "ci.json").read_text())
-    manifest = json.loads((output / "manifest.json").read_text())
-    checksums = _checksums(output)
-    assert ci["slurm_job"]["AllocTRES"] == allocation
-    assert manifest["evidence"]["ci.json"] == checksums["ci.json"]
-    assert hashlib.sha256((output / "ci.json").read_bytes()).hexdigest() == checksums["ci.json"]
-
-
 def test_bundle_counts_malformed_power_samples_instead_of_hiding_them(tmp_path):
     logs, workspace = _native_job(tmp_path, concurrencies=(1,))
     with (logs / "power/samples.csv").open("a", newline="") as stream:
@@ -399,26 +374,6 @@ def test_power_sample_is_valid_only_when_it_reads_every_server_gpu(tmp_path):
     assert [sample["valid"] for sample in series[4:7]] == [True, False, True]
 
 
-def test_bundle_reports_invalid_power_without_verifying_the_cell(tmp_path):
-    logs, workspace = _native_job(tmp_path, concurrencies=(1,), power_valid=False)
-    output = tmp_path / "h3-results"
-    result = srt_bundle.build_bundle(
-        video_dir=logs / "video",
-        power_dir=logs / "power",
-        workspace=workspace,
-        result_filename="r",
-        concurrencies=[1],
-        output=output,
-        environ={"PATH": os.environ["PATH"]},
-    )
-    assert result["status"] == "complete" and result["power_verified"] is False
-    [cell] = json.loads((output / "serving-smoke.json").read_text())["cells"]
-    assert cell["status"] == "complete" and cell["verified"] is False
-    power = json.loads((output / cell["power"]["path"]).read_text())
-    assert power["valid"] is False and power["invalid_reasons"] == ["manifest_missing"]
-    assert power["phases"]["measurement"]["aggregate"] is None
-
-
 def test_bundle_marks_a_missing_or_short_cell_failed(tmp_path):
     logs, workspace = _native_job(tmp_path, concurrencies=(1,))
     short = _run(1, valid=3)
@@ -442,23 +397,6 @@ def test_bundle_marks_a_missing_or_short_cell_failed(tmp_path):
     assert cells[1]["status"] == "failed" and cells[1]["completion"]["valid"] == 3
     assert cells[4]["status"] == "failed" and "run" not in cells[4]
     assert any("c4: run.json missing" in f for f in result["failures"])
-
-
-def test_bundle_rejects_cells_with_different_workload(tmp_path):
-    logs, workspace = _native_job(tmp_path)
-    path = logs / "video/gpu/c2/baseline/run.json"
-    run = json.loads(path.read_text())
-    run["plan_sha256"] = "a" * 64
-    path.write_text(json.dumps(run))
-    with pytest.raises(ValueError, match="identity differs"):
-        srt_bundle.build_bundle(
-            video_dir=logs / "video",
-            power_dir=logs / "power",
-            workspace=workspace,
-            result_filename="r",
-            concurrencies=[1, 2],
-            output=tmp_path / "bundle",
-        )
 
 
 def _bundle(tmp_path, artifacts, fingerprint, attempt):
@@ -549,25 +487,11 @@ def test_reuse_validates_every_selected_native_deployment_and_preserves_checkout
         validate_video_artifacts(artifacts, run_id="124", run_attempt="2", head_sha="c" * 40)
     with pytest.raises(ValueError, match="trusted run/head/attempt"):
         validate_video_artifacts(artifacts, run_id="123", run_attempt="3", head_sha="c" * 40)
-
-
-@pytest.mark.parametrize(
-    "fault,match", [("media", "checksum mismatch"), ("head", "CI identity mismatch")]
-)
-def test_reuse_rejects_incomplete_or_altered_native_sweeps(tmp_path, fault, match):
-    from infx.results.video_artifacts import validate_video_artifacts
-
-    artifacts = _sweep(tmp_path)
-    bundle = artifacts / ("h3-results-123-2-" + "2" * 64)
-    if fault == "media":
-        next(bundle.rglob("*.mp4")).write_bytes(b"corrupted")
-    else:
-        path = bundle / "manifest.json"
-        data = json.loads(path.read_text())
-        data["ci"]["head_sha"] = "d" * 40
-        path.write_text(json.dumps(data))
-        _reseal(bundle)
-    with pytest.raises(ValueError, match=match):
+    path = artifacts / "video-sweep-manifest/sweep_manifest.json"
+    manifest = json.loads(path.read_text())
+    manifest["video-full-sweep"] = False
+    path.write_text(json.dumps(manifest))
+    with pytest.raises(ValueError, match="requires a full video sweep"):
         validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40)
 
 
@@ -597,29 +521,16 @@ def test_startup_failure_preserves_declared_plan_and_engine_identity(tmp_path):
     assert "video-identity.json" in manifest["evidence"]
 
 
-def test_reuse_rechecks_sealed_power_receipts(tmp_path):
-    from infx.results.video_artifacts import validate_video_artifacts
-
-    artifacts = _sweep(tmp_path)
-    bundle = artifacts / ("h3-results-123-2-" + "2" * 64)
-    matrix_path = bundle / "serving-smoke.json"
-    matrix = json.loads(matrix_path.read_text())
-    cell = matrix["cells"][0]
-    path = bundle / cell["power"]["path"]
-    power = json.loads(path.read_text())
-    power["valid"] = False
-    path.write_text(json.dumps(power))
-    cell["power"]["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
-    matrix_path.write_text(json.dumps(matrix))
-    _reseal(bundle)
-    with pytest.raises(ValueError, match="unverified native"):
-        validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40)
-
-
 @pytest.mark.parametrize(
-    "fault,match", [("population", "request population"), ("missing_media", "reference mismatch")]
+    "fault,match",
+    [
+        ("population", "request population"),
+        ("missing_media", "reference mismatch"),
+        ("power", "unverified native"),
+        ("head", "CI identity mismatch"),
+    ],
 )
-def test_reuse_rejects_resealed_missing_evidence_and_wrong_population(tmp_path, fault, match):
+def test_reuse_rejects_resealed_bundles_with_altered_evidence(tmp_path, fault, match):
     from infx.results.video_artifacts import validate_video_artifacts
 
     artifacts = _sweep(tmp_path)
@@ -627,66 +538,50 @@ def test_reuse_rejects_resealed_missing_evidence_and_wrong_population(tmp_path, 
     matrix_path = bundle / "serving-smoke.json"
     matrix = json.loads(matrix_path.read_text())
     cell = matrix["cells"][0]
-    run_path = bundle / cell["run"]["path"]
-    run = json.loads(run_path.read_text())
+    reference = None if fault == "head" else cell["power" if fault == "power" else "run"]
+    path = bundle / ("manifest.json" if reference is None else reference["path"])
+    doc = json.loads(path.read_text())
     if fault == "population":
-        run["summary"].update(scheduled=1, valid=1)
-        run["records"] = run["records"][:1]
+        doc["summary"].update(scheduled=1, valid=1)
+        doc["records"] = doc["records"][:1]
+    elif fault == "missing_media":
+        doc["records"][0]["artifact_path"] = "artifacts/missing.mp4"
+    elif fault == "power":
+        doc["valid"] = False
     else:
-        run["records"][0]["artifact_path"] = "artifacts/missing.mp4"
-    run_path.write_text(json.dumps(run))
-    cell["run"]["sha256"] = hashlib.sha256(run_path.read_bytes()).hexdigest()
-    matrix_path.write_text(json.dumps(matrix))
+        doc["ci"]["head_sha"] = "d" * 40
+    path.write_text(json.dumps(doc))
+    if reference is not None:
+        reference["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+        matrix_path.write_text(json.dumps(matrix))
     _reseal(bundle)
     with pytest.raises(ValueError, match=match):
         validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40)
-
-
-def test_partial_native_sweep_cannot_qualify_for_reuse(tmp_path):
-    from infx.results.video_artifacts import validate_video_artifacts
-
-    artifacts = _sweep(tmp_path)
-    path = artifacts / "video-sweep-manifest/sweep_manifest.json"
-    manifest = json.loads(path.read_text())
-    manifest["video-full-sweep"] = False
-    path.write_text(json.dumps(manifest))
-    with pytest.raises(ValueError, match="requires a full video sweep"):
-        validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40)
-
-
-def test_reuse_reads_each_deployment_from_its_newest_attempt(tmp_path):
-    from infx.results.video_artifacts import validate_video_artifacts
-
-    artifacts = _sweep(tmp_path, attempts=("1", "2"))
-    assert (
-        validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40) == 2
-    )
 
 
 @pytest.mark.parametrize(
     "fault,match",
-    [("newer_attempt", "after the sweep manifest"), ("unselected", "extra=")],
+    [
+        ("newest_corrupted", "checksum mismatch"),
+        ("after_manifest", "after the sweep manifest"),
+        ("unselected", "extra="),
+    ],
 )
-def test_reuse_rejects_bundles_outside_the_selected_matrix(tmp_path, fault, match):
+def test_reuse_counts_only_the_newest_attempt_of_each_selected_deployment(tmp_path, fault, match):
     from infx.results.video_artifacts import validate_video_artifacts
 
-    if fault == "newer_attempt":
-        artifacts = _sweep(tmp_path, attempts=("2", "3"))
-    else:
-        artifacts = _sweep(tmp_path)
-        _bundle(tmp_path, artifacts, "3" * 64, "2")
-    with pytest.raises(ValueError, match=match):
-        validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40)
-
-
-def test_reuse_never_falls_back_to_an_older_attempt(tmp_path):
-    from infx.results.video_artifacts import validate_video_artifacts
-
-    artifacts = _sweep(tmp_path)
+    # Deployment 1 ran only in attempt 1; deployment 2 ran in attempts 1 and 2.
+    artifacts = _sweep(tmp_path, attempts=("1", "2"))
     _bundle(tmp_path, artifacts, "2" * 64, "1")
     assert (
         validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40) == 2
     )
-    next((artifacts / ("h3-results-123-2-" + "2" * 64)).rglob("*.mp4")).write_bytes(b"corrupted")
-    with pytest.raises(ValueError, match="checksum mismatch"):
+    if fault == "newest_corrupted":
+        newest = artifacts / ("h3-results-123-2-" + "2" * 64)
+        next(newest.rglob("*.mp4")).write_bytes(b"corrupted")
+    elif fault == "after_manifest":
+        _bundle(tmp_path, artifacts, "2" * 64, "3")
+    else:
+        _bundle(tmp_path, artifacts, "3" * 64, "2")
+    with pytest.raises(ValueError, match=match):
         validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40)

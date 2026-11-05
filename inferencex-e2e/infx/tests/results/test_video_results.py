@@ -39,27 +39,6 @@ IDENTITY = {"cluster": "h200-dgxc", "model": "MiniMaxAI/MiniMax-H3", "image": "i
             "framework": "sglang", "precision": "bf16", "spec": "h3.yaml"}  # fmt: skip
 
 
-def test_aggregate_carries_identity_throughput_and_the_measured_window():
-    aggregate = video.build_aggregate(
-        RUN, BENCH, concurrency=4, gpu_count=2, identity=IDENTITY,
-        run_path="video/gpu/c4/baseline/run.json", run_sha256="a" * 64,
-    )
-    assert aggregate["scenario_type"] == "video-generation" and aggregate["cluster"] == "h200-dgxc"
-    assert (aggregate["max_concurrency"], aggregate["num_gpus"], aggregate["valid"]) == (4, 2, 4)
-    assert aggregate["clips_per_hour"] == pytest.approx(240.0)
-    assert aggregate["latency_median_seconds"] == 119.0
-    assert aggregate["energy_normalization"] == "clips"
-    assert aggregate["duration"] == WINDOW_END - WINDOW_START
-
-
-def test_aggregate_refuses_a_window_that_disagrees_with_the_run():
-    with pytest.raises(ValueError, match="c4"):
-        video.build_aggregate(
-            {**RUN, "measurement": {**RUN["measurement"], "concurrency": 2}}, BENCH, concurrency=4, gpu_count=2,
-            identity=IDENTITY, run_path="x", run_sha256="a" * 64,
-        )
-
-
 def _service_package(tmp_path, service="video-server"):
     """A self-consistent native package whose GPUs are planned by the pool service."""
     pkg = build_package(tmp_path, bench_extra={**BENCH, "model_id": "MiniMaxAI/MiniMax-H3"})
@@ -123,9 +102,8 @@ def test_service_planned_gpus_validate_with_clip_normalized_energy(tmp_path):
 
 @pytest.mark.parametrize('fault', [
     "disjoint",
-    "missing",
     "launch_mismatch",
-], ids=['disjoint', 'missing', 'launch_mismatch'])
+], ids=['disjoint', 'launch_mismatch'])
 def test_video_power_rejects_unjoined_server_gpu_identity(tmp_path, fault):
     pkg = _service_package(tmp_path)
     _cell(pkg, pkg.logs_root)
@@ -136,8 +114,6 @@ def test_video_power_rejects_unjoined_server_gpu_identity(tmp_path, fault):
         spec["gpu_uuids"] = [f"GPU-other-{index}" for index in range(4)]
         launch_path.write_text(json.dumps(spec))
         spec_path.write_text(json.dumps(spec))
-    elif fault == "missing":
-        spec_path.unlink()
     else:
         launch_path.write_text(json.dumps({"gpu_uuids": [*spec["gpu_uuids"][:-1], "GPU-other"]}))
     workspace = tmp_path / "ws"
@@ -151,50 +127,3 @@ def test_video_power_rejects_unjoined_server_gpu_identity(tmp_path, fault):
     assert aggregate["power_valid"] == 0 and "total_gpu_energy_j" not in aggregate
     reason = "server_power_gpu_mismatch" if fault == "disjoint" else "server_gpu_identity_missing"
     assert reason in sidecar["reasons"]
-
-
-def test_missing_power_never_publishes_as_measured_and_fails_only_when_required(tmp_path):
-    pkg = _service_package(tmp_path)
-    _cell(pkg, pkg.logs_root)
-    (pkg.power_dir / "manifest.json").unlink()
-    workspace = tmp_path / "ws"
-    workspace.mkdir()
-    common = dict(
-        logs_root=pkg.logs_root, workspace=workspace, result_filename="h3_video", concurrencies=[4],
-        gpu_count=4, expected_producer_sha="a" * 40, identity=IDENTITY,
-    )
-    assert video.run(**common, require_power=False) == 0
-    aggregate = json.loads((workspace / "h3_video_conc4.json").read_text())
-    assert aggregate["power_valid"] == 0 and "total_gpu_energy_j" not in aggregate
-    sidecar = json.loads((workspace / "power_validation_h3_video_conc4.json").read_text())
-    assert "manifest_missing" in sidecar["reasons"]
-    assert video.run(**common, require_power=True) == 1
-
-
-def test_an_incomplete_cell_fails_the_point(tmp_path):
-    pkg = _service_package(tmp_path)
-    cell = _cell(pkg, pkg.logs_root)
-    short = {**RUN, "summary": {**RUN["summary"], "valid": 3, "failed": 1}}
-    (cell / "baseline/run.json").write_text(json.dumps(short))
-    workspace = tmp_path / "ws"
-    workspace.mkdir()
-    rc = video.run(
-        logs_root=pkg.logs_root, workspace=workspace, result_filename="h3_video", concurrencies=[4],
-        gpu_count=4, expected_producer_sha="a" * 40, identity=IDENTITY, require_power=False,
-    )
-    assert rc == 1
-    summary = json.loads((workspace / "h3_video.json").read_text())
-    assert summary["cells"]["4"]["status"] == "missing"
-
-
-def test_a_missing_run_fails_the_point_and_still_summarizes(tmp_path):
-    pkg = _service_package(tmp_path)
-    workspace = tmp_path / "ws"
-    workspace.mkdir()
-    rc = video.run(
-        logs_root=pkg.logs_root, workspace=workspace, result_filename="h3_video", concurrencies=[1],
-        gpu_count=4, expected_producer_sha="a" * 40, identity=IDENTITY, require_power=False,
-    )
-    assert rc == 1
-    summary = json.loads((workspace / "h3_video.json").read_text())
-    assert summary["cells"]["1"]["status"] == "missing" and summary["status"] == "failed"

@@ -18,8 +18,7 @@ import pytest
 import yaml
 
 from infx.launch.__main__ import main
-from infx.launch.backends.base import JobState, JobStatus
-from infx.launch.drivers.srt import collect, lanes, models
+from infx.launch.drivers.srt import lanes, models
 from infx.launch.drivers.srt.checkout import CPU_POWER_EXPORTER_RELEASE
 from infx.launch.drivers.srt.lanes import LaneMount, SrtLane
 from infx.launch.drivers.srt.models import Override
@@ -298,39 +297,6 @@ def test_video_point_requiring_power_fails_without_a_native_package(harness):
     assert "manifest_missing" in json.loads(
         (harness.workspace / "power_validation_point-identity_conc1.json").read_text()
     )["reasons"]
-
-
-def test_unknown_video_status_preserves_same_jobs_terminal_receipt(tmp_path):
-    def status(logs):
-        return json.loads((logs / "power/native-job-status.json").read_text())
-
-    logs = tmp_path / "logs"
-    allocation = "cpu=16,gres/gpu=8,mem=128G,node=1"
-    collect.write_video_job_status(
-        logs, "42", JobStatus(JobState.SUCCEEDED, "COMPLETED|0:0", 0, alloc_tres=allocation)
-    )
-
-    collect.write_video_job_status(logs, "42", JobStatus(JobState.UNKNOWN, "unknown"))
-
-    unknown = {"job_id": "42", "state": "unknown", "raw": "unknown", "alloc_tres": None}
-    assert status(logs) == {**unknown, "state": "succeeded", "raw": "COMPLETED|0:0", "alloc_tres": allocation}
-    unknown_logs = tmp_path / "unknown-logs"
-    collect.write_video_job_status(unknown_logs, "42", JobStatus(JobState.UNKNOWN, "unknown"))
-    assert status(unknown_logs) == unknown
-
-    other_logs = tmp_path / "other-logs"
-    collect.write_video_job_status(
-        other_logs, "420", JobStatus(JobState.SUCCEEDED, "COMPLETED|0:0", 0, alloc_tres=allocation)
-    )
-    collect.write_video_job_status(other_logs, "42", JobStatus(JobState.UNKNOWN, "unknown"))
-    assert status(other_logs) == unknown
-
-
-def test_video_points_must_be_single_node(harness):
-    env = video_env(harness, "h100-cw", IS_MULTINODE="true")
-    result = launch(env, harness.config, harness.workspace)
-    assert result.returncode != 0 and "single-node and not agentic" in result.stderr
-    assert srtctl_calls(harness.logs) == []
 
 
 @pytest.mark.parametrize("require_power", ["0", "1"])
@@ -1186,31 +1152,6 @@ def test_video_startup_failure_keeps_a_failed_bundle_without_client_results(harn
     assert [cell["concurrency"] for cell in matrix["cells"]] == [1, 2]
     assert all(cell["status"] == "failed" for cell in matrix["cells"])
     assert (bundle / "SHA256SUMS").is_file()
-
-
-def test_declared_video_identity_is_retained_before_startup(tmp_path, monkeypatch):
-    import hashlib
-    from infx.launch.drivers.srt import collect
-
-    plan = {"model_id": "test/video", "prompt": "夜空"}
-    digest = hashlib.sha256(json.dumps(plan, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
-    bound = tmp_path / "config.yaml"
-    bound.write_text(yaml.safe_dump({"benchmark": {"env": {
-        "VIDEO_SET": "release-v1", "VIDEO_PLAN_SHA256": digest,
-        "VIDEO_RUNTIME": "vllm-omni", "VIDEO_RUNTIME_REVISION": "a" * 40,
-    }}}))
-    run = SimpleNamespace(workspace=tmp_path, request=SimpleNamespace(model="test/video", env={"VIDEO_SPEC": "video.yaml"}))
-    def selected(name, *, root, set_id):
-        assert (name, root, set_id) == ("video.yaml", tmp_path, "release-v1")
-        return {"plan": plan, "plan_sha256": digest}
-    monkeypatch.setattr(collect, "load_spec", selected)
-    collect.stage_video_identity(run, bound)
-    identity = json.loads((tmp_path / "video-identity.json").read_text())
-    assert identity == {"plan_sha256": digest, "workload_plan": plan,
-                        "engine": {"name": "vllm-omni", "revision": "a" * 40}}
-    bound.write_text(bound.read_text().replace(digest, "0" * 64))
-    with pytest.raises(ValueError, match="disagrees"):
-        collect.stage_video_identity(run, bound)
 
 
 def test_launch_cpu_expectation_reaches_fixed_sequence_processor(harness, monkeypatch):

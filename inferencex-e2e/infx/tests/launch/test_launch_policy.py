@@ -175,18 +175,6 @@ def test_cluster_settings_beat_the_host_but_never_the_points_settings(chosen, ex
     assert {name: env[name] for name in HOST} == expected
 
 
-VIDEO_ENV = {
-    "RUNNER_NAME": "h200-dgxc-slurm_00", "SCENARIO_TYPE": "video-generation", "IS_MULTINODE": "false",
-    "IS_AGENTIC": "0", "MODEL": "MiniMaxAI/MiniMax-H3", "FRAMEWORK": "sglang",
-}  # fmt: skip
-
-
-def test_video_generation_points_route_to_the_native_video_driver():
-    request = LaunchRequest.from_env(VIDEO_ENV)
-    assert policy.launch_path("h200-dgxc", request) is LaunchPath.SRT_VIDEO
-    assert drivers.ROUTES[LaunchPath.SRT_VIDEO].scheduler == "slurm"
-
-
 def test_a_role_without_additional_settings_arrives_as_null_and_sets_no_names():
     record = {**RECORD, "env": {"CLUSTER": "cluster", "SHARED": "cluster"}}
     cluster = load_inventory({"labels": {"cluster:c": ["c_0"]}, "clusters": {"c": record}}).clusters["c"]

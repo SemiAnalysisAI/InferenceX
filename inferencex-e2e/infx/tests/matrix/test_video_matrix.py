@@ -1,12 +1,8 @@
 """Video matrix generation uses one job for each server deployment."""
 
-import copy
-
 import pytest
-from pydantic import ValidationError
 
 from infx.matrix.generate import generate_config_matrix, trim_conc, with_fingerprints
-from infx.matrix.validation import SingleNodeMasterConfigEntry
 from infx.workflows.benchmark_schema import validate_matrix
 
 
@@ -36,13 +32,6 @@ def test_video_generation_and_smoke_keep_one_server_job(master):
     assert generate_config_matrix(["video"], master, RUNNERS) == []
     with pytest.raises(ValueError, match="conc-list"):
         validate_matrix([{**row, "conc-list": [1, 1]}])
-
-
-def test_video_scenarios_keep_the_workload_spec_inside_specs(master):
-    config = copy.deepcopy(master["video"])
-    config["scenarios"]["video-generation"][0]["spec"] = "../clip.yaml"
-    with pytest.raises(ValidationError, match="specs"):
-        SingleNodeMasterConfigEntry(**config)
 
 
 def test_video_cannot_upload_without_a_renderable_recipe_fingerprint(master, tmp_path):

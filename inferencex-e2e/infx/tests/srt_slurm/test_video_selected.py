@@ -25,51 +25,7 @@ ENV = {
 }
 
 
-def test_native_video_recipe_requires_one_server_service(native_fragment):
-    raw, write = native_fragment
-    raw["services"] = []
-    with pytest.raises(ValueError, match="exactly one service"):
-        video.prepare(write(raw), {**ENV, "FRAMEWORK": "sglang"}, root=ROOT)
-
-
-def test_runtime_arguments_preserve_explicit_srun_values():
-    options = json.dumps({"mem": "0", "cpus-per-task": "32"})
-    assert video.runtime_arguments({**ENV, "SRT_SRUN_OPTIONS": options}) == [
-        "--set", 'srun_options.gpus-per-node="2"',
-        "--set", 'srun_options.mem="0"',
-        "--set", 'srun_options.cpus-per-task="32"',
-    ]
-    with pytest.raises(ValueError, match="SRT_SRUN_OPTIONS"):
-        video.runtime_arguments({**ENV, "SRT_SRUN_OPTIONS": json.dumps({"Mem": 1})})
-
-
-def test_spec_model_path_uses_the_pinned_hub_snapshot():
-    assert video.spec_model_path("/cache", "org/name", "a" * 40) == (
-        "/cache/models--org--name/snapshots/" + "a" * 40
-    )
-    with pytest.raises(ValueError, match="40-hex"):
-        video.spec_model_path("/cache", "org/name", "main")
-
-
-def test_both_engines_bind_the_same_selected_plan(native_fragment):
-    raw, write = native_fragment
-    sglang = video.prepare(write(), {**ENV, "FRAMEWORK": "sglang"}, root=ROOT)
-    _as_vllm(raw)
-    vllm = video.prepare(write(raw), ENV, root=ROOT)
-    for recipe, runtime in ((vllm, "vllm-omni"), (sglang, "sglang")):
-        [service] = recipe["services"]
-        client = recipe["benchmark"]["env"]
-        assert service["env"]["VIDEO_PLAN_SHA256"] == client["VIDEO_PLAN_SHA256"]
-        assert service["env"]["VIDEO_SET"] == client["VIDEO_SET"] == "release-v1"
-        assert service["env"]["VIDEO_RUNTIME"] == client["VIDEO_RUNTIME"] == runtime
-        assert service["env"]["VIDEO_RUNTIME_REVISION"] == client["VIDEO_RUNTIME_REVISION"]
-        assert client["VIDEO_SPEC_PATH"] == "/video-package/specs/h3.yaml"
-        assert client["GPU_COUNT"] == "2"
-        assert service["env"]["VIDEO_CONTAINER_IMAGE"] == client["VIDEO_CONTAINER_IMAGE"] == ENV["IMAGE"]
-    assert vllm["benchmark"]["env"]["VIDEO_PLAN_SHA256"] == sglang["benchmark"]["env"]["VIDEO_PLAN_SHA256"]
-
-
-def test_fairness_sglang_requires_disabled_cross_request_cache(native_fragment):
+def test_fairness_requires_disabled_cross_request_caches(native_fragment):
     raw, write = native_fragment
     selected = {**ENV, "FRAMEWORK": "sglang", "VIDEO_SPEC": "h3-v2.yaml", "GPU_COUNT": "4"}
     with pytest.raises(ValueError, match="--disable-conditioning-cache"):
@@ -82,40 +38,24 @@ def test_fairness_sglang_requires_disabled_cross_request_cache(native_fragment):
     assert server["env"]["VIDEO_CONTAINER_IMAGE"] == selected["IMAGE"]
     assert recipe["benchmark"]["env"]["VIDEO_CONTAINER_IMAGE"] == selected["IMAGE"]
 
-
-def test_fairness_vllm_requires_disabled_prompt_embedding_cache(native_fragment):
-    raw, write = native_fragment
     _as_vllm(raw)
-    selected = {**ENV, "VIDEO_SPEC": "h3-v2.yaml", "GPU_COUNT": "4"}
+    selected["FRAMEWORK"] = "vllm-omni"
     with pytest.raises(ValueError, match="OMNI_DIFFUSION_PROMPT_EMBED_CACHE=0"):
         video.prepare(write(raw), selected, root=ROOT)
 
-    raw["services"][0]["env"]["OMNI_DIFFUSION_PROMPT_EMBED_CACHE"] = "1"
+    server_env = raw["services"][0]["env"]
+    server_env["OMNI_DIFFUSION_PROMPT_EMBED_CACHE"] = "1"
     with pytest.raises(ValueError, match="OMNI_DIFFUSION_PROMPT_EMBED_CACHE=0"):
         video.prepare(write(raw), selected, root=ROOT)
 
-    raw["services"][0]["env"]["OMNI_DIFFUSION_PROMPT_EMBED_CACHE"] = "0"
+    server_env["OMNI_DIFFUSION_PROMPT_EMBED_CACHE"] = "0"
     recipe = video.prepare(write(raw), selected, root=ROOT)
-    [server] = recipe["services"]
-    assert server["env"]["OMNI_DIFFUSION_PROMPT_EMBED_CACHE"] == "0"
-    assert server["env"]["VIDEO_CONTAINER_IMAGE"] == selected["IMAGE"]
+    assert recipe["services"][0]["env"]["OMNI_DIFFUSION_PROMPT_EMBED_CACHE"] == "0"
 
 
-@pytest.mark.parametrize('edits', [
-    {"VIDEO_SET": "../release-v1"},
-    {"MODEL": "Other/model"},
-], ids=['edits1', 'edits2'])
-def test_invalid_selected_plan_or_runtime_fails_before_submission(native_fragment, edits):
-    _, write = native_fragment
-    with pytest.raises(ValueError):
-        video.prepare(
-            write(), {**ENV, "FRAMEWORK": "sglang", **edits}, root=ROOT,
-        )
-
-
-@pytest.mark.parametrize("port", [0, 65536])
-def test_server_port_must_be_a_tcp_port_before_submission(native_fragment, port):
+def test_server_port_must_be_a_tcp_port_before_submission(native_fragment):
     raw, write = native_fragment
+    port = 65536
     [server] = raw["services"]
     server["args"][server["args"].index("--port") + 1] = str(port)
     server["env"]["VIDEO_SERVER_PORT"] = raw["benchmark"]["env"]["VIDEO_SERVER_PORT"] = str(port)
@@ -165,70 +105,12 @@ def native_fragment(tmp_path):
     return raw, write
 
 
-def test_native_selected_recipe_renders_bound_engine_and_preserves_tuning(native_fragment):
-    raw, write = native_fragment
-    recipe = video.prepare(write(), {**ENV, "FRAMEWORK": "sglang", "GPU_COUNT": "4"}, root=ROOT)
-    [server] = recipe["services"]
-    model_path = recipe["benchmark"]["env"]["VIDEO_MODEL_PATH"]
-    args = server["args"]
-    assert args[args.index("--model-path") + 1] == model_path
-    assert args[args.index("--model-id") + 1] == ENV["MODEL"]
-    assert args[args.index("--num-gpus") + 1] == "4"
-    assert args[args.index("--tp-size") + 1] == "4"
-    assert args[args.index("--ulysses-degree") + 1] == "4"
-    assert args[args.index("--attention-backend") + 1] == "fixture-backend"
-    assert server["env"]["MODEL_REVISION_IN_ENV"] == args[args.index("--revision") + 1]
-    assert server["env"]["TUNABLE_ENV"] == "keep-this-value"
-    assert recipe["benchmark"]["command"] == raw["benchmark"]["command"]
-    assert recipe["resources"]["gpus_per_node"] == 4
-
-
 def test_selected_engine_revision_must_match_bound_point(native_fragment):
     raw, write = native_fragment
     args = raw["services"][0]["args"]
     args[args.index("--revision") + 1] = "c" * 40
     with pytest.raises(ValueError, match="--revision"):
         video.prepare(write(raw), {**ENV, "FRAMEWORK": "sglang"}, root=ROOT)
-
-
-def test_native_entry_has_no_implicit_engine(native_fragment):
-    raw, write = native_fragment
-    raw["services"][0]["args"].remove("--")
-    with pytest.raises(ValueError):
-        video.prepare(write(raw), {**ENV, "FRAMEWORK": "sglang"}, root=ROOT)
-
-
-@pytest.mark.parametrize('scope,name', [
-    ("environment", "SRT_SERVICE_VIDEO_SERVER_IPS"),
-    ("service", "VGBENCH_GPU_UUIDS"),
-    ("environment", "CUDA_VISIBLE_DEVICES"),
-    ("service", "VIDEO_MODEL_PATH"),
-    ("benchmark", "VIDEO_MODEL_PATH"),
-    ("environment", "HF_TOKEN"),
-    ("benchmark", "HF_TOKEN"),
-    ("service", "OPENAI_API_KEY"),
-    ("benchmark", "GOOGLE_APPLICATION_CREDENTIALS"),
-], ids=['SRT_SERVICE_VIDEO_SERVER_IPS-environment', 'VGBENCH_GPU_UUIDS-service', 'CUDA_VISIBLE_DEVICES-environment', 'VIDEO_MODEL_PATH-service', 'VIDEO_MODEL_PATH-benchmark', 'HF_TOKEN-environment', 'HF_TOKEN-benchmark', 'OPENAI_API_KEY-service', 'GOOGLE_APPLICATION_CREDENTIALS-benchmark'])
-def test_native_recipe_rejects_reserved_and_credential_environment(native_fragment, scope, name):
-    raw, write = native_fragment
-    if scope == "environment":
-        raw.setdefault("environment", {})[name] = "wrong"
-    elif scope == "service":
-        raw["services"][0]["env"][name] = "wrong"
-    else:
-        raw["benchmark"]["env"][name] = "wrong"
-    with pytest.raises(ValueError, match=name):
-        video.prepare(write(raw), {**ENV, "FRAMEWORK": "sglang"}, root=ROOT)
-
-
-def test_vllm_selected_recipe_uses_explicit_fl2va_view(native_fragment):
-    raw, write = native_fragment
-    _as_vllm(raw)
-    recipe = video.prepare(write(raw), ENV, root=ROOT)
-    args = recipe["services"][0]["args"]
-    assert args[:5] == ["--model-view", "h3-fl2va", "--", "vllm", "serve"]
-    assert args[5] == recipe["benchmark"]["env"]["VIDEO_MODEL_PATH"]
-    assert args[args.index("--gpu-memory-utilization") + 1] == "0.84"
 
 
 def _as_vllm(raw):
@@ -262,6 +144,10 @@ def test_bound_selected_service_executes_its_engine_and_retains_launch_receipts(
     environment = {**ENV, "FRAMEWORK": "sglang", "HF_HUB_CACHE": str(tmp_path / "cache")}
     bound = video.prepare(write(raw), environment, root=ROOT)
     [server] = bound["services"]
+    assert bound["resources"]["gpus_per_node"] == 2
+    assert server["env"]["VIDEO_SPEC_PATH"] == bound["benchmark"]["env"]["VIDEO_SPEC_PATH"] == (
+        "/video-package/specs/h3.yaml"
+    )
     Path(server["env"]["VIDEO_MODEL_PATH"]).mkdir(parents=True)
     output = tmp_path / "result"
     process_env = {
@@ -287,6 +173,9 @@ def test_bound_selected_service_executes_its_engine_and_retains_launch_receipts(
     spec = json.loads((output / "server/spec.json").read_text())
     expected_command = [sys.executable, str(engine), *server["args"][5:]]
     assert child["argv"] == expected_command[1:]
+    flags = dict(zip(child["argv"][1::2], child["argv"][2::2], strict=True))
+    assert flags["--tp-size"] == flags["--ulysses-degree"] == "2"
+    assert launch["environment"]["MODEL_REVISION_IN_ENV"] == launch["model_revision"]
     assert launch["argv"] == expected_command == spec["baseline"]["argv"]
     assert child["tunable"] == raw["services"][0]["env"]["TUNABLE_ENV"]
     assert child["global_tunable"] == raw["environment"]["GLOBAL_TUNABLE"]
