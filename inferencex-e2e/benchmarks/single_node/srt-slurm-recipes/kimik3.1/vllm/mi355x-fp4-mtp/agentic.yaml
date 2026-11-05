@@ -41,14 +41,14 @@ base:
         enable-prefix-caching: true
         prefix-match-unit: 64
         kv-cache-dtype: fp8
-        mamba-ssm-cache-dtype: float32
         # The K3.1 week-1 precision policy requires an FP32 KDA recurrent state.
+        mamba-ssm-cache-dtype: float32
         # The policy's FP4 indexer cache; the image's AITER pads the FP4 indexer pages it needs.
         attention-config: '{"mla_prefill_backend":"ROCM_AITER_FA","indexer_kv_dtype":"mxfp4"}'
         additional-config: '{"kda_prefill_backend":"fused"}'
-        # Prefix-cached prefill chunks end on K3.1's 1152-token packed DSA block, so 10240 tokens floor to 9216.
+        # Prefix-cached prefill chunks end on K3.1's 1152-token packed DSA block, so the budget floors to a multiple of 1152.
         max-num-batched-tokens: 16384
-        # MEC firmware 38 keeps scratch reclaim off (HSA_NO_SCRATCH_RECLAIM=1), so pinned prefill scratch needs headroom outside the budget.
+        # Kernel scratch, up to HSA_SCRATCH_SINGLE_LIMIT_ASYNC per dispatch, is allocated outside this budget, so leave headroom.
         gpu-memory-utilization: 0.90
         stream-interval: 10
         disable-uvicorn-access-log: true
@@ -77,6 +77,7 @@ base:
         # The K3.1 policy and MODELS.md keep all-reduce in BF16, so quick reduce must not quantize.
         VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: NONE
         AITER_BF16_FP8_MOE_BOUND: '0'
+        # vLLM's K3.1 mi355x_agentx env; reclaim overrides the image's HSA_NO_SCRATCH_RECLAIM=1.
         HSA_NO_SCRATCH_RECLAIM: '0'
         HSA_SCRATCH_SINGLE_LIMIT_ASYNC: '25769803776'
         VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1200'
@@ -84,15 +85,13 @@ base:
         VLLM_ENGINE_READY_TIMEOUT_S: '7200'
         # Identical prefixes must hash to identical block keys run-to-run.
         PYTHONHASHSEED: '42'
-        # Outlast AIPerf's pooled-connection idle gaps.
   benchmark:
     env:
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
-# Admission equals CONC: each breakable graph size costs graph-pool memory taken from the KV cache.
-# Graphs cover every decode batch, CONC x (1 + drafts) in steps of 1 + drafts, then the prefill sizes;
-# throughput runs replace block rejection with the golden acceptance length.
+# Admission and graph sizes follow the apex-1104 sweep: below CONC from c4 to c32, CONC at c1 and c48.
+# Throughput runs replace block rejection with the golden acceptance length.
 override_gpu_kv_c1:
   roles:
     agg:
