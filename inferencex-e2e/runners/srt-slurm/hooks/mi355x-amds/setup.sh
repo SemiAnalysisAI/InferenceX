@@ -8,7 +8,10 @@ bash "$(dirname "${BASH_SOURCE[0]}")/check-rdma.sh"
 # the next model load fail much later with a misleading OOM.
 # shellcheck source=runners/srt-slurm/hooks/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../common.sh"
-wait_for_amd_gpu_clean
+# After a job ends, a node can hold 15-26 GiB per GPU for minutes with no process
+# attached; 10% passes that, and a TP8 vLLM server at 0.90 then fails its startup
+# free-memory check. 5% leaves room for the engine's own context.
+wait_for_amd_gpu_clean 5
 
 # Some MI355X experiments reserve large 2 MiB HugeTLB pools and leave the
 # reservation behind after their Slurm allocation exits. Those free hugepages
