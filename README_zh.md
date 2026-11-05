@@ -23,6 +23,7 @@
 | [`OperatorX/`](operatorx/) | ⚙️ 算子与内核级基准测试（实验性 Beta 版本） |
 | [`UBenchX/`](ubenchX/) | 独立硬件微基准测试（实验性 Beta 版本） |
 | [`power_model/`](power_model/) | ⚡ 开源系统级功耗建模 |
+| [`video-generation/`](video-generation/) | 🎬 视频生成服务基准测试 |
 | [`shared/`](shared/) | 🧩 共享组件目录 |
 | [`experimental/`](experimental/) | 🧪 其余实验 |
 
