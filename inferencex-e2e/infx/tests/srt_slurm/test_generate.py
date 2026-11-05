@@ -145,6 +145,7 @@ def test_each_point_gets_its_bound_variant_and_a_manifest_entry(project, tmp_pat
     assert recipe["benchmark"] == {"type": "custom", "command": "bash client.sh", "env": {
         "CONC": "4", "ISL": "1024", "OSL": "128", "MODEL": "org/model",
         "RANDOM_RANGE_RATIO": "0.8", "USE_CHAT_TEMPLATE": "true", "REQUIRE_POWER": "0",
+        "SPEC_ALGORITHM": "mtp", "SPEC_DRAFT_MODEL": "native",
     }, "concurrencies": [4]}  # fmt: skip
     assert recipe["roles"]["agg"]["env"] == {"NCCL_SOCKET_IFNAME": "eth7"}
 

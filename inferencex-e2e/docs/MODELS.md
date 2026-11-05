@@ -119,10 +119,35 @@ The 3 TB limit prevents an unrealistic memory-capacity race in which hardware ve
 
 Other offloading tiers, including NVMe KV cache offloading, are outside the initial scope and may be introduced after the InferenceX v3 release. NVMe KV cache offloading is tentatively targeted as a fast follow-up in InferenceX v3.5 or as part of InferenceX v4.
 
+### Kimi K3.1 Pro week-1 precision policy
+
+Agreed by the vLLM and SGLang communities for week-1 official AgentX results. "Native" means the precision of the original released checkpoint.
+
+| Component | Rule |
+|---|---|
+| Linear ops | Must match native (BF16) |
+| Shared expert | Must match native (BF16) |
+| MoE weights | MXFP4 or NVFP4 |
+| MoE activations | A4W4 allowed |
+| MoE dispatch | MX/NV-style quantization allowed |
+| MoE combine | Must match native (BF16) |
+| AllReduce / AG / RS | Must match native (BF16) |
+| KDA cache | FP32 |
+| Conv cache | Native (BF16) |
+| Indexer cache | FP4 allowed |
+| KV cache | FP8 allowed. FP4 only if the native checkpoint ships an FP4 KV cache |
+
+- EPLB: dynamic only, static EPLB not allowed.
+- A4W4 and NVFP4 MoE are allowed because AMD has no W4A8 (FP4 weight, FP8 activation) MoE kernel.
+- FP4 KV cache without native support is not allowed in official AgentX results for week 1; it may be reconsidered once it passes KVV (and/or TB 4.0). Vendor blogs may still show it on the AgentX harness: such results must be labeled unofficial per the InferenceX/AgentX trademark and should include the full KVV suite showing FP4 KV cache passes or is near every KVV eval.
+- Engines outside vLLM, SGLang, TileRT and TokenSpeed on widely available hardware (i.e. not MI455X, Rubin, etc.) must first pass KVV (and/or TB 4.0), with logs and reproduction scripts, before submitting.
+- Any rule may be revisited after week 1 with a passing KVV (and/or TB 4.0) result. Passing requires public reproduction scripts and full logs.
+
 ## Model support matrix
 
 | Model architecture class | Prefix | Date added | Active scenarios | Deprecated scenarios |
 |---|---|---|---|---|
+| Kimi-K3.1-Pro | `kimik3.1` | 2026-11-04 ([#4795](https://github.com/SemiAnalysisAI/InferenceX/pull/4795)) | Agentic coding (vLLM and SGLang DSpark; golden AL curve `kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark-preview__probabilistic-block.yaml`; [week-1 precision policy](#kimi-k31-pro-week-1-precision-policy)) | |
 | MiniMax-M3.1-Flash | `minimaxm31flash` | 2026-10-23 | Agentic coding (vLLM DSpark; golden AL curve `minimax-m3.1-flash__dspark__native__probabilistic-block.yaml`) | |
 | Muse Spark Open 816B-A42B | `musespark` | 2026-10-15 | Agentic coding (SGLang and GB300 TensorRT-LLM with DFlash2 draft `RadixArk/Muse-Spark-Open-DFlash2`; golden AL curve `muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml`) | |
 | DeepSeek-V4.1-Flash | `dsv41flash` | 2026-09-10 | Agentic coding (vLLM: DSpark, Engram UVA offload; SGLang: DSpark arms added per SKU from 2026-09-17; ATOM: MI355X TP2/TP4 DSpark added 2026-09-23, removed in #3463, restored on srt-slurm 2026-09-30; GPU validation pending) | |

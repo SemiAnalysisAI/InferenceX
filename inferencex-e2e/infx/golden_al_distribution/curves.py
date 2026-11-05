@@ -24,12 +24,15 @@ class Curve:
 
     ``collection`` holds the SPEED-Bench client settings that measured the curve (the YAML's
     reserved ``collection`` key), which the acceptance-length gate replays; None if unrecorded.
+    ``source_run`` is the URL of the Actions run that measured the values (reserved
+    ``source_run`` key).
     """
 
     name: str
     model: str
     modes: Mapping[str, Mapping[int, Any]]
     collection: Mapping[str, Any] | None = None
+    source_run: str | None = None
 
     def tokens(self, thinking: str) -> list[int]:
         """Return the sorted draft lengths measured for one thinking mode."""
@@ -48,10 +51,15 @@ class Curve:
         return value
 
 
-def curve_name(model: str, spec: Mapping[str, Any], golden_dir: Path = GOLDEN_DIR) -> str:
-    """The curve file stem whose ``identities.yaml`` select block matches a model prefix and
-    speculative config, or ValueError when none or several do."""
-    name = select_curve(model, spec, golden_dir)
+def curve_name(
+    model: str,
+    spec: Mapping[str, Any],
+    golden_dir: Path = GOLDEN_DIR,
+    verify: str | None = None,
+) -> str:
+    """The curve file stem whose ``identities.yaml`` select block best matches a model prefix,
+    speculative config and verifier (None when unknown), or ValueError."""
+    name = select_curve(model, spec, golden_dir, verify)
     if not CURVE_NAME.fullmatch(name):
         raise ValueError(f"Invalid golden curve identity: {name!r}")
     return name
@@ -66,6 +74,7 @@ def load_curve(name: str, golden_dir: Path = GOLDEN_DIR) -> Curve:
         raise ValueError(f"No committed golden curve {path.name} in {golden_dir}")
     data = yamlio.safe_load(path.read_text())
     collection = data.pop("collection", None) if isinstance(data, dict) else None
+    source_run = data.pop("source_run", None) if isinstance(data, dict) else None
     if not isinstance(data, dict) or len(data) != 1:
         raise ValueError(f"Expected one model in golden curve {path.name}")
     [(model, modes)] = data.items()
@@ -74,7 +83,9 @@ def load_curve(name: str, golden_dir: Path = GOLDEN_DIR) -> Curve:
     for mode, cells in modes.items():
         if cells is not None and not isinstance(cells, dict):
             raise ValueError(f"Expected draft lengths in {mode} of golden curve {path.name}")
-    return Curve(name=name, model=str(model), modes=modes, collection=collection)
+    return Curve(
+        name=name, model=str(model), modes=modes, collection=collection, source_run=source_run
+    )
 
 
 def list_curves(golden_dir: Path = GOLDEN_DIR) -> list[Curve]:
@@ -84,10 +95,15 @@ def list_curves(golden_dir: Path = GOLDEN_DIR) -> list[Curve]:
 
 
 def golden_length(
-    model: str, spec: Mapping[str, Any], thinking: str, golden_dir: Path = GOLDEN_DIR
+    model: str,
+    spec: Mapping[str, Any],
+    thinking: str,
+    golden_dir: Path = GOLDEN_DIR,
+    verify: str | None = None,
 ) -> float:
-    """Return the committed AL for a model prefix, speculative config and thinking mode."""
-    name = curve_name(model, spec, golden_dir)
+    """Return the committed AL for a model prefix, speculative config, thinking mode and
+    verifier (None when unknown)."""
+    name = curve_name(model, spec, golden_dir, verify)
     tokens = spec.get("num_speculative_tokens")
     if not isinstance(tokens, int) or isinstance(tokens, bool) or tokens <= 0:
         raise ValueError("Speculative decoding requires a positive integer draft length")

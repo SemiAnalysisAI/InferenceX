@@ -757,7 +757,7 @@ def test_a_batch_wrapped_point_exits_with_the_wrapped_launchs_code(harness):
 def test_tilert_uses_upstream_submission_and_prepared_weights(harness):
     env = lane_env(
         harness, "mi355x-amds", MODEL_PREFIX="glm5.3", PRECISION="fp8", FRAMEWORK="tilert",
-        MODEL="zai-org/GLM-5.3", SPEC_DECODING="mtp", PREFILL_IMAGE="prefill:tag",
+        MODEL="zai-org/GLM-5.3", SPEC_DECODING="none", PREFILL_IMAGE="prefill:tag",
     )  # fmt: skip
     assert_ok(launch(env, harness.config, harness.workspace))
 
@@ -788,7 +788,7 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
     }  # fmt: skip
     env = lane_env(
         harness, "gb300-nv", MODEL_PREFIX="glm5.2", PRECISION="fp4", FRAMEWORK="dynamo-trt",
-        MODEL="nvidia/GLM-5.2-NVFP4", IS_AGENTIC="1", SPEC_DECODING="mtp", ISL="0", OSL="0",
+        MODEL="nvidia/GLM-5.2-NVFP4", IS_AGENTIC="1", SPEC_DECODING="none", ISL="0", OSL="0",
         EVAL_ONLY="true", EVAL_SRT_RECIPE=f"{MIRROR}/test/eval.yaml", FAKE_RESULTS="eval",
         EVAL_CONC="4 8", RECIPE_FINGERPRINT="recipe-fixture", FAKE_EVAL_META=json.dumps(staged),
     )  # fmt: skip
