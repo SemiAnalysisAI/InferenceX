@@ -12,7 +12,7 @@ fi
     "$TOKENSPEED_WHEEL_URL" "$TOKENSPEED_KERNEL_WHEEL_URL" "$TOKENSPEED_ENGINE_WHEEL_URL" \
     "tokenspeed-scheduler==$TOKENSPEED_SCHEDULER_VERSION" \
     "tokenspeed-smg==$ROUTER_VERSION"
-flashinfer download-kernels \
+python3 -m flashinfer download-kernels \
     --cuda-version "$TOKENSPEED_CUDA_VERSION" \
     --flashinfer-version "$TOKENSPEED_FLASHINFER_VERSION"
 python3 -m pip check
