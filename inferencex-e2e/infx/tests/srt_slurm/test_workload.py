@@ -19,6 +19,7 @@ from infx.srt_slurm.workload import (
     compose_recipe,
     parse_concurrencies,
     resolve_fabric,
+    selects_dedicated_discovery,
 )
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -158,23 +159,38 @@ def test_agentx_binding_writes_the_launchers_client_paths_without_lengths():
     assert bound["benchmark"]["env"] == {"HF_HOME": "/logs/hf", "RESULT_DIR": "/logs/agentic"}
 
 
+def test_the_launcher_reads_dedicated_discovery_without_srtctl(project, monkeypatch):
+    monkeypatch.setitem(sys.modules, "srtctl.core.config", None)
+    dedicated = [{"type": kind, "placement": {"node": "dedicated"}} for kind in ("etcd", "nats")]
+    path = fragment(project, {
+        "base": {"name": "bundle"},
+        "override_head": {"roles": {"agg": {"nodes": 2}}},
+        "override_infra": {"services": dedicated},
+    })
+
+    assert selects_dedicated_discovery(f"{path}:override_infra", agentic=True, root=project)
+    assert not selects_dedicated_discovery(f"{path}:override_head", agentic=True, root=project)
+
+
 def test_a_power_point_gets_telemetry_and_its_concurrencies_on_a_bundle_variant(project):
     path = fragment(project, {
         "base": {"name": "bundle", "telemetry": {"collector_join_timeout_seconds": 12}},
         "override_c8": {"roles": {"agg": {"nodes": 2}}},
     })
 
-    composed = compose_recipe(path, agentic=True, multinode=True, root=project, power_port=19401)
+    composed = compose_recipe(path, agentic=True, multinode=True, root=project, gpu_power=19401)
     [(_, variant)] = selected_recipes(composed, "override_c8")
-    bound = bind_workload(variant, AGENTX_ENV, agentic=True, multinode=True)
+    bound = bind_workload(variant, {**AGENTX_ENV, "POWER": "1"}, agentic=True, multinode=True)
 
     assert bound["telemetry"] == {
         "collector_join_timeout_seconds": 12, "enabled": True, "required": True,
         "dcgm_exporter": {"container_image": "dcgm-exporter", "port": 19401},
     }  # fmt: skip
     assert bound["benchmark"]["concurrencies"] == [8]
+    by_default = bind_workload(variant, AGENTX_ENV, agentic=True, multinode=True)
+    assert by_default["telemetry"]["required"] is False
     with_cpu = compose_recipe(
-        path, agentic=True, multinode=True, root=project, power_port=19401, cpu_power_source="acpi"
+        path, agentic=True, multinode=True, root=project, gpu_power=19401, cpu_power_source="acpi"
     )
     assert with_cpu["base"]["telemetry"]["cpu_power_exporter"] == {"source": "acpi"}
     unpowered = compose_recipe(path, agentic=True, multinode=True, root=project)["base"]
