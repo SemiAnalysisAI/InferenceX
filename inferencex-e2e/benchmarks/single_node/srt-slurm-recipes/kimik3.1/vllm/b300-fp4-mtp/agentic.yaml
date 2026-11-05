@@ -35,6 +35,7 @@ base:
         tool-call-parser: kimi_k3
         reasoning-parser: kimi_k3
         kv-cache-dtype: fp8
+        attention-config: '{"indexer_kv_dtype":"mxfp4"}'
         # The K3.1 week-1 precision policy requires an FP32 KDA recurrent state.
         mamba-ssm-cache-dtype: float32
         enable-prefix-caching: true
