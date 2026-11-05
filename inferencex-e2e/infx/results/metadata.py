@@ -40,3 +40,9 @@ def run_attempt(env: Mapping[str, str]) -> int | None:
     """GitHub run attempt that produced a result, or None outside Actions."""
     value = env.get("GITHUB_RUN_ATTEMPT", "")
     return int(value) if value.isascii() and value.isdecimal() and int(value) > 0 else None
+
+
+def speculation_fields(env: Mapping[str, str]) -> dict[str, str]:
+    """The algorithm and draft model the launcher bound for a drafting point, else nothing."""
+    fields = {"spec_algorithm": "SPEC_ALGORITHM", "spec_draft_model": "SPEC_DRAFT_MODEL"}
+    return {field: env[name] for field, name in fields.items() if env.get(name)}

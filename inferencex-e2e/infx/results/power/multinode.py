@@ -28,8 +28,8 @@ failed sibling window, the sidecar retains the healthy measurement in
 ``selected_window`` and its per-GPU diagnostics at the top level. Publication
 and aggregate power metrics remain blocked.
 
-Grace CPU-side leg: when the package also carries ``power/cpu/`` (see
-:mod:`.cpu_side`), each socket's Grace socket power and its reference rails are
+CPU-side leg: when the package also carries ``power/cpu/`` (see
+:mod:`.cpu_side`), each socket's meter (Grace socket or AMD package) and its rails are
 integrated over the same bound formal window and published under
 ``cpu_power_valid``. That verdict is independent of ``power_valid``. A missing
 or invalid CPU leg fails the run only with ``require_power`` and
@@ -46,6 +46,7 @@ import json
 import math
 import os
 import sys
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -240,18 +241,17 @@ def _whole(value: Any, label: str, *, minimum: int) -> int:
     return value
 
 
-def _role(value: Any) -> str:
-    """Return ``value`` if it is a known worker role, else raise ValueError."""
-    if value not in WORKER_ROLES:
-        raise ValueError(f"worker_role is not one of {WORKER_ROLES}: {value!r}")
+def _role(value: Any, roles: tuple[str, ...] = WORKER_ROLES) -> str:
+    """Return ``value`` if it is one of ``roles``, else raise ValueError."""
+    if value not in roles:
+        raise ValueError(f"worker_role is not one of {roles}: {value!r}")
     return value
 
 
-def _parse_expected_devices(manifest: dict) -> list[ExpectedDevice]:
-    """Parse the manifest's expected_devices into ExpectedDevice entries.
-
-    Raises TypeError, ValueError or KeyError on malformed entries.
-    """
+def _parse_expected_devices(
+    manifest: dict, roles: tuple[str, ...] = WORKER_ROLES
+) -> list[ExpectedDevice]:
+    """Parse expected devices, including declared service-pool roles."""
     entries = manifest.get("expected_devices") or []
     if not isinstance(entries, list):
         raise TypeError(f"expected_devices is not a list: {entries!r}")
@@ -262,7 +262,7 @@ def _parse_expected_devices(manifest: dict) -> list[ExpectedDevice]:
             raise ValueError(f"assignments is not a non-empty list: {raw_assignments!r}")
         assignments = tuple(
             DeviceAssignment(
-                worker_role=_role(assignment["worker_role"]),
+                worker_role=_role(assignment["worker_role"], roles),
                 worker_index=_whole(assignment["worker_index"], "worker_index", minimum=0),
                 worker_process=_whole(assignment["worker_process"], "worker_process", minimum=0),
                 het_group=(
@@ -963,6 +963,8 @@ def validate_and_integrate(
     decode_gpus: int,
     aggregate_gpus: int,
     expected_producer_sha: str | None,
+    service_gpus: Mapping[str, int] | None = None,
+    server_gpu_uuids: Sequence[str] | None = None,
     expected_cpu: bool = False,
 ) -> MultinodePowerAudit:
     """Recompute package validity, cross-check verdicts, and integrate energy.
@@ -971,6 +973,11 @@ def validate_and_integrate(
     reuses that window and the manifest topology as inputs. No GPU verdict
     reaches it: an unpinned producer or failed GPU coverage withholds GPU
     energy only, and ``cpu_power_valid`` judges the CPU samples on their own.
+
+    ``service_gpus`` names recipe services that own the job's GPUs instead of engine
+    workers (a diffusion server started as a generic service); each is a role the
+    producer plans by the service's name, with the given GPU count.
+    ``server_gpu_uuids`` binds native samples to that service's actual GPU assignment.
     """
     audit = _validate_gpu_leg(
         power_dir=power_dir,
@@ -981,6 +988,8 @@ def validate_and_integrate(
         decode_gpus=decode_gpus,
         aggregate_gpus=aggregate_gpus,
         expected_producer_sha=expected_producer_sha,
+        service_gpus=dict(service_gpus or {}),
+        server_gpu_uuids=server_gpu_uuids,
     )
     window = None
     if audit.window is not None and _window_contract_holds(audit.window, audit.window_validations):
@@ -1004,6 +1013,8 @@ def _validate_gpu_leg(
     decode_gpus: int,
     aggregate_gpus: int,
     expected_producer_sha: str | None,
+    service_gpus: dict[str, int],
+    server_gpu_uuids: Sequence[str] | None,
 ) -> MultinodePowerAudit:
     audit = MultinodePowerAudit(
         expected_producer_git_commit=expected_producer_sha,
@@ -1047,7 +1058,7 @@ def _validate_gpu_leg(
     recompute_failures: list[str] = _check_wire_contract(manifest)
 
     try:
-        expected_devices = _parse_expected_devices(manifest)
+        expected_devices = _parse_expected_devices(manifest, (*WORKER_ROLES, *service_gpus))
         expected_windows = _parse_expected_windows(manifest)
     except (AttributeError, KeyError, TypeError, ValueError) as exc:
         _add_reason(audit, "manifest_malformed", f"manifest malformed: {exc!r}")
@@ -1132,12 +1143,24 @@ def _validate_gpu_leg(
         expected_roles["decode"] = decode_gpus
     if aggregate_gpus > 0:
         expected_roles["agg"] = aggregate_gpus
+    if service_gpus and expected_roles:
+        topology_valid = False
+        _add_reason(
+            audit,
+            "topology_env_mismatch",
+            "service GPUs cannot be combined with engine worker GPUs",
+        )
+    for service, count in sorted(service_gpus.items()):
+        if service in WORKER_ROLES or count <= 0:
+            topology_valid = False
+            _add_reason(audit, "topology_env_mismatch", f"invalid service role {service!r}")
+        expected_roles[service] = count
     if not expected_roles:
         topology_valid = False
         _add_reason(
             audit,
             "topology_env_mismatch",
-            "prefill, decode, and aggregate GPU counts are all zero",
+            "prefill, decode, aggregate and service GPU counts are all zero",
         )
     elif roles:
         topology_failures = _check_role_topology(expected_devices, roles, expected_roles)
@@ -1160,6 +1183,18 @@ def _validate_gpu_leg(
         if device.key in roles and len(indices) == 1:
             label = uuid_label.get(device.key, f"{device.key[0]}/{device.key[1]}")
             audit.per_gpu_worker_index[label] = indices.pop()
+    if server_gpu_uuids is not None:
+        observed_uuids = [uuid for device in observed for uuid in device.gpu_uuids]
+        if not server_gpu_uuids:
+            _add_reason(audit, "server_gpu_identity_missing", "server GPU UUIDs are missing")
+        elif len(observed_uuids) != len(server_gpu_uuids) or set(observed_uuids) != set(
+            server_gpu_uuids
+        ):
+            _add_reason(
+                audit,
+                "server_power_gpu_mismatch",
+                "server GPU UUIDs differ from native power samples",
+            )
 
     window = _select_window_for_result(
         audit, parsed_windows, logs_root, bench_result_path, benchmark
@@ -1231,10 +1266,13 @@ def _validate_gpu_leg(
         "avg_total_gpu_power_w": total_energy / duration_s,
         "total_gpu_energy_j": total_energy,
         "joules_per_successful_query": total_energy / benchmark.completed,
-        "joules_per_input_token": total_energy / benchmark.total_input_tokens,
-        "joules_per_output_token": total_energy / benchmark.total_output_tokens,
-        "joules_per_total_token": total_energy / total_tokens,
     }
+    if benchmark.per_token:
+        metrics.update(
+            joules_per_input_token=total_energy / benchmark.total_input_tokens,
+            joules_per_output_token=total_energy / benchmark.total_output_tokens,
+            joules_per_total_token=total_energy / total_tokens,
+        )
     if prefill_gpus > 0:
         metrics["prefill_gpu_energy_j"] = role_energy["prefill"]
         metrics["prefill_avg_power_w"] = role_energy["prefill"] / duration_s / prefill_gpus
@@ -1477,6 +1515,8 @@ def run(
     expected_producer_sha: str | None,
     logs_root: Path,
     aggregate_gpus: int = 0,
+    service_gpus: Mapping[str, int] | None = None,
+    server_gpu_uuids: Sequence[str] | None = None,
     validation_result: Path | None = None,
     require_power: bool = False,
     expected_cpu: bool = False,
@@ -1497,6 +1537,8 @@ def run(
         decode_gpus=decode_gpus,
         aggregate_gpus=aggregate_gpus,
         expected_producer_sha=expected_producer_sha,
+        service_gpus=service_gpus,
+        server_gpu_uuids=server_gpu_uuids,
         expected_cpu=expected_cpu,
     )
     for reason in benchmark_reasons:

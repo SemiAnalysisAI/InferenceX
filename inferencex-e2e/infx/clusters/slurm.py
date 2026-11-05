@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 from pydantic import AfterValidator, Field, PlainSerializer, field_validator, model_validator
 
 from infx.clusters.base import Record, SchedulerSettings, Visibility, Volume
-from infx.srt_slurm.workload import resolve_fabric
+from infx.srt_slurm.workload import CpuPowerSource, resolve_fabric
 
 if TYPE_CHECKING:
     from infx.clusters import Cluster
@@ -174,13 +174,14 @@ class Fabric(Record):
 
 
 class CpuPowerExporter(Record):
-    """The Grace CPU power exporter srt-slurm scrapes on this cluster's compute trays.
+    """The CPU power exporter srt-slurm scrapes on this cluster's nodes.
 
     A point that selects ``cpu-power`` binds ``telemetry.cpu_power_exporter`` with this source.
-    Only ACPI serves the Grace socket meter the CPU leg integrates.
+    ACPI serves the Grace socket meter and RAPL the AMD EPYC package counter, the meters the
+    CPU leg integrates.
     """
 
-    source: Literal["acpi"]
+    source: CpuPowerSource
 
 
 class SrtSlurmSettings(Record):
@@ -227,6 +228,14 @@ class SrtSlurmSettings(Record):
             if not PurePosixPath(target).is_absolute():
                 raise ValueError(f"workspace-mounts target must be absolute: {target}")
         return mounts
+
+    @property
+    def gpu_exporter_image(self) -> str | None:
+        """The image of the cluster's GPU exporter, srtctl's ``default_gpu_exporter``; None
+        where the cluster declares none.
+        """
+        exporter = self.extra.get("default_gpu_exporter")
+        return (exporter.get("container_image") or None) if isinstance(exporter, dict) else None
 
     @model_validator(mode="before")
     @classmethod
@@ -286,6 +295,20 @@ class SlurmSettings(SchedulerSettings):
         for field, mounted in mounts.items():
             if unknown := sorted(mounted.keys() - self.volumes.keys()):
                 raise ValueError(f"srt-slurm.{field} names unknown volumes: {unknown}")
+        return self
+
+    @model_validator(mode="after")
+    def _rapl_on_exclusive_nodes(self) -> Self:
+        """A RAPL CPU exporter needs exclusive nodes: the teardown takes the counters back
+        host-wide, which would cut off a concurrent job's CPU samples on a shared node.
+        """
+        srt = self.srt_slurm
+        exporter = None if srt is None else srt.cpu_power_exporter
+        shared = not (self.exclusive and srt is not None and srt.single_node_exclusive)
+        if exporter is not None and exporter.source == "rapl" and shared:
+            raise ValueError(
+                "a rapl cpu-power-exporter needs exclusive single- and multi-node jobs"
+            )
         return self
 
     @model_validator(mode="after")
