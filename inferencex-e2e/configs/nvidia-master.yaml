@@ -4328,11 +4328,6 @@ minimaxm31flash-fp4-b300-vllm-agentic-dspark:
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [40], srt-recipe: 'agentic.yaml:zip_override_tp2[2]' }
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [48], srt-recipe: 'agentic.yaml:zip_override_tp2[3]' }
 
-# MiniMax-M3.1-Flash AgentX on GB200 with SGLang: day-zero image from the SGLang
-# cookbook (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1),
-# manifest digest verified 2026-10-24.
-# Seven-token DSpark (bundled draft); synthetic acceptance follows
-# infx/golden_al_distribution/minimax-m3.1-flash__dspark__native__probabilistic-block.yaml.
 minimaxm31flash-fp4-b300-dynamo-vllm-agentic-dspark-disagg:
   image: vllm/vllm-openai:minimax-m31-flash@sha256:86f582dae25ea92802353727164ae4eb03b37b18baf9119b805ffaec2a7ef07c
   model: MiniMaxAI/MiniMax-M3.1-Flash
@@ -4359,6 +4354,11 @@ minimaxm31flash-fp4-b300-dynamo-vllm-agentic-dspark-disagg:
         prefill: { num-worker: 1, tp: 2, ep: 2, dp-attn: true }
         decode: { num-worker: 1, tp: 4, ep: 4, dp-attn: true }
 
+# MiniMax-M3.1-Flash AgentX on GB200 with SGLang: day-zero image from the SGLang
+# cookbook (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1),
+# manifest digest verified 2026-10-24.
+# Seven-token DSpark (bundled draft); synthetic acceptance follows
+# infx/golden_al_distribution/minimax-m3.1-flash__dspark__native__probabilistic-block.yaml.
 minimaxm31flash-fp4-gb200-sglang-agentic-dspark:
   image: lmsysorg/sglang:dev-minimax-m31-flash@sha256:614b1509bcb729c653528d448bff9850f8977fcad9d12ba56bd6dbe3d7985e87
   model: MiniMaxAI/MiniMax-M3.1-Flash

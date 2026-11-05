@@ -80,6 +80,7 @@ services:
         "device_name": os.environ["STORE_RDMA_DEVICES"],
     }, open(os.environ["STORE_CONFIG"], "w"))
     PY
+    [ -s "$STORE_CONFIG" ]
 - name: mooncake-store-numa1
   type: mooncake-store
   placement:
