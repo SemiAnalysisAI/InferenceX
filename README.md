@@ -23,6 +23,7 @@ Trusted by Operators of Trillion Dollar Token Factories such as OpenAI, Meta, Mi
 | [`OperatorX/`](operatorx/) | ⚙️ Operator & Kernel Level Benchmarks (Experimental Beta) |
 | [`UBenchX/`](ubenchX/) | Standalone Hardware Microbenchmarks (Experimental Beta) |
 | [`power_model/`](power_model/) | ⚡ OSS System Level Power Modelling |
+| [`video-generation/`](video-generation/) | 🎬 Video Generation Serving Benchmarks |
 | [`shared/`](shared/) | 🧩 Home for shared components |
 | [`experimental/`](experimental/) | 🧪 Remaining experiments |
 
