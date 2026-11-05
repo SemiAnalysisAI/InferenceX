@@ -54,6 +54,7 @@ base:
         VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '600'
         VLLM_WORKER_MULTIPROC_METHOD: spawn
         VLLM_USE_V2_MODEL_RUNNER: '1'
+        VLLM_USE_RUST_FRONTEND: '1'
         VLLM_ENABLE_GEMM_RS: '1'
         VLLM_ALLREDUCE_USE_FLASHINFER: '1'
         VLLM_USE_NCCL_SYMM_MEM: '0'
@@ -87,7 +88,7 @@ base:
         mamba-ssm-cache-dtype: float32
         mamba-cache-dtype: float32
         enable-prefix-caching: true
-        prefix-match-unit: 128
+        prefix-match-unit: 64
         stream-interval: 10
         enable-auto-tool-choice: true
         tool-call-parser: kimi_k3
@@ -124,7 +125,7 @@ base:
         mamba-ssm-cache-dtype: float32
         mamba-cache-dtype: float32
         enable-prefix-caching: true
-        prefix-match-unit: 128
+        prefix-match-unit: 64
         stream-interval: 10
         enable-auto-tool-choice: true
         tool-call-parser: kimi_k3
