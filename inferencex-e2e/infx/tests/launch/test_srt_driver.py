@@ -510,111 +510,6 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
         assert status == "42|COMPLETED|0:0\n"
 
 
-GATE_DATASET = "al_gate_dataset/speedbench_coding.jsonl"
-GATE_PROMPTS = '{"question_id": "0", "prompt": "Reverse a singly linked list in place."}\n'
-GATE_ENV = {"AL_GATE": "true", "IS_AGENTIC": "1", "FAKE_RESULTS": "gate", "AL_GATE_DATASET": GATE_DATASET}
-
-
-def download_gate_prompts(workspace: Path) -> None:
-    """What the gate job's download step leaves in the workspace."""
-    (workspace / GATE_DATASET).parent.mkdir(parents=True)
-    (workspace / GATE_DATASET).write_text(GATE_PROMPTS)
-
-
-def assert_gate_ran(harness, call: dict, job: dict) -> None:
-    """The job ran the gate client on the downloaded prompts, and its outputs were staged."""
-    assert job["benchmark"]["command"] == "bash /infmax-workspace/benchmarks/srt_al_gate.sh"
-    assert "post_eval" not in job
-    # The container resolves AL_GATE_DATASET in INFMAX_WORKSPACE, its /infmax-workspace mount.
-    prompts = Path(call["env"]["INFMAX_WORKSPACE"]) / job["benchmark"]["env"]["AL_GATE_DATASET"]
-    assert prompts.read_text() == GATE_PROMPTS
-    verdict = json.loads((harness.workspace / "al_gate_point-identity.json").read_text())
-    assert verdict == {"status": "below", "result_filename": "point-identity"}
-    assert (harness.workspace / "al_gate/aiperf_artifacts/server_metrics_export.json").read_text() == "{}"
-
-
-def test_single_node_gate_measures_the_selected_variant_with_real_verification(harness):
-    recipe = json.loads(json.dumps(POINT_RECIPE))
-    recipe["roles"]["agg"]["args"].update({"speculative-algorithm": "EAGLE", "speculative-num-steps": 3})
-    recipe["roles"]["agg"]["env"] = {"KEEP": "yes", "SGLANG_SIMULATE_ACC_LEN": "2.5"}
-    raw = {"base": recipe, "zip_override_conc": {"benchmark": {"env": {"CONC": ["2", "4"]}}}}
-    workspace = harness.workspace
-    (workspace / "recipe.yaml").write_text(yaml.safe_dump(raw))
-    env = {
-        **harness.env, **POINT_ENV, **GATE_ENV, "RUNNER_NAME": runner_for("h200-dgxc"), "MODEL_PREFIX": "dsv4",
-        "SPEC_DECODING": "mtp", "DURATION": "600", "AL_GATE_CURVE": "deepseek-v4-pro__mtp__native__default-default", "AL_GATE_DRAFT_TOKENS": "3",
-    }  # fmt: skip
-    download_gate_prompts(workspace)
-    assert_ok(launch(env, harness.config, workspace))
-
-    [call] = srtctl_calls(harness.logs)
-    argv = call["argv"]
-    submitted = Path(argv[argv.index("--file") + 1])
-    job = job_recipe(yaml.safe_load(submitted.read_text()), argv)
-    assert_gate_ran(harness, call, job)
-    assert job["benchmark"]["env"]["CONC"] == "2"
-    # Real verification: the recipe's simulated acceptance is gone.
-    assert job["roles"]["agg"]["env"] == {"KEEP": "yes"}
-
-    # A job that leaves no verdict fails, and a throughput result is never staged in its place.
-    result = launch({**env, "FAKE_RESULTS": "single"}, harness.config, workspace)
-    assert result.returncode == 1
-    assert "al_gate_point-identity.json is missing or empty" in result.stderr
-    assert not (workspace / "point-identity.json").exists()
-
-
-AGENTX_LANE_RECIPE = """name: "fixture"
-roles:
-  prefill:
-    args:
-      tensor-parallel-size: 8
-  decode:
-    args:
-      tensor-parallel-size: 8
-      speculative-config: '{"method": "dspark", "num_speculative_tokens": 3, "draft_sample_method": "greedy", "rejection_sample_method": "synthetic", "synthetic_acceptance_length": 2.5}'
-"""
-
-
-def lane_gate_env(harness) -> dict[str, str]:
-    """The gate of a multi-node speculative AgentX point on a power lane."""
-    return lane_env(
-        harness, "h200-dgxc", AGENTX_LANE_RECIPE + POWER_TELEMETRY, **GATE_ENV,
-        MODEL_PREFIX="kimik3", PRECISION="fp4", FRAMEWORK="vllm", MODEL="moonshotai/Kimi-K3", ISL="0", OSL="0",
-        CONC="4", SPEC_DECODING="dspark", AL_GATE_CURVE="kimi-k3__dspark__kimi-k3-dspark__default-default", AL_GATE_DRAFT_TOKENS="3",
-    )  # fmt: skip
-
-
-def test_power_lane_gate_measures_real_acceptance_without_power(harness):
-    workspace = harness.workspace
-    download_gate_prompts(workspace)
-    assert_ok(launch(lane_gate_env(harness), harness.config, workspace))
-
-    [call] = srtctl_calls(harness.logs)
-    checkout = Path(call["cwd"])
-    submitted = Path(call["argv"][call["argv"].index("--file") + 1])
-    job = job_recipe(yaml.safe_load(submitted.read_text()), call["argv"])
-    assert_gate_ran(harness, call, job)
-    assert json.loads(job["roles"]["decode"]["args"]["speculative-config"]) == {
-        "method": "dspark", "num_speculative_tokens": 3, "draft_sample_method": "greedy",
-        "rejection_sample_method": "block",
-    }  # fmt: skip
-    # Without the gate this lane measures AgentX power; the gate measures and stages none.
-    assert "telemetry" not in job
-    assert "dcgm-exporter" not in srtslurm(checkout)["containers"]
-    assert not (workspace / "power-producer-sha.txt").exists()
-
-
-def test_a_gate_without_its_prompts_fails_before_any_work(harness):
-    result = launch(lane_gate_env(harness), harness.config, harness.workspace)
-
-    assert result.returncode == 1
-    error = f"AL_GATE_DATASET {GATE_DATASET} is not a file in {harness.workspace.resolve()}"
-    assert f"ERROR: {error}\n" in result.stderr
-    # Nothing was cloned, imported or submitted.
-    assert [lines(harness.logs, name) for name in ("git", "enroot", "sbatch")] == [[], [], []]
-    assert srtctl_calls(harness.logs) == []
-
-
 @pytest.mark.parametrize("shape", ["single", "multi"])
 def test_submission_failure_code_propagates_and_cancels_the_job(harness, shape):
     active = harness.tmp / "active"
@@ -798,6 +693,62 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
         "glm5.2", "recipe-fixture", "dynamo-trt",
     )
     assert list(workspace.glob("point-identity_*.json")) == []
+    # The point does not draft, so it has no acceptance gate.
+    assert list(workspace.glob("al_gate_*.json")) == []
+
+
+GATE_DATASET = "al_gate_dataset/speedbench_coding.jsonl"
+DRAFTING_LANE = LANE_FRAGMENT.replace(
+    "  decode:\n    args:\n",
+    "  decode:\n    args:\n      speculative-config: '{\"method\": \"mtp\", \"num_speculative_tokens\": 3}'\n",
+)
+
+
+def test_an_agentic_eval_runs_the_acceptance_gate_as_its_benchmark_stage(harness):
+    dataset = harness.workspace / GATE_DATASET
+    dataset.parent.mkdir()
+    dataset.write_text("{}\n")
+    env = lane_env(
+        harness, "gb300-nv", DRAFTING_LANE, MODEL_PREFIX="dsv4", PRECISION="fp4",
+        FRAMEWORK="dynamo-vllm", MODEL="deepseek-ai/DeepSeek-V4-Pro", IS_AGENTIC="1",
+        SPEC_DECODING="mtp", ISL="0", OSL="0", EVAL_ONLY="true", FAKE_RESULTS="gate",
+        EVAL_CONC="4", AL_GATE_DATASET=GATE_DATASET,
+    )  # fmt: skip
+    assert_ok(launch(env, harness.config, harness.workspace))
+
+    [call] = srtctl_calls(harness.logs)
+    argv = call["argv"]
+    # One job: srt-slurm runs the gate as its benchmark stage, then the eval on that server.
+    assert (call["env"]["EVAL_ONLY"], call["env"]["RUN_EVAL"]) == ("false", "true")
+    assert 'benchmark.command="bash /infmax-workspace/benchmarks/srt_al_gate.sh"' in argv
+    assert 'benchmark.env.AL_GATE_CURVE="deepseek-v4-pro__mtp__native__default-default"' in argv
+    assert f'benchmark.env.AL_GATE_DATASET="{GATE_DATASET}"' in argv
+    assert argv[argv.index("telemetry") - 1] == "--unset"
+    passthrough = next(a for a in argv if a.startswith("post_eval.passthrough_env="))
+    assert "EVAL_AL_GATE" in json.loads(passthrough.partition("=")[2])
+    # The eval's results and the gate's verdict are both staged; its raw files stay in the logs.
+    workspace = harness.workspace
+    assert (workspace / "results_gsm8k.json").read_text() == "{}"
+    verdict = json.loads((workspace / f"al_gate_{env['RESULT_FILENAME']}.json").read_text())
+    assert verdict == {"status": "below", "result_filename": env["RESULT_FILENAME"]}
+    assert not (workspace / "al_gate").exists()
+
+
+def test_an_agentic_eval_without_staged_prompts_runs_alone_and_records_why(harness):
+    env = lane_env(
+        harness, "gb300-nv", DRAFTING_LANE, MODEL_PREFIX="dsv4", PRECISION="fp4",
+        FRAMEWORK="dynamo-vllm", MODEL="deepseek-ai/DeepSeek-V4-Pro", IS_AGENTIC="1",
+        SPEC_DECODING="mtp", ISL="0", OSL="0", EVAL_ONLY="true", FAKE_RESULTS="eval",
+        EVAL_CONC="4",
+    )  # fmt: skip
+    assert_ok(launch(env, harness.config, harness.workspace))
+
+    [call] = srtctl_calls(harness.logs)
+    assert "bash /infmax-workspace/benchmarks/srt_al_gate.sh" not in " ".join(call["argv"])
+    skipped = json.loads(
+        (harness.workspace / f"al_gate_{env['RESULT_FILENAME']}.json").read_text()
+    )
+    assert (skipped["status"], skipped["error"]) == ("skipped", "no SPEED-Bench prompts at ''")
 
 
 def test_bundle_variants_take_the_lane_job_edits(harness, monkeypatch):
