@@ -63,8 +63,6 @@ base:
         # Rust API frontend from the image's vllm package: frees the Python
         # API server from tokenization and streaming at AgentX request rates.
         VLLM_USE_RUST_FRONTEND: '1'
-        # INT4 quick all-reduce: faster TP all-reduce on 16K+ token prefill steps.
-        VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: 'INT4'
         # The draft LM head's skinny GEMM takes about 5x longer at exactly 5
         # requests than at 4 (0.28 vs 0.05 ms per call); the regular GEMM has no such cliff.
         VLLM_ROCM_USE_SKINNY_GEMM: '0'
