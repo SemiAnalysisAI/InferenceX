@@ -43,6 +43,8 @@ SGLANG_VARIABLES = (
 )
 TRT_VARIABLE = "TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS"
 TILERT_VARIABLES = ("TILERT_SIMULATE_ACC_LEN", "TILERT_SIMULATE_ACC_METHOD")
+# Synthetic acceptance streams unverified draft tokens. Kimi's parsers stop streaming on them.
+KIMI_VLLM_PARSER_ARGS = ("enable-auto-tool-choice", "tool-call-parser", "reasoning-parser")
 
 
 def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
@@ -299,6 +301,10 @@ def build_overrides(
                 worker_spec.update(
                     rejection_sample_method="synthetic", synthetic_acceptance_length=worker_al
                 )
+                if environment["MODEL_PREFIX"].startswith("kimi"):
+                    for key in KIMI_VLLM_PARSER_ARGS:
+                        if key in (role.get("args") or {}):
+                            overrides += ["--unset", f"{prefix}.args.{key}"]
             elif (
                 worker_spec.get("rejection_sample_method") == "synthetic"
                 or "synthetic_acceptance_length" in worker_spec

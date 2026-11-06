@@ -49,6 +49,7 @@ base:
         # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
         HF_HUB_OFFLINE: '1'
+        SGLANG_FLASHINFER_NVFP4_PER_TOKEN_ACTIVATION: '0'
   # 533 GB of weights load from Lustre before graph capture.
   health_check:
     max_attempts: 1440
@@ -86,17 +87,6 @@ override_tp4_c1:
       CONC: '1'
       KV_OFFLOADING: none
 
-override_tp4_c2:
-  roles:
-    agg:
-      args:
-        max-running-requests: 4
-        cuda-graph-max-bs-decode: 4
-  benchmark:
-    env:
-      CONC: '2'
-      KV_OFFLOADING: dram
-
 override_tp4_c4:
   roles:
     agg:
@@ -107,59 +97,47 @@ override_tp4_c4:
         cuda-graph-backend-prefill: breakable
         chunked-prefill-size: 8192
         max-prefill-tokens: 8192
-        prefill-decode-interval: 128
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 256
+        stream-interval: 20
   benchmark:
     env:
       CONC: '4'
       KV_OFFLOADING: dram
 
-override_tp4_c6:
+override_tp4_c7:
   roles:
     agg:
       args:
-        max-running-requests: 3
-        cuda-graph-max-bs-decode: 3
-        mem-fraction-static: 0.95
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
         disable-prefill-cuda-graph: null
         cuda-graph-backend-prefill: breakable
         chunked-prefill-size: 8192
         max-prefill-tokens: 8192
-      env:
-        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '2048'
+        prefill-decode-interval: 64
+        stream-interval: 20
   benchmark:
     env:
-      CONC: '6'
-      KV_OFFLOADING: dram
-
-override_tp4_c8:
-  roles:
-    agg:
-      args:
-        max-running-requests: 3
-        cuda-graph-max-bs-decode: 3
-        disable-prefill-cuda-graph: null
-        cuda-graph-backend-prefill: breakable
-        chunked-prefill-size: 8192
-        max-prefill-tokens: 8192
-        prefill-decode-interval: 16
-  benchmark:
-    env:
-      CONC: '8'
+      CONC: '7'
       KV_OFFLOADING: dram
 
 override_tp4_c10:
   roles:
     agg:
       args:
-        max-running-requests: 10
-        cuda-graph-max-bs-decode: 10
+        max-running-requests: 3
+        cuda-graph-max-bs-decode: 3
         mem-fraction-static: 0.95
         disable-prefill-cuda-graph: null
         cuda-graph-backend-prefill: breakable
         chunked-prefill-size: 8192
         max-prefill-tokens: 8192
         schedule-policy: shortest-prefill-first
-        prefill-decode-interval: 32
+        prefill-decode-interval: 64
+        stream-interval: 20
+        tokenizer-worker-num: 4
+        incremental-streaming-output: true
         speculative-draft-attention-backend: null
       env:
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '2048'
@@ -169,19 +147,47 @@ override_tp4_c10:
       CONC: '10'
       KV_OFFLOADING: dram
 
-override_tp4_c16:
+override_tp4_c14:
   roles:
     agg:
       args:
-        max-running-requests: 32
-        cuda-graph-max-bs-decode: 32
+        max-running-requests: 5
+        cuda-graph-max-bs-decode: 5
         mem-fraction-static: 0.95
         disable-prefill-cuda-graph: null
         cuda-graph-backend-prefill: breakable
         chunked-prefill-size: 8192
         max-prefill-tokens: 8192
         schedule-policy: shortest-prefill-first
-        prefill-decode-interval: 16
+        prefill-decode-interval: 96
+        stream-interval: 20
+        tokenizer-worker-num: 4
+        incremental-streaming-output: true
+        speculative-draft-attention-backend: null
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '2048'
+        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
+  benchmark:
+    env:
+      CONC: '14'
+      KV_OFFLOADING: dram
+
+override_tp4_c16:
+  roles:
+    agg:
+      args:
+        max-running-requests: 6
+        cuda-graph-max-bs-decode: 6
+        mem-fraction-static: 0.95
+        disable-prefill-cuda-graph: null
+        cuda-graph-backend-prefill: breakable
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 64
+        stream-interval: 20
+        tokenizer-worker-num: 4
+        incremental-streaming-output: true
         speculative-draft-attention-backend: null
       env:
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '2048'
@@ -189,48 +195,7 @@ override_tp4_c16:
   benchmark:
     env:
       CONC: '16'
-
-override_tp4_c20:
-  roles:
-    agg:
-      args:
-        max-running-requests: 40
-        cuda-graph-max-bs-decode: 40
-        mem-fraction-static: 0.95
-        disable-prefill-cuda-graph: null
-        cuda-graph-backend-prefill: breakable
-        chunked-prefill-size: 8192
-        max-prefill-tokens: 8192
-        schedule-policy: shortest-prefill-first
-        prefill-decode-interval: 32
-        speculative-draft-attention-backend: null
-      env:
-        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '2048'
-        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
-  benchmark:
-    env:
-      CONC: '20'
-
-override_tp4_c24:
-  roles:
-    agg:
-      args:
-        max-running-requests: 48
-        cuda-graph-max-bs-decode: 48
-        mem-fraction-static: 0.95
-        disable-prefill-cuda-graph: null
-        cuda-graph-backend-prefill: breakable
-        chunked-prefill-size: 8192
-        max-prefill-tokens: 8192
-        schedule-policy: shortest-prefill-first
-        prefill-decode-interval: 32
-        speculative-draft-attention-backend: null
-      env:
-        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '2048'
-        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
-  benchmark:
-    env:
-      CONC: '24'
+      KV_OFFLOADING: dram
 
 override_tp4_c28:
   roles:
@@ -238,22 +203,12 @@ override_tp4_c28:
       args:
         max-running-requests: 56
         cuda-graph-max-bs-decode: 56
-        prefill-decode-interval: 16
-        speculative-draft-attention-backend: null
-      env:
-        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
-  benchmark:
-    env:
-      CONC: '28'
-
-override_tp4_c32:
-  roles:
-    agg:
-      args:
-        max-running-requests: 64
-        cuda-graph-max-bs-decode: 64
         mem-fraction-static: 0.9
-        prefill-decode-interval: 16
+        chunked-prefill-size: 16384
+        max-prefill-tokens: 16384
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 96
+        stream-interval: 20
         speculative-draft-attention-backend: null
       env:
         PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
@@ -261,4 +216,50 @@ override_tp4_c32:
         SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
   benchmark:
     env:
-      CONC: '32'
+      CONC: '28'
+      KV_OFFLOADING: dram
+
+override_tp4_c36:
+  roles:
+    agg:
+      args:
+        max-running-requests: 72
+        cuda-graph-max-bs-decode: 72
+        mem-fraction-static: 0.9
+        chunked-prefill-size: 16384
+        max-prefill-tokens: 16384
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 128
+        stream-interval: 20
+        speculative-draft-attention-backend: null
+      env:
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '4096'
+        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
+  benchmark:
+    env:
+      CONC: '36'
+      KV_OFFLOADING: dram
+
+override_tp4_c40:
+  roles:
+    agg:
+      args:
+        max-running-requests: 48
+        cuda-graph-max-bs-decode: 48
+        mem-fraction-static: 0.93
+        chunked-prefill-size: 16384
+        max-prefill-tokens: 16384
+        hicache-size: 160
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 64
+        stream-interval: 20
+        speculative-draft-attention-backend: null
+      env:
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '4096'
+        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
+  benchmark:
+    env:
+      CONC: '40'
+      KV_OFFLOADING: dram

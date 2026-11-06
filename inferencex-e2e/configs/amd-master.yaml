@@ -259,6 +259,8 @@ qwen3.5-fp4-mi355x-sglang-agentic-mtp:
 # Qwen3.8-Flash-Next Quark MXFP4 MoE (MTP experts included), FP8 attention and
 # FP8 PLE, AgentX on MI355X via SGLang with native NEXTN MTP (3 steps,
 # eagle-topk 1, 4 draft tokens). TP1: the ~116 GiB checkpoint fits on one MI355X.
+# Concurrency 1-16 serve from GPU KV; 24, 48 and 80 add an FP8 KV cache and HiCache
+# host-DRAM offload.
 qwen3.8next-fp4-mi355x-sglang-agentic-mtp:
   image: lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261031@sha256:3867dc07ba2530f914e1f210ed829f7a572a75286c8c362dbc22cbecf9b5a7e6
   model: amd/Qwen3.8-Flash-Next-Quark-MXFP4-AttnFP8-PLEFP8
@@ -270,9 +272,11 @@ qwen3.8next-fp4-mi355x-sglang-agentic-mtp:
   srt-recipe-dir: qwen3.8next/sglang/mi355x-fp4-mtp
   scenarios:
     agentic-coding:
+    # HiCache rows take the 0.80 policy share per GPU (299 GB); the recipe's hicache-size stays within it.
     - dram-utilization: 0.80
       search-space:
       - { tp: 1, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 12, 16], srt-recipe: agentic.yaml }
+      - { tp: 1, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [24, 48, 80], srt-recipe: agentic.yaml }
 
 # AgentX Pareto sweep for Qwen3.5 FP8 on MI300X. The fast discovery run peaks
 # at c24; c32 records the post-knee throughput and latency cliff.
@@ -1065,3 +1069,21 @@ glm5.3flash-fp8-mi325x-sglang-agentic-mtp:
       search-space:
       - { tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 12], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 24, 32], srt-recipe: agentic.yaml }
+
+h3-bf16-mi355x-sglang-video:
+  image: lmsysorg/sglang:v0.5.23-rocm724-mi35x@sha256:e5278f805bb4482cadc4957af63633a0b914b40c778f7f3ea63693a31ee04fdf
+  model: MiniMaxAI/MiniMax-H3
+  model-prefix: h3
+  runner: cluster:mi355x-amds
+  precision: bf16
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: h3/sglang/mi355x-bf16
+  scenarios:
+    video-generation:
+      - spec: h3-v2.yaml
+        set: release-v1
+        search-space:
+          - gpus: 4
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
