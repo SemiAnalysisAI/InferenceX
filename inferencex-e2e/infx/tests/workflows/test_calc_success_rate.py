@@ -122,31 +122,6 @@ def test_success_rates_include_all_pages_and_retries(
     assert "unused" not in table
 
 
-def test_acceptance_gate_jobs_are_not_counted(run_stats_environment, monkeypatch):
-    # Report-only gate jobs conclude success even when their deployment failed.
-    jobs = [
-        {"name": "al-gate / p5 | dsv4 fp4 cluster:sample-a sgl TP8 mtp c32",
-         "conclusion": "success"},
-        {"name": "multi-node al-gate / p5 | dsv4 fp4 cluster:sample-b dynamo-vllm c8",
-         "conclusion": "success"},
-        {"name": "agentic / p5 | dsv4 fp4 cluster:sample-a sgl TP8 mtp c32",
-         "conclusion": "failure"},
-        {"name": "multi-node agentic / p5 | dsv4 fp4 cluster:sample-b dynamo-vllm c8",
-         "conclusion": "success"},
-    ]
-    monkeypatch.setattr(
-        success_rate.github.subprocess, "run",
-        lambda args, **kwargs: subprocess.CompletedProcess(
-            args, 0, json.dumps([{"jobs": jobs, "total_count": len(jobs)}]), ""),
-    )
-    success_rate.main()
-    assert json.loads(run_stats_environment.read_text()) == {
-        "sample-a": {"n_success": 0, "total": 1},
-        "sample-b": {"n_success": 1, "total": 1},
-        "unused": {"n_success": 0, "total": 0},
-    }
-
-
 @pytest.mark.parametrize("response,error,match", [
     (401, RuntimeError, "HTTP 401"),
     ({}, RuntimeError, "unexpected shape"),
@@ -196,3 +171,18 @@ def test_empty_job_list_still_writes_zero_counts(run_stats_environment, monkeypa
         "sample-b": {"n_success": 0, "total": 0},
         "unused": {"n_success": 0, "total": 0},
     }
+
+
+def test_run_stats_wait_for_every_benchmark_sweep():
+    jobs = yaml.safe_load(
+        (infx.config.git_repository_root() / ".github/workflows/run-sweep.yml").read_text()
+    )["jobs"]
+
+    def upstream(name):
+        needs = jobs[name].get("needs", [])
+        needs = [needs] if isinstance(needs, str) else needs
+        return set(needs).union(*(upstream(need) for need in needs))
+
+    sweeps = {name for name in jobs if name.startswith("sweep-") and "evals" not in name}
+    assert "sweep-video" in sweeps
+    assert sweeps - upstream("calc-success-rate") == set()

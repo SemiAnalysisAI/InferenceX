@@ -167,3 +167,70 @@ override_c16:
     env:
       CONC: '16'
       KV_OFFLOADING: none
+
+# c24, c48 and c80 keep ReplaySSM and the PLE offload, store the target and draft KV
+# caches in FP8 (E4M3), and add HiCache host-DRAM offload with a Mamba state pool
+# that tracks a checkpoint every 256 tokens (extra_buffer_lazy). HiCache takes the
+# point's 299 GB DRAM share from the matrix generator (hicache-size 200 at c24, 298
+# at c48 and c80); TOTAL_CPU_DRAM_GB records it. mem-fraction-static is 0.88, used
+# as given. c24 admits 2x CONC; c48 and c80 admit 128 requests.
+# c80 caches only the prompt on finish and keeps at most two Mamba states per path.
+override_c24:
+  roles:
+    agg:
+      args: &hicache_args
+        kv-cache-dtype: fp8_e4m3
+        speculative-draft-kv-cache-dtype: fp8_e4m3
+        mem-fraction-static: 0.88
+        max-running-requests: 48
+        cuda-graph-max-bs-decode: 48
+        max-mamba-cache-size: 960
+        mamba-radix-cache-strategy: extra_buffer_lazy
+        mamba-track-interval: 256
+        enable-hierarchical-cache: true
+        hicache-size: 200
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        hicache-write-policy: write_back
+      env: &hicache_env
+        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
+        SGLANG_USE_AITER_UNIFIED_ATTN: '1'
+  benchmark:
+    env: &hicache_client
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '299'
+      CONC: '24'
+
+override_c48:
+  roles:
+    agg:
+      args:
+        <<: *hicache_args
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 128
+        max-mamba-cache-size: 720
+        hicache-size: 298
+      env: *hicache_env
+  benchmark:
+    env:
+      <<: *hicache_client
+      CONC: '48'
+
+override_c80:
+  roles:
+    agg:
+      args:
+        <<: *hicache_args
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 128
+        max-mamba-cache-size: 640
+        hicache-size: 298
+        # Cache only the prompt on finish; the AgentX replay never re-sends model output.
+        strip-thinking-cache: true
+        # At most two Mamba states per conversation path; stale interior states skip host write-back.
+        mamba-max-states-per-path: 2
+      env: *hicache_env
+  benchmark:
+    env:
+      <<: *hicache_client
+      CONC: '80'
