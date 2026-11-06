@@ -32,7 +32,7 @@ services:
       - --num-gpus
       - "{gpus_per_node}"
       - --ulysses-degree
-      - "4"
+      - "{gpus_per_node}"
       - --tp-size
       - "1"
       - --attention-backend
