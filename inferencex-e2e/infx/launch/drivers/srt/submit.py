@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from infx.srt_slurm.workload import CpuPowerSource, GpuPower
 
 SINGLE_NODE_SUBMISSION = "srt-single-node-submission.json"
+VIDEO_SUBMISSION = "srt-video-submission.json"
 MULTINODE_SUBMISSION = "srt-submission.json"
 ACCEPTANCE_RECORD = "golden-acceptance.json"
 BIND_LOG = "srt-bind.log"
@@ -114,6 +115,15 @@ def bind_point(
     ]  # fmt: skip
     if cpu_power_source is not None:
         prepare += ["--cpu-power-source", cpu_power_source]
+    return _bind(run, prepare, checkout.root)
+
+
+def bind_video(run: SrtRun, checkout: Checkout, arguments: Path) -> int:
+    """Bind the services-only video recipe for this job; the binder writes ``arguments``."""
+    prepare = [
+        str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.video", "prepare",
+        f"{run.workspace}/{run.request.srt_recipe}", str(arguments), *_fabric(run),
+    ]  # fmt: skip
     return _bind(run, prepare, checkout.root)
 
 
