@@ -158,7 +158,8 @@ def test_bound_selected_service_executes_its_engine_and_retains_launch_receipts(
         "VIDEO_RESULT_DIR": str(output),
     }
     bootstrap = (
-        "import sys; from evaluator import srt_selected; "
+        "import sys; from pathlib import Path; from evaluator import srt_selected; "
+        f"srt_selected.KFD = Path({str(tmp_path / 'no-kfd')!r}); "
         "srt_selected.cuda_devices=lambda: ['GPU-00000000-0000-0000-0000-000000000001', "
         "'GPU-00000000-0000-0000-0000-000000000002']; "
         "from infx.bench.video import main; sys.exit(main(sys.argv[1:]))"

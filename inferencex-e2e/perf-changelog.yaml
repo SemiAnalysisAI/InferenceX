@@ -12149,6 +12149,14 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
+    - h3-bf16-mi355x-sglang-video
+  scenario-type: [video-generation]
+  description:
+    - "Run the native H3 C1 sweep on four MI355X GPUs with SGLang Ulysses4, using the h3-v2.yaml release-v1 workload of the H100 and B200 rows."
+    - "Use the SGLang v0.5.23 ROCm 7.2.4 MI35x image and name ROCm server GPUs by board serial so AMD power samples bind to the server."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4809
+
+- config-keys:
     - qwen3.5-fp8-b300-sglang-agentic-mtp
   description:
     - "Update SGLang image from v0.5.16-cu130 to v0.5.22-cu130 and rename --cuda-graph-max-bs to --cuda-graph-max-bs-decode."

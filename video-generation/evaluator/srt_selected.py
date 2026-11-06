@@ -25,6 +25,8 @@ RECORDED_ENGINE_ENV = (
     "VGBENCH_GPU_UUIDS",
 )
 _BOOLEAN = {"true": True, "false": False}
+KFD = Path("/dev/kfd")
+PCI_DEVICES = Path("/sys/bus/pci/devices")
 # Deployment keys only: the dashboard treats any other spec.json server key as workload identity.
 SERVER_FLAGS = {
     "sglang": {
@@ -60,6 +62,29 @@ def cuda_devices() -> list[str]:
         ok(cuda.cuDeviceGetUuid(ctypes.byref(raw), device))
         values.append("GPU-" + str(uuid.UUID(bytes=bytes(raw))))
     return values
+
+
+def rocm_devices() -> list[str]:
+    # AMD power exporters label each GPU by its board serial, not by a HIP UUID.
+    hip = ctypes.CDLL("libamdhip64.so")
+
+    def ok(code):
+        if code != 0:
+            raise RuntimeError("HIP device inventory failed: " + str(code))
+
+    count = ctypes.c_int()
+    ok(hip.hipGetDeviceCount(ctypes.byref(count)))
+    values = []
+    for ordinal in range(count.value):
+        bus = ctypes.create_string_buffer(32)
+        ok(hip.hipDeviceGetPCIBusId(bus, len(bus), ordinal))
+        values.append((PCI_DEVICES / bus.value.decode() / "serial_number").read_text().strip())
+    return values
+
+
+def gpu_devices() -> list[str]:
+    """The visible GPUs in engine order, named as the cluster's power exporter labels them."""
+    return rocm_devices() if KFD.exists() else cuda_devices()
 
 
 def _recipe_environment(env: dict[str, str]) -> dict[str, str]:
@@ -166,7 +191,7 @@ def serve(
     if command.count(snapshot) != 1:
         raise ValueError("the engine command must contain the model snapshot path exactly once")
 
-    uuids = cuda_devices()
+    uuids = gpu_devices()
     if len(uuids) != gpus:
         raise RuntimeError("visible GPU count differs from the native recipe")
     env = os.environ.copy()
@@ -224,7 +249,7 @@ def _sglang_main() -> None:
     expected = os.environ.get("VGBENCH_GPU_UUIDS")
     if not expected:
         raise RuntimeError("VGBENCH_GPU_UUIDS is required for the native SGLang server")
-    if cuda_devices() != expected.split(","):
+    if gpu_devices() != expected.split(","):
         raise RuntimeError("Runtime device UUIDs differ from assigned GPUs")
     from sglang.cli.main import main
 
