@@ -31,7 +31,6 @@ jobs:
             - name: Checkout code
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
-                  fetch-depth: 0
                   persist-credentials: false
 
             - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
@@ -44,6 +43,8 @@ jobs:
               run: |
                   source "$GITHUB_WORKSPACE/inferencex-e2e/benchmarks/check_env.sh"
                   check_env_vars GITHUB_WORKSPACE RUNNER_TEMP GITHUB_OUTPUT PUSH_BEFORE PUSH_AFTER
+                  # The planner only reads the base and head trees, never history.
+                  git fetch --quiet --no-tags --depth=1 origin "$PUSH_BEFORE"
                   cd "$GITHUB_WORKSPACE/inferencex-e2e"
                   uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
                     python -m infx.matrix.plan \
