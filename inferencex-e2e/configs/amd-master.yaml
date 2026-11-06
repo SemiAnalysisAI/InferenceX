@@ -1002,6 +1002,37 @@ glm5.3-fp8-mi355x-tilert-agentic:
           ep: 1
           dp-attn: false
 
+dsv41flash-fp4-mi355x-tilert-agentic-dspark:
+  image: ghcr.io/tile-ai/tilert-rocm-decode:0.1.6@sha256:48c30d7636a561b4edf781ac3c7712e09fa9a0b2f1292863b72c2d8e4bcb492a
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: tilert
+  router: { name: tilert-pd-router, version: "0.1.7" }
+  multinode: true
+  disagg: true
+  kv-p2p-transfer: mooncake
+  srt-recipe-dir: dsv41flash/tilert/mi355x-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: "mtp"
+        conc-list: [1]
+        srt-recipe: disagg-1p1d-tp4-tp8-mtp.yaml
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_IMAGE=ghcr.io/tile-ai/tilert-rocm-prefill:0.1.7@sha256:8a88e2aa51105facd103217b0dc353258f3fc9368318c3bb62f0400bb8dd1ed5"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+
 # SGLang ROCm 10 MI35X release image. TP2/EP1 up to c32, TP4/EP1 up to c16,
 # DP2 attention with TP MoE at c32 and c64 (c32 overlaps TP2). Host Engram on all.
 dsv41flash-fp4-mi355x-sglang-agentic-dspark:

@@ -1,0 +1,121 @@
+schema: 2
+name: dsv41flash-mi355x-tilert-agentx
+slurm:
+  time_limit: "08:00:00"
+resources:
+  gpu_type: mi355x
+  gpus_per_node: 8
+setup_script: glm5.3-tilert-rocm.sh
+environment:
+  RDMAV_FORK_SAFE: "1"
+  NCCL_SOCKET_IFNAME: "@fabric.socket-ifname"
+  GLOO_SOCKET_IFNAME: "@fabric.socket-ifname"
+  NCCL_IB_HCA: "@fabric.rdma-devices"
+roles:
+  prefill:
+    engine:
+      type: vllm
+      set_visible_devices: true
+    # The vLLM nightly's PyPI Mooncake sends cross-node writes over HIP IPC and its ionic
+    # provider lacks kernel ABI 4; this image carries a multi-protocol build and a newer provider.
+    container: ghcr.io/tile-ai/tilert-rocm-prefill:0.1.7@sha256:8a88e2aa51105facd103217b0dc353258f3fc9368318c3bb62f0400bb8dd1ed5
+    nodes: 1
+    workers: 1
+    gpus: 4
+    env:
+      TILERT_ROLE: prefill
+      VLLM_ROCM_USE_AITER: "1"
+      VLLM_ROCM_USE_AITER_MOE: "1"
+      VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: NONE
+      AITER_TRITON_LOG_LEVEL: ERROR
+      VLLM_USE_BREAKABLE_CUDAGRAPH: "1"
+      OMP_NUM_THREADS: "1"
+      PYTHONUNBUFFERED: "1"
+      VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+      # Register the VRAM staging buffer with the ionic HCAs through dmabuf.
+      MOONCAKE_DISABLE_HIP_DMABUF: "0"
+    args:
+      served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+      tensor-parallel-size: 4
+      language-model-only: true
+      # The router's template: it tokenizes only when the prefill serves the same template with
+      # the HF tokenizer path, which it reads from the prefill's command line on a shared node.
+      chat-template: /configs/dsv41flash-tilert-chat-template.jinja
+      # The router reads the first token id from the prefill's logprobs.
+      return-tokens-as-token-ids: true
+      moe-backend: aiter
+      gpu-memory-utilization: 0.85
+      attention-config: '{"indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
+      block-size: 128
+      # The DSpark draft runs on the prefill too, so the decode receives its window state.
+      speculative-config: '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
+      max-model-len: 1048576
+      max-num-batched-tokens: 32768
+      max-num-seqs: 1
+      engram-config: '{"cpu_offload":false}'
+      enable-prefix-caching: true
+      # The KV connector has only been exercised with eager prefill.
+      enforce-eager: true
+      kv-transfer-config: >-
+        {"kv_connector":"DsV41TileRTConnector","kv_connector_module_path":"tilert.pd_vllm.dsv41_prefill_connector",
+         "kv_role":"kv_producer","kv_connector_extra_config":{
+           "tilert_model":"dsv41","tilert_max_seq_len":1048576,"tilert_transport":"mooncake"}}
+  decode:
+    engine: tilert
+    container: ghcr.io/tile-ai/tilert-rocm-decode:0.1.6@sha256:48c30d7636a561b4edf781ac3c7712e09fa9a0b2f1292863b72c2d8e4bcb492a
+    nodes: 1
+    workers: 1
+    gpus: 8
+    env:
+      TILERT_ROLE: decode
+      # The dsv41 profile lands the whole prompt KV in one receive buffer.
+      TILERT_PD_SHARDS: "1"
+      # Wake the stream on every token instead of the 200 ms default, so a short
+      # request's tokens are not held until it ends.
+      TILERT_DECODE_POLL_MS: "2"
+    args:
+      model: dsv41
+      # TileRT reads the Hugging Face checkpoint directly; no converted weights. The cluster
+      # stages no DeepSeek-V4.1-Flash checkpoint, so the job is in Hub mode and mounts nothing
+      # at /model: read the shared Hub cache's snapshot instead (refs/main, the revision the
+      # prefill's vLLM loads and the chat template is based on).
+      model-weights-dir: /hf_hub_cache/hub/models--deepseek-ai--DeepSeek-V4.1-Flash/snapshots/314113f8a7dadb388215396ba5fbee2c610a04d6
+      max-seq-len: 1048576
+      transport: mooncake
+      with-mtp: true
+      num-mtp: 5
+frontend:
+  type: tilert-router
+  container_image: ghcr.io/tile-ai/tilert-rocm-decode:0.1.6@sha256:48c30d7636a561b4edf781ac3c7712e09fa9a0b2f1292863b72c2d8e4bcb492a
+  enable_multiple_frontends: false
+  env:
+    TILERT_ROLE: router
+  args:
+    parser: none
+    model-path: /hf_hub_cache/hub/models--deepseek-ai--DeepSeek-V4.1-Flash/snapshots/314113f8a7dadb388215396ba5fbee2c610a04d6
+    queue-timeout: 1800
+    # The router renders the chat template and tokenizes each request itself, so the prefill
+    # receives token ids. The prefill serves the same template; the router checks its rendering
+    # against the prefill's /tokenize at startup and stays off otherwise.
+    chat-template: /configs/dsv41flash-tilert-chat-template.jinja
+sbatch_directives:
+  cpus-per-task: "128"
+  mem: "0"
+srun_options:
+  mem: "0"
+  container-writable: ""
+  container-remap-root: ""
+health_check:
+  max_attempts: 2160
+  interval_seconds: 5
+benchmark:
+  env:
+    TOKENIZER: /hf_hub_cache/hub/models--deepseek-ai--DeepSeek-V4.1-Flash/snapshots/314113f8a7dadb388215396ba5fbee2c610a04d6
+    SERVED_MODEL_NAME: deepseek-ai/DeepSeek-V4.1-Flash
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
+    # Thinking on with high effort, the regime of the golden acceptance curve.
+    AIPERF_EXTRA_INPUTS: '{"chat_template_kwargs":{"reasoning_effort":"high","thinking":true},"temperature":1}'
+    HF_HOME: /logs/hf_cache
+    HF_HUB_OFFLINE: ""
+    TRANSFORMERS_VERBOSITY: error
+    TOKENIZERS_PARALLELISM: "false"

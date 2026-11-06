@@ -12205,3 +12205,13 @@
     - "Retune the Muse Spark Open GB200 curve and set SGLANG_FLASHINFER_NVFP4_PER_TOKEN_ACTIVATION=0 at every concurrency; run TP4/EP4 at concurrency 1 without KV offload and at concurrency 4, 7, 10, 14, 16, 28, 36, 40 with HiCache, dropping concurrency 2, 6, 8, 20, 24 and 32."
     - "Use prefill-decode interval 64-256 and stream interval 20 at every HiCache point, shortest-prefill-first except at concurrency 7, request admission 2-6 at concurrency 4-16, 16K chunked prefill at concurrency 28-40, and at concurrency 40 mem-fraction-static 0.93, a 160 GB HiCache pool and CUDA graphs up to 48."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-tilert-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DeepSeek-V4.1-Flash FP4 AgentX on MI355X with a disaggregated TileRT setup at concurrency 1: one vLLM ROCm prefill (ghcr.io/tile-ai/tilert-rocm-prefill:0.1.7: the validated MI355X DeepSeek-V4.1-Flash vLLM nightly e68efc68 plus the multi-protocol Mooncake build and ionic verbs provider of the TileRT ROCm decode image; TP4, eager) sends the prompt KV over Mooncake to one TileRT decode (ghcr.io/tile-ai/tilert-rocm-decode:0.1.6 with tilert 0.1.7; TP8, five drafts from the checkpoint's own DSpark head) behind the TileRT PD router, with the full 1M context on both ranks and no context cap on the replay."
+    - "Throughput runs simulate the DeepSeek-V4.1-Flash DSpark golden AL at five drafts (3.51): a TileRT decode now takes its draft method from its model profile, and the dsv41 profile maps to dspark."
+    - "The TileRT router renders the chat template and tokenizes each request itself, so the prefill receives token ids. Prefill and router serve the same template, configs/dsv41flash-tilert-chat-template.jinja: the model's chat template, adapted to render exactly what vLLM's deepseek_v41 tokenizer mode renders; the prefill uses vLLM's HF tokenizer path with it."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
