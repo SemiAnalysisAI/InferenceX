@@ -12036,6 +12036,21 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4796
 
 - config-keys:
+    - kimik3.1-fp4-mi355x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi-K3.1-Pro vLLM AgentX on one 8x MI355X node with vLLM's day-0 image vllm/vllm-openai-rocm:kimi-k31@sha256:5f47cc1004d9a7ac65f8a913725edb20c62c99a07e31cbf4ba21741bd0b4f9b1 (vLLM 0.0.0+mum.14d1ec2336, AITER 52846bc2)."
+    - "TP8 x DCP8 (a2a DCP backend) with the Inferact/Kimi-K3.1-Pro-DSpark-preview draft: GPU-resident KV at concurrency 1, and SimpleCPUOffloadConnector DRAM offload at concurrency 4, 10, 16, 24, 32 and 48 (224.875 GB per rank, 1799 GB per node, which is what dram-utilization 0.6 resolves to)."
+    - "Per point at concurrency 1/4/10/16/24/32/48: max-num-seqs 1/2/6/10/16/24/48 and DSpark draft tokens 7/5/5/4/4/3/3. max-num-batched-tokens is 16384 and gpu-memory-utilization 0.90 through concurrency 24; both change to 10240 and 0.91 at concurrency 32 and 48."
+    - "Every point compiles in mode 3 with FULL_AND_PIECEWISE CUDA graphs. Concurrency 1 runs the latency_specialized decode backend, captures sizes 2-16 and turns breakable CUDA graphs off; the offload points keep VLLM_USE_BREAKABLE_CUDAGRAPH=1 and capture max-num-seqs multiples of (1 + draft tokens) plus a prefill ladder up to max-num-batched-tokens."
+    - "Common settings: FP8 KV cache, FP32 KDA state (mamba-ssm-cache-dtype float32), MXFP4 indexer cache (indexer_kv_dtype mxfp4), fused KDA prefill, prefix caching with prefix-match-unit 64, max-model-len 1048576, fastsafetensors loading, stream-interval 10, AITER ASM DCP verify, AITER DCP allgather, FlyDSL sparse MLA, the image's HSA_NO_SCRATCH_RECLAIM=1, transparent huge pages for the offload pool (THP_MEM_ALLOC_ENABLE=1), and 1200 s execute-model and 7200 s engine-ready timeouts."
+    - "K3.1 week-1 precision policy: linear layers and shared experts stay BF16 (no quantization-config); routed experts run A4W4, MXFP4 weights with FP4 activations, through the SiTUv2 FlyDSL MoE (VLLM_ROCM_USE_AITER_MOE_SITUV2=1, the same as the image's auto default); MoE stage 2 stays BF16 (AITER_FLYDSL_STAGE2_FP8=0); all-reduce stays BF16 (VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=NONE)."
+    - "Verification is block rejection with probabilistic draft sampling. Throughput runs replace it with the golden acceptance length for the draft length: 3.69 at 7 tokens, 3.41 at 5, 3.19 at 4 and 2.88 at 3. Evals and AL gates verify for real."
+    - "No change to the DSpark draft's precision: Inferact/Kimi-K3.1-Pro-DSpark-preview (revision 6a2ef20a) ships all-BF16 weights with no quantization_config, the speculative config sets no quantization, so get_draft_quant_config() returns None and K3DSparkModel loads its layers in BF16 with the target's BF16 embedding and LM head. Its KV cache is FP8, the same as the target's."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4806
+
+- config-keys:
     - kimik3.1-fp4-mi355x-sglang-agentic-dflash
   scenario-type:
     - agentic-coding
@@ -12293,6 +12308,27 @@
     - "Add native FP8 GLM-5.3-Flash AgentX on MI355X with the official SGLang v0.5.22 ROCm image pinned by digest and the SGLang cookbook MI355X FP8 Low Latency recipe: TP4/EP4, AITER MoE, FP8 KV with TileLang DSA, embedded NextN MTP 5/1/6 served as shipped."
     - "HBM-only KV at conc 1, 2, 8, 16, 24 and 32; the cookbook HiCache L1 + L2 tier (180 GB per rank, write-through) at conc 40 and 48 recording its 749.33 GB host allocation (187.33 GB per rank) as a 751 GB CPU DRAM share. ROCM_QUICK_REDUCE_QUANTIZATION=NONE per the all-reduce policy."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4720
+
+- config-keys:
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+  description:
+    - "Update the vLLM ROCm image from v0.32.0 to v0.33.0, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4794
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-h100-vllm-agentic-dspark
+  description:
+    - "Update the vLLM image from nightly-e4a5b5537344 to nightly-00b6c4c565a8, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4569
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-gb300-vllm-agentic-dspark
+  description:
+    - "Update the vLLM image from nightly-dev-arm64-cu130-ac9126e58aa7 to the digest-pinned nightly-00b6c4c5."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4558
+  scenario-type: [agentic-coding]
 
 - config-keys:
     - glm5.2-fp8-mi355x-sglang-agentic-mtp
