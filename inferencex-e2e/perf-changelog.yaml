@@ -12243,4 +12243,4 @@
     - "Set c16, c24, c32 and c48 to 10240 batched tokens, a 10240 graph capture cap and gpu-memory-utilization 0.90."
     - "Keep admission at 10/16/24/48 and DSpark at 4/4/3/3 draft tokens; preserve decode coverage and trim only capture sizes above 10240, leaving 45/50/57/78 buckets."
     - "Retain the pinned day-0 image, TP8/DCP8, 1799 GB CPU KV offload, precision settings and scratch configuration from PR #4806."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4858
