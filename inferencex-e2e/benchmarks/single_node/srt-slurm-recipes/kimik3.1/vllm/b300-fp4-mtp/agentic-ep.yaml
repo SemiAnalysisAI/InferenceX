@@ -79,10 +79,10 @@ base:
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '2999'
 
-# Hybrid decode: TP8 x DCP8 attention, routed experts EP8 on MegaMoE. This path keeps the
-# fused Kimi-K3 decode at every batch size (no 152-CTA wide-step MoE), at the cost of about
-# 20 GiB per GPU for the MegaMoE buffers. Admission is 2x CONC; FULL_DECODE_ONLY graphs
-# cover every decode batch; throughput runs replace block rejection with the golden acceptance length.
+# Hybrid decode: TP8 x DCP8 attention with routed experts EP8 on MegaMoE and the fused Kimi-K3 decode at every batch
+# size. Sequence-parallel MoE replicates the shared expert on each rank (about 20 GiB more weights per GPU).
+# Admission is 2x CONC; FULL_DECODE_ONLY graphs cover every decode batch; throughput runs replace block rejection with
+# the golden acceptance length.
 
 override_c32:
   roles:

@@ -5944,7 +5944,7 @@ dsv41flash-fp4-b300-vllm-agentic-dspark:
       - { tp: 2, ep: 2, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [128, 192], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
 
 kimik3.1-fp4-b300-vllm-agentic-dspark:
-  image: vllm/vllm-openai:kimi-k31-mc@sha256:eb9fcd314d104da39cf7e8055b28662dfe799ced618b62c3d92becf8a149b88b
+  image: vllm/vllm-openai:kimi-k31-mc@sha256:f81998764e8594d71b40788c5285ae112acf9230129d5d0d238b5df83da5acf6
   model: moonshotai/Kimi-K3.1-Pro
   model-prefix: kimik3.1
   runner: cluster:b300-dsxe
