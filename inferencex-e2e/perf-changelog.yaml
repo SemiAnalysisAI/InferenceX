@@ -12226,6 +12226,37 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4719
 
 - config-keys:
+    - glm5.3flash-fp8-gb300-sglang-agentic-mtp
+    - glm5.3flash-fp4-gb300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add native SGLang GLM-5.3-Flash AgentX on one GB300 tray (TP4/EP1) with lmsysorg/sglang:v0.5.22-cu130, FP8 (zai-org/GLM-5.3-Flash) and NVFP4 (nvidia/GLM-5.3-Flash-NVFP4), embedded EAGLE MTP 5/1/6."
+    - "SGLang cookbook GB300 recipe: TRT-LLM DSA prefill and decode, FP8 E4M3 KV cache, flashinfer_trtllm MoE, auto reasoning and tool-call parsers; NVFP4 adds modelopt_fp4 quantization."
+    - "GPU-resident KV at concurrency 1, 4, 8, 16, 24 and 32; auto-sized HiCache host tier (--hicache-host-memory-fraction 0.90, recorded as 723 GB per node, the measured maximum) at concurrency 40, 44 and 48."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4715
+
+- config-keys:
+    - glm5.3flash-fp8-b300-sglang-agentic-mtp
+    - glm5.3flash-fp4-b300-sglang-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Add GLM-5.3-Flash FP8 (zai-org/GLM-5.3-Flash) and NVFP4 (nvidia/GLM-5.3-Flash-NVFP4) AgentX on one 8x B300 node with the digest-pinned official SGLang v0.5.22-cu130 image: TP8, EAGLE MTP 5/1/6, TRT-LLM DSA, FP8 KV and FlashInfer TRT-LLM MoE, as in the SGLang cookbook's B300 cells."
+    - "GPU-resident KV at concurrency 1/4/8/16/24/32/48 (FP8) and 4/8/16/24/32/48 (NVFP4); HiCache at concurrency 64/96 with auto-sized host pools (host-memory fraction 0.76, about 2.8 TB per node, within the 3 TB cap) instead of the cookbook's 32 GB per rank, which is smaller than the device pool, and max-running-requests 96, since SGLang otherwise resets admission to 48 under EAGLE. Engine defaults set the remaining memory, admission and CUDA graph sizes."
+    - "Acceptance comes from the glm5.3flash MTP golden curve; the shipped draft head is served as stored, with SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE off."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4710
+
+- config-keys:
+    - glm5.3flash-fp8-h100-sglang-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Add native GLM-5.3-Flash FP8 AgentX on one 8x H100 node with the digest-pinned official SGLang v0.5.22-cu130 image and the SGLang cookbook H100 low-latency recipe: TP8/EP8, BF16 KV, TileLang DSA, DeepGEMM MoE, mem-fraction-static 0.70, and the embedded MTP head as EAGLE 5/1/6."
+    - "GPU-resident KV at concurrency 1 and 2; cookbook HiCache L1+L2 host tier (--hicache-size 32 per rank) at concurrency 4, 6, 8 and 10."
+    - "Prefill CUDA graphs are disabled because the image's default prefill graph faults with an illegal address during long-context replay on H100; decode CUDA graphs are unchanged."
+    - "Serve the pinned checkpoint revision 46a050bec13002ad29ee795c16e61cf4fa3c4a9c offline from the shared H100 Hugging Face cache."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4717
+
+- config-keys:
     - qwen3.5-fp8-b300-sglang-agentic-mtp
   description:
     - "Update SGLang image from v0.5.16-cu130 to v0.5.22-cu130 and rename --cuda-graph-max-bs to --cuda-graph-max-bs-decode."
