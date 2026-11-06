@@ -243,6 +243,10 @@ class HGXSystemChassis(GPUSystem):
 
 
 class MI300HGXSystemChassis(HGXSystemChassis):
+    """MI300X chassis; DIMM inventory measured on a Supermicro AS-8125GS-TNMR2 host."""
+
+    dimm_count: ClassVar[int] = 16
+    dimm_capacity_gb: ClassVar[int] = 96
     default_networking: ClassVar[tuple[NetworkGroup, ...]] = (AMD_TWO_TIER_NETWORK,)
     psu: SerializeAsAny[PSUEfficiencyModel] = Field(default_factory=MI300PSUEfficiency)
     pex89144_count: ClassVar[int] = 4
@@ -252,6 +256,10 @@ class MI300HGXSystemChassis(HGXSystemChassis):
 
 
 class MI325HGXSystemChassis(HGXSystemChassis):
+    """MI325X chassis; DIMM inventory measured on a QuantaGrid D75T-7U host."""
+
+    dimm_count: ClassVar[int] = 24
+    dimm_capacity_gb: ClassVar[int] = 96
     default_networking: ClassVar[tuple[NetworkGroup, ...]] = (AMD_TWO_TIER_NETWORK,)
     psu: SerializeAsAny[PSUEfficiencyModel] = Field(default_factory=MI325PSUEfficiency)
     pex89144_count: ClassVar[int] = 4
@@ -261,6 +269,10 @@ class MI325HGXSystemChassis(HGXSystemChassis):
 
 
 class MI355HGXSystemChassis(HGXSystemChassis):
+    """MI355X chassis; DIMM inventory measured on a Supermicro AS-4126GS-NMR-LCC host."""
+
+    dimm_count: ClassVar[int] = 24
+    dimm_capacity_gb: ClassVar[int] = 128
     default_networking: ClassVar[tuple[NetworkGroup, ...]] = (AMD_TWO_TIER_NETWORK,)
     psu: SerializeAsAny[PSUEfficiencyModel] = Field(default_factory=MI355PSUEfficiency)
     pex89144_count: ClassVar[int] = 4
