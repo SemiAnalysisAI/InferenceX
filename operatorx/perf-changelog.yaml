@@ -21,3 +21,12 @@
   description-zh:
     - 新增明确标注的 Kimi K3 vLLM 基准测试配置，测量 BF16 EP8/TP8 路由专家内核。
     - 在计时前生成本地均匀路由，不包含共享专家、通信或原生 K3 的latent 投影及 SITU 层。
+- date: 2026-11-03
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4762
+  operators: [all]
+  pools: [mi355x, b300]
+  description:
+    - "Kimi-K3 serving retirement removes its inherited vLLM recipe image, env and engine args from OperatorX cases; retain the shapes and remove stale recipe names from moe_small.json."
+    - "All unmatched vLLM cases on MI355X now select vllm/vllm-openai-rocm:nightly-e68efc685ab1e6f1eda004ced7157e3ca411da2f@sha256:520e098f54ec96837228aaddea0a833cbf6374dbdffd480c1d65f26ffab7701b instead of vllm/vllm-openai-rocm:nightly-rocm100-df6603f0583375f244d1ac6d36265462b7490392."
+    - "All unmatched vLLM cases on B300 now select vllm/vllm-openai:minimax-m31-flash@sha256:86f582dae25ea92802353727164ae4eb03b37b18baf9119b805ffaec2a7ef07c instead of vllm/vllm-openai:nightly-dev-x86_64-cu13-3696c77."
+    - "No GPU performance or compatibility evidence is claimed for these runtime changes; new results must retain image and recipe provenance."

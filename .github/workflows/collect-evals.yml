@@ -58,6 +58,12 @@ jobs:
           uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked --extra results \
             python -m infx.results.collect_eval_results eval_results/ "${RESULT_PREFIX}" >> $GITHUB_STEP_SUMMARY
 
+      - name: Summarize acceptance gates
+        continue-on-error: true # Report-only.
+        run: |
+          uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked \
+            python -m infx.srt_slurm.al_gate summarize eval_results/ >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload aggregated evals
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

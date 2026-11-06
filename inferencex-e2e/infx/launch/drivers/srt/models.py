@@ -69,6 +69,11 @@ OVERRIDES: dict[str, tuple[Override, ...]] = {
         ),
     ),
     "h200-dgxc": (
+        Override(
+            Match(any_of("glm5.3flash"), any_of("fp8"), any_of("sglang"), agentic=True),
+            require_config=True,
+            single_node_staged=True,
+        ),
         Override(Match(model_glob="*/Muse-Spark-Open-816B-A42B-NVFP4"), single_node_staged=True),
         Override(
             Match(any_of("dsr1"), any_of("fp8"), any_of("dynamo-trt")),
@@ -81,7 +86,6 @@ OVERRIDES: dict[str, tuple[Override, ...]] = {
     ),
     "mi355x-amds": (
         Override(Match(any_of("dsr1"), any_of("fp8"), any_of("sglang-disagg")), hub=True),
-        Override(Match(any_of("qwen3.5"), any_of("fp4"), any_of("sglang-disagg")), hub=True),
     ),
 }
 
@@ -192,6 +196,7 @@ SHARED_HF_CACHE_LANES: dict[str, tuple[Match, ...]] = {
         Match(agentic=True, model_glob="zai-org/GLM-5.2-FP8"),
         Match(agentic=True, model_glob="deepseek-ai/DeepSeek-V4.1-Flash"),
         Match(agentic=True, model_glob="amd/Muse-Spark-Open-*"),
+        Match(model_glob="MiniMaxAI/MiniMax-H3"),
     ),
 }
 

@@ -49,6 +49,11 @@ class Runtime:
         return self.venv / "bin" / "agentx"
 
     @property
+    def aiperf(self) -> Path:
+        """The harness package's generic ``aiperf`` replay executable."""
+        return self.venv / "bin" / "aiperf"
+
+    @property
     def hf(self) -> Path:
         """The venv's ``hf`` executable."""
         return self.venv / "bin" / "hf"

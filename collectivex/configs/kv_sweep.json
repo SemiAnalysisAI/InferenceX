@@ -1,0 +1,42 @@
+{
+  "suite": "kv-transfer",
+  "workloads": {
+    "kv-dsv4": [
+      "fp8"
+    ]
+  },
+  "isl_ladder": [
+    2048,
+    8192,
+    32768,
+    65536,
+    131072,
+    524288
+  ],
+  "batch_sizes": [
+    1,
+    2,
+    4,
+    8,
+    16,
+    32
+  ],
+  "max_burst_tokens": 131072,
+  "ops": {
+    "nixl": [
+      "pull",
+      "push"
+    ],
+    "mooncake": [
+      "push"
+    ]
+  },
+  "timing": {
+    "warmup_per_trial": 2,
+    "reps_per_trial": 16,
+    "trials_per_point": 3
+  },
+  "pool_slack": 2.0,
+  "allocation_minutes": 120,
+  "seed": 67
+}
