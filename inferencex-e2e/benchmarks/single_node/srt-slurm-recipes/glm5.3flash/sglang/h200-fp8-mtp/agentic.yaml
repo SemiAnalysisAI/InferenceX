@@ -1,0 +1,54 @@
+base:
+  schema: 2
+  name: glm5.3flash-fp8-h200-sglang-agentic
+  resources:
+    gpu_type: h200
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: zai-org/GLM-5.3-Flash
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        mem-fraction-static: 0.75
+        # Breakable prefill CUDA graphs hit a CUDA misaligned-address fault on
+        # ~336k-token single-request replay on H200; decode graphs stay enabled.
+        cuda-graph-backend-prefill: disabled
+        dsa-prefill-backend: tilelang
+        dsa-decode-backend: tilelang
+        kv-cache-dtype: bfloat16
+        moe-runner-backend: deep_gemm
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 5
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 6
+        reasoning-parser: auto
+        tool-call-parser: auto
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
+        SGLANG_GLM_NEXTN_MOE_PTPC: '0'
+
+override_hicache:
+  roles:
+    agg:
+      args:
+        # Default auto-sizing mirrors 2x the device KV and mamba pools (~119 GiB, 127 GB/rank);
+        # the cookbook's 32 GB tier is smaller than the 45 GiB/rank device KV pool.
+        enable-hierarchical-cache: true
+  benchmark:
+    env:
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1020'
