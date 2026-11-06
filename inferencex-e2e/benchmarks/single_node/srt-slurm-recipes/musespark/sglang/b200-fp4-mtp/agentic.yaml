@@ -73,9 +73,10 @@ override_tp8_c1:
   roles:
     agg:
       args:
-        max-running-requests: 1
         cuda-graph-max-bs-decode: 1
+        max-running-requests: 1
         mem-fraction-static: 0.88
+        stream-interval: 40
         swa-full-tokens-ratio: 0.3
       env:
         PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
@@ -86,33 +87,17 @@ override_tp8_c1:
       KV_OFFLOADING: none
 
 
-override_tp8_c2:
-  roles:
-    agg:
-      args:
-        max-running-requests: 1
-        cuda-graph-max-bs-decode: 1
-        mem-fraction-static: 0.88
-        swa-full-tokens-ratio: 0.3
-      env:
-        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
-        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
-  benchmark:
-    env:
-      CONC: '2'
-      KV_OFFLOADING: none
-
-
 override_tp8_c4:
   roles:
     agg:
       args:
-        max-running-requests: 4
-        cuda-graph-max-bs-decode: 4
-        prefill-decode-interval: 64
-        swa-full-tokens-ratio: 0.4
+        cuda-graph-max-bs-decode: 2
         enable-layernorm-sp: true
         enable-megamoe-for-layernorm-sp: true
+        max-running-requests: 2
+        prefill-decode-interval: 128
+        swa-full-tokens-ratio: 0.4
+        stream-interval: 40
       env:
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '8192'
   benchmark:
@@ -121,51 +106,17 @@ override_tp8_c4:
       KV_OFFLOADING: none
 
 
-override_tp8_c6:
-  roles:
-    agg:
-      args:
-        max-running-requests: 6
-        cuda-graph-max-bs-decode: 6
-        prefill-decode-interval: 64
-        swa-full-tokens-ratio: 0.4
-        enable-layernorm-sp: true
-        enable-megamoe-for-layernorm-sp: true
-      env:
-        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '8192'
-  benchmark:
-    env:
-      CONC: '6'
-      KV_OFFLOADING: none
-
-
-override_tp8_c8:
-  roles:
-    agg:
-      args:
-        max-running-requests: 3
-        cuda-graph-max-bs-decode: 3
-        mem-fraction-static: 0.88
-        swa-full-tokens-ratio: 0.3
-      env:
-        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
-        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
-  benchmark:
-    env:
-      CONC: '8'
-      KV_OFFLOADING: none
-
-
 override_tp8_c10:
   roles:
     agg:
       args:
-        max-running-requests: 10
-        cuda-graph-max-bs-decode: 10
-        prefill-decode-interval: 64
-        swa-full-tokens-ratio: 0.4
+        cuda-graph-max-bs-decode: 3
         enable-layernorm-sp: true
         enable-megamoe-for-layernorm-sp: true
+        max-running-requests: 3
+        prefill-decode-interval: 128
+        swa-full-tokens-ratio: 0.4
+        stream-interval: 40
       env:
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '8192'
   benchmark:
@@ -174,48 +125,23 @@ override_tp8_c10:
       KV_OFFLOADING: none
 
 
-override_tp8_c56:
-  roles:
-    agg:
-      args:
-        max-running-requests: 56
-        cuda-graph-max-bs-decode: 56
-        chunked-prefill-size: 32768
-        max-prefill-tokens: 32768
-        schedule-policy: shortest-prefill-first
-        prefill-decode-interval: 64
-        speculative-draft-attention-backend: null
-        swa-full-tokens-ratio: 0.25
-        enable-layernorm-sp: true
-        enable-megamoe-for-layernorm-sp: true
-        enable-hierarchical-cache: true
-        hicache-size: 160
-      env:
-        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '8192'
-        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
-        SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '4'
-  benchmark:
-    env:
-      CONC: '56'
-      KV_OFFLOADING: dram
-
-
 override_tp8_c64:
   roles:
     agg:
       args:
-        max-running-requests: 64
-        cuda-graph-max-bs-decode: 64
         chunked-prefill-size: 32768
-        max-prefill-tokens: 32768
-        schedule-policy: shortest-prefill-first
-        prefill-decode-interval: 48
-        speculative-draft-attention-backend: null
-        swa-full-tokens-ratio: 0.25
+        cuda-graph-max-bs-decode: 56
+        enable-hierarchical-cache: true
         enable-layernorm-sp: true
         enable-megamoe-for-layernorm-sp: true
-        enable-hierarchical-cache: true
         hicache-size: 160
+        max-prefill-tokens: 32768
+        max-running-requests: 56
+        prefill-decode-interval: 48
+        schedule-policy: shortest-prefill-first
+        stream-interval: 20
+        swa-full-tokens-ratio: 0.25
+        speculative-draft-attention-backend: null
       env:
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '8192'
         SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
@@ -226,60 +152,34 @@ override_tp8_c64:
       KV_OFFLOADING: dram
 
 
-override_tp4_c8:
+override_tp4_c7:
   roles:
     agg:
       gpus: 4
       args:
-        tensor-parallel-size: 4
-        expert-parallel-size: 4
-        max-running-requests: 8
-        cuda-graph-max-bs-decode: 8
-        mem-fraction-static: 0.95
         chunked-prefill-size: 8192
-        max-prefill-tokens: 8192
-        schedule-policy: shortest-prefill-first
-        prefill-decode-interval: 96
-        speculative-draft-attention-backend: null
-        swa-full-tokens-ratio: 0.1
+        cuda-graph-max-bs-decode: 2
+        enable-hierarchical-cache: true
         enable-layernorm-sp: true
         enable-megamoe-for-layernorm-sp: true
-        enable-hierarchical-cache: true
+        expert-parallel-size: 4
         hicache-size: 120
         hicache-write-policy: write_through
+        max-prefill-tokens: 8192
+        max-running-requests: 2
+        mem-fraction-static: 0.95
+        prefill-decode-interval: 64
+        stream-interval: 20
+        swa-full-tokens-ratio: 0.1
+        tensor-parallel-size: 4
+        schedule-policy: shortest-prefill-first
+        speculative-draft-attention-backend: null
       env:
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '2048'
         SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
   benchmark:
     env:
-      CONC: '8'
-      KV_OFFLOADING: dram
-
-
-override_tp4_c10:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        tensor-parallel-size: 4
-        expert-parallel-size: 4
-        max-running-requests: 10
-        cuda-graph-max-bs-decode: 10
-        mem-fraction-static: 0.95
-        chunked-prefill-size: 8192
-        max-prefill-tokens: 8192
-        schedule-policy: shortest-prefill-first
-        prefill-decode-interval: 64
-        speculative-draft-attention-backend: null
-        swa-full-tokens-ratio: 0.1
-        enable-hierarchical-cache: true
-        hicache-size: 120
-        hicache-write-policy: write_through
-      env:
-        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
-  benchmark:
-    env:
-      CONC: '10'
+      CONC: '7'
       KV_OFFLOADING: dram
 
 
@@ -288,22 +188,24 @@ override_tp4_c16:
     agg:
       gpus: 4
       args:
-        tensor-parallel-size: 4
-        expert-parallel-size: 4
-        max-running-requests: 32
-        cuda-graph-max-bs-decode: 32
-        mem-fraction-static: 0.95
         chunked-prefill-size: 8192
-        max-prefill-tokens: 8192
-        schedule-policy: shortest-prefill-first
-        prefill-decode-interval: 48
-        speculative-draft-attention-backend: null
-        swa-full-tokens-ratio: 0.1
+        cuda-graph-max-bs-decode: 6
+        enable-hierarchical-cache: true
         enable-layernorm-sp: true
         enable-megamoe-for-layernorm-sp: true
-        enable-hierarchical-cache: true
+        expert-parallel-size: 4
         hicache-size: 120
         hicache-write-policy: write_through
+        incremental-streaming-output: true
+        max-prefill-tokens: 8192
+        max-running-requests: 6
+        mem-fraction-static: 0.95
+        prefill-decode-interval: 44
+        schedule-policy: shortest-prefill-first
+        stream-interval: 20
+        swa-full-tokens-ratio: 0.1
+        tensor-parallel-size: 4
+        speculative-draft-attention-backend: null
       env:
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '2048'
         SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
@@ -318,22 +220,23 @@ override_tp4_c24:
     agg:
       gpus: 4
       args:
-        tensor-parallel-size: 4
-        expert-parallel-size: 4
-        max-running-requests: 48
-        cuda-graph-max-bs-decode: 48
-        mem-fraction-static: 0.98
         chunked-prefill-size: 8192
-        max-prefill-tokens: 8192
-        schedule-policy: shortest-prefill-first
-        prefill-decode-interval: 48
-        speculative-draft-attention-backend: null
-        swa-full-tokens-ratio: 0.1
+        cuda-graph-max-bs-decode: 48
+        enable-hierarchical-cache: true
         enable-layernorm-sp: true
         enable-megamoe-for-layernorm-sp: true
-        enable-hierarchical-cache: true
+        expert-parallel-size: 4
         hicache-size: 180
         hicache-write-policy: write_through
+        max-prefill-tokens: 8192
+        max-running-requests: 48
+        mem-fraction-static: 0.98
+        prefill-decode-interval: 48
+        schedule-policy: shortest-prefill-first
+        swa-full-tokens-ratio: 0.1
+        tensor-parallel-size: 4
+        stream-interval: 20
+        speculative-draft-attention-backend: null
       env:
         PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '2048'
@@ -341,4 +244,38 @@ override_tp4_c24:
   benchmark:
     env:
       CONC: '24'
+      KV_OFFLOADING: dram
+
+
+override_tp4_c40:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        chunked-prefill-size: 16384
+        cuda-graph-max-bs-decode: 48
+        enable-hierarchical-cache: true
+        enable-layernorm-sp: true
+        enable-megamoe-for-layernorm-sp: true
+        expert-parallel-size: 4
+        hicache-size: 160
+        hicache-write-policy: write_through
+        max-prefill-tokens: 16384
+        max-running-requests: 48
+        mem-fraction-static: 0.93
+        prefill-decode-interval: 64
+        schedule-policy: shortest-prefill-first
+        stream-interval: 20
+        swa-full-tokens-ratio: 0.1
+        tensor-parallel-size: 4
+        disable-prefill-cuda-graph: true
+        cuda-graph-backend-prefill: null
+        speculative-draft-attention-backend: null
+      env:
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '4096'
+        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
+  benchmark:
+    env:
+      CONC: '40'
       KV_OFFLOADING: dram
