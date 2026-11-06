@@ -12361,3 +12361,10 @@
     - "Update to lmsysorg/sglang:nightly-dev-cu13-20261103-797af717 and enable SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION and breakable prefill CUDA graphs."
     - "Replace the search space with TP4/EP4 at concurrency 3, TP1/EP1 at concurrency 8 and 20, and TP1/EP1 with HiCache at concurrency 36, 56 and 80; concurrency 20, 36, 56 and 80 use fp8_e4m3 kv-cache-dtype and speculative-draft-kv-cache-dtype (was bfloat16), concurrency 20, 56 and 80 set qsa-indexer-dtype fp8_e4m3, and concurrency 36 and 80 use 2 speculative steps instead of 3."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4787
+
+- config-keys:
+    - glm5.3flash-fp8-mi325x-sglang-agentic-mtp
+  description:
+    - "Update the SGLang ROCm image from v0.5.22-rocm10-mi30x to v0.5.23-rocm10-mi30x, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4872
+  scenario-type: [agentic-coding]
