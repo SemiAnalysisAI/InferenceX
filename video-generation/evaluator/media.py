@@ -9,19 +9,38 @@ from __future__ import annotations
 
 import hashlib
 import math
+import mmap
 import time
 from itertools import zip_longest
 from pathlib import Path
 from typing import Any
 
 
-IMPLEMENTATION_VERSION = "1.0.0"
+IMPLEMENTATION_VERSION = "1.1.0"
 SILENCE_AMPLITUDE = 1e-4  # -80 dBFS sample threshold, also used for RMS presence.
 CLIPPING_AMPLITUDE = 1.0 - 1.0 / 32768.0
 FROZEN_MAE = 1.0 / 1024.0
 SPECTRAL_WINDOW_SAMPLES = 1024
 # An MP4 records the codec family, not which encoder produced it.
 _DECODED_VIDEO_CODEC = {"libx264": "h264"}
+# Options a preset fixes in x264's SEI header. Tunes change none of them.
+_X264_PRESET_OPTIONS = {
+    "ultrafast": {
+        "cabac": "0",
+        "ref": "1",
+        "analyse": "0:0",
+        "me": "dia",
+        "subme": "0",
+        "mixed_ref": "0",
+        "trellis": "0",
+        "8x8dct": "0",
+        "bframes": "0",
+        "weightp": "0",
+        "scenecut": "0",
+        "mbtree": "0",
+        "aq": "0",
+    },
+}
 
 
 def _libraries() -> tuple[Any, Any]:
@@ -61,6 +80,18 @@ def _positive_number(value: Any) -> float | None:
     return number if math.isfinite(number) and number > 0 else None
 
 
+def _x264_options(path: Path) -> dict[str, str] | None:
+    """Return the options x264 wrote into the stream's SEI, or None if it wrote none."""
+    with path.open("rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as data:
+        start = data.find(b"x264 - core ")
+        if start < 0:
+            return None
+        end = data.find(b"\0", start, start + 4096)
+        header = data[start : end if end >= 0 else start + 4096].decode("ascii", "replace")
+    _, _, options = header.partition(" - options: ")
+    return dict(option.split("=", 1) for option in options.split() if "=" in option)
+
+
 def _validate_expected(expected: dict) -> None:
     integer_keys = {"width", "height", "frame_count", "audio_sample_rate_hz", "audio_channels"}
     positive_keys = integer_keys | {"fps", "duration_seconds", "timeout_seconds"}
@@ -85,7 +116,12 @@ def _validate_expected(expected: dict) -> None:
             raise ValueError(f"expected.{key} must be an integer")
         if key == "max_frozen_fraction" and value > 1:
             raise ValueError("expected.max_frozen_fraction must be <=1")
-    for key in {"audio_required", "requires_motion", "requires_sound"} & expected.keys():
+    for key in {
+        "audio_required",
+        "requires_motion",
+        "requires_picture",
+        "requires_sound",
+    } & expected.keys():
         if not isinstance(expected[key], bool):
             raise ValueError(f"expected.{key} must be a boolean")
     if "encoding" in expected:
@@ -99,6 +135,14 @@ def _validate_expected(expected: dict) -> None:
         ):
             raise ValueError(
                 "expected.encoding must name a known video encoder, a pixel format, and an audio codec"
+            )
+        if ("preset" in encoding or "crf" in encoding) and (
+            encoding.get("preset") not in _X264_PRESET_OPTIONS
+            or isinstance(encoding.get("crf"), bool)
+            or not isinstance(encoding.get("crf"), (int, float))
+        ):
+            raise ValueError(
+                "expected.encoding preset and crf must be given together, with a known preset"
             )
 
 
@@ -414,6 +458,7 @@ def analyze_media(path: Path, expected: dict | None = None) -> dict:
                     "MVP requires exactly one video stream and at most one audio stream; ambiguous tracks are not silently selected"
                 )
             report["video"] = _video_analysis(container, video_streams[0], np, deadline)
+            report["video"]["x264_options"] = _x264_options(path)
             has_audio = bool(audio_streams)
         # Reopen, not seek: video decoding consumed the demuxer to EOF.
         if has_audio:
@@ -534,6 +579,22 @@ def analyze_media(path: Path, expected: dict | None = None) -> dict:
                 "Decoded audio codec.",
             )
         )
+        if "preset" in encoding:
+            wanted = {
+                **_X264_PRESET_OPTIONS[encoding["preset"]],
+                "crf": f"{float(encoding['crf']):.1f}",
+            }
+            options = video.get("x264_options") or {}
+            observed = {key: options.get(key) for key in wanted}
+            checks.append(
+                _check(
+                    "video.encoder_settings",
+                    observed == wanted,
+                    observed,
+                    wanted,
+                    "CRF and the preset's fixed options, read from x264's SEI header in the stream.",
+                )
+            )
         report["encoding_evidence"] = {
             "requested": encoding,
             "observed": {
@@ -546,8 +607,6 @@ def analyze_media(path: Path, expected: dict | None = None) -> dict:
             },
             "unverified": [
                 "video_encoder_implementation",
-                "preset",
-                "crf",
                 "encoder_thread_count",
                 "aac_bitrate",
             ],
@@ -679,6 +738,17 @@ def analyze_media(path: Path, expected: dict | None = None) -> dict:
                 actual,
                 {"greater_than": FROZEN_MAE},
                 "Adjacent RGB change is a technical motion-presence proxy, not action understanding or physical correctness.",
+            )
+        )
+    if expected.get("requires_picture"):
+        actual = video.get("blank_fraction")
+        checks.append(
+            _check(
+                "video.picture_presence",
+                actual is not None and actual < 1,
+                actual,
+                {"less_than": 1},
+                "At least one decoded frame is not uniformly black or white; a technical proxy, not visual quality.",
             )
         )
     if "max_frozen_fraction" in expected:
