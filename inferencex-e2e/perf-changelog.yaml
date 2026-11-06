@@ -12303,4 +12303,4 @@
     - "C16/C32: breakable CUDA graphs (VLLM_USE_BREAKABLE_CUDAGRAPH=1, FULL_AND_PIECEWISE with a multiple-of-8 capture list up to 256, then 384-8192). DBO is removed from C16/C32/C64 (C1-C8 already ran without it); the 32768-token prefill budget, max-num-seqs and memory utilization are unchanged."
     - "C1-C8 (DSpark 7, mono decode, FP8 KV and indexer caches) and C64 (DSpark 3, NVFP4 KV, CPU KV offload) keep their speculative, KV and offload settings."
     - "Draft data types unchanged: the dspark/ draft keeps its MXFP8 config (FP8 E4M3 projections with 1x32 UE8M0 scales; BF16 fc, Markov and confidence heads, norms) and an FP8 draft KV cache. The drafter kernels replace the draft layers' MXFP8 linear, norm and attention ops, and vLLM's tests/models/minimax_m3/test_dspark_drafter.py holds them to the stock layers' own numerical spread."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4866
