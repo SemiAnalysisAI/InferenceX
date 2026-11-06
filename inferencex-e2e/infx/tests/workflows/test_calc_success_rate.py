@@ -38,15 +38,11 @@ def test_extract_hardware_from_name_matches_cluster_label():
     patterns = success_rate.build_hardware_match_patterns(["b300-nv", "gb200-nv"])
 
     assert (
-        success_rate.extract_hardware_from_name(
-            "dsv4 fp4 cluster:b300-nv vllm | tp=8", patterns
-        )
+        success_rate.extract_hardware_from_name("dsv4 fp4 cluster:b300-nv vllm | tp=8", patterns)
         == "b300-nv"
     )
     assert (
-        success_rate.extract_hardware_from_name(
-            "glm5 fp4 gb200-nv dynamo-sglang", patterns
-        )
+        success_rate.extract_hardware_from_name("glm5 fp4 gb200-nv dynamo-sglang", patterns)
         == "gb200-nv"
     )
 
@@ -73,6 +69,27 @@ def test_hardware_matching_respects_case_boundaries_and_literal_punctuation(job_
     assert success_rate.extract_hardware_from_name(job_name, patterns) == expected
 
 
+def query_of(args):
+    endpoint = next(arg for arg in args if arg.startswith("repos/"))
+    return {key: values[0] for key, values in parse_qs(urlparse(endpoint).query).items()}
+
+
+def page_of(jobs, page):
+    start = (int(page) - 1) * 100
+    return {"jobs": jobs[start : start + 100], "total_count": len(jobs)}
+
+
+def http_error(args, status):
+    return subprocess.CalledProcessError(1, args, stderr=f"gh: Server Error (HTTP {status})")
+
+
+@pytest.fixture(autouse=True)
+def no_sleep(monkeypatch):
+    sleeps = []
+    monkeypatch.setattr(success_rate.time, "sleep", sleeps.append)
+    return sleeps
+
+
 @pytest.fixture
 def run_stats_environment(tmp_path, monkeypatch):
     write_runners(tmp_path, ["sample-a", "sample-b", "unused"])
@@ -85,28 +102,28 @@ def run_stats_environment(tmp_path, monkeypatch):
     return output.with_suffix(".json")
 
 
-def test_success_rates_include_all_pages_and_retries(
-    run_stats_environment, monkeypatch, capsys
-):
+def test_success_rates_include_all_pages_and_retries(run_stats_environment, monkeypatch, capsys):
     jobs = [
         {"name": f"benchmark cluster:{hardware}", "conclusion": conclusion}
         for hardware, conclusion in [
-            ("sample-a", "failure"), ("sample-a", "success"),
-            ("sample-a", "skipped"), ("sample-b", "cancelled"),
-            ("sample-b", None), ("unrelated", "success"),
+            ("sample-a", "failure"),
+            ("sample-a", "success"),
+            ("sample-a", "skipped"),
+            ("sample-b", "cancelled"),
+            ("sample-b", None),
+            ("unrelated", "success"),
         ]
     ]
     jobs.extend({"name": "setup", "conclusion": "success"} for _ in range(94))
     jobs.append({"name": "benchmark cluster:sample-b", "conclusion": "success"})
 
     def run(args, **kwargs):
-        endpoint = next(arg for arg in args if arg.startswith("repos/"))
-        query = parse_qs(urlparse(endpoint).query)
-        selected = jobs if query.get("filter") == ["all"] else jobs[1:]
-        pages = [{"jobs": selected[:100], "total_count": len(selected)}]
-        if "--paginate" in args:
-            pages.append({"jobs": selected[100:], "total_count": len(selected)})
-        return subprocess.CompletedProcess(args, 0, json.dumps(pages), "")
+        assert "--paginate" not in args
+        query = query_of(args)
+        selected = jobs if query["filter"] == "all" else jobs[1:]
+        return subprocess.CompletedProcess(
+            args, 0, json.dumps(page_of(selected, query["page"])), ""
+        )
 
     monkeypatch.setattr(success_rate.github.subprocess, "run", run)
     success_rate.main()
@@ -122,19 +139,23 @@ def test_success_rates_include_all_pages_and_retries(
     assert "unused" not in table
 
 
-@pytest.mark.parametrize("response,error,match", [
-    (401, RuntimeError, "HTTP 401"),
-    ({}, RuntimeError, "unexpected shape"),
-    ({"jobs": None}, RuntimeError, "unexpected shape"),
-    ({"jobs": [{}], "total_count": 1}, KeyError, "name"),
-])
+@pytest.mark.parametrize(
+    "response,error,match",
+    [
+        (401, RuntimeError, "HTTP 401"),
+        ({}, RuntimeError, "unexpected shape"),
+        ([{"jobs": [], "total_count": 0}], RuntimeError, "unexpected shape"),
+        ({"jobs": None}, RuntimeError, "unexpected shape"),
+        ({"jobs": [{}], "total_count": 1}, KeyError, "name"),
+    ],
+)
 def test_failed_stats_do_not_publish_an_artifact(
     run_stats_environment, monkeypatch, response, error, match
 ):
     def run(args, **kwargs):
         if response == 401:
             raise subprocess.CalledProcessError(1, args, stderr="gh: Unauthorized (HTTP 401)")
-        return subprocess.CompletedProcess(args, 0, json.dumps([response]), "")
+        return subprocess.CompletedProcess(args, 0, json.dumps(response), "")
 
     monkeypatch.setattr(success_rate.github.subprocess, "run", run)
     with pytest.raises(error, match=match):
@@ -142,28 +163,105 @@ def test_failed_stats_do_not_publish_an_artifact(
     assert not run_stats_environment.exists()
 
 
-def test_later_page_failure_preserves_previous_artifact(run_stats_environment, monkeypatch):
+def test_later_page_failure_preserves_previous_artifact(
+    run_stats_environment, monkeypatch, no_sleep
+):
     run_stats_environment.write_text('{"previous": true}\n')
+    jobs = [{"name": "benchmark cluster:sample-a", "conclusion": "success"}] * 101
 
     def run(args, **kwargs):
-        partial = json.dumps([{"total_count": 101, "jobs": [
-            {"name": "benchmark cluster:sample-a", "conclusion": "success"}
-            for _ in range(100)
-        ]}])
-        raise subprocess.CalledProcessError(1, args, output=partial,
-                                            stderr="gh: Unavailable (HTTP 503)")
+        query = query_of(args)
+        if query["page"] == "1":
+            return subprocess.CompletedProcess(args, 0, json.dumps(page_of(jobs, 1)), "")
+        raise http_error(args, 503)
 
     monkeypatch.setattr(success_rate.github.subprocess, "run", run)
     with pytest.raises(RuntimeError, match="HTTP 503"):
         success_rate.main()
     assert run_stats_environment.read_text() == '{"previous": true}\n'
+    # Both listings retried their failing page before giving up.
+    assert no_sleep == [*success_rate.RETRY_DELAYS_SECONDS] * 2
+
+
+def test_transient_page_failure_is_retried(run_stats_environment, monkeypatch, no_sleep):
+    jobs = [{"name": "benchmark cluster:sample-a", "conclusion": "success"}] * 150
+    failures = {"2": 2}
+    calls = []
+
+    def run(args, **kwargs):
+        query = query_of(args)
+        calls.append((query["filter"], query["page"]))
+        if failures.get(query["page"], 0):
+            failures[query["page"]] -= 1
+            raise http_error(args, 502)
+        return subprocess.CompletedProcess(args, 0, json.dumps(page_of(jobs, query["page"])), "")
+
+    monkeypatch.setattr(success_rate.github.subprocess, "run", run)
+    success_rate.main()
+
+    assert json.loads(run_stats_environment.read_text())["sample-a"] == {
+        "n_success": 150,
+        "total": 150,
+    }
+    assert calls == [("all", "1"), ("all", "2"), ("all", "2"), ("all", "2")]
+    assert no_sleep == list(success_rate.RETRY_DELAYS_SECONDS[:2])
+
+
+def test_persistent_failure_falls_back_to_latest_attempt(
+    run_stats_environment, monkeypatch, capsys
+):
+    every_attempt = [{"name": "benchmark cluster:sample-a", "conclusion": "failure"}] * 150
+    latest = [{"name": "benchmark cluster:sample-a", "conclusion": "success"}] * 3
+
+    def run(args, **kwargs):
+        query = query_of(args)
+        if query["filter"] == "latest":
+            return subprocess.CompletedProcess(args, 0, json.dumps(page_of(latest, 1)), "")
+        if query["page"] == "1":
+            return subprocess.CompletedProcess(args, 0, json.dumps(page_of(every_attempt, 1)), "")
+        raise http_error(args, 502)
+
+    monkeypatch.setattr(success_rate.github.subprocess, "run", run)
+    success_rate.main()
+
+    assert json.loads(run_stats_environment.read_text())["sample-a"] == {"n_success": 3, "total": 3}
+    assert "::warning title=calc-success-rate::" in capsys.readouterr().out
+
+
+def test_timeouts_are_transient(run_stats_environment, monkeypatch):
+    latest = [{"name": "benchmark cluster:sample-b", "conclusion": "success"}]
+
+    def run(args, **kwargs):
+        if query_of(args)["filter"] == "all":
+            raise subprocess.TimeoutExpired(args, 60)
+        return subprocess.CompletedProcess(args, 0, json.dumps(page_of(latest, 1)), "")
+
+    monkeypatch.setattr(success_rate.github.subprocess, "run", run)
+    success_rate.main()
+    assert json.loads(run_stats_environment.read_text())["sample-b"] == {"n_success": 1, "total": 1}
+
+
+def test_non_transient_errors_are_not_retried(run_stats_environment, monkeypatch, no_sleep):
+    calls = []
+
+    def run(args, **kwargs):
+        calls.append(query_of(args)["filter"])
+        raise subprocess.CalledProcessError(1, args, stderr="gh: Not Found (HTTP 404)")
+
+    monkeypatch.setattr(success_rate.github.subprocess, "run", run)
+    with pytest.raises(RuntimeError, match="HTTP 404"):
+        success_rate.main()
+    assert calls == ["all"]
+    assert no_sleep == []
 
 
 def test_empty_job_list_still_writes_zero_counts(run_stats_environment, monkeypatch):
     monkeypatch.setattr(
-        success_rate.github.subprocess, "run",
+        success_rate.github.subprocess,
+        "run",
         lambda args, **kwargs: subprocess.CompletedProcess(
-            args, 0, '[{"jobs": [], "total_count": 0}]', ""),
+            args, 0, '{"jobs": [], "total_count": 0}', ""
+        ),
     )
     success_rate.main()
     assert json.loads(run_stats_environment.read_text()) == {

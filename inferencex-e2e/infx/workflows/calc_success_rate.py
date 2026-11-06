@@ -1,8 +1,11 @@
 import json
 import os
 import re
+import subprocess
 import sys
+import time
 from collections.abc import Iterable
+from typing import Any
 
 from infx import github
 from infx.clusters import CLUSTER_LABEL_PREFIX, load_clusters
@@ -43,18 +46,92 @@ def extract_hardware_from_name(
     return None
 
 
+# GitHub occasionally returns 5xx for later pages of a large job listing. A run with many
+# attempts is the usual trigger, because ``filter=all`` keeps every attempt's jobs.
+TRANSIENT_STATUSES = frozenset({500, 502, 503, 504})
+RETRY_DELAYS_SECONDS = (5, 15, 30)
+PER_PAGE = 100
+
+
+def _is_transient(exc: Exception) -> bool:
+    """True for gh failures worth retrying: 5xx gateway/server errors and timeouts."""
+    if isinstance(exc, subprocess.TimeoutExpired):
+        return True
+    return isinstance(exc, github.APIError) and exc.status in TRANSIENT_STATUSES
+
+
+def _fetch_page(repo: str, path: str, token: str, params: dict[str, str]) -> Any:
+    """Fetch one listing page, retrying transient failures with backoff."""
+    for delay in (*RETRY_DELAYS_SECONDS, None):
+        try:
+            return github.api(repo, path, token, params)
+        except (github.APIError, subprocess.TimeoutExpired) as exc:
+            if delay is None or not _is_transient(exc):
+                raise
+            print(
+                f"Transient GitHub API failure on {path} page {params['page']}; "
+                f"retrying in {delay}s: {exc}"
+            )
+            time.sleep(delay)
+    raise AssertionError("unreachable")
+
+
+def list_run_jobs(repo: str, run_id: int, token: str, job_filter: str) -> list[dict[str, Any]]:
+    """Return every job of ``run_id`` for ``job_filter``, one page per request.
+
+    Pages are fetched separately so one failing page is retried on its own instead of
+    restarting the whole listing.
+    """
+    path = f"/actions/runs/{run_id}/jobs"
+    rows: list[dict[str, Any]] = []
+    expected = 0
+    page = 1
+    while True:
+        data = _fetch_page(
+            repo, path, token, {"filter": job_filter, "per_page": str(PER_PAGE), "page": str(page)}
+        )
+        items = data.get("jobs") if isinstance(data, dict) else None
+        if not isinstance(items, list) or any(not isinstance(item, dict) for item in items):
+            raise github.ListingError("GitHub listing returned an unexpected shape")
+        total = data.get("total_count")
+        if type(total) is not int or total < 0:
+            raise github.ListingError("Invalid GitHub listing count")
+        expected = max(expected, total)
+        rows.extend(items)
+        if not items or len(rows) >= expected:
+            break
+        page += 1
+    if expected > len(rows):
+        raise github.ListingError("Incomplete GitHub listing")
+    return rows
+
+
+def list_jobs_for_stats(repo: str, run_id: int, token: str) -> list[dict[str, Any]]:
+    """Jobs from every attempt; only the latest attempt's when GitHub keeps failing.
+
+    ``filter=all`` counts failed earlier attempts, so it is preferred. When transient
+    failures outlast the retries, the latest attempt (one page for a typical sweep) still
+    yields usable stats, and a warning records that earlier attempts were not counted.
+    Non-transient failures (auth, malformed listings) still fail the job.
+    """
+    try:
+        return list_run_jobs(repo, run_id, token, "all")
+    except (github.APIError, subprocess.TimeoutExpired) as exc:
+        if not _is_transient(exc):
+            raise
+        print(
+            f"::warning title=calc-success-rate::Could not list jobs from every attempt "
+            f"({exc}); counting only the latest attempt of each job."
+        )
+    return list_run_jobs(repo, run_id, token, "latest")
+
+
 def calculate_hardware_success_rates() -> dict[str, dict[str, int]]:
     """Count successful and total non-skipped jobs per hardware in the current Actions run."""
     hardware_labels = load_hardware_labels()
     patterns = build_hardware_match_patterns(hardware_labels)
     run_id = int(os.environ["GITHUB_RUN_ID"])
-    jobs = github.paginate(
-        os.environ["GITHUB_REPOSITORY"],
-        f"/actions/runs/{run_id}/jobs",
-        os.environ["GITHUB_TOKEN"],
-        "jobs",
-        {"filter": "all"},
-    )
+    jobs = list_jobs_for_stats(os.environ["GITHUB_REPOSITORY"], run_id, os.environ["GITHUB_TOKEN"])
     success_rates = {hardware: {"n_success": 0, "total": 0} for hardware in hardware_labels}
     for job in jobs:
         hardware = extract_hardware_from_name(job["name"], patterns)
