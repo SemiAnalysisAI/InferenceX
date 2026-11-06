@@ -35,7 +35,6 @@ base:
       max_payload_mb: 32
   - name: mooncake-master
     type: mooncake-master
-    preamble: bash /configs/vllm-mooncake-image.sh
     args:
     - --default_kv_lease_ttl=60000
     - --eviction_high_watermark_ratio=0.95
@@ -235,7 +234,6 @@ base:
     placement:
       node: dedicated
   name: minimaxm31flash-gb200-disagg-mooncake
-  setup_script: vllm-mooncake-image.sh
 override_3p1d_c288:
   name: minimaxm31flash-gb200-disagg-mooncake-3p1d-c288
 override_3p1d_dep16_c280:
