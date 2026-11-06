@@ -12207,6 +12207,25 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
 
 - config-keys:
+    - glm5.3flash-fp8-b200-sglang-agentic-mtp
+    - glm5.3flash-fp4-b200-sglang-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Add GLM-5.3-Flash FP8 and NVFP4 (nvidia/GLM-5.3-Flash-NVFP4) SGLang AgentX on one 8x B200 node with the pinned lmsysorg/sglang:v0.5.22-cu130 image and the SGLang cookbook B200 Low Latency recipe: TP8, FP8 KV with TRT-LLM DSA, flashinfer_trtllm MoE, EAGLE MTP 5/1/6 and auto parsers."
+    - "Each precision runs concurrency 1, 4, 8, 16, 24 and 32 without KV offload and 40 and 48 with an auto-sized HiCache host tier (default host-memory fraction 0.8, about 1.5 TB per node) instead of the cookbook 32 GB/rank tier, which is smaller than the device KV pool; acceptance comes from the glm-5.3-flash golden AL curve."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4713
+
+- config-keys:
+    - glm5.3flash-fp8-h200-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GLM-5.3-Flash FP8 AgentX on one 8x H200 node with the pinned lmsysorg/sglang:v0.5.22-cu130 image and the SGLang cookbook H200 low-latency recipe: TP8/EP8, BF16 KV, TileLang DSA, DeepGemm MoE and embedded EAGLE MTP 5/1/6."
+    - "GPU-resident KV at concurrency 2-16; HiCache with SGLang's default auto-sized host tier (~119 GiB, 127 GB per rank; ~1,020 GB per node) at concurrency 20, 24, 28 and 32."
+    - "Prefill CUDA graphs are disabled after a CUDA misaligned-address fault during ~336k-token single-request replay at concurrency 1."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4719
+
+- config-keys:
     - glm5.2-fp8-mi355x-sglang-agentic-mtp
   description:
     - "Update SGLang image from v0.5.19-rocm720-mi35x-20260917 to v0.5.22-rocm720-mi35x."
