@@ -4041,8 +4041,8 @@ glm5.3flash-fp8-h200-sglang-agentic-mtp:
   srt-recipe-dir: glm5.3flash/sglang/h200-fp8-mtp
   scenarios:
     agentic-coding:
-    # 0.661 x 1,542.8 GB = 1,019 GB: HiCache auto-sizes ~127 GB/rank host pools on 8 ranks.
-    - dram-utilization: 0.661
+    # 0.6612 x 1,542.8 GB = 1,020 GB covers the measured 8 x 127.47 GB = 1,019.8 GB HiCache host pools.
+    - dram-utilization: 0.6612
       search-space:
       - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [2, 4, 8, 10, 12, 14, 16], srt-recipe: 'agentic.yaml:base' }
       - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [20, 24, 28, 32], srt-recipe: 'agentic.yaml:override_hicache' }
