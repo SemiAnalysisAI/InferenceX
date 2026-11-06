@@ -24,17 +24,17 @@ def rack_args(system="gb200-nvl72"):
 @pytest.mark.parametrize(
     "flags, offload, cpu_state, cpu_w, state, memory_w, fan_w, it_w, per_gpu",
     [
-        ([], False, "FixedSeqLen", 660, "idle", 243.2, 115.093627, 6021.108762, 489.215087),
+        ([], False, "FixedSeqLen", 660, "idle", 176, 113.666922, 5949.208447, 483.373186),
         (
             ["--workload=fixed-seq-len"],
             False,
             "FixedSeqLen",
             660,
             "idle",
-            243.2,
-            115.093627,
-            6021.108762,
-            489.215087,
+            176,
+            113.666922,
+            5949.208447,
+            483.373186,
         ),
         (
             ["--workload=agentic"],
@@ -42,10 +42,10 @@ def rack_args(system="gb200-nvl72"):
             "Agentic",
             720,
             "idle",
-            243.2,
-            117.139021,
-            6086.065327,
-            494.492808,
+            176,
+            115.721521,
+            6014.225596,
+            488.65583,
         ),
         (
             ["--workload=agentic-cpu-offloading"],
@@ -53,10 +53,10 @@ def rack_args(system="gb200-nvl72"):
             "AgenticOffloadingOn",
             780,
             "active",
-            448,
-            126.455719,
-            6372.493631,
-            517.765108,
+            176,
+            117.800731,
+            6079.22243,
+            493.936822,
         ),
     ],
 )
@@ -107,8 +107,8 @@ def test_cli_hopper_workloads_select_cpu_and_memory_power_with_air_cooling(
             "Thor2NICCard",
             320,
             480,
-            404.751221,
-            429.807527,
+            391.147209,
+            416.227056,
         ),
         (
             "mi325",
@@ -118,8 +118,8 @@ def test_cli_hopper_workloads_select_cpu_and_memory_power_with_air_cooling(
             "Thor2NICCard",
             320,
             480,
-            416.045426,
-            441.048261,
+            406.292494,
+            431.334983,
         ),
         (
             "mi355",
@@ -129,8 +129,8 @@ def test_cli_hopper_workloads_select_cpu_and_memory_power_with_air_cooling(
             "PollaraNICCard",
             320,
             480,
-            420.214289,
-            445.476939,
+            410.264242,
+            435.558894,
         ),
         (
             "b200",
@@ -140,8 +140,8 @@ def test_cli_hopper_workloads_select_cpu_and_memory_power_with_air_cooling(
             "ConnectX7NICCard",
             240,
             400,
-            485.468778,
-            510.389697,
+            479.700718,
+            504.635179,
         ),
     ],
 )
@@ -196,10 +196,16 @@ def test_cli_selects_each_hgx_family_board_and_nic(
     assert nic["power_w"] == nic_w
     assert dict(nic["details"])["state"] == nic_state
     assert dict(nic["details"])["bandwidth_gbps"] == 400
+    dimm_count, memory_w, dimm_gb = {
+        "mi300": (32, 88, 96),
+        "mi325": (48, 132, 96),
+        "mi355": (48, 132, 128),
+        "b200": (64, 176, 64),
+    }[system_name]
     memory = system["children"][1]["children"][2]
-    assert memory["quantity"] == 64
-    assert memory["power_w"] == pytest.approx(243.2)
-    assert dict(memory["details"])["capacity_gb_per_dimm"] == 64
+    assert memory["quantity"] == dimm_count
+    assert memory["power_w"] == pytest.approx(memory_w)
+    assert dict(memory["details"])["capacity_gb_per_dimm"] == dimm_gb
     pcie_switches = [
         component
         for component in system["children"][1]["children"]
@@ -213,29 +219,29 @@ def test_cli_selects_each_hgx_family_board_and_nic(
 @pytest.mark.parametrize(
     "state, workload, expected, it_w, fan_w, board_w, nic_w, cpu_w, memory_w",
     [
-        ("idle", "fixed-seq-len", 512.093932, 6302.694551, 99.378321, 3280, 480, 660, 243.2),
-        ("active", "fixed-seq-len", 562.347142, 6921.195596, 106.894645, 3600, 800, 660, 243.2),
+        ("idle", "fixed-seq-len", 506.143395, 6229.457169, 97.890571, 3280, 480, 660, 176),
+        ("active", "fixed-seq-len", 556.436627, 6848.450792, 105.395062, 3600, 800, 660, 176),
         (
             "idle",
             "agentic-cpu-offloading",
-            540.771281,
-            6655.646535,
-            107.010183,
+            516.773168,
+            6360.285144,
+            100.661497,
             3280,
             480,
             780,
-            448,
+            176,
         ),
         (
             "active",
             "agentic-cpu-offloading",
-            590.859165,
-            7272.112803,
-            114.901866,
+            567.005064,
+            6978.523867,
+            108.305195,
             3600,
             800,
             780,
-            448,
+            176,
         ),
     ],
 )
@@ -368,7 +374,7 @@ def test_cli_accepts_full_class_names_and_the_hyphenated_gpu_flag(capsys):
         ]
     )
     result = json.loads(capsys.readouterr().out)
-    assert result["AllInPower_per_gpu"] == pytest.approx(489.215087)
+    assert result["AllInPower_per_gpu"] == pytest.approx(483.373186)
 
 
 def test_cli_help_lists_models_and_systems(capsys):
