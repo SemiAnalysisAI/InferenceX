@@ -42,6 +42,7 @@ TELEMETRY_BLOCK = Path("configs/srt-recipes/telemetry-dcgm.yaml")
 # The CPU power exporter sources a cluster declares (srt-slurm.cpu-power-exporter).
 CpuPowerSource = Literal["acpi", "rapl"]
 NATIVE_TELEMETRY_BLOCK = Path("configs/srt-recipes/telemetry-native.yaml")
+VIDEO_BLOCK = Path("configs/srt-recipes/video.yaml")
 # How a recipe measures GPU power: the DCGM telemetry block with its exporter on this port, or
 # NATIVE, the cluster's own GPU exporter.
 NATIVE = "native"
@@ -234,6 +235,9 @@ def compose_recipe(
     return merge_blocks(shared, raw)
 
 
+POWER_FLAGS = frozenset({"1", "true", "TRUE", "yes", "YES"})
+
+
 def _required(environment: Mapping[str, str], name: str) -> str:
     """Return the input ``name`` from ``environment``, or raise ValueError if it is blank."""
     value = environment.get(name, "")
@@ -360,7 +364,7 @@ def bind_workload(
     )
     if (bound.get("telemetry") or {}).get("enabled") is True:
         benchmark["concurrencies"] = concurrencies
-        required = environment.get("REQUIRE_POWER", "0") in {"1", "true", "TRUE", "yes", "YES"}
+        required = environment.get("REQUIRE_POWER", "0") in POWER_FLAGS
         # A multi-node point measures power by default; only its power field makes srtctl skip
         # the benchmark when telemetry fails.
         required = required or (multinode and environment.get("POWER") == "1")
