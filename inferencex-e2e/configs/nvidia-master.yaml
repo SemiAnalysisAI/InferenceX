@@ -4149,7 +4149,7 @@ qwen3.8next-fp4-b200-sglang-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.8
       search-space:
-      - { tp: 1, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8], srt-recipe: agentic.yaml }
+      - { tp: 1, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [8], srt-recipe: agentic.yaml }
       - { tp: 2, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [8], srt-recipe: agentic.yaml }
       - { tp: 1, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 24, 32], srt-recipe: agentic.yaml }
 qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp:

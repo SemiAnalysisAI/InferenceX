@@ -53,28 +53,6 @@ base:
 
 # One variant per point. NEXTN resets an unset admission cap to 48, so it is
 # explicit at every point.
-override_c1:
-  roles:
-    agg:
-      args:
-        max-running-requests: 2
-        cuda-graph-max-bs: 2
-        mem-fraction-static: 0.8
-  benchmark:
-    env:
-      CONC: '1'
-
-override_c4:
-  roles:
-    agg:
-      args:
-        max-running-requests: 8
-        cuda-graph-max-bs: 8
-        mem-fraction-static: 0.8
-  benchmark:
-    env:
-      CONC: '4'
-
 override_c8:
   roles:
     agg:
