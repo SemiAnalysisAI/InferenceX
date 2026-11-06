@@ -17,6 +17,7 @@ from infx.matrix.validation import (
     MultiNodeMatrixEntry,
     SingleNodeAgenticMatrixEntry,
     SingleNodeMatrixEntry,
+    VideoMatrixEntry,
 )
 
 
@@ -57,7 +58,13 @@ def _validate_rows(
     path: str,
     multinode: bool | None = None,
     agentic: bool | None = None,
+    video: bool | None = None,
 ) -> None:
+    """Validate each row in rows against its workflow schema.
+
+    multinode and agentic force the schema choice when set, otherwise each row decides. Raises
+    ValueError located by path.
+    """
     if not isinstance(rows, list):
         raise ValueError(f"{path}: expected a list of matrix rows")
     for index, row in enumerate(rows):
@@ -66,7 +73,12 @@ def _validate_rows(
             raise ValueError(f"{location}: expected a matrix object")
         is_multinode = "prefill" in row if multinode is None else multinode
         is_agentic = row.get("scenario-type") == "agentic-coding" if agentic is None else agentic
-        if is_multinode:
+        is_video = row.get("scenario-type") == "video-generation" if video is None else video
+        if is_video and (is_multinode or is_agentic):
+            raise ValueError(f"{location}: video-generation rows are single-node, non-agentic")
+        if is_video:
+            schema = VideoMatrixEntry
+        elif is_multinode:
             schema = MultiNodeAgenticConfig if is_agentic else MultiNodeConfig
         else:
             schema = AgenticConfig if is_agentic else SingleNodeConfig
@@ -93,6 +105,7 @@ def validate_matrix(matrix: object, *, plan: bool = False) -> None:
                 path=f"{family}.{group}",
                 multinode=multinode,
                 agentic=group == "agentic",
+                video=group == "video",
             )
         prefix = "multinode_" if multinode else ""
         for suffix, agentic in (("evals", False), ("agentic_evals", True)):
@@ -106,6 +119,10 @@ def validate_matrix(matrix: object, *, plan: bool = False) -> None:
 
 
 def main() -> None:
+    """Validate the matrix JSON on stdin and echo it unchanged to stdout.
+
+    Exits with a usage error if the matrix is invalid.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--plan",

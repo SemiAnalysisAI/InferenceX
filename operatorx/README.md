@@ -1,90 +1,35 @@
-# operatorx - Experimental (Beta)
+# operatorx
 
-Multi-platform inference operator benchmark suite. Times one op at a time
-(gemm, attention, moe, collectives, ...) on NVIDIA / AMD / TPU / Trainium and
-emits one JSON per run under `results/<platform>/<cluster>/`.
+Inference operator benchmarks: times one op at a time on NVIDIA and AMD through the serving framework's own layers (vLLM).
 
-See `CLUSTERS.md` for how to reach each cluster and the per-host quirks.
+| Op type | Schema | What it is |
+| --- | --- | --- |
+| `gemm` | `ops/gemm.py` | dense GEMM, quantized operands (`a` activation, `b` weight) |
+| `moe` | `ops/moe.py` | one MoE layer, router GEMM to combined output |
+| `mla`, `mla_dsa`, `dsv4_attn`, `gqa`, `qsa`, `gdn`, `kda` | `ops/attention.py` | whole attention modules, one op type each |
 
-## Running on a cluster
+- Split over devices: each case's `parallel` arg (`{"tp", "dp", "ep", "dcp"}`), defined in `core/parallel.py`.
+- Testlists: `testlists/*.json`; every entry lists its `sources` (`<org>/<model>/<role>`). Dispatch `attn_*` testlists apart from gemm / moe ones (each builds its own vLLM engine).
 
-`scripts/submit_run.py <platform>` fans out one sbatch job per
-`(container_image, world_size)` pair to your local SLURM. Each job runs
-`python -m operatorx` inside the container.
+## Running
 
-The examples assume the repository is checked out at `$HOME/inferencex`.
-
-### b200 (DGX-style, 8x B200 SXM)
-
-```bash
-ssh tailscale-b200
-cd "$HOME/inferencex/operatorx"
-python3 scripts/submit_run.py nvidia
-```
-
-Defaults that apply: `OPERATORX_CLUSTER=b200_dgx_8x`,
-`OPERATORX_PARTITION=gpu-2`, `OPERATORX_SQUASH_DIR=/home/sa-shared/containers`.
-
-### b300 (HGX-style, 8x B300)
-
-The b300 cluster needs a non-default partition + account + qos, has its own
-squash dir, and DeepEP has known IBGDA issues here so we exclude it.
-This example uses container images stored in `$HOME/containers`.
+Dispatch the **OperatorX Sweep** workflow ([CI.md](CI.md)). The same planner runs by hand on a login node:
 
 ```bash
-ssh tailscale-b300
-cd "$HOME/inferencex/operatorx"
-OPERATORX_CLUSTER=b300_hgx_8x \
-OPERATORX_PARTITION=batch_1 \
-OPERATORX_ACCOUNT=benchmark \
-OPERATORX_SQUASH_DIR="$HOME/containers" \
-OPERATORX_BACKENDS=torch,deepgemm,flashinfer,sglang \
-python3 scripts/submit_run.py nvidia
+PYTHONPATH=.:inferencex-e2e python3 -m operatorx.ci plan --platform-config operatorx/platforms.json \
+  --runner cluster:h200-dgxc --backends vllm --testlists gemm_parallel --world-sizes 1,2,4,8 \
+  --chunk-size 500 --mode timing --run-id local --attempt 1 --source-sha "$(git rev-parse HEAD)" \
+  --out manifest.json
 ```
 
-### TPU / Trainium
-
-These hosts have no SLURM, so `submit_run.py` (which submits `sbatch` jobs)
-does not apply. Run the benchmark directly on the VM or instance:
-
-```bash
-OPERATORX_CLUSTER=v6e_4x   python -m operatorx   # TPU     (default tpu cluster)
-OPERATORX_CLUSTER=trn3_16x python -m operatorx   # Trainium (default trainium cluster)
-```
-
-The TPU `maxtext` backend depends on Google's MaxText library. Install it
-once per TPU VM (the `jax` backend works without it):
-
-```bash
-git clone https://github.com/AI-Hypercomputer/maxtext ~/maxtext
-pip install -e ~/maxtext
-```
-
-If MaxText isn't installed, `moe_forward` on TPU emits `unsupported` rows
-rather than running our old single-device dense fallback.
-
-## Env vars honored by `submit_run.py`
-
-| Var | Default | Notes |
-|-----|---------|-------|
-| `OPERATORX_CLUSTER` | per-platform (see script) | Cluster id used to route the runner (see `operatorx.clusters.CLUSTER_PLATFORMS`). |
-| `OPERATORX_PARTITION` | `gpu-2` | SLURM partition. |
-| `OPERATORX_ACCOUNT` | (omitted) | SLURM `--account`. |
-| `OPERATORX_QOS` | (omitted) | SLURM `--qos`. |
-| `OPERATORX_SQUASH_DIR` | `/home/sa-shared/containers` | Where `<safe_image>.sqsh` lives. |
-| `OPERATORX_BACKENDS` | all backends for the platform | CSV allowlist. |
-| `OPERATORX_JOB_NAME` | `benchmark` | SLURM job name. Set a recognizable name for your runs (see `CLUSTERS.md`). |
-
-`WORLD_SIZES` in the script is `[1, 2, 4, 8]` and supports single-node runs only.
-Values above 8 are disabled because multi-node NCCL IB bring-up currently hangs on b200/b300.
-`MASTER_ADDR` is derived by parsing `SLURM_NODELIST`.
+Results: one JSON per run under `results/<platform>/<cluster>/`; in CI, the `operatorx-shard-*` artifacts, then ingested into the OperatorX database.
 
 ## Adding a backend / op
 
-- Backend impl: `operatorx/runners/<platform>/backends/<name>.py`, exports an
-  `IMPLS = [BackendImpl(...)]` list.
-- Op spec: `operatorx/ops/<name>.py`, calls `register(OpSpec(..., flops=, bytes=))`.
-- Add the container image to `containers.toml`, then on each cluster run
-  `python3 scripts/pull_containers.py nvidia` to enroot-import it into
-  `$OPERATORX_SQUASH_DIR`.
-- Add shapes to `testlists/<name>.json`.
+- Backend: `runners/<platform>/backends/<name>.py` exporting `IMPLS = [BackendImpl(...)]`; its image in `containers.toml`.
+- Op: `ops/<name>.py` calling `register(OpSpec(type=..., arg_schema=..., parallel_axes=...))`.
+- Shapes: `testlists/<name>.json`.
+
+## Ascend reproduction harness
+
+The [standalone Ascend GEMM harness](scripts/ascend/README.md) accepts these testlists for native unquantized and FP32-block-scale FP8 measurements with queued NPU timing, numerical checks, resumable journals and an installed-tiling L0A guard. It does not add an Ascend CI pool or change the NVIDIA/AMD runners.

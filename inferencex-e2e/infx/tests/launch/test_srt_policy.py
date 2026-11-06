@@ -50,8 +50,8 @@ SINGLE = dict(IS_MULTINODE="false")
 
 
 @pytest.mark.parametrize(("cluster_id", "env", "path"), [
-    ("b200-nscale", dict(MULTI, MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="dynamo-sglang", SPEC_DECODING="mtp"), LaunchPath.SRT_NATIVE),
-    ("b200-nscale", dict(MULTI, MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="dynamo-sglang", SPEC_DECODING="eagle"), LaunchPath.SRT_MULTI),
+    ("b200-nscale", dict(MULTI, MODEL_PREFIX="glm5.2", PRECISION="fp4", FRAMEWORK="dynamo-sglang", SPEC_DECODING="mtp"), LaunchPath.SRT_NATIVE),
+    ("b200-nscale", dict(MULTI, MODEL_PREFIX="glm5.2", PRECISION="fp4", FRAMEWORK="dynamo-sglang", SPEC_DECODING="eagle"), LaunchPath.SRT_MULTI),
     ("b200-nscale", dict(MULTI, MODEL_PREFIX="glm5.3", PRECISION="fp8", FRAMEWORK="tilert", SPEC_DECODING="mtp"), LaunchPath.SRT_MULTI),
     ("mi355x-amds", dict(IS_MULTINODE="true", FRAMEWORK="atom-disagg"), LaunchPath.SRT_MULTI),
     ("mi355x-amds", dict(MULTI, FRAMEWORK="sglang-disagg"), LaunchPath.SRT_MULTI),
@@ -152,6 +152,18 @@ def test_matching_single_node_points_read_the_shared_hub_cache(tmp_path, monkeyp
 
     assert single_node_hf_cache(c, request(IS_AGENTIC="1")) == tmp_path / "shared-hub"
     assert single_node_hf_cache(c, request(IS_AGENTIC="0")) == tmp_path / "hub"
+
+
+@pytest.mark.parametrize(("model", "directory"), [
+    ("MiniMaxAI/MiniMax-M3.1-Flash", "shared-hub"),
+    ("amd/MiniMax-M3.1-Flash-MXFP4", "shared-hub"),
+    ("MiniMaxAI/MiniMax-M3-MXFP8", "hub"),
+    ("amd/MiniMax-M3-MXFP4", "hub"),
+])
+def test_minimax_shared_cache_keeps_m31_but_excludes_retired_m3(tmp_path, model, directory):
+    c = cluster(tmp_path)
+    c.bind_id("mi355x-amds")
+    assert single_node_hf_cache(c, request(MODEL=model, IS_AGENTIC="1")) == tmp_path / directory
 
 
 BUMP = TimeBump(Match(agentic=True), min_conc=64, minutes=1440)

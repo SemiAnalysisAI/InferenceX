@@ -8,6 +8,7 @@ from .atom import AtomBackend
 from .base import ServerMetricsBackend
 from .dynamo_vllm import DynamoVllmBackend
 from .sglang import SglangBackend
+from .tokenspeed import TokenSpeedBackend
 from .trtllm import TrtllmBackend
 from .vllm import VllmBackend
 
@@ -16,6 +17,7 @@ BACKENDS: tuple[ServerMetricsBackend, ...] = (
     DynamoVllmBackend(),
     AtomBackend(),
     SglangBackend(),
+    TokenSpeedBackend(),
     VllmBackend(),
 )
 
@@ -24,6 +26,7 @@ def detect_backend(
     metrics: dict[str, dict[str, Any]],
     framework: str,
 ) -> ServerMetricsBackend | None:
+    """Return the first backend that claims ``metrics`` for ``framework``, or None."""
     for backend in BACKENDS:
         if backend.matches(metrics, framework):
             return backend

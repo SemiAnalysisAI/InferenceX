@@ -37,8 +37,33 @@ def load_config(path: str) -> dict:
     if not isinstance(cfg, dict):
         raise ValueError("thresholds config must be a mapping")
     if "default" not in cfg and "models" not in cfg:
-        return {"default": cfg, "models": {}}
-    return {"default": cfg.get("default", {}), "models": cfg.get("models", {})}
+        cfg = {"default": cfg}
+    if unknown := sorted(set(cfg) - {"default", "models"}, key=str):
+        raise ValueError(
+            f"thresholds config has unknown section(s): {', '.join(map(str, unknown))}"
+        )
+    sections = {name: {} if cfg.get(name) is None else cfg[name] for name in ("default", "models")}
+    for name, section in sections.items():
+        if not isinstance(section, dict):
+            raise ValueError(f"thresholds config {name!r} must be a mapping")
+    sections["models"] = {
+        prefix: {} if tasks is None else tasks for prefix, tasks in sections["models"].items()
+    }
+    tables = {"default": sections["default"]}
+    tables.update((f"models.{prefix}", tasks) for prefix, tasks in sections["models"].items())
+    for name, tasks in tables.items():
+        if not isinstance(tasks, dict):
+            raise ValueError(f"thresholds config {name!r} must be a mapping")
+        for task, value in tasks.items():
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+            ):
+                raise ValueError(
+                    f"thresholds config {name}.{task} must be a finite number, got {value!r}"
+                )
+    return sections
 
 
 def detect_model_prefix(meta_env_path: str, override: str | None) -> str | None:
@@ -95,8 +120,15 @@ def metric_prefixes(data: dict, task: str, override: str | None) -> tuple[str, .
     """Resolve score metric prefixes from an explicit override or task config."""
     if override is not None:
         return (override,)
-    task_config = data.get("configs", {}).get(task, {})
+    configs = data.get("configs", {})
+    if not isinstance(configs, dict):
+        raise ValueError("'configs' is not a mapping")
+    task_config = configs.get(task, {})
+    if not isinstance(task_config, dict):
+        raise ValueError("'configs' entry is not a mapping")
     metric_list = task_config.get("metric_list", [])
+    if not isinstance(metric_list, list):
+        raise ValueError("'metric_list' is not a list")
     declared = tuple(
         f"{item['metric']},"
         for item in metric_list
@@ -215,6 +247,10 @@ def validate_batch_manifest(
 
 
 def main() -> int:
+    """Check each eval result file against its score threshold, printing PASS or FAIL per metric.
+
+    Returns 0 if all metrics pass, 1 if any fail or none matched.
+    """
     for _stream in (sys.stdout, sys.stderr):
         with contextlib.suppress(AttributeError, ValueError):
             _stream.reconfigure(line_buffering=True)
@@ -287,9 +323,10 @@ def main() -> int:
             print(f"Loaded thresholds from {thresholds_path}")
         except (json.JSONDecodeError, OSError, ValueError) as e:
             print(
-                f"WARN: could not load thresholds from {thresholds_path}: {e}",
+                f"FAIL: could not load thresholds from {thresholds_path}: {e}",
                 file=sys.stderr,
             )
+            return 1
 
     prefix = detect_model_prefix(args.meta_env, args.model_prefix)
     if prefix and prefix in config.get("models", {}):
@@ -301,6 +338,7 @@ def main() -> int:
 
     failed = False
     checked = 0
+    selector = args.metric_prefix or "declared task metrics"
     result_files = sorted(glob.glob(args.results_glob))
 
     manifest_errors = validate_batch_manifest(
@@ -325,9 +363,18 @@ def main() -> int:
     for f in result_files:
         match = CONC_SUFFIX_RE.search(Path(f).name)
         conc_label = f"[conc={match.group(1)}] " if match else ""
-        with open(f) as fh:
-            data = json.load(fh)
-        if "integration_error" in data:
+        try:
+            with open(f) as fh:
+                data = json.load(fh)
+        except json.JSONDecodeError as exc:
+            print(f"FAIL: unreadable result file {f}: invalid JSON: {exc}", file=sys.stderr)
+            failed = True
+            continue
+        except (OSError, UnicodeDecodeError) as exc:
+            print(f"FAIL: unreadable result file {f}: {exc}", file=sys.stderr)
+            failed = True
+            continue
+        if isinstance(data, dict) and "integration_error" in data:
             print(
                 f"FAIL: {conc_label}integration failure: "
                 f"{integration_error_message(data['integration_error'])}",
@@ -335,7 +382,17 @@ def main() -> int:
             )
             failed = True
             continue
-        for task, metrics in data.get("results", {}).items():
+        results = data.get("results", {}) if isinstance(data, dict) else None
+        if not isinstance(results, dict):
+            print(
+                f"FAIL: unreadable result file {f}: "
+                "expected a JSON object with a 'results' mapping",
+                file=sys.stderr,
+            )
+            failed = True
+            continue
+        file_checked = checked
+        for task, metrics in results.items():
             invalid_effective, effective = invalid_effective_count(data, task)
             if invalid_effective:
                 print(
@@ -344,15 +401,33 @@ def main() -> int:
                 )
                 failed = True
                 continue
+            if not isinstance(metrics, dict):
+                print(
+                    f"FAIL: {conc_label}{task} malformed result: 'results' entry is not a mapping",
+                    file=sys.stderr,
+                )
+                failed = True
+                continue
             min_score, source = resolve_threshold(config, prefix, task, args.min_score)
-            prefixes = metric_prefixes(data, task, args.metric_prefix)
+            try:
+                prefixes = metric_prefixes(data, task, args.metric_prefix)
+            except ValueError as exc:
+                print(f"FAIL: {conc_label}{task} malformed result: {exc}", file=sys.stderr)
+                failed = True
+                continue
             for name, val in metrics.items():
                 if not name.startswith(prefixes) or "stderr" in name:
                     continue
                 if not isinstance(val, (int, float)):
                     continue
                 checked += 1
-                if val < min_score:
+                if isinstance(val, bool) or not math.isfinite(val):
+                    print(
+                        f"FAIL: {conc_label}{task} {name} = {val} is not a finite number",
+                        file=sys.stderr,
+                    )
+                    failed = True
+                elif val < min_score:
                     print(
                         f"FAIL: {conc_label}{task} {name} = {val:.4f} (< {min_score} from {source})",
                         file=sys.stderr,
@@ -362,9 +437,11 @@ def main() -> int:
                     print(
                         f"PASS: {conc_label}{task} {name} = {val:.4f} (>= {min_score} from {source})"
                     )
+        if checked == file_checked:
+            print(f"FAIL: {conc_label}no metrics matched {selector!r} in {f}", file=sys.stderr)
+            failed = True
 
     if checked == 0:
-        selector = args.metric_prefix or "declared task metrics"
         print(f"WARN: no metrics matched {selector!r}", file=sys.stderr)
 
     return 1 if (failed or checked == 0) else 0

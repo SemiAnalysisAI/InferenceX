@@ -14,22 +14,29 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import yaml
+
 from infx.bench.env import InputError
 from infx.bench.eval import meta as eval_meta
+from infx.bench.video import JOB_STATUS, read_object, write_json
 from infx.launch.artifacts import (
     ArtifactError,
+    build_video_bundle,
     bundle_server_logs,
     collect_agentic_power_results,
     copy_agentic_results,
+    copy_al_gate_result,
     copy_eval_artifacts,
     copy_fixed_sequence_results,
     copy_to_workspace,
     run_power_adapter,
     validate_agentic_power,
+    validate_video_results,
 )
-from infx.launch.backends.base import BackendError
+from infx.launch.backends.base import BackendError, JobState, JobStatus
 from infx.launch.drivers.srt.config import EXPORTER_PROVENANCE
 from infx.launch.drivers.srt.run import SrtRun, require
+from infx.srt_slurm.video import load_spec, video_package
 
 if TYPE_CHECKING:
     from infx.launch.backends.base import Job
@@ -39,7 +46,10 @@ if TYPE_CHECKING:
     from infx.launch.drivers.srt.submit import Submitted
 
 SINGLE_NODE_LOGS = "srt-single-node-logs.tar.gz"
+VIDEO_LOGS = "srt-video-logs.tar.gz"
 MULTINODE_LOGS = "multinode_server_logs.tar.gz"
+VIDEO_BUNDLE = "h3-results"
+_TERMINAL = {JobState.SUCCEEDED, JobState.FAILED, JobState.CANCELLED}
 
 
 def _copy_tree_into(source: Path, destination: Path) -> None:
@@ -68,6 +78,7 @@ def finish_single_node(run: SrtRun, submitted: Submitted, fetched: Path) -> int:
         logs = output / "logs"
         power_rc = 0 if run.request.eval_only else _stage_power_package(run, logs)
         bundle_server_logs(output, run.workspace / SINGLE_NODE_LOGS)
+        copy_al_gate_result(logs, run.workspace, run.request.result_filename)
         result = logs / f"{run.request.result_filename}.json"
         if result.is_file():
             try:
@@ -107,7 +118,8 @@ def finalize_single_node_results(run: SrtRun, logs: Path, producer_sha: str) -> 
     A single-node point publishes the fixed-sequence bundle shape: the validation
     sidecar sits beside the result, named after it, and the audit names that file.
 
-    srt-slurm treats a failed post-benchmark eval as non-fatal; InferenceX does not.
+    srt-slurm treats a failed post-benchmark eval as non-fatal; InferenceX does not. An eval's
+    report-only acceptance gate never fails it.
     """
     request, event = run.request, run.life.event
     power_rc = 0
@@ -133,6 +145,102 @@ def finalize_single_node_results(run: SrtRun, logs: Path, producer_sha: str) -> 
             event.fail("ResultMissing", f"benchmark result {result} is missing or empty")
             return 1
     return power_rc
+
+
+def stage_video_identity(run: SrtRun, bound: Path) -> None:
+    """Retain the selected workload before startup, using the binder's declared identity."""
+    environment = yaml.safe_load(bound.read_text())["benchmark"]["env"]
+    selected = load_spec(
+        run.request.env["VIDEO_SPEC"], root=run.workspace, set_id=environment["VIDEO_SET"]
+    )
+    plan, digest = selected["plan"], selected["plan_sha256"]
+    if digest != environment["VIDEO_PLAN_SHA256"]:
+        raise ValueError("bound video identity disagrees with the selected workload")
+    identity = {
+        "plan_sha256": digest,
+        "workload_plan": plan,
+        "engine": {
+            "name": environment["VIDEO_RUNTIME"],
+            "revision": environment["VIDEO_RUNTIME_REVISION"],
+        },
+    }
+    write_json(run.workspace / "video-identity.json", identity)
+
+
+def write_video_job_status(logs: Path, job_id: str, status: JobStatus) -> None:
+    """Retain native status and any observed allocation beside video power logs.
+
+    An unknown reading after cancellation keeps the same job's earlier terminal status.
+    """
+    path = logs / "power" / JOB_STATUS
+    previous = read_object(path) if path.is_file() else {}
+    same_job = previous.get("job_id") == job_id
+    record = {
+        "job_id": job_id,
+        "state": status.state.value,
+        "raw": status.raw,
+        "alloc_tres": status.alloc_tres or (previous.get("alloc_tres") if same_job else None),
+    }
+    if same_job and status.state is JobState.UNKNOWN and previous.get("state") in _TERMINAL:
+        record.update(state=previous["state"], raw=previous["raw"])
+    write_json(path, record)
+
+
+def finish_video(run: SrtRun, submitted: Submitted, fetched: Path) -> int:
+    """Cancel a live job and retain diagnostics, including a bundle when startup failed."""
+    job = submitted.recover(run.backend)
+    output = fetched
+    if job is not None:
+        run.backend.cancel(job)
+        output = run.backend.fetch_outputs(job, fetched)
+    with run.life.event.stage("collect"):
+        logs = output / "logs"
+        rc = 0
+        if not (run.workspace / VIDEO_BUNDLE / "manifest.json").is_file():
+            if job is not None:
+                write_video_job_status(logs, job.id, run.backend.state(job))
+            producer = run.workspace / "power-producer-sha.txt"
+            rc = finalize_video_results(
+                run, logs, producer.read_text().strip() if producer.is_file() else ""
+            )
+        elif logs.is_dir():
+            rc = _stage_power_package(run, logs)
+        if output.is_dir():
+            bundle_server_logs(output, run.workspace / VIDEO_LOGS)
+    return rc
+
+
+def finalize_video_results(run: SrtRun, logs: Path, producer_sha: str) -> int:
+    """Validate every concurrency's video result against the native power package, then bundle.
+
+    Each concurrency gets its own aggregate and validation sidecar beside the result
+    summary; the bundle under ``h3-results`` is what the app ingests. An incomplete
+    concurrency fails the point; invalid power fails it only under REQUIRE_POWER.
+    """
+    request, event = run.request, run.life.event
+    require(request, "INFERENCEX_RESULTS_PYTHON", "CONC_LIST", "GPU_COUNT", "VIDEO_SPEC")
+    power_rc = _stage_power_package(run, logs)
+    rc = validate_video_results(
+        request.inferencex_results_python, run.workspace, logs, producer_sha,
+        result_filename=request.result_filename, concurrencies=request.conc_list,
+        gpu_count=int(request.env["GPU_COUNT"]), require_power=request.require_power,
+        identity={
+            "cluster": run.cluster.id, "model": request.env["MODEL"], "image": request.image,
+            "framework": request.framework, "precision": request.precision,
+            "spec": request.env["VIDEO_SPEC"],
+        },
+    )  # fmt: skip
+    if rc:
+        event.fail("VideoValidationFailed", "Video result validation failed", report=False)
+    bundle_rc = build_video_bundle(
+        request.inferencex_results_python, run.workspace, logs,
+        package=video_package(run.workspace),
+        output=run.workspace / VIDEO_BUNDLE, result_filename=request.result_filename,
+        concurrencies=request.conc_list,
+    )  # fmt: skip
+    if bundle_rc:
+        event.fail("VideoBundleFailed", "Video results bundle was not built", report=False)
+    return power_rc or rc or bundle_rc
 
 
 def _stage_logs(run: SrtRun, logs: Path, power: PowerDecision) -> None:
@@ -164,6 +272,7 @@ def collect(
     logs_staged = False
 
     def stage_logs_on_exit() -> None:
+        """Fetch and stage the job's logs when the launch ends before collect staged them."""
         if not logs_staged:
             _stage_logs(run, backend.fetch_outputs(job, fetched) / "logs", power)
 
@@ -188,11 +297,22 @@ def collect(
             python = request.inferencex_results_python
             if power.agentx:
                 power_rc = collect_agentic_power_results(
-                    status, job.id, logs, infmax, *audit, results_python=python
+                    status,
+                    job.id,
+                    logs,
+                    infmax,
+                    *audit,
+                    results_python=python,
+                    require_power=not power.best_effort,
+                    expected_cpu=power.expect_cpu,
                 )
             else:
                 power_rc = validate_agentic_power(
-                    logs, *audit, results_python=python, require_power=request.require_power
+                    logs,
+                    *audit,
+                    results_python=python,
+                    require_power=request.require_power,
+                    expected_cpu=power.expect_cpu,
                 )
             if power_rc:
                 event.fail(
@@ -214,6 +334,7 @@ def collect(
                 event.error(error)
                 rc = rc or 1
         if request.run_eval or request.eval_only:
+            copy_al_gate_result(logs, run.workspace, request.result_filename)
             try:
                 copy_eval_artifacts(logs / "eval_results", run.workspace)
             except ArtifactError as error:
@@ -258,6 +379,9 @@ def cleanup_outputs(root: Path, *, sleep: Callable[[float], None] = time.sleep) 
         except FileNotFoundError:
             break
         except OSError:
+            if attempt == attempts:
+                print(f"outputs still busy after {attempts} attempts; leaving it", flush=True)
+                break
             print(f"Retry {attempt}/{attempts}: Waiting for NFS locks to release...", flush=True)
             sleep(10)
     for directory, dirnames, filenames in os.walk(root, topdown=False):

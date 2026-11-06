@@ -17,6 +17,7 @@ _SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
 
 class _Interrupted(BaseException):
     def __init__(self, signum: int) -> None:
+        """Carry the received signal number ``signum``."""
         super().__init__(signum)
         self.signum = signum
 
@@ -30,6 +31,7 @@ class Lifecycle:
     """
 
     def __init__(self, event: JobEventBuilder | None = None) -> None:
+        """Start with no cleanups and exit code 0, recording into ``event`` or a fresh one."""
         self.event = event if event is not None else JobEventBuilder()
         self._stack = ExitStack()
         self._rc = 0
@@ -40,11 +42,13 @@ class Lifecycle:
 
     @property
     def returncode(self) -> int:
+        """Return the first recorded nonzero code, else 1 if a cleanup failed, else 0."""
         if self._rc:
             return self._rc
         return 1 if self._cleanup_failed else 0
 
     def record(self, rc: int) -> None:
+        """Keep ``rc`` as the exit code unless it is 0 or a nonzero code is already recorded."""
         if rc and not self._rc:
             self._rc = rc
 
@@ -52,6 +56,7 @@ class Lifecycle:
         """Register a cleanup; one that raises or returns a nonzero int fails the launch."""
 
         def run() -> None:
+            """Call the cleanup and record a failure if it raises or returns a nonzero int."""
             try:
                 result = fn(*args, **kwargs)
             except Exception as error:  # noqa: BLE001
@@ -68,6 +73,7 @@ class Lifecycle:
         self._stack.callback(run)
 
     def _on_signal(self, signum: int, frame: FrameType | None) -> None:
+        """Defer ``signum`` while exiting, else ignore later signals and raise ``_Interrupted``."""
         if self._exiting or (frame is not None and frame.f_code is _EXIT_CODE):
             self._signum = self._signum or signum
             return
@@ -76,6 +82,7 @@ class Lifecycle:
         raise _Interrupted(signum)
 
     def __enter__(self) -> Self:
+        """Install the signal handlers and return this lifecycle."""
         for sig in _SIGNALS:
             self._previous[sig] = signal.signal(sig, self._on_signal)
         return self
@@ -86,6 +93,10 @@ class Lifecycle:
         exc: BaseException | None,
         tb: TracebackType | None,
     ) -> bool:
+        """Record how the body ended, run the cleanups and restore the signal handlers.
+
+        Raises ``SystemExit(128 + signum)`` after a signal, else returns False to propagate errors.
+        """
         self._exiting = True
         mask = signal.pthread_sigmask(signal.SIG_BLOCK, _SIGNALS)
         if isinstance(exc, _Interrupted):

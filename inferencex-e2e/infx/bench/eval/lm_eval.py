@@ -24,7 +24,10 @@ CONTEXT_FIELDS = ("max_position_embeddings", "max_sequence_length", "seq_length"
 
 
 def install(environ: Mapping[str, str]) -> None:
-    """Install lm-eval at ``REF`` into this interpreter; failures only warn, as images may ship it."""
+    """Install lm-eval at ``REF`` into this interpreter. Failures only warn, as images may ship it.
+
+    The ``huggingface-hub`` range keeps lm-eval from upgrading it past what transformers 5.x accepts.
+    """
     try:
         uv.find()
     except env.BenchError as error:
@@ -32,17 +35,17 @@ def install(environ: Mapping[str, str]) -> None:
         return
     if "atom" in environ.get("IMAGE", ""):
         _pip(environ, "uninstall", "torchvision")
-    # lm-eval does not depend on transformers, so without this range its resolution
-    # upgrades huggingface-hub past what transformers 5.x accepts.
-    _pip(environ, "install", "lm-eval[api]", "huggingface-hub>=1.5,<2")
-    pinned = ("install", "--no-deps", "--reinstall")
+    constraints = ("huggingface-hub>=1.5,<2",)
     git = shutil.which("git", path=environ.get("PATH"))
-    if git and _pip(environ, *pinned, f"git+{REPOSITORY}.git@{REF}"):
+    if git and _pip(
+        environ, "install", f"lm-eval[api,hf] @ git+{REPOSITORY}.git@{REF}", *constraints
+    ):
         return
-    _pip(environ, *pinned, f"{REPOSITORY}/archive/{REF}.tar.gz")
+    _pip(environ, "install", f"lm-eval[api,hf] @ {REPOSITORY}/archive/{REF}.tar.gz", *constraints)
 
 
 def _pip(environ: Mapping[str, str], command: str, *args: str) -> bool:
+    """Run ``uv pip <command> <args>``, warning on failure, and return whether it succeeded."""
     argv = uv.pip(command, "-q", "--no-cache", "--break-system-packages", *args)
     rc = proc.call(argv, environ)
     if rc:
@@ -55,22 +58,21 @@ def native_context_length(model: str) -> int:
     try:
         config = json.loads((Path(model) / "config.json").read_text())
     except (OSError, ValueError):
-        config = None
-    if isinstance(config, dict):
+        try:
+            from transformers import PretrainedConfig
+
+            config, _ = PretrainedConfig.get_config_dict(model)
+        except Exception:  # noqa: BLE001
+            return 0
+    if not isinstance(config, dict):
+        return 0
+    for candidate in (config.get("text_config"), config):
+        if not isinstance(candidate, dict):
+            continue
         for name in CONTEXT_FIELDS:
-            value = config.get(name)
+            value = candidate.get(name)
             if type(value) is int and value > 0:
                 return value
-    try:
-        from transformers import AutoConfig
-
-        config = AutoConfig.from_pretrained(model, trust_remote_code=True)
-    except Exception:  # noqa: BLE001
-        return 0
-    for name in CONTEXT_FIELDS:
-        if hasattr(config, name):
-            value = getattr(config, name)
-            return value if isinstance(value, int) and value > 0 else 0
     return 0
 
 
@@ -98,6 +100,7 @@ def max_output_tokens(context: int) -> int:
 
 
 def tasks(environ: Mapping[str, str]) -> str:
+    """``EVAL_TASKS_DIR``, else the default task set."""
     return env.optional("EVAL_TASKS_DIR", env=environ) or DEFAULT_TASKS
 
 
@@ -112,9 +115,8 @@ def suite(environ: Mapping[str, str]) -> str:
 def prepare(environ: Mapping[str, str]) -> int:
     """Validate the inputs, install lm-eval, and return every request's context length."""
     env.require("OPENAI_API_KEY", env=environ)
-    length = context_length(environ)
     install(environ)
-    return length
+    return context_length(environ)
 
 
 def run(ctx: EvalContext) -> EvalOutcome:

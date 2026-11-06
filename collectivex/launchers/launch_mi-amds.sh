@@ -58,9 +58,8 @@ command -v salloc >/dev/null || collx_die "salloc not found on this runner"
 allocation=(--partition="$PARTITION" --nodes="$NODES" --gres=gpu:"$GPN"
   --time="$TIME_MIN" --ntasks-per-node="$GPN")
 [ -z "$CPUS_PER_NODE" ] || allocation+=(--cpus-per-task="$((CPUS_PER_NODE / GPN))")
-case "$RUNNER" in
-  mi300x|mi355x) allocation+=(--exclusive) ;;
-esac
+# Every pool runs alone on its nodes, as every other launcher allocates.
+allocation+=(--exclusive)
 excluded_nodes="$EXCLUDE_NODES"
 for allocation_attempt in 1 2 3; do
   attempt_allocation=("${allocation[@]}")
@@ -103,6 +102,7 @@ for allocation_attempt in 1 2 3; do
 done
 unset COLLX_SALLOC_ATTEMPT COLLX_NETWORK_VALIDATION_ATTEMPT
 CONTAINER_MOUNTS="$MOUNT_SRC:$MOUNT_DIR$DEVICE_MOUNTS"
+collx_add_host_verbs_provider_mount
 # uccl-ep builds from source, so it gets the cross-allocation backend cache single-slurm uses.
 # Its parent is COLLX_STAGE_DIR, not SQUASH_DIR: this SKU's squash dir is node-local and
 # root-owned (/var/lib/squash), so the submit-side mkdir fails and the path is not what compute

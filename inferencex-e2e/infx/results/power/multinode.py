@@ -27,6 +27,13 @@ to fail after those audit artifacts exist. If a consistent package contains a
 failed sibling window, the sidecar retains the healthy measurement in
 ``selected_window`` and its per-GPU diagnostics at the top level. Publication
 and aggregate power metrics remain blocked.
+
+CPU-side leg: when the package also carries ``power/cpu/`` (see
+:mod:`.cpu_side`), each socket's meter (Grace socket or AMD package) and its rails are
+integrated over the same bound formal window and published under
+``cpu_power_valid``. That verdict is independent of ``power_valid``. A missing
+or invalid CPU leg fails the run only with ``require_power`` and
+``expected_cpu``; otherwise it never changes the exit code.
 """
 
 from __future__ import annotations
@@ -39,26 +46,32 @@ import json
 import math
 import os
 import sys
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any
 
 from . import (
     ALL_POWER_METRIC_KEYS as _ALL_POWER_METRIC_KEYS,
+    CPU_METRIC_KEYS as CPU_METRIC_KEYS,
+    POWER_METRIC_SCHEMA_VERSION,
     ROLE_METRIC_KEYS as ROLE_METRIC_KEYS,
     WHOLE_METRIC_KEYS as WHOLE_METRIC_KEYS,
+    with_power_metrics,
 )
 from .common import (
+    MAX_SAMPLE_GAP_SECONDS,
     BenchmarkData,
     _append_reason,
+    _bracketing_sequence,
     _integrate_device,
     _load_benchmark_data,
     _percentile_total_power,
     _write_json_atomic,
     audit_metrics,
     benchmark_window_payload,
-    patch_power_metrics,
 )
+from .cpu_side import CPU_DIRNAME, CpuPowerAudit, validate_cpu_leg
 
 SCHEMA_VERSION = 1
 PRODUCER = "srt-slurm.dcgm-power"
@@ -83,7 +96,6 @@ SAMPLES_HEADER_V2 = (*SAMPLES_HEADER, "gpu_util_pct", "sm_active")
 SAMPLES_HEADER_V3 = (*SAMPLES_HEADER_V2, "temperature_c")
 SAMPLES_HEADERS = {1: SAMPLES_HEADER, 2: SAMPLES_HEADER_V2, 3: SAMPLES_HEADER_V3}
 
-MAX_SAMPLE_GAP_SECONDS = 3.0
 MAX_TEMPERATURE_C = 200.0
 
 WORKER_ROLES = ("prefill", "decode", "agg")
@@ -113,10 +125,12 @@ _INTEGRATION_METHOD = "per_device_trapezoidal_with_linear_boundary_interpolation
 
 
 def _dedupe(values: list[str]) -> tuple[str, ...]:
+    """Return ``values`` as a tuple without duplicates, keeping first-seen order."""
     return tuple(dict.fromkeys(values))
 
 
 def _is_safe_relative_subpath(value: str) -> bool:
+    """Return whether ``value`` is a non-empty relative POSIX path with no ``..`` or empty parts."""
     if not value or value.startswith(("/", "~")):
         return False
     parts = PurePosixPath(value).parts
@@ -124,6 +138,7 @@ def _is_safe_relative_subpath(value: str) -> bool:
 
 
 def _stays_below(root: Path, relative: str) -> bool:
+    """Return whether ``root / relative`` resolves inside ``root``."""
     try:
         (root / relative).resolve().relative_to(root.resolve())
     except (ValueError, OSError):
@@ -132,10 +147,12 @@ def _stays_below(root: Path, relative: str) -> bool:
 
 
 def _is_finite(value: Any) -> bool:
+    """Return whether ``value`` is a finite int or float, excluding booleans."""
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
 def _is_positive_finite(value: Any) -> bool:
+    """Return whether ``value`` is finite and greater than zero."""
     return _is_finite(value) and value > 0
 
 
@@ -155,6 +172,7 @@ class ExpectedDevice:
 
     @property
     def key(self) -> tuple[str, int]:
+        """The (hostname, gpu_index) pair identifying this device."""
         return (self.hostname, self.gpu_index)
 
 
@@ -165,6 +183,7 @@ class ExpectedWindow:
 
     @property
     def key(self) -> tuple[str, int]:
+        """The (benchmark_type, concurrency) pair identifying this window."""
         return (self.benchmark_type, self.concurrency)
 
 
@@ -179,6 +198,7 @@ class SampleRow:
 
     @property
     def key(self) -> tuple[int, str, int]:
+        """The (scrape_seq, hostname, gpu_index) triple identifying this sample."""
         return (self.scrape_seq, self.hostname, self.gpu_index)
 
 
@@ -193,9 +213,11 @@ class ObservedDevice:
 
     @property
     def key(self) -> tuple[str, int]:
+        """The (hostname, gpu_index) pair identifying this device."""
         return (self.hostname, self.gpu_index)
 
     def to_dict(self) -> dict:
+        """Return this device as a JSON-ready dict without its sample times."""
         return {
             "hostname": self.hostname,
             "gpu_index": self.gpu_index,
@@ -206,24 +228,30 @@ class ObservedDevice:
 
 
 def _text(value: Any, label: str) -> str:
+    """Return ``value`` if it is a non-empty string, else raise ValueError naming ``label``."""
     if not isinstance(value, str) or not value:
         raise ValueError(f"{label} is not a non-empty string: {value!r}")
     return value
 
 
 def _whole(value: Any, label: str, *, minimum: int) -> int:
+    """Return ``value`` if it is an int of at least ``minimum``, else raise ValueError naming ``label``."""
     if not isinstance(value, int) or isinstance(value, bool) or value < minimum:
         raise ValueError(f"{label} is not an integer >= {minimum}: {value!r}")
     return value
 
 
-def _role(value: Any) -> str:
-    if value not in WORKER_ROLES:
-        raise ValueError(f"worker_role is not one of {WORKER_ROLES}: {value!r}")
+def _role(value: Any, roles: tuple[str, ...] = WORKER_ROLES) -> str:
+    """Return ``value`` if it is one of ``roles``, else raise ValueError."""
+    if value not in roles:
+        raise ValueError(f"worker_role is not one of {roles}: {value!r}")
     return value
 
 
-def _parse_expected_devices(manifest: dict) -> list[ExpectedDevice]:
+def _parse_expected_devices(
+    manifest: dict, roles: tuple[str, ...] = WORKER_ROLES
+) -> list[ExpectedDevice]:
+    """Parse expected devices, including declared service-pool roles."""
     entries = manifest.get("expected_devices") or []
     if not isinstance(entries, list):
         raise TypeError(f"expected_devices is not a list: {entries!r}")
@@ -234,7 +262,7 @@ def _parse_expected_devices(manifest: dict) -> list[ExpectedDevice]:
             raise ValueError(f"assignments is not a non-empty list: {raw_assignments!r}")
         assignments = tuple(
             DeviceAssignment(
-                worker_role=_role(assignment["worker_role"]),
+                worker_role=_role(assignment["worker_role"], roles),
                 worker_index=_whole(assignment["worker_index"], "worker_index", minimum=0),
                 worker_process=_whole(assignment["worker_process"], "worker_process", minimum=0),
                 het_group=(
@@ -256,6 +284,10 @@ def _parse_expected_devices(manifest: dict) -> list[ExpectedDevice]:
 
 
 def _parse_expected_windows(manifest: dict) -> list[ExpectedWindow]:
+    """Parse the manifest's expected_windows into ExpectedWindow entries.
+
+    Raises TypeError, ValueError or KeyError on malformed entries.
+    """
     entries = manifest.get("expected_windows") or []
     if not isinstance(entries, list):
         raise TypeError(f"expected_windows is not a list: {entries!r}")
@@ -368,6 +400,7 @@ def _parse_sample_row(raw: list[str], expected_version: int) -> SampleRow | None
 
 
 def read_samples(path: Path) -> tuple[tuple[SampleRow, ...], tuple[str, ...]]:
+    """Return the valid unique sample rows of the samples CSV at ``path`` and the reasons it is unsound."""
     if not path.is_file():
         return (), ("samples_csv_missing",)
 
@@ -417,6 +450,7 @@ def read_samples(path: Path) -> tuple[tuple[SampleRow, ...], tuple[str, ...]]:
 
 
 def derive_observed_devices(rows: tuple[SampleRow, ...]) -> list[ObservedDevice]:
+    """Group sample ``rows`` per (hostname, gpu_index) into ObservedDevice entries sorted by key."""
     ordered: dict[tuple[str, int], list[SampleRow]] = {}
     for row in rows:
         ordered.setdefault((row.hostname, row.gpu_index), []).append(row)
@@ -441,6 +475,7 @@ def derive_observed_devices(rows: tuple[SampleRow, ...]) -> list[ObservedDevice]
 def _resolve_roles(
     devices: list[ExpectedDevice],
 ) -> tuple[dict[tuple[str, int], str], list[str]]:
+    """Map each expected device to its single worker role, or return {} and a conflict reason."""
     roles: dict[tuple[str, int], str] = {}
     for device in devices:
         distinct = {assignment.worker_role for assignment in device.assignments}
@@ -453,6 +488,7 @@ def _resolve_roles(
 def _resolve_het_groups(
     devices: list[ExpectedDevice],
 ) -> tuple[dict[str, int | None], list[str]]:
+    """Map each expected host to its single het group, or return {} and a conflict reason."""
     groups: dict[str, int | None] = {}
     for device in devices:
         distinct = {assignment.het_group for assignment in device.assignments}
@@ -469,6 +505,7 @@ def _validate_devices(
     expected: list[ExpectedDevice],
     observed: list[ObservedDevice],
 ) -> tuple[list[str], dict[tuple[str, int], str]]:
+    """Compare ``expected`` and ``observed`` devices and return the mismatch reasons and the role per device."""
     reasons: list[str] = []
     expected_keys = {device.key for device in expected}
     observed_keys = {device.key for device in observed}
@@ -555,6 +592,7 @@ class ParsedWindow:
 
 
 def _window_status_invariants_hold(status: str, end: Any, duration: Any, reason: Any) -> bool:
+    """Return whether ``end``, ``duration`` and ``reason`` are consistent with window ``status``."""
     if status == WINDOW_STATUS_RUNNING:
         return end is None and duration is None and reason is None
     if status == "interrupted":
@@ -569,6 +607,10 @@ def _window_status_invariants_hold(status: str, end: Any, duration: Any, reason:
 def _parse_window(
     path: Path, relative: str, result_root: Path
 ) -> tuple[ParsedWindow | None, list[str]]:
+    """Parse the window JSON at ``path`` whose result must stay below ``result_root``.
+
+    Returns the window, or None with the reason codes when it is malformed.
+    """
     try:
         payload = json.loads(path.read_text())
     except (OSError, ValueError):
@@ -621,6 +663,10 @@ def _scan_windows(
     result_root: Path,
     artifact_errors: list[dict],
 ) -> tuple[dict[tuple[str, int], ParsedWindow], set[tuple[str, int]]]:
+    """Parse every window file in ``windows_dir`` keyed by (type, concurrency), dropping duplicated keys.
+
+    Returns the windows and the duplicated keys, appending file problems to ``artifact_errors``.
+    """
     parsed: dict[tuple[str, int], ParsedWindow] = {}
     duplicates: set[tuple[str, int]] = set()
     if not windows_dir.is_dir():
@@ -672,6 +718,7 @@ def _scan_windows(
 
 
 def _check_window_result(window: ParsedWindow, result_root: Path) -> list[str]:
+    """Return reasons the window's result JSON under ``result_root`` is missing or disagrees with ``window``."""
     result_file = result_root / window.result_path
     if not result_file.is_file():
         return ["measurement_window_result_missing"]
@@ -696,21 +743,13 @@ def _check_window_result(window: ParsedWindow, result_root: Path) -> list[str]:
     return []
 
 
-def _bracketing_sequence(times: tuple[float, ...], start: float, end: float) -> list[float] | None:
-    before = [value for value in times if value <= start]
-    after = [value for value in times if value >= end]
-    if not before or not after:
-        return None
-    inside = [value for value in times if start < value < end]
-    return [before[-1], *inside, after[0]]
-
-
 def _check_coverage(
     start: float,
     end: float,
     expected_device_keys: set[tuple[str, int]],
     observed_devices: list[ObservedDevice],
 ) -> tuple[dict[str, float], list[str]]:
+    """Return the largest sample gap per expected device across ``start``..``end`` and the coverage reasons."""
     by_key = {device.key: device for device in observed_devices}
     gaps: dict[str, float] = {}
     reasons: list[str] = []
@@ -821,6 +860,7 @@ def _check_stored_evidence(
     validations: list[dict],
     artifact_errors: list[dict],
 ) -> list[str]:
+    """Return mismatches between the ``manifest``'s stored evidence and the values recomputed from disk."""
     failures: list[str] = []
 
     stored_rows = manifest.get("sample_row_count")
@@ -887,19 +927,27 @@ class MultinodePowerAudit:
     window_metrics: dict[str, float] = field(default_factory=dict)
     per_gpu_energy_j: dict[str, float] = field(default_factory=dict)
     per_gpu_role: dict[str, str] = field(default_factory=dict)
+    # Not serialized; absent for a GPU assigned to more than one worker.
+    per_gpu_worker_index: dict[str, int] = field(default_factory=dict)
     per_gpu_max_sample_gap_s: dict[str, float] = field(default_factory=dict)
     observed_gpu_count: int = 0
     expected_gpu_count: int = 0
     metrics: dict[str, float] = field(default_factory=dict)
+    # Input the CPU-side leg borrows from the GPU package; not serialized.
+    expected_worker_hosts: tuple[str, ...] = ()
+    # None when the package carried no cpu/ sub-package.
+    cpu: CpuPowerAudit | None = None
 
 
 def _canonical_sha256(payload: dict) -> str:
+    """Return the SHA-256 hex digest of ``payload`` as sorted, compact JSON."""
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
 
 
 def _add_reason(audit: MultinodePowerAudit, reason: str, detail: str | None = None) -> None:
+    """Record ``reason`` once on ``audit`` and append ``detail`` to its failures when given."""
     _append_reason(audit.reasons, reason)
     if detail:
         audit.failures.append(detail)
@@ -915,8 +963,59 @@ def validate_and_integrate(
     decode_gpus: int,
     aggregate_gpus: int,
     expected_producer_sha: str | None,
+    service_gpus: Mapping[str, int] | None = None,
+    server_gpu_uuids: Sequence[str] | None = None,
+    expected_cpu: bool = False,
 ) -> MultinodePowerAudit:
-    """Recompute package validity, cross-check verdicts, and integrate energy."""
+    """Recompute package validity, cross-check verdicts, and integrate energy.
+
+    The GPU leg runs first and binds the formal window; the CPU-side leg then
+    reuses that window and the manifest topology as inputs. No GPU verdict
+    reaches it: an unpinned producer or failed GPU coverage withholds GPU
+    energy only, and ``cpu_power_valid`` judges the CPU samples on their own.
+
+    ``service_gpus`` names recipe services that own the job's GPUs instead of engine
+    workers (a diffusion server started as a generic service); each is a role the
+    producer plans by the service's name, with the given GPU count.
+    ``server_gpu_uuids`` binds native samples to that service's actual GPU assignment.
+    """
+    audit = _validate_gpu_leg(
+        power_dir=power_dir,
+        logs_root=logs_root,
+        bench_result_path=bench_result_path,
+        benchmark=benchmark,
+        prefill_gpus=prefill_gpus,
+        decode_gpus=decode_gpus,
+        aggregate_gpus=aggregate_gpus,
+        expected_producer_sha=expected_producer_sha,
+        service_gpus=dict(service_gpus or {}),
+        server_gpu_uuids=server_gpu_uuids,
+    )
+    window = None
+    if audit.window is not None and _window_contract_holds(audit.window, audit.window_validations):
+        window = (audit.window["start_time_unix"], audit.window["end_time_unix"])
+    audit.cpu = validate_cpu_leg(
+        power_dir / CPU_DIRNAME,
+        window=window,
+        expected_hosts=audit.expected_worker_hosts,
+        expected=expected_cpu,
+    )
+    return audit
+
+
+def _validate_gpu_leg(
+    *,
+    power_dir: Path,
+    logs_root: Path,
+    bench_result_path: Path,
+    benchmark: BenchmarkData | None,
+    prefill_gpus: int,
+    decode_gpus: int,
+    aggregate_gpus: int,
+    expected_producer_sha: str | None,
+    service_gpus: dict[str, int],
+    server_gpu_uuids: Sequence[str] | None,
+) -> MultinodePowerAudit:
     audit = MultinodePowerAudit(
         expected_producer_git_commit=expected_producer_sha,
     )
@@ -959,12 +1058,13 @@ def validate_and_integrate(
     recompute_failures: list[str] = _check_wire_contract(manifest)
 
     try:
-        expected_devices = _parse_expected_devices(manifest)
+        expected_devices = _parse_expected_devices(manifest, (*WORKER_ROLES, *service_gpus))
         expected_windows = _parse_expected_windows(manifest)
     except (AttributeError, KeyError, TypeError, ValueError) as exc:
         _add_reason(audit, "manifest_malformed", f"manifest malformed: {exc!r}")
         audit.recomputed_publication_valid = False
         return audit
+    audit.expected_worker_hosts = tuple(sorted({device.hostname for device in expected_devices}))
 
     rows, sample_reasons = read_samples(power_dir / SAMPLES_FILENAME)
     recompute_failures += [f"{reason} in {SAMPLES_FILENAME}" for reason in sample_reasons]
@@ -1043,12 +1143,24 @@ def validate_and_integrate(
         expected_roles["decode"] = decode_gpus
     if aggregate_gpus > 0:
         expected_roles["agg"] = aggregate_gpus
+    if service_gpus and expected_roles:
+        topology_valid = False
+        _add_reason(
+            audit,
+            "topology_env_mismatch",
+            "service GPUs cannot be combined with engine worker GPUs",
+        )
+    for service, count in sorted(service_gpus.items()):
+        if service in WORKER_ROLES or count <= 0:
+            topology_valid = False
+            _add_reason(audit, "topology_env_mismatch", f"invalid service role {service!r}")
+        expected_roles[service] = count
     if not expected_roles:
         topology_valid = False
         _add_reason(
             audit,
             "topology_env_mismatch",
-            "prefill, decode, and aggregate GPU counts are all zero",
+            "prefill, decode, aggregate and service GPU counts are all zero",
         )
     elif roles:
         topology_failures = _check_role_topology(expected_devices, roles, expected_roles)
@@ -1066,11 +1178,27 @@ def validate_and_integrate(
     audit.per_gpu_role = {
         uuid_label.get(key, f"{key[0]}/{key[1]}"): role for key, role in sorted(roles.items())
     }
+    for device in expected_devices:
+        indices = {assignment.worker_index for assignment in device.assignments}
+        if device.key in roles and len(indices) == 1:
+            label = uuid_label.get(device.key, f"{device.key[0]}/{device.key[1]}")
+            audit.per_gpu_worker_index[label] = indices.pop()
+    if server_gpu_uuids is not None:
+        observed_uuids = [uuid for device in observed for uuid in device.gpu_uuids]
+        if not server_gpu_uuids:
+            _add_reason(audit, "server_gpu_identity_missing", "server GPU UUIDs are missing")
+        elif len(observed_uuids) != len(server_gpu_uuids) or set(observed_uuids) != set(
+            server_gpu_uuids
+        ):
+            _add_reason(
+                audit,
+                "server_power_gpu_mismatch",
+                "server GPU UUIDs differ from native power samples",
+            )
 
     window = _select_window_for_result(
         audit, parsed_windows, logs_root, bench_result_path, benchmark
     )
-
     if (
         not audit.package_integrity_valid
         or not topology_valid
@@ -1138,10 +1266,13 @@ def validate_and_integrate(
         "avg_total_gpu_power_w": total_energy / duration_s,
         "total_gpu_energy_j": total_energy,
         "joules_per_successful_query": total_energy / benchmark.completed,
-        "joules_per_input_token": total_energy / benchmark.total_input_tokens,
-        "joules_per_output_token": total_energy / benchmark.total_output_tokens,
-        "joules_per_total_token": total_energy / total_tokens,
     }
+    if benchmark.per_token:
+        metrics.update(
+            joules_per_input_token=total_energy / benchmark.total_input_tokens,
+            joules_per_output_token=total_energy / benchmark.total_output_tokens,
+            joules_per_total_token=total_energy / total_tokens,
+        )
     if prefill_gpus > 0:
         metrics["prefill_gpu_energy_j"] = role_energy["prefill"]
         metrics["prefill_avg_power_w"] = role_energy["prefill"] / duration_s / prefill_gpus
@@ -1238,13 +1369,88 @@ def _select_window_for_result(
     return window
 
 
+# Per-window audit codes that describe GPU sample coverage rather than the
+# window's own contract (srt-slurm power/windows.py _check_coverage); the
+# CPU-side leg re-checks its own coverage.
+_GPU_COVERAGE_REASONS = frozenset(
+    {
+        "measurement_window_not_bracketed",
+        "sample_gap_exceeded",
+        "gpu_uuid_changed",
+        "sample_loss_exceeded",
+    }
+)
+
+
+def _window_contract_holds(window: dict, validations: list[dict]) -> bool:
+    """True when the bound window passed every check that is not GPU coverage."""
+    for validation in validations:
+        if (validation["benchmark_type"], validation["concurrency"]) == (
+            window["benchmark_type"],
+            window["concurrency"],
+        ):
+            return all(reason in _GPU_COVERAGE_REASONS for reason in validation["reason_codes"])
+    return False
+
+
+def _host_workers(audit: MultinodePowerAudit) -> list[dict]:
+    """Project validated device energy onto one entry per worker per physical host.
+
+    A worker spanning hosts yields one entry per host, each with the manifest's worker
+    index, so consumers can model trays by host and still group entries by worker.
+    """
+    if not audit.power_valid or audit.window is None:
+        return []
+    if audit.per_gpu_energy_j.keys() - audit.per_gpu_worker_index.keys():
+        return []
+    duration_s = audit.window["end_time_unix"] - audit.window["start_time_unix"]
+    energies: dict[tuple[str, int, str], list[float]] = {}
+    for device, joules in audit.per_gpu_energy_j.items():
+        key = (
+            audit.per_gpu_role[device],
+            audit.per_gpu_worker_index[device],
+            device.rsplit("/", 1)[0],
+        )
+        energies.setdefault(key, []).append(joules)
+    return [
+        {
+            "role": role,
+            "worker_idx": worker_idx,
+            "hosts": [host],
+            "num_gpus": len(values),
+            "avg_power_w": round(sum(values) / duration_s / len(values), 3),
+        }
+        for (role, worker_idx, host), values in sorted(energies.items())
+    ]
+
+
 def _patch_agg(agg_path: Path, audit: MultinodePowerAudit) -> None:
-    patch_power_metrics(
-        agg_path,
+    """Write the ``audit`` verdict and power metrics into the aggregate JSON at ``agg_path``."""
+    cpu = audit.cpu
+    data = json.loads(agg_path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"aggregate is not a JSON object: {agg_path}")
+    data = with_power_metrics(
+        data,
+        schema_version=POWER_METRIC_SCHEMA_VERSION,
         metric_keys=_ALL_POWER_METRIC_KEYS,
         power_valid=audit.power_valid,
         metrics=audit.metrics,
+        cpu_power_valid=None if cpu is None else cpu.valid,
+        cpu_metrics={} if cpu is None else cpu.metrics,
     )
+    data.pop("workers", None)
+    if workers := _host_workers(audit):
+        data["workers"] = workers
+    _write_json_atomic(agg_path, data)
+
+
+def _withhold_metrics(audit: MultinodePowerAudit, cpu_reason: str | None = None) -> None:
+    """Drop every publishable number; the CPU leg only when the failure is shared."""
+    audit.power_valid = False
+    audit.metrics = {}
+    if audit.cpu is not None and cpu_reason is not None:
+        audit.cpu.invalidate(cpu_reason)
 
 
 def _sidecar_payload(
@@ -1254,7 +1460,8 @@ def _sidecar_payload(
     bench_result: Path,
     benchmark: BenchmarkData | None,
 ) -> dict:
-    return {
+    """Build the power validation sidecar JSON from ``audit`` and the benchmark inputs."""
+    payload = {
         "schema_version": 1,
         "power_valid": audit.power_valid,
         "reasons": list(audit.reasons),
@@ -1292,6 +1499,10 @@ def _sidecar_payload(
         },
         "metrics": audit_metrics(audit.metrics),
     }
+    # Only when the package carried cpu/: sidecars without it stay byte-identical.
+    if audit.cpu is not None:
+        payload["cpu"] = audit.cpu.to_payload()
+    return payload
 
 
 def run(
@@ -1304,8 +1515,11 @@ def run(
     expected_producer_sha: str | None,
     logs_root: Path,
     aggregate_gpus: int = 0,
+    service_gpus: Mapping[str, int] | None = None,
+    server_gpu_uuids: Sequence[str] | None = None,
     validation_result: Path | None = None,
     require_power: bool = False,
+    expected_cpu: bool = False,
 ) -> int:
     """Validate multinode power artifacts, patch metrics, and audit the verdict."""
     validation_result = validation_result or bench_result.with_name(
@@ -1323,24 +1537,24 @@ def run(
         decode_gpus=decode_gpus,
         aggregate_gpus=aggregate_gpus,
         expected_producer_sha=expected_producer_sha,
+        service_gpus=service_gpus,
+        server_gpu_uuids=server_gpu_uuids,
+        expected_cpu=expected_cpu,
     )
     for reason in benchmark_reasons:
         _add_reason(audit, reason)
     if benchmark is None or audit.reasons:
-        audit.power_valid = False
-        audit.metrics = {}
+        _withhold_metrics(audit)
 
     if not agg_result.is_file():
         _add_reason(audit, "aggregate_result_missing", f"aggregate missing: {agg_result}")
-        audit.power_valid = False
-        audit.metrics = {}
+        _withhold_metrics(audit, "aggregate_result_missing")
     else:
         try:
             _patch_agg(agg_result, audit)
         except (OSError, json.JSONDecodeError, ValueError) as exc:
             _add_reason(audit, "aggregate_result_unwritable", str(exc))
-            audit.power_valid = False
-            audit.metrics = {}
+            _withhold_metrics(audit, "aggregate_result_unwritable")
             print(
                 f"[aggregate_power_multinode] Failed to patch {agg_result}: {exc}",
                 file=sys.stderr,
@@ -1364,6 +1578,20 @@ def run(
         )
         return 1 if require_power else 0
 
+    if audit.cpu is not None:
+        cpu = audit.cpu
+        print(
+            f"[aggregate_power_multinode] cpu_power_valid={int(cpu.valid)} "
+            f"sensor_kind={cpu.sensor_kind} "
+            f"avg_total_cpu_power_w={cpu.metrics.get('avg_total_cpu_power_w', 0.0):.2f} "
+            f"total_cpu_energy_j={cpu.metrics.get('total_cpu_energy_j', 0.0):.2f} "
+            f"reasons={','.join(cpu.reason_codes) or '-'}"
+        )
+
+    if require_power and expected_cpu and (audit.cpu is None or not audit.cpu.valid):
+        print("[aggregate_power_multinode] Required CPU power is invalid", file=sys.stderr)
+        return 1
+
     if not audit.power_valid:
         print(
             f"[aggregate_power_multinode] Power validation failed: "
@@ -1383,6 +1611,7 @@ def run(
 
 
 def main() -> int:
+    """Parse the multinode power options from argv and return the exit code of ``run``."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--power-dir",

@@ -31,6 +31,11 @@ def normalized_runner(value: Any) -> str:
     return str(value or "").lower()
 
 
+def _lowered(value: Any) -> Any:
+    """Match aggregate rows, which lowercase framework and precision."""
+    return value.lower() if isinstance(value, str) else value
+
+
 LEGACY_EVAL_SUITE = "<legacy-eval-suite>"
 
 
@@ -47,8 +52,8 @@ def eval_key(row: dict[str, Any]) -> tuple[Any, ...]:
             "multi",
             normalized_runner(row.get("hw")),
             row.get("model_prefix", row.get("infmax_model_prefix")),
-            row.get("framework"),
-            row.get("precision"),
+            _lowered(row.get("framework")),
+            _lowered(row.get("precision")),
             row.get("eval_suite", LEGACY_EVAL_SUITE),
             row.get("spec_decoding", "none"),
             as_int(row.get("isl", 8192), 8192),
@@ -78,8 +83,8 @@ def eval_key(row: dict[str, Any]) -> tuple[Any, ...]:
         "single",
         normalized_runner(row.get("hw")),
         row.get("model_prefix", row.get("infmax_model_prefix")),
-        row.get("framework"),
-        row.get("precision"),
+        _lowered(row.get("framework")),
+        _lowered(row.get("precision")),
         row.get("eval_suite", LEGACY_EVAL_SUITE),
         row.get("spec_decoding", "none"),
         as_int(row.get("isl", 8192), 8192),
@@ -190,10 +195,12 @@ class _RawEvalArtifact:
 
     @cached_property
     def results(self) -> dict[Path, dict[str, Any]]:
+        """Parsed results*.json files of this raw dir, keyed by path."""
         return read_eval_results(self.path.glob("results*.json"))
 
     @classmethod
     def read(cls, path: Path) -> _RawEvalArtifact:
+        """Load the raw eval dir at ``path``, recording meta_env.json problems in ``errors``."""
         artifact = cls(path, {}, [], False, [])
         prefix = f"raw eval artifact {path.name!r}"
         meta_path = path / "meta_env.json"
@@ -400,6 +407,7 @@ def _prune_raw_eval_dir(
     name = artifact_dir.name
 
     def superseded(key: tuple[Any, ...]) -> bool:
+        """Return whether a dir other than this one won identity ``key``."""
         winner = winners.get(key)
         return winner is not None and winner.parent.name != name
 

@@ -1,7 +1,7 @@
 """Query the committed golden AL curves.
 
 python -m infx.golden_al_distribution list
-python -m infx.golden_al_distribution show qwen3.5_mtp
+python -m infx.golden_al_distribution show qwen3.5-397b-a17b-nvfp4__mtp__native__default-default
 python -m infx.golden_al_distribution lookup qwen3.5 mtp 3 --thinking thinking_on
 """
 
@@ -26,6 +26,7 @@ from .curves import (
 
 
 def token_range(tokens: list[int]) -> str:
+    """Render draft lengths as ``a-b`` if contiguous, else comma-separated, or ``-`` if empty."""
     if not tokens:
         return "-"
     if tokens == list(range(tokens[0], tokens[-1] + 1)) and len(tokens) > 1:
@@ -34,6 +35,7 @@ def token_range(tokens: list[int]) -> str:
 
 
 def curve_json(curve: Curve) -> dict:
+    """Return a curve as a JSON-ready dict of its name, model and per-mode AL values."""
     return {
         "curve": curve.name,
         "model": curve.model,
@@ -45,6 +47,7 @@ def curve_json(curve: Curve) -> dict:
 
 
 def list_command(args: argparse.Namespace) -> None:
+    """Print every committed curve with its draft-length ranges, as a table or JSON."""
     curves = list_curves(args.golden_dir)
     if args.json:
         print(json.dumps([curve_json(curve) for curve in curves], indent=2))
@@ -62,6 +65,7 @@ def list_command(args: argparse.Namespace) -> None:
 
 
 def show_command(args: argparse.Namespace) -> None:
+    """Print one curve's AL per draft length and thinking mode, as a table or JSON."""
     curve = load_curve(args.curve, args.golden_dir)
     if args.json:
         print(json.dumps(curve_json(curve), indent=2))
@@ -71,7 +75,7 @@ def show_command(args: argparse.Namespace) -> None:
     print("  ".join(["tokens", *modes]))
     for tokens in sorted({token for mode in modes for token in curve.tokens(mode)}):
         cells = [
-            f"{float(curve.modes[mode][tokens]):.2f}" if tokens in curve.modes[mode] else "-"
+            f"{float(curve.modes[mode][tokens]):.2f}" if tokens in curve.tokens(mode) else "-"
             for mode in modes
         ]
         print(
@@ -85,17 +89,18 @@ def show_command(args: argparse.Namespace) -> None:
 
 
 def lookup_command(args: argparse.Namespace) -> None:
+    """Print the golden AL for the model, method, draft length and thinking mode in ``args``."""
     spec = {"method": args.method, "num_speculative_tokens": args.tokens}
     if args.draft_model:
         spec["model"] = args.draft_model
     if args.draft_sample_method:
         spec["draft_sample_method"] = args.draft_sample_method
-    value = golden_length(args.model, spec, args.thinking, args.golden_dir)
+    value = golden_length(args.model, spec, args.thinking, args.golden_dir, args.verify)
     if args.json:
         print(
             json.dumps(
                 {
-                    "curve": curve_name(args.model, spec),
+                    "curve": curve_name(args.model, spec, args.golden_dir, args.verify),
                     "thinking": args.thinking,
                     "tokens": args.tokens,
                     "acceptance_length": value,
@@ -107,6 +112,7 @@ def lookup_command(args: argparse.Namespace) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Parse ``argv``, run the chosen subcommand and return the exit code."""
     parser = argparse.ArgumentParser(
         prog="python -m infx.golden_al_distribution",
         description=__doc__,
@@ -120,7 +126,9 @@ def main(argv: list[str] | None = None) -> int:
     list_parser.set_defaults(handler=list_command)
 
     show_parser = commands.add_parser("show", help="every AL in one curve")
-    show_parser.add_argument("curve", help="curve file stem, e.g. qwen3.5_mtp")
+    show_parser.add_argument(
+        "curve", help="curve file stem, e.g. qwen3.5-397b-a17b-nvfp4__mtp__native__default-default"
+    )
     show_parser.add_argument("--json", action="store_true")
     show_parser.set_defaults(handler=show_command)
 
@@ -128,7 +136,9 @@ def main(argv: list[str] | None = None) -> int:
         "lookup", help="the AL synthetic acceptance applies for a model prefix and method"
     )
     lookup_parser.add_argument("model", help="InferenceX model prefix, e.g. qwen3.5, dsv4, kimik3")
-    lookup_parser.add_argument("method", help="spec method: mtp, eagle, nextn, eagle3, dspark")
+    lookup_parser.add_argument(
+        "method", help="spec method: mtp, eagle, nextn, eagle3, dspark, dflash"
+    )
     lookup_parser.add_argument("tokens", type=int, help="num_speculative_tokens")
     lookup_parser.add_argument("--thinking", choices=THINKING_MODES, default="thinking_on")
     lookup_parser.add_argument("--draft-model", help="draft checkpoint (selects MiniMax GQA)")
@@ -136,6 +146,11 @@ def main(argv: list[str] | None = None) -> int:
         "--draft-sample-method",
         choices=("greedy", "probabilistic"),
         help="Kimi DSpark draft sampler",
+    )
+    lookup_parser.add_argument(
+        "--verify",
+        choices=("standard", "block", "relaxed"),
+        help="the run's verifier; omit when unknown (selects block-verified curves only by it)",
     )
     lookup_parser.add_argument("--json", action="store_true")
     lookup_parser.set_defaults(handler=lookup_command)

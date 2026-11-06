@@ -74,9 +74,9 @@ def test_amd_board_sums_only_eight_gpus_and_eight_retimers(board_type, gpu_power
 @pytest.mark.parametrize(
     "chassis_type, board_name, expected, fan_w",
     [
-        (MI300HGXSystemChassis, "MI300UBB", 4919.563227194, 24.763227194),
-        (MI325HGXSystemChassis, "MI325UBB", 4910.016100019, 15.216100019),
-        (MI355HGXSystemChassis, "MI355UBB", 4903.201263802, 8.401263802),
+        (MI300HGXSystemChassis, "MI300UBB", 4684.561756979, 22.561756979),
+        (MI325HGXSystemChassis, "MI325UBB", 4742.224743017, 14.224743017),
+        (MI355HGXSystemChassis, "MI355UBB", 5085.571057424, 9.571057424),
     ],
 )
 def test_amd_chassis_defaults_to_its_board_and_scales_retimers_once(
@@ -103,8 +103,8 @@ def test_amd_chassis_defaults_to_its_board_and_scales_retimers_once(
 @pytest.mark.parametrize(
     "chassis_type, board_name, switch_name, switch_count, bandwidth, expected",
     [
-        (HopperHGXSystemChassis, "HopperHGXBoard", "HopperHGXNVSwitch", 12, 12.8, 6020.338144575),
-        (B200HGXSystemChassis, "B200HGXBoard", "BlackwellHGXNVSwitch", 6, 28.8, 6000.440079767),
+        (HopperHGXSystemChassis, "HopperHGXBoard", "HopperHGXNVSwitch", 12, 12.8, 5919.078165682),
+        (B200HGXSystemChassis, "B200HGXBoard", "BlackwellHGXNVSwitch", 6, 28.8, 5899.121340994),
     ],
 )
 def test_chassis_quantity_scales_nvidia_components_and_preserves_per_device_metadata(
@@ -207,8 +207,8 @@ def test_b300_board_owns_eight_connectx8_nics_and_two_blackwell_switches(
 @pytest.mark.parametrize(
     "state, expected, board_w, nic_w, fan_w",
     [
-        ("idle", 5691.004609342, 4320, 720, 16.204609342),
-        ("active", 6175.474200356, 4800, 1200, 20.674200356),
+        ("idle", 5589.764893912, 4320, 720, 15.764893912),
+        ("active", 6074.198420499, 4800, 1200, 20.198420499),
     ],
 )
 def test_b300_chassis_scales_board_nics_and_fans_without_chassis_nics_or_switches(

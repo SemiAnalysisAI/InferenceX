@@ -8,9 +8,9 @@ from typing import Any
 def convert_to_pytorch_benchmark_format(
     args: argparse.Namespace, metrics: dict[str, list], extra_info: dict[str, Any]
 ) -> list:
-    """
-    Save the benchmark results in the format used by PyTorch OSS benchmark with
-    on metric per record
+    """Build one PyTorch OSS benchmark record per entry of ``metrics``, tagged with ``args`` and ``extra_info``.
+
+    Returns an empty list unless ``SAVE_TO_PYTORCH_BENCHMARK_FORMAT`` is set. Format reference is at
     https://github.com/pytorch/pytorch/wiki/How-to-integrate-with-PyTorch-OSS-benchmark-database
     """
     records = []

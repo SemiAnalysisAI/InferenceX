@@ -1,0 +1,105 @@
+#!/usr/bin/env python3
+"""KV pools: torch (cudaMalloc) for rdma lanes, cuMem FABRIC for mnnvl, where UCX's
+cross-node cuda_ipc engages on nothing else."""
+
+from __future__ import annotations
+
+import ctypes
+from ctypes import byref, c_int, c_size_t, c_ulonglong, c_void_p
+
+import kv_workload
+
+CU_MEM_ALLOCATION_TYPE_PINNED = 1
+CU_MEM_HANDLE_TYPE_FABRIC = 0x8
+CU_MEM_LOCATION_TYPE_DEVICE = 1
+CU_MEM_ACCESS_FLAGS_PROT_READWRITE = 3
+
+
+class _Pool:
+    """Shared fill surface over ``self.words`` (int64, nbytes // 8 entries)."""
+
+    def fill_pattern(self, salt: int) -> None:
+        kv_workload.fill_pattern(self.words, salt)
+        self._torch.cuda.synchronize()
+
+    def fill_byte(self, value: int) -> None:
+        self.words.view(self._torch.uint8).fill_(value)
+        self._torch.cuda.synchronize()
+
+
+class TorchPool(_Pool):
+    def __init__(self, nbytes: int, device: int):
+        import torch
+
+        nbytes = -(-nbytes // 8) * 8
+        self._torch = torch
+        self._t = torch.empty(nbytes, dtype=torch.uint8, device=f"cuda:{device}")
+        self.words = self._t.view(torch.int64)
+        self.ptr, self.nbytes, self.device = self._t.data_ptr(), nbytes, device
+
+
+class _AllocProp(ctypes.Structure):
+    _fields_ = [("type", c_int), ("requestedHandleTypes", c_int),
+                ("location_type", c_int), ("location_id", c_int),
+                ("win32HandleMetaData", c_void_p),
+                ("compressionType", ctypes.c_ubyte),
+                ("gpuDirectRDMACapable", ctypes.c_ubyte),
+                ("usage", ctypes.c_ushort),
+                ("reserved", ctypes.c_ubyte * 4)]
+
+
+class _AccessDesc(ctypes.Structure):
+    _fields_ = [("location_type", c_int), ("location_id", c_int), ("flags", c_int)]
+
+
+class _DeviceBytes:
+    """A raw device range as a __cuda_array_interface__ object, so torch can
+    view cuMem memory it did not allocate."""
+
+    def __init__(self, ptr: int, nbytes: int):
+        self.__cuda_array_interface__ = {
+            "shape": (nbytes,), "typestr": "|u1", "data": (ptr, False), "version": 3}
+
+
+class FabricPool(_Pool):
+    def __init__(self, nbytes: int, device: int):
+        import torch
+
+        self._torch = torch
+        cu = self._cu = ctypes.CDLL("libcuda.so.1")
+        self._check(cu.cuInit(0), "cuInit")
+        dev = c_int()
+        self._check(cu.cuDeviceGet(byref(dev), device), "cuDeviceGet")
+        ctx = c_void_p()
+        self._check(cu.cuDevicePrimaryCtxRetain(byref(ctx), dev), "cuDevicePrimaryCtxRetain")
+        self._check(cu.cuCtxSetCurrent(ctx), "cuCtxSetCurrent")
+        prop = _AllocProp(type=CU_MEM_ALLOCATION_TYPE_PINNED,
+                          requestedHandleTypes=CU_MEM_HANDLE_TYPE_FABRIC,
+                          location_type=CU_MEM_LOCATION_TYPE_DEVICE,
+                          location_id=device, gpuDirectRDMACapable=1)
+        gran = c_size_t()
+        self._check(cu.cuMemGetAllocationGranularity(byref(gran), byref(prop), 0), "granularity")
+        size = (nbytes + gran.value - 1) // gran.value * gran.value
+        handle = c_ulonglong()
+        code = cu.cuMemCreate(byref(handle), c_size_t(size), byref(prop), 0)
+        if code != 0:
+            raise RuntimeError(
+                f"cuMemCreate(FABRIC) -> CUresult {code}: no IMEX fabric access on this "
+                "allocation; the mnnvl lane cannot run here")
+        ptr = c_ulonglong()
+        self._check(cu.cuMemAddressReserve(byref(ptr), c_size_t(size), 0, 0, 0), "reserve")
+        self._check(cu.cuMemMap(ptr, c_size_t(size), 0, handle, 0), "map")
+        access = _AccessDesc(location_type=CU_MEM_LOCATION_TYPE_DEVICE, location_id=device,
+                             flags=CU_MEM_ACCESS_FLAGS_PROT_READWRITE)
+        self._check(cu.cuMemSetAccess(ptr, c_size_t(size), byref(access), 1), "setAccess")
+        self.ptr, self.nbytes, self.device = ptr.value, size, device
+        self.words = torch.as_tensor(_DeviceBytes(self.ptr, size),
+                                     device=f"cuda:{device}").view(torch.int64)
+
+    def _check(self, code: int, what: str) -> None:
+        if code != 0:
+            raise RuntimeError(f"{what} -> CUresult {code}")
+
+
+def create(fabric: str, nbytes: int, device: int):
+    return FabricPool(nbytes, device) if fabric == "mnnvl" else TorchPool(nbytes, device)

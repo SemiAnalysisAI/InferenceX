@@ -15,6 +15,29 @@ COLLX_DEEPEP_V2_REPO="https://github.com/deepseek-ai/DeepEP"
 # backend cache is keyed on this value.
 COLLX_DEEPEP_V2_COMMIT="01dc3aaac82068020353dce2c302e38153c0bfaa"
 
+# Pools whose registry network block sets deepep_efa_fork (b300) build AWS's EFA fork of the same
+# V2: amazon-contributing/DeepEP main is the pin above plus its EFA commits, chiefly unordered
+# hybrid kernels that need only the weak GIN signals the aws-ofi-nccl proxy provides. Upstream
+# treats EFA as unsupported (deepseek-ai/DeepEP#369).
+COLLX_DEEPEP_V2_EFA_REPO="https://github.com/amazon-contributing/DeepEP"
+COLLX_DEEPEP_V2_EFA_COMMIT="a227152ac29513b1c702860745a1d1e0111ae0dc"
+# ElasticBuffer needs NCCL 2.30.4 (torch pins 2.28.9). The fork sets GIN signal requirements
+# (ginStrongSignalsRequired, ginVaSignalsRequired) that NCCL first declares in 2.32, which is what
+# AWS tests it with. Part of the venv cache key.
+COLLX_DEEPEP_V2_NCCL_SPEC="nvidia-nccl-cu13==2.30.4"
+COLLX_DEEPEP_V2_EFA_NCCL_SPEC="nvidia-nccl-cu13==2.32.3"
+
+# Selects this pool's DeepEP V2 source into COLLX_DEEPEP_V2_REPO/COMMIT/NCCL_SPEC (the venv cache is keyed
+# on the commit, so the two sources never share a build).
+collx_select_deepep_v2_source() {
+  # Opt-in per pool, not per fabric: on h100-dgxc (p5, 32 EFA NICs per node) the fork's
+  # unordered dispatch times out forwarding scale-out tokens, so it keeps upstream there.
+  [ "${COLLX_DEEPEP_EFA_FORK:-}" = 1 ] || return 0
+  COLLX_DEEPEP_V2_REPO="$COLLX_DEEPEP_V2_EFA_REPO"
+  COLLX_DEEPEP_V2_COMMIT="$COLLX_DEEPEP_V2_EFA_COMMIT"
+  COLLX_DEEPEP_V2_NCCL_SPEC="$COLLX_DEEPEP_V2_EFA_NCCL_SPEC"
+}
+
 # Must match the image's CUDA line: the cu12 wheel's r12 host library on cu130 images survives
 # on sm90/sm100 but poisons the CUDA context during symmetric-heap init over MNNVL on sm103
 # (gb300); every CUDA call after buffer creation fails cudaErrorUnknown. Part of the venv cache key.
@@ -34,16 +57,31 @@ COLLX_UCCL_COMMIT="df000fd3001da04a397253fd6a2204bde62d32aa"
 
 # nccl-extensions (github.com/NVIDIA/nccl-extensions) owns nccl.ep, which nccl4py >= 0.4 does
 # not bundle; its combine-recv fence (DeepEP's LOW_LATENCY_COMBINE_RECV analogue) releases the
-# low-latency ladder clamp. nccl4py is pinned alongside so a rebuild resolves the same tree. Two
-# whitespace-separated pip specs: the install site word-splits this deliberately, and the whole
-# string keys the shared cache dir.
-COLLX_NCCL_EP_SPEC="nccl-extensions[cu13]==0.2.0.dev20261005 nccl4py[cu13]==0.5.0"
+# low-latency ladder clamp. nccl4py and cuda-core are pinned alongside so a rebuild resolves the
+# same tree. Whitespace-separated pip specs: the install site word-splits this deliberately, and the
+# whole string keys the shared cache dir.
+COLLX_NCCL_EP_SPEC="nccl-extensions[cu13]==0.2.0.dev20261021 nccl4py[cu13]==0.5.0 cuda-core==1.2.1"
+# vLLM main's FlashInfer pin and the companions its one-sided all-to-all imports, installed over the
+# image's older FlashInfer. The cubin and jit-cache wheels must match flashinfer-python's version or
+# it refuses to import. jit-cache goes in without deps: its per-arch providers hold no all-to-all
+# kernel, which JIT-builds once into the cache. Whitespace-separated pip specs, hashed into the cache key.
+COLLX_FLASHINFER_SPEC="flashinfer-python==0.7.1 flashinfer-cubin==0.7.1 apache-tvm-ffi==0.1.11 \
+nvidia-cutlass-dsl[cu13]==4.8.0 cuda-tile==1.6.0 cuda-core==1.2.1 nvidia-cudnn-frontend==1.31.0 \
+nccl4py==0.6.0 nccl-extensions==0.1.0"
+COLLX_FLASHINFER_JIT_CACHE_SPEC="flashinfer-jit-cache==0.7.1+cu130"
 # aws-ofi-nccl that prepare_backend.sh builds for multi-node EFA shards whose host plugin predates
 # 1.21 (h100's 1.20). That proxy thread applies every GIN signal with an inline gdrcopy
 # read-modify-write of device memory; 1.21 hands signals to a worker and drops the read (1.3-4.5x on
 # b300 EP16).
 COLLX_OFI_NCCL_VERSION="1.21.1"
 COLLX_OFI_NCCL_SHA256="2533d1ec179a86dcf0470fc39800b06cd9169cd854c0c913cc4782a42f36cff4"
+# aws-ofi-nccl's configure requires hwloc headers, which runtime images (vLLM's) do not carry. A
+# static, position-independent build of this release goes into the plugin's cache, so the plugin
+# has no runtime hwloc dependency. 2.10.0 is the h100-dgxc hosts' distro version.
+COLLX_HWLOC_VERSION="2.10.0"
+COLLX_HWLOC_SHA256="c7fd8a1404a9719c76aadc642864b9f77aed1dc1fc8882d6af861a9260ba240d"
+COLLX_PCIACCESS_VERSION="0.16"
+COLLX_PCIACCESS_SHA256="84413553994aef0070cf420050aa5c0a51b1956b404920e21b81e96db6a61a27"
 
 collx_log_tail() {
   local log_path="$1"
@@ -75,7 +113,10 @@ collx_set_placement() {
   export COLLX_NGPUS="$NGPUS" COLLX_NODES="$NODES"
   export COLLX_GPUS_PER_NODE="$GPN" COLLX_SCALE_UP_DOMAIN="$SCALE_UP_DOMAIN"
   COLLX_TRANSPORT="$4"
-  [ "$4" = mnnvl ] || [ "$NODES" -le 1 ] || COLLX_TRANSPORT="$4-rdma"
+  # A shard that names the rdma fabric on an MNNVL rack (the kv-transfer rdma legs) leaves the
+  # NVL domain, so it takes the same network profile and validation as any other scale-out.
+  { [ "$4" = mnnvl ] && [ "${COLLX_FABRIC:-}" != rdma ]; } || [ "$NODES" -le 1 ] \
+    || COLLX_TRANSPORT="$4-rdma"
   export COLLX_TRANSPORT
 }
 
@@ -117,7 +158,8 @@ collx_load_operator_config() {
   unset COLLX_EXCLUDE_NODES COLLX_NODELIST COLLX_LOCK_DIR COLLX_MASTER_PORT
   unset COLLX_SOCKET_IFNAME COLLX_RDMA_DEVICES COLLX_IB_GID_INDEX COLLX_RDMA_SERVICE_LEVEL
   unset COLLX_RDMA_TRAFFIC_CLASS COLLX_RAIL_ISOLATED COLLX_SINGLE_NODE_RDMA_DEVICES COLLX_RDMA_FABRIC
-  unset COLLX_RDMA_RELAXED_ORDERING COLLX_RDMA_GBS
+  unset COLLX_RDMA_RELAXED_ORDERING COLLX_RDMA_GBS COLLX_HOST_VERBS_PROVIDER
+  unset COLLX_UCCL_RDMA_RECV_TOKENS COLLX_DEEPEP_EFA_FORK
   unset MASTER_ADDR MASTER_PORT RANK WORLD_SIZE LOCAL_RANK LOCAL_WORLD_SIZE
   config_path="${COLLECTIVEX_OPERATOR_CONFIG:-${XDG_CONFIG_HOME:-${HOME}/.config}/inferencex/collectivex.json}"
   if [ ! -e "$config_path" ]; then
@@ -209,13 +251,17 @@ COLLX_EFA_HOST_ROOT=/opt/collectivex/host-efa
 # lib<driver>-rdmav<its private ABI>.so, so the host's whole multiarch libdir is bound privately as
 # well: its libibverbs/ providers are symlinks into their parent and resolve there, without the
 # launcher naming the host's ABI. The EFA profile puts all of it first on the loader path.
-collx_efa_host_mounts() {
-  local libdir name mounts
+collx_efa_host_libdir() {
   case "$1" in
-    linux/amd64) libdir=/usr/lib/x86_64-linux-gnu ;;
-    linux/arm64) libdir=/usr/lib/aarch64-linux-gnu ;;
+    linux/amd64) echo /usr/lib/x86_64-linux-gnu ;;
+    linux/arm64) echo /usr/lib/aarch64-linux-gnu ;;
     *) return 1 ;;
   esac
+}
+
+collx_efa_host_mounts() {
+  local libdir name mounts
+  libdir="$(collx_efa_host_libdir "$1")" || return 1
   mounts="/opt/amazon/efa:/opt/amazon/efa:ro,/opt/amazon/ofi-nccl:/opt/amazon/ofi-nccl:ro"
   mounts+=",$libdir:$COLLX_EFA_HOST_ROOT/libdir:ro"
   for name in libibverbs libefa libmlx5; do
@@ -232,7 +278,33 @@ collx_add_efa_host_mounts() {
     && [ "${COLLX_TRANSPORT:-}" != mnnvl ] || return 0
   mounts="$(collx_efa_host_mounts "${COLLX_IMAGE_PLATFORM:-}")" \
     || collx_die "no host EFA user space layout for this image platform"
+  # UCCL-EP compiles its EFA transport in the container, against the host rdma-core headers that
+  # match the bound libefa (the image's efadv.h lacks fields UCCL uses).
+  if [ "${COLLX_BENCH:-}" = uccl-ep ]; then
+    mounts+=",/usr/include/infiniband:$COLLX_EFA_HOST_ROOT/include/infiniband:ro"
+    mounts+=",/usr/include/rdma:$COLLX_EFA_HOST_ROOT/include/rdma:ro"
+  fi
+  # NIXL's LIBFABRIC plugin links libhwloc.so.15, which the vLLM image does not ship; the host's
+  # (the same Ubuntu and glibc as the image) is bound alone into the profile's library dir.
+  [ "${COLLX_BENCH:-}" != nixl ] \
+    || mounts+=",$(collx_efa_host_libdir "${COLLX_IMAGE_PLATFORM:-}")/libhwloc.so.15:$COLLX_EFA_HOST_ROOT/lib/libhwloc.so.15:ro"
   CONTAINER_MOUNTS="$CONTAINER_MOUNTS,$mounts"
+}
+
+# Where collx_add_host_verbs_provider_mount binds a host verbs provider inside the container.
+COLLX_HOST_VERBS_ROOT=/opt/collectivex/host-verbs
+
+# Some NIC vendors replace the host's rdma-core provider with their own build for an out-of-tree
+# kernel driver (the MI300X/MI325X pools' Broadcom bnxt_re 237.x speaks kernel ABI 8; rdma-core's stock bnxt_re
+# provider, the image's, supports only ABI 1, so libibverbs lists no device). Multi-node shards
+# bind the registry-named host provider read-only; backend preparation installs it into the
+# container over the image's file (verbs_provider_prepare in prepare_backend.sh).
+collx_add_host_verbs_provider_mount() {
+  local provider="${COLLX_HOST_VERBS_PROVIDER:-}"
+  [ -n "$provider" ] && [ "${NODES:-1}" -gt 1 ] && [ "${COLLX_TRANSPORT:-}" != mnnvl ] || return 0
+  [[ "$provider" =~ ^/[A-Za-z0-9_./-]+/lib[a-z0-9_]+-rdmav[0-9]+\.so$ ]] && [[ "$provider" != *..* ]] \
+    || collx_die "invalid host verbs provider path"
+  CONTAINER_MOUNTS="$CONTAINER_MOUNTS,$provider:$COLLX_HOST_VERBS_ROOT/${provider##*/}:ro"
 }
 
 # AWS EFA scale-out (b300: p6-b300.48xlarge, 16 EFA devices per node; h100-dgxc: p5.48xlarge, 32).
@@ -281,12 +353,12 @@ collx_apply_network_profile() {
   [[ "$nodes" =~ ^[1-9][0-9]*$ ]] || collx_die "invalid network placement"
   unset NCCL_NET NCCL_NET_PLUGIN NCCL_TUNER_PLUGIN NCCL_GIN_TYPE NCCL_SOCKET_IFNAME
   unset GLOO_SOCKET_IFNAME NCCL_IB_HCA
-  unset NCCL_IB_GID_INDEX NCCL_IB_SL NCCL_IB_MERGE_NICS NCCL_CROSS_NIC
+  unset NCCL_IB_GID_INDEX NCCL_IB_SL NCCL_IB_TC NCCL_IB_MERGE_NICS NCCL_CROSS_NIC
   unset NVSHMEM_ENABLE_NIC_PE_MAPPING
-  unset NVSHMEM_HCA_LIST NVSHMEM_IB_GID_INDEX NVSHMEM_IB_SL
+  unset NVSHMEM_HCA_LIST NVSHMEM_IB_GID_INDEX NVSHMEM_IB_SL NVSHMEM_IB_TRAFFIC_CLASS
   unset NVSHMEM_IB_ENABLE_IBGDA NVSHMEM_IBGDA_NIC_HANDLER
   unset EP_NIC_NAME EP_OVERRIDE_RDMA_SL
-  unset MORI_RDMA_DEVICES
+  unset MORI_RDMA_DEVICES MORI_SOCKET_IFNAME
   unset MORI_RDMA_TC MORI_IO_TC MORI_RDMA_SL MORI_IO_SL
   unset UCCL_SOCKET_IFNAME UCCL_IB_HCA UCCL_IB_GID_INDEX UCCL_IB_SL UCCL_IB_TC
   unset UCCL_IB_MAX_INFLIGHT_BYTES UCCL_IB_MAX_INFLIGHT_NORMAL UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC
@@ -309,7 +381,10 @@ collx_apply_network_profile() {
   if [ -n "${COLLX_SOCKET_IFNAME:-}" ]; then
     [[ "$COLLX_SOCKET_IFNAME" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}$ ]] \
       || collx_die "invalid private socket interface selector"
-    export NCCL_SOCKET_IFNAME="$COLLX_SOCKET_IFNAME" GLOO_SOCKET_IFNAME="$COLLX_SOCKET_IFNAME"
+    # MoRI's shmem bootstrap otherwise picks its own interface, which can be a rail without a
+    # kernel route to the root rank (per-rail /31 links on the Broadcom pools).
+    export NCCL_SOCKET_IFNAME="$COLLX_SOCKET_IFNAME" GLOO_SOCKET_IFNAME="$COLLX_SOCKET_IFNAME" \
+      MORI_SOCKET_IFNAME="$COLLX_SOCKET_IFNAME"
   fi
   [[ "$COLLX_RDMA_DEVICES" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}(:[1-9][0-9]*)?(,[A-Za-z][A-Za-z0-9_.-]{0,31}(:[1-9][0-9]*)?)*$ ]] \
     || collx_die "invalid private RDMA device selector"
@@ -373,7 +448,8 @@ collx_apply_network_profile() {
     [[ "$COLLX_RDMA_TRAFFIC_CLASS" =~ ^[0-9]+$ ]] && [ "$COLLX_RDMA_TRAFFIC_CLASS" -le 255 ] \
       || collx_die "invalid private RDMA traffic class"
     export MORI_RDMA_TC="$COLLX_RDMA_TRAFFIC_CLASS" MORI_IO_TC="$COLLX_RDMA_TRAFFIC_CLASS"
-    export UCCL_IB_TC="$COLLX_RDMA_TRAFFIC_CLASS"
+    export UCCL_IB_TC="$COLLX_RDMA_TRAFFIC_CLASS" NCCL_IB_TC="$COLLX_RDMA_TRAFFIC_CLASS"
+    export NVSHMEM_IB_TRAFFIC_CLASS="$COLLX_RDMA_TRAFFIC_CLASS"
   fi
   local nic_handler=gpu
   export NVSHMEM_IB_ENABLE_IBGDA=1 NVSHMEM_IBGDA_NIC_HANDLER="$nic_handler"
@@ -474,6 +550,9 @@ collx_allocation_nodes_csv() {
 collx_resolve_slurm_rendezvous() {
   local job_id="$1" master_addr master_port socket_ifname="${COLLX_SOCKET_IFNAME:-}"
   [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || collx_die "invalid rendezvous allocation"
+  # Inside an MNNVL domain the socket interface is never validated (the GB registry names it for
+  # the kv rdma legs only), so rank zero keeps resolving by hostname there.
+  [ "${COLLX_TRANSPORT:-}" != mnnvl ] || socket_ifname=""
   # Relative node zero hosts global rank 0. Prefer the address on the validated socket interface:
   # a short hostname may resolve onto a management network that ranks cannot use.
   if [[ "$socket_ifname" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}$ ]]; then
@@ -530,7 +609,7 @@ export RANK="$SLURM_PROCID" WORLD_SIZE="$SLURM_NTASKS"
 export LOCAL_RANK="$SLURM_LOCALID" LOCAL_WORLD_SIZE="$COLLX_GPUS_PER_NODE"
 # config.py case-args leads every argv with the suite's entrypoint.
 [ "${1:-}" = --entrypoint ] || exit 67
-case "${2:-}" in run_ep|run_swap_blocks) ;; *) exit 67 ;; esac
+case "${2:-}" in run_ep|run_swap_blocks|run_kv) ;; *) exit 67 ;; esac
 entry="$2"; shift 2
 exec python3 "bench/$entry.py" "$@"
 BASH
@@ -545,6 +624,17 @@ collx_slurm_job_name() {
 }
 
 # The job name is prepended so a caller-supplied --job-name wins (salloc takes the last).
+# True only when Slurm says the job is gone: listed as nothing, or purged ("Invalid job id"). A
+# failed query (slurmctld busy or restarting) is not an answer, so it reads as still there.
+collx_job_gone() {
+  local out
+  if out="$(squeue -h -j "$1" -o %A 2>&1)"; then
+    [ -z "$out" ]
+  else
+    [[ "$out" == *"Invalid job id"* ]]
+  fi
+}
+
 collx_salloc_jobid() {
   local log_label log job_id
   set -- --job-name="$(collx_slurm_job_name)" "$@"
@@ -554,7 +644,30 @@ collx_salloc_jobid() {
     return 1
   fi
   collx_log "scheduler-request=submit"
-  if ! (salloc "$@" --no-shell) > "$log" 2>&1; then
+  if [ "${COLLX_ALLOCATION:-salloc}" = sbatch ]; then
+    collx_sbatch_hold_jobid "$log" "$@"
+    return
+  fi
+  [ "${COLLX_ALLOCATION:-salloc}" = salloc ] || collx_die "COLLX_ALLOCATION must be salloc or sbatch"
+  # salloc --no-shell does not notice a job that ends between the grant and its own poll (a node
+  # prolog that fails the job ten seconds in leaves it waiting forever), so the job is watched
+  # here: once Slurm no longer lists the queued job and no grant was logged, salloc is stopped.
+  (salloc "$@" --no-shell) > "$log" 2>&1 &
+  local salloc_pid=$! queued=""
+  while kill -0 "$salloc_pid" 2>/dev/null; do
+    sleep 10
+    grep -q "Granted job allocation" "$log" && break
+    [ -n "$queued" ] || queued="$(sed -nE 's/.*Pending job allocation ([1-9][0-9]*).*/\1/p' "$log" | head -n1)"
+    if [ -n "$queued" ] && collx_job_gone "$queued" \
+        && ! grep -q "Granted job allocation" "$log"; then
+      collx_log "ERROR: scheduled job $queued ended before its allocation was granted"
+      kill -TERM "$salloc_pid" 2>/dev/null
+      wait "$salloc_pid" 2>/dev/null
+      collx_log_tail "$log"
+      return 1
+    fi
+  done
+  if ! wait "$salloc_pid"; then
     collx_log "ERROR: scheduler allocation failed"
     collx_log_tail "$log"
     return 1
@@ -563,6 +676,41 @@ collx_salloc_jobid() {
       's/.*Granted job allocation ([1-9][0-9]*).*/\1/p' "$log" | head -n1)"
   [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || return 1
   JOB_ID="$job_id"
+}
+
+# COLLX_ALLOCATION=sbatch holds the same nodes with a batch job that only sleeps, for pools whose
+# controller fails interactive allocations (salloc granted, then killed at MessageTimeout) while
+# batch jobs run. Every later step already goes through `srun --jobid`, which is unaffected.
+collx_sbatch_hold_jobid() {
+  local log="$1" job_id state
+  shift
+  if ! job_id="$(sbatch --parsable "$@" --output=/dev/null --wrap 'exec sleep infinity' 2>>"$log")"; then
+    collx_log "ERROR: scheduler allocation failed"
+    collx_log_tail "$log"
+    return 1
+  fi
+  job_id="${job_id%%;*}"
+  [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || return 1
+  # Recorded before the wait, so an interrupted launch still cancels the queued job.
+  JOB_ID="$job_id"
+  printf 'Pending job allocation %s (sbatch hold)\n' "$job_id" >> "$log"
+  while :; do
+    if state="$(squeue -h -j "$job_id" -o %T 2>/dev/null)"; then
+      case "$state" in
+        RUNNING) break ;;
+        ""|PENDING|CONFIGURING) ;;
+        *)
+          collx_log "ERROR: scheduled job $job_id ended in state $state before its allocation was granted"
+          return 1 ;;
+      esac
+      if [ -z "$state" ] && collx_job_gone "$job_id"; then
+        collx_log "ERROR: scheduled job $job_id ended before its allocation was granted"
+        return 1
+      fi
+    fi
+    sleep 5
+  done
+  printf 'Granted job allocation %s\n' "$job_id" >> "$log"
 }
 
 # Cancels only this launcher's own allocation, by job id.
@@ -644,6 +792,7 @@ collx_prepare_pinned_source() {
 }
 
 collx_prepare_deepep_source() {
+  collx_select_deepep_v2_source
   collx_prepare_pinned_source "$1" deepep-v2 "$COLLX_DEEPEP_V2_REPO" "$COLLX_DEEPEP_V2_COMMIT" \
     DeepEP third-party/fmt
 }
@@ -735,8 +884,8 @@ collx_ensure_squash() {
     || { collx_log_tail "$log"; return 1; }
   { exec {lock_fd}>"$locks/${key}.lock"; } 2>> "$log" \
     || { collx_log_tail "$log"; return 1; }
-  # A concurrent leg holds the content-keyed lock for its full import (~18 minutes for the 32 GB
-  # sglang squash on b300), so the wait must outlast an import, and a timeout must log: the
+  # A concurrent leg holds the content-keyed lock for its full import (~18 minutes for a ~30 GB
+  # squash on b300), so the wait must outlast an import, and a timeout must log: the
   # empty import log would otherwise make this a silent launcher death.
   flock -w 2700 "$lock_fd" 2>> "$log" \
     || { collx_log "ERROR: timed out waiting for the container import lock"
@@ -823,7 +972,6 @@ collx_ensure_squash_on_job() {
       --export="$(collx_host_exports)" \
       bash -s -- "$sq" "$lock" "$image" "$COLLX_IMAGE_PLATFORM" "$refresh_epoch" \
       "${COLLX_IMAGE_DIGEST:-}" "$(printf '%s' "$image" | sed 's#[/:@#]#_#g')" \
-      "${COLLX_IMPORT_TMPDIR:-}" \
       > "$log" 2>&1 <<< "$(collx_squash_import_script)" || rc=$?
     [ "$rc" = 0 ] && { printf '%s' "$sq"; return 0; }
     # 13 is the remote block's architecture guard; a platform mismatch never improves on retry.
@@ -862,13 +1010,7 @@ case "$platform:$machine" in
   linux/amd64:x86_64|linux/amd64:amd64|linux/arm64:aarch64|linux/arm64:arm64) ;;
   *) exit 13 ;;
 esac
-# The caller may select the scratch filesystem used for image-layer conversion.
-if [ -n "$8" ]; then
-  [[ "$8" = /* ]] && [ -d "$8" ] || exit 14
-  compute_home="$(mktemp -d "$8/inferencex-collectivex-home.XXXXXX")"
-else
-  compute_home="$(mktemp -d /tmp/inferencex-collectivex-home.XXXXXX)"
-fi
+compute_home="$(mktemp -d /tmp/inferencex-collectivex-home.XXXXXX)"
 trap 'rm -rf -- "$compute_home"' EXIT
 export HOME="$compute_home" XDG_CACHE_HOME="$compute_home/.cache"
 export ENROOT_TEMP_PATH="$compute_home/enroot-tmp"

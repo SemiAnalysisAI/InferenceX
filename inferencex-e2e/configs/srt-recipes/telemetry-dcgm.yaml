@@ -1,10 +1,10 @@
-# Merged under the fragment of a point whose master row sets `power: true`. The launcher
-# adds the cluster's power-exporter-port and stages the dcgm-exporter image.
+# Merged under the fragment of every multi-node benchmark point on a cluster with a
+# power-exporter-port. The launcher adds the port and stages the dcgm-exporter image; the binder
+# sets `required` from the row's `power` field.
 telemetry:
   enabled: true
   collect_interval_ms: 1000
   storage_subdir: power
-  required: true
   startup_timeout_seconds: 120
   request_timeout_seconds: 2
   dcgm_exporter:

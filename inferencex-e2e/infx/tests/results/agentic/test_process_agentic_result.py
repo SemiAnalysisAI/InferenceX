@@ -1041,6 +1041,49 @@ def test_server_metrics_reject_unknown_backend() -> None:
         )
 
 
+@pytest.mark.parametrize("with_occupancy", [True, False])
+def test_processor_normalizes_tokenspeed_metrics_without_inventing_cache_counters(
+    tmp_path: Path, with_occupancy: bool,
+) -> None:
+    result_dir = _write_fixture(tmp_path)
+    metrics = {
+        "tokenspeed:num_requests_running": {
+            "type": "gauge",
+            "series": [{"stats": {"max": 5}}],
+        },
+        "tokenspeed:iteration_tokens_total": {
+            "type": "histogram",
+            "series": [{"stats": {"sum": 123456}}],
+        },
+    }
+    if with_occupancy:
+        metrics["tokenspeed:kv_cache_usage_perc"] = {
+            "type": "gauge",
+            "series": [
+                {"labels": {"dp_rank": "0"}, "stats": {"max": 0.25, "avg": 0.1}},
+                {"labels": {"dp_rank": "1"}, "stats": {"max": 0.8, "avg": 0.3}},
+            ],
+        }
+    (result_dir / "aiperf_artifacts/server_metrics_export.json").write_text(
+        json.dumps({"metrics": metrics}),
+    )
+
+    agg = _run_processor(result_dir, tmp_path / "out", env_overrides={"FRAMEWORK": "tokenspeed"})
+    server = agg["server_metrics"]
+
+    assert server["adapter"] == "tokenspeed"
+    assert server["kv_cache"]["gpu_usage_pct"] == (0.8 if with_occupancy else None)
+    assert server["kv_cache"]["gpu_total_tokens"] is None
+    assert server["kv_cache"]["cpu_usage_pct"] is None
+    assert server["cache"]["gpu_cache_hit_rate"] is None
+    assert server["cache"]["cpu_cache_hit_rate"] is None
+    assert server["cache"]["overall_cache_hit_rate"] is None
+    assert server["tokens"]["prompt_total"] == 840
+    assert server["tokens"]["generation_total"] == 275
+    assert server["tokens"]["requests_completed"] == 5
+    _assert_stable_server_metrics_schema(agg)
+
+
 def test_processor_excludes_warmup_phase_records(tmp_path: Path):
     result_dir = tmp_path / "results"
     artifact = result_dir / "aiperf_artifacts"
@@ -1605,6 +1648,37 @@ def test_processor_normalizes_dynamo_server_metrics(tmp_path: Path):
     assert agg["server_metrics"]["cache"]["frontend_cache_hit_rate"] == pytest.approx(0.5)
     assert agg["server_metrics"]["cache"]["router_shared_cache_hit_rate"] == pytest.approx(0.55)
     assert any(source["role"] == "prefill" for source in agg["server_metrics"]["sources"])
+
+
+@pytest.mark.parametrize(("cached", "router_shared", "expected"), [
+    (0.0, 0.55, 0.0),
+    (25.0, None, 0.25),
+    (None, 0.55, 0.55),
+])
+def test_dynamo_overall_cache_hit_rate_falls_back_to_frontend_then_router(
+    cached, router_shared, expected,
+):
+    metrics = {
+        "dynamo_frontend_input_sequence_tokens": {
+            "type": "counter", "series": [{"stats": {"total": 100.0}}],
+        },
+    }
+    if cached is not None:
+        metrics["dynamo_frontend_cached_tokens"] = {
+            "type": "counter", "series": [{"stats": {"total": cached}}],
+        }
+    if router_shared is not None:
+        metrics["dynamo_component_router_shared_cache_hit_rate"] = {
+            "type": "gauge", "series": [{"stats": {"avg": router_shared}}],
+        }
+
+    _, nested, _ = compute_server_metrics(
+        {"metrics": metrics}, framework="dynamo-vllm", records=[],
+    )
+
+    assert nested["adapter"] == "dynamo-vllm"
+    assert nested["cache"]["overall_cache_hit_rate"] == pytest.approx(expected)
+
 
 
 def test_processor_uses_aiperf_theoretical_cache_metric(tmp_path: Path):

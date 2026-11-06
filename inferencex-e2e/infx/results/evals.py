@@ -27,6 +27,7 @@ def read_eval_results(
     *,
     skip_errors: tuple[type[Exception], ...] = (OSError, UnicodeDecodeError, json.JSONDecodeError),
 ) -> dict[Path, dict[str, Any]]:
+    """Map each of ``paths`` holding a recognized eval result to its JSON, skipping ``skip_errors`` failures."""
     results = {}
     for path in paths:
         try:
@@ -103,6 +104,11 @@ def select_latest_results(paths: Iterable[Path], *, batched: bool = False) -> li
 
 
 _SCORE_NAMES = {"strict": "em_strict", "accuracy": "accuracy", "flex": "em_flexible"}
+_PARALLELISM_SIZE_KEYS = (
+    "pp", "dcp_size", "pcp_size",
+    "prefill_pp", "prefill_dcp_size", "prefill_pcp_size", "prefill_dwdp_size",
+    "decode_pp", "decode_dcp_size", "decode_pcp_size",
+)  # fmt: skip
 
 
 def is_valid_score(value: object) -> bool:
@@ -125,6 +131,16 @@ def is_valid_effective_count(value: object) -> bool:
     )
 
 
+def _is_standard_error(value: object) -> bool:
+    """Return whether ``value`` is a finite non-negative number, excluding booleans."""
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, (int, float))
+        and math.isfinite(value)
+        and value >= 0
+    )
+
+
 def metric_family(name: str) -> str | None:
     """Classify a filter name or metric key; strict takes precedence."""
     if "strict" in name:
@@ -135,6 +151,7 @@ def metric_family(name: str) -> str | None:
 
 
 def _primary_metric(metrics: dict[str, Any]) -> str | None:
+    """Return the first of strict, accuracy and flex set in ``metrics``, or None."""
     return next((name for name in _SCORE_NAMES if metrics.get(name) is not None), None)
 
 
@@ -235,7 +252,10 @@ def as_bool(x: Any, default: bool = False) -> bool:
 
 
 def build_row(meta: dict[str, Any], m: dict[str, Any]) -> dict[str, Any]:
-    """Build a result row from metadata and extracted metrics."""
+    """Build a result row from metadata and extracted metrics.
+
+    Parallelism sizes in ``meta`` are copied because raw artifact identities include them.
+    """
     is_multinode = as_bool(meta.get("is_multinode"), False)
     prefill_tp = as_int(meta.get("prefill_tp", meta.get("tp", 1)), 1)
     prefill_ep = as_int(meta.get("prefill_ep", meta.get("ep", 1)), 1)
@@ -293,6 +313,9 @@ def build_row(meta: dict[str, Any], m: dict[str, Any]) -> dict[str, Any]:
 
     if "eval_suite" in meta:
         row["eval_suite"] = meta["eval_suite"]
+    for key in _PARALLELISM_SIZE_KEYS:
+        if key in meta:
+            row[key] = as_int(meta[key], 1)
 
     primary = _primary_metric(m)
     row["score"] = m[primary] if primary is not None else None
@@ -312,6 +335,7 @@ def build_rows(
 
     Primary scores prefer strict, accuracy, then flexible metrics. An invalid
     primary produces a failed row rather than falling back to a secondary score.
+    Non-numeric stderrs, such as lm-eval's "N/A" for one-sample metrics, become None.
     Inputs are not modified; discovery, concurrency selection and writes belong
     to the caller.
     """
@@ -327,6 +351,9 @@ def build_rows(
                     "type": "InvalidPrimaryScore",
                     "message": f"invalid primary score: {score!r}",
                 }
+        for name in _SCORE_NAMES:
+            if not _is_standard_error(metrics[f"{name}_se"]):
+                metrics[f"{name}_se"] = None
         rows.append(build_row(meta, metrics))
     return rows
 

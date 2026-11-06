@@ -12,6 +12,7 @@ from infx.srt_slurm.generate import generate_recipes
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run the ``infx`` command line on ``argv`` and return the exit status."""
     parser = argparse.ArgumentParser(prog="infx")
     commands = parser.add_subparsers(dest="command", required=True)
     generate = commands.add_parser(
