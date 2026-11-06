@@ -12116,6 +12116,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4811
 
 - config-keys:
+    - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dep16-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi-K3.1-Pro GB300 Dynamo+vLLM disaggregated AgentX configs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4839
+
+- config-keys:
     - qwen3.8next-fp4-gb300-tokenspeed-agentic-mtp
   scenario-type:
     - agentic-coding
@@ -12329,6 +12338,29 @@
     - "Update the vLLM image from nightly-dev-arm64-cu130-ac9126e58aa7 to the digest-pinned nightly-00b6c4c5."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4558
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - h3-bf16-h200-sglang-video
+  scenario-type: [video-generation]
+  description:
+    - "Restore the H200 row and sweep H3 C1 latency on 1, 2, 4 and 8 H200 GPUs with SGLang Ulysses across all GPUs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4856
+
+- config-keys:
+    - h3-bf16-mi355x-sglang-video
+  scenario-type: [video-generation]
+  description:
+    - "Sweep H3 C1 latency on 1, 2, 4 and 8 MI355X GPUs with SGLang Ulysses across all GPUs; the MI355X recipe now sets the Ulysses degree from the GPU count, which keeps the 4-GPU point unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4818
+
+- config-keys:
+    - qwen3.8next-fp4-gb300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update to lmsysorg/sglang:nightly-dev-cu13-20261103-797af717 and enable SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION and breakable prefill CUDA graphs."
+    - "Replace the search space with TP4/EP4 at concurrency 3, TP1/EP1 at concurrency 8 and 20, and TP1/EP1 with HiCache at concurrency 36, 56 and 80; concurrency 20, 36, 56 and 80 use fp8_e4m3 kv-cache-dtype and speculative-draft-kv-cache-dtype (was bfloat16), concurrency 20, 56 and 80 set qsa-indexer-dtype fp8_e4m3, and concurrency 36 and 80 use 2 speculative steps instead of 3."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4787
 
 - config-keys:
     - glm5.2-fp4-b200-sglang-agentic-mtp
