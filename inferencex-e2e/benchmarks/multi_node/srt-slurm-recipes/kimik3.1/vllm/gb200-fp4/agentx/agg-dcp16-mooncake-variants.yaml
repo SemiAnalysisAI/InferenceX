@@ -1,0 +1,173 @@
+schema: 2
+
+base:
+  name: kimik3.1-fp4-gb200-vllm-agentx-agg-dcp16-mooncake
+  identity:
+    model: {}
+    container: {}
+    frameworks:
+      vllm: "0.1.dev24218+g78e9a0c28"
+  environment:
+    HF_HUB_CACHE: /hf_hub_cache
+    PYTHONHASHSEED: "0"
+  slurm:
+    time_limit: "06:00:00"
+  health_check:
+    max_attempts: 720
+    interval_seconds: 10
+  resources:
+    gpu_type: gb200
+    gpus_per_node: 4
+  services:
+  - name: mooncake-master
+    type: mooncake-master
+    args:
+    - "--default_kv_lease_ttl=60000"
+    - "--eviction_high_watermark_ratio=0.95"
+    - "--eviction_ratio=0.10"
+    options:
+      store_config:
+        metadata_server: P2PHANDSHAKE
+        global_segment_size: "160GB"
+        local_buffer_size: "4GB"
+        protocol: rdma
+        device_name: "@fabric.rdma-devices"
+        mode: embedded
+        enable_offload: false
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  engine:
+    type: vllm
+    connector:
+  roles:
+    agg:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      env:
+        VLLM_USE_V2_MODEL_RUNNER: "1"
+        VLLM_USE_DIRECT_DCP_A2A: "1"
+        VLLM_USE_DIRECT_DCP_Q_GATHER: "1"
+        VLLM_USE_DIRECT_DCP_KV_GATHER: "1"
+        VLLM_ALLREDUCE_USE_FLASHINFER: "1"
+        VLLM_KIMI_K3_SHARD_SP_SHARED_EXPERT: "0"
+        VLLM_ENABLE_GEMM_RS: "0"
+        VLLM_USE_NCCL_SYMM_MEM: "0"
+        NCCL_CUMEM_ENABLE: "1"
+        NCCL_MNNVL_ENABLE: "1"
+        NCCL_NVLS_ENABLE: "1"
+        NCCL_P2P_LEVEL: NVL
+        NCCL_NET_PLUGIN: none
+        MC_GID_INDEX: "@fabric.rdma-gid-index"
+        MC_SLICE_SIZE: "1048576"
+        MC_MAX_MR_SIZE: "4294967296"
+        MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+        WITH_NVIDIA_PEERMEM: "0"
+        VLLM_MOONCAKE_LOAD_RECV_THREADS: "4"
+        VLLM_MOONCAKE_STORE_SELECTIVE_LEASE: "1"
+        UCX_MEMTYPE_REG_WHOLE: n
+        UCX_TCP_AF_PRIO: inet
+        VLLM_SSM_CONV_STATE_LAYOUT: DS
+        TOKENSPEED_MLA_FP16_PARTIALS: "0"
+        TILELANG_CLEANUP_TEMP_FILES: "1"
+        VLLM_RPC_TIMEOUT: "600000"
+        VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
+        VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "900"
+      args:
+        served-model-name: moonshotai/Kimi-K3.1-Pro
+        tensor-parallel-size: 16
+        decode-context-parallel-size: 16
+        dcp-comm-backend: a2a
+        cp-kv-cache-interleave-size: 1
+        trust-remote-code: true
+        language-model-only: true
+        load-format: fastsafetensors
+        moe-backend: auto
+        gpu-memory-utilization: 0.90
+        max-model-len: 1048576
+        max-num-batched-tokens: 8192
+        kv-cache-dtype: fp8
+        attention-config: '{"indexer_kv_dtype":"mxfp4"}'
+        mamba-ssm-cache-dtype: float32
+        mamba-cache-dtype: float32
+        enable-prefix-caching: true
+        prefix-match-unit: 128
+        enable-cumem-allocator: true
+        no-enable-flashinfer-autotune: true
+        additional-config: '{"decode_backend":"latency_specialized"}'
+        use-replayssm: true
+        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        stream-interval: 10
+  sbatch_directives:
+    mem: "0"
+    cpus-per-task: "144"
+  srun_options:
+    mem: "0"
+    container-remap-root: ""
+  telemetry:
+    collector_join_timeout_seconds: 12
+  benchmark:
+    placement:
+      node: head
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
+      AIPERF_HTTP_TCP_USER_TIMEOUT: "900000"
+
+override_tp16_dcp16_c1:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 2
+        max-cudagraph-capture-size: 10
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[5,10]}'
+
+override_tp16_dcp16_c1_eval:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 2
+        max-cudagraph-capture-size: 10
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[5,10]}'
+        enable-auto-tool-choice: true
+        tool-call-parser: kimi_k3
+        reasoning-parser: kimi_k3
+
+override_tp16_dcp16_c4:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 8
+        max-cudagraph-capture-size: 40
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[5,10,15,20,25,30,35,40]}'
+
+override_tp16_dcp16_c4_eval:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 8
+        max-cudagraph-capture-size: 40
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[5,10,15,20,25,30,35,40]}'
+        enable-auto-tool-choice: true
+        tool-call-parser: kimi_k3
+        reasoning-parser: kimi_k3
+
+override_tp16_dcp16_c8:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 16
+        max-cudagraph-capture-size: 80
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80]}'
+
+override_tp16_dcp16_c8_eval:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 16
+        max-cudagraph-capture-size: 80
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80]}'
+        enable-auto-tool-choice: true
+        tool-call-parser: kimi_k3
+        reasoning-parser: kimi_k3

@@ -8143,3 +8143,175 @@ qwen3.8next-fp4-gb300-tokenspeed-agentic-mtp:
         kv-offload-backend: { name: kvstore }
         conc-list: [1, 2, 4, 8, 16, 32, 48, 64]
         srt-recipe: agg-tp1-mtp3-kvstore.yaml
+
+kimik3.1-fp4-gb200-vllm-agentic-dspark-mooncake-dcp16-agg:
+  image: vllm/vllm-openai:kimi-k31-mc@sha256:f29efae15f9cb47f6215add0cba70b4b7d3596e6f3990d8b46c7cad0f8fbbc8b
+  model: moonshotai/Kimi-K3.1-Pro
+  model-prefix: kimik3.1
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: vllm
+  multinode: true
+  disagg: false
+  srt-recipe-dir: kimik3.1/vllm/gb200-fp4/agentx
+  scenarios:
+    agentic-coding:
+    # Four TP ranks each lend 160 GiB; round 687.2 GB per node up to 688 GB.
+    - dram-utilization: 0.7628
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: 0.3.14 }
+        conc-list: [1]
+        num-nodes: 4
+        srt-recipe: agg-dcp16-mooncake-variants.yaml:override_tp16_dcp16_c1
+        eval-srt-recipe: agg-dcp16-mooncake-variants.yaml:override_tp16_dcp16_c1_eval
+        power: true
+        worker: { num-worker: 1, tp: 16, dcp-size: 16, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: 0.3.14 }
+        conc-list: [4]
+        num-nodes: 4
+        srt-recipe: agg-dcp16-mooncake-variants.yaml:override_tp16_dcp16_c4
+        eval-srt-recipe: agg-dcp16-mooncake-variants.yaml:override_tp16_dcp16_c4_eval
+        power: true
+        worker: { num-worker: 1, tp: 16, dcp-size: 16, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: 0.3.14 }
+        conc-list: [8]
+        num-nodes: 4
+        srt-recipe: agg-dcp16-mooncake-variants.yaml:override_tp16_dcp16_c8
+        eval-srt-recipe: agg-dcp16-mooncake-variants.yaml:override_tp16_dcp16_c8_eval
+        power: true
+        worker: { num-worker: 1, tp: 16, dcp-size: 16, ep: 1, dp-attn: false }
+
+kimik3.1-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-hybrid-tp4-disagg:
+  image: vllm/vllm-openai:kimi-k31-mc@sha256:f29efae15f9cb47f6215add0cba70b4b7d3596e6f3990d8b46c7cad0f8fbbc8b
+  model: moonshotai/Kimi-K3.1-Pro
+  model-prefix: kimik3.1
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: dynamo-vllm
+  router:
+    name: dynamo-router
+    version: 3dd0744eb72c707d76d4c520ae4dea9e286a4ab6
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  srt-recipe-dir: kimik3.1/vllm/gb200-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.7628
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend:
+          name: mooncake
+          version: 0.3.14
+        conc-list:
+        - 64
+        srt-recipe: disagg-hybrid-tp4-mooncake-variants.yaml:override_1p1d_tp4dp4_c64
+        eval-srt-recipe: disagg-hybrid-tp4-mooncake-variants.yaml:override_1p1d_tp4dp4_c64_eval
+        power: true
+        prefill:
+          num-worker: 1
+          tp: 16
+          dcp-size: 4
+          ep: 16
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 16
+          dcp-size: 4
+          ep: 16
+          dp-attn: true
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend:
+          name: mooncake
+          version: 0.3.14
+        conc-list:
+        - 96
+        srt-recipe: disagg-hybrid-tp4-mooncake-variants.yaml:override_1p1d_tp4dp4_c96
+        eval-srt-recipe: disagg-hybrid-tp4-mooncake-variants.yaml:override_1p1d_tp4dp4_c96_eval
+        power: true
+        prefill:
+          num-worker: 1
+          tp: 16
+          dcp-size: 4
+          ep: 16
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 16
+          dcp-size: 4
+          ep: 16
+          dp-attn: true
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend:
+          name: mooncake
+          version: 0.3.14
+        conc-list:
+        - 128
+        srt-recipe: disagg-hybrid-tp4-mooncake-variants.yaml:override_1p1d_tp4dp4_c128
+        eval-srt-recipe: disagg-hybrid-tp4-mooncake-variants.yaml:override_1p1d_tp4dp4_c128_eval
+        power: true
+        prefill:
+          num-worker: 1
+          tp: 16
+          dcp-size: 4
+          ep: 16
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 16
+          dcp-size: 4
+          ep: 16
+          dp-attn: true
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend:
+          name: mooncake
+          version: 0.3.14
+        conc-list:
+        - 192
+        srt-recipe: disagg-hybrid-tp4-mooncake-variants.yaml:override_1p1d_tp4dp4_c192
+        eval-srt-recipe: disagg-hybrid-tp4-mooncake-variants.yaml:override_1p1d_tp4dp4_c192_eval
+        power: true
+        prefill:
+          num-worker: 1
+          tp: 16
+          dcp-size: 4
+          ep: 16
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 16
+          dcp-size: 4
+          ep: 16
+          dp-attn: true
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend:
+          name: mooncake
+          version: 0.3.14
+        conc-list:
+        - 256
+        srt-recipe: disagg-hybrid-tp4-mooncake-variants.yaml:override_1p1d_tp4dp4_c256
+        eval-srt-recipe: disagg-hybrid-tp4-mooncake-variants.yaml:override_1p1d_tp4dp4_c256_eval
+        power: true
+        prefill:
+          num-worker: 1
+          tp: 16
+          dcp-size: 4
+          ep: 16
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 16
+          dcp-size: 4
+          ep: 16
+          dp-attn: true

@@ -12389,3 +12389,12 @@
     - "Update the SGLang image from nightly-dev-cu13-20261026-8252e3af to nightly-dev-cu13-20261029-c10e0e17."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4635
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - kimik3.1-fp4-gb200-vllm-agentic-dspark-mooncake-dcp16-agg
+    - kimik3.1-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-hybrid-tp4-disagg
+  scenario-type: [agentic-coding]
+  description:
+    - "Add GB200 Kimi K3.1 Pro AgentX TP16/DCP16 aggregated candidates at concurrency 1, 4 and 8 with the digest-pinned Mooncake image and latency-specialized decode."
+    - "Add disaggregated TP4 x DP4 / DCP4 / EP16 prefill and decode candidates at concurrency 64, 96, 128, 192 and 256 with DSpark, NIXL and Mooncake DRAM KV offload."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
