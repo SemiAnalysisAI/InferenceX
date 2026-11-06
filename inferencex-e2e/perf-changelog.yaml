@@ -12324,6 +12324,13 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
+    - dsv41flash-fp4-gb300-vllm-agentic-dspark
+  description:
+    - "Update the vLLM image from nightly-dev-arm64-cu130-ac9126e58aa7 to the digest-pinned nightly-00b6c4c5."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4558
+  scenario-type: [agentic-coding]
+
+- config-keys:
     - glm5.3flash-fp8-mi300x-sglang-agentic-mtp
   description:
     - "Update the SGLang ROCm image from v0.5.22-rocm10-mi30x to v0.5.23-rocm10-mi30x, pinned by digest."
