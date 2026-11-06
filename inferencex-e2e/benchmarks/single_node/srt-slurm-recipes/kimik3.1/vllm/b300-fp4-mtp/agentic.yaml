@@ -35,8 +35,6 @@ base:
         reasoning-parser: kimi_k3
         kv-cache-dtype: fp8
         attention-config: '{"indexer_kv_dtype":"mxfp4"}'
-        # The recipe's Low-latency decode: decode steps run the fused CuTe DSL path (TP8 or TP8 x DCP8, no EP).
-        additional-config: '{"decode_backend":"latency_specialized"}'
         # The K3.1 week-1 precision policy requires an FP32 KDA recurrent state.
         mamba-ssm-cache-dtype: float32
         enable-prefix-caching: true
@@ -64,10 +62,14 @@ base:
 # rounded up to a default capture size; throughput runs replace block rejection with the
 # golden acceptance length. Plain TP8 at c1-c2, where the KV fits on GPU and DCP's decode
 # collectives cost most; DCP8 from c4 for ~7x the KV tokens.
+# Low-latency decode (the fused CuTe DSL path) runs only where every decode graph has at
+# most 64 rows (c1-c4): this image launches its 65-320-row MoE experts on 152 CTAs that
+# must all be resident, which a 148-SM B300 cannot hold.
 override_tp8_c1:
   roles:
     agg:
       args:
+        additional-config: '{"decode_backend":"latency_specialized"}'
         max-num-seqs: 2
         max-cudagraph-capture-size: 16
         speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
@@ -79,6 +81,7 @@ override_tp8_c2:
   roles:
     agg:
       args:
+        additional-config: '{"decode_backend":"latency_specialized"}'
         max-num-seqs: 4
         max-cudagraph-capture-size: 32
         speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
@@ -90,6 +93,7 @@ override_dcp8_c4:
   roles:
     agg:
       args:
+        additional-config: '{"decode_backend":"latency_specialized"}'
         decode-context-parallel-size: 8
         max-num-seqs: 8
         max-cudagraph-capture-size: 64
