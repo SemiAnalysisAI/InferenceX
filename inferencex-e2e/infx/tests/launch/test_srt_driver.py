@@ -19,9 +19,11 @@ import yaml
 
 from infx.launch.__main__ import main
 from infx.launch.drivers.srt import lanes, models
+from infx.launch.drivers.srt.checkout import CPU_POWER_EXPORTER_RELEASE
 from infx.launch.drivers.srt.lanes import LaneMount, SrtLane
 from infx.launch.drivers.srt.models import Override
 from infx.launch.policy import LaunchPath, Match
+from infx.srt_slurm.workload import BOUND_RECIPE
 from infx.tests.launch.fake_slurm import (
     ROOT,
     base_env,
@@ -97,6 +99,14 @@ def single_node_env(harness, cluster_id: str, **overrides: str) -> dict[str, str
     return {**harness.env, **POINT_ENV, "RUNNER_NAME": runner, **overrides}
 
 
+def set_cpu_power_exporter(config: Path, cluster_id: str, exporter: dict) -> None:
+    """Give ``cluster_id`` the CPU power exporter ``exporter`` on exclusive nodes."""
+    records = yaml.safe_load(config.read_text())
+    records["clusters"][cluster_id]["slurm"]["exclusive"] = True
+    records["clusters"][cluster_id]["slurm"]["srt-slurm"]["cpu-power-exporter"] = exporter
+    config.write_text(yaml.safe_dump(records))
+
+
 def lane_env(harness, cluster_id: str, recipe: str = LANE_FRAGMENT, **overrides: str) -> dict[str, str]:
     """Environment of a multi-node point whose recipe lives in the workspace mirror.
 
@@ -118,6 +128,15 @@ def srtslurm(root: Path) -> dict:
     """The srtslurm.yaml the launch rendered under ``root``."""
     [path] = root.glob("**/srtslurm.yaml")
     return yaml.safe_load(path.read_text())
+
+
+def job_recipe(raw: dict, argv: list[str]) -> dict:
+    """The recipe an ``srtctl apply argv`` job runs: ``raw`` overridden."""
+    sets = [value for flag, value in zip(argv, argv[1:]) if flag == "--set"]
+    unsets = [value for flag, value in zip(argv, argv[1:]) if flag == "--unset"]
+    document = json.loads(json.dumps(raw))
+    apply_overrides_to_recipe(document, parse_overrides(sets, unsets))
+    return document
 
 
 WORKDIR = 'srun_options.container-workdir="/infmax-workspace"'
@@ -160,7 +179,7 @@ def test_single_node_point_stages_workflow_artifacts(harness):
         "MODEL": "test/model", "CONC": "2", "USE_CHAT_TEMPLATE": "false",
     }
     assert recipe["roles"]["agg"]["env"] == {"NCCL_SOCKET_IFNAME": "eth9"}
-    assert {"--json", "--yes", "--output", WORKDIR} <= set(argv)
+    assert {"--json", "--yes", "--output", "benchmark.stream_output=true", WORKDIR} <= set(argv)
     assert (call["env"]["INFMAX_WORKSPACE"], call["env"]["VIRTUAL_ENV"]) == (str(workspace), None)
     assert call["env"]["RUNNER_NAME"] == f"inferencex-{env['RUNNER_NAME']}"
     assert "/hf" in srtslurm(workspace)["default_mounts"].values()
@@ -192,12 +211,103 @@ def test_single_node_point_stages_workflow_artifacts(harness):
     assert "recipe.yaml" not in event["artifacts"]
 
 
+VIDEO_ENV = {
+    "FRAMEWORK": "sglang", "MODEL": "MiniMaxAI/MiniMax-H3", "IMAGE": "test:tag", "PRECISION": "bf16",
+    "MODEL_PREFIX": "h3", "SPEC_DECODING": "none", "IS_AGENTIC": "0", "ISL": "0", "OSL": "0",
+    "SCENARIO_TYPE": "video-generation", "IS_MULTINODE": "false", "GPU_COUNT": "2",
+    "CONC_LIST": "1 2", "VIDEO_SPEC": "h3.yaml", "VIDEO_SET": "release-v1", "HF_HUB_CACHE": "/mnt/hf_hub_cache/",
+    "SRT_RECIPE": "benchmarks/single_node/srt-slurm-recipes/h3/sglang/b200-bf16/serving-client.yaml",
+    "FAKE_RESULTS": "video",
+}  # fmt: skip
+
+
+def video_env(harness, cluster_id: str, **overrides: str) -> dict[str, str]:
+    """Environment of a video point: the checked-in H3 fragment and harness beside the workspace."""
+    recipe = ROOT / VIDEO_ENV["SRT_RECIPE"]
+    mirror = harness.workspace / VIDEO_ENV["SRT_RECIPE"]
+    mirror.parent.mkdir(parents=True, exist_ok=True)
+    mirror.write_text(recipe.read_text())
+    package = harness.workspace.parent / "video-generation"
+    package.parent.mkdir(parents=True, exist_ok=True)
+    if not package.exists():
+        package.symlink_to(ROOT.parent / "video-generation", target_is_directory=True)
+    runner = overrides.pop("RUNNER_NAME", None) or runner_for(cluster_id)
+    return {**harness.env, **VIDEO_ENV, "RUNNER_NAME": runner, **overrides}
+
+
+def test_video_point_serves_the_video_service_and_stages_every_concurrency(harness):
+    workspace = harness.workspace
+    allocation = "cpu=16,gres/gpu=8,mem=128G,node=1"
+    env = video_env(
+        harness, "b200-nscale", SALLOC_TIME_LIMIT="75",
+        FAKE_STATE=f"COMPLETED|0:0|gpu03|1791547200|1791548100|1791551700|{allocation}",
+    )
+    assert_ok(launch(env, harness.config, workspace))
+
+    [call] = srtctl_calls(harness.logs)
+    argv = call["argv"]
+    bound = yaml.safe_load(Path(argv[argv.index("--file") + 1]).read_text())
+    assert bound["model"] == {"path": "hf:MiniMaxAI/MiniMax-H3", "container": "test:tag", "precision": "bf16"}
+    assert "roles" not in bound and bound["frontend"] == {"type": "none"}
+    [service] = bound["services"]
+    assert service["readiness"]["http"] == {"port": 30283, "path": "/health"}
+    assert bound["benchmark"]["type"] == "custom" and bound["benchmark"]["concurrencies"] == [1, 2]
+    assert bound["telemetry"]["enabled"] is True
+    assert {"--json", "--yes", "--output", WORKDIR, 'srun_options.gpus-per-node="2"'} <= set(argv)
+    rendered = srtslurm(workspace)
+    ClusterConfig.Schema().load(rendered)
+    mounts = rendered["default_mounts"]
+    assert mounts[str(workspace.parent / "video-generation")] == "/video-package"
+    assert rendered["default_time_limit"] == "75"
+    assert "/mnt/hf_hub_cache/" in mounts.values()
+    assert rendered["containers"][rendered["default_gpu_exporter"]["container_image"]]
+    # Every concurrency's aggregate and validation sidecar, the point summary, and the app bundle.
+    for conc in (1, 2):
+        aggregate = json.loads((workspace / f"point-identity_conc{conc}.json").read_text())
+        assert (aggregate["max_concurrency"], aggregate["num_gpus"], aggregate["valid"]) == (conc, 2, 4)
+        assert aggregate["power_valid"] == 0  # the fake retains no manifest: never measured
+        assert (workspace / f"power_validation_point-identity_conc{conc}.json").is_file()
+    summary = json.loads((workspace / "point-identity.json").read_text())
+    assert summary["scenario_type"] == "video-generation" and summary["status"] == "complete"
+    bundle = workspace / "h3-results"
+    matrix = json.loads((bundle / "serving-smoke.json").read_text())
+    assert [cell["concurrency"] for cell in matrix["cells"]] == [1, 2]
+    assert all(cell["status"] == "complete" and not cell["verified"] for cell in matrix["cells"])
+    assert (bundle / "SHA256SUMS").is_file() and (bundle / "gpu/c1/power.json").is_file()
+    ci = json.loads((bundle / "ci.json").read_text())
+    assert ci["slurm_job"]["AllocTRES"] == allocation
+    assert ci["power"]["producer_git_commit"] == (workspace / "power-producer-sha.txt").read_text().strip()
+    assert ci["power"]["exporter_image_sha256"] == (workspace / "exporter-image.sha256").read_text().strip()
+    assert (workspace / "LOGS/power/samples.csv").read_text() == "retained native samples\n"
+    assert json.loads((workspace / "LOGS/power/native-job-status.json").read_text()) == {
+        "job_id": "42", "state": "succeeded", "raw": "COMPLETED|0:0", "alloc_tres": allocation,
+    }
+    assert (workspace / "srt-video-logs.tar.gz").stat().st_size > 0
+    assert lines(harness.logs, "scancel") == []
+
+
+def test_video_point_requiring_power_fails_without_a_native_package(harness):
+    env = video_env(harness, "h100-cw", REQUIRE_POWER="1")
+    result = launch(env, harness.config, harness.workspace)
+    assert result.returncode == 1
+    ci = json.loads((harness.workspace / "h3-results/ci.json").read_text())
+    assert ci["slurm_job"] == {"job_id": "42", "state": "succeeded", "raw": "COMPLETED|0:0"}
+    aggregate = json.loads((harness.workspace / "point-identity_conc1.json").read_text())
+    assert aggregate["power_valid"] == 0
+    assert "manifest_missing" in json.loads(
+        (harness.workspace / "power_validation_point-identity_conc1.json").read_text()
+    )["reasons"]
+
+
 @pytest.mark.parametrize("require_power", ["0", "1"])
-@pytest.mark.parametrize(("cluster_id", "kind", "port"), [
-    ("mi355x-amds", "custom", 19500), ("h100-cw", "dcgm", 9401),
+@pytest.mark.parametrize(("cluster_id", "kind", "port", "cpu_exporter"), [
+    ("mi355x-amds", "custom", 19500, {"source": "rapl"}), ("h100-cw", "dcgm", 9401, None),
 ])  # fmt: skip
-def test_single_node_native_power_is_bound_and_retained(harness, require_power, cluster_id, kind, port):
-    env = single_node_env(harness, cluster_id, REQUIRE_POWER=require_power)
+def test_single_node_native_power_is_bound_and_retained(
+    harness, require_power, cluster_id, kind, port, cpu_exporter
+):
+    cpu_power = "1" if cpu_exporter else "0"
+    env = single_node_env(harness, cluster_id, REQUIRE_POWER=require_power, CPU_POWER=cpu_power)
     assert_ok(launch(env, harness.config, harness.workspace))
 
     workspace = harness.workspace
@@ -212,6 +322,7 @@ def test_single_node_native_power_is_bound_and_retained(harness, require_power, 
     apply_overrides_to_recipe(variant, parse_overrides(sets, []))
     resolved = resolve_config_with_defaults(variant, rendered)
     telemetry = resolved["telemetry"]
+    assert telemetry.get("cpu_power_exporter") == cpu_exporter
     assert telemetry["enabled"] is True
     assert telemetry["required"] is (require_power == "1")
     assert telemetry["storage_subdir"] == "power"
@@ -450,13 +561,13 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
     assert outputs.exists() is not outputs.is_relative_to(checkout)
 
 
-@pytest.mark.parametrize(("model_prefix", "precision", "framework", "model", "require_power", "lane"), [
-    ("kimik3", "fp4", "vllm", "moonshotai/Kimi-K3", "0", "agentx"),
-    ("glm5.2", "fp8", "dynamo-sglang", "zai-org/GLM-5.2-FP8", "1", "adapter"),
-    ("glm5.2", "fp8", "dynamo-sglang", "zai-org/GLM-5.2-FP8", "0", "adapter"),
+@pytest.mark.parametrize(("cluster", "precision", "model", "require_power", "lane"), [
+    ("gb200-nv", "fp4", "zai-org/GLM-5.2", "0", "agentx"),
+    ("h200-dgxc", "fp8", "zai-org/GLM-5.2-FP8", "1", "adapter"),
+    ("h200-dgxc", "fp8", "zai-org/GLM-5.2-FP8", "0", "adapter"),
 ])  # fmt: skip
 def test_power_lane_stages_provenance_and_validates_each_concurrency(
-    harness, model_prefix, precision, framework, model, require_power, lane
+    harness, cluster, precision, model, require_power, lane
 ):
     adapter = harness.tmp / "results-python"
     adapter.write_text(
@@ -464,8 +575,8 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     )
     adapter.chmod(0o755)
     env = lane_env(
-        harness, "h200-dgxc", LANE_FRAGMENT + POWER_TELEMETRY,
-        MODEL_PREFIX=model_prefix, PRECISION=precision, FRAMEWORK=framework, MODEL=model,
+        harness, cluster, LANE_FRAGMENT + POWER_TELEMETRY,
+        MODEL_PREFIX="glm5.2", PRECISION=precision, FRAMEWORK="dynamo-sglang", MODEL=model,
         IS_AGENTIC="1", ISL="0", OSL="0", CONC="4", CONC_LIST="4", FAKE_RESULTS="agentic",
         REQUIRE_POWER=require_power, INFERENCEX_RESULTS_PYTHON=str(adapter), POWER="1",
     )  # fmt: skip
@@ -474,7 +585,8 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     workspace = harness.workspace
     commit = harness.env["FAKE_SRT_COMMIT"]
     assert (workspace / "power-producer-sha.txt").read_text() == commit + "\n"
-    [checkout] = workspace.glob("srt-slurm-9001-*")
+    [call] = srtctl_calls(harness.logs)
+    checkout = Path(call["cwd"]).resolve()
     exporter = srtslurm(checkout)["containers"]["dcgm-exporter"]
     provenance = (workspace / "exporter-image.sha256").read_text()
     assert provenance.endswith(f"  {exporter}\n")
@@ -486,6 +598,9 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     assert bound["benchmark"]["env"]["REQUIRE_POWER"] == require_power
     assert bound["telemetry"]["collector_join_timeout_seconds"] == 12
     assert (bound["telemetry"]["enabled"], bound["telemetry"]["dcgm_exporter"]["port"]) == (True, 9401)
+    nvl72 = cluster == "gb200-nv"
+    assert ("cpu_power_exporter" in bound["telemetry"]) is nvl72
+    assert any("CPU_POWER_EXPORTER_RELEASE" in call for call in lines(harness.logs, "make")) is nvl72
 
     runs = lines(harness.logs, "adapter")
     assert [run.split("--result-dir ")[1].split()[0].rsplit("/", 1)[1] for run in runs] == ["conc_4"]
@@ -495,6 +610,50 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     if lane == "agentx":
         status = (workspace / "LOGS/power/native-job-status.txt").read_text()
         assert status == "42|COMPLETED|0:0\n"
+
+
+@pytest.mark.parametrize(("point", "required"), [
+    ({"MODEL_PREFIX": "qwen3.5", "FRAMEWORK": "dynamo-trt", "MODEL": "nvidia/Qwen3.5-397B-A17B-NVFP4"}, False),
+    ({"MODEL_PREFIX": "qwen3.5", "FRAMEWORK": "dynamo-trt", "MODEL": "nvidia/Qwen3.5-397B-A17B-NVFP4", "REQUIRE_POWER": "1"}, True),
+])  # fmt: skip
+def test_nvl72_agentx_point_measures_gpu_and_cpu_power_by_default(harness, point, required):
+    adapter = harness.tmp / "results-python"
+    adapter.write_text("#!/bin/bash\nprintf '%s\\n' \"$*\" >> \"$FAKE_LOG_DIR/adapter.log\"\n")
+    adapter.chmod(0o755)
+    env = lane_env(
+        harness, "gb300-nv", LANE_FRAGMENT + POWER_TELEMETRY, PRECISION="fp4", IS_AGENTIC="1",
+        ISL="0", OSL="0", CONC="4", CONC_LIST="4", FAKE_RESULTS="agentic",
+        INFERENCEX_RESULTS_PYTHON=str(adapter), **point,
+    )  # fmt: skip
+    assert_ok(launch(env, harness.config, harness.workspace))
+
+    [checkout] = harness.workspace.glob("srt-slurm-9001-*")
+    bound = yaml.safe_load((checkout / "recipe.yaml").read_text())
+    assert bound["telemetry"]["dcgm_exporter"]["port"] == 19401
+    assert bound["telemetry"]["cpu_power_exporter"] == {"source": "acpi"}
+    assert bound["benchmark"]["env"]["ENABLE_AGENTX_POWER"] == "1"
+    assert bound["benchmark"]["env"]["REQUIRE_POWER"] == ("1" if required else "0")
+    [setup] = [call for call in lines(harness.logs, "make") if call.startswith("setup ")]
+    assert f"CPU_POWER_EXPORTER_RELEASE={CPU_POWER_EXPORTER_RELEASE}" in setup.split()
+    runs = lines(harness.logs, "adapter")
+    assert runs and all(run.endswith("--require-power") is required for run in runs)
+    assert all("--expected-cpu-power" not in run for run in runs)
+
+
+def test_nvl72_point_with_dedicated_discovery_skips_default_power(harness):
+    dedicated = "services:\n" + "".join(
+        f"  - type: {kind}\n    placement:\n      node: dedicated\n" for kind in ("etcd", "nats")
+    )
+    env = lane_env(
+        harness, "gb300-nv", LANE_FRAGMENT + dedicated, MODEL_PREFIX="qwen3.5", PRECISION="fp8",
+        FRAMEWORK="dynamo-sglang", MODEL="Qwen/Qwen3.5-397B-A17B-FP8",
+    )  # fmt: skip
+    assert_ok(launch(env, harness.config, harness.workspace))
+
+    [checkout] = harness.workspace.glob("srt-slurm-9001-*")
+    assert "telemetry" not in yaml.safe_load((checkout / "recipe.yaml").read_text())
+    [setup] = [call for call in lines(harness.logs, "make") if call.startswith("setup ")]
+    assert "CPU_POWER_EXPORTER_RELEASE" not in setup
 
 
 @pytest.mark.parametrize("shape", ["single", "multi"])
@@ -529,15 +688,21 @@ def test_a_manifest_that_is_not_a_json_object_fails_as_a_launch_error(harness, s
     assert error["message"].startswith("srtctl did not report one submitted job")
 
 
-@pytest.mark.parametrize("shape", ["single", "multi"])
+@pytest.mark.parametrize("shape", ["single", "multi", "video"])
 def test_sigterm_while_streaming_cancels_the_job_and_exits_143(harness, shape):
     active, tailing = harness.tmp / "active", harness.tmp / "tailing"
-    extra = {"FAKE_ACTIVE": str(active), "FAKE_TAIL_MARKER": str(tailing)}
+    allocation = "cpu=16,gres/gpu=8,mem=128G,node=1"
+    extra = {
+        "FAKE_ACTIVE": str(active), "FAKE_TAIL_MARKER": str(tailing),
+        "FAKE_STATE": f"COMPLETED|0:0|gpu03|1791547200|1791548100|1791551700|{allocation}",
+    }
     if shape == "single":
         env = single_node_env(harness, "h100-cw", **extra)
-    else:
+    elif shape == "multi":
         env = lane_env(harness, "b300-dsxe", MODEL_PREFIX="dsr1", PRECISION="fp4", FRAMEWORK="dynamo-trt",
                        MODEL="deepseek-r1-fp4", **extra)  # fmt: skip
+    else:
+        env = video_env(harness, "b200-nscale", **extra)
     command = [sys.executable, "-m", "infx.launch", "--runner-config", str(harness.config), "run"]
     output = harness.tmp / "launcher.log"
     with output.open("w") as stream:
@@ -558,8 +723,18 @@ def test_sigterm_while_streaming_cancels_the_job_and_exits_143(harness, shape):
         process.wait(timeout=60)
     assert process.returncode == 143, output.read_text()[-4000:]
     assert lines(harness.logs, "scancel") == ["42"]
-    staged = "srt-single-node-logs.tar.gz" if shape == "single" else "multinode_server_logs.tar.gz"
+    staged = {
+        "single": "srt-single-node-logs.tar.gz",
+        "multi": "multinode_server_logs.tar.gz",
+        "video": "srt-video-logs.tar.gz",
+    }[shape]
     assert (harness.workspace / staged).stat().st_size > 0
+    if shape == "video":
+        bundle = harness.workspace / "h3-results"
+        ci = json.loads((bundle / "ci.json").read_text())
+        assert ci["slurm_job"]["AllocTRES"] == allocation
+        recorded = json.loads((harness.workspace / "LOGS/power/native-job-status.json").read_text())
+        assert recorded["alloc_tres"] == allocation
     error = job_event(harness.workspace)["error"]
     assert {key: error[key] for key in ("stage", "type", "exit_code", "retriable")} == {
         "stage": "run", "type": "Interrupted", "exit_code": 143, "retriable": True,
@@ -622,7 +797,7 @@ def test_a_batch_wrapped_point_exits_with_the_wrapped_launchs_code(harness):
 def test_tilert_uses_upstream_submission_and_prepared_weights(harness):
     env = lane_env(
         harness, "mi355x-amds", MODEL_PREFIX="glm5.3", PRECISION="fp8", FRAMEWORK="tilert",
-        MODEL="zai-org/GLM-5.3", SPEC_DECODING="mtp", PREFILL_IMAGE="prefill:tag",
+        MODEL="zai-org/GLM-5.3", SPEC_DECODING="none", PREFILL_IMAGE="prefill:tag",
     )  # fmt: skip
     assert_ok(launch(env, harness.config, harness.workspace))
 
@@ -632,7 +807,13 @@ def test_tilert_uses_upstream_submission_and_prepared_weights(harness):
     assert "--no-preflight" not in call["argv"]
     config = srtslurm(Path(call["cwd"]))
     assert config["default_health_check"]["max_attempts"] > 0
-    assert {"test:tag", "prefill:tag"} <= set(config["containers"])
+    assert {"test:tag", "prefill:tag", config["default_gpu_exporter"]["container_image"]} <= set(
+        config["containers"]
+    )
+    telemetry = yaml.safe_load((Path(call["cwd"]) / BOUND_RECIPE).read_text())["telemetry"]
+    assert (telemetry["enabled"], telemetry["required"], "dcgm_exporter" in telemetry) == (
+        True, False, False,
+    )
     assert config["default_mounts"][str(harness.workspace)] == "/infmax-workspace"
     assert "/models" in config["default_mounts"].values()
     [point] = harness.workspace.glob("point-identity_sweep_*.json")
@@ -653,7 +834,7 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
     }  # fmt: skip
     env = lane_env(
         harness, "gb300-nv", MODEL_PREFIX="glm5.2", PRECISION="fp4", FRAMEWORK="dynamo-trt",
-        MODEL="nvidia/GLM-5.2-NVFP4", IS_AGENTIC="1", SPEC_DECODING="mtp", ISL="0", OSL="0",
+        MODEL="nvidia/GLM-5.2-NVFP4", IS_AGENTIC="1", SPEC_DECODING="none", ISL="0", OSL="0",
         EVAL_ONLY="true", EVAL_SRT_RECIPE=f"{MIRROR}/test/eval.yaml", FAKE_RESULTS="eval",
         EVAL_CONC="4 8", RECIPE_FINGERPRINT="recipe-fixture", FAKE_EVAL_META=json.dumps(staged),
     )  # fmt: skip
@@ -680,6 +861,62 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
         "glm5.2", "recipe-fixture", "dynamo-trt",
     )
     assert list(workspace.glob("point-identity_*.json")) == []
+    # The point does not draft, so it has no acceptance gate.
+    assert list(workspace.glob("al_gate_*.json")) == []
+
+
+GATE_DATASET = "al_gate_dataset/speedbench_coding.jsonl"
+DRAFTING_LANE = LANE_FRAGMENT.replace(
+    "  decode:\n    args:\n",
+    "  decode:\n    args:\n      speculative-config: '{\"method\": \"mtp\", \"num_speculative_tokens\": 3}'\n",
+)
+
+
+def test_an_agentic_eval_runs_the_acceptance_gate_as_its_benchmark_stage(harness):
+    dataset = harness.workspace / GATE_DATASET
+    dataset.parent.mkdir()
+    dataset.write_text("{}\n")
+    env = lane_env(
+        harness, "gb300-nv", DRAFTING_LANE, MODEL_PREFIX="dsv4", PRECISION="fp4",
+        FRAMEWORK="dynamo-vllm", MODEL="deepseek-ai/DeepSeek-V4-Pro", IS_AGENTIC="1",
+        SPEC_DECODING="mtp", ISL="0", OSL="0", EVAL_ONLY="true", FAKE_RESULTS="gate",
+        EVAL_CONC="4", AL_GATE_DATASET=GATE_DATASET,
+    )  # fmt: skip
+    assert_ok(launch(env, harness.config, harness.workspace))
+
+    [call] = srtctl_calls(harness.logs)
+    argv = call["argv"]
+    # One job: srt-slurm runs the gate as its benchmark stage, then the eval on that server.
+    assert (call["env"]["EVAL_ONLY"], call["env"]["RUN_EVAL"]) == ("false", "true")
+    assert 'benchmark.command="bash /infmax-workspace/benchmarks/srt_al_gate.sh"' in argv
+    assert 'benchmark.env.AL_GATE_CURVE="deepseek-v4-pro__mtp__native__default-default"' in argv
+    assert f'benchmark.env.AL_GATE_DATASET="{GATE_DATASET}"' in argv
+    assert argv[argv.index("telemetry") - 1] == "--unset"
+    passthrough = next(a for a in argv if a.startswith("post_eval.passthrough_env="))
+    assert "EVAL_AL_GATE" in json.loads(passthrough.partition("=")[2])
+    # The eval's results and the gate's verdict are both staged; its raw files stay in the logs.
+    workspace = harness.workspace
+    assert (workspace / "results_gsm8k.json").read_text() == "{}"
+    verdict = json.loads((workspace / f"al_gate_{env['RESULT_FILENAME']}.json").read_text())
+    assert verdict == {"status": "below", "result_filename": env["RESULT_FILENAME"]}
+    assert not (workspace / "al_gate").exists()
+
+
+def test_an_agentic_eval_without_staged_prompts_runs_alone_and_records_why(harness):
+    env = lane_env(
+        harness, "gb300-nv", DRAFTING_LANE, MODEL_PREFIX="dsv4", PRECISION="fp4",
+        FRAMEWORK="dynamo-vllm", MODEL="deepseek-ai/DeepSeek-V4-Pro", IS_AGENTIC="1",
+        SPEC_DECODING="mtp", ISL="0", OSL="0", EVAL_ONLY="true", FAKE_RESULTS="eval",
+        EVAL_CONC="4",
+    )  # fmt: skip
+    assert_ok(launch(env, harness.config, harness.workspace))
+
+    [call] = srtctl_calls(harness.logs)
+    assert "bash /infmax-workspace/benchmarks/srt_al_gate.sh" not in " ".join(call["argv"])
+    skipped = json.loads(
+        (harness.workspace / f"al_gate_{env['RESULT_FILENAME']}.json").read_text()
+    )
+    assert (skipped["status"], skipped["error"]) == ("skipped", "no SPEED-Bench prompts at ''")
 
 
 def test_bundle_variants_take_the_lane_job_edits(harness, monkeypatch):
@@ -729,6 +966,45 @@ def test_a_setup_failure_without_a_bad_archive_is_not_retried(harness):
     assert srtctl_calls(harness.logs) == [] and lines(harness.logs, "scancel") == []
     error = job_event(harness.workspace)["error"]
     assert (error["stage"], error["type"], error["evidence"]) == ("prepare", "SetupFailed", "srt-setup.log")
+
+
+RAPL_RESTORE = "sudo -n chown root /sys/class/powercap/intel-rapl/intel-rapl:*/energy_uj"
+CPU_POWER_POINTS = {
+    "native": lambda harness, cluster_id: single_node_env(harness, cluster_id, MAX_MODEL_LEN="1024"),
+    "eval-only": lambda harness, cluster_id: single_node_env(
+        harness, cluster_id, EVAL_ONLY="true", MAX_MODEL_LEN="1024"
+    ),
+    "multi-node": lambda harness, cluster_id: lane_env(
+        harness, cluster_id, LANE_FRAGMENT + POWER_TELEMETRY, MODEL_PREFIX="qwen3.5", PRECISION="fp8",
+        FRAMEWORK="dynamo-sglang", MODEL="Qwen/Qwen3.5-397B-A17B-FP8", POWER="1",
+    ),
+}  # fmt: skip
+
+
+@pytest.mark.parametrize(("point", "cluster_id", "cpu_power", "bound"), [
+    ("native", "mi355x-amds", "1", True),
+    ("native", "mi355x-amds", "0", True),
+    ("eval-only", "mi355x-amds", "1", False),
+    ("multi-node", "gb300-nv", "1", True),
+])  # fmt: skip
+def test_a_power_point_on_a_rapl_cluster_binds_the_exporter_and_grants_its_counters(
+    harness, point, cluster_id, cpu_power, bound
+):
+    set_cpu_power_exporter(harness.config, cluster_id, {"source": "rapl"})
+    env = {**CPU_POWER_POINTS[point](harness, cluster_id), "CPU_POWER": cpu_power}
+    assert_ok(launch(env, harness.config, harness.workspace))
+
+    [setup] = [call for call in lines(harness.logs, "make") if call.startswith("setup ")]
+    assert (f"CPU_POWER_EXPORTER_RELEASE={CPU_POWER_EXPORTER_RELEASE}" in setup.split()) is bound
+    [call] = srtctl_calls(harness.logs)
+    argv = call["argv"]
+    submitted = yaml.safe_load(Path(argv[argv.index("--file" if "--file" in argv else "-f") + 1]).read_text())
+    assert ("cpu_power_exporter" in submitted.get("telemetry", {})) is bound
+    if bound:
+        assert submitted["telemetry"]["cpu_power_exporter"] == {"source": "rapl"}
+    host_setup = srtslurm(harness.workspace).get("default_host_setup", {})
+    assert (host_setup.get("teardown") == [RAPL_RESTORE]) is bound
+    assert ("powercap" in " ".join(host_setup.get("commands", []))) is bound
 
 
 def test_a_setup_step_killed_by_a_signal_exits_128_plus_the_signal(harness):
@@ -864,3 +1140,61 @@ def test_multinode_eval_overrides_image_offline_mode_and_host_model_path(harness
         "http://worker:8000",
         str(harness.workspace),
     ]
+
+
+def test_video_startup_failure_keeps_a_failed_bundle_without_client_results(harness):
+    env = video_env(harness, "h100-cw", FAKE_RESULTS="none", FAKE_STATE="FAILED|1:0")
+    result = launch(env, harness.config, harness.workspace)
+    assert result.returncode != 0
+    bundle = harness.workspace / "h3-results"
+    matrix = json.loads((bundle / "serving-smoke.json").read_text())
+    assert matrix["status"] == "failed" and matrix["power_verified"] is False
+    assert [cell["concurrency"] for cell in matrix["cells"]] == [1, 2]
+    assert all(cell["status"] == "failed" for cell in matrix["cells"])
+    assert (bundle / "SHA256SUMS").is_file()
+
+
+def test_launch_cpu_expectation_reaches_fixed_sequence_processor(harness, monkeypatch):
+    from infx.results.fixed_sequence import aggregate_power_result
+    from infx.tests.results.power.test_aggregate_power_multinode import (
+        PRODUCER_SHA,
+        build_package,
+    )
+
+    env = lane_env(
+        harness,
+        "gb300-nv",
+        LANE_FRAGMENT + POWER_TELEMETRY,
+        MODEL_PREFIX="qwen3.5",
+        PRECISION="fp8",
+        FRAMEWORK="dynamo-sglang",
+        MODEL="Qwen/Qwen3.5-397B-A17B-FP8",
+        REQUIRE_POWER="1",
+        POWER="1",
+        CPU_POWER="1",
+    )
+    assert_ok(launch(env, harness.config, harness.workspace))
+    [checkout] = harness.workspace.glob("srt-slurm-9001-*")
+    bound = yaml.safe_load((checkout / "recipe.yaml").read_text())
+    assert bound["telemetry"]["cpu_power_exporter"] == {"source": "acpi"}
+    assert bound["telemetry"]["dcgm_exporter"]["port"] == 19401
+    [setup] = [call for call in lines(harness.logs, "make") if call.startswith("setup ")]
+    assert f"CPU_POWER_EXPORTER_RELEASE={CPU_POWER_EXPORTER_RELEASE}" in setup.split()
+    pkg = build_package(harness.tmp / "power-input")
+    monkeypatch.chdir(harness.tmp)
+    # The workflow exports CPU_POWER once; the launcher and the processor both read it.
+    result_env = {
+        "CPU_POWER": "1",
+        "REQUIRE_POWER": "1",
+        "IS_MULTINODE": "true",
+        "RESULT_FILENAME": "fixture",
+        "PREFILL_GPUS": "2",
+        "DECODE_GPUS": "2",
+        "POWER_PRODUCER_SHA": PRODUCER_SHA,
+        "POWER_ARTIFACT_DIR": str(pkg.power_dir),
+        "POWER_RESULT_ROOT": str(pkg.logs_root),
+    }
+    assert aggregate_power_result(result_env, pkg.bench_result, pkg.agg_result) == 1
+    aggregate = pkg.agg()
+    assert aggregate["power_valid"] == 1
+    assert aggregate["cpu_power_valid"] == 0

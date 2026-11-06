@@ -192,14 +192,11 @@ class NCCLEPBackend(EPBackend):
         # fails (error 5); present -> device_api_support=True and HT+LL groups create.
         os.environ.setdefault("NCCL_CUMEM_ENABLE", "1")
         self.group = dist.group.WORLD
-        self.experts_per_rank = args.experts // world_size
         self.num_local_experts = self.experts_per_rank
         self._internode = world_size > int(args.scale_up_domain)
         self._ll = self.mode == "low-latency"
-        self._fp8 = getattr(self, "precision", "bf16") == "fp8"
         if self._fp8 and not self._ll:
             raise ValueError("NCCL EP FP8 is enabled for low-latency mode only")
-        self.stage_device_work = self._fp8
         # LL layout: rank-major (TensorRT-LLM's NCCL EP contract, the default) or expert-major
         # (DeepEP LL's contract, as vLLM/SGLang decode consume it). Both are native LL layouts.
         layout = os.environ.get("COLLX_NCCL_LL_LAYOUT", "rank-major")
@@ -359,8 +356,6 @@ class NCCLEPBackend(EPBackend):
     def create_buffer(self, spec):
         """Bootstrap the communicator, create the EP group sized from the ladder maximum, and
         allocate the persistent receive/combine buffers reused across every ladder shape."""
-        # Unit tests construct a deliberately partial adapter without __init__.
-        self._fp8 = getattr(self, "_fp8", False)
         # Token capacity is the largest step the ladder runs. LL follows TensorRT-LLM, which sizes
         # its one NcclEP group to min(max_num_tokens, moe_max_num_tokens) (nccl_ep.py:98-103) and
         # rejects any step above it (124-129): the smallest such engine serving every rung has
@@ -526,7 +521,6 @@ class NCCLEPBackend(EPBackend):
         the oracle passes), never inside a timed window. Re-entering with the already-bound
         problem returns immediately without a collective or a sync.
         """
-        self._fp8 = getattr(self, "_fp8", False)
         cached = getattr(p, "_nccl", None)
         if cached is not None:
             if self._bound is not cached:

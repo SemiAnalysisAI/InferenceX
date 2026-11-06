@@ -54,9 +54,8 @@ base:
       env:
         VLLM_ROCM_USE_AITER: '1'
         VLLM_ROCM_USE_AITER_MOE: '1'
-        # INT4 quick all-reduce above its size threshold
-        # (vllm-project/recipes#1061).
-        VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: INT4
+        # Disable integer QuickReduce for every variant, including TP8.
+        VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: NONE
         AITER_TRITON_LOG_LEVEL: ERROR
         VLLM_ROCM_USE_AITER_TRITON_SPARSE_MLA: 'True'
         # DeepseekV41ForCausalLM is not torch-compiled upstream; breakable
@@ -173,6 +172,21 @@ override_tp4_c64:
   benchmark:
     env:
       CONC: '64'
+
+# TP8 c1 mirrors TP4 c1: one sequence at a time, Engram tables GPU-resident.
+override_tp8_c1:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        engram-config: '{"cpu_offload":false}'
+        max-cudagraph-capture-size: 8
+        max-num-batched-tokens: 32768
+        max-num-seqs: 1
+  benchmark:
+    env:
+      CONC: '1'
 
 override_tp2_c1:
   roles:

@@ -559,7 +559,7 @@ def test_main_reports_recorded_external_head_and_ignores_current_labels(
     (identity_zip(head_sha="f" * 40), "disagrees with its title"),
     (identity_zip(agentx_fast="false"), "malformed source-identity"),
     (b"not a zip", "unreadable source-identity"),
-])
+], ids=["evals-only", "pr-number", "head-sha", "malformed", "unreadable"])
 def test_main_rejects_by_recorded_external_identity(monkeypatch, tmp_path, archive, reason) -> None:
     with pytest.raises(RuntimeError, match=reason):
         run_external_reuse(monkeypatch, tmp_path, EXTERNAL_RUN, identity=archive)
