@@ -12308,3 +12308,10 @@
     - "Add native FP8 GLM-5.3-Flash AgentX on MI355X with the official SGLang v0.5.22 ROCm image pinned by digest and the SGLang cookbook MI355X FP8 Low Latency recipe: TP4/EP4, AITER MoE, FP8 KV with TileLang DSA, embedded NextN MTP 5/1/6 served as shipped."
     - "HBM-only KV at conc 1, 2, 8, 16, 24 and 32; the cookbook HiCache L1 + L2 tier (180 GB per rank, write-through) at conc 40 and 48 recording its 749.33 GB host allocation (187.33 GB per rank) as a 751 GB CPU DRAM share. ROCM_QUICK_REDUCE_QUANTIZATION=NONE per the all-reduce policy."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4720
+
+- config-keys:
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+  description:
+    - "Update the vLLM ROCm image from v0.32.0 to v0.33.0, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4794
+  scenario-type: [agentic-coding]
