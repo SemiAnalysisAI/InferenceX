@@ -5729,6 +5729,41 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
           tp: 8
           ep: 8
           dp-attn: true
+
+glm5.3flash-fp8-gb300-sglang-agentic-mtp:
+  image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
+  model: zai-org/GLM-5.3-Flash
+  model-prefix: glm5.3flash
+  runner: cluster:gb300-nv
+  precision: fp8
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: glm5.3flash/sglang/gb300-fp8-mtp
+  scenarios:
+    agentic-coding:
+    # HiCache auto-sizes at fraction 0.90; run 42026173061 measured 708.7-722.9 GB per node (4 ranks) of 964.7 GB.
+    - dram-utilization: 0.7495
+      search-space:
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 16, 24, 32], srt-recipe: "agentic.yaml:override_gpu_kv" }
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [40, 44, 48], srt-recipe: "agentic.yaml:override_hicache" }
+
+glm5.3flash-fp4-gb300-sglang-agentic-mtp:
+  image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
+  model: nvidia/GLM-5.3-Flash-NVFP4
+  model-prefix: glm5.3flash
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: glm5.3flash/sglang/gb300-fp4-mtp
+  scenarios:
+    agentic-coding:
+    # HiCache auto-sizes at fraction 0.90; run 42026173061 measured 708.7-722.9 GB per node (4 ranks) of 964.7 GB.
+    - dram-utilization: 0.7495
+      search-space:
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 16, 24, 32], srt-recipe: "agentic.yaml:override_gpu_kv" }
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [40, 44, 48], srt-recipe: "agentic.yaml:override_hicache" }
+
 # H100 AgentX arm for DeepSeek-V4.1-Flash. H100 is not in the upstream hardware
 # table (h200, gb200, gb300, mi350x are). It needs its own script, not the
 # shared symlink: the sparse attention indexer's
