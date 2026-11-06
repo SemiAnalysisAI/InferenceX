@@ -4,7 +4,7 @@ from pathlib import Path
 
 import yaml
 
-from infx.srt_slurm.workload import NATIVE_TELEMETRY_BLOCK, SHARED_BLOCKS, TELEMETRY_BLOCK
+from infx.srt_slurm.workload import NATIVE_TELEMETRY_BLOCK, SHARED_BLOCKS, TELEMETRY_BLOCK, VIDEO_BLOCK
 
 
 def shared_blocks() -> dict[str, str]:
@@ -20,6 +20,9 @@ def shared_blocks() -> dict[str, str]:
     )
     blocks[NATIVE_TELEMETRY_BLOCK.as_posix()] = yaml.safe_dump(
         {"telemetry": {"enabled": True, "required": False}}
+    )
+    blocks[VIDEO_BLOCK.as_posix()] = yaml.safe_dump(
+        {"frontend": {"type": "none"}, "benchmark": {"type": "custom", "command": "python3 -m infx.bench video client"}}
     )
     return blocks
 
