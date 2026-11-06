@@ -10,7 +10,7 @@ from pathlib import Path
 from infx.bench import env, proc, server
 
 PYTHON = "python3"
-SINGLE_NODE_BACKENDS = {"sglang": "vllm", "atom": "vllm", "trt": "openai"}
+SINGLE_NODE_BACKENDS = {"sglang": "vllm", "atom": "vllm", "trt": "openai", "tokenspeed": "vllm"}
 
 
 @dataclass(frozen=True)

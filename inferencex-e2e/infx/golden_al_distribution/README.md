@@ -33,6 +33,15 @@ SGLang MTP synthetic throughput, the connector rejects a generation role whose
 `speculative-num-steps + 1`. Manual acceptance-length settings are not needed.
 Eval-only runs remove synthetic settings and use real verification.
 
+TokenSpeed MTP recipes use the same automatic selection from
+`speculative-num-steps`, with `speculative-num-draft-tokens` equal to the step
+count plus one and `speculative-eagle-topk: 1`. The connector sets
+`synthetic-acceptance-length` and the required `sampling-backend: greedy` for
+AgentX throughput. Eval-only and fixed-sequence runs remove that length and
+select `sampling-backend: flashinfer` for real verification. TokenSpeed's
+connector accepts explicit MTP flags; other speculative algorithms and the
+JSON `speculative-config` shorthand are rejected.
+
 vLLM supports this through synthetic rejection sampling. For example, an EAGLE3 run can inject the selected YAML value through `synthetic_acceptance_length`:
 
 ```bash
@@ -167,6 +176,7 @@ Before accepting an updated curve, reviewers should verify:
 | MiniMax-M3 | EAGLE3 (GQA, block verify) | [`minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-block.yaml`](minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-block.yaml) |
 | GLM-5.2 | MTP | [`glm-5.2-fp8__mtp__native__default-default.yaml`](glm-5.2-fp8__mtp__native__default-default.yaml) |
 | GLM-5.3 | MTP (SGLang) | [`glm-5.3-nvfp4__mtp__native__default-default.yaml`](glm-5.3-nvfp4__mtp__native__default-default.yaml) |
+| GLM-5.3-Flash | MTP | [`glm-5.3-flash__mtp__native__default-default.yaml`](glm-5.3-flash__mtp__native__default-default.yaml) |
 | Qwen3.8-Flash-Next | MTP (native) | [`qwen3.8-flash-next-fp8__mtp__native__default-default.yaml`](qwen3.8-flash-next-fp8__mtp__native__default-default.yaml) |
 | Muse Spark Open | DFlash2 | [`muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml`](muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml) |
 
