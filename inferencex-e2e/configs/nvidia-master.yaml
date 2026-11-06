@@ -7476,16 +7476,7 @@ h3-bf16-b200-sglang-video:
       - spec: h3-v2.yaml
         set: release-v1
         search-space:
-          - gpus: 1
-            srt-recipe: serving-client.yaml
-            conc-list: [1]
-          - gpus: 2
-            srt-recipe: serving-client.yaml
-            conc-list: [1]
           - gpus: 4
-            srt-recipe: serving-client.yaml
-            conc-list: [1]
-          - gpus: 8
             srt-recipe: serving-client.yaml
             conc-list: [1]
 

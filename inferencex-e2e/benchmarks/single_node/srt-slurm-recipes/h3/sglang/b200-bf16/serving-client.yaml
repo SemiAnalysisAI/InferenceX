@@ -32,7 +32,7 @@ services:
       - --num-gpus
       - "{gpus_per_node}"
       - --ulysses-degree
-      - "{gpus_per_node}"
+      - "4"
       - --tp-size
       - "1"
       - --encoder-parallel

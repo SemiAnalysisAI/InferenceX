@@ -12229,9 +12229,8 @@
     - h3-bf16-mi355x-sglang-video
     - h3-bf16-h200-sglang-video
     - h3-bf16-h100-sglang-video
-    - h3-bf16-b200-sglang-video
   scenario-type: [video-generation]
   description:
-    - "Sweep H3 C1 latency across GPU counts: MI355X, H200 and B200 on 1, 2, 4 and 8 GPUs with SGLang Ulysses across all GPUs, H100 on 2, 4 and 8 GPUs with TP2."
+    - "Sweep H3 C1 latency across GPU counts: MI355X and H200 on 1, 2, 4 and 8 GPUs with SGLang Ulysses across all GPUs, H100 on 2, 4 and 8 GPUs with TP2."
     - "Restore the H200 row; H100 starts at 2 GPUs because the model does not fit one 80 GB GPU."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4818
