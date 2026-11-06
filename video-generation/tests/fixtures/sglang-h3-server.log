@@ -1,0 +1,250 @@
+[11-04 10:59:04] server_args: {"model_id": "MiniMaxAI/MiniMax-H3", "attention_backend": null, "cache_dit_config": null, "num_gpus": 4, "performance_mode": "speed", "tp_size": 1, "ulysses_degree": 4, "ring_degree": 1, "cfg_parallel_degree": 1, "lora_path": null, "component_quantizations": {}, "component_precisions": {}, "quantization": null, "enable_torch_compile": false, "allow_cudnn_tf32": true, "allow_bf16_reduced_precision_reduction": true, "disable_conditioning_cache": true}
+[11-04 10:59:26] Numerics policy: cudnn TF32 and bf16 reduced-precision reduction enabled. These lower precision below the reference, so quality='exact' is bit-reproducible on this server but not free of approximate library defaults. Pass --allow-cudnn-tf32 false --allow-bf16-reduced-precision-reduction false for the strict contract (slower fp32 convolutions).
+[11-04 10:59:38] Attention backends for text_encoder: dynamic_cudnn_sdpa
+[11-04 10:59:38] Loading MiniMaxH3DiTModel from 13 safetensors file(s) , param_dtype: torch.bfloat16
+Loading required modules:  17%|█▋        | 1/6 [00:02<00:14,  2.89s/it]Loading required modules:  17%|█▋        | 1/6 [00:02<00:14,  2.84s/it]
+[11-04 10:59:55] Attention backends for audio_vae: torch_sdpa
+[11-04 10:59:59] Attention backends for video_vae: torch_sdpa
+[11-04 10:59:59] Using dynamic_cudnn_sdpa attention backend
+[11-04 11:00:01] Warmup requests: 0/1 server warmup req (1344x768x124f, 2/50 steps)
+[11-04 11:00:50] Warmup requests: 1/1 server warmup req (1344x768x124f, 2/50 steps)
+[11-04 11:00:50] The server is fired up and ready to roll!
+[11-04 11:01:51] Adjusting number of frames from 1 to 1 based on model
+[11-04 11:01:51] Adjusting number of frames from 1 to 13 based on number of GPUs (4)
+[2026-11-04 11:01:51] [32mINFO[0m:     203.0.113.1:50978 - "[1mPOST /v1/videos HTTP/1.1[0m" [32m200 OK[0m
+[11-04 11:01:51] Sampling params:
+                       width: 1344
+                      height: 768
+                  num_frames: 124
+                         fps: 24
+                      prompt: <redacted, len=174>
+                  neg_prompt: None
+                        seed: 11
+                 infer_steps: 49
+      num_outputs_per_prompt: 1
+              guidance_scale: 1.0
+     embedded_guidance_scale: 6.0
+                    n_tokens: None
+                  flow_shift: 12.0
+                  image_path: None
+                 save_output: True
+            output_file_path: outputs/6b0e85dd-c34b-448e-8f9e-f66139721dd3.mp4
+        
+[11-04 11:01:51] Running pipeline stages: ['InputValidationStage', 'MiniMaxH3PartitionAdmissionStage', 'MiniMaxH3TextEncodingStage', 'MiniMaxH3VisualEncodingStage', 'MiniMaxH3AudioEncodingStage', 'MiniMaxH3LatentPreparationStage', 'MiniMaxH3TimestepPreparationStage', 'MiniMaxH3DenoisingStage', 'MiniMaxH3DecodingStage']
+[11-04 11:01:51] [InputValidationStage] started...
+[11-04 11:01:51] [InputValidationStage] finished in 0.0000 seconds
+[11-04 11:01:51] [MiniMaxH3PartitionAdmissionStage] started...
+[11-04 11:01:51] [MiniMaxH3PartitionAdmissionStage] finished in 0.0000 seconds
+[11-04 11:01:51] [MiniMaxH3TextEncodingStage] started...
+[2026-11-04 11:01:51] [32mINFO[0m:     203.0.113.1:50988 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:01:52] [32mINFO[0m:     203.0.113.1:50996 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:01:52] [32mINFO[0m:     203.0.113.1:51008 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:01:53] [32mINFO[0m:     203.0.113.1:51014 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[11-04 11:01:53] [MiniMaxH3TextEncodingStage] finished in 2.1419 seconds
+[11-04 11:01:53] [MiniMaxH3VisualEncodingStage] started...
+[11-04 11:01:53] [MiniMaxH3VisualEncodingStage] finished in 0.0000 seconds
+[11-04 11:01:53] [MiniMaxH3AudioEncodingStage] started...
+[11-04 11:01:53] [MiniMaxH3AudioEncodingStage] finished in 0.0000 seconds
+[11-04 11:01:53] [MiniMaxH3LatentPreparationStage] started...
+[11-04 11:01:53] [MiniMaxH3LatentPreparationStage] finished in 0.0125 seconds
+[11-04 11:01:53] [MiniMaxH3TimestepPreparationStage] started...
+[11-04 11:01:53] [MiniMaxH3TimestepPreparationStage] finished in 0.0002 seconds
+[11-04 11:01:53] [MiniMaxH3DenoisingStage] started...
+[2026-11-04 11:01:53] [32mINFO[0m:     203.0.113.1:51024 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:01:54] [32mINFO[0m:     203.0.113.1:60732 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:01:54] [32mINFO[0m:     203.0.113.1:60746 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:01:55] [32mINFO[0m:     203.0.113.1:60760 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:01:55] [32mINFO[0m:     203.0.113.1:60776 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:01:56] [32mINFO[0m:     203.0.113.1:60782 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:01:56] [32mINFO[0m:     203.0.113.1:60786 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:01:57] [32mINFO[0m:     203.0.113.1:60798 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:01:57] [32mINFO[0m:     203.0.113.1:60814 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:01:58] [32mINFO[0m:     203.0.113.1:60824 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:01:58] [32mINFO[0m:     203.0.113.1:60840 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:01:59] [32mINFO[0m:     203.0.113.1:60846 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:01:59] [32mINFO[0m:     203.0.113.1:60858 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:00] [32mINFO[0m:     203.0.113.1:60862 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:00] [32mINFO[0m:     203.0.113.1:60868 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:01] [32mINFO[0m:     203.0.113.1:60870 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:01] [32mINFO[0m:     203.0.113.1:60878 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:02] [32mINFO[0m:     203.0.113.1:60882 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+minimax_h3 denoise:   0%|          | 0/49 [00:00<?, ?it/s]minimax_h3 denoise:   2%|▏         | 1/49 [00:00<00:06,  7.61it/s]minimax_h3 denoise:   4%|▍         | 2/49 [00:00<00:19,  2.41it/s]minimax_h3 denoise:   6%|▌         | 3/49 [00:01<00:25,  1.84it/s]minimax_h3 denoise:   8%|▊         | 4/49 [00:02<00:27,  1.65it/s]minimax_h3 denoise:  10%|█         | 5/49 [00:02<00:28,  1.57it/s]minimax_h3 denoise:  12%|█▏        | 6/49 [00:03<00:28,  1.52it/s]minimax_h3 denoise:  14%|█▍        | 7/49 [00:04<00:28,  1.49it/s]minimax_h3 denoise:  16%|█▋        | 8/49 [00:04<00:27,  1.47it/s]minimax_h3 denoise:  18%|█▊        | 9/49 [00:05<00:27,  1.46it/s]minimax_h3 denoise:  20%|██        | 10/49 [00:06<00:26,  1.45it/s]minimax_h3 denoise:  22%|██▏       | 11/49 [00:07<00:26,  1.44it/s]minimax_h3 denoise:  24%|██▍       | 12/49 [00:07<00:25,  1.44it/s]minimax_h3 denoise:  27%|██▋       | 13/49 [00:08<00:25,  1.44it/s]minimax_h3 denoise:  29%|██▊       [2026-11-04 11:02:02] [32mINFO[0m:     203.0.113.1:60894 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:03] [32mINFO[0m:     203.0.113.1:60908 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:03] [32mINFO[0m:     203.0.113.1:60910 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:04] [32mINFO[0m:     203.0.113.1:39252 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:04] [32mINFO[0m:     203.0.113.1:39262 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:05] [32mINFO[0m:     203.0.113.1:39276 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:05] [32mINFO[0m:     203.0.113.1:39290 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:06] [32mINFO[0m:     203.0.113.1:39304 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:06] [32mINFO[0m:     203.0.113.1:39306 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:07] [32mINFO[0m:     203.0.113.1:39318 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:07] [32mINFO[0m:     203.0.113.1:39332 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:08] [32mINFO[0m:     203.0.113.1:39336 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:08] [32mINFO[0m:     203.0.113.1:39338 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:09] [32mINFO[0m:     203.0.113.1:39348 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:09] [32mINFO[0m:     203.0.113.1:39354 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:10] [32mINFO[0m:     203.0.113.1:39364 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:10] [32mINFO[0m:     203.0.113.1:39374 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:11] [32mINFO[0m:     203.0.113.1:39376 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+| 14/49 [00:09<00:24,  1.44it/s]minimax_h3 denoise:  31%|███       | 15/49 [00:09<00:23,  1.43it/s]minimax_h3 denoise:  33%|███▎      | 16/49 [00:10<00:23,  1.43it/s]minimax_h3 denoise:  35%|███▍      | 17/49 [00:11<00:22,  1.43it/s]minimax_h3 denoise:  37%|███▋      | 18/49 [00:11<00:21,  1.43it/s]minimax_h3 denoise:  39%|███▉      | 19/49 [00:12<00:20,  1.43it/s]minimax_h3 denoise:  41%|████      | 20/49 [00:13<00:20,  1.43it/s]minimax_h3 denoise:  43%|████▎     | 21/49 [00:14<00:19,  1.43it/s]minimax_h3 denoise:  45%|████▍     | 22/49 [00:14<00:18,  1.43it/s]minimax_h3 denoise:  47%|████▋     | 23/49 [00:15<00:18,  1.43it/s]minimax_h3 denoise:  49%|████▉     | 24/49 [00:16<00:17,  1.44it/s]minimax_h3 denoise:  51%|█████     | 25/49 [00:16<00:16,  1.43it/s]minimax_h3 denoise:  53%|█████▎    | 26/49 [00:17<00:16,  1.43it/s]minimax_h3 denoise:  55%|█████▌    | 27/49 [00:18<00:15[2026-11-04 11:02:11] [32mINFO[0m:     203.0.113.1:39378 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:12] [32mINFO[0m:     203.0.113.1:39392 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:12] [32mINFO[0m:     203.0.113.1:39408 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:13] [32mINFO[0m:     203.0.113.1:39424 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:13] [32mINFO[0m:     203.0.113.1:39440 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:14] [32mINFO[0m:     203.0.113.1:34758 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:14] [32mINFO[0m:     203.0.113.1:34768 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:15] [32mINFO[0m:     203.0.113.1:34782 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:15] [32mINFO[0m:     203.0.113.1:34792 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:16] [32mINFO[0m:     203.0.113.1:34804 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:16] [32mINFO[0m:     203.0.113.1:34810 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:17] [32mINFO[0m:     203.0.113.1:34826 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:17] [32mINFO[0m:     203.0.113.1:34836 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:18] [32mINFO[0m:     203.0.113.1:34846 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:18] [32mINFO[0m:     203.0.113.1:34852 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:19] [32mINFO[0m:     203.0.113.1:34858 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:19] [32mINFO[0m:     203.0.113.1:34862 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:20] [32mINFO[0m:     203.0.113.1:34870 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+,  1.43it/s]minimax_h3 denoise:  57%|█████▋    | 28/49 [00:18<00:14,  1.43it/s]minimax_h3 denoise:  59%|█████▉    | 29/49 [00:19<00:13,  1.43it/s]minimax_h3 denoise:  61%|██████    | 30/49 [00:20<00:13,  1.43it/s]minimax_h3 denoise:  63%|██████▎   | 31/49 [00:20<00:12,  1.43it/s]minimax_h3 denoise:  65%|██████▌   | 32/49 [00:21<00:11,  1.43it/s]minimax_h3 denoise:  67%|██████▋   | 33/49 [00:22<00:11,  1.43it/s]minimax_h3 denoise:  69%|██████▉   | 34/49 [00:23<00:10,  1.43it/s]minimax_h3 denoise:  71%|███████▏  | 35/49 [00:23<00:09,  1.43it/s]minimax_h3 denoise:  73%|███████▎  | 36/49 [00:24<00:09,  1.43it/s]minimax_h3 denoise:  76%|███████▌  | 37/49 [00:25<00:08,  1.43it/s]minimax_h3 denoise:  78%|███████▊  | 38/49 [00:25<00:07,  1.43it/s]minimax_h3 denoise:  80%|███████▉  | 39/49 [00:26<00:06,  1.43it/s]minimax_h3 denoise:  82[2026-11-04 11:02:20] [32mINFO[0m:     203.0.113.1:34874 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:21] [32mINFO[0m:     203.0.113.1:34890 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:21] [32mINFO[0m:     203.0.113.1:34900 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:22] [32mINFO[0m:     203.0.113.1:34908 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:22] [32mINFO[0m:     203.0.113.1:34920 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:23] [32mINFO[0m:     203.0.113.1:34930 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:23] [32mINFO[0m:     203.0.113.1:34942 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:24] [32mINFO[0m:     203.0.113.1:52092 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:24] [32mINFO[0m:     203.0.113.1:52098 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:25] [32mINFO[0m:     203.0.113.1:52106 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:25] [32mINFO[0m:     203.0.113.1:52116 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:26] [32mINFO[0m:     203.0.113.1:52124 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:26] [32mINFO[0m:     203.0.113.1:52130 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+%|████████▏ | 40/49 [00:27<00:06,  1.43it/s]minimax_h3 denoise:  84%|████████▎ | 41/49 [00:27<00:05,  1.43it/s]minimax_h3 denoise:  86%|████████▌ | 42/49 [00:28<00:04,  1.43it/s]minimax_h3 denoise:  88%|████████▊ | 43/49 [00:29<00:04,  1.43it/s]minimax_h3 denoise:  90%|████████▉ | 44/49 [00:30<00:03,  1.43it/s]minimax_h3 denoise:  92%|█████████▏| 45/49 [00:30<00:02,  1.43it/s]minimax_h3 denoise:  94%|█████████▍| 46/49 [00:31<00:02,  1.43it/s]minimax_h3 denoise:  96%|█████████▌| 47/49 [00:32<00:01,  1.43it/s]minimax_h3 denoise:  98%|█████████▊| 48/49 [00:32<00:00,  1.43it/s]minimax_h3 denoise: 100%|██████████| 49/49 [00:33<00:00,  1.43it/s]minimax_h3 denoise: 100%|██████████| 49/49 [00:33<00:00,  1.46it/s]
+[11-04 11:02:27] [MiniMaxH3DenoisingStage] finished in 33.6126 seconds
+[2026-11-04 11:02:27] [32mINFO[0m:     203.0.113.1:52136 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[11-04 11:02:27] [MiniMaxH3DecodingStage] started...
+[2026-11-04 11:02:27] [32mINFO[0m:     203.0.113.1:52146 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:28] [32mINFO[0m:     203.0.113.1:52154 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[11-04 11:02:28] Output saved to [1;36moutputs/6b0e85dd-c34b-448e-8f9e-f66139721dd3.mp4[0;0m
+[11-04 11:02:28] [MiniMaxH3DecodingStage] finished in 0.8338 seconds
+[11-04 11:02:28] Pixel data generated successfully in [92m37.31[0;0m seconds
+[11-04 11:02:28] Peak memory usage: 89282.00 MB
+[2026-11-04 11:02:28] [32mINFO[0m:     203.0.113.1:52168 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:28] [32mINFO[0m:     203.0.113.1:52180 - "[1mGET /v1/videos/6b0e85dd-c34b-448e-8f9e-f66139721dd3/content HTTP/1.1[0m" [32m200 OK[0m
+[11-04 11:02:29] Adjusting number of frames from 1 to 1 based on model
+[11-04 11:02:29] Adjusting number of frames from 1 to 13 based on number of GPUs (4)
+[2026-11-04 11:02:29] [32mINFO[0m:     203.0.113.1:52192 - "[1mPOST /v1/videos HTTP/1.1[0m" [32m200 OK[0m
+[11-04 11:02:29] Sampling params:
+                       width: 1344
+                      height: 768
+                  num_frames: 124
+                         fps: 24
+                      prompt: <redacted, len=217>
+                  neg_prompt: None
+                        seed: 11
+                 infer_steps: 49
+      num_outputs_per_prompt: 1
+              guidance_scale: 1.0
+     embedded_guidance_scale: 6.0
+                    n_tokens: None
+                  flow_shift: 12.0
+                  image_path: None
+                 save_output: True
+            output_file_path: outputs/5f8fc4dc-811a-480f-a533-ba1007fa8ccc.mp4
+        
+[11-04 11:02:29] Running pipeline stages: ['InputValidationStage', 'MiniMaxH3PartitionAdmissionStage', 'MiniMaxH3TextEncodingStage', 'MiniMaxH3VisualEncodingStage', 'MiniMaxH3AudioEncodingStage', 'MiniMaxH3LatentPreparationStage', 'MiniMaxH3TimestepPreparationStage', 'MiniMaxH3DenoisingStage', 'MiniMaxH3DecodingStage']
+[11-04 11:02:29] [InputValidationStage] started...
+[11-04 11:02:29] [InputValidationStage] finished in 0.0000 seconds
+[11-04 11:02:29] [MiniMaxH3PartitionAdmissionStage] started...
+[11-04 11:02:29] [MiniMaxH3PartitionAdmissionStage] finished in 0.0000 seconds
+[11-04 11:02:29] [MiniMaxH3TextEncodingStage] started...
+[11-04 11:02:29] [MiniMaxH3TextEncodingStage] finished in 0.0597 seconds
+[11-04 11:02:29] [MiniMaxH3VisualEncodingStage] started...
+[11-04 11:02:29] [MiniMaxH3VisualEncodingStage] finished in 0.0000 seconds
+[11-04 11:02:29] [MiniMaxH3AudioEncodingStage] started...
+[11-04 11:02:29] [MiniMaxH3AudioEncodingStage] finished in 0.0000 seconds
+[11-04 11:02:29] [MiniMaxH3LatentPreparationStage] started...
+[11-04 11:02:29] [MiniMaxH3LatentPreparationStage] finished in 0.0143 seconds
+[11-04 11:02:29] [MiniMaxH3TimestepPreparationStage] started...
+[11-04 11:02:29] [MiniMaxH3TimestepPreparationStage] finished in 0.0002 seconds
+[11-04 11:02:29] [MiniMaxH3DenoisingStage] started...
+[2026-11-04 11:02:30] [32mINFO[0m:     203.0.113.1:52200 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:30] [32mINFO[0m:     203.0.113.1:52216 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:31] [32mINFO[0m:     203.0.113.1:52226 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:31] [32mINFO[0m:     203.0.113.1:52228 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:32] [32mINFO[0m:     203.0.113.1:52244 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:32] [32mINFO[0m:     203.0.113.1:52248 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:33] [32mINFO[0m:     203.0.113.1:52256 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:33] [32mINFO[0m:     203.0.113.1:52262 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:34] [32mINFO[0m:     203.0.113.1:52274 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:34] [32mINFO[0m:     203.0.113.1:43244 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:35] [32mINFO[0m:     203.0.113.1:43256 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:35] [32mINFO[0m:     203.0.113.1:43264 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:36] [32mINFO[0m:     203.0.113.1:43276 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:36] [32mINFO[0m:     203.0.113.1:43280 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:37] [32mINFO[0m:     203.0.113.1:43282 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:37] [32mINFO[0m:     203.0.113.1:43288 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:38] [32mINFO[0m:     203.0.113.1:43292 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:38] [32mINFO[0m:     203.0.113.1:43294 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+minimax_h3 denoise:   0%|          | 0/49 [00:00<?, ?it/s]minimax_h3 denoise:   2%|▏         | 1/49 [00:00<00:06,  7.76it/s]minimax_h3 denoise:   4%|▍         | 2/49 [00:00<00:19,  2.39it/s]minimax_h3 denoise:   6%|▌         | 3/49 [00:01<00:25,  1.83it/s]minimax_h3 denoise:   8%|▊         | 4/49 [00:02<00:27,  1.65it/s]minimax_h3 denoise:  10%|█         | 5/49 [00:02<00:28,  1.56it/s]minimax_h3 denoise:  12%|█▏        | 6/49 [00:03<00:28,  1.51it/s]minimax_h3 denoise:  14%|█▍        | 7/49 [00:04<00:28,  1.48it/s]minimax_h3 denoise:  16%|█▋        | 8/49 [00:04<00:27,  1.46it/s]minimax_h3 denoise:  18%|█▊        | 9/49 [00:05<00:27,  1.45it/s]minimax_h3 denoise:  20%|██        | 10/49 [00:06<00:26,  1.45it/s]minimax_h3 denoise:  22%|██▏       | 11/49 [00:07<00:26,  1.44it/s]minimax_h3 denoise:  24%|██▍       | 12/49 [00:07<00:25,  1.43it/s]minimax_h3 denoise:  27%|██▋       | 13/49 [00:08<00:25,  1.43it/s]minimax_h3 denoise:  29%|██▊       [2026-11-04 11:02:39] [32mINFO[0m:     203.0.113.1:43308 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:39] [32mINFO[0m:     203.0.113.1:43314 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:40] [32mINFO[0m:     203.0.113.1:43328 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:40] [32mINFO[0m:     203.0.113.1:43332 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:41] [32mINFO[0m:     203.0.113.1:43334 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:41] [32mINFO[0m:     203.0.113.1:43348 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:42] [32mINFO[0m:     203.0.113.1:43364 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:42] [32mINFO[0m:     203.0.113.1:43370 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:43] [32mINFO[0m:     203.0.113.1:43378 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:43] [32mINFO[0m:     203.0.113.1:43388 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:44] [32mINFO[0m:     203.0.113.1:43400 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:44] [32mINFO[0m:     203.0.113.1:47012 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:45] [32mINFO[0m:     203.0.113.1:47016 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:45] [32mINFO[0m:     203.0.113.1:47028 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:46] [32mINFO[0m:     203.0.113.1:47030 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:46] [32mINFO[0m:     203.0.113.1:47042 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:47] [32mINFO[0m:     203.0.113.1:47046 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:47] [32mINFO[0m:     203.0.113.1:47048 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+| 14/49 [00:09<00:24,  1.43it/s]minimax_h3 denoise:  31%|███       | 15/49 [00:09<00:23,  1.43it/s]minimax_h3 denoise:  33%|███▎      | 16/49 [00:10<00:23,  1.43it/s]minimax_h3 denoise:  35%|███▍      | 17/49 [00:11<00:22,  1.43it/s]minimax_h3 denoise:  37%|███▋      | 18/49 [00:11<00:21,  1.43it/s]minimax_h3 denoise:  39%|███▉      | 19/49 [00:12<00:21,  1.43it/s]minimax_h3 denoise:  41%|████      | 20/49 [00:13<00:20,  1.43it/s]minimax_h3 denoise:  43%|████▎     | 21/49 [00:14<00:19,  1.43it/s]minimax_h3 denoise:  45%|████▍     | 22/49 [00:14<00:18,  1.43it/s]minimax_h3 denoise:  47%|████▋     | 23/49 [00:15<00:18,  1.43it/s]minimax_h3 denoise:  49%|████▉     | 24/49 [00:16<00:17,  1.43it/s]minimax_h3 denoise:  51%|█████     | 25/49 [00:16<00:16,  1.43it/s]minimax_h3 denoise:  53%|█████▎    | 26/49 [00:17<00:16,  1.43it/s]minimax_h3 denoise:  55%|█████▌    | 27/49 [00:18<00:15[2026-11-04 11:02:48] [32mINFO[0m:     203.0.113.1:47058 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:48] [32mINFO[0m:     203.0.113.1:47070 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:49] [32mINFO[0m:     203.0.113.1:47080 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:49] [32mINFO[0m:     203.0.113.1:47082 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:50] [32mINFO[0m:     203.0.113.1:47092 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:50] [32mINFO[0m:     203.0.113.1:47100 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:51] [32mINFO[0m:     203.0.113.1:47106 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:51] [32mINFO[0m:     203.0.113.1:47116 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:52] [32mINFO[0m:     203.0.113.1:47120 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:52] [32mINFO[0m:     203.0.113.1:47124 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:53] [32mINFO[0m:     203.0.113.1:47134 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:53] [32mINFO[0m:     203.0.113.1:47146 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:54] [32mINFO[0m:     203.0.113.1:47160 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:54] [32mINFO[0m:     203.0.113.1:46256 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:55] [32mINFO[0m:     203.0.113.1:46266 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:55] [32mINFO[0m:     203.0.113.1:46272 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:56] [32mINFO[0m:     203.0.113.1:46278 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:56] [32mINFO[0m:     203.0.113.1:46292 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+,  1.43it/s]minimax_h3 denoise:  57%|█████▋    | 28/49 [00:18<00:14,  1.43it/s]minimax_h3 denoise:  59%|█████▉    | 29/49 [00:19<00:14,  1.43it/s]minimax_h3 denoise:  61%|██████    | 30/49 [00:20<00:13,  1.43it/s]minimax_h3 denoise:  63%|██████▎   | 31/49 [00:21<00:12,  1.42it/s]minimax_h3 denoise:  65%|██████▌   | 32/49 [00:21<00:11,  1.43it/s]minimax_h3 denoise:  67%|██████▋   | 33/49 [00:22<00:11,  1.43it/s]minimax_h3 denoise:  69%|██████▉   | 34/49 [00:23<00:10,  1.43it/s]minimax_h3 denoise:  71%|███████▏  | 35/49 [00:23<00:09,  1.43it/s]minimax_h3 denoise:  73%|███████▎  | 36/49 [00:24<00:09,  1.43it/s]minimax_h3 denoise:  76%|███████▌  | 37/49 [00:25<00:08,  1.43it/s]minimax_h3 denoise:  78%|███████▊  | 38/49 [00:25<00:07,  1.43it/s]minimax_h3 denoise:  80%|███████▉  | 39/49 [00:26<00:07,  1.43it/s]minimax_h3 denoise:  82[2026-11-04 11:02:57] [32mINFO[0m:     203.0.113.1:46302 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:57] [32mINFO[0m:     203.0.113.1:46316 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:58] [32mINFO[0m:     203.0.113.1:46324 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:58] [32mINFO[0m:     203.0.113.1:46332 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:59] [32mINFO[0m:     203.0.113.1:46334 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:02:59] [32mINFO[0m:     203.0.113.1:46344 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:03:00] [32mINFO[0m:     203.0.113.1:46352 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:03:00] [32mINFO[0m:     203.0.113.1:46360 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:03:01] [32mINFO[0m:     203.0.113.1:46370 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:03:01] [32mINFO[0m:     203.0.113.1:46382 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:03:02] [32mINFO[0m:     203.0.113.1:46388 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:03:02] [32mINFO[0m:     203.0.113.1:46392 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:03:03] [32mINFO[0m:     203.0.113.1:46404 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+%|████████▏ | 40/49 [00:27<00:06,  1.43it/s]minimax_h3 denoise:  84%|████████▎ | 41/49 [00:28<00:05,  1.43it/s]minimax_h3 denoise:  86%|████████▌ | 42/49 [00:28<00:04,  1.42it/s]minimax_h3 denoise:  88%|████████▊ | 43/49 [00:29<00:04,  1.43it/s]minimax_h3 denoise:  90%|████████▉ | 44/49 [00:30<00:03,  1.43it/s]minimax_h3 denoise:  92%|█████████▏| 45/49 [00:30<00:02,  1.43it/s]minimax_h3 denoise:  94%|█████████▍| 46/49 [00:31<00:02,  1.42it/s]minimax_h3 denoise:  96%|█████████▌| 47/49 [00:32<00:01,  1.42it/s]minimax_h3 denoise:  98%|█████████▊| 48/49 [00:32<00:00,  1.43it/s]minimax_h3 denoise: 100%|██████████| 49/49 [00:33<00:00,  1.43it/s]minimax_h3 denoise: 100%|██████████| 49/49 [00:33<00:00,  1.45it/s]
+[11-04 11:03:03] [MiniMaxH3DenoisingStage] finished in 33.7355 seconds
+[2026-11-04 11:03:03] [32mINFO[0m:     203.0.113.1:46410 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[11-04 11:03:04] [MiniMaxH3DecodingStage] started...
+[2026-11-04 11:03:04] [32mINFO[0m:     203.0.113.1:51410 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:03:04] [32mINFO[0m:     203.0.113.1:51424 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[11-04 11:03:04] Output saved to [1;36moutputs/5f8fc4dc-811a-480f-a533-ba1007fa8ccc.mp4[0;0m
+[11-04 11:03:04] [MiniMaxH3DecodingStage] finished in 0.7746 seconds
+[11-04 11:03:04] Pixel data generated successfully in [92m35.30[0;0m seconds
+[11-04 11:03:04] Peak memory usage: 89284.00 MB
+[2026-11-04 11:03:05] [32mINFO[0m:     203.0.113.1:51438 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-04 11:03:05] [32mINFO[0m:     203.0.113.1:51446 - "[1mGET /v1/videos/5f8fc4dc-811a-480f-a533-ba1007fa8ccc/content HTTP/1.1[0m" [32m200 OK[0m
+[11-04 11:03:05] Adjusting number of frames from 1 to 1 based on model
+[11-04 11:03:05] Adjusting number of frames from 1 to 13 based on number of GPUs (4)
+[2026-11-04 11:03:05] [32mINFO[0m:     203.0.113.1:51458 - "[1mPOST /v1/videos HTTP/1.1[0m" [32m200 OK[0m
