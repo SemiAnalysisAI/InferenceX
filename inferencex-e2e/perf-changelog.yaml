@@ -12047,6 +12047,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4806
 
 - config-keys:
+    - kimik3.1-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Shrink the Simple CPU offload to 2700 blocks per TP rank, 112,251,571,200 bytes (112.25 GB) per rank and 898 GB across the 8 ranks, via dram-utilization 0.2994. The image registers the pool with cudaHostRegister, which costs VRAM for page tables on every GPU in proportion to its size, so a smaller pool leaves more of each GPU outside the gpu-memory-utilization budget. A replay of the conc-48 trace through a model of the offload puts the loss at about half a point of overall prefix-cache hit rate against the 1799 GB pool; the model is optimistic, and the hit rate falls steeply below about 2150 blocks."
+    - "Keep THP_MEM_ALLOC_ENABLE=1 so the pool is backed by transparent huge pages."
+    - "Lower max-num-batched-tokens to 8192 and cap the cudagraph capture list at 8192 (max_cudagraph_capture_size 8192) at conc 4-48. Conc 1 keeps max-num-batched-tokens 16384 and its decode-only capture list."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4867
+
+- config-keys:
     - kimik3.1-fp4-mi355x-sglang-agentic-dflash
   scenario-type:
     - agentic-coding

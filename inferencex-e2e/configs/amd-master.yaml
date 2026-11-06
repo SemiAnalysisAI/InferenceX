@@ -937,8 +937,8 @@ kimik3.1-fp4-mi355x-vllm-agentic-dspark:
   srt-recipe-dir: kimik3.1/vllm/mi355x-fp4-mtp
   scenarios:
     agentic-coding:
-    # 0.6 resolves to 1799 GB of host DRAM, which the recipe's Simple CPU offload splits across the 8 TP ranks.
-    - dram-utilization: 0.6
+    # 0.2994 resolves to 898 GB of host DRAM, the recipe's 2700 Simple CPU offload blocks per TP rank across 8 ranks.
+    - dram-utilization: 0.2994
       search-space:
       # The ~1.56 TB MXFP4 checkpoint needs all 8 GPUs. c1 keeps the KV cache on the GPUs.
       - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: agentic.yaml }
