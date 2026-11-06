@@ -144,9 +144,9 @@ override_dram_c16:
   roles:
     agg:
       args:
-        max-num-batched-tokens: 10240
+        max-num-batched-tokens: 16384
         max-num-seqs: 10
-        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":10240,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[5,10,15,20,25,30,35,40,45,50,64,96,128,160,192,224,256,288,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240]}'
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":16384,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[5,10,15,20,25,30,35,40,45,50,64,96,128,160,192,224,256,288,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240,12288,14336,16384]}'
         speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:
@@ -158,9 +158,9 @@ override_dram_c24:
   roles:
     agg:
       args:
-        max-num-batched-tokens: 10240
+        max-num-batched-tokens: 16384
         max-num-seqs: 16
-        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":10240,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,96,128,160,192,224,256,288,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240]}'
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":16384,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,96,128,160,192,224,256,288,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240,12288,14336,16384]}'
         speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:
@@ -173,8 +173,8 @@ override_dram_c32:
     agg:
       args:
         max-num-seqs: 24
-        max-num-batched-tokens: 10240
-        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":10240,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,128,160,192,224,256,288,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240]}'
+        max-num-batched-tokens: 16384
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":16384,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,128,160,192,224,256,288,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240,12288,14336,16384]}'
         speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":3,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:
@@ -187,8 +187,8 @@ override_dram_c48:
     agg:
       args:
         max-num-seqs: 48
-        max-num-batched-tokens: 10240
-        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":10240,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,224,256,288,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240]}'
+        max-num-batched-tokens: 16384
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":16384,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,224,256,288,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240,12288,14336,16384]}'
         speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":3,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:
@@ -196,3 +196,28 @@ override_dram_c48:
       KV_OFFLOADING: 'dram'
       TOTAL_CPU_DRAM_GB: '1799'
 
+override_dram_c56:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 56
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":16384,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[3,6,9,12,15,18,21,24,27,30,33,36,39,42,45,48,51,54,57,60,63,66,69,72,75,78,81,84,87,90,93,96,99,102,105,108,111,114,117,120,123,126,129,132,135,138,141,144,147,150,153,156,159,162,165,168,192,224,256,288,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240,12288,14336,16384]}'
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":2,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  benchmark:
+    env:
+      CONC: '56'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '1799'
+
+override_dram_c64:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 64
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":16384,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[3,6,9,12,15,18,21,24,27,30,33,36,39,42,45,48,51,54,57,60,63,66,69,72,75,78,81,84,87,90,93,96,99,102,105,108,111,114,117,120,123,126,129,132,135,138,141,144,147,150,153,156,159,162,165,168,171,174,177,180,183,186,189,192,224,256,288,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240,12288,14336,16384]}'
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":2,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  benchmark:
+    env:
+      CONC: '64'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '1799'
