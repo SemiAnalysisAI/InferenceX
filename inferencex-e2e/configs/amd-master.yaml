@@ -1020,6 +1020,27 @@ glm5.3-fp8-mi355x-tilert-agentic:
           ep: 1
           dp-attn: false
 
+# SGLang cookbook MI355X FP8 Low Latency recipe on four GPUs: HBM-only KV up to
+# c32, the cookbook HiCache L1 + L2 tier above it.
+glm5.3flash-fp8-mi355x-sglang-agentic-mtp:
+  image: lmsysorg/sglang:v0.5.22-rocm10-mi35x@sha256:1438dd8b9000adaefb5828edb1cc5713992815d4296f4ad1a1e98dee4e9c7e5f
+  model: zai-org/GLM-5.3-Flash
+  model-prefix: glm5.3flash
+  runner: cluster:mi355x-amds
+  precision: fp8
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: glm5.3flash/sglang/mi355x-fp8-mtp
+  scenarios:
+    agentic-coding:
+    # HiCache allocates 187.33 GB of host memory per rank (113.10 GB KV, 66.94 GB KDA
+    # state, 7.29 GB DSA indexer), 749.33 GB for the TP4 server; dram-utilization 0.501
+    # -> TOTAL_CPU_DRAM_GB = 2861022 MiB cap * 0.501 * 4/8 = 716,686 MiB = 751 GB.
+    - dram-utilization: 0.501
+      search-space:
+      - { tp: 4, ep: 4, kv-offloading: none, conc-list: [1, 2, 8, 16, 24, 32], spec-decoding: mtp, srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [40, 48], spec-decoding: mtp, srt-recipe: agentic.yaml }
+
 # SGLang ROCm 10 MI35X release image. TP2/EP1 up to c32, TP4/EP1 up to c16,
 # DP2 attention with TP MoE at c32 and c64 (c32 overlaps TP2). Host Engram on all.
 dsv41flash-fp4-mi355x-sglang-agentic-dspark:
