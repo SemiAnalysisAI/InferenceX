@@ -14,7 +14,7 @@ from infx import yamlio
 from infx.clusters import CLUSTER_LABEL_PREFIX
 from infx.clusters.slurm import Fabric
 from infx.srt_slurm.variants import deep_merge, expand_variants
-from infx.srt_slurm.workload import resolve_fabric
+from infx.srt_slurm.workload import discovery_on_dedicated_node, resolve_fabric
 
 from .validation import (
     DEFAULT_AGENTIC_DURATION_SECONDS,
@@ -25,6 +25,7 @@ from .validation import (
     srt_recipe_path,
     validate_agentic_matrix_entry,
     validate_matrix_entry,
+    validate_video_matrix_entry,
 )
 
 seq_len_stoi = {"1k1k": (1024, 1024), "8k1k": (8192, 1024)}
@@ -83,6 +84,10 @@ def trim_conc(entries: list[dict]) -> list[dict]:
 
     for source_entry in entries:
         entry = source_entry
+        if entry.get(Fields.SCENARIO_TYPE.value) == "video-generation":
+            # One job serves every listed concurrency; a smoke keeps the lowest.
+            out.append({**entry, Fields.CONC_LIST.value: [min(entry[Fields.CONC_LIST.value])]})
+            continue
         conc = entry.get("conc")
         if entry.get("prefill") is not None and isinstance(conc, list) and conc:
             minimum_conc = min(conc)
@@ -241,16 +246,7 @@ def recipe_auxiliary_node_count(recipe: dict) -> int:
     """Return the nodes a recipe needs beyond its workers, for service pools and dedicated roles."""
     services = [service for service in recipe.get("services") or [] if service.get("enabled", True)]
     pool_nodes = sum(service.get("nodes") or 0 for service in services)
-    infra_dedicated = (recipe.get("infra") or {}).get("etcd_nats_dedicated_node", False)
-    discovery = [service for service in services if service.get("type") in ("etcd", "nats")]
-    if discovery:
-        placements = {
-            (service.get("placement") or {}).get("node") == "dedicated" for service in discovery
-        }
-        if len(placements) != 1:
-            raise ValueError("Recipe etcd and nats must agree on dedicated placement")
-        infra_dedicated = placements.pop()
-    dedicated_roles = int(infra_dedicated)
+    dedicated_roles = int(discovery_on_dedicated_node(recipe))
     for section, legacy_key in (
         ("frontend", "dedicated_node"),
         ("benchmark", "client_dedicated_node"),
@@ -1197,6 +1193,51 @@ def _agentic_entries(
     return entries
 
 
+def _video_entries(
+    config: dict,
+    scenario: dict,
+    benchmark: dict,
+    runners: list[str],
+    conc_filter: list[int] | None = None,
+) -> list[dict]:
+    """One job per deployment: every listed concurrency runs against the same video server."""
+    if config.get(Fields.MULTINODE.value, False):
+        raise ValueError("video-generation scenarios run on one node; multinode is not supported")
+    concurrencies = [
+        conc
+        for conc in benchmark[Fields.CONC_LIST.value]
+        if conc_filter is None or conc in conc_filter
+    ]
+    if not concurrencies:
+        return []
+    model_code = config[Fields.MODEL_PREFIX.value]
+    spec = scenario[Fields.SPEC.value]
+    gpus = benchmark[Fields.GPUS.value]
+    entries = []
+    for runner in runners:
+        entry = {
+            Fields.IMAGE.value: config[Fields.IMAGE.value],
+            Fields.MODEL.value: config[Fields.MODEL.value],
+            Fields.MODEL_PREFIX.value: model_code,
+            Fields.PRECISION.value: config[Fields.PRECISION.value],
+            Fields.FRAMEWORK.value: config[Fields.FRAMEWORK.value],
+            Fields.RUNNER.value: runner,
+            Fields.SPEC.value: spec,
+            "set": scenario["set"],
+            Fields.GPUS.value: gpus,
+            Fields.CONC_LIST.value: list(concurrencies),
+            **srt_recipe_fields(config, benchmark),
+            Fields.EXP_NAME.value: f"{model_code}_video_{Path(spec).stem}_{scenario['set']}_g{gpus}",
+            Fields.SCENARIO_TYPE.value: "video-generation",
+            Fields.SPEC_DECODING.value: "none",
+            Fields.DISAGG.value: False,
+            Fields.DP_ATTN.value: False,
+            Fields.RUN_EVAL.value: False,
+        }
+        entries.append(validate_video_matrix_entry(entry))
+    return entries
+
+
 @dataclass(frozen=True)
 class FullSweepOptions:
     model_prefix: list[str] | None = None
@@ -1536,6 +1577,17 @@ def _expand_configs(
                         root=root,
                     )
                 )
+        # Video is opt-in: a selection that names no scenario type keeps the LLM scenarios.
+        video = (
+            config[Fields.SCENARIOS.value].get(Fields.VIDEO_GENERATION.value, [])
+            if scenario_types and "video-generation" in scenario_types
+            else []
+        )
+        for scenario in video:
+            for benchmark in scenario[Fields.SEARCH_SPACE.value]:
+                rows.extend(
+                    _video_entries(config, scenario, benchmark, runners, conc_filter=concurrencies)
+                )
     if root is not None:
         selected = {
             (row[field.value], row[Fields.RUNNER.value])
@@ -1682,6 +1734,8 @@ def with_fingerprints(rows: list[dict], root: Path) -> list[dict]:
         try:
             fingerprint = recipe_fingerprint(row, root)
         except ValueError as error:
+            if row.get("scenario-type") == "video-generation":
+                raise
             print(f"WARNING: no recipe fingerprint: {error}", file=sys.stderr)
             fingerprinted.append(row)
         else:
@@ -1743,9 +1797,9 @@ def main() -> list[dict]:
     parent_parser.add_argument(
         "--scenario-type",
         nargs="+",
-        choices=["fixed-seq-len", "agentic-coding"],
+        choices=["fixed-seq-len", "agentic-coding", "video-generation"],
         required=False,
-        help="Scenario type(s) to include. If not specified, all scenario types are generated.",
+        help="Scenario type(s) to include. If not specified, fixed-seq-len and agentic-coding are generated; video-generation runs only when named.",
     )
 
     parser = argparse.ArgumentParser(

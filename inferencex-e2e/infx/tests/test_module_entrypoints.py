@@ -26,7 +26,7 @@ def invoke(tmp_path):
 
 
 @pytest.mark.parametrize("payload,expected", [
-    (None, []),
+    (None, None),
     ('{"value": 3}', [{"value": 3}]),
     ('[{"value": 3}, {"value": 4}]', [[{"value": 3}, {"value": 4}]]),
 ])
@@ -40,8 +40,14 @@ def test_collector_preserves_nested_json_and_empty_inputs(invoke, tmp_path, payl
     result = invoke("infx.results.collect_results", "inputs", "test")
 
     assert result.returncode == 0, result.stderr
-    assert result.stdout == result.stderr == ""
-    assert json.loads((tmp_path / "agg_test.json").read_text()) == expected
+    assert result.stderr == ""
+    output = tmp_path / "agg_test.json"
+    if expected is None:
+        assert result.stdout == "No benchmark JSON artifacts to aggregate.\n"
+        assert not output.exists()
+    else:
+        assert result.stdout == ""
+        assert json.loads(output.read_text()) == expected
 
 
 def test_collector_orders_rows_by_artifact_path(invoke, tmp_path):

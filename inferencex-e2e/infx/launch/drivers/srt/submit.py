@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 from infx.bench.proc import echo
 from infx.launch.backends.slurm import srtctl_job_name
 from infx.launch.context import LaunchError
+from infx.srt_slurm import al_gate
 from infx.srt_slurm.single_node import submission_fields
 
 if TYPE_CHECKING:
@@ -24,9 +25,10 @@ if TYPE_CHECKING:
     from infx.launch.drivers.srt.checkout import Checkout
     from infx.launch.drivers.srt.lanes import SrtLane
     from infx.launch.drivers.srt.run import SrtRun
-    from infx.launch.request import SrtRequest
+    from infx.srt_slurm.workload import CpuPowerSource, GpuPower
 
 SINGLE_NODE_SUBMISSION = "srt-single-node-submission.json"
+VIDEO_SUBMISSION = "srt-video-submission.json"
 MULTINODE_SUBMISSION = "srt-submission.json"
 ACCEPTANCE_RECORD = "golden-acceptance.json"
 BIND_LOG = "srt-bind.log"
@@ -39,7 +41,6 @@ SINGLE_NODE_EVAL_COMMAND = (
     '["bash", "{infmax_workspace}/benchmarks/single_node/srt_eval.sh", "{endpoint}", '
     '"/logs/infx-eval-exit-code"]'
 )
-GATE_COMMAND = "bash /infmax-workspace/benchmarks/srt_al_gate.sh"
 WORKLOAD_ENV = (
     "EVAL_*", "AIPERF_*", "AGENTIC_*",
     "TP", "EP_SIZE", "DP_ATTENTION", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "CONC",
@@ -49,6 +50,39 @@ WORKLOAD_ENV = (
     "SGLANG_TORCH_PROFILER_DIR", "VLLM_TORCH_PROFILER_DIR",
 )  # fmt: skip
 _SHELL_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def request_al_gate(run: SrtRun) -> None:
+    """Ask the planner for an agentic speculative eval's acceptance gate when its prompts are
+    staged.
+
+    ``EVAL_AL_GATE`` reaches the eval through ``post_eval.passthrough_env``. Without the
+    prompts, the eval runs alone and the gate's skipped result says why.
+    """
+    request = run.request
+    if not (
+        request.eval_only and request.is_agentic and request.spec_decoding not in (None, "none")
+    ):
+        return
+    dataset = run.env.get("AL_GATE_DATASET", "")
+    workspace = run.workspace.resolve()
+    staged = (workspace / dataset).resolve()
+    if (
+        dataset
+        and not Path(dataset).is_absolute()
+        and staged.is_relative_to(workspace)
+        and staged.is_file()
+    ):
+        run.env["EVAL_AL_GATE"] = "true"
+        return
+    write_al_gate(run, al_gate.skipped(f"no SPEED-Bench prompts at {dataset!r}", run.env))
+
+
+def write_al_gate(run: SrtRun, document: Mapping[str, object]) -> None:
+    """Write an acceptance gate result beside the eval's, where the workflow uploads it."""
+    path = run.workspace / f"al_gate_{run.request.result_filename}.json"
+    path.write_text(json.dumps(document, indent=2) + "\n")
+    print(f"AL gate (report-only): {document.get('status')}: {document.get('error')}", flush=True)
 
 
 def eval_args(env: Mapping[str, str], command: str) -> list[str]:
@@ -68,30 +102,26 @@ def eval_args(env: Mapping[str, str], command: str) -> list[str]:
     ]
 
 
-def gate_args(request: SrtRequest) -> list[str]:
-    """Arguments that run the acceptance gate as the benchmark, without power telemetry.
+def bind_point(
+    run: SrtRun, checkout: Checkout, arguments: Path, cpu_power_source: CpuPowerSource | None
+) -> int:
+    """Bind the single-node recipe variant for this point; the binder writes ``arguments``.
 
-    ``benchmark.env`` outranks the job environment. The container resolves the relative
-    ``AL_GATE_DATASET`` in ``/infmax-workspace``.
+    ``cpu_power_source`` adds the cluster's CPU power exporter to the native telemetry.
     """
-    env = {
-        "AL_GATE": "true",
-        "AL_GATE_CURVE": request.al_gate_curve,
-        "AL_GATE_DRAFT_TOKENS": str(request.al_gate_draft_tokens),
-        "AL_GATE_DATASET": request.al_gate_dataset,
-        "AL_GATE_OUTPUT_DIR": "/logs",
-        "THINKING_MODE": request.thinking_mode,
-    }
-    arguments = ["--set", f"benchmark.command={json.dumps(GATE_COMMAND)}"]
-    for name, value in env.items():
-        arguments += ["--set", f"benchmark.env.{name}={json.dumps(value)}"]
-    return [*arguments, "--unset", "telemetry"]
-
-
-def bind_point(run: SrtRun, checkout: Checkout, arguments: Path) -> int:
-    """Bind the single-node recipe variant for this point; the binder writes ``arguments``."""
     prepare = [
         str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.single_node", "prepare",
+        f"{run.workspace}/{run.request.srt_recipe}", str(arguments), *_fabric(run),
+    ]  # fmt: skip
+    if cpu_power_source is not None:
+        prepare += ["--cpu-power-source", cpu_power_source]
+    return _bind(run, prepare, checkout.root)
+
+
+def bind_video(run: SrtRun, checkout: Checkout, arguments: Path) -> int:
+    """Bind the services-only video recipe for this job; the binder writes ``arguments``."""
+    prepare = [
+        str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.video", "prepare",
         f"{run.workspace}/{run.request.srt_recipe}", str(arguments), *_fabric(run),
     ]  # fmt: skip
     return _bind(run, prepare, checkout.root)
@@ -111,15 +141,15 @@ def bind_recipe(
     checkout: Checkout,
     staged: str,
     output: str,
-    power_port: int | None,
-    cpu_power_source: str | None,
+    gpu_power: GpuPower | None,
+    cpu_power_source: CpuPowerSource | None,
     client_env: Mapping[str, str],
 ) -> int:
-    """Compose and bind the staged fragment into ``output``, with telemetry if ``power_port``
-    and the Grace CPU exporter if ``cpu_power_source``."""
+    """Compose and bind the staged fragment into ``output``, with GPU telemetry if
+    ``gpu_power`` and the cluster's CPU exporter if ``cpu_power_source``."""
     bind = [str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.workload", staged, output]
-    if power_port is not None:
-        bind += ["--power-port", str(power_port)]
+    if gpu_power is not None:
+        bind += ["--gpu-power", str(gpu_power)]
     if cpu_power_source is not None:
         bind += ["--cpu-power-source", cpu_power_source]
     for name, value in client_env.items():
@@ -170,7 +200,8 @@ def apply(
 
     Containers start in the workspace mount: PyTorch's generated module imports fail from /
     with PYTHONPYCACHEPREFIX set. ``arguments`` still win. ``stdout`` receives srtctl's JSON
-    manifest; the planner's golden acceptance length goes into the launch's record.
+    manifest; the planner's golden acceptance length goes into the launch's record, and an
+    acceptance gate it skipped is written beside the eval.
     """
     record = checkout.root / ACCEPTANCE_RECORD
     argv = [
@@ -188,8 +219,11 @@ def apply(
                 argv, env=env, cwd=checkout.root, stdout=handle, check=False
             ).returncode
     with contextlib.suppress(OSError, ValueError, KeyError, TypeError):
-        length = json.loads(record.read_text())["golden_acceptance_length"]
-        event.set(golden_acceptance_length=length)
+        planned = json.loads(record.read_text())
+        event.set(golden_acceptance_length=planned["golden_acceptance_length"])
+        gate = planned.get("al_gate")
+        if isinstance(gate, dict) and gate.get("status") == "skipped":
+            write_al_gate(run, gate)
     if rc:
         event.fail("SubmitFailed", f"srtctl apply exited {rc}")
     return subprocess.CompletedProcess(argv, rc, stdout.read_text(errors="replace"), "")
@@ -263,7 +297,7 @@ def multinode_arguments(
     """The ``srtctl apply`` arguments of a multi-node lane submission."""
     request = run.request
     arguments = [
-        *(gate_args(request) if request.al_gate else eval_args(run.env, MULTINODE_EVAL_COMMAND)),
+        *eval_args(run.env, MULTINODE_EVAL_COMMAND),
         "--set",
         "benchmark.stream_output=true",
         *overrides,

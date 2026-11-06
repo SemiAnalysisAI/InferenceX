@@ -361,6 +361,7 @@ clusters:
     models:
       entries:
         DeepSeek-V4.1-Flash: {root: data-models, dir: DeepSeek-V4.1-Flash}
+        Kimi-K3.1-Pro: {root: scratch, dir: Kimi-K3.1-Pro}
         Muse-Spark-Open-816B-A42B-NVFP4: {root: data-models, dir: Muse-Spark-Open-816B-A42B-NVFP4}
         Qwen3.5-397B-A17B-FP8: {root: data-models, dir: Qwen3.5-397B-A17B-FP8}
     scheduler: slurm
@@ -373,6 +374,7 @@ clusters:
         hf-hub-cache: {path: /data/home/sa-gha-runner/gharunners/hf-hub-cache}
         aiperf-cache: {path: /data/home/sa-gha-runner/gharunners/ai-perf-cache}
         data-models: {path: /data/models}
+        scratch: {path: /scratch/models, visibility: node-local}
       squash:
         dir: /data/home/sa-gha-runner/gharunners/squash
         visibility: shared
@@ -394,6 +396,8 @@ clusters:
       entries:
         DeepSeek-R1-0528: {root: models, dir: DeepSeek-R1-0528}
         GLM-5.2-FP8: {root: models, dir: GLM-5.2-FP8}
+        GLM-5.3-Flash: {root: hf-hub-cache, dir: GLM-5.3-Flash}
+        Kimi-K3.1-Pro: {root: hf-hub-cache, dir: Kimi-K3.1-Pro}
         Muse-Spark-Open-816B-A42B-NVFP4: {root: hf-hub-cache, dir: Muse-Spark-Open-816B-A42B-NVFP4}
         Qwen3.5-397B-A17B-FP8: {root: hf-hub-cache, dir: Qwen3.5-397B-A17B-FP8}
     scheduler: slurm
@@ -454,6 +458,9 @@ clusters:
         deepseek-r1-fp4: {root: scratch, dir: DeepSeek-R1-0528-NVFP4-v2}
         GLM-5.2-FP8: {root: scratch, dir: GLM-5.2-FP8}
         GLM-5.2-NVFP4: {root: scratch, dir: GLM-5.2-NVFP4}
+        GLM-5.3-Flash: {root: data-models, dir: GLM-5.3-Flash}
+        GLM-5.3-Flash-NVFP4: {root: data-models, dir: GLM-5.3-Flash-NVFP4}
+        Kimi-K3.1-Pro: {root: scratch, dir: Kimi-K3.1-Pro}
         MiniMax-M3.1-Flash: {root: data-models, dir: MiniMax-M3.1-Flash}
         Muse-Spark-Open-816B-A42B-NVFP4: {root: data-models, dir: Muse-Spark-Open-816B-A42B-NVFP4}
         Qwen3.5-397B-A17B-FP8: {root: scratch, dir: Qwen3.5-397B-A17B-FP8}
@@ -518,7 +525,10 @@ clusters:
         GLM-5.2-FP8: {root: scratch, dir: GLM-5.2-FP8}
         GLM-5.2-NVFP4: {root: scratch, dir: GLM-5.2-NVFP4}
         GLM-5.3-NVFP4: {root: scratch, dir: GLM-5.3-NVFP4}
+        GLM-5.3-Flash: {root: data-models, dir: GLM-5.3-Flash}
+        GLM-5.3-Flash-NVFP4: {root: data-models, dir: GLM-5.3-Flash-NVFP4}
         Kimi-K3: {root: scratch, dir: Kimi-K3}
+        Kimi-K3.1-Pro: {root: scratch, dir: Kimi-K3.1-Pro}
         MiniMax-M3: {root: scratch, dir: MiniMax-M3}
         MiniMax-M3-MXFP8: {root: scratch, dir: MiniMax-M3-MXFP8}
         MiniMax-M3-NVFP4: {root: scratch, dir: MiniMax-M3-NVFP4}
@@ -572,11 +582,14 @@ clusters:
         deepseek-r1-0528: {root: lustre-models, dir: deepseek-r1-0528}
         deepseek-r1-0528-fp4-v2: {root: lustre-models, dir: deepseek-r1-0528-fp4-v2}
         MiniMax-M3.1-Flash: {root: lustre-models, dir: MiniMax-M3.1-Flash}
+        GLM-5.3-Flash: {root: lustre-models, dir: GLM-5.3-Flash}
+        GLM-5.3-Flash-NVFP4: {root: lustre-models, dir: GLM-5.3-Flash-NVFP4}
         Qwen3.5-397B-A17B-NVFP4-V2: {root: lustre-models, dir: Qwen3.5-397B-A17B-NVFP4-V2}
         Muse-Spark-Open-816B-A42B-NVFP4: {root: lustre-models, dir: Muse-Spark-Open-816B-A42B-NVFP4}
         GLM-5.2-NVFP4: {root: sa-shared-models, dir: GLM-5.2-NVFP4}
         DeepSeek-R1-0528: {root: numa1, dir: DeepSeek-R1-0528}
         DeepSeek-R1-0528-NVFP4-v2: {root: numa1, dir: DeepSeek-R1-0528-NVFP4-v2}
+        Kimi-K3.1-Pro: {root: numa1, dir: Kimi-K3.1-Pro}
     scheduler: slurm
     slurm:
       partition: batch
@@ -628,7 +641,10 @@ clusters:
         DeepSeek-R1-0528: {root: scratch, dir: DeepSeek-R1-0528}
         DeepSeek-R1-0528-NVFP4-v2: {root: scratch, dir: DeepSeek-R1-0528-NVFP4-v2}
         GLM-5.2-NVFP4: {root: scratch, dir: GLM-5.2-NVFP4}
+        GLM-5.3-Flash: {root: data-models, dir: GLM-5.3-Flash}
+        GLM-5.3-Flash-NVFP4: {root: data-models, dir: GLM-5.3-Flash-NVFP4}
         GLM-5.3-NVFP4: {root: data-models, dir: GLM-5.3-NVFP4}
+        Kimi-K3.1-Pro: {root: scratch, dir: Kimi-K3.1-Pro}
         MiniMax-M3.1-Flash: {root: data-models, dir: MiniMax-M3.1-Flash}
         Muse-Spark-Open-816B-A42B-NVFP4: {root: data-models, dir: Muse-Spark-Open-816B-A42B-NVFP4}
         Qwen3.5-397B-A17B-FP8: {root: scratch, dir: Qwen3.5-397B-A17B-FP8}
@@ -641,6 +657,9 @@ clusters:
       partitions: [batch_1, batch_3]
       account: benchmark
       exclusive: false
+      # 2026-11-05: c003's local NVMe extracted containers with zero-filled blocks (libcuda stub),
+      # and c008 twice read back empty Triton cache files. Remove after ops checks both disks.
+      exclude: [im-gb300-r01-c003, im-gb300-r01-c008]
       volumes:
         hf-hub-cache: {path: /data/home/sa-shared/gharunners/hf-hub-cache}
         aiperf-cache: {path: /data/home/sa-shared/gharunners/ai-perf-cache}
@@ -703,6 +722,7 @@ clusters:
         single-node-time-limit: 180
         gpus-per-node-directive: true
         segment-directive: false
+        cpu-power-exporter: {source: rapl}
         host-setup:
           script: runners/srt-slurm/hooks/mi300x-amd/setup.sh
         mounts:
@@ -752,6 +772,7 @@ clusters:
         single-node-time-limit: 480
         gpus-per-node-directive: true
         segment-directive: false
+        cpu-power-exporter: {source: rapl}
         mounts:
           /dev/kfd: /dev/kfd
           /dev/dri: /dev/dri
@@ -801,11 +822,13 @@ clusters:
         gpus-per-node-directive: true
         segment-directive: false
         outputs: /it-share/gharunners2/srt-slurm/outputs
+        cpu-power-exporter: {source: rapl}
         host-setup:
           script: runners/srt-slurm/hooks/mi355x-amds/setup.sh
           env:
             IBDEVICES: '@fabric.rdma-devices'
-          timeout-s: 1200
+          # Covers the hook's 60-minute wait for prior-job VRAM to drain.
+          timeout-s: 4200
           nodes: all
         volume-mounts:
           shared-hf-hub-cache: /hf_hub_cache/hub
