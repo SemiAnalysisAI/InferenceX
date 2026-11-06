@@ -12329,3 +12329,11 @@
     - "Update the vLLM image from nightly-dev-arm64-cu130-ac9126e58aa7 to the digest-pinned nightly-00b6c4c5."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4558
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - kimik3.1-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update Kimi-K3.1-Pro B300 vLLM aggregated AgentX configs: kimi-k31-mc image, fused Kimi-K3 decode on TP8 x DCP8 at every point, routed experts EP8 on MegaMoE from c32."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX

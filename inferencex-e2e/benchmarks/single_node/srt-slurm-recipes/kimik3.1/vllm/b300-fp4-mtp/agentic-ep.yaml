@@ -1,0 +1,121 @@
+base:
+  schema: 2
+  name: kimik3.1-fp4-b300-vllm-agentic-ep
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  # Loading ~1.56 TB of MXFP4 shards plus the latency_specialized decode JIT can take
+  # most of VLLM_ENGINE_READY_TIMEOUT_S.
+  health_check:
+    interval_seconds: 10
+    max_attempts: 720
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: moonshotai/Kimi-K3.1-Pro
+        tensor-parallel-size: 8
+        # Shards the MLA latent and indexer-key caches across the TP group: ~7x the KV tokens of plain TP8.
+        decode-context-parallel-size: 8
+        dcp-comm-backend: a2a
+        cp-kv-cache-interleave-size: 1
+        trust-remote-code: true
+        language-model-only: true
+        load-format: fastsafetensors
+        enable-auto-tool-choice: true
+        tool-call-parser: kimi_k3
+        reasoning-parser: kimi_k3
+        kv-cache-dtype: fp8
+        # The DSpark draft layers run TOKENSPEED_MLA (speculative-config); min_split_kv bounds its split-KV workspace.
+        attention-config: '{"indexer_kv_dtype":"mxfp4","tokenspeed_mla_min_split_kv":16}'
+        # The K3.1 week-1 precision policy requires an FP32 KDA recurrent state.
+        mamba-ssm-cache-dtype: float32
+        # KDA verify replays the accepted prefix instead of keeping one state per draft token.
+        use-replayssm: true
+        no-enable-flashinfer-autotune: true
+        enable-prefix-caching: true
+        max-num-batched-tokens: 8192
+        gpu-memory-utilization: 0.95
+        stream-interval: 10
+        disable-uvicorn-access-log: true
+        # TOTAL_CPU_DRAM_GB (dram-utilization 1.0) split across the 8 TP ranks.
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":374875000000,"lazy_offload":false}}'
+        # Hybrid decode: TP8 x DCP8 attention, routed experts EP8 on MegaMoE.
+        # Routed experts EP8 on MegaMoE (see the note below the base).
+        enable-expert-parallel: true
+        moe-backend: deep_gemm_mega_moe
+      env:
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+        PYTHONUNBUFFERED: '1'
+        # Identical prefixes must hash to identical block keys run-to-run.
+        PYTHONHASHSEED: '42'
+        # Outlast AIPerf's pooled-connection idle gaps.
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '900'
+        # The specialized decode runs on the V2 model runner.
+        VLLM_USE_V2_MODEL_RUNNER: '1'
+        VLLM_USE_DIRECT_DCP_A2A: '1'
+        VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
+        VLLM_ALLREDUCE_USE_FLASHINFER: '1'
+        VLLM_KIMI_K3_SHARD_SP_SHARED_EXPERT: '0'
+        VLLM_USE_NCCL_SYMM_MEM: '0'
+        VLLM_ENABLE_GEMM_RS: '0'
+        TOKENSPEED_MLA_FP16_PARTIALS: '0'
+  benchmark:
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '2999'
+
+# Hybrid decode: TP8 x DCP8 attention, routed experts EP8 on MegaMoE. This path keeps the
+# fused Kimi-K3 decode at every batch size (no 152-CTA wide-step MoE), at the cost of about
+# 20 GiB per GPU for the MegaMoE buffers. Admission is 2x CONC; FULL_DECODE_ONLY graphs
+# cover every decode batch; throughput runs replace block rejection with the golden acceptance length.
+
+override_c32:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 64
+        additional-config: '{"decode_backend":"latency_specialized"}'
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100,105,110,115,120,125,130,135,140,145,150,155,160,165,170,175,180,185,190,195,200,205,210,215,220,225,230,235,240,245,250,255,260,265,270,275,280,285,290,295,300,305,310,315,320]}'
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","revision":"6a2ef20a05efe88aabbf9ecaa12d020c3b0edf94","attention_backend":"TOKENSPEED_MLA","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  benchmark:
+    env:
+      CONC: '32'
+
+override_c48:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 96
+        additional-config: '{"decode_backend":"latency_specialized"}'
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[10,20,30,40,50,60,70,80,90,100,110,120,130,140,150,160,170,180,190,200,210,220,230,240,250,260,270,280,290,300,310,320,330,340,350,360,370,380,390,400,410,420,430,440,450,460,470,480]}'
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","revision":"6a2ef20a05efe88aabbf9ecaa12d020c3b0edf94","attention_backend":"TOKENSPEED_MLA","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  benchmark:
+    env:
+      CONC: '48'
+
+override_c56:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 112
+        additional-config: '{"decode_backend":"latency_specialized"}'
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[10,20,30,40,50,60,70,80,90,100,110,120,130,140,150,160,170,180,190,200,210,220,230,240,250,260,270,280,290,300,310,320,330,340,350,360,370,380,390,400,410,420,430,440,450,460,470,480,490,500,510,520,530,540,550,560]}'
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","revision":"6a2ef20a05efe88aabbf9ecaa12d020c3b0edf94","attention_backend":"TOKENSPEED_MLA","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  benchmark:
+    env:
+      CONC: '56'
