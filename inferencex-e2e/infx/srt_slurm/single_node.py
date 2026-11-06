@@ -171,22 +171,32 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
             raise ValueError(f"Single-node SRT {name}: recipe/matrix {actual!r} != {wanted!r}")
 
 
+def srun_overrides(environment: Mapping[str, str]) -> list[str]:
+    if not environment.get("SRT_SRUN_OPTIONS"):
+        return []
+    options = json.loads(environment["SRT_SRUN_OPTIONS"])
+    if not isinstance(options, dict) or any(
+        not re.fullmatch(r"[a-z][a-z0-9-]*", key) or not isinstance(value, str)
+        for key, value in options.items()
+    ):
+        raise ValueError("SRT_SRUN_OPTIONS must map option names to string values")
+    overrides: list[str] = []
+    for key, value in options.items():
+        overrides += ["--set", f"srun_options.{key}={json.dumps(value)}"]
+    return overrides
+
+
 def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
     """Bind only runtime-owned values after validating the selected recipe."""
     select_recipe(config, environment)
     for name in ("RUN_EVAL", "EVAL_ONLY", "DP_ATTENTION"):
         if environment[name] not in {"true", "false"}:
             raise ValueError(f"{name} must be true or false")
-    overrides = ["--set", f"srun_options.gpus-per-node={json.dumps(environment['GPU_COUNT'])}"]
-    if environment.get("SRT_SRUN_OPTIONS"):
-        options = json.loads(environment["SRT_SRUN_OPTIONS"])
-        if not isinstance(options, dict) or any(
-            not re.fullmatch(r"[a-z][a-z0-9-]*", key) or not isinstance(value, str)
-            for key, value in options.items()
-        ):
-            raise ValueError("SRT_SRUN_OPTIONS must map option names to string values")
-        for key, value in options.items():
-            overrides += ["--set", f"srun_options.{key}={json.dumps(value)}"]
+    overrides = [
+        "--set",
+        f"srun_options.gpus-per-node={json.dumps(environment['GPU_COUNT'])}",
+        *srun_overrides(environment),
+    ]
     agentic = environment["IS_AGENTIC"] == "1"
     names = ["RESULT_FILENAME", "RUN_EVAL", "EVAL_ONLY", "FRAMEWORK"]
     if agentic:
