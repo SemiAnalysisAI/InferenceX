@@ -95,6 +95,16 @@ def _atom(method: str) -> dict[str, Fact]:
     }
 
 
+def _tokenspeed(args: Mapping[str, Any]) -> dict[str, Fact]:
+    topk = args.get("speculative-eagle-topk")
+    topology = (
+        Fact("chain" if topk == 1 else f"tree-topk{topk}", "explicit")
+        if isinstance(topk, int) and not isinstance(topk, bool)
+        else UNKNOWN
+    )
+    return {"draft_sample": UNKNOWN, "adaptive": UNKNOWN, "topology": topology}
+
+
 def _dtype(value: Any) -> Fact:
     if isinstance(value, str):
         value = DTYPE_ALIASES.get(value.lower(), value.lower())
@@ -112,6 +122,9 @@ def _precision(args: Mapping[str, Any], spec: Mapping[str, Any], engine: str) ->
     elif engine == "sglang":
         draft = args.get("speculative-draft-model-quantization")
         draft_kv = args.get("speculative-draft-kv-cache-dtype")
+    elif engine == "tokenspeed":
+        draft = args.get("speculative-draft-model-quantization")
+        draft_kv = None
     else:
         draft = draft_kv = None
     unread = engine == "tilert"  # TileRT's draft settings are not readable here
@@ -142,6 +155,7 @@ def run_collection(model_prefix: str, role: Mapping[str, Any], framework: str) -
         "trtllm": _trtllm,
         "atom": lambda: _atom(method),
         "tilert": _tilert,
+        "tokenspeed": lambda: _tokenspeed(args),
     }[engine]()
     facts |= _precision(args, spec, engine)
     facts["verify"] = verifier(role, engine)
