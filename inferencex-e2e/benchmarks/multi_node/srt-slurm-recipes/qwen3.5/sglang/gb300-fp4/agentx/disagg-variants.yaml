@@ -182,57 +182,6 @@ base:
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
-  setup_script: qwen35-main-source-overlay.sh
-  host_setup:
-    commands:
-    - |-
-      python3 - <<'PY_SOURCE'
-      import os
-      import pathlib
-      import subprocess
-      root = pathlib.Path("/tmp/inferencex-qwen35") / os.environ["SLURM_JOB_ID"]
-      (root / "runtime").mkdir(parents=True, exist_ok=True)
-      for name in ("home", "tmp", "cache/pip", "cache/uv", "cache/xdg", "cache/sglang", "cache/triton", "cache/flashinfer", "cache/torch-extensions", 'cache/deepgemm', 'cache/cupy', 'cache/torchinductor', 'cache/cuda', 'cache/uv-python'):
-          (root / "runtime" / name).mkdir(parents=True, exist_ok=True)
-      for name, url, sha in (
-          ("sglang", "https://github.com/sgl-project/sglang.git", "858073e4f6d246bd6e3baae1d4e07919a578a04f"),
-          ("sgl-nvidia-mega", "https://github.com/sgl-project/sgl-nvidia-mega.git", "77360f1fd74dc46010056ebdac0ed5e0b87d3978"),
-      ):
-          source = root / "sources" / name
-          if not source.exists():
-              source.parent.mkdir(parents=True, exist_ok=True)
-              subprocess.run(["git", "init", str(source)], check=True)
-              subprocess.run(["git", "-C", str(source), "fetch", "--depth=1", url, sha], check=True)
-              subprocess.run(["git", "-C", str(source), "checkout", "--detach", "FETCH_HEAD"], check=True)
-          actual = subprocess.check_output(["git", "-C", str(source), "rev-parse", "HEAD"], text=True).strip()
-          if actual != sha:
-              raise RuntimeError(f"Unexpected source revision: {name} {actual} != {sha}")
-      PY_SOURCE
-    nodes: all
-    ignore_failure: false
-    timeout_seconds: 600
-  extra_mount:
-  - /tmp/inferencex-qwen35/$SLURM_JOB_ID/sources/sglang:/opt/sglang-main:ro
-  - /tmp/inferencex-qwen35/$SLURM_JOB_ID/sources/sgl-nvidia-mega:/opt/sgl-nvidia-mega:ro
-  - /tmp/inferencex-qwen35/$SLURM_JOB_ID/runtime:/opt/inferencex-qwen35-runtime:rw
-  environment:
-    PYTHONPATH: /opt/sgl-nvidia-mega:/opt/inferencex-qwen35-runtime/python
-    IMX_SGLANG_COMMIT: 858073e4f6d246bd6e3baae1d4e07919a578a04f
-    IMX_MEGA_COMMIT: 77360f1fd74dc46010056ebdac0ed5e0b87d3978
-    HOME: /opt/inferencex-qwen35-runtime/home
-    TMPDIR: /opt/inferencex-qwen35-runtime/tmp
-    PIP_CACHE_DIR: /opt/inferencex-qwen35-runtime/cache/pip
-    UV_CACHE_DIR: /opt/inferencex-qwen35-runtime/cache/uv
-    XDG_CACHE_HOME: /opt/inferencex-qwen35-runtime/cache/xdg
-    SGLANG_CACHE_DIR: /opt/inferencex-qwen35-runtime/cache/sglang
-    TRITON_CACHE_DIR: /opt/inferencex-qwen35-runtime/cache/triton
-    FLASHINFER_WORKSPACE_BASE: /opt/inferencex-qwen35-runtime/cache/flashinfer
-    TORCH_EXTENSIONS_DIR: /opt/inferencex-qwen35-runtime/cache/torch-extensions
-    SGLANG_DG_CACHE_DIR: /opt/inferencex-qwen35-runtime/cache/deepgemm
-    CUPY_CACHE_DIR: /opt/inferencex-qwen35-runtime/cache/cupy
-    TORCHINDUCTOR_CACHE_DIR: /opt/inferencex-qwen35-runtime/cache/torchinductor
-    CUDA_CACHE_PATH: /opt/inferencex-qwen35-runtime/cache/cuda
-    UV_PYTHON_INSTALL_DIR: /opt/inferencex-qwen35-runtime/cache/uv-python
 override_3p1d_dep8_cap32:
   name: disagg-gb300-3p1d-dep8-cap32-mtp-hicache
   frontend:

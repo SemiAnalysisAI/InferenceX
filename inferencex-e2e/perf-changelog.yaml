@@ -12231,8 +12231,8 @@
   scenario-type:
   - agentic-coding
   description:
-  - Run the 21 GB300 Qwen3.5 NVFP4 AgentX points on the official 20261106-858073e4 SGLang container with read-only source mounts pinned to SGLang main 858073e4f6d246bd6e3baae1d4e07919a578a04f
-    and sgl-nvidia-mega main 77360f1fd74dc46010056ebdac0ed5e0b87d3978.
+  - Run the 21 GB300 Qwen3.5 NVFP4 AgentX points on the official lmsysorg/sglang:nightly-dev-cu13-20261106-858073e4 container, which is built from SGLang 858073e4f6d246bd6e3baae1d4e07919a578a04f
+    and bundles sgl-nvidia-mega 77360f1fd74dc46010056ebdac0ed5e0b87d3978. No source overlays or plugin reinstalls.
   - 'Add 17 full-precision frontier points: TP8 PD c8/c16/c28, two TP8 decodes c72/c112/c128, TP8 EP4 decode c126/c130/c148/c160/c176/c224/c392, and DEP8 c720.'
-  - Enable supported NVIDIA megakernel slots and upstream runtime optimization controls. Use the matching official image Rust TreeCore and verify its SGLang revision against the explicit source pin. No draft precision reduction.
+  - Enable supported NVIDIA megakernel slots and upstream runtime optimization controls. Use the image's native Rust TreeCore. No draft precision reduction.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4853
