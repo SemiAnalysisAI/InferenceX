@@ -77,12 +77,8 @@ base:
         VLLM_USE_DIRECT_DCP_KV_GATHER: '0'
         # The K3.1 policy and MODELS.md keep all-reduce in BF16, so quick reduce must not quantize.
         VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: NONE
-        # MXFP8 MoE stage 2. Only MoE calls above 1024 tokens take this path,
-        # so the conc-1 decode is unaffected.
-        AITER_FLYDSL_STAGE2_FP8: '1'
+        AITER_FLYDSL_STAGE2_FP8: '0'
         AITER_BF16_FP8_MOE_BOUND: '0'
-        # MEC firmware 38 on this cluster cannot reclaim RCCL scratch, and the blocking
-        # release hangs the collective; vLLM's K3 recipe asks for this below firmware 177.
         HSA_NO_SCRATCH_RECLAIM: '1'
         VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1200'
         PYTHONNOUSERSITE: '1'
