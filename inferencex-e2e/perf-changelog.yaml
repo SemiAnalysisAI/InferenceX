@@ -12352,4 +12352,4 @@
     - agentic-coding
   description:
     - "Add GLM-5.3 FP8 MI355X SGLang AgentX: TP8 EP1, EAGLE MTP 3-1-4, FP8 E4M3 KV cache, and the AMD monokernel (--enable-amd-monokernel) at concurrency 1, 2, 4, and 10."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4829
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4875
