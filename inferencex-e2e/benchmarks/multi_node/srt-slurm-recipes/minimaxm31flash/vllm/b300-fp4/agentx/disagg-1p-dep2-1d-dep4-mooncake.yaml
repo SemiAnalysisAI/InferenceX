@@ -19,7 +19,7 @@ health_check:
 environment:
   PYTHONHASHSEED: '0'
   # vllm-mooncake-efa.sh installs libfabric to efa-1.50 when the host mounts /opt/amazon/efa read-only.
-  LD_LIBRARY_PATH: &efa-library-path /opt/host-cuda:/opt/amazon/efa-1.50/lib:/opt/amazon/efa/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib64:/usr/local/nvidia/lib
+  LD_LIBRARY_PATH: &efa-library-path /opt/amazon/efa-1.50/lib:/opt/amazon/efa/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib64:/usr/local/nvidia/lib
 services:
 - name: etcd
   type: etcd
@@ -176,7 +176,6 @@ roles:
       VLLM_ENGINE_READY_TIMEOUT_S: '7200'
       PYTHONUNBUFFERED: '1'
       DYN_TCP_CONNECT_TIMEOUT: '120'
-      VLLM_EFA_PREFLIGHT: '1'
       NCCL_NET_PLUGIN: none
       NCCL_P2P_LEVEL: NVL
       NIXL_TELEMETRY_ENABLE: 'y'
@@ -213,6 +212,8 @@ roles:
       long-prefill-token-threshold: 4096
       prefill-schedule-interval: 1
       enable-prefix-caching: true
+      # EFA RMA sets CUDA sync-memops on each MR, which VMM memory rejects, so libfabric returns EINVAL.
+      no-enable-extensible-kv-cache: true
       compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
       max-cudagraph-capture-size: 2048
       kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["LIBFABRIC"],"enforce_handshake_compat":false,"kv_lease_duration":120}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}]}}'
@@ -225,7 +226,6 @@ roles:
       VLLM_ENGINE_READY_TIMEOUT_S: '7200'
       PYTHONUNBUFFERED: '1'
       DYN_TCP_CONNECT_TIMEOUT: '120'
-      VLLM_EFA_PREFLIGHT: '1'
       NCCL_NET_PLUGIN: none
       NCCL_P2P_LEVEL: NVL
       NIXL_TELEMETRY_ENABLE: 'y'
@@ -263,6 +263,8 @@ roles:
       max-num-batched-tokens: 8192
       watermark: 0.05
       enable-prefix-caching: true
+      # EFA RMA sets CUDA sync-memops on each MR, which VMM memory rejects, so libfabric returns EINVAL.
+      no-enable-extensible-kv-cache: true
       compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
       max-cudagraph-capture-size: 384
       # Decode takes prompt KV over NIXL only; the Mooncake pool serves prefill.
