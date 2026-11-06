@@ -90,10 +90,86 @@ def test_attestation_fails_when_the_log_does_not_prove_the_declared_work(tmp_pat
     elif fault == "unserved_request":
         records = [*RECORDS, {**RECORDS[1], "slot_id": "measurement-r001-c002", "job_id": "x"}]
     else:
-        runtime = "vllm-omni"
+        runtime = "tensorrt-llm"
     log = tmp_path / "server.out"
     log.write_bytes(text.encode("utf-8"))
 
     document = attest(runtime, log, PLAN, records, "bf16")
 
     assert (document["valid"], _failed(document)) == (False, failed)
+
+
+# A sanitized real vLLM-Omni v0.30.0 H3 server log from 2x H100: startup and one measured
+# frozen-c124 request (107 frames, 50 steps).
+VLLM_LOG = Path(__file__).parent / "fixtures/vllm-omni-h3-server.log"
+VLLM_PLAN = {"generation": {**PLAN["generation"], "frame_count": 107, "num_inference_steps": 50}}
+VLLM_RECORDS = [
+    {
+        "slot_id": "measurement-r001-c001",
+        "job_id": "video_gen_89c18f73f8304628b4a6482bc741ef7d",
+        "attempted": True,
+        "seed": 11,
+    }
+]
+
+
+def _failed_server(document):
+    return {check["name"] for check in document["server"]["checks"] if check["status"] == "failed"}
+
+
+def test_vllm_omni_log_attests_its_server_but_ties_no_request_parameters_to_the_job():
+    document = attest("vllm-omni", VLLM_LOG, VLLM_PLAN, VLLM_RECORDS, "bf16")
+
+    assert (document["valid"], _failed(document)) == (
+        False,
+        {"request.parameters", "request.denoise_steps"},
+    )
+    assert document["server"]["observed"] == {"enforce_eager": True, "tensor_parallel_size": 2}
+    [request] = document["requests"]
+    checks = {check["name"]: check for check in request["checks"]}
+    assert checks["request.server_record"]["status"] == "passed"
+    assert checks["request.parameters"]["observed"] is None
+    assert checks["request.denoise_steps"]["observed"] == {"completed": None, "totals": []}
+    assert "<model-snapshot>" not in json.dumps(document)
+
+
+@pytest.mark.parametrize(
+    "fault,old,new,failed",
+    [
+        (
+            "fp8_weights",
+            "'tensor_parallel_size': 2}",
+            "'tensor_parallel_size': 2, 'quantization': 'fp8'}",
+            "server.quality_features_off",
+        ),
+        (
+            "configured_attention",
+            "for role='self' via platform default",
+            "for role='self' via attention_config.default",
+            "server.attention_backends",
+        ),
+        (
+            "startup_lora",
+            "static_lora_path=None",
+            "static_lora_path=<adapter>",
+            "server.no_lora",
+        ),
+        (
+            "step_cache",
+            "[RequestBatch] engine init",
+            "Cache-dit enabled successfully on MiniMaxH3ModularPipeline\n[RequestBatch] engine init",
+            "server.no_cache_or_quantization",
+        ),
+    ],
+)
+def test_vllm_omni_server_checks_fail_when_the_log_shows_changed_work(
+    tmp_path, fault, old, new, failed
+):
+    text = VLLM_LOG.read_bytes().decode("utf-8")
+    assert old in text, fault
+    log = tmp_path / "server.out"
+    log.write_bytes(text.replace(old, new, 1).encode("utf-8"))
+
+    document = attest("vllm-omni", log, VLLM_PLAN, VLLM_RECORDS, "bf16")
+
+    assert _failed_server(document) == {failed}

@@ -1,0 +1,234 @@
+INFO 10-17 06:38:17 [patch.py:253] NVFP4 W4A4 weight_scale NaN-clamp: skipped — upstream serves ModelOpt linears through the generic ModelOptLinearMethod and rejects any NaN weight_scale (unloaded-scale sentinel), so a load-time error replaces the `!!!!` decode-time collapse.
+INFO 10-17 06:38:17 [patch.py:565] inductor factorable-divisibility patch: installed.
+INFO 10-17 06:38:17 [patch.py:630] [cumem-cuda] CuMemAllocator._python_free_callback patched: asleep guard extended to all platforms.
+INFO 10-17 06:38:20 [main.py:33] Delegating entrypoint handling to vllm-omni
+INFO 10-17 06:38:20 [serve.py:314] Detected diffusion model: <model-snapshot>
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:38:20 [api_utils.py:347] vLLM server version 0.30.0, serving model <model-snapshot>
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:38:20 [api_utils.py:286] non-default args: {'model_tag': '<model-snapshot>', 'host': '<bind-host>', 'port': 30283, 'model': '<model-snapshot>', 'trust_remote_code': True, 'enforce_eager': True, 'served_model_name': ['MiniMaxAI/MiniMax-H3'], 'tensor_parallel_size': 2}
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:38:20 [omni_base.py:208] [AsyncOmni] Initializing with model <model-snapshot>
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:38:20 [omni_engine_base.py:163] [OmniEngine] Initializing with model <model-snapshot>
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:38:20 [config_factory.py:697] Resolved generic diffusion final_output_type='video' for model_class_name='MiniMaxH3ModularPipeline'.
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:38:20 [omni_engine_base.py:312] [OmniEngine] Launching Orchestrator thread with 1 stages
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:38:20 [stage_utils.py:178] Stage 0 logical-to-physical device mapping: 0->0, 1->1
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:38:24 [multiproc_executor.py:372] Starting server...
+[32mINFO[0m [90m10-17 06:38:34[0m [90m[patch.py:253][0m NVFP4 W4A4 weight_scale NaN-clamp: skipped — upstream serves ModelOpt linears through the generic ModelOptLinearMethod and rejects any NaN weight_scale (unloaded-scale sentinel), so a load-time error replaces the `!!!!` decode-time collapse.
+[32mINFO[0m [90m10-17 06:38:34[0m [90m[patch.py:565][0m inductor factorable-divisibility patch: installed.
+[32mINFO[0m [90m10-17 06:38:34[0m [90m[patch.py:630][0m [cumem-cuda] CuMemAllocator._python_free_callback patched: asleep guard extended to all platforms.
+[32mINFO[0m [90m10-17 06:38:34[0m [90m[patch.py:253][0m NVFP4 W4A4 weight_scale NaN-clamp: skipped — upstream serves ModelOpt linears through the generic ModelOptLinearMethod and rejects any NaN weight_scale (unloaded-scale sentinel), so a load-time error replaces the `!!!!` decode-time collapse.
+[32mINFO[0m [90m10-17 06:38:34[0m [90m[patch.py:565][0m inductor factorable-divisibility patch: installed.
+[32mINFO[0m [90m10-17 06:38:34[0m [90m[patch.py:630][0m [cumem-cuda] CuMemAllocator._python_free_callback patched: asleep guard extended to all platforms.
+[0;36m(DiffusionWorker pid=3012611)[0;0m [32mINFO[0m [90m10-17 06:38:37[0m [90m[diffusion_worker.py:1169][0m Worker 0 created result MessageQueue
+[0;36m(DiffusionWorker pid=3012612)[0;0m [32mINFO[0m [90m10-17 06:38:37[0m [90m[diffusion_worker.py:1169][0m Worker 1 created result MessageQueue
+[0;36m(DiffusionWorker pid=3012611)[0;0m [32mINFO[0m [90m10-17 06:38:38[0m [90m[scheduler.py:288][0m Chunked prefill is enabled with max_num_batched_tokens=2048.
+[0;36m(DiffusionWorker pid=3012611)[0;0m [32mINFO[0m [90m10-17 06:38:38[0m [90m[kernel.py:416][0m Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'], gelu_and_mul_sparse=['triton', 'native'])
+[0;36m(DiffusionWorker pid=3012611)[0;0m [32mINFO[0m [90m10-17 06:38:38[0m [90m[diffusion_worker.py:346][0m Final IR op priority after setting vLLM-Omni overrides: IrOpPriorityConfig(rms_norm=['vllm_c', 'native'], fused_add_rms_norm=['vllm_c', 'native'], gelu_and_mul_sparse=['triton', 'native'])
+[0;36m(DiffusionWorker pid=3012612)[0;0m [32mINFO[0m [90m10-17 06:38:38[0m [90m[scheduler.py:288][0m Chunked prefill is enabled with max_num_batched_tokens=2048.
+[0;36m(DiffusionWorker pid=3012612)[0;0m [32mINFO[0m [90m10-17 06:38:38[0m [90m[kernel.py:416][0m Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'], gelu_and_mul_sparse=['triton', 'native'])
+[0;36m(DiffusionWorker pid=3012612)[0;0m [32mINFO[0m [90m10-17 06:38:38[0m [90m[diffusion_worker.py:346][0m Final IR op priority after setting vLLM-Omni overrides: IrOpPriorityConfig(rms_norm=['vllm_c', 'native'], fused_add_rms_norm=['vllm_c', 'native'], gelu_and_mul_sparse=['triton', 'native'])
+[0;36m(DiffusionWorker pid=3012611)[0;0m [32mINFO[0m [90m10-17 06:38:38[0m [90m[diffusion_worker.py:358][0m Worker 0: Initialized device and distributed environment.
+[0;36m(DiffusionWorker pid=3012612)[0;0m [32mINFO[0m [90m10-17 06:38:38[0m [90m[diffusion_worker.py:358][0m Worker 1: Initialized device and distributed environment.
+[0;36m(DiffusionWorker pid=3012612)[0;0m [32mINFO[0m [90m10-17 06:38:38[0m [90m[parallel_state.py:610][0m Building SP subgroups from explicit sp_group_ranks (sp_size=1, ulysses=1, ring=1, use_ulysses_low=True).
+[0;36m(DiffusionWorker pid=3012611)[0;0m [32mINFO[0m [90m10-17 06:38:38[0m [90m[parallel_state.py:610][0m Building SP subgroups from explicit sp_group_ranks (sp_size=1, ulysses=1, ring=1, use_ulysses_low=True).
+[0;36m(DiffusionWorker pid=3012612)[0;0m [32mINFO[0m [90m10-17 06:38:38[0m [90m[parallel_state.py:652][0m SP group details for rank 1: sp_group=[1], ulysses_group=[1], ring_group=[1]
+[0;36m(DiffusionWorker pid=3012611)[0;0m [32mINFO[0m [90m10-17 06:38:38[0m [90m[parallel_state.py:652][0m SP group details for rank 0: sp_group=[0], ulysses_group=[0], ring_group=[0]
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m [32mINFO[0m [90m10-17 06:38:38[0m [90m[selector.py:84][0m Resolved diffusion attention backend 'FLASH_ATTN' for role='minimax_h3.token_refiner' (role_category='self') via platform default
+[0;36m(DiffusionWorker_TP1 pid=3012612)[0;0m [32mINFO[0m [90m10-17 06:38:38[0m [90m[selector.py:84][0m Resolved diffusion attention backend 'FLASH_ATTN' for role='minimax_h3.token_refiner' (role_category='self') via platform default
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m [32mINFO[0m [90m10-17 06:38:38[0m [90m[selector.py:93][0m Resolved diffusion attention backend 'FLASH_ATTN' for role='self' via platform default
+[0;36m(DiffusionWorker_TP1 pid=3012612)[0;0m [32mINFO[0m [90m10-17 06:38:38[0m [90m[selector.py:93][0m Resolved diffusion attention backend 'FLASH_ATTN' for role='self' via platform default
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m [32mINFO[0m [90m10-17 06:38:39[0m [90m[encoder.py:1133][0m MiniMax H3 Qwen3-VL encoder: 50 retained decoder layers, text_encoder_tp_size=2, vision replicated
+[0;36m(DiffusionWorker_TP1 pid=3012612)[0;0m [32mINFO[0m [90m10-17 06:38:39[0m [90m[encoder.py:1133][0m MiniMax H3 Qwen3-VL encoder: 50 retained decoder layers, text_encoder_tp_size=2, vision replicated
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m The config attributes {'vae_ratio': 16, 'vae_ratio_t': 4} were passed to AutoencoderKLLegacy, but are not expected and will be ignored. Please verify your config.json configuration file.
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m [32mINFO[0m [90m10-17 06:39:41[0m [90m[vae_temporal.py:261][0m MiniMax-H3 VAE encode_temporal tail-padding patch installed
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m [32mINFO[0m [90m10-17 06:39:41[0m [90m[vae_temporal.py:266][0m MiniMax-H3 VAE streaming uint8 decode patch installed
+[0;36m(DiffusionWorker_TP1 pid=3012612)[0;0m [32mINFO[0m [90m10-17 06:39:42[0m [90m[vae_temporal.py:261][0m MiniMax-H3 VAE encode_temporal tail-padding patch installed
+[0;36m(DiffusionWorker_TP1 pid=3012612)[0;0m [32mINFO[0m [90m10-17 06:39:42[0m [90m[vae_temporal.py:266][0m MiniMax-H3 VAE streaming uint8 decode patch installed
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m Multi-thread loading shards:   0% Completed | 0/13 [00:00<?, ?it/s]
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m Multi-thread loading shards:   8% Completed | 1/13 [00:12<02:35, 12.95s/it]
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m Multi-thread loading shards:  15% Completed | 2/13 [00:19<01:42,  9.33s/it]
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m Multi-thread loading shards:  23% Completed | 3/13 [00:25<01:18,  7.85s/it]
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m Multi-thread loading shards:  31% Completed | 4/13 [00:36<01:22,  9.13s/it]
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m Multi-thread loading shards:  38% Completed | 5/13 [00:50<01:25, 10.63s/it]
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m Multi-thread loading shards:  46% Completed | 6/13 [00:59<01:10, 10.05s/it]
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m Multi-thread loading shards:  54% Completed | 7/13 [01:05<00:52,  8.77s/it]
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m Multi-thread loading shards:  62% Completed | 8/13 [01:15<00:46,  9.23s/it]
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m Multi-thread loading shards:  69% Completed | 9/13 [01:27<00:40, 10.16s/it]
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m Multi-thread loading shards:  77% Completed | 10/13 [01:34<00:27,  9.07s/it]
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m Multi-thread loading shards:  85% Completed | 11/13 [01:40<00:16,  8.26s/it]
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m Multi-thread loading shards:  92% Completed | 12/13 [01:49<00:08,  8.26s/it]
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m Multi-thread loading shards: 100% Completed | 13/13 [01:54<00:00,  7.47s/it]
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m Multi-thread loading shards: 100% Completed | 13/13 [01:54<00:00,  8.82s/it]
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m 
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m Multi-thread loading shards:   0% Completed | 0/14 [00:00<?, ?it/s]
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m Multi-thread loading shards:   7% Completed | 1/14 [00:08<01:55,  8.89s/it]
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m Multi-thread loading shards:  14% Completed | 2/14 [00:19<01:56,  9.68s/it]
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m Multi-thread loading shards:  21% Completed | 3/14 [00:27<01:37,  8.89s/it]
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m Multi-thread loading shards:  29% Completed | 4/14 [00:35<01:27,  8.74s/it]
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m Multi-thread loading shards:  36% Completed | 5/14 [00:44<01:20,  8.89s/it]
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m Multi-thread loading shards:  43% Completed | 6/14 [00:54<01:13,  9.24s/it]
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m Multi-thread loading shards:  50% Completed | 7/14 [01:03<01:03,  9.11s/it]
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m Multi-thread loading shards:  57% Completed | 8/14 [01:10<00:49,  8.29s/it]
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m Multi-thread loading shards:  64% Completed | 9/14 [01:16<00:37,  7.57s/it]
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m Multi-thread loading shards:  71% Completed | 10/14 [01:21<00:27,  6.95s/it]
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m Multi-thread loading shards:  79% Completed | 11/14 [01:24<00:17,  5.72s/it]
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m Multi-thread loading shards: 100% Completed | 14/14 [01:25<00:00,  2.70s/it]
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m Multi-thread loading shards: 100% Completed | 14/14 [01:25<00:00,  6.12s/it]
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m 
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m [32mINFO[0m [90m10-17 06:43:18[0m [90m[diffusers_loader.py:1098][0m Loading weights took 200.41 seconds
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m [32mINFO[0m [90m10-17 06:43:19[0m [90m[diffusion_model_runner.py:352][0m Model loading took 61.3163 GiB and 281.095664 seconds
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m [32mINFO[0m [90m10-17 06:43:19[0m [90m[diffusion_model_runner.py:358][0m Model runner: Model loaded successfully.
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m [32mINFO[0m [90m10-17 06:43:19[0m [90m[diffusion_model_runner.py:449][0m Model runner: Initialization complete.
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m [32mINFO[0m [90m10-17 06:43:19[0m [90m[diffusion_worker.py:439][0m Worker 0: Process-scoped GPU memory after model loading: 62.53 GiB.
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m [32mINFO[0m [90m10-17 06:43:19[0m [90m[manager.py:112][0m Initializing DiffusionLoRAManager: device=cuda:0, dtype=torch.bfloat16, max_cached_adapters=1, static_lora_path=None
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m [32mINFO[0m [90m10-17 06:43:19[0m [90m[diffusion_worker.py:316][0m Worker 0: Initialization complete.
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m [32mINFO[0m [90m10-17 06:43:19[0m [90m[diffusion_worker.py:1642][0m Worker 0: Scheduler loop started.
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m [32mINFO[0m [90m10-17 06:43:19[0m [90m[diffusion_worker.py:1486][0m Worker 0 ready to receive requests via shared memory
+[0;36m(DiffusionWorker_TP1 pid=3012612)[0;0m [32mINFO[0m [90m10-17 06:43:20[0m [90m[diffusion_model_runner.py:352][0m Model loading took 61.3163 GiB and 281.866549 seconds
+[0;36m(DiffusionWorker_TP1 pid=3012612)[0;0m [32mINFO[0m [90m10-17 06:43:20[0m [90m[diffusion_model_runner.py:358][0m Model runner: Model loaded successfully.
+[0;36m(DiffusionWorker_TP1 pid=3012612)[0;0m [32mINFO[0m [90m10-17 06:43:20[0m [90m[diffusion_model_runner.py:449][0m Model runner: Initialization complete.
+[0;36m(DiffusionWorker_TP1 pid=3012612)[0;0m [32mINFO[0m [90m10-17 06:43:20[0m [90m[diffusion_worker.py:439][0m Worker 1: Process-scoped GPU memory after model loading: 62.53 GiB.
+[0;36m(DiffusionWorker_TP1 pid=3012612)[0;0m [32mINFO[0m [90m10-17 06:43:20[0m [90m[manager.py:112][0m Initializing DiffusionLoRAManager: device=cuda:1, dtype=torch.bfloat16, max_cached_adapters=1, static_lora_path=None
+[0;36m(DiffusionWorker_TP1 pid=3012612)[0;0m [32mINFO[0m [90m10-17 06:43:20[0m [90m[diffusion_worker.py:316][0m Worker 1: Initialization complete.
+[0;36m(DiffusionWorker_TP1 pid=3012612)[0;0m [32mINFO[0m [90m10-17 06:43:20[0m [90m[diffusion_worker.py:1642][0m Worker 1: Scheduler loop started.
+[0;36m(DiffusionWorker_TP1 pid=3012612)[0;0m [32mINFO[0m [90m10-17 06:43:20[0m [90m[diffusion_worker.py:1486][0m Worker 1 ready to receive requests via shared memory
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:43:20 [multiproc_executor.py:925] Async result pump started for 2 worker queue(s)
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:43:20 [diffusion_engine.py:430] [RequestBatch] engine init max_num_seqs=1 max_wait_ms=0.0
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:43:20 [diffusion_engine.py:1419] Skipping dummy warmup run (num_frames=0)
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:43:20 [inline_stage_diffusion_client.py:82] [InlineStageDiffusionClient] stage-0 [rep-0] initialized inline (max_num_seqs=1)
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:43:20 [stage_runtime.py:1210] [StageRuntime] Stage 0 replica 0 initialized (diffusion)
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:43:20 [orchestrator.py:432] [Orchestrator] Starting event loop
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:43:20 [omni_engine_base.py:344] [OmniEngine] Orchestrator ready with 1 stages
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:43:20 [omni_base.py:227] [AsyncOmni] AsyncOmniEngine initialized in 300.10 seconds
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:43:20 [omni_base.py:246] [AsyncOmni] Initialized with 1 stages for model <model-snapshot>
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:43:20 [factories.py:76] Scale-out endpoints are disabled. Set --enable-scale-out to enable them.
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:43:20 [api_server.py:776] Detected pure diffusion mode (single diffusion stage)
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:43:20 [serving_video.py:170] Video response frame conversion pool configured: workers=8
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:43:20 [speaker_cache.py:239] Speaker cache ready (max_bytes=536870912)
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:43:20 [serving_speech.py:270] Speaker storage: dir=<speaker-dir>, max_speakers=1000, restored=0
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:43:20 [serving.py:91] Robot OpenPI serving disabled for model MiniMaxAI/MiniMax-H3
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:43:20 [api_server.py:864] Pure diffusion API server initialized for model: MiniMaxAI/MiniMax-H3
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:43:20 [api_server.py:373] Starting vLLM API server (pure diffusion mode) on http://<bind-host>:30283
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:43:20 [launcher.py:61] Available routes are:
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:43:20 [launcher.py:81] Route: /v1/audio/speech/stream, Endpoint: streaming_speech
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:43:20 [launcher.py:81] Route: /v1/video/chat/stream, Endpoint: streaming_video_chat
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:43:20 [launcher.py:81] Route: /v1/realtime/video, Endpoint: streaming_video_output
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:43:20 [launcher.py:81] Route: /v1/realtime, Endpoint: realtime_websocket
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:43:20 [launcher.py:81] Route: /v1/duplex, Endpoint: duplex_websocket
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:43:20 [launcher.py:81] Route: /v1/realtime/robot/openpi, Endpoint: realtime_robot_openpi
+[0;36m(APIServer pid=3012282)[0;0m INFO:     Started server process [3012282]
+[0;36m(APIServer pid=3012282)[0;0m INFO:     Waiting for application startup.
+[0;36m(APIServer pid=3012282)[0;0m INFO:     Application startup complete.
+[0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /health HTTP/1.1" 200 OK
+[0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /health HTTP/1.1" 200 OK
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:45:12 [helpers.py:986] Video generation handler: OmniOpenAIServingVideo
+[0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "POST /v1/videos HTTP/1.1" 200 OK
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:45:12 [serving_video.py:430] Boundary ratio parse: request=None gen_params=None
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:45:12 [serving_video.py:472] Applied extra_params: {'task': 't2va', 'target': {'duration_seconds': 4, 'aspect_ratio': '16:9', 'short_edge': 768}, 'audio_flow_shift': 3.0}
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:45:12 [serving_video.py:476] Video sampling params: steps=50 guidance=None guidance_2=None seed=11
+NCCL version 2.30.7+cuda13.3
+[0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+[0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m   0%|          | 0/50 [00:00<?, ?it/s]torch/distributed/c10d_logger.py:83: FutureWarning: `torch.distributed.all_gather_into_tensor` is deprecated. Please use `torch.distributed.all_gather_single` instead.
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m   return func(*args, **kwargs)
+[0;36m(DiffusionWorker_TP1 pid=3012612)[0;0m torch/distributed/c10d_logger.py:83: FutureWarning: `torch.distributed.all_gather_into_tensor` is deprecated. Please use `torch.distributed.all_gather_single` instead.
+[0;36m(DiffusionWorker_TP1 pid=3012612)[0;0m   return func(*args, **kwargs)
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m   2%|▏         | 1/50 [00:03<02:41,  3.29s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+  4%|▍         | 2/50 [00:05<02:10,  2.72s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+  6%|▌         | 3/50 [00:07<01:59,  2.53s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+  8%|▊         | 4/50 [00:10<01:52,  2.45s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 10%|█         | 5/50 [00:12<01:47,  2.40s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 12%|█▏        | 6/50 [00:14<01:44,  2.37s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 14%|█▍        | 7/50 [00:17<01:41,  2.35s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 16%|█▌        | 8/50 [00:19<01:38,  2.34s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 18%|█▊        | 9/50 [00:21<01:35,  2.33s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 20%|██        | 10/50 [00:24<01:32,  2.32s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 22%|██▏       | 11/50 [00:26<01:30,  2.32s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 24%|██▍       | 12/50 [00:28<01:28,  2.32s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 26%|██▌       | 13/50 [00:31<01:25,  2.32s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 28%|██▊       | 14/50 [00:33<01:23,  2.32s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 30%|███       | 15/50 [00:35<01:21,  2.32s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 32%|███▏      | 16/50 [00:38<01:18,  2.32s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 34%|███▍      | 17/50 [00:40<01:16,  2.32s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 36%|███▌      | 18/50 [00:42<01:14,  2.33s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 38%|███▊      | 19/50 [00:45<01:12,  2.33s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 40%|████      | 20/50 [00:47<01:09,  2.33s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 42%|████▏     | 21/50 [00:49<01:07,  2.33s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 44%|████▍     | 22/50 [00:52<01:05,  2.33s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 46%|████▌     | 23/50 [00:54<01:03,  2.33s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 48%|████▊     | 24/50 [00:56<01:00,  2.33s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 50%|█████     | 25/50 [00:59<00:58,  2.34s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 52%|█████▏    | 26/50 [01:01<00:56,  2.34s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 54%|█████▍    | 27/50 [01:03<00:53,  2.34s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 56%|█████▌    | 28/50 [01:06<00:51,  2.34s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 58%|█████▊    | 29/50 [01:08<00:49,  2.34s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 60%|██████    | 30/50 [01:10<00:46,  2.34s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 62%|██████▏   | 31/50 [01:13<00:44,  2.34s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 64%|██████▍   | 32/50 [01:15<00:42,  2.34s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 66%|██████▌   | 33/50 [01:17<00:39,  2.34s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 68%|██████▊   | 34/50 [01:20<00:37,  2.34s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 70%|███████   | 35/50 [01:22<00:35,  2.35s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 72%|███████▏  | 36/50 [01:24<00:32,  2.35s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 74%|███████▍  | 37/50 [01:27<00:30,  2.35s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 76%|███████▌  | 38/50 [01:29<00:28,  2.35s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 78%|███████▊  | 39/50 [01:31<00:25,  2.35s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 80%|████████  | 40/50 [01:34<00:23,  2.35s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 82%|████████▏ | 41/50 [01:36<00:21,  2.35s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 84%|████████▍ | 42/50 [01:38<00:18,  2.35s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 86%|████████▌ | 43/50 [01:41<00:16,  2.35s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 88%|████████▊ | 44/50 [01:43<00:14,  2.35s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 90%|█████████ | 45/50 [01:45<00:11,  2.35s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 92%|█████████▏| 46/50 [01:48<00:09,  2.35s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 94%|█████████▍| 47/50 [01:50<00:07,  2.35s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 96%|█████████▌| 48/50 [01:53<00:04,  2.36s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+ 98%|█████████▊| 49/50 [01:55<00:02,  2.36s/it][0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d HTTP/1.1" 200 OK
+100%|██████████| 50/50 [01:57<00:00,  2.35s/it]100%|██████████| 50/50 [01:57<00:00,  2.36s/it]
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m torch/distributed/c10d_logger.py:83: UserWarning: barrier(): using the device under current context. You can specify `device_id` in `init_process_group` to mute this warning.
+[0;36m(DiffusionWorker_TP0 pid=3012611)[0;0m   return func(*args, **kwargs)
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:899] 
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:899] [Overall Summary]
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:899] +-----------------------------+-------------+
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:899] | Field                       |       Value |
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:899] +-----------------------------+-------------+
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:899] | e2e_requests                |           1 |
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:899] | e2e_wall_time_ms            | 124,441.704 |
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:899] | e2e_avg_time_per_request_ms | 124,441.704 |
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:899] | e2e_stage_0_wall_time_ms    | 124,441.602 |
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:899] +-----------------------------+-------------+
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:925] 
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:925] [RequestE2EStats [request_id=video_gen_89c18f73f8304628b4a6482bc741ef7d-a5565bf9]]
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:925] +--------------+-------------+
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:925] | Field        |       Value |
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:925] +--------------+-------------+
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:925] | e2e_total_ms | 124,441.602 |
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:925] +--------------+-------------+
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:966] [OmniTiming] req=video_gen_89c18f73f8304628b4a6482bc741ef7d-a5565bf9 total=124.44s engine=124.44s stages=[0:124.44s]
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:1009] 
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:1009] [StageRequestStats [request_id=video_gen_89c18f73f8304628b4a6482bc741ef7d-a5565bf9]]
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:1009] +---------------------------------+-------------+
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:1009] | Field                           |           0 |
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:1009] +---------------------------------+-------------+
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:1009] | audio_duration_s                |       4.450 |
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:1009] | audio_generated_frames          |     142,400 |
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:1009] | audio_sample_rate               |      32,000 |
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:1009] | batch_id                        |           1 |
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:1009] | batch_size                      |           1 |
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:1009] | diffusion_engine_exec_time_s    |     123.572 |
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:1009] | height                          |     768.000 |
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:1009] | image_num                       |       1.000 |
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:1009] | inter_output_latencies_ms       |             |
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:1009] | kv_recv_time_s                  |       0.000 |
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:1009] | num_inference_steps             |      50.000 |
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:1009] | output_ready_wait_time_s        |       0.867 |
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:1009] | output_unit_count               |           1 |
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:1009] | output_unit_type                |       video |
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:1009] | postprocess_time_s              |       0.000 |
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:1009] | resolution                      |     640.000 |
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:1009] | scheduler_queue_wait_s          |       0.000 |
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:1009] | serving_time_to_first_output_ms | 124,441.122 |
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:1009] | stage_gen_time_ms               | 124,440.775 |
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:1009] | vllm_itls_ms                    |             |
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:1009] | width                           |   1,344.000 |
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [stats.py:1009] +---------------------------------+-------------+
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [video_api_utils.py:765] Video response encoding route selected: selected_path=direct_planar frames=107 frame_shape=(768, 1344, 3) dtype=uint8 fps=24.0 audio_present=True effective_audio_sample_rate=32000 effective_frame_conversion_workers=8
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [serving_video.py:627] Video response encoding (MP4 bytes): 348.27 ms
+[0;36m(APIServer pid=3012282)[0;0m INFO 10-17 06:47:16 [helpers.py:432] Video request video_gen_89c18f73f8304628b4a6482bc741ef7d persisted video_gen_89c18f73f8304628b4a6482bc741ef7d output file.
+[0;36m(APIServer pid=3012282)[0;0m INFO:     <client> - "GET /v1/videos/video_gen_89c18f73f8304628b4a6482bc741ef7d/content HTTP/1.1" 200 OK
