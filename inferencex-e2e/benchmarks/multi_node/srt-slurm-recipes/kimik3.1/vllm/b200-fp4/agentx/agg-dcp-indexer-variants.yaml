@@ -1,0 +1,146 @@
+schema: 2
+base:
+  identity:
+    model: {}
+    container: {}
+  dynamo:
+    install: false
+  slurm:
+    time_limit: '8:00:00'
+  health_check:
+    interval_seconds: 10
+    max_attempts: 720
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  engine:
+    type: vllm
+    connector: null
+  roles:
+    agg:
+      nodes: 2
+      workers: 1
+      gpus: 16
+      env:
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+        VLLM_SERVER_DEV_MODE: '1'
+        VLLM_LOG_STATS_INTERVAL: '1'
+        VLLM_RPC_TIMEOUT: '600000'
+        NCCL_CUMEM_ENABLE: '1'
+        HF_HUB_CACHE: /hf_hub_cache
+        HUGGINGFACE_HUB_CACHE: /hf_hub_cache
+        PYTHONHASHSEED: '42'
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '900'
+        VLLM_USE_DIRECT_DCP_A2A: '1'
+        VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
+        VLLM_USE_V2_MODEL_RUNNER: '1'
+        VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1800'
+      args:
+        served-model-name: moonshotai/Kimi-K3.1-Pro
+        tensor-parallel-size: 8
+        pipeline-parallel-size: 2
+        decode-context-parallel-size: 8
+        trust-remote-code: true
+        load-format: fastsafetensors
+        moe-backend: auto
+        gpu-memory-utilization: 0.92
+        max-model-len: 1048576
+        kv-cache-dtype: fp8
+        mamba-ssm-cache-dtype: float32
+        enable-prefix-caching: true
+        enable-auto-tool-choice: true
+        tool-call-parser: kimi_k3
+        reasoning-parser: kimi_k3
+        language-model-only: true
+        max-num-batched-tokens: 10240
+        dcp-comm-backend: a2a
+        attention-config: '{"indexer_kv_dtype": "mxfp4"}'
+        prefix-match-unit: 128
+  srun_options:
+    container-remap-root: ''
+  telemetry:
+    collector_join_timeout_seconds: 12
+  benchmark:
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+override_tp8pp2_c1:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 2
+        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":7,"method":"dspark","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[8]}'
+override_tp8pp2_c4:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 8
+        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":7,"method":"dspark","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[8,16,24,32]}'
+override_tp8pp2_c8:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 16
+        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":7,"method":"dspark","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[8,16,24,32,48,64]}'
+override_tp8pp2_c14:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 28
+        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":7,"method":"dspark","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[8,16,24,32,48,64,80,96,112]}'
+override_tp8pp2_c24:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 48
+        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"method":"dspark","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[5,10,15,20,30,40,50,60,70,80,100,120]}'
+override_tp8pp2_c32:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 64
+        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"method":"dspark","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[5,10,15,20,30,40,50,60,70,80,100,120,140,160]}'
+override_tp8pp2_c48:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 96
+        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"method":"dspark","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[5,10,15,20,30,40,50,60,70,80,100,120,140,160,200,240]}'
+override_tp8pp2_c56:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 112
+        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"method":"dspark","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[5,10,15,20,30,40,50,60,70,80,100,120,140,160,200,240,280]}'
+override_tp8pp2_c72:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 144
+        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"method":"dspark","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[5,10,15,20,30,40,50,60,70,80,100,120,140,160,200,240,280,320,360]}'
+override_tp8pp2_c80:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 160
+        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"method":"dspark","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[5,10,15,20,30,40,50,60,70,80,100,120,140,160,200,240,280,320,360,400]}'
+override_tp8pp2_c96:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 192
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1,2,3,4,6,8,10,12,14,16,20,24,28,32,40,48,56,64,72,80,96]}'
