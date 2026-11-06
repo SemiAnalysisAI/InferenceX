@@ -12352,3 +12352,10 @@
   description:
     - "Sweep H3 C1 latency on 1, 2, 4 and 8 MI355X GPUs with SGLang Ulysses across all GPUs; the MI355X recipe now sets the Ulysses degree from the GPU count, which keeps the 4-GPU point unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4818
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark-dp2
+  scenario-type: [agentic-coding]
+  description:
+    - "Add DSv4.1-Flash FP4 AgentX on MI355X at TP1 x DP2 behind a consistent-hash vLLM router, concurrency 64, 128 and 256, with the cross-DP prefill delayer (interval 11, 5 s max wait, 16K token budget). The image is TBD until a build carries vllm-project/vllm#65655."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4873
