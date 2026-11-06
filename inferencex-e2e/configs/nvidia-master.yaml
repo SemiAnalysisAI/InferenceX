@@ -5729,6 +5729,41 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
           tp: 8
           ep: 8
           dp-attn: true
+
+glm5.3flash-fp8-gb300-sglang-agentic-mtp:
+  image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
+  model: zai-org/GLM-5.3-Flash
+  model-prefix: glm5.3flash
+  runner: cluster:gb300-nv
+  precision: fp8
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: glm5.3flash/sglang/gb300-fp8-mtp
+  scenarios:
+    agentic-coding:
+    # HiCache auto-sizes at fraction 0.90; run 42026173061 measured 708.7-722.9 GB per node (4 ranks) of 964.7 GB.
+    - dram-utilization: 0.7495
+      search-space:
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 16, 24, 32], srt-recipe: "agentic.yaml:override_gpu_kv" }
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [40, 44, 48], srt-recipe: "agentic.yaml:override_hicache" }
+
+glm5.3flash-fp4-gb300-sglang-agentic-mtp:
+  image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
+  model: nvidia/GLM-5.3-Flash-NVFP4
+  model-prefix: glm5.3flash
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: glm5.3flash/sglang/gb300-fp4-mtp
+  scenarios:
+    agentic-coding:
+    # HiCache auto-sizes at fraction 0.90; run 42026173061 measured 708.7-722.9 GB per node (4 ranks) of 964.7 GB.
+    - dram-utilization: 0.7495
+      search-space:
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 16, 24, 32], srt-recipe: "agentic.yaml:override_gpu_kv" }
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [40, 44, 48], srt-recipe: "agentic.yaml:override_hicache" }
+
 # H100 AgentX arm for DeepSeek-V4.1-Flash. H100 is not in the upstream hardware
 # table (h200, gb200, gb300, mi350x are). It needs its own script, not the
 # shared symlink: the sparse attention indexer's
@@ -7341,6 +7376,24 @@ musespark-fp4-h100-sglang-agentic-dflash:
       search-space:
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [1, 2, 4, 8], srt-recipe: agentic.yaml }
 
+glm5.3flash-fp8-h100-sglang-agentic-mtp:
+  image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
+  model: zai-org/GLM-5.3-Flash
+  model-prefix: glm5.3flash
+  runner: cluster:h100-dsxe
+  precision: fp8
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: glm5.3flash/sglang/h100-fp8-mtp
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2], srt-recipe: 'agentic.yaml:override_none' }
+    # HiCache allocates ~32.5 GB/rank, ~260 GB/node: 32 GB split over KV and Mamba host pools plus the DSA indexer pool.
+    - dram-utilization: 0.131
+      search-space:
+      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [4, 6, 8, 10], srt-recipe: 'agentic.yaml:override_hicache' }
+
 glm5.3flash-fp8-b200-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
   model: zai-org/GLM-5.3-Flash
@@ -7472,6 +7525,38 @@ glm5.3-fp4-b300-sglang-agentic-mtp:
     - dram-utilization: 1.0
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [22, 24, 25, 28], srt-recipe: agentic.yaml }
+
+glm5.3flash-fp8-b300-sglang-agentic-mtp:
+  image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
+  model: zai-org/GLM-5.3-Flash
+  model-prefix: glm5.3flash
+  runner: cluster:b300-dsxe
+  precision: fp8
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: glm5.3flash/sglang/b300-fp8-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.935
+      search-space:
+      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 16, 24, 32, 48], srt-recipe: "agentic.yaml:override_none" }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64, 96], srt-recipe: "agentic.yaml:override_dram" }
+
+glm5.3flash-fp4-b300-sglang-agentic-mtp:
+  image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
+  model: nvidia/GLM-5.3-Flash-NVFP4
+  model-prefix: glm5.3flash
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: glm5.3flash/sglang/b300-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.939
+      search-space:
+      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [4, 8, 16, 24, 32, 48], srt-recipe: "agentic.yaml:override_none" }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64, 96], srt-recipe: "agentic.yaml:override_dram" }
 
 minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-agg:
   image: vllm/vllm-openai:minimax-m31-flash-arm64-cu134@sha256:5d76347628973fb80519a919a2f2740b6645b62cba3fe2bd87b25f111bd0e948
