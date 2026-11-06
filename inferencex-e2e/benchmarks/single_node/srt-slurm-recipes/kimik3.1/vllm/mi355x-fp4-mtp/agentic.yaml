@@ -178,6 +178,45 @@ override_dram_c32:
       TOTAL_CPU_DRAM_GB: '1799'
 
 override_dram_c48:
+  # Back the KV cache with one LMCache MP server holding the whole 1799 GB DRAM budget as L1,
+  # in place of the Simple CPU offload. Installs LMCache in the worker container; the service
+  # installs its own.
+  setup_script: lmcache-mp-rocm.sh
+  services:
+    - name: lmcache
+      type: lmcache-server
+      preamble: bash /configs/lmcache-mp-rocm.sh
+      # The install and the 1799 GB L1 preallocation count against the probe.
+      readiness:
+        http:
+          port: 8751
+          path: /healthcheck
+        timeout_seconds: 1800
+      env:
+        LMCACHE_ROCM_ENABLE_BATCH_MEMCPY: '1'
+        LMCACHE_ROCM_FORCE_BATCH_MEMCPY: '1'
+      args:
+        - --l1-size-gb
+        - '1799'
+        - --l1-init-size-gb
+        - '1799'
+        - --l1-read-ttl-seconds
+        - '7200'
+        - --session-ttl-seconds
+        - '7200'
+        # The hybrid KDA model forces a 2048-token vLLM block; dcp8 scales the block span to 16384.
+        - --chunk-size
+        - '16384'
+        - --separate-object-groups
+        # One GPU worker per vLLM rank; more threads give nothing.
+        - --max-cpu-workers
+        - '8'
+        - --max-gpu-workers
+        - '8'
+        - --eviction-policy
+        - LRU
+        - --supported-transfer-mode
+        - lmcache_driven
   roles:
     agg:
       args:
@@ -186,6 +225,12 @@ override_dram_c48:
         gpu-memory-utilization: 0.91
         compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":10240,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,224,256,288,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240]}'
         speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":3,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        # The default 10 s heartbeat marks the server unhealthy during long
+        # stores; a failed load then recomputes instead of failing the request.
+        kv-transfer-config: '{"kv_connector":"LMCacheMPConnector","kv_connector_module_path":"lmcache.integration.vllm.lmcache_mp_connector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"lmcache.mp.host":"tcp://localhost","lmcache.mp.port":8750,"lmcache.mp.mq_timeout":6000.0,"lmcache.mp.heartbeat_interval":30.0,"lmcache.mp.save_decode_cache":true}}'
+      env:
+        LMCACHE_ROCM_ENABLE_BATCH_MEMCPY: '1'
+        LMCACHE_ROCM_FORCE_BATCH_MEMCPY: '1'
   benchmark:
     env:
       CONC: '48'
