@@ -43,11 +43,11 @@ def chassis(chassis_type=HopperHGXSystemChassis, **kwargs):
     [
         (
             HopperHGXSystemChassis,
-            2181.06160200,
+            2147.28953636,
             [
                 ("X86CPU", 2, 330),
                 ("ConnectX7NICCard", 8, 120),
-                ("DDR5DIMM", 32, 121.6),
+                ("DDR5DIMM", 32, 88),
                 ("NVMeDrive", 10, 50),
                 ("PEX89144PCIeSwitch", 4, 180),
                 ("SystemSide400GTransceiver", 8, 64),
@@ -55,10 +55,10 @@ def chassis(chassis_type=HopperHGXSystemChassis, **kwargs):
         ),
         (
             B300HGXSystemChassis,
-            2068.605173560,
+            2034.833394926,
             [
                 ("X86CPU", 2, 330),
-                ("DDR5DIMM", 32, 121.6),
+                ("DDR5DIMM", 32, 88),
                 ("NVMeDrive", 10, 50),
                 ("SystemSide800GTransceiver", 8, 120),
             ],
@@ -123,9 +123,9 @@ def test_extra_components_feed_fans_without_replacing_automatic_inventory():
             ComponentGroup(component=PCIe4x16Retimer(power_w=5), quantity=2),
         )
     ).estimate_it_power(100)
-    assert result.power_w == pytest.approx(2293.51218410)
-    assert result.children[1].power_w == pytest.approx(975.6)
-    assert result.children[-1].power_w == pytest.approx(21.91218410)
+    assert result.power_w == pytest.approx(2259.75571388)
+    assert result.children[1].power_w == pytest.approx(942)
+    assert result.children[-1].power_w == pytest.approx(21.75571388)
     assert [(node.name, node.power_w) for node in result.children[1].children[-2:]] == [
         ("FrontendDPU", 100),
         ("PCIe4x16Retimer", 10),
@@ -195,8 +195,8 @@ def test_b300_scenario_updates_board_nics_without_mutating_the_board():
     idle = system.estimate_it_power(100)
     assert active.children[0].children[2].power_w == 400
     assert idle.children[0].children[2].power_w == 240
-    assert active.power_w == pytest.approx(2230.36603668)
-    assert idle.power_w == pytest.approx(2068.605173560)
+    assert active.power_w == pytest.approx(2196.58172556)
+    assert idle.power_w == pytest.approx(2034.833394926)
     assert system.ubb.estimate_breakdown(100).power_w == 1440
 
 
