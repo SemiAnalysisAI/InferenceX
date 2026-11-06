@@ -1,0 +1,172 @@
+base:
+  schema: 2
+  name: minimaxm31flash-fp4-mi355x-atom-agentic
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: atomesh
+    container_image: rocm/atom-dev@sha256:857297cc5d6024ef9a5e9c5a4efa11b7d8bcde7ad69a7ef55a312f47a53860cb
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: atom
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      # The Quark MXFP4 export served as shipped: routed experts MXFP4,
+      # attention, dense MLP and shared expert MXFP8, the dspark/ draft MXFP8.
+      # No online quantization, no shared-expert fusion and no quick-reduce
+      # quantization, so ATOM's mono decode (which needs per-token FP8 attention
+      # and a fused shared expert) declines and every point runs the production
+      # decode path.
+      args:
+        served-model-name: amd/MiniMax-M3.1-Flash-Quark-MXFP4
+        trust-remote-code: true
+        kv_cache_dtype: fp8
+        index-cache-dtype: fp8
+        block-size: 128
+        gpu-memory-utilization: 0.9
+        max-num-batched-tokens: 32768
+        enable_prefix_caching: true
+        # The checkpoint's bundled DSpark draft (dspark/, MXFP8 linears), seven
+        # tokens. Throughput runs get the golden AL
+        # (minimax-m3.1-flash__dspark__native__probabilistic-block thinking_on,
+        # K7) from infx/srt_slurm/synthetic_acceptance.py; evals keep real
+        # acceptance. ATOM needs the draft as a local directory and does not
+        # fetch dspark/ itself, so this points at the shared HF-cache copy the
+        # SGLang M3.1 MI355X runs load. MiniMaxAI@2f33a8b9 dspark/ and this
+        # checkpoint's dspark/ have identical blob oids.
+        method: dspark
+        draft-model: /mnt/hf_hub_cache/models--MiniMaxAI--MiniMax-M3.1-Flash/snapshots/2f33a8b9ae49ce7b51c994df97166a7fd059bc2e/dspark
+        num-speculative-tokens: 7
+      env:
+        PYTHONNOUSERSITE: '1'
+        AITER_LOG_LEVEL: WARNING
+        # Decode needs the Triton paged attention: with 16 query heads per KV head
+        # at TP4, a verify step of more than one token breaks the ASM kernel's
+        # qlen x gqa <= 16 bound.
+        ATOM_FORCE_ATTN_TRITON: '1'
+  benchmark:
+    env:
+      # Long AgentX stalls exceed AIPerf's 30 s TCP_USER_TIMEOUT default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'atom:'
+
+# One variant per point. Admission is 2x CONC (at least 2); decode graphs cover
+# every batch size up to 8, then steps of 2 / 4 / 8 / 16 up to the admission.
+# C1-C16 run the TP-local prefill delayer: after a prefill, no new prefill is
+# admitted for 20000 scheduler passes while requests decode. C16-C48 add the
+# LMCache CPU tier at 200 GiB per rank (800 GiB, 859 GB per server), since the
+# FP8 KV and index pool alone (about 7.3M tokens) is smaller than the AgentX
+# working set at C48.
+
+override_tp4_c1:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 2
+        cudagraph-capture-sizes: '[1,2]'
+      env:
+        ATOM_PREFILL_DECODE_INTERVAL: '20000'
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp4_c2:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 4
+        cudagraph-capture-sizes: '[1,2,3,4]'
+      env:
+        ATOM_PREFILL_DECODE_INTERVAL: '20000'
+  benchmark:
+    env:
+      CONC: '2'
+
+override_tp4_c4:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 8
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8]'
+      env:
+        ATOM_PREFILL_DECODE_INTERVAL: '20000'
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp4_c8:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 16
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,10,12,14,16]'
+      env:
+        ATOM_PREFILL_DECODE_INTERVAL: '20000'
+  benchmark:
+    env:
+      CONC: '8'
+
+override_tp4_c16_lmcache:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 32
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,10,12,14,16,20,24,28,32]'
+        extra-kv-connectors: &lmcache_offload
+          - kv_connector: lmcache_offload
+            kv_role: offload
+      env:
+        ATOM_PREFILL_DECODE_INTERVAL: '20000'
+        # Each rank stores its own KV shard (target, NSA index cache and the
+        # draft's pool); without a fixed seed the ranks hash a prompt to
+        # different keys and never hit.
+        PYTHONHASHSEED: '0'
+        LMCACHE_LOCAL_CPU: 'True'
+        LMCACHE_NUMA_MODE: auto
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '200'
+        LMCACHE_CHUNK_SIZE: '256'
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '869'
+
+override_tp4_c32_lmcache:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 64
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,10,12,14,16,20,24,28,32,40,48,56,64]'
+        extra-kv-connectors: *lmcache_offload
+      env: &lmcache_env
+        PYTHONHASHSEED: '0'
+        LMCACHE_LOCAL_CPU: 'True'
+        LMCACHE_NUMA_MODE: auto
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '200'
+        LMCACHE_CHUNK_SIZE: '256'
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '869'
+
+override_tp4_c48_lmcache:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 96
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,10,12,14,16,20,24,28,32,40,48,56,64,80,96]'
+        extra-kv-connectors: *lmcache_offload
+      env: *lmcache_env
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '869'

@@ -12461,3 +12461,12 @@
     - "max-num-seqs at concurrency 10/16/24/32 changes from 6/10/16/24 to 7/8/13/20. Concurrency 10 adds capture size 42 (7 x (1 + 5)). Otherwise the draft lengths, capture lists, max-num-batched-tokens and gpu-memory-utilization at these points, and every setting at concurrency 48, are unchanged."
     - "No change to the DSpark draft's precision: Inferact/Kimi-K3.1-Pro-DSpark-preview (revision 6a2ef20a) ships all-BF16 weights with no quantization_config, the speculative config names the draft and sets no quantization, so get_draft_quant_config() returns None and K3DSparkModel loads its layers in BF16 with the target's BF16 embedding and LM head. Its KV cache stays FP8, the same as the target's. DCP1 at concurrency 1 and 7 draft tokens at concurrency 4 do not change these types."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4887
+
+- config-keys:
+    - minimaxm31flash-fp4-mi355x-atom-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add MiniMax-M3.1-Flash AgentX on MI355X with ATOM (rocm/atom-dev:nightly_202611060646, ATOM e1295074f): AMD's Quark MXFP4 export served as shipped, with no online quantization, no shared-expert fusion and no quick-reduce quantization, at TP4 with FP8 KV and index cache, prefix caching and the bundled seven-token DSpark draft at its shipped MXFP8 precision."
+    - "Concurrency 1, 2, 4, 8 and 16 run the prefill delayer (ATOM_PREFILL_DECODE_INTERVAL=20000); 32 and 48 run without it. Concurrency 16, 32 and 48 add the LMCache 0.5.6.dev139+gf22dec28 CPU tier at 200 GiB per rank (dram-utilization 0.58, 869 GB per TP4 server). Admission is twice the concurrency; acceptance comes from the minimax-m3.1-flash golden AL curve (4.04 at seven draft tokens)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4860
