@@ -21,4 +21,19 @@ fi
     "cupy-rocm-7-0==14.1.1" \
     "lmcache==${KV_OFFLOAD_BACKEND_VERSION}" \
     --find-links "https://github.com/LMCache/LMCache/releases/expanded_assets/${release}"
+# dev276 cannot tile Kimi K3.1's KDA state row (411 bytes per token, no page padding) and
+# fails register_kv_caches. Overlay the one file LMCache #6318 (3e47dfbe) changes in the
+# package until a nightly-rocm wheel ships it; dev276 plus that diff equals this file.
+if [[ "$KV_OFFLOAD_BACKEND_VERSION" == "0.5.7.dev276+rocm7.2" ]]; then
+    python3 - <<'PY'
+import hashlib, urllib.request
+import lmcache.integration.vllm.kv_cache_group_edits as m
+url = ("https://raw.githubusercontent.com/LMCache/LMCache/"
+       "3e47dfbe/lmcache/integration/vllm/kv_cache_group_edits.py")
+src = urllib.request.urlopen(url, timeout=60).read()
+assert hashlib.sha256(src).hexdigest() == "2b2c809339bb685ef3f955be3467d33be9e549283f24de49ba0084fd655b7c03", "unexpected LMCache #6318 file"
+open(m.__file__, "wb").write(src)
+print(f"patched {m.__file__} with LMCache #6318")
+PY
+fi
 python3 -c "import cupy; import lmcache.integration.vllm.lmcache_mp_connector; import opentelemetry.exporter.prometheus"
