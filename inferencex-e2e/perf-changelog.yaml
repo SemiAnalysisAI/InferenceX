@@ -12116,6 +12116,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4811
 
 - config-keys:
+    - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dep16-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi-K3.1-Pro GB300 Dynamo+vLLM disaggregated AgentX configs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4839
+
+- config-keys:
     - qwen3.8next-fp4-gb300-tokenspeed-agentic-mtp
   scenario-type:
     - agentic-coding
@@ -12329,6 +12338,20 @@
     - "Update the vLLM image from nightly-dev-arm64-cu130-ac9126e58aa7 to the digest-pinned nightly-00b6c4c5."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4558
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - h3-bf16-h200-sglang-video
+  scenario-type: [video-generation]
+  description:
+    - "Restore the H200 row and sweep H3 C1 latency on 1, 2, 4 and 8 H200 GPUs with SGLang Ulysses across all GPUs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4856
+
+- config-keys:
+    - h3-bf16-mi355x-sglang-video
+  scenario-type: [video-generation]
+  description:
+    - "Sweep H3 C1 latency on 1, 2, 4 and 8 MI355X GPUs with SGLang Ulysses across all GPUs; the MI355X recipe now sets the Ulysses degree from the GPU count, which keeps the 4-GPU point unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4818
 
 - config-keys:
     - qwen3.5-fp8-mi300x-sglang-agentic-mtp
