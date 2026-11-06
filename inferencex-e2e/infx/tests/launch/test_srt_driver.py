@@ -23,6 +23,7 @@ from infx.launch.drivers.srt.checkout import CPU_POWER_EXPORTER_RELEASE
 from infx.launch.drivers.srt.lanes import LaneMount, SrtLane
 from infx.launch.drivers.srt.models import Override
 from infx.launch.policy import LaunchPath, Match
+from infx.srt_slurm.workload import BOUND_RECIPE
 from infx.tests.launch.fake_slurm import (
     ROOT,
     base_env,
@@ -178,7 +179,7 @@ def test_single_node_point_stages_workflow_artifacts(harness):
         "MODEL": "test/model", "CONC": "2", "USE_CHAT_TEMPLATE": "false",
     }
     assert recipe["roles"]["agg"]["env"] == {"NCCL_SOCKET_IFNAME": "eth9"}
-    assert {"--json", "--yes", "--output", WORKDIR} <= set(argv)
+    assert {"--json", "--yes", "--output", "benchmark.stream_output=true", WORKDIR} <= set(argv)
     assert (call["env"]["INFMAX_WORKSPACE"], call["env"]["VIRTUAL_ENV"]) == (str(workspace), None)
     assert call["env"]["RUNNER_NAME"] == f"inferencex-{env['RUNNER_NAME']}"
     assert "/hf" in srtslurm(workspace)["default_mounts"].values()
@@ -208,6 +209,94 @@ def test_single_node_point_stages_workflow_artifacts(harness):
     }
     assert {"point-identity.json", "srt-single-node-logs.tar.gz", "srt-setup.log"} <= set(event["artifacts"])
     assert "recipe.yaml" not in event["artifacts"]
+
+
+VIDEO_ENV = {
+    "FRAMEWORK": "sglang", "MODEL": "MiniMaxAI/MiniMax-H3", "IMAGE": "test:tag", "PRECISION": "bf16",
+    "MODEL_PREFIX": "h3", "SPEC_DECODING": "none", "IS_AGENTIC": "0", "ISL": "0", "OSL": "0",
+    "SCENARIO_TYPE": "video-generation", "IS_MULTINODE": "false", "GPU_COUNT": "2",
+    "CONC_LIST": "1 2", "VIDEO_SPEC": "h3.yaml", "VIDEO_SET": "release-v1", "HF_HUB_CACHE": "/mnt/hf_hub_cache/",
+    "SRT_RECIPE": "benchmarks/single_node/srt-slurm-recipes/h3/sglang/b200-bf16/serving-client.yaml",
+    "FAKE_RESULTS": "video",
+}  # fmt: skip
+
+
+def video_env(harness, cluster_id: str, **overrides: str) -> dict[str, str]:
+    """Environment of a video point: the checked-in H3 fragment and harness beside the workspace."""
+    recipe = ROOT / VIDEO_ENV["SRT_RECIPE"]
+    mirror = harness.workspace / VIDEO_ENV["SRT_RECIPE"]
+    mirror.parent.mkdir(parents=True, exist_ok=True)
+    mirror.write_text(recipe.read_text())
+    package = harness.workspace.parent / "video-generation"
+    package.parent.mkdir(parents=True, exist_ok=True)
+    if not package.exists():
+        package.symlink_to(ROOT.parent / "video-generation", target_is_directory=True)
+    runner = overrides.pop("RUNNER_NAME", None) or runner_for(cluster_id)
+    return {**harness.env, **VIDEO_ENV, "RUNNER_NAME": runner, **overrides}
+
+
+def test_video_point_serves_the_video_service_and_stages_every_concurrency(harness):
+    workspace = harness.workspace
+    allocation = "cpu=16,gres/gpu=8,mem=128G,node=1"
+    env = video_env(
+        harness, "b200-nscale", SALLOC_TIME_LIMIT="75",
+        FAKE_STATE=f"COMPLETED|0:0|gpu03|1791547200|1791548100|1791551700|{allocation}",
+    )
+    assert_ok(launch(env, harness.config, workspace))
+
+    [call] = srtctl_calls(harness.logs)
+    argv = call["argv"]
+    bound = yaml.safe_load(Path(argv[argv.index("--file") + 1]).read_text())
+    assert bound["model"] == {"path": "hf:MiniMaxAI/MiniMax-H3", "container": "test:tag", "precision": "bf16"}
+    assert "roles" not in bound and bound["frontend"] == {"type": "none"}
+    [service] = bound["services"]
+    assert service["readiness"]["http"] == {"port": 30283, "path": "/health"}
+    assert bound["benchmark"]["type"] == "custom" and bound["benchmark"]["concurrencies"] == [1, 2]
+    assert bound["telemetry"]["enabled"] is True
+    assert {"--json", "--yes", "--output", WORKDIR, 'srun_options.gpus-per-node="2"'} <= set(argv)
+    rendered = srtslurm(workspace)
+    ClusterConfig.Schema().load(rendered)
+    mounts = rendered["default_mounts"]
+    assert mounts[str(workspace.parent / "video-generation")] == "/video-package"
+    assert rendered["default_time_limit"] == "75"
+    assert "/mnt/hf_hub_cache/" in mounts.values()
+    assert rendered["containers"][rendered["default_gpu_exporter"]["container_image"]]
+    # Every concurrency's aggregate and validation sidecar, the point summary, and the app bundle.
+    for conc in (1, 2):
+        aggregate = json.loads((workspace / f"point-identity_conc{conc}.json").read_text())
+        assert (aggregate["max_concurrency"], aggregate["num_gpus"], aggregate["valid"]) == (conc, 2, 4)
+        assert aggregate["power_valid"] == 0  # the fake retains no manifest: never measured
+        assert (workspace / f"power_validation_point-identity_conc{conc}.json").is_file()
+    summary = json.loads((workspace / "point-identity.json").read_text())
+    assert summary["scenario_type"] == "video-generation" and summary["status"] == "complete"
+    bundle = workspace / "h3-results"
+    matrix = json.loads((bundle / "serving-smoke.json").read_text())
+    assert [cell["concurrency"] for cell in matrix["cells"]] == [1, 2]
+    assert all(cell["status"] == "complete" and not cell["verified"] for cell in matrix["cells"])
+    assert (bundle / "SHA256SUMS").is_file() and (bundle / "gpu/c1/power.json").is_file()
+    ci = json.loads((bundle / "ci.json").read_text())
+    assert ci["slurm_job"]["AllocTRES"] == allocation
+    assert ci["power"]["producer_git_commit"] == (workspace / "power-producer-sha.txt").read_text().strip()
+    assert ci["power"]["exporter_image_sha256"] == (workspace / "exporter-image.sha256").read_text().strip()
+    assert (workspace / "LOGS/power/samples.csv").read_text() == "retained native samples\n"
+    assert json.loads((workspace / "LOGS/power/native-job-status.json").read_text()) == {
+        "job_id": "42", "state": "succeeded", "raw": "COMPLETED|0:0", "alloc_tres": allocation,
+    }
+    assert (workspace / "srt-video-logs.tar.gz").stat().st_size > 0
+    assert lines(harness.logs, "scancel") == []
+
+
+def test_video_point_requiring_power_fails_without_a_native_package(harness):
+    env = video_env(harness, "h100-cw", REQUIRE_POWER="1")
+    result = launch(env, harness.config, harness.workspace)
+    assert result.returncode == 1
+    ci = json.loads((harness.workspace / "h3-results/ci.json").read_text())
+    assert ci["slurm_job"] == {"job_id": "42", "state": "succeeded", "raw": "COMPLETED|0:0"}
+    aggregate = json.loads((harness.workspace / "point-identity_conc1.json").read_text())
+    assert aggregate["power_valid"] == 0
+    assert "manifest_missing" in json.loads(
+        (harness.workspace / "power_validation_point-identity_conc1.json").read_text()
+    )["reasons"]
 
 
 @pytest.mark.parametrize("require_power", ["0", "1"])
@@ -509,8 +598,9 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     assert bound["benchmark"]["env"]["REQUIRE_POWER"] == require_power
     assert bound["telemetry"]["collector_join_timeout_seconds"] == 12
     assert (bound["telemetry"]["enabled"], bound["telemetry"]["dcgm_exporter"]["port"]) == (True, 9401)
-    assert "cpu_power_exporter" not in bound["telemetry"]
-    assert all("CPU_POWER_EXPORTER_RELEASE" not in call for call in lines(harness.logs, "make"))
+    nvl72 = cluster == "gb200-nv"
+    assert ("cpu_power_exporter" in bound["telemetry"]) is nvl72
+    assert any("CPU_POWER_EXPORTER_RELEASE" in call for call in lines(harness.logs, "make")) is nvl72
 
     runs = lines(harness.logs, "adapter")
     assert [run.split("--result-dir ")[1].split()[0].rsplit("/", 1)[1] for run in runs] == ["conc_4"]
@@ -520,6 +610,50 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     if lane == "agentx":
         status = (workspace / "LOGS/power/native-job-status.txt").read_text()
         assert status == "42|COMPLETED|0:0\n"
+
+
+@pytest.mark.parametrize(("point", "required"), [
+    ({"MODEL_PREFIX": "qwen3.5", "FRAMEWORK": "dynamo-trt", "MODEL": "nvidia/Qwen3.5-397B-A17B-NVFP4"}, False),
+    ({"MODEL_PREFIX": "qwen3.5", "FRAMEWORK": "dynamo-trt", "MODEL": "nvidia/Qwen3.5-397B-A17B-NVFP4", "REQUIRE_POWER": "1"}, True),
+])  # fmt: skip
+def test_nvl72_agentx_point_measures_gpu_and_cpu_power_by_default(harness, point, required):
+    adapter = harness.tmp / "results-python"
+    adapter.write_text("#!/bin/bash\nprintf '%s\\n' \"$*\" >> \"$FAKE_LOG_DIR/adapter.log\"\n")
+    adapter.chmod(0o755)
+    env = lane_env(
+        harness, "gb300-nv", LANE_FRAGMENT + POWER_TELEMETRY, PRECISION="fp4", IS_AGENTIC="1",
+        ISL="0", OSL="0", CONC="4", CONC_LIST="4", FAKE_RESULTS="agentic",
+        INFERENCEX_RESULTS_PYTHON=str(adapter), **point,
+    )  # fmt: skip
+    assert_ok(launch(env, harness.config, harness.workspace))
+
+    [checkout] = harness.workspace.glob("srt-slurm-9001-*")
+    bound = yaml.safe_load((checkout / "recipe.yaml").read_text())
+    assert bound["telemetry"]["dcgm_exporter"]["port"] == 19401
+    assert bound["telemetry"]["cpu_power_exporter"] == {"source": "acpi"}
+    assert bound["benchmark"]["env"]["ENABLE_AGENTX_POWER"] == "1"
+    assert bound["benchmark"]["env"]["REQUIRE_POWER"] == ("1" if required else "0")
+    [setup] = [call for call in lines(harness.logs, "make") if call.startswith("setup ")]
+    assert f"CPU_POWER_EXPORTER_RELEASE={CPU_POWER_EXPORTER_RELEASE}" in setup.split()
+    runs = lines(harness.logs, "adapter")
+    assert runs and all(run.endswith("--require-power") is required for run in runs)
+    assert all("--expected-cpu-power" not in run for run in runs)
+
+
+def test_nvl72_point_with_dedicated_discovery_skips_default_power(harness):
+    dedicated = "services:\n" + "".join(
+        f"  - type: {kind}\n    placement:\n      node: dedicated\n" for kind in ("etcd", "nats")
+    )
+    env = lane_env(
+        harness, "gb300-nv", LANE_FRAGMENT + dedicated, MODEL_PREFIX="qwen3.5", PRECISION="fp8",
+        FRAMEWORK="dynamo-sglang", MODEL="Qwen/Qwen3.5-397B-A17B-FP8",
+    )  # fmt: skip
+    assert_ok(launch(env, harness.config, harness.workspace))
+
+    [checkout] = harness.workspace.glob("srt-slurm-9001-*")
+    assert "telemetry" not in yaml.safe_load((checkout / "recipe.yaml").read_text())
+    [setup] = [call for call in lines(harness.logs, "make") if call.startswith("setup ")]
+    assert "CPU_POWER_EXPORTER_RELEASE" not in setup
 
 
 @pytest.mark.parametrize("shape", ["single", "multi"])
@@ -554,15 +688,21 @@ def test_a_manifest_that_is_not_a_json_object_fails_as_a_launch_error(harness, s
     assert error["message"].startswith("srtctl did not report one submitted job")
 
 
-@pytest.mark.parametrize("shape", ["single", "multi"])
+@pytest.mark.parametrize("shape", ["single", "multi", "video"])
 def test_sigterm_while_streaming_cancels_the_job_and_exits_143(harness, shape):
     active, tailing = harness.tmp / "active", harness.tmp / "tailing"
-    extra = {"FAKE_ACTIVE": str(active), "FAKE_TAIL_MARKER": str(tailing)}
+    allocation = "cpu=16,gres/gpu=8,mem=128G,node=1"
+    extra = {
+        "FAKE_ACTIVE": str(active), "FAKE_TAIL_MARKER": str(tailing),
+        "FAKE_STATE": f"COMPLETED|0:0|gpu03|1791547200|1791548100|1791551700|{allocation}",
+    }
     if shape == "single":
         env = single_node_env(harness, "h100-cw", **extra)
-    else:
+    elif shape == "multi":
         env = lane_env(harness, "b300-dsxe", MODEL_PREFIX="dsr1", PRECISION="fp4", FRAMEWORK="dynamo-trt",
                        MODEL="deepseek-r1-fp4", **extra)  # fmt: skip
+    else:
+        env = video_env(harness, "b200-nscale", **extra)
     command = [sys.executable, "-m", "infx.launch", "--runner-config", str(harness.config), "run"]
     output = harness.tmp / "launcher.log"
     with output.open("w") as stream:
@@ -583,8 +723,18 @@ def test_sigterm_while_streaming_cancels_the_job_and_exits_143(harness, shape):
         process.wait(timeout=60)
     assert process.returncode == 143, output.read_text()[-4000:]
     assert lines(harness.logs, "scancel") == ["42"]
-    staged = "srt-single-node-logs.tar.gz" if shape == "single" else "multinode_server_logs.tar.gz"
+    staged = {
+        "single": "srt-single-node-logs.tar.gz",
+        "multi": "multinode_server_logs.tar.gz",
+        "video": "srt-video-logs.tar.gz",
+    }[shape]
     assert (harness.workspace / staged).stat().st_size > 0
+    if shape == "video":
+        bundle = harness.workspace / "h3-results"
+        ci = json.loads((bundle / "ci.json").read_text())
+        assert ci["slurm_job"]["AllocTRES"] == allocation
+        recorded = json.loads((harness.workspace / "LOGS/power/native-job-status.json").read_text())
+        assert recorded["alloc_tres"] == allocation
     error = job_event(harness.workspace)["error"]
     assert {key: error[key] for key in ("stage", "type", "exit_code", "retriable")} == {
         "stage": "run", "type": "Interrupted", "exit_code": 143, "retriable": True,
@@ -657,7 +807,13 @@ def test_tilert_uses_upstream_submission_and_prepared_weights(harness):
     assert "--no-preflight" not in call["argv"]
     config = srtslurm(Path(call["cwd"]))
     assert config["default_health_check"]["max_attempts"] > 0
-    assert {"test:tag", "prefill:tag"} <= set(config["containers"])
+    assert {"test:tag", "prefill:tag", config["default_gpu_exporter"]["container_image"]} <= set(
+        config["containers"]
+    )
+    telemetry = yaml.safe_load((Path(call["cwd"]) / BOUND_RECIPE).read_text())["telemetry"]
+    assert (telemetry["enabled"], telemetry["required"], "dcgm_exporter" in telemetry) == (
+        True, False, False,
+    )
     assert config["default_mounts"][str(harness.workspace)] == "/infmax-workspace"
     assert "/models" in config["default_mounts"].values()
     [point] = harness.workspace.glob("point-identity_sweep_*.json")
@@ -984,6 +1140,18 @@ def test_multinode_eval_overrides_image_offline_mode_and_host_model_path(harness
         "http://worker:8000",
         str(harness.workspace),
     ]
+
+
+def test_video_startup_failure_keeps_a_failed_bundle_without_client_results(harness):
+    env = video_env(harness, "h100-cw", FAKE_RESULTS="none", FAKE_STATE="FAILED|1:0")
+    result = launch(env, harness.config, harness.workspace)
+    assert result.returncode != 0
+    bundle = harness.workspace / "h3-results"
+    matrix = json.loads((bundle / "serving-smoke.json").read_text())
+    assert matrix["status"] == "failed" and matrix["power_verified"] is False
+    assert [cell["concurrency"] for cell in matrix["cells"]] == [1, 2]
+    assert all(cell["status"] == "failed" for cell in matrix["cells"])
+    assert (bundle / "SHA256SUMS").is_file()
 
 
 def test_launch_cpu_expectation_reaches_fixed_sequence_processor(harness, monkeypatch):
