@@ -85,12 +85,17 @@ def build_pytest_command(
 
 
 def _mapping(value: Any, name: str) -> Mapping[str, Any]:
+    """Return value if it is a mapping, else raise ValueError naming it as name."""
     if not isinstance(value, Mapping):
         raise ValueError(f"{name} must be an object")
     return value
 
 
 def _expected_total(task_name: str) -> int:
+    """Return the expected record count for task_name.
+
+    Raises ValueError for an unsupported task.
+    """
     try:
         return EXPECTED_TOTALS[task_name]
     except KeyError as exc:
@@ -122,6 +127,11 @@ def _project_report(
     *,
     task_name: str = TASK_NAME,
 ) -> tuple[dict[str, Any], bool]:
+    """Validate a native verifier report and convert it to a compatibility result.
+
+    Returns (result, True if every record passed). Raises ValueError if the report is malformed or
+    incomplete.
+    """
     expected_total = _expected_total(task_name)
     root = _mapping(report, "report")
     summary = _mapping(root.get("summary"), "report.summary")
@@ -244,6 +254,10 @@ def _compatibility_result(
     n_samples: int,
     integration_error: BaseException | None = None,
 ) -> dict[str, Any]:
+    """Build the lm-eval style result for model with score over n_samples.
+
+    Records integration_error in the result when given.
+    """
     expected_total = _expected_total(task_name)
     result: dict[str, Any] = {
         "result_format": RESULT_FORMAT,
@@ -310,6 +324,7 @@ def _write_native_failure(
 
 
 def _write_compatibility(path: Path, result: Mapping[str, Any]) -> None:
+    """Write result to path as indented JSON."""
     path.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
 
 
@@ -420,6 +435,7 @@ def run_evaluation(
 
 
 def _positive_int(value: str) -> int:
+    """Parse value as an int, raising ArgumentTypeError unless it is at least 1."""
     parsed = int(value)
     if parsed < 1:
         raise argparse.ArgumentTypeError("must be a positive integer")
@@ -427,6 +443,10 @@ def _positive_int(value: str) -> int:
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Parse CLI arguments from argv.
+
+    Requires --verifier-dir and --base-url unless --integration-error is set.
+    """
     parser = argparse.ArgumentParser(
         description="Run the pinned stock Kimi Vendor Verifier tool-schema evaluation."
     )
@@ -463,6 +483,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """Run the Kimi verifier eval, or record the given integration error.
+
+    Returns 0 on pass or after recording an error, 1 on failure.
+    """
     args = parse_args(argv)
     if args.integration_error is not None:
         args.output_dir.mkdir(parents=True, exist_ok=True)

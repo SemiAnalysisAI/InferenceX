@@ -5,6 +5,7 @@ import json
 import pytest
 
 from infx.clusters import load_inventory
+from infx.clusters.slurm import SrtSlurmSettings
 from infx.launch import drivers, policy
 from infx.launch.__main__ import launch
 from infx.launch.context import LaunchError
@@ -12,11 +13,10 @@ from infx.launch.drivers import check_tables
 from infx.launch.drivers.srt import models, power
 from infx.launch.drivers.srt.power import PowerPolicyError, decide_power
 from infx.launch.lifecycle import Lifecycle
-from infx.launch.policy import LaunchPath, Match, salloc_time_limit
-from infx.launch.request import LaunchRequest, MultiNodeRequest
+from infx.launch.policy import LaunchPath, salloc_time_limit
+from infx.launch.request import LaunchRequest, MultiNodeRequest, RequestError
 
-DCGM, AGENTX, ADAPTER, ERR = "dcgm", "agentx", "adapter", "error"
-MULTI, NATIVE = LaunchPath.SRT_MULTI, LaunchPath.SRT_NATIVE
+MULTI = LaunchPath.SRT_MULTI
 
 
 def _request(**env):
@@ -31,70 +31,75 @@ def _multinode(**env):
     })
 
 
-CASES = [
-    ("gb200-nv", MULTI, "1", "glm5.2", "fp4", "dynamo-sglang", AGENTX),
-    ("gb200-nv", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", AGENTX),
-    ("gb200-nv", MULTI, "0", "dsr1", "fp8", "dynamo-sglang", DCGM),
-    ("gb200-nv", MULTI, "0", "dsv4", "fp4", "dynamo-vllm", ERR),
-    ("gb300-nv", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", AGENTX),
-    ("gb300-nv", MULTI, "1", "glm5.2", "fp4", "dynamo-sglang", DCGM),
-    ("gb300-nv", MULTI, "0", "qwen3.5", "fp8", "dynamo-trt", ERR),
-    ("b300-dsxe", MULTI, "0", "dsv4", "fp4", "dynamo-vllm", DCGM),
-    ("b300-dsxe", MULTI, "0", "dsv4", "fp8", "dynamo-sglang", ERR),
-    ("b300-dsxe", MULTI, "1", "dsv4", "fp4", "dynamo-sglang", ERR),
-    ("b200-nscale", NATIVE, "1", "kimik3", "fp4", "dynamo-vllm", AGENTX),
-    ("b200-nscale", NATIVE, "0", "dsv4", "fp4", "dynamo-sglang", DCGM),
-    ("b200-nscale", NATIVE, "0", "glm5.2", "fp4", "dynamo-vllm", ERR),
-    ("b200-nscale", MULTI, "1", "qwen3.5", "fp8", "dynamo-sglang", AGENTX),
-    ("b200-nscale", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", ERR),
-    ("b200-nscale", MULTI, "0", "dsv4", "fp4", "dynamo-vllm", DCGM),
-    ("b200-nscale", MULTI, "0", "dsv4", "fp4", "dynamo-sglang", ERR),
-    ("h200-dgxc", MULTI, "1", "kimik3", "fp4", "vllm", AGENTX),
-    ("h200-dgxc", MULTI, "1", "dsv4", "fp8", "dynamo-sglang", ADAPTER),
-    ("h200-dgxc", MULTI, "0", "dsv4", "fp8", "dynamo-sglang", ERR),
-    ("h200-dgxc", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", ERR),
-]
+def _srt(**settings) -> SrtSlurmSettings:
+    return SrtSlurmSettings.model_validate({"network-interface": "", **settings})
 
 
-@pytest.mark.parametrize(
-    ("cluster", "path", "agentic", "prefix", "precision", "framework", "expected"), CASES
-)
-def test_power_eligibility_of_each_cluster_lane(
-    cluster, path, agentic, prefix, precision, framework, expected
-):
-    env = dict(IS_AGENTIC=agentic, MODEL_PREFIX=prefix, PRECISION=precision, FRAMEWORK=framework)
+EXPORTER = {"extra": {"default_gpu_exporter": {"container_image": "exporter:test"}}}
+GPU_ONLY = _srt(**EXPORTER, **{"power-exporter-port": 9401})
+WITH_CPU = _srt(**EXPORTER, **{"power-exporter-port": 9401, "cpu-power-exporter": {"source": "acpi"}})
+
+
+def _point(agentic: str, prefix: str = "dsv4", framework: str = "dynamo-vllm", **env):
     if agentic == "1":
         env.update(CONC="4", CONC_LIST="4", IS_MULTINODE="true")
-    if expected == ERR:
-        with pytest.raises(PowerPolicyError):
-            decide_power(cluster, path, _multinode(**env, POWER="1"))
-        return
-    decision = decide_power(cluster, path, _multinode(**env, POWER="1"))
-    assert (decision.dcgm, decision.agentx, decision.adapter) == (
-        True, expected == AGENTX, expected == ADAPTER,
-    )  # fmt: skip
-    assert decision.require is (prefix == "kimik3" and cluster in ("gb200-nv", "gb300-nv"))
-    assert not decide_power(cluster, path, _multinode(**env, POWER="0")).dcgm
+    return _multinode(
+        IS_AGENTIC=agentic, MODEL_PREFIX=prefix, PRECISION="fp8", FRAMEWORK=framework, **env
+    )
 
 
-def test_gb200_reports_agentic_misses_distinctly():
-    request = _multinode(IS_AGENTIC="1", MODEL_PREFIX="dsv4", PRECISION="fp4",
-                         FRAMEWORK="dynamo-sglang", CONC="4", CONC_LIST="4", POWER="1")  # fmt: skip
-    with pytest.raises(PowerPolicyError, match="AgentX dcgm-power requires GLM-5.2"):
-        decide_power("gb200-nv", MULTI, request)
+@pytest.mark.parametrize(("srt", "cpu"), [(GPU_ONLY, False), (WITH_CPU, True)])
+@pytest.mark.parametrize("agentic", ["0", "1"])
+def test_a_cluster_with_a_gpu_exporter_measures_every_benchmark_point_without_failing_it(
+    srt, cpu, agentic
+):
+    point = _point(agentic)
+    assert decide_power("c", MULTI, srt, point) == power.PowerDecision(
+        dcgm=True, agentx=agentic == "1", cpu=cpu, best_effort=True
+    )
+    assert decide_power("c", MULTI, srt, point, lambda: True) == power.NO_POWER
+    evaluation = _point(agentic, EVAL_ONLY="true")
+    assert decide_power("c", MULTI, srt, evaluation) == power.NO_POWER
 
 
-def test_a_power_lane_needs_its_clusters_exporter_port(monkeypatch):
+def test_power_the_cluster_cannot_measure_is_refused_only_when_the_point_asks_for_it():
+    no_exporter = _srt()
+    assert decide_power("c", MULTI, no_exporter, _point("1")) == power.NO_POWER
+    with pytest.raises(PowerPolicyError, match="measures no GPU power"):
+        decide_power("c", MULTI, no_exporter, _point("1", POWER="1"))
+    with pytest.raises(PowerPolicyError, match="no srt-slurm.cpu-power-exporter"):
+        decide_power("c", MULTI, GPU_ONLY, _point("1", POWER="1", CPU_POWER="1"))
+
+
+def test_the_power_field_keeps_invalid_power_fatal():
+    explicit = _point("1", POWER="1", CPU_POWER="1")
+    assert decide_power("c", MULTI, WITH_CPU, explicit) == power.PowerDecision(
+        dcgm=True, agentx=True, cpu=True, expect_cpu=True
+    )
+    assert decide_power("c", MULTI, WITH_CPU, _point("1", POWER="1"), lambda: True).dcgm
+    workflow = _point("1", REQUIRE_POWER="1")
+    assert not decide_power("c", MULTI, WITH_CPU, workflow).best_effort
+
+
+def test_a_lane_rule_changes_how_its_matching_agentx_points_measure_power():
+    matching = _point("1", prefix="glm5.2", framework="dynamo-sglang")
+    decision = decide_power("h200-dgxc", MULTI, GPU_ONLY, matching)
+    assert (decision.agentx, decision.adapter) == (False, True)
+    other = decide_power("h200-dgxc", MULTI, GPU_ONLY, _point("1", framework="dynamo-sglang"))
+    assert (other.agentx, other.adapter) == (True, False)
+
+
+def test_a_power_lane_needs_its_clusters_gpu_exporter(monkeypatch):
     labels = {"cluster:c": ["c_0"]}
     srt = {"network-interface": ""}
     record = {**RECORD, "slurm": {**RECORD["slurm"], "srt-slurm": srt}}
     clusters = load_inventory({"labels": labels, "clusters": {"c": record}}).clusters
     monkeypatch.setitem(drivers.srt.lanes.SRT_LANES, ("c", MULTI), drivers.srt.lanes.SrtLane())
-    monkeypatch.setitem(power.POWER_LANES, ("c", MULTI), power.PowerLane(rules=(), error="x"))
+    monkeypatch.setitem(power.POWER_LANES, ("c", MULTI), power.PowerLane(rules=()))
     assert drivers.srt.table_problems(clusters, "c") == [
-        "POWER_LANES['c', srt-multi]: no srt-slurm.power-exporter-port"
+        "POWER_LANES['c', srt-multi]: no srt-slurm.extra.default_gpu_exporter"
     ]
-    srt["power-exporter-port"] = 9401
+    srt.update(EXPORTER)
     clusters = load_inventory({"labels": labels, "clusters": {"c": record}}).clusters
     assert drivers.srt.table_problems(clusters, "c") == []
 
@@ -168,3 +173,26 @@ def test_cluster_settings_beat_the_host_but_never_the_points_settings(chosen, ex
     env = policy.runtime_env(cluster, request, {"LATER": "later", "SHARED": "later"})
 
     assert {name: env[name] for name in HOST} == expected
+
+
+def test_a_role_without_additional_settings_arrives_as_null_and_sets_no_names():
+    record = {**RECORD, "env": {"CLUSTER": "cluster", "SHARED": "cluster"}}
+    cluster = load_inventory({"labels": {"cluster:c": ["c_0"]}, "clusters": {"c": record}}).clusters["c"]
+    request = _request(
+        PREFILL_ADDITIONAL_SETTINGS='["SHARED=point"]', DECODE_ADDITIONAL_SETTINGS="null",
+        **{**HOST, "SHARED": "point"},
+    )
+
+    env = policy.runtime_env(cluster, request, {"LATER": "later", "SHARED": "later"})
+
+    assert {name: env[name] for name in HOST} == {"CLUSTER": "cluster", "LATER": "later", "SHARED": "point"}
+
+
+@pytest.mark.parametrize(("settings", "kind"), [("5", "int"), ("true", "bool"), ('{"SHARED=point": 1}', "dict")])
+def test_additional_settings_that_are_not_a_list_are_rejected(settings, kind):
+    record = {**RECORD, "env": {"CLUSTER": "cluster", "SHARED": "cluster"}}
+    cluster = load_inventory({"labels": {"cluster:c": ["c_0"]}, "clusters": {"c": record}}).clusters["c"]
+    request = _request(DECODE_ADDITIONAL_SETTINGS=settings, **HOST)
+
+    with pytest.raises(RequestError, match=f"^DECODE_ADDITIONAL_SETTINGS must be a JSON list .*, got {kind}$"):
+        policy.runtime_env(cluster, request, {"LATER": "later", "SHARED": "later"})

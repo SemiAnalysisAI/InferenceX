@@ -8,37 +8,113 @@ on:
                 required: true
                 type: string
             merge-run-id:
-                description: Main publication run ID containing changelog metadata
-                required: true
+                description: Main publication run ID containing changelog metadata (or set original-merge-sha)
+                required: false
+                type: string
+            original-merge-sha:
+                description: Main merge commit whose changelog metadata this run regenerates when its merge-ingest run uploaded none
+                required: false
                 type: string
 
 permissions: {}
 
 concurrency:
-  group: recover-ingest-${{ inputs.source-run-id }}-${{ inputs.merge-run-id }}
+  group: recover-ingest-${{ inputs.source-run-id }}-${{ inputs.merge-run-id }}${{ inputs.original-merge-sha }}
   cancel-in-progress: false
 
 jobs:
     trigger-agentic-ingest:
         name: trigger-agentic-ingest
         runs-on: ubuntu-latest
+        permissions:
+            contents: read
         steps:
-            - name: Trigger agentic database ingest
-              uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+            - name: Validate inputs
               env:
                 SOURCE_RUN_ID: ${{ inputs.source-run-id }}
                 MERGE_RUN_ID: ${{ inputs.merge-run-id }}
+                ORIGINAL_MERGE_SHA: ${{ inputs.original-merge-sha }}
+              run: |
+                [[ "$SOURCE_RUN_ID" =~ ^[0-9]+$ ]] || { echo "::error::source-run-id must be numeric"; exit 1; }
+                if [[ -n "$MERGE_RUN_ID" && -n "$ORIGINAL_MERGE_SHA" ]] || [[ -z "$MERGE_RUN_ID" && -z "$ORIGINAL_MERGE_SHA" ]]; then
+                  echo "::error::Set exactly one of merge-run-id or original-merge-sha"
+                  exit 1
+                fi
+                if [[ -n "$MERGE_RUN_ID" && ! "$MERGE_RUN_ID" =~ ^[0-9]+$ ]]; then
+                  echo "::error::merge-run-id must be numeric"
+                  exit 1
+                fi
+                if [[ -n "$ORIGINAL_MERGE_SHA" && ! "$ORIGINAL_MERGE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+                  echo "::error::original-merge-sha must be a full 40-character commit SHA"
+                  exit 1
+                fi
+
+            - name: Checkout original merge
+              if: inputs.original-merge-sha != ''
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
-                # Cross-repository dispatch credential for maintainer-triggered ingest recovery.
+                  ref: ${{ inputs.original-merge-sha }}
+                  fetch-depth: 0
+                  persist-credentials: false
+
+            - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+              if: inputs.original-merge-sha != ''
+
+            # Same metadata merge-ingest.yml's "Extract changelog metadata" step uploads, for the
+            # push that merged original-merge-sha (a squash merge's push before is its parent).
+            - name: Extract changelog metadata
+              id: plan
+              if: inputs.original-merge-sha != ''
+              env:
+                  ORIGINAL_MERGE_SHA: ${{ inputs.original-merge-sha }}
+                  PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
+              run: |
+                  git merge-base --is-ancestor "$ORIGINAL_MERGE_SHA" origin/main || {
+                    echo "::error::$ORIGINAL_MERGE_SHA is not on main"
+                    exit 1
+                  }
+                  cd "$GITHUB_WORKSPACE/inferencex-e2e"
+                  uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+                    python -m infx.matrix.plan \
+                    --changelog-file perf-changelog.yaml \
+                    --base-ref "${ORIGINAL_MERGE_SHA}^" \
+                    --head-ref "$ORIGINAL_MERGE_SHA" > "$RUNNER_TEMP/plan.json"
+                  jq -c '.changelog_metadata' "$RUNNER_TEMP/plan.json" > "$GITHUB_WORKSPACE/changelog_metadata.json"
+                  jq -e '(.entries // []) | length > 0' "$GITHUB_WORKSPACE/changelog_metadata.json" >/dev/null || {
+                    echo "::error::$ORIGINAL_MERGE_SHA appended no changelog entries"
+                    exit 1
+                  }
+                  agentic=$(jq '((.single_node.agentic // []) + (.multi_node.agentic // [])) | length > 0' "$RUNNER_TEMP/plan.json")
+                  echo "agentic=$agentic" >> "$GITHUB_OUTPUT"
+
+            - name: Upload changelog artifact
+              if: inputs.original-merge-sha != ''
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: changelog-metadata
+                  path: changelog_metadata.json
+                  if-no-files-found: error
+
+            - name: Trigger database ingest
+              uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+              env:
+                SOURCE_RUN_ID: ${{ inputs.source-run-id }}
+                # Without merge-run-id this run carries the regenerated changelog metadata.
+                MERGE_RUN_ID: ${{ inputs.merge-run-id || github.run_id }}
+                # A supplied merge run keeps the original agentic-only behavior.
+                AGENTIC: ${{ inputs.merge-run-id != '' && 'true' || steps.plan.outputs.agentic }}
+              with:
                 github-token: ${{ secrets.FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
                 script: |
+                  const agentic = process.env.AGENTIC === 'true';
+                  const client_payload = {
+                    "source-run-id": process.env.SOURCE_RUN_ID,
+                    "merge-run-id": process.env.MERGE_RUN_ID,
+                  };
+                  if (agentic) client_payload["database-target"] = "production";
                   await github.rest.repos.createDispatchEvent({
                     owner: "SemiAnalysisAI",
                     repo: "InferenceX-app",
-                    event_type: "ingest-agentic-results",
-                    client_payload: {
-                      "source-run-id": process.env.SOURCE_RUN_ID,
-                      "merge-run-id": process.env.MERGE_RUN_ID,
-                      "database-target": "production"
-                    }
+                    event_type: agentic ? "ingest-agentic-results" : "ingest-results",
+                    client_payload,
                   });

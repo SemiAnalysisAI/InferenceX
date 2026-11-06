@@ -982,8 +982,9 @@ def test_kimi_suite_caps_multi_turn_steps(monkeypatch: pytest.MonkeyPatch) -> No
     assert prompts.MAXIMUM_STEP_LIMIT == 10
 
 
+@pytest.mark.parametrize("model", ["model-a", "zai-org/glm5_2"])
 def test_upstream_registration_uses_exact_stock_openai_handler(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, model: str
 ) -> None:
     project_root = tmp_path / "bfcl"
     be._write_id_map(project_root, be.SMOKE_CASE_IDS)
@@ -1008,8 +1009,13 @@ def test_upstream_registration_uses_exact_stock_openai_handler(
                 encoding="utf-8",
             )
 
-    def evaluate(**_: Any) -> None:
-        pass
+    evaluated: list[str] = []
+
+    def evaluate(**kwargs: Any) -> None:
+        # Upstream evaluation reloads configs from the "/"-to-"_" result dir name.
+        [name] = kwargs["model"]
+        escaped = name.replace("/", "_").replace("_", "/")
+        evaluated.append(model_config_mapping[escaped].model_name)
 
     modules = {
         "bfcl_eval": ModuleType("bfcl_eval"),
@@ -1047,14 +1053,15 @@ def test_upstream_registration_uses_exact_stock_openai_handler(
     monkeypatch.setattr(be, "_function_defaults", lambda _: {})
 
     be._run_upstream(
-        model="model-a",
+        model=model,
         project_root=project_root,
         base_url="http://127.0.0.1:8000/v1",
         api_key="EMPTY",
         num_threads=4,
     )
 
-    assert model_config_mapping["model-a"].model_handler is OpenAICompletionsHandler
+    assert model_config_mapping[model].model_handler is OpenAICompletionsHandler
+    assert evaluated == [model]
 
 
 def test_source_mount_archives_license_without_installed_distribution(tmp_path: Path) -> None:

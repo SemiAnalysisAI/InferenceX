@@ -11,6 +11,8 @@ import pytest
 import yaml
 
 from infx.matrix import revision
+from infx.matrix.validation import VIDEO_SPEC_DIR
+from infx.srt_slurm import video
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -102,6 +104,43 @@ def test_historical_generation_uses_committed_source_and_inputs(generation_repo,
     assert not snapshot.exists()
 
 
+@pytest.mark.parametrize("ref,expected", [("older", ("older", 2)), ("newer", ("newer", 6))])
+def test_batch_generation_runs_each_revisions_own_generator(
+    generation_repo, ref, expected, monkeypatch
+):
+    def no_process_per_request(*_):
+        raise AssertionError("a request fell back to its own process")
+
+    monkeypatch.setattr(revision.Revision, "generate", no_process_per_request)
+    with revision.snapshot(ref) as inputs:
+        batches = inputs.generate_each([(["fixture"], ["--no-evals"], None)] * 3, 2)
+
+    assert [[(row["model"], row["conc"]) for row in rows] for rows in batches] == [[expected]] * 3
+
+
+def test_batch_generation_raises_the_generators_own_failure(generation_repo):
+    requests = [(["fixture"], ["--no-evals"], None), (["absent"], ["--no-evals"], None)]
+    with revision.snapshot("newer") as inputs, pytest.raises(subprocess.CalledProcessError) as error:
+        inputs.generate_each(requests, 2)
+
+    assert "absent" in error.value.stderr
+
+
+@pytest.mark.parametrize("flush", [False, True])
+def test_batch_generation_fails_like_each_run_when_an_import_writes_to_stdout(
+    generation_repo, flush
+):
+    _, git = generation_repo
+    source = git("show", "newer:infx/matrix/validation.py")
+    Path("infx/matrix/validation.py").write_text(f"print('imported', flush={flush})\n{source}\n")
+    git("add", "infx/matrix/validation.py")
+    git("commit", "-qm", "noisy import")
+
+    with revision.snapshot("HEAD") as inputs, pytest.raises(json.JSONDecodeError):
+        inputs.generate_each([(["fixture"], ["--no-evals"], None)] * 3, 1)
+
+
+
 def test_historical_generation_rejects_missing_inputs(generation_repo):
     _, git = generation_repo
     git("rm", "-f", "configs/runners.yaml")
@@ -175,6 +214,22 @@ def test_historical_generation_from_nested_project(generation_repo, monkeypatch,
     assert [(row["model"], row["conc"]) for row in rows] == [expected]
 
 
+def test_nested_snapshot_keeps_the_video_specs_the_binder_loads(generation_repo, monkeypatch):
+    root, git = generation_repo
+    git("restore", ".")
+    (root / "inferencex-e2e").mkdir()
+    git("mv", "infx", "configs", "benchmarks", "inferencex-e2e/")
+    (root / VIDEO_SPEC_DIR).mkdir(parents=True)
+    for name in ("video_spec.py", "h3-v2.yaml"):
+        shutil.copy(ROOT.parent / VIDEO_SPEC_DIR / name, root / VIDEO_SPEC_DIR / name)
+    git("add", ".")
+    git("commit", "-qm", "relocate project beside the video harness")
+    monkeypatch.chdir(root / "inferencex-e2e")
+    expected = video.load_spec("h3-v2.yaml", root=ROOT, set_id="release-v1")
+    with revision.snapshot("HEAD") as inputs:
+        assert video.load_spec("h3-v2.yaml", root=inputs.root, set_id="release-v1") == expected
+
+
 LEGACY_GENERATOR = """\
 import argparse, json
 import yaml
@@ -234,6 +289,8 @@ from {origin} import NAME
 print(json.dumps({{"planner": NAME, "args": sys.argv[1:], "cwd": os.getcwd(),
                   "root": os.environ["INFERENCEX_REPOSITORY_ROOT"], "env": dict(os.environ)}}))
 print("planner diagnostics", file=sys.stderr)
+if "--kill" in sys.argv:
+    os.kill(os.getpid(), 9)
 sys.exit(int(sys.argv[sys.argv.index("--exit") + 1]) if "--exit" in sys.argv else 0)
 """
 
@@ -279,6 +336,14 @@ def test_cli_runs_the_checkouts_own_planner_and_forwards_its_output_and_status(t
         "cwd": str(checkout.resolve()), "root": str(checkout.resolve()),
     }
     assert result.stderr == "planner diagnostics\n"
+
+
+def test_cli_exits_128_plus_the_signal_that_killed_the_tool(tmp_path):
+    checkout = planner_checkout(tmp_path / "checkout", "module")
+
+    result = run_cli(tmp_path, "plan", str(checkout), "--kill")
+
+    assert result.returncode == 137, result.stderr
 
 
 def test_cli_runs_the_tool_without_the_callers_credentials(tmp_path):

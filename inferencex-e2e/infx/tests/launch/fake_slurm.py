@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -52,7 +53,8 @@ exit 0
 """,
     "sacct": r"""
 state="${FAKE_STATE:-COMPLETED|0:0}"
-if [[ " $* " == *" 4242 "* && "$(cat "$FAKE_LOG_DIR/batch-rc" 2>/dev/null)" != 0 ]]; then state="FAILED|1:0"; fi
+rc="$(cat "$FAKE_LOG_DIR/batch-rc" 2>/dev/null)"
+if [[ " $* " == *" 4242 "* && -n "$rc" && "$rc" != 0 ]]; then state="FAILED|$rc:0"; fi
 echo "$state"
 """,
     "scontrol": "exit 1",
@@ -96,7 +98,7 @@ import json, os, pathlib, sys
 import yaml
 argv = sys.argv[1:]
 keep = ("RUNNER_NAME", "INFMAX_WORKSPACE", "MODEL_PATH", "SERVED_MODEL_NAME", "VIRTUAL_ENV",
-        "UCX_NET_DEVICES", "ENROOT_ROOTFS_WRITABLE", "SRT_SRUN_OPTIONS")
+        "UCX_NET_DEVICES", "ENROOT_ROOTFS_WRITABLE", "SRT_SRUN_OPTIONS", "EVAL_ONLY", "RUN_EVAL")
 record = {"argv": argv, "cwd": os.getcwd(), "env": {name: os.environ.get(name) for name in keep}}
 with open(os.path.join(os.environ["FAKE_LOG_DIR"], "srtctl.jsonl"), "a") as handle:
     handle.write(json.dumps(record) + "\n")
@@ -127,6 +129,41 @@ elif mode == "agentic":
     for conc in os.environ["CONC_LIST"].split():
         (workspace / f"{result}_conc{conc}.json").write_text(json.dumps({"conc": int(conc)}))
         (logs / "agentic" / f"conc_{conc}").mkdir(parents=True)
+elif mode == "gate":
+    # What an eval's acceptance gate writes to AL_GATE_OUTPUT_DIR (/logs in the container).
+    (logs / f"al_gate_{result}.json").write_text(json.dumps({"status": "below", "result_filename": result}))
+    (logs / "al_gate" / "aiperf_artifacts").mkdir(parents=True)
+    (logs / "al_gate" / "aiperf_artifacts" / "server_metrics_export.json").write_text("{}")
+elif mode == "video":
+    # The video service and client leave the server record, one run per concurrency and
+    # each cell's measured window; the native power package is what srt-slurm retained.
+    # The client runs the plan the launcher declared before startup (video-identity.json).
+    workspace = pathlib.Path(os.environ["INFMAX_WORKSPACE"])
+    declared = json.loads((workspace / "video-identity.json").read_text())
+    (logs / "power").mkdir()
+    (logs / "power/samples.csv").write_text("retained native samples\n")
+    (logs / "video/server").mkdir(parents=True)
+    (logs / "video/server/spec.json").write_text(json.dumps({"gpu_uuids": ["GPU-a", "GPU-b"], "plan": declared["workload_plan"],
+        "baseline": {"name": declared["engine"]["name"], "revision": declared["engine"]["revision"]}}))
+    for conc in os.environ["CONC_LIST"].split():
+        cell = logs / "video/gpu" / f"c{conc}"
+        (cell / "baseline").mkdir(parents=True)
+        summary = {"scheduled": 4, "completed": 4, "valid": 4, "failed": 0, "not_started": 0,
+                   "latency_median_seconds": 119.0, "valid_clips_per_second": 0.05}
+        (cell / "baseline/run.json").write_text(json.dumps({
+            "status": "complete", "plan_id": declared["workload_plan"]["plan_id"], "plan_sha256": declared["plan_sha256"],
+            "records": [], "plan": declared["workload_plan"],
+            "configuration": {"runtime": declared["engine"]["name"], "runtime_revision": declared["engine"]["revision"]},
+            "measurement": {"concurrency": int(conc), "start_monotonic_seconds": 1.0,
+                            "end_monotonic_seconds": 61.0, "wall_seconds": 60.0},
+            "serving": {"mode": "closed_loop", "concurrency": int(conc),
+                        "client_ready_latency_seconds": {"p50": 118.0}},
+            "summary": summary, "started_at": "2026-10-17T00:00:00Z", "finished_at": "2026-10-17T00:01:00Z",
+        }))
+        (cell / f"benchmark_concurrency_{conc}.json").write_text(json.dumps({
+            "max_concurrency": int(conc), "benchmark_start_time_unix": 1000.0,
+            "benchmark_end_time_unix": 1060.0, "duration": 60.0, "completed": 4, "scheduled": 4,
+            "valid": 4, "failed": 0, "energy_normalization": "clips"}))
 if os.environ.get("RUN_EVAL") == "true" or os.environ.get("EVAL_ONLY") == "true":
     (logs / "eval_results").mkdir()
     (logs / "eval_results" / "results_gsm8k.json").write_text("{}")
@@ -136,7 +173,7 @@ if os.environ.get("RUN_EVAL") == "true" or os.environ.get("EVAL_ONLY") == "true"
 if os.environ.get("FAKE_ACTIVE"):
     pathlib.Path(os.environ["FAKE_ACTIVE"]).touch()
 if "--json" in argv:
-    print(json.dumps({"status": "submitted", "slurm_job_id": "42", "output_dir": str(output)}))
+    print(os.environ.get("FAKE_MANIFEST") or json.dumps({"status": "submitted", "slurm_job_id": "42", "output_dir": str(output)}))
 else:
     print("✅ Job 42 submitted!")
 sys.exit(int(os.environ.get("FAKE_SRTCTL_RC", "0")))
@@ -167,7 +204,7 @@ def install_fakes(directory: Path) -> Path:
         binary.chmod(0o755)
     for name, body in {"srtctl": _SRTCTL, "sbatch": _SBATCH}.items():
         binary = directory / name
-        binary.write_text(f"#!{sys.executable}\n{body.lstrip()}")
+        binary.write_text(f"#!/bin/sh\nexec {shlex.quote(sys.executable)} -c {shlex.quote(body.lstrip())} \"$@\"\n")
         binary.chmod(0o755)
     return directory
 

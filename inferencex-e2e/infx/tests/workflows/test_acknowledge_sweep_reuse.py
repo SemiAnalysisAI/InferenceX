@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import copy
+import io
 import json
 import subprocess
+import zipfile
 from urllib.parse import parse_qsl
 
 import pytest
@@ -135,6 +137,33 @@ def test_source_outside_pr_is_accepted_then_warned_once(request_case, capsys):
     assert len(request_case["posted"]) == 1
     assert "(from PR #5, commit `tested-sha`)" in request_case["posted"][0]["body"]
     assert "::warning::Reuse source run 123 head tested-sha is not part of PR #7" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("on_pr", [True, False])
+def test_external_source_warning_uses_recorded_pr_head(request_case, monkeypatch, capsys, on_pr):
+    head = "75745991a66c" + "1" * 28
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as bundle:
+        bundle.writestr("source_identity.json", json.dumps({
+            "pr_number": 900, "head_sha": head, "merge_sha": "2" * 40, "evals_only": False,
+            "agentx_fast": False, "all_evals": False, "fail_fast": True,
+        }))
+    monkeypatch.setattr(acknowledgment.github, "download", lambda repo, path, token: (
+        buffer.getvalue() if path == "/actions/artifacts/5/zip" else None
+    ))
+    request_case["run"].update(
+        event="workflow_dispatch", path=".github/workflows/e2e-tests.yml", head_branch="main",
+        head_sha="main-sha", display_title="e2e Test - External PR #900 @ 75745991a66c",
+    )
+    request_case["artifacts"].append({"name": "source-identity", "id": 5, "expired": False})
+    request_case["commits"] = [{"sha": head if on_pr else "different-sha"}]
+    assert acknowledgment.acknowledge("example/project", event_for(request_case), "test-token") == 0
+    assert bot_status(request_case) == ["+1"]
+    if on_pr:
+        assert request_case["posted"] == []
+        return
+    assert "(from PR #900, commit `75745991a66c`)" in request_case["posted"][0]["body"]
+    assert f"::warning::Reuse source run 123 head {head} is not part" in capsys.readouterr().out
 
 
 def test_warning_comment_failure_keeps_acceptance(request_case):

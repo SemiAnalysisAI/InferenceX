@@ -131,6 +131,21 @@ def test_conflict_resolution_rejects_duplicate_remaining_contribution() -> None:
         )
 
 
+def test_conflict_resolution_keeps_pr_entry_repeating_a_historical_entry() -> None:
+    base = block("same-config", "https://github.com/SemiAnalysisAI/InferenceX/pull/1")
+    pr = base + b"\n" + block("same-config", "XXX")
+    main = base + b"\n" + block(
+        "main-config",
+        "https://github.com/SemiAnalysisAI/InferenceX/pull/41",
+    )
+
+    result = resolve_conflict_bytes(base, pr, main, 42, "SemiAnalysisAI/InferenceX")
+
+    assert result == main + b"\n" + block(
+        "same-config", "https://github.com/SemiAnalysisAI/InferenceX/pull/42"
+    )
+
+
 def test_conflict_resolution_separates_multiple_contributions_by_one_blank_line() -> None:
     base = block("base-config", "https://github.com/SemiAnalysisAI/InferenceX/pull/1")
     pr = base + b"\n" + block("new-a", "XXX") + b"\n" + block("new-b", "XXX")

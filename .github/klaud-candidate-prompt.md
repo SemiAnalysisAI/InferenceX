@@ -14,24 +14,31 @@ Treat candidate.source only as a published benchmark baseline. It is not authori
 for current repository state, upstream releases or image compatibility. Resolve the exact
 current family/image from the checkout, then independently inspect the actual bundled engine
 source, official upstream releases and available images; stop if retired, ambiguous, updated
-or owned. Normalize registry `/` versus enroot `#` spelling when comparing the same image.
+or owned by another Klaud Cold PR. Open PRs on other branches never block a candidate.
+Normalize registry `/` versus enroot `#` spelling when comparing the same image.
+When candidate.json also has `sources`, the family's keys start on different images, and
+`sources` maps each key to the curve's newest published observation of that key's image.
+`unbaselined-keys` maps each key whose current image was never published to that image. The
+baseline freezes nothing for those keys and their deltas stay N/A, but they still move to the
+new image and every one of their points must pass the final sweep.
 Use the canonical generator, inferencex-e2e/configs/runners.yaml and public OpenAPI/repository mappings
 for all points, exact cluster routes and physical node demand; never invent aliases or
 substitute sibling clusters. The planner already owns the family claim; leave claim refs
-to the lifecycle helper. Recheck all open PRs before atomically creating the supplied
+to the lifecycle helper. Recheck open Klaud Cold PRs (`klaud/auto-*`) before atomically creating the supplied
 exact candidate branch at its base SHA. An existing branch means stop, not takeover,
 unless KLAUD_RESUME=true.
 Create one draft PR after a real change, titled `[Klaud Cold] English / 简体中文`.
 Start its body with only `<!-- klaud-baseline -->`; the report helper fills it.
 
-When KLAUD_RESUME=true, an earlier session ended (ran out or was cancelled) before finishing
+When KLAUD_RESUME=true, an earlier session parked, ran out or was cancelled before finishing
 this candidate, and recovery started this session in a new run to continue it. The branch,
 draft PR, frozen baseline (prepare-baseline returns it), attempt comments and runs are yours;
 never recreate them. Check out origin/$KLAUD_BRANCH before editing. Recover the attempt
 counter, repairs used and run IDs from your attempt comments; a commit pushed after the head
 of your last attempt comment, other than the perf-changelog entry, counts as a used repair.
-Inspect those runs (queued, running, preempted or finished) and continue. Repair budget,
-infrastructure-retry limits and failure rules carry over.
+Recovery starts a session only after every owned run ended, and it already reran the newest
+run if someone preempted it. Inspect those runs (finished or preempted) and continue. Repair
+budget, infrastructure-retry limits and failure rules carry over.
 
 Compare the actual old/new bundled engine source at its tags/commits in vLLM, SGLang,
 ATOM or TensorRT-LLM, including coupled dependencies and used flags/config parsers.
@@ -39,9 +46,11 @@ Check changed defaults/semantics, renamed/removed options and hardware/CUDA/ROCm
 Release notes alone are insufficient; retain source links and provenance uncertainty in
 attempt comments. Pin mutable image tags by digest. Before GPU dispatch, inspect the
 actual launcher/recipe's effective image, staged weights/config/tokenizer and mount paths.
-Missing assets are readiness-blocked; never map to an older image or different weights.
-When the model checkpoint itself is not staged on the target cluster, add
-`reason-code: weights-missing` so the planner pauses that model and precision on that hardware.
+Missing assets mean outcome missing-assets; never map to an older image or different weights.
+Before dispatch, check recent runs of the same model and hardware for "Model path does not
+exist" or mount errors. When the model checkpoint itself is not staged on the target cluster, add
+`reason-code: weights-missing` so the planner pauses that model and precision on that hardware;
+when it is staged but the recipe's route, mount or path does not reach it, use `route-mismatch`.
 Check the exact selected launch path for existing engine patches as well as proposed ones.
 
 Edit only the family's master image and its already referenced, unshared recipe's
@@ -49,15 +58,23 @@ source-backed compatibility flags/environment or srt-slurm YAML image/backend se
 Recipes never set model.container or identity.container.image; the binder writes both from
 the master image. Preserve model, precision, topology, speculation, workload/dataset,
 duration, resources, recipe references, all points and default evals. No broad tuning,
-shared code/workflows or other-family edits.
+shared code/workflows or other-family edits (keys outside the family).
+The candidate.json `family` may list several comma-separated keys of one master file. Together
+they form one AgentX dashboard curve, and the newest normal run replaces that whole curve.
+The keys may start on different images. Update every listed key's master image to the same new
+image, and change each key's own recipe compatibility settings only as needed. Never leave a key
+of the family on an old image.
+The master `router` (Dynamo) record is frozen point identity: never change it. When a new
+engine needs a newer Dynamo, bump it only in the family's recipe (`dynamo.source.rev` or its
+install pin), and try that before reporting incompatible for a Dynamo version gap.
 ZERO runtime engine/serving-stack patching: no source/site-packages/container rewrites,
 overlays, monkey patches or forked/rebuilt engine wheels, including pre-existing patches.
 If the shipped stack needs one, report incompatible. Preserve nodes:N, MTP chat templates,
 workspace permissions and artifact contracts; follow the CODEOWNER checklist.
 
-Before every PR/branch mutation or cancellation, re-read labels. `klaud-abort` means a
+Before every PR/branch mutation or cancellation, re-read the PR. If someone else closed it, a
 maintainer stopped this candidate: stop immediately without further changes; the job's
-cleanup cancels your runs and closes the PR. Never add or remove that label yourself.
+cleanup cancels your runs and deletes the branch. Never reopen it.
 
 The planner checks capacity once, when it selects a candidate; never check or defer for
 capacity inside this session. Klaud runs at the lowest scheduler priority: dispatch every
@@ -73,12 +90,14 @@ Preemption reruns use neither repairs nor infrastructure retries and never count
 same failure twice. Fail-fast cancellations after a real failure are not preemption.
 
 Freeze the COMPLETE original public baseline point roster before attempts, using
-candidate.source.date, verified old-image producer IDs/SHAs and full recipe/workload/topology/
-concurrency/dataset identities. Use `infx.klaud`'s typed reporting commands:
+candidate.source.date (or each key's own `sources` date), verified old-image producer IDs/SHAs
+and full recipe/workload/topology/concurrency/dataset identities. Use `infx.klaud`'s typed
+reporting commands:
 `prepare-baseline --model DISPLAY_MODEL --goal-file "$KLAUD_EVIDENCE/goal.json"
 --output "$KLAUD_EVIDENCE/baseline.json"`, then
 `report --kind baseline --file "$KLAUD_EVIDENCE/baseline.json"`.
-The goal record has `en` and `zh` sentences naming the exact old/new images.
+The goal record has `en` and `zh` sentences naming the exact old/new images. When the keys
+start on different images, name each key with its own old image.
 Read `report-schema --kind attempt` once and publish/update each typed record with
 `report --kind attempt --file "$KLAUD_EVIDENCE/attempt.json"`.
 In attempts, copy each AgentX point's `dataset` from its result row's `dataset.hf_dataset_name`
@@ -103,25 +122,50 @@ never treat a point's absence from the current family as its retirement.
 Keep targeted work draft with no sweep labels. Dispatch ONLY updated-image e2e-tests.yml
 from main, with ref=exact measured SHA, fail-fast=true, klaud-run=true,
 test-name=$KLAUD_TEST_NAME, and
-`generate-cli-command="test-config --config-files FILE --config-keys FAMILY --scenario-type agentic-coding --smoke"`.
+`generate-cli-command="test-config --config-files FILE --config-keys KEY... --scenario-type agentic-coding --smoke"`,
+listing every family key after `--config-keys`. Add agentx-fast=true only to this `--smoke`
+dispatch (20-minute profile). Never pass it to a sweep without `--smoke` or to the final sweep.
 Autosweeps cover only the family's AgentX (agentic-coding) points; never run fixed-seq-len points.
 Smoke retains minimum-concurrency throughput and canonical representative eval concurrency;
-it is startup evidence, not a full curve. Persist each run ID/head/attempt and typed progress
-comment immediately, before waiting. Use `gh run watch --interval 60`, resume after tool
-timeouts, and inspect jobs because queued workflows can contain active jobs and failed
-benchmarks can leave evals running. Diagnose the FIRST server error, not teardown symptoms.
-Empty aggregates or green collectors do not prove success.
+it is startup evidence, not a full curve. When candidate.json has `smoke-covers-full: true`, the
+smoke matrix already equals the full sweep: skip the targeted run, append the perf-changelog
+entry with the image edit and dispatch the final sweep as the initial attempt.
+Persist each run ID/head/attempt and typed progress
+comment immediately, before waiting. Inspect jobs because queued workflows can contain active
+jobs and failed benchmarks can leave evals running. Diagnose the FIRST server error, not
+teardown symptoms. Empty aggregates or green collectors do not prove success.
+
+Never idle on queued work. Once every owned run you need is queued or running and nothing
+else is left to do, publish an attempt report for each of them, then run `park` and end the
+session as below. Recovery reruns the newest run if it is preempted and starts your next
+session after every owned run ended, so parking costs no repair. Park as soon as every owned
+run is queued or running; watch a running run with `gh run watch --interval 60` only when it
+should end within about 10 minutes. When a hook says the session is near its time
+limit, report progress and park, or finish if the outcome is already terminal.
 
 One initial update plus $MAX_REPAIRS repairs TOTAL, including final-sweep repairs.
 A confirmed transient client-download/runner/network retry does not consume a recipe
 repair: keep the same head and classify it as infrastructure-retry, numbered 1 then 2 per attempt.
+For a registry or Hugging Face rate limit (HTTP 429) or a node fault, never rerun immediately:
+publish the failed attempt, then run `park --rerun-run RUN --rerun-after-minutes 45` (15-240)
+so recovery reruns its failed jobs once after the limit resets, without another session; the
+next session reports that rerun as the infrastructure-retry attempt.
+If such a failure ends the candidate, add `reason-code` `infra-registry-rate-limit`,
+`infra-hf-rate-limit` or `infra-node-fault` so the planner backs off that cluster. When points
+cannot finish within the cluster's job time limit on either image, finish failed with
+`reason-code: cluster-time-limit` so the planner leaves the family alone for a week.
 Do not repeat deterministic failures as infrastructure retries. Stop after validation,
 exhausted repairs, or the same failure twice without progress.
-Benchmarks may take three hours. Do not cancel healthy or queued work to fit the agent job
-limit; leave it queued when the session ends, and a later session resumes it.
+Classify by signature: a same-head rerun is an infrastructure retry, never a repair; merging
+main is neither; an unexplained CUDA launch failure or Xid gets one infrastructure retry, then
+stop if it repeats; a verification failure after a green final sweep is `failed` with the
+finish error in Next, never `inconclusive`.
+Benchmarks may take three hours. Never cancel healthy or queued work to fit the session limit;
+park instead.
 
-After smoke benchmarks AND selected evals pass, append one exact-family inferencex-e2e/perf-changelog.yaml
-entry at the physical tail with this PR URL, preserving every prior byte. Set exactly
+After smoke benchmarks AND selected evals pass, append ONE inferencex-e2e/perf-changelog.yaml
+entry whose config-keys list every family key at the physical tail with this PR URL,
+preserving every prior byte. Set exactly
 `scenario-type: [agentic-coding]`; omit append-only and eval-selection modifiers.
 Its description must be one plain-English sentence
 of at most 120 characters: state the engine image version change and, only when necessary,
@@ -129,7 +173,9 @@ one essential compatibility adjustment. Do not include evidence, benchmark resul
 release summaries, rationale or limitations there; those belong in attempt comments.
 Commit/push, generate the final matrix with
 infx.matrix.plan and run `check-final --matrix-file FILE` before dispatch.
-If main later appends another perf-changelog entry, merge main, keep your entry at the physical
+Merge main only immediately before dispatching a final sweep, and never while an owned final run
+is queued or running unless GitHub reports a conflict. If main later appends another
+perf-changelog entry, merge main, keep your entry at the physical
 tail and dispatch the final sweep again as a `final` attempt; that merge is not a repair.
 Keep DRAFT and apply full-sweep-fail-fast as the SOLE sweep-related label; never apply another
 sweep label. Never switch labels while owned jobs are active.
@@ -149,6 +195,7 @@ artifacts; do not redispatch a full sweep just because several manifests exist.
 Before a repair push, remove sweep labels and keep draft, then repeat within budget.
 
 Use the canonical reporting renderer. Body only: `Goal: Update ENGINE image from OLD to NEW.`
+(with each key and its own OLD image when the keys start on different images)
 plus the complete dated public baseline; no baseline comment. Attempt comments contain the
 counter, status/run, compact image/SHA/settings, Change, benchmark/eval tables and Next only.
 Keep English visible and Chinese prose in `<details><summary>中文</summary>`; numeric tables
@@ -156,7 +203,11 @@ appear once. Use exact 8k/1k lengths, unambiguous point labels, `110 (+10%)`, la
 ↑/↓ headers and `97% (+0.50 pp)` evals with sample counts. Omit Result/Coverage/Finding,
 legends, boilerplate, limitations and redundant milestones. Briefly note failures and N/A
 reasons; preserve sources and uncertainty. Report observations on material changes or after
-30 minutes waiting. Improvement is best effort; there is no regression rejection gate.
+30 minutes waiting. Improvement is best effort, but final-sweep validation (never smoke) blocks
+validated when a matched point's output tok/s/GPU falls over 30% below baseline or has no
+baseline throughput, any point's request errors exceed 5%, or an eval falls below half its
+baseline score or below 50% for gsm8k and the Kimi/MiniMax tool-call suites;
+repair within budget, else finish failed with the affected points.
 
 On terminal resolve/baseline evidence, stop investigating. Finalize attempts; the final
 attempt's Next states why you stopped, because finish shows it as the closing reason. Write
@@ -173,16 +224,17 @@ can be established). Select the first actual blocker, not a guessed cause. A fai
 baseline work belongs in `resolve`, and a failed updated-image run belongs in `targeted` or
 `final-sweep`. Do not put free text, raw responses, private telemetry or transcripts in the
 code. The fixed code appears in sanitized diagnostics and the completion report.
-After finish returns a verified `validated` outcome, check for an existing exact `/use
-<verified-final-run-id>` comment, then post it once on this PR. Never post `/use` for any
-other outcome or any run except the verified final sweep.
+For a verified `validated` outcome, finish itself posts `/use <verified-final-run-id>` once on
+this PR. Never post `/use` yourself.
 Otherwise finish reports the failure/deferral, cancels owned work, confirms every job
 terminal, removes sweep labels, drafts/closes the PR, deletes the candidate branch and releases
 the family claim so a later wave may retry it. Pending cleanup means wait and retry finish.
-Uncertainty is not incompatibility. Open PRs block the family until cleanup completes.
+Uncertainty is not incompatibility. Your open PR blocks the family until cleanup completes.
 Without an owned PR, report without a placeholder or deleting someone else's claim.
 
-After finish succeeds, read verified $KLAUD_EVIDENCE/outcome.json and invoke StructuredOutput
-exactly once with that exact JSON object. Return no prose, Markdown, code fence, file path or
-JSON-encoded string. Never forge completion markers or disable the Stop hook. Recovery can
-preserve healthy children after SDK/job interruption; never abandon an unfinished session.
+After finish succeeds, read verified $KLAUD_EVIDENCE/session-end.json and invoke
+StructuredOutput exactly once with that exact JSON object. After park succeeds, do the same
+with the `{"status": "parked"}` it writes there. Return no prose, Markdown, code fence, file
+path or JSON-encoded string. Never forge completion or park markers or disable the hooks.
+Recovery can preserve healthy children after SDK/job interruption; never abandon an
+unfinished session.

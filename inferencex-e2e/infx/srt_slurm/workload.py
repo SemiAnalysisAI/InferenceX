@@ -1,7 +1,7 @@
 """Compose srt-slurm recipe fragments and bind the master-owned workload into them.
 
 A fragment holds only recipe-specific srt-slurm settings. Its lane's shared block, and the
-DCGM telemetry block for a point that measures power, is merged under it, a variant is
+GPU telemetry block for a point that measures power, is merged under it, a variant is
 selected, and the binder then writes the matrix point's and the launcher's values and
 replaces ``'@fabric.<name>'`` values with the job's cluster facts.
 """
@@ -13,15 +13,23 @@ import json
 import os
 import re
 from collections.abc import Callable, Iterator, Mapping
-from copy import deepcopy
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, get_args
 
 import yaml
 
+from infx import yamlio
 from infx.config import repository_root
+from infx.fastcopy import deepcopy
 from infx.results.metadata import parse_component_metadata
-from infx.srt_slurm.synthetic_acceptance import selected_recipes, spec_parameters
+from infx.srt_slurm.spec_identity import speculation_facts
+from infx.srt_slurm.synthetic_acceptance import (
+    ENGINES,
+    generation_role,
+    selected_recipes,
+    spec_parameters,
+)
+from infx.srt_slurm.variants import expand_variants
 
 SHARED_BLOCKS = {
     (False, False): Path("configs/srt-recipes/fixed-sequence-single.yaml"),
@@ -31,7 +39,14 @@ SHARED_BLOCKS = {
 }
 BOUND_RECIPE = "recipe.yaml"
 TELEMETRY_BLOCK = Path("configs/srt-recipes/telemetry-dcgm.yaml")
+# The CPU power exporter sources a cluster declares (srt-slurm.cpu-power-exporter).
+CpuPowerSource = Literal["acpi", "rapl"]
 NATIVE_TELEMETRY_BLOCK = Path("configs/srt-recipes/telemetry-native.yaml")
+VIDEO_BLOCK = Path("configs/srt-recipes/video.yaml")
+# How a recipe measures GPU power: the DCGM telemetry block with its exporter on this port, or
+# NATIVE, the cluster's own GPU exporter.
+NATIVE = "native"
+GpuPower = int | Literal["native"]
 _POINT_KEYS = (
     ("model", "path"),
     ("model", "container"),
@@ -41,6 +56,7 @@ _POINT_KEYS = (
     ("benchmark", "concurrencies"),
     ("telemetry", "enabled"),
     ("telemetry", "dcgm_exporter", "port"),
+    ("telemetry", "cpu_power_exporter"),
 )
 _FIXED_ENV = ("MODEL", "ISL", "OSL", "CONC", "CONC_LIST", "RANDOM_RANGE_RATIO", "USE_CHAT_TEMPLATE")
 _AGENTIC_ENV = ("CONC", "CONC_LIST", "RESULT_DIR", "AGENTIC_OUTPUT_DIR", "HF_HUB_CACHE",
@@ -49,13 +65,16 @@ _WORKFLOW_ENV = (
     "IMAGE", "MODEL_PREFIX", "FRAMEWORK", "PRECISION", "DISAGG", "DURATION", "MAX_MODEL_LEN",
     "KV_OFFLOAD_BACKEND", "KV_OFFLOAD_BACKEND_METADATA", "ROUTER_METADATA", "KV_P2P_TRANSFER",
     "POWER", "REQUIRE_POWER", "IS_AGENTIC", "SCENARIO_TYPE", "RUN_EVAL", "EVAL_ONLY",
+    "SPEC_ALGORITHM", "SPEC_DRAFT_MODEL",
 )  # fmt: skip
 _MULTINODE_ENV = (
     "SPEC_DECODING", "KV_OFFLOADING", "TOTAL_CPU_DRAM_GB", "DECODE_CPU_DRAM_GB", "PREFILL_DWDP_SIZE",
     *(f"{role}_{field}" for role in ("PREFILL", "DECODE")
       for field in ("NUM_WORKERS", "TP", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "EP", "DP_ATTN")),
 )  # fmt: skip
-_SINGLE_NODE_ENV = ("TP", "EP_SIZE", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "DP_ATTENTION", "GPU_COUNT")
+_SINGLE_NODE_ENV = (
+    "TP", "EP_SIZE", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "DP_ATTENTION", "GPU_COUNT", "SPEC_DECODING",
+)  # fmt: skip
 BOUND_ENV = {
     (False, False): (*_FIXED_ENV, *_WORKFLOW_ENV, *_SINGLE_NODE_ENV),
     (False, True): (*_FIXED_ENV, *_WORKFLOW_ENV, *_MULTINODE_ENV),
@@ -78,9 +97,8 @@ BOUND_ENV = {
 }
 FABRIC_REFERENCE = "@fabric."
 INSTALLERS = {
+    "tokenspeed-nightly.sh": ("router", "smg"),
     "glm5.3-tilert-rocm.sh": ("router", "tilert-pd-router"),
-    "kimik3-b300-mooncake.sh": ("kv-offload-backend", "mooncake"),
-    "lmcache-mp-rocm.sh": ("kv-offload-backend", "lmcache"),
     "vllm-mooncake.sh": ("kv-offload-backend", "mooncake"),
     "vllm-router.sh": ("router", "vllm-router"),
 }
@@ -108,6 +126,7 @@ def merge_blocks(shared: Mapping[str, Any], fragment: Mapping[str, Any]) -> dict
 
 
 def _lookup(block: Any, key: tuple[str, ...]) -> tuple[bool, Any]:
+    """Follow ``key`` into nested mappings and return whether it is present and its value."""
     for part in key:
         if not isinstance(block, Mapping) or part not in block:
             return False, None
@@ -158,7 +177,8 @@ def check_fragment(raw: Mapping[str, Any], source: Path, *, agentic: bool, multi
 
 
 def _block(path: Path) -> dict[str, Any]:
-    block = yaml.safe_load(path.read_text())
+    """Load the YAML mapping at ``path``, or raise ValueError if it is not a mapping."""
+    block = yamlio.safe_load(path.read_text())
     if not isinstance(block, dict):
         raise ValueError(f"{path}: shared block must be a mapping")
     return block
@@ -186,29 +206,40 @@ def compose_recipe(
     agentic: bool,
     multinode: bool,
     root: Path,
-    power_port: int | None = None,
-    native_power: bool = False,
+    gpu_power: GpuPower | None = None,
+    cpu_power_source: CpuPowerSource | None = None,
 ) -> dict[str, Any]:
     """The fragment at ``path`` over its lane's shared block, under ``base`` for bundles.
 
-    ``power_port`` adds the DCGM telemetry block with its exporter on that port.
+    ``gpu_power`` adds its telemetry block, and ``cpu_power_source`` the cluster's CPU power
+    exporter to the telemetry block.
     """
-    raw = yaml.safe_load(path.read_text())
+    raw = yamlio.safe_load(path.read_text())
     if not isinstance(raw, dict):
         raise ValueError(f"{path}: recipe must be a mapping")
     check_fragment(raw, path, agentic=agentic, multinode=multinode)
     shared = _block(root / SHARED_BLOCKS[agentic, multinode])
-    if native_power:
+    if gpu_power == NATIVE:
         shared = merge_blocks(shared, _block(root / NATIVE_TELEMETRY_BLOCK))
-    if power_port is not None:
-        exporter = {"telemetry": {"dcgm_exporter": {"port": power_port}}}
-        shared = merge_blocks(shared, merge_blocks(_block(root / TELEMETRY_BLOCK), exporter))
+    dcgm = gpu_power if isinstance(gpu_power, int) else None
+    exporters: dict[str, Any] = {}
+    if dcgm is not None:
+        exporters["dcgm_exporter"] = {"port": dcgm}
+    if cpu_power_source is not None:
+        exporters["cpu_power_exporter"] = {"source": cpu_power_source}
+    if exporters:
+        block = _block(root / TELEMETRY_BLOCK) if dcgm is not None else {}
+        shared = merge_blocks(shared, merge_blocks(block, {"telemetry": exporters}))
     if "base" in raw:
         return {**raw, "base": merge_blocks(shared, raw["base"])}
     return merge_blocks(shared, raw)
 
 
+POWER_FLAGS = frozenset({"1", "true", "TRUE", "yes", "YES"})
+
+
 def _required(environment: Mapping[str, str], name: str) -> str:
+    """Return the input ``name`` from ``environment``, or raise ValueError if it is blank."""
     value = environment.get(name, "")
     if not value.strip():
         raise ValueError(f"Missing workload input: {name}")
@@ -216,6 +247,7 @@ def _required(environment: Mapping[str, str], name: str) -> str:
 
 
 def _positive(value: str, name: str) -> int:
+    """Return ``value`` as a positive int, or raise ValueError naming ``name``."""
     if not value.isascii() or not value.isdecimal() or int(value) <= 0:
         raise ValueError(f"{name} must be a positive integer: {value!r}")
     return int(value)
@@ -332,9 +364,12 @@ def bind_workload(
     )
     if (bound.get("telemetry") or {}).get("enabled") is True:
         benchmark["concurrencies"] = concurrencies
+        required = environment.get("REQUIRE_POWER", "0") in POWER_FLAGS
+        # A multi-node point measures power by default; only its power field makes srtctl skip
+        # the benchmark when telemetry fails.
+        required = required or (multinode and environment.get("POWER") == "1")
+        bound["telemetry"]["required"] = required
         if not multinode:
-            required = environment.get("REQUIRE_POWER", "0") in {"1", "true", "TRUE", "yes", "YES"}
-            bound["telemetry"]["required"] = required
             workload["REQUIRE_POWER"] = "1" if required else "0"
     if agentic and not multinode:
         workload["ENABLE_AGENTX_POWER"] = (
@@ -350,22 +385,100 @@ def bind_multinode(
     *,
     root: Path,
     expand: Callable[..., list[tuple[str | None, dict[str, Any]]]] = selected_recipes,
-    power_port: int | None = None,
+    gpu_power: GpuPower | None = None,
+    cpu_power_source: CpuPowerSource | None = None,
     client_env: Mapping[str, str] | None = None,
 ) -> tuple[str | None, dict[str, Any]]:
     """Bind the one variant ``recipe`` (``fragment[:selector]``) selects; return its name too."""
     agentic = environment["IS_AGENTIC"] == "1"
+    name, selected = select_multinode(
+        recipe,
+        agentic=agentic,
+        root=root,
+        expand=expand,
+        gpu_power=gpu_power,
+        cpu_power_source=cpu_power_source,
+    )
+    bound = bind_workload(
+        selected, environment, agentic=agentic, multinode=True, client_env=client_env
+    )
+    bind_speculation(bound, environment)
+    return name, bound
+
+
+def select_multinode(
+    recipe: str,
+    *,
+    agentic: bool,
+    root: Path,
+    expand: Callable[..., list[tuple[str | None, dict[str, Any]]]] = selected_recipes,
+    gpu_power: GpuPower | None = None,
+    cpu_power_source: CpuPowerSource | None = None,
+) -> tuple[str | None, dict[str, Any]]:
+    """The one composed, unbound variant ``recipe`` (``fragment[:selector]``) selects."""
     path, _, selector = recipe.partition(":")
     composed = compose_recipe(
-        Path(path), agentic=agentic, multinode=True, root=root, power_port=power_port
+        Path(path),
+        agentic=agentic,
+        multinode=True,
+        root=root,
+        gpu_power=gpu_power,
+        cpu_power_source=cpu_power_source,
     )
     variants = expand(composed, selector or None)
     if len(variants) != 1:
         raise ValueError(f"{recipe} selects {len(variants)} variants, not one")
-    name, selected = variants[0]
-    return name, bind_workload(
-        selected, environment, agentic=agentic, multinode=True, client_env=client_env
+    return variants[0]
+
+
+def discovery_on_dedicated_node(recipe: Mapping[str, Any]) -> bool:
+    """Whether ``recipe`` runs etcd and NATS on a node of their own.
+
+    srtctl then refuses GPU power telemetry: its samples would leave the benchmark's clock.
+    """
+    discovery = [
+        service
+        for service in recipe.get("services") or []
+        if service.get("enabled", True) and service.get("type") in ("etcd", "nats")
+    ]
+    if not discovery:
+        return bool((recipe.get("infra") or {}).get("etcd_nats_dedicated_node", False))
+    placements = {
+        (service.get("placement") or {}).get("node") == "dedicated" for service in discovery
+    }
+    if len(placements) != 1:
+        raise ValueError("Recipe etcd and nats must agree on dedicated placement")
+    return placements.pop()
+
+
+def selects_dedicated_discovery(recipe: str, *, agentic: bool, root: Path) -> bool:
+    """Whether the variant ``recipe`` (``fragment[:selector]``) selects runs etcd and NATS on a
+    node of their own.
+
+    Expands variants without srtctl, which the launcher's environment does not install.
+    """
+    _, selected = select_multinode(recipe, agentic=agentic, root=root, expand=expand_variants)
+    return discovery_on_dedicated_node(selected)
+
+
+def bind_speculation(recipe: dict[str, Any], environment: Mapping[str, str]) -> None:
+    """Fail unless the matrix's SPEC_DECODING says whether the generation worker drafts, and
+    give the client the algorithm and draft model it drafts with."""
+    engine = recipe.get("engine")
+    engine = ENGINES.get(environment["FRAMEWORK"]) or (
+        engine.get("type") if isinstance(engine, Mapping) else engine
     )
+    spec = spec_parameters(generation_role(recipe), engine)
+    label = environment["SPEC_DECODING"]
+    if bool(spec) != (label != "none"):
+        raise ValueError(
+            f"SPEC_DECODING: matrix {label!r}, but the generation worker "
+            f"{'drafts' if spec else 'does not draft'}"
+        )
+    if spec:
+        algorithm, draft_model = speculation_facts(_required(environment, "MODEL_PREFIX"), spec)
+        workload = recipe.setdefault("benchmark", {}).setdefault("env", {})
+        workload.update(SPEC_ALGORITHM=algorithm, SPEC_DRAFT_MODEL=draft_model)
 
 
 def resolve_fabric(node: Any, fabric: Mapping[str, str | None], where: str = "") -> Any:
@@ -406,7 +519,22 @@ def add_fabric_argument(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def add_cpu_power_source_argument(parser: argparse.ArgumentParser) -> None:
+    """``--cpu-power-source``: the cluster's CPU power exporter source, for a cpu-power point."""
+    parser.add_argument(
+        "--cpu-power-source",
+        choices=get_args(CpuPowerSource),
+        help="bind the cluster's CPU power exporter with this source",
+    )
+
+
+def _gpu_power(text: str) -> GpuPower:
+    """Parse ``--gpu-power``: a DCGM exporter port, or NATIVE."""
+    return NATIVE if text == NATIVE else int(text)
+
+
 def _assignment(text: str) -> tuple[str, str]:
+    """Split a ``NAME=VALUE`` argument, or raise ArgumentTypeError if malformed."""
     name, separator, value = text.partition("=")
     if not separator or not name:
         raise argparse.ArgumentTypeError(f"expected NAME=VALUE, got {text!r}")
@@ -414,12 +542,17 @@ def _assignment(text: str) -> tuple[str, str]:
 
 
 def main(argv: list[str] | None = None) -> None:
+    """Bind the multi-node recipe variant ``argv`` names and write it to the output path."""
     parser = argparse.ArgumentParser(description="Bind one multi-node recipe variant")
     parser.add_argument("recipe", help="fragment[:selector]")
     parser.add_argument("output", type=Path)
     parser.add_argument(
-        "--power-port", type=int, help="merge the DCGM telemetry block, its exporter on this port"
+        "--gpu-power",
+        type=_gpu_power,
+        help=f"merge a GPU telemetry block: the DCGM one with its exporter on this port, or "
+        f"{NATIVE!r} for the cluster's own exporter",
     )
+    add_cpu_power_source_argument(parser)
     parser.add_argument(
         "--client-env",
         type=_assignment,
@@ -436,7 +569,8 @@ def main(argv: list[str] | None = None) -> None:
             args.recipe,
             os.environ,
             root=root,
-            power_port=args.power_port,
+            gpu_power=args.gpu_power,
+            cpu_power_source=args.cpu_power_source,
             client_env=dict(args.client_env),
         )
         bound = resolve_fabric(bound, args.fabric)

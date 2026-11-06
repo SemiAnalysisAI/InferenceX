@@ -12,9 +12,11 @@ entry-name:
   runner: string
   precision: string
   framework: string
+  multinode: bool
+  disagg: bool  # optional, multinode only
   # Optional defaults for every search-space entry in this config.
   router: { name: string, version: string }
-  kv-p2p-transfer: string
+  kv-p2p-transfer: string  # multinode only
   # Recipe directory under benchmarks/<single|multi>_node/srt-slurm-recipes/.
   srt-recipe-dir: string
   scenarios:
@@ -25,16 +27,15 @@ entry-name:
       - { tp: int, conc-start: int, conc-end: int, srt-recipe: string }
       # Optionally, specify pipeline/expert/data-attention/context parallelism.
       - { tp: int, pp: int, ep: int, dp-attn: bool, dcp-size: int, pcp-size: int, conc-start: int, conc-end: int }
-      # Optionally, declare router metadata and the P2P KV transfer engine.
+      # Optionally, declare router metadata.
       - tp: int
         router: { name: string, version: string }
-        kv-p2p-transfer: string
         conc-start: int
         conc-end: int
       - ...
     - ...
     agentic-coding:  # optional
-    - trace-source: string
+    - dram-utilization: float  # required by kv-offloading: dram
       search-space:
       - tp: int
         kv-offloading: dram
@@ -82,13 +83,14 @@ The below list describes what each field is:
 
 - `image`: The image used to serve the benchmark, e.g., `vllm/vllm-openai:v0.10.2`
 - `model`: The model to serve, e.g., `deepseek-ai/DeepSeek-R1-0528`
-- `model-prefix`: The canonical InferenceX model prefix reference, i.e., `dsr1` for DeepSeek-R1 or `qwen3.5` for Qwen3.5. Consult `docs/MODELS.md` for supported model/scenario combinations. This value is used to decipher which script in `benchmarks/` should be used in order to launch the benchmark.
+- `model-prefix`: The canonical InferenceX model prefix reference, i.e., `dsr1` for DeepSeek-R1 or `qwen3.5` for Qwen3.5. Consult `docs/MODELS.md` for supported model/scenario combinations. The launcher's workload policy rows in [`infx/launch/policy.py`](../infx/launch/policy.py) match on this value.
 - `runner`: This is the runner label on which to run the benchmark. This must be a valid key under `labels` in `runners.yaml`.
   Agentic configs must use an exact `cluster:<name>` runner label, not a broad
   SKU or capacity label, so every search-space point runs on the same hardware
   fleet.
-- `precision`: The precision to run the benchmark. Again, this is used to find which script to run in `benchmarks/`.
+- `precision`: The precision to run the benchmark. Launcher workload policy rows may also match on it.
 - `framework`: The framework (serving runtime) to serve the benchmark, e.g., `vllm`, `sglang`, `trt`.
+- `multinode`: Required. `true` selects the multinode schema with `prefill`/`decode` or `worker` blocks, and `false` the single-node schema with `tp` entries.
 - `disagg`: Enables disaggregated serving and may only be `true` when
   `multinode` is also `true`.
 - `hardware`: Optional metadata within each `prefill` and `decode` worker block
@@ -98,10 +100,11 @@ The below list describes what each field is:
   scheduling.
 - `scenarios`: A dictionary of benchmark scenario types. At least one must be specified. Currently supported:
   - `fixed-seq-len`: Fixed input/output sequence length benchmarks. Each entry must have:
-    - `isl`: An integer representing the input sequence length, e.g., `1024`
-    - `osl`: An integer representing the output sequence length, e.g., `8192`
+    - `isl`: An integer representing the input sequence length, e.g., `8192`
+    - `osl`: An integer representing the output sequence length, e.g., `1024`
+    - PR sweeps run only `isl`/`osl` pairs 1024/1024 and 8192/1024; the changelog planner rejects any other pair.
     - `search-space`: A list of configurations to run with respective `isl` and `osl`, each entry must be a dict with the following fields:
-      - `tp`: An integer representing the tensor parallelism level that the configuration will be served at.
+      - `tp`: A positive integer representing the benchmark's parallel width. In native single-node SRT recipes, its mapping depends on the engine: TokenSpeed and vLLM use attention TP/TP times data parallelism, while SGLang and TensorRT-LLM compare their TP fields directly. See [single-node parallelism validation](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md#single-node-parallelism-validation) for the full mapping and mismatch behavior.
       - `conc-start`: An integer representing the starting level of concurrency e.g., `4`
       - `conc-end`: An integer representing the ending level of concurrency (inclusive) e.g., `128`
       - Note: the step factor between `conc-start` and `conc-end` is 2, so if `conc-start` is 4 and `conc-end` is 128, all concurrencies `4, 8, 16, 32, ..., 128` will be run.
@@ -114,9 +117,9 @@ The below list describes what each field is:
       - (Optional) `pcp-size`: Prefill context-parallel size. Default is 1. A topology consumes `tp * pp * pcp-size` GPUs per worker. DCP does not add GPUs.
       - For single-node entries, set `pp`, `dcp-size`, and `pcp-size` directly in the search-space entry.
       - For multinode entries, set them independently inside each `prefill` and `decode` worker block. A worker pool allocates `num-worker * tp * pp * pcp-size` GPUs.
-  - `agentic-coding`: Agentic trace replay benchmarks using real conversation traces. Each entry must have:
-    - `trace-source`: Identifier for the trace dataset to use.
-    - `search-space`: Same structure as `fixed-seq-len` search-space entries.
+  - `agentic-coding`: Agentic trace replay benchmarks using real conversation traces. Each entry has:
+    - (Optional) `dram-utilization`: The fraction of each node's available CPU DRAM that DRAM KV offloading may use, greater than 0 and at most 1. It is required when any search-space entry sets `kv-offloading: dram`.
+    - `search-space`: Same structure as `fixed-seq-len` search-space entries, plus `kv-offloading` (`none` or `dram`, required for single-node entries) and the optional `kv-offload-backend`.
 
 `router` and `kv-p2p-transfer` may be omitted independently. Router metadata
 requires non-empty `name` and `version` strings. Its `version` must be the
@@ -150,7 +153,8 @@ input.
 
 Notes:
 - The fields above are the common ones, not the full schema. The Pydantic models in [`infx/matrix/validation.py`](../infx/matrix/validation.py) are the authoritative contract; they also accept fields such as `spec-decoding`, `num-nodes`, `require-power` and `power`, and they reject any field they do not define, which fails matrix generation.
-- A multinode search-space entry with `power: true` measures DCGM power: its rows carry `power: true`, the launcher merges the shared telemetry block into the recipe and rejects lanes without a power rule.
+- Every multinode benchmark point on a cluster with a GPU exporter measures GPU power (DCGM where the cluster sets `srt-slurm.power-exporter-port`, its `default_gpu_exporter` elsewhere), and CPU power where the cluster declares a `cpu-power-exporter`, unless its recipe runs etcd and NATS on a dedicated node; it keeps its result when telemetry fails. A search-space entry with `power: true` makes failed telemetry or invalid AgentX power fail the point, and is rejected on a cluster without a GPU exporter.
+- A multinode entry with `cpu-power: true` beside `power: true` also measures CPU power: its rows carry `cpu-power: true` and the launcher binds the cluster's `cpu-power-exporter` record beside the GPU telemetry block. Native single-node points measure CPU power by default on a cluster that declares a `cpu-power-exporter`; a single-node fixed-sequence entry sets `cpu-power: true` alone to count a missing CPU leg as invalid.
 - srt-slurm entries require `srt-recipe-dir`. Every row requires `srt-recipe: <file>[:<selector>]` under it (selector: `base`, `override_<name>` or `zip_override_<name>[<i>]`). Multinode rows may add `eval-srt-recipe`. Validation rejects missing files or variants, and `CONFIG_FILE`/`EVAL_CONFIG_FILE` settings. Only `llmd-vllm` keeps `CONFIG_FILE`. Generated rows carry the path from `inferencex-e2e/`.
 - Setting the fields above only guarantees that their values are passed as environment variables to benchmark scripts. Single-node jobs receive `PP_SIZE`, `DCP_SIZE`, and `PCP_SIZE`. Multinode jobs receive `PREFILL_PP_SIZE`, `PREFILL_DCP_SIZE`, `PREFILL_PCP_SIZE`, `DECODE_PP_SIZE`, `DECODE_DCP_SIZE`, and `DECODE_PCP_SIZE`. Actually using those variables is an implementation detail of the benchmark Bash script.
 
@@ -262,7 +266,11 @@ schema; unknown keys fail.
   volumes every job mounts to container paths, `mounts` does the same for host
   paths outside the volumes (devices), `agentic-volume-mounts` adds world-writable
   volumes for multi-node AgentX jobs, `power-exporter-port` is the DCGM exporter port
-  of power points, `env` is the environment of the srt-slurm
+  of multi-node power points (without it they use `extra.default_gpu_exporter`), `cpu-power-exporter` (`source: acpi` or `rapl`) is the CPU power exporter native
+  single-node points and `cpu-power` rows bind beside it (`make setup` installs it from the pinned srt-slurm
+  release; a RAPL job's host setup gives the job user the RAPL counters until teardown, so `rapl`
+  needs `slurm.exclusive` and `single-node-exclusive`),
+  `env` is the environment of the srt-slurm
   launch, `container-aliases` and `nginx-aliases` name the recipe containers that
   resolve to the main image and to the staged nginx, and `outputs`,
   `shared-run-root` and `uv-cache-root` are the directories the srt-slurm launcher
@@ -278,13 +286,15 @@ schema; unknown keys fail.
   same way; they resolve when the record loads, and `env` still rejects the commas of a
   list.
 - `slurm.srt-slurm.extra.default_gpu_exporter` is the cluster's native power exporter.
-  Native single-node throughput and AgentX jobs inherit it when the bound recipe
-  enables telemetry without selecting its own exporter; eval-only jobs collect no power.
-  A cluster without the block stops preparation before the benchmark starts. An invalid
+  Native single-node throughput and AgentX jobs, and multi-node points on a cluster
+  without `power-exporter-port`, inherit it when the bound recipe enables telemetry
+  without selecting its own exporter; eval-only jobs collect no power. A single-node job
+  on a cluster without the block stops preparation before the benchmark starts; a
+  multi-node point measures no GPU power and keeps its result. An invalid
   measurement fails the job under `REQUIRE_POWER=1` and otherwise records an invalid
   verdict without energy metrics. NVIDIA clusters run `dcgm-exporter`; AMD clusters use
   srt-slurm's
-  [`kind: custom` schema](https://github.com/NVIDIA/srt-slurm/blob/ae3d6877c46f3147e3a5dafa46ee4cd89322e52f/docs/power-telemetry.md#gpu-exporter-labels-and-metrics),
+  [`kind: custom` schema](https://github.com/NVIDIA/srt-slurm/blob/acfb4dcc3bd48fd6a1e7b615e849e7954c0c3852/docs/power-telemetry.md#gpu-exporter-labels-and-metrics),
   which requires `gpu_labels` and `gpu_metrics` and rejects unknown keys such as the
   former `power_profile`. The AMD exporter reads
   [`runners/srt-slurm/exporters/amd-power.json`](../runners/srt-slurm/exporters/amd-power.json);

@@ -75,13 +75,16 @@ class SuiteSpec:
 
     @property
     def leaf_categories(self) -> tuple[str, ...]:
+        """Leaf category names in suite order."""
         return tuple(category for category, _ in self.expected_leaf_counts)
 
     @property
     def expected_sample_count(self) -> int:
+        """Total number of cases across all leaf categories."""
         return sum(count for _, count in self.expected_leaf_counts)
 
     def projected_task(self, category: str) -> str:
+        """Return the projected lm-eval task name for category."""
         if self.name == TASK_NAME:
             return f"bfcl_{category}"
         return f"{self.name}_{category}"
@@ -162,7 +165,9 @@ class UpstreamRunner(Protocol):
         base_url: str,
         api_key: str,
         num_threads: int,
-    ) -> None: ...
+    ) -> None:
+        """Run BFCL generation and evaluation for model against base_url under project_root."""
+        ...
 
 
 @dataclass(frozen=True)
@@ -177,6 +182,7 @@ class CategoryScore:
     total_count: int
 
     def as_dict(self) -> dict[str, Any]:
+        """Return the score as a JSON-ready dict with a per-case pass or fail entry."""
         failure_ids = {record["id"] for record in self.records}
         return {
             "category": self.category,
@@ -196,12 +202,17 @@ class CategoryScore:
 
 
 def _nonempty_string(value: str) -> str:
+    """Return value stripped of whitespace, raising ArgumentTypeError if it is blank."""
     if not value.strip():
         raise argparse.ArgumentTypeError("must be a non-empty string")
     return value.strip()
 
 
 def _absolute_http_url(value: str) -> str:
+    """Return value without trailing slashes.
+
+    Raises ArgumentTypeError unless it is an absolute HTTP(S) API root URL.
+    """
     normalized = _nonempty_string(value).rstrip("/")
     parsed = urllib.parse.urlsplit(normalized)
     if (
@@ -221,6 +232,7 @@ def _absolute_http_url(value: str) -> str:
 
 
 def _positive_int(value: str) -> int:
+    """Parse value as an int, raising ArgumentTypeError unless it is greater than 0."""
     try:
         parsed = int(value)
     except ValueError as exc:
@@ -231,9 +243,9 @@ def _positive_int(value: str) -> int:
 
 
 def _source_details(
-    suite: SuiteSpec,  # noqa: ARG001
     case_ids_by_category: Mapping[str, tuple[str, ...]],
 ) -> dict[str, Any]:
+    """Return the pinned upstream source metadata plus the case IDs selected per category."""
     return {
         "url": UPSTREAM_SOURCE,
         "repository": UPSTREAM_REPOSITORY,
@@ -250,12 +262,14 @@ def _source_details(
 
 
 def _error_dict(error: BaseException) -> dict[str, str]:
+    """Return the type name and message of error as a dict."""
     return {"type": type(error).__name__, "message": str(error)}
 
 
 def _expected_category_details(
     case_ids_by_category: Mapping[str, tuple[str, ...]],
 ) -> list[dict[str, Any]]:
+    """Return placeholder diagnostics that mark every expected case in each category as failed."""
     return [
         {
             "category": category,
@@ -272,12 +286,12 @@ def _expected_category_details(
 
 
 def _diagnostics(
-    suite: SuiteSpec,
     case_ids_by_category: Mapping[str, tuple[str, ...]],
     scores: Sequence[CategoryScore] | None = None,
 ) -> dict[str, Any]:
+    """Return source metadata and per-category diagnostics, with placeholders if scores is None."""
     return {
-        "source": _source_details(suite, case_ids_by_category),
+        "source": _source_details(case_ids_by_category),
         "categories": (
             [score.as_dict() for score in scores]
             if scores is not None
@@ -296,6 +310,7 @@ def _native_report(
     scores: Sequence[CategoryScore] | None,
     integration_error: BaseException | None = None,
 ) -> dict[str, Any]:
+    """Build the native BFCL report for model from scores, recording integration_error if given."""
     correct_count = sum(score.correct_count for score in scores or ())
     total_count = sum(score.total_count for score in scores or ())
     accuracy = correct_count / total_count if total_count else 0.0
@@ -317,7 +332,7 @@ def _native_report(
             "total_count": total_count,
             "expected_count": suite.expected_sample_count,
         },
-        "bfcl": _diagnostics(suite, case_ids_by_category, scores),
+        "bfcl": _diagnostics(case_ids_by_category, scores),
     }
     if integration_error is not None:
         report["integration_error"] = _error_dict(integration_error)
@@ -332,6 +347,10 @@ def _compatibility_result(
     scores: Sequence[CategoryScore] | None,
     integration_error: BaseException | None = None,
 ) -> dict[str, Any]:
+    """Build the lm-eval style result for model with suite and per-category accuracies.
+
+    Records integration_error in the result when given.
+    """
     score_by_category = {score.category: score for score in scores or ()}
     total_count = sum(score.total_count for score in scores or ())
     correct_count = sum(score.correct_count for score in scores or ())
@@ -390,7 +409,7 @@ def _compatibility_result(
         "results": results,
         "configs": configs,
         "n-samples": task_samples,
-        "bfcl": _diagnostics(suite, case_ids_by_category, scores),
+        "bfcl": _diagnostics(case_ids_by_category, scores),
     }
     if integration_error is not None:
         result["integration_error"] = _error_dict(integration_error)
@@ -398,6 +417,7 @@ def _compatibility_result(
 
 
 def _write_json(path: Path, value: Mapping[str, Any]) -> None:
+    """Write value to path as indented UTF-8 JSON."""
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
@@ -437,6 +457,7 @@ def _write_upstream_attribution(project_root: Path) -> None:
 
 
 def _prepare_output_paths(output_dir: Path) -> tuple[Path, Path]:
+    """Create output_dir, delete stale reports and return the (native, compatibility) paths."""
     output_dir.mkdir(parents=True, exist_ok=True)
     native_path = output_dir / NATIVE_REPORT_FILENAME
     native_path.unlink(missing_ok=True)
@@ -467,6 +488,7 @@ def _bounded_openai_handler(stock_handler: type[Any]) -> type[Any]:
 
     class BoundedOpenAICompletionsHandler(stock_handler):
         def _build_client_kwargs(self) -> dict[str, Any]:
+            """Return the stock client kwargs with the full-suite timeout and retry limits."""
             kwargs = super()._build_client_kwargs()
             kwargs.update(
                 timeout=FULL_SUITE_REQUEST_TIMEOUT_SECONDS,
@@ -478,6 +500,7 @@ def _bounded_openai_handler(stock_handler: type[Any]) -> type[Any]:
 
 
 def _write_id_map(project_root: Path, case_ids_by_category: Mapping[str, tuple[str, ...]]) -> None:
+    """Write the selected case IDs per category to project_root/test_case_ids_to_generate.json."""
     project_root.mkdir(parents=True, exist_ok=True)
     _write_json(
         project_root / "test_case_ids_to_generate.json",
@@ -518,6 +541,11 @@ def _load_dataset_helpers() -> tuple[
 def _build_suite_case_ids(
     suite: SuiteSpec,
 ) -> dict[str, tuple[str, ...]]:
+    """Return the case IDs per leaf category that suite evaluates.
+
+    Splits each category limit evenly across its leaves. Raises ValueError on malformed or duplicate
+    dataset entries or unexpected counts.
+    """
     if suite is SMOKE_SUITE:
         return dict(SMOKE_CASE_IDS)
 
@@ -561,6 +589,10 @@ def _build_suite_case_ids(
 def _read_selected_suite(
     project_root: Path,
 ) -> tuple[SuiteSpec, dict[str, tuple[str, ...]]]:
+    """Read the case ID map under project_root and return the suite it matches with those IDs.
+
+    Raises ValueError if the map is malformed or matches no supported suite.
+    """
     raw = json.loads((project_root / "test_case_ids_to_generate.json").read_text(encoding="utf-8"))
     if not isinstance(raw, Mapping):
         raise ValueError("BFCL test-case ID map must be a JSON object")
@@ -590,7 +622,11 @@ def _run_upstream(
     api_key: str,
     num_threads: int,
 ) -> None:
-    """Lazily load and invoke the pinned BFCL API against an existing server."""
+    """Lazily load and invoke the pinned BFCL API against an existing server.
+
+    Also registers the model config under its result-dir name with every "_" turned
+    into "/", since that is how BFCL evaluation looks configs up.
+    """
     suite, case_ids_by_category = _read_selected_suite(project_root)
     _apply_suite_runtime_limits(suite)
     os.environ["BFCL_PROJECT_ROOT"] = str(project_root)
@@ -610,7 +646,7 @@ def _run_upstream(
         else _bounded_openai_handler(OpenAICompletionsHandler)
     )
 
-    bfcl_model_config.MODEL_CONFIG_MAPPING[model] = ModelConfig(
+    model_config = ModelConfig(
         model_name=model,
         display_name=f"{model} (FC) (InferenceX)",
         url="",
@@ -622,6 +658,8 @@ def _run_upstream(
         is_fc_model=True,
         underscore_to_dot=True,
     )
+    bfcl_model_config.MODEL_CONFIG_MAPPING[model] = model_config
+    bfcl_model_config.MODEL_CONFIG_MAPPING[model.replace("/", "_").replace("_", "/")] = model_config
 
     categories = list(suite.generation_categories)
     generation_kwargs = _function_defaults(generate)
@@ -650,6 +688,10 @@ def _validate_generated_results(
     project_root: Path,
     case_ids_by_category: Mapping[str, tuple[str, ...]] = SMOKE_CASE_IDS,
 ) -> None:
+    """Check each category has one result file under project_root with the expected case IDs.
+
+    Raises ValueError on malformed files and RuntimeError if any case hit an inference error.
+    """
     for category, case_ids in case_ids_by_category.items():
         matches = sorted(project_root.glob(f"result/**/BFCL_v4_{category}_result.json"))
         if len(matches) != 1:
@@ -690,6 +732,11 @@ def _validate_generated_results(
 
 
 def _validate_header(*, category: str, header: Any, expected_count: int) -> tuple[float, int, int]:
+    """Check a category score header against expected_count and return its counts.
+
+    Returns (accuracy, correct count, total count). Raises ValueError if fields are missing,
+    mistyped or inconsistent.
+    """
     if not isinstance(header, Mapping):
         raise ValueError(f"{category} score header must be a JSON object")
     missing = {"accuracy", "correct_count", "total_count"} - header.keys()
@@ -724,6 +771,11 @@ def _collect_scores(
     project_root: Path,
     case_ids_by_category: Mapping[str, tuple[str, ...]] = SMOKE_CASE_IDS,
 ) -> list[CategoryScore]:
+    """Read and validate each category's BFCL score file under project_root.
+
+    Returns one CategoryScore per category. Raises ValueError if a file is missing, malformed or
+    disagrees with its header.
+    """
     scores: list[CategoryScore] = []
     for category, case_ids in case_ids_by_category.items():
         matches = sorted(project_root.glob(f"score/**/BFCL_v4_{category}_score.json"))
@@ -958,6 +1010,10 @@ def install_runtime(download_dir: Path, uv: str) -> None:
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Parse CLI arguments from argv.
+
+    Enforces the options each mode needs and defaults --num-threads per suite.
+    """
     parser = argparse.ArgumentParser(description="Run a pinned BFCL V4 OpenAI completions suite.")
     parser.add_argument(
         "--install-runtime",
@@ -997,6 +1053,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """Install the runtime, record an integration error or run the suite.
+
+    Returns 0 on pass, 1 on failure or after recording an error.
+    """
     args = parse_args(argv)
     if args.install_runtime is not None:
         try:
