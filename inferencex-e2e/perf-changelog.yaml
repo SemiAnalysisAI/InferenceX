@@ -12282,5 +12282,5 @@
     - minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-disagg
   description:
     - "Rerun the unchanged MiniMax-M3.1-Flash GB200 Dynamo-vLLM AgentX configs to collect measured GPU and Grace CPU power; the published curve (2026-11-01) predates default-on multinode power collection and carries no power fields."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4863
   scenario-type: [agentic-coding]
