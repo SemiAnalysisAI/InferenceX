@@ -76,7 +76,7 @@ def test_amd_board_sums_only_eight_gpus_and_eight_retimers(board_type, gpu_power
     [
         (MI300HGXSystemChassis, "MI300UBB", 4684.561756979, 22.561756979),
         (MI325HGXSystemChassis, "MI325UBB", 4742.224743017, 14.224743017),
-        (MI355HGXSystemChassis, "MI355UBB", 4735.779807878, 7.779807878),
+        (MI355HGXSystemChassis, "MI355UBB", 5085.571057424, 9.571057424),
     ],
 )
 def test_amd_chassis_defaults_to_its_board_and_scales_retimers_once(
