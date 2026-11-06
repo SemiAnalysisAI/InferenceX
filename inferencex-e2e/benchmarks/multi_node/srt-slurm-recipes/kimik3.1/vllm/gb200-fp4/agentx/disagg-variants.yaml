@@ -1,0 +1,156 @@
+schema: 2
+
+base:
+  identity:
+    model: {}
+    container: {}
+
+  slurm:
+    time_limit: "6:00:00"
+
+  health_check:
+    max_attempts: 720
+    interval_seconds: 10
+
+  resources:
+    gpu_type: "gb200"
+    gpus_per_node: 4
+
+  environment:
+    # Identical prefixes must hash to identical block keys run-to-run.
+    PYTHONHASHSEED: "0"
+
+  frontend:
+    type: vllm-router
+    enable_multiple_frontends: false
+    args:
+      policy: consistent_hash
+      prometheus-host: 127.0.0.1
+      prometheus-port: 18000
+      request-timeout-secs: 14400
+      disable-retries: true
+
+  setup_script: vllm-router.sh
+
+  engine:
+    type: vllm
+    connector:
+
+  roles:
+    prefill:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      env: &kimi_env
+        VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+        VLLM_RPC_TIMEOUT: "600000"
+        # Outlast the router's pooled-connection idle gaps (disable-retries makes a reset fatal).
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "600"
+        # NIXL moves the KDA short-conv state in three reads, which needs the DS layout.
+        VLLM_SSM_CONV_STATE_LAYOUT: "DS"
+        NCCL_CUMEM_ENABLE: "1"
+        NCCL_MNNVL_ENABLE: "1"
+        NCCL_NVLS_ENABLE: "1"
+        UCX_MEMTYPE_CACHE: "n"
+        UCX_MEMTYPE_REG_WHOLE: "n"
+        HF_HUB_CACHE: "/hf_hub_cache"
+        HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
+      args:
+        # 112742379520 bytes per rank is the dram-utilization 0.5 share of a 4-GPU tray.
+        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda"},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":112742379520,"lazy_offload":false}}]}}'
+        served-model-name: "moonshotai/Kimi-K3.1-Pro"
+        # NixlConnector rejects pipeline parallelism on KDA hybrids, so each role is one TP16 group.
+        tensor-parallel-size: 16
+        enable-expert-parallel: true
+        trust-remote-code: true
+        language-model-only: true
+        load-format: fastsafetensors
+        moe-backend: auto
+        gpu-memory-utilization: 0.88
+        max-model-len: 1048576
+        max-num-batched-tokens: 16384
+        kv-cache-dtype: fp8
+        attention-config: '{"indexer_kv_dtype":"mxfp4"}'
+        mamba-ssm-cache-dtype: float32
+        enable-prefix-caching: true
+        enable-auto-tool-choice: true
+        tool-call-parser: kimi_k3
+        reasoning-parser: kimi_k3
+        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"method":"dspark","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+    decode:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      env:
+        <<: *kimi_env
+      args:
+        kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_consumer","kv_load_failure_policy":"fail","kv_buffer_device":"cuda"}'
+        served-model-name: "moonshotai/Kimi-K3.1-Pro"
+        tensor-parallel-size: 16
+        # TP16/EP1 holds 131.5 GiB/GPU of weights and leaves under 20 GiB of KV for a 1M-token context.
+        enable-expert-parallel: true
+        trust-remote-code: true
+        language-model-only: true
+        load-format: fastsafetensors
+        moe-backend: auto
+        gpu-memory-utilization: 0.9
+        max-model-len: 1048576
+        # Bounds the MoE autotune workspace to decode-sized batches.
+        max-num-batched-tokens: 1024
+        kv-cache-dtype: fp8
+        attention-config: '{"indexer_kv_dtype":"mxfp4"}'
+        mamba-ssm-cache-dtype: float32
+        enable-prefix-caching: true
+        enable-auto-tool-choice: true
+        tool-call-parser: kimi_k3
+        reasoning-parser: kimi_k3
+        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"method":"dspark","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+
+  sbatch_directives:
+    mem: "0"
+    cpus-per-task: "144"
+
+  srun_options:
+    mem: "0"
+    container-remap-root: ""
+
+  telemetry:
+    collector_join_timeout_seconds: 12
+
+  benchmark:
+    placement:
+      node: head
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
+      AIPERF_HTTP_TCP_USER_TIMEOUT: "900000"
+
+# Admission is 2x CONC on both roles; decode graphs capture max-num-seqs x (1 + 4 draft tokens).
+override_1p1d_tp16_c16:
+  roles:
+    prefill:
+      args:
+        max-num-seqs: 32
+    decode:
+      args:
+        max-num-seqs: 32
+        max-cudagraph-capture-size: 160
+
+override_1p1d_tp16_c32:
+  roles:
+    prefill:
+      args:
+        max-num-seqs: 64
+    decode:
+      args:
+        max-num-seqs: 64
+        max-cudagraph-capture-size: 320
+
+override_1p1d_tp16_c48:
+  roles:
+    prefill:
+      args:
+        max-num-seqs: 96
+    decode:
+      args:
+        max-num-seqs: 96
+        max-cudagraph-capture-size: 480
