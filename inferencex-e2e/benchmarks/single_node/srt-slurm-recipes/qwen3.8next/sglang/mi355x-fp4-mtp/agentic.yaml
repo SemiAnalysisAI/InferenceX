@@ -123,13 +123,17 @@ override_c2:
 
 # c12, c24, c48 and c80 keep ReplaySSM and the PLE offload, store the target and draft KV
 # caches in FP8 (E4M3), and add HiCache host-DRAM offload with a Mamba state pool
-# that tracks a checkpoint every 256 tokens (extra_buffer_lazy). HiCache takes the
+# whose checkpoint interval is 262144 tokens, so a prompt gets no interior checkpoints
+# (extra_buffer_lazy). HiCache takes the
 # point's 299 GB DRAM share from the matrix generator (hicache-size 200 at c12 and c24,
 # 298 at c48 and c80); TOTAL_CPU_DRAM_GB records it. mem-fraction-static is 0.88, used
 # as given. c12 and c24 admit 2x CONC; c48 and c80 admit 128 requests.
 # SGLANG_OPT_QWEN4_FUSED_HC (sglang#48648) fuses the decode-sized hyper-connection
-# norm and inject into the mix. c80 caches only the prompt on finish and keeps at most
-# two Mamba states per path.
+# norm and inject into the mix. The prefill CUDA graph backend is breakable (the AMD
+# reference recipes get it from an SGLang default change that this image lacks), which
+# captures the GDN prefill on static per-bucket tables; a batch outside the captured
+# buckets runs eagerly through the AITER fused prefill. c80 caches only the prompt on
+# finish and keeps at most two Mamba states per path.
 override_c12:
   roles:
     agg:
@@ -141,7 +145,8 @@ override_c12:
         cuda-graph-max-bs-decode: 24
         max-mamba-cache-size: 960
         mamba-radix-cache-strategy: extra_buffer_lazy
-        mamba-track-interval: 256
+        mamba-track-interval: 262144
+        cuda-graph-backend-prefill: breakable
         enable-hierarchical-cache: true
         hicache-size: 200
         hicache-io-backend: kernel
