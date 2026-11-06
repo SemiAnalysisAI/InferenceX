@@ -178,7 +178,7 @@ override_dram_c32:
       TOTAL_CPU_DRAM_GB: '1799'
 
 override_dram_c48:
-  # Back the KV cache with one LMCache MP server holding the whole 1799 GB DRAM budget as L1,
+  # Back the KV cache with one LMCache MP server holding the whole 899 GB DRAM budget as L1,
   # in place of the Simple CPU offload. Installs LMCache in the worker container; the service
   # installs its own.
   setup_script: lmcache-mp-rocm.sh
@@ -186,7 +186,7 @@ override_dram_c48:
     - name: lmcache
       type: lmcache-server
       preamble: bash /configs/lmcache-mp-rocm.sh
-      # The install and the 1799 GB L1 preallocation count against the probe.
+      # The install and the 899 GB L1 preallocation count against the probe.
       readiness:
         http:
           port: 8751
@@ -197,9 +197,9 @@ override_dram_c48:
         LMCACHE_ROCM_FORCE_BATCH_MEMCPY: '1'
       args:
         - --l1-size-gb
-        - '1799'
+        - '899'
         - --l1-init-size-gb
-        - '1799'
+        - '899'
         - --l1-read-ttl-seconds
         - '7200'
         - --session-ttl-seconds
@@ -235,5 +235,5 @@ override_dram_c48:
     env:
       CONC: '48'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1799'
+      TOTAL_CPU_DRAM_GB: '899'
 
