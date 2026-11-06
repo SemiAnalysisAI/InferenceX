@@ -1,0 +1,95 @@
+base:
+  schema: 2
+  name: glm5.3flash-fp8-b200-sglang-agentic
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: zai-org/GLM-5.3-Flash
+        tensor-parallel-size: 8
+        dsa-prefill-backend: trtllm
+        dsa-decode-backend: trtllm
+        kv-cache-dtype: fp8_e4m3
+        moe-runner-backend: flashinfer_trtllm
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 5
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 6
+        reasoning-parser: auto
+        tool-call-parser: auto
+        watchdog-timeout: 1800
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        # Outlast AIPerf's 300 s client connection pool.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+  benchmark:
+    env:
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      KV_OFFLOADING: none
+
+override_c1:
+  benchmark:
+    env:
+      CONC: '1'
+
+override_c4:
+  benchmark:
+    env:
+      CONC: '4'
+
+override_c8:
+  benchmark:
+    env:
+      CONC: '8'
+
+override_c16:
+  benchmark:
+    env:
+      CONC: '16'
+
+override_c24:
+  benchmark:
+    env:
+      CONC: '24'
+
+override_c32:
+  benchmark:
+    env:
+      CONC: '32'
+
+override_hicache_c40:
+  roles:
+    agg:
+      args:
+        # Auto-sized host tier (default fraction 0.8): a 32 GB/rank tier is smaller than the
+        # device KV pool, which SGLang warns reduces L2 effectiveness.
+        enable-hierarchical-cache: true
+  benchmark:
+    env:
+      CONC: '40'
+      KV_OFFLOADING: dram
+
+override_hicache_c48:
+  roles:
+    agg:
+      args:
+        enable-hierarchical-cache: true
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: dram
