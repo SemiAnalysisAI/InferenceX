@@ -148,6 +148,36 @@ def test_atom_verifier_is_unknown_and_reported_unverified() -> None:
     assert ["unverified", "verify", "unknown", "block (explicit)"] in findings
 
 
+@pytest.mark.parametrize(
+    ("topk", "topology"),
+    [
+        (1, Fact("chain", "explicit")),
+        (4, Fact("tree-topk4", "explicit")),
+        (None, Fact(None, "unknown")),
+    ],
+)
+def test_tokenspeed_identity_keeps_unread_semantics_unknown(
+    topk: int | None, topology: Fact
+) -> None:
+    args = {
+        "speculative-algorithm": "MTP",
+        "speculative-num-steps": 3,
+        "speculative-draft-model-quantization": "modelopt_mixed",
+        "kv-cache-dtype": "bfloat16",
+        "sampling-backend": "greedy",
+    }
+    if topk is not None:
+        args["speculative-eagle-topk"] = topk
+    run = run_collection("qwen3.8next", _role(**args), "tokenspeed")
+    assert run.engine == "tokenspeed"
+    assert run.draft == "native"
+    assert run.topology == topology
+    assert run.draft_precision == Fact("modelopt_mixed", "explicit")
+    assert run.kv_cache_dtype == Fact("bf16", "explicit")
+    assert run.draft_kv_cache_dtype == Fact(None, "default")
+    assert run.verify == run.draft_sample == run.adaptive == Fact(None, "unknown")
+
+
 def test_adaptive_run_is_reported() -> None:
     spec = {
         "method": "dspark", "num_speculative_tokens": 5, "draft_sample_method": "probabilistic",
