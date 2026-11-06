@@ -4,12 +4,6 @@ base:
   identity:
     model:
       revision: 46a050bec13002ad29ee795c16e61cf4fa3c4a9c
-  # h100-dsxe stages no GLM-5.3-Flash checkpoint; fetch the pinned revision into the shared HF cache.
-  setup_script: stage-hf-checkpoint.sh
-  environment:
-    HF_CHECKPOINT_REPO: zai-org/GLM-5.3-Flash
-    HF_CHECKPOINT_REVISION: 46a050bec13002ad29ee795c16e61cf4fa3c4a9c
-    HF_CHECKPOINT_BUDGET_BYTES: '400000000000'
   resources:
     gpu_type: h100
     gpus_per_node: 8
