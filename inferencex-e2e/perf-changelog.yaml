@@ -12315,3 +12315,10 @@
     - "Update the vLLM ROCm image from v0.32.0 to v0.33.0, pinned by digest."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4794
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-h100-vllm-agentic-dspark
+  description:
+    - "Update the vLLM image from nightly-e4a5b5537344 to nightly-00b6c4c565a8, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4569
+  scenario-type: [agentic-coding]
