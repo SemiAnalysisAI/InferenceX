@@ -35,6 +35,7 @@ ROUTES: dict[LaunchPath, Route] = {
     LaunchPath.SRT_BATCH: Route("slurm", srt.run_batch),
     LaunchPath.SRT_MULTI: Route("slurm", srt.run_multinode),
     LaunchPath.SRT_NATIVE: Route("slurm", srt.run_multinode),
+    LaunchPath.SRT_VIDEO: Route("slurm", srt.run_video),
     LaunchPath.SCRIPT: Route(None, script.run),
 }
 
