@@ -10,6 +10,17 @@ base:
     install: true
     source:
       wheel: 1.6.0.dev20261023
+    request_plane: tcp
+    event_plane: zmq
+    # Native vLLM engines (Rust frontend, gRPC) behind Dynamo sidecars, which parse tools and reasoning.
+    sidecar: true
+    sidecar_args:
+    - --grpc-startup-deadline-secs
+    - '3600'
+    - --dyn-tool-call-parser
+    - minimax_m3
+    - --dyn-reasoning-parser
+    - minimax_m3
   resources:
     gpu_type: gb200
     gpus_per_node: 4
@@ -27,12 +38,6 @@ base:
     type: etcd
     placement:
       node: infra
-  - name: nats
-    type: nats
-    placement:
-      node: infra
-    options:
-      max_payload_mb: 32
   - name: mooncake-master
     type: mooncake-master
     args:
@@ -53,13 +58,19 @@ base:
   frontend:
     type: dynamo
     enable_multiple_frontends: false
+    numa_bind: true
     # KV router without session affinity or KV events (it predicts each worker's prefix
-    # cache from its own routing), temperature 0; decode goes to the least-loaded worker.
+    # cache from its own routing) or busy thresholds, temperature 0; decode goes to the
+    # least-loaded worker.
     args:
       router-mode: kv
+      active-decode-blocks-threshold: None
+      active-prefill-tokens-threshold: None
+      active-prefill-tokens-threshold-frac: None
       no-router-kv-events: true
     env:
       DYN_ROUTER_TEMPERATURE: '0'
+      DYN_ROUTER_QUEUE_THRESHOLD: None
       DYN_ROUTER_TTL_SECS: '3600'
       DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: '3600'
       DYN_LOG: warn
@@ -119,6 +130,7 @@ base:
         MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
         WITH_NVIDIA_PEERMEM: '0'
         VLLM_RANDOMIZE_DP_DUMMY_INPUTS: '1'
+        VLLM_RS_TOKEN_IDS_AS_BYTES: '1'
       args:
         served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
         language-model-only: true
@@ -132,8 +144,6 @@ base:
         load-format: fastsafetensors
         kernel-config: '{"moe_backend":"deep_gemm_mega_moe"}'
         numa-bind: true
-        dyn-tool-call-parser: minimax_m3
-        dyn-reasoning-parser: minimax_m3
         speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         tensor-parallel-size: 1
         gpu-memory-utilization: 0.92
@@ -180,6 +190,7 @@ base:
         MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
         WITH_NVIDIA_PEERMEM: '0'
         VLLM_RANDOMIZE_DP_DUMMY_INPUTS: '1'
+        VLLM_RS_TOKEN_IDS_AS_BYTES: '1'
         NCCL_CUMEM_ENABLE: '1'
         NCCL_MNNVL_ENABLE: '1'
         NCCL_NVLS_ENABLE: '1'
@@ -197,8 +208,6 @@ base:
         load-format: fastsafetensors
         kernel-config: '{"moe_backend":"deep_gemm_mega_moe"}'
         numa-bind: true
-        dyn-tool-call-parser: minimax_m3
-        dyn-reasoning-parser: minimax_m3
         speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         tensor-parallel-size: 1
         gpu-memory-utilization: 0.88
