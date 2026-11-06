@@ -1,21 +1,24 @@
 # Native video delivery
 
-The `video-generation` scenario schedules one server job per deployment. H100
-and B200 SGLang select four-GPU C1 deployments using
+The `video-generation` scenario schedules one server job per deployment. SGLang
+selects C1 deployments on 1, 2, 4 and 8 B200, H200 or MI355X GPUs (Ulysses
+across all GPUs) and on 2, 4 and 8 H100 GPUs (TP2, since the model does not fit
+one 80 GB GPU), all using
 `h3-v2.yaml`: 20 distinct measured prompts, a separate warmup, 49 denoising
 updates, and 124 frames at 24 fps and 1344×768. A five-second request produces
 124/24 seconds of video. Config presence is not GPU or quality qualification.
 Each deployment's image pin is its `*-video` entry in
-[`configs/nvidia-master.yaml`](../configs/nvidia-master.yaml).
+[`configs/nvidia-master.yaml`](../configs/nvidia-master.yaml) or
+[`configs/amd-master.yaml`](../configs/amd-master.yaml).
 Actual step execution, media,
 and power must be checked in the original run. The YAML workload has no `model.path`
 or Python field: the binder derives the pinned model snapshot path from `MODEL`,
 `HF_HUB_CACHE`, and the model revision. The service recipe selects the engine executable.
 Native power is accepted only when its sampled GPU UUIDs match the server's
-`spec.json` and `launch.json` assignment.
+`spec.json` and `launch.json` assignment. On ROCm the server names each GPU by
+its board serial, which is how the AMD power exporter identifies it.
 The H100 runner provides an HF hub cache mount, but the pinned H3 snapshot must
-be verified there before execution. MI355X is excluded because the prepared
-CUDA image cannot run on AMD. Historical artifacts remain evidence of their
+be verified there before execution. Historical artifacts remain evidence of their
 original workloads.
 
 Each video service uses `command: [python3, -m, infx.bench, video, serve]`.
@@ -94,7 +97,8 @@ the first native video reuse request; a PR-local checker cannot bypass that gate
 
 For an existing video runtime/API, change its native recipe and master config rather
 than adding a launcher or modifying the Python client. The configured deployments
-are the `*-video` keys in [`configs/nvidia-master.yaml`](../configs/nvidia-master.yaml);
+are the `*-video` keys in [`configs/nvidia-master.yaml`](../configs/nvidia-master.yaml)
+and [`configs/amd-master.yaml`](../configs/amd-master.yaml);
 each names its recipe directory under
 [`benchmarks/single_node/srt-slurm-recipes/h3/`](../benchmarks/single_node/srt-slurm-recipes/h3/).
 Their presence does not establish final-head GPU qualification.
@@ -105,10 +109,11 @@ Their presence does not establish final-head GPU qualification.
    or recipe-wide `environment`. Keep the native serve/client entrypoints and
    telemetry binding. A new model, engine API, topology or model-view format
    needs maintainer adapter validation before it becomes a recipe-only contribution.
-2. Change the existing row in `configs/nvidia-master.yaml`, or copy it with a
+2. Change the existing row in its master config, or copy it with a
    distinct key and recipe for a deployment that must remain separately selectable.
    Pin the image by digest and use its real interpreter and architecture. The
-   H100/B200 SGLang rows use the public amd64 image. A shared image does
+   H100/H200/B200 SGLang rows use the public CUDA amd64 image and the MI355X row its
+   ROCm MI35x build. A shared image does
    not qualify a different topology or SKU: validate
    the selected deployments through their sweep. Maintainers stage model snapshots in the runner's
    existing HF cache; contributors do not patch the cache or SSH extra launch flags.
@@ -129,7 +134,8 @@ Their presence does not establish final-head GPU qualification.
    proves schema/binding, not model execution. Run the focused binder, entrypoint,
    matrix and result tests for changed behavior.
 4. Append the PR's single `perf-changelog.yaml` entry with every affected config
-   key. Follow [the contribution workflow](../../CONTRIBUTING.md) for review,
+   key and a `scenario-type` that lists `video-generation`. The planner rejects an
+   entry whose named video config would otherwise plan no jobs. Follow [the contribution workflow](../../CONTRIBUTING.md) for review,
    CODEOWNER sign-off, the primary sweep label and trusted reuse. A maintainer
    controls fork scheduling. Use the final PR-selected matrix and preserve failed
    attempts; an ad-hoc diagnostic cannot replace its qualifying sweep.

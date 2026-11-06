@@ -9,13 +9,13 @@ decoded and validated, and every cell's
 measured window published to srt-slurm's native GPU power telemetry.
 
 InferenceX owns scheduling and results. `inferencex-e2e/configs/nvidia-master.yaml`
-declares the deployments (`h3-bf16-<sku>-<engine>-video`), `infx.matrix` plans
+and `amd-master.yaml` declare the deployments (`h3-bf16-<sku>-<engine>-video`), `infx.matrix` plans
 them from `perf-changelog.yaml`, `run-sweep.yml` runs the `video` bucket through
 `benchmark-tmpl.yml`, and `python -m infx.launch run` takes the `srt-video` path:
 the SKU recipe under `benchmarks/single_node/srt-slurm-recipes/h3/` starts the
 engine through `python3 -m infx.bench video serve` as a generic service and runs
 `python3 -m infx.bench video client` as `benchmark.type: custom`. This directory
-is mounted into the job as `/video-package`. H100 and B200 select
+is mounted into the job as `/video-package`. H100, H200, B200 and MI355X select
 `h3-v2.yaml/release-v1`: 20 distinct measured prompts at C1. See
 [native video delivery](../inferencex-e2e/docs/video-generation.md) for
 artifact identity, reuse validation and post-merge publication.
