@@ -12030,5 +12030,5 @@
     - "Enable EPLB (symm_mem communicator, async) with 4 redundant experts on DEP4 prefill, 8 on DEP8 decode and 16 on DEP16 decode; decode caps in-flight async KV loads at 64 with 4 new per step."
     - "Route with the KV router without session affinity or KV events at temperature 0, and pick the least-loaded decode worker."
     - "Drop 4 DEP4 prefill + DEP16 decode at conc 352 and 3 DEP4 prefill + DEP8 decode at conc 256, which trailed 3 DEP4 prefill + DEP16 decode at conc 360 and 2 DEP4 prefill + DEP8 decode at conc 256 by about 13% at the same interactivity."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4865
   scenario-type: [agentic-coding]
