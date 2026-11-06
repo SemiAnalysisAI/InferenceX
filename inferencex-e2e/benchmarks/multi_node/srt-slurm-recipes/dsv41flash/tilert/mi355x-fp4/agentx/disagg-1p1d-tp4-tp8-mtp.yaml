@@ -34,13 +34,17 @@ roles:
       VLLM_ENGINE_READY_TIMEOUT_S: "3600"
       # Register the VRAM staging buffer with the ionic HCAs through dmabuf.
       MOONCAKE_DISABLE_HIP_DMABUF: "0"
+      # vLLM's Rust front end (as the MI355X vLLM DeepSeek-V4.1-Flash recipes run it): parses the
+      # router's token-id request and returns the first token without the Python front end's
+      # detokenization of the whole prompt.
+      VLLM_USE_RUST_FRONTEND: "1"
     args:
       served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
       tensor-parallel-size: 4
       language-model-only: true
       tokenizer-mode: deepseek_v41
-      # The router reads the first token id from the prefill's logprobs.
-      return-tokens-as-token-ids: true
+      # The router reads the first token id from the prefill's logprobs; it asks for token ids per
+      # request (return_tokens_as_token_ids), which the Rust front end supports.
       moe-backend: aiter
       gpu-memory-utilization: 0.85
       attention-config: '{"indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
@@ -52,8 +56,9 @@ roles:
       max-num-seqs: 1
       engram-config: '{"cpu_offload":false}'
       enable-prefix-caching: true
-      # The KV connector has only been exercised with eager prefill.
-      enforce-eager: true
+      # CUDA graphs cover the prefill's step sizes too: an AgentX turn computes a few thousand new
+      # tokens, and in eager mode such a step is bound by launching its ~2.5K kernels.
+      compilation-config: '{"cudagraph_capture_sizes":[1,2,4,8,16,32,64,128,256,512,768,1024,1536,2048,3072,4096,6144,8192]}'
       kv-transfer-config: >-
         {"kv_connector":"DsV41TileRTConnector","kv_connector_module_path":"tilert.pd_vllm.dsv41_prefill_connector",
          "kv_role":"kv_producer","kv_connector_extra_config":{

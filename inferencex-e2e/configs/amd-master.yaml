@@ -1009,7 +1009,7 @@ dsv41flash-fp4-mi355x-tilert-agentic-dspark:
   runner: cluster:mi355x-amds
   precision: fp4
   framework: tilert
-  router: { name: tilert-pd-router, version: "0.1.7.post1" }
+  router: { name: tilert-pd-router, version: "0.1.7.post2" }
   multinode: true
   disagg: true
   kv-p2p-transfer: mooncake
