@@ -12167,3 +12167,12 @@
     - "Admission is 48 requests at c24 (2x CONC) and 128 at c48 and c80, with decode CUDA graphs up to the same size. HiCache uses the kernel IO backend, page_first layout and write_back policy. c80 also sets strip-thinking-cache and mamba-max-states-per-path 2."
     - "No patch and no setup script: the settings come from the AMD Qwen3.8 submission recipes for these concurrencies without the extra AITER and SGLang patches they carry (QSA FlyDSL decode, AITER GDN conv and prefill, fused hyper-connection decode)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4779
+
+- config-keys:
+    - kimik3.1-fp4-b200-dynamo-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi K3.1 Pro B200 vLLM AgentX on vllm/vllm-openai:kimi-k31: two nodes, TP8 x PP2 with DCP8, no KV offload, concurrency 1, 4, 8, 14, 24, 32, 48, 56, 72, 80 with DSpark and 96 without speculation."
+    - "DSpark uses Inferact/Kimi-K3.1-Pro-DSpark-preview with probabilistic drafting and block verification, 7 draft tokens through concurrency 14 and 4 above."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4797
