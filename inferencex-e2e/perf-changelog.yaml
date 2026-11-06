@@ -12235,3 +12235,12 @@
     - "GPU-resident KV at concurrency 2-16; HiCache with SGLang's default auto-sized host tier (~119 GiB, 127 GB per rank; ~1,020 GB per node) at concurrency 20, 24, 28 and 32."
     - "Prefill CUDA graphs are disabled after a CUDA misaligned-address fault during ~336k-token single-request replay at concurrency 1."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4719
+
+- config-keys:
+    - kimik3.1-fp4-mi355x-vllm-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Set c16, c24, c32 and c48 to 10240 batched tokens, a 10240 graph capture cap and gpu-memory-utilization 0.90."
+    - "Keep admission at 10/16/24/48 and DSpark at 4/4/3/3 draft tokens; preserve decode coverage and trim only capture sizes above 10240, leaving 45/50/57/78 buckets."
+    - "Retain the pinned day-0 image, TP8/DCP8, 1799 GB CPU KV offload, precision settings and scratch configuration from PR #4806."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
