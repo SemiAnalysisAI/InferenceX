@@ -12257,6 +12257,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4717
 
 - config-keys:
+    - kimik3.1-fp4-b300-vllm-agentic-dspark
+  description:
+    - "Kimi-K3.1-Pro B300 vLLM: enable the recipe's low-latency decode (decode_backend=latency_specialized) at c1-c4, whose decode graphs stay within 64 rows (the image's wider MoE needs 152 resident CTAs, more than a B300's 148 SMs), and run c1-c2 at plain TP8 instead of TP8 x DCP8."
+    - "Match the SGLang recipe's draft depths (DSpark 7 tokens through c8, 6 at c16, 5 at c24-c40, 4 from c48), size each decode graph cap to max-num-seqs x (1 + drafts), and raise the engine-ready timeout and health check to 7200 s."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4833
+
+- config-keys:
     - h3-bf16-b200-sglang-video
   scenario-type: [video-generation]
   description:
