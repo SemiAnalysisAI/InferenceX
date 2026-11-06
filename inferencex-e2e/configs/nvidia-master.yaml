@@ -7437,7 +7437,7 @@ kimik3.1-fp4-gb200-vllm-agentic-dspark-tp16-disagg:
         srt-recipe: disagg-variants.yaml:override_1p1d_tp16_c16
         power: true
         prefill: { num-worker: 1, tp: 16, ep: 16, dp-attn: false }
-        decode: { num-worker: 1, tp: 16, ep: 1, dp-attn: false }
+        decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: false }
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple }
@@ -7445,7 +7445,7 @@ kimik3.1-fp4-gb200-vllm-agentic-dspark-tp16-disagg:
         srt-recipe: disagg-variants.yaml:override_1p1d_tp16_c32
         power: true
         prefill: { num-worker: 1, tp: 16, ep: 16, dp-attn: false }
-        decode: { num-worker: 1, tp: 16, ep: 1, dp-attn: false }
+        decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: false }
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple }
@@ -7453,7 +7453,7 @@ kimik3.1-fp4-gb200-vllm-agentic-dspark-tp16-disagg:
         srt-recipe: disagg-variants.yaml:override_1p1d_tp16_c48
         power: true
         prefill: { num-worker: 1, tp: 16, ep: 16, dp-attn: false }
-        decode: { num-worker: 1, tp: 16, ep: 1, dp-attn: false }
+        decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: false }
 
 minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg:
   image: vllm/vllm-openai:minimax-m31-flash-arm64-cu134@sha256:5d76347628973fb80519a919a2f2740b6645b62cba3fe2bd87b25f111bd0e948

@@ -87,6 +87,8 @@ base:
         kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_consumer","kv_load_failure_policy":"fail","kv_buffer_device":"cuda"}'
         served-model-name: "moonshotai/Kimi-K3.1-Pro"
         tensor-parallel-size: 16
+        # TP16/EP1 holds 131.5 GiB/GPU of weights and leaves under 20 GiB of KV for a 1M-token context.
+        enable-expert-parallel: true
         trust-remote-code: true
         language-model-only: true
         load-format: fastsafetensors
