@@ -12,42 +12,24 @@ concurrency:
 
 jobs:
   probe:
-    name: Read-only HSMP DIMM power probe (${{ matrix.runner }})
+    name: HSMP DIMM power probe (${{ matrix.runner }})
     strategy:
       fail-fast: false
       matrix:
         include:
-          - {runner: "cluster:mi325x-amds", partition: MI325X-UBUNTU}
           - {runner: "cluster:mi300x-amd", partition: MI300X-UBUNTU}
           - {runner: "cluster:mi355x-amds", partition: compute}
-    runs-on: ["self-hosted", "${{ matrix.runner }}"] # zizmor: ignore[self-hosted-runner] Temporary read-only telemetry probe, manual dispatch only.
-    timeout-minutes: 45
+    runs-on: ["self-hosted", "${{ matrix.runner }}"] # zizmor: ignore[self-hosted-runner] Temporary telemetry probe, manual dispatch only.
+    timeout-minutes: 60
     steps:
-      - name: Probe one GPU node (read-only)
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Per-DIMM HSMP power at idle and under memory load
         shell: bash
         env:
           PARTITION: ${{ matrix.partition }}
         run: |
           set -u
-          export PROBE='
-          set +e
-          t() { timeout 60s "$@" 2>&1; echo "[exit $?]"; }
-          echo "== cpu"; lscpu | grep -E "^(Model name|Socket\(s\)|Core\(s\) per socket)"
-          echo "== kernel"; uname -r
-          echo "== hsmp module"; lsmod | grep -i hsmp || echo "amd_hsmp not loaded"
-          echo "== hsmp device"; ls -l /dev/hsmp* 2>&1
-          echo "== hsmp sysfs"; ls /sys/devices/platform 2>/dev/null | grep -i -E "hsmp|amd_hsmp" || echo none
-          for f in /sys/devices/platform/amd_hsmp/*/protocol_version /sys/devices/platform/AMDI0097*/protocol_version; do [ -r "$f" ] && echo "$f: $(cat $f)"; done
-          echo "== hsmp availability"; t modinfo -F filename amd_hsmp; t modinfo -F filename hsmp_acpi; grep -E "CONFIG_AMD_HSMP" /boot/config-$(uname -r) 2>&1
-          echo "== acpi hsmp device (BIOS enablement)"; ls /sys/bus/acpi/devices 2>/dev/null | grep -i AMDI0097 || echo "no AMDI0097 ACPI device"
-          echo "== amd-smi cpu options"; amd-smi metric -h 2>&1 | grep -i -E "cpu|dimm" | head -20
-          echo "== tools"; for c in amd-smi e_smi_tool ipmitool dmidecode; do printf "%s: " $c; command -v $c || echo missing; done
-          echo "== sudo"; sudo -n true 2>&1 && echo "sudo ok" || echo "no passwordless sudo"
-          echo "== dimm inventory"; sudo -n dmidecode -t 17 2>/dev/null | grep -E "^\s+(Size|Locator|Manufacturer|Part Number|Configured Memory Speed|Type):" | grep -v "No Module" | sed "s/^\s*//" | sort | uniq -c | sort -rn | head -40
-          echo "== amd-smi version"; t amd-smi version
-          echo "== amd-smi cpu metrics"; t sudo -n amd-smi metric --cpu
-          for s in 0 1; do echo "== e_smi_tool socket $s"; t sudo -n e_smi_tool --showalldimmpower $s; done
-          for a in 0x0 0x1 0x10 0x80 0x90; do echo "== amd-smi dimm power $a"; t sudo -n amd-smi metric --cpu-dimm-pow-consumption $a; done
-          echo "== bmc memory sensors"; t sudo -n ipmitool sdr elist | grep -i -E "mem|dimm|ddr" | head -40
-          '
-          timeout 25m srun --partition="$PARTITION" --nodes=1 --exclusive --gres=gpu:8 --time=15 --job-name=hsmp-dimm-probe bash -c "$PROBE" | sed -E 's/[0-9]{1,3}(\.[0-9]{1,3}){3}/<ip>/g'
+          export PROBE="$(cat .github/probe/hsmp_dimm.sh)"
+          timeout 35m srun --partition="$PARTITION" --nodes=1 --exclusive --gres=gpu:8 --time=30 --job-name=hsmp-dimm-probe bash -c "$PROBE" | sed -E 's/[0-9]{1,3}(\.[0-9]{1,3}){3}/<ip>/g'
