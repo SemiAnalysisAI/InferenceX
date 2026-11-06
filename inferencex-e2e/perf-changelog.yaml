@@ -12340,6 +12340,13 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
+    - h3-bf16-h200-sglang-video
+  scenario-type: [video-generation]
+  description:
+    - "Restore the H200 row and sweep H3 C1 latency on 1, 2, 4 and 8 H200 GPUs with SGLang Ulysses across all GPUs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4856
+
+- config-keys:
     - kimik3.1-fp4-b300-vllm-agentic-dspark
   scenario-type:
     - agentic-coding
