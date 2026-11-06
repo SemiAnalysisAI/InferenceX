@@ -9,9 +9,9 @@ closest existing sibling recipe, then ship it as one `[Klaud Cold]` PR with a fu
 Inputs from `$ARGUMENTS` (links first, then SKU. The rest are optional and order-tolerant):
 
 - **model-link** (required). HuggingFace URL of the exact checkpoint to benchmark, e.g.
-  `https://huggingface.co/MiniMaxAI/MiniMax-M3-MXFP8`. Derive from it: the `model:` id
+  `https://huggingface.co/moonshotai/Kimi-K3`. Derive from it: the `model:` id
   (`org/repo`), the **precision** (from the repo name, where `MXFP8`/`FP8`→`fp8`, `NVFP4`/`FP4`→`fp4`,
-  `INT4`→`int4`, else `bf16`), and the **model-prefix** (e.g. `minimaxm3`).
+  `INT4`→`int4`, else `bf16`), and the **model-prefix** (e.g. `kimik3`).
 - **gpu-sku** (required). Choose from `b200 | b300 | h100 | h200 | gb200 | mi300x | mi325x | mi355x`.
   Determines the master config (`mi*`→`amd-master.yaml`, else `nvidia-master.yaml`), the image
   repo (`vllm/vllm-openai` vs `vllm/vllm-openai-rocm`), and the launcher.
@@ -19,7 +19,7 @@ Inputs from `$ARGUMENTS` (links first, then SKU. The rest are optional and order
   Consult it for the authoritative serve flags (block size, parsers, attention backend,
   parallelism guidance). If omitted, copy the sibling recipe's flags.
 - **draft-model-link** (optional). HF URL of a speculative-decoding draft (e.g.
-  `https://huggingface.co/Inferact/MiniMax-M3-EAGLE3`). Its presence means **build the MTP
+  `https://huggingface.co/Inferact/Kimi-K3-DSpark`). Its presence means **build the MTP
   variant** (EAGLE3 with this draft). See the MTP appendix.
 - **mtp** (optional). Force the `spec-decoding: mtp` variant even without a draft link (use
   native MTP if the checkpoint ships `num_mtp_modules > 0`).
@@ -180,19 +180,13 @@ Finish on a clean `main`.
 ## Appendix — MTP / EAGLE3 spec-decoding variant
 
 When a **draft-model-link** is given (or `mtp` is forced), build the `spec-decoding: mtp`
-sibling of the base recipe. Use the provided draft id as `--speculative-config.model`. The
-proven setup for **MiniMax-M3** (merged for b300/b200/h100/h200/mi355x/mi300x) uses the
-external **`Inferact/MiniMax-M3-EAGLE3`** draft, `method: eagle3`, **3 speculative tokens**:
-```
---speculative-config "{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": 3<CUDA: , \"attention_backend\": \"FLASH_ATTN\">}"
-```
-- **CUDA (b*/h*).** Pin the drafter to `FLASH_ATTN` because FlashInfer can't run the MHA EAGLE3 head
-  at the mandatory page-size 128. Scale cudagraph capture to `CONC * (1 + NUM_SPEC_TOKENS)`.
-- **ROCm (mi*)**: no backend pin (server runs `TRITON_ATTN`). Use an image that already carries
-  the upstream `SupportsEagle3` fix (`vllm-project/vllm#45546`); the old in-place model patch was
-  retired with the legacy bash scripts. Copy the sibling `minimaxm3/vllm/mi*-mtp` recipe.
+sibling of the base recipe. Use the provided draft id as `--speculative-config.model` when
+the model uses an external draft. Copy a current sibling recipe for the same model,
+framework, and hardware; select the method, draft length, and attention backend supported
+by that checkpoint and pinned image. MiniMax-M3 is retired; MiniMax-M3.1-Flash uses its own
+DSpark recipes under `minimaxm31flash/`.
 - **All**: speculative fixed-sequence recipes get `USE_CHAT_TEMPLATE: 'true'` from the binder; AgentX
   recipes set it themselves. Raw random tokens tank spec-decode acceptance. Search space mirrors the non-MTP
   entry trimmed at the extreme-conc end, latency rows starting at conc 1, `tp2-ep2` dropped.
 - Other models may instead use **native MTP** (`method: mtp`, no external draft) when the
-  checkpoint ships MTP modules (`num_mtp_modules > 0`), e.g. the DeepSeek-V4 recipes.
+  checkpoint ships MTP modules (`num_mtp_modules > 0`), e.g. the GLM-5.3 recipes.

@@ -648,6 +648,144 @@ def test_invalid_key_after_valid_key_rejects_entire_selection(changelog_run, key
         changelog_run([{"config-keys": keys}])
 
 
+@pytest.mark.parametrize("include_active", [False, True])
+def test_retirement_records_deleted_configs_without_running_them(
+    committed_planning_repo, include_active
+):
+    root, base, head = committed_planning_repo
+    path = root / "configs/nvidia-master.yaml"
+    master = yaml.safe_load(path.read_text())
+    del master["single"]
+    path.write_text(yaml.safe_dump(master))
+    (root / "benchmarks/single_node/srt-slurm-recipes/fixture/recipe.yaml").unlink()
+    entries = [{
+        "config-keys": ["single"], "retired": True, "description": ["Retire single"],
+        "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
+    }]
+    if include_active:
+        entries.append({
+            "config-keys": ["multi"], "description": ["Update multi"],
+            "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
+        })
+
+    result = process_changelog.build_plan(entries, base_ref=base, head_ref=head)
+
+    assert result.single_node == {}
+    assert result.evals == result.agentic_evals == []
+    assert result.changelog_metadata.entries[0].retired is True
+    assert result.changelog_metadata.entries[0].config_keys == ["single"]
+    if include_active:
+        assert result.multi_node["8k1k"][0].conc == [16, 32, 64]
+        assert result.multinode_evals[0].conc == [16, 32, 64]
+    else:
+        assert result.multi_node == {}
+        assert result.multinode_evals == result.multinode_agentic_evals == []
+
+
+@pytest.mark.parametrize(("mode", "expected"), [
+    ("retirement", "true"), ("mixed", "false"), ("empty", None), ("still-active", None),
+])
+def test_merge_ingest_executes_the_plan_before_classifying_retirement(
+    committed_planning_repo, mode, expected, tmp_path
+):
+    import json
+    import os
+    import subprocess
+    import sys
+
+    root, _, base = committed_planning_repo
+    project = Path(__file__).resolve().parents[3]
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "inferencex-e2e").symlink_to(root, target_is_directory=True)
+    (root / "benchmarks/check_env.sh").symlink_to(project / "benchmarks/check_env.sh")
+    entries = []
+    if mode != "empty":
+        entries.append({
+            "config-keys": ["single"], "retired": True, "description": ["Retire single"],
+            "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
+        })
+    if mode == "mixed":
+        entries.append({
+            "config-keys": ["multi"], "description": ["Update multi"],
+            "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
+        })
+    if mode != "still-active":
+        config = root / "configs/nvidia-master.yaml"
+        master = yaml.safe_load(config.read_text())
+        del master["single"]
+        config.write_text(yaml.safe_dump(master))
+    with (root / "perf-changelog.yaml").open("a") as handle:
+        if entries:
+            handle.write(yaml.safe_dump(entries))
+    subprocess.run(["git", "add", "."], cwd=root, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-qm", "retirement"], cwd=root, check=True)
+    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    uv = fake_bin / "uv"
+    uv.write_text(
+        f'#!/bin/sh\nwhile [ "$1" != python ]; do shift; done\nshift\nexec "{sys.executable}" "$@"\n'
+    )
+    uv.chmod(0o755)
+    output = tmp_path / "outputs"
+    workflow = yaml.safe_load((project.parent / ".github/workflows/merge-ingest.yml").read_text())
+    step = next(step for step in workflow["jobs"]["ingest"]["steps"] if step.get("id") == "plan")
+    result = subprocess.run(
+        ["bash", "-e", "-c", step["run"]], capture_output=True, text=True, cwd=workspace,
+        env={
+            **os.environ, "PATH": f"{fake_bin}:{os.environ['PATH']}", "PYTHONPATH": str(project),
+            "GITHUB_WORKSPACE": str(workspace), "GITHUB_OUTPUT": str(output),
+            "RUNNER_TEMP": str(tmp_path), "PUSH_BEFORE": base, "PUSH_AFTER": head,
+        },
+    )
+    if expected is None:
+        assert result.returncode != 0
+        message = "No additions found" if mode == "empty" else "retired configs still exist in head"
+        assert message in result.stderr
+        assert not output.exists()
+    else:
+        assert result.returncode == 0, result.stderr
+        assert f"retirement-only={expected}\n" in output.read_text()
+        metadata = json.loads((workspace / "changelog_metadata.json").read_text())
+        assert [entry["retired"] for entry in metadata["entries"]] == [
+            entry.get("retired", False) for entry in entries
+        ]
+
+
+@pytest.mark.parametrize(("keys", "message"), [
+    (["single"], "retired configs still exist in head"),
+    (["missing"], "not found"),
+    (["missing-*"], "No config keys matched"),
+    (["*"], "retired configs still exist in head"),
+])
+def test_retirement_requires_real_base_keys_absent_from_head(
+    committed_planning_repo, keys, message
+):
+    _, base, head = committed_planning_repo
+    entries = [{
+        "config-keys": keys, "retired": True, "description": ["Retire configs"],
+        "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
+    }]
+    with pytest.raises(ValueError, match=message):
+        process_changelog.build_plan(entries, base_ref=base, head_ref=head)
+
+
+@pytest.mark.parametrize("flags", [
+    {"append-only": True}, {"evals-only": True}, {"all-evals": True}, {"no-evals": True},
+    {"eval-min-prefill-ep": 2}, {"scenario-type": ["agentic-coding"]},
+])
+def test_retirement_rejects_sweep_and_partial_scenario_options(changelog_run, flags):
+    with pytest.raises(ValueError, match="retired entries cannot use sweep or scenario"):
+        changelog_run([{"retired": True, **flags}])
+
+
+@pytest.mark.parametrize("flag", ["--all-evals", "--evals-only"])
+def test_retirement_rejects_eval_modifiers(changelog_run, flag):
+    with pytest.raises(ValueError, match="retired entries cannot use all-evals or evals-only"):
+        changelog_run([{"retired": True}], [flag])
+
+
 @pytest.mark.parametrize("trim", [False, True])
 def test_append_only_main_runs_only_added_points_and_skips_evals(planning_repo, changelog_run, trim):
     root, master, _ = planning_repo

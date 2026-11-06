@@ -1,0 +1,174 @@
+name: Classify CI priority criteria
+description: >-
+    Classify an unmerged diff into CI priority criteria. Emits no criteria when
+    head is already on the default branch, and falls back to patchwork when
+    classification fails.
+
+inputs:
+    head-ref:
+        description: Revision under test
+        required: true
+    base-ref:
+        description: Diff base; empty uses the merge base with the default branch
+        required: false
+        default: ""
+    scope:
+        description: "full returns every criterion; patchwork returns only the patchwork verdict"
+        required: false
+        default: full
+    pr-number:
+        description: Pull request whose description decides checklist-complete; empty never returns it
+        required: false
+        default: ""
+    anthropic-api-key:
+        description: Anthropic API key for the classifier
+        required: true
+    github-token:
+        description: GitHub token for claude-code-action and reading the PR description
+        required: true
+
+outputs:
+    criteria:
+        description: JSON array for ci_priority --criteria-json, or empty for unscoped scoring
+        value: ${{ steps.normalize.outputs.criteria }}
+
+runs:
+    using: composite
+    steps:
+        - name: Resolve classification range
+          id: range
+          shell: bash
+          env:
+              HEAD_REF: ${{ inputs.head-ref }}
+              BASE_REF: ${{ inputs.base-ref }}
+              SCOPE: ${{ inputs.scope }}
+              DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          run: |
+              if [ "$SCOPE" != "full" ] && [ "$SCOPE" != "patchwork" ]; then
+                  echo "::error::scope must be full or patchwork, got '$SCOPE'" >&2
+                  exit 1
+              fi
+              head=$(git rev-parse --verify "${HEAD_REF}^{commit}")
+              base="$BASE_REF"
+              if [ -z "$base" ]; then
+                  if [ "$(git rev-parse --is-shallow-repository)" = "true" ] ||
+                     ! git rev-parse --verify -q "origin/${DEFAULT_BRANCH}" >/dev/null; then
+                      echo "::error::classify-priority needs a full-history checkout (fetch-depth: 0) with origin/${DEFAULT_BRANCH}" >&2
+                      exit 1
+                  fi
+                  if git merge-base --is-ancestor "$head" "origin/${DEFAULT_BRANCH}"; then
+                      echo "Head $head is already on ${DEFAULT_BRANCH}; skipping priority classification."
+                      exit 0
+                  fi
+                  base=$(git merge-base "$head" "origin/${DEFAULT_BRANCH}")
+              fi
+              {
+                  echo "base=$base"
+                  echo "head=$head"
+              } >> "$GITHUB_OUTPUT"
+
+        - name: Load supported criteria
+          id: schema
+          if: steps.range.outputs.head != ''
+          shell: bash
+          env:
+              E2E_ROOT: ${{ github.action_path }}/../../../inferencex-e2e
+          run: |
+              criteria=$(env PYTHONPATH="$E2E_ROOT" \
+                uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
+                python -P -m infx.workflows.ci_priority \
+                --policy "$E2E_ROOT/configs/ci-priority.yaml" --list-criteria)
+              schema=$(jq -c 'map(select(. != "checklist-complete")) | {type:"object",properties:{criteria:{type:"array",items:{type:"string",enum:.},uniqueItems:true},reason:{type:"string"}},required:["criteria","reason"]}' <<<"$criteria")
+              echo "json=$schema" >> "$GITHUB_OUTPUT"
+
+        - name: Check PR checklist
+          id: checklist
+          if: steps.range.outputs.head != '' && inputs.pr-number != ''
+          continue-on-error: true
+          shell: bash
+          env:
+              GH_TOKEN: ${{ inputs.github-token }}
+              PR_NUMBER: ${{ inputs.pr-number }}
+              E2E_ROOT: ${{ github.action_path }}/../../../inferencex-e2e
+          run: |
+              complete=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '.body // ""' |
+                env PYTHONPATH="$E2E_ROOT" uv run --no-project --exclude-newer PT12H --python 3.12 \
+                python -P -m infx.workflows.pr_checklist)
+              echo "complete=$complete" >> "$GITHUB_OUTPUT"
+
+        - name: Install Claude Code 2.1.282
+          id: claude_cli
+          if: steps.range.outputs.head != ''
+          shell: bash
+          run: | # zizmor: ignore[adhoc-packages] Claude CLI and its native packages are pinned to 2.1.282
+              npm install --prefix "$RUNNER_TEMP/claude-code" --no-audit --no-fund @anthropic-ai/claude-code@2.1.282
+              claude_cli="$RUNNER_TEMP/claude-code/node_modules/.bin/claude"
+              test "$("$claude_cli" --version)" = "2.1.282 (Claude Code)"
+              echo "path=$claude_cli" >> "$GITHUB_OUTPUT"
+
+        - name: Classify priority criteria
+          id: classify
+          if: steps.range.outputs.head != ''
+          continue-on-error: true
+          uses: anthropics/claude-code-action@9171db3e57d6a3140a37ddc2ba92788584e0ead6 # v1.0.234
+          with:
+              path_to_claude_code_executable: ${{ steps.claude_cli.outputs.path }}
+              github_token: ${{ inputs.github-token }}
+              anthropic_api_key: ${{ inputs.anthropic-api-key }}
+              track_progress: false
+              settings: |
+                  {"fastMode": true}
+              claude_args: |
+                  --model 'claude-opus-5-5'
+                  --effort low
+                  --max-turns 8
+                  --allowedTools "Read,Glob,Grep,Bash(git diff:*)"
+                  --json-schema '${{ steps.schema.outputs.json }}'
+              prompt: |
+                  Inspect the diff `git diff ${{ steps.range.outputs.base }}...${{ steps.range.outputs.head }}`.
+
+                  Return every matching priority criterion:
+
+                  - multi-node: separate prefill and decode workers
+                  - agentic: agentic-coding or AgentX workload
+                  - eval-only: evaluation without throughput measurement
+                  - fp4: FP4 precision
+                  - mtp, draft_model: speculative decoding method
+                  - sglang, vllm, dynamo-sglang, dynamo-vllm: runtime framework
+                  - model criterion: the config model-prefix itself (minimaxm31flash, not minimaxm3)
+                  - patchwork: modified upstream engine or runtime source
+
+                  Patchwork includes patch files, git apply, source mutation,
+                  monkey-patching, local engine builds, forks, or images
+                  containing unmerged engine changes.
+
+                  Return a concise reason grounded in the diff.
+
+        - name: Normalize priority classification
+          id: normalize
+          if: always() && steps.range.outputs.head != ''
+          shell: bash
+          env:
+              OUTPUT: ${{ steps.classify.outputs.structured_output || '{}' }}
+              SCOPE: ${{ inputs.scope }}
+              CHECKLIST_COMPLETE: ${{ steps.checklist.outputs.complete }}
+          run: |
+              if jq -e 'type == "object" and (.criteria | type == "array")' \
+                >/dev/null <<<"$OUTPUT"; then
+                  criteria=$(jq -c '.criteria' <<<"$OUTPUT")
+              else
+                  criteria='["patchwork"]'
+              fi
+              criteria=$(jq -c 'map(select(. != "checklist-complete"))' <<<"$criteria")
+              if [ "$CHECKLIST_COMPLETE" = "true" ]; then
+                  criteria=$(jq -c '. + ["checklist-complete"]' <<<"$criteria")
+              fi
+              if [ "$SCOPE" = "patchwork" ]; then
+                  if jq -e 'index("patchwork")' >/dev/null <<<"$criteria"; then
+                      criteria='["patchwork"]'
+                  else
+                      criteria=''
+                  fi
+              fi
+              echo "criteria=$criteria" >> "$GITHUB_OUTPUT"
+              echo "Priority criteria: ${criteria:-<unscoped>}"

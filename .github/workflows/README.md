@@ -34,7 +34,7 @@ usage: python -m infx.matrix.generate full-sweep
     [--no-evals | --evals-only] [--all-evals]
     [--smoke] [--trim-conc]
     [--runner-node-filter RUNNER_NODE_FILTER]
-    [--scenario-type {fixed-seq-len,agentic-coding} [{fixed-seq-len,agentic-coding} ...]]
+    [--scenario-type {fixed-seq-len,agentic-coding,video-generation} [{fixed-seq-len,agentic-coding,video-generation} ...]]
     [--model-prefix MODEL_PREFIX [MODEL_PREFIX ...]]
     [--precision PRECISION [PRECISION ...]]
     [--framework FRAMEWORK [FRAMEWORK ...]]
@@ -109,7 +109,7 @@ usage: python -m infx.matrix.generate test-config
     [--no-evals | --evals-only] [--all-evals]
     [--smoke] [--trim-conc]
     [--runner-node-filter RUNNER_NODE_FILTER]
-    [--scenario-type {fixed-seq-len,agentic-coding} [{fixed-seq-len,agentic-coding} ...]]
+    [--scenario-type {fixed-seq-len,agentic-coding,video-generation} [{fixed-seq-len,agentic-coding,video-generation} ...]]
     --config-keys CONFIG_KEYS [CONFIG_KEYS ...]
     [--conc CONC [CONC ...]]
     [--exp-names EXP_NAMES [EXP_NAMES ...]]
@@ -186,8 +186,16 @@ Labels authorize same-repository sweeps on draft or ready PRs. Marking ready
 does not dispatch a sweep. Changing a recognized primary or modifier label
 cancels the active sweep; another starts only if a primary label remains.
 To retrigger an already-labeled PR, remove and reapply its primary label.
-Merge conflicts block sweeps. Queue priority comes from the PR diff and
-review state, not priority labels.
+Merge conflicts block sweeps. Queue priority comes from the PR diff and the
+PR description's checklist, not priority labels. A PR gets a small bonus when
+every item under its `Checklist` heading is checked, except conditional items
+("If ...", "Before merging ...") that do not apply yet. The checklist is read
+when the sweep starts, so later edits count from the next sweep. Trusted
+external sweeps classify the approved PR diff the same way. Manual
+`e2e-tests.yml` and `profile.yml` dispatches of a revision not yet on `main`
+classify its diff from the merge
+base only for patchwork, so engine-patching branches still run last. Klaud runs
+and revisions already on `main` keep unclassified scoring.
 
 The canary is the lowest-concurrency non-eval candidate among single-node
 fixed-sequence 1k/1k, 8k/1k, or AgentX entries, falling back to multi-node AgentX.
@@ -196,6 +204,10 @@ without a canary; otherwise all matrices require canary success. Fail-fast
 cancels siblings within each matrix family, not every independent family.
 Find the first actual failure before treating a cancelled run as a flake.
 Manual `e2e-tests.yml` has no canary and defaults `fail-fast` to false.
+
+## Speculative acceptance gate
+
+AgentX throughput forces speculative acceptance to the committed golden acceptance length (AL). The acceptance gate, milestone M1 of [#1651](https://github.com/SemiAnalysisAI/InferenceX/issues/1651), measures each agentic speculative eval's real AL on the eval's own server, in the same Slurm job, before the eval runs. `run-sweep.yml` and `e2e-tests.yml` call [`al-gate-prompts.yml`](al-gate-prompts.yml) for the SPEED-Bench prompts before their agentic eval jobs, and `collect-evals.yml` tabulates the verdicts. The gate is report-only: a verdict, a skipped gate or a failed measurement never fails the eval or the run. See [the speculative acceptance gate](../../inferencex-e2e/infx/evals/EVALS.md#speculative-acceptance-gate) for how it is planned, run, and skipped.
 
 ## Changelog Conflict Recovery
 
@@ -241,6 +253,8 @@ This proof of concept produces benchmark and evaluation artifacts through the
 End-to-End Tests workflow. The dispatch also uploads a `source-identity`
 artifact (PR number, full approved head SHA, merge SHA, and the `evals-only`,
 `agentx-fast`, `all-evals`, and fail-fast modifiers) and `changelog-metadata`.
+When the matrix selects video, it also uploads `video-sweep-manifest` and runs
+`validate-video-results`, because video reuse requires that manifest.
 A pinned `/use <run_id>` accepts these runs; reuse and staging report the
 recorded PR head and judge modifiers from the recorded dispatch rather than the
 PR's current labels. Older runs without the artifact fall back to the run title
@@ -301,14 +315,22 @@ pushes a synchronization commit, waits for checks, then merges.
 
 At merge, `merge-ingest.yml` ("Merge Ingest") publishes the reused sweep. It
 runs on pushes to `main` that change `inferencex-e2e/perf-changelog.yaml`. Its
-single `ingest` job resolves the merge commit's PR, reuse command, and source
-run with `infx.workflows.reuse`, computes the changelog delta with
-`infx.matrix.plan`, and fails before uploading or dispatching anything unless
-reuse is validly authorized. It then uploads merge-time `changelog-metadata`
+single `ingest` job first computes the changelog delta with `infx.matrix.plan`.
+For entries with results, it resolves the merge commit's PR, reuse command, and
+source run with `infx.workflows.reuse`, and fails before uploading or dispatching
+anything unless reuse is validly authorized. It then uploads merge-time `changelog-metadata`
 and sends one `repository_dispatch` to InferenceX-app: `ingest-agentic-results`
 (with `database-target: production`) when the delta has agentic entries,
 otherwise `ingest-results`. The payload's `source-run-id` is the reused PR
 `run-sweep.yml` run and its `merge-run-id` is the Merge Ingest run.
+
+For a nonempty delta consisting entirely of `retired: true` entries, the planner
+verifies that the selected configs existed in the base and are absent from the
+head. There are no result artifacts to reuse: merge these PRs directly after
+review and required checks, without `/use` or `merge_with_reuse`. Merge Ingest
+uploads the validated changelog metadata but skips reuse lookup and database
+dispatch. Empty or mixed deltas do not receive this exception. Ingest recovery
+excludes retired entries from mixed changes and rejects retirement-only changes.
 
 The app downloads source artifacts, keeps the newest upload for each exact
 artifact name, and ingests them with changelog metadata from the merge run. The

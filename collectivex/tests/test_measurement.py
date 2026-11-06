@@ -178,5 +178,26 @@ class BandwidthMath(unittest.TestCase):
         self.assertAlmostEqual(fit.beta_gbps, 375.0, places=4)  # 1.5x the logical 250 GB/s
 
 
+@unittest.skipIf(_torch is None, "torch not installed")
+class CrossRankMedian(unittest.TestCase):
+    def test_an_even_rank_count_publishes_the_mean_of_the_middle_two(self):
+        import ep_harness
+
+        ranks = [[10.0, 1.0], [20.0, 2.0], [30.0, 3.0], [40.0, 8.0]]
+
+        class FourRanks:
+            @staticmethod
+            def get_world_size():
+                return len(ranks)
+
+            @staticmethod
+            def all_gather(gathered, local):
+                for slot, values in zip(gathered, ranks):
+                    slot.copy_(_torch.tensor(values, dtype=_torch.float64))
+
+        median, spread = ep_harness._Collectives(_torch, FourRanks, "cpu").median_spread([0.0, 0.0])
+        self.assertEqual((median, spread), ([25.0, 2.5], [30.0, 7.0]))
+
+
 if __name__ == "__main__":
     unittest.main()

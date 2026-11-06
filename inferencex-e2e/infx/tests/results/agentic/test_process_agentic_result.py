@@ -1041,6 +1041,49 @@ def test_server_metrics_reject_unknown_backend() -> None:
         )
 
 
+@pytest.mark.parametrize("with_occupancy", [True, False])
+def test_processor_normalizes_tokenspeed_metrics_without_inventing_cache_counters(
+    tmp_path: Path, with_occupancy: bool,
+) -> None:
+    result_dir = _write_fixture(tmp_path)
+    metrics = {
+        "tokenspeed:num_requests_running": {
+            "type": "gauge",
+            "series": [{"stats": {"max": 5}}],
+        },
+        "tokenspeed:iteration_tokens_total": {
+            "type": "histogram",
+            "series": [{"stats": {"sum": 123456}}],
+        },
+    }
+    if with_occupancy:
+        metrics["tokenspeed:kv_cache_usage_perc"] = {
+            "type": "gauge",
+            "series": [
+                {"labels": {"dp_rank": "0"}, "stats": {"max": 0.25, "avg": 0.1}},
+                {"labels": {"dp_rank": "1"}, "stats": {"max": 0.8, "avg": 0.3}},
+            ],
+        }
+    (result_dir / "aiperf_artifacts/server_metrics_export.json").write_text(
+        json.dumps({"metrics": metrics}),
+    )
+
+    agg = _run_processor(result_dir, tmp_path / "out", env_overrides={"FRAMEWORK": "tokenspeed"})
+    server = agg["server_metrics"]
+
+    assert server["adapter"] == "tokenspeed"
+    assert server["kv_cache"]["gpu_usage_pct"] == (0.8 if with_occupancy else None)
+    assert server["kv_cache"]["gpu_total_tokens"] is None
+    assert server["kv_cache"]["cpu_usage_pct"] is None
+    assert server["cache"]["gpu_cache_hit_rate"] is None
+    assert server["cache"]["cpu_cache_hit_rate"] is None
+    assert server["cache"]["overall_cache_hit_rate"] is None
+    assert server["tokens"]["prompt_total"] == 840
+    assert server["tokens"]["generation_total"] == 275
+    assert server["tokens"]["requests_completed"] == 5
+    _assert_stable_server_metrics_schema(agg)
+
+
 def test_processor_excludes_warmup_phase_records(tmp_path: Path):
     result_dir = tmp_path / "results"
     artifact = result_dir / "aiperf_artifacts"

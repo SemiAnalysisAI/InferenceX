@@ -1,5 +1,3 @@
-# Native single-node benchmarks inherit the GPU exporter from the cluster record.
-# The binder sets `required` from REQUIRE_POWER.
 telemetry:
   enabled: true
   storage_subdir: power

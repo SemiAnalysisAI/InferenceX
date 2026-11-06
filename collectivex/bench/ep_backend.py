@@ -63,6 +63,32 @@ class WorkloadSpec:
     points: dict = field(default_factory=dict)
 
 
+# FP8 block size: the DeepSeek-V3 per-1x128 recipe every FP8 backend here uses.
+FP8_BLOCK = 128
+
+
+def blockwise_fp8_codec(fp8_dtype, fp8_max):
+    """(quantize, dequantize) for per-1x128 FP8 with row-major FP32 scales [m, n // 128]: vLLM's
+    `per_token_group_quant_fp8(x, 128)` layout: flashinfer-ep and mori quantize with it, and
+    nccl-ep's oracle models its kernel with it. deepep-v2 and uccl-ep keep copies that match their
+    own kernels' bits."""
+    import torch
+
+    def quantize(x):
+        m, n = x.shape
+        blocks = x.view(m, -1, FP8_BLOCK)
+        amax = blocks.abs().float().amax(dim=2).view(m, -1).clamp(1e-4)
+        values = (blocks * (fp8_max / amax.unsqueeze(2))).to(fp8_dtype).view(m, n)
+        return values, (amax / fp8_max).view(m, -1)
+
+    def dequantize(values, scales):
+        m, n = values.shape
+        blocks = values.view(m, -1, FP8_BLOCK).float()
+        return (blocks * scales.view(m, -1, 1)).view(m, n).to(torch.bfloat16)
+
+    return quantize, dequantize
+
+
 class EPBackend(abc.ABC):
     """One expert-parallel dispatch/combine transport under a fixed benchmark contract.
 
@@ -123,6 +149,9 @@ class EPBackend(abc.ABC):
     dispatch_scale_bytes_per_copy = 0
     # (eager quantize, dequantize) of an adopted blockwise FP8 codec; see `_enable_fp8`.
     _fp8_codec = None
+    # Whether this run dispatches FP8; set from args.precision in __init__ (the class default
+    # covers partial adapters that tests build without __init__).
+    _fp8 = False
     # The low-latency dispatch quantises FP8 in-kernel from BF16, so its caller-side quantize only
     # models those bits for the oracle. False where low-latency is caller-prequantized like normal.
     ll_quantizes_in_kernel = True
@@ -209,7 +238,15 @@ class EPBackend(abc.ABC):
         """
         if self.mode == "low-latency" and self.ll_quantizes_in_kernel:
             return eager
-        import torch
+        return self.compiled(eager)
+
+    @staticmethod
+    def compiled(eager, torch=None):
+        """`eager` through torch.compile as fused_quantize builds it, unconditionally: for
+        conversions no oracle gate compares bit-for-bit (nccl-ep's received-plane dequant).
+        `torch` is the caller's module when it has one."""
+        if torch is None:
+            import torch
 
         torch._dynamo.config.cache_size_limit = 64
         if hasattr(torch._dynamo.config, "fail_on_recompile_limit_hit"):
@@ -273,6 +310,12 @@ class EPBackend(abc.ABC):
             raise ValueError(
                 f"{self.name} does not support precision {self.precision!r}"
             )
+        self._fp8 = self.precision == "fp8"
+        self.experts_per_rank = args.experts // world_size
+        # Every adapter's FP8 stage() dequantizes the received (fp8, scale) payload to the BF16
+        # combine input -- real device work, and so a separately-timed component -- while its BF16
+        # stage() is a pointer hand-off.
+        self.stage_device_work = self._fp8
 
     @staticmethod
     def init_process_group(dist, rank, world_size, device):
