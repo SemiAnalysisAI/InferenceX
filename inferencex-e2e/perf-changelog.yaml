@@ -12269,3 +12269,10 @@
   description:
     - "Sweep H3 C1 latency on 1, 2, 4 and 8 B200 GPUs with SGLang Ulysses across all GPUs; the B200 recipe now sets the Ulysses degree from the GPU count, which keeps the 4-GPU point unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4852
+
+- config-keys:
+    - h3-bf16-h100-sglang-video
+  scenario-type: [video-generation]
+  description:
+    - "Sweep H3 C1 latency on 2, 4 and 8 H100 GPUs with SGLang TP2 and Ulysses 1, 2 and 4; H100 starts at 2 GPUs because the model does not fit one 80 GB GPU, and the 4-GPU point keeps its recipe."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4857
