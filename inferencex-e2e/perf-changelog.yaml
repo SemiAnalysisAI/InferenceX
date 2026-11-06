@@ -12345,3 +12345,10 @@
   description:
     - "Restore the H200 row and sweep H3 C1 latency on 1, 2, 4 and 8 H200 GPUs with SGLang Ulysses across all GPUs."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4856
+
+- config-keys:
+    - h3-bf16-mi355x-sglang-video
+  scenario-type: [video-generation]
+  description:
+    - "Sweep H3 C1 latency on 1, 2, 4 and 8 MI355X GPUs with SGLang Ulysses across all GPUs; the MI355X recipe now sets the Ulysses degree from the GPU count, which keeps the 4-GPU point unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4818
