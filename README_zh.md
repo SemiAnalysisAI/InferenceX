@@ -21,12 +21,21 @@
 | [`InferenceX-e2e/`](inferencex-e2e/) | 🚀 端到端推理服务基准测试 |
 | [`CollectiveX/`](collectivex/) | 🌐 网络与集合通信基准测试（实验性 Beta 版本） |
 | [`OperatorX/`](operatorx/) | ⚙️ 算子与内核级基准测试（实验性 Beta 版本） |
+| [`UBenchX/`](ubenchX/) | 独立硬件微基准测试（实验性 Beta 版本） |
 | [`power_model/`](power_model/) | ⚡ 开源系统级功耗建模 |
+| [`video-generation/`](video-generation/) | 🎬 视频生成服务基准测试 |
 | [`shared/`](shared/) | 🧩 共享组件目录 |
 | [`experimental/`](experimental/) | 🧪 其余实验 |
 
 ## 新闻
 
+- **[2026/11]** 🔥 Kimi K3.1 Pro：自 Day 0 起持续基准测试上线，覆盖 B200、B300、GB200 与 MI355X（SGLang + vLLM）
+- **[2026/11]** 🔥 PowerX：多节点运行默认采集实测功耗，包括 NVL72 Grace CPU、逐主机 GPU 与 AMD EPYC CPU 封装功耗
+- **[2026/11]** GLM-5.3-Flash：新增 GB200（FP8 + NVFP4）、MI300X 与 MI325X（含 HiCache）上的 AgentX 基准测试 [仪表盘](https://inferencex.semianalysis.com/agentx)
+- **[2026/10]** MiniMax M3.1 Flash：在 B200 与 B300 上提供使用 DSpark 投机解码的 Day 0 AgentX 基准测试 [仪表盘](https://inferencex.semianalysis.com/agentx)
+- **[2026/10]** Muse Spark Open：新增 B300 与 GB300（SGLang）上的 AgentX 基准测试 [仪表盘](https://inferencex.semianalysis.com/agentx)
+- **[2026/10]** 开源功耗模型（Beta）：基于实测 GPU、CPU 与内存遥测估算系统功耗
+- **[2026/09]** Vera Rubin NVL72、TPUv7x Ironwood 与 RTX PRO 6000 Server 现已获得官方支持
 - **[2026/09]** DeepSeek V4.1 Flash：新增 AgentX 基准测试 [仪表盘](https://inferencex.semianalysis.com/agentx)
 - **[2026/08]** Qwen3.8-Flash-Next：新增使用原生多 Token 预测（MTP）的 AgentX 基准测试 [仪表盘](https://inferencex.semianalysis.com/agentx)
 - **[2026/08]** 🔥 **AgentX：全球首个完全开源、采用 Apache 2.0 许可的真实百万级长上下文多轮基准测试上线** [仪表盘](https://inferencex.semianalysis.com/agentx)

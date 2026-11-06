@@ -94,12 +94,12 @@ def test_model_constructs_equipment_and_resolves_scenario_without_the_cli(
     result = model.estimate_breakdown(125)
     assert result.gpu_count == 16
     assert (result.cooling_mode, result.pue) == ("air", 1.3)
-    assert named(result, "X86CPU")[0].power_w == 800
-    assert named(result, "DDR5DIMM")[0].power_w == 448
+    assert named(result, "X86CPU")[0].power_w == 780
+    assert named(result, "DDR5DIMM")[0].power_w == 176
     assert named(result, network_name)[0].power_w == network_w
     losses = named(result, "Power conversion losses")[0]
     assert losses.power_w > 0
-    assert dict(losses.details)["dc_load_w_per_system"] > 2594
+    assert dict(losses.details)["dc_load_w_per_system"] > 2458
 
 
 def test_public_factory_uses_model_owned_defaults_and_family_nics():
@@ -108,10 +108,10 @@ def test_public_factory_uses_model_owned_defaults_and_family_nics():
     assert result.using_scale_out is False
     assert result.cpu_offload is False
     assert named(result, "Thor2NICCard")[0].power_w == 160
-    assert named(result, "X86CPU")[0].power_w == 240
+    assert named(result, "X86CPU")[0].power_w == 330
     assert named(result, "Generic512TEthernetSwitch")[0].power_w == 281.0625
     fan = named(result, "FanPower")[0]
-    assert dict(fan.details)["non_fan_power_w_per_system"] == pytest.approx(1711.6)
+    assert dict(fan.details)["non_fan_power_w_per_system"] == pytest.approx(1724)
 
 
 @pytest.mark.parametrize("factory", [create_power_model, OSSAllinPowerModel.for_system])
@@ -158,9 +158,9 @@ def test_hgx_complete_power_and_serializable_provenance():
     model = advanced()
     result = model.estimate_breakdown(125)
     assert result.gpu_count == 8
-    assert result.it_power_w == pytest.approx(2970.735473339775)
-    assert result.facility_power_w == pytest.approx(3267.8090206737525)
-    assert model.estimate(125) == pytest.approx(408.476127584219)
+    assert result.it_power_w == pytest.approx(3044.937061879922)
+    assert result.facility_power_w == pytest.approx(3349.430768067914)
+    assert model.estimate(125) == pytest.approx(418.678846008489)
     assert named(result, "GPUs")[0].power_w == 1000
     assert named(result, "HopperHGXBoard")[0].power_w == 1496
     switch = named(result, "HopperHGXNVSwitch")[0]
@@ -176,20 +176,20 @@ def test_hgx_complete_power_and_serializable_provenance():
     optics = named(result, "SystemSide400GTransceiver")[0]
     assert (optics.quantity, optics.power_w) == (8, 64)
     cpu = named(result, "X86CPU")[0]
-    assert (cpu.quantity, cpu.power_w) == (2, 240)
+    assert (cpu.quantity, cpu.power_w) == (2, 330)
     assert dict(cpu.details)["architecture"] == "x86"
     memory = named(result, "DDR5DIMM")[0]
     assert memory.quantity == 32
-    assert memory.power_w == pytest.approx(121.6)
+    assert memory.power_w == pytest.approx(88)
     assert dict(memory.details)["state"] == "idle"
     assert dict(memory.details)["capacity_gb_per_dimm"] == 64
     assert dict(memory.details)["memory_type"] == "DDR5"
     assert sum(nic.quantity for nic in named(result, "ConnectX7NICCard")) == 8
     fan = named(result, "FanPower")[0]
-    assert fan.power_w == pytest.approx(24.988378671820)
-    assert dict(fan.details)["non_fan_power_w_per_system"] == 2351.6
+    assert fan.power_w == pytest.approx(27.94964950394)
+    assert dict(fan.details)["non_fan_power_w_per_system"] == 2408
     exported = json.loads(result.model_dump_json())
-    assert exported["AllInPower_per_gpu"] == pytest.approx(408.476127584219)
+    assert exported["AllInPower_per_gpu"] == pytest.approx(418.678846008489)
     config = result.components[0].children[0].configuration
     assert config["components"][1]["component"]["state"] == "active"
     assert config["fan_policy"]["fan_power_ratio_at_design"] == 0.1
@@ -199,7 +199,7 @@ def test_hgx_complete_power_and_serializable_provenance():
     ]
     assert exported["components"][0]["children"][0]["configuration"] == config
     assert PowerEstimate.model_validate_json(result.model_dump_json()).it_power_w == pytest.approx(
-        2970.735473339775
+        3044.937061879922
     )
     assert config["ubb"]["non_gpu_power_w"] == 496
     assert config["components"][-1]["component"]["power_w"] == 8
@@ -208,10 +208,10 @@ def test_hgx_complete_power_and_serializable_provenance():
 
 def test_idle_nics_reduce_both_direct_power_and_fans():
     result = advanced(using_scale_out=False).estimate_breakdown(125)
-    assert result.it_power_w == pytest.approx(2867.654856429474)
-    assert named(result, "FanPower")[0].power_w == pytest.approx(22.523885143580)
+    assert result.it_power_w == pytest.approx(2941.569365936337)
+    assert named(result, "FanPower")[0].power_w == pytest.approx(25.25549274907)
     assert named(result, "ConnectX7NICCard")[0].power_w == 120
-    assert result.AllInPower_per_gpu == pytest.approx(394.302542759053)
+    assert result.AllInPower_per_gpu == pytest.approx(404.465787816246)
 
 
 @pytest.mark.parametrize(
@@ -221,31 +221,31 @@ def test_idle_nics_reduce_both_direct_power_and_fans():
             "fixed-seq-len",
             False,
             "FixedSeqLen",
-            240,
-            121.6,
-            24.988378671820,
-            2970.735473339775,
-            408.476127584219,
+            330,
+            88,
+            27.94964950394,
+            3044.937061879922,
+            418.678846008489,
         ),
         (
             "agentic",
             False,
             "Agentic",
-            300,
-            121.6,
-            26.950296628687,
-            3048.187870785858,
-            419.125832233056,
+            360,
+            88,
+            29.007347798362,
+            3083.759184747952,
+            424.016887902843,
         ),
         (
             "agentic-cpu-offloading",
             True,
             "AgenticOffloadingOn",
-            400,
-            224,
-            34.321358824742,
-            3310.401698530927,
-            455.180233548002,
+            390,
+            88,
+            30.091399354768,
+            3122.61424919346,
+            429.359459264101,
         ),
     ],
 )
@@ -270,7 +270,7 @@ def test_workload_resolves_cpus_dimms_fans_and_exported_state_without_mutating_h
     assert config["cpu_offload"] is offload
     assert config["components"][0]["component"]["state"] == state
     assert config["components"][0]["component"]["power_w"] == cpu_w / 2
-    assert advanced(system).estimate(125) == pytest.approx(408.476127584219)
+    assert advanced(system).estimate(125) == pytest.approx(418.678846008489)
 
 
 @pytest.mark.parametrize("value", ["false", 1, None])
@@ -297,9 +297,9 @@ def test_example_model_rejects_offloading_workload_without_a_memory_inventory():
 @pytest.mark.parametrize(
     "quantity, count, nvme_w, fan_w, expected",
     [
-        (1, 8, 50, 24.988378671820, 582.138627584219),
-        (2, 16, 100, 49.976757343640, 495.307377584219),
-        (3, 24, 150, 74.965136015460, 466.363627584219),
+        (1, 8, 50, 27.94964950394, 592.341346008489),
+        (2, 16, 100, 55.89929900788, 505.510096008489),
+        (3, 24, 150, 83.84894851181, 476.566346008489),
     ],
 )
 def test_system_quantities_scale_nonlinear_fans_but_not_shared_networking(
@@ -327,8 +327,8 @@ def test_mixed_chassis_and_rack_use_their_actual_gpu_counts():
     result = model.estimate_breakdown(125)
     assert result.gpu_count == 80
     assert [node.power_w for node in named(result, "GPUs")] == [1000, 9000]
-    assert [node.power_w for node in named(result, "X86CPU")] == [240]
-    assert [node.power_w for node in named(result, "GraceCPU")] == [3600]
+    assert [node.power_w for node in named(result, "X86CPU")] == [330]
+    assert [node.power_w for node in named(result, "GraceCPU")] == [3420]
     assert [node.power_w for node in named(result, "NVMeDrive")] == [50, 720]
     assert result.facility_power_w == pytest.approx(result.AllInPower_per_gpu * 80)
     measured = model.estimate_breakdown(125, cpu_and_dram_measured_power_per_socket=98)
@@ -352,25 +352,25 @@ def test_mixed_chassis_and_rack_use_their_actual_gpu_counts():
 def test_external_network_power_does_not_heat_the_chassis_fan_model():
     low = advanced(network_switches=1).estimate_breakdown(125)
     high = advanced(network_switches=2).estimate_breakdown(125)
-    assert named(low, "FanPower")[0].power_w == pytest.approx(24.988378671820)
-    assert named(high, "FanPower")[0].power_w == pytest.approx(24.988378671820)
-    assert high.AllInPower_per_gpu == pytest.approx(755.801127584219)
+    assert named(low, "FanPower")[0].power_w == pytest.approx(27.94964950394)
+    assert named(high, "FanPower")[0].power_w == pytest.approx(27.94964950394)
+    assert high.AllInPower_per_gpu == pytest.approx(766.003846008489)
 
 
 def test_cooling_only_changes_facility_accounting():
     air = advanced(cooling="air").estimate_breakdown(125)
     liquid = advanced(cooling="liquid").estimate_breakdown(125)
-    assert air.it_power_w == liquid.it_power_w == pytest.approx(2970.735473339775)
-    assert air.AllInPower_per_gpu == pytest.approx(482.744514417713)
-    assert liquid.AllInPower_per_gpu == pytest.approx(408.476127584219)
+    assert air.it_power_w == liquid.it_power_w == pytest.approx(3044.937061879922)
+    assert air.AllInPower_per_gpu == pytest.approx(494.802272555487)
+    assert liquid.AllInPower_per_gpu == pytest.approx(418.678846008489)
 
 
 def test_zero_gpu_input_preserves_advanced_overhead_and_gpu_count():
     assert ExamplePowerModel(cooling=CoolingProfile(mode="air")).estimate(0) == 0
     result = advanced().estimate_breakdown(0)
     assert result.gpu_count == 8
-    assert result.it_power_w == pytest.approx(1695.430649885949)
-    assert result.AllInPower_per_gpu == pytest.approx(233.121714359318)
+    assert result.it_power_w == pytest.approx(1766.984332327981)
+    assert result.AllInPower_per_gpu == pytest.approx(242.960345695097)
 
 
 @pytest.mark.parametrize(
@@ -411,7 +411,7 @@ def test_frozen_inputs_cannot_change_after_validation():
     system = hgx()
     with pytest.raises(ValidationError):
         system.ubb.non_gpu_power_w = -1
-    assert advanced(system).estimate(125) == pytest.approx(408.476127584219)
+    assert advanced(system).estimate(125) == pytest.approx(418.678846008489)
 
 
 def test_inconsistent_exported_estimate_is_rejected():

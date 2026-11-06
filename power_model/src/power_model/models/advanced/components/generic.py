@@ -42,9 +42,9 @@ class X86CPU(CPU):
     provenance: Provenance = X86_CPU_BASELINE
     _state_power_w: ClassVar[dict[str, float]] = {
         "Idle": 80.0,
-        "FixedSeqLen": 120.0,
-        "Agentic": 150.0,
-        "AgenticOffloadingOn": 200.0,
+        "FixedSeqLen": 165.0,
+        "Agentic": 180.0,
+        "AgenticOffloadingOn": 195.0,
     }
 
     @classmethod
@@ -82,13 +82,13 @@ class X86CPU(CPU):
 
 
 class DDR5DIMM(GenericComponent):
-    """One DDR5 DIMM, idle at 3.8 W or active during CPU offloading at 7 W."""
+    """One DDR5 DIMM at 2.75 W, whether idle or active during CPU offloading."""
 
     capacity_gb: PositiveCount = 64
     state: Literal["idle", "active"] = "idle"
     memory_type: ClassVar[str] = "DDR5"
-    idle_power_w: ClassVar[float] = 3.8
-    active_power_w: ClassVar[float] = 7.0
+    idle_power_w: ClassVar[float] = 2.75
+    active_power_w: ClassVar[float] = 2.75
     provenance: Provenance = DDR5_BASELINE
 
     @property

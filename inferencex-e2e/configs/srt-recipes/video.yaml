@@ -1,0 +1,11 @@
+frontend:
+  type: none
+
+benchmark:
+  type: custom
+  command: python3 -m infx.bench video client --request-seconds 900
+  env:
+    PYTHONPATH: /video-package:/infmax-workspace
+    PYTHONUNBUFFERED: "1"
+    VIDEO_SERVER_SERVICE: video-server
+    VIDEO_SERVER_PORT: "30283"
