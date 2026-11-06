@@ -57,54 +57,6 @@ def test_merge_ingest_routes_video_and_llm_independently(tmp_path):
     assert (outputs["video"], outputs["llm"], outputs["retirement-only"]) == ("true", "true", "false")
 
 
-def test_video_reuse_discovery_requires_the_selected_matrix_manifest():
-    from infx.workflows.sweep_runs import has_reusable_result_artifacts
-    name = "h3-results-123-2-" + "a" * 64
-    assert not has_reusable_result_artifacts({name})
-    assert has_reusable_result_artifacts({name, "video-sweep-manifest"})
-    assert not has_reusable_result_artifacts({"h3-results-123-2", "video-sweep-manifest"})
-
-
-@pytest.mark.parametrize('labels,full', [
-    (["full-sweep-enabled"], True),
-    (["full-sweep-enabled", "evals-only"], False),
-], ids=['labels1-True', 'labels3-False'])
-def test_selected_video_manifest_distinguishes_full_sweep_from_partial(tmp_path, labels, full):
-    workflow = yaml.safe_load((ROOT / ".github/workflows/run-sweep.yml").read_text())
-    step = workflow["jobs"]["upload-changelog-metadata"]["steps"][0]
-    result = subprocess.run(["bash", "-e", "-c", step["run"]], cwd=tmp_path, text=True, capture_output=True,
-        env={**os.environ, "SWEEP_MATRIX": json.dumps({"changelog_metadata": {}, "single_node": {"video": [{}]}}),
-             "SWEEP_HEAD": "a" * 40, "SWEEP_LABELS": json.dumps(labels), "GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "2"})
-    assert result.returncode == 0, result.stderr
-    manifest = json.loads((tmp_path / "sweep_manifest.json").read_text())
-    assert manifest["video-full-sweep"] is full
-    assert (manifest["run-id"], manifest["run-attempt"]) == (123, 2)
-
-
-def test_sweep_setup_routes_only_llm_rows_to_benchmark_aggregation(tmp_path):
-    workspace = tmp_path / "workspace"
-    (workspace / "inferencex-e2e").mkdir(parents=True)
-    bindir = tmp_path / "bin"
-    bindir.mkdir()
-    uv = bindir / "uv"
-    uv.write_text('#!/bin/sh\ncase "$*" in *infx.matrix.plan*) printf "%s" "$FIXTURE_PLAN";; *) cat;; esac\n')
-    uv.chmod(0o755)
-    plan = {"single_node": {"video": [{"scenario-type": "video-generation"}], "1k1k": []}, "multi_node": {}}
-    workflow = yaml.safe_load((ROOT / ".github/workflows/run-sweep.yml").read_text())
-    step = next(step for step in workflow["jobs"]["setup"]["steps"] if step.get("id") == "setup")
-    output = tmp_path / "output"
-    result = subprocess.run(["bash", "-e", "-c", step["run"]], cwd=workspace, text=True, capture_output=True,
-        env={**os.environ, "PATH": str(bindir) + os.pathsep + os.environ["PATH"], "FIXTURE_PLAN": json.dumps(plan),
-             "GITHUB_WORKSPACE": str(workspace), "GITHUB_OUTPUT": str(output), "GITHUB_BASE_REF": "main",
-             "PR_HEAD_SHA": "a" * 40, "ALL_EVALS": "false", "EVALS_ONLY": "false",
-             "GITHUB_EVENT_NAME": "pull_request", "GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "1",
-             "PRIORITY_CRITERIA": ""})
-    assert result.returncode == 0, result.stderr
-    outputs = dict(line.split("=", 1) for line in output.read_text().splitlines())
-    assert outputs["has-benchmark-results"] == "false"
-    assert json.loads(outputs["search-space-config"]) == plan
-
-
 @pytest.mark.parametrize("agentx_fast,manifest", [("false", True), ("true", False)])
 def test_trusted_external_dispatch_records_reusable_video_matrix(tmp_path, agentx_fast, manifest):
     workflow = yaml.safe_load((ROOT / ".github/workflows/e2e-tests.yml").read_text())

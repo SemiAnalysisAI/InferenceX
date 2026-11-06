@@ -14,7 +14,7 @@ from infx import yamlio
 from infx.clusters import CLUSTER_LABEL_PREFIX
 from infx.clusters.slurm import Fabric
 from infx.srt_slurm.variants import deep_merge, expand_variants
-from infx.srt_slurm.workload import resolve_fabric
+from infx.srt_slurm.workload import discovery_on_dedicated_node, resolve_fabric
 
 from .validation import (
     DEFAULT_AGENTIC_DURATION_SECONDS,
@@ -246,16 +246,7 @@ def recipe_auxiliary_node_count(recipe: dict) -> int:
     """Return the nodes a recipe needs beyond its workers, for service pools and dedicated roles."""
     services = [service for service in recipe.get("services") or [] if service.get("enabled", True)]
     pool_nodes = sum(service.get("nodes") or 0 for service in services)
-    infra_dedicated = (recipe.get("infra") or {}).get("etcd_nats_dedicated_node", False)
-    discovery = [service for service in services if service.get("type") in ("etcd", "nats")]
-    if discovery:
-        placements = {
-            (service.get("placement") or {}).get("node") == "dedicated" for service in discovery
-        }
-        if len(placements) != 1:
-            raise ValueError("Recipe etcd and nats must agree on dedicated placement")
-        infra_dedicated = placements.pop()
-    dedicated_roles = int(infra_dedicated)
+    dedicated_roles = int(discovery_on_dedicated_node(recipe))
     for section, legacy_key in (
         ("frontend", "dedicated_node"),
         ("benchmark", "client_dedicated_node"),
@@ -300,11 +291,7 @@ def recipe_node_count(root: Path, srt_recipe: str) -> int | None:
             0 if role["nodes"] == "colocate" else int(role["nodes"]) for role in roles.values()
         )
         return worker_nodes + recipe_auxiliary_node_count(recipe)
-    # Services-only recipes (frontend.type: none, services[].nodes) have no engine roles.
-    auxiliary = recipe_auxiliary_node_count(recipe)
-    if auxiliary:
-        return auxiliary
-    raise ValueError(f"Recipe has no worker roles or service pools: {recipe_path}")
+    raise ValueError(f"Recipe has no worker roles: {recipe_path}")
 
 
 def _label_fabrics(label: str, runner_data: dict) -> dict[str, Fabric]:
@@ -1590,9 +1577,10 @@ def _expand_configs(
                         root=root,
                     )
                 )
+        # Video is opt-in: a selection that names no scenario type keeps the LLM scenarios.
         video = (
             config[Fields.SCENARIOS.value].get(Fields.VIDEO_GENERATION.value, [])
-            if not scenario_types or "video-generation" in scenario_types
+            if scenario_types and "video-generation" in scenario_types
             else []
         )
         for scenario in video:
@@ -1811,7 +1799,7 @@ def main() -> list[dict]:
         nargs="+",
         choices=["fixed-seq-len", "agentic-coding", "video-generation"],
         required=False,
-        help="Scenario type(s) to include. If not specified, all scenario types are generated.",
+        help="Scenario type(s) to include. If not specified, fixed-seq-len and agentic-coding are generated; video-generation runs only when named.",
     )
 
     parser = argparse.ArgumentParser(

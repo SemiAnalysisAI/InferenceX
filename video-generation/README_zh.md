@@ -16,7 +16,7 @@ diffusion 引擎在单节点上提供服务，选定的冻结 YAML 工作负载�
 本目录以 `/video-package` 挂载进任务。H100、H200、B200 与 MI355X 选用
 `h3-v2.yaml/release-v1`，在 C1 测量 20 个不同 prompt。
 产物身份、复用校验与合并后发布见
-[原生视频交付](../../inferencex-e2e/docs/video-generation.md)。
+[原生视频交付](../inferencex-e2e/docs/video-generation.md)。
 
 ## 入口
 
@@ -50,11 +50,11 @@ prompt 合同，集合选择器为 `release-v1`。请求使用 49 次去噪更�
 
 ```bash
 cd video-generation
-PYTHONPATH=../../inferencex-e2e uv run --no-project --python 3.12 \
+PYTHONPATH=../inferencex-e2e uv run --no-project --python 3.12 \
   --with 'av==16.1.0' --with 'numpy==2.3.5' \
   --with 'pyyaml>=6,<7' --with 'pytest>=8,<9' python -m pytest -q
 ```
 
-[Test Video Harness](../../.github/workflows/test-video-harness.yml) 会在相关
+[Test Video Harness](../.github/workflows/test-video-harness.yml) 会在相关
 变更上运行这些 CPU 检查。它们不调用模型、调度器或 GPU；sweep 产物才是验收
 证据。
