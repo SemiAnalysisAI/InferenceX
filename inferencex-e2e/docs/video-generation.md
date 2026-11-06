@@ -3,7 +3,7 @@
 The `video-generation` scenario schedules one server job per deployment. SGLang
 selects C1 deployments on 1, 2, 4 and 8 B200, H200 or MI355X GPUs (Ulysses
 across all GPUs) and on 2, 4 and 8 H100 GPUs (TP2, since the model does not fit
-one 80 GB GPU), all using
+one 80 GB GPU), and vLLM-Omni the same four B200 deployments, all using
 `h3-v2.yaml`: 20 distinct measured prompts, a separate warmup, 49 denoising
 updates, and 124 frames at 24 fps and 1344×768. A five-second request produces
 124/24 seconds of video. Config presence is not GPU or quality qualification.
@@ -112,8 +112,8 @@ Their presence does not establish final-head GPU qualification.
 2. Change the existing row in its master config, or copy it with a
    distinct key and recipe for a deployment that must remain separately selectable.
    Pin the image by digest and use its real interpreter and architecture. The
-   H100/H200/B200 SGLang rows use the public CUDA amd64 image and the MI355X row its
-   ROCm MI35x build. A shared image does
+   H100/H200/B200 SGLang rows and the B200 vLLM-Omni row use the public CUDA amd64
+   image and the MI355X row its ROCm MI35x build. A shared image does
    not qualify a different topology or SKU: validate
    the selected deployments through their sweep. Maintainers stage model snapshots in the runner's
    existing HF cache; contributors do not patch the cache or SSH extra launch flags.
