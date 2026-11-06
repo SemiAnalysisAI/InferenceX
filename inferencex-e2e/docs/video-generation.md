@@ -1,8 +1,8 @@
 # Native video delivery
 
 The `video-generation` scenario schedules one server job per deployment. SGLang
-selects C1 deployments on 1, 2, 4 and 8 H200 GPUs (Ulysses across all GPUs) and
-on 4 H100, B200 or MI355X GPUs, all using
+selects C1 deployments on 1, 2, 4 and 8 B200 or H200 GPUs (Ulysses across all
+GPUs) and on 4 H100 or MI355X GPUs, all using
 `h3-v2.yaml`: 20 distinct measured prompts, a separate warmup, 49 denoising
 updates, and 124 frames at 24 fps and 1344×768. A five-second request produces
 124/24 seconds of video. Config presence is not GPU or quality qualification.
