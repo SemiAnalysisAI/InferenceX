@@ -97,7 +97,6 @@ base:
 # max-num-seqs stays below CONC from c4 to c32, and equals it at c1 and c48. The capture list is
 # the decode sizes, multiples of one plus the draft token count, then the prefill ladder.
 # Throughput runs replace block rejection with the golden acceptance length.
-# c16 to c32 use 0.86 because, with reclaim off, their kernel scratch filled the rest of VRAM at 0.90-0.91 and stalled RCCL.
 override_gpu_kv_c1:
   roles:
     agg:
@@ -146,7 +145,6 @@ override_dram_c16:
     agg:
       args:
         max-num-seqs: 10
-        gpu-memory-utilization: 0.86
         compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":16384,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[5,10,15,20,25,30,35,40,45,50,64,96,128,160,192,224,256,288,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240,12288,14336,16384]}'
         speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
@@ -160,7 +158,6 @@ override_dram_c24:
     agg:
       args:
         max-num-seqs: 16
-        gpu-memory-utilization: 0.86
         compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":16384,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,96,128,160,192,224,256,288,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240,12288,14336,16384]}'
         speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
@@ -175,7 +172,7 @@ override_dram_c32:
       args:
         max-num-seqs: 24
         max-num-batched-tokens: 10240
-        gpu-memory-utilization: 0.86
+        gpu-memory-utilization: 0.91
         compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":10240,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,128,160,192,224,256,288,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240]}'
         speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":3,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
