@@ -34,7 +34,7 @@ usage: python -m infx.matrix.generate full-sweep
     [--no-evals | --evals-only] [--all-evals]
     [--smoke] [--trim-conc]
     [--runner-node-filter RUNNER_NODE_FILTER]
-    [--scenario-type {fixed-seq-len,agentic-coding} [{fixed-seq-len,agentic-coding} ...]]
+    [--scenario-type {fixed-seq-len,agentic-coding,video-generation} [{fixed-seq-len,agentic-coding,video-generation} ...]]
     [--model-prefix MODEL_PREFIX [MODEL_PREFIX ...]]
     [--precision PRECISION [PRECISION ...]]
     [--framework FRAMEWORK [FRAMEWORK ...]]
@@ -109,7 +109,7 @@ usage: python -m infx.matrix.generate test-config
     [--no-evals | --evals-only] [--all-evals]
     [--smoke] [--trim-conc]
     [--runner-node-filter RUNNER_NODE_FILTER]
-    [--scenario-type {fixed-seq-len,agentic-coding} [{fixed-seq-len,agentic-coding} ...]]
+    [--scenario-type {fixed-seq-len,agentic-coding,video-generation} [{fixed-seq-len,agentic-coding,video-generation} ...]]
     --config-keys CONFIG_KEYS [CONFIG_KEYS ...]
     [--conc CONC [CONC ...]]
     [--exp-names EXP_NAMES [EXP_NAMES ...]]
@@ -253,6 +253,8 @@ This proof of concept produces benchmark and evaluation artifacts through the
 End-to-End Tests workflow. The dispatch also uploads a `source-identity`
 artifact (PR number, full approved head SHA, merge SHA, and the `evals-only`,
 `agentx-fast`, `all-evals`, and fail-fast modifiers) and `changelog-metadata`.
+When the matrix selects video, it also uploads `video-sweep-manifest` and runs
+`validate-video-results`, because video reuse requires that manifest.
 A pinned `/use <run_id>` accepts these runs; reuse and staging report the
 recorded PR head and judge modifiers from the recorded dispatch rather than the
 PR's current labels. Older runs without the artifact fall back to the run title

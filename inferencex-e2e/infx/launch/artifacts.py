@@ -12,7 +12,7 @@ import re
 import shutil
 import sys
 import tarfile
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -174,6 +174,7 @@ def collect_agentic_power_results(
     concurrencies: Sequence[int],
     *,
     results_python: str | None,
+    require_power: bool = True,
     expected_cpu: bool = False,
 ) -> int:
     """Stage the AgentX power audit inputs and validate each concurrency's power window.
@@ -197,7 +198,7 @@ def collect_agentic_power_results(
 
     if step := validate_agentic_power(
         logs_dir, workspace, result_filename, producer_sha, concurrencies,
-        results_python=results_python, require_power=True, expected_cpu=expected_cpu,
+        results_python=results_python, require_power=require_power, expected_cpu=expected_cpu,
     ):  # fmt: skip
         rc = step
     return rc
@@ -240,6 +241,61 @@ def validate_agentic_power(
     return rc
 
 
+def validate_video_results(
+    results_python: str,
+    workspace: Path,
+    logs_dir: Path,
+    producer_sha: str,
+    *,
+    result_filename: str,
+    concurrencies: Sequence[int],
+    gpu_count: int,
+    require_power: bool,
+    identity: Mapping[str, str],
+) -> int:
+    """Join every concurrency's video result to the native power package under ``logs_dir``."""
+    argv = [
+        results_python, "-P", "-m", "infx.results.video",
+        "--logs-root", str(logs_dir), "--workspace", str(workspace),
+        "--result-filename", result_filename, "--gpu-count", str(gpu_count),
+        "--expected-producer-sha", producer_sha,
+        "--concurrencies", *map(str, concurrencies),
+        *(f"--{name}={value}" for name, value in identity.items()),
+        *(["--require-power"] if require_power else []),
+    ]  # fmt: skip
+    return proc.run(argv, env=_results_env(), cwd=workspace).returncode
+
+
+def build_video_bundle(
+    results_python: str,
+    workspace: Path,
+    logs_dir: Path,
+    *,
+    package: Path,
+    output: Path,
+    result_filename: str,
+    concurrencies: Sequence[int],
+) -> int:
+    """Assemble the app-facing video bundle from the job's results and validation sidecars."""
+    argv = [
+        results_python, "-P", "-m", "evaluator.cli", "srt-finalize",
+        "--video-dir", str(logs_dir / "video"), "--power-dir", str(logs_dir / "power"),
+        "--workspace", str(workspace), "--result-filename", result_filename,
+        "--output", str(output), "--concurrencies", *map(str, concurrencies),
+    ]  # fmt: skip
+    env = _results_env()
+    env["PYTHONPATH"] = f"{package}{os.pathsep}{env['PYTHONPATH']}"
+    return proc.run(argv, env=env, cwd=workspace).returncode
+
+
+def _results_env() -> dict[str, str]:
+    python_path = os.environ.get("PYTHONPATH")
+    return {
+        **os.environ,
+        "PYTHONPATH": f"{_PROJECT_ROOT}:{python_path}" if python_path else str(_PROJECT_ROOT),
+    }
+
+
 def run_power_adapter(
     results_python: str,
     workspace: Path,
@@ -251,11 +307,6 @@ def run_power_adapter(
     require_power: bool,
 ) -> int:
     """Join one AgentX point's aggregate to the power package under ``logs_dir``."""
-    python_path = os.environ.get("PYTHONPATH")
-    env = {
-        **os.environ,
-        "PYTHONPATH": f"{_PROJECT_ROOT}:{python_path}" if python_path else str(_PROJECT_ROOT),
-    }
     argv = [
         results_python, "-m", "infx.results.agentic.power_adapter",
         "--result-dir", str(result_dir),
@@ -266,4 +317,4 @@ def run_power_adapter(
         *extra,
         *(["--require-power"] if require_power else []),
     ]  # fmt: skip
-    return proc.run(argv, env=env, cwd=workspace).returncode
+    return proc.run(argv, env=_results_env(), cwd=workspace).returncode

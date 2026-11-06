@@ -25,9 +25,10 @@ if TYPE_CHECKING:
     from infx.launch.drivers.srt.checkout import Checkout
     from infx.launch.drivers.srt.lanes import SrtLane
     from infx.launch.drivers.srt.run import SrtRun
-    from infx.srt_slurm.workload import CpuPowerSource
+    from infx.srt_slurm.workload import CpuPowerSource, GpuPower
 
 SINGLE_NODE_SUBMISSION = "srt-single-node-submission.json"
+VIDEO_SUBMISSION = "srt-video-submission.json"
 MULTINODE_SUBMISSION = "srt-submission.json"
 ACCEPTANCE_RECORD = "golden-acceptance.json"
 BIND_LOG = "srt-bind.log"
@@ -117,6 +118,15 @@ def bind_point(
     return _bind(run, prepare, checkout.root)
 
 
+def bind_video(run: SrtRun, checkout: Checkout, arguments: Path) -> int:
+    """Bind the services-only video recipe for this job; the binder writes ``arguments``."""
+    prepare = [
+        str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.video", "prepare",
+        f"{run.workspace}/{run.request.srt_recipe}", str(arguments), *_fabric(run),
+    ]  # fmt: skip
+    return _bind(run, prepare, checkout.root)
+
+
 def bound_arguments(arguments: Path) -> tuple[str, str, list[str]]:
     """The selected variant, its bound recipe, and srtctl runtime arguments the binder wrote.
 
@@ -131,15 +141,15 @@ def bind_recipe(
     checkout: Checkout,
     staged: str,
     output: str,
-    power_port: int | None,
+    gpu_power: GpuPower | None,
     cpu_power_source: CpuPowerSource | None,
     client_env: Mapping[str, str],
 ) -> int:
-    """Compose and bind the staged fragment into ``output``, with telemetry if ``power_port``
-    and the Grace CPU exporter if ``cpu_power_source``."""
+    """Compose and bind the staged fragment into ``output``, with GPU telemetry if
+    ``gpu_power`` and the cluster's CPU exporter if ``cpu_power_source``."""
     bind = [str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.workload", staged, output]
-    if power_port is not None:
-        bind += ["--power-port", str(power_port)]
+    if gpu_power is not None:
+        bind += ["--gpu-power", str(gpu_power)]
     if cpu_power_source is not None:
         bind += ["--cpu-power-source", cpu_power_source]
     for name, value in client_env.items():

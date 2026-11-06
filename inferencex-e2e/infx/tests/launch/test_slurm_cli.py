@@ -1,6 +1,7 @@
 """Slurm CLI wrappers of the Slurm backend against fake salloc/srun/squeue/sacct/scontrol binaries."""
 
 import json
+import shlex
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -44,7 +45,7 @@ def fake_bin(tmp_path, monkeypatch):
 def recorder(log: Path) -> str:
     """Bash snippet appending the invocation's argv as a JSON line to ``log``."""
     return (
-        f"{sys.executable} -c 'import json,sys; print(json.dumps(sys.argv[1:]))' \"$@\" >> {log}"
+        f"{shlex.quote(sys.executable)} -c 'import json,sys; print(json.dumps(sys.argv[1:]))' \"$@\" >> {shlex.quote(str(log))}"
     )
 
 
@@ -90,7 +91,19 @@ def test_final_status_maps_allocation_accounting(fake_bin, tmp_path, record, sta
     fake_bin("sacct", f"{recorder(log)}\necho '{record}'")
     status = final_status(Job("42"), delay_s=0)
     assert (status.state, status.exit_code, status.nodes) == (state, exit_code, nodes)
-    assert calls(log) == [["-X", "-n", "-P", "-j", "42", "--format=State,ExitCode,NodeList,Submit,Start,End"]]
+    assert calls(log) == [["-X", "-n", "-P", "-j", "42",
+                           "--format=State,ExitCode,NodeList,Submit,Start,End,AllocTRES"]]
+
+
+def test_observe_fills_missing_accounting_alloc_tres_from_matching_controller(fake_bin):
+    allocation = "cpu=16,gres/gpu=8,mem=128G,node=1"
+    fake_bin("sacct", "echo 'COMPLETED|0:0|gpu03|1791547200|1791548100|1791551700|Unknown'")
+    fake_bin("scontrol", f"echo 'JobId=42 JobState=FAILED ExitCode=1:0 NodeList=gpu03 AllocTRES={allocation}'")
+
+    status = cli.observe(Job("42"))
+
+    assert status.state is JobState.SUCCEEDED
+    assert status.alloc_tres == allocation
 
 
 def test_final_status_reads_the_accounting_times_as_epoch_seconds(fake_bin):
