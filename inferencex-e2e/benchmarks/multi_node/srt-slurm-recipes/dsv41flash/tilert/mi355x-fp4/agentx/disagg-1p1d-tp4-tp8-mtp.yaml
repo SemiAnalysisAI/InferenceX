@@ -38,9 +38,7 @@ roles:
       served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
       tensor-parallel-size: 4
       language-model-only: true
-      # The router's template: it tokenizes only when the prefill serves the same template with
-      # the HF tokenizer path, which it reads from the prefill's command line on a shared node.
-      chat-template: /configs/dsv41flash-tilert-chat-template.jinja
+      tokenizer-mode: deepseek_v41
       # The router reads the first token id from the prefill's logprobs.
       return-tokens-as-token-ids: true
       moe-backend: aiter
@@ -95,8 +93,8 @@ frontend:
     model-path: /hf_hub_cache/hub/models--deepseek-ai--DeepSeek-V4.1-Flash/snapshots/314113f8a7dadb388215396ba5fbee2c610a04d6
     queue-timeout: 1800
     # The router renders the chat template and tokenizes each request itself, so the prefill
-    # receives token ids. The prefill serves the same template; the router checks its rendering
-    # against the prefill's /tokenize at startup and stays off otherwise.
+    # receives token ids. The template renders what vLLM's deepseek_v41 tokenizer mode renders; the
+    # router checks that against the prefill's /tokenize at startup and stays off otherwise.
     chat-template: /configs/dsv41flash-tilert-chat-template.jinja
 sbatch_directives:
   cpus-per-task: "128"
