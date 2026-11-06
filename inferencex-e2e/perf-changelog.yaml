@@ -12285,3 +12285,13 @@
   description:
     - "Add day-0 Kimi K3.1 Pro vLLM AgentX on GB200: aggregated TP8 x PP2 x DCP8 and disaggregated 1P1D TP16 + EP16 with DSpark (K3.1 golden AL curve) and Simple CPU KV offload."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4799
+
+- config-keys:
+    - kimik3.1-fp4-gb200-vllm-agentic-dspark-tp8pp2-agg
+    - kimik3.1-fp4-gb200-vllm-agentic-dspark-tp16-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Re-sweep Kimi-K3.1-Pro GB200 vLLM AgentX with the updated DSpark draft (Inferact/Kimi-K3.1-Pro-DSpark-preview @ 6a2ef20a) and the #4851 golden curve, so throughput forces AL 3.41 at 5 draft tokens and 3.19 at 4."
+    - "Set VLLM_HTTP_TIMEOUT_KEEP_ALIVE to 600 s on the aggregated server so AIPerf's reused session connections outlive uvicorn's 5 s idle timeout."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
