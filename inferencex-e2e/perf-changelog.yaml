@@ -12178,6 +12178,17 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4797
 
 - config-keys:
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-hicache
+  scenario-type: [agentic-coding]
+  description:
+    - "Move dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg and dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-hicache to nightly-dev-cu13-20261030-302b78cc (Dynamo 1.7.0.dev20261029, SGLang 0.0.0.dev1+g52604e1d4), pinned by digest."
+    - "Keep one point per interactivity range. Disagg: 3 prefill workers at c700 (decode CUDA graph batch 18, max-running-requests 288, extra slots 27) and c1228, 5 at c2884 and 7 at c5540 (decode CUDA graph batch 96, max-running-requests 1536), where the decode batch cap sits at the rank's equilibrium batch so the queue moves to TTFT instead of decode step time, and 9 at c7480 with decode CUDA graph batch 192, max-running-requests 3072 and total_requests DP balancing, so decode takes every request the saturated prefill delivers. 7P c5540 keeps the base disaggregation-decode-extra-slots of 256."
+    - "Drop the agg TP2/EP2 c16 point (override_tp2_c16), 8 prefill workers at c4096, and 9 at c7480 with decode batch 160. Each lies on or under the line between its neighbours on this curve: agg TP2/EP2 c16 between agg TP4 c16 and 3P c1228 (3P c700 also has higher p90 interactivity and about 3.8x its throughput), 8P c4096 between 5P c2884 and 7P c5540, and 9P batch 160 between 7P c5540 and 9P batch 192."
+    - "Agg TP4 c1, c4 and c16 are unchanged. The agg key is listed so the whole Dynamo + SGLang curve, agg points included, comes from this sweep."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4673
+
+- config-keys:
     - kimik3.1-fp4-gb200-vllm-agentic-dspark-tp8pp2-agg
     - kimik3.1-fp4-gb200-vllm-agentic-dspark-tp16-disagg
   scenario-type:
