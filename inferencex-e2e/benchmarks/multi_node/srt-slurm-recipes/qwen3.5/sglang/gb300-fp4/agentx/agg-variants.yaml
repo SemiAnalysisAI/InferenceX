@@ -40,7 +40,7 @@ base:
         SGLANG_FLASHINFER_MOE_FUSED_FINALIZE: '1'
         SGLANG_ENABLE_METADATA_GLUE_GRAPH: '1'
         SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION: '1'
-        SGLANG_NVIDIA_MEGAKERNEL_SLOTS: route,mkm,gdn_verify,gdn_pdl,gdn_conv,hop,hop_fp8,hop_mid,draft_loop,draft_extend,draft_moe,draft_q1,draft_xchg,draft_hop,draft_fin,draft_front,draft_skv2,draft_multi,draft_embed,gdn_push,gdn_front,gdn_trt_front,route_shared,skv2,skv2_cp,mka,mka_push,mkm_wide,mkm_m32,mkm_m64,mkm_m128,mkm_m256,mkm_m512,multi_request,lowm_in,lowm_out,lowm_se,lowm_push,draft_q1_cp,draft_skv2_cp,sharded_gumbel
+        SGLANG_NVIDIA_MEGAKERNEL_SLOTS: route,mkm,gdn_verify,gdn_pdl,gdn_conv,hop,hop_fp8,hop_mid,draft_loop,draft_extend,draft_moe,draft_q1,draft_xchg,draft_hop,draft_fin,draft_front,draft_skv2,draft_multi,draft_embed,gdn_push,gdn_front,route_shared,skv2,skv2_cp,mka,mka_push,mkm_wide,mkm_m32,mkm_m64,mkm_m128,mkm_m256,mkm_m512,multi_request,lowm_in,lowm_out,lowm_se,lowm_push,draft_q1_cp,draft_skv2_cp,sharded_gumbel
       args:
         served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4
         model-path: /model/
@@ -115,7 +115,7 @@ override_tp4_mrr8:
         SGLANG_GDN_CHUNK_H_BV: '16'
         SGLANG_GDN_CHUNK_H_NUM_STAGES: '3'
         SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION: '1'
-        SGLANG_NVIDIA_MEGAKERNEL_SLOTS: route,mkm,gdn_verify,gdn_pdl,gdn_conv,hop,hop_fp8,hop_mid,draft_loop,draft_extend,draft_moe,draft_q1,draft_xchg,draft_hop,draft_fin,draft_front,draft_skv2,draft_multi,draft_embed,gdn_push,gdn_front,gdn_trt_front,route_shared,skv2,skv2_cp,mka,mka_push,mkm_wide,mkm_m32,mkm_m64,mkm_m128,mkm_m256,mkm_m512,multi_request,lowm_in,lowm_out,lowm_se,lowm_push,draft_q1_cp,draft_skv2_cp,sharded_gumbel
+        SGLANG_NVIDIA_MEGAKERNEL_SLOTS: route,mkm,gdn_verify,gdn_pdl,gdn_conv,hop,hop_fp8,hop_mid,draft_loop,draft_extend,draft_moe,draft_q1,draft_xchg,draft_hop,draft_fin,draft_front,draft_skv2,draft_multi,draft_embed,gdn_push,gdn_front,route_shared,skv2,skv2_cp,mka,mka_push,mkm_wide,mkm_m32,mkm_m64,mkm_m128,mkm_m256,mkm_m512,multi_request,lowm_in,lowm_out,lowm_se,lowm_push,draft_q1_cp,draft_skv2_cp,sharded_gumbel
       args:
         tensor-parallel-size: 4
         moe-dense-tp-size: 4
@@ -155,7 +155,7 @@ override_tp4_mrr8_c8:
         - 8
       env:
         SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION: '1'
-        SGLANG_NVIDIA_MEGAKERNEL_SLOTS: route,mkm,gdn_verify,gdn_pdl,gdn_conv,hop,hop_fp8,hop_mid,draft_loop,draft_extend,draft_moe,draft_q1,draft_xchg,draft_hop,draft_fin,draft_front,draft_skv2,draft_multi,draft_embed,gdn_push,gdn_front,gdn_trt_front,route_shared,skv2,skv2_cp,mka,mka_push,mkm_wide,mkm_m32,mkm_m64,mkm_m128,mkm_m256,mkm_m512,multi_request,lowm_in,lowm_out,lowm_se,lowm_push,draft_q1_cp,draft_skv2_cp,sharded_gumbel
+        SGLANG_NVIDIA_MEGAKERNEL_SLOTS: route,mkm,gdn_verify,gdn_pdl,gdn_conv,hop,hop_fp8,hop_mid,draft_loop,draft_extend,draft_moe,draft_q1,draft_xchg,draft_hop,draft_fin,draft_front,draft_skv2,draft_multi,draft_embed,gdn_push,gdn_front,route_shared,skv2,skv2_cp,mka,mka_push,mkm_wide,mkm_m32,mkm_m64,mkm_m128,mkm_m256,mkm_m512,multi_request,lowm_in,lowm_out,lowm_se,lowm_push,draft_q1_cp,draft_skv2_cp,sharded_gumbel
 override_tp4_mrr3_k48:
   name: agg-gb300-tp4-mrr3-k48-mtp-hicache
   roles:
@@ -167,7 +167,7 @@ override_tp4_mrr3_k48:
         SGLANG_GDN_CHUNK_H_BV: '16'
         SGLANG_GDN_CHUNK_H_NUM_STAGES: '3'
         SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION: '1'
-        SGLANG_NVIDIA_MEGAKERNEL_SLOTS: route,mkm,gdn_verify,gdn_pdl,gdn_conv,hop,hop_fp8,hop_mid,draft_loop,draft_extend,draft_moe,draft_q1,draft_xchg,draft_hop,draft_fin,draft_front,draft_skv2,draft_multi,draft_embed,gdn_push,gdn_front,gdn_trt_front,route_shared,skv2,skv2_cp,mka,mka_push,mkm_wide,mkm_m32,mkm_m64,mkm_m128,mkm_m256,mkm_m512,multi_request,lowm_in,lowm_out,lowm_se,lowm_push,draft_q1_cp,draft_skv2_cp,sharded_gumbel
+        SGLANG_NVIDIA_MEGAKERNEL_SLOTS: route,mkm,gdn_verify,gdn_pdl,gdn_conv,hop,hop_fp8,hop_mid,draft_loop,draft_extend,draft_moe,draft_q1,draft_xchg,draft_hop,draft_fin,draft_front,draft_skv2,draft_multi,draft_embed,gdn_push,gdn_front,route_shared,skv2,skv2_cp,mka,mka_push,mkm_wide,mkm_m32,mkm_m64,mkm_m128,mkm_m256,mkm_m512,multi_request,lowm_in,lowm_out,lowm_se,lowm_push,draft_q1_cp,draft_skv2_cp,sharded_gumbel
       args:
         tensor-parallel-size: 4
         moe-dense-tp-size: 4
@@ -190,7 +190,7 @@ override_tp4_mrr2_k64:
         SGLANG_GDN_CHUNK_H_BV: '16'
         SGLANG_GDN_CHUNK_H_NUM_STAGES: '3'
         SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION: '1'
-        SGLANG_NVIDIA_MEGAKERNEL_SLOTS: route,mkm,gdn_verify,gdn_pdl,gdn_conv,hop,hop_fp8,hop_mid,draft_loop,draft_extend,draft_moe,draft_q1,draft_xchg,draft_hop,draft_fin,draft_front,draft_skv2,draft_multi,draft_embed,gdn_push,gdn_front,gdn_trt_front,route_shared,skv2,skv2_cp,mka,mka_push,mkm_wide,mkm_m32,mkm_m64,mkm_m128,mkm_m256,mkm_m512,multi_request,lowm_in,lowm_out,lowm_se,lowm_push,draft_q1_cp,draft_skv2_cp,sharded_gumbel
+        SGLANG_NVIDIA_MEGAKERNEL_SLOTS: route,mkm,gdn_verify,gdn_pdl,gdn_conv,hop,hop_fp8,hop_mid,draft_loop,draft_extend,draft_moe,draft_q1,draft_xchg,draft_hop,draft_fin,draft_front,draft_skv2,draft_multi,draft_embed,gdn_push,gdn_front,route_shared,skv2,skv2_cp,mka,mka_push,mkm_wide,mkm_m32,mkm_m64,mkm_m128,mkm_m256,mkm_m512,multi_request,lowm_in,lowm_out,lowm_se,lowm_push,draft_q1_cp,draft_skv2_cp,sharded_gumbel
       args:
         tensor-parallel-size: 4
         moe-dense-tp-size: 4
@@ -212,7 +212,7 @@ override_tp4_mrr2_k32:
         SGLANG_GDN_CHUNK_H_BV: '16'
         SGLANG_GDN_CHUNK_H_NUM_STAGES: '3'
         SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION: '1'
-        SGLANG_NVIDIA_MEGAKERNEL_SLOTS: route,mkm,gdn_verify,gdn_pdl,gdn_conv,hop,hop_fp8,hop_mid,draft_loop,draft_extend,draft_moe,draft_q1,draft_xchg,draft_hop,draft_fin,draft_front,draft_skv2,draft_multi,draft_embed,gdn_push,gdn_front,gdn_trt_front,route_shared,skv2,skv2_cp,mka,mka_push,mkm_wide,mkm_m32,mkm_m64,mkm_m128,mkm_m256,mkm_m512,multi_request,lowm_in,lowm_out,lowm_se,lowm_push,draft_q1_cp,draft_skv2_cp,sharded_gumbel
+        SGLANG_NVIDIA_MEGAKERNEL_SLOTS: route,mkm,gdn_verify,gdn_pdl,gdn_conv,hop,hop_fp8,hop_mid,draft_loop,draft_extend,draft_moe,draft_q1,draft_xchg,draft_hop,draft_fin,draft_front,draft_skv2,draft_multi,draft_embed,gdn_push,gdn_front,route_shared,skv2,skv2_cp,mka,mka_push,mkm_wide,mkm_m32,mkm_m64,mkm_m128,mkm_m256,mkm_m512,multi_request,lowm_in,lowm_out,lowm_se,lowm_push,draft_q1_cp,draft_skv2_cp,sharded_gumbel
       args:
         tensor-parallel-size: 4
         moe-dense-tp-size: 4
@@ -233,7 +233,7 @@ override_tp4_mrr1:
       env:
         SGLANG_EAGER_INPUT_NO_COPY: '1'
         SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION: '1'
-        SGLANG_NVIDIA_MEGAKERNEL_SLOTS: route,mkm,gdn_verify,gdn_pdl,gdn_conv,hop,hop_fp8,hop_mid,draft_loop,draft_extend,draft_moe,draft_q1,draft_xchg,draft_hop,draft_fin,draft_front,draft_skv2,draft_multi,draft_embed,gdn_push,gdn_front,gdn_trt_front,route_shared,skv2,skv2_cp,mka,mka_push,mkm_wide,mkm_m32,mkm_m64,mkm_m128,mkm_m256,mkm_m512,multi_request,lowm_in,lowm_out,lowm_se,lowm_push,draft_q1_cp,draft_skv2_cp,sharded_gumbel
+        SGLANG_NVIDIA_MEGAKERNEL_SLOTS: route,mkm,gdn_verify,gdn_pdl,gdn_conv,hop,hop_fp8,hop_mid,draft_loop,draft_extend,draft_moe,draft_q1,draft_xchg,draft_hop,draft_fin,draft_front,draft_skv2,draft_multi,draft_embed,gdn_push,gdn_front,route_shared,skv2,skv2_cp,mka,mka_push,mkm_wide,mkm_m32,mkm_m64,mkm_m128,mkm_m256,mkm_m512,multi_request,lowm_in,lowm_out,lowm_se,lowm_push,draft_q1_cp,draft_skv2_cp,sharded_gumbel
       args:
         tensor-parallel-size: 4
         moe-dense-tp-size: 4
@@ -250,7 +250,7 @@ override_tp8_mrr1:
       workers: 1
       gpus: 8
       env:
-        SGLANG_NVIDIA_MEGAKERNEL_SLOTS: route,mkm,gdn_verify,gdn_pdl,gdn_conv,hop,hop_fp8,hop_mid,draft_loop,draft_extend,draft_moe,draft_q1,draft_xchg,draft_hop,draft_fin,draft_front,draft_skv2,draft_multi,draft_embed,gdn_push,gdn_front,gdn_trt_front,route_shared,skv2,skv2_cp,mka,mka_push,mkm_wide,mkm_m32,mkm_m64,mkm_m128,mkm_m256,mkm_m512,multi_request,lowm_in,lowm_out,lowm_se,lowm_push,draft_q1_cp,draft_skv2_cp,sharded_gumbel
+        SGLANG_NVIDIA_MEGAKERNEL_SLOTS: route,route_topk,mkm,gdn_verify,gdn_pdl,gdn_conv,hop,hop_fp8,hop_mid,draft_loop,draft_extend,draft_moe,draft_q1,draft_xchg,draft_hop,draft_fin,draft_front,draft_skv2,draft_multi,draft_embed,gdn_push,gdn_front,route_shared,skv2,skv2_cp,mka,mka_push,mkm_wide,mkm_m32,mkm_m64,mkm_m128,mkm_m256,mkm_m512,multi_request,lowm_in,lowm_out,lowm_se,lowm_push,draft_q1_cp,draft_skv2_cp,sharded_gumbel
         SGLANG_EAGER_INPUT_NO_COPY: '1'
         SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION: '1'
       args:
