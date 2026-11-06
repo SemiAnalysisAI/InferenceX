@@ -4329,7 +4329,7 @@ minimaxm31flash-fp4-b300-vllm-agentic-dspark:
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [48], srt-recipe: 'agentic.yaml:zip_override_tp2[3]' }
 
 minimaxm31flash-fp4-b300-dynamo-vllm-agentic-dspark-disagg:
-  image: vllm/vllm-openai:minimax-m31-flash@sha256:86f582dae25ea92802353727164ae4eb03b37b18baf9119b805ffaec2a7ef07c
+  image: vllm/vllm-openai:minimax-m31-flash-x86_64-cu134-bc9a3ac-mc0.3.13.post1@sha256:016ea876b186a092a4ca479481de00d6063ffaead256472aa261270c15015b7b
   model: MiniMaxAI/MiniMax-M3.1-Flash
   model-prefix: minimaxm31flash
   runner: cluster:b300-dsxe
@@ -4349,7 +4349,7 @@ minimaxm31flash-fp4-b300-dynamo-vllm-agentic-dspark-disagg:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: 0.3.13.post1 }
-        conc-list: [24, 48, 96, 160, 200]
+        conc-list: [24, 48, 64, 96, 128, 144]
         srt-recipe: disagg-1p-dep2-1d-dep4-mooncake.yaml
         prefill: { num-worker: 1, tp: 2, ep: 2, dp-attn: true }
         decode: { num-worker: 1, tp: 4, ep: 4, dp-attn: true }

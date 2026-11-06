@@ -100,6 +100,7 @@ INSTALLERS = {
     "tokenspeed-nightly.sh": ("router", "smg"),
     "glm5.3-tilert-rocm.sh": ("router", "tilert-pd-router"),
     "vllm-mooncake.sh": ("kv-offload-backend", "mooncake"),
+    "vllm-mooncake-efa.sh": ("kv-offload-backend", "mooncake"),
     "vllm-router.sh": ("router", "vllm-router"),
 }
 VERSION_ENV = {"router": "ROUTER_VERSION", "kv-offload-backend": "KV_OFFLOAD_BACKEND_VERSION"}
