@@ -7376,6 +7376,24 @@ musespark-fp4-h100-sglang-agentic-dflash:
       search-space:
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [1, 2, 4, 8], srt-recipe: agentic.yaml }
 
+glm5.3flash-fp8-h100-sglang-agentic-mtp:
+  image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
+  model: zai-org/GLM-5.3-Flash
+  model-prefix: glm5.3flash
+  runner: cluster:h100-dsxe
+  precision: fp8
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: glm5.3flash/sglang/h100-fp8-mtp
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2], srt-recipe: 'agentic.yaml:override_none' }
+    # HiCache allocates ~32.5 GB/rank, ~260 GB/node: 32 GB split over KV and Mamba host pools plus the DSA indexer pool.
+    - dram-utilization: 0.131
+      search-space:
+      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [4, 6, 8, 10], srt-recipe: 'agentic.yaml:override_hicache' }
+
 glm5.3flash-fp8-b200-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
   model: zai-org/GLM-5.3-Flash
