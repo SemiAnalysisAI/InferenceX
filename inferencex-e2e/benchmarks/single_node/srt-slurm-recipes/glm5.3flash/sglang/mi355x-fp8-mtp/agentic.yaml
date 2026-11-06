@@ -25,7 +25,8 @@ base:
         quantization: fp8
         tensor-parallel-size: 4
         expert-parallel-size: 4
-        page-size: 64
+        # The cookbook passes 64; v0.5.22 forces 256 for DSA models.
+        page-size: 256
         mem-fraction-static: 0.82
         max-running-requests: 96
         cuda-graph-max-bs-decode: 96
@@ -106,8 +107,8 @@ override_tp4_c32:
       CONC: '32'
       KV_OFFLOADING: none
 
-# 180 GB per rank of host KV plus the host KDA and indexer pools, about 190 GB per rank
-# and 760 GB for the TP4 server.
+# 180 GB per rank of host KV plus the host KDA and indexer pools, 187.33 GB per rank
+# and 749.33 GB for the TP4 server.
 override_tp4_c40_hicache:
   roles:
     agg:

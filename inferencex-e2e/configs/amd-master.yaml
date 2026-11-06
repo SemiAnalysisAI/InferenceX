@@ -987,10 +987,10 @@ glm5.3flash-fp8-mi355x-sglang-agentic-mtp:
   srt-recipe-dir: glm5.3flash/sglang/mi355x-fp8-mtp
   scenarios:
     agentic-coding:
-    # HiCache allocates about 190 GB of host memory per rank (180 GB KV plus the host
-    # KDA and DSA indexer pools), 760 GB for the TP4 server; dram-utilization 0.507 ->
-    # TOTAL_CPU_DRAM_GB = 2861022 MiB cap * 0.507 * 4/8 = 725,269 MiB = 760 GB.
-    - dram-utilization: 0.507
+    # HiCache allocates 187.33 GB of host memory per rank (113.10 GB KV, 66.94 GB KDA
+    # state, 7.29 GB DSA indexer), 749.33 GB for the TP4 server; dram-utilization 0.501
+    # -> TOTAL_CPU_DRAM_GB = 2861022 MiB cap * 0.501 * 4/8 = 716,686 MiB = 751 GB.
+    - dram-utilization: 0.501
       search-space:
       - { tp: 4, ep: 4, kv-offloading: none, conc-list: [1, 2, 8, 16, 24, 32], spec-decoding: mtp, srt-recipe: agentic.yaml }
       - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [40, 48], spec-decoding: mtp, srt-recipe: agentic.yaml }
