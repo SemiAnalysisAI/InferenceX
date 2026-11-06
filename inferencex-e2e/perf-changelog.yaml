@@ -12226,13 +12226,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4719
 
 - config-keys:
-  - qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg
-  - qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg
   scenario-type:
-  - agentic-coding
+    - agentic-coding
   description:
-  - Run the 21 GB300 Qwen3.5 NVFP4 AgentX points on the official lmsysorg/sglang:nightly-dev-cu13-20261106-858073e4 container, which is built from SGLang 858073e4f6d246bd6e3baae1d4e07919a578a04f
-    and bundles sgl-nvidia-mega 77360f1fd74dc46010056ebdac0ed5e0b87d3978. No source overlays or plugin reinstalls.
-  - 'Add 17 full-precision frontier points: TP8 PD c8/c16/c28, two TP8 decodes c72/c112/c128, TP8 EP4 decode c126/c130/c148/c160/c176/c224/c392, and DEP8 c720.'
-  - Enable supported NVIDIA megakernel slots and upstream runtime optimization controls. Use the image's native Rust TreeCore. No draft precision reduction.
+    - "Move both configs to lmsysorg/sglang:nightly-dev-cu13-20261106-858073e4, pinned by digest. The official image is built from SGLang 858073e4f6d246bd6e3baae1d4e07919a578a04f and bundles sgl-nvidia-mega 77360f1fd74dc46010056ebdac0ed5e0b87d3978; the recipes run it as shipped, with no source overlay, setup script or plugin reinstall."
+    - "Replace all 14 previous points with 38 points in 28 recipe overrides. Aggregated: TP4 with max-running-requests 8 at concurrency 8, 9, 12 and 18, 3 at 23, 2 at 16 and 20, and 1 at 13; TP8 across two nodes with max-running-requests 1 at 11 and 18."
+    - "Disaggregated, Dynamo b208989fbe1cfbfde64d11334d8af4ff04fe1a99 (was 5a638087d82c990d35c69cb8e41c2c2582e9ef9a): one TP1 prefill with one colocated TP2 decode at concurrency 20, 26, 36 and 38, or with two TP2 decodes at 48; one TP4 prefill with one TP8 decode at 8, 16 and 28, or with two TP8 decodes at 72, 112 and 128; two or four TP2 prefills with one TP8/EP4 decode at 126, 130, 148, 160, 176, 224 and 392; three PP4 prefills with one DEP8 decode at 704 and 720; two or three PP4 prefills with one DEP16 decode at 488, 530, 660, 760 and 840."
+    - "Enable the NVIDIA megakernel, with an explicit SGLANG_NVIDIA_MEGAKERNEL_SLOTS list, on aggregated workers and on TP2, TP8, TP8/EP4 and DEP8 decode workers; prefill and DEP16 decode keep the stock engine path. Every worker sets SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION=1."
+    - "MTP runs six draft steps with the checkpoint's shipped draft head: the previous recipes' SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE and speculative-draft-model-quantization settings are removed."
+    - "Retire qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg-pareto and qwen3.5-fp4-gb300-dynamo-sglang-agentic-pp-pareto and their recipes (agg-pareto-variants.yaml, disagg-pp-pareto-variants.yaml); the points above supersede them."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4853

@@ -1,7 +1,7 @@
 schema: 2
 base:
   slurm:
-    time_limit: '2:00:00'
+    time_limit: '8:00:00'
   health_check:
     max_attempts: 1440
     interval_seconds: 10

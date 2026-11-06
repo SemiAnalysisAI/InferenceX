@@ -5,7 +5,7 @@ base:
     source:
       rev: b208989fbe1cfbfde64d11334d8af4ff04fe1a99
   slurm:
-    time_limit: '2:00:00'
+    time_limit: '8:00:00'
   health_check:
     max_attempts: 1440
     interval_seconds: 10
