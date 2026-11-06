@@ -1,6 +1,6 @@
 # Qwen3.8-Flash-Next Quark MXFP4 MoE (MTP experts included), FP8 attention and
 # FP8 PLE, AgentX on MI355X via SGLang with native NEXTN MTP. The ~116 GiB
-# checkpoint fits on one MI355X, so TP1. The upstream image is used unpatched.
+# checkpoint fits on one MI355X, so TP1.
 base:
   schema: 2
   name: qwen3.8next-fp4-mi355x-sglang-agentic
@@ -15,6 +15,11 @@ base:
     tachometer:
       enabled: false
   engine: sglang
+  # Qwen3.8 AITER/FlyDSL kernels and SGLang dispatch from open upstream PRs
+  # (ROCm/aiter#5992, #6670, #6496; sgl-project/sglang#48648, #45196, #48649,
+  # #45529, #41683, #41879, #44103), patched into the upstream ROCm 10 image.
+  # The patch files are in patches/ next to this recipe.
+  setup_script: qwen3.8next-rocm10-patches.sh
   roles:
     agg:
       nodes: 1
@@ -43,6 +48,7 @@ base:
         scheduler-recv-interval: 10
         stream-interval: 50
         reasoning-parser: qwen3
+        default-chat-template-kwargs: '{"enable_thinking": false}'
         tool-call-parser: qwen3_coder
         speculative-algorithm: NEXTN
         speculative-num-steps: 3
@@ -61,19 +67,26 @@ base:
         SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
         SGLANG_ENABLE_SPEC_V2: '1'
         AITER_GDR_FLYDSL: '1'
+        # The FlyDSL QSA sparse decode (sglang#45196) is on whenever SGLANG_USE_AITER
+        # is set on gfx950. The GDN prefill (sglang#41879, #44103) runs AITER's
+        # FlyDSL causal conv1d and the single fused chunked-prefill kernel
+        # (ROCm/aiter#6496), which needs the bf16 SSM state set above.
+        SGLANG_USE_AITER: '1'
+        SGLANG_AITER_GDN_CONV: '1'
+        SGLANG_AITER_GDN_PREFILL: '1'
+        SGLANG_AITER_GDN_PREFILL_H: fused
   benchmark:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
 
-# c1, c2, c4 and c8 run the FlyDSL monokernel (--enable-amd-monokernel) for MTP
-# target verify and draft. Its verify writes the per-draft intermediate SSM
-# states, so ReplaySSM is off, and its prelude reads the PLE table on the GPU,
-# so the table is not offloaded. Admission equals the concurrency. These points
-# also set SGLANG_USE_AITER, which the monokernel requires (the image sets it
-# too), so they form their own GSM8K eval group. c12 and c16 keep ReplaySSM,
-# the PLE offload and 2x CONC admission. Every point uses mem-fraction-static
-# as given instead of the aiter backend's 0.85 scaling.
+# c1 and c2 run the FlyDSL monokernel (--enable-amd-monokernel) for MTP target verify
+# and draft. Its verify writes the per-draft intermediate SSM states, so ReplaySSM is
+# off, and its prelude reads the PLE table on the GPU, so the table is not offloaded.
+# Admission equals the concurrency. These points also set SGLANG_USE_AITER, which the
+# monokernel requires (the image sets it too), so they form their own GSM8K eval group.
+# Every point uses mem-fraction-static as given instead of the aiter backend's 0.85
+# scaling.
 override_c1:
   roles:
     agg:
@@ -108,112 +121,72 @@ override_c2:
       CONC: '2'
       KV_OFFLOADING: none
 
-override_c4:
-  roles:
-    agg:
-      args:
-        enable-linear-replayssm-spec: null
-        ple-offload-embedding: null
-        enable-amd-monokernel: true
-        max-running-requests: 4
-        cuda-graph-max-bs-decode: 4
-      env:
-        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
-        SGLANG_USE_AITER: '1'
-  benchmark:
-    env:
-      CONC: '4'
-      KV_OFFLOADING: none
-
-override_c8:
-  roles:
-    agg:
-      args:
-        enable-linear-replayssm-spec: null
-        ple-offload-embedding: null
-        enable-amd-monokernel: true
-        max-running-requests: 8
-        cuda-graph-max-bs-decode: 8
-      env:
-        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
-        SGLANG_USE_AITER: '1'
-  benchmark:
-    env:
-      CONC: '8'
-      KV_OFFLOADING: none
-
+# c12, c24, c48 and c80 keep ReplaySSM and the PLE offload, store the target and draft KV
+# caches in FP8 (E4M3), and use a Mamba state pool whose checkpoint interval is 262144
+# tokens, so a prompt gets no interior checkpoints (extra_buffer_lazy). mem-fraction-static
+# is 0.88, used as given. c12 and c24 admit 2x CONC and serve from GPU KV; c48 and c80
+# add HiCache host-DRAM offload and admit 128 requests. HiCache takes the point's 299 GB
+# DRAM share from the matrix generator (hicache-size 298); TOTAL_CPU_DRAM_GB records it.
+# SGLANG_OPT_QWEN4_FUSED_HC (sglang#48648) fuses the decode-sized hyper-connection
+# norm and inject into the mix. The prefill CUDA graph backend is breakable (the AMD
+# reference recipes get it from an SGLang default change that this image lacks), which
+# captures the GDN prefill on static per-bucket tables; a batch outside the captured
+# buckets runs eagerly through the AITER fused prefill. c80 caches only the prompt on
+# finish and keeps at most two Mamba states per path.
 override_c12:
   roles:
     agg:
-      args:
-        max-running-requests: 24
-        cuda-graph-max-bs-decode: 24
-      env:
-        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
-  benchmark:
-    env:
-      CONC: '12'
-      KV_OFFLOADING: none
-
-override_c16:
-  roles:
-    agg:
-      args:
-        max-running-requests: 32
-        cuda-graph-max-bs-decode: 32
-      env:
-        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
-  benchmark:
-    env:
-      CONC: '16'
-      KV_OFFLOADING: none
-
-# c24, c48 and c80 keep ReplaySSM and the PLE offload, store the target and draft KV
-# caches in FP8 (E4M3), and add HiCache host-DRAM offload with a Mamba state pool
-# that tracks a checkpoint every 256 tokens (extra_buffer_lazy). HiCache takes the
-# point's 299 GB DRAM share from the matrix generator (hicache-size 200 at c24, 298
-# at c48 and c80); TOTAL_CPU_DRAM_GB records it. mem-fraction-static is 0.88, used
-# as given. c24 admits 2x CONC; c48 and c80 admit 128 requests.
-# c80 caches only the prompt on finish and keeps at most two Mamba states per path.
-override_c24:
-  roles:
-    agg:
-      args: &hicache_args
+      args: &fp8_args
         kv-cache-dtype: fp8_e4m3
         speculative-draft-kv-cache-dtype: fp8_e4m3
         mem-fraction-static: 0.88
-        max-running-requests: 48
-        cuda-graph-max-bs-decode: 48
+        max-running-requests: 24
+        cuda-graph-max-bs-decode: 24
         max-mamba-cache-size: 960
         mamba-radix-cache-strategy: extra_buffer_lazy
-        mamba-track-interval: 256
-        enable-hierarchical-cache: true
-        hicache-size: 200
-        hicache-io-backend: kernel
-        hicache-mem-layout: page_first
-        hicache-write-policy: write_back
-      env: &hicache_env
-        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
+        mamba-track-interval: 262144
+        cuda-graph-backend-prefill: breakable
+      env: &fp8_env
+        SGLANG_USE_AITER: '1'
         SGLANG_USE_AITER_UNIFIED_ATTN: '1'
+        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
+        SGLANG_OPT_QWEN4_FUSED_HC: '1'
   benchmark:
-    env: &hicache_client
-      KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '299'
+    env:
+      KV_OFFLOADING: none
+      CONC: '12'
+
+override_c24:
+  roles:
+    agg:
+      args:
+        <<: *fp8_args
+        max-running-requests: 48
+        cuda-graph-max-bs-decode: 48
+      env: *fp8_env
+  benchmark:
+    env:
+      KV_OFFLOADING: none
       CONC: '24'
 
 override_c48:
   roles:
     agg:
-      args:
-        <<: *hicache_args
+      args: &hicache_args
+        <<: *fp8_args
         max-running-requests: 128
         cuda-graph-max-bs-decode: 128
         max-mamba-cache-size: 720
+        enable-hierarchical-cache: true
         hicache-size: 298
-      env: *hicache_env
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        hicache-write-policy: write_back
+      env: *fp8_env
   benchmark:
-    env:
-      <<: *hicache_client
+    env: &hicache_client
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '299'
       CONC: '48'
 
 override_c80:
@@ -221,15 +194,12 @@ override_c80:
     agg:
       args:
         <<: *hicache_args
-        max-running-requests: 128
-        cuda-graph-max-bs-decode: 128
         max-mamba-cache-size: 640
-        hicache-size: 298
         # Cache only the prompt on finish; the AgentX replay never re-sends model output.
         strip-thinking-cache: true
         # At most two Mamba states per conversation path; stale interior states skip host write-back.
         mamba-max-states-per-path: 2
-      env: *hicache_env
+      env: *fp8_env
   benchmark:
     env:
       <<: *hicache_client

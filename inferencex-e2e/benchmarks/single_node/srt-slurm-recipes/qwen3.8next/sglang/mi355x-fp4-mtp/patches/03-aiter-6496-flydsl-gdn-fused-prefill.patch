@@ -1,0 +1,1200 @@
+# [FlyDSL] [gfx950] Add gdn fused prefill kernel
+# https://github.com/ROCm/aiter/pull/6496  (PR head cfded984ab5ea70cd14b8ea78a34874727d32f01)
+# Generated against the AITER checkout of the image (285579b6); source files only (tests, benchmarks, AOT registry and docs dropped).
+
+diff --git a/aiter/ops/flydsl/gdn_fused_prefill.py b/aiter/ops/flydsl/gdn_fused_prefill.py
+new file mode 100644
+index 00000000..27602602
+--- /dev/null
++++ b/aiter/ops/flydsl/gdn_fused_prefill.py
+@@ -0,0 +1,295 @@
++# SPDX-License-Identifier: MIT
++# Copyright (C) 2026, Advanced Micro Devices, Inc. All rights reserved.
++
++"""Single-kernel Gated DeltaNet chunked prefill on gfx950 (FlyDSL).
++
++One launch replaces the l2norm, prepare, hidden-state and output stages of the
++chunked prefill: every workgroup keeps its slice of the recurrent state on chip
++across the sequence's 64-token chunks, so the per-chunk states ``h`` never
++reach HBM. The pool state is updated in place. The kernel can also write the
++fp32 state at one requested chunk boundary per sequence, which serving stacks
++use to snapshot the recurrent state for prefix caching.
++
++Callers gate on :func:`gdn_fused_prefill_supported` (passing ``max_seqlen`` so
++it can also reject batches the multi-kernel path runs faster) and keep their
++multi-kernel path wherever it returns False.
++"""
++
++from __future__ import annotations
++
++import functools
++
++import torch
++
++from .kernels.gdr_prefill import compile_gdn_fused_prefill
++from .kernels.tensor_shim import _run_compiled
++
++_KD = 128
++_VD = 128
++# Buffer loads/stores take a 32-bit byte offset from each workgroup's base, so
++# every operand's span must stay below 2^32 bytes. That also keeps the 32-bit
++# element offsets and token strides the launch ABI passes below 2^31.
++_MAX_BYTES = 2**32
++
++
++@functools.cache
++def _is_gfx950() -> bool:
++    try:
++        from aiter.jit.utils.chip_info import get_gfx_runtime
++
++        return get_gfx_runtime() == "gfx950"
++    except Exception:  # noqa: BLE001
++        return False
++
++
++@functools.cache
++def _num_cus(device: torch.device) -> int:
++    return torch.cuda.get_device_properties(device).multi_processor_count
++
++
++def _pick_bv(N: int, H: int, device: torch.device) -> int:
++    """V slice per workgroup.
++
++    LDS allows one workgroup per CU, and each walks its sequence's chunks
++    serially. When the BV=16 grid still fits in one pass over the CUs, the
++    narrower slice shortens every chunk step; otherwise BV=32 recomputes the
++    V-independent work half as often.
++    """
++    return 16 if (_VD // 16) * N * H <= _num_cus(device) else 32
++
++
++def _span(t: torch.Tensor, head_dim: int) -> int:
++    """Elements from ``t``'s first element through its last [T, heads, dim] row.
++
++    ``head_dim=1`` covers the [1, T, H] g / beta tensors (unit head stride).
++    """
++    T, heads = t.shape[1], t.shape[2]
++    return (T - 1) * t.stride(1) + (heads - 1) * t.stride(2) + head_dim
++
++
++def _flat(t: torch.Tensor, head_dim: int) -> torch.Tensor:
++    """1-D view over ``t``'s storage span; the kernel applies the strides."""
++    return t.as_strided((_span(t, head_dim),), (1,), t.storage_offset())
++
++
++def _token_major(t: torch.Tensor, head_dim: int) -> bool:
++    """[1, T, heads, head_dim] with contiguous heads; any token stride."""
++    return (
++        t.dim() == 4
++        and t.shape[0] == 1
++        and t.shape[3] == head_dim
++        and t.stride(3) == 1
++        and t.stride(2) == head_dim
++        and t.stride(1) >= t.shape[2] * head_dim
++    )
++
++
++def gdn_fused_prefill_supported(
++    q: torch.Tensor,
++    k: torch.Tensor,
++    v: torch.Tensor,
++    g: torch.Tensor,
++    beta: torch.Tensor,
++    ssm_states: torch.Tensor,
++    max_seqlen: int | None = None,
++) -> bool:
++    """Whether :func:`gdn_fused_prefill_fwd` serves these operands.
++
++    Supported: gfx950; bf16 q/k [1, T, Hg, 128] and v [1, T, H, 128] with
++    contiguous heads (token stride free, e.g. views of a packed projection);
++    fp32 g/beta [1, T, H] with unit head stride; a contiguous bf16 state pool
++    [slots, H, 128, 128]; H % Hg == 0; q/k/v/g/beta/o spans under 4 GiB
++    (32-bit buffer byte offsets).
++
++    With ``max_seqlen`` (the longest sequence in the batch) it also returns
++    False where the multi-kernel path is expected to be faster, i.e. unless
++    ``max_seqlen <= 1024 or H * T >= 24 * max_seqlen``.
++    """
++    if not (_token_major(q, _KD) and _token_major(k, _KD) and _token_major(v, _VD)):
++        return False
++    T, Hg = q.shape[1], q.shape[2]
++    H = v.shape[2]
++    # The fused kernel walks each sequence's chunks serially at ~2.5 us per
++    # chunk whatever H is; the multi-kernel path spreads all chunks over the
++    # GPU and serializes only its state scan. Thresholds measured on MI355X
++    # against chunk_gated_delta_rule_opt_vk (op_tests/test_gdn_fused_prefill.py).
++    if max_seqlen is not None and not (max_seqlen <= 1024 or H * T >= 24 * max_seqlen):
++        return False
++    tensors = (q, k, v, g, beta, ssm_states)
++    return (
++        T > 0
++        and k.shape == q.shape
++        and v.shape[1] == T
++        and H % Hg == 0
++        and q.dtype is torch.bfloat16
++        and k.dtype is torch.bfloat16
++        and v.dtype is torch.bfloat16
++        and g.dtype is torch.float32
++        and beta.dtype is torch.float32
++        and ssm_states.dtype is torch.bfloat16
++        and g.shape == (1, T, H)
++        and beta.shape == (1, T, H)
++        and g.stride(2) == 1
++        and beta.stride(2) == 1
++        and ssm_states.dim() == 4
++        and tuple(ssm_states.shape[1:]) == (H, _VD, _KD)
++        and ssm_states.is_contiguous()
++        and all(t.is_cuda and t.device == q.device for t in tensors)
++        and all(
++            _span(t, d) * t.element_size() < _MAX_BYTES
++            for t, d in ((q, _KD), (k, _KD), (v, _VD), (g, 1), (beta, 1))
++        )
++        and T * H * _VD * 2 < _MAX_BYTES  # o
++        and _is_gfx950()
++    )
++
++
++def gdn_fused_prefill_fwd(
++    q: torch.Tensor,
++    k: torch.Tensor,
++    v: torch.Tensor,
++    g: torch.Tensor,
++    beta: torch.Tensor,
++    *,
++    ssm_states: torch.Tensor,
++    cache_indices: torch.Tensor,
++    cu_seqlens: torch.Tensor,
++    track_state: torch.Tensor | None = None,
++    track_chunk_idx: torch.Tensor | None = None,
++    has_initial_state: torch.Tensor | None = None,
++    scale: float | None = None,
++    stream=None,
++) -> torch.Tensor:
++    """Varlen GDN chunked prefill (BT=64) with in-kernel q/k l2norm.
++
++    Args:
++        q, k: [1, T, Hg, 128] bf16, un-normalized.
++        v: [1, T, H, 128] bf16.
++        g: [1, T, H] fp32 per-token log decay (natural log).
++        beta: [1, T, H] fp32, post-sigmoid.
++        ssm_states: [slots, H, V, K] bf16 state pool, read and updated in place.
++            Each sequence starts from its slot's current contents unless
++            ``has_initial_state`` says otherwise, so without that flag the
++            slot of a new sequence must be zeroed beforehand.
++        cache_indices: [N] pool slot per sequence. Non-negative entries must
++            be unique within the batch: sequences sharing a slot race on its
++            read-modify-write. Negative entries (padding) are skipped: no pool
++            slot or track row is touched and that sequence's rows of ``o``
++            are left uninitialized.
++        cu_seqlens: [N + 1] token offsets of the packed sequences.
++        track_state: optional fp32 [>= N, H, V, K]. Row n receives the state
++            before chunk ``track_chunk_idx[n]`` of sequence n. Rows with a
++            negative or out-of-range chunk index are left untouched.
++        track_chunk_idx: [N] int chunk index per sequence, required with
++            ``track_state``.
++        has_initial_state: optional [N] bool (or int) per sequence. False
++            rows start from a zero state and ignore their slot's contents; the
++            final state is still written to the slot. None loads every slot.
++        scale: attention scale, defaults to 128 ** -0.5.
++        stream: launch stream; defaults to the current stream.
++
++    Returns:
++        o: [1, T, H, 128] bf16, freshly allocated. Only the tokens of
++        non-padded sequences are written; rows outside
++        ``[cu_seqlens[0], cu_seqlens[-1])`` and the rows of padded sequences
++        are left uninitialized.
++    """
++    if not gdn_fused_prefill_supported(q, k, v, g, beta, ssm_states):
++        raise ValueError(
++            "gdn_fused_prefill_fwd: unsupported operands "
++            f"q={tuple(q.shape)} {q.dtype}, v={tuple(v.shape)} {v.dtype}, "
++            f"g={g.dtype}, beta={beta.dtype}, ssm_states={tuple(ssm_states.shape)} "
++            f"{ssm_states.dtype}; gate on gdn_fused_prefill_supported."
++        )
++    T, Hg = q.shape[1], q.shape[2]
++    H = v.shape[2]
++    N = cu_seqlens.numel() - 1
++    if cache_indices.numel() < N:
++        raise ValueError(
++            f"cache_indices has {cache_indices.numel()} entries for {N} sequences"
++        )
++    for name, tensor in (
++        ("cu_seqlens", cu_seqlens),
++        ("cache_indices", cache_indices),
++        ("track_state", track_state),
++        ("track_chunk_idx", track_chunk_idx if track_state is not None else None),
++        ("has_initial_state", has_initial_state),
++    ):
++        if tensor is not None and tensor.device != q.device:
++            raise ValueError(f"{name} must be on {q.device}, got {tensor.device}")
++    cu = cu_seqlens.to(torch.int32).contiguous()
++    idx = cache_indices[:N].to(torch.int32).contiguous()
++
++    has_track = track_state is not None
++    if has_track:
++        if track_chunk_idx is None:
++            raise ValueError("track_state needs track_chunk_idx")
++        if (
++            track_state.dtype is not torch.float32
++            or not track_state.is_contiguous()
++            or track_state.shape[0] < N
++            or tuple(track_state.shape[1:]) != (H, _VD, _KD)
++        ):
++            raise ValueError(
++                "track_state must be contiguous fp32 [>= N, H, 128, 128], got "
++                f"{tuple(track_state.shape)} {track_state.dtype}"
++            )
++        trs = track_state.view(-1)
++        if track_chunk_idx.dim() != 1 or track_chunk_idx.numel() < N:
++            raise ValueError(f"track_chunk_idx must be 1-D with at least {N} entries")
++        tri = track_chunk_idx[:N].to(torch.int32).contiguous()
++    else:
++        # Not dereferenced when HAS_TRACK is off.
++        trs = ssm_states.view(-1)
++        tri = idx
++
++    has_init_flag = has_initial_state is not None
++    if has_init_flag:
++        if has_initial_state.dim() != 1 or has_initial_state.numel() < N:
++            raise ValueError(f"has_initial_state must be 1-D with at least {N} entries")
++        init = has_initial_state[:N].to(torch.int32).contiguous()
++    else:
++        # Not dereferenced when HAS_INIT_FLAG is off.
++        init = idx
++
++    o = q.new_empty(1, T, H, _VD)
++    if N == 0:
++        return o
++    if stream is None:
++        stream = torch.cuda.current_stream()
++
++    exe = compile_gdn_fused_prefill(
++        H=H,
++        Hg=Hg,
++        BV=_pick_bv(N, H, q.device),
++        HAS_TRACK=has_track,
++        HAS_INIT_FLAG=has_init_flag,
++        scale=_KD**-0.5 if scale is None else float(scale),
++    )
++    _run_compiled(
++        exe,
++        _flat(q, _KD),
++        _flat(k, _KD),
++        _flat(v, _VD),
++        _flat(g, 1),
++        _flat(beta, 1),
++        cu,
++        idx,
++        ssm_states.view(-1),
++        o.view(-1),
++        trs,
++        tri,
++        init,
++        q.stride(1),
++        k.stride(1),
++        v.stride(1),
++        g.stride(1),
++        beta.stride(1),
++        T,
++        N * H,
++        stream,
++    )
++    return o
++
++
++__all__ = ["gdn_fused_prefill_fwd", "gdn_fused_prefill_supported"]
+diff --git a/aiter/ops/flydsl/kernels/gdr_prefill/__init__.py b/aiter/ops/flydsl/kernels/gdr_prefill/__init__.py
+index 269633a2..fc036077 100644
+--- a/aiter/ops/flydsl/kernels/gdr_prefill/__init__.py
++++ b/aiter/ops/flydsl/kernels/gdr_prefill/__init__.py
+@@ -3,13 +3,16 @@
+ 
+ """FlyDSL GDN/GDR prefill device kernels.
+ 
+-Host wrappers stay in ``aiter.ops.flydsl.linear_attention_prefill_kernels``.
++Host wrappers stay in ``aiter.ops.flydsl.linear_attention_prefill_kernels``,
++except the single-kernel prefill's, in ``aiter.ops.flydsl.gdn_fused_prefill``.
+ """
+ 
+ from .chunk_gated_delta_h import compile_chunk_gated_delta_h
++from .gdn_fused_prefill import compile_gdn_fused_prefill
+ from .gdn_prepare import compile_gdn_prepare
+ 
+ __all__ = [
+     "compile_chunk_gated_delta_h",
++    "compile_gdn_fused_prefill",
+     "compile_gdn_prepare",
+ ]
+diff --git a/aiter/ops/flydsl/kernels/gdr_prefill/gdn_fused_prefill.py b/aiter/ops/flydsl/kernels/gdr_prefill/gdn_fused_prefill.py
+new file mode 100644
+index 00000000..ad5f1172
+--- /dev/null
++++ b/aiter/ops/flydsl/kernels/gdr_prefill/gdn_fused_prefill.py
+@@ -0,0 +1,867 @@
++# SPDX-License-Identifier: MIT
++# Copyright (C) 2026, Advanced Micro Devices, Inc. All rights reserved.
++
++"""Single-kernel Gated DeltaNet chunked prefill (gfx950).
++
++One workgroup owns one (sequence, value head, BV-wide slice of V) and walks the
++sequence's 64-token chunks in order, keeping its slice of the state on chip.
++Per chunk, with gc the in-chunk cumulative log-decay:
++
++    A    = strict_tril(beta_t * k_t.k_j * exp(gc_t - gc_j))      [64, 64]
++    Tinv = (I + A)^-1
++    vnew = Tinv @ (beta * (v - exp(gc) * k @ S^T))                [64, BV]
++    o    = scale * (exp(gc) * q @ S^T + tril(q k^T * exp(gc_t - gc_j)) @ vnew)
++    S    = exp(gc_last) * S + vnew^T @ (k * exp(gc_last - gc))
++
++The state slice S^T [K, BV] lives in fp32 MFMA accumulators; a bf16 copy in
++LDS feeds the next chunk's k @ S^T and q @ S^T. The V-independent work (q/k
++l2norm, k k^T, the triangular inverse, the masked q k^T) is recomputed by every
++V slice of a head; that is the price of not round-tripping the per-chunk state
++through HBM.
++
++Lane conventions (wave of 64, c = lane % 16, gq = lane // 16), for the MFMAs:
++  16x16x32 bf16: A[c][8gq + e], B[8gq + e][c]
++  16x16x16 bf16 / 16x16x4 f32 (x4): A[c][4gq + e], B[4gq + e][c]
++  accumulator C[4gq + i][c]
++A 16x16 tile stored "fragment-native" keeps each lane's 4 accumulator values
++contiguous at ``lane * 4``; read back by the same lane it is directly the B
++operand (and the A operand of the transpose) of the 16x16x16 MFMA.
++"""
++
++import functools
++import math
++
++import flydsl.compiler as flyc
++import flydsl.expr as fx
++from flydsl.expr import const_expr, gpu, range_constexpr, rocdl
++from flydsl.expr.typing import T
++
++from ..kernels_common import LOG2E
++
++BT = 64
++KD = 128
++VD = 128
++# Two wave groups of four (one wave of each per SIMD): group 0 owns the state
++# slice and the triangular inverse, group 1 the q-side tiles and the output.
++NUM_WAVES = 8
++GROUP = 4
++WAVE = 64
++BLOCK = NUM_WAVES * WAVE
++# Row pitch of the [token][K] and [V][K] bf16 LDS tiles; the 8-element pad
++# shifts consecutive rows by 4 banks so a 16-row b128 operand read is
++# conflict-free.
++ROW = KD + 8
++FRAG = 256
++L2NORM_EPS = 1e-6
++
++N_A_TILES = 6
++
++
++def _ld(ptr, off, n, dt, atom):
++    view = fx.make_view(ptr + off, fx.make_layout(n, 1))
++    frag = fx.make_rmem_tensor(n, dt)
++    fx.copy(fx.make_copy_atom(atom, dt), view, frag)
++    return frag.load()
++
++
++def _st(ptr, off, vec, n, dt, atom):
++    view = fx.make_view(ptr + off, fx.make_layout(n, 1))
++    frag = fx.make_rmem_tensor(n, dt)
++    frag.store(vec)
++    fx.copy(fx.make_copy_atom(atom, dt), frag, view)
++
++
++def _lds_ld(ptr, off, n, dt):
++    return _ld(ptr, off, n, dt, fx.UniversalCopy(n * dt.width))
++
++
++def _lds_st(ptr, off, vec, n, dt):
++    _st(ptr, off, vec, n, dt, fx.UniversalCopy(n * dt.width))
++
++
++def _g_ld(it, off, n, dt):
++    return _ld(it, off, n, dt, fx.rocdl.BufferCopy(n * dt.width))
++
++
++def _g_st(it, off, vec, n, dt):
++    _st(it, off, vec, n, dt, fx.rocdl.BufferCopy(n * dt.width))
++
++
++def _vec(elems, dt=fx.Float32):
++    return fx.Vector.from_elements(list(elems), dtype=dt)
++
++
++def _zeros4():
++    return fx.Vector.filled(4, 0.0, fx.Float32)
++
++
++def _mfma32(a8, b8, c4):
++    return fx.Vector(rocdl.mfma_f32_16x16x32_bf16(T.vec(4, T.f32), [a8, b8, c4]))
++
++
++def _mfma16(a4, b4, c4):
++    return fx.Vector(
++        rocdl.mfma_f32_16x16x16bf16_1k(
++            T.vec(4, T.f32),
++            [fx.Vector(a4).bitcast(fx.Int16), fx.Vector(b4).bitcast(fx.Int16), c4],
++        )
++    )
++
++
++def _split_bf16(v4):
++    v = fx.Vector(v4)
++    hi = v.to(fx.BFloat16)
++    lo = (v - hi.to(fx.Float32)).to(fx.BFloat16)
++    return hi, lo
++
++
++def _mm16_x3(a, b, c4):
++    """16x16 product to ~2^-16 relative error from three bf16 MFMAs; ``a`` and
++    ``b`` are (hi, lo) splits."""
++    acc = _mfma16(a[1], b[0], c4)
++    acc = _mfma16(a[0], b[1], acc)
++    return _mfma16(a[0], b[0], acc)
++
++
++def _dpp_i32(src, ctrl, row_mask, bank_mask, bound_ctrl=False, old=0):
++    return fx.Int32(
++        rocdl.update_dpp(
++            fx.Int32.ir_type,
++            fx.Int32(old).ir_value(),
++            fx.Int32(src).ir_value(),
++            ctrl,
++            row_mask,
++            bank_mask,
++            bound_ctrl,
++        )
++    )
++
++
++def _dpp_f32(x, ctrl, row_mask=0xF, bank_mask=0xF):
++    """DPP move of ``x``; lanes with no valid source read 0."""
++    return _dpp_i32(fx.Float32(x).bitcast(fx.Int32), ctrl, row_mask, bank_mask).bitcast(
++        fx.Float32
++    )
++
++
++def _bf16(v4):
++    return fx.Vector(v4).to(fx.BFloat16)
++
++
++def _diag_inverse(aa, ab, ident):
++    """(I + A)^-1 of a strictly lower 16x16 block via (I-A)(I+A^2)(I+A^4)(I+A^8).
++
++    ``aa`` / ``ab`` hold A in the A- / B-operand layout; the result is the
++    accumulator layout. Products are split-bf16, close to fp32.
++    """
++    naa = _split_bf16(-aa)
++    nab = _split_bf16(-ab)
++    z = _zeros4()
++    b2 = _split_bf16(_mm16_x3(naa, nab, z))
++    b2t = _split_bf16(_mm16_x3(nab, naa, z))
++    b4 = _split_bf16(_mm16_x3(b2t, b2, z))
++    b4t = _split_bf16(_mm16_x3(b2, b2t, z))
++    acc = _mm16_x3(b4t, b4, ident)
++    acc = _mm16_x3(b4t, _split_bf16(acc), acc)
++    acc = _mm16_x3(b2t, _split_bf16(acc), acc)
++    return _mm16_x3(naa, _split_bf16(acc), acc)
++
++
++def _exp2(x):
++    return fx.Float32(rocdl.exp2(T.f32, fx.Float32(x).ir_value()))
++
++
++def _log2(x):
++    # rocdl.log is v_log_f32, which computes log2 (not ln).
++    return fx.Float32(rocdl.log(T.f32, fx.Float32(x).ir_value()))
++
++
++def _rsq(x):
++    return fx.Float32(rocdl.rsq(T.f32, fx.Float32(x).ir_value()))
++
++
++def _fdot2(a2, b2, c):
++    return fx.Float32(
++        rocdl.fdot2_f32_bf16(T.f32, a2.ir_value(), b2.ir_value(), c.ir_value()).result
++    )
++
++
++def _sumsq_bf16x8(v8, acc):
++    """acc + sum(v8 ** 2) for a bf16x8 vector, via v_dot2_f32_bf16."""
++    for p in range(4):
++        pair = v8.shuffle(v8, [2 * p, 2 * p + 1])
++        acc = _fdot2(pair, pair, acc)
++    return acc
++
++
++def _row_sum8(x):
++    """Sum over each aligned group of 8 lanes (DPP quad_perm, then row_shr/shl 4)."""
++    s = x + _dpp_f32(x, 0xB1)  # quad_perm [1, 0, 3, 2]
++    s = s + _dpp_f32(s, 0x4E)  # quad_perm [2, 3, 0, 1]
++    si = fx.Float32(s).bitcast(fx.Int32)
++    x4 = _dpp_i32(si, 0x114, 0xF, 0xA, old=si)  # row_shr:4 into banks 1, 3
++    x4 = _dpp_i32(si, 0x104, 0xF, 0x5, old=x4)  # row_shl:4 into banks 0, 2
++    return s + x4.bitcast(fx.Float32)
++
++
++def _wave_scan(x):
++    """Inclusive wave64 prefix sum (gfx9 DPP row_shr + row_bcast)."""
++    s = x
++    for i in range(4):
++        s = s + _dpp_f32(s, 0x110 + (1 << i))  # row_shr
++    s = s + _dpp_f32(s, 0x142, row_mask=0xA)  # row_bcast:15
++    return s + _dpp_f32(s, 0x143, row_mask=0xC)  # row_bcast:31
++
++
++def _lds_ld_tr(ptr, off):
++    """ds_read_b64_tr_b16: in each 16-lane group, lane j addresses 4 b16 of row j;
++    lane i receives element i % 4 of the rows addressed by lanes 4k + i // 4."""
++    return _ld(ptr, off, 4, fx.BFloat16, fx.rocdl.cdna4.LDSReadTrans16_64b())
++
++
++def _sel_by_wave(w, values):
++    """Pick ``values[w]`` for a runtime, wave-uniform ``w``."""
++    out = fx.Int32(values[-1])
++    for i in range(len(values) - 2, -1, -1):
++        out = (w == i).select(fx.Int32(values[i]), out)
++    return out
++
++
++# Per-token factor rows in the ``fac`` LDS array (each BT fp32), all derived
++# from the in-chunk log2 decay gl, the L2-norm reciprocals rq/rk and beta.
++F_EA = 0  # gl + log2(beta * rk): row exponent of A
++F_EB = 1  # gl - log2(rk): column exponent of A and P^T
++F_EQ = 2  # gl + log2(scale * rq): row exponent of P (= column of P^T)
++F_BETA = 3
++F_BEGRK = 4  # beta * exp(gc) * rk
++F_EGQ = 5  # scale * exp(gc) * rq
++F_EDRK = 6  # exp(gc_last - gc) * rk
++F_EG = 7  # exp(gc)
++N_FAC = 8
++
++# Strictly-lower off-diagonal 16x16 blocks (a > b) of a 64x64 chunk matrix:
++# group wave wl takes OFF0[wl], and OFF1[wl] when wl < 2.
++OFF0 = ((1, 0), (2, 1), (3, 1), (3, 2))
++OFF1 = ((2, 0), (3, 0))
++ZERO_TILE = N_A_TILES + 10
++N_AP_TILES = ZERO_TILE + 1
++
++
++@functools.lru_cache(maxsize=32)
++def compile_gdn_fused_prefill(
++    *,
++    H: int,
++    Hg: int,
++    BV: int = 32,
++    HAS_TRACK: bool = False,
++    HAS_INIT_FLAG: bool = False,
++    scale: float = KD**-0.5,
++):
++    """Compile the fused prefill; returns the @flyc.jit launcher.
++
++    Launch grid is (V // BV, N * H); 512 threads per workgroup. With
++    ``HAS_INIT_FLAG`` a zero entry of ``init_t`` starts that sequence from a
++    zero state instead of its pool slot.
++    """
++    assert H % Hg == 0
++    assert BV % 16 == 0 and VD % BV == 0
++    NVB = BV // 16
++    REP = H // Hg
++    LOG2_SCALE = math.log2(scale)
++    # v staging: thread (r_row, sub) loads V_EPT contiguous values of its token.
++    V_EPT = BV // 8
++    VROW = BV + 8
++
++    @fx.struct
++    class SharedStorage:
++        # q tile, then two k tiles: chunk c's k is still read (transposed) by the
++        # state update while chunk c + 1 is being staged.
++        qk: fx.Array[fx.BFloat16, 3 * BT * ROW, 16]
++        s: fx.Array[fx.BFloat16, BV * ROW, 16]
++        ap: fx.Array[fx.BFloat16, N_AP_TILES * FRAG, 16]
++        td: fx.Array[fx.BFloat16, GROUP * FRAG, 16]
++        rhs: fx.Array[fx.BFloat16, GROUP * NVB * FRAG, 16]
++        vn: fx.Array[fx.BFloat16, GROUP * NVB * FRAG, 16]
++        vd: fx.Array[fx.BFloat16, GROUP * NVB * FRAG, 16]
++        fac: fx.Array[fx.Float32, N_FAC * BT, 16]
++        vt: fx.Array[fx.BFloat16, BT * VROW, 16]
++
++    @flyc.kernel(
++        name=(
++            f"gdn_fused_prefill_bv{BV}_h{H}_hg{Hg}"
++            f"_t{int(HAS_TRACK)}_i{int(HAS_INIT_FLAG)}"
++        )
++    )
++    def gdn_fused_kernel(
++        q_t: fx.Tensor,
++        k_t: fx.Tensor,
++        v_t: fx.Tensor,
++        g_t: fx.Tensor,
++        beta_t: fx.Tensor,
++        cu_t: fx.Tensor,
++        idx_t: fx.Tensor,
++        pool_t: fx.Tensor,
++        o_t: fx.Tensor,
++        trs_t: fx.Tensor,
++        tri_t: fx.Tensor,
++        init_t: fx.Tensor,
++        q_st: fx.Int32,
++        k_st: fx.Int32,
++        v_st: fx.Int32,
++        g_st: fx.Int32,
++        b_st: fx.Int32,
++        T_total: fx.Int32,
++    ):
++        tid = fx.Int32(fx.thread_idx.x)
++        # Wave index as a scalar so per-wave selects and addresses stay in SGPRs.
++        w = fx.Int32(rocdl.readfirstlane(T.i32, (tid // WAVE).ir_value()))
++        wl = w % GROUP
++        wh = w // GROUP
++        lane = tid % WAVE
++        c = lane % 16
++        gq = lane // 16
++        i_v = fx.Int32(fx.block_idx.x)
++        i_nh = fx.Int32(fx.block_idx.y)
++        i_n = i_nh // H
++        i_h = i_nh % H
++        i_hg = i_h // REP
++
++        bos = fx.Int32(cu_t[i_n])
++        eos = fx.Int32(cu_t[i_n + 1])
++        T_local = eos - bos
++        NT = (T_local + (BT - 1)) // BT
++        # Padding rows (slot < 0) run no chunks and skip the pool write-back, so
++        # they write neither o, track nor any pool slot. The clamp only keeps the
++        # unused initial-state load in bounds.
++        slot_in = fx.Int32(idx_t[i_n])
++        NT = (slot_in < 0).select(fx.Int32(0), NT)
++        slot = (slot_in < 0).select(fx.Int32(0), slot_in)
++        last_tok = (T_total - 1 < 0).select(fx.Int32(0), T_total - 1)
++
++        # Buffer resources over each workgroup's slice. Accesses take a 32-bit
++        # byte offset from the 64-bit base; the wrapper keeps every offset
++        # below 2^32. Only o sets num_records: the last chunk's rows past eos
++        # belong to the next sequence, and the hardware drops those stores.
++        # Every other view keeps the default 0xFFFFFFFF size (no effective
++        # check) because its accesses are in range by construction: q/k/v/g/
++        # beta token indices are clamped to the batch's last token (rows past
++        # eos are masked, not skipped), and pool/track offsets stay within the
++        # [BV, K] slice.
++        def _view(tensor, base, records=None):
++            view = fx.make_view(fx.get_iter(tensor) + base, fx.make_layout(1, 1))
++            if records is None:
++                return fx.get_iter(fx.rocdl.make_buffer_tensor(view))
++            return fx.get_iter(
++                fx.rocdl.make_buffer_tensor(view, num_records_bytes=records)
++            )
++
++        bos64 = fx.Int64(bos)
++        q_it = _view(q_t, fx.Int64(i_hg) * KD)
++        k_it = _view(k_t, fx.Int64(i_hg) * KD)
++        v_it = _view(v_t, fx.Int64(i_h) * VD + fx.Int64(i_v) * BV)
++        g_it = _view(g_t, fx.Int64(i_h))
++        b_it = _view(beta_t, fx.Int64(i_h))
++        state_base = (fx.Int64(slot) * H + fx.Int64(i_h)) * (VD * KD) + fx.Int64(
++            i_v
++        ) * (BV * KD)
++        pool_it = _view(pool_t, state_base)
++        o_rec = fx.Int64(T_local) * (H * VD * 2)
++        o_it = _view(o_t, (bos64 * H + fx.Int64(i_h)) * VD + fx.Int64(i_v) * BV, o_rec)
++        if const_expr(HAS_TRACK):
++            trk = fx.Int32(tri_t[i_n])
++            trs_base = (fx.Int64(i_n) * H + fx.Int64(i_h)) * (VD * KD) + fx.Int64(
++                i_v
++            ) * (BV * KD)
++            trs_it = _view(trs_t, trs_base)
++
++        lds = fx.SharedAllocator().allocate(SharedStorage).peek()
++        p_qk = lds.qk.ptr
++        p_s = lds.s.ptr
++        p_ap = lds.ap.ptr
++        p_td = lds.td.ptr
++        p_rhs = lds.rhs.ptr
++        p_vn = lds.vn.ptr
++        p_vd = lds.vd.ptr
++        p_f = lds.fac.ptr
++        p_vt = lds.vt.ptr
++
++        def _fac4(row, tok):
++            return _lds_ld(p_f, row * BT + tok, 4, fx.Float32)
++
++        def _fac1(row, tok):
++            return _lds_ld(p_f, row * BT + tok, 1, fx.Float32)[0]
++
++        # q/k staging: thread owns token row r and K columns 8*sub + 64*m.
++        r_row = tid // 8
++        sub = tid % 8
++
++        def _tok(t_local):
++            t = bos + t_local
++            t = (t > last_tok).select(last_tok, t)
++            return t
++
++        def _prefetch(chunk):
++            base = chunk * BT
++            tq = _tok(base + r_row)
++            qs = [
++                _g_ld(q_it, tq * q_st + 8 * sub + 64 * m, 8, fx.BFloat16)
++                for m in range(2)
++            ]
++            ks = [
++                _g_ld(k_it, tq * k_st + 8 * sub + 64 * m, 8, fx.BFloat16)
++                for m in range(2)
++            ]
++            vs = [_g_ld(v_it, tq * v_st + V_EPT * sub, V_EPT, fx.BFloat16)]
++            tg = _tok(base + lane)
++            gv = _g_ld(g_it, tg * g_st, 1, fx.Float32)[0]
++            bv = _g_ld(b_it, tg * b_st, 1, fx.Float32)[0]
++            return qs + ks + vs + [gv, bv]
++
++        # State slice: group-0 wave wl owns K rows [32wl, 32wl + 32) of S^T, all
++        # BV columns. Group 1 never reads it; it carries zeros through the loop.
++        def _s_off(fb, vb):
++            return (16 * vb + c) * KD + 16 * fb + 4 * gq
++
++        s_init = [_zeros4() for _ in range(2 * NVB)]
++        if wh == 0:
++            s_init = [
++                _g_ld(pool_it, _s_off(2 * wl + j, vb), 4, fx.BFloat16).to(fx.Float32)
++                for j in range(2)
++                for vb in range(NVB)
++            ]
++            if const_expr(HAS_INIT_FLAG):
++                # Select rather than scale: a fresh slot may hold NaN/Inf garbage.
++                has_init = fx.Int32(init_t[i_n]) != 0
++                s_init = [
++                    _vec([has_init.select(s[i], fx.Float32(0.0)) for i in range(4)])
++                    for s in s_init
++                ]
++            for j in range_constexpr(2):
++                for vb in range_constexpr(NVB):
++                    _lds_st(
++                        p_s,
++                        (16 * vb + c) * ROW + 16 * (2 * wl + j) + 4 * gq,
++                        s_init[j * NVB + vb].to(fx.BFloat16),
++                        4,
++                        fx.BFloat16,
++                    )
++        if w == 0:
++            _lds_st(
++                p_ap,
++                ZERO_TILE * FRAG + lane * 4,
++                fx.Vector.filled(4, 0.0, fx.BFloat16),
++                4,
++                fx.BFloat16,
++            )
++
++        N_S = 2 * NVB
++        # Inputs are prefetched two chunks ahead to cover the load latency.
++        pre0 = _prefetch(fx.Int32(0)) + _prefetch(fx.Int32(1))
++        N_PRE = len(pre0) // 2
++        ident = _vec(
++            [
++                ((4 * gq + i) == c).select(fx.Float32(1.0), fx.Float32(0.0))
++                for i in range(4)
++            ]
++        )
++
++        def _mm_k4(a_row, b_row):
++            """Raw 16x16 tile sum_k A[a_row + c][k] * B[b_row + c][k] over K."""
++            acc = _zeros4()
++            for s_ in range_constexpr(4):
++                acc = _mfma32(
++                    _lds_ld(p_qk, a_row + 32 * s_, 8, fx.BFloat16),
++                    _lds_ld(p_qk, b_row + 32 * s_, 8, fx.BFloat16),
++                    acc,
++                )
++            return acc
++
++        def _a_tile(kbuf, ra, rb):
++            acc = _mm_k4(
++                kbuf + (16 * ra + c) * ROW + 8 * gq, kbuf + (16 * rb + c) * ROW + 8 * gq
++            )
++            ea4 = _fac4(F_EA, 16 * ra + 4 * gq)
++            eb = _fac1(F_EB, 16 * rb + c)
++            vals = _vec([acc[i] * _exp2(ea4[i] - eb) for i in range(4)])
++            _lds_st(
++                p_ap,
++                (ra * (ra - 1) // 2 + rb) * FRAG + lane * 4,
++                _bf16(vals),
++                4,
++                fx.BFloat16,
++            )
++
++        def _p_tile(kbuf, a, b, diag):
++            # P^T[j][t], j-block b (rows, from k), t-block a (columns, from q).
++            acc = _mm_k4(
++                kbuf + (16 * b + c) * ROW + 8 * gq, (16 * a + c) * ROW + 8 * gq
++            )
++            eb4 = _fac4(F_EB, 16 * b + 4 * gq)
++            eq = _fac1(F_EQ, 16 * a + c)
++            vals = []
++            for i in range_constexpr(4):
++                val = acc[i] * _exp2(eq - eb4[i])
++                if const_expr(diag):
++                    val = ((4 * gq + i) <= c).select(val, fx.Float32(0.0))
++                vals.append(val)
++            _lds_st(
++                p_ap,
++                (N_A_TILES + a * (a + 1) // 2 + b) * FRAG + lane * 4,
++                _bf16(_vec(vals)),
++                4,
++                fx.BFloat16,
++            )
++
++        for i_t, state in range(
++            fx.Int64(0), fx.Int64(NT), fx.Int64(1), init=s_init + pre0
++        ):
++            ch = fx.Int32(i_t)
++            kbuf = BT * ROW + (ch % 2) * (BT * ROW)
++            S = [fx.Vector(state[j]) for j in range(N_S)]
++            qr = [fx.Vector(state[N_S + m]) for m in range(2)]
++            kr = [fx.Vector(state[N_S + 2 + m]) for m in range(2)]
++            vrow = fx.Vector(state[N_S + 4])
++            gv = fx.Float32(state[N_S + 5])
++            bv = fx.Float32(state[N_S + 6])
++            pre_next = [state[N_S + N_PRE + i] for i in range(N_PRE)]
++
++            if const_expr(HAS_TRACK):  # noqa: SIM102 - Preserve FlyDSL branches.
++                if wh == 0:  # noqa: SIM102 - Preserve FlyDSL branches.
++                    if ch == trk:
++                        for j in range_constexpr(2):
++                            for vb in range_constexpr(NVB):
++                                _g_st(
++                                    trs_it,
++                                    _s_off(2 * wl + j, vb),
++                                    S[j * NVB + vb],
++                                    4,
++                                    fx.Float32,
++                                )
++
++            # ---- Phase 0: gates, norms, per-token factors, raw q/k to LDS ----
++            L = T_local - ch * BT
++            tok_ok = lane < L
++            gv = tok_ok.select(gv, fx.Float32(0.0))
++            bv = tok_ok.select(bv, fx.Float32(0.0))
++            gl = _wave_scan(gv) * LOG2E
++            gl_last = fx.Float32(rocdl.readlane(T.f32, gl.ir_value(), BT - 1))
++            _lds_st(p_vt, r_row * VROW + V_EPT * sub, vrow, V_EPT, fx.BFloat16)
++            for m in range_constexpr(2):
++                _lds_st(p_qk, r_row * ROW + 8 * sub + 64 * m, qr[m], 8, fx.BFloat16)
++                _lds_st(
++                    p_qk, kbuf + r_row * ROW + 8 * sub + 64 * m, kr[m], 8, fx.BFloat16
++                )
++            ssq = _sumsq_bf16x8(qr[1], _sumsq_bf16x8(qr[0], fx.Float32(0.0)))
++            ssk = _sumsq_bf16x8(kr[1], _sumsq_bf16x8(kr[0], fx.Float32(0.0)))
++            row_ok = r_row < L
++            rq = row_ok.select(_rsq(_row_sum8(ssq) + L2NORM_EPS), fx.Float32(0.0))
++            rk = row_ok.select(_rsq(_row_sum8(ssk) + L2NORM_EPS), fx.Float32(0.0))
++            # This thread's token is r_row; its gates live in lane r_row % 64.
++            src = r_row % WAVE
++            gl_r = gpu.shuffle_idx(gl, src, WAVE)
++            beta_r = gpu.shuffle_idx(bv, src, WAVE)
++            eg_r = _exp2(gl_r)
++            log_rk = _log2(rk)
++            fac_vals = (
++                (F_EA, gl_r + _log2(beta_r) + log_rk),
++                (F_EB, gl_r - log_rk),
++                (F_EQ, gl_r + _log2(rq) + LOG2_SCALE),
++                (F_BETA, beta_r),
++                (F_BEGRK, beta_r * eg_r * rk),
++                (F_EGQ, eg_r * rq * scale),
++                (F_EDRK, _exp2(gl_last - gl_r) * rk),
++                (F_EG, eg_r),
++            )
++            if sub == 0:
++                for fi, val in fac_vals:
++                    _lds_st(p_f, fi * BT + r_row, _vec([val]), 1, fx.Float32)
++            gpu.barrier()
++
++            # ---- Phase 1: group 0 diag A + inverse and RHS; group 1 q S^T, A tiles ----
++            nxt = pre_next + _prefetch(ch + 2)
++            tw4 = 16 * wl + 4 * gq
++            twc = 16 * wl + c
++            sb = [
++                [
++                    _lds_ld(p_s, (16 * vb + c) * ROW + 8 * gq + 32 * s_, 8, fx.BFloat16)
++                    for s_ in range(4)
++                ]
++                for vb in range(NVB)
++            ]
++            o_acc = [_zeros4() for _ in range(NVB)]
++            if wh == 0:
++                ea4w = _fac4(F_EA, tw4)
++                eb4w = _fac4(F_EB, tw4)
++                beta4w = _fac4(F_BETA, tw4)
++                begrk4w = _fac4(F_BEGRK, tw4)
++                ea_c = _fac1(F_EA, twc)
++                eb_c = _fac1(F_EB, twc)
++                k_row = kbuf + twc * ROW + 8 * gq
++                ka = [_lds_ld(p_qk, k_row + 32 * s_, 8, fx.BFloat16) for s_ in range(4)]
++                # Diagonal block of A, in both operand layouts (k k^T is symmetric).
++                kk = _zeros4()
++                for s_ in range_constexpr(4):
++                    kk = _mfma32(ka[s_], ka[s_], kk)
++                ab_l = []
++                aa_l = []
++                for i in range_constexpr(4):
++                    r_i = 4 * gq + i
++                    ab_l.append(
++                        (r_i > c).select(kk[i] * _exp2(ea4w[i] - eb_c), fx.Float32(0.0))
++                    )
++                    aa_l.append(
++                        (c > r_i).select(kk[i] * _exp2(ea_c - eb4w[i]), fx.Float32(0.0))
++                    )
++                # RHS = beta * v - beta * exp(gc) * rk * (k_raw S^T), token block wl.
++                for vb in range_constexpr(NVB):
++                    ks_acc = _zeros4()
++                    for s_ in range_constexpr(4):
++                        ks_acc = _mfma32(ka[s_], sb[vb][s_], ks_acc)
++                    v4 = _lds_ld_tr(
++                        p_vt, (16 * wl + 4 * gq + c // 4) * VROW + 16 * vb + 4 * (c % 4)
++                    )
++                    rhs = v4.to(fx.Float32) * beta4w - ks_acc * begrk4w
++                    _lds_st(
++                        p_rhs,
++                        (wl * NVB + vb) * FRAG + lane * 4,
++                        _bf16(rhs),
++                        4,
++                        fx.BFloat16,
++                    )
++                tdiag = _diag_inverse(_vec(aa_l), _vec(ab_l), ident)
++                _lds_st(p_td, wl * FRAG + lane * 4, _bf16(tdiag), 4, fx.BFloat16)
++            else:
++                egq_c = _fac1(F_EGQ, twc)
++                q_row = twc * ROW + 8 * gq
++                qb = [_lds_ld(p_qk, q_row + 32 * s_, 8, fx.BFloat16) for s_ in range(4)]
++                o_new = []
++                for vb in range_constexpr(NVB):
++                    qs_acc = _zeros4()
++                    for s_ in range_constexpr(4):
++                        qs_acc = _mfma32(sb[vb][s_], qb[s_], qs_acc)
++                    o_new.append(qs_acc * egq_c)
++                o_acc = o_new
++                _a_tile(
++                    kbuf,
++                    _sel_by_wave(wl, [t[0] for t in OFF0]),
++                    _sel_by_wave(wl, [t[1] for t in OFF0]),
++                )
++                if wl < 2:
++                    _a_tile(
++                        kbuf,
++                        _sel_by_wave(wl, [t[0] for t in OFF1]),
++                        _sel_by_wave(wl, [t[1] for t in OFF1]),
++                    )
++
++            gpu.barrier()
++
++            # ---- Phase 2: group 0 Tinv row block + vnew; group 1 P^T tiles ----
++            eg_last = fx.Float32(0.0)
++            if wh == 0:
++                zw = _vec(
++                    [
++                        _lds_ld(
++                            p_td,
++                            wl * FRAG + (c // 4) * 64 + (4 * gq + e) * 4 + c % 4,
++                            1,
++                            fx.BFloat16,
++                        )[0].to(fx.Float32)
++                        for e in range(4)
++                    ]
++                )
++                z = [None] * 4
++                z[3] = _vec(
++                    [(wl == 3).select(zw[i], fx.Float32(0.0)) for i in range(4)]
++                )
++                for j in range_constexpr(2, -1, -1):
++                    y = _zeros4()
++                    for kb in range_constexpr(j + 1, 4):
++                        a_frag = _lds_ld(
++                            p_ap,
++                            (kb * (kb - 1) // 2 + j) * FRAG + lane * 4,
++                            4,
++                            fx.BFloat16,
++                        )
++                        y = _mfma16(a_frag, _bf16(z[kb]), y)
++                    td_frag = _lds_ld(p_td, j * FRAG + lane * 4, 4, fx.BFloat16)
++                    zc = _mfma16(td_frag, _bf16(y), _zeros4())
++                    z[j] = _vec(
++                        [
++                            (wl > j).select(
++                                -zc[i], (wl == j).select(zw[i], fx.Float32(0.0))
++                            )
++                            for i in range(4)
++                        ]
++                    )
++                zb = [_bf16(z[j]) for j in range(4)]
++                edrk4w = _fac4(F_EDRK, tw4)
++                for vb in range_constexpr(NVB):
++                    vn = _zeros4()
++                    for j in range_constexpr(4):
++                        vn = _mfma16(
++                            zb[j],
++                            _lds_ld(
++                                p_rhs, (j * NVB + vb) * FRAG + lane * 4, 4, fx.BFloat16
++                            ),
++                            vn,
++                        )
++                    _lds_st(
++                        p_vn,
++                        (wl * NVB + vb) * FRAG + lane * 4,
++                        _bf16(vn),
++                        4,
++                        fx.BFloat16,
++                    )
++                    _lds_st(
++                        p_vd,
++                        (wl * NVB + vb) * FRAG + lane * 4,
++                        _bf16(vn * edrk4w),
++                        4,
++                        fx.BFloat16,
++                    )
++                eg_last = _fac1(F_EG, BT - 1)
++            else:
++                _p_tile(kbuf, wl, wl, True)
++                _p_tile(
++                    kbuf,
++                    _sel_by_wave(wl, [t[0] for t in OFF0]),
++                    _sel_by_wave(wl, [t[1] for t in OFF0]),
++                    False,
++                )
++                if wl < 2:
++                    _p_tile(
++                        kbuf,
++                        _sel_by_wave(wl, [t[0] for t in OFF1]),
++                        _sel_by_wave(wl, [t[1] for t in OFF1]),
++                        False,
++                    )
++
++            gpu.barrier()
++
++            # ---- Phase 3: group 0 state update; group 1 output ----
++            new_s = S
++            if wh == 0:
++                upd = []
++                for j in range_constexpr(2):
++                    fb = 2 * wl + j
++                    # k^T operand via transposed reads of the [token][K] tile.
++                    kt_off = kbuf + (4 * gq + c // 4) * ROW + 16 * fb + 4 * (c % 4)
++                    kt = [
++                        _lds_ld_tr(p_qk, kt_off + (32 * s_ + 16 * h_) * ROW)
++                        for s_ in range(2)
++                        for h_ in range(2)
++                    ]
++                    for vb in range_constexpr(NVB):
++                        acc = S[j * NVB + vb] * eg_last
++                        for s_ in range_constexpr(2):
++                            a8 = kt[2 * s_].shuffle(
++                                kt[2 * s_ + 1], [0, 1, 2, 3, 4, 5, 6, 7]
++                            )
++                            b_lo = _lds_ld(
++                                p_vd,
++                                ((2 * s_) * NVB + vb) * FRAG + lane * 4,
++                                4,
++                                fx.BFloat16,
++                            )
++                            b_hi = _lds_ld(
++                                p_vd,
++                                ((2 * s_ + 1) * NVB + vb) * FRAG + lane * 4,
++                                4,
++                                fx.BFloat16,
++                            )
++                            acc = _mfma32(
++                                a8, b_lo.shuffle(b_hi, [0, 1, 2, 3, 4, 5, 6, 7]), acc
++                            )
++                        upd.append(acc)
++                        _lds_st(
++                            p_s,
++                            (16 * vb + c) * ROW + 16 * fb + 4 * gq,
++                            _bf16(acc),
++                            4,
++                            fx.BFloat16,
++                        )
++                new_s = upd
++            else:
++                for vb in range_constexpr(NVB):
++                    acc = o_acc[vb]
++                    for b in range_constexpr(4):
++                        p_idx = (b > wl).select(
++                            fx.Int32(ZERO_TILE), N_A_TILES + wl * (wl + 1) // 2 + b
++                        )
++                        acc = _mfma16(
++                            _lds_ld(
++                                p_vn, (b * NVB + vb) * FRAG + lane * 4, 4, fx.BFloat16
++                            ),
++                            _lds_ld(p_ap, p_idx * FRAG + lane * 4, 4, fx.BFloat16),
++                            acc,
++                        )
++                    _g_st(
++                        o_it,
++                        (ch * BT + twc) * (H * VD) + 16 * vb + 4 * gq,
++                        _bf16(acc),
++                        4,
++                        fx.BFloat16,
++                    )
++
++            results = yield new_s + nxt
++
++        if slot_in >= 0:  # noqa: SIM102 - Preserve FlyDSL branches.
++            if wh == 0:
++                for j in range_constexpr(2):
++                    for vb in range_constexpr(NVB):
++                        _g_st(
++                            pool_it,
++                            _s_off(2 * wl + j, vb),
++                            _bf16(fx.Vector(results[j * NVB + vb])),
++                            4,
++                            fx.BFloat16,
++                        )
++
++    @flyc.jit
++    def launch(
++        q_t: fx.Tensor,
++        k_t: fx.Tensor,
++        v_t: fx.Tensor,
++        g_t: fx.Tensor,
++        beta_t: fx.Tensor,
++        cu_t: fx.Tensor,
++        idx_t: fx.Tensor,
++        pool_t: fx.Tensor,
++        o_t: fx.Tensor,
++        trs_t: fx.Tensor,
++        tri_t: fx.Tensor,
++        init_t: fx.Tensor,
++        q_st: fx.Int32,
++        k_st: fx.Int32,
++        v_st: fx.Int32,
++        g_st: fx.Int32,
++        b_st: fx.Int32,
++        T_total: fx.Int32,
++        grid_y: fx.Int32,
++        stream: fx.Stream,
++    ):
++        gdn_fused_kernel(
++            q_t,
++            k_t,
++            v_t,
++            g_t,
++            beta_t,
++            cu_t,
++            idx_t,
++            pool_t,
++            o_t,
++            trs_t,
++            tri_t,
++            init_t,
++            q_st,
++            k_st,
++            v_st,
++            g_st,
++            b_st,
++            T_total,
++        ).launch(grid=(VD // BV, grid_y, 1), block=(BLOCK, 1, 1), stream=stream)
++
++    return launch
++
++
++__all__ = ["compile_gdn_fused_prefill"]

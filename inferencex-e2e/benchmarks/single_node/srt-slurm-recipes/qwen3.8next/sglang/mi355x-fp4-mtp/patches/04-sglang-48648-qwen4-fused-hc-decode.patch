@@ -1,0 +1,693 @@
+# [Perf] [AMD] Qwen4-Exp HC: fuse decode-sized hyper-connection norm and inject into FlyDSL mix
+# https://github.com/sgl-project/sglang/pull/48648  (PR head f6f9c1c41678ec6087a58cf51145b8041460364b)
+# Generated against the SGLang checkout of the image (1ced9a9eb0); source files only (tests, benchmarks, AOT registry and docs dropped).
+
+diff --git a/python/sglang/kernels/ops/gemm/hc_fused_flydsl.py b/python/sglang/kernels/ops/gemm/hc_fused_flydsl.py
+new file mode 100644
+index 0000000000..0d47a1d2b8
+--- /dev/null
++++ b/python/sglang/kernels/ops/gemm/hc_fused_flydsl.py
+@@ -0,0 +1,549 @@
++"""Fused Qwen gated-residual HC (hc_per_branch_norm, HC=4) for decode-sized M on gfx950.
++
++Extends AITER's FlyDSL ``hc_mix`` (down split-K -> reduce + SiLU -> up + gate + branch
++mean) so an HC site needs no separate RMSNorm and its combine needs no GEMV:
++
++* The per-branch Gemma RMSNorm is folded into the down projection. ``(1 + w)`` is folded
++  into the packed down / inject weights, the down kernel multiplies the raw residual
++  ``H``, and the reduce scales each split-K partial by its branch's
++  ``rsqrt(mean(H_b^2) + eps)`` (a split never straddles two branches). The up kernel
++  rebuilds the normed gate operand as ``H * s_b * (1 + w)`` in FP32.
++* The combine's inject projection ``normed @ W_inj^T`` rides along as extra down rows,
++  so the reduce also returns the inject logits ``G`` and the combine is elementwise.
++* The per-branch sums of squares come either from the combine that produced ``H``
++  (``hc_apply_inject`` returns them) or, when ``H`` has another origin, from extra
++  down-kernel CTAs.
++
++Numerics differ from the unfused path only by rounding points: the normed input is no
++longer rounded to BF16 before the GEMMs, and ``(1 + w)`` is rounded into the weights.
++"""
++
++import functools
++
++import flydsl.compiler as flyc
++import flydsl.expr as fx
++import torch
++from aiter.ops.flydsl.kernels.mxfp4_gemm_common import lds_typed_ptr, lds_vec_load
++from flydsl.expr import const_expr, gpu, math, range_constexpr, rocdl
++
++HC = 4
++# Rows in a 16x16x32 MFMA tile.
++_MFMA_M = 16
++# Elements of one packed 16x32 B fragment (see _pack): 64 lanes x 8 BF16.
++_FRAG = 16 * 32
++# Same LDS row pad as AITER's hc_mix up projection; gfx950 has 160 KiB of LDS per CU.
++_LDS_ROW_PAD = 8
++_LDS_BYTES = 160 * 1024
++# Speculative verify carries requests x draft tokens rows; past this the unfused path is used.
++MAX_M = 128
++_REDUCE_THREADS = 256
++# B fragments in flight per wave, as in AITER's hc_mix.
++_PREFETCH = 16
++# Columns per combine wave (64 lanes x 8); HS splits into HS / _INJECT_BLOCK partial
++# sums of squares per branch.
++_INJECT_BLOCK = 512
++
++
++def _load(tensor, offset, width, dtype):
++    """Buffer load of `width` elements at `offset`; OOB reads return zero."""
++    if width == 8:
++        kind = fx.rocdl.BufferCopy128b()
++    elif dtype == fx.Float32:
++        kind = fx.rocdl.BufferCopy32b()
++    else:
++        kind = fx.rocdl.BufferCopy16b()
++    view = fx.make_view(
++        fx.get_iter(tensor) + fx.Int32(offset), fx.make_layout(width, 1)
++    )
++    frag = fx.make_rmem_tensor(width, dtype)
++    fx.copy(fx.make_copy_atom(kind, dtype), view, frag)
++    return fx.Vector(frag.load())
++
++
++def _store(tensor, offset, value, dtype):
++    view = fx.make_view(fx.get_iter(tensor) + fx.Int32(offset), fx.make_layout(1, 1))
++    atom = fx.make_copy_atom(
++        fx.rocdl.BufferCopy32b() if dtype == fx.Float32 else fx.rocdl.BufferCopy16b(),
++        dtype,
++    )
++    frag = fx.make_rmem_tensor(1, dtype)
++    frag.store(fx.Vector.from_elements([value], dtype))
++    fx.copy(atom, frag, view)
++
++
++def _store8(tensor, offset, vec):
++    """128-bit store of 8 BF16 at `offset`."""
++    view = fx.make_view(fx.get_iter(tensor) + fx.Int32(offset), fx.make_layout(8, 1))
++    frag = fx.make_rmem_tensor(8, fx.BFloat16)
++    frag.store(vec)
++    fx.copy(fx.make_copy_atom(fx.rocdl.BufferCopy128b(), fx.BFloat16), frag, view)
++
++
++def _mfma(av, bv, acc):
++    return fx.Vector(
++        rocdl.mfma_f32_16x16x32_bf16(
++            acc.ir_value().type,
++            [av.ir_value(), bv.ir_value(), acc.ir_value(), 0, 0, 0],
++        )
++    )
++
++
++def _sigmoid(v):
++    return fx.Float32(1.0) / (fx.Float32(1.0) + math.exp(-v))
++
++
++@functools.cache
++def _up_shared(rows, rpad):
++    @fx.struct
++    class UpShared:
++        t: fx.Array[fx.Int32, rows * rpad // 2, 16]
++
++    return UpShared
++
++
++@flyc.kernel
++def _hc_down_fused(
++    A: fx.Tensor,
++    W: fx.Tensor,
++    P: fx.Tensor,
++    SS: fx.Tensor,
++    M: fx.Constexpr[int],
++    R: fx.Constexpr[int],
++    K: fx.Constexpr[int],
++    SPLIT: fx.Constexpr[int],
++    SS_OUT: fx.Constexpr[bool],
++):
++    """H[M,K] against packed down[R,K] -> P[SPLIT,M,R] FP32 split-K partials.
++
++    One wave per CTA; grid (R / 16 [+ row tiles], SPLIT). With SS_OUT, CTA R / 16 + t
++    also writes row tile t's sums of squares over the split's columns, SS[M, SPLIT].
++    """
++    lane = gpu.thread_id("x") % 64
++    nt = gpu.block_id("x")
++    sp = gpu.block_id("y")
++    a = fx.rocdl.make_buffer_tensor(A, max_size=False)
++    w = fx.rocdl.make_buffer_tensor(W, max_size=False)
++    out = fx.rocdl.make_buffer_tensor(P, max_size=False)
++    row_a = lane % 16
++    mt = (M + _MFMA_M - 1) // _MFMA_M
++    steps = K // SPLIT // 32
++    k0 = sp * steps
++
++    def a_offset(row, kcol):
++        # Descriptor-bound OOB loads return zero for the padded M rows.
++        return (row < M).select(fx.Int32(row * K + kcol), fx.Int32(M * K))
++
++    if nt < R // 16:
++        accs = [fx.Vector.filled(4, 0.0, fx.Float32)] * mt
++        for g in range_constexpr(0, steps, _PREFETCH):
++            bvs = []
++            for ki in range_constexpr(g, min(g + _PREFETCH, steps)):
++                bvs.append(
++                    _load(
++                        w, (nt * (K // 32) + k0 + ki) * _FRAG + lane * 8, 8, fx.BFloat16
++                    )
++                )
++            for j in range_constexpr(len(bvs)):
++                kcol = (k0 + g + j) * 32 + lane // 16 * 8
++                for t in range_constexpr(mt):
++                    row = t * _MFMA_M + row_a
++                    av = _load(a, a_offset(row, kcol), 8, fx.BFloat16)
++                    accs[t] = _mfma(av, bvs[j], accs[t])
++        for t in range_constexpr(mt):
++            for i in range_constexpr(4):
++                row = t * _MFMA_M + lane // 16 * 4 + i
++                col = nt * 16 + lane % 16
++                if row < M:
++                    _store(out, (sp * M + row) * R + col, accs[t][i], fx.Float32)
++    if const_expr(SS_OUT):
++        ss = fx.rocdl.make_buffer_tensor(SS, max_size=False)
++        for t in range_constexpr(mt):
++            if nt == R // 16 + t:
++                row = t * _MFMA_M + row_a
++                sq = fx.Float32(0.0)
++                for k in range_constexpr(steps):
++                    kcol = (k0 + k) * 32 + lane // 16 * 8
++                    af = _load(a, a_offset(row, kcol), 8, fx.BFloat16).to(fx.Float32)
++                    for e in range_constexpr(8):
++                        sq = sq + af[e] * af[e]
++                # The 4 lanes holding a row's four 8-column groups are 16 apart.
++                for shift in range_constexpr(2):
++                    peer = gpu.shuffle(
++                        sq, fx.Int32(16 << shift), fx.Int32(64), mode="xor"
++                    )
++                    sq = sq + fx.Float32(peer)
++                if (lane < 16) & (row < M):
++                    _store(ss, row * SPLIT + sp, sq, fx.Float32)
++
++
++@flyc.kernel
++def _hc_reduce_fused(
++    P: fx.Tensor,
++    SS: fx.Tensor,
++    T: fx.Tensor,
++    G: fx.Tensor,
++    SC: fx.Tensor,
++    M: fx.Constexpr[int],
++    R: fx.Constexpr[int],
++    RL: fx.Constexpr[int],
++    NI: fx.Constexpr[int],
++    K: fx.Constexpr[int],
++    SPLIT: fx.Constexpr[int],
++    NP: fx.Constexpr[int],
++    EPS: fx.Constexpr[float],
++):
++    """Scale each split by its branch's rstd and sum: SiLU(down / HC) -> T[M,RL] BF16,
++    inject logits -> G[M,NI] FP32, branch scales -> SC[M,HC] FP32.
++
++    SS[M, HC * NP] holds NP partial sums of squares per branch.
++    """
++    i = gpu.block_id("x") * _REDUCE_THREADS + gpu.thread_id("x")
++    p = fx.rocdl.make_buffer_tensor(P, max_size=False)
++    ss = fx.rocdl.make_buffer_tensor(SS, max_size=False)
++    t = fx.rocdl.make_buffer_tensor(T, max_size=False)
++    g = fx.rocdl.make_buffer_tensor(G, max_size=False)
++    sc = fx.rocdl.make_buffer_tensor(SC, max_size=False)
++    row = i // R
++    c = i % R
++    per = SPLIT // HC
++    acc = fx.Float32(0.0)
++    for b in range_constexpr(HC):
++        total = fx.Float32(0.0)
++        for j in range_constexpr(NP):
++            total = total + _load(ss, row * (HC * NP) + (b * NP + j), 1, fx.Float32)[0]
++        scale = fx.Float32(1.0) / math.sqrt(
++            total * fx.Float32(HC / K) + fx.Float32(EPS)
++        )
++        part = fx.Float32(0.0)
++        for s in range_constexpr(b * per, (b + 1) * per):
++            part = part + _load(p, fx.Int32(s * M * R) + i, 1, fx.Float32)[0]
++        acc = acc + part * scale
++        if (c == b) & (i < M * R):
++            _store(sc, row * HC + b, scale, fx.Float32)
++    v = acc * fx.Float32(1.0 / HC)
++    v = v * _sigmoid(v)
++    if (i < M * R) & (c < RL):
++        _store(t, row * RL + c, v.to(fx.BFloat16), fx.BFloat16)
++    if const_expr(NI > 0):
++        if (i < M * R) & (c >= RL) & (c < RL + NI):
++            _store(g, row * NI + c - RL, acc, fx.Float32)
++
++
++@flyc.kernel
++def _hc_up_fused(
++    A: fx.Tensor,
++    W: fx.Tensor,
++    X: fx.Tensor,
++    SC: fx.Tensor,
++    W1: fx.Tensor,
++    O: fx.Tensor,
++    M: fx.Constexpr[int],
++    N: fx.Constexpr[int],
++    R: fx.Constexpr[int],
++    WAVES: fx.Constexpr[int],
++    STAGE: fx.Constexpr[bool],
++):
++    """T[M,R] against interleaved up[N,R]; gate sigmoid * (H * s_b * (1 + w)), mean over HC."""
++    tid = gpu.thread_id("x")
++    lane = tid % 64
++    nt = gpu.block_id("x") * WAVES + tid // 64
++    a = fx.rocdl.make_buffer_tensor(A, max_size=False)
++    w = fx.rocdl.make_buffer_tensor(W, max_size=False)
++    x = fx.rocdl.make_buffer_tensor(X, max_size=False)
++    sc = fx.rocdl.make_buffer_tensor(SC, max_size=False)
++    w1 = fx.rocdl.make_buffer_tensor(W1, max_size=False)
++    out = fx.rocdl.make_buffer_tensor(O, max_size=False)
++    mt = (M + _MFMA_M - 1) // _MFMA_M
++
++    bvs = []
++    for ki in range_constexpr(min(_PREFETCH, R // 32)):
++        bvs.append(_load(w, (nt * (R // 32) + ki) * _FRAG + lane * 8, 8, fx.BFloat16))
++    col = nt * 16 + lane % 16
++    # Interleaved up rows: col % HC is the branch, col // HC the hidden unit.
++    n = (col % HC) * (N // HC) + col // HC
++    wn = _load(w1, n, 1, fx.Float32)[0]
++    xvs = []
++    for t in range_constexpr(mt):
++        for i in range_constexpr(4):
++            row = t * _MFMA_M + lane // 16 * 4 + i
++            # Rows >= M sit past the end of X / SC, so these loads return zero.
++            hv = _load(x, row * N + n, 1, fx.BFloat16)[0].to(fx.Float32)
++            sv = _load(sc, row * HC + col % HC, 1, fx.Float32)[0]
++            xvs.append(hv * sv * wn)
++
++    if const_expr(STAGE):
++        rows = mt * _MFMA_M
++        rpad = R + _LDS_ROW_PAD
++        threads = 64 * WAVES
++        lds = fx.SharedAllocator().allocate(_up_shared(rows, rpad)).peek()
++        base = fx.Int32(fx.ptrtoint(lds.t.ptr))
++        chunks = rows * (R // 8)
++        vals = []
++        for c0 in range_constexpr(0, chunks, threads):
++            vals.append(_load(a, (fx.Int32(c0) + fx.Int32(tid)) * 8, 8, fx.BFloat16))
++        for j in range_constexpr(len(vals)):
++            c = fx.Int32(j * threads) + fx.Int32(tid)
++            ptr = lds_typed_ptr(
++                base,
++                fx.BFloat16.ir_type,
++                align=16,
++                byte_offset=(c + c // (R // 8)) * fx.Int32(16),
++            )
++            if const_expr((j + 1) * threads <= chunks):
++                fx.ptr_store(vals[j].ir_value(), ptr)
++            elif c < chunks:
++                fx.ptr_store(vals[j].ir_value(), ptr)
++        gpu.barrier()
++
++    row_a = lane % 16
++    steps = R // 32
++    accs = [fx.Vector.filled(4, 0.0, fx.Float32)] * mt
++    for g in range_constexpr(0, steps, _PREFETCH):
++        if const_expr(g > 0):
++            bvs = []
++            for ki in range_constexpr(g, min(g + _PREFETCH, steps)):
++                bvs.append(
++                    _load(w, (nt * steps + ki) * _FRAG + lane * 8, 8, fx.BFloat16)
++                )
++        for j in range_constexpr(len(bvs)):
++            ki = g + j
++            for t in range_constexpr(mt):
++                row = t * _MFMA_M + row_a
++                if const_expr(STAGE):
++                    av = fx.Vector(
++                        lds_vec_load(
++                            base,
++                            fx.Int32(row * rpad + ki * 32 + lane // 16 * 8)
++                            * fx.Int32(2),
++                            fx.Vector.make_type(8, fx.BFloat16),
++                            fx.BFloat16,
++                            align=16,
++                        )
++                    )
++                else:
++                    ao = (row < M).select(
++                        fx.Int32(row * R + ki * 32 + lane // 16 * 8),
++                        fx.Int32(M * R),
++                    )
++                    av = _load(a, ao, 8, fx.BFloat16)
++                accs[t] = _mfma(av, bvs[j], accs[t])
++    for t in range_constexpr(mt):
++        for i in range_constexpr(4):
++            row = t * _MFMA_M + lane // 16 * 4 + i
++            value = xvs[t * 4 + i] * _sigmoid(accs[t][i])
++            # Four adjacent lanes hold the four branches of one hidden unit.
++            for shift in range_constexpr(2):
++                peer = gpu.shuffle(
++                    value, fx.Int32(1 << shift), fx.Int32(64), mode="xor"
++                )
++                value = value + fx.Float32(peer)
++            if (row < M) & (lane % 4 == 0):
++                _store(
++                    out,
++                    row * (N // HC) + col // HC,
++                    (value * fx.Float32(1.0 / HC)).to(fx.BFloat16),
++                    fx.BFloat16,
++                )
++
++
++@flyc.jit
++def _launch(
++    H: fx.Tensor,
++    D: fx.Tensor,
++    U: fx.Tensor,
++    W1: fx.Tensor,
++    P: fx.Tensor,
++    SS: fx.Tensor,
++    T: fx.Tensor,
++    G: fx.Tensor,
++    SC: fx.Tensor,
++    O: fx.Tensor,
++    M: fx.Constexpr[int],
++    K: fx.Constexpr[int],
++    R: fx.Constexpr[int],
++    RL: fx.Constexpr[int],
++    NI: fx.Constexpr[int],
++    S: fx.Constexpr[int],
++    NP: fx.Constexpr[int],
++    WV: fx.Constexpr[int],
++    SS_OUT: fx.Constexpr[bool],
++    STAGE: fx.Constexpr[bool],
++    EPS: fx.Constexpr[float],
++    stream: fx.Stream,
++):
++    if const_expr(SS_OUT):
++        _hc_down_fused(H, D, P, SS, M, R, K, S, True).launch(
++            grid=(R // 16 + (M + _MFMA_M - 1) // _MFMA_M, S), block=(64,), stream=stream
++        )
++    else:
++        _hc_down_fused(H, D, P, SS, M, R, K, S, False).launch(
++            grid=(R // 16, S), block=(64,), stream=stream
++        )
++    _hc_reduce_fused(P, SS, T, G, SC, M, R, RL, NI, K, S, NP, EPS).launch(
++        grid=((M * R + _REDUCE_THREADS - 1) // _REDUCE_THREADS,),
++        block=(_REDUCE_THREADS,),
++        stream=stream,
++    )
++    _hc_up_fused(T, U, H, SC, W1, O, M, K, RL, WV, STAGE).launch(
++        grid=(K // (16 * WV),), block=(64 * WV,), stream=stream
++    )
++
++
++def _pack(w):
++    n, k = w.shape
++    return w.reshape(n // 16, 16, k // 32, 4, 8).permute(0, 2, 3, 1, 4).contiguous()
++
++
++class HcFusedWeights:
++    """Packed weights of one HC site; build after weight loading."""
++
++    def __init__(self, down, up, inject, norm_weight, eps):
++        r, k = down.shape
++        if k % (32 * HC) or r % 32 or up.shape != (k, r) or norm_weight.shape != (k,):
++            raise ValueError(
++                "fused HC needs K % 128 == 0, R % 32 == 0 and matching weights"
++            )
++        self.k, self.r, self.eps = k, r, float(eps)
++        self.w1 = (1.0 + norm_weight.float()).contiguous()
++        rows = [down.float() * self.w1]
++        self.ni = 0
++        if inject is not None:
++            self.ni = inject.shape[0]
++            rows.append(inject.float() * self.w1)
++        d = torch.cat(rows)
++        pad = -d.shape[0] % 16
++        if pad:
++            d = torch.cat([d, d.new_zeros(pad, k)])
++        self.rp = d.shape[0]
++        self.down = _pack(d.to(torch.bfloat16))
++        interleaved = up.reshape(HC, k // HC, r).permute(1, 0, 2).reshape(k, r)
++        self.up = _pack(interleaved.contiguous())
++
++
++# Measured on Qwen K=10240, R=320 with per-layer (cold) weights at M=16 and 64: split-K 32
++# fills the GPU with single-wave down CTAs; 4 waves per up CTA as in AITER's hc_mix.
++SPLIT_K = 32
++UP_WAVES = 4
++
++
++def hc_fused_supported(h, weights: HcFusedWeights, split_k=SPLIT_K):
++    """Whether both the site's mix and its combine (``hc_apply_inject``) accept h."""
++    return (
++        h.dtype == torch.bfloat16
++        and h.is_contiguous()
++        and h.dim() == 2
++        and 1 <= h.shape[0] <= MAX_M
++        and h.shape[1] == weights.k
++        and weights.k % (32 * split_k) == 0
++        and weights.k % (HC * _INJECT_BLOCK) == 0
++        and split_k % HC == 0
++        and weights.ni in (0, HC)
++    )
++
++
++def hc_fused_mix(
++    h, weights: HcFusedWeights, sumsq=None, *, split_k=SPLIT_K, up_waves=UP_WAVES
++):
++    """One HC site on residual h [M, K]: (mixed [M, K/HC] BF16, inject logits [M, NI] FP32
++    or None). ``sumsq`` is the [M, HC * NP] partial sums of squares ``hc_apply_inject``
++    returned for h; None makes the down kernel compute them."""
++    m, k = h.shape
++    dev = h.device
++    f32 = torch.float32
++    p = torch.empty((split_k, m, weights.rp), device=dev, dtype=f32)
++    t = torch.empty((m, weights.r), device=dev, dtype=h.dtype)
++    g = torch.empty((m, max(weights.ni, 1)), device=dev, dtype=f32)
++    sc = torch.empty((m, HC), device=dev, dtype=f32)
++    out = torch.empty((m, k // HC), device=dev, dtype=h.dtype)
++    if sumsq is None:
++        sumsq = torch.empty((m, split_k), device=dev, dtype=f32)
++        np_, ss_out = split_k // HC, True
++    else:
++        np_, ss_out = sumsq.shape[1] // HC, False
++    stage = -(-m // _MFMA_M) * _MFMA_M * (weights.r + _LDS_ROW_PAD) * 2 <= _LDS_BYTES
++    _launch(
++        h, weights.down, weights.up, weights.w1, p, sumsq, t, g, sc, out,
++        m, k, weights.rp, weights.r, weights.ni, split_k, np_, up_waves,
++        ss_out, stage, weights.eps,
++        torch.cuda.current_stream(dev),
++    )  # fmt: skip
++    return out, (g if weights.ni else None)
++
++
++@flyc.kernel
++def _hc_inject_fused(
++    H: fx.Tensor,
++    Y: fx.Tensor,
++    G: fx.Tensor,
++    O: fx.Tensor,
++    SS: fx.Tensor,
++    K: fx.Constexpr[int],
++    NI: fx.Constexpr[int],
++):
++    """O = H + Y * 2 sigmoid(G / HC) per branch, plus each wave's sum of squares of O.
++
++    One wave per CTA owns _INJECT_BLOCK columns of one branch of one row: grid
++    (M, HC * HS / _INJECT_BLOCK). SS[M, HC * NP] gets NP = HS / _INJECT_BLOCK partials
++    per branch, the layout ``_hc_reduce_fused`` sums.
++    """
++    lane = gpu.thread_id("x") % 64
++    row = gpu.block_id("x")
++    part = gpu.block_id("y")
++    hs = K // HC
++    nblk = hs // _INJECT_BLOCK
++    branch = part // nblk
++    col = (part % nblk) * _INJECT_BLOCK + lane * 8
++    h = fx.rocdl.make_buffer_tensor(H, max_size=False)
++    y = fx.rocdl.make_buffer_tensor(Y, max_size=False)
++    g = fx.rocdl.make_buffer_tensor(G, max_size=False)
++    o = fx.rocdl.make_buffer_tensor(O, max_size=False)
++    ss = fx.rocdl.make_buffer_tensor(SS, max_size=False)
++    gl = _load(g, row * NI + branch, 1, fx.Float32)[0]
++    gate = fx.Float32(2.0) * _sigmoid(gl * fx.Float32(1.0 / HC))
++    off = row * K + branch * hs + col
++    hv = _load(h, off, 8, fx.BFloat16).to(fx.Float32)
++    yv = _load(y, row * hs + col, 8, fx.BFloat16).to(fx.Float32)
++    ov = (hv + yv * fx.Vector.from_elements([gate] * 8, fx.Float32)).to(fx.BFloat16)
++    _store8(o, off, ov)
++    of = ov.to(fx.Float32)
++    sq = fx.Float32(0.0)
++    for e in range_constexpr(8):
++        sq = sq + of[e] * of[e]
++    for shift in range_constexpr(6):
++        peer = gpu.shuffle(sq, fx.Int32(1 << shift), fx.Int32(64), mode="xor")
++        sq = sq + fx.Float32(peer)
++    if lane == 0:
++        _store(ss, row * (HC * nblk) + part, sq, fx.Float32)
++
++
++@flyc.jit
++def _launch_inject(
++    H: fx.Tensor,
++    Y: fx.Tensor,
++    G: fx.Tensor,
++    O: fx.Tensor,
++    SS: fx.Tensor,
++    M: fx.Constexpr[int],
++    K: fx.Constexpr[int],
++    NI: fx.Constexpr[int],
++    stream: fx.Stream,
++):
++    _hc_inject_fused(H, Y, G, O, SS, K, NI).launch(
++        grid=(M, K // _INJECT_BLOCK), block=(64,), stream=stream
++    )
++
++
++def hc_apply_inject(h, y, g):
++    """Elementwise combine h + y * 2 sigmoid(g / HC) per branch, given the inject logits.
++
++    Returns (combined [M, K] BF16, partial sums of squares [M, HC * HS / 512] FP32 of the
++    combined residual, for the next ``hc_fused_mix``)."""
++    m, k = h.shape
++    if k % (HC * _INJECT_BLOCK) or g.shape != (m, HC) or y.shape != (m, k // HC):
++        raise ValueError("unsupported fused HC combine shape")
++    out = torch.empty_like(h)
++    ss = torch.empty((m, k // _INJECT_BLOCK), device=h.device, dtype=torch.float32)
++    _launch_inject(
++        h, y, g, out, ss, m, k, g.shape[1], torch.cuda.current_stream(h.device)
++    )
++    return out, ss
+diff --git a/python/sglang/srt/environ.py b/python/sglang/srt/environ.py
+index 24eb383d96..f09344c04a 100644
+--- a/python/sglang/srt/environ.py
++++ b/python/sglang/srt/environ.py
+@@ -1018,6 +1018,9 @@ class Envs:
+     SGLANG_AITER_INTREE_GEMM_TUNE = EnvBool(True)
+     # TODO(aiter#6030): remove once ROCm/aiter#6030 is in the aiter pin
+     SGLANG_AITER_INTREE_MHC_TILE_M16 = EnvBool(True)
++    # Qwen4-Exp decode-sized (<= 128 rows) HC sites on gfx950: the per-branch norm and the
++    # combine's inject GEMV fold into FlyDSL HC mix kernels; the combine becomes elementwise.
++    SGLANG_OPT_QWEN4_FUSED_HC = EnvBool(False)
+     # Fuse MiniMax-M3 main/index QK norm + RoPE with main KV and index-K cache
+     # insertion. Requires an AITER build with the fp8_e4m3_unit cache contract.
+     # Enabled by default for supported configurations; set to 0 to disable.
+diff --git a/python/sglang/srt/layers/hyperconnection.py b/python/sglang/srt/layers/hyperconnection.py
+index 13100b34e9..c0448ccac9 100644
+--- a/python/sglang/srt/layers/hyperconnection.py
++++ b/python/sglang/srt/layers/hyperconnection.py
+@@ -7,11 +7,17 @@ import torch.nn as nn
+ import torch.nn.functional as F
+ 
+ from sglang.kernels.ops.gemm.hc_mix import fused_hc_mix, fused_hc_mix_supported
++from sglang.srt.environ import envs
+ from sglang.srt.layers.hc_mix_flydsl import (
+     flydsl_hc_mix_supported,
+     flydsl_hc_mix_weights_supported,
+     weight_cache_key,
+ )
++from sglang.srt.utils.common import is_gfx95_supported
++
++# (output, partial sums of squares) of the last fused HC combine; a fused mix reuses
++# them only for that same tensor object, otherwise its down kernel recomputes them.
++_last_fused_combine: Optional[tuple[torch.Tensor, torch.Tensor]] = None
+ 
+ 
+ @lru_cache(None)
+@@ -173,6 +179,17 @@ class GatedResidual(HyperConnectionBase):
+             self._mix_flydsl_ok = None
+             self._mix_flydsl_weights = None
+             self._mix_flydsl_weight_key = None
++        # Decode-sized gfx950 sites: the norm and the inject GEMV fold into the mix,
++        # which hands its combine the inject logits as gate partials.
++        self._fused_hc_ok = (
++            use_mix
++            and envs.SGLANG_OPT_QWEN4_FUSED_HC.get()
++            and self.hc_count == 4
++            and self.config.hc_per_branch_norm
++            and is_gfx95_supported()
++        )
++        self._fused_hc_weights = None
++        self._fused_hc_weight_key = None
+ 
+         self._gate_stream = None
+         if use_combine:
+@@ -251,6 +268,43 @@ class GatedResidual(HyperConnectionBase):
+             )
+         return self._mix_flydsl_ok
+ 
++    def _fused_mix(self, hyper_input: torch.Tensor):
++        """Fused decode-sized mix, or None when the input does not fit it."""
++        from sglang.kernels.ops.gemm.hc_fused_flydsl import (
++            HcFusedWeights,
++            hc_fused_mix,
++            hc_fused_supported,
++        )
++
++        down = self.input_mix_weight_down.weight
++        up = self.input_mix_weight_up.weight
++        inject = getattr(self, "block_inject_weight", None)
++        inject = inject.weight if inject is not None else None
++        # The norm and inject weights are folded into the packed copy as well.
++        key = (
++            weight_cache_key(down, up),
++            weight_cache_key(self.hc_norm.weight, up if inject is None else inject),
++        )
++        if self._fused_hc_weight_key != key:
++            self._fused_hc_weights = HcFusedWeights(
++                down=down,
++                up=up,
++                inject=inject,
++                norm_weight=self.hc_norm.weight,
++                eps=self.config.rms_norm_eps,
++            )
++            self._fused_hc_weight_key = key
++        weights = self._fused_hc_weights
++        if not hc_fused_supported(h=hyper_input, weights=weights):
++            return None
++        sumsq = None
++        if _last_fused_combine is not None and _last_fused_combine[0] is hyper_input:
++            sumsq = _last_fused_combine[1]
++        mixed_input, inject_logits = hc_fused_mix(
++            h=hyper_input, weights=weights, sumsq=sumsq
++        )
++        return mixed_input, (hyper_input, None, inject_logits)
++
+     def mix(
+         self,
+         hyper_input: torch.Tensor,
+@@ -262,6 +316,10 @@ class GatedResidual(HyperConnectionBase):
+                 (*hyper_input.shape[:-1], self.hidden_size), dtype=self.params_dtype
+             )
+             return mixed_input, (hyper_input, hyper_input, None)
++        if self._fused_hc_ok:
++            fused = self._fused_mix(hyper_input)
++            if fused is not None:
++                return fused
+ 
+         if normalized_input is not None:
+             assert self.config.hc_per_branch_norm
+@@ -357,6 +415,8 @@ class GatedResidual(HyperConnectionBase):
+         Callers must only pass the norm when no PLE or other update intervenes.
+         """
+         hyper_input, _, partials = residuals
++        if self._fused_hc_ok and partials is not None:
++            return self.combine(block_output, residuals), None
+         if (
+             partials is not None
+             and next_norm is not None
+@@ -386,6 +446,15 @@ class GatedResidual(HyperConnectionBase):
+         residuals: tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]],
+     ) -> torch.Tensor:
+         hyper_input, hyper_input_normed, partials = residuals
++        if self._fused_hc_ok and partials is not None:
++            from sglang.kernels.ops.gemm.hc_fused_flydsl import hc_apply_inject
++
++            global _last_fused_combine
++            out, sumsq = hc_apply_inject(
++                h=hyper_input, y=block_output.contiguous(), g=partials
++            )
++            _last_fused_combine = (out, sumsq)
++            return out
+         if partials is not None:
+             from sglang.kernels.ops.elementwise.hc_combine_decode import (
+                 hc_combine_apply,
