@@ -140,8 +140,11 @@ Their presence does not establish final-head GPU qualification.
 5. Inspect the original run artifacts. `video-sweep-manifest` identifies the
    selected attempt and deployments. Each `h3-results-*` bundle retains
    `manifest.json`, `ci.json`, `SHA256SUMS` and `gpu/c*/` request, media and power
-   evidence. A valid `release-v1` deployment needs 20 valid measured C1 clips plus
-   its separate warmup. Four-sample B200 cells remain History evidence below the
+   evidence. Each cell's `attestation.json` checks, from the engine's own startup
+   arguments and log, that every request ran the declared shape, seed and denoising
+   steps without step caching, quantization, LoRA or sparse attention; a failed
+   attestation leaves the cell unverified. A valid `release-v1` deployment needs 20
+   valid measured C1 clips plus its separate warmup. Four-sample B200 cells remain History evidence below the
    App's ten-valid-sample chart floor.
 
 During execution, native `recipe.lock.yaml` and the scheduler job record identify

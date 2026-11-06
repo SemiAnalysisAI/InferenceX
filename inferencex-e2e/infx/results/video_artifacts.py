@@ -143,6 +143,11 @@ def validate_video_artifacts(
                 or receipt.get("status") != "complete"
             ):
                 raise ValueError(f"{name}: unverified native measurement or power receipt")
+            # Bundles finalized before work attestation existed carry none; a referenced one must hold.
+            if "attestation" in cell or "attestation" in receipt:
+                attestation = read_object(bundle / _reference(inventory, cell.get("attestation")))
+                if attestation.get("valid") is not True:
+                    raise ValueError(f"{name}: engine work attestation failed")
             plan = run.get("plan")
             plan_sha = hashlib.sha256(
                 json.dumps(
