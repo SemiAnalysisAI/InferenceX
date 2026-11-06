@@ -156,7 +156,6 @@ base:
         max-cudagraph-capture-size: 2048
         enable-eplb: true
         eplb-config: '{"communicator":"symm_mem","num_redundant_experts":4,"window_size":1000,"step_interval":2000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":1000}'
-        # hbm_pool auto: KV for one max-model-len request; the rest of the KV budget is a Mooncake GPU segment.
         kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["UCX"],"enforce_handshake_compat":false,"kv_lease_duration":120}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false,"hbm_pool":{"segment_size":"auto"}}}]}}'
         data-parallel-size: 4
     decode:
@@ -253,7 +252,6 @@ override_3p1d_dep16_c280:
       gpus: 16
       args:
         data-parallel-size: 16
-        # 128 routed experts + 16 redundant divide over EP16.
         eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
 override_3p1d_dep16_c320:
   name: minimaxm31flash-gb200-disagg-mooncake-3p1d-dep16-c320
@@ -263,7 +261,6 @@ override_3p1d_dep16_c320:
       gpus: 16
       args:
         data-parallel-size: 16
-        # 128 routed experts + 16 redundant divide over EP16.
         eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
 override_3p1d_dep16_c360:
   name: minimaxm31flash-gb200-disagg-mooncake-3p1d-dep16-c360
@@ -273,7 +270,6 @@ override_3p1d_dep16_c360:
       gpus: 16
       args:
         data-parallel-size: 16
-        # 128 routed experts + 16 redundant divide over EP16.
         eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
 override_2p1d_c224:
   name: minimaxm31flash-gb200-disagg-mooncake-2p1d-c224

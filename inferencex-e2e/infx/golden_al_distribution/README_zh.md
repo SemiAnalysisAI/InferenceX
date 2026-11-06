@@ -26,6 +26,13 @@ AL 取决于工作负载：草稿模型的预测在某些领域比其他领域�
 
 对于 Qwen3.5 的 srt-slurm 启动，srt 驱动会运行 `infx/srt_slurm/synthetic_acceptance.py` 连接器，在应用调用方覆盖设置后，根据生成角色的 `speculative-num-steps` 和 `THINKING_MODE` 选择已提交的曲线。验证 token 不计为额外的 MTP 步数。对于采用合成接受的 SGLang MTP 吞吐测试，如果生成角色缺少 `speculative-num-draft-tokens`，或者其值不是等于 `speculative-num-steps + 1` 的整数，连接器会拒绝启动。无需手动设置接受长度。仅评测运行会移除合成设置并使用真实验证。
 
+TokenSpeed MTP 配置同样根据 `speculative-num-steps` 自动选择黄金 AL，要求
+`speculative-num-draft-tokens` 等于步数加一，且 `speculative-eagle-topk: 1`。
+连接器为 AgentX 吞吐测试设置 `synthetic-acceptance-length` 和所需的
+`sampling-backend: greedy`；仅评测和固定序列长度运行会移除该接受长度，并选择
+`sampling-backend: flashinfer` 进行真实验证。TokenSpeed 连接器接受显式 MTP 参数，
+拒绝其他投机算法和 JSON `speculative-config` 简写。
+
 vLLM 通过合成拒绝采样支持这一策略。例如，EAGLE3 运行可以通过 `synthetic_acceptance_length` 注入所选 YAML 值：
 
 ```bash
@@ -97,21 +104,21 @@ python -m atom.entrypoints.openai_server \
 
 ## 收集设置
 
-每个曲线 YAML 在模型键旁的保留顶层键 `collection` 中记录该次收集使用的 SPEED-Bench 客户端设置，`load_curve(name).collection` 会返回这些设置（没有该块的曲线返回 `None`）。在 `run-sweep.yml` 的 PR 扫描中，仅作报告的接受长度门禁会以真实验证对每个投机解码 AgentX 部署重放这些设置，并将测得的 AL 与黄金 AL 比较，详见[投机解码接受门禁](../../../.github/workflows/README.md#speculative-acceptance-gate)。
+每个曲线 YAML 在模型键旁的保留顶层键 `collection` 中记录该次收集使用的 SPEED-Bench 客户端设置，`load_curve(name).collection` 会返回这些设置（没有该块的曲线返回 `None`）。每个 agentic 投机解码评测都会先运行仅作报告的接受长度门禁：它在评测自身的服务上以真实验证重放这些设置，并将测得的 AL 与黄金 AL 比较，详见[投机解码接受门禁](../evals/EVALS.md#speculative-acceptance-gate)。
 
 ```yaml
 collection:
-  renderer: chat_template  # 或 deepseek_v4
+  renderer: chat_template  # 或 deepseek_v4、deepseek_v41
   modes:                   # 曲线中有 AL 数值的每个思考模式各一项
     thinking_on:
       chat_template_kwargs: {enable_thinking: true}  # 收集脚本未传入任何参数时为 null
       sampling: {temperature: 0.6, top_p: 0.95, top_k: 20, presence_penalty: 0.0, repetition_penalty: 1.0}
 ```
 
-- `renderer` 表示客户端如何把每个提示词渲染成文本。`chat_template` 对一条用户消息应用所服务模型的 Hugging Face 聊天模板，并带上生成提示和 `chat_template_kwargs`。`deepseek_v4` 是 vLLM 中同名的 tokenizer 模式；门禁使用本仓库中等效的[编码器](../bench_serving/encoding_dsv4.py)，并把 `chat_template_kwargs` 作为其思考选项。
+- `renderer` 表示客户端如何把每个提示词渲染成文本。`chat_template` 对一条用户消息应用所服务模型的 Hugging Face 聊天模板，并带上生成提示和 `chat_template_kwargs`。`deepseek_v4` 和 `deepseek_v41` 是 vLLM 中同名的 tokenizer 模式；门禁使用本仓库中等效的编码器（[V4](../bench_serving/encoding_dsv4.py)、[V4.1](../bench_serving/encoding_dsv41.py)），并把 `chat_template_kwargs` 作为其思考选项。V4.1 编码器取自采集当周的 vLLM：之后的 vLLM 把推理强度 `high` 渲染为 75，而不是 50。
 - `sampling` 列出请求携带的全部采样参数，其中包括 `vllm bench serve` 附加的 `repetition_penalty: 1.0`。未列出的参数即未发送，服务端使用了自身的默认值。
 - 其余设置对所有收集都相同：SPEED-Bench Qualitative `coding` 类别的 80 条提示词，按 vLLM 加载器的发送顺序，以流式 `/v1/completions` 请求发送，`max_tokens` 为 4096，且不设置 `ignore_eos`。各次收集的并发数不同；门禁始终以并发 64 重放，即视 AL 与并发无关。
-- 新曲线必须包含该块。目前有三条曲线没有该块，门禁会把它们的点列为未解析（unresolved）。[`deepseek-v4.1-flash__dspark__native__probabilistic-block.yaml`](deepseek-v4.1-flash__dspark__native__probabilistic-block.yaml) 需要等 DeepSeek V4.1 渲染器落地后，门禁才能渲染其提示词。[`muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml`](muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml) 使用 SGLang 的 `bench_serving` 客户端在其原生 `/generate` 端点上收集，门禁的 `/v1/completions` 重放无法复现该方式。[`glm-5.3-nvfp4__mtp__native__default-default.yaml`](glm-5.3-nvfp4__mtp__native__default-default.yaml) 的收集方式相同。
+- 新曲线必须包含该块；没有该块的曲线会被门禁跳过。[`muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml`](muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml) 使用 SGLang 的 `bench_serving` 客户端在其原生 `/generate` 端点上收集，不发送 `repetition_penalty`；门禁在 `/v1/completions` 上重放相同的渲染后提示词和采样设置。[`glm-5.3-nvfp4__mtp__native__default-default.yaml`](glm-5.3-nvfp4__mtp__native__default-default.yaml) 的收集方式相同，目前还没有该块。
 
 ## 复现一次收集
 

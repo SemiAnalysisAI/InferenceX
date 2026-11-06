@@ -34,6 +34,7 @@ from infx.results.eval_artifacts import (
     raw_eval_key_rows as raw_eval_key_rows,
     validate_eval_artifacts as validate_eval_artifacts,
 )
+from infx.results.video_artifacts import validate_video_artifacts
 
 
 def main() -> int:
@@ -59,7 +60,13 @@ def main() -> int:
     errors.extend(validate_agentic_artifacts(args.artifacts_dir))
     errors.extend(eval_errors)
     errors.extend(validate_run_stats(args.artifacts_dir, bool(fixed_rows)))
-    if not fixed_rows and not agentic_rows and not eval_rows:
+    video_count = 0
+    if (args.artifacts_dir / "video-sweep-manifest").is_dir():
+        try:
+            video_count = validate_video_artifacts(args.artifacts_dir)
+        except (OSError, KeyError, TypeError, ValueError) as error:
+            errors.append(str(error))
+    if not fixed_rows and not agentic_rows and not eval_rows and not video_count:
         errors.append("no reusable benchmark, agentic, or eval result rows found")
 
     if errors:
@@ -68,6 +75,8 @@ def main() -> int:
             print(error, file=sys.stderr)
         return 1
 
+    if video_count:
+        print(f"Validated {video_count} complete native video deployment(s).")
     print(
         "Reusable sweep artifacts validated: "
         f"{len(set(fixed_rows))} fixed-sequence row(s), "
