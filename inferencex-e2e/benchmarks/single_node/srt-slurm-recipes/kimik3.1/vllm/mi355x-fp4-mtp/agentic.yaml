@@ -80,6 +80,10 @@ base:
         AITER_FLYDSL_STAGE2_FP8: '0'
         AITER_BF16_FP8_MOE_BOUND: '0'
         HSA_NO_SCRATCH_RECLAIM: '1'
+        # Back the offload pool with transparent huge pages. Torch's CPU allocator
+        # only calls madvise(MADV_HUGEPAGE) when this is set, and the host is in
+        # madvise mode, so without it the pool is all 4 KiB pages.
+        THP_MEM_ALLOC_ENABLE: '1'
         VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1200'
         PYTHONNOUSERSITE: '1'
         VLLM_ENGINE_READY_TIMEOUT_S: '7200'
