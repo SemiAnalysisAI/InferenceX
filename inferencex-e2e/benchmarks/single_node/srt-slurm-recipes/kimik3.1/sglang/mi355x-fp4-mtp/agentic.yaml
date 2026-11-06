@@ -187,10 +187,15 @@ override_tp8_dcp8_c48:
         hicache-ratio: 2.5
         max-running-requests: 48
         cuda-graph-max-bs-decode: 48
+        # Prefill-bound: larger chunks, scheduled twice as often, cut time to first token.
+        chunked-prefill-size: 32768
+        prefill-decode-interval: 8
       env:
         SGLANG_ROCM_RUNTIME_RESERVE_GB: '10'
         SGLANG_HICACHE_MAMBA_HOST_RATIO: '12'
         RUSTUP_TOOLCHAIN: stable
+        # Residual stream on row shards for prefill batches of 4096+ tokens (no extra memory).
+        SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_STREAM: '1'
   benchmark:
     env:
       CONC: '48'

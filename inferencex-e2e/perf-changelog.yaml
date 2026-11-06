@@ -12118,4 +12118,5 @@
   description:
     - "Bump to lmsysorg/sglang-rocm:dev-kimi-k31-pro-mi35x-1105: SGLang kimi-k3.1-day-0-amd with split-K HIP sparse MLA decode/verify, DFLASH fc row-sharding in prefill and MoE small sort up to 1024 pairs; sgl-amd-mono e52803f9d2."
     - "Concurrency 1 and 4: max-mamba-cache-size 60 -> 150."
+    - "Concurrency 48: chunked-prefill-size 16384 -> 32768, prefill-decode-interval 16 -> 8, residual stream on row shards for prefill batches of 4096+ tokens (SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_STREAM)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4846
