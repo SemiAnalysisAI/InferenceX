@@ -12189,6 +12189,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4673
 
 - config-keys:
+    - musespark-fp4-b200-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the Muse Spark Open B200 curve to lmsysorg/sglang:nightly-dev-cu13-20261030-302b78cc and retune request admission, prefill-decode interval and stream interval per concurrency."
+    - "Add TP4/EP4 concurrency 7 and 40; drop TP8 concurrency 2, 6, 8 and 56 and TP4 concurrency 8 and 10."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
     - h3-bf16-mi355x-sglang-video
     - h3-bf16-h200-sglang-video
     - h3-bf16-h100-sglang-video
