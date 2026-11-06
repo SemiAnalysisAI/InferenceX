@@ -12224,3 +12224,12 @@
     - "GPU-resident KV at concurrency 2-16; HiCache with SGLang's default auto-sized host tier (~119 GiB, 127 GB per rank; ~1,020 GB per node) at concurrency 20, 24, 28 and 32."
     - "Prefill CUDA graphs are disabled after a CUDA misaligned-address fault during ~336k-token single-request replay at concurrency 1."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4719
+
+- config-keys:
+    - minimaxm31flash-fp4-mi355x-atom-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add MiniMax-M3.1-Flash AgentX on MI355X with ATOM (rocm/atom-dev:nightly_202611060646, ATOM e1295074f): AMD's Quark MXFP4 export served as shipped, with no online quantization, no shared-expert fusion and no quick-reduce quantization, at TP4 with FP8 KV and index cache, prefix caching and the bundled seven-token DSpark draft at its shipped MXFP8 precision."
+    - "Concurrency 1, 2, 4, 8 and 16 run the prefill delayer (ATOM_PREFILL_DECODE_INTERVAL=20000); 32 and 48 run without it. Concurrency 16, 32 and 48 add the LMCache 0.5.6.dev139+gf22dec28 CPU tier at 200 GiB per rank (dram-utilization 0.58, 869 GB per TP4 server). Admission is twice the concurrency; acceptance comes from the minimax-m3.1-flash golden AL curve (4.04 at seven draft tokens)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4860
