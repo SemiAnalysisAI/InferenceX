@@ -4,10 +4,11 @@ The job leaves the client's per-concurrency run bundles under ``<logs>/video/gpu
 and the server's bound spec under ``<logs>/video/server``; InferenceX validates each
 cell's measured window against the native power package and leaves the aggregate and
 validation sidecar in the runner workspace. This module joins them into the matrix
-layout the dashboard ingests (``serving-smoke.json``, ``gpu/c<N>/{spec,gpu-job,power}.json``,
-``manifest.json``, ``ci.json``, ``SHA256SUMS``) with evidence kind
-``srt_slurm_h3_service``: power comes from srt-slurm's DCGM telemetry, re-validated by
-InferenceX, never from the video supervisor's own sampler.
+layout the dashboard ingests (``serving-smoke.json``,
+``gpu/c<N>/{spec,gpu-job,power,attestation}.json``, ``manifest.json``, ``ci.json``,
+``SHA256SUMS``) with evidence kind ``srt_slurm_h3_service``: power comes from srt-slurm's DCGM
+telemetry, re-validated by InferenceX, never from the video supervisor's own sampler, and the
+work attestation from the engine's own startup arguments and log.
 """
 
 from __future__ import annotations
@@ -31,6 +32,8 @@ from infx.bench.video import (
     window_file,
     write_json,
 )
+
+from .attestation import attest
 
 EVIDENCE_KIND = "srt_slurm_h3_service"
 TASK_ID = "video-generation"
@@ -277,6 +280,8 @@ def build_bundle(
     *,
     video_dir: Path,
     power_dir: Path,
+    server_log: Path,
+    precision: str,
     workspace: Path,
     result_filename: str,
     concurrencies: list[int],
@@ -366,13 +371,18 @@ def build_bundle(
             write_json(target / "spec.json", cell_spec)
         power = _power(validation, series, run, bench, gpu_uuids, malformed)
         write_json(target / "power.json", power)
+        attestation = attest(
+            configuration.get("runtime"), server_log, plan, run.get("records") or [], precision
+        )
+        write_json(target / "attestation.json", attestation)
+        attested = {"sha256": _hash(target / "attestation.json"), "valid": attestation["valid"]}
         summary = run.get("summary") or {}
         complete = run_complete(run)
         if not complete:
             failures.append(
                 f"c{concurrency}: {summary.get('valid', 0)}/{summary.get('scheduled', 0)} valid clips"
             )
-        verified = complete and power["valid"]
+        verified = complete and power["valid"] and attestation["valid"]
         receipt = {
             "schema_version": "0.1.0",
             "bundle_type": RECEIPT_BUNDLE_TYPE,
@@ -407,6 +417,7 @@ def build_bundle(
                 "valid": power["valid"],
                 "invalid_reasons": power["invalid_reasons"],
             },
+            "attestation": {"path": "attestation.json", **attested},
             "aggregate_path": "aggregate.json" if aggregate is not None else None,
             "failures": [f for f in failures if f.startswith(f"c{concurrency}:")],
         }
@@ -438,6 +449,7 @@ def build_bundle(
                     "sha256": receipt["power"]["sha256"],
                     "phases": power["phases"],
                 },
+                "attestation": {"path": f"{relative}/attestation.json", **attested},
             }
         )
         if aggregate is not None:
@@ -447,8 +459,9 @@ def build_bundle(
             }
         cells.append(cell)
     finished = _iso(time.time())
-    # Requests decide completion; power decides verification. Invalid power never publishes
-    # as measured, but it fails the job only under REQUIRE_POWER (the launcher's call).
+    # Requests decide completion; power and the work attestation decide verification. An
+    # unverified cell never publishes as measured, but invalid power fails the job only under
+    # REQUIRE_POWER (the launcher's call).
     status = "complete" if cells and all(c["status"] == "complete" for c in cells) else "failed"
     power_verified = bool(cells) and all(c["verified"] for c in cells)
     ci = _ci_context(environ)

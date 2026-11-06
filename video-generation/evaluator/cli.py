@@ -55,6 +55,8 @@ def _mvp_command(arguments: argparse.Namespace) -> int:
             result = build_bundle(
                 video_dir=arguments.video_dir,
                 power_dir=arguments.power_dir,
+                server_log=arguments.server_log,
+                precision=arguments.precision,
                 workspace=arguments.workspace,
                 result_filename=arguments.result_filename,
                 concurrencies=arguments.concurrencies,
@@ -159,6 +161,15 @@ def _parser() -> argparse.ArgumentParser:
     )
     srt_finalize.add_argument("--video-dir", required=True, type=Path)
     srt_finalize.add_argument("--power-dir", required=True, type=Path)
+    srt_finalize.add_argument(
+        "--server-log",
+        required=True,
+        type=Path,
+        help="engine log whose startup arguments and per-request records attest the work",
+    )
+    srt_finalize.add_argument(
+        "--precision", required=True, help="declared model precision, such as bf16"
+    )
     srt_finalize.add_argument("--workspace", required=True, type=Path)
     srt_finalize.add_argument("--result-filename", required=True)
     srt_finalize.add_argument("--concurrencies", nargs="+", type=int, required=True)

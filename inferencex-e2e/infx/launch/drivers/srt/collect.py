@@ -236,7 +236,7 @@ def finalize_video_results(run: SrtRun, logs: Path, producer_sha: str) -> int:
         request.inferencex_results_python, run.workspace, logs,
         package=video_package(run.workspace),
         output=run.workspace / VIDEO_BUNDLE, result_filename=request.result_filename,
-        concurrencies=request.conc_list,
+        concurrencies=request.conc_list, precision=request.precision,
     )  # fmt: skip
     if bundle_rc:
         event.fail("VideoBundleFailed", "Video results bundle was not built", report=False)
