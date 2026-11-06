@@ -1,9 +1,9 @@
 # Native video delivery
 
 The `video-generation` scenario schedules one server job per deployment. SGLang
-selects C1 deployments on 1, 2, 4 and 8 B200 GPUs (Ulysses across all GPUs), on
-2, 4 and 8 H100 GPUs (TP2, since the model does not fit one 80 GB GPU) and on 4
-MI355X GPUs, all using
+selects C1 deployments on 1, 2, 4 and 8 B200 or H200 GPUs (Ulysses across all
+GPUs), on 2, 4 and 8 H100 GPUs (TP2, since the model does not fit one 80 GB GPU)
+and on 4 MI355X GPUs, all using
 `h3-v2.yaml`: 20 distinct measured prompts, a separate warmup, 49 denoising
 updates, and 124 frames at 24 fps and 1344×768. A five-second request produces
 124/24 seconds of video. Config presence is not GPU or quality qualification.
@@ -112,7 +112,7 @@ Their presence does not establish final-head GPU qualification.
 2. Change the existing row in its master config, or copy it with a
    distinct key and recipe for a deployment that must remain separately selectable.
    Pin the image by digest and use its real interpreter and architecture. The
-   H100/B200 SGLang rows use the public CUDA amd64 image and the MI355X row its
+   H100/H200/B200 SGLang rows use the public CUDA amd64 image and the MI355X row its
    ROCm MI35x build. A shared image does
    not qualify a different topology or SKU: validate
    the selected deployments through their sweep. Maintainers stage model snapshots in the runner's
