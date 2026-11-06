@@ -5957,8 +5957,9 @@ kimik3.1-fp4-b300-vllm-agentic-dspark:
     # 0.75 resolves to 2249 GB of host DRAM, which the recipe's Simple CPU offload splits across the 8 TP ranks.
     - dram-utilization: 0.75
       search-space:
-      # The ~1.56 TB MXFP4 checkpoint needs all 8 GPUs. DSpark drafts 5 tokens up to conc 8, then 4, 3 and 2.
-      - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 70], srt-recipe: agentic.yaml }
+      # The ~1.56 TB MXFP4 checkpoint needs all 8 GPUs. DSpark drafts 7 tokens up to conc 8, then 6, 5 and 4.
+      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 2], srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [4, 8, 16, 24, 32, 40, 48, 56, 70], srt-recipe: agentic.yaml }
 
 dsv41flash-fp4-b200-vllm-agentic-dspark:
   image: vllm/vllm-openai:cu134-nightly-40941f2c4ba96fba0a7e282a5355e89cd74d9ac5@sha256:13e92fcd97268013d13d07fb97d80803227cf0beae0161f8dce95a8200eaafb0
@@ -7478,8 +7479,14 @@ h3-bf16-h100-sglang-video:
       - spec: h3-v2.yaml
         set: release-v1
         search-space:
+          - gpus: 2
+            srt-recipe: serving-client-tp2.yaml
+            conc-list: [1]
           - gpus: 4
             srt-recipe: serving-client.yaml
+            conc-list: [1]
+          - gpus: 8
+            srt-recipe: serving-client-tp2-ulysses4.yaml
             conc-list: [1]
 
 h3-bf16-b200-sglang-video:
@@ -7496,7 +7503,16 @@ h3-bf16-b200-sglang-video:
       - spec: h3-v2.yaml
         set: release-v1
         search-space:
+          - gpus: 1
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
+          - gpus: 2
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
           - gpus: 4
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
+          - gpus: 8
             srt-recipe: serving-client.yaml
             conc-list: [1]
 
@@ -7680,6 +7696,119 @@ minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-disagg:
         srt-recipe: disagg-mooncake.yaml:override_2p1d_c256
         prefill: { num-worker: 2, tp: 4, ep: 4, dp-attn: true }
         decode: { num-worker: 1, tp: 8, ep: 8, dp-attn: true }
+
+kimik3.1-fp4-gb200-vllm-agentic-dspark-tp8pp2-agg:
+  image: vllm/vllm-openai:kimi-k31-arm64-cu130@sha256:52b793567651780dc529647a211a3d15cec11ebc872ac7492636d7d75340eab4
+  model: moonshotai/Kimi-K3.1-Pro
+  model-prefix: kimik3.1
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: vllm
+  multinode: true
+  disagg: false
+  srt-recipe-dir: kimik3.1/vllm/gb200-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.5
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [1]
+        num-nodes: 4
+        srt-recipe: agg-tp8pp2-variants.yaml:override_tp8pp2_c1
+        power: true
+        worker: { num-worker: 1, tp: 8, pp: 2, dcp-size: 8, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [4]
+        num-nodes: 4
+        srt-recipe: agg-tp8pp2-variants.yaml:override_tp8pp2_c4
+        power: true
+        worker: { num-worker: 1, tp: 8, pp: 2, dcp-size: 8, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [8]
+        num-nodes: 4
+        srt-recipe: agg-tp8pp2-variants.yaml:override_tp8pp2_c8
+        power: true
+        worker: { num-worker: 1, tp: 8, pp: 2, dcp-size: 8, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [24]
+        num-nodes: 4
+        srt-recipe: agg-tp8pp2-variants.yaml:override_tp8pp2_c24
+        power: true
+        worker: { num-worker: 1, tp: 8, pp: 2, dcp-size: 8, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [32]
+        num-nodes: 4
+        srt-recipe: agg-tp8pp2-variants.yaml:override_tp8pp2_c32
+        power: true
+        worker: { num-worker: 1, tp: 8, pp: 2, dcp-size: 8, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [48]
+        num-nodes: 4
+        srt-recipe: agg-tp8pp2-variants.yaml:override_tp8pp2_c48
+        power: true
+        worker: { num-worker: 1, tp: 8, pp: 2, dcp-size: 8, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [56]
+        num-nodes: 4
+        srt-recipe: agg-tp8pp2-variants.yaml:override_tp8pp2_c56
+        power: true
+        worker: { num-worker: 1, tp: 8, pp: 2, dcp-size: 8, ep: 1, dp-attn: false }
+
+kimik3.1-fp4-gb200-vllm-agentic-dspark-tp16-disagg:
+  image: vllm/vllm-openai:kimi-k31-arm64-cu130@sha256:52b793567651780dc529647a211a3d15cec11ebc872ac7492636d7d75340eab4
+  model: moonshotai/Kimi-K3.1-Pro
+  model-prefix: kimik3.1
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: vllm
+  router: { name: vllm-router, version: "0.1.14" }
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  srt-recipe-dir: kimik3.1/vllm/gb200-fp4/agentx
+  scenarios:
+    agentic-coding:
+    # Host offload runs on the prefill role only; decode keeps plain NIXL.
+    - dram-utilization: 0.5
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [16]
+        srt-recipe: disagg-variants.yaml:override_1p1d_tp16_c16
+        power: true
+        prefill: { num-worker: 1, tp: 16, ep: 16, dp-attn: false }
+        decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [32]
+        srt-recipe: disagg-variants.yaml:override_1p1d_tp16_c32
+        power: true
+        prefill: { num-worker: 1, tp: 16, ep: 16, dp-attn: false }
+        decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [48]
+        srt-recipe: disagg-variants.yaml:override_1p1d_tp16_c48
+        power: true
+        prefill: { num-worker: 1, tp: 16, ep: 16, dp-attn: false }
+        decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: false }
 
 minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg:
   image: vllm/vllm-openai:minimax-m31-flash-arm64-cu134@sha256:5d76347628973fb80519a919a2f2740b6645b62cba3fe2bd87b25f111bd0e948
