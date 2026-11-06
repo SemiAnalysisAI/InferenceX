@@ -63,7 +63,7 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
                 world_writable=True,
             ),
         ),
-        shared_run_root=(Match(any_of("qwen3.5", "glm5.2")),),
+        shared_run_root=(Match(any_of("kimik3.1", "qwen3.5", "glm5.2")),),
     ),
     ("gb300-nv", LaunchPath.SRT_MULTI): SrtLane(
         real_verification=Match(frameworks=any_of("dynamo-trt"), agentic=True),
