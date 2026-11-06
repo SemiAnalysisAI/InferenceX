@@ -3452,6 +3452,38 @@ def test_require_power_is_scoped_to_one_multinode_fixed_sequence(
         expand_full_sweep(config, sample_runner_config)
 
 
+def test_cpu_power_reaches_the_planner_row_beside_power(
+    sample_multinode_config, sample_runner_config
+):
+    from infx.matrix.generate import expand_full_sweep
+
+    config = sample_multinode_config
+    point = next(iter(config.values()))["scenarios"]["fixed-seq-len"][0]["search-space"][0]
+    point["power"] = True
+    rows = expand_full_sweep(config, sample_runner_config)
+    assert rows
+    assert all(row["power"] is True and "cpu-power" not in row for row in rows)
+    point["cpu-power"] = True
+    rows = expand_full_sweep(config, sample_runner_config)
+    assert all(row["cpu-power"] is True for row in rows)
+
+
+def test_single_node_cpu_power_reaches_the_planner_row_without_power(
+    sample_single_node_config, sample_runner_config
+):
+    from infx.matrix.generate import expand_full_sweep
+
+    config = sample_single_node_config
+    point = next(iter(config.values()))["scenarios"]["fixed-seq-len"][-1]["search-space"][0]
+    rows = expand_full_sweep(config, sample_runner_config)
+    assert rows
+    assert all("cpu-power" not in row and "power" not in row for row in rows)
+    point["cpu-power"] = True
+    rows = expand_full_sweep(config, sample_runner_config)
+    assert {row["isl"] for row in rows if row.get("cpu-power") is True} == {8192}
+    assert all("power" not in row for row in rows)
+
+
 def test_single_node_fixed_sequence_rejects_require_power(sample_single_node_config):
     from infx.matrix.validation import validate_master_config
 

@@ -1,66 +1,49 @@
-"""Plan and summarize the AgentX speculative acceptance gate (milestone M1 of #1651).
+"""Plan and summarize the report-only SPEED-Bench acceptance gate of AgentX speculative evals.
 
-Alongside AgentX throughput, each deployment topology x drafting configuration measures its real
-SPEED-Bench acceptance length (AL) once against the golden curve. The gate is report-only.
+An agentic eval job whose generation role drafts replays the golden curve's SPEED-Bench
+collection before its eval, against the same server: srt-slurm runs the gate as the job's
+benchmark stage, which alone receives the workers' metrics endpoints, and the eval as its
+post-benchmark eval. The gate never fails the job.
 """
 
+from __future__ import annotations
+
 import argparse
-import hashlib
 import json
 import sys
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from infx.bench.speedbench import REPLAY_CONCURRENCY
-from infx.clusters import CLUSTER_LABEL_PREFIX, load_clusters
-from infx.golden_al_distribution import GOLDEN_DIR, curve_name, golden_length, load_curve
-from infx.launch.request import AL_GATE_EXEMPT_FRAMEWORKS
-from infx.srt_slurm.generate import bound_variant, point_environment
+from infx.golden_al_distribution import GOLDEN_DIR, curve_name, load_curve
 from infx.srt_slurm.synthetic_acceptance import (
     ENGINES,
     generation_role,
     spec_parameters,
+    verifier,
 )
 
-# Points that differ only in these share a gate (KV offloading restores the same cache).
-POINT_FIELDS = frozenset((
-    "conc", "exp-name", "recipe-fingerprint", "priority", "queue-token", "run-eval", "eval-only",
-    "eval-conc", "eval-framework", "eval-suite", "kv-offloading", "kv-offload-backend",
-    "total-cpu-dram-gb", "srt-recipe", "eval-srt-recipe",
-))  # fmt: skip
-SPEC_FIELDS = (
-    "method", "num_speculative_tokens", "model", "draft_sample_method", "rejection_sample_method"
-)  # fmt: skip
+COMMAND = "bash /infmax-workspace/benchmarks/srt_al_gate.sh"
+OUTPUT_DIR = "/logs"
+# srt-slurm runs the benchmark stage, then the eval, only without EVAL_ONLY.
+SRT_ENVIRONMENT = {"EVAL_ONLY": "false", "RUN_EVAL": "true"}
+EXEMPT_FRAMEWORKS = {
+    "tilert": "TileRT rejects streaming /v1/completions and serves no metrics",
+}
 LEADER_ONLY_METRICS = (
-    "exempt: srtctl gives the gate only the leader's metrics of this multi-node Dynamo vLLM "
+    "srtctl gives the gate only the leader's metrics of this multi-node Dynamo vLLM "
     "data-parallel worker, so AL would cover part of the prompts"
 )
 
 
-def _concurrency(row: Mapping[str, Any]) -> int:
-    return min(row["conc"]) if isinstance(row["conc"], list) else row["conc"]
+def requested(environment: Mapping[str, str]) -> bool:
+    """Whether the launcher found the prompts for this agentic speculative eval."""
+    return environment.get("EVAL_AL_GATE") == "true"
 
 
-def point_recipe(row: Mapping[str, Any], workspace: Path) -> dict[str, Any]:
-    """The composed and bound recipe variant the current launcher selects for a point."""
-    point = {**row, "scenario-type": "agentic-coding"}
-    _, recipe = bound_variant(point, point_environment(point), workspace)
-    return recipe
-
-
-def deployment_key(row: Mapping[str, Any]) -> str:
-    """Identify a deployment: the point without concurrency-level fields or recipe files."""
-    deployment = {key: value for key, value in row.items() if key not in POINT_FIELDS}
-    for role in ("prefill", "decode"):
-        if isinstance(worker := deployment.get(role), Mapping):
-            settings = worker.get("additional-settings") or []
-            kept = [setting for setting in settings if not setting.startswith("CONFIG_FILE=")]
-            deployment[role] = {**worker, "additional-settings": kept}
-    return json.dumps(deployment, sort_keys=True, default=str)
-
-
-def leader_only_metrics(role: Mapping[str, Any], recipe: Mapping[str, Any], runner: str) -> bool:
+def leader_only_metrics(
+    role: Mapping[str, Any], recipe: Mapping[str, Any], environment: Mapping[str, str]
+) -> bool:
     """Whether srtctl runs a Dynamo vLLM worker's data-parallel ranks as one process per node,
     as it does when they span nodes but a tensor x pipeline replica fits on one."""
     args = role.get("args") or {}
@@ -69,130 +52,140 @@ def leader_only_metrics(role: Mapping[str, Any], recipe: Mapping[str, Any], runn
         return False
     gpus_per_node = (recipe.get("resources") or {}).get("gpus_per_node")
     if gpus_per_node is None:  # srtctl then uses the cluster's, from runners.yaml
-        gpus_per_node = load_clusters()[runner.removeprefix(CLUSTER_LABEL_PREFIX)].gpus_per_node
+        from infx.clusters import CLUSTER_LABEL_PREFIX, load_clusters
+
+        cluster = environment["RUNNER_TYPE"].removeprefix(CLUSTER_LABEL_PREFIX)
+        gpus_per_node = load_clusters()[cluster].gpus_per_node
     return tp * pp <= gpus_per_node < tp * pp * dp
 
 
-def _gate(
-    row: Mapping[str, Any], workspace: Path, thinking_mode: str, golden_dir: Path
-) -> dict[str, Any] | str | None:
-    """The point's gate, the reason it gets none, or None when it does not draft."""
-    if reason := AL_GATE_EXEMPT_FRAMEWORKS.get(row["framework"]):
-        return f"exempt: {reason}"
-    recipe = point_recipe(row, workspace)
-    engine = ENGINES[row["framework"]]
+def plan(
+    recipe: Mapping[str, Any],
+    framework: str,
+    environment: Mapping[str, str],
+    *,
+    golden_dir: Path = GOLDEN_DIR,
+) -> dict[str, Any] | None:
+    """The gate a resolved eval recipe runs, a ``skipped`` record, or None when it does not draft.
+
+    A runnable gate has ``curve``, ``draft_tokens`` and ``golden_acceptance_length``. The curve
+    is the one synthetic acceptance selects for the generation role and its verifier.
+    """
+    if framework in EXEMPT_FRAMEWORKS:
+        return skipped(EXEMPT_FRAMEWORKS[framework], environment)
+    engine = ENGINES.get(framework)
+    if engine is None:
+        return skipped(f"{framework} has no speculative settings to read", environment)
     role = generation_role(recipe)
     spec = spec_parameters(role, engine)
     if not spec:
         return None
-    if row["framework"] == "dynamo-vllm" and leader_only_metrics(role, recipe, row["runner"]):
-        return LEADER_ONLY_METRICS
-    curve = curve_name(row["model-prefix"], spec)
-    golden = golden_length(row["model-prefix"], spec, thinking_mode, golden_dir)
-    if load_curve(curve, golden_dir).collection is None:
-        return f"golden curve {curve} records no collection settings to replay"
-    key = json.dumps([deployment_key(row), [spec.get(field) for field in SPEC_FIELDS]])
+    if framework == "dynamo-vllm" and leader_only_metrics(role, recipe, environment):
+        return skipped(LEADER_ONLY_METRICS, environment)
+    try:
+        verify = verifier(role, engine).value
+        name = curve_name(environment["MODEL_PREFIX"], spec, golden_dir, verify)
+        curve = load_curve(name, golden_dir)
+        tokens = spec.get("num_speculative_tokens")
+        golden = curve.acceptance(environment["THINKING_MODE"], tokens)
+    except (KeyError, TypeError, ValueError) as error:
+        return skipped(f"no golden AL: {error}", environment)
+    if curve.collection is None:
+        return skipped(f"golden curve {curve.name} records no collection to replay", environment)
+    return {"curve": curve.name, "draft_tokens": tokens, "golden_acceptance_length": golden}
+
+
+def skipped(reason: str, environment: Mapping[str, str]) -> dict[str, Any]:
+    """The result document of a gate that did not run."""
     return {
-        "id": hashlib.sha256(key.encode()).hexdigest()[:12],
-        "curve": curve,
-        "draft-tokens": spec["num_speculative_tokens"],
-        "golden-acceptance-length": golden,
+        "result_filename": environment.get("RESULT_FILENAME"),
+        "framework": environment.get("FRAMEWORK"),
+        "eval_framework": environment.get("EVAL_FRAMEWORK"),
+        "eval_suite": environment.get("EVAL_SUITE"),
+        "status": "skipped",
+        "error": reason,
+        "report_only": True,
     }
 
 
-def plan(
-    space: Mapping[str, Any], workspace: Path, thinking_mode: str, *, golden_dir: Path = GOLDEN_DIR
-) -> dict[str, Any]:
-    """Gate a search space's AgentX speculative points; only an ImportError stops the plan."""
-    groups: dict[str, tuple[dict[str, Any], str, list[dict[str, Any]]]] = {}
-    unresolved = []
-    for kind in ("single_node", "multi_node"):
-        for row in (space.get(kind) or {}).get("agentic", []):
-            if row.get("spec-decoding", "none") == "none":
-                continue
-            try:
-                gate = _gate(row, workspace, thinking_mode, golden_dir)
-            except ImportError:
-                raise
-            except Exception as error:  # noqa: BLE001 - one point's error must not stop the plan
-                gate = f"planning error: {type(error).__name__}: {error}"
-            if isinstance(gate, str):
-                unresolved.append({"point": row["exp-name"], "conc": row["conc"], "reason": gate})
-            elif gate is not None:
-                groups.setdefault(gate["id"], (gate, kind, []))[2].append(row)
-    gates: dict[str, list[dict[str, Any]]] = {"single_node": [], "multi_node": []}
-    for gate, kind, rows in groups.values():
-        rows.sort(key=_concurrency)
-        chosen = next((row for row in rows if _concurrency(row) >= REPLAY_CONCURRENCY), rows[-1])
-        gates[kind].append({**chosen, "al-gate": {**gate, "covers": [row["conc"] for row in rows]}})
-    return {**gates, "unresolved": unresolved}
+def overrides(gate: Mapping[str, Any], environment: Mapping[str, str]) -> list[str]:
+    """``srtctl apply`` arguments that run ``gate`` as the benchmark stage, without power.
+
+    ``benchmark.env`` outranks the job environment. The container resolves the relative
+    ``AL_GATE_DATASET`` in ``/infmax-workspace``.
+    """
+    env = {
+        "AL_GATE": "true",
+        "AL_GATE_CURVE": gate["curve"],
+        "AL_GATE_DRAFT_TOKENS": str(gate["draft_tokens"]),
+        "AL_GATE_DATASET": environment["AL_GATE_DATASET"],
+        "AL_GATE_OUTPUT_DIR": OUTPUT_DIR,
+        "THINKING_MODE": environment["THINKING_MODE"],
+        **{
+            name: environment[name]
+            for name in ("EVAL_FRAMEWORK", "EVAL_SUITE")
+            if environment.get(name)
+        },
+    }
+    arguments = [
+        "--set", 'benchmark.type="custom"',
+        "--set", f"benchmark.command={json.dumps(COMMAND)}",
+    ]  # fmt: skip
+    for name, value in env.items():
+        arguments += ["--set", f"benchmark.env.{name}={json.dumps(value)}"]
+    return [*arguments, "--unset", "telemetry"]
 
 
 def _number(value: float | None, digits: int = 2) -> str:
     return "-" if value is None else f"{value:.{digits}f}"
 
 
-def _gate_count(planned: Mapping[str, Any]) -> int:
-    return sum(len(planned.get(kind, [])) for kind in ("single_node", "multi_node"))
-
-
-def summarize(planned: Mapping[str, Any], results: list[Mapping[str, Any]]) -> str:
-    """Markdown of the gate verdicts, planned gates without a result, and unresolved points."""
+def summarize(results: list[Mapping[str, Any]]) -> str:
+    """Markdown of the gate verdicts, or an empty string without any."""
+    if not results:
+        return ""
     lines = [
         "## Speculative acceptance gate (report-only)",
         "",
-        "| Point | Curve | Draft tokens | Golden AL | Measured AL | Ratio | Status |",
-        "| --- | --- | --- | --- | --- | --- | --- |",
+        (
+            "Measured with real verification on the eval's server; "
+            "`pass` is within 5% of the golden AL."
+        ),
+        "",
+        "| Point | Eval | Curve | Draft tokens | Golden AL | Measured AL | Ratio | Status |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
-    lines += [
-        f"| `{r.get('result_filename')}` | {r.get('curve')} | {r.get('draft_tokens')} | "
-        f"{_number(r.get('golden_acceptance_length'))} | {_number(r.get('acceptance_length'))} | "
-        f"{_number(r.get('ratio'), 3)} | {r.get('status')} |"
-        for r in sorted(results, key=lambda r: str(r.get("result_filename")))
-    ]
-    gates = _gate_count(planned)
-    if gates > len(results):
-        lines += ["", f"{gates - len(results)} planned gate(s) have no result; see their logs."]
-    by_reason: dict[str, list[str]] = {}
-    for point in planned.get("unresolved", []):
-        by_reason.setdefault(point["reason"], []).append(
-            f"`{point['point']}` (conc {point['conc']})"
+    for r in sorted(
+        results, key=lambda r: (str(r.get("result_filename")), str(r.get("eval_framework")))
+    ):
+        evaluation = " ".join(filter(None, (r.get("eval_framework"), r.get("eval_suite")))) or "-"
+        status = r.get("status")
+        if r.get("error"):
+            status = f"{status}: {r['error']}"
+        lines.append(
+            f"| `{r.get('result_filename')}` | {evaluation} | {r.get('curve') or '-'} | "
+            f"{r.get('draft_tokens') or '-'} | {_number(r.get('golden_acceptance_length'))} | "
+            f"{_number(r.get('acceptance_length'))} | {_number(r.get('ratio'), 3)} | {status} |"
         )
-    if by_reason:
-        lines += ["", f"### Unresolved points ({len(planned['unresolved'])}, no gate)", ""]
-    for reason, points in by_reason.items():
-        lines.append(f"- {reason}: {len(points)} point(s), e.g. {', '.join(points[:3])}")
     return "\n".join(lines) + "\n"
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    plan_parser = commands.add_parser("plan", help="gate points of a run-sweep search space")
-    plan_parser.add_argument("search_space", type=Path)
-    plan_parser.add_argument("--workspace", type=Path, required=True)
-    plan_parser.add_argument("--thinking-mode", required=True)
-    plan_parser.add_argument("--output", type=Path, required=True)
-    summary_parser = commands.add_parser("summarize", help="tabulate downloaded gate results")
-    summary_parser.add_argument("results", type=Path)
-    summary_parser.add_argument("--plan", type=Path)
+    summary = commands.add_parser("summarize", help="tabulate downloaded al_gate_*.json results")
+    summary.add_argument("results", type=Path)
     args = parser.parse_args(argv)
-    if args.command == "plan":
-        gates = plan(json.loads(args.search_space.read_text()), args.workspace, args.thinking_mode)
-        args.output.write_text(json.dumps(gates, indent=2) + "\n")
-        return 0
-    # The collect job also runs when no plan was uploaded.
-    planned = json.loads(args.plan.read_text()) if args.plan and args.plan.is_file() else {}
-    results = [json.loads(path.read_text()) for path in args.results.rglob("al_gate_*.json")]
-    results = [result for result in results if "status" in result]
-    sys.stdout.write(summarize(planned, results))
-    gates = _gate_count(planned)
-    if unmeasured := gates - sum(result["status"] != "error" for result in results):
-        print(
-            f"::warning title=Speculative acceptance gate::{unmeasured} of {gates} planned "
-            "gate(s) measured nothing; see the run summary",
-            file=sys.stderr,
-        )
+    results = []
+    for path in sorted(args.results.rglob("al_gate_*.json")):
+        try:
+            document = json.loads(path.read_text())
+        except (OSError, ValueError) as error:
+            print(f"WARNING: unreadable {path}: {error}", file=sys.stderr)
+            continue
+        if isinstance(document, dict) and "status" in document:
+            results.append(document)
+    sys.stdout.write(summarize(results))
     return 0
 
 
