@@ -10,6 +10,7 @@ import copy
 import hashlib
 import json
 import math
+import re
 import sys
 import threading
 import time
@@ -231,12 +232,15 @@ def fixture_server():
         thread.join(timeout=1)
 
 
+RUNTIME_REVISION = "7" * 40
+
+
 def execute(plan, output_dir, endpoint, **kwargs):
     return runner.run_plan(
         plan,
         output_dir,
         endpoint=endpoint,
-        runtime_revision="253020450290328e9deb307eece1e402fa17f35e",
+        runtime_revision=RUNTIME_REVISION,
         hardware_label="LOCAL HTTP FIXTURE; no GPU and no model execution",
         **kwargs,
     )
@@ -294,6 +298,8 @@ def test_local_http_fixture_lifecycle_and_identity(
     }
     digest = config.pop("configuration_sha256")
     assert hashlib.sha256(video_spec.canonical_json_bytes(config)).hexdigest() == digest
+    revisions = re.findall(r"(?<![0-9a-f])[0-9a-f]{40}(?![0-9a-f])", json.dumps(config))
+    assert set(revisions) == {RUNTIME_REVISION, plan["model_revision"]}
     assert (output / "plan.json").read_bytes() == video_spec.canonical_json_bytes(plan)
     assert json.loads((output / "run.json").read_text()) == run
     for record in run["records"]:
@@ -345,7 +351,7 @@ def test_fairness_request_and_disjoint_warmup_reach_local_http_fixture(
     assert preview["slots"][0]["prompt"] not in {slot["prompt"] for slot in preview["slots"][1:]}
     endpoint, server = fixture_server()
     identity = {
-        "runtime_revision": "253020450290328e9deb307eece1e402fa17f35e",
+        "runtime_revision": RUNTIME_REVISION,
         "image_digest": "a" * 64,
         "server_argv": ["serve", runtime],
         "server_environment": {"CACHE": "0"},
