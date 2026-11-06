@@ -126,12 +126,9 @@ base:
         MC_FORCE_MNNVL: '1'
         NCCL_MNNVL_ENABLE: '1'
         NCCL_CUMEM_ENABLE: '1'
-        # Push all-reduce and DCP combine cover a full 192-request verify batch.
-        SGLANG_CUSTOM_ALL_REDUCE_V2_MAX_SIZE_KB: '32768'
-        SGLANG_DCP_PUSH_COMBINE_MAX_ROWS: '1536'
         # SGLang's Kimi MegaMoE check bounds a rank's rows by max-running-requests x draft
-        # tokens per attention-DP rank (384 x 8 without attention DP).
-        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '3072'
+        # tokens per attention-DP rank (96 x 8 without attention DP).
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '1536'
         NVSHMEM_REMOTE_TRANSPORT: none
       args:
         served-model-name: moonshotai/Kimi-K3.1-Pro
@@ -148,10 +145,11 @@ base:
         disaggregation-transfer-backend: mooncake
         disaggregation-decode-extra-slots: 16
         disaggregation-decode-enable-radix-cache: true
-        # MegaMoE buffers and 192-request verify graphs need about 20 GB beyond the static pool.
         mem-fraction-static: 0.85
-        max-running-requests: 384
-        cuda-graph-max-bs-decode: 192
+        # DCP16 without the megakernel merges indexer top-k through an fp32 buffer of
+        # verify rows x 1M context (4 MiB per row); 96 x 8 rows is 3 GiB of HBM.
+        max-running-requests: 96
+        cuda-graph-max-bs-decode: 96
         weight-loader-prefetch-checkpoints: true
         model-loader-extra-config: '{"enable_multithread_load":true}'
         dyn-reasoning-parser: kimi_k3
