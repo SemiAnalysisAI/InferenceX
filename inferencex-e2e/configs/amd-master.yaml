@@ -723,7 +723,7 @@ glm5.2-fp8-mi325x-sglang-agentic-mtp:
 # golden AL 3.51 for throughput, real block verification for evals, adaptive
 # verification off on ROCm.
 dsv41flash-fp4-mi325x-vllm-agentic-dspark:
-  image: vllm/vllm-openai-rocm:v0.32.0@sha256:14f6a575e1fb0a580b0f633c09e06f648709d60405b85f6a7ff3f80d49f39905
+  image: vllm/vllm-openai-rocm:v0.33.0@sha256:4fcd39b758b660c4e9c345c021e2ea8f0ccdb31e3c32507d676cc3005ae83fba
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi325x-amd
@@ -926,6 +926,24 @@ minimaxm31flash-fp4-mi355x-vllm-agentic-dspark:
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32], srt-recipe: agentic.yaml }
       - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [64], srt-recipe: agentic.yaml:override_tp4_dspark3_c64_offload }
 
+kimik3.1-fp4-mi355x-vllm-agentic-dspark:
+  image: vllm/vllm-openai-rocm:kimi-k31@sha256:5f47cc1004d9a7ac65f8a913725edb20c62c99a07e31cbf4ba21741bd0b4f9b1
+  model: moonshotai/Kimi-K3.1-Pro
+  model-prefix: kimik3.1
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  srt-recipe-dir: kimik3.1/vllm/mi355x-fp4-mtp
+  scenarios:
+    agentic-coding:
+    # 0.6 resolves to 1799 GB of host DRAM, which the recipe's Simple CPU offload splits across the 8 TP ranks.
+    - dram-utilization: 0.6
+      search-space:
+      # The ~1.56 TB MXFP4 checkpoint needs all 8 GPUs. c1 keeps the KV cache on the GPUs.
+      - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [4, 10, 16, 24, 32, 48], srt-recipe: agentic.yaml }
+
 # MiniMax-M3.1-Flash AgentX on MI355X with SGLang: day-zero image from the SGLang
 # cookbook (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1),
 # manifest digest verified 2026-10-24. Serve flags follow the cookbook's
@@ -1001,6 +1019,27 @@ glm5.3-fp8-mi355x-tilert-agentic:
           tp: 8
           ep: 1
           dp-attn: false
+
+# SGLang cookbook MI355X FP8 Low Latency recipe on four GPUs: HBM-only KV up to
+# c32, the cookbook HiCache L1 + L2 tier above it.
+glm5.3flash-fp8-mi355x-sglang-agentic-mtp:
+  image: lmsysorg/sglang:v0.5.22-rocm10-mi35x@sha256:1438dd8b9000adaefb5828edb1cc5713992815d4296f4ad1a1e98dee4e9c7e5f
+  model: zai-org/GLM-5.3-Flash
+  model-prefix: glm5.3flash
+  runner: cluster:mi355x-amds
+  precision: fp8
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: glm5.3flash/sglang/mi355x-fp8-mtp
+  scenarios:
+    agentic-coding:
+    # HiCache allocates 187.33 GB of host memory per rank (113.10 GB KV, 66.94 GB KDA
+    # state, 7.29 GB DSA indexer), 749.33 GB for the TP4 server; dram-utilization 0.501
+    # -> TOTAL_CPU_DRAM_GB = 2861022 MiB cap * 0.501 * 4/8 = 716,686 MiB = 751 GB.
+    - dram-utilization: 0.501
+      search-space:
+      - { tp: 4, ep: 4, kv-offloading: none, conc-list: [1, 2, 8, 16, 24, 32], spec-decoding: mtp, srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [40, 48], spec-decoding: mtp, srt-recipe: agentic.yaml }
 
 # SGLang ROCm 10 MI35X release image. TP2/EP1 up to c32, TP4/EP1 up to c16,
 # DP2 attention with TP MoE at c32 and c64 (c32 overlaps TP2). Host Engram on all.
@@ -1084,6 +1123,15 @@ h3-bf16-mi355x-sglang-video:
       - spec: h3-v2.yaml
         set: release-v1
         search-space:
+          - gpus: 1
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
+          - gpus: 2
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
           - gpus: 4
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
+          - gpus: 8
             srt-recipe: serving-client.yaml
             conc-list: [1]
