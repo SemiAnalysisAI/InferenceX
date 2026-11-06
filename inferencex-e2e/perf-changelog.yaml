@@ -12116,6 +12116,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4811
 
 - config-keys:
+    - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dep16-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi-K3.1-Pro GB300 Dynamo+vLLM disaggregated AgentX configs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4839
+
+- config-keys:
     - qwen3.8next-fp4-gb300-tokenspeed-agentic-mtp
   scenario-type:
     - agentic-coding
