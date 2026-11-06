@@ -12322,3 +12322,10 @@
     - "Update the vLLM image from nightly-e4a5b5537344 to nightly-00b6c4c565a8, pinned by digest."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4569
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-gb300-vllm-agentic-dspark
+  description:
+    - "Update the vLLM image from nightly-dev-arm64-cu130-ac9126e58aa7 to the digest-pinned nightly-00b6c4c5."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4558
+  scenario-type: [agentic-coding]
