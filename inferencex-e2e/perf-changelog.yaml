@@ -12224,3 +12224,10 @@
     - "GPU-resident KV at concurrency 2-16; HiCache with SGLang's default auto-sized host tier (~119 GiB, 127 GB per rank; ~1,020 GB per node) at concurrency 20, 24, 28 and 32."
     - "Prefill CUDA graphs are disabled after a CUDA misaligned-address fault during ~336k-token single-request replay at concurrency 1."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4719
+
+- config-keys:
+    - h3-bf16-h200-sglang-video
+  scenario-type: [video-generation]
+  description:
+    - "Restore the H200 row and sweep H3 C1 latency on 1, 2, 4 and 8 H200 GPUs with SGLang Ulysses across all GPUs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
