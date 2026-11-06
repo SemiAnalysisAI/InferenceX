@@ -1,14 +1,22 @@
 #!/usr/bin/env bash
 # Add the AWS EFA userspace and the EFA Mooncake wheel to a plain vLLM image, for clusters whose NICs are
 # EFA. Mooncake's wheel is pinned to the master config's kv-offload-backend version. The vLLM workers
-# (setup_script) and Mooncake stores (preamble) share a container on each node, so one run does the work.
+# (setup_script) and Mooncake stores (preamble) share a container on each node, so one run does the install.
+# Workers set VLLM_EFA_PREFLIGHT, which tests GPU RMA before the engine loads.
 set -eo pipefail
 source /infmax-workspace/benchmarks/check_env.sh
 check_env_vars KV_OFFLOAD_BACKEND_VERSION
 exec 9>/tmp/vllm-mooncake-efa.lock
 flock 9
 marker=/var/lib/vllm-mooncake-efa.done
-[ -f "$marker" ] && exit 0
+preflight() {
+    [ "${VLLM_EFA_PREFLIGHT:-0}" = 1 ] || return 0
+    python3 /configs/vllm-efa-preflight.py
+}
+if [ -f "$marker" ]; then
+    preflight
+    exit
+fi
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends ca-certificates curl libhwloc15 numactl
@@ -76,3 +84,4 @@ if [ -n "$unresolved" ]; then
     exit 1
 fi
 touch "$marker"
+preflight

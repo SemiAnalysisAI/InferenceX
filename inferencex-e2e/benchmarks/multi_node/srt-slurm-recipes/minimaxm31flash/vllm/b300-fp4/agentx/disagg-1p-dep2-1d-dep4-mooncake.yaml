@@ -19,7 +19,7 @@ health_check:
 environment:
   PYTHONHASHSEED: '0'
   # vllm-mooncake-efa.sh installs libfabric to efa-1.50 when the host mounts /opt/amazon/efa read-only.
-  LD_LIBRARY_PATH: &efa-library-path /opt/amazon/efa-1.50/lib:/opt/amazon/efa/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib64:/usr/local/nvidia/lib
+  LD_LIBRARY_PATH: &efa-library-path /opt/host-cuda:/opt/amazon/efa-1.50/lib:/opt/amazon/efa/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib64:/usr/local/nvidia/lib
 services:
 - name: etcd
   type: etcd
@@ -176,11 +176,7 @@ roles:
       VLLM_ENGINE_READY_TIMEOUT_S: '7200'
       PYTHONUNBUFFERED: '1'
       DYN_TCP_CONNECT_TIMEOUT: '120'
-      FI_PROVIDER: efa
-      FI_EFA_USE_DEVICE_RDMA: '1'
-      FI_EFA_FORK_SAFE: '1'
-      # Without this, libfabric 2.6's default timed out about 1.4% of NIXL-over-EFA decode requests.
-      FI_EFA_USE_UNSOLICITED_WRITE_RECV: '0'
+      VLLM_EFA_PREFLIGHT: '1'
       NCCL_NET_PLUGIN: none
       NCCL_P2P_LEVEL: NVL
       NIXL_TELEMETRY_ENABLE: 'y'
@@ -229,11 +225,7 @@ roles:
       VLLM_ENGINE_READY_TIMEOUT_S: '7200'
       PYTHONUNBUFFERED: '1'
       DYN_TCP_CONNECT_TIMEOUT: '120'
-      FI_PROVIDER: efa
-      FI_EFA_USE_DEVICE_RDMA: '1'
-      FI_EFA_FORK_SAFE: '1'
-      # Without this, libfabric 2.6's default timed out about 1.4% of NIXL-over-EFA decode requests.
-      FI_EFA_USE_UNSOLICITED_WRITE_RECV: '0'
+      VLLM_EFA_PREFLIGHT: '1'
       NCCL_NET_PLUGIN: none
       NCCL_P2P_LEVEL: NVL
       NIXL_TELEMETRY_ENABLE: 'y'
