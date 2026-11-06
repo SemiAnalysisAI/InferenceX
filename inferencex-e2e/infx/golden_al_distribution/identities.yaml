@@ -50,6 +50,19 @@ glm-5.2-fp8__mtp__native__default-default:
     draft_kv_cache_dtype: {value: null, source: default}
     kv_cache_dtype: {value: fp8, source: explicit}
 
+glm-5.3-flash__mtp__native__default-default:
+  select: {model_prefixes: [glm5.3flash], method: mtp}
+  collection:
+    engine: vllm
+    draft: native
+    draft_sample: {value: null, source: default}
+    verify: {value: standard, source: documented}
+    adaptive: {value: false, source: documented}
+    topology: {value: chain, source: documented}
+    draft_precision: {value: null, source: default}
+    draft_kv_cache_dtype: {value: null, source: default}
+    kv_cache_dtype: {value: fp8, source: explicit}
+
 glm-5.3-nvfp4__mtp__native__default-default:
   select: {model_prefixes: [glm5.3], method: mtp}
   collection:
