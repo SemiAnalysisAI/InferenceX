@@ -30,7 +30,7 @@ runs the decode and prefill ladders; `low-latency` runs decode, plus prefill for
 
 | Backend | Engine selector (`maturity`) | `normal` | `low-latency` |
 |---|---|---|---|
-| `deepep-v2` | vLLM `--all2all-backend deepep_v2`, SGLang `--moe-a2a-backend deepep` (`production`) | EP8, EP16: H100, H200, B200, B300, GB200, GB300 | EP8, EP16: H100, H200, B200, GB200, GB300 |
+| `deepep-v2` | vLLM `--all2all-backend deepep_v2`, SGLang `--moe-a2a-backend deepep` (`production`) | EP8, EP16: H100, H200, B200, B300, GB200, GB300 | EP8: H100. EP8, EP16: H200, B200, GB200, GB300 |
 | `mori` | vLLM `--all2all-backend mori_*`, SGLang `--moe-a2a-backend mori` (`production`) | EP8, EP16: MI300X, MI325X, MI355X | EP16: MI300X, MI325X, MI355X |
 | `uccl-ep` | none; engines load it as a drop-in `deep_ep` under vLLM's DeepEP backends (`candidate`) | EP8: H100, H200, B200, MI300X, MI325X, MI355X. EP16: H100, H200, B200, MI300X, MI325X | EP8: B200. EP8, EP16: H100, H200. EP16: MI300X, MI325X |
 | `nccl-ep` | TensorRT-LLM `NcclEP` (`production` for low-latency rank-major BF16 where it matches, `candidate` otherwise) | EP8, EP16: H100, H200, B200, B300, GB200, GB300 | EP8: B300. EP8, EP16: H100, H200, B200, GB200, GB300 |
@@ -39,7 +39,7 @@ runs the decode and prefill ladders; `low-latency` runs decode, plus prefill for
 Every backend runs a BF16 dispatch control and an FP8 dispatch; nccl-ep's FP8 is its internal
 DS_FP8E3M4 recipe, low-latency prefill and decode. Combine is always BF16. Coverage is uniform routing only.
 
-`results/cases.json` is the committed copy of the full matrix: 290 requested cases, of which 252 are
+`results/cases.json` is the committed copy of the full matrix: 288 requested cases, of which 250 are
 runnable EP cases, 18 are swap-blocks cases (two per pool), 12 are kv-transfer cases (one per pool,
 backend and fabric) and 8 are unsupported EP cells (UCCL-EP EP16 on MI355X and FlashInfer EP16 on
 H100, H200 and B200, once per phase; FlashInfer's MNNVL workspace needs every rank inside one NVLink
