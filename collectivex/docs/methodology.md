@@ -194,7 +194,7 @@ and `do_expand=False` into a receive bounded at the next power of two of T, with
 prefill runs eager, as vLLM runs large prefill batches uncaptured. `combine` copies the batch's rows
 into the MoE layer's output, as vLLM's finalize does (`library_config.finalize_copy`); rows without
 that field predate the copy: on b200 EP8 it adds 4-13% to decode `combine`, 4-5% to prefill `combine`
-and 1-2% to the prefill pair period (1-5% for uccl-ep).
+and 1-2% to the prefill pair period; uccl-ep's pair period moves 1-5%.
 
 Scale-up cases request NCCL Device API LSA and fail closed unless the LSA team covers the whole EP
 world, which is also what makes the hybrid choice match vLLM's autoselect: DeepEP goes hybrid only
@@ -225,8 +225,9 @@ runs over intra-node NVLink; multi-node EP16 rides NVSHMEM IBGDA, which wants gd
 low-latency: the legacy Buffer initializes NVSHMEM with an RDMA transport even on one node, and
 NVSHMEM aborts on topology detection over B300's EFA. H100's EFA pool registers EP8 only: at EP16
 every rank segfaults during setup, since IBGDA has no EFA transport. Its normal-mode EP16 prefill
-also does not finish inside the per-case guard (`COLLX_RUN_TIMEOUT`) through the EFA proxy, so those
-two cells stay unmeasured.
+stays registered (`backend_mode_phases` is per backend, not per pool) but does not finish inside the
+per-case guard (`COLLX_RUN_TIMEOUT`) through the EFA proxy: expect those two cases to time out and
+stay unmeasured.
 
 ### UCCL-EP
 
