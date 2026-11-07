@@ -1,16 +1,11 @@
-
 schema: 2
 
 base:
-  dynamo:
-    install: true
-    source:
-      wheel: 1.6.0.dev20261010
   identity:
     model: {}
     container: {}
     frameworks:
-      tensorrt_llm: 1.3.0a0.dev202610151219
+      tensorrt_llm: 1.4.0rc3.dev202611020007
       dynamo: 1.6.0.dev20261010
   slurm:
     time_limit: 04:00:00
@@ -20,33 +15,43 @@ base:
   resources:
     gpu_type: gb300
     gpus_per_node: 4
+    het_jobs: false
   engine:
     type: trtllm
+    served_model_name: Qwen3.5-397B-A17B-NVFP4-V2
     publish_metrics: true
-  environment:
-    TRTLLM_SERVER_DISABLE_GC: '1'
+    numa_cpu_bind: true
+    numa_memory_bind: preferred
   roles:
     prefill:
       nodes: 1
+      gpus: 4
       env:
-        CUDA_SCALE_LAUNCH_QUEUES: 4x
-        ENROOT_ALLOW_DEV: 'yes'
-        MIMALLOC_ARENA_RESERVE: '0'
-        MIMALLOC_PURGE_DELAY: ''
-        NCCL_GRAPH_MIXING_SUPPORT: '0'
-        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
         TLLM_LOG_LEVEL: INFO
-        TLLM_PROFILE_LOG_RANKS: all
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        MIMALLOC_ARENA_RESERVE: '0'
+        OMP_NUM_THREADS: '1'
+        TLLM_NUMA_AWARE_WORKER_AFFINITY: '1'
+        MPI_UCX_TLS: rc,ud,sm,self
+        MPI_UCX_NET_DEVICES: mlx5_0:1,mlx5_2:1
+        OMPI_MCA_coll: ^ucc,hcoll
+        UCX_CUDA_IPC_MAX_POLL: inf
+        UCX_CUDA_COPY_MAX_POLL: inf
+        UCX_TLS: rc,cuda_ipc,cuda_copy,sm,self,tcp
         TRTLLM_ENABLE_PDL: '1'
         TRTLLM_KV_TRANSFER_NUM_THREADS: '8'
-        TRTLLM_PINNED_WEIGHT_STAGING: '1'
-        TRTLLM_SERVER_DISABLE_GC: '1'
+        CUDA_SCALE_LAUNCH_QUEUES: 4x
         TRTLLM_SKIP_KV_CACHE_ESTIMATION: '1'
-        TRTLLM_WORKER_DISABLE_GC: '1'
-        UCX_TLS: rc,cuda_ipc,cuda_copy,sm,self,tcp
-        DYN_ENGINE_CONV_AFFINITY: "1"
-        DYN_TRTLLM_SERVED_MODEL_NAME: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+        TRTLLM_PINNED_WEIGHT_STAGING: '1'
+        MIMALLOC_PURGE_DELAY: ''
+        DYN_ENGINE_CONV_AFFINITY: '1'
+        DYN_ROUTER_MODE: kv
+        DYN_ROUTER_SESSION_AFFINITY_TTL_SECS: '14400'
       args:
+        allreduce_strategy: TWOSHOT
         attention_dp_config:
           kv_cache_routing_conversation_affinity: true
         cache_transceiver_config:
@@ -55,14 +60,16 @@ base:
           kv_transfer_timeout_ms: 600000
           transceiver_runtime: PYTHON
         cuda_graph_config:
+        disable_mm_encoder: true
         disable_overlap_scheduler: false
-        enable_attention_dp: true
+        enable_attention_dp: false
         enable_chunked_prefill: true
         enable_iter_perf_stats: true
         enable_iter_req_stats: false
         iter_perf_stats_interval: 40
         kv_cache_config:
           block_reuse_config:
+            enable_branch_snapshot: true
             max_num_turns: 3
             policy: per_conversation
           dtype: fp8
@@ -73,78 +80,110 @@ base:
           iteration_stats_interval: 40
           mamba_state_config:
             additional_snapshot_offsets_from_end:
-              - 2
+            - 2
             periodic_snapshot_interval: 0
           pool_ratio:
-            - 0.8
-            - 0.2
+          - 0.2
+          - 0.8
           tokens_per_block: 64
           use_kv_cache_manager_v2: true
         max_batch_size: 64
-        max_num_tokens: 8192
+        max_num_tokens: 16384
         max_seq_len: 262144
         moe_config:
           backend: CUTEDSL
+        moe_expert_parallel_size: 4
         nvfp4_gemm_config:
           allowed_backends:
-            - cutlass
-            - cublaslt
-            - cutedsl
-            - cuda_core
+          - cutlass
+          - cublaslt
+          - cutedsl
+          - cuda_core
         pipeline_parallel_size: 1
+        prefill_capture_num_tokens:
+        - 1
+        - 2
+        - 4
+        - 8
+        - 16
+        - 32
+        - 64
+        - 128
+        - 256
+        - 384
+        - 512
+        - 768
+        - 1024
+        - 1536
+        - 2048
+        - 2560
+        - 3072
+        - 3584
+        - 4096
+        - 4608
+        - 5120
+        - 5632
+        - 6144
+        - 6656
+        - 7168
+        - 7680
+        - 8192
+        - 10240
+        - 12288
+        - 14336
+        - 16384
+        prefill_cuda_graph_backend: breakable
         print_iter_log: true
         return_perf_metrics: false
         scheduler_config:
           capacity_scheduler_policy: MAX_UTILIZATION
-        torch_compile_config:
-          capture_num_tokens:
-            - 1
-            - 2
-            - 4
-            - 8
-            - 16
-            - 32
-            - 64
-            - 128
-            - 256
-            - 512
-            - 1024
-            - 2048
-            - 4096
-            - 8192
-          enable_fullgraph: true
-          enable_piecewise_cuda_graph: true
+          context_scheduling_policy: shortest_uncached_first
+        speculative_config:
+          decoding_type: MTP
+          max_draft_len: 1
+        tensor_parallel_size: 4
         trust_remote_code: true
     decode:
+      nodes: 4
+      workers: 1
+      gpus: 8
       env:
-        ENROOT_ALLOW_DEV: 'yes'
-        MIMALLOC_ARENA_RESERVE: '0'
-        MIMALLOC_PURGE_DELAY: ''
-        NCCL_GRAPH_MIXING_SUPPORT: '0'
-        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
         TLLM_LOG_LEVEL: INFO
-        TLLM_PROFILE_LOG_RANKS: all
-        TRTLLM_ENABLE_PDL: '1'
-        TRTLLM_KV_TRANSFER_NUM_THREADS: '8'
-        TRTLLM_PINNED_WEIGHT_STAGING: '1'
         TRTLLM_SERVER_DISABLE_GC: '1'
         TRTLLM_WORKER_DISABLE_GC: '1'
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        MIMALLOC_ARENA_RESERVE: '0'
+        OMP_NUM_THREADS: '1'
+        TLLM_NUMA_AWARE_WORKER_AFFINITY: '1'
+        MPI_UCX_TLS: rc,ud,sm,self
+        MPI_UCX_NET_DEVICES: mlx5_0:1,mlx5_2:1
+        OMPI_MCA_coll: ^ucc,hcoll
+        UCX_CUDA_IPC_MAX_POLL: inf
+        UCX_CUDA_COPY_MAX_POLL: inf
         UCX_TLS: rc,cuda_ipc,cuda_copy,sm,self,tcp
-        DYN_ENGINE_CONV_AFFINITY: "1"
-        DYN_TRTLLM_SERVED_MODEL_NAME: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
+        TRTLLM_ENABLE_PDL: '1'
+        TRTLLM_KV_TRANSFER_NUM_THREADS: '8'
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+        TRTLLM_PINNED_WEIGHT_STAGING: '1'
+        MIMALLOC_PURGE_DELAY: ''
+        DYN_ENGINE_CONV_AFFINITY: '1'
+        DYN_ROUTER_MODE: least-loaded
       args:
         cache_transceiver_config:
           backend: NIXL
           kv_transfer_sender_future_timeout_ms: 20
           kv_transfer_timeout_ms: 600000
+          # Explicit: TensorRT-LLM bypasses the GEN transfer window when it defaults the budget.
+          max_tokens_in_buffer: 262144
           transceiver_runtime: PYTHON
         cuda_graph_config:
           enable_padding: true
+        disable_mm_encoder: true
         enable_attention_dp: false
         enable_iter_perf_stats: true
         enable_iter_req_stats: false
-        iter_perf_stats_interval: 40
         enable_lm_head_tp_in_adp: false
+        iter_perf_stats_interval: 40
         kv_cache_config:
           avg_seq_len: 102150
           dtype: fp8
@@ -157,16 +196,19 @@ base:
           use_kv_cache_manager_v2: true
         max_seq_len: 262148
         moe_config:
-          backend: CUTEDSL
+          backend: TRTLLM
           use_low_precision_moe_combine: true
+        moe_expert_parallel_size: 4
+        moe_tensor_parallel_size: 2
         nvfp4_gemm_config:
           allowed_backends:
-            - cutlass
-            - cublaslt
-            - cutedsl
-            - cuda_core
+          - cutlass
+          - cublaslt
+          - cutedsl
+          - cuda_core
         pipeline_parallel_size: 1
         print_iter_log: true
+        replicate_embedding: true
         return_perf_metrics: false
         scheduler_config:
           capacity_scheduler_policy: GUARANTEED_NO_EVICT
@@ -174,18 +216,22 @@ base:
           decoding_type: MTP
           max_draft_len: 6
         stream_interval: 20
+        tensor_parallel_size: 8
         trust_remote_code: true
   frontend:
     type: dynamo
     enable_multiple_frontends: false
     env:
-      ETCD_LEASE_TTL: "120"
-      DYN_TOKENIZER_CACHE: "1"
-      DYN_TOKENIZER_CACHE_BYTES: "8000000000"
-      DYN_TOKENIZER: "fastokens"
+      ETCD_LEASE_TTL: '120'
+      DYN_TOKENIZER_CACHE: '1'
+      DYN_TOKENIZER_CACHE_BYTES: '8000000000'
+      DYN_TOKENIZER: fastokens
+      DYN_TOKEN_IDS_AS_BYTES: '1'
     args:
       router-mode: kv
       router-session-affinity-ttl-secs: '14400'
+    placement:
+      node: first_decode
   benchmark:
     env:
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
@@ -195,211 +241,341 @@ base:
       SERVED_MODEL_NAME: Qwen3.5-397B-A17B-NVFP4-V2
     placement:
       node: last_decode
+  dynamo:
+    install: true
+    source:
+      wheel: 1.6.0.dev20261010
 
-override_1p1d_dep1_tep2_b8:
-  name: disagg-gb300-1p1d-dep1-tep2-b8-mtp-kvoffload-bb2048
-  roles:
-    prefill: &dep1_prefill
-      workers: 1
-      gpus: 1
-      env:
-        TRT_LLM_DISABLE_LOAD_WEIGHTS_IN_PARALLEL: '1'
-      args:
-        cache_transceiver_config:
-          kv_cache_bounce_size_mb: 2048
-        moe_expert_parallel_size: 1
-        tensor_parallel_size: 1
-    decode:
-      nodes: colocate
-      workers: 1
-      gpus: 2
-      env:
-        TRT_LLM_DISABLE_LOAD_WEIGHTS_IN_PARALLEL: '1'
-      args:
-        cache_transceiver_config:
-          kv_cache_bounce_size_mb: 2048
-        cuda_graph_config:
-          batch_sizes:
-            - 1
-            - 2
-            - 4
-            - 8
-        max_batch_size: 8
-        max_num_tokens: 56
-        moe_config:
-          backend: TRTLLM
-        moe_expert_parallel_size: 2
-        tensor_parallel_size: 2
-
-override_1p1d_dep1_tep2_c45_b4:
-  name: disagg-gb300-1p1d-dep1-tep2-c45-b4-mtp-kvoffload-bb2048
-  roles:
-    prefill: *dep1_prefill
-    decode:
-      nodes: colocate
-      workers: 1
-      gpus: 2
-      env:
-        TRT_LLM_DISABLE_LOAD_WEIGHTS_IN_PARALLEL: '1'
-      args:
-        cache_transceiver_config:
-          kv_cache_bounce_size_mb: 2048
-        cuda_graph_config:
-          batch_sizes:
-            - 1
-            - 2
-            - 4
-        max_batch_size: 4
-        max_num_tokens: 28
-        moe_config:
-          backend: TRTLLM
-        moe_expert_parallel_size: 2
-        tensor_parallel_size: 2
-
-override_1p2d_tep4_tep8_c48_b4:
-  name: disagg-gb300-1p2d-tep4-tep8-c48-b4-mtp-kvoffload
-  roles:
-    prefill: &tep4_prefill
-      workers: 1
-      gpus: 4
-      args:
-        enable_attention_dp: false
-        max_num_tokens: 32768
-        moe_expert_parallel_size: 4
-        tensor_parallel_size: 4
-        torch_compile_config:
-          capture_num_tokens:
-            - 1
-            - 2
-            - 4
-            - 8
-            - 16
-            - 32
-            - 64
-            - 128
-            - 256
-            - 512
-            - 1024
-            - 2048
-            - 4096
-            - 8192
-            - 16384
-            - 32768
-    decode:
-      nodes: 4
-      workers: 2
-      gpus: 8
-      args:
-        cuda_graph_config:
-          batch_sizes: &b4_batch_sizes
-            - 1
-            - 2
-            - 4
-        max_batch_size: 4
-        max_num_tokens: 28
-        moe_expert_parallel_size: 8
-        tensor_parallel_size: 8
-
-override_1p4d_tep4_tep8_c38_b1:
-  name: disagg-gb300-1p4d-tep4-tep8-c38-b1-mtp-kvoffload
-  roles:
-    prefill: *tep4_prefill
-    decode:
-      nodes: 8
-      workers: 4
-      gpus: 8
-      args:
-        cuda_graph_config:
-          batch_sizes: *b4_batch_sizes
-        max_batch_size: 1
-        max_num_tokens: 7
-        moe_expert_parallel_size: 8
-        tensor_parallel_size: 8
-
-override_1p4d_tep4_tep8_c38_b4:
-  name: disagg-gb300-1p4d-tep4-tep8-c38-b4-mtp-kvoffload
-  roles:
-    prefill: *tep4_prefill
-    decode:
-      nodes: 8
-      workers: 4
-      gpus: 8
-      args:
-        cuda_graph_config:
-          batch_sizes: *b4_batch_sizes
-        max_batch_size: 4
-        max_num_tokens: 28
-        moe_expert_parallel_size: 8
-        tensor_parallel_size: 8
-
-override_2p3d_tep4_tep8_c136_b4:
-  name: disagg-gb300-2p3d-tep4-tep8-c136-b4-mtp-kvoffload
+override_1p1d_tep4_tep16_c16:
+  name: disagg-gb300-1p1d-tep4-tep16-c16-b4-mnt28-mtp6-kvoffload
   roles:
     prefill:
-      <<: *tep4_prefill
-      nodes: 2
-      workers: 2
-    decode:
-      nodes: 6
-      workers: 3
-      gpus: 8
-      args:
-        cuda_graph_config:
-          batch_sizes: *b4_batch_sizes
-        max_batch_size: 4
-        max_num_tokens: 28
-        moe_expert_parallel_size: 8
-        tensor_parallel_size: 8
-
-override_3p1d_dep4_dep16_c565_b8:
-  name: disagg-gb300-3p1d-dep4-dep16-c565-b8-mtp-kvoffload
-  roles:
-    prefill: &dep4_prefill
-      nodes: 3
-      workers: 3
-      gpus: 4
-      args:
-        moe_expert_parallel_size: 4
-        tensor_parallel_size: 4
-    decode:
-      nodes: 4
       workers: 1
+    decode:
       gpus: 16
       args:
         cuda_graph_config:
           batch_sizes:
-            - 1
-            - 2
-            - 4
-            - 8
-        enable_attention_dp: true
-        enable_lm_head_tp_in_adp: true
-        max_batch_size: 8
-        max_num_tokens: 56
-        moe_expert_parallel_size: 16
+          - 1
+          - 2
+          - 3
+          - 4
+        max_batch_size: 4
+        max_num_tokens: 28
+        moe_expert_parallel_size: 8
         tensor_parallel_size: 16
 
-override_3p2d_dep4_dep4_c704_b32:
-  name: disagg-gb300-3p2d-dep4-dep4-c704-b32-mtp-kvoffload
+override_1p1d_tep4_tep16_c8:
+  name: disagg-gb300-1p1d-tep4-tep16-c8-b1-mnt7-mtp6-kvoffload
   roles:
-    prefill: *dep4_prefill
+    prefill:
+      workers: 1
+    decode:
+      gpus: 16
+      args:
+        cuda_graph_config:
+          batch_sizes:
+          - 1
+        max_batch_size: 1
+        max_num_tokens: 7
+        moe_expert_parallel_size: 8
+        tensor_parallel_size: 16
+
+override_1p1d_tep4_tep8_c28:
+  name: disagg-gb300-1p1d-tep4-tep8-c28-b6-mnt42-mtp6-kvoffload
+  roles:
+    prefill:
+      workers: 1
+    decode:
+      nodes: 2
+      args:
+        cuda_graph_config:
+          batch_sizes:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+        max_batch_size: 6
+        max_num_tokens: 42
+
+override_1p2d_tep4_tep8_c115:
+  name: disagg-gb300-1p2d-tep4-tep8-c115-b16-mnt112-mtp6-kvoffload
+  roles:
+    prefill:
+      workers: 1
+    decode:
+      workers: 2
+      args:
+        cuda_graph_config:
+          batch_sizes:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
+          - 9
+          - 10
+          - 11
+          - 12
+          - 13
+          - 14
+          - 15
+          - 16
+        max_batch_size: 16
+        max_num_tokens: 112
+
+override_2p1d_tep2_tep8_c224:
+  name: disagg-gb300-2p1d-tep2-tep8-c224-b64-mnt448-mtp6-kvoffload
+  roles:
+    prefill:
+      workers: 2
+      gpus: 2
+      args:
+        moe_expert_parallel_size: 2
+        tensor_parallel_size: 2
+    decode:
+      nodes: 2
+      args:
+        cache_transceiver_config:
+          max_tokens_in_buffer: 4194304
+        cuda_graph_config:
+          batch_sizes:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
+          - 9
+          - 10
+          - 11
+          - 12
+          - 13
+          - 14
+          - 15
+          - 16
+          - 18
+          - 20
+          - 22
+          - 24
+          - 26
+          - 28
+          - 30
+          - 32
+          - 40
+          - 48
+          - 56
+          - 64
+        max_batch_size: 64
+        max_num_tokens: 448
+
+override_2p2d_tep2_tep8_c158:
+  name: disagg-gb300-2p2d-tep2-tep8-c158-b32-mnt224-mtp6-kvoffload
+  roles:
+    prefill:
+      workers: 2
+      gpus: 2
+      args:
+        kv_cache_config:
+          iteration_stats_interval:
+        moe_expert_parallel_size: 2
+        tensor_parallel_size: 2
+    decode:
+      workers: 2
+      args:
+        cuda_graph_config:
+          batch_sizes:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
+          - 9
+          - 10
+          - 11
+          - 12
+          - 13
+          - 14
+          - 15
+          - 16
+          - 18
+          - 20
+          - 22
+          - 24
+          - 26
+          - 28
+          - 30
+          - 32
+        kv_cache_config:
+          iteration_stats_interval:
+        max_batch_size: 32
+        max_num_tokens: 224
+
+override_2p2d_tep4_tep8_c264:
+  name: disagg-gb300-2p2d-tep4-tep8-c264-b32-mnt224-mtp6-kvoffload
+  roles:
+    prefill:
+      nodes: 2
+      workers: 2
+    decode:
+      workers: 2
+      args:
+        cuda_graph_config:
+          batch_sizes:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
+          - 9
+          - 10
+          - 11
+          - 12
+          - 13
+          - 14
+          - 15
+          - 16
+          - 18
+          - 20
+          - 22
+          - 24
+          - 26
+          - 28
+          - 30
+          - 32
+        max_batch_size: 32
+        max_num_tokens: 224
+
+override_3p1d_tep2_tep8_b128:
+  name: disagg-gb300-3p1d-tep2-tep8-b128-mnt896-mtp6-kvoffload
+  roles:
+    prefill:
+      nodes: 2
+      workers: 3
+      gpus: 2
+      args:
+        moe_expert_parallel_size: 2
+        tensor_parallel_size: 2
+    decode:
+      nodes: 2
+      args:
+        cache_transceiver_config:
+          max_tokens_in_buffer: 4194304
+        cuda_graph_config:
+          batch_sizes:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
+          - 9
+          - 10
+          - 11
+          - 12
+          - 13
+          - 14
+          - 15
+          - 16
+          - 18
+          - 20
+          - 22
+          - 24
+          - 26
+          - 28
+          - 30
+          - 32
+          - 40
+          - 48
+          - 56
+          - 64
+          - 72
+          - 80
+          - 88
+          - 96
+          - 104
+          - 112
+          - 120
+          - 128
+        kv_cache_config:
+          free_gpu_memory_fraction: 0.8
+        max_batch_size: 128
+        max_num_tokens: 896
+
+override_3p2d_dep4_dep4_c720:
+  name: disagg-gb300-3p2d-dep4-dep4-c720-b36-mnt252-mtp6-kvoffload
+  roles:
+    prefill:
+      nodes: 3
+      workers: 3
+      args:
+        enable_attention_dp: true
+        kv_cache_config:
+          block_reuse_config:
+            enable_branch_snapshot:
+        max_num_tokens: 8192
+        prefill_capture_num_tokens:
+        prefill_cuda_graph_backend:
+        scheduler_config:
+          # About 8 s of waiting at this prefill's measured 3.8 scheduler iterations/s.
+          context_starvation_iterations: 30
+        torch_compile_config:
+          capture_num_tokens:
+          - 1
+          - 2
+          - 4
+          - 8
+          - 16
+          - 32
+          - 64
+          - 128
+          - 256
+          - 512
+          - 1024
+          - 2048
+          - 4096
+          - 8192
+          enable_fullgraph: true
+          enable_piecewise_cuda_graph: true
+        allreduce_strategy:
+        speculative_config:
     decode:
       nodes: 2
       workers: 2
       gpus: 4
       args:
+        cache_transceiver_config:
+          max_tokens_in_buffer:
         cuda_graph_config:
           batch_sizes:
-            - 1
-            - 2
-            - 4
-            - 8
-            - 16
-            - 24
-            - 32
+          - 1
+          - 2
+          - 4
+          - 8
+          - 16
+          - 24
+          - 32
+          - 36
         enable_attention_dp: true
         enable_lm_head_tp_in_adp: true
-        max_batch_size: 32
-        max_num_tokens: 224
-        moe_expert_parallel_size: 4
+        max_batch_size: 36
+        max_num_tokens: 252
+        moe_config:
+          backend: CUTEDSL
         tensor_parallel_size: 4
+        moe_tensor_parallel_size:
