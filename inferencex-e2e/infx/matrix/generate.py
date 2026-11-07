@@ -30,6 +30,9 @@ from .validation import (
 
 seq_len_stoi = {"1k1k": (1024, 1024), "8k1k": (8192, 1024)}
 
+# Every scenario type a changelog entry can select; unscoped generation leaves video out.
+SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding", "video-generation")
+
 MIN_EVAL_CONC = 16
 DEFAULT_EVAL_FRAMEWORK = "lm-eval"
 AUTOMATIC_AGENTIC_VENDOR_EVALS = {
@@ -1797,7 +1800,7 @@ def main() -> list[dict]:
     parent_parser.add_argument(
         "--scenario-type",
         nargs="+",
-        choices=["fixed-seq-len", "agentic-coding", "video-generation"],
+        choices=list(SCENARIO_TYPES),
         required=False,
         help="Scenario type(s) to include. If not specified, fixed-seq-len and agentic-coding are generated; video-generation runs only when named.",
     )
