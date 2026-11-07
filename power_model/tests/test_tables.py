@@ -8,10 +8,10 @@ from power_model.tables import TableSet, read_table
 
 
 def test_unresolved_references_fail_at_load():
-    named = {"version": "1", "kind": "assumed", "source": "s", "input-boundary": "b"}
+    named = {"version": "1", "kind": "assumed", "source": "s", "input_boundary": "b"}
     labeled = {"name": "GPU", "provenance": "known"}
     raw = {
-        "provenance": {"known": {"profile-id": "known", **named}},
+        "provenance": {"known": {"profile_id": "known", **named}},
         "parts": {
             "drive": {
                 "name": "NVMeDrive",

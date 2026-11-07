@@ -49,10 +49,6 @@ class Table(FrozenModel):
     model_config = ConfigDict(alias_generator=_kebab)
 
 
-class ProvenanceEntry(Provenance):
-    model_config = ConfigDict(alias_generator=_kebab)
-
-
 def _increasing(points: Curve, what: str) -> None:
     if len(points) < 2 or any(a[0] >= b[0] for a, b in zip(points, points[1:], strict=False)):
         raise ValueError(f"{what} needs at least two points with increasing load fractions")
@@ -252,7 +248,7 @@ class Assemblies(Table):
 
 class Labeled(Table):
     name: NonemptyString
-    provenance: NonemptyString | ProvenanceEntry
+    provenance: NonemptyString | Provenance
 
 
 class PUE(Table):
@@ -397,7 +393,7 @@ def _templates(details: DetailTemplate) -> set[str]:
 
 
 class TableSet(Table):
-    provenance: dict[str, ProvenanceEntry]
+    provenance: dict[str, Provenance]
     parts: dict[str, Part]
     network: dict[str, Gear]
     curves: Curves
@@ -499,11 +495,37 @@ def read_table(path: Path) -> object:
     return yaml.load(path.read_text(encoding="utf-8"), Loader=_UniqueKeyLoader)
 
 
+def _provenance_fields(record: dict) -> dict:
+    """base.Provenance field names for a provenance record spelled in kebab-case."""
+    if snake := [key for key in record if "_" in key]:
+        raise ValueError(f"Provenance fields are kebab-case: {', '.join(snake)}")
+    return {key.replace("-", "_"): value for key, value in record.items()}
+
+
+def _inline_provenance(value: object) -> object:
+    if isinstance(value, dict):
+        return {
+            key: _provenance_fields(item)
+            if key == "provenance" and isinstance(item, dict)
+            else _inline_provenance(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_inline_provenance(item) for item in value]
+    return value
+
+
 def load_tables(root: Path = TABLES_DIR) -> TableSet:
-    """Read and validate every table under root."""
-    raw: dict[str, object] = {name: read_table(root / f"{name}.yaml") for name in TABLE_FILES}
+    """Read and validate every table under root.
+
+    Provenance records validate as base.Provenance, so their kebab-case fields are
+    renamed here and the evaluator's output carries the same type as the class graph's.
+    """
+    raw: dict[str, object] = {
+        name: _inline_provenance(read_table(root / f"{name}.yaml")) for name in TABLE_FILES
+    }
     raw["provenance"] = {
-        key: {"profile-id": key, **value}
+        key: _provenance_fields({"profile-id": key, **value})
         for key, value in read_table(root / "provenance.yaml").items()
     }
     raw["systems"] = {path.stem: read_table(path) for path in sorted(root.glob("systems/*.yaml"))}

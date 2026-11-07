@@ -34,9 +34,9 @@ def from_tables(case):
 
 
 def outcome(evaluate, case):
-    """The estimate as JSON, or the rejection reason without pydantic's wrapper."""
+    """The estimate, or the rejection reason without pydantic's wrapper."""
     try:
-        return evaluate(case).model_dump(mode="json"), None
+        return evaluate(case), None
     except ValidationError as error:
         first = error.errors()[0]
         return None, str(first["ctx"]["error"]) if first["type"] == "value_error" else first["type"]
@@ -96,6 +96,10 @@ def test_tables_match_class_graph(system):
             if expected_error != actual_error:
                 mismatches.append(f"{case}: {expected_error!r} != {actual_error!r}")
             continue
-        mismatches += [f"{case}: {d}" for d in differences(expected, actual)]
+        # The example model has no configuration subtree, so its estimates are equal objects.
+        if case.model == "example" and actual != expected:
+            mismatches.append(f"{case}: estimates are not equal objects")
+        dumps = (estimate.model_dump(mode="json") for estimate in (expected, actual))
+        mismatches += [f"{case}: {d}" for d in differences(*dumps)]
     assert compared
     assert not mismatches, "\n".join(mismatches[:20])
