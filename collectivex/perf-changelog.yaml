@@ -137,3 +137,17 @@
   suites: [swap-blocks]
   description:
     - Take 100 iterations per swap-blocks point, so p99 is no longer the slowest of 20 samples.
+- date: 2026-11-07
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4882
+  pools: [h100-dgxc, h200-dgxc, b200-nscale, b300, gb200, gb300]
+  backends: [deepep-v2]
+  modes: [normal]
+  description:
+    - Charge vLLM's finalize copy in DeepEP V2 normal combine (the result is copied into the MoE layer's output, as mori and flashinfer-ep already did).
+- date: 2026-11-07
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4882
+  pools: [h100-dgxc, h200-dgxc, b200-nscale, mi300x, mi325x, mi355x]
+  backends: [uccl-ep]
+  modes: [normal]
+  description:
+    - Charge vLLM's finalize copy in UCCL-EP normal combine.

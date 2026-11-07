@@ -44,8 +44,8 @@ collx_select_deepep_v2_source() {
 COLLX_DEEPEP_V2_NVSHMEM_SPEC="nvidia-nvshmem-cu13==3.4.5"
 
 # 2.10.0+cu130's bundled CUDA userland poisons the CUDA context during nvshmem symmetric-heap
-# init over MNNVL on sm103/driver 580.159.03 (gb300); 2.11.0 is what the cu130 image itself
-# ships. Part of the venv cache key.
+# init over MNNVL on sm103/driver 580.159.03 (gb300). The vLLM v0.32.0 image ships 2.13.0, which
+# this venv does not use. Part of the venv cache key.
 COLLX_DEEPEP_V2_TORCH_SPEC="torch==2.11.0"
 
 # Build-recipe generation for the DeepEP venv cache key: bump when build flags change without

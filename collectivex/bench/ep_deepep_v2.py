@@ -298,6 +298,7 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
             "receive_capacity": "next-pow2-of-tokens",
             "buffer_tokens_per_rank": getattr(self, "max_tokens", None),
             "zero_copy": False,
+            "finalize_copy": True,
             "deepep_source": _DEEPEP_REPO.removeprefix("https://github.com/"),
             # The fork's scale-out kernel pair (unordered by default); upstream has one.
             "hybrid_kernel": os.environ.get("EP_HYBRID_KERNEL", "unordered") if _EFA_FORK else "ordered",
