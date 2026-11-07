@@ -8,6 +8,7 @@ performed. PyAV and NumPy are optional and imported only when a measurement runs
 from __future__ import annotations
 
 import hashlib
+import io
 import math
 import time
 from itertools import zip_longest
@@ -351,8 +352,59 @@ def _audio_analysis(container: Any, stream: Any, np: Any, deadline: float | None
     }
 
 
-def analyze_media(path: Path, expected: dict | None = None) -> dict:
+def _ssim(x: Any, y: Any, np: Any) -> float:
+    """Mean SSIM (Wang et al. 2004): 11x11 Gaussian window, sigma 1.5, valid region, 8-bit range."""
+    taps = np.exp(-((np.arange(11) - 5) ** 2) / (2 * 1.5**2))
+    taps /= taps.sum()
+
+    def blur(a: Any) -> Any:
+        rows = sum(w * a[k : k + a.shape[0] - 10] for k, w in enumerate(taps))
+        return sum(w * rows[:, k : k + rows.shape[1] - 10] for k, w in enumerate(taps))
+
+    c1, c2 = (0.01 * 255) ** 2, (0.03 * 255) ** 2
+    mx, my = blur(x), blur(y)
+    vx, vy, cxy = blur(x * x) - mx * mx, blur(y * y) - my * my, blur(x * y) - mx * my
+    ssim = (2 * mx * my + c1) * (2 * cxy + c2) / ((mx * mx + my * my + c1) * (vx + vy + c2))
+    return float(ssim.mean())
+
+
+def _first_frame_fidelity(path: Path, image: bytes, av: Any, np: Any) -> dict:
+    """How closely decoded frame 0 reproduces the conditioning image; recorded, never a gate."""
+    result: dict[str, Any] = {
+        "input_sha256": hashlib.sha256(image).hexdigest(),
+        "psnr_db": None,
+        "ssim": None,
+        "identical": None,
+        "method": "decoded frame 0 vs input PNG: RGB24 PSNR (peak 255) and BT.601 luma SSIM",
+        "gate": "recorded_only",
+    }
+    try:
+        with av.open(io.BytesIO(image), format="png_pipe") as container:
+            reference = next(container.decode(video=0)).to_ndarray(format="rgb24")
+        with av.open(str(path), mode="r") as container:
+            frame = next(container.decode(video=0)).to_ndarray(format="rgb24")
+        if frame.shape != reference.shape:
+            raise ValueError(f"frame 0 is {frame.shape}, the input image {reference.shape}")
+        x, y = frame.astype(np.float64), reference.astype(np.float64)
+        mse = float(np.mean((x - y) ** 2))
+        luma = np.array([0.299, 0.587, 0.114])
+        result.update(
+            psnr_db=10.0 * math.log10(255.0**2 / mse) if mse > 0 else None,
+            ssim=_ssim(x @ luma, y @ luma, np),
+            identical=mse == 0,
+        )
+    except Exception as exc:
+        result["error"] = f"{type(exc).__name__}: {exc}"
+    return result
+
+
+def analyze_media(
+    path: Path, expected: dict | None = None, first_frame: bytes | None = None
+) -> dict:
     """Decode a local clip fully and validate only explicitly supplied expectations.
+
+    ``first_frame`` is the conditioning image's bytes. Its fidelity to decoded frame 0 is
+    reported under ``first_frame`` and never changes ``valid``.
 
     ``duration_seconds`` is expected *media* duration, not the provider's rounded
     request duration. A caller must resolve those differences explicitly. Motion
@@ -734,6 +786,8 @@ def analyze_media(path: Path, expected: dict | None = None) -> dict:
                     "Explicit caller-supplied media-boundary limit, not semantic or lip synchronization.",
                 )
             )
+    if first_frame is not None and report["decode_ok"]:
+        report["first_frame"] = _first_frame_fidelity(path, first_frame, av, np)
     report["valid"] = report["decode_ok"] and all(check["status"] != "failed" for check in checks)
     return report
 

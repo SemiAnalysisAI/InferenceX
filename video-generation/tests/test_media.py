@@ -134,6 +134,28 @@ def test_full_decode_contract_and_channel_statistics(tmp_path):
     json.dumps(result, allow_nan=False)
 
 
+def _png(pixels: np.ndarray) -> bytes:
+    codec = av.CodecContext.create("png", "w")
+    codec.width, codec.height, codec.pix_fmt = pixels.shape[1], pixels.shape[0], "rgb24"
+    frame = av.VideoFrame.from_ndarray(pixels, format="rgb24")
+    return b"".join(bytes(packet) for packet in [*codec.encode(frame), *codec.encode(None)])
+
+
+def test_first_frame_fidelity_is_recorded_without_gating_validity(tmp_path):
+    path = encode_media(tmp_path / "lossless.mkv")
+    with av.open(str(path)) as container:
+        first = next(container.decode(video=0)).to_ndarray(format="rgb24")
+    exact = analyze_media(path, expectation(), first_frame=_png(first))
+    assert exact["valid"]
+    assert exact["first_frame"]["identical"] is True
+    assert exact["first_frame"]["psnr_db"] is None
+    assert exact["first_frame"]["ssim"] == pytest.approx(1.0)
+    shifted = analyze_media(path, expectation(), first_frame=_png(first + 10))
+    assert shifted["valid"]
+    assert shifted["first_frame"]["psnr_db"] == pytest.approx(20 * np.log10(255 / 10))
+    assert shifted["first_frame"]["ssim"] < 1
+
+
 def test_corrupt_file_fails_without_pretending_it_is_a_clip(tmp_path):
     path = tmp_path / "broken.mp4"
     path.write_bytes(b"not a media container\x00" * 20)
