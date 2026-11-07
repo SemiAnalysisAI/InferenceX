@@ -12439,4 +12439,4 @@
   scenario-type: [video-generation]
   description:
     - "The H3 client polls job status every 0.1 s instead of every 0.5 s. A job counts as done only at the next poll, so each published latency carried up to 0.5 s of polling delay; it now carries up to 0.1 s."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PRNUM
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4904
