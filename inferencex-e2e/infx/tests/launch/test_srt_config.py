@@ -348,7 +348,6 @@ def test_the_staged_workspace_drops_run_artifacts_but_keeps_srt_slurm_sources(tm
 
 @pytest.mark.parametrize(("agentic", "decision", "expected"), [
     ("1", NO_POWER, (None, "true", "0", "0")),
-    ("1", PowerDecision(dcgm=True, agentx=False), (9401, "true", "0", "0")),
     ("1", PowerDecision(dcgm=True, agentx=True), (9401, "true", "1", "0")),
     ("0", PowerDecision(dcgm=True, agentx=False), (9401, None, None, None)),
 ])  # fmt: skip

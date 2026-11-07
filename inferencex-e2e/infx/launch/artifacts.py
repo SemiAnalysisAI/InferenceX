@@ -177,10 +177,12 @@ def collect_agentic_power_results(
     require_power: bool = True,
     expected_cpu: bool = False,
 ) -> int:
-    """Stage the AgentX power audit inputs and validate each concurrency's power window.
+    """Stage the AgentX power audit inputs and run the power adapter for every concurrency.
 
     ``power/native-job-status.txt`` records the job's final ``status`` for the audit, and
-    only a successful job passes. Every step runs; returns the last failing step's code.
+    only a successful job passes. With ``require_power`` a concurrency without a valid power
+    window fails, and with ``expected_cpu`` one without a valid Grace CPU leg fails too.
+    Every step runs; returns the last failing step's code.
     """
     if not concurrencies:
         return 1
@@ -196,33 +198,6 @@ def collect_agentic_power_results(
         _warn(f"ERROR: {error}")
         rc = 1
 
-    if step := validate_agentic_power(
-        logs_dir, workspace, result_filename, producer_sha, concurrencies,
-        results_python=results_python, require_power=require_power, expected_cpu=expected_cpu,
-    ):  # fmt: skip
-        rc = step
-    return rc
-
-
-def validate_agentic_power(
-    logs_dir: Path,
-    workspace: Path,
-    result_filename: str,
-    producer_sha: str,
-    concurrencies: Sequence[int],
-    *,
-    results_python: str | None,
-    require_power: bool,
-    expected_cpu: bool = False,
-) -> int:
-    """Run the AgentX power adapter for every concurrency; return the last failing code.
-
-    With ``require_power`` a concurrency without a valid power window fails, and with
-    ``expected_cpu`` one without a valid Grace CPU leg fails too.
-    """
-    logs_dir = logs_dir.resolve()
-    workspace = workspace.resolve()
-    rc = 0
     for concurrency in concurrencies:
         if not results_python:
             _warn("ERROR: INFERENCEX_RESULTS_PYTHON is required")

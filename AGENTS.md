@@ -102,6 +102,6 @@ Run the focused test path first. Use `--extra workflows` for GitHub integrations
 
 - Delete retired entries (or, for partial retirement, only the retired scenarios) from the master config; never archive. Delete recipes, setup scripts, and assets no active config uses, rather than moving them to `deprecated/`.
 - In the same PR, reconcile retirement statements in [`MODELS.md`](inferencex-e2e/docs/MODELS.md) with active configs and routing, preserving documented exceptions and planned (not completed) retirements.
-- Remove unused retired-model rows from launch workload tables (`infx/launch/policy.py`, `infx/launch/drivers/srt/{lanes,models,power}.py`) and cluster `models.entries`, and fix guidance that recommends retired coverage. Audit callers before removing shared helpers; SPEED-Bench collectors and historical readers may still need them.
+- Remove unused retired-model rows from launch workload tables (`infx/launch/policy.py`, `infx/launch/drivers/srt/{lanes,models}.py`) and cluster `models.entries`, and fix guidance that recommends retired coverage. Audit callers before removing shared helpers; SPEED-Bench collectors and historical readers may still need them.
 
 See also: [config fields](inferencex-e2e/configs/CONFIGS.md), [GitHub operations](.github/AGENT_OPERATIONS.md), [workflows](.github/workflows/README.md), [evals](inferencex-e2e/infx/evals/EVALS.md), [AgentX replay](inferencex-e2e/docs/agentx-standalone.md), and [ingest recovery](.claude/commands/recover-failed-ingest.md).

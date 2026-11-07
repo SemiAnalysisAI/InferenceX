@@ -1112,18 +1112,13 @@ def test_multinode_batch_rejects_unknown_point_filename(
     assert any('filename lacks' in point.get('error', '') for point in receipt['points'])
 
 
-@pytest.mark.parametrize("collector", ["shared", "h200-dcgm"])
 @pytest.mark.parametrize("result_python", [None, "", sys.executable])
 def test_agentic_collector_preserves_archive_when_result_python_is_missing(
-    tmp_path: Path, monkeypatch, capfd, result_python: str | None, collector: str
+    tmp_path: Path, monkeypatch, capfd, result_python: str | None
 ) -> None:
     import tarfile
 
-    from infx.launch.artifacts import (
-        bundle_server_logs,
-        collect_agentic_power_results,
-        validate_agentic_power,
-    )
+    from infx.launch.artifacts import bundle_server_logs, collect_agentic_power_results
     from infx.launch.backends.base import JobState, JobStatus
 
     pkg = build_package(tmp_path)
@@ -1159,26 +1154,17 @@ def test_agentic_collector_preserves_archive_when_result_python_is_missing(
         ambient_python.write_text("#!/bin/sh\nexit 73\n")
         ambient_python.chmod(0o755)
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
-    if collector == "shared":
-        completed = JobStatus(JobState.SUCCEEDED, "COMPLETED|0:0", 0)
-        rc = collect_agentic_power_results(
-            completed, "12345", pkg.logs_root, source, workspace, "point", PRODUCER_SHA, [4],
-            results_python=result_python,
-        )  # fmt: skip
-        archive_name = "server-logs.tar.gz"
-    else:
-        (workspace / "point_conc4.json").write_text(json.dumps(raw_result))
-        rc = validate_agentic_power(
-            pkg.logs_root, workspace, "point", PRODUCER_SHA, [4],
-            results_python=result_python, require_power=True,
-        )  # fmt: skip
-        archive_name = "multinode_server_logs.tar.gz"
-    bundle_server_logs(pkg.logs_root, workspace / archive_name)
+    completed = JobStatus(JobState.SUCCEEDED, "COMPLETED|0:0", 0)
+    rc = collect_agentic_power_results(
+        completed, "12345", pkg.logs_root, source, workspace, "point", PRODUCER_SHA, [4],
+        results_python=result_python,
+    )  # fmt: skip
+    archive = workspace / "server-logs.tar.gz"
+    bundle_server_logs(pkg.logs_root, archive)
     assert rc == (0 if result_python else 1)
-    with tarfile.open(workspace / archive_name) as archive:
-        if collector == "shared":
-            assert "./power/native-job-status.txt" in archive.getnames()
-        assert f"./agentic/conc_4/{stem}.json" in archive.getnames()
+    with tarfile.open(archive) as bundle:
+        assert "./power/native-job-status.txt" in bundle.getnames()
+        assert f"./agentic/conc_4/{stem}.json" in bundle.getnames()
     aggregate = json.loads((workspace / "point_conc4.json").read_text())
     if result_python:
         assert aggregate["power_valid"] == 1
