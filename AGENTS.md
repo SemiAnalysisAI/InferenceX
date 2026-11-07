@@ -79,6 +79,14 @@ uvx --exclude-newer PT12H ruff@latest format infx
 uv run --locked --all-extras --group test python -m pytest -c pyproject.toml infx/tests/ -n 4
 ```
 
+Check `power_model/` from the repository root:
+
+```bash
+uvx --exclude-newer PT12H ruff@latest check --fix power_model
+uvx --exclude-newer PT12H ruff@latest format power_model
+uv run --project inferencex-e2e --locked --all-extras --group test python -m pytest -c power_model/pyproject.toml power_model/tests -n 4
+```
+
 Run the focused test path first. Use `--extra workflows` for GitHub integrations and `--extra results` for result tooling. Dependency changes update `pyproject.toml` and `uv.lock` via `uv add` or `uv lock --upgrade-package NAME`. Workflow changes run the [Zizmor CI command](.github/workflows/zizmor.yml) with online checks; do not weaken its policy. Schema and generator checks do not prove serving behavior: run the exact config, inspect its generated fields, then collect smoke, sweep, and eval evidence.
 
 ## Benchmark invariants (non-negotiable)
