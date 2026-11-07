@@ -79,7 +79,8 @@ def estimate_breakdown(
     state = OperatingState(workload_state=workload_state, using_scale_out=using_scale_out)
     if selected == "example" and state.cpu_offload:
         raise ValueError("CPU offloading requires OSSAllinPowerModel with DDR5 inventory")
-    count = _COUNT.validate_python(systems)
+    # The example model is one GPU and ignores systems, as the class graph does.
+    count = _COUNT.validate_python(systems) if selected == "oss" else 1
     inputs = Inputs(
         state=state,
         gpu_w=validate_watts(gpu_level_power_per_gpu),
