@@ -7650,7 +7650,7 @@ minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-agg:
         worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
 
 minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-disagg:
-  image: vllm/vllm-openai:cu134-arm64-1105-mdev@sha256:ed4d16f0bd6b6afe0aecf553247302684dc8d4b5ffa47547a7e4cd5b4cb05b0b
+  image: vllm/vllm-openai:cu134-arm64-1107-mdev@sha256:1b4a9b46c217ae3665b5e793341892d555b9bd5ca81230eed26e1b94a42b5801
   model: MiniMaxAI/MiniMax-M3.1-Flash
   model-prefix: minimaxm31flash
   runner: cluster:gb200-nv
