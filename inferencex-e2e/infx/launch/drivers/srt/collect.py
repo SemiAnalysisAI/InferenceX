@@ -11,7 +11,7 @@ import os
 import shutil
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -123,28 +123,28 @@ def finalize_single_node_results(run: SrtRun, logs: Path, producer_sha: str) -> 
     report-only acceptance gate never fails it.
     """
     request, event = run.request, run.life.event
+    result = logs / f"{request.result_filename}.json"
     power_rc = 0
     if request.is_agentic and not request.eval_only:
         require(request, "INFERENCEX_RESULTS_PYTHON")
         sidecar = f"power_validation_{request.result_filename}.json"
         power_rc = run_power_adapter(
             request.inferencex_results_python, run.workspace, logs, logs / "agentic",
-            logs / f"{request.result_filename}.json", producer_sha,
+            result, producer_sha,
             "--validation-result", str(run.workspace / sidecar), "--audit-source", sidecar,
             require_power=request.require_power,
         )  # fmt: skip
         if power_rc:
             event.fail("PowerValidationFailed", "AgentX power validation failed", report=False)
+        _stamp_rows([result] if result.is_file() else [], require_power=request.require_power)
     if request.run_eval or request.eval_only:
         exit_file = logs / "infx-eval-exit-code"
         if not exit_file.is_file() or exit_file.read_text().rstrip("\n") != "0":
             event.fail("EvalFailed", f"eval did not succeed (see {exit_file})")
             return 1
-    if not request.eval_only:
-        result = logs / f"{request.result_filename}.json"
-        if not result.is_file() or result.stat().st_size == 0:
-            event.fail("ResultMissing", f"benchmark result {result} is missing or empty")
-            return 1
+    if not request.eval_only and (not result.is_file() or result.stat().st_size == 0):
+        event.fail("ResultMissing", f"benchmark result {result} is missing or empty")
+        return 1
     return power_rc
 
 
@@ -263,15 +263,15 @@ def _stage_logs(run: SrtRun, logs: Path, power: PowerDecision) -> None:
     bundle_server_logs(logs, workspace / MULTINODE_LOGS)
 
 
-def _record_skipped_power(run: SrtRun, reason: str) -> None:
-    """Record in each staged AgentX row why its point measured no power."""
-    for path in sorted(run.workspace.glob(f"{run.request.result_filename}_conc*.json")):
+def _stamp_rows(paths: Iterable[Path], **fields: object) -> None:
+    """Add ``fields`` to each AgentX result row in ``paths``; a row that cannot be updated warns."""
+    for path in paths:
         try:
             row = json.loads(path.read_text())
-            row["power_missing"] = reason
+            row.update(fields)
             path.write_text(json.dumps(row, indent=2) + "\n")
-        except (OSError, ValueError, TypeError) as error:
-            print(f"WARNING: could not record power_missing in {path}: {error}", file=sys.stderr)
+        except (OSError, ValueError, AttributeError) as error:
+            print(f"WARNING: could not update {path}: {error}", file=sys.stderr)
 
 
 def collect(
@@ -348,11 +348,15 @@ def collect(
                     copy_fixed_sequence_results(logs, run.workspace, request.result_filename)
                 elif not power.agentx:
                     copy_agentic_results(infmax, run.workspace, request.result_filename)
-                    if power.skipped_reason:
-                        _record_skipped_power(run, power.skipped_reason)
             except ArtifactError as error:
                 event.error(error)
                 rc = rc or 1
+            if request.is_agentic:
+                fields: dict[str, object] = {"require_power": request.require_power}
+                if power.skipped_reason:
+                    fields["power_missing"] = power.skipped_reason
+                rows = run.workspace.glob(f"{request.result_filename}_conc*.json")
+                _stamp_rows(sorted(rows), **fields)
         if request.run_eval or request.eval_only:
             copy_al_gate_result(logs, run.workspace, request.result_filename)
             try:

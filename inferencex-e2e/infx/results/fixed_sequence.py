@@ -327,7 +327,9 @@ def process_result(env: Mapping[str, str]) -> int:
     bench_path = Path(f"{result_filename}.json")
     with open(bench_path) as f:
         benchmark = json.load(f)
+    require_power = env.get("REQUIRE_POWER", "").lower() in {"1", "true", "yes"}
     data = build_result(benchmark, env)
+    data["require_power"] = require_power
     if (attempt := run_attempt(env)) is not None:
         data["run_attempt"] = attempt
     agg_path = Path(f"agg_{result_filename}.json")
@@ -346,7 +348,7 @@ def process_result(env: Mapping[str, str]) -> int:
         except (OSError, ValueError, TypeError) as exc:
             print(f"[process_result] audit summary unavailable: {exc}", file=sys.stderr)
             result["power_invalid_reasons"] = ["validation_artifact_unavailable"]
-            if env.get("REQUIRE_POWER", "").lower() in {"1", "true", "yes"}:
+            if require_power:
                 status = 1
         if missing := power_missing(result, _skipped_reason(Path(JOB_EVENT))):
             result["power_missing"] = missing

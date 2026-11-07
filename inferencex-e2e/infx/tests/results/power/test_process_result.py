@@ -814,6 +814,7 @@ class TestMultinodePower:
         assert (tmp_path / "power_validation_benchmark_result.json").is_file()
         missing = skipped or "power_artifacts_missing"
         assert agg["power_missing"] == missing
+        assert agg["require_power"] is False
         assert summary.read_text() == f"- `agg_benchmark_result.json`: power_missing `{missing}`\n"
 
     def test_missing_package_fails_in_strict_mode(self, tmp_path, power_env):
@@ -823,6 +824,7 @@ class TestMultinodePower:
 
         assert result.returncode != 0
         assert (tmp_path / "power_validation_benchmark_result.json").is_file()
+        assert json.loads((tmp_path / "agg_benchmark_result.json").read_text())["require_power"] is True
 
     def test_invalid_package_withholds_metrics(self, tmp_path, power_env):
         benchmark_result = self._build(tmp_path, publication_valid=False)

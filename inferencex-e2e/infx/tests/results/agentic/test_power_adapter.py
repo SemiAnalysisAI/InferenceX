@@ -74,6 +74,7 @@ def test_single_node_collector_finalizes_native_agentx_power(
     assert aggregate["power_audit"]["source"] == "power_validation_point.json"
     no_package = failure == "power_artifacts_missing"
     assert aggregate.get("power_missing") == ("power_artifacts_missing" if no_package else None)
+    assert aggregate["require_power"] is require_power
     if failure is None:
         assert aggregate["total_gpu_energy_j"] == 84_000
         assert aggregate["avg_power_w"] == 350
