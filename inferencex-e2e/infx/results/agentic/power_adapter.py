@@ -21,7 +21,7 @@ from infx.results.power import (
     POWER_METRIC_SCHEMA_VERSION,
     with_power_metrics,
 )
-from infx.results.power.audit import audit_summary
+from infx.results.power.audit import audit_summary, power_missing
 from infx.results.power.common import _write_json_atomic
 from infx.results.power.multinode import WINDOWS_DIRNAME, run as run_multinode_power
 
@@ -433,6 +433,8 @@ def run_native_agentic_power(
             if not isinstance(result, dict) or not isinstance(validation, dict):
                 raise ValueError("AgentX aggregate and validation must be JSON objects")
             result.update(audit_summary(validation, audit_source))
+            if missing := power_missing(result):
+                result["power_missing"] = missing
             _write_json_atomic(agg_result, result)
         except (OSError, ValueError, TypeError) as exc:
             print(f"[agentx_power] Audit summary unavailable: {exc}", file=sys.stderr)

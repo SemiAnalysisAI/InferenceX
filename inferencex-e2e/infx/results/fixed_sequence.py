@@ -34,11 +34,6 @@ _BASE_ENV_VARS = (
     "MODEL_PREFIX",
     "IMAGE",
 )
-# Validation reasons of a result whose power package never reached the consumer, as opposed
-# to one that arrived invalid.
-_PACKAGE_MISSING_REASONS = frozenset(
-    {"power_artifacts_missing", "manifest_missing", "manifest_malformed"}
-)
 
 
 def require_environment(env: Mapping[str, str], names: Iterable[str]) -> None:
@@ -302,22 +297,13 @@ def aggregate_power_result(
         return int(require_power)
 
 
-def _power_missing(result: Mapping[str, Any], job_event: Path) -> str | None:
-    """Why a result with an invalid power verdict has no power package, else None.
-
-    The reason the launcher recorded in ``job_event`` for measuring no power comes first,
-    then the validation reason that says no package arrived.
-    """
-    if "power_valid" not in result or result["power_valid"] == 1:
-        return None
+def _skipped_reason(job_event: Path) -> str | None:
+    """The reason the launcher recorded in ``job_event`` for measuring no power, else None."""
     try:
         skipped = (json.loads(job_event.read_text()).get("power") or {}).get("skipped_reason")
     except (OSError, ValueError, AttributeError):
-        skipped = None
-    if isinstance(skipped, str) and skipped:
-        return skipped
-    reasons = result.get("power_invalid_reasons") or []
-    return next((reason for reason in reasons if reason in _PACKAGE_MISSING_REASONS), None)
+        return None
+    return skipped if isinstance(skipped, str) and skipped else None
 
 
 def _report_power_missing(name: str, reason: str, env: Mapping[str, str]) -> None:
@@ -351,7 +337,7 @@ def process_result(env: Mapping[str, str]) -> int:
     if data["is_multinode"] or env.get("POWER_PRODUCER_SHA"):
         status = aggregate_power_result(env, bench_path, agg_path)
         validation_path = Path(f"power_validation_{result_filename}.json")
-        from .power.audit import audit_summary
+        from .power.audit import audit_summary, power_missing
 
         result = json.loads(agg_path.read_text())
         try:
@@ -362,7 +348,7 @@ def process_result(env: Mapping[str, str]) -> int:
             result["power_invalid_reasons"] = ["validation_artifact_unavailable"]
             if env.get("REQUIRE_POWER", "").lower() in {"1", "true", "yes"}:
                 status = 1
-        if missing := _power_missing(result, Path(JOB_EVENT)):
+        if missing := power_missing(result, _skipped_reason(Path(JOB_EVENT))):
             result["power_missing"] = missing
             _report_power_missing(agg_path.name, missing, env)
         agg_path.write_text(json.dumps(result, indent=2))

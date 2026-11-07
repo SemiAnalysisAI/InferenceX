@@ -6,6 +6,7 @@ Logs are staged on every exit path, and always before the job's outputs are dele
 from __future__ import annotations
 
 import contextlib
+import json
 import os
 import shutil
 import sys
@@ -262,6 +263,17 @@ def _stage_logs(run: SrtRun, logs: Path, power: PowerDecision) -> None:
     bundle_server_logs(logs, workspace / MULTINODE_LOGS)
 
 
+def _record_skipped_power(run: SrtRun, reason: str) -> None:
+    """Record in each staged AgentX row why its point measured no power."""
+    for path in sorted(run.workspace.glob(f"{run.request.result_filename}_conc*.json")):
+        try:
+            row = json.loads(path.read_text())
+            row["power_missing"] = reason
+            path.write_text(json.dumps(row, indent=2) + "\n")
+        except (OSError, ValueError, TypeError) as error:
+            print(f"WARNING: could not record power_missing in {path}: {error}", file=sys.stderr)
+
+
 def collect(
     run: SrtRun, lane: SrtLane, checkout: Checkout, job: Job, power: PowerDecision, infmax: Path
 ) -> int:
@@ -336,6 +348,8 @@ def collect(
                     copy_fixed_sequence_results(logs, run.workspace, request.result_filename)
                 elif not power.agentx:
                     copy_agentic_results(infmax, run.workspace, request.result_filename)
+                    if power.skipped_reason:
+                        _record_skipped_power(run, power.skipped_reason)
             except ArtifactError as error:
                 event.error(error)
                 rc = rc or 1

@@ -10,6 +10,11 @@ from typing import Any
 from .cpu_side import SENSOR_KINDS
 
 _REASON_CODE = re.compile(r"[a-z][a-z0-9_]{0,63}")
+# Validation reasons of a result whose power package never reached the consumer, as opposed
+# to one that arrived invalid.
+_PACKAGE_MISSING_REASONS = frozenset(
+    {"power_artifacts_missing", "manifest_missing", "manifest_malformed"}
+)
 _CPU_COUNT_FIELDS = ("expected_sockets", "observed_sockets", "sample_row_count")
 
 
@@ -86,3 +91,17 @@ def audit_summary(validation: Mapping[str, Any], source: str) -> dict[str, Any]:
         "power_invalid_reasons": _bounded_reasons(validation.get("reasons", [])),
         "power_audit": audit,
     }
+
+
+def power_missing(result: Mapping[str, Any], skipped_reason: str | None = None) -> str | None:
+    """Why a result with an invalid power verdict has no power package, else None.
+
+    ``skipped_reason``, the launcher's reason for measuring no power, comes first, then the
+    validation reason that says no package arrived.
+    """
+    if "power_valid" not in result or result["power_valid"] == 1:
+        return None
+    if skipped_reason:
+        return skipped_reason
+    reasons = result.get("power_invalid_reasons") or []
+    return next((reason for reason in reasons if reason in _PACKAGE_MISSING_REASONS), None)

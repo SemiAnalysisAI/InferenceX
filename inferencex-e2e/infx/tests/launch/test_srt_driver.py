@@ -505,7 +505,8 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
     assert launch_here(monkeypatch, env, lab_config(tmp), workspace) == 0
 
     if env["FAKE_RESULTS"] == "agentic":
-        assert json.loads((workspace / "point-identity_conc4.json").read_text()) == {"conc": 4}
+        row = json.loads((workspace / "point-identity_conc4.json").read_text())
+        assert row == {"conc": 4, "power_missing": "no_gpu_exporter"}
     else:
         [point] = workspace.glob("point-identity_*.json")
         assert point.name == "point-identity_sweep_isl_1024_osl_1024_conc4_gpus_16_ctx_8_gen_8.json"
@@ -646,7 +647,8 @@ def test_nvl72_point_with_dedicated_discovery_skips_default_power(harness):
     )
     env = lane_env(
         harness, "gb300-nv", LANE_FRAGMENT + dedicated, MODEL_PREFIX="qwen3.5", PRECISION="fp8",
-        FRAMEWORK="dynamo-sglang", MODEL="Qwen/Qwen3.5-397B-A17B-FP8",
+        FRAMEWORK="dynamo-sglang", MODEL="Qwen/Qwen3.5-397B-A17B-FP8", IS_AGENTIC="1", ISL="0",
+        OSL="0", CONC="4", CONC_LIST="4", FAKE_RESULTS="agentic",
     )  # fmt: skip
     assert_ok(launch(env, harness.config, harness.workspace))
 
@@ -655,6 +657,8 @@ def test_nvl72_point_with_dedicated_discovery_skips_default_power(harness):
     [setup] = [call for call in lines(harness.logs, "make") if call.startswith("setup ")]
     assert "CPU_POWER_EXPORTER_RELEASE" not in setup
     assert job_event(harness.workspace)["power"]["skipped_reason"] == "dedicated_discovery"
+    [row] = harness.workspace.glob("*_conc4.json")
+    assert json.loads(row.read_text()) == {"conc": 4, "power_missing": "dedicated_discovery"}
 
 
 def test_a_measured_point_whose_job_left_no_power_package_fails_though_best_effort(harness):

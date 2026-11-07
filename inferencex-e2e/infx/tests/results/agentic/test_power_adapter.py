@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -16,7 +17,7 @@ from infx.tests.results.power.test_aggregate_power_multinode import PRODUCER_SHA
 
 @pytest.mark.parametrize("require_power", [False, True])
 @pytest.mark.parametrize("failure", [None, "samples_csv_missing", "agentic_gpu_topology_invalid",
-                                     "producer_commit_mismatch"])
+                                     "producer_commit_mismatch", "power_artifacts_missing"])
 def test_single_node_collector_finalizes_native_agentx_power(
     tmp_path: Path, require_power: bool, failure: str | None,
 ) -> None:
@@ -51,6 +52,8 @@ def test_single_node_collector_finalizes_native_agentx_power(
     }))
     if failure == "samples_csv_missing":
         (pkg.power_dir / "samples.csv").unlink()
+    if failure == "power_artifacts_missing":
+        shutil.rmtree(pkg.power_dir)
     env = {**os.environ, "INFERENCEX_RESULTS_PYTHON": sys.executable,
            "REQUIRE_POWER": str(int(require_power)),
            "PYTHONPATH": str(Path(__file__).resolve().parents[4])}
@@ -69,6 +72,8 @@ def test_single_node_collector_finalizes_native_agentx_power(
     assert not (result_dir / "power_validation.json").exists()
     assert aggregate["power_valid"] == int(failure is None)
     assert aggregate["power_audit"]["source"] == "power_validation_point.json"
+    no_package = failure == "power_artifacts_missing"
+    assert aggregate.get("power_missing") == ("power_artifacts_missing" if no_package else None)
     if failure is None:
         assert aggregate["total_gpu_energy_j"] == 84_000
         assert aggregate["avg_power_w"] == 350
