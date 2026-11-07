@@ -6218,7 +6218,7 @@ minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg:
 # buffer at startup, which is 16 GiB at 1M context and does not fit 80 GB
 # alongside the weights. Tracked separately.
 dsv41flash-fp4-h200-vllm-agentic-dspark:
-  image: vllm/vllm-openai:v0.32.0@sha256:befccf0e7e4089aa23926bb6f887a85c0d46c2a99e6de5c5ffdf5cb7957c5b34
+  image: vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:h200-dgxc
