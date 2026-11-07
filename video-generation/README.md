@@ -73,7 +73,9 @@ A clip is scored only when its recorded prompt, seed, model and generation
 settings equal the descriptor; `compare_media` then compares every decoded frame.
 Other clips are listed under `unscored` with a reason: `invalid_candidate`,
 `checksum_mismatch`, `no_reference`, or `settings_mismatch` with the differing
-fields. The `h3-quality-<run>-<attempt>` artifact holds `quality.json`, a copy of
+fields. A bundle that cannot be read is listed under `unreadable` and the others are still
+scored. Each deployment contributes its newest bundle up to the scored attempt. The
+`h3-quality-<run>-<attempt>` artifact holds `quality.json`, a copy of
 the descriptor and `SHA256SUMS`. PSNR measures technical fidelity to one reference
 implementation, so `quality_status` stays `unjudged`. To score an earlier run,
 dispatch the workflow with its `run_id` and `run_attempt`.

@@ -31,6 +31,8 @@ env:
 jobs:
   find:
     name: Find h3-results artifacts
+    # Fork runs are scored only by an explicit dispatch.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -38,7 +40,7 @@ jobs:
     outputs:
       artifacts: ${{ steps.list.outputs.artifacts }}
     steps:
-      - name: List unexpired h3-results artifacts
+      - name: List the newest h3-results bundle of each deployment
         id: list
         env:
           GH_TOKEN: ${{ github.token }}
@@ -48,9 +50,15 @@ jobs:
             echo "::error::run_id and run_attempt must be numeric"
             exit 1
           }
+          # Names are h3-results-<run>-<attempt>-<fingerprint>; a rerun's bundle replaces the
+          # earlier attempt's, and a bundle from a later attempt is never scored.
           artifacts=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" \
-            --jq '.artifacts[] | select((.expired | not) and (.name | startswith("h3-results-"))) | .id' \
-            | jq -sc 'sort')
+            --jq '.artifacts[] | select((.expired | not) and (.name | startswith("h3-results-"))) | {id, name}' \
+            | jq -sc --arg run "$RUN_ID" --argjson attempt "$RUN_ATTEMPT" '
+                [.[] | (.name | split("-")) as $p
+                  | select(($p | length) == 5 and $p[2] == $run and ($p[3] | tonumber) <= $attempt)
+                  | {id, attempt: ($p[3] | tonumber), fingerprint: $p[4]}]
+                | group_by(.fingerprint) | map(max_by(.attempt).id) | sort')
           echo "artifacts=$artifacts" >> "$GITHUB_OUTPUT"
           [[ "$artifacts" != "[]" ]] || echo "Run $RUN_ID has no h3-results artifacts; nothing to score."
 

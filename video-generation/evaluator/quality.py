@@ -115,6 +115,49 @@ def _unscored_reason(
     return ("settings_mismatch", fields) if fields else None
 
 
+def _error(error: Exception) -> str:
+    if isinstance(error, OSError) and error.filename:
+        return f"{type(error).__name__}: {Path(error.filename).name}"
+    return f"{type(error).__name__}: {error}"
+
+
+def _score_bundle(
+    artifact_id: int,
+    path: Path,
+    scratch: Path,
+    run_id: str,
+    descriptor: dict,
+    references: dict[str, tuple[dict, Path]],
+) -> tuple[list[dict], list[dict]]:
+    root = path
+    if path.is_file():
+        root = scratch / str(artifact_id)
+        with zipfile.ZipFile(path) as archive:
+            archive.extractall(root)
+    sums = _checksums(root)
+    pairs, unscored = [], []
+    for plan, record, candidate in _measured(root, sums, run_id, artifact_id):
+        failure = _unscored_reason(root, sums, plan, record, candidate, descriptor, references)
+        if failure is not None:
+            reason, fields = failure
+            unscored.append({"candidate": candidate, "reason": reason, "fields": fields})
+            continue
+        case, reference = references[candidate["case_id"]]
+        pairs.append(
+            {
+                "candidate": candidate,
+                "reference": {
+                    "receipt_sha256": case["receipt_sha256"],
+                    "case_id": case["case_id"],
+                    "media_path": case["asset"],
+                    "media_sha256": case["sha256"],
+                },
+                "comparison": media.compare_media(reference, root / candidate["media_path"]),
+            }
+        )
+    return pairs, unscored
+
+
 def score_quality(
     *,
     bundles: dict[int, Path],
@@ -124,7 +167,7 @@ def score_quality(
     source_revision: str,
     output: Path,
 ) -> dict[str, Any]:
-    """Score every measured clip against its public reference; unscorable clips stay listed."""
+    """Score every measured clip against its public reference; unscorable clips and bundles stay listed."""
     if not re.fullmatch(r"[0-9a-f]{40}", source_revision):
         raise ValueError("source revision must be a 40-character git commit")
     if output.exists():
@@ -132,36 +175,18 @@ def score_quality(
     raw = descriptor.read_bytes()
     spec = json.loads(raw)
     known = _references(spec, references)
-    pairs, unscored = [], []
+    pairs, unscored, unreadable = [], [], []
     with tempfile.TemporaryDirectory() as scratch:
         for artifact_id, path in sorted(bundles.items()):
-            root = path
-            if path.is_file():
-                root = Path(scratch) / str(artifact_id)
-                with zipfile.ZipFile(path) as archive:
-                    archive.extractall(root)
-            sums = _checksums(root)
-            for plan, record, candidate in _measured(root, sums, run_id, artifact_id):
-                failure = _unscored_reason(root, sums, plan, record, candidate, spec, known)
-                if failure is not None:
-                    reason, fields = failure
-                    unscored.append({"candidate": candidate, "reason": reason, "fields": fields})
-                    continue
-                case, reference = known[candidate["case_id"]]
-                pairs.append(
-                    {
-                        "candidate": candidate,
-                        "reference": {
-                            "receipt_sha256": case["receipt_sha256"],
-                            "case_id": case["case_id"],
-                            "media_path": case["asset"],
-                            "media_sha256": case["sha256"],
-                        },
-                        "comparison": media.compare_media(
-                            reference, root / candidate["media_path"]
-                        ),
-                    }
+            try:
+                scored, skipped = _score_bundle(
+                    artifact_id, path, Path(scratch), run_id, spec, known
                 )
+            except (OSError, ValueError, KeyError, TypeError, zipfile.BadZipFile) as error:
+                unreadable.append({"artifact_id": artifact_id, "error": _error(error)})
+                continue
+            pairs += scored
+            unscored += skipped
     attachment = {
         "schema_version": 1,
         "quality_status": "unjudged",
@@ -179,6 +204,7 @@ def score_quality(
         },
         "pairs": pairs,
         "unscored": unscored,
+        "unreadable": unreadable,
     }
     output.mkdir(parents=True)
     (output / descriptor.name).write_bytes(raw)
@@ -196,4 +222,5 @@ def score_quality(
         "pairs": len(pairs),
         "compatible": sum(pair["comparison"]["compatible"] for pair in pairs),
         "unscored": dict(sorted(Counter(item["reason"] for item in unscored).items())),
+        "unreadable": len(unreadable),
     }

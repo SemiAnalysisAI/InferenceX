@@ -114,9 +114,11 @@ def _score(descriptor: Path, references: Path, output: Path, *bundles: str) -> i
 def scored(tmp_path_factory):
     root = tmp_path_factory.mktemp("quality")
     descriptor, references, bundle = _setup(root)
-    zipped, directory = f"7={root / 'bundle.zip'}", f"8={bundle}"
-    assert _score(descriptor, references, root / "first", zipped, directory) == 0
-    assert _score(descriptor, references, root / "second", directory, zipped) == 0
+    shutil.copytree(bundle, root / "partial")
+    (root / "partial/manifest.json").unlink()
+    zipped, directory, partial = f"7={root / 'bundle.zip'}", f"8={bundle}", f"9={root / 'partial'}"
+    assert _score(descriptor, references, root / "first", zipped, partial, directory) == 0
+    assert _score(descriptor, references, root / "second", directory, zipped, partial) == 0
     return root
 
 
@@ -158,6 +160,14 @@ def test_reports_a_clip_generated_with_other_settings_instead_of_scoring_it(scor
         (7, "reseeded", "settings_mismatch", ["seed"]),
         (8, "reseeded", "settings_mismatch", ["seed"]),
     ]
+
+
+def test_lists_a_partial_bundle_as_unreadable_and_still_scores_the_others(scored):
+    quality = json.loads((scored / "first/quality.json").read_bytes())
+    assert quality["unreadable"] == [
+        {"artifact_id": 9, "error": "FileNotFoundError: manifest.json"}
+    ]
+    assert {pair["candidate"]["artifact_id"] for pair in quality["pairs"]} == {7, 8}
 
 
 def test_refuses_a_reference_asset_that_differs_from_the_descriptor(tmp_path):
