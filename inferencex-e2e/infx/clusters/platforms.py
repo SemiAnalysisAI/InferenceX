@@ -157,11 +157,19 @@ class Platform(Record):
         return problems
 
 
-def load_platforms() -> dict[str, Platform]:
-    """Validate every ``configs/platforms/<cluster id>.yaml``, keyed by cluster id."""
-    directory = repository_root() / PLATFORM_DIR
+def load_platforms(directory: Path | None = None) -> dict[str, Platform]:
+    """Validate every ``<cluster id>.yaml`` in ``configs/platforms`` (or ``directory``), by id.
+
+    Raises ``ValueError`` for any other file there, so a misnamed file cannot drop its rules.
+    """
+    directory = directory or repository_root() / PLATFORM_DIR
     platforms: dict[str, Platform] = {}
-    for path in sorted(directory.glob("*.yaml")):
+    for path in sorted(directory.glob("*")):
+        # Finder and editors leave dotfiles beside the platform files.
+        if path.name.startswith("."):
+            continue
+        if path.suffix != ".yaml" or not path.is_file():
+            raise ValueError(f"{path}: not a <cluster id>.yaml platform file")
         with open(path) as file:
             data = yamlio.safe_load(file)
         try:

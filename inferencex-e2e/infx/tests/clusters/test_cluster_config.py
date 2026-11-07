@@ -5,6 +5,7 @@ import yaml
 from pydantic import ValidationError
 
 from infx.clusters import SCHEDULERS, load_inventory, resolve_cluster
+from infx.clusters.platforms import load_platforms
 from infx.launch.backends import BACKENDS
 from infx.tests.launch.fake_backend import FakeSettings
 
@@ -188,3 +189,10 @@ def test_a_list_fabric_field_cannot_become_a_cluster_env_value():
     record["env"] = {"NCCL_IB_HCA": "@fabric.rdma-devices"}
     with pytest.raises(ValidationError, match="cannot contain ','"):
         load_inventory(inventory(alpha=record))
+
+
+def test_a_platform_file_without_the_yaml_suffix_is_rejected_not_skipped(tmp_path):
+    (tmp_path / "alpha.yaml").write_text("{}\n")
+    (tmp_path / "beta.yml").write_text("{}\n")
+    with pytest.raises(ValueError, match="beta.yml: not a <cluster id>.yaml platform file"):
+        load_platforms(tmp_path)
