@@ -808,6 +808,11 @@ class TestMultinodePower:
         assert agg["tput_per_gpu"] == 15000.5 / 4
         assert agg["input_tput_per_gpu"] == 3000.5 / 2
         assert agg["avg_total_gpu_power_w"] / 4 == agg["avg_power_w"] == 350.0
+        assert agg["power_audit"]["warnings"] == ["topology_env_mismatch_warning"]
+        assert agg["power_audit"]["warning_details"] == [
+            "workflow env expects role GPUs {'decode': 2, 'prefill': 4}, "
+            "manifest plans {'decode': 2, 'prefill': 2}"
+        ]
 
     def test_missing_package_is_best_effort(self, tmp_path, power_env):
         result = run_script(tmp_path, power_env, self._bench_without_package())

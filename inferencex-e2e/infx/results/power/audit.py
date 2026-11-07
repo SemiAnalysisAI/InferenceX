@@ -82,6 +82,14 @@ def audit_summary(validation: Mapping[str, Any], source: str) -> dict[str, Any]:
     cpu = validation.get("cpu")
     if isinstance(cpu, Mapping):
         audit["cpu"] = _cpu_audit(cpu)
+    if warnings := _bounded_reasons(validation.get("warnings")):
+        details = validation.get("warning_details")
+        audit["warnings"] = warnings
+        audit["warning_details"] = [
+            detail[:256]
+            for detail in (details if isinstance(details, list) else [])
+            if isinstance(detail, str) and detail
+        ][:32]
     return {
         "power_invalid_reasons": _bounded_reasons(validation.get("reasons", [])),
         "power_audit": audit,
