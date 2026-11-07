@@ -12406,3 +12406,12 @@
     - "Update to lmsysorg/sglang:v0.5.23-cu130 and set SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE=0."
     - "Remove TP1/EP1 at concurrency 1 and 4 and replace the search space with TP1/EP1 at concurrency 8, TP2/EP1 at concurrency 8, and TP1/EP1 with HiCache at concurrency 16, 24 and 32; the HiCache points use fp8_e4m3 kv-cache-dtype, and concurrency 16 and 24 use 2 speculative steps instead of 3."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4850
+
+- config-keys:
+    - kimik3.1-fp4-b300-vllm-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Move to inferactinc/public:kimi-k31-mc-f819987-tep-shared-tp-x86_64: vllm/vllm-openai:kimi-k31-mc (sha256:f81998764e85) plus VLLM_KIMI_K3_TEP_SHARED_TP (default off), which TP-shards the replicated BF16 shared expert in TEP decode steps and folds the routed rows into one all-reduce."
+    - "Run latency_specialized decode at every point with explicit CUDA graph capture sizes up to 4096 tokens, so prefill and mixed steps replay graphs instead of running eager; gpu-memory-utilization 0.95 (0.961 at conc 32-70)."
+    - "TP8 with 7 DSpark draft tokens and TOKENSPEED_MLA draft attention at conc 1; TP8 x DCP8 with 7 draft tokens at conc 4-8 and 3 at conc 16-24; TP8 x DCP8 attention with EP8 MegaMoE (deep_gemm_mega_moe, flashinfer_nvlink_one_sided), 4 draft tokens and VLLM_KIMI_K3_TEP_SHARED_TP=1 at conc 32-70. Every DCP8 point adds ReplaySSM and the a2a DCP backend with direct A2A, Q and KV gathers. Drop conc 2."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4878

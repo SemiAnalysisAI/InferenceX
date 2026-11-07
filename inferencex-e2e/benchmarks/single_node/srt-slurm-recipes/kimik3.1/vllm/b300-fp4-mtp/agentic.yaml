@@ -38,8 +38,13 @@ base:
         # The K3.1 week-1 precision policy requires an FP32 KDA recurrent state.
         mamba-ssm-cache-dtype: float32
         enable-prefix-caching: true
+        additional-config: '{"decode_backend":"latency_specialized"}'
         max-num-batched-tokens: 16384
-        gpu-memory-utilization: 0.9
+        # Prefill and mixed steps up to 4096 tokens replay graphs instead of running eager
+        # (~150 ms of launch overhead per step); larger steps are GPU-bound.
+        max-cudagraph-capture-size: 4096
+        # Prefix-cache hits are KV-bound on B300.
+        gpu-memory-utilization: 0.95
         stream-interval: 10
         disable-uvicorn-access-log: true
         # TOTAL_CPU_DRAM_GB split across the 8 TP ranks.
@@ -57,47 +62,31 @@ base:
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '2249'
 
-# Admission is 2x CONC. DSpark drafts match the SGLang recipe's DFLASH drafts: 7 through c8,
-# 6 at c16, 5 at c24-c40 and 4 from c48. The largest decode graph covers max-num-seqs x (1 + drafts),
-# rounded up to a default capture size; throughput runs replace block rejection with the
-# golden acceptance length. Plain TP8 at c1-c2, where the KV fits on GPU and DCP's decode
-# collectives cost most; DCP8 from c4 for ~7x the KV tokens.
-# Low-latency decode (the fused CuTe DSL path) runs only where every decode graph has at
-# most 64 rows (c1-c4): this image launches its 65-320-row MoE experts on 152 CTAs that
-# must all be resident, which a 148-SM B300 cannot hold.
 override_tp8_c1:
   roles:
     agg:
       args:
-        additional-config: '{"decode_backend":"latency_specialized"}'
         max-num-seqs: 2
-        max-cudagraph-capture-size: 16
-        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        cudagraph-capture-sizes: &capture_c1 [1, 2, 4, 8, 16, 32, 64, 128, 192, 256, 384, 512, 640, 768, 1024, 1280, 1536, 1792, 2048, 2560, 3072, 3584, 4096]
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block","attention_backend":"TOKENSPEED_MLA"}'
   benchmark:
     env:
       CONC: '1'
-
-override_tp8_c2:
-  roles:
-    agg:
-      args:
-        additional-config: '{"decode_backend":"latency_specialized"}'
-        max-num-seqs: 4
-        max-cudagraph-capture-size: 32
-        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-  benchmark:
-    env:
-      CONC: '2'
 
 override_dcp8_c4:
   roles:
     agg:
       args:
-        additional-config: '{"decode_backend":"latency_specialized"}'
         decode-context-parallel-size: 8
+        dcp-comm-backend: a2a
+        use-replayssm: true
         max-num-seqs: 8
-        max-cudagraph-capture-size: 64
+        cudagraph-capture-sizes: &capture_c4 [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64, 128, 192, 256, 384, 512, 640, 768, 1024, 1280, 1536, 1792, 2048, 2560, 3072, 3584, 4096]
         speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+      env:
+        VLLM_USE_DIRECT_DCP_A2A: '1'
+        VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
   benchmark:
     env:
       CONC: '4'
@@ -107,9 +96,15 @@ override_dcp8_c8:
     agg:
       args:
         decode-context-parallel-size: 8
+        dcp-comm-backend: a2a
+        use-replayssm: true
         max-num-seqs: 16
-        max-cudagraph-capture-size: 128
+        cudagraph-capture-sizes: &capture_c8 [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 192, 256, 384, 512, 640, 768, 1024, 1280, 1536, 1792, 2048, 2560, 3072, 3584, 4096]
         speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+      env:
+        VLLM_USE_DIRECT_DCP_A2A: '1'
+        VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
   benchmark:
     env:
       CONC: '8'
@@ -119,9 +114,15 @@ override_dcp8_c16:
     agg:
       args:
         decode-context-parallel-size: 8
-        max-num-seqs: 32
-        max-cudagraph-capture-size: 224
-        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":6,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        dcp-comm-backend: a2a
+        use-replayssm: true
+        max-num-seqs: 96
+        cudagraph-capture-sizes: &capture_c16 [1, 2, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144, 148, 152, 156, 160, 164, 168, 172, 176, 180, 184, 188, 192, 196, 200, 204, 208, 212, 216, 220, 224, 228, 232, 236, 240, 244, 248, 252, 256, 260, 264, 268, 272, 276, 280, 284, 288, 292, 296, 300, 304, 308, 312, 316, 320, 324, 328, 332, 336, 340, 344, 348, 352, 356, 360, 364, 368, 372, 376, 380, 384, 512, 640, 768, 1024, 1280, 1536, 1792, 2048, 2560, 3072, 3584, 4096]
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":3,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+      env:
+        VLLM_USE_DIRECT_DCP_A2A: '1'
+        VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
   benchmark:
     env:
       CONC: '16'
@@ -131,69 +132,130 @@ override_dcp8_c24:
     agg:
       args:
         decode-context-parallel-size: 8
-        max-num-seqs: 48
-        max-cudagraph-capture-size: 288
-        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        dcp-comm-backend: a2a
+        use-replayssm: true
+        max-num-seqs: 96
+        cudagraph-capture-sizes: *capture_c16
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":3,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+      env:
+        VLLM_USE_DIRECT_DCP_A2A: '1'
+        VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
   benchmark:
     env:
       CONC: '24'
 
-override_dcp8_c32:
+override_dcp8_ep8_c32:
   roles:
     agg:
       args:
         decode-context-parallel-size: 8
-        max-num-seqs: 64
-        max-cudagraph-capture-size: 384
-        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        dcp-comm-backend: a2a
+        use-replayssm: true
+        enable-expert-parallel: true
+        moe-backend: deep_gemm_mega_moe
+        all2all-backend: flashinfer_nvlink_one_sided
+        gpu-memory-utilization: 0.961
+        max-num-seqs: 96
+        cudagraph-capture-sizes: &capture_c32 [1, 2, 4, 5, 8, 10, 15, 16, 20, 24, 25, 30, 32, 35, 40, 45, 48, 50, 55, 56, 60, 64, 65, 70, 72, 75, 80, 85, 88, 90, 95, 96, 100, 104, 105, 110, 112, 115, 120, 125, 128, 130, 135, 136, 140, 144, 145, 150, 152, 155, 160, 165, 168, 170, 175, 176, 180, 184, 185, 190, 192, 195, 200, 205, 208, 210, 215, 216, 220, 224, 225, 230, 232, 235, 240, 245, 248, 250, 255, 256, 260, 265, 270, 272, 275, 280, 285, 288, 290, 295, 300, 304, 305, 310, 315, 320, 325, 330, 335, 336, 340, 345, 350, 352, 355, 360, 365, 368, 370, 375, 380, 384, 385, 390, 395, 400, 405, 410, 415, 416, 420, 425, 430, 432, 435, 440, 445, 448, 450, 455, 460, 464, 465, 470, 475, 480, 512, 640, 768, 1024, 1280, 1536, 1792, 2048, 2560, 3072, 3584, 4096]
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+      env:
+        VLLM_USE_DIRECT_DCP_A2A: '1'
+        VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
+        VLLM_KIMI_K3_TEP_SHARED_TP: '1'
   benchmark:
     env:
       CONC: '32'
 
-override_dcp8_c40:
+override_dcp8_ep8_c40:
   roles:
     agg:
       args:
         decode-context-parallel-size: 8
-        max-num-seqs: 80
-        max-cudagraph-capture-size: 480
-        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        dcp-comm-backend: a2a
+        use-replayssm: true
+        enable-expert-parallel: true
+        moe-backend: deep_gemm_mega_moe
+        all2all-backend: flashinfer_nvlink_one_sided
+        gpu-memory-utilization: 0.961
+        max-num-seqs: 96
+        cudagraph-capture-sizes: &capture_c40 [1, 2, 4, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140, 145, 150, 155, 160, 165, 170, 175, 180, 185, 190, 195, 200, 205, 210, 215, 220, 225, 230, 235, 240, 768, 1024, 1280, 1536, 1792, 2048, 2560, 3072, 3584, 4096]
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+      env:
+        VLLM_USE_DIRECT_DCP_A2A: '1'
+        VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
+        VLLM_KIMI_K3_TEP_SHARED_TP: '1'
   benchmark:
     env:
       CONC: '40'
 
-override_dcp8_c48:
+override_dcp8_ep8_c48:
   roles:
     agg:
       args:
         decode-context-parallel-size: 8
+        dcp-comm-backend: a2a
+        use-replayssm: true
+        enable-expert-parallel: true
+        moe-backend: deep_gemm_mega_moe
+        all2all-backend: flashinfer_nvlink_one_sided
+        gpu-memory-utilization: 0.961
         max-num-seqs: 96
-        max-cudagraph-capture-size: 480
+        cudagraph-capture-sizes: *capture_c32
         speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+      env:
+        VLLM_USE_DIRECT_DCP_A2A: '1'
+        VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
+        VLLM_KIMI_K3_TEP_SHARED_TP: '1'
   benchmark:
     env:
       CONC: '48'
 
-override_dcp8_c56:
+override_dcp8_ep8_c56:
   roles:
     agg:
       args:
         decode-context-parallel-size: 8
+        dcp-comm-backend: a2a
+        use-replayssm: true
+        enable-expert-parallel: true
+        moe-backend: deep_gemm_mega_moe
+        all2all-backend: flashinfer_nvlink_one_sided
+        gpu-memory-utilization: 0.961
         max-num-seqs: 112
-        max-cudagraph-capture-size: 560
+        cudagraph-capture-sizes: &capture_c56 [1, 2, 4, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140, 145, 150, 155, 160, 165, 170, 175, 180, 185, 190, 195, 200, 205, 210, 215, 220, 225, 230, 235, 240, 245, 250, 255, 260, 265, 270, 275, 280, 768, 1024, 1280, 1536, 1792, 2048, 2560, 3072, 3584, 4096]
         speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+      env:
+        VLLM_USE_DIRECT_DCP_A2A: '1'
+        VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
+        VLLM_KIMI_K3_TEP_SHARED_TP: '1'
   benchmark:
     env:
       CONC: '56'
 
-override_dcp8_c70:
+override_dcp8_ep8_c70:
   roles:
     agg:
       args:
         decode-context-parallel-size: 8
+        dcp-comm-backend: a2a
+        use-replayssm: true
+        enable-expert-parallel: true
+        moe-backend: deep_gemm_mega_moe
+        all2all-backend: flashinfer_nvlink_one_sided
+        gpu-memory-utilization: 0.961
         max-num-seqs: 140
-        max-cudagraph-capture-size: 704
+        cudagraph-capture-sizes: &capture_c70 [1, 2, 4, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140, 145, 150, 155, 160, 165, 170, 175, 180, 185, 190, 195, 200, 205, 210, 215, 220, 225, 230, 235, 240, 245, 250, 255, 260, 265, 270, 275, 280, 285, 290, 295, 300, 305, 310, 315, 320, 340, 360, 768, 1024, 1280, 1536, 1792, 2048, 2560, 3072, 3584, 4096]
         speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+      env:
+        VLLM_USE_DIRECT_DCP_A2A: '1'
+        VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
+        VLLM_KIMI_K3_TEP_SHARED_TP: '1'
   benchmark:
     env:
       CONC: '70'
