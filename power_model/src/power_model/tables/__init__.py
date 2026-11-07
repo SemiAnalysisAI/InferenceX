@@ -348,23 +348,18 @@ class NVL72System(SystemTable):
 System = Annotated[HGXSystem | NVL72System, Field(discriminator="family")]
 
 
-def _references(value: object, key: str) -> list[str]:
-    """Every string stored under key anywhere in a dumped table."""
-    if isinstance(value, dict):
-        own = [value[key]] if isinstance(value.get(key), str) else []
-        return own + [ref for item in value.values() for ref in _references(item, key)]
-    if isinstance(value, list):
-        return [ref for item in value for ref in _references(item, key)]
-    return []
+def _names(key: str, system: HGXSystem | NVL72System) -> set[str]:
+    return {name.lower() for name in (key, system.name, *system.aliases)}
 
 
-def _part_uses(value: object) -> list[dict]:
+def _mappings(value: object):
+    """Every mapping in a dumped table, depth first."""
     if isinstance(value, dict):
-        own = [value] if isinstance(value.get("part"), str) else []
-        return own + [use for item in value.values() for use in _part_uses(item)]
+        yield value
+        value = list(value.values())
     if isinstance(value, list):
-        return [use for item in value for use in _part_uses(item)]
-    return []
+        for item in value:
+            yield from _mappings(item)
 
 
 def _templates(details: Details) -> set[str]:
@@ -386,18 +381,21 @@ class TableSet(FrozenModel):
 
     @model_validator(mode="after")
     def resolve_references(self) -> Self:
-        tables = self.model_dump(mode="json", exclude={"provenance"})
+        mappings = list(_mappings(self.model_dump(mode="json", exclude={"provenance"})))
         curves, assemblies = self.curves, self.assemblies
         missing = [
             f"provenance {ref}"
-            for ref in _references(tables, "provenance")
-            if ref not in self.provenance
+            for mapping in mappings
+            if isinstance(ref := mapping.get("provenance"), str) and ref not in self.provenance
         ]
-        missing += [f"part {ref}" for ref in _references(tables, "part") if ref not in self.parts]
-        for use in _part_uses(tables):
-            if part := self.parts.get(use["part"]):
-                unknown = _templates(part.details) - part.variables() - set(use["vars"])
-                missing += [f"{use['part']} detail variable {name}" for name in sorted(unknown)]
+        for use in mappings:
+            if not isinstance(ref := use.get("part"), str):
+                continue
+            if (part := self.parts.get(ref)) is None:
+                missing.append(f"part {ref}")
+                continue
+            unknown = _templates(part.details) - part.variables() - set(use["vars"])
+            missing += [f"{ref} detail variable {name}" for name in sorted(unknown)]
         missing += [
             f"{gear.name} detail variable {name}"
             for gear in self.network.values()
@@ -435,7 +433,7 @@ class TableSet(FrozenModel):
         for key, system in self.systems.items():
             if system.id != key:
                 raise ValueError(f"systems/{key}.yaml declares id {system.id}")
-        names = [self.alias_key(name) for name in self.aliases()]
+        names = [name for key, system in self.systems.items() for name in _names(key, system)]
         if len(names) != len(set(names)):
             raise ValueError("System ids, names and aliases must be unique")
         for shelves in self.assemblies.power_shelves.values():
@@ -449,22 +447,10 @@ class TableSet(FrozenModel):
                 if any(p.memory_bandwidth_gbps > limit for p in workload.states.values()):
                     raise ValueError(f"{workload.name} bandwidth exceeds {board.memory}")
 
-    @staticmethod
-    def alias_key(name: str) -> str:
-        return name.lower()
-
-    def aliases(self) -> list[str]:
-        return [
-            name
-            for key, system in self.systems.items()
-            for name in (key, system.name, *system.aliases)
-        ]
-
     def system(self, name: str) -> HGXSystem | NVL72System:
         """The system for a catalog key, alias or system name, case-insensitively."""
-        wanted = self.alias_key(name)
         for key, system in self.systems.items():
-            if wanted in {self.alias_key(n) for n in (key, system.name, *system.aliases)}:
+            if name.lower() in _names(key, system):
                 return system
         raise ValueError(f"Unknown system: {name}")
 
