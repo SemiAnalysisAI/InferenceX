@@ -6,7 +6,7 @@ base:
     gpus_per_node: 8
   frontend:
     type: atomesh
-    container_image: rocm/atom-dev@sha256:c615bbe35972d6a808fc4829a4d987242a3c2c599fd9d6238280e236e3d4cbd0
+    container_image: rocm/atom-dev@sha256:e01f202b325049d3674c588273ff0000f14bd5f757cb15cfac769e8aa6332dec
     enable_multiple_frontends: false
   observability:
     enabled: false
@@ -51,8 +51,8 @@ base:
       AIPERF_TIMING_CANCEL_DRAIN_TIMEOUT: '300'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'atom:'
 
-# One variant per point, on an MXFP8 KV cache: plain TP2 at concurrency 1, 2, 8,
-# 16 and 32, plain TP4 at 1, 2, 4 and 8, DTP2 (DP attention, MoE over TP) at 64
+# One variant per point, on an MXFP8 KV cache: plain TP2 at concurrency 1, 2, 16
+# and 32, plain TP4 at 1, 2, 4 and 8, DTP2 (DP attention, MoE over TP) at 64
 # and DEP2 (DP attention plus expert parallelism) at 128 and 256. max-num-seqs is ATOM's default except at
 # concurrency 1; decode graphs cover every size through 32 plus 48, 64 and 128
 # (and 256 on the c256 point).
@@ -89,17 +89,6 @@ override_tp2_c2:
   benchmark:
     env:
       CONC: '2'
-
-override_tp2_c8:
-  roles:
-    agg:
-      gpus: 2
-      env:
-        ATOM_ENABLE_PREFILL_DELAYER: '1'
-        ATOM_PREFILL_DECODE_INTERVAL: '192'
-  benchmark:
-    env:
-      CONC: '8'
 
 override_tp2_c16:
   roles:
