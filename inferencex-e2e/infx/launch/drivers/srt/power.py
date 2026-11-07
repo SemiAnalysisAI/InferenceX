@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from infx.launch.context import LaunchError
 from infx.launch.policy import LaunchPath, Match, any_of
@@ -56,6 +56,10 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
 }
 
 
+# Why a launch measures no GPU power, as its job event and fixed-sequence agg rows record it.
+SkipReason = Literal["eval_only", "no_gpu_exporter", "dedicated_discovery"]
+
+
 @dataclass(frozen=True)
 class PowerDecision:
     """Outcome of power eligibility for one launch."""
@@ -72,9 +76,17 @@ class PowerDecision:
     expect_cpu: bool = False
     # Invalid AgentX power leaves the benchmark result standing.
     best_effort: bool = False
+    skipped_reason: SkipReason | None = None
+
+    def __post_init__(self) -> None:
+        """Require a reason exactly when the decision measures no GPU power."""
+        if self.dcgm == (self.skipped_reason is not None):
+            raise ValueError(f"dcgm={self.dcgm} contradicts skipped_reason={self.skipped_reason!r}")
 
 
-NO_POWER = PowerDecision(dcgm=False, agentx=False)
+def skip_power(reason: SkipReason) -> PowerDecision:
+    """The decision of a launch that measures no power, for ``reason``."""
+    return PowerDecision(dcgm=False, agentx=False, skipped_reason=reason)
 
 
 def decide_power(
@@ -85,22 +97,22 @@ def decide_power(
     dedicated_discovery: Callable[[], bool] = lambda: False,
 ) -> PowerDecision:
     """Measure power on every benchmark point of a cluster with a GPU exporter, except one
-    without ``power`` whose recipe runs ``dedicated_discovery``.
+    without ``power`` whose recipe runs ``dedicated_discovery``. A skipped launch says why.
 
     Raises ``PowerPolicyError`` when the point asks for power the cluster cannot measure.
     """
     if request.eval_only:
-        return NO_POWER
+        return skip_power("eval_only")
     if srt.gpu_exporter_image is None:
         if request.power:
             raise PowerPolicyError(f"cluster {cluster_id!r} measures no GPU power on {path}")
-        return NO_POWER
+        return skip_power("no_gpu_exporter")
     if request.cpu_power and srt.cpu_power_exporter is None:
         raise PowerPolicyError(
             f"cluster {cluster_id!r} declares no srt-slurm.cpu-power-exporter for cpu-power"
         )
     if not request.power and dedicated_discovery():
-        return NO_POWER
+        return skip_power("dedicated_discovery")
     lane = POWER_LANES.get((cluster_id, path), PowerLane(rules=()))
     rule = next((rule for rule in lane.rules if rule.when(request)), None)
     return PowerDecision(

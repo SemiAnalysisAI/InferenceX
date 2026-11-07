@@ -18,7 +18,7 @@ from infx.launch.context import Launch, LaunchError
 from infx.launch.drivers.srt.checkout import Checkout, compute_workspace
 from infx.launch.drivers.srt.config import SrtJob, binder_inputs, pyxis_spelling, render, write
 from infx.launch.drivers.srt.lanes import SrtLane
-from infx.launch.drivers.srt.power import NO_POWER, PowerDecision
+from infx.launch.drivers.srt.power import PowerDecision, skip_power
 from infx.launch.drivers.srt.recipe import HEALTH_ATTEMPTS, prepare_recipe
 from infx.launch.drivers.srt.run import SrtRun
 from infx.launch.lifecycle import Lifecycle
@@ -347,7 +347,7 @@ def test_the_staged_workspace_drops_run_artifacts_but_keeps_srt_slurm_sources(tm
 
 
 @pytest.mark.parametrize(("agentic", "decision", "expected"), [
-    ("1", NO_POWER, (None, "true", "0", "0")),
+    ("1", skip_power("no_gpu_exporter"), (None, "true", "0", "0")),
     ("1", PowerDecision(dcgm=True, agentx=False), (9401, "true", "0", "0")),
     ("1", PowerDecision(dcgm=True, agentx=True), (9401, "true", "1", "0")),
     ("1", PowerDecision(dcgm=True, agentx=True, require=True), (9401, "true", "1", "1")),

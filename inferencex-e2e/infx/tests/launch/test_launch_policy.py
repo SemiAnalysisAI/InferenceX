@@ -57,14 +57,16 @@ def test_a_cluster_with_a_gpu_exporter_measures_every_benchmark_point_without_fa
     assert decide_power("c", MULTI, srt, point) == power.PowerDecision(
         dcgm=True, agentx=agentic == "1", cpu=cpu, best_effort=True
     )
-    assert decide_power("c", MULTI, srt, point, lambda: True) == power.NO_POWER
+    skipped = decide_power("c", MULTI, srt, point, lambda: True)
+    assert skipped == power.skip_power("dedicated_discovery")
     evaluation = _point(agentic, EVAL_ONLY="true")
-    assert decide_power("c", MULTI, srt, evaluation) == power.NO_POWER
+    assert decide_power("c", MULTI, srt, evaluation) == power.skip_power("eval_only")
 
 
 def test_power_the_cluster_cannot_measure_is_refused_only_when_the_point_asks_for_it():
     no_exporter = _srt()
-    assert decide_power("c", MULTI, no_exporter, _point("1")) == power.NO_POWER
+    skipped = decide_power("c", MULTI, no_exporter, _point("1"))
+    assert skipped == power.skip_power("no_gpu_exporter")
     with pytest.raises(PowerPolicyError, match="measures no GPU power"):
         decide_power("c", MULTI, no_exporter, _point("1", POWER="1"))
     with pytest.raises(PowerPolicyError, match="no srt-slurm.cpu-power-exporter"):

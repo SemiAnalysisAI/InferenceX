@@ -49,6 +49,8 @@ class Power(_Record):
     cpu: bool = False
     expect_cpu: bool = False
     best_effort: bool = False
+    # Why the launch measured no GPU power; None when it did.
+    skipped_reason: str | None = None
 
 
 class JobError(_Record):
