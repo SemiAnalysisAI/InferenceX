@@ -187,13 +187,50 @@ override_tp8_dcp8_c48:
         hicache-ratio: 2.5
         max-running-requests: 48
         cuda-graph-max-bs-decode: 48
+        chunked-prefill-size: 32768
+        prefill-decode-interval: 8
+        # The current token plus 4 drafts: from 48 requests the shorter verify outweighs its lower acceptance.
+        speculative-num-draft-tokens: 5
       env:
         SGLANG_ROCM_RUNTIME_RESERVE_GB: '10'
         SGLANG_HICACHE_MAMBA_HOST_RATIO: '12'
         RUSTUP_TOOLCHAIN: stable
-        # Residual stream on row shards for prefill batches of 4096+ tokens (no extra memory).
+        # MoE front and residual stream on row shards in prefill (no extra memory).
+        SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_ROUTED_FRONT: '1'
         SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_STREAM: '1'
+        # A draft block's ring locations in one launch.
+        SGLANG_OPT_DFLASH_RING_LOCS_FUSED: '1'
   benchmark:
     env:
       CONC: '48'
+      KV_OFFLOADING: dram
+
+override_tp8_dcp8_c56:
+  roles:
+    agg:
+      args:
+        dcp-size: 8
+        dcp-comm-backend: a2a
+        mamba-full-memory-ratio: 0.65
+        enable-hierarchical-cache: true
+        hicache-write-policy: write_back
+        hicache-ratio: 2.5
+        max-running-requests: 56
+        cuda-graph-max-bs-decode: 56
+        chunked-prefill-size: 32768
+        prefill-decode-interval: 8
+        # The current token plus 4 drafts: from 48 requests the shorter verify outweighs its lower acceptance.
+        speculative-num-draft-tokens: 5
+      env:
+        SGLANG_ROCM_RUNTIME_RESERVE_GB: '10'
+        SGLANG_HICACHE_MAMBA_HOST_RATIO: '12'
+        RUSTUP_TOOLCHAIN: stable
+        # MoE front and residual stream on row shards in prefill (no extra memory).
+        SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_ROUTED_FRONT: '1'
+        SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_STREAM: '1'
+        # A draft block's ring locations in one launch.
+        SGLANG_OPT_DFLASH_RING_LOCS_FUSED: '1'
+  benchmark:
+    env:
+      CONC: '56'
       KV_OFFLOADING: dram
