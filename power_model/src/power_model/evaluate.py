@@ -7,6 +7,7 @@ provenance come from power_model.tables; this module holds only the arithmetic e
 system family applies to them, in the class graph's order of operations.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from itertools import pairwise
 
@@ -213,7 +214,7 @@ def _interpolate(points: tuple[tuple[float, float], ...], x: float) -> float:
     raise ValueError("Curve does not cover the supplied load")
 
 
-def _network(t: TableSet, allocation: NetworkAllocation, count: int, state: OperatingState):
+def _network(t: TableSet, allocation: NetworkAllocation, count: int, state: OperatingState) -> Node:
     """The scenario's share of external switches, allocated per system."""
     gear = t.network[allocation.gear]
     node = Node.group(
@@ -534,7 +535,11 @@ def _fan_module(t: TableSet, fans: FanUse, air_heat_w: float) -> Node:
 
 
 def _solve_cooling(
-    t: TableSet, fans: FanUse, load_w: float, air_w: float, conversion_loss_w
+    t: TableSet,
+    fans: FanUse,
+    load_w: float,
+    air_w: float,
+    conversion_loss_w: Callable[[float], float],
 ) -> Node:
     """Fans for air heat plus the conversion loss of carrying the fans themselves."""
     load = validate_watts(load_w)
