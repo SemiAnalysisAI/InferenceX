@@ -26,8 +26,7 @@ HGX_FAN_BASELINE = Provenance(
     kind="assumed",
     input_boundary="Chassis fan DC watts from pre-fan component DC load; excludes PSU loss and PUE",
     assumptions=(
-        "Default GPU TDP per device: Hopper 700 W, B200 1000 W, B300 1100 W, "
-        "MI300 750 W, MI325 1000 W, MI355 1400 W.",
+        "Default GPU TDP per device is the board's gpu_tdp_w.",
         "Design heat is GPU count times GPU TDP plus the highest modeled non-GPU power: "
         "CPU offloading and active scale-out networking, including board NICs and optional extras.",
         "All default HGX systems share 22-80% PWM and load-to-PWM exponent 1.0.",
