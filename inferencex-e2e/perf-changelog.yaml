@@ -11500,6 +11500,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4571
 
 - config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "TP8 concurrency 4 drops max-running-requests from 8 to 2 and keeps cuda-graph-max-bs-decode at 8. No other point moves: TP8 concurrency 1 and 2 and every TP4 HiCache point keep admission at 2x CONC."
+    - "At this point the slowest decodes are the ones that share a decode batch, so admission above the in-flight tail only widens the batch that tail runs in. A max-running-requests sweep at TP8 concurrency 4 measured interactivity at p90 TPOT 222.3 to 255.0 output tokens/s/user and the slowest decile's mean concurrent decode partners 1.68 to 0.71, against TTFT p90 1.07 to 1.22 s and 3911 to 3754 tokens/s/GPU; requests over the cap wait for a slot."
+    - "The image, EAGLE shape (5 steps, 6 draft tokens), chunked-prefill-size, mem-fraction-static, HiCache tier and the DSA triton prefill and decode backends are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4630
+
+- config-keys:
     - minimaxm31flash-fp4-b200-sglang-agentic-dspark
     - minimaxm31flash-fp4-gb200-sglang-agentic-dspark
     - minimaxm31flash-fp4-b300-sglang-agentic-dspark
