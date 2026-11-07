@@ -103,9 +103,12 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
     for path in shrunk:
-        print(f"{path}: dropped to {counts.get(path, 0)} (baseline {baseline[path]})")
+        print(
+            f"{path}: dropped to {counts.get(path, 0)} (baseline {baseline[path]})", file=sys.stderr
+        )
     if shrunk:
-        print(f"Lower the baseline: run `{UPDATE}` from inferencex-e2e/.")
+        print(f"Lower the baseline: run `{UPDATE}` from inferencex-e2e/.", file=sys.stderr)
+        return 1
     print(f"hardware-literals: OK, {total} literal(s) in {len(counts)} file(s)")
     return 0
 
