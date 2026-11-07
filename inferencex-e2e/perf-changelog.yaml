@@ -12419,3 +12419,13 @@
     - "Add concurrency 56."
     - "Concurrency 8 to 56: SGLANG_HICACHE_MAMBA_HOST_RATIO 12 -> 10; the image's larger device pools grew the pinned host pools past the node's GTT (hipHostMalloc failed at concurrency 32)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4846
+
+- config-keys:
+    - kimik3.1-fp4-mi355x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Concurrency 1: DCP8 -> DCP1 (decode-context-parallel-size, dcp-comm-backend and cp-kv-cache-interleave-size removed; dcp-size 1)."
+    - "Concurrency 4: DSpark draft tokens 5 -> 7 (golden AL 3.41 -> 3.69); decode capture sizes 8 and 16."
+    - "max-num-seqs at concurrency 10/16/24/32: 6/10/16/24 -> 7/8/13/20; concurrency 10 adds capture size 42. Concurrency 48 unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
