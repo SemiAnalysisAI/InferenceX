@@ -12424,7 +12424,7 @@
     - minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-disagg
   description:
     - "Run the vLLM engines natively behind Dynamo sidecars (vLLM Rust frontend over gRPC, TCP request plane, ZMQ event plane, no NATS) as the GB300 DeepSeek-V4.1-Flash vLLM recipes do. Route with the KV router without KV events or busy thresholds at temperature 0: prefill goes to the least-loaded worker, and soft session affinity keeps each session on one decode rank."
-    - "Decode runs at most 8 requests per DP rank (max-num-seqs 64 -> 8) and caps in-flight async KV loads at 64 with 4 new per step."
+    - "Decode runs at most 8 requests per DP rank (max-num-seqs 64 -> 8, max-cudagraph-capture-size 512 -> 64 for 8 requests x 8 DSpark tokens) and caps in-flight async KV loads at 64 with 4 new per step."
     - "Keep three points: 2 DEP4 prefill + DEP8 decode at conc 260 and 3 DEP4 prefill + DEP16 decode at conc 340 and 380. Drop 4 DEP4 prefill + DEP16 decode at conc 352, 3 DEP4 prefill + DEP16 decode at conc 280, 320 and 360, 3 DEP4 prefill + DEP8 decode at conc 256 and 288, and 2 DEP4 prefill + DEP8 decode at conc 224 and 256."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4865
   scenario-type: [agentic-coding]

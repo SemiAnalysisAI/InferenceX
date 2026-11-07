@@ -216,7 +216,7 @@ base:
         max-num-inflight-kv-loads: 64
         max-async-kv-loads-per-step: 4
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
-        max-cudagraph-capture-size: 512
+        max-cudagraph-capture-size: 64
         enable-eplb: true
         eplb-config: '{"communicator":"symm_mem","num_redundant_experts":8,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
         numa-bind-nodes:
