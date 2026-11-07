@@ -820,6 +820,7 @@ def run_plan(
             **frozen["generation"],
             "requires_motion": slot["requires_motion"],
             "requires_sound": slot["requires_sound"],
+            "requires_picture": True,
             "audio_required": True,
         }
         expected["duration_seconds"] = expected["frame_count"] / expected["fps"]
