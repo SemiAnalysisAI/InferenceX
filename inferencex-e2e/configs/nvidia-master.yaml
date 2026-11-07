@@ -3870,7 +3870,7 @@ qwen3.5-fp4-b300-sglang-agentic-mtp:
 # Qwen3.5 NVFP4 B300 Dynamo/SGLang AgentX variants using the pinned
 # SGLang image and committed golden acceptance-length curve.
 qwen3.5-fp4-b300-dynamo-sglang-agentic-pareto:
-  image: lmsysorg/sglang:nightly-dev-20261013-7224fce1
+  image: lmsysorg/sglang:v0.5.23-cu130@sha256:f832b5c39559c9caa900b22ad37c76fcce66470676855c42052102c537812f1f
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
   model-prefix: qwen3.5
   runner: cluster:b300-dsxe
