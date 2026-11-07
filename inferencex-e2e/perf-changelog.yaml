@@ -12414,4 +12414,4 @@
     - "Move to inferactinc/public:kimi-k31-mc-f819987-tep-shared-tp-x86_64: vllm/vllm-openai:kimi-k31-mc (sha256:f81998764e85) plus VLLM_KIMI_K3_TEP_SHARED_TP (default off), which TP-shards the replicated BF16 shared expert in TEP decode steps and folds the routed rows into one all-reduce."
     - "Run latency_specialized decode at every point with explicit CUDA graph capture sizes up to 4096 tokens, so prefill and mixed steps replay graphs instead of running eager; gpu-memory-utilization 0.95 (0.961 at conc 32-70)."
     - "TP8 with 7 DSpark draft tokens and TOKENSPEED_MLA draft attention at conc 1; TP8 x DCP8 with 7 draft tokens at conc 4-8 and 3 at conc 16-24; TP8 x DCP8 attention with EP8 MegaMoE (deep_gemm_mega_moe, flashinfer_nvlink_one_sided), 4 draft tokens and VLLM_KIMI_K3_TEP_SHARED_TP=1 at conc 32-70. Every DCP8 point adds ReplaySSM and the a2a DCP backend with direct A2A, Q and KV gathers. Drop conc 2."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4878
