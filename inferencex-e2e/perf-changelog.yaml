@@ -12406,3 +12406,10 @@
     - "Update to lmsysorg/sglang:v0.5.23-cu130 and set SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE=0."
     - "Remove TP1/EP1 at concurrency 1 and 4 and replace the search space with TP1/EP1 at concurrency 8, TP2/EP1 at concurrency 8, and TP1/EP1 with HiCache at concurrency 16, 24 and 32; the HiCache points use fp8_e4m3 kv-cache-dtype, and concurrency 16 and 24 use 2 speculative steps instead of 3."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4850
+
+- config-keys:
+    - minimaxm31flash-fp4-b200-vllm-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Update the vLLM image from minimax-m31-flash to cu134-nightly-a2bcb5657a881a002e79d0adab3c6b5e39436121."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4880
