@@ -124,8 +124,8 @@ override_tp8_dcp8_c8:
         cuda-graph-max-bs-decode: 8
       env:
         SGLANG_ROCM_RUNTIME_RESERVE_GB: '10'
-        # About 190 GB of pinned host pools per GPU, within the node's 1511 GiB GTT limit.
-        SGLANG_HICACHE_MAMBA_HOST_RATIO: '12'
+        # 170-185 GB of pinned host pools per GPU: the 8 ranks share the node's 1511 GiB GTT.
+        SGLANG_HICACHE_MAMBA_HOST_RATIO: '10'
         # Keeps every rank on the Rust TreeCore; write-back asserts on a mix with the Python one.
         RUSTUP_TOOLCHAIN: stable
   benchmark:
@@ -147,7 +147,7 @@ override_tp8_dcp8_c16:
         cuda-graph-max-bs-decode: 16
       env:
         SGLANG_ROCM_RUNTIME_RESERVE_GB: '10'
-        SGLANG_HICACHE_MAMBA_HOST_RATIO: '12'
+        SGLANG_HICACHE_MAMBA_HOST_RATIO: '10'
         RUSTUP_TOOLCHAIN: stable
   benchmark:
     env:
@@ -168,7 +168,7 @@ override_tp8_dcp8_c32:
         cuda-graph-max-bs-decode: 32
       env:
         SGLANG_ROCM_RUNTIME_RESERVE_GB: '10'
-        SGLANG_HICACHE_MAMBA_HOST_RATIO: '12'
+        SGLANG_HICACHE_MAMBA_HOST_RATIO: '10'
         RUSTUP_TOOLCHAIN: stable
   benchmark:
     env:
@@ -193,7 +193,7 @@ override_tp8_dcp8_c48:
         speculative-num-draft-tokens: 5
       env:
         SGLANG_ROCM_RUNTIME_RESERVE_GB: '10'
-        SGLANG_HICACHE_MAMBA_HOST_RATIO: '12'
+        SGLANG_HICACHE_MAMBA_HOST_RATIO: '10'
         RUSTUP_TOOLCHAIN: stable
         # MoE front and residual stream on row shards in prefill (no extra memory).
         SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_ROUTED_FRONT: '1'
@@ -223,7 +223,7 @@ override_tp8_dcp8_c56:
         speculative-num-draft-tokens: 5
       env:
         SGLANG_ROCM_RUNTIME_RESERVE_GB: '10'
-        SGLANG_HICACHE_MAMBA_HOST_RATIO: '12'
+        SGLANG_HICACHE_MAMBA_HOST_RATIO: '10'
         RUSTUP_TOOLCHAIN: stable
         # MoE front and residual stream on row shards in prefill (no extra memory).
         SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_ROUTED_FRONT: '1'
