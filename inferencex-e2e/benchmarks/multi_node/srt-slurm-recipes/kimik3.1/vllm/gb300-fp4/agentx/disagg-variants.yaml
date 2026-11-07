@@ -436,7 +436,6 @@ override_hyb4_3p1d_eval:
         dyn-reasoning-parser: kimi_k3
         dyn-enable-structural-tag: true
 
-# c=192: the hybrid with two prefill engines, plus the adaptive prefill chunk cap.
 override_hyb4_2p1d_lpt4k:
   engine:
     # Lets vLLM bind each spawned worker to its GPU's NUMA node.
@@ -469,42 +468,6 @@ override_hyb4_2p1d_lpt4k_eval:
       <<: *override_hyb4_3p1d_decode
       args:
         <<: *override_hyb4_3p1d_decode_args
-        reasoning-parser: kimi_k3
-        dyn-tool-call-parser: kimi_k3
-        dyn-reasoning-parser: kimi_k3
-        dyn-enable-structural-tag: true
-
-# c=80: cap the prefill chunk for long prompts (adaptive), which lowers TTFT for short turns queued behind them.
-override_1p2d_mns256_lpt4k:
-  engine:
-    # Lets vLLM bind each spawned worker to its GPU's NUMA node.
-    set_visible_devices: true
-  roles:
-    prefill:
-      <<: *override_1p2d_mns256_prefill
-      args: &override_1p2d_mns256_lpt4k_prefill_args
-        <<: *override_1p2d_mns256_prefill_args
-        long-prefill-token-threshold: 4096
-        long-prefill-token-threshold-adaptive: true
-    decode: *override_1p2d_mns256_decode
-
-override_1p2d_mns256_lpt4k_eval:
-  engine:
-    # Lets vLLM bind each spawned worker to its GPU's NUMA node.
-    set_visible_devices: true
-  roles:
-    prefill:
-      <<: *override_1p2d_mns256_prefill
-      args:
-        <<: *override_1p2d_mns256_lpt4k_prefill_args
-        reasoning-parser: kimi_k3
-        dyn-tool-call-parser: kimi_k3
-        dyn-reasoning-parser: kimi_k3
-        dyn-enable-structural-tag: true
-    decode:
-      <<: *override_1p2d_mns256_decode
-      args:
-        <<: *override_1p2d_mns256_decode_args
         reasoning-parser: kimi_k3
         dyn-tool-call-parser: kimi_k3
         dyn-reasoning-parser: kimi_k3
