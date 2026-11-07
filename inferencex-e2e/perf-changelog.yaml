@@ -12406,3 +12406,16 @@
     - "Update to lmsysorg/sglang:v0.5.23-cu130 and set SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE=0."
     - "Remove TP1/EP1 at concurrency 1 and 4 and replace the search space with TP1/EP1 at concurrency 8, TP2/EP1 at concurrency 8, and TP1/EP1 with HiCache at concurrency 16, 24 and 32; the HiCache points use fp8_e4m3 kv-cache-dtype, and concurrency 16 and 24 use 2 speculative steps instead of 3."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4850
+
+- config-keys:
+    - kimik3.1-fp4-mi355x-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump to lmsysorg/sglang-rocm:dev-kimi-k31-pro-mi35x-1105: SGLang kimi-k3.1-day-0-amd with split-K HIP sparse MLA decode/verify, DFLASH fc row-sharding in prefill and MoE small sort up to 1024 pairs; sgl-amd-mono e52803f9d2."
+    - "Concurrency 1 and 4: max-mamba-cache-size 60 -> 150."
+    - "Bump to lmsysorg/sglang:dev-kimi-k31-pro-mi35x (sha256:346a6d83): SGLang #48427 at 64507491d9 with DCP sharing the TP communicators, the latent-MoE tail column-split up to 384 rows, the radix-4 router and ROCm host pools sized against the pinned-memory limit; sgl-amd-mono 25723f1e46."
+    - "Concurrency 48 and 56: 32k prefill chunks every 8 decode steps, 5-token DFLASH verify, MoE front and residual stream on row shards in prefill (SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_ROUTED_FRONT, SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_STREAM), fused DFLASH ring locations."
+    - "Add concurrency 56."
+    - "Concurrency 8 to 56: SGLANG_HICACHE_MAMBA_HOST_RATIO 12 -> 10; the image's larger device pools grew the pinned host pools past the node's GTT (hipHostMalloc failed at concurrency 32)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4846
