@@ -531,9 +531,65 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload power audit bundle
+        id: upload-power-audit
         if: ${{ always() && !inputs.eval-only }}
+        continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
+          name: power_audit_${{ env.RESULT_FILENAME }}
+          path: |
+            ${{ env.INFERENCEX_E2E_ROOT }}/${{ env.RESULT_FILENAME }}.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/agg_${{ env.RESULT_FILENAME }}.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/power_validation_${{ env.RESULT_FILENAME }}.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/${{ env.RESULT_FILENAME }}_conc*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/power_validation_${{ env.RESULT_FILENAME }}_conc*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/results/agentic_power_timezone_offset.txt
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/power/**
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/agentic_power_concurrency_*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/video/**/benchmark_concurrency_*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/video/server/*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/${{ env.RESULT_FILENAME }}.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/power-producer-sha.txt
+            ${{ env.INFERENCEX_E2E_ROOT }}/exporter-image.sha256
+          if-no-files-found: ignore
+
+      - name: Wait before retrying upload power audit bundle
+        if: ${{ always() && steps.upload-power-audit.outcome == 'failure' }}
+        run: sleep 10
+
+      - name: Retry upload power audit bundle (attempt 2)
+        id: retry-upload-power-audit
+        if: ${{ always() && steps.upload-power-audit.outcome == 'failure' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          overwrite: true
+          name: power_audit_${{ env.RESULT_FILENAME }}
+          path: |
+            ${{ env.INFERENCEX_E2E_ROOT }}/${{ env.RESULT_FILENAME }}.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/agg_${{ env.RESULT_FILENAME }}.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/power_validation_${{ env.RESULT_FILENAME }}.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/${{ env.RESULT_FILENAME }}_conc*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/power_validation_${{ env.RESULT_FILENAME }}_conc*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/results/agentic_power_timezone_offset.txt
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/power/**
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/agentic_power_concurrency_*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/video/**/benchmark_concurrency_*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/video/server/*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/${{ env.RESULT_FILENAME }}.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/power-producer-sha.txt
+            ${{ env.INFERENCEX_E2E_ROOT }}/exporter-image.sha256
+          if-no-files-found: ignore
+
+      - name: Wait before final power audit bundle upload attempt
+        if: ${{ always() && steps.retry-upload-power-audit.outcome == 'failure' }}
+        run: sleep 30
+
+      - name: Retry upload power audit bundle (attempt 3)
+        if: ${{ always() && steps.retry-upload-power-audit.outcome == 'failure' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          overwrite: true
           name: power_audit_${{ env.RESULT_FILENAME }}
           path: |
             ${{ env.INFERENCEX_E2E_ROOT }}/${{ env.RESULT_FILENAME }}.json
