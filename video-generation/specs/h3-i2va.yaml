@@ -1,0 +1,450 @@
+schema_version: 3
+model:
+  id: MiniMaxAI/MiniMax-H3
+  revision: 42ed227ee7df40d41602854ae760620d6eb651fe
+generation:
+  aspect_ratio: '16:9'
+  audio_channels: 2
+  audio_flow_shift: 3.0
+  audio_sample_rate_hz: 32000
+  duration_seconds: 5
+  flow_shift: 12.0
+  fps: 24
+  frame_count: 124
+  height: 768
+  num_inference_steps: 49
+  width: 1344
+images:
+  waterfall-pool:
+    sha256: 907bdacc7265a8eb663778f5cf47f3912a40d5fd790935c8ae08f0890988de1f
+    byte_size: 1349826
+    width: 1344
+    height: 768
+    media_type: image/png
+    source:
+      url: https://upload.wikimedia.org/wikipedia/commons/0/09/Twin_falls_waterfall_in_Lynn_Canyon.jpg
+      file_page: https://commons.wikimedia.org/wiki/File:Twin_falls_waterfall_in_Lynn_Canyon.jpg
+      commons_sha1: 4378d52653ff801a6caf8b28ac160db9ace9e140
+      license: CC0-1.0
+      author: PheobeLongneck
+      crop_box: [0, 289, 6016, 3727]
+  surf-crash:
+    sha256: eee2126904393f219cb5ecf46501669a5363d4c29ef61927bd0e32564d0a52fa
+    byte_size: 984324
+    width: 1344
+    height: 768
+    media_type: image/png
+    source:
+      url: https://upload.wikimedia.org/wikipedia/commons/0/01/Crashing_Waves_%28Unsplash%29.jpg
+      file_page: https://commons.wikimedia.org/wiki/File:Crashing_Waves_(Unsplash).jpg
+      commons_sha1: fdd48e60ed555c39f0a7063e72a09e05d0f62c62
+      license: CC0-1.0
+      author: Nadine Shaabana nadineshaabana
+      crop_box: [0, 247, 5184, 3209]
+  sand-fire:
+    sha256: 7919739c3a1388a68d2f2476788fa4de05a97833a2d9160cfe6c1afc5b77a3a4
+    byte_size: 1645042
+    width: 1344
+    height: 768
+    media_type: image/png
+    source:
+      url: https://upload.wikimedia.org/wikipedia/commons/8/85/Fire_in_the_sand_hole_%28Unsplash%29.jpg
+      file_page: https://commons.wikimedia.org/wiki/File:Fire_in_the_sand_hole_(Unsplash).jpg
+      commons_sha1: 8ca4adb967008337c6252f366f999352d3d30ab7
+      license: CC0-1.0
+      author: Sandis Helvigs sandishelvigs
+      crop_box: [0, 219, 4608, 2852]
+  fountain-jets:
+    sha256: 7062ffc0f9273222bf73d404ce1f8f5187f954a5d61044f1c435327b95a9897c
+    byte_size: 2096208
+    width: 1344
+    height: 768
+    media_type: image/png
+    source:
+      url: https://upload.wikimedia.org/wikipedia/commons/4/4a/Fountain%2C_Minnesota.jpg
+      file_page: https://commons.wikimedia.org/wiki/File:Fountain,_Minnesota.jpg
+      commons_sha1: da7cecef1d5983ade9e9044c92b099d3f42ea86c
+      license: CC0-1.0
+      author: Wikideas1
+      crop_box: [0, 315, 4410, 2835]
+  puddle-rain:
+    sha256: baace6a37d3a304473bf610fd1f16e394deb0b733194acde0b090326a7d2d683
+    byte_size: 2295701
+    width: 1344
+    height: 768
+    media_type: image/png
+    source:
+      url: https://upload.wikimedia.org/wikipedia/commons/0/00/Puddle_in_the_Volkspark_Wilmersdorf_2023-06-26_01.jpg
+      file_page: https://commons.wikimedia.org/wiki/File:Puddle_in_the_Volkspark_Wilmersdorf_2023-06-26_01.jpg
+      commons_sha1: 0a82c29409be073ba9d34448d4e1bbb97bb19821
+      license: CC0-1.0
+      author: Leonhard Lenz
+      crop_box: [0, 410, 8384, 5201]
+  tea-kettles:
+    sha256: 382f2eb04fb8759da717dd0797f99a99e877e6841cd402a5e84d9955e682e9b7
+    byte_size: 1391297
+    width: 1344
+    height: 768
+    media_type: image/png
+    source:
+      url: https://upload.wikimedia.org/wikipedia/commons/7/7d/Boiling_Tea_Kettles_%28165873%29.jpg
+      file_page: https://commons.wikimedia.org/wiki/File:Boiling_Tea_Kettles_(165873).jpg
+      commons_sha1: 31dc42448ad36ee5d5c682049975d4db7d15689a
+      license: CC0-1.0
+      author: Shubham Sharma on Unsplash
+      crop_box: [0, 243, 5109, 3162]
+  typewriter-keys:
+    sha256: 2e3661fd8e68a6f9331e012869083cb7ee218cf50c37201986fd41dbff0975fb
+    byte_size: 1357905
+    width: 1344
+    height: 768
+    media_type: image/png
+    source:
+      url: https://upload.wikimedia.org/wikipedia/commons/3/3a/Vintage_black_typewriter_%28Unsplash%29.jpg
+      file_page: https://commons.wikimedia.org/wiki/File:Vintage_black_typewriter_(Unsplash).jpg
+      commons_sha1: c00ace41738aec3218addd2e359727c4fdf7feb6
+      license: CC0-1.0
+      author: Daniel McCullough d_mccullough
+      crop_box: [34, 0, 4206, 2384]
+  moored-sailboats:
+    sha256: b5e4ccfd74f028f3174f0fef4b060d09e7ca2c059aad161c363ae8ae5917271b
+    byte_size: 1860409
+    width: 1344
+    height: 768
+    media_type: image/png
+    source:
+      url: https://upload.wikimedia.org/wikipedia/commons/6/6e/Sailboats_in_St%C3%A5ngehuvud_nature_reserve.jpg
+      file_page: https://commons.wikimedia.org/wiki/File:Sailboats_in_St%C3%A5ngehuvud_nature_reserve.jpg
+      commons_sha1: 003372d476c6b926748f775f3125b12fbc9bd71c
+      license: CC0-1.0
+      author: W.carter
+      crop_box: [0, 221, 4667, 2888]
+  horse-snow:
+    sha256: 7f13720916cd3749f7411ba9545992d9dc10f0f149c0f1fc229778b1ccd2daf2
+    byte_size: 1274869
+    width: 1344
+    height: 768
+    media_type: image/png
+    source:
+      url: https://upload.wikimedia.org/wikipedia/commons/7/75/Horse_in_a_snowy_field_in_close-up_%28Unsplash%29.jpg
+      file_page: https://commons.wikimedia.org/wiki/File:Horse_in_a_snowy_field_in_close-up_(Unsplash).jpg
+      commons_sha1: c3d910ca715b5ad3dcc53309c4d9f384e142c9a2
+      license: CC0-1.0
+      author: Benny Jackson themightymerlin
+      crop_box: [0, 339, 5392, 3420]
+  pond-ducks:
+    sha256: 5e9e8ba8e6b805431f868b430a182780950140ff1d67862729799f26b50c9580
+    byte_size: 1949819
+    width: 1344
+    height: 768
+    media_type: image/png
+    source:
+      url: https://upload.wikimedia.org/wikipedia/commons/6/66/Wild_ducks_in_a_pond_%2828435090480%29.jpg
+      file_page: https://commons.wikimedia.org/wiki/File:Wild_ducks_in_a_pond_(28435090480).jpg
+      commons_sha1: f8a809ed50050281864111457a39941e17b0aa8a
+      license: CC0-1.0
+      author: freestocks.org from Olsztyn, Poland
+      crop_box: [0, 226, 4761, 2947]
+  street-tram:
+    sha256: ec273fd083215ea477d70b5e9bc96d72781b5ee4d0532fcd3c9e9e346c69ca33
+    byte_size: 1536374
+    width: 1344
+    height: 768
+    media_type: image/png
+    source:
+      url: https://upload.wikimedia.org/wikipedia/commons/0/04/Moscow%2C_Katukova_Street%2C_71%E2%80%93931M_tram_July_2025_02.jpg
+      file_page: https://commons.wikimedia.org/wiki/File:Moscow,_Katukova_Street,_71%E2%80%93931M_tram_July_2025_02.jpg
+      commons_sha1: 80ef1c3d48f061f459f4d42181ed764ff2a394cd
+      license: CC0-1.0
+      author: Retired electrician
+      crop_box: [0, 247, 5184, 3209]
+  water-fireworks:
+    sha256: a2f68c18daf6398ff6162b82392a007d79d52e2f275ff8e77fdbd61dd111cbe7
+    byte_size: 635165
+    width: 1344
+    height: 768
+    media_type: image/png
+    source:
+      url: https://upload.wikimedia.org/wikipedia/commons/b/ba/Fireworks_over_water_%28Unsplash%29.jpg
+      file_page: https://commons.wikimedia.org/wiki/File:Fireworks_over_water_(Unsplash).jpg
+      commons_sha1: c7181fef663fd2bda6bd85e4d2ebf53c8b8e1716
+      license: CC0-1.0
+      author: Adam Whitlock devlife411
+      crop_box: [0, 240, 5052, 3127]
+  balloon-burner:
+    sha256: f0970b10682cc8f6c7b59e63d61f2f8dfa50c3c7ca4ba5d25f2fce72df5dd0a3
+    byte_size: 1486947
+    width: 1344
+    height: 768
+    media_type: image/png
+    source:
+      url: https://upload.wikimedia.org/wikipedia/commons/0/0b/Hot_Air_Balloon_over_Lake.jpg
+      file_page: https://commons.wikimedia.org/wiki/File:Hot_Air_Balloon_over_Lake.jpg
+      commons_sha1: 78239643a4229f9bcf12e4835f7b3ea3557f1b89
+      license: CC0-1.0
+      author: Bonnie Moreland
+      crop_box: [0, 236, 4968, 3075]
+  espresso-pour:
+    sha256: cd93d50fa3a577c64377a97a84927c7ebee451498b4e8610688b756f7fcb6db8
+    byte_size: 1062340
+    width: 1344
+    height: 768
+    media_type: image/png
+    source:
+      url: https://upload.wikimedia.org/wikipedia/commons/b/be/Close-up_of_espresso_machine_with_two_brown_coffee_cups.jpg
+      file_page: https://commons.wikimedia.org/wiki/File:Close-up_of_espresso_machine_with_two_brown_coffee_cups.jpg
+      commons_sha1: 1ad42588fc1f9b9f37d4b8a8ef27673e38ce74da
+      license: CC0-1.0
+      author: Chevanon Photography
+      crop_box: [0, 266, 5533, 3428]
+  wind-turbines:
+    sha256: 8a499e6fc708b5d7cd4eb2cf6b0bbec238f43c94ff114c5685f9dabe4e9205dd
+    byte_size: 1440557
+    width: 1344
+    height: 768
+    media_type: image/png
+    source:
+      url: https://upload.wikimedia.org/wikipedia/commons/1/1c/Wind_turbine_in_Heidehof_-_Golmberg_2022-01-21_01.jpg
+      file_page: https://commons.wikimedia.org/wiki/File:Wind_turbine_in_Heidehof_-_Golmberg_2022-01-21_01.jpg
+      commons_sha1: ef57eaae1967cd4bffff0cf8f16e0895c01b5a9b
+      license: CC0-1.0
+      author: Leonhard Lenz
+      crop_box: [0, 401, 8368, 5183]
+  geyser-burst:
+    sha256: 04913b8b4451d33d0cd9b6c05f4e284f96bc23b1df0ccd302a2cb1b20e780022
+    byte_size: 1857121
+    width: 1344
+    height: 768
+    media_type: image/png
+    source:
+      url: https://upload.wikimedia.org/wikipedia/commons/4/4b/Geyser_Rotorua.jpg
+      file_page: https://commons.wikimedia.org/wiki/File:Geyser_Rotorua.jpg
+      commons_sha1: 5871efa254402c8ca8fbd0eddc0658f8ff36fc87
+      license: CC0-1.0
+      author: Nolabob
+      crop_box: [0, 285, 6000, 3714]
+  grazing-cows:
+    sha256: b9661d5d70fa6a7f783d8899f4b85905a286f9153f69d2c3aeff337c79fadf37
+    byte_size: 2028165
+    width: 1344
+    height: 768
+    media_type: image/png
+    source:
+      url: https://upload.wikimedia.org/wikipedia/commons/8/8f/Cows_in_Gullmarsskogen_1.jpg
+      file_page: https://commons.wikimedia.org/wiki/File:Cows_in_Gullmarsskogen_1.jpg
+      commons_sha1: 1933082434e13953202a84e0ef695cf0fa8120f1
+      license: CC0-1.0
+      author: W.carter
+      crop_box: [0, 130, 5154, 3075]
+  rooster-crow:
+    sha256: 16173dd51655d582344efb960b354dca78c6abf099753b94473538e27614b7d5
+    byte_size: 1565245
+    width: 1344
+    height: 768
+    media_type: image/png
+    source:
+      url: https://upload.wikimedia.org/wikipedia/commons/6/6f/Rooster_in_Kathmandu%2C_Nepal.jpg
+      file_page: https://commons.wikimedia.org/wiki/File:Rooster_in_Kathmandu,_Nepal.jpg
+      commons_sha1: 68266384a17cd86c775293c274e3ce80aecf28d9
+      license: CC0-1.0
+      author: Ashes Sitoula
+      crop_box: [0, 267, 5616, 3476]
+  frog-croak:
+    sha256: 3b6b05226cb605b8e5dc6a13505927bd34f8786dca1a9dacaf94f261460134e5
+    byte_size: 1760574
+    width: 1344
+    height: 768
+    media_type: image/png
+    source:
+      url: https://upload.wikimedia.org/wikipedia/commons/7/72/Frog_on_a_Boulder.jpg
+      file_page: https://commons.wikimedia.org/wiki/File:Frog_on_a_Boulder.jpg
+      commons_sha1: 1862d8c5c14be9d9b936c46d189f498609cd0366
+      license: CC0-1.0
+      author: Tyler C.
+      crop_box: [0, 297, 6240, 3863]
+  dog-snow:
+    sha256: 18d91f03186c9e64299eaa9250951789af0b86cc38cd5060c1f67993ab64b6c4
+    byte_size: 1336210
+    width: 1344
+    height: 768
+    media_type: image/png
+    source:
+      url: https://upload.wikimedia.org/wikipedia/commons/0/0a/Dog_inspects_snow_%28Unsplash%29.jpg
+      file_page: https://commons.wikimedia.org/wiki/File:Dog_inspects_snow_(Unsplash).jpg
+      commons_sha1: ba6f65804cfb792e60e8a3498dd12b490e3309f8
+      license: CC0-1.0
+      author: Wil Stewart wilstewart3
+      crop_box: [0, 285, 6000, 3714]
+  warmup-rapids:
+    sha256: 71de19ed95f785b933d1922e69c4e8fb6044838840a9d2b7af8957d619aabbb4
+    byte_size: 1547971
+    width: 1344
+    height: 768
+    media_type: image/png
+    source:
+      url: https://upload.wikimedia.org/wikipedia/commons/2/25/Rapids_on_George_River.jpg
+      file_page: https://commons.wikimedia.org/wiki/File:Rapids_on_George_River.jpg
+      commons_sha1: 4d7e016eaa9cb02fd1d0606be69312ee325d7fe3
+      license: CC0-1.0
+      author: N. Perrault, auteur du guide complet du canotage
+      crop_box: [0, 344, 7174, 4443]
+prompts:
+  waterfall-pool:
+    text: A single continuous shot of a waterfall pouring between mossy rocks into a forest pool. The falling water
+      is visible and its steady roar is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+  surf-crash:
+    text: A single continuous shot of waves rolling in and breaking on a rocky shore. The breaking surf is visible
+      and the crash of each wave is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+  sand-fire:
+    text: A single continuous shot of a wood fire burning in a hole in the sand. The flames flickering is visible
+      and the wood crackling is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+  fountain-jets:
+    text: A single continuous shot of a park fountain spraying water into its basin. The jets rising and falling
+      are visible and the splashing water is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+  puddle-rain:
+    text: A single continuous shot of rain starting to fall into a puddle on a park path. The rings spreading on
+      the water are visible and the raindrops pattering is audible. Fixed camera, no speech, music, subtitles, or
+      cuts.
+    requires_motion: true
+    requires_sound: true
+  tea-kettles:
+    text: A single continuous shot of tea kettles boiling with steam rising from their spouts. The steam is visible
+      and the water bubbling and lids rattling are audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+  typewriter-keys:
+    text: A single continuous shot of hands typing a line on a vintage black typewriter. The keys moving is visible
+      and each key clacking is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+  moored-sailboats:
+    text: A single continuous shot of sailboats moored between red granite cliffs. The boats rocking on the water
+      is visible and the rigging clinking is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+  horse-snow:
+    text: A single continuous shot of a horse in a snowy field turning its head and snorting. The movement is visible
+      and the horse snorting is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+  pond-ducks:
+    text: A single continuous shot of wild ducks paddling across a pond. The ripples are visible and the ducks quacking
+      is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+  street-tram:
+    text: A single continuous shot of a tram moving along a city street. The tram rolling forward is visible and
+      the wheels clattering on the rails is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+  water-fireworks:
+    text: A single continuous shot of fireworks bursting over dark water. The bursts are visible and each explosion
+      booming is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+  balloon-burner:
+    text: A single continuous shot of a hot air balloon drifting over a lake. The balloon rising is visible and
+      the burner roaring is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+  espresso-pour:
+    text: A single continuous shot of an espresso machine pouring coffee into two brown cups. The coffee streaming
+      is visible and the machine hissing is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+  wind-turbines:
+    text: A single continuous shot of wind turbines turning above a heath. The blades rotating are visible and the
+      blades whooshing in the wind is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+  geyser-burst:
+    text: A single continuous shot of a geyser erupting steam and water. The eruption is visible and its hissing
+      roar is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+  grazing-cows:
+    text: A single continuous shot of cows grazing in a field beside a forest. The cows chewing and stepping is
+      visible and one cow mooing is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+  rooster-crow:
+    text: A single continuous shot of a rooster lifting its head and crowing. The motion is visible and the rooster
+      crowing is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+  frog-croak:
+    text: A single continuous shot of a frog sitting on a rock as its throat puffs out. The throat swelling is visible
+      and the frog croaking is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+  dog-snow:
+    text: A single continuous shot of a dog sniffing and pawing at fresh snow. The digging is visible and the snow
+      crunching is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+  warmup-rapids:
+    text: A single continuous shot of whitewater rapids on a wide river. The rushing water is visible and its constant
+      roar is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    requires_motion: true
+    requires_sound: true
+sets:
+  release-v1:
+    plan_id: h3-i2va-release-v1
+    repetitions: 1
+    warmup_runs: 1
+    warmup_case: {case_id: warmup-rapids, prompt: warmup-rapids, seed: 11, image: warmup-rapids}
+    cases:
+      - {case_id: waterfall-pool, prompt: waterfall-pool, seed: 11, image: waterfall-pool}
+      - {case_id: surf-crash, prompt: surf-crash, seed: 23, image: surf-crash}
+      - {case_id: sand-fire, prompt: sand-fire, seed: 29, image: sand-fire}
+      - {case_id: fountain-jets, prompt: fountain-jets, seed: 47, image: fountain-jets}
+      - {case_id: puddle-rain, prompt: puddle-rain, seed: 83, image: puddle-rain}
+      - {case_id: tea-kettles, prompt: tea-kettles, seed: 11, image: tea-kettles}
+      - {case_id: typewriter-keys, prompt: typewriter-keys, seed: 23, image: typewriter-keys}
+      - {case_id: moored-sailboats, prompt: moored-sailboats, seed: 29, image: moored-sailboats}
+      - {case_id: horse-snow, prompt: horse-snow, seed: 47, image: horse-snow}
+      - {case_id: pond-ducks, prompt: pond-ducks, seed: 83, image: pond-ducks}
+      - {case_id: street-tram, prompt: street-tram, seed: 11, image: street-tram}
+      - {case_id: water-fireworks, prompt: water-fireworks, seed: 23, image: water-fireworks}
+      - {case_id: balloon-burner, prompt: balloon-burner, seed: 29, image: balloon-burner}
+      - {case_id: espresso-pour, prompt: espresso-pour, seed: 47, image: espresso-pour}
+      - {case_id: wind-turbines, prompt: wind-turbines, seed: 83, image: wind-turbines}
+      - {case_id: geyser-burst, prompt: geyser-burst, seed: 11, image: geyser-burst}
+      - {case_id: grazing-cows, prompt: grazing-cows, seed: 23, image: grazing-cows}
+      - {case_id: rooster-crow, prompt: rooster-crow, seed: 29, image: rooster-crow}
+      - {case_id: frog-croak, prompt: frog-croak, seed: 47, image: frog-croak}
+      - {case_id: dog-snow, prompt: dog-snow, seed: 83, image: dog-snow}
+fairness:
+  schedule:
+    sigma_points: 50
+    denoising_updates: 49
+    video_flow_shift: 12.0
+    audio_flow_shift: 3.0
+  encoding:
+    video_codec: libx264
+    preset: ultrafast
+    crf: 18
+    pixel_format: yuv420p
+    audio_codec: aac
+    audio_sample_rate_hz: 32000
+    audio_channels: 2
+  conditioning_cache: disabled_across_requests
+  conditioning:
+    task: fl2va
+    role: keyframe
+    frame_index: 0
+    preparation:
+      crop: images.*.source.crop_box, the centered 7:4 box of the decoded source
+      resize: Pillow 11.3.0 Image.resize LANCZOS from the crop box to the generation width and height
+      pixels: decoded source RGB values; source ICC profiles are dropped, not converted
+      file: 8-bit RGB PNG, zlib level 9, IHDR, IDAT and IEND chunks only
+      engine_resize: none, every image already has the generation canvas size
+      transport: inline bytes, an SGLang data URI condition or a vLLM-Omni multipart input_reference

@@ -84,12 +84,38 @@ def test_frozen_plan_reproduces_the_hash_its_reference_run_recorded() -> None:
     assert RECORDED_FROZEN_PLAN_SHA256 in (SPECS / "README.md").read_text()
 
 
+# The plan_sha256 every native h3-v2 run binds; sealed text-to-video results carry it.
+RECORDED_V2_PLAN_SHA256 = "a5c800f14c801c74ff6902bdefcfa008d95fbcf98abe3b4920c7e525a4dba457"
+RECORDED_V2_SPEC_SHA256 = "e7d52f380b6decf37fc57c7e567b400b9cbd291f81df7500d546a1f85d57c1ab"
+
+
 def test_v01_plan_declares_schema_2_with_its_fairness_and_warmup() -> None:
     spec = video_spec.load_spec(SPECS / "h3-v2.yaml")
     plan = video_spec.plan_for(spec, "release-v1")
     assert video_spec.schema_version(plan) == 2
     assert plan["fairness"] == spec["fairness"]
     assert plan["warmup_case"]["case_id"] == "warmup-only"
+    assert video_spec.plan_sha256(plan) == RECORDED_V2_PLAN_SHA256
+    assert video_spec.spec_sha256(spec) == RECORDED_V2_SPEC_SHA256
+
+
+def test_i2va_plan_hash_covers_each_image_bytes() -> None:
+    spec = video_spec.load_spec(SPECS / "h3-i2va.yaml")
+    plan = video_spec.plan_for(spec, "release-v1")
+    image = spec["images"]["surf-crash"]
+    assert plan["cases"][1]["condition"] == {
+        "task": "fl2va",
+        "role": "keyframe",
+        "frame_index": 0,
+        "sha256": image["sha256"],
+        "width": 1344,
+        "height": 768,
+        "media_type": "image/png",
+    }
+    image["sha256"] = "0" * 64
+    assert video_spec.plan_sha256(video_spec.plan_for(spec, "release-v1")) != (
+        video_spec.plan_sha256(plan)
+    )
 
 
 def _reuse_text(source: str, target: str) -> Callable[[dict[str, Any]], None]:
@@ -133,6 +159,23 @@ def _reuse_text(source: str, target: str) -> Callable[[dict[str, Any]], None]:
             "h3.yaml",
             lambda doc: doc["sets"]["engine-compare-v1"]["cases"][1].update(seed=11),
             "cases must not repeat a prompt text with the same seed",
+        ),
+        (
+            "h3-i2va.yaml",
+            lambda doc: doc["images"]["surf-crash"].update(width=1280),
+            "must have the generation canvas size",
+        ),
+        (
+            "h3-i2va.yaml",
+            lambda doc: doc["images"]["surf-crash"].update(
+                sha256=doc["images"]["sand-fire"]["sha256"]
+            ),
+            "images must not repeat a sha256",
+        ),
+        (
+            "h3-i2va.yaml",
+            lambda doc: doc["sets"]["release-v1"]["warmup_case"].update(image="dog-snow"),
+            "a distinct image per case and a disjoint warmup image",
         ),
     ],
 )

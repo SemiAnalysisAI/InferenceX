@@ -9,11 +9,18 @@ import yaml
 
 DEFAULT_SPEC = Path(__file__).with_name("h3.yaml")
 _REVISION = re.compile(r"[0-9a-f]{40}")
+_SHA256 = re.compile(r"[0-9a-f]{64}")
 _MAX_SEED = 2**63
 _ROOT_KEYS = {
     1: {"schema_version", "model", "generation", "prompts", "sets", "reference"},
     2: {"schema_version", "model", "generation", "prompts", "sets", "fairness"},
+    3: {"schema_version", "model", "generation", "images", "prompts", "sets", "fairness"},
 }
+_FAIRNESS_KEYS = {
+    2: {"schedule", "encoding", "conditioning_cache", "reference_identity"},
+    3: {"schedule", "encoding", "conditioning_cache", "conditioning"},
+}
+_FIRST_FRAME = {"task": "fl2va", "role": "keyframe", "frame_index": 0}
 
 
 def canonical_json_bytes(value: Any) -> bytes:
@@ -59,18 +66,29 @@ def _integer(value: Any, where: str, *, minimum: int, below: int | None = None) 
         raise ValueError(f"{where} must be an integer {bound}")
 
 
-def _validate_case(case: Any, where: str, prompts: dict[str, Any]) -> None:
-    _fields(case, where, {"case_id", "prompt", "seed"})
+def _validate_case(
+    case: Any, where: str, prompts: dict[str, Any], images: dict[str, Any] | None
+) -> None:
+    keys = {"case_id", "prompt", "seed"}
+    _fields(case, where, keys if images is None else keys | {"image"})
     _text(case["case_id"], f"{where}.case_id")
     if case["prompt"] not in prompts:
         raise ValueError(f"{where}.prompt {case['prompt']!r} is not a defined prompt")
     _integer(case["seed"], f"{where}.seed", minimum=0, below=_MAX_SEED)
+    if images is not None and case["image"] not in images:
+        raise ValueError(f"{where}.image {case['image']!r} is not a defined image")
 
 
-def _validate_set(set_id: str, prompt_set: Any, prompts: dict[str, Any], version: int) -> None:
+def _validate_set(
+    set_id: str,
+    prompt_set: Any,
+    prompts: dict[str, Any],
+    images: dict[str, Any] | None,
+    version: int,
+) -> None:
     where = f"sets.{set_id}"
     keys = {"plan_id", "repetitions", "warmup_runs", "cases"}
-    _fields(prompt_set, where, keys | {"warmup_case"} if version == 2 else keys)
+    _fields(prompt_set, where, keys | {"warmup_case"} if version >= 2 else keys)
     _text(prompt_set["plan_id"], f"{where}.plan_id")
     _integer(prompt_set["repetitions"], f"{where}.repetitions", minimum=1)
     _integer(prompt_set["warmup_runs"], f"{where}.warmup_runs", minimum=0)
@@ -79,20 +97,59 @@ def _validate_set(set_id: str, prompt_set: Any, prompts: dict[str, Any], version
         raise ValueError(f"{where}.cases must be a nonempty list")
     case_ids: set[str] = set()
     for index, case in enumerate(cases):
-        _validate_case(case, f"{where}.cases[{index}]", prompts)
+        _validate_case(case, f"{where}.cases[{index}]", prompts, images)
         if case["case_id"] in case_ids:
             raise ValueError(f"{where}.cases[{index}].case_id {case['case_id']!r} is not unique")
         case_ids.add(case["case_id"])
     texts = [prompts[case["prompt"]]["text"] for case in cases]
     if len(set(zip(texts, [case["seed"] for case in cases], strict=True))) != len(cases):
         raise ValueError(f"{where}.cases must not repeat a prompt text with the same seed")
-    if version == 2:
+    if version >= 2:
         if len(cases) != 20 or len(set(texts)) != len(cases) or prompt_set["warmup_runs"] != 1:
             raise ValueError(f"{where} needs 20 distinct measured prompts and one warmup run")
         warmup = prompt_set["warmup_case"]
-        _validate_case(warmup, f"{where}.warmup_case", prompts)
+        _validate_case(warmup, f"{where}.warmup_case", prompts, images)
         if warmup["case_id"] in case_ids or prompts[warmup["prompt"]]["text"] in texts:
             raise ValueError(f"{where}.warmup_case must be disjoint from measurements")
+    if images is not None:
+        # A repeated image would let a cross-request conditioning cache skip encoder work.
+        measured = {case["image"] for case in cases}
+        if len(measured) != len(cases) or prompt_set["warmup_case"]["image"] in measured:
+            raise ValueError(f"{where} needs a distinct image per case and a disjoint warmup image")
+
+
+def _validate_images(images: Any, generation: dict[str, Any]) -> None:
+    if not isinstance(images, dict) or not images:
+        raise ValueError("images must be a nonempty mapping")
+    for name, image in images.items():
+        where = f"images.{name}"
+        _fields(image, where, {"sha256", "byte_size", "width", "height", "media_type", "source"})
+        if not isinstance(image["sha256"], str) or not _SHA256.fullmatch(image["sha256"]):
+            raise ValueError(f"{where}.sha256 must be 64 lowercase hex characters")
+        _integer(image["byte_size"], f"{where}.byte_size", minimum=1)
+        if (image["width"], image["height"]) != (generation["width"], generation["height"]):
+            raise ValueError(
+                f"{where} must have the generation canvas size, so no engine resizes it"
+            )
+        if image["media_type"] != "image/png":
+            raise ValueError(f"{where}.media_type must be image/png")
+        source = _fields(
+            image["source"],
+            f"{where}.source",
+            {"url", "file_page", "commons_sha1", "license", "author", "crop_box"},
+        )
+        for key in ("url", "file_page", "commons_sha1", "license", "author"):
+            _text(source[key], f"{where}.source.{key}")
+        box = source["crop_box"]
+        if (
+            not isinstance(box, list)
+            or len(box) != 4
+            or any(isinstance(v, bool) or not isinstance(v, int) or v < 0 for v in box)
+            or not (box[0] < box[2] and box[1] < box[3])
+        ):
+            raise ValueError(f"{where}.source.crop_box must be [left, top, right, bottom] pixels")
+    if len({image["sha256"] for image in images.values()}) != len(images):
+        raise ValueError("images must not repeat a sha256")
 
 
 def load_spec(path: str | Path) -> dict[str, Any]:
@@ -124,18 +181,17 @@ def load_spec(path: str | Path) -> dict[str, Any]:
         _flag(prompt["requires_motion"], f"{where}.requires_motion")
         _flag(prompt["requires_sound"], f"{where}.requires_sound")
 
+    images = spec.get("images")
+    if version == 3:
+        _validate_images(images, generation)
     sets = spec["sets"]
     if not isinstance(sets, dict) or not sets:
         raise ValueError("sets must be a nonempty mapping")
     for set_id, prompt_set in sets.items():
-        _validate_set(set_id, prompt_set, prompts, version)
+        _validate_set(set_id, prompt_set, prompts, images, version)
 
-    if version == 2:
-        fairness = _fields(
-            spec["fairness"],
-            "fairness",
-            {"schedule", "encoding", "conditioning_cache", "reference_identity"},
-        )
+    if version >= 2:
+        fairness = _fields(spec["fairness"], "fairness", _FAIRNESS_KEYS[version])
         schedule = _fields(
             fairness["schedule"],
             "fairness.schedule",
@@ -186,6 +242,7 @@ def load_spec(path: str | Path) -> dict[str, Any]:
             raise ValueError("fairness.encoding audio properties must match generation")
         if fairness["conditioning_cache"] != "disabled_across_requests":
             raise ValueError("fairness.conditioning_cache must declare disabled_across_requests")
+    if version == 2:
         identity = _fields(
             fairness["reference_identity"],
             "fairness.reference_identity",
@@ -204,6 +261,17 @@ def load_spec(path: str | Path) -> dict[str, Any]:
             raise ValueError("fairness.reference_identity.model_revision must match model")
         for key in ("implementation", "rng_policy"):
             _text(identity[key], f"fairness.reference_identity.{key}")
+    elif version == 3:
+        conditioning = _fields(
+            fairness["conditioning"], "fairness.conditioning", {*_FIRST_FRAME, "preparation"}
+        )
+        if any(conditioning[key] != value for key, value in _FIRST_FRAME.items()):
+            raise ValueError("fairness.conditioning must place one fl2va keyframe at frame 0")
+        preparation = conditioning["preparation"]
+        if not isinstance(preparation, dict) or not preparation:
+            raise ValueError("fairness.conditioning.preparation must be a nonempty mapping")
+        for key, value in preparation.items():
+            _text(value, f"fairness.conditioning.preparation.{key}")
 
     elif not isinstance(spec["reference"], dict):
         raise ValueError("reference must be a mapping")
@@ -212,13 +280,20 @@ def load_spec(path: str | Path) -> dict[str, Any]:
 
 def _resolve_case(spec: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
     prompt = spec["prompts"][case["prompt"]]
-    return {
+    resolved = {
         "case_id": case["case_id"],
         "prompt": prompt["text"],
         "seed": case["seed"],
         "requires_motion": prompt["requires_motion"],
         "requires_sound": prompt["requires_sound"],
     }
+    if "image" in case:
+        image = spec["images"][case["image"]]
+        resolved["condition"] = {
+            **{key: spec["fairness"]["conditioning"][key] for key in _FIRST_FRAME},
+            **{key: image[key] for key in ("sha256", "width", "height", "media_type")},
+        }
+    return resolved
 
 
 def _set_plan_fields(spec: dict[str, Any], set_id: str) -> dict[str, Any]:
@@ -229,7 +304,7 @@ def _set_plan_fields(spec: dict[str, Any], set_id: str) -> dict[str, Any]:
         "repetitions": prompt_set["repetitions"],
         "warmup_runs": prompt_set["warmup_runs"],
     }
-    if schema_version(spec) == 2:
+    if schema_version(spec) >= 2:
         result["warmup_case"] = _resolve_case(spec, prompt_set["warmup_case"])
     return result
 
@@ -253,8 +328,8 @@ def plan_for(
         "generation": dict(spec["generation"]),
         **_set_plan_fields(spec, set_id),
     }
-    if schema_version(spec) == 2:
-        plan |= {"schema_version": 2, "fairness": spec["fairness"]}
+    if schema_version(spec) >= 2:
+        plan |= {"schema_version": schema_version(spec), "fairness": spec["fairness"]}
     counts = (plan["repetitions"], plan["warmup_runs"])
     if repetitions is not None:
         _integer(repetitions, "repetitions", minimum=1)
@@ -279,7 +354,7 @@ def spec_sha256(spec: dict[str, Any]) -> str:
         "generation": spec["generation"],
         "sets": {set_id: _set_plan_fields(spec, set_id) for set_id in spec["sets"]},
     }
-    if schema_version(spec) == 2:
+    if schema_version(spec) >= 2:
         identity["fairness"] = spec["fairness"]
     return _sha256(identity)
 
