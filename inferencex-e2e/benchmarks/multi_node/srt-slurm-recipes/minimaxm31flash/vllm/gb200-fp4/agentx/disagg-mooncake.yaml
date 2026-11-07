@@ -59,16 +59,17 @@ base:
     type: dynamo
     enable_multiple_frontends: false
     numa_bind: true
-    # KV router without session affinity or KV events (it predicts each worker's prefix
-    # cache from its own routing) or busy thresholds, temperature 0; decode goes to the
-    # least-loaded worker.
+    # KV router without KV events (it predicts prefix caches from its own routing) or busy
+    # thresholds, temperature 0; soft session affinity keeps each session on one decode rank.
     args:
       router-mode: kv
+      router-session-affinity-ttl-secs: 14400
       active-decode-blocks-threshold: None
       active-prefill-tokens-threshold: None
       active-prefill-tokens-threshold-frac: None
       no-router-kv-events: true
     env:
+      DYN_ROUTER_SESSION_AFFINITY_MODE: soft
       DYN_ROUTER_TEMPERATURE: '0'
       DYN_ROUTER_QUEUE_THRESHOLD: None
       DYN_ROUTER_TTL_SECS: '3600'
@@ -83,11 +84,12 @@ base:
       DYN_TOKENIZER: fastokens
       DYN_TOKENIZER_CACHE: '1'
       DYN_TOKENIZER_CACHE_BYTES: '8000000000'
-    # cache_threshold 1.0 selects the active-request cost tier.
+    # Prefill goes to the least-loaded worker (cache_threshold 1.0 selects the active-request
+    # cost tier), ignoring session affinity; decode keeps the default, affinity-bound selection.
     worker_selection:
-      decode: decode-least-loaded
+      prefill: prefill-least-loaded
       instances:
-      - name: decode-least-loaded
+      - name: prefill-least-loaded
         type: dynamo-two-tier-cost-fn
         parameters:
           cache_threshold: 1.0
@@ -154,8 +156,6 @@ base:
         enable-prefix-caching: true
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
         max-cudagraph-capture-size: 2048
-        enable-eplb: true
-        eplb-config: '{"communicator":"symm_mem","num_redundant_experts":4,"window_size":1000,"step_interval":2000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":1000}'
         kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["UCX"],"enforce_handshake_compat":false,"kv_lease_duration":120}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false,"hbm_pool":{"segment_size":"auto"}}}]}}'
         data-parallel-size: 4
     decode:
@@ -242,17 +242,10 @@ base:
     placement:
       node: dedicated
   name: minimaxm31flash-gb200-disagg-mooncake
+override_3p1d_c256:
+  name: minimaxm31flash-gb200-disagg-mooncake-3p1d-c256
 override_3p1d_c288:
   name: minimaxm31flash-gb200-disagg-mooncake-3p1d-c288
-override_3p1d_dep16_c280:
-  name: minimaxm31flash-gb200-disagg-mooncake-3p1d-dep16-c280
-  roles:
-    decode:
-      nodes: 4
-      gpus: 16
-      args:
-        data-parallel-size: 16
-        eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
 override_3p1d_dep16_c320:
   name: minimaxm31flash-gb200-disagg-mooncake-3p1d-dep16-c320
   roles:
@@ -271,14 +264,8 @@ override_3p1d_dep16_c360:
       args:
         data-parallel-size: 16
         eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
-override_2p1d_c224:
-  name: minimaxm31flash-gb200-disagg-mooncake-2p1d-c224
-  roles:
-    prefill:
-      nodes: 2
-      workers: 2
-override_2p1d_c256:
-  name: minimaxm31flash-gb200-disagg-mooncake-2p1d-c256
+override_2p1d_c260:
+  name: minimaxm31flash-gb200-disagg-mooncake-2p1d-c260
   roles:
     prefill:
       nodes: 2
