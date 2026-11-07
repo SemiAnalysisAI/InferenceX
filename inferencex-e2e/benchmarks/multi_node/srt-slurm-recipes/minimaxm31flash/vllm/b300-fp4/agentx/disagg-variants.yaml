@@ -46,7 +46,7 @@ base:
         metadata_server: P2PHANDSHAKE
         global_segment_size: '0'
         local_buffer_size: 4GB
-        # With no device list, Mooncake discovers every EFA NIC on the node.
+        # With no device list, Mooncake discovers the NICs MC_MS_FILTERS allows.
         protocol: efa
         mode: standalone-store
         enable_offload: false
@@ -70,6 +70,10 @@ base:
       MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
       MC_SLICE_SIZE: '1048576'
       MC_WORKERS_PER_CTX: '4'
+      # The two non-EFA InfiniBand HCAs otherwise shift every NIC index EfaTransport selects.
+      MC_MS_FILTERS: '@fabric.rdma-devices'
+      # Same-node peers otherwise take libfabric's shm path, which copies on Mooncake's CQ poller thread.
+      FI_EFA_ENABLE_SHM_TRANSFER: '0'
     preamble: &store-preamble |
       bash /configs/vllm-mooncake-efa.sh
       python3 - <<'PY'
@@ -102,6 +106,10 @@ base:
       MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
       MC_SLICE_SIZE: '1048576'
       MC_WORKERS_PER_CTX: '4'
+      # The two non-EFA InfiniBand HCAs otherwise shift every NIC index EfaTransport selects.
+      MC_MS_FILTERS: '@fabric.rdma-devices'
+      # Same-node peers otherwise take libfabric's shm path, which copies on Mooncake's CQ poller thread.
+      FI_EFA_ENABLE_SHM_TRANSFER: '0'
     preamble: *store-preamble
   - name: mooncake-store-decode-numa0
     type: mooncake-store
@@ -120,6 +128,10 @@ base:
       MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
       MC_SLICE_SIZE: '1048576'
       MC_WORKERS_PER_CTX: '4'
+      # The two non-EFA InfiniBand HCAs otherwise shift every NIC index EfaTransport selects.
+      MC_MS_FILTERS: '@fabric.rdma-devices'
+      # Same-node peers otherwise take libfabric's shm path, which copies on Mooncake's CQ poller thread.
+      FI_EFA_ENABLE_SHM_TRANSFER: '0'
     preamble: *store-preamble
   - name: mooncake-store-decode-numa1
     type: mooncake-store
@@ -138,6 +150,10 @@ base:
       MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
       MC_SLICE_SIZE: '1048576'
       MC_WORKERS_PER_CTX: '4'
+      # The two non-EFA InfiniBand HCAs otherwise shift every NIC index EfaTransport selects.
+      MC_MS_FILTERS: '@fabric.rdma-devices'
+      # Same-node peers otherwise take libfabric's shm path, which copies on Mooncake's CQ poller thread.
+      FI_EFA_ENABLE_SHM_TRANSFER: '0'
     preamble: *store-preamble
   - name: otel-collector
     type: otel-collector
@@ -188,9 +204,15 @@ base:
         DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT: '1024'
         DYN_BACKEND_ADMISSION_REQUEST_QUEUE_LIMIT: '2048'
         VLLM_MOONCAKE_LOAD_RECV_THREADS: '8'
+        # Register GPU KV only on the NICs beside its GPU, so a transfer never crosses the socket.
+        MC_EFA_NIC_SELECTION: local
         MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
         MC_SLICE_SIZE: '1048576'
         MC_WORKERS_PER_CTX: '4'
+        # The two non-EFA InfiniBand HCAs otherwise shift every NIC index EfaTransport selects.
+        MC_MS_FILTERS: '@fabric.rdma-devices'
+        # Same-node peers otherwise take libfabric's shm path, which copies on Mooncake's CQ poller thread.
+        FI_EFA_ENABLE_SHM_TRANSFER: '0'
       args:
         served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
         language-model-only: true
