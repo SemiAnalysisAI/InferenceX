@@ -193,7 +193,8 @@ and `do_expand=False` into a receive bounded at the next power of two of T, with
 `allow_multiple_reduction=False`. No deepep-v2 dispatch waits on the host. Decode replays a graph and
 prefill runs eager, as vLLM runs large prefill batches uncaptured. `combine` copies the batch's rows
 into the MoE layer's output, as vLLM's finalize does (`library_config.finalize_copy`); rows without
-that field predate the copy and read 2-7% low on combine by MoRI's measure.
+that field predate the copy: on b200 EP8 it adds 4-13% to decode `combine`, 4-5% to prefill `combine`
+and 1-2% to the prefill pair period (1-5% for uccl-ep).
 
 Scale-up cases request NCCL Device API LSA and fail closed unless the LSA team covers the whole EP
 world, which is also what makes the hybrid choice match vLLM's autoselect: DeepEP goes hybrid only
