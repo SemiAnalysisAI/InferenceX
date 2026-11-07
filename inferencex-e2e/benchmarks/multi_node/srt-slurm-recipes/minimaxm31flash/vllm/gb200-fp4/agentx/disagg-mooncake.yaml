@@ -210,7 +210,7 @@ base:
         speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         tensor-parallel-size: 1
         gpu-memory-utilization: 0.88
-        max-num-seqs: 64
+        max-num-seqs: 8
         max-num-batched-tokens: 8192
         watermark: 0.05
         max-num-inflight-kv-loads: 64
@@ -242,10 +242,8 @@ base:
     placement:
       node: dedicated
   name: minimaxm31flash-gb200-disagg-mooncake
-override_3p1d_c288:
-  name: minimaxm31flash-gb200-disagg-mooncake-3p1d-c288
-override_3p1d_dep16_c320:
-  name: minimaxm31flash-gb200-disagg-mooncake-3p1d-dep16-c320
+override_3p1d_dep16_c340:
+  name: minimaxm31flash-gb200-disagg-mooncake-3p1d-dep16-c340
   roles:
     decode:
       nodes: 4
@@ -253,8 +251,8 @@ override_3p1d_dep16_c320:
       args:
         data-parallel-size: 16
         eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
-override_3p1d_dep16_c360:
-  name: minimaxm31flash-gb200-disagg-mooncake-3p1d-dep16-c360
+override_3p1d_dep16_c380:
+  name: minimaxm31flash-gb200-disagg-mooncake-3p1d-dep16-c380
   roles:
     decode:
       nodes: 4
