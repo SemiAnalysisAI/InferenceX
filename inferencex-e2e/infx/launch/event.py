@@ -37,6 +37,10 @@ class Outcome(StrEnum):
     FAILURE = "failure"
 
 
+# Why a launch measures no GPU power, as its job event and result rows (`power_missing`) record it.
+SkipReason = Literal["eval_only", "no_gpu_exporter", "dedicated_discovery"]
+
+
 class _Record(BaseModel):
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
@@ -50,7 +54,7 @@ class Power(_Record):
     expect_cpu: bool = False
     best_effort: bool = False
     # Why the launch measured no GPU power; None when it did.
-    skipped_reason: str | None = None
+    skipped_reason: SkipReason | None = None
 
 
 class JobError(_Record):

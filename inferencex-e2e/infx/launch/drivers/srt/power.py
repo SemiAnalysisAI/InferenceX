@@ -10,9 +10,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 from infx.launch.context import LaunchError
+from infx.launch.event import SkipReason
 from infx.launch.policy import LaunchPath, Match, any_of
 
 if TYPE_CHECKING:
@@ -54,10 +55,6 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
         ),
     ),
 }
-
-
-# Why a launch measures no GPU power, as its job event and fixed-sequence agg rows record it.
-SkipReason = Literal["eval_only", "no_gpu_exporter", "dedicated_discovery"]
 
 
 @dataclass(frozen=True)
