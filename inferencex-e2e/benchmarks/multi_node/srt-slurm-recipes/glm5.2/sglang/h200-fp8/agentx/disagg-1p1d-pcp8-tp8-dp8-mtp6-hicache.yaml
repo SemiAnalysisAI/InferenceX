@@ -3,9 +3,8 @@ name: "disagg-h200-1p1d-pcp8-tp8-dp8-mtp6-hicache"
 
 
 dynamo:
-  install: true
-  source:
-    wheel: "1.3.0.dev1"
+  # The image bundles the Dynamo build matching its SGLang commit.
+  install: false
 
 resources:
   gpu_type: h200
@@ -30,7 +29,6 @@ frontend:
     PIP_BREAK_SYSTEM_PACKAGES: "1"
   args:
     router-mode: "kv"
-    router-reset-states: true
     active-decode-blocks-threshold: "None"
     active-prefill-tokens-threshold: "None"
     active-prefill-tokens-threshold-frac: "None"

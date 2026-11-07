@@ -4376,7 +4376,7 @@ minimaxm31flash-fp4-gb200-sglang-agentic-dspark:
 # PCP8/TP8-DP8 topology and c8/c12/c16 curve from Actions run 30133535261 while
 # enabling native EAGLE MTP with golden AL and GPU-resident decode KV cache.
 glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-2p2d:
-  image: lmsysorg/sglang:v0.5.16-cu130
+  image: lmsysorg/sglang:nightly-dev-cu13-20261106-858073e4@sha256:034f4c6122b50785ef939f26488a696d823048925176bafcf090b0de0ff97a5a
   model: zai-org/GLM-5.2-FP8
   model-prefix: glm5.2
   runner: cluster:h200-dgxc
@@ -4444,7 +4444,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-2p2d:
 # Prefill uses PCP8 and a host-DRAM-backed hierarchical KV cache; decode uses
 # TP8/DP8 with a GPU-resident KV cache. Both roles enable six-step EAGLE MTP.
 glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-1p1d-hicache:
-  image: lmsysorg/sglang:v0.5.16-cu130
+  image: lmsysorg/sglang:nightly-dev-cu13-20261106-858073e4@sha256:034f4c6122b50785ef939f26488a696d823048925176bafcf090b0de0ff97a5a
   model: zai-org/GLM-5.2-FP8
   model-prefix: glm5.2
   runner: cluster:h200-dgxc
@@ -4515,7 +4515,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-1p1d-hicache:
 # concurrency uses an individual recipe so max-running-requests and CUDA graph
 # capture are capped at twice the trajectory concurrency.
 glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg:
-  image: lmsysorg/sglang:nightly-dev-20260914-4358a161
+  image: lmsysorg/sglang:nightly-dev-cu13-20261106-858073e4@sha256:034f4c6122b50785ef939f26488a696d823048925176bafcf090b0de0ff97a5a
   model: zai-org/GLM-5.2-FP8
   model-prefix: glm5.2
   runner: cluster:h200-dgxc
