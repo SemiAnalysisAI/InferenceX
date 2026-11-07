@@ -12426,5 +12426,5 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Bump the SGLang image from lmsysorg/sglang:v0.5.22-cu130 to v0.5.23-cu130."
+    - "Bump SGLang image to v0.5.23-cu130 and cap DP-attention prefill CUDA graphs at 2048 tokens."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4889

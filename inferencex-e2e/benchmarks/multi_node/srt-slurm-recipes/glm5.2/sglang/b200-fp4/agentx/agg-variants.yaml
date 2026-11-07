@@ -169,5 +169,7 @@ override_tp8_dp8attn_c32:
         chunked-prefill-size: 65536
         max-running-requests: 128
         cuda-graph-max-bs-decode: 16
+        # v0.5.23's DP-attention prefill graph OOMs capturing 8192 tokens; cap at SGLang's 2048 default.
+        cuda-graph-max-bs-prefill: 2048
         # Unsplit attention weights per rank; leaves room for the DSA indexer's fp32 prefill logits.
         mem-fraction-static: 0.82

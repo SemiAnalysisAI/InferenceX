@@ -68,6 +68,8 @@ base:
         chunked-prefill-size: 65536
         max-running-requests: 16
         cuda-graph-max-bs-decode: 16
+        # v0.5.23's DP-attention prefill graph OOMs capturing 8192 tokens; cap at SGLang's 2048 default.
+        cuda-graph-max-bs-prefill: 2048
         dsa-prefill-backend: trtllm
         dsa-decode-backend: trtllm
         moe-runner-backend: flashinfer_cutlass
