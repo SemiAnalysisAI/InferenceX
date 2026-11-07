@@ -302,6 +302,9 @@ deepep_install() {
     || { collx_log "ERROR: DeepEP V2 CUDA header overlay failed"; return 1; }
   deepep_activate "$root" \
     || { collx_log "ERROR: DeepEP V2 environment activation failed"; return 1; }
+  # Probe: run the deep_ep the vLLM image packages; nothing is built.
+  mkdir -p "$source_dir" && deepep_probe && : > "$root/.ready"
+  return
   collx_materialize_source "deepep-v2-$COLLX_DEEPEP_V2_COMMIT" "$source_dir" \
     || { collx_log "ERROR: DeepEP V2 staged source is invalid"; return 1; }
   # Upstream registers the GIN window NCCL_WIN_STRICT_ORDERING, which drops PCIe relaxed ordering
@@ -332,7 +335,7 @@ deepep_prepare() {
   local arch root
   collx_select_deepep_v2_source
   # Recorded by the adapter. Its own name: ranks re-source common.sh, which resets the pins.
-  export COLLX_DEEPEP_SOURCE="$COLLX_DEEPEP_V2_REPO@$COLLX_DEEPEP_V2_COMMIT"
+  export COLLX_DEEPEP_SOURCE="$COLLX_DEEPEP_V2_REPO@vllm-image-packaged"
   arch="$(cuda_arch)" || return 1
   root="$(deepep_cache_root "$arch")" || return 1
   command -v flock >/dev/null || { collx_log "ERROR: flock is required for DeepEP V2"; return 1; }
