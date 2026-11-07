@@ -39,10 +39,12 @@ class BenchmarkData:
 ENERGY_NORMALIZATIONS = ("tokens", "clips")
 
 
+_THRESHOLDS = json.loads(Path(__file__).with_name("thresholds.json").read_text())
 # Widest gap between consecutive samples inside the integration window that
 # still counts as continuous coverage (srt-slurm contract.MAX_SAMPLE_GAP_SECONDS).
-# thresholds.json exports it with the multinode clock tolerance for InferenceX-app.
-MAX_SAMPLE_GAP_SECONDS = 3.0
+MAX_SAMPLE_GAP_SECONDS = float(_THRESHOLDS["max_sample_gap_seconds"])
+CLOCK_TOLERANCE_SECONDS = float(_THRESHOLDS["clock_tolerance_seconds"])
+CLOCK_TOLERANCE_FRACTION = float(_THRESHOLDS["clock_tolerance_fraction"])
 
 
 def _append_reason(reasons: list[str], reason: str) -> None:

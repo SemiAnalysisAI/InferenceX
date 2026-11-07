@@ -60,6 +60,8 @@ from . import (
     with_power_metrics,
 )
 from .common import (
+    CLOCK_TOLERANCE_FRACTION,
+    CLOCK_TOLERANCE_SECONDS,
     MAX_SAMPLE_GAP_SECONDS,
     BenchmarkData,
     _append_reason,
@@ -104,10 +106,6 @@ STATUS_COMPLETE = "complete"
 WINDOW_STATUS_RUNNING = "running"
 WINDOW_STATUS_COMPLETED = "completed"
 _WINDOW_ALLOWED_STATUSES = ("running", "completed", "failed", "interrupted")
-
-# Exported to InferenceX-app in thresholds.json.
-_CLOCK_TOLERANCE_SECONDS = 0.5
-_CLOCK_TOLERANCE_FRACTION = 0.01
 
 _FATAL_LIFECYCLE_REASONS = (
     "exporter_exited",
@@ -738,7 +736,7 @@ def _check_window_result(window: ParsedWindow, result_root: Path) -> list[str]:
         return ["measurement_window_result_mismatch"]
 
     wall = window.end_unix - window.start_unix
-    tolerance = max(_CLOCK_TOLERANCE_SECONDS, _CLOCK_TOLERANCE_FRACTION * window.duration)
+    tolerance = max(CLOCK_TOLERANCE_SECONDS, CLOCK_TOLERANCE_FRACTION * window.duration)
     if abs(wall - window.duration) > tolerance:
         return ["measurement_window_clock_mismatch"]
     return []
