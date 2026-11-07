@@ -46,6 +46,7 @@ import json
 import math
 import os
 import sys
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
@@ -528,26 +529,25 @@ def _validate_devices(
     return list(_dedupe(reasons)), roles
 
 
-def _check_role_topology(
+def _env_role_mismatch(planned: Counter[str], env_roles: dict[str, int]) -> str | None:
+    """Describe how the workflow env's role GPU counts differ from the manifest plan, if at all."""
+    if planned == Counter(env_roles):
+        return None
+    return (
+        f"workflow env expects role GPUs {dict(sorted(env_roles.items()))}, "
+        f"manifest plans {dict(sorted(planned.items()))}"
+    )
+
+
+def _check_het_groups(
     expected_devices: list[ExpectedDevice],
     roles: dict[tuple[str, int], str],
-    expected_roles: dict[str, int],
 ) -> list[str]:
-    """Exact role-count match against the workflow env; distinct het groups when present."""
+    """Each role occupies exactly one het group and no two roles share one."""
     failures: list[str] = []
-    counts: dict[str, int] = {}
-    for role in roles.values():
-        counts[role] = counts.get(role, 0) + 1
-
-    if set(counts) != set(expected_roles):
-        failures.append(f"expected roles {sorted(expected_roles)}, found {sorted(counts)}")
-    for role, count in sorted(expected_roles.items()):
-        if counts.get(role, 0) != count:
-            failures.append(f"expected {count} {role} GPUs, found {counts.get(role, 0)}")
-
     groups, group_conflicts = _resolve_het_groups(expected_devices)
     if group_conflicts:
-        return failures + [f"{reason} (topology)" for reason in group_conflicts]
+        return [f"{reason} (topology)" for reason in group_conflicts]
 
     per_role: dict[str, set] = {}
     for device in expected_devices:
@@ -915,6 +915,9 @@ class MultinodePowerAudit:
     power_valid: bool = False
     reasons: list[str] = field(default_factory=list)
     failures: list[str] = field(default_factory=list)
+    # Recorded beside the verdict; never withholds power.
+    warnings: list[str] = field(default_factory=list)
+    warning_details: list[str] = field(default_factory=list)
     stored_publication_valid: bool | None = None
     recomputed_publication_valid: bool | None = None
     package_integrity_valid: bool = False
@@ -973,6 +976,11 @@ def validate_and_integrate(
     reuses that window and the manifest topology as inputs. No GPU verdict
     reaches it: an unpinned producer or failed GPU coverage withholds GPU
     energy only, and ``cpu_power_valid`` judges the CPU samples on their own.
+
+    The manifest's planned devices are the topology. ``prefill_gpus``, ``decode_gpus``,
+    ``aggregate_gpus`` and ``service_gpus`` are the workflow's own role GPU counts; a
+    disagreement with the manifest is recorded as ``topology_env_mismatch_warning``
+    and does not withhold power.
 
     ``service_gpus`` names recipe services that own the job's GPUs instead of engine
     workers (a diffusion server started as a generic service); each is a role the
@@ -1128,45 +1136,24 @@ def _validate_gpu_leg(
         elif audit.stored_publication_valid is not True:
             _add_reason(audit, "package_recompute_invalid", "stored and recomputed both invalid")
 
-    expected_roles = {}
-    topology_valid = True
-    if aggregate_gpus > 0 and (prefill_gpus > 0 or decode_gpus > 0):
-        topology_valid = False
-        _add_reason(
-            audit,
-            "topology_env_mismatch",
-            "aggregate GPUs cannot be combined with prefill/decode GPUs",
+    het_group_failures = _check_het_groups(expected_devices, roles) if roles else []
+    for failure in het_group_failures:
+        _add_reason(audit, "het_group_invalid", failure)
+    # The manifest's placement is the topology; the env's role counts are only a cross-check.
+    env_roles = {
+        role: count
+        for role, count in (
+            ("prefill", prefill_gpus),
+            ("decode", decode_gpus),
+            ("agg", aggregate_gpus),
+            *service_gpus.items(),
         )
-    if prefill_gpus > 0:
-        expected_roles["prefill"] = prefill_gpus
-    if decode_gpus > 0:
-        expected_roles["decode"] = decode_gpus
-    if aggregate_gpus > 0:
-        expected_roles["agg"] = aggregate_gpus
-    if service_gpus and expected_roles:
-        topology_valid = False
-        _add_reason(
-            audit,
-            "topology_env_mismatch",
-            "service GPUs cannot be combined with engine worker GPUs",
-        )
-    for service, count in sorted(service_gpus.items()):
-        if service in WORKER_ROLES or count <= 0:
-            topology_valid = False
-            _add_reason(audit, "topology_env_mismatch", f"invalid service role {service!r}")
-        expected_roles[service] = count
-    if not expected_roles:
-        topology_valid = False
-        _add_reason(
-            audit,
-            "topology_env_mismatch",
-            "prefill, decode, aggregate and service GPU counts are all zero",
-        )
-    elif roles:
-        topology_failures = _check_role_topology(expected_devices, roles, expected_roles)
-        topology_valid = topology_valid and not topology_failures
-        for failure in topology_failures:
-            _add_reason(audit, "topology_env_mismatch", failure)
+        if count
+    }
+    planned_roles = Counter(roles.values())
+    if roles and (mismatch := _env_role_mismatch(planned_roles, env_roles)):
+        audit.warnings.append("topology_env_mismatch_warning")
+        audit.warning_details.append(mismatch)
 
     audit.expected_gpu_count = len(expected_devices)
     audit.observed_gpu_count = len(observed)
@@ -1201,7 +1188,7 @@ def _validate_gpu_leg(
     )
     if (
         not audit.package_integrity_valid
-        or not topology_valid
+        or het_group_failures
         or window is None
         or benchmark is None
         or not any(
@@ -1273,15 +1260,17 @@ def _validate_gpu_leg(
             joules_per_output_token=total_energy / benchmark.total_output_tokens,
             joules_per_total_token=total_energy / total_tokens,
         )
-    if prefill_gpus > 0:
+    if planned_roles["prefill"]:
         metrics["prefill_gpu_energy_j"] = role_energy["prefill"]
-        metrics["prefill_avg_power_w"] = role_energy["prefill"] / duration_s / prefill_gpus
+        metrics["prefill_avg_power_w"] = (
+            role_energy["prefill"] / duration_s / planned_roles["prefill"]
+        )
         metrics["prefill_joules_per_input_token"] = (
             role_energy["prefill"] / benchmark.total_input_tokens
         )
-    if decode_gpus > 0:
+    if planned_roles["decode"]:
         metrics["decode_gpu_energy_j"] = role_energy["decode"]
-        metrics["decode_avg_power_w"] = role_energy["decode"] / duration_s / decode_gpus
+        metrics["decode_avg_power_w"] = role_energy["decode"] / duration_s / planned_roles["decode"]
         metrics["decode_joules_per_output_token"] = (
             role_energy["decode"] / benchmark.total_output_tokens
         )
@@ -1499,7 +1488,10 @@ def _sidecar_payload(
         },
         "metrics": audit_metrics(audit.metrics),
     }
-    # Only when the package carried cpu/: sidecars without it stay byte-identical.
+    # Only when present, so sidecars without them stay byte-identical.
+    if audit.warnings:
+        payload["warnings"] = list(audit.warnings)
+        payload["warning_details"] = list(audit.warning_details)
     if audit.cpu is not None:
         payload["cpu"] = audit.cpu.to_payload()
     return payload
@@ -1578,6 +1570,9 @@ def run(
         )
         return 1 if require_power else 0
 
+    for detail in audit.warning_details:
+        print(f"[aggregate_power_multinode] warning: {detail}", file=sys.stderr)
+
     if audit.cpu is not None:
         cpu = audit.cpu
         print(
@@ -1643,19 +1638,19 @@ def main() -> int:
         "--prefill-gpus",
         type=int,
         required=True,
-        help="Expected prefill GPU count from the workflow's PREFILL_GPUS",
+        help="Workflow PREFILL_GPUS, cross-checked against the manifest plan",
     )
     parser.add_argument(
         "--decode-gpus",
         type=int,
         required=True,
-        help="Expected decode GPU count from the workflow's DECODE_GPUS",
+        help="Workflow DECODE_GPUS, cross-checked against the manifest plan",
     )
     parser.add_argument(
         "--aggregate-gpus",
         type=int,
         default=0,
-        help="Expected aggregate-worker GPU count (mutually exclusive with prefill/decode)",
+        help="Workflow aggregate-worker GPU count, cross-checked against the manifest plan",
     )
     parser.add_argument(
         "--expected-producer-sha",

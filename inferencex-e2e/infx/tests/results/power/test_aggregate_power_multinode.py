@@ -379,6 +379,7 @@ class TestValidPackage:
         sidecar = pkg.sidecar()
         assert sidecar["power_valid"] is True
         assert sidecar["reasons"] == []
+        assert "warnings" not in sidecar
         assert sidecar["producer"]["stored_publication_valid"] is True
         assert sidecar["producer"]["recomputed_publication_valid"] is True
         assert sidecar["selected_window"]["window_file"] == f"windows/{RESULT_STEM}.json"
@@ -657,27 +658,31 @@ class TestWindowAndResultGates:
 
 
 class TestTopologyGates:
-    def test_role_counts_must_match_workflow_env(self, tmp_path):
+    def test_env_role_counts_disagreeing_with_manifest_publish_with_warning(self, tmp_path):
         pkg = build_package(tmp_path)
-        assert_invalid(pkg, "topology_env_mismatch", prefill_gpus=4, decode_gpus=2)
+        assert pkg.run(prefill_gpus=4, decode_gpus=2, require_power=True) == 0
 
-    def test_aggregate_role_count_must_match_aggregate_topology(self, tmp_path):
+        agg = pkg.agg()
+        assert agg["power_valid"] == 1
+        assert agg["prefill_gpu_energy_j"] == 48000.0
+        assert agg["prefill_avg_power_w"] == 400.0
+        sidecar = pkg.sidecar()
+        assert sidecar["reasons"] == []
+        assert sidecar["warnings"] == ["topology_env_mismatch_warning"]
+        assert sidecar["warning_details"] == [
+            "workflow env expects role GPUs {'decode': 2, 'prefill': 4}, "
+            "manifest plans {'decode': 2, 'prefill': 2}"
+        ]
+
+    def test_planned_device_never_sampled_withholds(self, tmp_path):
         pkg = build_package(tmp_path)
-        manifest_path = pkg.power_dir / "manifest.json"
-        manifest = json.loads(manifest_path.read_text())
-        for device in manifest["expected_devices"]:
-            for assignment in device["assignments"]:
-                assignment["worker_role"] = "agg"
-                assignment["het_group"] = None
-        manifest_path.write_text(json.dumps(manifest, indent=2))
+        manifest = json.loads((pkg.power_dir / "manifest.json").read_text())
+        extra = {**manifest["expected_devices"][-1], "gpu_index": 2}
+        _edit_manifest(pkg, expected_devices=[*manifest["expected_devices"], extra])
 
-        assert_invalid(
-            pkg,
-            "topology_env_mismatch",
-            prefill_gpus=0,
-            decode_gpus=0,
-            aggregate_gpus=8,
-        )
+        sidecar = assert_invalid(pkg, "package_recompute_invalid", prefill_gpus=3)
+        assert any("expected_device_missing" in failure for failure in sidecar["failures"])
+        assert "warnings" not in sidecar
 
     def test_roles_sharing_het_group_rejected(self, tmp_path):
         pkg = build_package(tmp_path)
@@ -686,7 +691,7 @@ class TestTopologyGates:
             for assignment in device["assignments"]:
                 assignment["het_group"] = 0
         (pkg.power_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
-        sidecar = assert_invalid(pkg, "topology_env_mismatch")
+        sidecar = assert_invalid(pkg, "het_group_invalid")
         assert any("share a het group" in failure for failure in sidecar["failures"])
 
     def test_none_het_groups_valid_for_non_het_deployments(self, tmp_path):
@@ -712,7 +717,7 @@ class TestTopologyGates:
                 if assignment["worker_role"] == "decode":
                     assignment["het_group"] = None
         (pkg.power_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
-        sidecar = assert_invalid(pkg, "topology_env_mismatch")
+        sidecar = assert_invalid(pkg, "het_group_invalid")
         assert any(
             "het group None while other devices" in failure
             for failure in sidecar["failures"]
