@@ -13,7 +13,7 @@ diffusion 引擎在单节点上提供服务，选定的冻结 YAML 工作负载�
 `benchmarks/single_node/srt-slurm-recipes/h3/` 下的 SKU 配方通过
 `python3 -m infx.bench video serve` 把引擎作为 generic service 启动，
 并以 `benchmark.type: custom` 运行 `python3 -m infx.bench video client`。
-本目录以 `/video-package` 挂载进任务。H100、B200 与 MI355X 选用
+本目录以 `/video-package` 挂载进任务。H100、H200、B200 与 MI355X 选用
 `h3-v2.yaml/release-v1`，在 C1 测量 20 个不同 prompt。
 产物身份、复用校验与合并后发布见
 [原生视频交付](../inferencex-e2e/docs/video-generation.md)。
