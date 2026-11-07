@@ -63,6 +63,9 @@ roles:
       attn-cp-size: 8
       enable-prefill-cp: true
       cp-strategy: interleave
+      # sglang #44022 auto-enables breakable prefill CUDA graphs for prefill CP;
+      # keep v0.5.16's eager prefill, as that graph crashes FlashMLA FP8 KV here.
+      cuda-graph-backend-prefill: disabled
       enable-dsa-cache-layer-split: true
       disaggregation-transfer-backend: mooncake
       disaggregation-mode: prefill
