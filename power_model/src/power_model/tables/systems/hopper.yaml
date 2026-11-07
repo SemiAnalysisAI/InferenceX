@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# One HGX H100 or H200 chassis on a Hopper board.
+id: hopper
+family: hgx-chassis
+name: HopperHGXSystemChassis
+aliases: [h100, h200]
+provenance: explicit-component-input
+cooling: air
+gpu_count: 8
+board:
+  name: HopperHGXBoard
+  provenance: hopper-hgx-board
+  gpu_tdp_w: 700
+  parts:
+    - {part: hopper-hgx-nvswitch, count: 4}
+    - {part: pcie5-x16-retimer, count: 8}
+host:
+  - {part: x86-cpu, count: 2}
+  - {part: connectx7-nic, count: 8}
+  - {part: ddr5-dimm, count: 32, vars: {capacity_gb: 64}}
+  - {part: nvme-drive, count: 10}
+  - {part: pex89144-pcie-switch, count: 4}
+  - {part: system-side-400g-transceiver, count: 8}
+psu:
+  name: HopperPSUEfficiency
+  provenance: hopper-psu
+  efficiency: titanium
+  installed: 6
+  load_sharing: 6
+  redundant_capacity: 4
+  capacity_w: 3300.0
+  redundancy: "4+2"
+fans: normalized
+network:
+  gear: qm9790-ndr-infiniband
+  per_system: 0.375
+  details: {topology: two-tier, switches_per_chassis: 0.375}

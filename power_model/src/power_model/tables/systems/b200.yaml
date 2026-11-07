@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# One HGX B200 chassis.
+id: b200
+family: hgx-chassis
+name: B200HGXSystemChassis
+provenance: explicit-component-input
+cooling: air
+gpu_count: 8
+board:
+  name: B200HGXBoard
+  provenance: b200-hgx-board
+  gpu_tdp_w: 1000
+  parts:
+    - {part: blackwell-hgx-nvswitch, count: 2}
+    - {part: pcie5-x16-retimer, count: 8}
+host:
+  - {part: x86-cpu, count: 2}
+  - {part: connectx7-nic, count: 8}
+  - {part: ddr5-dimm, count: 32, vars: {capacity_gb: 64}}
+  - {part: nvme-drive, count: 10}
+  - {part: pex89144-pcie-switch, count: 4}
+  - {part: system-side-400g-transceiver, count: 8}
+psu:
+  name: B200PSUEfficiency
+  provenance: b200-psu
+  efficiency: titanium
+  installed: 6
+  load_sharing: 3
+  redundant_capacity: 3
+  capacity_w: 5250.0
+  redundancy: "3+3"
+fans: normalized
+network:
+  gear: qm9790-ndr-infiniband
+  per_system: 0.375
+  details: {topology: two-tier, switches_per_chassis: 0.375}

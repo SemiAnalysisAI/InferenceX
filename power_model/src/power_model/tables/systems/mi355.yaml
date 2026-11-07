@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# One MI355X chassis on an AMD eight-way UBB.
+# DIMM inventory measured on a Supermicro AS-4126GS-NMR-LCC host.
+id: mi355
+family: hgx-chassis
+name: MI355HGXSystemChassis
+provenance: explicit-component-input
+cooling: air
+gpu_count: 8
+board:
+  name: MI355UBB
+  provenance: amd-8way-ubb
+  gpu_tdp_w: 1400
+  parts:
+    - {part: pcie5-x16-retimer, count: 8}
+host:
+  - {part: x86-cpu, count: 2}
+  - {part: pollara-nic, count: 8}
+  - {part: ddr5-dimm, count: 24, vars: {capacity_gb: 128}}
+  - {part: nvme-drive, count: 10}
+  - {part: pex89144-pcie-switch, count: 4}
+  - {part: system-side-400g-transceiver, count: 8}
+psu:
+  name: MI355PSUEfficiency
+  provenance: amd_oam-psu
+  efficiency: titanium
+  installed: 6
+  load_sharing: 6
+  redundant_capacity: 4
+  capacity_w: 6600.0
+  system_max_w: 26400.0
+  redundancy: "4+2"
+fans: normalized
+network:
+  gear: generic-512t-ethernet
+  per_system: 0.1875
+  details: {topology: two-tier, switches_per_chassis: 0.1875}

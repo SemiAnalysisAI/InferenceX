@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# One HGX B300 chassis. Its ConnectX-8 NICs sit on the board; it has no PCIe retimers,
+# chassis NICs or chassis PCIe switches.
+id: b300
+family: hgx-chassis
+name: B300HGXSystemChassis
+provenance: explicit-component-input
+cooling: air
+gpu_count: 8
+board:
+  name: B300HGXBoard
+  provenance: b300-hgx-board
+  gpu_tdp_w: 1100
+  parts:
+    - {part: blackwell-hgx-nvswitch, count: 2}
+    - {part: connectx8-nic, count: 8}
+host:
+  - {part: x86-cpu, count: 2}
+  - {part: ddr5-dimm, count: 32, vars: {capacity_gb: 64}}
+  - {part: nvme-drive, count: 10}
+  - {part: system-side-800g-transceiver, count: 8}
+psu:
+  name: B300PSUEfficiency
+  provenance: b300-psu
+  efficiency: titanium
+  installed: 12
+  load_sharing: 12
+  redundant_capacity: 6
+  capacity_w: 3300.0
+  system_max_w: 15000.0
+  redundancy: "N+N / 6+6"
+fans: normalized
+network:
+  gear: generic-512t-ethernet
+  per_system: 0.375
+  details: {topology: two-tier, switches_per_chassis: 0.375}
