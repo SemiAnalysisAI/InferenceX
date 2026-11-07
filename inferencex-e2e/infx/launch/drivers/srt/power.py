@@ -2,8 +2,7 @@
 
 Every multi-node benchmark point on a cluster with a GPU exporter measures GPU power, and CPU
 power where the cluster declares a CPU exporter, unless its recipe runs etcd and NATS on a
-dedicated node. A point without ``power`` keeps its result when telemetry fails. A lane rule
-the point matches changes how its AgentX power is measured.
+dedicated node. A point without ``power`` keeps its result when telemetry fails.
 """
 
 from __future__ import annotations
@@ -13,7 +12,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from infx.launch.context import LaunchError
-from infx.launch.policy import LaunchPath, Match, any_of
+from infx.launch.policy import LaunchPath
 
 if TYPE_CHECKING:
     from infx.clusters.slurm import SrtSlurmSettings
@@ -25,38 +24,6 @@ class PowerPolicyError(LaunchError):
 
 
 @dataclass(frozen=True)
-class PowerRule:
-    """How matching points measure AgentX power; ``require`` makes the client fail invalid
-    AgentX power.
-    """
-
-    when: Match
-    agentx: bool
-    adapter: bool = False
-    require: bool = False
-
-
-@dataclass(frozen=True)
-class PowerLane:
-    """Ordered power rules for one lane; first match wins."""
-
-    rules: tuple[PowerRule, ...]
-
-
-POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
-    ("h200-dgxc", LaunchPath.SRT_MULTI): PowerLane(
-        rules=(
-            PowerRule(
-                Match(any_of("glm5.2"), any_of("fp8"), any_of("dynamo-sglang"), agentic=True),
-                agentx=False,
-                adapter=True,
-            ),
-        ),
-    ),
-}
-
-
-@dataclass(frozen=True)
 class PowerDecision:
     """Outcome of power eligibility for one launch."""
 
@@ -64,8 +31,6 @@ class PowerDecision:
     # The name is the job-event schema's (``event.Power.dcgm``).
     dcgm: bool
     agentx: bool
-    adapter: bool = False
-    require: bool = False
     # The cluster's CPU exporter is bound.
     cpu: bool = False
     # The point selected cpu-power, so a required point fails without a valid CPU leg.
@@ -101,13 +66,9 @@ def decide_power(
         )
     if not request.power and dedicated_discovery():
         return NO_POWER
-    lane = POWER_LANES.get((cluster_id, path), PowerLane(rules=()))
-    rule = next((rule for rule in lane.rules if rule.when(request)), None)
     return PowerDecision(
         dcgm=True,
-        agentx=rule.agentx if rule else request.is_agentic,
-        adapter=rule is not None and rule.adapter,
-        require=request.power and rule is not None and rule.require,
+        agentx=request.is_agentic,
         cpu=srt.cpu_power_exporter is not None,
         expect_cpu=request.cpu_power,
         best_effort=not (request.power or request.require_power),

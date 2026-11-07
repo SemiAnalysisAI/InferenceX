@@ -81,29 +81,6 @@ def test_the_power_field_keeps_invalid_power_fatal():
     assert not decide_power("c", MULTI, WITH_CPU, workflow).best_effort
 
 
-def test_a_lane_rule_changes_how_its_matching_agentx_points_measure_power():
-    matching = _point("1", prefix="glm5.2", framework="dynamo-sglang")
-    decision = decide_power("h200-dgxc", MULTI, GPU_ONLY, matching)
-    assert (decision.agentx, decision.adapter) == (False, True)
-    other = decide_power("h200-dgxc", MULTI, GPU_ONLY, _point("1", framework="dynamo-sglang"))
-    assert (other.agentx, other.adapter) == (True, False)
-
-
-def test_a_power_lane_needs_its_clusters_gpu_exporter(monkeypatch):
-    labels = {"cluster:c": ["c_0"]}
-    srt = {"network-interface": ""}
-    record = {**RECORD, "slurm": {**RECORD["slurm"], "srt-slurm": srt}}
-    clusters = load_inventory({"labels": labels, "clusters": {"c": record}}).clusters
-    monkeypatch.setitem(drivers.srt.lanes.SRT_LANES, ("c", MULTI), drivers.srt.lanes.SrtLane())
-    monkeypatch.setitem(power.POWER_LANES, ("c", MULTI), power.PowerLane(rules=()))
-    assert drivers.srt.table_problems(clusters, "c") == [
-        "POWER_LANES['c', srt-multi]: no srt-slurm.extra.default_gpu_exporter"
-    ]
-    srt.update(EXPORTER)
-    clusters = load_inventory({"labels": labels, "clusters": {"c": record}}).clusters
-    assert drivers.srt.table_problems(clusters, "c") == []
-
-
 AGENTX_FLASH = dict(MODEL_PREFIX="dsv41flash", FRAMEWORK="sglang", IS_MULTINODE="false",
                     IS_AGENTIC="1", EVAL_ONLY="false", SALLOC_TIME_LIMIT="480")
 

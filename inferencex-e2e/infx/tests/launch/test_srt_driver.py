@@ -561,13 +561,12 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
     assert outputs.exists() is not outputs.is_relative_to(checkout)
 
 
-@pytest.mark.parametrize(("cluster", "precision", "model", "require_power", "lane"), [
-    ("gb200-nv", "fp4", "zai-org/GLM-5.2", "0", "agentx"),
-    ("h200-dgxc", "fp8", "zai-org/GLM-5.2-FP8", "1", "adapter"),
-    ("h200-dgxc", "fp8", "zai-org/GLM-5.2-FP8", "0", "adapter"),
+@pytest.mark.parametrize(("cluster", "precision", "model"), [
+    ("gb200-nv", "fp4", "zai-org/GLM-5.2"),
+    ("h200-dgxc", "fp8", "zai-org/GLM-5.2-FP8"),
 ])  # fmt: skip
 def test_power_lane_stages_provenance_and_validates_each_concurrency(
-    harness, cluster, precision, model, require_power, lane
+    harness, cluster, precision, model
 ):
     adapter = harness.tmp / "results-python"
     adapter.write_text(
@@ -578,7 +577,7 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
         harness, cluster, LANE_FRAGMENT + POWER_TELEMETRY,
         MODEL_PREFIX="glm5.2", PRECISION=precision, FRAMEWORK="dynamo-sglang", MODEL=model,
         IS_AGENTIC="1", ISL="0", OSL="0", CONC="4", CONC_LIST="4", FAKE_RESULTS="agentic",
-        REQUIRE_POWER=require_power, INFERENCEX_RESULTS_PYTHON=str(adapter), POWER="1",
+        REQUIRE_POWER="0", INFERENCEX_RESULTS_PYTHON=str(adapter), POWER="1",
     )  # fmt: skip
     assert_ok(launch(env, harness.config, harness.workspace))
 
@@ -595,7 +594,7 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     bound = yaml.safe_load((checkout / "recipe.yaml").read_text())
     assert bound["benchmark"]["concurrencies"] == [4]
     assert bound["benchmark"]["env"]["ENABLE_AGENTX_POWER"] == "1"
-    assert bound["benchmark"]["env"]["REQUIRE_POWER"] == require_power
+    assert bound["benchmark"]["env"]["REQUIRE_POWER"] == "0"
     assert bound["telemetry"]["collector_join_timeout_seconds"] == 12
     assert (bound["telemetry"]["enabled"], bound["telemetry"]["dcgm_exporter"]["port"]) == (True, 9401)
     nvl72 = cluster == "gb200-nv"
@@ -605,11 +604,9 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     runs = lines(harness.logs, "adapter")
     assert [run.split("--result-dir ")[1].split()[0].rsplit("/", 1)[1] for run in runs] == ["conc_4"]
     assert all(f"--expected-producer-sha {commit}" in run for run in runs)
-    required = lane == "agentx" or require_power == "1"
-    assert all(run.endswith("--require-power") is required for run in runs)
-    if lane == "agentx":
-        status = (workspace / "LOGS/power/native-job-status.txt").read_text()
-        assert status == "42|COMPLETED|0:0\n"
+    assert all(run.endswith("--require-power") for run in runs)
+    status = (workspace / "LOGS/power/native-job-status.txt").read_text()
+    assert status == "42|COMPLETED|0:0\n"
 
 
 @pytest.mark.parametrize(("point", "required"), [

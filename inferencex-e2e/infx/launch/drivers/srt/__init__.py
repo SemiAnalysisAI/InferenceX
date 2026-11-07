@@ -288,7 +288,7 @@ def run_multinode(launch: Launch) -> int:
             ),
         )
         event.set(power=asdict(decision))
-        if not request.eval_only and (decision.agentx or decision.adapter):
+        if not request.eval_only and decision.agentx:
             require(request, "INFERENCEX_RESULTS_PYTHON")
         preflight = run.srt.preflight and not (model_paths and model and model.node_local)
         if request.framework == "tilert":
@@ -362,14 +362,6 @@ def table_problems(clusters: Mapping[str, Cluster], only: str | None = None) -> 
             problems.append(f"{where}: no srt-slurm.shared-run-root")
         if srt.default_time_limit is not None and (lane.time_limit or lane.long_time_limit):
             problems.append(f"{where}: its time limits are shadowed by default-time-limit")
-    for cluster_id, path in power.POWER_LANES:
-        where = f"POWER_LANES[{cluster_id!r}, {path}]"
-        if not scoped(cluster_id):
-            continue
-        if (cluster_id, path) not in lanes.SRT_LANES:
-            problems.append(f"{where}: no SRT_LANES row")
-        elif (srt := _srt_settings(clusters.get(cluster_id))) and srt.gpu_exporter_image is None:
-            problems.append(f"{where}: no srt-slurm.extra.default_gpu_exporter")
     for cluster_id, overrides in models.OVERRIDES.items():
         if scoped(cluster_id) and profile("OVERRIDES", cluster_id) is not None:
             entries = clusters[cluster_id].models.entries

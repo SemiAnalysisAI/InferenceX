@@ -30,7 +30,6 @@ from infx.launch.artifacts import (
     copy_fixed_sequence_results,
     copy_to_workspace,
     run_power_adapter,
-    validate_agentic_power,
     validate_video_results,
 )
 from infx.launch.backends.base import BackendError, JobState, JobStatus
@@ -291,29 +290,21 @@ def collect(
         if not logs.is_dir():
             event.fail("LogsMissing", f"Logs directory not found at {logs}")
             return 1
-        if not request.eval_only and (power.agentx or power.adapter):
+        if not request.eval_only and power.agentx:
             require(request, "CONC_LIST")
-            audit = (run.workspace, request.result_filename, checkout.commit, request.conc_list)
-            python = request.inferencex_results_python
-            if power.agentx:
-                power_rc = collect_agentic_power_results(
-                    status,
-                    job.id,
-                    logs,
-                    infmax,
-                    *audit,
-                    results_python=python,
-                    require_power=not power.best_effort,
-                    expected_cpu=power.expect_cpu,
-                )
-            else:
-                power_rc = validate_agentic_power(
-                    logs,
-                    *audit,
-                    results_python=python,
-                    require_power=request.require_power,
-                    expected_cpu=power.expect_cpu,
-                )
+            power_rc = collect_agentic_power_results(
+                status,
+                job.id,
+                logs,
+                infmax,
+                run.workspace,
+                request.result_filename,
+                checkout.commit,
+                request.conc_list,
+                results_python=request.inferencex_results_python,
+                require_power=not power.best_effort,
+                expected_cpu=power.expect_cpu,
+            )
             if power_rc:
                 event.fail(
                     "PowerValidationFailed",
