@@ -12,6 +12,7 @@ on:
       - 'inferencex-e2e/uv.lock'
       - 'inferencex-e2e/.python-version'
       - 'inferencex-e2e/infx/ruff.toml'
+      - 'inferencex-e2e/infx/workflows/hardware-literals-baseline.json'
       - '**/pytest.ini'
       - 'inferencex-e2e/configs/**'
       - 'inferencex-e2e/utils/srt-slurm'
@@ -58,6 +59,11 @@ jobs:
         run: |
           uvx --exclude-newer PT12H ruff@latest check --output-format=github inferencex-e2e/infx
           uvx --exclude-newer PT12H ruff@latest format --check --diff inferencex-e2e/infx
+
+      - name: Hardware literal guard
+        if: matrix.check == 'Lint'
+        working-directory: inferencex-e2e
+        run: uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml python -m infx.workflows.hardware_literals
 
       - name: Prepare test environment
         if: matrix.check == 'Tests'

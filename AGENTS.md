@@ -77,7 +77,10 @@ uv sync --locked --all-extras --group test
 uvx --exclude-newer PT12H ruff@latest check --fix infx
 uvx --exclude-newer PT12H ruff@latest format infx
 uv run --locked --all-extras --group test python -m pytest -c pyproject.toml infx/tests/ -n 4
+uv run --locked --all-extras --group test python -m infx.workflows.hardware_literals
 ```
+
+The last command fails when a file under `infx/` names more SKU keys (`h100`, `gb300-nv`, ...) in string constants than `infx/workflows/hardware-literals-baseline.json` allows; read hardware facts from `configs/runners.yaml` instead. `--update` rewrites the baseline after literals are removed, or when one is accepted on purpose.
 
 Run the focused test path first. Use `--extra workflows` for GitHub integrations and `--extra results` for result tooling. Dependency changes update `pyproject.toml` and `uv.lock` via `uv add` or `uv lock --upgrade-package NAME`. Workflow changes run the [Zizmor CI command](.github/workflows/zizmor.yml) with online checks; do not weaken its policy. Schema and generator checks do not prove serving behavior: run the exact config, inspect its generated fields, then collect smoke, sweep, and eval evidence.
 
