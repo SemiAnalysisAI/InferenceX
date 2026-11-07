@@ -71,6 +71,13 @@ def test_power_the_cluster_cannot_measure_is_refused_only_when_the_point_asks_fo
         decide_power("c", MULTI, no_exporter, _point("1", POWER="1"))
     with pytest.raises(PowerPolicyError, match="no srt-slurm.cpu-power-exporter"):
         decide_power("c", MULTI, GPU_ONLY, _point("1", POWER="1", CPU_POWER="1"))
+    required = _point("1", REQUIRE_POWER="1")
+    with pytest.raises(PowerPolicyError, match="cannot measure power: no_gpu_exporter"):
+        decide_power("c", MULTI, no_exporter, required)
+    with pytest.raises(PowerPolicyError, match="cannot measure power: dedicated_discovery"):
+        decide_power("c", MULTI, GPU_ONLY, required, lambda: True)
+    evaluation = _point("1", REQUIRE_POWER="1", EVAL_ONLY="true")
+    assert decide_power("c", MULTI, GPU_ONLY, evaluation) == power.skip_power("eval_only")
 
 
 def test_the_power_field_keeps_invalid_power_fatal():

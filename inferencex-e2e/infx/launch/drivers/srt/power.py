@@ -89,6 +89,13 @@ def skip_power(reason: SkipReason) -> PowerDecision:
     return PowerDecision(dcgm=False, agentx=False, skipped_reason=reason)
 
 
+def _skip_unless_required(request: MultiNodeRequest, reason: SkipReason) -> PowerDecision:
+    """Skip power for ``reason``; raise ``PowerPolicyError`` when REQUIRE_POWER demands it."""
+    if request.require_power:
+        raise PowerPolicyError(f"REQUIRE_POWER is on, but the point cannot measure power: {reason}")
+    return skip_power(reason)
+
+
 def decide_power(
     cluster_id: str,
     path: LaunchPath,
@@ -99,20 +106,21 @@ def decide_power(
     """Measure power on every benchmark point of a cluster with a GPU exporter, except one
     without ``power`` whose recipe runs ``dedicated_discovery``. A skipped launch says why.
 
-    Raises ``PowerPolicyError`` when the point asks for power the cluster cannot measure.
+    Raises ``PowerPolicyError`` when the point asks for power the cluster cannot measure, or
+    when REQUIRE_POWER is on and a benchmark point would skip it.
     """
     if request.eval_only:
         return skip_power("eval_only")
     if srt.gpu_exporter_image is None:
         if request.power:
             raise PowerPolicyError(f"cluster {cluster_id!r} measures no GPU power on {path}")
-        return skip_power("no_gpu_exporter")
+        return _skip_unless_required(request, "no_gpu_exporter")
     if request.cpu_power and srt.cpu_power_exporter is None:
         raise PowerPolicyError(
             f"cluster {cluster_id!r} declares no srt-slurm.cpu-power-exporter for cpu-power"
         )
     if not request.power and dedicated_discovery():
-        return skip_power("dedicated_discovery")
+        return _skip_unless_required(request, "dedicated_discovery")
     lane = POWER_LANES.get((cluster_id, path), PowerLane(rules=()))
     rule = next((rule for rule in lane.rules if rule.when(request)), None)
     return PowerDecision(
