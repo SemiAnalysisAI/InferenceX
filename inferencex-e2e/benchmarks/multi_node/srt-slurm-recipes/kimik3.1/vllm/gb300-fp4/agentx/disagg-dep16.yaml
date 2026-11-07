@@ -231,3 +231,34 @@ override_1p1d_eval:
         dyn-tool-call-parser: kimi_k3
         dyn-reasoning-parser: kimi_k3
         dyn-enable-structural-tag: true
+
+# c=352: explicit KV cache size per rank (the size vLLM reports it can fully use, minus 3 GiB).
+override_1p1d_kvb:
+  roles:
+    prefill:
+      nodes: 4
+      workers: 1
+      args:
+        kv-cache-memory-bytes: 61926160384
+    decode:
+      args:
+        kv-cache-memory-bytes: 64475268096
+
+override_1p1d_kvb_eval:
+  roles:
+    prefill:
+      nodes: 4
+      workers: 1
+      args:
+        kv-cache-memory-bytes: 61926160384
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+    decode:
+      args:
+        kv-cache-memory-bytes: 64475268096
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
