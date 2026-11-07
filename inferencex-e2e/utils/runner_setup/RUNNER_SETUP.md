@@ -143,8 +143,9 @@ key off that name:
 
    which finds the single `cluster:<id>` label in [`configs/runners.yaml`](../../configs/runners.yaml)
    that lists the runner and reads that cluster's record under `clusters:`. For example, runner
-   `b300-dsxe_07` resolves to `clusters.b300-dsxe`. For a brand-new cluster, add a `cluster:<id>` label
-   and a `clusters.<id>` record first. Keep `BASE_RUNNER_NAME` free of `_` (use hyphens): `_`
+   `b300-dsxe_07` resolves to `clusters.b300-dsxe`. For a brand-new cluster, add a `cluster:<id>` label,
+   a `clusters.<id>` record and its [`configs/platforms/<id>.yaml`](../../configs/platforms) (`{}`
+   without launch rules) first. Keep `BASE_RUNNER_NAME` free of `_` (use hyphens): `_`
    separates it from the runner index.
 
 2. **Sweep scheduling looks runner nodes up by label.** Jobs are distributed across the

@@ -307,7 +307,9 @@ schema; unknown keys fail.
 ## Platforms
 
 `platforms/<cluster id>.yaml` holds the launch workload rules of one `clusters:` record;
-every cluster has one, `{}` when it needs none. The `Platform` model in
+every cluster has one, `{}` when it needs none. Runner-config validation, which matrix
+generation runs, fails on a cluster without its file or a file without its cluster, and on
+any other file in the directory, such as a `.yml`. The `Platform` model in
 [`infx/clusters/platforms.py`](../infx/clusters/platforms.py) is the schema: unknown keys
 fail, and a file that does not validate stops every launch.
 
@@ -327,9 +329,13 @@ model-overrides:
   values, `agentic` and `multinode` the point's shape, and `model-glob` is a glob over
   `model`. Unset fields match anything.
 - `srt-lanes.srt-multi` and `srt-lanes.srt-native` say how the cluster's multi-node
-  srt-slurm lane on that launch path differs: the frameworks it runs, setup scripts, volume
-  mounts, shared run root, eval-only overrides, time limits and AgentX result directory. A
-  multi-node point on a cluster without the lane for its path fails before setup.
+  srt-slurm lane on that launch path differs: `frameworks` it runs, per-framework
+  `setup-scripts`, volume `mounts` (`when`, `volume`, `target`, `world-writable`),
+  `shared-run-root` (points that use the cluster's shared run root), eval-only
+  `real-verification` (points whose eval strips forced TRT acceptance), `eval-unsets` (keys
+  eval runs unset), `write-eval-meta` (refresh the eval's staged `meta_env.json` from the
+  workflow inputs), `time-limit` and `agentic-result-dir`. A multi-node
+  point on a cluster without the lane for its path fails before setup.
 - `native-srt-lanes` sends matching multi-node points to `srt-native`, which needs that
   lane; `batch-wrapped-lane` runs matching single-node points as a batch job;
   `salloc-time-bump` sets `SALLOC_TIME_LIMIT` to `minutes` for matching benchmark points at
@@ -341,6 +347,7 @@ model-overrides:
   `shared-hf-hub-cache` volume.
 
 Before any work, a launch checks its cluster's platform against the cluster record: a mount
-of an unknown volume, an override of an unknown model entry, a lane time limit or time bump
-that a fixed srt-slurm limit shadows, or any rule on a cluster without `slurm.srt-slurm` fails
-it.
+of an unknown volume, an override of an unknown model entry, a shared-HF-cache rule without
+a `shared-hf-hub-cache` volume, or a lane time limit or time bump that a fixed srt-slurm limit
+shadows fails it, as do `srt-lanes`, `model-overrides` or `shared-hf-cache-lanes` on a
+cluster without `slurm.srt-slurm`.
