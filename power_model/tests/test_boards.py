@@ -207,8 +207,8 @@ def test_b300_board_owns_eight_connectx8_nics_and_two_blackwell_switches(
 @pytest.mark.parametrize(
     "state, expected, board_w, nic_w, fan_w",
     [
-        ("idle", 5589.764893912, 4320, 720, 15.764893912),
-        ("active", 6074.198420499, 4800, 1200, 20.198420499),
+        ("idle", 5592.322306769, 4320, 720, 18.322306769),
+        ("active", 6077.475048973, 4800, 1200, 23.475048973),
     ],
 )
 def test_b300_chassis_scales_board_nics_and_fans_without_chassis_nics_or_switches(

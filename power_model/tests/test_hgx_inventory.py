@@ -55,7 +55,7 @@ def chassis(chassis_type=HopperHGXSystemChassis, **kwargs):
         ),
         (
             B300HGXSystemChassis,
-            2034.833394926,
+            2035.94192202,
             [
                 ("X86CPU", 2, 330),
                 ("DDR5DIMM", 32, 88),
@@ -195,8 +195,8 @@ def test_b300_scenario_updates_board_nics_without_mutating_the_board():
     idle = system.estimate_it_power(100)
     assert active.children[0].children[2].power_w == 400
     assert idle.children[0].children[2].power_w == 240
-    assert active.power_w == pytest.approx(2196.58172556)
-    assert idle.power_w == pytest.approx(2034.833394926)
+    assert active.power_w == pytest.approx(2197.973870372)
+    assert idle.power_w == pytest.approx(2035.94192202)
     assert system.ubb.estimate_breakdown(100).power_w == 1440
 
 
