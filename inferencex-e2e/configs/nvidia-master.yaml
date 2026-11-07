@@ -4086,14 +4086,14 @@ qwen3.5-fp8-h100-sglang-agentic-mtp:
       search-space:
       - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16], srt-recipe: agentic.yaml }
       - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [4, 8, 12, 16], srt-recipe: agentic.yaml }
-# MiniMax-M3.1-Flash AgentX on H100: day-zero vLLM image from
-# https://vllm.ai/blog/2026-10-23-minimax-m31-flash, multiarch manifest verified
-# 2026-10-23 (amd64 is minimax-m31-flash-x86_64-cu134). Serve flags follow the
+# MiniMax-M3.1-Flash AgentX on H100: vLLM CUDA 13.4 nightly of main 1648fef, which
+# carries the upstreamed MiniMax-M3.1-Flash model and DSpark draft (vllm#64111);
+# multiarch manifest verified 2026-11-07. Serve flags follow the
 # Hopper TP8 recipe: FP8 KV and indexer caches, NVFP4 experts on Marlin MoE.
 # Upstream does not enable DSpark on Hopper; this adds the GB200 recipe's
 # three-token DSpark, with synthetic acceptance from minimax-m3.1-flash__dspark__native__probabilistic-block.yaml.
 minimaxm31flash-fp4-h100-vllm-agentic-dspark:
-  image: vllm/vllm-openai:minimax-m31-flash@sha256:86f582dae25ea92802353727164ae4eb03b37b18baf9119b805ffaec2a7ef07c
+  image: vllm/vllm-openai:cu134-nightly-1648fefab91204f3b15bf8062217316f07f2c4bb@sha256:bec82f0f8415716ccee67dc06d7d0064a9834682a5dc1c972bb422a79f7d535d
   model: MiniMaxAI/MiniMax-M3.1-Flash
   model-prefix: minimaxm31flash
   runner: cluster:h100-dsxe
