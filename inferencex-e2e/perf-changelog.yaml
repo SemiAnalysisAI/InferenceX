@@ -12437,3 +12437,4 @@
   description:
     - "Raise H100 GLM-5.3-Flash HiCache DRAM utilization to 0.90 and the KV/Mamba host pool to 220 GB per rank, leaving room for the separate DSA indexer pool."
     - "Add HiCache concurrency 12, 14, 16, 20 and 24; set max-running-requests and cuda-graph-max-bs-decode to twice each point's concurrency, including the GPU-resident concurrency 1 and 2 points."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4903
