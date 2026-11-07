@@ -1,0 +1,20 @@
+srt-lanes:
+  srt-multi:
+    frameworks: [dynamo-sglang, dynamo-trt, dynamo-vllm, llmd-vllm, sglang, vllm]
+    setup-scripts: {dynamo-sglang: install-torchao.sh}
+    mounts:
+    - when: {model-prefix: [glm5.2], precision: [fp4], framework: [dynamo-sglang], agentic: true}
+      volume: dynamo-wheels
+      target: /configs/dynamo-wheels
+      world-writable: true
+    shared-run-root:
+    - {model-prefix: [glm5.2, kimik3.1, qwen3.5]}
+model-overrides:
+- when: {model-prefix: [dsr1], precision: [fp4], framework: [dynamo-sglang]}
+  entry: deepseek-r1-0528-fp4-v2
+- when: {model-prefix: [dsr1], precision: [fp8], framework: [dynamo-sglang]}
+  entry: deepseek-r1-0528
+- when: {model-prefix: [dsr1], precision: [fp4], framework: [dynamo-trt]}
+  served-name: deepseek-r1-fp4
+- when: {model-prefix: [dsr1], precision: [fp8], framework: [dynamo-trt]}
+  served-name: deepseek-r1-fp8

@@ -1,0 +1,12 @@
+srt-lanes:
+  srt-multi:
+    real-verification: {framework: [dynamo-trt], agentic: true}
+    write-eval-meta: true
+    time-limit: "4:00:00"
+model-overrides:
+- when: {model-prefix: [dsr1], precision: [fp4]}
+  served-name: deepseek-r1-fp4
+- when: {model-prefix: [dsr1], precision: [fp8]}
+  served-name: deepseek-r1-fp8
+- when: {model-prefix: [glm5.2], precision: [fp4], framework: [dynamo-trt]}
+  served-name: GLM-5.2-NVFP4

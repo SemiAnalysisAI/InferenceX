@@ -410,6 +410,8 @@ def test_build_recovery_config_from_current_and_historical_projects(
         "clusters:\n  fixture: {gpus-per-node: 8, arch: x86_64, scheduler: slurm,\n"
         "    slurm: {partition: batch, exclusive: true}}\n"
     )
+    (configs / "platforms").mkdir()
+    (configs / "platforms/fixture.yaml").write_text("{}\n")
     master = {"fixture": {
         "image": "example/image:stable", "model": "example/model", "model-prefix": "dsr1",
         "precision": "fp8", "framework": "sglang", "runner": "fixture", "multinode": False,

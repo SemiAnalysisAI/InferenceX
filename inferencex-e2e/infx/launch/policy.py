@@ -1,18 +1,18 @@
 """Workload policy the launch drivers share: tables keyed by cluster id, and functions over them.
 
-Tables one driver reads alone live beside it; cluster facts without a workload predicate
-belong in the cluster record. :func:`table_problems` checks every table here against it.
+Every table is a view of the platform records in ``configs/platforms``; tables one driver
+reads alone live beside it. Cluster facts without a workload predicate belong in the
+cluster record.
 """
 
 from __future__ import annotations
 
-import fnmatch
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
+from infx.clusters.platforms import Match, TimeBump, load_platforms
 from infx.launch.context import LaunchError
 from infx.launch.request import RequestError
 
@@ -20,37 +20,7 @@ if TYPE_CHECKING:
     from infx.clusters import Cluster
     from infx.launch.request import LaunchRequest
 
-
-def any_of(*values: str) -> frozenset[str]:
-    """Return ``values`` as a frozenset for a ``Match`` field."""
-    return frozenset(values)
-
-
-@dataclass(frozen=True)
-class Match:
-    """A predicate over a launch request; ``None`` fields match anything."""
-
-    prefixes: frozenset[str] | None = None
-    precisions: frozenset[str] | None = None
-    frameworks: frozenset[str] | None = None
-    specs: frozenset[str] | None = None
-    agentic: bool | None = None
-    multinode: bool | None = None
-    model_glob: str | None = None
-
-    def __call__(self, request: LaunchRequest) -> bool:
-        """Return whether ``request`` satisfies every set field."""
-        return (
-            (self.prefixes is None or request.model_prefix in self.prefixes)
-            and (self.precisions is None or request.precision in self.precisions)
-            and (self.frameworks is None or request.framework in self.frameworks)
-            and (self.specs is None or request.spec_decoding in self.specs)
-            and (self.agentic is None or request.is_agentic == self.agentic)
-            and (self.multinode is None or request.is_multinode == self.multinode)
-            and (
-                self.model_glob is None or fnmatch.fnmatchcase(request.model or "", self.model_glob)
-            )
-        )
+PLATFORMS = load_platforms()
 
 
 class LaunchPath(StrEnum):
@@ -65,16 +35,15 @@ class LaunchPath(StrEnum):
 
 
 NATIVE_SRT_LANES: dict[str, tuple[Match, ...]] = {
-    "b200-nscale": (
-        Match(any_of("kimik3.1", "glm5.2"), any_of("fp4"), any_of("dynamo-vllm")),
-        Match(any_of("glm5.2"), any_of("fp4"), any_of("dynamo-sglang"), specs=any_of("mtp")),
-    ),
+    cluster_id: platform.native_srt_lanes
+    for cluster_id, platform in PLATFORMS.items()
+    if platform.native_srt_lanes
 }
 
 BATCH_WRAPPED_LANES: dict[str, Match] = {
-    "b300-dsxe": Match(
-        any_of("dsv41flash"), frameworks=any_of("sglang"), agentic=True, multinode=False
-    ),
+    cluster_id: platform.batch_wrapped_lane
+    for cluster_id, platform in PLATFORMS.items()
+    if platform.batch_wrapped_lane is not None
 }
 
 
@@ -99,21 +68,10 @@ def launch_path(cluster_id: str, request: LaunchRequest) -> LaunchPath:
     return LaunchPath.SRT_SINGLE
 
 
-@dataclass(frozen=True)
-class TimeBump:
-    """A longer SALLOC_TIME_LIMIT for throughput runs ``when`` matches at ``CONC >= min_conc``."""
-
-    when: Match
-    min_conc: int
-    minutes: int
-
-
 SALLOC_TIME_BUMPS: dict[str, TimeBump] = {
-    "h200-dgxc": TimeBump(
-        Match(any_of("dsv41flash"), frameworks=any_of("sglang"), agentic=True, multinode=False),
-        min_conc=64,
-        minutes=1440,
-    ),
+    cluster_id: platform.salloc_time_bump
+    for cluster_id, platform in PLATFORMS.items()
+    if platform.salloc_time_bump is not None
 }
 
 
@@ -163,23 +121,3 @@ def point_settings(request: LaunchRequest) -> frozenset[str]:
             raise RequestError(f"{name} must be a JSON list of NAME=value strings, got {kind}")
         names.update(v.partition("=")[0] for v in values if isinstance(v, str))
     return frozenset(names)
-
-
-def table_problems(clusters: Mapping[str, Cluster], only: str | None = None) -> list[str]:
-    """Rows of this module's tables that ``clusters`` contradicts; only ``only``'s rows if given."""
-
-    def keys(table: Mapping[str, object]) -> list[str]:
-        """Return the keys of ``table`` within the checked scope."""
-        return [key for key in table if only in (None, key)]
-
-    tables: dict[str, Mapping[str, object]] = {
-        "NATIVE_SRT_LANES": NATIVE_SRT_LANES,
-        "BATCH_WRAPPED_LANES": BATCH_WRAPPED_LANES,
-        "SALLOC_TIME_BUMPS": SALLOC_TIME_BUMPS,
-    }
-    return [
-        f"{name}[{key!r}]: no such cluster"
-        for name, table in tables.items()
-        for key in keys(table)
-        if key not in clusters
-    ]

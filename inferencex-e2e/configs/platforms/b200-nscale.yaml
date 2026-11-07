@@ -1,0 +1,7 @@
+srt-lanes:
+  srt-native: {}
+  srt-multi:
+    frameworks: [dynamo-sglang, dynamo-trt, dynamo-vllm]
+native-srt-lanes:
+- {model-prefix: [glm5.2, kimik3.1], precision: [fp4], framework: [dynamo-vllm]}
+- {model-prefix: [glm5.2], precision: [fp4], framework: [dynamo-sglang], spec-decoding: [mtp]}

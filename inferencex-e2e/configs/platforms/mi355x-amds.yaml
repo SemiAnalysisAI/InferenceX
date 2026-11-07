@@ -1,0 +1,25 @@
+srt-lanes:
+  srt-multi:
+    mounts:
+    - when: {}
+      volume: aiperf-cache
+      target: /aiperf_mmap_cache
+    - when: {framework: [tilert]}
+      volume: it-share-data
+      target: /models
+    eval-unsets:
+    - roles.prefill.args.ep-dispatch-algorithm
+    - roles.decode.args.ep-dispatch-algorithm
+    time-limit: "01:00:00"
+    agentic-result-dir: /infmax-workspace/LOGS/agentic
+model-overrides:
+- when: {model-prefix: [dsr1], precision: [fp8], framework: [sglang-disagg]}
+  hub: true
+shared-hf-cache-lanes:
+- {agentic: true, model-glob: MiniMaxAI/MiniMax-M3.1-*}
+- {agentic: true, model-glob: amd/MiniMax-M3.1-*}
+- {agentic: true, model-glob: zai-org/GLM-5.2-FP8}
+- {agentic: true, model-glob: zai-org/GLM-5.3-Flash}
+- {agentic: true, model-glob: deepseek-ai/DeepSeek-V4.1-Flash}
+- {agentic: true, model-glob: amd/Muse-Spark-Open-*}
+- {model-glob: MiniMaxAI/MiniMax-H3}

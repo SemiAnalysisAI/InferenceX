@@ -6,7 +6,7 @@ launch's Lifecycle. Drivers say what runs; the cluster's backend runs it.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -40,22 +40,23 @@ ROUTES: dict[LaunchPath, Route] = {
 }
 
 
-def check_tables(clusters: Mapping[str, Cluster], only: str | None = None) -> None:
-    """Raise ``LaunchError`` naming every policy-table row the cluster inventory contradicts."""
-    problems = [*policy.table_problems(clusters, only), *srt.table_problems(clusters, only)]
-    if problems:
+def check_platform(cluster: Cluster) -> None:
+    """Raise ``LaunchError`` naming every row of the cluster's platform its record contradicts."""
+    platform = policy.PLATFORMS.get(cluster.id)
+    if platform is not None and (problems := platform.problems(cluster)):
         raise LaunchError(
-            "launch policy tables disagree with the cluster inventory:\n  " + "\n  ".join(problems)
+            f"configs/platforms/{cluster.id}.yaml disagrees with the cluster record:\n  "
+            + "\n  ".join(problems)
         )
 
 
 def run(cluster: Cluster, request: LaunchRequest, life: Lifecycle) -> int:
     """Run ``request`` with the driver its launch path selects.
 
-    Fails before any work if the cluster's own table rows contradict its record, or if the
+    Fails before any work if the cluster's platform rows contradict its record, or if the
     path needs another scheduler than the cluster's.
     """
-    check_tables({cluster.id: cluster}, only=cluster.id)
+    check_platform(cluster)
     path = launch_path(cluster.id, request)
     life.event.set(launch_path=path.value)
     route = ROUTES[path]

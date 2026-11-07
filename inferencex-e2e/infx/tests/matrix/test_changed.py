@@ -47,6 +47,8 @@ def test_keys_with_changed_recipes_or_points_are_listed(tmp_path, monkeypatch, c
         "clusters": {"fixture": {"gpus-per-node": 8, "arch": "x86_64", "scheduler": "slurm",
                                  "slurm": {"partition": "batch", "exclusive": True}}},
     }))  # fmt: skip
+    (tmp_path / "configs/platforms").mkdir()
+    (tmp_path / "configs/platforms/fixture.yaml").write_text("{}\n")
     (tmp_path / RECIPES / "stable.yaml").write_text(yaml.safe_dump(single_node_fragment(4)))
     write(tmp_path, {
         "edited": entry("edited.yaml", [2, 4]), "grown": entry("stable.yaml", [2]),

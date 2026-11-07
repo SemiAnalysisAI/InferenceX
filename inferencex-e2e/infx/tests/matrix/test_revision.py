@@ -36,6 +36,8 @@ def generation_repo(tmp_path, monkeypatch):
         "clusters:\n  fixture: {gpus-per-node: 8, arch: x86_64, scheduler: slurm,\n"
         "    slurm: {partition: batch, exclusive: true}}\n"
     )
+    (tmp_path / "configs/platforms").mkdir()
+    (tmp_path / "configs/platforms/fixture.yaml").write_text("{}\n")
     (tmp_path / "infx/data.bin").write_bytes(b"\x00\nblob\xff\n")
     (tmp_path / "infx/data 中文\t\r\n.bin").write_bytes(b"named asset")
     (tmp_path / "infx/data-link").symlink_to("data.bin")

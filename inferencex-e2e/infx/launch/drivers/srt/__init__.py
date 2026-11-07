@@ -11,12 +11,11 @@ import os
 import shlex
 import sys
 import tempfile
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-from infx.clusters.slurm import SlurmSettings
 from infx.config import repository_root
 from infx.launch import policy
 from infx.launch.backends.base import BackendError, JobStatus
@@ -47,10 +46,6 @@ from infx.launch.request import (
 )
 from infx.srt_slurm.video import PACKAGE_MOUNT, video_package
 from infx.srt_slurm.workload import BOUND_RECIPE, selects_dedicated_discovery
-
-if TYPE_CHECKING:
-    from infx.clusters import Cluster
-    from infx.clusters.slurm import SrtSlurmSettings
 
 
 def run_single_node(launch: Launch) -> int:
@@ -324,60 +319,3 @@ def run_multinode(launch: Launch) -> int:
     if rc := submit.submit_lane(run, submitted, checkout, recipe, arguments):
         return rc
     return collect.collect(run, lane, checkout, submitted.adopted(), decision, infmax)
-
-
-def _srt_settings(cluster: Cluster | None) -> SrtSlurmSettings | None:
-    """Return the cluster's srt-slurm settings, or None if it is absent or not a Slurm cluster."""
-    settings = cluster.scheduler_settings if cluster is not None else None
-    return settings.srt_slurm if isinstance(settings, SlurmSettings) else None
-
-
-def table_problems(clusters: Mapping[str, Cluster], only: str | None = None) -> list[str]:
-    """Rows of the srt-slurm tables that ``clusters`` contradicts; only ``only``'s rows if given."""
-    problems: list[str] = []
-
-    def scoped(cluster_id: str) -> bool:
-        """Return whether ``cluster_id`` is within the checked scope."""
-        return only in (None, cluster_id)
-
-    def profile(table: str, cluster_id: str) -> SrtSlurmSettings | None:
-        """Return the srt-slurm settings of ``cluster_id``, recording a problem if it has none."""
-        srt = _srt_settings(clusters.get(cluster_id))
-        if srt is None:
-            problems.append(f"{table}[{cluster_id!r}]: no srt-slurm cluster {cluster_id!r}")
-        return srt
-
-    def volume(where: str, cluster_id: str, name: str) -> None:
-        """Record a problem at ``where`` if ``cluster_id`` has no volume ``name``."""
-        if name not in clusters[cluster_id].scheduler_settings.volumes:
-            problems.append(f"{where}: no volume {name!r}")
-
-    for (cluster_id, path), lane in lanes.SRT_LANES.items():
-        if not scoped(cluster_id) or (srt := profile("SRT_LANES", cluster_id)) is None:
-            continue
-        where = f"SRT_LANES[{cluster_id!r}, {path}]"
-        for mount in lane.mounts:
-            volume(where, cluster_id, mount.volume)
-        if lane.shared_run_root and srt.shared_run_root is None:
-            problems.append(f"{where}: no srt-slurm.shared-run-root")
-        if srt.default_time_limit is not None and (lane.time_limit or lane.long_time_limit):
-            problems.append(f"{where}: its time limits are shadowed by default-time-limit")
-    for cluster_id, overrides in models.OVERRIDES.items():
-        if scoped(cluster_id) and profile("OVERRIDES", cluster_id) is not None:
-            entries = clusters[cluster_id].models.entries
-            problems.extend(
-                f"OVERRIDES[{cluster_id!r}]: no models.entries {row.entry!r}"
-                for row in overrides
-                if row.entry is not None and row.entry not in entries
-            )
-    for cluster_id in filter(scoped, models.SHARED_HF_CACHE_LANES):
-        if profile("SHARED_HF_CACHE_LANES", cluster_id) is not None:
-            volume(f"SHARED_HF_CACHE_LANES[{cluster_id!r}]", cluster_id, "shared-hf-hub-cache")
-    for cluster_id in filter(scoped, policy.SALLOC_TIME_BUMPS):
-        srt = _srt_settings(clusters.get(cluster_id))
-        if srt is not None and (srt.default_time_limit or srt.single_node_time_limit):
-            problems.append(
-                f"SALLOC_TIME_BUMPS[{cluster_id!r}]: shadowed by the cluster's fixed "
-                "srt-slurm default-time-limit or single-node-time-limit"
-            )
-    return problems

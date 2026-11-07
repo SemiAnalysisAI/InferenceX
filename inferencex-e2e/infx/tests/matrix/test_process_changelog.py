@@ -402,6 +402,8 @@ def planning_repo(tmp_path, monkeypatch):
     (tmp_path / "configs/amd-master.yaml").write_text("{}\n")
     master, runners = planning_inputs()
     (tmp_path / "configs/runners.yaml").write_text(yaml.safe_dump(runners))
+    (tmp_path / "configs/platforms").mkdir()
+    (tmp_path / "configs/platforms/fixture.yaml").write_text("{}\n")
     (tmp_path / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(master, sort_keys=False))
     write_shared_blocks(tmp_path)
     single = tmp_path / "benchmarks/single_node/srt-slurm-recipes/fixture/recipe.yaml"

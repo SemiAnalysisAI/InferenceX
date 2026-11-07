@@ -1,0 +1,18 @@
+srt-lanes:
+  srt-multi:
+    frameworks: [dynamo-sglang, dynamo-trt, vllm]
+    time-limit: "4:00:00"
+salloc-time-bump:
+  when: {model-prefix: [dsv41flash], framework: [sglang], agentic: true, multinode: false}
+  min-conc: 64
+  minutes: 1440
+model-overrides:
+- when: {model-prefix: [glm5.3flash], precision: [fp8], framework: [sglang], agentic: true}
+  require-config: true
+  single-node-staged: true
+- when: {model-glob: "*/Muse-Spark-Open-816B-A42B-NVFP4"}
+  single-node-staged: true
+- when: {model-prefix: [dsr1], precision: [fp8], framework: [dynamo-trt]}
+  served-name: DeepSeek-R1-0528
+- when: {model-prefix: [glm5.2], precision: [fp8], framework: [dynamo-sglang], agentic: true}
+  hub: true

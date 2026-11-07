@@ -1,0 +1,9 @@
+srt-lanes:
+  srt-multi:
+    frameworks: [dynamo-sglang, dynamo-trt, dynamo-vllm]
+batch-wrapped-lane: {model-prefix: [dsv41flash], framework: [sglang], agentic: true, multinode: false}
+model-overrides:
+- when: {framework: [dynamo-sglang, vllm], model-glob: "*/DeepSeek-V4-Pro-0813"}
+  entry: DeepSeek-V4-Pro-0813@scratch
+- when: {model-glob: "*/DeepSeek-V4-Pro-0813"}
+  entry: DeepSeek-V4-Pro-0813

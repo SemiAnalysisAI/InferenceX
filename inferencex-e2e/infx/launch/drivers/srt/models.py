@@ -1,9 +1,10 @@
 """Which checkpoint a job serves.
 
 MODEL resolves to its ``models.entries`` record, keyed by its basename or
-``<basename>@<root>``, a node-local copy first; ``OVERRIDES`` holds the exceptions. An
-srt-slurm job serves that checkpoint unless the point's additional-settings name a
-MODEL_PATH: the ``hf:<MODEL>`` its recipe is bound to maps to it.
+``<basename>@<root>``, a node-local copy first; ``OVERRIDES``, the platforms'
+``model-overrides``, holds the exceptions. An srt-slurm job serves that checkpoint unless the
+point's additional-settings name a MODEL_PATH: the ``hf:<MODEL>`` its recipe is bound to maps
+to it.
 """
 
 from __future__ import annotations
@@ -13,80 +14,21 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from infx.clusters.platforms import Match, Override
 from infx.clusters.slurm import slurm_settings
 from infx.launch.context import LaunchError
 from infx.launch.drivers.srt.config import volume_path
-from infx.launch.policy import Match, any_of, point_settings
+from infx.launch.policy import PLATFORMS, point_settings
 
 if TYPE_CHECKING:
     from infx.clusters import Cluster
     from infx.launch.request import LaunchRequest
 
 
-@dataclass(frozen=True)
-class Override:
-    """What differs for the requests ``when`` matches; per field, the first such row wins."""
-
-    when: Match
-    entry: str | None = None
-    served_name: str | None = None
-    require_config: bool = False
-    hub: bool = False
-    single_node_staged: bool = False
-
-
 OVERRIDES: dict[str, tuple[Override, ...]] = {
-    "b300-dsxe": (
-        Override(
-            Match(frameworks=any_of("vllm", "dynamo-sglang"), model_glob="*/DeepSeek-V4-Pro-0813"),
-            entry="DeepSeek-V4-Pro-0813@scratch",
-        ),
-        Override(Match(model_glob="*/DeepSeek-V4-Pro-0813"), entry="DeepSeek-V4-Pro-0813"),
-    ),
-    "gb200-nv": (
-        Override(
-            Match(any_of("dsr1"), any_of("fp4"), any_of("dynamo-sglang")),
-            entry="deepseek-r1-0528-fp4-v2",
-        ),
-        Override(
-            Match(any_of("dsr1"), any_of("fp8"), any_of("dynamo-sglang")), entry="deepseek-r1-0528"
-        ),
-        Override(
-            Match(any_of("dsr1"), any_of("fp4"), any_of("dynamo-trt")),
-            served_name="deepseek-r1-fp4",
-        ),
-        Override(
-            Match(any_of("dsr1"), any_of("fp8"), any_of("dynamo-trt")),
-            served_name="deepseek-r1-fp8",
-        ),
-    ),
-    "gb300-nv": (
-        Override(Match(any_of("dsr1"), any_of("fp4")), served_name="deepseek-r1-fp4"),
-        Override(Match(any_of("dsr1"), any_of("fp8")), served_name="deepseek-r1-fp8"),
-        Override(
-            Match(any_of("glm5.2"), any_of("fp4"), any_of("dynamo-trt")),
-            served_name="GLM-5.2-NVFP4",
-        ),
-    ),
-    "h200-dgxc": (
-        Override(
-            Match(any_of("glm5.3flash"), any_of("fp8"), any_of("sglang"), agentic=True),
-            require_config=True,
-            single_node_staged=True,
-        ),
-        Override(Match(model_glob="*/Muse-Spark-Open-816B-A42B-NVFP4"), single_node_staged=True),
-        Override(
-            Match(any_of("dsr1"), any_of("fp8"), any_of("dynamo-trt")),
-            served_name="DeepSeek-R1-0528",
-        ),
-        Override(
-            Match(any_of("glm5.2"), any_of("fp8"), any_of("dynamo-sglang"), agentic=True),
-            hub=True,
-        ),
-    ),
-    "mi355x-amds": (
-        Override(Match(any_of("dsr1"), any_of("fp8"), any_of("sglang-disagg")), hub=True),
-    ),
+    cluster_id: platform.model_overrides
+    for cluster_id, platform in PLATFORMS.items()
+    if platform.model_overrides
 }
 
 
@@ -190,15 +132,9 @@ def single_node_model_path(cluster: Cluster, request: LaunchRequest) -> str:
 
 
 SHARED_HF_CACHE_LANES: dict[str, tuple[Match, ...]] = {
-    "mi355x-amds": (
-        Match(agentic=True, model_glob="MiniMaxAI/MiniMax-M3.1-*"),
-        Match(agentic=True, model_glob="amd/MiniMax-M3.1-*"),
-        Match(agentic=True, model_glob="zai-org/GLM-5.2-FP8"),
-        Match(agentic=True, model_glob="zai-org/GLM-5.3-Flash"),
-        Match(agentic=True, model_glob="deepseek-ai/DeepSeek-V4.1-Flash"),
-        Match(agentic=True, model_glob="amd/Muse-Spark-Open-*"),
-        Match(model_glob="MiniMaxAI/MiniMax-H3"),
-    ),
+    cluster_id: platform.shared_hf_cache_lanes
+    for cluster_id, platform in PLATFORMS.items()
+    if platform.shared_hf_cache_lanes
 }
 
 

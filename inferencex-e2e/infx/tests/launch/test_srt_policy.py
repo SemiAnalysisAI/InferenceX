@@ -3,13 +3,13 @@
 import pytest
 
 from infx.clusters import Cluster, load_inventory
+from infx.clusters.platforms import Match, Override, SrtLane, TimeBump
 from infx.clusters.slurm import SrtSlurmSettings
 from infx.launch import policy
 from infx.launch.context import LaunchError
 from infx.launch.drivers.srt import models
-from infx.launch.drivers.srt.lanes import SrtLane, srt_lane, srt_time_limit
+from infx.launch.drivers.srt.lanes import srt_lane, srt_time_limit
 from infx.launch.drivers.srt.models import (
-    Override,
     checkpoint,
     host_path,
     job_env,
@@ -18,7 +18,7 @@ from infx.launch.drivers.srt.models import (
     single_node_hf_cache,
     single_node_model_path,
 )
-from infx.launch.policy import LaunchPath, Match, TimeBump, any_of, launch_path
+from infx.launch.policy import LaunchPath, launch_path
 from infx.launch.request import LaunchRequest
 
 
@@ -73,9 +73,9 @@ def test_a_path_without_a_lane_on_the_cluster_is_refused():
 
 
 OVERRIDES = (
-    Override(Match(frameworks=any_of("sglang")), entry="M"),
-    Override(Match(frameworks=any_of("trt")), served_name="served-m"),
-    Override(Match(model_glob="*/S"), require_config=True),
+    Override(when=Match(frameworks={"sglang"}), entry="M"),
+    Override(when=Match(frameworks={"trt"}), served_name="served-m"),
+    Override(when=Match(model_glob="*/S"), require_config=True),
 )
 
 
@@ -97,7 +97,7 @@ def test_models_resolve_by_basename_with_overrides(tmp_path, monkeypatch, env, p
 
 def test_single_node_staging_can_be_selected_for_one_workload(tmp_path, monkeypatch):
     monkeypatch.setitem(models.OVERRIDES, "c", (
-        Override(Match(model_glob="org/M"), single_node_staged=True),
+        Override(when=Match(model_glob="org/M"), single_node_staged=True),
     ))
     c = cluster(tmp_path, "hub")
     assert single_node_model_path(c, request(MODEL="org/M")) == str(tmp_path / "nvme/m")
@@ -119,7 +119,7 @@ def test_a_points_own_model_path_is_what_its_job_serves(tmp_path, monkeypatch):
     host = request(MODEL="org/M", MODEL_PATH="/host/m")
     assert served_path(c, host, checkpoint(c, host)) == str(tmp_path / "nvme/m")
     point = request(MODEL="org/M", MODEL_PATH="/point/m", PREFILL_ADDITIONAL_SETTINGS='["MODEL_PATH=/point/m"]')
-    monkeypatch.setitem(models.OVERRIDES, "c", (Override(Match(), require_config=True),))
+    monkeypatch.setitem(models.OVERRIDES, "c", (Override(when=Match(), require_config=True),))
     served = served_path(c, point, checkpoint(c, point))
     assert served == "/point/m"
     assert job_env(c, point, served)["MODEL_PATH"] == "/point/m"
@@ -129,8 +129,8 @@ def test_a_points_own_model_path_is_what_its_job_serves(tmp_path, monkeypatch):
     ("org/M", "0", (), {"hf:org/M": "nvme/m"}),
     ("org/Unstaged", "0", (), LaunchError),
     ("org/Unstaged", "1", (), {}),
-    ("org/M", "0", (Override(Match(), hub=True),), {}),
-    ("org/Unstaged", "0", (Override(Match(), hub=True),), {}),
+    ("org/M", "0", (Override(when=Match(), hub=True),), {}),
+    ("org/Unstaged", "0", (Override(when=Match(), hub=True),), {}),
 ])  # fmt: skip
 def test_the_bound_model_maps_to_its_checkpoint_unless_served_from_the_hub(
     tmp_path, monkeypatch, model, agentic, overrides, paths
@@ -166,8 +166,8 @@ def test_minimax_shared_cache_keeps_m31_but_excludes_retired_m3(tmp_path, model,
     assert single_node_hf_cache(c, request(MODEL=model, IS_AGENTIC="1")) == tmp_path / directory
 
 
-BUMP = TimeBump(Match(agentic=True), min_conc=64, minutes=1440)
-LANE = SrtLane(time_limit="4:00:00", long_time_limit="8:00:00", long_time=Match(any_of("dsv4"), agentic=True))
+BUMP = TimeBump(when=Match(agentic=True), min_conc=64, minutes=1440)
+LANE = SrtLane(time_limit="4:00:00", long_time_limit="8:00:00", long_time=Match(prefixes={"dsv4"}, agentic=True))
 BUMPED = dict(IS_AGENTIC="1", CONC="64")
 LONG = dict(MODEL_PREFIX="dsv4", IS_AGENTIC="1")
 

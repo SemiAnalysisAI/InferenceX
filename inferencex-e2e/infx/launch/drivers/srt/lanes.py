@@ -1,13 +1,15 @@
-"""Each cluster's multi-node srt-slurm lanes: one ``SRT_LANES`` row per (cluster, launch path)."""
+"""Each cluster's multi-node srt-slurm lanes: one ``SRT_LANES`` row per (cluster, launch path).
+
+The rows are the ``srt-lanes`` of each ``configs/platforms`` record.
+"""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from infx.clusters.platforms import SrtLane
 from infx.launch.context import LaunchError
-from infx.launch.policy import LaunchPath, Match, any_of, salloc_time_limit
+from infx.launch.policy import PLATFORMS, LaunchPath, salloc_time_limit
 from infx.launch.request import RequestError
 
 if TYPE_CHECKING:
@@ -15,77 +17,10 @@ if TYPE_CHECKING:
     from infx.launch.request import LaunchRequest, MultiNodeRequest, SrtRequest
 
 
-@dataclass(frozen=True)
-class LaneMount:
-    """A cluster volume the lane mounts for the requests ``when`` matches."""
-
-    when: Match
-    volume: str
-    target: str | None = None
-    world_writable: bool = False
-
-
-@dataclass(frozen=True)
-class SrtLane:
-    """How one cluster's multi-node srt-slurm lane differs from the others."""
-
-    frameworks: frozenset[str] | None = None
-    rejects: tuple[tuple[Match, str], ...] = ()
-    setup_scripts: Mapping[str, str] = field(default_factory=dict)
-    mounts: tuple[LaneMount, ...] = ()
-    shared_run_root: tuple[Match, ...] = ()
-    eval_unsets: tuple[str, ...] = ()
-    real_verification: Match | None = None
-    head_frontend: Match | None = None
-    write_eval_meta: bool = False
-    time_limit: str | None = None
-    long_time_limit: str | None = None
-    long_time: Match | None = None
-    agentic_result_dir: str = "/logs/agentic"
-
-
-_DYNAMO = any_of("dynamo-sglang", "dynamo-trt", "dynamo-vllm")
-
 SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
-    ("b200-nscale", LaunchPath.SRT_NATIVE): SrtLane(),
-    ("b200-nscale", LaunchPath.SRT_MULTI): SrtLane(frameworks=_DYNAMO),
-    ("b300-dsxe", LaunchPath.SRT_MULTI): SrtLane(frameworks=_DYNAMO),
-    ("gb200-nv", LaunchPath.SRT_MULTI): SrtLane(
-        frameworks=any_of(
-            "dynamo-sglang", "dynamo-trt", "dynamo-vllm", "llmd-vllm", "sglang", "vllm"
-        ),
-        setup_scripts={"dynamo-sglang": "install-torchao.sh"},
-        mounts=(
-            LaneMount(
-                Match(any_of("glm5.2"), any_of("fp4"), any_of("dynamo-sglang"), agentic=True),
-                "dynamo-wheels",
-                "/configs/dynamo-wheels",
-                world_writable=True,
-            ),
-        ),
-        shared_run_root=(Match(any_of("kimik3.1", "qwen3.5", "glm5.2")),),
-    ),
-    ("gb300-nv", LaunchPath.SRT_MULTI): SrtLane(
-        real_verification=Match(frameworks=any_of("dynamo-trt"), agentic=True),
-        write_eval_meta=True,
-        time_limit="4:00:00",
-    ),
-    ("h200-dgxc", LaunchPath.SRT_MULTI): SrtLane(
-        frameworks=any_of("dynamo-sglang", "dynamo-trt", "vllm"),
-        time_limit="4:00:00",
-    ),
-    ("mi355x-amds", LaunchPath.SRT_MULTI): SrtLane(
-        mounts=(
-            LaneMount(Match(), "aiperf-cache", "/aiperf_mmap_cache"),
-            LaneMount(Match(frameworks=any_of("tilert")), "it-share-data", "/models"),
-        ),
-        eval_unsets=(
-            "roles.prefill.args.ep-dispatch-algorithm",
-            "roles.decode.args.ep-dispatch-algorithm",
-        ),
-        time_limit="01:00:00",
-        agentic_result_dir="/infmax-workspace/LOGS/agentic",
-    ),
+    (cluster_id, LaunchPath(path)): lane
+    for cluster_id, platform in PLATFORMS.items()
+    for path, lane in platform.srt_lanes.items()
 }
 
 
@@ -126,7 +61,8 @@ def srt_time_limit(
 ) -> str:
     """A job's srtslurm.yaml ``default_time_limit`` (``lane`` None: single-node).
 
-    A fixed profile limit wins; table_problems rejects a bump or lane limit it would shadow.
+    A fixed profile limit wins; ``Platform.problems`` rejects a bump or lane limit it would
+    shadow.
     """
     if srt.default_time_limit is not None:
         return srt.default_time_limit

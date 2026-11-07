@@ -17,12 +17,11 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
+from infx.clusters.platforms import LaneMount, Match, Override, SrtLane
 from infx.launch.__main__ import main
 from infx.launch.drivers.srt import lanes, models
 from infx.launch.drivers.srt.checkout import CPU_POWER_EXPORTER_RELEASE
-from infx.launch.drivers.srt.lanes import LaneMount, SrtLane
-from infx.launch.drivers.srt.models import Override
-from infx.launch.policy import LaunchPath, Match
+from infx.launch.policy import LaunchPath
 from infx.srt_slurm.workload import BOUND_RECIPE
 from infx.tests.launch.fake_slurm import (
     ROOT,
@@ -444,7 +443,7 @@ LABS = {
     "lab-a": dict(
         lane=SrtLane(
             setup_scripts={"dynamo-sglang": "setup.sh"},
-            mounts=(LaneMount(Match(), "cache", "/cache"),), time_limit="2:00:00",
+            mounts=(LaneMount(when=Match(), volume="cache", target="/cache"),), time_limit="2:00:00",
         ),
         env=dict(FRAMEWORK="dynamo-sglang"),
         paths={"hf:org/Model": "nvme/model"}, preflight=False, tag="lab,dsr1,fp8,1024x1024,", setup_script="setup.sh",
@@ -498,7 +497,7 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
     lab = LABS[cluster_id]
     for other, spec in LABS.items():
         monkeypatch.setitem(lanes.SRT_LANES, (other, LaunchPath.SRT_MULTI), spec["lane"])
-    monkeypatch.setitem(models.OVERRIDES, "lab-a", (Override(Match(), served_name="served-model"),))
+    monkeypatch.setitem(models.OVERRIDES, "lab-a", (Override(when=Match(), served_name="served-model"),))
     env = lane_env(harness, cluster_id, lab.get("recipe", LANE_FRAGMENT), RUNNER_NAME=f"{cluster_id}_00",
                    MODEL_PREFIX="dsr1", PRECISION="fp8", MODEL="org/Model", **lab["env"])  # fmt: skip
     runner, tmp, workspace = env["RUNNER_NAME"], harness.tmp, harness.workspace
