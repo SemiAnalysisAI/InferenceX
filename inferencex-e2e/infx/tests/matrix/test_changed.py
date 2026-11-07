@@ -10,6 +10,7 @@ import yaml
 
 from infx.matrix import changed
 from infx.tests.srt_recipes import (
+    fixed_seq_entry,
     single_node_fragment,
     video_entry,
     video_fragment,
@@ -19,17 +20,6 @@ from infx.tests.srt_recipes import (
 
 ROOT = Path(__file__).resolve().parents[3]
 RECIPES = "benchmarks/single_node/srt-slurm-recipes/fixture"
-
-
-def entry(recipe: str, concurrencies: list[int]) -> dict:
-    return {
-        "image": "example/image:1", "model": "org/model", "model-prefix": "dsr1",
-        "precision": "fp8", "framework": "sglang", "runner": "cluster:fixture",
-        "multinode": False, "srt-recipe-dir": "fixture",
-        "scenarios": {"fixed-seq-len": [{"isl": 1024, "osl": 128, "search-space": [
-            {"tp": 4, "conc-list": concurrencies, "srt-recipe": recipe},
-        ]}]},
-    }  # fmt: skip
 
 
 def write(project: Path, master: dict, edited: dict, video: dict) -> None:
@@ -58,8 +48,11 @@ def test_keys_with_changed_recipes_or_points_are_listed(tmp_path, monkeypatch, c
     }))  # fmt: skip
     (project / RECIPES / "stable.yaml").write_text(yaml.safe_dump(single_node_fragment(4)))
     write(project, {
-        "edited": entry("edited.yaml", [2, 4]), "grown": entry("stable.yaml", [2]),
-        "same": entry("stable.yaml", [8]), "video": video_entry(), "gone": entry("stable.yaml", [2]),
+        "edited": fixed_seq_entry("edited.yaml", [2, 4]),
+        "grown": fixed_seq_entry("stable.yaml", [2]),
+        "same": fixed_seq_entry("stable.yaml", [8]),
+        "video": video_entry(),
+        "gone": fixed_seq_entry("stable.yaml", [2]),
     }, single_node_fragment(4), video_fragment())  # fmt: skip
     (tmp_path / ".gitignore").write_text("__pycache__/\n")
     git(tmp_path, "init", "-q")
@@ -69,8 +62,10 @@ def test_keys_with_changed_recipes_or_points_are_listed(tmp_path, monkeypatch, c
     git(tmp_path, "commit", "-qm", "base")
     git(tmp_path, "tag", "base")
     write(project, {
-        "edited": entry("edited.yaml", [2, 4]), "grown": entry("stable.yaml", [2, 4]),
-        "same": entry("stable.yaml", [8]), "video": video_entry(),
+        "edited": fixed_seq_entry("edited.yaml", [2, 4]),
+        "grown": fixed_seq_entry("stable.yaml", [2, 4]),
+        "same": fixed_seq_entry("stable.yaml", [8]),
+        "video": video_entry(),
     }, single_node_fragment(4, **{"max-running-requests": 16}), video_fragment(**{"max-running-requests": "7"}))  # fmt: skip
     monkeypatch.chdir(project)
 

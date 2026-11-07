@@ -63,6 +63,18 @@ def write_video_specs(repository: Path) -> None:
     }))  # fmt: skip
 
 
+def fixed_seq_entry(recipe: str, concurrencies: list[int]) -> dict:
+    """A master entry with one TP4 fixed-sequence point per concurrency, served by ``recipe``."""
+    return {
+        "image": "example/image:1", "model": "org/model", "model-prefix": "dsr1",
+        "precision": "fp8", "framework": "sglang", "runner": "cluster:fixture",
+        "multinode": False, "srt-recipe-dir": "fixture",
+        "scenarios": {"fixed-seq-len": [{"isl": 1024, "osl": 128, "search-space": [
+            {"tp": 4, "conc-list": concurrencies, "srt-recipe": recipe},
+        ]}]},
+    }  # fmt: skip
+
+
 def video_entry(recipe: str = "video.yaml") -> dict:
     """A master entry with one 2-GPU video point of ``VIDEO_SPEC``'s set served by ``recipe``."""
     return {
