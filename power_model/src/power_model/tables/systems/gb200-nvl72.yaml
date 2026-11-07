@@ -29,6 +29,7 @@ compute-tray:
 switch-trays: {tray: nvl72-nvswitch-tray, count: 9}
 power-shelves: nvl72-titanium-shelves
 network:
+  provenance: two-tier-scale-out-allocation
   gear: qm9700-ndr-infiniband
   per-system: 3.375
   details:

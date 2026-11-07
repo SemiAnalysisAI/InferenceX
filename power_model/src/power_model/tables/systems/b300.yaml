@@ -31,6 +31,7 @@ psu:
   redundancy: "N+N / 6+6"
 fans: normalized
 network:
+  provenance: two-tier-scale-out-allocation
   gear: generic-512t-ethernet
   per-system: 0.375
   details: {topology: two-tier, switches_per_chassis: 0.375}

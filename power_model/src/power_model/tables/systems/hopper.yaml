@@ -32,6 +32,7 @@ psu:
   redundancy: "4+2"
 fans: normalized
 network:
+  provenance: two-tier-scale-out-allocation
   gear: qm9790-ndr-infiniband
   per-system: 0.375
   details: {topology: two-tier, switches_per_chassis: 0.375}

@@ -459,6 +459,14 @@ titanium-psu-curve:
   - Shared by every HGX chassis PSU bank and the NVL72 power-shelf supplies.
   - A modeling assumption, not a measured chassis or shelf efficiency profile.
 
+two-tier-scale-out-allocation:
+  version: '1'
+  kind: assumed
+  source: User-specified two-tier scale-out topology
+  input-boundary: Share of the external scale-out switches allocated to one chassis or rack
+  assumptions:
+  - Switches per system are user-specified allocations of a two-tier fabric, not measured topologies.
+
 x86-cpu-and-dram-socket-input:
   version: '1'
   kind: measured

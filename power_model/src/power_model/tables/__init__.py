@@ -284,6 +284,7 @@ class Facility(Table):
 
 class NetworkAllocation(Table):
     gear: NonemptyString
+    provenance: NonemptyString
     per_system: Positive
     details: Details = {}
 
