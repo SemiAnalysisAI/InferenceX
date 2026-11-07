@@ -244,13 +244,12 @@ def finalize_video_results(run: SrtRun, logs: Path, producer_sha: str) -> int:
 
 
 def _stage_logs(run: SrtRun, logs: Path, power: PowerDecision) -> None:
-    """Stage LOGS/ and the server-log bundle, which carries a power lane's audit provenance."""
+    """Stage LOGS/ and the server-log bundle; a power package also gets its audit provenance."""
     if not logs.is_dir():
         return
     workspace = run.workspace
-    if power.dcgm:
-        power_dir = logs / "power"
-        power_dir.mkdir(parents=True, exist_ok=True)
+    power_dir = logs / "power"
+    if power.dcgm and power_dir.is_dir():
         for name in (EXPORTER_PROVENANCE, "power-producer-sha.txt"):
             try:
                 shutil.copyfile(workspace / name, power_dir / name)
@@ -266,7 +265,11 @@ def _stage_logs(run: SrtRun, logs: Path, power: PowerDecision) -> None:
 def collect(
     run: SrtRun, lane: SrtLane, checkout: Checkout, job: Job, power: PowerDecision, infmax: Path
 ) -> int:
-    """Stream the job, then stage power, logs, results and evals; return the first failure."""
+    """Stream the job, then stage power, logs, results and evals; return the first failure.
+
+    A job that completed with telemetry bound but left no power package fails, even when its
+    power is best-effort: srt-slurm creates the package before the benchmark starts.
+    """
     backend, request, event = run.backend, run.request, run.life.event
     fetched = checkout.root / "fetched-outputs"
     logs_staged = False
@@ -291,6 +294,9 @@ def collect(
         if not logs.is_dir():
             event.fail("LogsMissing", f"Logs directory not found at {logs}")
             return 1
+        if status.succeeded and power.dcgm and not (logs / "power").is_dir():
+            event.fail("PowerMissing", f"power_artifacts_missing: no {logs / 'power'}")
+            rc = 1
         if not request.eval_only and (power.agentx or power.adapter):
             require(request, "CONC_LIST")
             audit = (run.workspace, request.result_filename, checkout.commit, request.conc_list)

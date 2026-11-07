@@ -114,10 +114,15 @@ output = base / "42"
 logs = output / "logs"
 logs.mkdir(parents=True, exist_ok=True)
 (logs / "sweep_42.log").write_text(os.environ.get("FAKE_SWEEP_LOG", "benchmark complete\n"))
+# srtctl creates the power package when its telemetry starts, before the benchmark.
+if "-f" in argv and os.environ.get("EVAL_ONLY") != "true":
+    telemetry = yaml.safe_load(pathlib.Path(argv[argv.index("-f") + 1]).read_text()).get("telemetry") or {}
+    if telemetry.get("enabled") is True and os.environ.get("FAKE_POWER_PACKAGE") != "absent":
+        (logs / telemetry.get("storage_subdir", "power")).mkdir(exist_ok=True)
 result = os.environ["RESULT_FILENAME"]
 mode = os.environ["FAKE_RESULTS"]
 if mode == "single":
-    (logs / "power").mkdir()
+    (logs / "power").mkdir(exist_ok=True)
     (logs / "power/samples.csv").write_text("retained native samples\n")
     (logs / f"{result}.json").write_text(os.environ.get("FAKE_RESULT", '{"completed": 2}'))
 elif mode == "fixed":
@@ -140,7 +145,7 @@ elif mode == "video":
     # The client runs the plan the launcher declared before startup (video-identity.json).
     workspace = pathlib.Path(os.environ["INFMAX_WORKSPACE"])
     declared = json.loads((workspace / "video-identity.json").read_text())
-    (logs / "power").mkdir()
+    (logs / "power").mkdir(exist_ok=True)
     (logs / "power/samples.csv").write_text("retained native samples\n")
     (logs / "video/server").mkdir(parents=True)
     (logs / "video/server/spec.json").write_text(json.dumps({"gpu_uuids": ["GPU-a", "GPU-b"], "plan": declared["workload_plan"],

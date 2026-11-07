@@ -654,6 +654,21 @@ def test_nvl72_point_with_dedicated_discovery_skips_default_power(harness):
     assert "telemetry" not in yaml.safe_load((checkout / "recipe.yaml").read_text())
     [setup] = [call for call in lines(harness.logs, "make") if call.startswith("setup ")]
     assert "CPU_POWER_EXPORTER_RELEASE" not in setup
+    assert job_event(harness.workspace)["power"]["skipped_reason"] == "dedicated_discovery"
+
+
+def test_a_measured_point_whose_job_left_no_power_package_fails_though_best_effort(harness):
+    env = lane_env(
+        harness, "gb300-nv", MODEL_PREFIX="qwen3.5", PRECISION="fp8", FRAMEWORK="dynamo-sglang",
+        MODEL="Qwen/Qwen3.5-397B-A17B-FP8", FAKE_POWER_PACKAGE="absent",
+    )  # fmt: skip
+    result = launch(env, harness.config, harness.workspace)
+
+    assert result.returncode == 1, result.stderr
+    event = job_event(harness.workspace)
+    assert event["power"]["best_effort"] is True
+    assert event["error"]["type"] == "PowerMissing"
+    assert not (harness.workspace / "LOGS/power").exists()
 
 
 @pytest.mark.parametrize("shape", ["single", "multi"])
