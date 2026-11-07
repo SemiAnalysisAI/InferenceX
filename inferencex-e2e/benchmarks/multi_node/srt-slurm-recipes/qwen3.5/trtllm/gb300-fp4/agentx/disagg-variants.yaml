@@ -300,8 +300,8 @@ override_1p1d_tep4_tep8_c28:
         max_batch_size: 6
         max_num_tokens: 42
 
-override_1p2d_tep4_tep8_c128:
-  name: disagg-gb300-1p2d-tep4-tep8-c128-b16-mnt112-mtp6-kvoffload
+override_1p2d_tep4_tep8_c115:
+  name: disagg-gb300-1p2d-tep4-tep8-c115-b16-mnt112-mtp6-kvoffload
   roles:
     prefill:
       workers: 1
@@ -376,8 +376,8 @@ override_2p1d_tep2_tep8_c224:
         max_batch_size: 64
         max_num_tokens: 448
 
-override_2p2d_tep2_tep8_c176:
-  name: disagg-gb300-2p2d-tep2-tep8-c176-b32-mnt224-mtp6-kvoffload
+override_2p2d_tep2_tep8_c158:
+  name: disagg-gb300-2p2d-tep2-tep8-c158-b32-mnt224-mtp6-kvoffload
   roles:
     prefill:
       workers: 2
