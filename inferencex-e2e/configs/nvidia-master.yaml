@@ -5964,7 +5964,6 @@ kimik3.1-fp4-b300-vllm-agentic-dspark:
     # 1.0 resolves to 2999 GB of host DRAM.
     - dram-utilization: 1.0
       search-space:
-      - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [32], srt-recipe: agentic.yaml }
       # Routed experts EP8 on MegaMoE keep the fused decode at every batch size; DSpark drafts 4 tokens.
       - { tp: 8, ep: 8, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [48, 64], srt-recipe: agentic-ep.yaml }
 
