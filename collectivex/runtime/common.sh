@@ -24,7 +24,7 @@ COLLX_DEEPEP_V2_EFA_COMMIT="a227152ac29513b1c702860745a1d1e0111ae0dc"
 # ElasticBuffer needs NCCL 2.30.4 (torch pins 2.28.9). The fork sets GIN signal requirements
 # (ginStrongSignalsRequired, ginVaSignalsRequired) that NCCL first declares in 2.32, which is what
 # AWS tests it with. Part of the venv cache key.
-COLLX_DEEPEP_V2_NCCL_SPEC="nvidia-nccl-cu13==2.30.4"
+COLLX_DEEPEP_V2_NCCL_SPEC="image"
 COLLX_DEEPEP_V2_EFA_NCCL_SPEC="nvidia-nccl-cu13==2.32.3"
 
 # Selects this pool's DeepEP V2 source into COLLX_DEEPEP_V2_REPO/COMMIT/NCCL_SPEC (the venv cache is keyed
@@ -36,6 +36,7 @@ collx_select_deepep_v2_source() {
   COLLX_DEEPEP_V2_REPO="$COLLX_DEEPEP_V2_EFA_REPO"
   COLLX_DEEPEP_V2_COMMIT="$COLLX_DEEPEP_V2_EFA_COMMIT"
   COLLX_DEEPEP_V2_NCCL_SPEC="$COLLX_DEEPEP_V2_EFA_NCCL_SPEC"
+  COLLX_DEEPEP_V2_TORCH_SPEC="torch==2.11.0"
 }
 
 # Must match the image's CUDA line: the cu12 wheel's r12 host library on cu130 images survives
@@ -46,11 +47,11 @@ COLLX_DEEPEP_V2_NVSHMEM_SPEC="nvidia-nvshmem-cu13==3.4.5"
 # 2.10.0+cu130's bundled CUDA userland poisons the CUDA context during nvshmem symmetric-heap
 # init over MNNVL on sm103/driver 580.159.03 (gb300). The vLLM v0.32.0 image ships 2.13.0, which
 # this venv does not use. Part of the venv cache key.
-COLLX_DEEPEP_V2_TORCH_SPEC="torch==2.11.0"
+COLLX_DEEPEP_V2_TORCH_SPEC="image"
 
 # Build-recipe generation for the DeepEP venv cache key: bump when build flags change without
 # any pin changing, so venvs that already carry .ready are not reused with a stale recipe.
-COLLX_DEEPEP_V2_BUILD_GEN="dlarch2"
+COLLX_DEEPEP_V2_BUILD_GEN="imgstack1"
 
 COLLX_UCCL_REPO="https://github.com/uccl-project/uccl"
 COLLX_UCCL_COMMIT="df000fd3001da04a397253fd6a2204bde62d32aa"
