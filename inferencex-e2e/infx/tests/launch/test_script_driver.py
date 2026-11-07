@@ -13,6 +13,8 @@ import pytest
 import yaml
 
 from infx.clusters import load_inventory
+from infx.clusters.platforms import Platform
+from infx.launch import policy
 from infx.launch.__main__ import launch
 from infx.launch.event import JobEventBuilder
 from infx.launch.request import LaunchRequest
@@ -86,6 +88,7 @@ def fakes(tmp_path, monkeypatch):
     monkeypatch.setenv("PATH", f"{binaries}:/usr/bin:/bin")
     monkeypatch.setenv("FAKE_CALLS", str(log))
     monkeypatch.setenv("OUT_YAML", "/workspace/speedbench-reference-al.yaml")
+    monkeypatch.setitem(policy.PLATFORMS, "fixture", Platform())
 
     def calls() -> list[list[str]]:
         return [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
@@ -127,6 +130,13 @@ def launch_env(workspace: Path, **overrides: str) -> dict[str, str]:
 
 def request_for(workspace: Path, **overrides: str) -> LaunchRequest:
     return LaunchRequest.from_env(launch_env(workspace, **overrides))
+
+
+# ``python -m infx.launch`` in a child process that knows the ``fixture`` cluster's (empty) platform.
+LAUNCH_FIXTURE = [sys.executable, "-c", (
+    "import sys; from infx.clusters.platforms import Platform; from infx.launch import policy; "
+    "from infx.launch.__main__ import main; policy.PLATFORMS['fixture'] = Platform(); sys.exit(main())"
+)]  # fmt: skip
 
 
 def inventory_for(tmp_path: Path, slurm: dict | None = None, squash: dict | None = None) -> dict:
@@ -329,7 +339,7 @@ def test_sigterm_during_the_collector_cancels_the_allocation_and_exits_143(
     config.write_text(yaml.safe_dump(inventory_for(tmp_path)))
     started = tmp_path / "container-started"
     launcher = subprocess.Popen(
-        [sys.executable, "-m", "infx.launch", "--runner-config", str(config), "run"],
+        [*LAUNCH_FIXTURE, "--runner-config", str(config), "run"],
         env={**os.environ, **launch_env(workspace), "PYTHONPATH": str(ROOT),
              "FAKE_HANG_MARKER": str(started)},
         cwd=workspace, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -350,7 +360,7 @@ def test_sigterm_while_salloc_is_queued_cancels_the_pending_request(fakes, works
     config.write_text(yaml.safe_dump(inventory_for(tmp_path)))
     queued = tmp_path / "salloc-queued"
     launcher = subprocess.Popen(
-        [sys.executable, "-m", "infx.launch", "--runner-config", str(config), "run"],
+        [*LAUNCH_FIXTURE, "--runner-config", str(config), "run"],
         env={**os.environ, **launch_env(workspace), "PYTHONPATH": str(ROOT),
              "FAKE_QUEUED_MARKER": str(queued), "FAKE_STUCK_JOB": "99", "USER": "runner"},
         cwd=workspace, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,

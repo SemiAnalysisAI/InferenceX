@@ -4,7 +4,8 @@ import pytest
 import yaml
 
 from infx.clusters import SCHEDULERS, load_inventory
-from infx.launch import drivers
+from infx.clusters.platforms import Platform
+from infx.launch import drivers, policy
 from infx.launch.__main__ import launch, main
 from infx.launch.backends import BACKENDS
 from infx.launch.backends.base import BackendError, JobState, JobStatus
@@ -28,6 +29,7 @@ def fake(tmp_path, monkeypatch):
     monkeypatch.setitem(SCHEDULERS, "fake", FakeSettings)
     monkeypatch.setitem(BACKENDS, "fake", "infx.tests.launch.fake_backend:FakeBackend")
     monkeypatch.setattr(FakeBackend, "cleaned", [])
+    monkeypatch.setitem(policy.PLATFORMS, "local", Platform())
     checkpoint = tmp_path / "fake/volumes/ckpt/Kimi-K3"
     checkpoint.mkdir(parents=True)
     (checkpoint / "config.json").write_text("{}")

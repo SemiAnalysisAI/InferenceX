@@ -42,8 +42,13 @@ ROUTES: dict[LaunchPath, Route] = {
 
 def check_platform(cluster: Cluster) -> None:
     """Raise ``LaunchError`` naming every row of the cluster's platform its record contradicts."""
-    platform = policy.PLATFORMS.get(cluster.id)
-    if platform is not None and (problems := platform.problems(cluster)):
+    try:
+        platform = policy.PLATFORMS[cluster.id]
+    except KeyError:
+        raise LaunchError(
+            f"cluster {cluster.id!r} has no configs/platforms/{cluster.id}.yaml"
+        ) from None
+    if problems := platform.problems(cluster):
         raise LaunchError(
             f"configs/platforms/{cluster.id}.yaml disagrees with the cluster record:\n  "
             + "\n  ".join(problems)

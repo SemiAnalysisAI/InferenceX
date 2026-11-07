@@ -152,8 +152,6 @@ def test_native_rules_without_the_native_lane_fail_to_load():
 def test_a_launch_checks_its_own_cluster_rows_before_any_work(monkeypatch, capsys):
     labels = {"cluster:c": ["c_0"], "cluster:d": ["d_0"]}
     clusters = load_inventory({"labels": labels, "clusters": {"c": RECORD, "d": RECORD}}).clusters
-    contradicted = Platform(model_overrides=(Override(when=Match()),))
-    monkeypatch.setitem(policy.PLATFORMS, "d", contradicted)
 
     class ReachedBackend(Exception):
         pass
@@ -162,6 +160,12 @@ def test_a_launch_checks_its_own_cluster_rows_before_any_work(monkeypatch, capsy
         raise ReachedBackend
 
     monkeypatch.setattr(drivers, "backend_class", backend_class)
+    assert launch(clusters["c"], _request(IS_MULTINODE="false")) == 1
+    assert "cluster 'c' has no configs/platforms/c.yaml" in capsys.readouterr().err
+
+    contradicted = Platform(model_overrides=(Override(when=Match()),))
+    monkeypatch.setitem(policy.PLATFORMS, "c", Platform())
+    monkeypatch.setitem(policy.PLATFORMS, "d", contradicted)
     with pytest.raises(ReachedBackend), Lifecycle() as life:
         drivers.run(clusters["c"], _request(IS_MULTINODE="false"), life)
 

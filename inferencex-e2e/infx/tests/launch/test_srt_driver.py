@@ -17,7 +17,8 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
-from infx.clusters.platforms import LaneMount, Match, Override, SrtLane
+from infx.clusters.platforms import LaneMount, Match, Override, Platform, SrtLane
+from infx.launch import policy
 from infx.launch.__main__ import main
 from infx.launch.drivers.srt import lanes, models
 from infx.launch.drivers.srt.checkout import CPU_POWER_EXPORTER_RELEASE
@@ -417,7 +418,7 @@ def test_a_recipe_the_binder_rejects_fails_the_point_with_the_binders_error(harn
     (8000, False, {"mem": "4000M"}, {"mem": "4000M"}),
     (None, True, {}, {}),
 ])  # fmt: skip
-def test_single_node_jobs_cap_dram_only_on_shared_nodes(harness, dram, exclusive, step, job):
+def test_single_node_jobs_cap_dram_only_on_shared_nodes(harness, monkeypatch, dram, exclusive, step, job):
     slurm = {
         "partition": "p", "exclusive": True, "srun-args": ["--container-remap-root"],
         "volumes": {"hf-hub-cache": {"path": str(harness.tmp / "hf")}},
@@ -432,7 +433,8 @@ def test_single_node_jobs_cap_dram_only_on_shared_nodes(harness, dram, exclusive
     config = harness.tmp / "dram-runners.yaml"
     config.write_text(yaml.safe_dump({"labels": {"cluster:lab": ["lab_00"]}, "clusters": {"lab": cluster}}))
     env = single_node_env(harness, "lab", RUNNER_NAME="lab_00", GPU_COUNT="4")
-    assert_ok(launch(env, config, harness.workspace))
+    monkeypatch.setitem(policy.PLATFORMS, "lab", Platform())
+    assert launch_here(monkeypatch, env, config, harness.workspace) == 0
 
     [call] = srtctl_calls(harness.logs)
     assert json.loads(call["env"]["SRT_SRUN_OPTIONS"]) == {"container-remap-root": "", **step}
@@ -497,6 +499,7 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
     lab = LABS[cluster_id]
     for other, spec in LABS.items():
         monkeypatch.setitem(lanes.SRT_LANES, (other, LaunchPath.SRT_MULTI), spec["lane"])
+        monkeypatch.setitem(policy.PLATFORMS, other, Platform())
     monkeypatch.setitem(models.OVERRIDES, "lab-a", (Override(when=Match(), served_name="served-model"),))
     env = lane_env(harness, cluster_id, lab.get("recipe", LANE_FRAGMENT), RUNNER_NAME=f"{cluster_id}_00",
                    MODEL_PREFIX="dsr1", PRECISION="fp8", MODEL="org/Model", **lab["env"])  # fmt: skip
@@ -917,6 +920,7 @@ def test_an_agentic_eval_without_staged_prompts_runs_alone_and_records_why(harne
 
 def test_bundle_variants_take_the_lane_job_edits(harness, monkeypatch):
     monkeypatch.setitem(lanes.SRT_LANES, ("lab-a", LaunchPath.SRT_MULTI), LABS["lab-a"]["lane"])
+    monkeypatch.setitem(policy.PLATFORMS, "lab-a", Platform())
     bundle = "base:\n" + "".join(f"  {line}\n" for line in LANE_FRAGMENT.splitlines())
     env = lane_env(
         harness, "lab-a", bundle + "override_x:\n  roles:\n    decode:\n      nodes: 3\n",
