@@ -608,6 +608,8 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     assert all(f"--expected-producer-sha {commit}" in run for run in runs)
     required = lane == "agentx" or require_power == "1"
     assert all(run.endswith("--require-power") is required for run in runs)
+    [row] = workspace.glob("*_conc4.json")
+    assert json.loads(row.read_text())["require_power"] is required
     if lane == "agentx":
         status = (workspace / "LOGS/power/native-job-status.txt").read_text()
         assert status == "42|COMPLETED|0:0\n"
@@ -648,7 +650,7 @@ def test_nvl72_point_with_dedicated_discovery_skips_default_power(harness):
     env = lane_env(
         harness, "gb300-nv", LANE_FRAGMENT + dedicated, MODEL_PREFIX="qwen3.5", PRECISION="fp8",
         FRAMEWORK="dynamo-sglang", MODEL="Qwen/Qwen3.5-397B-A17B-FP8", IS_AGENTIC="1", ISL="0",
-        OSL="0", CONC="4", CONC_LIST="4", FAKE_RESULTS="agentic", REQUIRE_POWER="1",
+        OSL="0", CONC="4", CONC_LIST="4", FAKE_RESULTS="agentic",
     )  # fmt: skip
     assert_ok(launch(env, harness.config, harness.workspace))
 
@@ -658,7 +660,7 @@ def test_nvl72_point_with_dedicated_discovery_skips_default_power(harness):
     assert "CPU_POWER_EXPORTER_RELEASE" not in setup
     assert job_event(harness.workspace)["power"]["skipped_reason"] == "dedicated_discovery"
     [row] = harness.workspace.glob("*_conc4.json")
-    stamped = {"conc": 4, "power_missing": "dedicated_discovery", "require_power": True}
+    stamped = {"conc": 4, "power_missing": "dedicated_discovery", "require_power": False}
     assert json.loads(row.read_text()) == stamped
 
 

@@ -128,15 +128,16 @@ def finalize_single_node_results(run: SrtRun, logs: Path, producer_sha: str) -> 
     if request.is_agentic and not request.eval_only:
         require(request, "INFERENCEX_RESULTS_PYTHON")
         sidecar = f"power_validation_{request.result_filename}.json"
+        required = request.require_power
         power_rc = run_power_adapter(
             request.inferencex_results_python, run.workspace, logs, logs / "agentic",
             result, producer_sha,
             "--validation-result", str(run.workspace / sidecar), "--audit-source", sidecar,
-            require_power=request.require_power,
+            require_power=required,
         )  # fmt: skip
         if power_rc:
             event.fail("PowerValidationFailed", "AgentX power validation failed", report=False)
-        _stamp_rows([result] if result.is_file() else [], require_power=request.require_power)
+        _stamp_rows([result] if result.is_file() else [], require_power=required)
     if request.run_eval or request.eval_only:
         exit_file = logs / "infx-eval-exit-code"
         if not exit_file.is_file() or exit_file.read_text().rstrip("\n") != "0":
@@ -309,7 +310,10 @@ def collect(
         if status.succeeded and power.dcgm and not (logs / "power").is_dir():
             event.fail("PowerMissing", f"power_artifacts_missing: no {logs / 'power'}")
             rc = 1
+        # Whether invalid AgentX power fails the point; each AgentX row records it.
+        required = False
         if not request.eval_only and (power.agentx or power.adapter):
+            required = not power.best_effort if power.agentx else request.require_power
             require(request, "CONC_LIST")
             audit = (run.workspace, request.result_filename, checkout.commit, request.conc_list)
             python = request.inferencex_results_python
@@ -321,7 +325,7 @@ def collect(
                     infmax,
                     *audit,
                     results_python=python,
-                    require_power=not power.best_effort,
+                    require_power=required,
                     expected_cpu=power.expect_cpu,
                 )
             else:
@@ -329,7 +333,7 @@ def collect(
                     logs,
                     *audit,
                     results_python=python,
-                    require_power=request.require_power,
+                    require_power=required,
                     expected_cpu=power.expect_cpu,
                 )
             if power_rc:
@@ -352,7 +356,7 @@ def collect(
                 event.error(error)
                 rc = rc or 1
             if request.is_agentic:
-                fields: dict[str, object] = {"require_power": request.require_power}
+                fields: dict[str, object] = {"require_power": required}
                 if power.skipped_reason:
                     fields["power_missing"] = power.skipped_reason
                 rows = run.workspace.glob(f"{request.result_filename}_conc*.json")

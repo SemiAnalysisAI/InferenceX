@@ -36,6 +36,11 @@ _BASE_ENV_VARS = (
 )
 
 
+def _requires_power(env: Mapping[str, str]) -> bool:
+    """Whether invalid power fails the result: ``REQUIRE_POWER`` is on."""
+    return env.get("REQUIRE_POWER", "").lower() in {"1", "true", "yes"}
+
+
 def require_environment(env: Mapping[str, str], names: Iterable[str]) -> None:
     """Reject missing values in declaration order; empty strings remain present."""
     missing = [name for name in names if env.get(name) is None]
@@ -261,7 +266,7 @@ def aggregate_power_result(
     agg_path: Path,
 ) -> int:
     """Enrich a written result from retained native telemetry."""
-    require_power = env.get("REQUIRE_POWER", "").lower() in {"1", "true", "yes"}
+    require_power = _requires_power(env)
     validation_path = Path(f"power_validation_{env['RESULT_FILENAME']}.json")
     source = Path(env.get("POWER_ARTIFACT_DIR", "LOGS/power"))
     is_multinode = env.get("IS_MULTINODE", "false").lower() == "true"
@@ -327,7 +332,7 @@ def process_result(env: Mapping[str, str]) -> int:
     bench_path = Path(f"{result_filename}.json")
     with open(bench_path) as f:
         benchmark = json.load(f)
-    require_power = env.get("REQUIRE_POWER", "").lower() in {"1", "true", "yes"}
+    require_power = _requires_power(env)
     data = build_result(benchmark, env)
     data["require_power"] = require_power
     if (attempt := run_attempt(env)) is not None:
