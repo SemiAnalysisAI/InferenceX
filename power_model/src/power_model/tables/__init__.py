@@ -246,9 +246,12 @@ class Assemblies(Table):
     power_shelves: dict[str, PowerShelves]
 
 
-class Labeled(Table):
-    name: NonemptyString
+class Sourced(Table):
     provenance: NonemptyString | Provenance
+
+
+class Labeled(Sourced):
+    name: NonemptyString
 
 
 class PUE(Table):
@@ -270,7 +273,8 @@ class MeasuredInputs(Table):
     x86_cpu: Labeled
     x86_cpu_and_dram: Labeled
     grace_socket: Labeled
-    grace_cpu: Labeled
+    # Keeps the modeled Grace CPU's name; only the watts and provenance change.
+    grace_cpu: Sourced
 
 
 class Facility(Table):

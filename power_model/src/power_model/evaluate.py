@@ -400,13 +400,13 @@ def _bianca(t: TableSet, board: BiancaBoard, inputs: Inputs, per_gpu: float) -> 
         raise ValueError(f"Grace {state} power requires an explicit calibrated workload profile")
     memory = _lpddr5x(t, board.memory, point.memory_bandwidth_gbps)
     if inputs.cpu_and_dram_w is None:
-        cpu = workload if inputs.cpu_w is None else t.inputs.grace_cpu
+        source = workload if inputs.cpu_w is None else t.inputs.grace_cpu
         cpu_w = point.cpu_w if inputs.cpu_w is None else inputs.cpu_w
         grace = (
             Node(
-                name=cpu.name,
+                name=workload.name,
                 power_w=cpu_w,
-                provenance=t.provenance_of(cpu.provenance),
+                provenance=t.provenance_of(source.provenance),
                 details=(
                     ("architecture", "Arm"),
                     ("workload_state", state.value),

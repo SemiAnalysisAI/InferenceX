@@ -8,5 +8,5 @@ x86-cpu: {name: CPU, provenance: x86-cpu-socket-input}
 x86-cpu-and-dram: {name: CPUAndDRAM, provenance: x86-cpu-and-dram-socket-input}
 # Replaces the modeled Grace CPU and its LPDDR5X.
 grace-socket: {name: Grace socket (measured), provenance: grace-socket-input}
-# Replaces the modeled Grace CPU; LPDDR5X stays modeled.
-grace-cpu: {name: GraceCPU, provenance: grace-cpu-socket-input}
+# Replaces the modeled Grace CPU's watts; LPDDR5X stays modeled.
+grace-cpu: {provenance: grace-cpu-socket-input}

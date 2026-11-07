@@ -42,8 +42,8 @@ def test_unresolved_references_fail_at_load():
             "example": {"non-gpu-ratio": 0.5, "gpu": labeled, "non-gpu": labeled},
         },
         "inputs": {
-            key: labeled
-            for key in ("gpus", "x86-cpu", "x86-cpu-and-dram", "grace-socket", "grace-cpu")
+            **{key: labeled for key in ("gpus", "x86-cpu", "x86-cpu-and-dram", "grace-socket")},
+            "grace-cpu": {"provenance": "known"},
         },
         "systems": {},
     }
