@@ -12428,4 +12428,4 @@
     - "Concurrency 1: DCP8 -> DCP1 (decode-context-parallel-size, dcp-comm-backend and cp-kv-cache-interleave-size removed; dcp-size 1)."
     - "Concurrency 4: DSpark draft tokens 5 -> 7 (golden AL 3.41 -> 3.69); decode capture sizes 8 and 16."
     - "max-num-seqs at concurrency 10/16/24/32: 6/10/16/24 -> 7/8/13/20; concurrency 10 adds capture size 42. Concurrency 48 unchanged."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4887
