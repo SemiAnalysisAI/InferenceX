@@ -1369,7 +1369,8 @@ def load_config_files(config_files: list[str], validate: bool = True) -> dict:
 def check_platform_files(directory: Path, clusters: dict) -> None:
     """Raise ValueError unless ``directory`` holds one platform file per cluster and no other.
 
-    A runner config with no platforms directory beside it, such as a test fixture, is not checked.
+    A runner config with no platforms directory beside it is not checked: a test fixture, or a
+    checkout from before the platform registry that current code reads.
     """
     if not directory.is_dir():
         return
