@@ -486,6 +486,19 @@ def _resolve_roles(
     return roles, []
 
 
+def planned_role_gpus(power_dir: Path) -> dict[str, int] | None:
+    """GPUs per engine role in the manifest's placement, or None when the manifest cannot say."""
+    try:
+        manifest = json.loads((power_dir / MANIFEST_FILENAME).read_text())
+        devices = _parse_expected_devices(manifest)
+    except (OSError, ValueError, AttributeError, KeyError, TypeError):
+        return None
+    roles, conflicts = _resolve_roles(devices)
+    if conflicts or not roles:
+        return None
+    return dict(Counter(roles.values()))
+
+
 def _resolve_het_groups(
     devices: list[ExpectedDevice],
 ) -> tuple[dict[str, int | None], list[str]]:

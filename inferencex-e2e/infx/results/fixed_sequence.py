@@ -35,6 +35,26 @@ _BASE_ENV_VARS = (
 )
 
 
+_ROLE_GPU_ENV = {"prefill": "PREFILL_GPUS", "decode": "DECODE_GPUS", "agg": "AGGREGATE_GPUS"}
+
+
+def manifest_role_env(env: Mapping[str, str]) -> dict[str, str]:
+    """The power manifest's role GPU counts as ``build_result`` env, when it plans the env's roles.
+
+    Placement is the topology, so per-GPU throughput divides by the GPUs the power metrics
+    integrate. Without a readable manifest, or with other roles planned, the env counts stand.
+    """
+    try:
+        from .power.multinode import planned_role_gpus
+    except ImportError:
+        return {}
+    planned = planned_role_gpus(Path(env.get("POWER_ARTIFACT_DIR", "LOGS/power")))
+    declared = {role for role, name in _ROLE_GPU_ENV.items() if int(env.get(name, "0")) > 0}
+    if planned is None or set(planned) != declared:
+        return {}
+    return {_ROLE_GPU_ENV[role]: str(count) for role, count in planned.items()}
+
+
 def require_environment(env: Mapping[str, str], names: Iterable[str]) -> None:
     """Reject missing values in declaration order; empty strings remain present."""
     missing = [name for name in names if env.get(name) is None]
@@ -306,7 +326,8 @@ def process_result(env: Mapping[str, str]) -> int:
     bench_path = Path(f"{result_filename}.json")
     with open(bench_path) as f:
         benchmark = json.load(f)
-    data = build_result(benchmark, env)
+    is_multinode = env.get("IS_MULTINODE", "false").lower() == "true"
+    data = build_result(benchmark, {**env, **manifest_role_env(env)} if is_multinode else env)
     if (attempt := run_attempt(env)) is not None:
         data["run_attempt"] = attempt
     agg_path = Path(f"agg_{result_filename}.json")

@@ -794,6 +794,21 @@ class TestMultinodePower:
         assert agg["decode_avg_power_w"] == 300.0
         assert (tmp_path / "power_validation_benchmark_result.json").is_file()
 
+    def test_manifest_counts_set_per_gpu_denominators_when_env_disagrees(
+        self, tmp_path, power_env
+    ):
+        benchmark_result = self._build(tmp_path)
+
+        result = run_script(tmp_path, {**power_env, "PREFILL_GPUS": "4"}, benchmark_result)
+
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+        agg = json.loads((tmp_path / "agg_benchmark_result.json").read_text())
+        assert agg["power_valid"] == 1
+        assert (agg["num_prefill_gpu"], agg["num_decode_gpu"]) == (2, 2)
+        assert agg["tput_per_gpu"] == 15000.5 / 4
+        assert agg["input_tput_per_gpu"] == 3000.5 / 2
+        assert agg["avg_total_gpu_power_w"] / 4 == agg["avg_power_w"] == 350.0
+
     def test_missing_package_is_best_effort(self, tmp_path, power_env):
         result = run_script(tmp_path, power_env, self._bench_without_package())
 
