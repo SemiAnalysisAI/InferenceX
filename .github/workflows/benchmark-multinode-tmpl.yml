@@ -425,7 +425,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: power_audit_${{ env.RESULT_FILENAME }}
-          path: |
+          path: &power-audit-paths |
             ${{ env.INFERENCEX_E2E_ROOT }}/${{ env.RESULT_FILENAME }}_*.json
             ${{ env.INFERENCEX_E2E_ROOT }}/agg_${{ env.RESULT_FILENAME }}_*.json
             ${{ env.INFERENCEX_E2E_ROOT }}/power_validation_${{ env.RESULT_FILENAME }}_*.json
@@ -449,16 +449,7 @@ jobs:
         with:
           overwrite: true
           name: power_audit_${{ env.RESULT_FILENAME }}
-          path: |
-            ${{ env.INFERENCEX_E2E_ROOT }}/${{ env.RESULT_FILENAME }}_*.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/agg_${{ env.RESULT_FILENAME }}_*.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/power_validation_${{ env.RESULT_FILENAME }}_*.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/power/**
-            ${{ env.INFERENCEX_E2E_ROOT }}/result_processing_${{ env.RESULT_FILENAME }}.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/*/results_*.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/agentic_power_concurrency_*.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/agentic_power_timezone_offset.txt
-            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/power_validation.json
+          path: *power-audit-paths
           if-no-files-found: ignore
 
       - name: Wait before final power audit bundle upload attempt
@@ -471,16 +462,7 @@ jobs:
         with:
           overwrite: true
           name: power_audit_${{ env.RESULT_FILENAME }}
-          path: |
-            ${{ env.INFERENCEX_E2E_ROOT }}/${{ env.RESULT_FILENAME }}_*.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/agg_${{ env.RESULT_FILENAME }}_*.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/power_validation_${{ env.RESULT_FILENAME }}_*.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/power/**
-            ${{ env.INFERENCEX_E2E_ROOT }}/result_processing_${{ env.RESULT_FILENAME }}.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/*/results_*.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/agentic_power_concurrency_*.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/agentic_power_timezone_offset.txt
-            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/power_validation.json
+          path: *power-audit-paths
           if-no-files-found: ignore
 
       - name: Upload server logs
