@@ -79,11 +79,10 @@ def differences(expected, actual, path="$"):
     return [] if expected == actual else [f"{path}: {expected!r} != {actual!r}"]
 
 
-def test_grid_covers_every_table_system():
-    assert set(default_tables().systems) == set(SYSTEMS)
-
-
-@pytest.mark.parametrize("system", SYSTEMS)
+# A system on only one side fails: no grid cases, or an unknown system in the tables.
+@pytest.mark.parametrize(
+    "system", [*SYSTEMS, *(key for key in default_tables().systems if key not in SYSTEMS)]
+)
 def test_tables_match_class_graph(system):
     compared = 0
     mismatches = []

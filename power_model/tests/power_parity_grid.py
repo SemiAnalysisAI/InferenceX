@@ -11,17 +11,9 @@ import itertools
 import random
 from typing import NamedTuple
 
-SYSTEMS = (
-    "mi300",
-    "mi325",
-    "mi355",
-    "hopper",
-    "b200",
-    "b300",
-    "gb200-nvl72",
-    "gb300-nvl72",
-)
-RACKS = frozenset({"gb200-nvl72", "gb300-nvl72"})
+from power_model.models.advanced.systems.catalog import SYSTEMS as CATALOG
+
+SYSTEMS = tuple(CATALOG)
 WORKLOADS = ("idle", "fixed-seq-len", "agentic", "agentic-cpu-offloading")
 SCALE_OUT = (False, True)
 # Spans idle, typical, TDP, and both PSU-capacity and rack-shelf limits; -1 is rejected.
@@ -55,7 +47,7 @@ class Case(NamedTuple):
 
 def grid():
     for system in SYSTEMS:
-        rack = system in RACKS
+        rack = CATALOG[system].has_grace_sockets
         # A rack measures its Grace sockets, a chassis its x86 CPU packages; the dense
         # value is swept across every GPU watt.
         measured, dense = (RACK_SOCKET_WATTS, 98.066) if rack else (CHASSIS_CPU_WATTS, 180.0)
@@ -93,7 +85,8 @@ def fuzz():
         system = rng.choice(SYSTEMS)
         gpu_watts = rng.uniform(0.0, 2000.0 if rng.random() < 0.8 else 40000.0)
         watts = rng.uniform(0.0, 1500.0) if rng.random() < 0.6 else None
-        socket_watts, cpu_watts = (watts, None) if system in RACKS else (None, watts)
+        rack = CATALOG[system].has_grace_sockets
+        socket_watts, cpu_watts = (watts, None) if rack else (None, watts)
         workload, scale_out, systems = rng.choice(WORKLOADS), rng.random() < 0.5, rng.randint(1, 8)
         yield Case(system, workload, scale_out, systems, gpu_watts, socket_watts, cpu_watts)
 
