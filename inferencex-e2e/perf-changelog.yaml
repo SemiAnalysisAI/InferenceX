@@ -12431,4 +12431,4 @@
     - "TP8-decode rows: 1P3D c50 verifies 8 tokens; 1P4D c36 and c16 verify 9."
     - "Aggregated megakernel rows: c2 with max-running-requests 1; c4 with max-running-requests 2 and K31MK_* megakernel schedule options."
     - "Remove 3P1D c300, 1P1D c76, 1P3D c60 and c36, 1P4D c32 and the c1 megakernel row."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4893
