@@ -12360,4 +12360,4 @@
   description:
     - "Bump to lmsysorg/sglang-rocm:muse-spark-open-mi355-1106."
     - "Concurrency 6, 10 and 28: TP8/EP8 with GPU-only KV; 28, 32, 36, 40, 44 and 48: TP4/EP4 with a 310 GB-per-rank HiCache DRAM tier."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4881
