@@ -12419,3 +12419,14 @@
     - "Add concurrency 56."
     - "Concurrency 8 to 56: SGLANG_HICACHE_MAMBA_HOST_RATIO 12 -> 10; the image's larger device pools grew the pinned host pools past the node's GTT (hipHostMalloc failed at concurrency 32)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4846
+
+- config-keys:
+    - minimaxm31flash-fp4-mi355x-vllm-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Image vllm/vllm-openai-rocm:minimax-m31-flash (vLLM 0.32.0rc1.dev364+g8d0f05a0c) -> nightly-4fab5a07475822c6eaa971dceb2e2220d0446808 (vLLM main of 2026-11-05), pinned by digest. It carries the MiniMax-M3.1 ROCm work merged since: decode CP (#64448), qkv input-norm quant fusion (#63637), four-wave decode top-k (#65087), local DSpark 7 indexer scoring below 3 requests (#65432), FFN-side MXFP8 quant fusion (#65478), sparse-decode splits per XCD (#65481), MXFP8 GEMM tile retune for M=17-256 (#65530), DSpark drafter monokernel (#65386) and opt-in parallel top-k (#65267)."
+    - "New env at every point: VLLM_ROCM_MINIMAX_M3_MONO_DRAFTER=1 (fused FlyDSL DSpark 7 draft steps of up to 10 requests; the c64 3-token draft keeps the stock layers), VLLM_ROCM_PARALLEL_INDEX_TOPK=1 (NVFP4 indexer points; the FP8 indexer of c1-c8 bypasses it), VLLM_USE_RUST_FRONTEND=1 and VLLM_ROCM_USE_SKINNY_GEMM=0 (removes the draft LM head's 5-request skinny-GEMM cliff)."
+    - "C16/C32: breakable CUDA graphs (VLLM_USE_BREAKABLE_CUDAGRAPH=1, FULL_AND_PIECEWISE with a multiple-of-8 capture list up to 256, then 384-8192). INT4 quick all-reduce stays off: the image's AITER lacks the QuickAllReduceInt4.compile that vLLM's FlyDSL INT4 path calls, so workers fail at startup. DBO is removed from C16/C32/C64 (C1-C8 already ran without it); the 32768-token prefill budget, max-num-seqs and memory utilization are unchanged."
+    - "C1-C8 (DSpark 7, mono decode, FP8 KV and indexer caches) and C64 (DSpark 3, NVFP4 KV, CPU KV offload) keep their speculative, KV and offload settings."
+    - "Draft data types unchanged: the dspark/ draft keeps its MXFP8 config (FP8 E4M3 projections with 1x32 UE8M0 scales; BF16 fc, Markov and confidence heads, norms) and an FP8 draft KV cache. The drafter kernels replace the draft layers' MXFP8 linear, norm and attention ops, and vLLM's tests/models/minimax_m3/test_dspark_drafter.py holds them to the stock layers' own numerical spread."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4866
