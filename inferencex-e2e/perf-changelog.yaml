@@ -12419,3 +12419,10 @@
     - "Add concurrency 56."
     - "Concurrency 8 to 56: SGLANG_HICACHE_MAMBA_HOST_RATIO 12 -> 10; the image's larger device pools grew the pinned host pools past the node's GTT (hipHostMalloc failed at concurrency 32)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4846
+
+- config-keys:
+    - glm5.2-fp8-mi355x-sglang-agentic-mtp
+  description:
+    - "Update SGLang image from v0.5.19-rocm720-mi35x-20260917 to v0.5.22-rocm720-mi35x."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4518
+  scenario-type: [agentic-coding]
