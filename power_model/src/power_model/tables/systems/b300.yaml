@@ -6,11 +6,11 @@ family: hgx-chassis
 name: B300HGXSystemChassis
 provenance: explicit-component-input
 cooling: air
-gpu_count: 8
+gpu-count: 8
 board:
   name: B300HGXBoard
   provenance: b300-hgx-board
-  gpu_tdp_w: 1100
+  gpu-tdp-w: 1100
   parts:
     - {part: blackwell-hgx-nvswitch, count: 2}
     - {part: connectx8-nic, count: 8}
@@ -24,13 +24,13 @@ psu:
   provenance: b300-psu
   efficiency: titanium
   installed: 12
-  load_sharing: 12
-  redundant_capacity: 6
-  capacity_w: 3300.0
-  system_max_w: 15000.0
+  load-sharing: 12
+  redundant-capacity: 6
+  capacity-w: 3300.0
+  system-max-w: 15000.0
   redundancy: "N+N / 6+6"
 fans: normalized
 network:
   gear: generic-512t-ethernet
-  per_system: 0.375
+  per-system: 0.375
   details: {topology: two-tier, switches_per_chassis: 0.375}

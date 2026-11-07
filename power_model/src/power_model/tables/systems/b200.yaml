@@ -5,11 +5,11 @@ family: hgx-chassis
 name: B200HGXSystemChassis
 provenance: explicit-component-input
 cooling: air
-gpu_count: 8
+gpu-count: 8
 board:
   name: B200HGXBoard
   provenance: b200-hgx-board
-  gpu_tdp_w: 1000
+  gpu-tdp-w: 1000
   parts:
     - {part: blackwell-hgx-nvswitch, count: 2}
     - {part: pcie5-x16-retimer, count: 8}
@@ -25,12 +25,12 @@ psu:
   provenance: b200-psu
   efficiency: titanium
   installed: 6
-  load_sharing: 3
-  redundant_capacity: 3
-  capacity_w: 5250.0
+  load-sharing: 3
+  redundant-capacity: 3
+  capacity-w: 5250.0
   redundancy: "3+3"
 fans: normalized
 network:
   gear: qm9790-ndr-infiniband
-  per_system: 0.375
+  per-system: 0.375
   details: {topology: two-tier, switches_per_chassis: 0.375}

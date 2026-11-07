@@ -6,8 +6,8 @@ name: GB300NVL72RackScaleSystem
 aliases: [gb300]
 provenance: nvl72-rack
 cooling: liquid
-gpu_count: 72
-compute_tray:
+gpu-count: 72
+compute-tray:
   name: GB300ComputeTray
   provenance: nvl72-compute-tray
   count: 18
@@ -15,22 +15,22 @@ compute_tray:
     name: GB300BiancaBoard
     provenance: bianca-board
     count: 2
-    gpu_count: 2
-    gpu_tdp_w: 1400
-    gpu_family: Blackwell Ultra
+    gpu-count: 2
+    gpu-tdp-w: 1400
+    gpu-family: Blackwell Ultra
     cpu: grace
     memory: grace-512gb
   parts:
     - {part: connectx8-nic, count: 4, heat: air}
     - {part: system-side-800g-transceiver, count: 4, heat: air}
     - {part: nvme-drive, count: 8, heat: air}
-  fans: {curve: module, count: 8, design_air_heat_w: 500.0}
+  fans: {curve: module, count: 8, design-air-heat-w: 500.0}
   converter: compute-tray-8kw
-switch_trays: {tray: nvl72-nvswitch-tray, count: 9}
-power_shelves: nvl72-titanium-shelves
+switch-trays: {tray: nvl72-nvswitch-tray, count: 9}
+power-shelves: nvl72-titanium-shelves
 network:
   gear: generic-512t-ethernet
-  per_system: 3.375
+  per-system: 3.375
   details:
     topology: two-tier
     switches_per_rack: 3.375

@@ -6,11 +6,11 @@ family: hgx-chassis
 name: MI300HGXSystemChassis
 provenance: explicit-component-input
 cooling: air
-gpu_count: 8
+gpu-count: 8
 board:
   name: MI300UBB
   provenance: amd-8way-ubb
-  gpu_tdp_w: 750
+  gpu-tdp-w: 750
   parts:
     - {part: pcie5-x16-retimer, count: 8}
 host:
@@ -25,13 +25,13 @@ psu:
   provenance: amd_oam-psu
   efficiency: titanium
   installed: 6
-  load_sharing: 6
-  redundant_capacity: 3
-  capacity_w: 3000.0
-  system_max_w: 9000.0
+  load-sharing: 6
+  redundant-capacity: 3
+  capacity-w: 3000.0
+  system-max-w: 9000.0
   redundancy: "N+N / 3+3"
 fans: normalized
 network:
   gear: generic-512t-ethernet
-  per_system: 0.1875
+  per-system: 0.1875
   details: {topology: two-tier, switches_per_chassis: 0.1875}

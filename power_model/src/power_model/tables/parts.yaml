@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Leaf components: one electrical load per unit, counted by the boards, hosts and switches
-# that list them. name is the output component name. A part has either a fixed power_w,
-# or states_w selected by state_by:
-#   scale_out    "active" with scale-out networking, else "idle"
-#   cpu_offload  "active" for agentic-cpu-offloading, else "idle"
-#   workload     workload_states maps the workload to a state label
+# that list them. name is the output component name. A part has either a fixed power-w,
+# or states-w selected by state-by:
+#   scale-out    "active" with scale-out networking, else "idle"
+#   cpu-offload  "active" for agentic-cpu-offloading, else "idle"
+#   workload     workload-states maps the workload to a state label
 # category groups the part for presentation and decides which host parts a measured CPU
 # input replaces. A details value "$x" is filled at evaluation: $state, $power_w, $<state>_w,
 # or a variable supplied by the referencing entry's vars.
@@ -13,74 +13,74 @@ hopper-hgx-nvswitch:
   name: HopperHGXNVSwitch
   category: nvswitch
   provenance: hopper-hgx-nvswitch
-  power_w: 100.0
+  power-w: 100.0
   details: {bandwidth_tbps: 12.8, per_switch_power_w: $power_w}
 
 blackwell-hgx-nvswitch:
   name: BlackwellHGXNVSwitch
   category: nvswitch
   provenance: blackwell-hgx-nvswitch
-  power_w: 200.0
+  power-w: 200.0
   details: {bandwidth_tbps: 28.8, per_switch_power_w: $power_w}
 
 pcie5-x16-retimer:
   name: PCIe5x16Retimer
   category: other
   provenance: pcie5-x16-retimer
-  power_w: 12.0
+  power-w: 12.0
   details: {pcie_generation: 5, lane_count: 16, per_retimer_power_w: $power_w}
 
 connectx7-nic:
   name: ConnectX7NICCard
   category: nic
   provenance: connectx7-state-power
-  state_by: scale_out
-  states_w: {active: 25.0, idle: 15.0}
+  state-by: scale-out
+  states-w: {active: 25.0, idle: 15.0}
   details: {state: $state, bandwidth_gbps: 400, active_power_w: $active_w, idle_power_w: $idle_w}
 
 connectx8-nic:
   name: ConnectX8NICCard
   category: nic
   provenance: connectx8-state-power
-  state_by: scale_out
-  states_w: {active: 50.0, idle: 30.0}
+  state-by: scale-out
+  states-w: {active: 50.0, idle: 30.0}
   details: {state: $state, bandwidth_gbps: 800, active_power_w: $active_w, idle_power_w: $idle_w}
 
 thor2-nic:
   name: Thor2NICCard
   category: nic
   provenance: thor2-state-power
-  state_by: scale_out
-  states_w: {active: 30.0, idle: 20.0}
+  state-by: scale-out
+  states-w: {active: 30.0, idle: 20.0}
   details: {state: $state, bandwidth_gbps: 400, active_power_w: $active_w, idle_power_w: $idle_w}
 
 pollara-nic:
   name: PollaraNICCard
   category: nic
   provenance: pollara-state-power
-  state_by: scale_out
-  states_w: {active: 34.5, idle: 34.5}
+  state-by: scale-out
+  states-w: {active: 34.5, idle: 34.5}
   details: {state: $state, bandwidth_gbps: 400, active_power_w: $active_w, idle_power_w: $idle_w}
 
 x86-cpu:
   name: X86CPU
   category: cpu
   provenance: x86-cpu-state
-  state_by: workload
-  workload_states:
+  state-by: workload
+  workload-states:
     idle: Idle
     fixed-seq-len: FixedSeqLen
     agentic: Agentic
     agentic-cpu-offloading: AgenticOffloadingOn
-  states_w: {Idle: 80.0, FixedSeqLen: 165.0, Agentic: 180.0, AgenticOffloadingOn: 195.0}
+  states-w: {Idle: 80.0, FixedSeqLen: 165.0, Agentic: 180.0, AgenticOffloadingOn: 195.0}
   details: {architecture: x86, state: $state, per_cpu_power_w: $power_w}
 
 ddr5-dimm:
   name: DDR5DIMM
   category: memory
   provenance: ddr5-dimm-offload
-  state_by: cpu_offload
-  states_w: {idle: 2.75, active: 2.75}
+  state-by: cpu-offload
+  states-w: {idle: 2.75, active: 2.75}
   details:
     memory_type: DDR5
     state: $state
@@ -93,14 +93,14 @@ nvme-drive:
   name: NVMeDrive
   category: storage
   provenance: hgx-idle-nvme
-  power_w: 5.0
+  power-w: 5.0
   details: {state: idle, per_drive_power_w: $power_w}
 
 pex89144-pcie-switch:
   name: PEX89144PCIeSwitch
   category: other
   provenance: broadcom-pex89144
-  power_w: 45.0
+  power-w: 45.0
   details:
     vendor: Broadcom
     part_number: PEX89144
@@ -113,21 +113,21 @@ system-side-400g-transceiver:
   name: SystemSide400GTransceiver
   category: nic
   provenance: system-side-400g-transceiver
-  power_w: 8.0
+  power-w: 8.0
   details: {bandwidth_gbps: 400, per_transceiver_power_w: $power_w, power_policy: always_on}
 
 system-side-800g-transceiver:
   name: SystemSide800GTransceiver
   category: nic
   provenance: system-side-800g-transceiver
-  power_w: 15.0
+  power-w: 15.0
   details: {bandwidth_gbps: 800, per_transceiver_power_w: $power_w, power_policy: always_on}
 
 rack-blackwell-nvswitch:
   name: BlackwellNVSwitch
   category: nvswitch
   provenance: rack-blackwell-nvswitch
-  power_w: 200.0
+  power-w: 200.0
   details: {bandwidth_tbps: 28.8, power_policy: always_on}
 
 # The NVSwitch tray's management CPU is tray overhead, not a host CPU.
@@ -135,13 +135,13 @@ epyc-embedded-3151:
   name: EPYCEmbedded3151CPU
   category: nvswitch
   provenance: epyc-embedded-3151
-  power_w: 45.0
+  power-w: 45.0
 
 switch-side-800g-sr8-transceiver:
   name: SwitchSide800GSR8Transceiver
   category: network
   provenance: switch-side-800g-sr8-transceiver
-  power_w: 15.0
+  power-w: 15.0
   details:
     bandwidth_gbps: 800
     optical_standard: SR8
@@ -152,22 +152,22 @@ generic-512t-ethernet-asic:
   name: Generic 51.2T Ethernet switch ASIC
   category: network
   provenance: generic-51.2t-ethernet-switch
-  state_by: scale_out
-  states_w: {active: 900.0, idle: 539.0}
+  state-by: scale-out
+  states-w: {active: 900.0, idle: 539.0}
   details: {state: $state, bandwidth_tbps: 51.2}
 
 qm9790-switch-box:
   name: QM9790 switch box
   category: network
   provenance: qm9790-ndr-infiniband-switch
-  state_by: scale_out
-  states_w: {active: 783.0, idle: 600.0}
+  state-by: scale-out
+  states-w: {active: 783.0, idle: 600.0}
   details: {state: $state, bandwidth_tbps: 25.6}
 
 qm9700-switch-box:
   name: QM9700 switch box
   category: network
   provenance: qm9700-ndr-infiniband-switch
-  state_by: scale_out
-  states_w: {active: 783.0, idle: 600.0}
+  state-by: scale-out
+  states-w: {active: 783.0, idle: 600.0}
   details: {state: $state, bandwidth_tbps: 25.6}

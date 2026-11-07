@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Annotated, Literal, Self
 
 import yaml
-from pydantic import Field, JsonValue, model_validator
+from pydantic import ConfigDict, Field, JsonValue, model_validator
 
 from power_model.base import (
     FrozenModel,
@@ -38,19 +38,33 @@ Curve = tuple[tuple[PositiveFraction, PositiveFraction], ...]
 TEMPLATE = re.compile(r"^\$(\w+)$")
 
 
+def _kebab(name: str) -> str:
+    return name.replace("_", "-")
+
+
+class Table(FrozenModel):
+    """A table record: strict, frozen, and spelled in kebab-case in YAML."""
+
+    model_config = ConfigDict(alias_generator=_kebab)
+
+
+class ProvenanceEntry(Provenance):
+    model_config = ConfigDict(alias_generator=_kebab)
+
+
 def _increasing(points: Curve, what: str) -> None:
     if len(points) < 2 or any(a[0] >= b[0] for a, b in zip(points, points[1:], strict=False)):
         raise ValueError(f"{what} needs at least two points with increasing load fractions")
 
 
-class Part(FrozenModel):
+class Part(Table):
     """One unit of a leaf component, at a fixed power or a power per state."""
 
     name: NonemptyString
     category: Category
     provenance: NonemptyString
     power_w: Watts | None = None
-    state_by: Literal["scale_out", "cpu_offload", "workload"] | None = None
+    state_by: Literal["scale-out", "cpu-offload", "workload"] | None = None
     states_w: dict[str, Watts] = {}
     workload_states: dict[WorkloadState, str] = {}
     details: Details = {}
@@ -77,7 +91,7 @@ class Part(FrozenModel):
         return {"state", "power_w", *(f"{label}_w" for label in self.states_w)}
 
 
-class PartUse(FrozenModel):
+class PartUse(Table):
     part: NonemptyString
     count: PositiveCount
     vars: Details = {}
@@ -87,7 +101,7 @@ class TrayPartUse(PartUse):
     heat: Literal["air", "liquid"]
 
 
-class Gear(FrozenModel):
+class Gear(Table):
     """One external switch: a box and its optics, in the switch's scale-out state."""
 
     name: NonemptyString
@@ -96,7 +110,7 @@ class Gear(FrozenModel):
     parts: tuple[PartUse, ...]
 
 
-class EfficiencyCurve(FrozenModel):
+class EfficiencyCurve(Table):
     provenance: NonemptyString
     points: Curve
 
@@ -106,7 +120,7 @@ class EfficiencyCurve(FrozenModel):
         return self
 
 
-class DCConverter(FrozenModel):
+class DCConverter(Table):
     provenance: NonemptyString
     module_capacity_w: Positive
     input_voltage_v: Positive
@@ -132,7 +146,7 @@ class DCConverter(FrozenModel):
         )
 
 
-class HGXFans(FrozenModel):
+class HGXFans(Table):
     name: NonemptyString
     provenance: NonemptyString
     fan_complement: NonemptyString
@@ -148,7 +162,7 @@ class HGXFans(FrozenModel):
         return self
 
 
-class RackFan(FrozenModel):
+class RackFan(Table):
     provenance: NonemptyString
     rated_w: Watts
     min_speed: Fraction
@@ -161,13 +175,13 @@ class RackFan(FrozenModel):
         return self
 
 
-class Quadratic(FrozenModel):
+class Quadratic(Table):
     a: float
     b1: float
     c: float
 
 
-class LPDDR5X(FrozenModel):
+class LPDDR5X(Table):
     name: NonemptyString
     provenance: NonemptyString
     capacity_gb: PositiveInt
@@ -176,12 +190,12 @@ class LPDDR5X(FrozenModel):
     milliwatts: Quadratic
 
 
-class GracePoint(FrozenModel):
+class GracePoint(Table):
     cpu_w: Watts
     memory_bandwidth_gbps: Watts
 
 
-class GraceWorkload(FrozenModel):
+class GraceWorkload(Table):
     """Per-socket CPU watts and DRAM bandwidth; a missing workload is uncalibrated."""
 
     name: NonemptyString
@@ -189,7 +203,7 @@ class GraceWorkload(FrozenModel):
     states: dict[WorkloadState, GracePoint]
 
 
-class Curves(FrozenModel):
+class Curves(Table):
     psu_efficiency: dict[str, EfficiencyCurve]
     dc_converters: dict[str, DCConverter]
     hgx_fans: dict[str, HGXFans]
@@ -198,13 +212,13 @@ class Curves(FrozenModel):
     grace_workload: dict[str, GraceWorkload]
 
 
-class FanUse(FrozenModel):
+class FanUse(Table):
     curve: NonemptyString
     count: PositiveCount
     design_air_heat_w: Positive
 
 
-class Tray(FrozenModel):
+class Tray(Table):
     name: NonemptyString
     provenance: NonemptyString
     parts: tuple[TrayPartUse, ...]
@@ -212,7 +226,7 @@ class Tray(FrozenModel):
     converter: NonemptyString
 
 
-class PowerShelves(FrozenModel):
+class PowerShelves(Table):
     provenance: NonemptyString
     installed_shelves: PositiveCount
     active_shelves: PositiveCount
@@ -230,40 +244,40 @@ class PowerShelves(FrozenModel):
         return self
 
 
-class Assemblies(FrozenModel):
+class Assemblies(Table):
     trays: dict[str, Tray]
     power_shelves: dict[str, PowerShelves]
 
 
-class Labeled(FrozenModel):
+class Labeled(Table):
     name: NonemptyString
-    provenance: NonemptyString | Provenance
+    provenance: NonemptyString | ProvenanceEntry
 
 
-class PUE(FrozenModel):
+class PUE(Table):
     provenance: NonemptyString
     air: Annotated[float, Field(ge=1, allow_inf_nan=False)]
     liquid: Annotated[float, Field(ge=1, allow_inf_nan=False)]
 
 
-class ExampleModel(FrozenModel):
+class ExampleModel(Table):
     non_gpu_ratio: Annotated[float, Field(ge=0, allow_inf_nan=False)]
     gpu: Labeled
     non_gpu: Labeled
 
 
-class Facility(FrozenModel):
+class Facility(Table):
     pue: PUE
     example: ExampleModel
 
 
-class NetworkAllocation(FrozenModel):
+class NetworkAllocation(Table):
     gear: NonemptyString
     per_system: Positive
     details: Details = {}
 
 
-class SystemTable(FrozenModel):
+class SystemTable(Table):
     id: NonemptyString
     name: NonemptyString
     aliases: tuple[str, ...] = ()
@@ -273,14 +287,14 @@ class SystemTable(FrozenModel):
     network: NetworkAllocation
 
 
-class HGXBoard(FrozenModel):
+class HGXBoard(Table):
     name: NonemptyString
     provenance: NonemptyString
     gpu_tdp_w: PositiveInt
     parts: tuple[PartUse, ...]
 
 
-class PSUBank(FrozenModel):
+class PSUBank(Table):
     name: NonemptyString
     provenance: NonemptyString
     efficiency: NonemptyString
@@ -308,7 +322,7 @@ class HGXSystem(SystemTable):
     fans: NonemptyString
 
 
-class BiancaBoard(FrozenModel):
+class BiancaBoard(Table):
     name: NonemptyString
     provenance: NonemptyString
     count: PositiveCount
@@ -324,7 +338,7 @@ class ComputeTray(Tray):
     board: BiancaBoard
 
 
-class TrayCount(FrozenModel):
+class TrayCount(Table):
     tray: NonemptyString
     count: PositiveCount
 
@@ -370,8 +384,8 @@ def _templates(details: Details) -> set[str]:
     }
 
 
-class TableSet(FrozenModel):
-    provenance: dict[str, Provenance]
+class TableSet(Table):
+    provenance: dict[str, ProvenanceEntry]
     parts: dict[str, Part]
     network: dict[str, Gear]
     curves: Curves
@@ -466,7 +480,7 @@ def load_tables(root: Path = TABLES_DIR) -> TableSet:
     """Read and validate every table under root."""
     raw: dict[str, object] = {name: _read(root / f"{name}.yaml") for name in TABLE_FILES}
     raw["provenance"] = {
-        key: {"profile_id": key, **value} for key, value in _read(root / "provenance.yaml").items()
+        key: {"profile-id": key, **value} for key, value in _read(root / "provenance.yaml").items()
     }
     raw["systems"] = {path.stem: _read(path) for path in sorted(root.glob("systems/*.yaml"))}
     return TableSet.model_validate_json(json.dumps(raw))

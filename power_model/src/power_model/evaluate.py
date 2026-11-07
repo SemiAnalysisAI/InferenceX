@@ -187,7 +187,7 @@ def _part(t: TableSet, use: PartUse, state: OperatingState) -> Node:
     else:
         if part.state_by == "workload":
             label = part.workload_states[state.workload_state]
-        elif part.state_by == "scale_out":
+        elif part.state_by == "scale-out":
             label = state.nic_state
         else:
             label = "active" if state.cpu_offload else "idle"

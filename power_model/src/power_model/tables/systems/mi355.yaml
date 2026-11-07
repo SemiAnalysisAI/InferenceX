@@ -6,11 +6,11 @@ family: hgx-chassis
 name: MI355HGXSystemChassis
 provenance: explicit-component-input
 cooling: air
-gpu_count: 8
+gpu-count: 8
 board:
   name: MI355UBB
   provenance: amd-8way-ubb
-  gpu_tdp_w: 1400
+  gpu-tdp-w: 1400
   parts:
     - {part: pcie5-x16-retimer, count: 8}
 host:
@@ -25,13 +25,13 @@ psu:
   provenance: amd_oam-psu
   efficiency: titanium
   installed: 6
-  load_sharing: 6
-  redundant_capacity: 4
-  capacity_w: 6600.0
-  system_max_w: 26400.0
+  load-sharing: 6
+  redundant-capacity: 4
+  capacity-w: 6600.0
+  system-max-w: 26400.0
   redundancy: "4+2"
 fans: normalized
 network:
   gear: generic-512t-ethernet
-  per_system: 0.1875
+  per-system: 0.1875
   details: {topology: two-tier, switches_per_chassis: 0.1875}
