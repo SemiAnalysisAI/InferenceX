@@ -4,7 +4,7 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from power_model.tables import TableSet
+from power_model.tables import TableSet, read_table
 
 
 def test_unresolved_references_fail_at_load():
@@ -46,3 +46,11 @@ def test_unresolved_references_fail_at_load():
 
     with pytest.raises(ValidationError, match="provenance unknown.*drive detail variable drive_w"):
         TableSet.model_validate_json(json.dumps(raw))
+
+
+def test_duplicate_yaml_keys_fail_at_load(tmp_path):
+    table = tmp_path / "parts.yaml"
+    table.write_text("nvme-drive:\n  power-w: 5.0\nnvme-drive:\n  power-w: 6.0\n")
+
+    with pytest.raises(ValueError, match="Duplicate key nvme-drive"):
+        read_table(table)

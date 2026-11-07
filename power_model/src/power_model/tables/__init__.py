@@ -28,6 +28,7 @@ from power_model.base import (
 TABLES_DIR = Path(__file__).parent
 TABLE_FILES = ("parts", "network", "curves", "assemblies", "facility")
 
+Finite = Annotated[float, Field(allow_inf_nan=False)]
 Positive = Annotated[float, Field(gt=0, allow_inf_nan=False)]
 Fraction = Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)]
 PositiveFraction = Annotated[float, Field(gt=0, le=1, allow_inf_nan=False)]
@@ -176,9 +177,9 @@ class RackFan(Table):
 
 
 class Quadratic(Table):
-    a: float
-    b1: float
-    c: float
+    a: Finite
+    b1: Finite
+    c: Finite
 
 
 class LPDDR5X(Table):
@@ -472,17 +473,30 @@ class TableSet(Table):
         return ref if isinstance(ref, Provenance) else self.provenance[ref]
 
 
-def _read(path: Path) -> object:
-    return yaml.safe_load(path.read_text(encoding="utf-8"))
+class _UniqueKeyLoader(yaml.SafeLoader):
+    """PyYAML keeps the last of two equal keys; a copied block must fail instead."""
+
+    def construct_mapping(self, node, deep=False):
+        keys = [self.construct_object(key, deep=deep) for key, _ in node.value]
+        if duplicates := sorted({str(key) for key in keys if keys.count(key) > 1}):
+            raise ValueError(f"Duplicate key {', '.join(duplicates)} at {node.start_mark}")
+        return super().construct_mapping(node, deep=deep)
+
+
+def read_table(path: Path) -> object:
+    return yaml.load(path.read_text(encoding="utf-8"), Loader=_UniqueKeyLoader)
 
 
 def load_tables(root: Path = TABLES_DIR) -> TableSet:
     """Read and validate every table under root."""
-    raw: dict[str, object] = {name: _read(root / f"{name}.yaml") for name in TABLE_FILES}
+    raw: dict[str, object] = {name: read_table(root / f"{name}.yaml") for name in TABLE_FILES}
     raw["provenance"] = {
-        key: {"profile-id": key, **value} for key, value in _read(root / "provenance.yaml").items()
+        key: {"profile-id": key, **value}
+        for key, value in read_table(root / "provenance.yaml").items()
     }
-    raw["systems"] = {path.stem: _read(path) for path in sorted(root.glob("systems/*.yaml"))}
+    raw["systems"] = {path.stem: read_table(path) for path in sorted(root.glob("systems/*.yaml"))}
+    if not raw["systems"]:
+        raise ValueError(f"No system tables in {root / 'systems'}")
     return TableSet.model_validate_json(json.dumps(raw))
 
 
