@@ -71,17 +71,13 @@ class SrtLane(Record):
     """How one cluster's multi-node srt-slurm lane differs from the others."""
 
     frameworks: Values | None = None
-    rejects: tuple[tuple[Match, str], ...] = ()
     setup_scripts: dict[str, str] = Field(default_factory=dict, alias="setup-scripts")
     mounts: tuple[LaneMount, ...] = ()
     shared_run_root: tuple[Match, ...] = Field(default=(), alias="shared-run-root")
     eval_unsets: tuple[str, ...] = Field(default=(), alias="eval-unsets")
     real_verification: Match | None = Field(default=None, alias="real-verification")
-    head_frontend: Match | None = Field(default=None, alias="head-frontend")
     write_eval_meta: bool = Field(default=False, alias="write-eval-meta")
     time_limit: TimeLimit | None = Field(default=None, alias="time-limit")
-    long_time_limit: TimeLimit | None = Field(default=None, alias="long-time-limit")
-    long_time: Match | None = Field(default=None, alias="long-time")
     agentic_result_dir: str = Field(default="/logs/agentic", alias="agentic-result-dir")
 
 
@@ -145,8 +141,8 @@ class Platform(Record):
             )
             if lane.shared_run_root and srt.shared_run_root is None:
                 problems.append(f"{where}: no srt-slurm.shared-run-root")
-            if srt.default_time_limit is not None and (lane.time_limit or lane.long_time_limit):
-                problems.append(f"{where}: its time limits are shadowed by default-time-limit")
+            if srt.default_time_limit is not None and lane.time_limit:
+                problems.append(f"{where}: its time limit is shadowed by default-time-limit")
         problems.extend(
             f"model-overrides: no models.entries {row.entry!r}"
             for row in self.model_overrides

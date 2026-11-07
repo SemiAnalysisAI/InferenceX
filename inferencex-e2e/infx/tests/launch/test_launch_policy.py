@@ -124,7 +124,7 @@ def test_every_platform_row_its_cluster_record_contradicts_is_reported_at_once()
     assert CONTRADICTED.problems(_cluster(fixed)) == [
         "srt-lanes.srt-multi: no volume 'wheels'",
         "srt-lanes.srt-multi: no srt-slurm.shared-run-root",
-        "srt-lanes.srt-multi: its time limits are shadowed by default-time-limit",
+        "srt-lanes.srt-multi: its time limit is shadowed by default-time-limit",
         "model-overrides: no models.entries 'M'",
         "shared-hf-cache-lanes: no volume 'shared-hf-hub-cache'",
         "salloc-time-bump: shadowed by the cluster's fixed srt-slurm default-time-limit or "

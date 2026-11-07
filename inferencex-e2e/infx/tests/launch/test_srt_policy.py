@@ -167,22 +167,19 @@ def test_minimax_shared_cache_keeps_m31_but_excludes_retired_m3(tmp_path, model,
 
 
 BUMP = TimeBump(when=Match(agentic=True), min_conc=64, minutes=1440)
-LANE = SrtLane(time_limit="4:00:00", long_time_limit="8:00:00", long_time=Match(prefixes={"dsv4"}, agentic=True))
+LANE = SrtLane(time_limit="4:00:00")
 BUMPED = dict(IS_AGENTIC="1", CONC="64")
-LONG = dict(MODEL_PREFIX="dsv4", IS_AGENTIC="1")
 
 
 @pytest.mark.parametrize(("profile", "lane", "env", "limit"), [
     ({}, None, {}, "480"),
     ({}, None, BUMPED, "1440"),
     ({"single-node-time-limit": 180}, None, BUMPED, "180"),
-    ({}, LANE, LONG, "8:00:00"),
-    ({}, LANE, dict(LONG, IS_AGENTIC="0"), "4:00:00"),
+    ({}, LANE, BUMPED, "4:00:00"),
     ({}, SrtLane(), BUMPED, "480"),
     ({"default-time-limit": "6:00:00", "single-node-time-limit": 180}, None, BUMPED, "6:00:00"),
 ], ids=[
-    "single-node-salloc", "single-node-bump", "single-node-profile-limit", "lane-long-limit",
-    "lane-limit", "multi-node-salloc-is-never-bumped", "fixed-limit-wins",
+    "single-node-salloc", "single-node-bump", "single-node-profile-limit", "lane-limit", "multi-node-salloc-is-never-bumped", "fixed-limit-wins",
 ])  # fmt: skip
 def test_srt_time_limits(monkeypatch, profile, lane, env, limit):
     monkeypatch.setitem(policy.SALLOC_TIME_BUMPS, "c", BUMP)

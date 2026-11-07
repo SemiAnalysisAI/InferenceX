@@ -40,9 +40,6 @@ def check_request(lane: SrtLane, request: SrtRequest) -> None:
         raise LaunchError(
             f"Unsupported framework: {framework}. Supported frameworks are: {supported}"
         )
-    for match, message in lane.rejects:
-        if match(request):
-            raise LaunchError(f"{message} (FRAMEWORK={framework})")
 
 
 def srt_recipe(request: MultiNodeRequest) -> str:
@@ -68,8 +65,6 @@ def srt_time_limit(
         return srt.default_time_limit
     if lane is None:
         minutes = srt.single_node_time_limit or salloc_time_limit(cluster_id, request)
-    elif lane.long_time is not None and lane.long_time_limit and lane.long_time(request):
-        return lane.long_time_limit
     elif lane.time_limit is not None:
         return lane.time_limit
     else:
