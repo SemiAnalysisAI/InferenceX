@@ -10,6 +10,7 @@ repository root in an environment with the required device libraries.
 | [gemm](gemm/bench.py) | Dense matrix multiplication latency and TFLOP/s | PyTorch with CUDA/ROCm, or compatible `torch_npu` and CANN for Ascend |
 | [mem_bw](mem_bw/bench.py) | Device copy bandwidth, counting reads and writes | PyTorch with CUDA/ROCm and Triton |
 | [l2_distance/nvidia](l2_distance/nvidia/bench.py) | Per-SM L2 pointer-chase latency differences | NVIDIA GPU and CUDA toolkit (`nvcc`) |
+| [l2_distance/amd](l2_distance/amd/bench.py) | Per-CU L2 / Infinity Cache pointer-chase latency differences | AMD GPU (`gfx942`, `gfx950`) and ROCm (`hipcc`, `rocminfo`) |
 | [gpc_query](gpc_query/) | GPC/TPC configuration from cluster scheduling | NVIDIA GPU with `sm_90+` and CUDA toolkit |
 
 ## GEMM
@@ -54,3 +55,39 @@ python ubenchX/gemm/bench.py --device npu --shapes shapes.json \
 
 The GEMM path has not yet been validated on accelerator hardware; no hardware
 measurements are included. It does not check outputs against a numerical reference.
+
+## L2 distance
+
+```bash
+python ubenchX/l2_distance/nvidia/bench.py             # NVIDIA: SM-to-SM, chain = L2
+python ubenchX/l2_distance/amd/bench.py                # AMD: CU-to-CU, chain = per-XCD L2 (4 MB)
+python ubenchX/l2_distance/amd/bench.py --chain-mb 64  # AMD: chain in the Infinity Cache
+python ubenchX/l2_distance/amd/plot_distance.py ubenchX/l2_distance/amd/results/distance.csv
+```
+
+`l2_distance/nvidia` is the CUDA SM-to-SM benchmark; `l2_distance/amd` is its
+CU-to-CU counterpart for CDNA3/CDNA4. One single-wavefront workgroup per CU,
+pinned one-per-CU by requesting the whole LDS, pointer-chases a random linked
+list of 128-byte lines. Each dependent load is a device-scope (`sc1`) load,
+which misses the CU's vector L1 and is served by the XCD's L2, and is timed
+with `s_memtime` in shader-clock cycles. Per-hop latencies are staged in LDS so
+the timed loop issues no global stores. CUs are identified from the `HW_ID` and
+`XCC_ID` hardware registers and reported as `cu = xcd << 6 | se << 4 | cu_id`.
+
+The chain size selects the cache level under test. The default equals the
+per-XCD L2 reported by HIP (4 MB on MI300X and MI355X). `--chain-mb 64` exceeds
+L2 and sits in the 256 MB Infinity Cache; `--chain-mb 1024` exceeds the
+Infinity Cache as well. Every XCD has a private, identically organised L2, so an
+L2-resident chain shows no cross-XCD structure, only the CU's position inside
+its XCD (the SE0/SE1 and SE2/SE3 halves). An Infinity-Cache-resident chain shows
+IOD locality instead: XCDs 0-3 against XCDs 4-7 on MI355X. `plot_distance.py`
+groups CUs by IOD (XCDs 0-3 and 4-7 by default; `--iod-groups` takes an
+explicit assignment, or `cluster` to derive two groups from the data), then by
+XCD and shader engine.
+
+`--num-passes` averages over passes with shuffled start offsets, `--num-hops`
+limits the timed hops per CU, and `--warm-hops` sets the untimed traversal that
+fills the cache before timing. The pairwise CSV (`cu_a, cu_b, mean_abs_diff,
+xcd_a, xcd_b`) goes to stdout; `results/cu_info.csv` holds the per-CU XCD, SE,
+CU id and mean latency, and `results/latency_profile.csv` the sorted profile of
+the first CU.
