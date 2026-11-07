@@ -47,11 +47,15 @@ def test_keys_with_changed_recipes_or_points_are_listed(tmp_path, monkeypatch, c
                                  "slurm": {"partition": "batch", "exclusive": True}}},
     }))  # fmt: skip
     (project / RECIPES / "stable.yaml").write_text(yaml.safe_dump(single_node_fragment(4)))
+    unbound = video_fragment()
+    del unbound["services"][0]["env"]["VIDEO_RUNTIME_REVISION"]
+    (project / RECIPES / "unbound.yaml").write_text(yaml.safe_dump(unbound))
     write(project, {
         "edited": fixed_seq_entry("edited.yaml", [2, 4]),
         "grown": fixed_seq_entry("stable.yaml", [2]),
         "same": fixed_seq_entry("stable.yaml", [8]),
         "video": video_entry(),
+        "unbound": video_entry("unbound.yaml"),
         "gone": fixed_seq_entry("stable.yaml", [2]),
     }, single_node_fragment(4), video_fragment())  # fmt: skip
     (tmp_path / ".gitignore").write_text("__pycache__/\n")
@@ -66,28 +70,37 @@ def test_keys_with_changed_recipes_or_points_are_listed(tmp_path, monkeypatch, c
         "grown": fixed_seq_entry("stable.yaml", [2, 4]),
         "same": fixed_seq_entry("stable.yaml", [8]),
         "video": video_entry(),
+        "unbound": video_entry("unbound.yaml"),
     }, single_node_fragment(4, **{"max-running-requests": 16}), video_fragment(**{"max-running-requests": "7"}))  # fmt: skip
+    (project / RECIPES / "unbound.yaml").write_text(yaml.safe_dump(video_fragment()))
     monkeypatch.chdir(project)
 
     changed.main(["--base", "base", "--json"])
     report = json.loads(capsys.readouterr().out)
 
-    assert (report["config-keys"], report["errors"]) == (5, [])
+    assert report["config-keys"] == 6
+    [error] = report["errors"]
+    assert (error["config-key"], error["revision"]) == ("unbound", "base")
+    assert error["error"].endswith("video service requires a pinned VIDEO_RUNTIME_REVISION")
     assert [
         (change["config-key"], change["base-points"], change["head-points"],
          [point["conc"] for point in change["added"]], [point["conc"] for point in change["removed"]])
         for change in report["changed"]
     ] == [
-        ("edited", 2, 2, [2, 4], [2, 4]), ("grown", 1, 2, [4], []),
+        ("edited", 2, 2, [2, 4], [2, 4]), ("grown", 1, 2, [4], []), ("unbound", 0, 1, [1], []),
         ("video", 1, 1, [1], [1]), ("gone", 1, 0, [], [2]),
     ]  # fmt: skip
     assert git(tmp_path, "status", "--porcelain").splitlines() == [
-        f" M inferencex-e2e/{RECIPES}/edited.yaml", f" M inferencex-e2e/{RECIPES}/video.yaml",
+        f" M inferencex-e2e/{RECIPES}/edited.yaml",
+        f" M inferencex-e2e/{RECIPES}/unbound.yaml",
+        f" M inferencex-e2e/{RECIPES}/video.yaml",
         " M inferencex-e2e/configs/nvidia-master.yaml",
     ]
 
     changed.main(["--base", "base"])
-    assert capsys.readouterr().out.splitlines()[-1] == "4 of 5 config keys changed since base."
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[-2] == "5 of 6 config keys changed since base."
+    assert lines[-1].startswith("warning: 1 rows of unbound have no fingerprint at base: ")
 
 
 def test_rows_without_fingerprints_are_compared_individually(tmp_path):

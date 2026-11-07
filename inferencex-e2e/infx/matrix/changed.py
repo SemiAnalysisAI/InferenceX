@@ -15,7 +15,7 @@ from infx.config import MASTER_CONFIGS, RUNNER_CONFIG
 
 from .fingerprint import recipe_fingerprint, row_fingerprint
 from .generate import SCENARIO_TYPES, generate_config_matrix
-from .revision import snapshot
+from .revision import Revision, snapshot
 from .validation import config_root, load_config_files, load_runner_file
 
 Matrix = dict[str, tuple[dict[tuple[str, int], dict[str, Any]], list[str]]]
@@ -59,6 +59,19 @@ def head_matrix(config_files: list[str], runner_config: str) -> Matrix:
     return {key: config_points(key, master, runners, root) for key in master}
 
 
+def _base_video_points(revision: Revision, key: str, single: str) -> tuple[dict, list[str]]:
+    """The video points of config ``key`` at ``revision``, or its generator's failure as an error.
+
+    That generator exits when a video recipe cannot be bound, where head records the error per key.
+    """
+    flags = ["--no-evals", "--scenario-type", "video-generation"]
+    try:
+        rows = revision.generate([key], flags, [single])
+    except subprocess.CalledProcessError as error:
+        return {}, [error.stderr.strip().rsplit("\n", 1)[-1]]
+    return _points(rows, revision.root)
+
+
 def base_matrix(ref: str, config_files: list[str]) -> Matrix:
     """Generate the matrix of each config key at git ``ref``, as points and fingerprint errors."""
     with snapshot(ref) as revision:
@@ -71,13 +84,19 @@ def base_matrix(ref: str, config_files: list[str]) -> Matrix:
             single.write_text(yaml.safe_dump({key: entry}, sort_keys=False))
             singles.append(str(single))
 
-        flags = ["--no-evals", "--scenario-type", *SCENARIO_TYPES]
-        requests = [([key], flags, [single]) for key, single in zip(master, singles, strict=True)]
+        requests = [
+            ([key], ["--no-evals"], [single]) for key, single in zip(master, singles, strict=True)
+        ]
         rows = revision.generate_each(requests, os.cpu_count() or 1)
-        return {
-            key: _points(generated, revision.root)
-            for key, generated in zip(master, rows, strict=True)
-        }
+        matrix: Matrix = {}
+        for (key, entry), single, generated in zip(master.items(), singles, rows, strict=True):
+            points, errors = _points(generated, revision.root)
+            if "video-generation" in entry.get("scenarios", {}):
+                video_points, video_errors = _base_video_points(revision, key, single)
+                points.update(video_points)
+                errors.extend(video_errors)
+            matrix[key] = (points, errors)
+        return matrix
 
 
 def _sorted(points: Iterable[dict]) -> list[dict]:
