@@ -102,7 +102,6 @@ override_gpu_kv_c1:
     agg:
       args:
         max-num-seqs: 1
-        # DCP1 at conc 1: no DCP collectives per decode step.
         decode-context-parallel-size: null
         dcp-comm-backend: null
         cp-kv-cache-interleave-size: null
