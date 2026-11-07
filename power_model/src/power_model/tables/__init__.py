@@ -482,10 +482,18 @@ class TableSet(Table):
 
 
 class _UniqueKeyLoader(yaml.SafeLoader):
-    """PyYAML keeps the last of two equal keys; a copied block must fail instead."""
+    """PyYAML keeps the last of two equal keys; a copied block must fail instead.
+
+    Only a mapping's own keys count: a key that overrides one merged in with << is
+    ordinary YAML, and SafeLoader resolves the merge itself.
+    """
 
     def construct_mapping(self, node, deep=False):
-        keys = [self.construct_object(key, deep=deep) for key, _ in node.value]
+        keys = [
+            self.construct_object(key, deep=deep)
+            for key, _ in node.value
+            if key.tag != "tag:yaml.org,2002:merge"
+        ]
         if duplicates := sorted({str(key) for key in keys if keys.count(key) > 1}):
             raise ValueError(f"Duplicate key {', '.join(duplicates)} at {node.start_mark}")
         return super().construct_mapping(node, deep=deep)

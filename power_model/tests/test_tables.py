@@ -52,9 +52,11 @@ def test_unresolved_references_fail_at_load():
         TableSet.model_validate_json(json.dumps(raw))
 
 
-def test_duplicate_yaml_keys_fail_at_load(tmp_path):
+def test_duplicate_yaml_keys_fail_but_merge_overrides_load(tmp_path):
     table = tmp_path / "parts.yaml"
-    table.write_text("nvme-drive:\n  power-w: 5.0\nnvme-drive:\n  power-w: 6.0\n")
+    table.write_text("base: &base {power-w: 5.0}\nnvme-drive:\n  <<: *base\n  power-w: 6.0\n")
+    assert read_table(table)["nvme-drive"] == {"power-w": 6.0}
 
+    table.write_text("nvme-drive:\n  power-w: 5.0\nnvme-drive:\n  power-w: 6.0\n")
     with pytest.raises(ValueError, match="Duplicate key nvme-drive"):
         read_table(table)
