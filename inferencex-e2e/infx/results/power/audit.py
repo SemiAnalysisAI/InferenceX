@@ -93,6 +93,11 @@ def audit_summary(validation: Mapping[str, Any], source: str) -> dict[str, Any]:
     }
 
 
+def required_power(env: Mapping[str, str]) -> bool:
+    """The workflow's REQUIRE_POWER input, which every result row records as ``require_power``."""
+    return env.get("REQUIRE_POWER", "").lower() in {"1", "true", "yes"}
+
+
 def power_missing(result: Mapping[str, Any], skipped_reason: str | None = None) -> str | None:
     """Why a result with an invalid power verdict has no power package, else None.
 

@@ -609,7 +609,7 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     required = lane == "agentx" or require_power == "1"
     assert all(run.endswith("--require-power") is required for run in runs)
     [row] = workspace.glob("*_conc4.json")
-    assert json.loads(row.read_text())["require_power"] is required
+    assert json.loads(row.read_text())["require_power"] is (require_power == "1")
     if lane == "agentx":
         status = (workspace / "LOGS/power/native-job-status.txt").read_text()
         assert status == "42|COMPLETED|0:0\n"
