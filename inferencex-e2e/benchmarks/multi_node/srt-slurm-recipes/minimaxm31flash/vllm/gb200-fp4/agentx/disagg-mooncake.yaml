@@ -242,8 +242,6 @@ base:
     placement:
       node: dedicated
   name: minimaxm31flash-gb200-disagg-mooncake
-override_3p1d_c256:
-  name: minimaxm31flash-gb200-disagg-mooncake-3p1d-c256
 override_3p1d_c288:
   name: minimaxm31flash-gb200-disagg-mooncake-3p1d-c288
 override_3p1d_dep16_c320:
