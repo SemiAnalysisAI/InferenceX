@@ -31,6 +31,7 @@ The Python project is `inferencex-e2e/` (`pyproject.toml`, `uv.lock`, `.python-v
   2. Open the app PR, cross-linked both ways, with matching tests.
   3. In the app PR, pin the InferenceX merge commit.
   4. In the app PR, regenerate the port manifest and the parity fixture.
+- `inferencex-e2e/infx/results/power/thresholds.json` changes follow the same four steps: the app copies it at the same pin to show the validity thresholds.
 
 ## Code style
 
