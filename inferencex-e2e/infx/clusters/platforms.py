@@ -14,7 +14,7 @@ from pydantic import Field, model_validator
 
 from infx import yamlio
 from infx.clusters.base import Record
-from infx.clusters.slurm import SlurmSettings
+from infx.clusters.slurm import SlurmSettings, TimeLimit
 from infx.config import repository_root
 
 if TYPE_CHECKING:
@@ -24,7 +24,6 @@ if TYPE_CHECKING:
 PLATFORM_DIR = Path("configs/platforms")
 
 Values = Annotated[frozenset[str], Field(min_length=1)]
-TimeLimit = Annotated[str, Field(pattern=r"^\d+:\d{2}:\d{2}$")]
 # The launch paths that run a multi-node srt-slurm lane (``policy.LaunchPath`` values).
 LanePath = Literal["srt-multi", "srt-native"]
 

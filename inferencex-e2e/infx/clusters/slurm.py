@@ -151,6 +151,7 @@ class HostSetup(Record):
         return script
 
 
+TimeLimit = Annotated[str, Field(pattern=r"^\d+:\d{2}:\d{2}$")]
 FabricName = Annotated[str, Field(pattern=r"^[^,\s]+$")]
 FabricList = Annotated[
     tuple[FabricName, ...], Field(min_length=1), PlainSerializer(",".join, return_type=str)
@@ -190,9 +191,7 @@ class SrtSlurmSettings(Record):
     network_interface: str = Field(alias="network-interface")
     fabric: Fabric = Field(default_factory=Fabric)
     job_tag: str | None = Field(default=None, alias="job-tag")
-    default_time_limit: str | None = Field(
-        default=None, alias="default-time-limit", pattern=r"^\d+:\d{2}:\d{2}$"
-    )
+    default_time_limit: TimeLimit | None = Field(default=None, alias="default-time-limit")
     single_node_time_limit: int | None = Field(default=None, alias="single-node-time-limit", gt=0)
     single_node_models: Literal["staged", "hub"] = Field(default="hub", alias="single-node-models")
     preflight: bool = True
