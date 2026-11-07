@@ -5946,7 +5946,7 @@ dsv41flash-fp4-b300-vllm-agentic-dspark:
       - { tp: 2, ep: 2, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [128, 192], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
 
 kimik3.1-fp4-b300-vllm-agentic-dspark:
-  image: vllm/vllm-openai:kimi-k31@sha256:904520f3fefc32414abcedf6ba8dadc9c5978db1bcdaf40f58d6b9036ef30a99
+  image: inferactinc/public:kimi-k31-mc-f819987-tep-shared-tp-x86_64@sha256:acf503a6058e75a63f0902a7ebb8200f6757d5d5ed92ca50edb67cbbb691ace9
   model: moonshotai/Kimi-K3.1-Pro
   model-prefix: kimik3.1
   runner: cluster:b300-dsxe
@@ -5959,9 +5959,11 @@ kimik3.1-fp4-b300-vllm-agentic-dspark:
     # 0.75 resolves to 2249 GB of host DRAM, which the recipe's Simple CPU offload splits across the 8 TP ranks.
     - dram-utilization: 0.75
       search-space:
-      # The ~1.56 TB MXFP4 checkpoint needs all 8 GPUs. DSpark drafts 7 tokens up to conc 8, then 6, 5 and 4.
-      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 2], srt-recipe: agentic.yaml }
-      - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [4, 8, 16, 24, 32, 40, 48, 56, 70], srt-recipe: agentic.yaml }
+      # The ~1.56 TB MXFP4 checkpoint needs all 8 GPUs.
+      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1], srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [4, 8, 16, 24], srt-recipe: agentic.yaml }
+      # EP8 MegaMoE prefills faster than TP MoE, which outweighs its smaller KV pool from conc 32.
+      - { tp: 8, ep: 8, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [32, 40, 48, 56, 70], srt-recipe: agentic.yaml }
 
 dsv41flash-fp4-b200-vllm-agentic-dspark:
   image: vllm/vllm-openai:cu134-nightly-40941f2c4ba96fba0a7e282a5355e89cd74d9ac5@sha256:13e92fcd97268013d13d07fb97d80803227cf0beae0161f8dce95a8200eaafb0
