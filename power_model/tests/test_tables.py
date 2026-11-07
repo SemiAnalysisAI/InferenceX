@@ -1,20 +1,48 @@
 # SPDX-License-Identifier: GPL-3.0-only
-import shutil
+import json
 
 import pytest
+from pydantic import ValidationError
 
-from power_model.tables import TABLES_DIR, load_tables
+from power_model.tables import TableSet
 
 
-def test_unresolved_references_fail_at_load(tmp_path):
-    root = tmp_path / "tables"
-    shutil.copytree(TABLES_DIR, root, ignore=shutil.ignore_patterns("*.py", "__pycache__"))
-    parts = root / "parts.yaml"
-    parts.write_text(
-        parts.read_text()
-        .replace("provenance: hgx-idle-nvme", "provenance: hgx-idle-nvme-v2")
-        .replace("per_drive_power_w: $power_w", "per_drive_power_w: $drive_w")
-    )
+def test_unresolved_references_fail_at_load():
+    named = {"version": "1", "kind": "assumed", "source": "s", "input-boundary": "b"}
+    labeled = {"name": "GPU", "provenance": "known"}
+    raw = {
+        "provenance": {"known": {"profile-id": "known", **named}},
+        "parts": {
+            "drive": {
+                "name": "NVMeDrive",
+                "category": "storage",
+                "provenance": "unknown",
+                "power-w": 5.0,
+                "details": {"per_drive_power_w": "$drive_w"},
+            }
+        },
+        "network": {
+            "switch": {
+                "name": "Switch",
+                "provenance": "known",
+                "parts": [{"part": "drive", "count": 1}],
+            }
+        },
+        "curves": {
+            "psu-efficiency": {},
+            "dc-converters": {},
+            "hgx-fans": {},
+            "rack-fans": {},
+            "lpddr5x": {},
+            "grace-workload": {},
+        },
+        "assemblies": {"trays": {}, "power-shelves": {}},
+        "facility": {
+            "pue": {"provenance": "known", "air": 1.3, "liquid": 1.1},
+            "example": {"non-gpu-ratio": 0.5, "gpu": labeled, "non-gpu": labeled},
+        },
+        "systems": {},
+    }
 
-    with pytest.raises(ValueError, match="provenance hgx-idle-nvme-v2.*detail variable drive_w"):
-        load_tables(root)
+    with pytest.raises(ValidationError, match="provenance unknown.*drive detail variable drive_w"):
+        TableSet.model_validate_json(json.dumps(raw))
