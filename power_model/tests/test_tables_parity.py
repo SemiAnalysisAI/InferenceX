@@ -4,7 +4,7 @@
 from math import isclose
 
 import pytest
-from power_parity_grid import RACKS, SYSTEMS, cases
+from power_parity_grid import SYSTEMS, cases
 from pydantic import ValidationError
 
 from power_model import create_power_model
@@ -80,10 +80,10 @@ def differences(expected, actual, path="$"):
 
 
 def test_grid_covers_every_table_system():
-    assert set(default_tables().systems) == set(SYSTEMS) - RACKS
+    assert set(default_tables().systems) == set(SYSTEMS)
 
 
-@pytest.mark.parametrize("system", [system for system in SYSTEMS if system not in RACKS])
+@pytest.mark.parametrize("system", SYSTEMS)
 def test_tables_match_class_graph(system):
     compared = 0
     mismatches = []

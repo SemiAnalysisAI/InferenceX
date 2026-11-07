@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# One GB200 NVL72 rack: 18 compute trays, 9 NVSwitch trays and shared power shelves.
+id: gb200-nvl72
+family: nvl72-rack
+name: GB200NVL72RackScaleSystem
+aliases: [gb200]
+provenance: nvl72-rack
+cooling: liquid
+gpu_count: 72
+compute_tray:
+  name: GB200ComputeTray
+  provenance: nvl72-compute-tray
+  count: 18
+  board:
+    name: GB200BiancaBoard
+    provenance: bianca-board
+    count: 2
+    gpu_count: 2
+    gpu_tdp_w: 1200
+    gpu_family: Blackwell
+    cpu: grace
+    memory: grace-512gb
+  parts:
+    - {part: connectx7-nic, count: 4, heat: air}
+    - {part: system-side-400g-transceiver, count: 4, heat: air}
+    - {part: nvme-drive, count: 8, heat: air}
+  fans: {curve: module, count: 8, design_air_heat_w: 500.0}
+  converter: compute-tray-8kw
+switch_trays: {tray: nvl72-nvswitch-tray, count: 9}
+power_shelves: nvl72-titanium-shelves
+network:
+  gear: qm9700-ndr-infiniband
+  per_system: 3.375
+  details:
+    topology: two-tier
+    switches_per_rack: 3.375
+    allocation_basis: "User-specified: 3.375 QM9700 switches per rack"

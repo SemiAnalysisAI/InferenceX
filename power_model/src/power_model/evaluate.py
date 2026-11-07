@@ -26,11 +26,17 @@ from power_model.base import (
 from power_model.base import PowerComponentBreakdown as Node
 from power_model.tables import (
     TEMPLATE,
+    BiancaBoard,
+    DCConverter,
+    FanUse,
     HGXSystem,
     NetworkAllocation,
+    NVL72System,
     PartUse,
+    PowerShelves,
     PSUBank,
     TableSet,
+    Tray,
     default_tables,
 )
 
@@ -43,6 +49,9 @@ GPU_INPUT = "gpu-input"
 # A measured x86 package replaces the modeled CPU; CPU-and-DRAM also drops the DIMMs.
 X86_CPU_INPUT = ("CPU", "x86-cpu-socket-input")
 X86_CPU_AND_DRAM_INPUT = ("CPUAndDRAM", "x86-cpu-and-dram-socket-input")
+# A measured Grace socket replaces Grace and its LPDDR5X; a CPU-only input, Grace alone.
+GRACE_SOCKET_INPUT = ("Grace socket (measured)", "grace-socket-input")
+GRACE_CPU_INPUT = "grace-cpu-socket-input"
 _COUNT = TypeAdapter(PositiveCount)
 
 
@@ -141,8 +150,10 @@ def _example(t: TableSet, inputs: Inputs) -> ITPowerBreakdown:
     )
 
 
-def _cluster(t: TableSet, table: HGXSystem, count: int, inputs: Inputs) -> ITPowerBreakdown:
-    unit = _hgx(t, table, inputs)
+def _cluster(
+    t: TableSet, table: HGXSystem | NVL72System, count: int, inputs: Inputs
+) -> ITPowerBreakdown:
+    unit = _hgx(t, table, inputs) if isinstance(table, HGXSystem) else _nvl72(t, table, inputs)
     return ITPowerBreakdown(
         scope="cluster",
         gpu_count=count * table.gpu_count,
@@ -354,3 +365,269 @@ def _psu_loss(t: TableSet, psu: PSUBank, dc_load_w: float) -> Node:
             ("redundancy", psu.redundancy),
         ),
     )
+
+
+# NVL72 racks: compute and NVSwitch trays on a rack bus fed by shared power shelves.
+
+
+def _nvl72(t: TableSet, s: NVL72System, inputs: Inputs) -> Node:
+    per_gpu = validate_watts(inputs.gpu_w)
+    tray = s.compute_tray
+    board = _bianca(t, tray.board, inputs, per_gpu)
+    compute = _tray(
+        t,
+        tray,
+        inputs.state,
+        board=board.scaled(tray.board.count),
+        board_air_w=tray.board.count * dict(board.details)["air_heat_w"],
+        gpus=tray.board.count * tray.board.gpu_count,
+    ).scaled(tray.count)
+    switch = t.assemblies.trays[s.switch_trays.tray]
+    switches = _tray(t, switch, inputs.state).scaled(s.switch_trays.count)
+    shelves = _power_shelves(
+        t,
+        t.assemblies.power_shelves[s.power_shelves],
+        sum_watts((compute.power_w, switches.power_w)),
+    )
+    return Node.group(
+        s.name,
+        (compute, switches, shelves),
+        provenance=t.provenance_of(s.provenance),
+        details=(("gpu_count_per_system", s.gpu_count), ("system_unit", "rack")),
+        configuration=_configuration(inputs.state),
+    )
+
+
+def _bianca(t: TableSet, board: BiancaBoard, inputs: Inputs, per_gpu: float) -> Node:
+    """GPUs and one Grace socket; only the modeled LPDDR5X share heats tray air."""
+    workload = t.curves.grace_workload[board.cpu]
+    state = inputs.state.workload_state
+    point = workload.states.get(state)
+    if point is None:
+        raise ValueError(f"Grace {state} power requires an explicit calibrated workload profile")
+    memory = _lpddr5x(t, board.memory, point.memory_bandwidth_gbps)
+    if inputs.cpu_and_dram_w is None:
+        cpu_w = point.cpu_w if inputs.cpu_w is None else inputs.cpu_w
+        provenance = workload.provenance if inputs.cpu_w is None else GRACE_CPU_INPUT
+        grace = (
+            Node(
+                name=workload.name,
+                power_w=cpu_w,
+                provenance=t.provenance_of(provenance),
+                details=(
+                    ("architecture", "Arm"),
+                    ("workload_state", state.value),
+                    ("per_cpu_power_w", cpu_w),
+                ),
+            ),
+            memory,
+        )
+    else:
+        name, provenance = GRACE_SOCKET_INPUT
+        socket_w = validate_watts(inputs.cpu_and_dram_w)
+        grace = (
+            Node(
+                name=name,
+                power_w=socket_w,
+                provenance=t.provenance_of(provenance),
+                details=(("cpu_and_dram_measured_power_per_socket", socket_w),),
+            ),
+        )
+    gpus = Node(
+        name="GPUs",
+        quantity=board.gpu_count,
+        power_w=board.gpu_count * per_gpu,
+        provenance=t.provenance_of(GPU_INPUT),
+        details=(
+            ("gpu_family", board.gpu_family),
+            ("gpu_tdp_w", board.gpu_tdp_w),
+            ("gpu_level_power_per_gpu", per_gpu),
+            ("input_boundary", "GPU module, after tray DC/DC"),
+        ),
+    )
+    return Node.group(
+        board.name,
+        (gpus, *grace),
+        provenance=t.provenance_of(board.provenance),
+        details=(("air_heat_w", memory.power_w),),
+    )
+
+
+def _lpddr5x(t: TableSet, memory_id: str, bandwidth: float) -> Node:
+    memory = t.curves.lpddr5x[memory_id]
+    q = memory.milliwatts
+    return Node(
+        name=memory.name,
+        power_w=validate_watts((q.a * bandwidth * bandwidth + q.b1 * bandwidth + q.c) / 1000),
+        provenance=t.provenance_of(memory.provenance),
+        details=(
+            ("capacity_gb_per_pool", memory.capacity_gb),
+            ("frequency_mhz", memory.frequency_mhz),
+            ("bandwidth_gbps", bandwidth),
+            ("scope", "one Grace memory pool"),
+        ),
+    )
+
+
+def _tray(
+    t: TableSet,
+    tray: Tray,
+    state: OperatingState,
+    *,
+    board: Node | None = None,
+    board_air_w: float = 0.0,
+    gpus: int = 0,
+) -> Node:
+    """Tray loads, the fans their air heat needs, and the tray converter's loss."""
+    parts = tuple(_part(t, use, state) for use in tray.parts)
+    components = (*((board,) if board else ()), *parts)
+    load = sum_watts(tuple(node.power_w for node in components))
+    air = sum_watts(
+        (
+            board_air_w,
+            *(
+                node.power_w
+                for node, use in zip(parts, tray.parts, strict=True)
+                if use.heat == "air"
+            ),
+        )
+    )
+    converter = t.curves.dc_converters[tray.converter]
+    fans = _solve_cooling(t, tray.fans, load, air, lambda watts: _dc_loss_w(converter, watts))
+    loss_w = _dc_loss_w(converter, load + fans.power_w)
+    loss = Node(
+        name="DC/DC converter loss",
+        power_w=loss_w,
+        provenance=t.provenance_of(converter.provenance),
+        details=(
+            ("output_power_w", load + fans.power_w),
+            ("input_power_w", load + fans.power_w + loss_w),
+            ("input_voltage_v", converter.input_voltage_v),
+            ("module_capacity_w", converter.module_capacity_w),
+        ),
+    )
+    return Node.group(
+        tray.name,
+        (*components, fans, loss),
+        provenance=t.provenance_of(tray.provenance),
+        details=(("gpu_count_per_tray", gpus), ("dc_component_power_w", load)) if board else (),
+    )
+
+
+def _fan_module(t: TableSet, fans: FanUse, air_heat_w: float) -> Node:
+    """Fan speed linear in air heat up to the design heat; watts cubic in speed."""
+    fan = t.curves.rack_fans[fans.curve]
+    heat = validate_watts(air_heat_w)
+    speed = fan.min_speed + (fan.max_speed - fan.min_speed) * min(heat / fans.design_air_heat_w, 1)
+    return Node(
+        name="Fan module",
+        quantity=fans.count,
+        power_w=validate_watts(fans.count * fan.rated_w * speed**3),
+        provenance=t.provenance_of(fan.provenance),
+        details=(
+            ("speed_fraction", speed),
+            ("air_heat_w", heat),
+            ("rated_power_w_per_fan", fan.rated_w),
+            ("design_air_heat_w", fans.design_air_heat_w),
+        ),
+    )
+
+
+def _solve_cooling(
+    t: TableSet, fans: FanUse, load_w: float, air_w: float, conversion_loss_w
+) -> Node:
+    """Fans for air heat plus the conversion loss of carrying the fans themselves."""
+    load = validate_watts(load_w)
+    air = validate_watts(air_w)
+    fan = _fan_module(t, fans, air)
+    for _ in range(128):
+        loss = validate_watts(conversion_loss_w(validate_watts(load + fan.power_w)))
+        updated = _fan_module(t, fans, validate_watts(air + loss))
+        if abs(updated.power_w - fan.power_w) < 1e-8:
+            return updated
+        fan = updated
+    raise ValueError("Fan and conversion-loss iteration did not converge")
+
+
+def _dc_loss_w(converter: DCConverter, output_w: float) -> float:
+    output = validate_watts(output_w)
+    fraction = output / converter.module_capacity_w
+    if fraction > 1:
+        raise ValueError("DC converter output exceeds installed continuous capacity")
+    return validate_watts(_interpolate(converter.loss_points(), fraction))
+
+
+def _power_shelves(t: TableSet, shelves: PowerShelves, rack_bus_w: float) -> Node:
+    """Normal operation on the active shelves, checked against the surviving bank."""
+    load = validate_watts(rack_bus_w)
+    redundant_w = shelves.surviving_shelves * shelves.psus_per_shelf * shelves.psu_capacity_w
+    if load > redundant_w:
+        raise ValueError("Rack bus load exceeds redundant power-shelf capacity")
+    # The surviving bank carries its own fan load, not the normal operating fan watts.
+    reserve = _shelf(t, shelves, load / shelves.surviving_shelves)
+    current = _shelf(t, shelves, load / shelves.active_shelves).scaled(shelves.active_shelves)
+    return Node(
+        name="Power shelves",
+        power_w=current.power_w,
+        quantity=current.quantity,
+        children=current.children,
+        provenance=t.provenance_of(shelves.provenance),
+        details=(
+            ("rack_bus_w", load),
+            ("rack_ac_w", load + current.power_w),
+            ("installed_shelves", shelves.installed_shelves),
+            ("active_shelves", shelves.active_shelves),
+            ("redundant_capacity_w", redundant_w),
+            ("feed_loss_ac_w", load + reserve.power_w * shelves.surviving_shelves),
+        ),
+    )
+
+
+def _shelf(t: TableSet, shelves: PowerShelves, delivered_w: float) -> Node:
+    provenance = t.provenance_of(shelves.provenance)
+    load = validate_watts(validate_watts(delivered_w) + shelves.controller_w)
+    psus = _rack_psu(t, shelves, load / shelves.psus_per_shelf).scaled(shelves.psus_per_shelf)
+    controller = Node(name="Shelf controller", power_w=shelves.controller_w, provenance=provenance)
+    return Node.group("Power shelf overhead", (psus, controller), provenance=provenance)
+
+
+def _rack_psu(t: TableSet, shelves: PowerShelves, delivered_w: float) -> Node:
+    provenance = t.provenance_of(shelves.provenance)
+    fan = _solve_cooling(
+        t, shelves.psu_fans, delivered_w, 0.0, lambda watts: _rack_psu_loss_w(t, shelves, watts)
+    )
+    output = validate_watts(delivered_w + fan.power_w)
+    efficiency = _rack_psu_efficiency(t, shelves, output)
+    loss = Node(
+        name="AC/DC conversion loss",
+        power_w=_rack_psu_loss_w(t, shelves, output),
+        provenance=provenance,
+    )
+    return Node.group(
+        "Rack PSU overhead",
+        (loss, fan),
+        provenance=provenance,
+        details=(
+            ("dc_output_w_per_psu", output),
+            ("efficiency", efficiency),
+            ("load_fraction", output / shelves.psu_capacity_w),
+            ("capacity_w", shelves.psu_capacity_w),
+        ),
+    )
+
+
+def _rack_psu_efficiency(t: TableSet, shelves: PowerShelves, output_w: float) -> float:
+    points = t.curves.psu_efficiency[shelves.efficiency].points
+    load = validate_watts(output_w) / shelves.psu_capacity_w
+    if load < points[0][0]:
+        raise ValueError(
+            f"Rack PSU load below {points[0][0]:.0%} requires a calibrated low-load profile"
+        )
+    if load > 1:
+        raise ValueError("Rack PSU output exceeds continuous capacity")
+    return _interpolate(points, load)
+
+
+def _rack_psu_loss_w(t: TableSet, shelves: PowerShelves, output_w: float) -> float:
+    output = validate_watts(output_w)
+    return validate_watts(output * (1 / _rack_psu_efficiency(t, shelves, output) - 1))
