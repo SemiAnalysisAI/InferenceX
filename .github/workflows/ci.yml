@@ -60,17 +60,17 @@ jobs:
           uvx --exclude-newer PT12H ruff@latest check --output-format=github inferencex-e2e/infx
           uvx --exclude-newer PT12H ruff@latest format --check --diff inferencex-e2e/infx
 
-      - name: Hardware literal guard
-        if: matrix.check == 'Lint'
-        working-directory: inferencex-e2e
-        run: uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml python -m infx.workflows.hardware_literals
-
       - name: Prepare test environment
         if: matrix.check == 'Tests'
         run: |
           git submodule update --init inferencex-e2e/utils/srt-slurm
           uv sync --project inferencex-e2e --locked --all-extras --group test --no-editable
           echo "$GITHUB_WORKSPACE/inferencex-e2e/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Hardware literal guard
+        if: matrix.check == 'Tests'
+        working-directory: inferencex-e2e
+        run: python -m infx.workflows.hardware_literals
 
       - name: Check CollectiveX coverage manifest
         if: matrix.check == 'Tests'

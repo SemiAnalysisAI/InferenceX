@@ -1,4 +1,7 @@
-"""Fail when ``infx`` code names more hardware than the checked-in per-file baseline allows."""
+"""Fail when a file's count of hardware literals in ``infx`` code differs from its baseline.
+
+More literals than the baseline allows is a regression; fewer means the baseline must be lowered.
+"""
 
 from __future__ import annotations
 
@@ -10,35 +13,20 @@ import sys
 from collections.abc import Iterable
 from pathlib import Path
 
-import yaml
+from infx.clusters import load_clusters
+from infx.config import repository_root
+from infx.matrix.generate import _hardware_family
 
-from infx.config import RUNNER_CONFIG, repository_root
-
-BASELINE = Path(__file__).with_name("hardware-literals-baseline.json")
 SCANNED = "infx"
-EXCLUDED = ("infx/tests/",)
-UPDATE = "uv run --no-project --with pyyaml python -m infx.workflows.hardware_literals --update"
-
-
-def sku_keys(runner_config: Path) -> frozenset[str]:
-    """Return the SKU keys named by the cluster ids and labels of ``runner_config``."""
-    with runner_config.open() as config_file:
-        inventory = yaml.safe_load(config_file)
-    names = [*inventory["clusters"], *inventory["labels"]]
-    keys = {
-        name.removeprefix("cluster:").split("-", 1)[0]
-        for name in names
-        if ":" not in name.removeprefix("cluster:")
-    }
-    if not keys:
-        raise ValueError(f"{runner_config} names no clusters")
-    return frozenset(keys)
+BASELINE = f"{SCANNED}/workflows/hardware-literals-baseline.json"
+EXCLUDED = (f"{SCANNED}/tests/",)
+COMMAND = "uv run --locked --all-extras --group test python -m infx.workflows.hardware_literals"
 
 
 def literal_pattern(keys: Iterable[str]) -> re.Pattern[str]:
-    """Match a key not preceded or followed by a letter or digit, so ``b200`` misses ``gb200``."""
+    """Match a key in any case, not next to a letter or digit, so ``b200`` misses ``gb200``."""
     alternatives = "|".join(re.escape(key) for key in sorted(keys, key=len, reverse=True))
-    return re.compile(rf"(?<![A-Za-z0-9])(?:{alternatives})(?![A-Za-z0-9])")
+    return re.compile(rf"(?<![A-Za-z0-9])(?:{alternatives})(?![A-Za-z0-9])", re.IGNORECASE)
 
 
 def literal_hits(source: str, pattern: re.Pattern[str]) -> list[tuple[int, str]]:
@@ -77,15 +65,16 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     root = repository_root()
-    found = count_literals(root, literal_pattern(sku_keys(root / RUNNER_CONFIG)))
+    keys = {_hardware_family(cluster_id) for cluster_id in load_clusters()}
+    found = count_literals(root, literal_pattern(keys))
     counts = {path: len(hits) for path, hits in found.items()}
     total = sum(counts.values())
     if args.update:
-        BASELINE.write_text(json.dumps(counts, indent=2, sort_keys=True) + "\n")
+        (root / BASELINE).write_text(json.dumps(counts, indent=2, sort_keys=True) + "\n")
         print(f"hardware-literals: baseline rewritten, {total} literal(s) in {len(counts)} file(s)")
         return 0
 
-    baseline = json.loads(BASELINE.read_text())
+    baseline = json.loads((root / BASELINE).read_text())
     grown = sorted(path for path, count in counts.items() if count > baseline.get(path, 0))
     shrunk = sorted(path for path, count in baseline.items() if counts.get(path, 0) < count)
     for path in grown:
@@ -98,7 +87,7 @@ def main(argv: list[str] | None = None) -> int:
     if grown:
         print(
             "Read SKU and cluster facts from configs/runners.yaml instead of naming them in code;"
-            f" to accept a literal on purpose, run `{UPDATE}` from inferencex-e2e/.",
+            f" to accept a literal on purpose, run `{COMMAND} --update` from inferencex-e2e/.",
             file=sys.stderr,
         )
         return 1
@@ -107,7 +96,9 @@ def main(argv: list[str] | None = None) -> int:
             f"{path}: dropped to {counts.get(path, 0)} (baseline {baseline[path]})", file=sys.stderr
         )
     if shrunk:
-        print(f"Lower the baseline: run `{UPDATE}` from inferencex-e2e/.", file=sys.stderr)
+        print(
+            f"Lower the baseline: run `{COMMAND} --update` from inferencex-e2e/.", file=sys.stderr
+        )
         return 1
     print(f"hardware-literals: OK, {total} literal(s) in {len(counts)} file(s)")
     return 0
