@@ -12352,3 +12352,12 @@
   description:
     - "Sweep H3 C1 latency on 1, 2, 4 and 8 MI355X GPUs with SGLang Ulysses across all GPUs; the MI355X recipe now sets the Ulysses degree from the GPU count, which keeps the 4-GPU point unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4818
+
+- config-keys:
+    - musespark-fp4-mi355x-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump to lmsysorg/sglang-rocm:muse-spark-open-mi355-1106."
+    - "Concurrency 6, 10 and 28: TP8/EP8 with GPU-only KV; 28, 32, 36, 40, 44 and 48: TP4/EP4 with a 310 GB-per-rank HiCache DRAM tier."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
