@@ -1,15 +1,16 @@
-"""Grace CPU-side power leg of the multinode srt-slurm package.
+"""CPU-side power leg of the srt-slurm power package.
 
 srt-slurm's ``cpu_power_exporter`` leg writes ``power/cpu/samples.csv`` beside
-the GPU DCGM package (srt-slurm ``src/srtctl/core/power/cpu_session.py``); its
+the GPU package (srt-slurm ``src/srtctl/core/power/cpu_session.py``); its
 ``cpu_manifest.json`` is debugging metadata and is not read. Both accepted
 schemas are the wide format: one row per (scrape, host, socket) whose ``sensor`` names the
-Grace socket meter and whose ``cpu_rail_w`` / ``soc_w`` columns carry the ACPI
-component rails of that socket. Schema v3 (srt-slurm v2.59.0+) adds ``module_w``,
-NVML superchip module power; the module contains both GPUs, so it is published
-as its own rail and never added to the CPU or GPU totals.
+socket meter of its source, the Grace socket meter for ACPI or the AMD EPYC package
+counter for RAPL. ACPI rows also carry the component rails of that socket in
+``cpu_rail_w`` / ``soc_w``; RAPL rows carry none. Schema v3 (srt-slurm v2.59.0+) adds
+``module_w``, NVML superchip module power; the module contains both GPUs, so it is
+published as its own rail and never added to the CPU or GPU totals.
 
-Each socket's Grace socket series is integrated over the GPU leg's bound formal
+Each socket's meter series is integrated over the GPU leg's bound formal
 window with the shared trapezoid and boundary interpolation and published as
 additive metrics next to the GPU-board numbers. The CPU-only, SysIO and module
 rails are integrated the same way when every socket reports them; a rail with
@@ -26,7 +27,7 @@ import math
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from .common import (
     MAX_SAMPLE_GAP_SECONDS,
@@ -59,14 +60,30 @@ _SCHEMA_VERSION_BY_HEADER = {
     (*_CPU_SAMPLES_HEADER_V2[:-1], "module_w", "total_power_w"): 3,
 }
 
-# One GB200/GB300 compute tray per worker host, two Grace sockets per tray.
+# Two sockets per worker host: a GB200/GB300 compute tray or a dual AMD EPYC host.
 SOCKETS_PER_HOST = 2
 
-# The headline meter: "Grace Power Socket N", the whole socket (CPU rail, SysIO,
-# LPDDR5X and regulator loss). srt-slurm names its wide-format rows
-# ``CPU<socket>:cpuSidePowerUsageW`` (cpu_rails.SENSOR_SUFFIXES).
+
+class SocketMeter(NamedTuple):
+    """The headline per-socket meter of one exporter source.
+
+    srt-slurm names its rows ``CPU<socket>:<sensor_suffix>`` (cpu_rails.SENSOR_SUFFIXES).
+    """
+
+    sensor_suffix: str
+    sensor_kind: str
+
+
 SENSOR_GRACE = "grace_socket"
-_GRACE_SENSOR_SUFFIX = "cpuSidePowerUsageW"
+SENSOR_RAPL = "rapl_package"
+# srt-slurm cpu_sample.PRIMARY_KIND_BY_SOURCE. ACPI reads "Grace Power Socket N", the whole
+# socket (CPU rail, SysIO, LPDDR5X and regulator loss); RAPL reads the AMD package energy
+# counter, which the kernel gives no DRAM domain.
+SOCKET_METERS = {
+    "acpi": SocketMeter("cpuSidePowerUsageW", SENSOR_GRACE),
+    "rapl": SocketMeter("packagePowerUsageW", SENSOR_RAPL),
+}
+SENSOR_KINDS = frozenset(meter.sensor_kind for meter in SOCKET_METERS.values())
 # Wide-format rail column -> published rail family: "CPU Power Socket N" (cores,
 # no SysIO), "SysIO Power Socket N" and the v3 NVML superchip module. dram_w
 # stays blank on NVL72 firmware; module_w is blank when NVML is unavailable.
@@ -127,11 +144,6 @@ class CpuPowerAudit:
             },
             "metrics": audit_metrics(self.metrics),
         }
-
-
-def is_grace_sensor(sensor: str) -> bool:
-    """True for the Grace socket meter's ``CPU<socket>:cpuSidePowerUsageW`` sensor name."""
-    return sensor.partition(":")[2] == _GRACE_SENSOR_SUFFIX
 
 
 def _parse_row(raw: list[str], header: tuple[str, ...], version: int) -> CpuSampleRow | None:
@@ -200,20 +212,21 @@ def read_cpu_samples(path: Path) -> tuple[tuple[CpuSampleRow, ...], tuple[str, .
 
 
 SocketKey = tuple[str, int]
-# (host, socket) -> family -> {timestamp: watts}; the Grace meter and its rails.
+# (host, socket) -> family -> {timestamp: watts}; the socket meter and its rails.
 SocketSeries = dict[SocketKey, dict[str, dict[float, float]]]
 
 
-def _grace_series(rows: Iterable[CpuSampleRow]) -> tuple[SocketSeries, set[str], bool]:
-    """Group the Grace socket rows per socket, with the sources seen and a duplicate flag."""
+def _socket_series(rows: Iterable[CpuSampleRow]) -> tuple[SocketSeries, set[str], bool]:
+    """Group the socket meter rows per socket, with the sources seen and a duplicate flag."""
     series: SocketSeries = {}
     sources: set[str] = set()
     duplicate = False
     for row in rows:
-        if not is_grace_sensor(row.sensor):
+        meter = SOCKET_METERS.get(row.source)
+        if meter is None or row.sensor.partition(":")[2] != meter.sensor_suffix:
             continue
         by_family = series.setdefault((row.hostname, row.socket_id), {})
-        points = by_family.setdefault(SENSOR_GRACE, {})
+        points = by_family.setdefault(meter.sensor_kind, {})
         if row.timestamp_unix in points:
             duplicate = True
         points[row.timestamp_unix] = row.power_w
@@ -253,7 +266,7 @@ def validate_cpu_leg(
     rows, sample_reasons = read_cpu_samples(cpu_dir / CPU_SAMPLES_FILENAME)
     audit.sample_row_count = len(rows)
     audit.invalidate(*sample_reasons)
-    series, sources, duplicate = _grace_series(rows)
+    series, sources, duplicate = _socket_series(rows)
     if duplicate or len(sources) > 1:
         audit.invalidate("cpu_samples_malformed")
     expected_keys = {
@@ -268,12 +281,12 @@ def validate_cpu_leg(
     if not expected_keys or set(series) != expected_keys:
         audit.invalidate("cpu_socket_count_mismatch")
         return audit
-    audit.sensor_kind = SENSOR_GRACE
     audit.source = next(iter(sources))
+    kind = audit.sensor_kind = SOCKET_METERS[audit.source].sensor_kind
 
-    # A rail is published only when every socket reports it, gap-free; the Grace
+    # A rail is published only when every socket reports it, gap-free; the socket
     # meter must be gap-free on every socket or the whole leg is invalid.
-    families = [SENSOR_GRACE] + [
+    families = [kind] + [
         rail
         for rail in RAIL_COLUMNS.values()
         if all(rail in by_family for by_family in series.values())
@@ -289,7 +302,7 @@ def validate_cpu_leg(
             if gap is not None:
                 audit.per_series_max_sample_gap_s[label] = gap
             if gap is None or gap > MAX_SAMPLE_GAP_SECONDS:
-                if family != SENSOR_GRACE:
+                if family != kind:
                     dropped_rails.add(family)
                 elif gap is None:
                     audit.invalidate("cpu_window_not_bracketed")
@@ -305,9 +318,9 @@ def validate_cpu_leg(
 
     duration = end - start
     metrics = {
-        "avg_cpu_socket_power_w": energy[SENSOR_GRACE] / duration / len(expected_keys),
-        "avg_total_cpu_power_w": energy[SENSOR_GRACE] / duration,
-        "total_cpu_energy_j": energy[SENSOR_GRACE],
+        "avg_cpu_socket_power_w": energy[kind] / duration / len(expected_keys),
+        "avg_total_cpu_power_w": energy[kind] / duration,
+        "total_cpu_energy_j": energy[kind],
     }
     for rail in RAIL_COLUMNS.values():
         if rail in energy and rail not in dropped_rails:

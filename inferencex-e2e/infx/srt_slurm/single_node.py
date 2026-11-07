@@ -16,7 +16,11 @@ from infx.config import repository_root
 from infx.srt_slurm.synthetic_acceptance import ENGINES, selected_recipes, spec_parameters
 from infx.srt_slurm.workload import (
     BOUND_RECIPE,
+    NATIVE,
+    CpuPowerSource,
+    add_cpu_power_source_argument,
     add_fabric_argument,
+    bind_speculation,
     bind_workload,
     check_setup_script,
     compose_recipe,
@@ -37,6 +41,14 @@ def parallelism_constraints(
     """Read each engine's native topology fields without translating the recipe."""
     tp, ep = int(environment["TP"]), int(environment["EP_SIZE"])
     dp_attention = environment["DP_ATTENTION"] == "true"
+    if engine == "tokenspeed":
+        data_parallel = args["data-parallel-size"]
+        return {
+            "attention TP x DP": (args["attn-tp-size"] * data_parallel, tp),
+            "DP_ATTENTION": (data_parallel > 1, dp_attention),
+            "ep-size": (args["ep-size"], ep),
+            "pipeline-parallel-size": (args["pipeline-parallel-size"], 1),
+        }
     if engine == "sglang":
         return {
             "tensor-parallel-size": (args["tensor-parallel-size"], tp),
@@ -74,12 +86,14 @@ def select_recipe(
     *,
     root: Path | None = None,
     expand: Callable[..., list[tuple[str | None, dict[str, Any]]]] = selected_recipes,
+    cpu_power_source: CpuPowerSource | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """Resolve a matrix point to one native variant, never submit an entire sweep.
 
     Variants are composed with the shared block under ``root`` (default: this
     repository) and bound before they are validated. ``expand`` lists the selected
     variants: srtctl at launch, ``variants.expand_variants`` in the planner.
+    ``cpu_power_source`` adds the cluster's CPU power exporter to the native telemetry.
     """
     path, _, selector = config.partition(":")
     agentic = environment["IS_AGENTIC"] == "1"
@@ -88,7 +102,8 @@ def select_recipe(
         agentic=agentic,
         multinode=False,
         root=root or repository_root(),
-        native_power=environment.get("EVAL_ONLY") != "true",
+        gpu_power=NATIVE if environment.get("EVAL_ONLY") != "true" else None,
+        cpu_power_source=cpu_power_source,
     )
     recipes = expand(raw, selector or None)
     matches = []
@@ -97,6 +112,7 @@ def select_recipe(
         try:
             recipe = bind_workload(recipe, environment, agentic=agentic, multinode=False)
             validate_recipe(recipe, environment)
+            bind_speculation(recipe, environment)
         except ValueError as exc:
             errors.append(f"{name}: {exc}")
         except (KeyError, TypeError) as exc:
@@ -117,14 +133,14 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
     workload = benchmark["env"]
     engine_config = recipe["engine"]
     engine = engine_config["type"] if isinstance(engine_config, dict) else engine_config
-    if environment["FRAMEWORK"] not in {"sglang", "trt", "atom", "vllm"}:
+    if environment["FRAMEWORK"] not in {"sglang", "trt", "atom", "vllm", "tokenspeed"}:
         raise ValueError(f"Unsupported single-node framework: {environment['FRAMEWORK']!r}")
     spec = spec_parameters(role, engine)
     if spec and spec["method"] not in {"eagle", "eagle3", "nextn", "mtp", "dspark", "dflash"}:
         raise ValueError(
             "Single-node SRT supports only native MTP, EAGLE3, DSpark, DFlash or no speculation"
         )
-    speculation = "mtp" if spec else workload.get("SPEC_DECODING", "none")
+    speculation = "mtp" if spec else "none"
     agentic = environment["IS_AGENTIC"] == "1"
     expected = {
         "engine": (engine, SINGLE_NODE_ENGINES[environment["FRAMEWORK"]]),
@@ -155,22 +171,32 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
             raise ValueError(f"Single-node SRT {name}: recipe/matrix {actual!r} != {wanted!r}")
 
 
+def srun_overrides(environment: Mapping[str, str]) -> list[str]:
+    if not environment.get("SRT_SRUN_OPTIONS"):
+        return []
+    options = json.loads(environment["SRT_SRUN_OPTIONS"])
+    if not isinstance(options, dict) or any(
+        not re.fullmatch(r"[a-z][a-z0-9-]*", key) or not isinstance(value, str)
+        for key, value in options.items()
+    ):
+        raise ValueError("SRT_SRUN_OPTIONS must map option names to string values")
+    overrides: list[str] = []
+    for key, value in options.items():
+        overrides += ["--set", f"srun_options.{key}={json.dumps(value)}"]
+    return overrides
+
+
 def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
     """Bind only runtime-owned values after validating the selected recipe."""
     select_recipe(config, environment)
     for name in ("RUN_EVAL", "EVAL_ONLY", "DP_ATTENTION"):
         if environment[name] not in {"true", "false"}:
             raise ValueError(f"{name} must be true or false")
-    overrides = ["--set", f"srun_options.gpus-per-node={json.dumps(environment['GPU_COUNT'])}"]
-    if environment.get("SRT_SRUN_OPTIONS"):
-        options = json.loads(environment["SRT_SRUN_OPTIONS"])
-        if not isinstance(options, dict) or any(
-            not re.fullmatch(r"[a-z][a-z0-9-]*", key) or not isinstance(value, str)
-            for key, value in options.items()
-        ):
-            raise ValueError("SRT_SRUN_OPTIONS must map option names to string values")
-        for key, value in options.items():
-            overrides += ["--set", f"srun_options.{key}={json.dumps(value)}"]
+    overrides = [
+        "--set",
+        f"srun_options.gpus-per-node={json.dumps(environment['GPU_COUNT'])}",
+        *srun_overrides(environment),
+    ]
     agentic = environment["IS_AGENTIC"] == "1"
     names = ["RESULT_FILENAME", "RUN_EVAL", "EVAL_ONLY", "FRAMEWORK"]
     if agentic:
@@ -192,6 +218,7 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
             "trt": ("max_seq_len", "max_num_tokens"),
             "atom": ("max-model-len",),
             "vllm": ("max-model-len",),
+            "tokenspeed": ("max-model-len",),
         }[environment["FRAMEWORK"]]
         for key in context_keys:
             overrides += ["--set", f"roles.agg.args.{key}={context}"]
@@ -222,6 +249,7 @@ def main() -> None:
     prepare.add_argument("recipe")
     prepare.add_argument("output", type=Path)
     add_fabric_argument(prepare)
+    add_cpu_power_source_argument(prepare)
     submitted = commands.add_parser("submission")
     submitted.add_argument("manifest", type=Path)
     parsed = parser.parse_args()
@@ -229,7 +257,9 @@ def main() -> None:
         parser.error(f"{parsed.output} would overwrite the bound recipe written beside it")
     try:
         if parsed.command == "prepare":
-            selected, recipe = select_recipe(parsed.recipe, os.environ)
+            selected, recipe = select_recipe(
+                parsed.recipe, os.environ, cpu_power_source=parsed.cpu_power_source
+            )
             recipe = resolve_fabric(recipe, parsed.fabric)
             check_setup_script(recipe, Path(parsed.recipe.partition(":")[0]), repository_root())
             arguments = runtime_arguments(parsed.recipe, os.environ)
