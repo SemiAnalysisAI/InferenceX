@@ -64,3 +64,15 @@ AMD Zen RAPL has not been validated against wall power, and Schöne et al. (TU D
 python -m power_model --system=mi355 --gpu-level-power-per-gpu=612.5 \
   --cpu-measured-power-per-socket=180 --power-breakdown-per-chassis
 ```
+
+## Tables
+
+Every model constant and its provenance is also stored as data in `src/power_model/tables/`: one `systems/<id>.yaml` per catalog system, shared `parts.yaml`, `curves.yaml`, `network.yaml`, `assemblies.yaml` and `facility.yaml`, and `provenance.yaml`, which the other tables reference by profile id. `load_tables()` validates each table and every cross-reference when it loads.
+
+`power_model.evaluate.estimate_breakdown()` evaluates the tables and returns the same `PowerEstimate` as the classes under `models/advanced/`; the CLI still uses the classes. `tests/test_tables_parity.py` requires the two to agree within 1e-12 relative on the InferenceX-app parity grid. Until the classes are removed, change a constant in both places.
+
+```python
+from power_model.evaluate import estimate_breakdown
+
+estimate_breakdown("gb300", 594.191, cpu_and_dram_measured_power_per_socket=98.066)
+```
