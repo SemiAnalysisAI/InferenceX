@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import fcntl
 import os
 import shutil
 import sys
 import tempfile
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
+from hashlib import sha256
 from pathlib import Path
 from typing import NoReturn
 
@@ -70,10 +73,21 @@ class Runtime:
 
 
 def bootstrap(runtime: Runtime) -> int:
-    """Create ``runtime``'s venv from scratch; return ``uv venv``'s status, else 0."""
+    """Reuse ``runtime``'s matching venv or rebuild it; return ``uv venv``'s status, else 0."""
+    key = _runtime_key()
+    runtime.root.mkdir(parents=True, exist_ok=True)
+    with _build_lock(runtime):
+        if _matches(runtime, key):
+            return 0
+        return _build(runtime, key)
+
+
+def _build(runtime: Runtime, key: str) -> int:
+    """Build ``runtime`` while holding its lock."""
     uv_exe = uv.find(runtime.root / "uv" / "bin")
     shutil.rmtree(runtime.venv, ignore_errors=True)
-    cache = runtime.root / "uv-cache"
+    caller_cache = os.environ.get("UV_CACHE_DIR")
+    cache = Path(caller_cache) if caller_cache else runtime.root / "uv-cache"
     cache.mkdir(parents=True, exist_ok=True)
     env = {**os.environ, "UV_CACHE_DIR": str(cache)}
     rc = proc.call([uv_exe, "venv", "--python", PYTHON_VERSION, str(runtime.venv)], env)
@@ -88,7 +102,36 @@ def bootstrap(runtime: Runtime) -> int:
         )
     if not (_executable(runtime.agentx) and _executable(runtime.hf)):
         raise BenchError(f"isolated AgentX environment is incomplete at {runtime.venv}")
+    (runtime.venv / ".inferencex-runtime-key").write_text(key)
     return 0
+
+
+def _runtime_key() -> str:
+    """Hash the interpreter and exact requirements bytes that define the runtime."""
+    digest = sha256()
+    digest.update(PYTHON_VERSION.encode())
+    digest.update(b"\0")
+    digest.update(REQUIREMENTS.read_bytes())
+    return digest.hexdigest()
+
+
+def _matches(runtime: Runtime, key: str) -> bool:
+    """Whether ``runtime`` was completed from the current interpreter and requirements."""
+    marker = runtime.venv / ".inferencex-runtime-key"
+    return (
+        marker.is_file()
+        and marker.read_text() == key
+        and _executable(runtime.agentx)
+        and _executable(runtime.hf)
+    )
+
+
+@contextmanager
+def _build_lock(runtime: Runtime) -> Iterator[None]:
+    """Serialize check-and-build for a runtime shared by concurrent jobs."""
+    with (runtime.root / "venv.lock").open("w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
 
 
 def _executable(path: Path) -> bool:
