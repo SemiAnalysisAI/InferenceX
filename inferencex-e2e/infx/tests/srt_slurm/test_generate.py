@@ -12,6 +12,7 @@ from infx.launch.policy import LaunchPath
 from infx.tests.srt_recipes import (
     VIDEO_MODEL,
     VIDEO_SPEC,
+    video_entry,
     video_fragment,
     write_shared_blocks,
     write_video_specs,
@@ -58,14 +59,7 @@ MASTER = {
             "power": True,
         }]}]},
     },
-    "video": {
-        "image": "org/video:1", "model": VIDEO_MODEL, "model-prefix": "h3", "precision": "bf16",
-        "framework": "sglang", "runner": "cluster:fixture", "multinode": False,
-        "srt-recipe-dir": "fixture", "scenarios": {"video-generation": [{
-            "spec": VIDEO_SPEC, "set": "release-v1",
-            "search-space": [{"gpus": 2, "conc-list": [1], "srt-recipe": "video.yaml"}],
-        }]},
-    },
+    "video": video_entry(),
 }  # fmt: skip
 SHARED = {
     "telemetry-native.yaml": {"telemetry": {"enabled": True, "required": False}},
@@ -340,7 +334,7 @@ def test_a_video_point_renders_its_bound_server_recipe(project, tmp_path):
     [(record, recipe)] = written(output)
     assert (record["variant"], record["cluster"]) == (None, "fixture")
     assert (record["matrix"]["scenario-type"], record["matrix"]["conc-list"]) == ("video-generation", [1])
-    assert recipe["model"] == {"path": f"hf:{VIDEO_MODEL}", "container": "org/video:1", "precision": "bf16"}
+    assert recipe["model"] == {"path": f"hf:{VIDEO_MODEL}", "container": "example/video:1", "precision": "bf16"}
     assert recipe["resources"]["gpus_per_node"] == 2
     [server] = recipe["services"]
     assert server["args"][server["args"].index("--num-gpus") + 1] == "2"

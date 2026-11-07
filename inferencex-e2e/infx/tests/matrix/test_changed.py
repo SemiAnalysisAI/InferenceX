@@ -10,9 +10,8 @@ import yaml
 
 from infx.matrix import changed
 from infx.tests.srt_recipes import (
-    VIDEO_MODEL,
-    VIDEO_SPEC,
     single_node_fragment,
+    video_entry,
     video_fragment,
     write_shared_blocks,
     write_video_specs,
@@ -29,17 +28,6 @@ def entry(recipe: str, concurrencies: list[int]) -> dict:
         "multinode": False, "srt-recipe-dir": "fixture",
         "scenarios": {"fixed-seq-len": [{"isl": 1024, "osl": 128, "search-space": [
             {"tp": 4, "conc-list": concurrencies, "srt-recipe": recipe},
-        ]}]},
-    }  # fmt: skip
-
-
-def video_entry() -> dict:
-    return {
-        "image": "example/video:1", "model": VIDEO_MODEL, "model-prefix": "h3",
-        "precision": "bf16", "framework": "sglang", "runner": "cluster:fixture",
-        "multinode": False, "srt-recipe-dir": "fixture",
-        "scenarios": {"video-generation": [{"spec": VIDEO_SPEC, "set": "release-v1", "search-space": [
-            {"gpus": 2, "conc-list": [1], "srt-recipe": "video.yaml"},
         ]}]},
     }  # fmt: skip
 
