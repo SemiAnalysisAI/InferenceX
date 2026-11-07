@@ -12406,3 +12406,15 @@
     - "Update to lmsysorg/sglang:v0.5.23-cu130 and set SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE=0."
     - "Remove TP1/EP1 at concurrency 1 and 4 and replace the search space with TP1/EP1 at concurrency 8, TP2/EP1 at concurrency 8, and TP1/EP1 with HiCache at concurrency 16, 24 and 32; the HiCache points use fp8_e4m3 kv-cache-dtype, and concurrency 16 and 24 use 2 speculative steps instead of 3."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4850
+
+- config-keys:
+    - minimaxm31flash-fp4-b300-dynamo-vllm-agentic-dspark-disagg
+  description:
+    - "Add MiniMax-M3.1-Flash AgentX on B300 with Dynamo 1.6.0.dev20261023 and vLLM bc9a3ac (minimax-m31-flash-x86_64-cu134-bc9a3ac-mc0.3.13.post1): 1 DEP2 prefill + 1 DEP4 decode (6 GPUs) at conc 48, 64, 96, 128 and 144, and 1 DEP2 prefill + 1 TP4 decode (6 GPUs) at conc 24."
+    - "DSpark with the built-in drafter, 7 draft tokens (golden AL 4.04), DeepGEMM MegaMoE on the expert-parallel workers, NIXL prefill-to-decode transfer and the Dynamo KV router with session affinity."
+    - "Prefix cache in a shared MooncakeStore pool served by standalone stores, one per socket on the prefill and decode nodes. The 2093 GiB pool fits the 749 GB prefill and 1499 GB decode DRAM shares; prefill workers are store clients and decode takes KV over NIXL only."
+    - "Use the EFA fabric on b300-dsxe: a setup script adds AWS EFA 1.50.0 and the EFA Mooncake wheel at 0.3.13.post1 to the image, Mooncake runs with protocol efa and auto-discovered NICs, and NIXL uses the LIBFABRIC backend."
+    - "Mooncake EFA settings for b300-dsxe: filter discovery to the 16 EFA NICs so the two InfiniBand HCAs do not shift NIC indices, register GPU KV on the NICs beside its GPU, and send same-node store reads over the EFA device instead of libfabric shm."
+    - "Disable the extensible KV cache on prefill and decode: it is VMM-backed, and cuPointerSetAttribute(SYNC_MEMOPS), which the libfabric EFA provider runs on the first RMA of each CUDA MR, returns NOT_SUPPORTED on VMM memory, so every NIXL and Mooncake transfer failed with EINVAL. The KV cache is sized from gpu-memory-utilization instead of measured free memory."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4826
+  scenario-type: [agentic-coding]
