@@ -21,6 +21,7 @@ base:
         tensor-parallel-size: 8
         expert-parallel-size: 8
         served-model-name: amd/Muse-Spark-Open-816B-A42B-Quark-MXFP4
+        revision: c7bc74fd64371315a091bc15f9723882eead0dc1
         attention-backend: aiter
         page-size: 16
         kv-cache-dtype: fp8_e4m3
