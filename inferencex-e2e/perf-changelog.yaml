@@ -12430,3 +12430,13 @@
     - "Add concurrency 56."
     - "Concurrency 8 to 56: SGLANG_HICACHE_MAMBA_HOST_RATIO 12 -> 10; the image's larger device pools grew the pinned host pools past the node's GTT (hipHostMalloc failed at concurrency 32)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4846
+
+- config-keys:
+    - h3-bf16-b200-sglang-video
+    - h3-bf16-h100-sglang-video
+    - h3-bf16-h200-sglang-video
+    - h3-bf16-mi355x-sglang-video
+  scenario-type: [video-generation]
+  description:
+    - "The H3 client polls job status every 0.1 s instead of every 0.5 s. A job counts as done only at the next poll, so each published latency carried up to 0.5 s of polling delay; it now carries up to 0.1 s."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PRNUM
