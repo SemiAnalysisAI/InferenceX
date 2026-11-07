@@ -53,6 +53,31 @@ separate evidence. Comparisons leave cross-engine quality unjudged, while
 same-implementation numerical checks require matching sealed image, launch,
 environment, GPU and algorithm identity.
 
+## Reference PSNR
+
+[Video Quality](../.github/workflows/video-quality.yml) scores every measured clip
+of a finished Run Sweep against the Diffusers references. It runs main's code on a
+GitHub-hosted runner and reads the sweep's `h3-results-*` artifacts only as data.
+[`reference/h3-v2.json`](reference/h3-v2.json) names the reference release, the
+generation settings and implementation identity, and each case's prompt, seed,
+MP4 SHA256 and size. The job downloads the release assets, rejects any asset whose
+hash differs from the descriptor, and runs:
+
+```bash
+python -m evaluator.cli score-quality <artifact-id>=<bundle.zip|dir> ... \
+  --descriptor reference/h3-v2.json --references <release-mp4-dir> \
+  --run-id <run> --source-revision <git-sha> --output <new-dir>
+```
+
+A clip is scored only when its recorded prompt, seed, model and generation
+settings equal the descriptor; `compare_media` then compares every decoded frame.
+Other clips are listed under `unscored` with a reason: `invalid_candidate`,
+`checksum_mismatch`, `no_reference`, or `settings_mismatch` with the differing
+fields. The `h3-quality-<run>-<attempt>` artifact holds `quality.json`, a copy of
+the descriptor and `SHA256SUMS`. PSNR measures technical fidelity to one reference
+implementation, so `quality_status` stays `unjudged`. To score an earlier run,
+dispatch the workflow with its `run_id` and `run_attempt`.
+
 ## Local checks
 
 ```bash

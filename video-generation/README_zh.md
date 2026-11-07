@@ -46,6 +46,29 @@ prompt 合同，集合选择器为 `release-v1`。请求使用 49 次去噪更�
 实际编码器实现和跨引擎质量仍需单独证据。比较器将跨引擎质量标为未评估；
 同实现数值检查则要求封存的镜像、启动命令、环境、GPU 和算法身份一致。
 
+## 参考 PSNR
+
+[Video Quality](../.github/workflows/video-quality.yml) 在 Run Sweep 结束后，
+以 Diffusers 参考视频为基准，为每段测量视频计算 PSNR。它在 GitHub 托管的
+runner 上运行 main 分支的代码，sweep 的 `h3-results-*` 产物只作为数据读取。
+[`reference/h3-v2.json`](reference/h3-v2.json) 记录参考视频所在的 release、
+生成参数与实现身份，以及每个 case 的 prompt、seed、MP4 的 SHA256 和字节数。
+任务先下载 release 资源，哈希与描述文件不一致的资源直接拒绝，然后运行：
+
+```bash
+python -m evaluator.cli score-quality <artifact-id>=<bundle.zip|dir> ... \
+  --descriptor reference/h3-v2.json --references <release-mp4-dir> \
+  --run-id <run> --source-revision <git-sha> --output <new-dir>
+```
+
+只有记录的 prompt、seed、模型与生成参数都与描述文件一致时才评分，随后由
+`compare_media` 比较全部解码帧。其余视频列在 `unscored` 中并注明原因：
+`invalid_candidate`、`checksum_mismatch`、`no_reference`，或 `settings_mismatch`
+及不一致的字段。`h3-quality-<run>-<attempt>` 产物包含 `quality.json`、描述文件
+副本和 `SHA256SUMS`。PSNR 只衡量相对单一参考实现的技术保真度，因此
+`quality_status` 仍为 `unjudged`。如需为较早的运行补算，按其 `run_id` 与
+`run_attempt` 手动触发该 workflow。
+
 ## 本地检查
 
 ```bash
