@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = "GPL-3.0-only"
 license-files = ["LICENSE"]
-dependencies = ["pydantic>=2.10,<3"]
+dependencies = ["pydantic>=2.10,<3", "pyyaml>=6,<7"]
 
 [project.scripts]
 power_model = "power_model.cli:main"
@@ -22,7 +22,7 @@ dev = ["pytest>=8,<10", "ruff>=0.11,<1", "build>=1,<2"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-power_model = ["py.typed"]
+power_model = ["py.typed", "tables/*.yaml", "tables/systems/*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

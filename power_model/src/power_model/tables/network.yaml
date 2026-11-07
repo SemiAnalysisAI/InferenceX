@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# External scale-out switches: one box plus its always-powered switch-side optics. The
+# switch state follows scale-out networking ($state is "active" or "idle"). Box power
+# includes its own cooling and conversion, so no chassis fan or PSU model applies.
+# Systems allocate a fractional number of switches per chassis or rack.
+
+generic-512t-ethernet:
+  name: Generic512TEthernetSwitch
+  provenance: generic-51.2t-ethernet-switch
+  details: {state: $state, bandwidth_tbps: 51.2, protocol: Ethernet, optics_per_switch: 64}
+  parts:
+    - {part: generic-512t-ethernet-asic, count: 1}
+    - {part: switch-side-800g-sr8-transceiver, count: 64}
+
+qm9790-ndr-infiniband:
+  name: QM9790NDRInfiniBandSwitch
+  provenance: qm9790-ndr-infiniband-switch
+  details: {state: $state, bandwidth_tbps: 25.6, protocol: NDR InfiniBand, optics_per_switch: 32}
+  parts:
+    - {part: qm9790-switch-box, count: 1}
+    - {part: switch-side-800g-sr8-transceiver, count: 32}
+
+qm9700-ndr-infiniband:
+  name: QM9700NDRInfiniBandSwitch
+  provenance: qm9700-ndr-infiniband-switch
+  details: {state: $state, bandwidth_tbps: 25.6, protocol: NDR InfiniBand, optics_per_switch: 32}
+  parts:
+    - {part: qm9700-switch-box, count: 1}
+    - {part: switch-side-800g-sr8-transceiver, count: 32}

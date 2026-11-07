@@ -1,0 +1,68 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Load-dependent relationships: conversion efficiency, fan control and workload profiles.
+# Each entry is referenced by id from systems/*.yaml or assemblies.yaml.
+
+psu_efficiency:
+  # [load fraction, efficiency]; linear between points, flat beyond the ends.
+  titanium:
+    provenance: titanium-psu-curve
+    points: [[0.05, 0.8864], [0.10, 0.9238], [0.20, 0.9448], [0.50, 0.9640], [1.0, 0.9556]]
+
+dc_converters:
+  # Loss is linear in output between [output fraction, efficiency] points, plus the
+  # enabled no-load loss at zero output. Output above capacity is outside the model.
+  nvswitch-tray-1600w:
+    provenance: rack-48v-converter
+    module_capacity_w: 1600.0
+    input_voltage_v: 50.0
+    no_load_loss_w: 5.0
+    efficiency: [[0.1, 0.94], [0.2, 0.96], [0.5, 0.967], [1.0, 0.96]]
+  compute-tray-8kw:
+    provenance: compute-tray-48v-converter
+    module_capacity_w: 8000.0
+    input_voltage_v: 50.0
+    no_load_loss_w: 25.0
+    efficiency: [[0.1, 0.94], [0.2, 0.96], [0.5, 0.967], [1.0, 0.96]]
+
+hgx_fans:
+  # Cooling capacity is GPU count x GPU TDP plus host watts at the design state
+  # (CPU offloading with active scale-out). PWM rises linearly with pre-fan DC load over
+  # that capacity, raised to exponent; fan watts = nameplate x PWM^3, where the nameplate
+  # puts fan watts at ratio_at_design of capacity at normal_max_pwm.
+  normalized:
+    name: NormalizedHGXFanPower
+    provenance: normalized-hgx-fans
+    fan_complement: Normalized capacity sized from GPU TDP and host design watts
+    min_pwm: 0.22
+    normal_max_pwm: 0.8
+    exponent: 1.0
+    ratio_at_design: 0.05928421052631581  # 1100 * 0.8**3 / 9500
+
+rack_fans:
+  # Speed rises linearly from min_speed to max_speed with air heat up to the assembly's
+  # design air heat; module watts = rated_w x speed^3.
+  module:
+    provenance: rack-air-cooling
+    rated_w: 30.24
+    min_speed: 0.4
+    max_speed: 0.8
+
+lpddr5x:
+  # Pool watts = (a b^2 + b1 b + c) / 1000 at total DRAM bandwidth b GB/s.
+  grace-512gb:
+    name: LPDDR5XMemory
+    provenance: grace-512gb-lpddr5x
+    capacity_gb: 512
+    frequency_mhz: 3200
+    max_bandwidth_gbps: 384.0
+    milliwatts: {a: -0.0000603, b1: 56.2, c: 3396.0}
+
+grace_workload:
+  # Per Grace socket, less modeled LPDDR5X. No idle point is calibrated.
+  grace:
+    name: GraceCPU
+    provenance: grace-workload-baseline
+    states:
+      fixed-seq-len: {cpu_w: 95.0, memory_bandwidth_gbps: 25.0}
+      agentic: {cpu_w: 90.0, memory_bandwidth_gbps: 50.0}
+      agentic-cpu-offloading: {cpu_w: 85.0, memory_bandwidth_gbps: 250.0}

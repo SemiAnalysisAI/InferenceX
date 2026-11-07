@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Rack assemblies shared by the NVL72 systems.
+
+trays:
+  # A tray's fans see the heat of its air-cooled parts plus its converter loss; the
+  # converter carries the parts and the fans.
+  nvl72-nvswitch-tray:
+    name: NVSwitchTray
+    provenance: nvl72-nvswitch-tray
+    parts:
+      - {part: rack-blackwell-nvswitch, count: 2, heat: liquid}
+      - {part: epyc-embedded-3151, count: 1, heat: air}
+    fans: {curve: module, count: 4, design_air_heat_w: 250.0}
+    converter: nvswitch-tray-1600w
+
+power_shelves:
+  # Normal operation spreads the rack bus over active_shelves; the redundancy check uses
+  # surviving_shelves. Each supply carries its own fan; controller_w is per active shelf.
+  nvl72-titanium-shelves:
+    provenance: nvl72-titanium-shelves
+    installed_shelves: 8
+    active_shelves: 8
+    surviving_shelves: 4
+    psus_per_shelf: 6
+    psu_capacity_w: 5500.0
+    efficiency: titanium
+    psu_fans: {curve: module, count: 1, design_air_heat_w: 250.0}
+    controller_w: 10.0
