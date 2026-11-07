@@ -26,7 +26,7 @@ from power_model.base import (
 )
 
 TABLES_DIR = Path(__file__).parent
-TABLE_FILES = ("parts", "network", "curves", "assemblies", "facility")
+TABLE_FILES = ("parts", "network", "curves", "assemblies", "facility", "inputs")
 
 Finite = Annotated[float, Field(allow_inf_nan=False)]
 Positive = Annotated[float, Field(gt=0, allow_inf_nan=False)]
@@ -267,6 +267,16 @@ class ExampleModel(Table):
     non_gpu: Labeled
 
 
+class MeasuredInputs(Table):
+    """The components a caller-supplied measurement stands for."""
+
+    gpus: Labeled
+    x86_cpu: Labeled
+    x86_cpu_and_dram: Labeled
+    grace_socket: Labeled
+    grace_cpu: Labeled
+
+
 class Facility(Table):
     pue: PUE
     example: ExampleModel
@@ -392,6 +402,7 @@ class TableSet(Table):
     curves: Curves
     assemblies: Assemblies
     facility: Facility
+    inputs: MeasuredInputs
     systems: dict[str, System]
 
     @model_validator(mode="after")

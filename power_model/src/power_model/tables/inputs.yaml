@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Components that carry a caller-supplied measurement instead of a modeled part.
+
+gpus: {name: GPUs, provenance: gpu-input}
+# Replaces the modeled x86 CPU; DIMMs stay modeled.
+x86-cpu: {name: CPU, provenance: x86-cpu-socket-input}
+# Replaces the modeled x86 CPU and its DIMMs.
+x86-cpu-and-dram: {name: CPUAndDRAM, provenance: x86-cpu-and-dram-socket-input}
+# Replaces the modeled Grace CPU and its LPDDR5X.
+grace-socket: {name: Grace socket (measured), provenance: grace-socket-input}
+# Replaces the modeled Grace CPU; LPDDR5X stays modeled.
+grace-cpu: {name: GraceCPU, provenance: grace-cpu-socket-input}

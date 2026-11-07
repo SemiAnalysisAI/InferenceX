@@ -31,6 +31,7 @@ from power_model.tables import (
     DCConverter,
     FanUse,
     HGXSystem,
+    Labeled,
     NetworkAllocation,
     NVL72System,
     PartUse,
@@ -46,13 +47,6 @@ MODELS = {"oss": "OSSAllinPowerModel", "example": "ExamplePowerModel"}
 DESIGN_STATE = OperatingState(
     workload_state=WorkloadState.AGENTIC_CPU_OFFLOADING, using_scale_out=True
 )
-GPU_INPUT = "gpu-input"
-# A measured x86 package replaces the modeled CPU; CPU-and-DRAM also drops the DIMMs.
-X86_CPU_INPUT = ("CPU", "x86-cpu-socket-input")
-X86_CPU_AND_DRAM_INPUT = ("CPUAndDRAM", "x86-cpu-and-dram-socket-input")
-# A measured Grace socket replaces Grace and its LPDDR5X; a CPU-only input, Grace alone.
-GRACE_SOCKET_INPUT = ("Grace socket (measured)", "grace-socket-input")
-GRACE_CPU_INPUT = "grace-cpu-socket-input"
 _COUNT = TypeAdapter(PositiveCount)
 
 
@@ -201,9 +195,10 @@ def _part(t: TableSet, use: PartUse, state: OperatingState) -> Node:
     ).scaled(use.count)
 
 
-def _measured(t: TableSet, label: tuple[str, str], watts: float, count: int) -> Node:
-    name, provenance = label
-    return Node(name=name, power_w=watts, provenance=t.provenance_of(provenance)).scaled(count)
+def _measured(t: TableSet, label: Labeled, watts: float, count: int) -> Node:
+    return Node(
+        name=label.name, power_w=watts, provenance=t.provenance_of(label.provenance)
+    ).scaled(count)
 
 
 def _interpolate(points: tuple[tuple[float, float], ...], x: float) -> float:
@@ -255,10 +250,10 @@ def _hgx(t: TableSet, s: HGXSystem, inputs: Inputs) -> Node:
 def _hgx_board(t: TableSet, s: HGXSystem, state: OperatingState, gpu_w: float) -> Node:
     per_gpu = validate_watts(gpu_w)
     gpus = Node(
-        name="GPUs",
+        name=t.inputs.gpus.name,
         power_w=s.gpu_count * per_gpu,
         quantity=s.gpu_count,
-        provenance=t.provenance_of(GPU_INPUT),
+        provenance=t.provenance_of(t.inputs.gpus.provenance),
         details=(("gpu_level_power_per_gpu", per_gpu), ("gpu_tdp_w", s.board.gpu_tdp_w)),
     )
     return Node.group(
@@ -279,9 +274,9 @@ def _hgx_host(
     for use in s.host:
         category = t.parts[use.part].category
         if category == "cpu" and cpu_w is not None:
-            nodes.append(_measured(t, X86_CPU_INPUT, cpu_w, use.count))
+            nodes.append(_measured(t, t.inputs.x86_cpu, cpu_w, use.count))
         elif category == "cpu" and cpu_and_dram_w is not None:
-            nodes.append(_measured(t, X86_CPU_AND_DRAM_INPUT, cpu_and_dram_w, use.count))
+            nodes.append(_measured(t, t.inputs.x86_cpu_and_dram, cpu_and_dram_w, use.count))
         elif not (category == "memory" and cpu_w is None and cpu_and_dram_w is not None):
             nodes.append(_part(t, use, state))
     return tuple(nodes)
@@ -408,13 +403,13 @@ def _bianca(t: TableSet, board: BiancaBoard, inputs: Inputs, per_gpu: float) -> 
         raise ValueError(f"Grace {state} power requires an explicit calibrated workload profile")
     memory = _lpddr5x(t, board.memory, point.memory_bandwidth_gbps)
     if inputs.cpu_and_dram_w is None:
+        cpu = workload if inputs.cpu_w is None else t.inputs.grace_cpu
         cpu_w = point.cpu_w if inputs.cpu_w is None else inputs.cpu_w
-        provenance = workload.provenance if inputs.cpu_w is None else GRACE_CPU_INPUT
         grace = (
             Node(
-                name=workload.name,
+                name=cpu.name,
                 power_w=cpu_w,
-                provenance=t.provenance_of(provenance),
+                provenance=t.provenance_of(cpu.provenance),
                 details=(
                     ("architecture", "Arm"),
                     ("workload_state", state.value),
@@ -424,21 +419,20 @@ def _bianca(t: TableSet, board: BiancaBoard, inputs: Inputs, per_gpu: float) -> 
             memory,
         )
     else:
-        name, provenance = GRACE_SOCKET_INPUT
         socket_w = validate_watts(inputs.cpu_and_dram_w)
         grace = (
             Node(
-                name=name,
+                name=t.inputs.grace_socket.name,
                 power_w=socket_w,
-                provenance=t.provenance_of(provenance),
+                provenance=t.provenance_of(t.inputs.grace_socket.provenance),
                 details=(("cpu_and_dram_measured_power_per_socket", socket_w),),
             ),
         )
     gpus = Node(
-        name="GPUs",
+        name=t.inputs.gpus.name,
         quantity=board.gpu_count,
         power_w=board.gpu_count * per_gpu,
-        provenance=t.provenance_of(GPU_INPUT),
+        provenance=t.provenance_of(t.inputs.gpus.provenance),
         details=(
             ("gpu_family", board.gpu_family),
             ("gpu_tdp_w", board.gpu_tdp_w),
