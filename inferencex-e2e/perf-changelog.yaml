@@ -12430,3 +12430,10 @@
     - "Add concurrency 56."
     - "Concurrency 8 to 56: SGLANG_HICACHE_MAMBA_HOST_RATIO 12 -> 10; the image's larger device pools grew the pinned host pools past the node's GTT (hipHostMalloc failed at concurrency 32)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4846
+
+- config-keys:
+    - glm5.3flash-fp8-h100-sglang-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Raise H100 GLM-5.3-Flash HiCache DRAM utilization to 0.90 and the KV/Mamba host pool to 220 GB per rank, leaving room for the separate DSA indexer pool."
+    - "Add HiCache concurrency 12, 14, 16, 20 and 24; set max-running-requests and cuda-graph-max-bs-decode to twice each point's concurrency, including the GPU-resident concurrency 1 and 2 points."
