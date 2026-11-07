@@ -47,6 +47,14 @@ substitute set). The same requirement applies to existing and new models.
 For state-cache precision reductions, both baselines must use FP32 state caches.
 The separate draft-model precision restrictions below still apply.
 
+The organization that trained the model (for example, DeepSeek or Moonshot) may
+also veto any optimization for its own model if it considers the optimization
+unsuitable for production use because it reduces evaluation accuracy, even when
+the required evals pass. Record the attributable objection, rationale, and scope
+in the PR; a submission within that scope cannot qualify until the trainer
+withdraws or narrows the veto. This does not require affirmative trainer approval
+for every submission. See [Model-trainer veto](inferencex-e2e/docs/MODELS.md#model-trainer-veto).
+
 ## Draft-model precision
 
 The rule is simple: **serve the draft as it ships.** A speculative-decoding

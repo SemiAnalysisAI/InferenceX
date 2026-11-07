@@ -413,7 +413,7 @@ and multi-node entries.
 ## Check 8 — No benchmark hacks that change the model architecture
 Inspect the PR diff (server args in `inferencex-e2e/benchmarks/**` and master-config
 changes) for architecture changes, including trimmed layers/experts/heads or other
-ways of skipping computation, and assess them under (a)-(c). Making the same
+ways of skipping computation, and assess them under (a)-(d). Making the same
 computation run faster is fair game. Cross-indexer sharing on models without native
 support is a specific exception only when it qualifies under (c); this does not
 permit arbitrary indexer skipping or other architecture-FLOP reductions.
@@ -499,6 +499,19 @@ deployments.
   sharing and native FP4 KV cache alone do not trigger (c), but ordinary evals still
   apply. Qualification does not waive Check 10 or the separate draft-precision
   restrictions in Check 13.
+
+### (d) Model-trainer veto
+For upstream official InferenceX submissions, check for a recorded veto from the
+organization that trained the affected model (for example, DeepSeek or Moonshot).
+This applies to any submitted optimization, including those outside (c), when the
+trainer considers it unsuitable for production use because it reduces evaluation
+accuracy. Require a link or attributable statement identifying the trainer's
+objection, rationale, and affected model, optimization, and configuration.
+FAIL Check 8 for a submission within an active veto's scope, even when evals pass
+or a hardware vendor, inference-engine maintainer, or InferenceX reviewer approves.
+Only a recorded withdrawal or narrowing by the trainer removes the veto for the
+affected submission. Do not infer a veto from an unattributed claim, require
+affirmative trainer approval for every submission, or treat silence as endorsement.
 
 Keep this assessment in the single Check 8 row. A failure in any applicable
 subcheck makes Check 8 FAIL; N/A for (c) does not make all of Check 8 N/A.

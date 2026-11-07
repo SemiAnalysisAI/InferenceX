@@ -24,7 +24,7 @@ In general, we should be benchmarking free & ~open engines that is used in produ
 
 ## Accuracy-sensitive optimization policy
 
-On upstream official InferenceX, the following optimizations are accepted if and only if passing the evaluations below is demonstrated with logs and complete, manually runnable reproduction scripts:
+On upstream official InferenceX, the following optimizations require passing the evaluations below, demonstrated with logs and complete, manually runnable reproduction scripts, and remain subject to the model-trainer veto below:
 
 - Reduced-precision all-reduce or reduce-scatter, including integer and floating-point quantization.
 - Online quantization of linear layers.
@@ -34,6 +34,12 @@ On upstream official InferenceX, the following optimizations are accepted if and
 - Reducing the SSM/KDA/Mamba state-cache dtype below FP32.
 
 This evidence requirement applies to submissions for both existing and new models, including recipe updates, image-only updates, and re-enabled configurations. Existing models have no grandfathered exemption. Historical results are unchanged. Native index sharing and native FP4 KV cache remain subject to the ordinary eval requirements; they do not require this additional qualification solely because they use those native features.
+
+### Model-trainer veto
+
+The organization that trained the model (for example, DeepSeek or Moonshot) may veto an optimization for its own model if it considers the optimization unsuitable for production use because it reduces evaluation accuracy. This applies to any optimization submitted to upstream official InferenceX, not only those listed above, even if the submission passes the required evaluations.
+
+Record the trainer's objection, its accuracy and production-use rationale, and the affected model, optimization, and configuration in the PR, with a link or attributable statement from the trainer. A submission within that scope cannot qualify while the veto remains in effect; passing evaluations or approval from a hardware vendor, inference-engine maintainer, or InferenceX reviewer does not override it. Reconsideration requires a recorded withdrawal or narrowing of the veto by the trainer. This does not require affirmative trainer approval for every submission, and silence is not endorsement.
 
 ### Required evaluations
 
