@@ -29,12 +29,12 @@ TABLES_DIR = Path(__file__).parent
 TABLE_FILES = ("parts", "network", "curves", "assemblies", "facility", "inputs")
 
 Finite = Annotated[float, Field(allow_inf_nan=False)]
+NonNegative = Annotated[float, Field(ge=0, allow_inf_nan=False)]
 Positive = Annotated[float, Field(gt=0, allow_inf_nan=False)]
 Fraction = Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)]
 PositiveFraction = Annotated[float, Field(gt=0, le=1, allow_inf_nan=False)]
-PositiveInt = Annotated[int, Field(strict=True, gt=0)]
 Category = Literal["cpu", "memory", "nic", "nvswitch", "storage", "other", "network"]
-Details = dict[str, JsonValue]
+DetailTemplate = dict[str, JsonValue]
 Curve = tuple[tuple[PositiveFraction, PositiveFraction], ...]
 TEMPLATE = re.compile(r"^\$(\w+)$")
 
@@ -68,7 +68,7 @@ class Part(Table):
     state_by: Literal["scale-out", "cpu-offload", "workload"] | None = None
     states_w: dict[str, Watts] = {}
     workload_states: dict[WorkloadState, str] = {}
-    details: Details = {}
+    details: DetailTemplate = {}
 
     @model_validator(mode="after")
     def one_power_source(self) -> Self:
@@ -95,7 +95,7 @@ class Part(Table):
 class PartUse(Table):
     part: NonemptyString
     count: PositiveCount
-    vars: Details = {}
+    vars: DetailTemplate = {}
 
 
 class TrayPartUse(PartUse):
@@ -107,7 +107,7 @@ class Gear(Table):
 
     name: NonemptyString
     provenance: NonemptyString
-    details: Details = {}
+    details: DetailTemplate = {}
     parts: tuple[PartUse, ...]
 
 
@@ -185,15 +185,15 @@ class Quadratic(Table):
 class LPDDR5X(Table):
     name: NonemptyString
     provenance: NonemptyString
-    capacity_gb: PositiveInt
-    frequency_mhz: PositiveInt
-    max_bandwidth_gbps: Watts
+    capacity_gb: PositiveCount
+    frequency_mhz: PositiveCount
+    max_bandwidth_gbps: NonNegative
     milliwatts: Quadratic
 
 
 class GracePoint(Table):
     cpu_w: Watts
-    memory_bandwidth_gbps: Watts
+    memory_bandwidth_gbps: NonNegative
 
 
 class GraceWorkload(Table):
@@ -286,7 +286,7 @@ class NetworkAllocation(Table):
     gear: NonemptyString
     provenance: NonemptyString
     per_system: Positive
-    details: Details = {}
+    details: DetailTemplate = {}
 
 
 class SystemTable(Table):
@@ -302,7 +302,7 @@ class SystemTable(Table):
 class HGXBoard(Table):
     name: NonemptyString
     provenance: NonemptyString
-    gpu_tdp_w: PositiveInt
+    gpu_tdp_w: PositiveCount
     parts: tuple[PartUse, ...]
 
 
@@ -339,7 +339,7 @@ class BiancaBoard(Table):
     provenance: NonemptyString
     count: PositiveCount
     gpu_count: PositiveCount
-    gpu_tdp_w: PositiveInt
+    gpu_tdp_w: PositiveCount
     gpu_family: NonemptyString
     cpu: NonemptyString
     memory: NonemptyString
@@ -388,7 +388,7 @@ def _mappings(value: object):
             yield from _mappings(item)
 
 
-def _templates(details: Details) -> set[str]:
+def _templates(details: DetailTemplate) -> set[str]:
     return {
         match.group(1)
         for value in details.values()

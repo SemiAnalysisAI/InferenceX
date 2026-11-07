@@ -212,20 +212,15 @@ def _interpolate(points: tuple[tuple[float, float], ...], x: float) -> float:
 def _network(t: TableSet, allocation: NetworkAllocation, count: int, state: OperatingState) -> Node:
     """The scenario's share of external switches, allocated per system."""
     gear = t.network[allocation.gear]
-    node = Node.group(
+    return Node.group(
         gear.name,
         tuple(_part(t, use, state) for use in gear.parts),
         provenance=t.provenance_of(gear.provenance),
-        details=_details(gear.details, {"state": state.nic_state}),
+        details=(
+            *_details(gear.details, {"state": state.nic_state}),
+            *allocation.details.items(),
+        ),
     ).scaled(allocation.per_system * count)
-    return Node(
-        name=node.name,
-        power_w=node.power_w,
-        quantity=node.quantity,
-        children=node.children,
-        provenance=node.provenance,
-        details=(*node.details, *allocation.details.items()),
-    )
 
 
 # HGX chassis: GPU board, host parts, normalized fans and a PSU bank.
