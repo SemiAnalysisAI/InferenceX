@@ -1108,7 +1108,7 @@ musespark-fp4-mi355x-sglang-agentic-dflash:
       - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [10, 16, 24, 28, 36, 40], srt-recipe: agentic.yaml }
 
 kimik3.1-fp4-mi355x-sglang-agentic-dflash:
-  image: lmsysorg/sglang:dev-kimi-k31-pro-mi35x@sha256:6af91676b98cb98246aab7da6ab5a8cdaa0f30d9e0f4a9d44e6b19c9f99e87a0
+  image: lmsysorg/sglang:dev-kimi-k31-pro-mi35x@sha256:346a6d832bbfcb5776d8d938154870682a891278a8adc264ed996ccf3d3b6762
   model: moonshotai/Kimi-K3.1-Pro
   model-prefix: kimik3.1
   runner: cluster:mi355x-amds
@@ -1121,7 +1121,7 @@ kimik3.1-fp4-mi355x-sglang-agentic-dflash:
     - dram-utilization: 0.513
       search-space:
       - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4], srt-recipe: agentic.yaml }
-      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [8, 16, 32, 48], srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [8, 16, 32, 48, 56], srt-recipe: agentic.yaml }
 
 glm5.3flash-fp8-mi325x-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.22-rocm10-mi30x@sha256:5658cd0d8de0c68de10d2e349296f55ceff98053182fa87b2a7e942e5e7f3c2a
