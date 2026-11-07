@@ -786,7 +786,7 @@ def compare_runs(baseline_dir: Path, candidate_dir: Path, *, policy: dict) -> di
     )
     imported_only = evidence_kind == "imported_media"
     plan = baseline_run["plan"]
-    fairness_comparison = schema_version(plan) == 2
+    fairness_comparison = schema_version(plan) >= 2
     left_config, right_config = baseline_run["configuration"], candidate_run["configuration"]
     numerical_identity = left_config.get("numerical_identity")
     complete_identity = valid_numerical_identity(

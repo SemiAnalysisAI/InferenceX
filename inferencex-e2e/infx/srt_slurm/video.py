@@ -325,7 +325,7 @@ def bind_video(
         port=port,
         gpus=gpus,
     )
-    if spec["schema_version"] == 2:
+    if spec["schema_version"] >= 2:
         if runtime == "sglang":
             if service["args"].count("--disable-conditioning-cache") != 1:
                 raise ValueError("fairness workload requires --disable-conditioning-cache")

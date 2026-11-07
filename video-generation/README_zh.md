@@ -46,6 +46,15 @@ prompt 合同，集合选择器为 `release-v1`。请求使用 49 次去噪更�
 实际编码器实现和跨引擎质量仍需单独证据。比较器将跨引擎质量标为未评估；
 同实现数值检查则要求封存的镜像、启动命令、环境、GPU 和算法身份一致。
 
+[`specs/h3-i2va.yaml`](specs/h3-i2va.yaml) 是该合同的图生视频版本：生成与
+编码设置相同，每个 case 额外带一张首帧图像。runner 从 `--image-dir` 读取
+`<sha256>.png`，哈希与计划不符时拒绝运行，并把图像字节内联发送：SGLang 使用
+`data:` URI condition，vLLM-Omni 使用 multipart `input_reference`。保存的请求
+payload 只保留图像哈希。若记录的服务端启动参数没有关闭跨请求的 conditioning
+cache，runner 也会拒绝启动。每条记录保存请求大小和发送耗时；媒体检查记录第 0
+帧相对输入图像的 PSNR 和 SSIM，仅作记录，不影响有效性判定。原生 srt 路径目前
+还不会传入图像目录。
+
 ## 本地检查
 
 ```bash

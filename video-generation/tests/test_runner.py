@@ -6,6 +6,7 @@ Actual decoding/corruption tests belong to the media engine's test suite.
 
 from __future__ import annotations
 
+import base64
 import copy
 import hashlib
 import json
@@ -74,13 +75,14 @@ def plan():
 @pytest.fixture
 def mocked_media(monkeypatch, tmp_path):
     calls = []
-    state = {"valid": True}
+    state = {"valid": True, "first_frames": []}
     analyzer = tmp_path / "analyzer.py"
     analyzer.write_bytes(ANALYZER_BYTES)
 
-    def analyze(path, expected):
+    def analyze(path, expected, first_frame=None):
         assert path.read_bytes() == FIXTURE_BYTES
         calls.append((path, expected))
+        state["first_frames"].append(first_frame)
         return {
             "decode_ok": True,
             "video": {
@@ -170,9 +172,11 @@ def fixture_server():
                         + body
                     )
                     payload = {
-                        part.get_param("name", header="content-disposition"): part.get_payload(
-                            decode=True
-                        ).decode()
+                        part.get_param("name", header="content-disposition"): (
+                            (part.get_content_type(), part.get_payload(decode=True))
+                            if part.get_filename()
+                            else part.get_payload(decode=True).decode()
+                        )
                         for part in message.iter_parts()
                     }
                 else:
@@ -377,6 +381,101 @@ def test_fairness_request_and_disjoint_warmup_reach_local_http_fixture(
             == {"preset": "ultrafast", "crf": "18"}
             for post in server["posts"]
         )
+
+
+def _i2va_plan(image_dir):
+    """The h3-i2va plan with each image swapped for distinct local bytes, one of them over 1 MiB."""
+    path = Path(__file__).resolve().parents[1] / "specs/h3-i2va.yaml"
+    plan = video_spec.plan_for(video_spec.load_spec(path), "release-v1")
+    images = {}
+    for index, case in enumerate([plan["warmup_case"], *plan["cases"]]):
+        data = bytes([index]) * (1536 * 1024 if index == 1 else 4096)
+        digest = hashlib.sha256(data).hexdigest()
+        (image_dir / f"{digest}.png").write_bytes(data)
+        case["condition"]["sha256"] = digest
+        images[case["case_id"]] = data
+    return plan, images
+
+
+def _identity(runtime, *, cache_off=True):
+    flag = ["--disable-conditioning-cache"] if cache_off else []
+    return {
+        "runtime_revision": RUNTIME_REVISION,
+        "image_digest": "a" * 64,
+        "server_argv": ["serve", runtime, *(flag if runtime == "sglang" else [])],
+        "server_environment": {
+            "OMNI_DIFFUSION_PROMPT_EMBED_CACHE": "0" if cache_off else "1",
+        },
+        "gpu_topology": {"gpu_uuids": ["GPU-fixture"]},
+    }
+
+
+@pytest.mark.parametrize("runtime", ["sglang", "vllm-omni"])
+def test_i2va_sends_the_sealed_image_inline_and_records_only_its_hash(
+    tmp_path, mocked_media, fixture_server, runtime
+):
+    plan, images = _i2va_plan(tmp_path)
+    endpoint, server = fixture_server()
+    output = tmp_path / runtime
+    run = execute(
+        plan,
+        output,
+        endpoint,
+        runtime=runtime,
+        numerical_identity=_identity(runtime),
+        image_dir=tmp_path,
+    )
+    assert run["status"] == "complete"
+    assert run["configuration"]["conditioning_cache"]["state"] == "disabled_across_requests"
+    _, state = mocked_media
+    for post, record, first_frame in zip(
+        server["posts"], run["records"], state["first_frames"], strict=True
+    ):
+        image = images[record["case_id"]]
+        digest = hashlib.sha256(image).hexdigest()
+        if runtime == "sglang":
+            assert post["task"] == "fl2va"
+            assert post["conditions"] == [
+                {
+                    "type": "image",
+                    "uri": "data:image/png;base64," + base64.b64encode(image).decode(),
+                    "role": "keyframe",
+                    "frame_index": 0,
+                }
+            ]
+        else:
+            assert json.loads(post["extra_params"])["task"] == "fl2va"
+            assert post["input_reference"] == ("image/png", image)
+        stored = (output / "requests" / f"{record['slot_id']}.json").read_text()
+        assert f"sha256:{digest}" in stored and len(stored) < 4096
+        assert record["condition"]["sha256"] == digest
+        assert record["condition"]["byte_size"] == len(image)
+        assert 0 < record["submit_to_sent_seconds"] <= record["submit_to_accepted_seconds"]
+        assert first_frame == image
+    assert max(record["request_bytes"] for record in run["records"]) > runner.MAX_JSON_BYTES
+
+
+@pytest.mark.parametrize(
+    ("fault", "message"),
+    [("image_bytes", "does not match the sha256"), ("cache_on", "conditioning caches")],
+)
+def test_i2va_refuses_unsealed_images_or_a_cache_on_server_before_any_request(
+    tmp_path, mocked_media, fixture_server, fault, message
+):
+    plan, _ = _i2va_plan(tmp_path)
+    if fault == "image_bytes":
+        (tmp_path / f"{plan['cases'][3]['condition']['sha256']}.png").write_bytes(b"other")
+    endpoint, server = fixture_server()
+    output = tmp_path / "not-created"
+    with pytest.raises(ValueError, match=message):
+        execute(
+            plan,
+            output,
+            endpoint,
+            numerical_identity=_identity("sglang", cache_off=fault != "cache_on"),
+            image_dir=tmp_path,
+        )
+    assert not output.exists() and server["posts"] == []
 
 
 def test_cli_run_records_the_declared_numerical_identity(
@@ -659,7 +758,7 @@ def test_keyboard_interrupt_retains_inflight_outcome_and_schedule(
     plan["warmup_runs"] = 0
     endpoint, server = fixture_server()
 
-    def interrupt_analysis(*_):
+    def interrupt_analysis(*_, **__):
         raise KeyboardInterrupt
 
     monkeypatch.setattr(sys.modules["evaluator.media"], "analyze_media", interrupt_analysis)
@@ -693,9 +792,9 @@ def test_serving_overlaps_requests_without_waiting_for_local_validation(
     endpoint, state = fixture_server(before_submit=before_submit)
     analyzer = sys.modules["evaluator.media"].analyze_media
 
-    def validate_after_submissions(path, expected):
+    def validate_after_submissions(path, expected, first_frame=None):
         assert submitted.wait(2), "local validation blocked later submissions"
-        return analyzer(path, expected)
+        return analyzer(path, expected, first_frame)
 
     monkeypatch.setattr(sys.modules["evaluator.media"], "analyze_media", validate_after_submissions)
     run = execute(

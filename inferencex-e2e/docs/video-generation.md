@@ -30,7 +30,7 @@ worker settings. The binder substitutes `{model_path}`, `{model_id}`,
 `{model_revision}`, and `{gpus_per_node}` in service args/env, and rejects
 model, revision, port, or GPU-count mismatches before submission. Other native
 srt-slurm service placeholders retain their existing meaning. For a schema version 2
-fairness plan, the binder also requires SGLang's `--disable-conditioning-cache`
+or 3 fairness plan, the binder also requires SGLang's `--disable-conditioning-cache`
 or vLLM-Omni's `OMNI_DIFFUSION_PROMPT_EMBED_CACHE=0` in the selected recipe.
 It forwards every point's image as `VIDEO_CONTAINER_IMAGE`; the server refuses an
 image without a SHA256 digest and records the digest in its launch receipt.

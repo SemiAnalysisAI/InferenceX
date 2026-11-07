@@ -13,6 +13,7 @@ form fields. Those source pins do not attest to a supplied server's revision.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import http.client
 import json
@@ -27,6 +28,7 @@ import threading
 import time
 import urllib.parse
 import uuid
+from collections.abc import Callable
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from datetime import datetime, timezone
 from pathlib import Path
@@ -40,6 +42,8 @@ from .serving import settings as serving_settings, summarize as serving_summary
 MODEL_ID = "MiniMaxAI/MiniMax-H3"
 RUNTIMES = {"sglang", "vllm-omni"}
 MAX_JSON_BYTES = 1024 * 1024
+# A 1344x768 RGB PNG is at most about 3.1 MB, about 4.2 MB once base64-encoded for SGLang.
+MAX_IMAGE_REQUEST_BYTES = 8 * 1024 * 1024
 MAX_MEDIA_BYTES = 512 * 1024 * 1024
 MAX_SLOTS = 10000
 MAX_POLLS = 10000
@@ -53,6 +57,8 @@ _ERROR_EXCERPT_CHARS = 300
 _PAID_MINIMAX_DOMAINS = ("minimax.io", "minimaxi.com")
 _EVENT_LOCK = threading.Lock()
 _CASE_FIELDS = {"case_id", "prompt", "seed", "requires_motion", "requires_sound"}
+_FIRST_FRAME = {"task": "fl2va", "role": "keyframe", "frame_index": 0, "media_type": "image/png"}
+_CONDITION_FIELDS = {*_FIRST_FRAME, "sha256", "width", "height"}
 _GENERATION_CONTROLS = {
     "duration_seconds",
     "aspect_ratio",
@@ -139,12 +145,26 @@ def valid_numerical_identity(identity: Any, runtime_revision: str) -> bool:
 
 
 def requested_encoding(plan: dict[str, Any]) -> dict[str, Any] | None:
-    return plan["fairness"]["encoding"] if schema_version(plan) == 2 else None
+    return plan["fairness"]["encoding"] if schema_version(plan) >= 2 else None
 
 
-def _case(case: Any, name: str) -> None:
-    if not isinstance(case, dict) or set(case) != _CASE_FIELDS:
-        raise ValueError(f"{name} must declare exactly {sorted(_CASE_FIELDS)}")
+def _case(case: Any, name: str, canvas: tuple[Any, Any]) -> None:
+    if not isinstance(case, dict) or set(case) - {"condition"} != _CASE_FIELDS:
+        raise ValueError(
+            f"{name} must declare exactly {sorted(_CASE_FIELDS)} and may add condition"
+        )
+    condition = case.get("condition")
+    if "condition" in case and (
+        not isinstance(condition, dict)
+        or set(condition) != _CONDITION_FIELDS
+        or any(condition[key] != value for key, value in _FIRST_FRAME.items())
+        or (condition["width"], condition["height"]) != canvas
+        or not isinstance(condition["sha256"], str)
+        or not re.fullmatch(r"[0-9a-f]{64}", condition["sha256"])
+    ):
+        raise ValueError(
+            f"{name}.condition must be one canvas-sized fl2va PNG keyframe at frame 0, by sha256"
+        )
     _text(case["case_id"], f"{name}.case_id", limit=200)
     _text(case["prompt"], f"{name}.prompt", limit=32000)
     seed = case["seed"]
@@ -173,9 +193,9 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(f"this runner supports only {MODEL_ID}")
     if not re.fullmatch(r"[a-fA-F0-9]{40}", frozen["model_revision"]):
         raise ValueError("model_revision must be an immutable 40-character commit")
-    if schema_version(frozen) not in (1, 2):
-        raise ValueError("schema_version must be 1 or 2")
-    if schema_version(frozen) == 2:
+    if schema_version(frozen) not in (1, 2, 3):
+        raise ValueError("schema_version must be 1, 2 or 3")
+    if schema_version(frozen) >= 2:
         fairness = frozen.get("fairness")
         encoding = fairness.get("encoding") if isinstance(fairness, dict) else None
         if (
@@ -183,7 +203,9 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
             or not isinstance(encoding.get("preset"), str)
             or type(encoding.get("crf")) is not int
         ):
-            raise ValueError("schema 2 plans must request fairness.encoding preset and integer crf")
+            raise ValueError(
+                "schema 2 and 3 plans must request fairness.encoding preset and integer crf"
+            )
     generation = frozen.get("generation")
     if not isinstance(generation, dict):
         raise ValueError("generation must be an object with explicit controls")
@@ -212,12 +234,13 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
     cases = frozen.get("cases")
     if not isinstance(cases, list) or not cases:
         raise ValueError("cases must be a nonempty array")
+    canvas = (generation["width"], generation["height"])
     for index, case in enumerate(cases):
-        _case(case, f"cases[{index}]")
+        _case(case, f"cases[{index}]", canvas)
     if len({case["case_id"] for case in cases}) != len(cases):
         raise ValueError("case_id must be unique")
     if frozen.get("warmup_case") is not None:
-        _case(frozen["warmup_case"], "warmup_case")
+        _case(frozen["warmup_case"], "warmup_case", canvas)
     _positive(frozen.get("repetitions"), "repetitions", maximum=MAX_SLOTS, integer=True)
     warmups = frozen.get("warmup_runs")
     if isinstance(warmups, bool) or not isinstance(warmups, int) or warmups < 0:
@@ -252,7 +275,10 @@ def _slots(plan: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _payload(plan: dict[str, Any], slot: dict[str, Any], runtime: str) -> dict[str, Any]:
+    """The request as recorded: an image condition appears as ``sha256:<hex>``, not its bytes."""
     generation = plan["generation"]
+    condition = slot.get("condition")
+    task = condition["task"] if condition else "t2va"
     encoding = requested_encoding(plan)
     target = {
         "duration_seconds": generation["duration_seconds"],
@@ -271,8 +297,17 @@ def _payload(plan: dict[str, Any], slot: dict[str, Any], runtime: str) -> dict[s
         # its target resolves both. Expected dimensions are verified on delivery.
         request = {
             **common,
-            "task": "t2va",
-            "conditions": [],
+            "task": task,
+            "conditions": [
+                {
+                    "type": "image",
+                    "uri": "sha256:" + condition["sha256"],
+                    "role": condition["role"],
+                    "frame_index": condition["frame_index"],
+                }
+            ]
+            if condition
+            else [],
             "target": target,
             "audio_flow_shift": generation["audio_flow_shift"],
         }
@@ -283,13 +318,13 @@ def _payload(plan: dict[str, Any], slot: dict[str, Any], runtime: str) -> dict[s
             request["output_compression"] = SGLANG_OUTPUT_COMPRESSION[encoding["crf"]]
         return request
     extra = {
-        "task": "t2va",
+        "task": task,
         "target": target,
         "audio_flow_shift": generation["audio_flow_shift"],
     }
     if encoding:
         extra["video_codec_options"] = {"preset": encoding["preset"], "crf": str(encoding["crf"])}
-    return {
+    request = {
         **common,
         "width": generation["width"],
         "height": generation["height"],
@@ -298,6 +333,48 @@ def _payload(plan: dict[str, Any], slot: dict[str, Any], runtime: str) -> dict[s
         "num_outputs_per_prompt": 1,
         "extra_params": extra,
     }
+    if condition:
+        request["input_reference"] = "sha256:" + condition["sha256"]
+    return request
+
+
+def _conditioning_images(plan: dict[str, Any], image_dir: Path | None) -> dict[str, bytes]:
+    """Read each conditioning image as ``<sha256>.png`` and refuse bytes the plan did not seal."""
+    cases = [*plan["cases"], plan.get("warmup_case") or {}]
+    digests = sorted({case["condition"]["sha256"] for case in cases if "condition" in case})
+    if digests and image_dir is None:
+        raise ValueError("image-conditioned plans need image_dir holding <sha256>.png files")
+    images = {}
+    for digest in digests:
+        data = (Path(image_dir) / f"{digest}.png").read_bytes()
+        if hashlib.sha256(data).hexdigest() != digest:
+            raise ValueError(f"{digest}.png does not match the sha256 the plan names")
+        images[digest] = data
+    return images
+
+
+def _conditioning_cache_evidence(runtime: str, identity: dict[str, Any] | None) -> str:
+    """The recorded server launch setting that keeps conditioning caches off across requests."""
+    if identity is not None:
+        if runtime == "sglang" and "--disable-conditioning-cache" in identity["server_argv"]:
+            return "server_argv --disable-conditioning-cache"
+        environment = identity["server_environment"]
+        if runtime == "vllm-omni" and environment.get("OMNI_DIFFUSION_PROMPT_EMBED_CACHE") == "0":
+            return "server_environment OMNI_DIFFUSION_PROMPT_EMBED_CACHE=0"
+    raise ValueError(
+        "image-conditioned plans need a numerical_identity whose server launch turns off"
+        " cross-request conditioning caches"
+    )
+
+
+def _body(payload: dict[str, Any], runtime: str, image: bytes | None) -> tuple[bytes, str]:
+    """Encode a recorded payload for the wire, putting the image bytes where its hash stands."""
+    if runtime == "vllm-omni":
+        return _multipart(payload, image)
+    if image is not None:
+        uri = "data:image/png;base64," + base64.b64encode(image).decode("ascii")
+        payload = {**payload, "conditions": [{**payload["conditions"][0], "uri": uri}]}
+    return canonical_json_bytes(payload), "application/json"
 
 
 def preview_plan(plan: dict[str, Any], *, runtime: str = "sglang") -> dict[str, Any]:
@@ -363,10 +440,20 @@ def _remaining(deadline: float) -> float:
     return remaining
 
 
-def _multipart(payload: dict[str, Any]) -> tuple[bytes, str]:
+def _multipart(payload: dict[str, Any], image: bytes | None = None) -> tuple[bytes, str]:
     boundary = "vgbench-" + uuid.uuid4().hex
     chunks: list[bytes] = []
     for name, value in payload.items():
+        if name == "input_reference":
+            chunks.append(
+                (
+                    f'--{boundary}\r\nContent-Disposition: form-data; name="{name}";'
+                    ' filename="input_reference.png"\r\nContent-Type: image/png\r\n\r\n'
+                ).encode("ascii")
+                + image
+                + b"\r\n"
+            )
+            continue
         text = (
             json.dumps(value, ensure_ascii=False, allow_nan=False)
             if isinstance(value, (dict, list))
@@ -392,6 +479,7 @@ def _open_response(
     credential: str | None,
     body: bytes | None = None,
     content_type: str | None = None,
+    sent: Callable[[], None] | None = None,
 ) -> tuple[http.client.HTTPConnection, http.client.HTTPResponse, threading.Timer]:
     """No redirect following, environment proxies, cookies, or server URLs.
 
@@ -467,6 +555,8 @@ def _open_response(
         if credential:
             headers["Authorization"] = "Bearer " + credential
         connection.request(method, path, body=body, headers=headers)
+        if sent:
+            sent()
         response = connection.getresponse()
         if not 200 <= response.status < 300:
             body = response.read(_ERROR_EXCERPT_CHARS + len(credential or ""))
@@ -494,6 +584,7 @@ def _transfer(
     body: bytes | None = None,
     content_type: str | None = None,
     destination: Path | None = None,
+    sent: Callable[[], None] | None = None,
 ) -> bytes | str:
     connection, response, timer = _open_response(
         parts,
@@ -503,6 +594,7 @@ def _transfer(
         credential=credential,
         body=body,
         content_type=content_type,
+        sent=sent,
     )
     limit = MAX_MEDIA_BYTES if destination else MAX_JSON_BYTES
     sink = None
@@ -654,6 +746,7 @@ def run_plan(
     serving_concurrency: int | None = None,
     delivery_deadline_seconds: float | None = None,
     numerical_identity: dict[str, Any] | None = None,
+    image_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Execute a serial or explicit closed-loop run, retaining every outcome.
 
@@ -666,6 +759,10 @@ def run_plan(
     A client timeout does not cancel server work. To prevent such an unknown
     job from violating the declared concurrency, remaining slots are not submitted.
     Native media decoding observes a cooperative, not preemptive, deadline.
+
+    An image-conditioned plan reads each image from ``image_dir/<sha256>.png`` and refuses to
+    start unless every file matches its hash and ``numerical_identity`` shows the server's
+    cross-request conditioning cache is off.
     """
     frozen = validate_plan(plan)
     serving = serving_settings(serving_concurrency, delivery_deadline_seconds)
@@ -687,6 +784,8 @@ def run_plan(
             )
         canonical_json_bytes(numerical_identity)
     _positive(timeout_seconds, "timeout_seconds", maximum=86400)
+    images = _conditioning_images(frozen, image_dir)
+    cache_evidence = _conditioning_cache_evidence(runtime, numerical_identity) if images else None
     safe_endpoint, parts, api_path = _endpoint(endpoint)
     credential = None
     if api_key_env:
@@ -744,6 +843,7 @@ def run_plan(
             "attempt_timeout_seconds": timeout_seconds,
             "socket_timeout_seconds": SOCKET_TIMEOUT_SECONDS,
             "max_json_bytes": MAX_JSON_BYTES,
+            "max_image_request_bytes": MAX_IMAGE_REQUEST_BYTES,
             "max_media_bytes": MAX_MEDIA_BYTES,
             "max_polls": MAX_POLLS,
             "poll_interval_seconds": POLL_INTERVAL_SECONDS,
@@ -752,6 +852,11 @@ def run_plan(
     }
     if numerical_identity is not None:
         configuration["numerical_identity"] = numerical_identity
+    if cache_evidence:
+        configuration["conditioning_cache"] = {
+            "state": "disabled_across_requests",
+            "evidence": cache_evidence,
+        }
     if serving:
         from . import serving as serving_module
 
@@ -801,6 +906,7 @@ def run_plan(
             media = analyze_media(
                 directory / record["artifact_path"],
                 {**record["expected_media"], "timeout_seconds": _remaining(deadline)},
+                first_frame=images[record["condition"]["sha256"]] if record["condition"] else None,
             )
         finally:
             record["media_validation_seconds"] = time.monotonic() - validation_started
@@ -825,6 +931,8 @@ def run_plan(
         expected["duration_seconds"] = expected["frame_count"] / expected["fps"]
         if encoding:
             expected["encoding"] = encoding
+        condition = slot.get("condition")
+        image = images[condition["sha256"]] if condition else None
         record: dict[str, Any] = {
             **{
                 key: slot[key]
@@ -844,6 +952,9 @@ def run_plan(
             "outcome": "not_started",
             "job_id": None,
             "provider_status": None,
+            "condition": {**condition, "byte_size": len(image)} if condition else None,
+            "request_bytes": None,
+            "submit_to_sent_seconds": None,
             "submit_to_accepted_seconds": None,
         }
         if abort_reason:
@@ -854,13 +965,10 @@ def run_plan(
             _write_json(
                 directory / "requests" / (slot["slot_id"] + ".json"), payload, exclusive=True
             )
-            body, content_type = (
-                (canonical_json_bytes(payload), "application/json")
-                if runtime == "sglang"
-                else _multipart(payload)
-            )
-            if len(body) > MAX_JSON_BYTES:
+            body, content_type = _body(payload, runtime, image)
+            if len(body) > (MAX_IMAGE_REQUEST_BYTES if image else MAX_JSON_BYTES):
                 raise ValueError("request exceeds byte limit")
+            record["request_bytes"] = len(body)
             # fsync the intent BEFORE the first byte can leave this client.
             _event(
                 journal, "attempt_started", slot_id=slot["slot_id"], payload_sha256=_digest(payload)
@@ -876,6 +984,10 @@ def run_plan(
             }
             deadline = start + timeout_seconds
             remote_terminal = False
+
+            def sent() -> None:
+                record["submit_to_sent_seconds"] = time.monotonic() - start
+
             try:
                 reply = _json_request(
                     parts,
@@ -885,6 +997,7 @@ def run_plan(
                     credential=credential,
                     body=body,
                     content_type=content_type,
+                    sent=sent,
                 )
                 record["submit_to_accepted_seconds"] = time.monotonic() - start
                 identifier = reply.get("id")

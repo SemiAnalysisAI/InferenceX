@@ -53,6 +53,17 @@ separate evidence. Comparisons leave cross-engine quality unjudged, while
 same-implementation numerical checks require matching sealed image, launch,
 environment, GPU and algorithm identity.
 
+[`specs/h3-i2va.yaml`](specs/h3-i2va.yaml) is the image-to-video version of that
+contract: the same generation and encoding, plus one first-frame image per case.
+The runner reads each image from `--image-dir` as `<sha256>.png`, refuses bytes
+whose hash differs from the plan, and sends them inline: an SGLang `data:` URI
+condition or a vLLM-Omni multipart `input_reference`. Stored request payloads
+keep only the image hash. The runner also refuses to start unless the recorded
+server launch turns off cross-request conditioning caches. Each record keeps the
+request size and the time to send it. The media check records frame-0 PSNR and
+SSIM against the input image without affecting validity. The native srt path
+does not pass an image directory yet.
+
 ## Local checks
 
 ```bash

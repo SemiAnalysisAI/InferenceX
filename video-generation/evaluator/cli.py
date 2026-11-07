@@ -109,6 +109,7 @@ def _mvp_command(arguments: argparse.Namespace) -> int:
                         if arguments.numerical_identity
                         else None
                     ),
+                    image_dir=arguments.image_dir,
                 )
             finally:
                 signal.signal(signal.SIGTERM, previous_sigterm)
@@ -198,6 +199,11 @@ def _parser() -> argparse.ArgumentParser:
         "--numerical-identity",
         type=Path,
         help="JSON server identity (image digest, argv, environment, GPU topology) that lets compare gate same-configuration fidelity",
+    )
+    run.add_argument(
+        "--image-dir",
+        type=Path,
+        help="directory of <sha256>.png conditioning images that an image-to-video plan names",
     )
 
     compare = subparsers.add_parser(
