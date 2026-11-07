@@ -121,9 +121,10 @@ if "-f" in argv and os.environ.get("EVAL_ONLY") != "true":
         (logs / telemetry.get("storage_subdir", "power")).mkdir(exist_ok=True)
 result = os.environ["RESULT_FILENAME"]
 mode = os.environ["FAKE_RESULTS"]
-if mode == "single":
+if mode == "single" and os.environ.get("FAKE_POWER_PACKAGE") != "absent":
     (logs / "power").mkdir(exist_ok=True)
     (logs / "power/samples.csv").write_text("retained native samples\n")
+if mode == "single":
     (logs / f"{result}.json").write_text(os.environ.get("FAKE_RESULT", '{"completed": 2}'))
 elif mode == "fixed":
     point = logs / "sweep_isl_1024_osl_1024"
