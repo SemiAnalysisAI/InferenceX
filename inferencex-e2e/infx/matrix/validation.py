@@ -17,6 +17,7 @@ from pydantic import (
 
 from infx import yamlio
 from infx.clusters import CLUSTER_LABEL_PREFIX, RunnerInventory
+from infx.clusters.platforms import PLATFORM_DIR, load_platforms
 
 DEFAULT_AGENTIC_DURATION_SECONDS = 3600
 SINGLE_NODE_RECIPES = "benchmarks/single_node/srt-slurm-recipes"
@@ -1365,10 +1366,27 @@ def load_config_files(config_files: list[str], validate: bool = True) -> dict:
     return all_config_data
 
 
+def check_platform_files(directory: Path, clusters: dict) -> None:
+    """Raise ValueError unless ``directory`` holds one platform file per cluster and no other.
+
+    A runner config with no platforms directory beside it, such as a test fixture, is not checked.
+    """
+    if not directory.is_dir():
+        return
+    files = load_platforms(directory).keys()
+    missing, stray = sorted(clusters.keys() - files), sorted(files - clusters.keys())
+    if missing or stray:
+        raise ValueError(
+            f"{directory}: clusters without a platform file: {missing}; "
+            f"platform files without a cluster: {stray}"
+        )
+
+
 def load_runner_file(runner_file: str, validate: bool = True) -> dict:
     """Load the runner config, validating it unless ``validate`` is False.
 
-    Raise ValueError when the file is missing or invalid.
+    Validation also checks the platform files beside it against its clusters. Raise ValueError
+    when the file is missing or invalid.
     """
     try:
         with open(runner_file) as f:
@@ -1378,5 +1396,8 @@ def load_runner_file(runner_file: str, validate: bool = True) -> dict:
 
     if validate:
         validate_runner_config(runner_config)
+        check_platform_files(
+            Path(runner_file).parent / PLATFORM_DIR.name, runner_config["clusters"]
+        )
 
     return runner_config

@@ -1498,6 +1498,20 @@ clusters:
         with pytest.raises(ValueError, match="cannot be an empty list"):
             load_runner_file(str(runner_file))
 
+    def test_every_cluster_needs_its_platform_file_and_no_file_lacks_a_cluster(self, tmp_path):
+        runner_file = tmp_path / "runners.yaml"
+        runner_file.write_text(
+            "labels: {'cluster:alpha': [alpha_0]}\n"
+            "clusters:\n  alpha: {gpus-per-node: 8, arch: x86_64, scheduler: slurm,\n"
+            "    slurm: {partition: batch, exclusive: true}}\n"
+        )
+        (tmp_path / "platforms").mkdir()
+        (tmp_path / "platforms/retired.yaml").write_text("{}\n")
+        with pytest.raises(ValueError, match=r"without a platform file: \['alpha'\]; .* without a cluster: \['retired'\]"):
+            load_runner_file(str(runner_file))
+        (tmp_path / "platforms/retired.yaml").rename(tmp_path / "platforms/alpha.yaml")
+        assert "alpha" in load_runner_file(str(runner_file))["clusters"]
+
     def test_nonexistent_runner_file(self):
         with pytest.raises(ValueError) as exc_info:
             load_runner_file("nonexistent.yaml")
