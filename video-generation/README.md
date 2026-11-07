@@ -1,4 +1,4 @@
-# Video-generation harness
+# Video-generation harness [experimental]
 
 **English** | [中文](README_zh.md)
 
@@ -15,7 +15,7 @@ them from `perf-changelog.yaml`, `run-sweep.yml` runs the `video` bucket through
 the SKU recipe under `benchmarks/single_node/srt-slurm-recipes/h3/` starts the
 engine through `python3 -m infx.bench video serve` as a generic service and runs
 `python3 -m infx.bench video client` as `benchmark.type: custom`. This directory
-is mounted into the job as `/video-package`. H100, B200 and MI355X select
+is mounted into the job as `/video-package`. H100, H200, B200 and MI355X select
 `h3-v2.yaml/release-v1`: 20 distinct measured prompts at C1. See
 [native video delivery](../inferencex-e2e/docs/video-generation.md) for
 artifact identity, reuse validation and post-merge publication.
