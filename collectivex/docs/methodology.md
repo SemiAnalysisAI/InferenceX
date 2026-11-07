@@ -223,7 +223,10 @@ and each collective split into a send kernel and a receive hook that runs straig
 runs over intra-node NVLink; multi-node EP16 rides NVSHMEM IBGDA, which wants gdrdrv on the node
 (b200-nscale's bare-metal IB has it), and GB EP16 stays inside MNNVL. B300 registers no DeepEP
 low-latency: the legacy Buffer initializes NVSHMEM with an RDMA transport even on one node, and
-NVSHMEM aborts on topology detection over B300's EFA.
+NVSHMEM aborts on topology detection over B300's EFA. H100's EFA pool registers EP8 only: at EP16
+every rank segfaults during setup, since IBGDA has no EFA transport. Its normal-mode EP16 prefill
+also does not finish inside the per-case guard (`COLLX_RUN_TIMEOUT`) through the EFA proxy, so those
+two cells stay unmeasured.
 
 ### UCCL-EP
 
