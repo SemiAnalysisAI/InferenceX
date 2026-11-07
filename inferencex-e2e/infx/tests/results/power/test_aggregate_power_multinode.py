@@ -1103,3 +1103,12 @@ def test_each_cluster_cpu_source_reads_the_socket_meter_srt_slurm_writes(monkeyp
     assert set(SOCKET_METERS) == set(sources)
     for source in sources:
         assert SOCKET_METERS[source].sensor_suffix == SENSOR_SUFFIXES[PRIMARY_KIND_BY_SOURCE[source]]
+
+
+def test_exported_thresholds_match_the_validator_constants():
+    exported = json.loads(Path(apm.__file__).with_name("thresholds.json").read_text())
+    assert exported == {
+        "max_sample_gap_seconds": apm.MAX_SAMPLE_GAP_SECONDS,
+        "clock_tolerance_seconds": apm._CLOCK_TOLERANCE_SECONDS,
+        "clock_tolerance_fraction": apm._CLOCK_TOLERANCE_FRACTION,
+    }

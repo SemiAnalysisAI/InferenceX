@@ -105,6 +105,7 @@ WINDOW_STATUS_RUNNING = "running"
 WINDOW_STATUS_COMPLETED = "completed"
 _WINDOW_ALLOWED_STATUSES = ("running", "completed", "failed", "interrupted")
 
+# Exported to InferenceX-app in thresholds.json.
 _CLOCK_TOLERANCE_SECONDS = 0.5
 _CLOCK_TOLERANCE_FRACTION = 0.01
 

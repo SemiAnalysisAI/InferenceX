@@ -41,6 +41,7 @@ ENERGY_NORMALIZATIONS = ("tokens", "clips")
 
 # Widest gap between consecutive samples inside the integration window that
 # still counts as continuous coverage (srt-slurm contract.MAX_SAMPLE_GAP_SECONDS).
+# thresholds.json exports it with the multinode clock tolerance for InferenceX-app.
 MAX_SAMPLE_GAP_SECONDS = 3.0
 
 

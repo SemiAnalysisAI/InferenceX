@@ -1,0 +1,5 @@
+{
+  "max_sample_gap_seconds": 3.0,
+  "clock_tolerance_seconds": 0.5,
+  "clock_tolerance_fraction": 0.01
+}
