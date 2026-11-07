@@ -32,7 +32,7 @@ library only. Details are under [Backends](#backends).
 | nccl-ep | production for in-domain zero-copy LL rank-major BF16; library otherwise | graph decode; prefill eager | TensorRT-LLM `NcclEP` with NVIDIA/TensorRT-LLM#20631; HT and FP8 (DS_FP8E3M4) are library rows |
 | uccl-ep | candidate | normal eager; LL graph | vLLM's DeepEP configuration on UCCL's drop-in `deep_ep`; no engine ships its selector |
 | mori | production | graph decode; eager prefill | vLLM's MoRI IntraNode / InterNodeV1, LL EP16 only |
-| flashinfer-ep | production | graph decode; eager prefill | vLLM's integration, GB200/GB300 only |
+| flashinfer-ep | production | graph decode; eager prefill | vLLM's integration; EP8 on H100/H200, EP8 and EP16 on GB200/GB300 |
 
 ## Timing
 
@@ -191,7 +191,9 @@ graphs on, vLLM's default, every batch, prefill as well as decode, dispatches wi
 and `do_expand=False` into a receive bounded at the next power of two of T, with
 `prefer_overlap_with_compute=False` (DeepEP then sizes its kernels at 64 SMs) and
 `allow_multiple_reduction=False`. No deepep-v2 dispatch waits on the host. Decode replays a graph and
-prefill runs eager, as vLLM runs large prefill batches uncaptured.
+prefill runs eager, as vLLM runs large prefill batches uncaptured. `combine` copies the batch's rows
+into the MoE layer's output, as vLLM's finalize does (`library_config.finalize_copy`); rows without
+that field predate the copy and read 2-7% low on combine by MoRI's measure.
 
 Scale-up cases request NCCL Device API LSA and fail closed unless the LSA team covers the whole EP
 world, which is also what makes the hybrid choice match vLLM's autoselect: DeepEP goes hybrid only
@@ -233,7 +235,8 @@ under vLLM's DeepEP backends, and the adapter runs that configuration.
 `normal` is vLLM's `deepep_ht` path: UCCL's default 20 SMs, `get_dispatch_config`/`get_combine_config`
 per call, 1 GiB of NVLink buffer, plus 1 GiB of RDMA buffer and 10 QPs per rank across nodes. Its
 dispatch polls receive counters on the host before launching the transfer, so `normal` stays eager and
-passes through the host gate ([Rank Alignment](#rank-alignment)). `low-latency` issues the same calls
+passes through the host gate ([Rank Alignment](#rank-alignment)). Its `combine` carries vLLM's copy
+into the layer output, as DeepEP V2's does. `low-latency` issues the same calls
 as DeepEP V2 (send kernel plus receive hook) with vLLM's 256-token receive; at EP8 `is_intranode`
 keeps it on NVLink. UCCL-EP is built from source at its pin with UCCL's drop-in flags
 `USE_DMABUF=1 PER_EXPERT_BATCHING=1`; `implementation.library_version` names the commit and flags,
@@ -299,8 +302,9 @@ point, because two handles from one group share its double-buffer parity slots
 ### FlashInfer EP
 
 FlashInfer EP is TensorRT-LLM's one-sided MNNVL `MoeAlltoAll` from FlashInfer 0.7.1, vLLM main's pin:
-each rank writes tokens directly into its peers' workspace windows, so it is GB200/GB300-only and runs
-EP8 and EP16 inside MNNVL. It has one kernel family, so it runs `normal` only, across both ladders.
+each rank writes tokens directly into its peers' workspace windows, so every rank must sit in one
+NVLink domain: EP8 on H100 and H200 (one node), EP8 and EP16 inside MNNVL on GB200/GB300. B200 and
+B300 are not registered yet. The `flashinfer-mnnvl-…` generation name is kept on the single-node rows. It has one kernel family, so it runs `normal` only, across both ladders.
 It runs vLLM's integration (`flashinfer_nvlink_one_sided`): combine is handed a caller-owned payload
 with `payload_in_workspace=False`, so FlashInfer's staging copy into the workspace runs, and is timed,
 inside `combine`, as in vLLM (writing the expert output into the workspace directly is TensorRT-LLM's
@@ -674,7 +678,11 @@ aws-ofi-nccl 1.21.1 where needed. Each cache directory's name binds the CPU arch
 the pin (plus the GPU architecture and build-recipe generation for GPU builds), and it is never
 committed. The DeepEP V2 build applies one local patch, the opt-in relaxed-ordering switch; UCCL-EP's
 AMD build swaps managed allocations for pinned host memory. MoRI ships in the image and is only
-import-checked. Runtime probes fail closed before reuse, and a cache that fails them is rejected, not
+import-checked. DeepEP V2 does not run on the image's torch: its cache holds an isolated venv with
+torch 2.11.0 and NCCL 2.30.4 (2.32.3 for the EFA fork), where the vLLM v0.32.0 image carries torch
+2.13.0 and NCCL 2.30.7, which every other NVIDIA backend uses. `runtime.framework` and
+`runtime.collective_library` record the pair per row. The pin is 6 commits ahead of the DeepEP commit
+vLLM v0.32.0 installs (d4f41e4), which vLLM builds into the image's own environment. Runtime probes fail closed before reuse, and a cache that fails them is rejected, not
 reset, so a concurrent allocation cannot lose files it is using.
 
 ## Result Delivery
