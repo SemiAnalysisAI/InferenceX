@@ -46,6 +46,7 @@ base:
         PYTHONNOUSERSITE: '1'
         # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        SGLANG_WARMUP_TIMEOUT: '1800'
         SGLANG_USE_AITER: '1'
         SGLANG_USE_AITER_UNIFIED_ATTN: '1'
         MUSE_MOE_BACKEND: flydsl
