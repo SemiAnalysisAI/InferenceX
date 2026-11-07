@@ -56,25 +56,9 @@ outside the recipe.
 
 ## 3. Check locally
 
-From `inferencex-e2e/`, list the config keys your diff affects, then render their
-recipes. Neither command submits a job.
-
-```bash
-uv run --locked --all-extras --group test python -m infx.matrix.changed \
-  --base origin/main --json
-recipe_output=$(mktemp -d)
-uv run --locked --extra recipes infx generate \
-  --config-key h3-bf16-h100-sglang-video --output-dir "$recipe_output"
-```
-
-`infx.matrix.changed` lists every key whose row or bound recipe changed. Step 4
-needs that list. In the rendered `manifest.json` and YAML, check the image, model,
-GPU count, full command, environment, and client concurrency. The recipe
-fingerprint binds the matrix row to the rendered recipe, so rendering fails and
-names the recipe when a recipe cannot be bound. A passing render proves schema and
-binding, not model execution.
-
-If you changed code under `video-generation/`, run its
+Render the changed deployments and list the changed config keys as
+[Render a deployment locally](../inferencex-e2e/docs/video-generation.md#render-a-deployment-locally)
+describes. If you changed code under `video-generation/`, run its
 [local checks](README.md#local-checks). For code under `inferencex-e2e/infx/`, run
 the [repository local checks](../AGENTS.md#local-checks).
 

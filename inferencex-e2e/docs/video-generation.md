@@ -99,3 +99,22 @@ the first native video reuse request; a PR-local checker cannot bypass that gate
 
 To add or change a deployment, follow the
 [H3 submission guide](../../video-generation/SUBMITTING.md).
+
+### Render a deployment locally
+
+Render locally from `inferencex-e2e/`, using the repository's pinned srt-slurm
+submodule and locked dependencies. This writes files only and submits no job:
+
+```bash
+recipe_output=$(mktemp -d)
+uv run --locked --extra recipes infx generate \
+  --config-key h3-bf16-h100-sglang-video --output-dir "$recipe_output"
+uv run --locked --all-extras --group test python -m infx.matrix.changed \
+  --base origin/main --json
+```
+
+Inspect `manifest.json` and its generated YAML for the selected config, image,
+model, GPU count, full command, environment and client concurrency. The recipe
+fingerprint binds the matrix row and rendered recipe; a successful render
+proves schema/binding, not model execution. Run the focused binder, entrypoint,
+matrix and result tests for changed behavior.
