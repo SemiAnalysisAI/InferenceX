@@ -56,23 +56,23 @@ outside the recipe.
 
 ## 3. Check locally
 
-From `inferencex-e2e/`, generate the matrix rows of each key you changed. The
-command writes no files and submits no job.
+From `inferencex-e2e/`, list the config keys your diff affects, then render their
+recipes. Neither command submits a job.
 
 ```bash
-uv run --locked python -m infx.matrix.generate test-config \
-  --config-files configs/nvidia-master.yaml configs/amd-master.yaml \
-  --config-keys h3-bf16-h100-sglang-video --scenario-type video-generation
+uv run --locked --all-extras --group test python -m infx.matrix.changed \
+  --base origin/main --json
+recipe_output=$(mktemp -d)
+uv run --locked --extra recipes infx generate \
+  --config-key h3-bf16-h100-sglang-video --output-dir "$recipe_output"
 ```
 
-Each row shows the image, GPU count, recipe path, `conc-list`, and
-`recipe-fingerprint`. The fingerprint comes from the bound recipe, so the command
-fails and names the recipe when a recipe cannot be bound. A passing check proves
-schema and binding, not model execution.
-
-`infx generate` and `infx.matrix.changed` currently leave video-generation points
-out of their selection. They neither render nor list video keys, so track the keys
-you changed yourself.
+`infx.matrix.changed` lists every key whose row or bound recipe changed. Step 4
+needs that list. In the rendered `manifest.json` and YAML, check the image, model,
+GPU count, full command, environment, and client concurrency. The recipe
+fingerprint binds the matrix row to the rendered recipe, so rendering fails and
+names the recipe when a recipe cannot be bound. A passing render proves schema and
+binding, not model execution.
 
 If you changed code under `video-generation/`, run its
 [local checks](README.md#local-checks). For code under `inferencex-e2e/infx/`, run
@@ -168,8 +168,11 @@ clip against the public Diffusers reference videos. It uploads the scores as the
 automatically. A maintainer dispatches it with that run's `run_id` and
 `run_attempt`.
 
-PSNR flags broken output. It does not grade quality, so `quality.json` keeps
-`quality_status: unjudged`, and the score does not gate reuse or merge.
+PSNR measures how closely each clip matches the reference implementation's output
+for the same prompt and seed. Other hardware and engines legitimately diverge from
+that output, so the score is not a quality grade. `quality.json` keeps
+`quality_status: unjudged` and `release_qualified: false`, and no workflow gates
+reuse or merge on the score.
 [Reference PSNR](README.md#reference-psnr) describes the method and the reasons a
 clip stays unscored.
 
