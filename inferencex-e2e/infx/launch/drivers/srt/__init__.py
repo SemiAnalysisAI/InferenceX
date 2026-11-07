@@ -96,6 +96,9 @@ def run_single_node(launch: Launch) -> int:
 
     fetched = root / "fetched-outputs"
     submitted = submit.Submitted(manifest=run.workspace / submit.SINGLE_NODE_SUBMISSION)
+    if request.is_agentic:
+        rows = f"{request.result_filename}.json"
+        collect.stamp_rows_on_exit(run, rows, require_power=request.require_power)
     run.life.callback(collect.finish_single_node, run, submitted, fetched)
     submit.request_al_gate(run)
     eval_args = submit.eval_args(run.env, submit.SINGLE_NODE_EVAL_COMMAND)
@@ -291,6 +294,10 @@ def run_multinode(launch: Launch) -> int:
             ),
         )
         event.set(power=asdict(decision))
+        if request.is_agentic:
+            missing = {"power_missing": decision.skipped_reason} if decision.skipped_reason else {}
+            rows = f"{request.result_filename}_conc*.json"
+            collect.stamp_rows_on_exit(run, rows, require_power=request.require_power, **missing)
         if not request.eval_only and (decision.agentx or decision.adapter):
             require(request, "INFERENCEX_RESULTS_PYTHON")
         preflight = run.srt.preflight and not (model_paths and model and model.node_local)

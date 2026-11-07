@@ -20,7 +20,6 @@ from .power import (
     POWER_METRIC_SCHEMA_VERSION,
     with_power_metrics,
 )
-from .power.audit import required_power
 from .topology import Parallelism, validate_parallelism
 
 _BASE_ENV_VARS = (
@@ -256,13 +255,18 @@ def record_power_internal_error(
         )
 
 
+def _required_power(env: Mapping[str, str]) -> bool:
+    """The workflow's REQUIRE_POWER input, which agg rows record as ``require_power``."""
+    return env.get("REQUIRE_POWER", "").lower() in {"1", "true", "yes"}
+
+
 def aggregate_power_result(
     env: Mapping[str, str],
     bench_path: Path,
     agg_path: Path,
 ) -> int:
     """Enrich a written result from retained native telemetry."""
-    require_power = required_power(env)
+    require_power = _required_power(env)
     validation_path = Path(f"power_validation_{env['RESULT_FILENAME']}.json")
     source = Path(env.get("POWER_ARTIFACT_DIR", "LOGS/power"))
     is_multinode = env.get("IS_MULTINODE", "false").lower() == "true"
@@ -328,7 +332,7 @@ def process_result(env: Mapping[str, str]) -> int:
     bench_path = Path(f"{result_filename}.json")
     with open(bench_path) as f:
         benchmark = json.load(f)
-    require_power = required_power(env)
+    require_power = _required_power(env)
     data = build_result(benchmark, env)
     data["require_power"] = require_power
     if (attempt := run_attempt(env)) is not None:

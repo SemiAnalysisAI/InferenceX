@@ -812,6 +812,13 @@ def test_a_failed_batch_wrapped_point_reports_the_wrapped_failure_once(harness):
     assert (result.stdout + result.stderr).count("::error") == 1
 
 
+def test_an_agentx_row_staged_after_a_failed_submission_records_require_power(harness):
+    env = batch_env(harness, FAKE_SRTCTL_RC="7", REQUIRE_POWER="1")
+    assert launch(env, harness.config, harness.workspace).returncode == 7
+    row = json.loads((harness.workspace / "point-identity.json").read_text())
+    assert row["require_power"] is True
+
+
 def test_a_batch_wrapped_point_exits_with_the_wrapped_launchs_code(harness):
     env = batch_env(harness, FAKE_SRTCTL_RC="7")
     result = launch(env, harness.config, harness.workspace)

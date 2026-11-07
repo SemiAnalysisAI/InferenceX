@@ -6,12 +6,11 @@ Logs are staged on every exit path, and always before the job's outputs are dele
 from __future__ import annotations
 
 import contextlib
-import json
 import os
 import shutil
 import sys
 import time
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -31,13 +30,13 @@ from infx.launch.artifacts import (
     copy_fixed_sequence_results,
     copy_to_workspace,
     run_power_adapter,
+    stamp_rows,
     validate_agentic_power,
     validate_video_results,
 )
 from infx.launch.backends.base import BackendError, JobState, JobStatus
 from infx.launch.drivers.srt.config import EXPORTER_PROVENANCE
 from infx.launch.drivers.srt.run import SrtRun, require
-from infx.results.power.audit import required_power
 from infx.srt_slurm.video import load_spec, video_package
 
 if TYPE_CHECKING:
@@ -124,29 +123,28 @@ def finalize_single_node_results(run: SrtRun, logs: Path, producer_sha: str) -> 
     report-only acceptance gate never fails it.
     """
     request, event = run.request, run.life.event
-    result = logs / f"{request.result_filename}.json"
     power_rc = 0
     if request.is_agentic and not request.eval_only:
         require(request, "INFERENCEX_RESULTS_PYTHON")
         sidecar = f"power_validation_{request.result_filename}.json"
         power_rc = run_power_adapter(
             request.inferencex_results_python, run.workspace, logs, logs / "agentic",
-            result, producer_sha,
+            logs / f"{request.result_filename}.json", producer_sha,
             "--validation-result", str(run.workspace / sidecar), "--audit-source", sidecar,
             require_power=request.require_power,
         )  # fmt: skip
         if power_rc:
             event.fail("PowerValidationFailed", "AgentX power validation failed", report=False)
-        stamped = [result] if result.is_file() else []
-        _stamp_rows(stamped, require_power=required_power(request.env))
     if request.run_eval or request.eval_only:
         exit_file = logs / "infx-eval-exit-code"
         if not exit_file.is_file() or exit_file.read_text().rstrip("\n") != "0":
             event.fail("EvalFailed", f"eval did not succeed (see {exit_file})")
             return 1
-    if not request.eval_only and (not result.is_file() or result.stat().st_size == 0):
-        event.fail("ResultMissing", f"benchmark result {result} is missing or empty")
-        return 1
+    if not request.eval_only:
+        result = logs / f"{request.result_filename}.json"
+        if not result.is_file() or result.stat().st_size == 0:
+            event.fail("ResultMissing", f"benchmark result {result} is missing or empty")
+            return 1
     return power_rc
 
 
@@ -265,15 +263,13 @@ def _stage_logs(run: SrtRun, logs: Path, power: PowerDecision) -> None:
     bundle_server_logs(logs, workspace / MULTINODE_LOGS)
 
 
-def _stamp_rows(paths: Iterable[Path], **fields: object) -> None:
-    """Add ``fields`` to each AgentX result row in ``paths``; a row that cannot be updated warns."""
-    for path in paths:
-        try:
-            row = json.loads(path.read_text())
-            row.update(fields)
-            path.write_text(json.dumps(row, indent=2) + "\n")
-        except (OSError, ValueError, AttributeError) as error:
-            print(f"WARNING: could not update {path}: {error}", file=sys.stderr)
+def stamp_rows_on_exit(run: SrtRun, pattern: str, **fields: object) -> None:
+    """Record ``fields`` on every AgentX row matching ``pattern`` in the workspace on exit.
+
+    Rows reach the workspace from the harness, from collect or from an exit cleanup, on any
+    exit path. Exit cleanups run last-registered first, so register this before the others.
+    """
+    run.life.callback(lambda: stamp_rows(sorted(run.workspace.glob(pattern)), fields))
 
 
 def collect(
@@ -312,8 +308,6 @@ def collect(
             event.fail("PowerMissing", f"power_artifacts_missing: no {logs / 'power'}")
             rc = 1
         if not request.eval_only and (power.agentx or power.adapter):
-            # Whether invalid AgentX power fails the point.
-            required = not power.best_effort if power.agentx else request.require_power
             require(request, "CONC_LIST")
             audit = (run.workspace, request.result_filename, checkout.commit, request.conc_list)
             python = request.inferencex_results_python
@@ -325,7 +319,7 @@ def collect(
                     infmax,
                     *audit,
                     results_python=python,
-                    require_power=required,
+                    require_power=not power.best_effort,
                     expected_cpu=power.expect_cpu,
                 )
             else:
@@ -333,7 +327,7 @@ def collect(
                     logs,
                     *audit,
                     results_python=python,
-                    require_power=required,
+                    require_power=request.require_power,
                     expected_cpu=power.expect_cpu,
                 )
             if power_rc:
@@ -355,12 +349,6 @@ def collect(
             except ArtifactError as error:
                 event.error(error)
                 rc = rc or 1
-            if request.is_agentic:
-                fields: dict[str, object] = {"require_power": required_power(request.env)}
-                if power.skipped_reason:
-                    fields["power_missing"] = power.skipped_reason
-                rows = run.workspace.glob(f"{request.result_filename}_conc*.json")
-                _stamp_rows(sorted(rows), **fields)
         if request.run_eval or request.eval_only:
             copy_al_gate_result(logs, run.workspace, request.result_filename)
             try:

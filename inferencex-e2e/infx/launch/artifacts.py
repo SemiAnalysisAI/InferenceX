@@ -7,12 +7,13 @@ raises ``ArtifactError``; warnings stay warnings.
 from __future__ import annotations
 
 import fnmatch
+import json
 import os
 import re
 import shutil
 import sys
 import tarfile
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -127,6 +128,22 @@ def copy_agentic_results(source_dir: Path, workspace: Path, result_filename: str
     if not files:
         raise ArtifactError(f"no {result_filename}_conc*.json results found in {source_dir}")
     _say(f"Copied {len(files)} agentic result file(s)")
+
+
+def stamp_rows(paths: Iterable[Path], fields: Mapping[str, object]) -> None:
+    """Merge ``fields`` into each JSON result row in ``paths``, replacing it atomically.
+
+    A row that cannot be updated only warns, and keeps its previous content.
+    """
+    for path in paths:
+        temporary = path.with_name(f".{path.name}.tmp")
+        try:
+            row = json.loads(path.read_text())
+            row.update(fields)
+            temporary.write_text(json.dumps(row, indent=2) + "\n")
+            temporary.replace(path)
+        except (OSError, ValueError, AttributeError) as error:
+            _warn(f"WARNING: could not update {path}: {error}")
 
 
 def copy_al_gate_result(logs_dir: Path, workspace: Path, result_filename: str) -> None:
