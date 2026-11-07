@@ -1,4 +1,4 @@
-# Video-generation harness
+# Video-generation harness [experimental]
 
 **English** | [中文](README_zh.md)
 
