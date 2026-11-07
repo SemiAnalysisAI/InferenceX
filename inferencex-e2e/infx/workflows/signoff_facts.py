@@ -7,14 +7,12 @@ Every subcommand runs trusted default-branch code. PR content is read only as da
 from __future__ import annotations
 
 import argparse
-import io
 import itertools
 import json
 import math
 import re
 import subprocess
 import sys
-import tarfile
 import tempfile
 import urllib.request
 from collections.abc import Callable
@@ -47,11 +45,6 @@ BENCH_JOB = re.compile(r"^(?:(?:single|multi)-node )?(?:agentic|canary|\d+k\d+k)
 EVAL_JOB = re.compile(r"^(?:(?:single|multi)-node )?(?:agentic )?eval /")
 RUN_ID = re.compile(r"/actions/runs/([0-9]+)")
 IMAGE_REF = re.compile(r"""\b(?:image|container):\s*["']?([A-Za-z0-9][\w./#:@+-]*)""")
-DATA_PATHS = (
-    "inferencex-e2e/configs",
-    "inferencex-e2e/benchmarks/single_node/srt-slurm-recipes",
-    "inferencex-e2e/benchmarks/multi_node/srt-slurm-recipes",
-)
 SIGMAS = 2
 
 
@@ -362,32 +355,22 @@ def merge_base(base_ref: str, sha: str) -> str:
     return _git("merge-base", base_ref, sha).stdout.decode().strip()
 
 
-def _extract(rev: str, target: Path) -> Path:
-    with tarfile.open(fileobj=io.BytesIO(_git("archive", rev, "--", *DATA_PATHS).stdout)) as tar:
-        tar.extractall(target, filter="data")
-    return target / "inferencex-e2e"
-
-
-def matrix_at(rev: str, workdir: Path) -> tuple[dict, dict[str, str]]:
+def matrix_at(rev: str) -> tuple[dict, dict[str, str]]:
     """Generate every config key's points from a revision's config data with trusted code."""
-    from infx.matrix.changed import _points
-    from infx.matrix.generate import generate_config_matrix
+    from infx.matrix.changed import config_points
+    from infx.matrix.revision import snapshot
     from infx.matrix.validation import load_config_files, load_runner_file
 
-    project = _extract(rev, workdir)
-    configs = [
-        str(project / "configs" / name) for name in ("amd-master.yaml", "nvidia-master.yaml")
-    ]
-    master = load_config_files([path for path in configs if Path(path).is_file()], validate=False)
-    runners = load_runner_file(str(project / "configs" / "runners.yaml"), validate=False)
-    matrix, errors = {}, {}
-    for key in master:
-        try:
-            rows = generate_config_matrix([key], master, runners, eval_mode="none", root=project)
-            matrix[key] = _points(rows, project)
-        except Exception as error:  # noqa: BLE001 - one malformed key must not hide the others
-            errors[key] = str(error)[:300]
-    return matrix, errors
+    with snapshot(rev) as revision:
+        master = load_config_files(revision.master_configs, validate=False)
+        runners = load_runner_file(revision.runner_config, validate=False)
+        matrix, errors = {}, {}
+        for key in master:
+            try:
+                matrix[key] = config_points(key, master, runners, revision.root)
+            except Exception as error:  # noqa: BLE001 - one malformed key must not hide the others
+                errors[key] = str(error)[:300]
+        return matrix, errors
 
 
 def public_model_name(point: dict) -> str:
@@ -733,8 +716,8 @@ def build_report(
             report["check_2_eval_gaps"] = _section(gaps)
 
         def diff() -> dict[str, Any]:
-            before, before_errors = matrix_at(base, workdir / "base")
-            after, after_errors = matrix_at(sha, workdir / "head")
+            before, before_errors = matrix_at(base)
+            after, after_errors = matrix_at(sha)
             ingested, unavailable = [], {}
             for prefix, checkpoint in changed_models(before, after):
                 try:
