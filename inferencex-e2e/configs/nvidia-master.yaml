@@ -3476,7 +3476,7 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg:
   framework: dynamo-sglang
   router:
     name: dynamo-router
-    version: b208989fbe1cfbfde64d11334d8af4ff04fe1a99
+    version: ad8ecd2e5d83f9ef55ad07302b96785b2dc94d6d
   kv-p2p-transfer: mooncake
   multinode: true
   disagg: true

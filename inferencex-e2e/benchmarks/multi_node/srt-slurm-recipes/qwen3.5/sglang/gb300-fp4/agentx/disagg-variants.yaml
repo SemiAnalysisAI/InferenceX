@@ -3,7 +3,7 @@ base:
   dynamo:
     install: true
     source:
-      rev: b208989fbe1cfbfde64d11334d8af4ff04fe1a99
+      rev: ad8ecd2e5d83f9ef55ad07302b96785b2dc94d6d
   slurm:
     time_limit: '8:00:00'
   health_check:
