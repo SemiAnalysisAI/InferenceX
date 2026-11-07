@@ -83,7 +83,7 @@ The below list describes what each field is:
 
 - `image`: The image used to serve the benchmark, e.g., `vllm/vllm-openai:v0.10.2`
 - `model`: The model to serve, e.g., `deepseek-ai/DeepSeek-R1-0528`
-- `model-prefix`: The canonical InferenceX model prefix reference, i.e., `dsr1` for DeepSeek-R1 or `qwen3.5` for Qwen3.5. Consult `docs/MODELS.md` for supported model/scenario combinations. The launcher's workload policy rows in [`infx/launch/policy.py`](../infx/launch/policy.py) match on this value.
+- `model-prefix`: The canonical InferenceX model prefix reference, i.e., `dsr1` for DeepSeek-R1 or `qwen3.5` for Qwen3.5. Consult `docs/MODELS.md` for supported model/scenario combinations. The launcher's [platform](#platforms) rules match on this value.
 - `runner`: This is the runner label on which to run the benchmark. This must be a valid key under `labels` in `runners.yaml`.
   Agentic configs must use an exact `cluster:<name>` runner label, not a broad
   SKU or capacity label, so every search-space point runs on the same hardware
@@ -303,3 +303,44 @@ schema; unknown keys fail.
 - `slurm.srt-slurm.workspace-mounts` maps files relative to `inferencex-e2e/` into
   job containers. The renderer resolves each source against the job checkout;
   host-absolute paths belong in `mounts`, and volume aliases in `volume-mounts`.
+
+## Platforms
+
+`platforms/<cluster id>.yaml` holds the launch workload rules of one `clusters:` record;
+every cluster has one, `{}` when it needs none. The `Platform` model in
+[`infx/clusters/platforms.py`](../infx/clusters/platforms.py) is the schema: unknown keys
+fail, and a file that does not validate stops every launch.
+
+```yaml
+srt-lanes:
+  srt-multi:
+    frameworks: [dynamo-sglang, dynamo-trt, vllm]
+    time-limit: "4:00:00"
+model-overrides:
+- when: {model-prefix: [dsr1], precision: [fp8], framework: [dynamo-trt]}
+  served-name: DeepSeek-R1-0528
+```
+
+- A rule's `when`, and each entry of `native-srt-lanes`, `batch-wrapped-lane`,
+  `shared-run-root` and `shared-hf-cache-lanes`, matches a launch request:
+  `model-prefix`, `precision`, `framework` and `spec-decoding` list accepted master-config
+  values, `agentic` and `multinode` the point's shape, and `model-glob` is a glob over
+  `model`. Unset fields match anything.
+- `srt-lanes.srt-multi` and `srt-lanes.srt-native` say how the cluster's multi-node
+  srt-slurm lane on that launch path differs: the frameworks it runs, setup scripts, volume
+  mounts, shared run root, eval-only overrides, time limits and AgentX result directory. A
+  multi-node point on a cluster without the lane for its path fails before setup.
+- `native-srt-lanes` sends matching multi-node points to `srt-native`, which needs that
+  lane; `batch-wrapped-lane` runs matching single-node points as a batch job;
+  `salloc-time-bump` sets `SALLOC_TIME_LIMIT` to `minutes` for matching benchmark points at
+  `CONC >= min-conc`.
+- `model-overrides` give matching points another checkpoint (`entry`, a `models.entries`
+  key), a `served-name`, a required readable `config.json`, Hub serving or single-node
+  staging; per field, the first matching row wins.
+- `shared-hf-cache-lanes` gives matching single-node points the cluster's
+  `shared-hf-hub-cache` volume.
+
+Before any work, a launch checks its cluster's platform against the cluster record: a mount
+of an unknown volume, an override of an unknown model entry, a lane time limit or time bump
+that a fixed srt-slurm limit shadows, or any rule on a cluster without `slurm.srt-slurm` fails
+it.

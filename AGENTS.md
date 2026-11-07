@@ -93,7 +93,7 @@ Run the focused test path first. Use `--extra workflows` for GitHub integrations
 
 ## Launchers and hooks
 
-- Launch only through `python -m infx.launch`; add no shell launchers. Cluster facts go in the cluster's `clusters:` record, workload rules in named policy tables; drivers never branch on a cluster id. Retiring a cluster removes its label, record, and policy rows in one PR.
+- Launch only through `python -m infx.launch`; add no shell launchers. Cluster facts go in the cluster's `clusters:` record, workload rules in its `inferencex-e2e/configs/platforms/<cluster>.yaml`; drivers never branch on a cluster id. Retiring a cluster removes its label, record, and platform file in one PR.
 - srt-slurm host-setup hooks only check or prepare hosts: they never run benchmarks, tune engines, patch containers, or hide failures.
 - Never hard-code synthetic acceptance lengths; the srt driver picks measured values from `infx/golden_al_distribution/` ([details](inferencex-e2e/infx/golden_al_distribution/README.md#using-golden-curves-in-srt-slurm-runs)).
 - Agentic speculative evals also run the report-only [speculative acceptance gate](inferencex-e2e/infx/evals/EVALS.md#speculative-acceptance-gate) on the eval's own server. New golden curves need a `collection` block with the SPEED-Bench client settings they were measured with.
@@ -102,6 +102,6 @@ Run the focused test path first. Use `--extra workflows` for GitHub integrations
 
 - Delete retired entries (or, for partial retirement, only the retired scenarios) from the master config; never archive. Delete recipes, setup scripts, and assets no active config uses, rather than moving them to `deprecated/`.
 - In the same PR, reconcile retirement statements in [`MODELS.md`](inferencex-e2e/docs/MODELS.md) with active configs and routing, preserving documented exceptions and planned (not completed) retirements.
-- Remove unused retired-model rows from launch workload tables (`infx/launch/policy.py`, `infx/launch/drivers/srt/{lanes,models}.py`) and cluster `models.entries`, and fix guidance that recommends retired coverage. Audit callers before removing shared helpers; SPEED-Bench collectors and historical readers may still need them.
+- Remove unused retired-model rows from launch workload tables (the cluster files in `inferencex-e2e/configs/platforms/`) and cluster `models.entries`, and fix guidance that recommends retired coverage. Audit callers before removing shared helpers; SPEED-Bench collectors and historical readers may still need them.
 
 See also: [config fields](inferencex-e2e/configs/CONFIGS.md), [GitHub operations](.github/AGENT_OPERATIONS.md), [workflows](.github/workflows/README.md), [evals](inferencex-e2e/infx/evals/EVALS.md), [AgentX replay](inferencex-e2e/docs/agentx-standalone.md), and [ingest recovery](.claude/commands/recover-failed-ingest.md).
