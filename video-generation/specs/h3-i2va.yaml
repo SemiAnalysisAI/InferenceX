@@ -55,31 +55,31 @@ images:
       author: Sandis Helvigs sandishelvigs
       crop_box: [0, 219, 4608, 2852]
   fountain-jets:
-    sha256: 7062ffc0f9273222bf73d404ce1f8f5187f954a5d61044f1c435327b95a9897c
-    byte_size: 2096208
+    sha256: 7bab325166f74a3f2e87d56ee98acbd5ea15253481e73f428636a35c4c8fe70c
+    byte_size: 1544151
     width: 1344
     height: 768
     media_type: image/png
     source:
-      url: https://upload.wikimedia.org/wikipedia/commons/4/4a/Fountain%2C_Minnesota.jpg
-      file_page: https://commons.wikimedia.org/wiki/File:Fountain,_Minnesota.jpg
-      commons_sha1: da7cecef1d5983ade9e9044c92b099d3f42ea86c
+      url: https://upload.wikimedia.org/wikipedia/commons/0/03/Springbrunnen_im_Fennpfuhl_in_Berlin.jpg
+      file_page: https://commons.wikimedia.org/wiki/File:Springbrunnen_im_Fennpfuhl_in_Berlin.jpg
+      commons_sha1: 9f1554c869bdfc1e06e0c2199cf31da804490eda
       license: CC0-1.0
-      author: Wikideas1
-      crop_box: [0, 315, 4410, 2835]
+      author: Singlespeedfahrer
+      crop_box: [0, 245, 5792, 3555]
   puddle-rain:
-    sha256: baace6a37d3a304473bf610fd1f16e394deb0b733194acde0b090326a7d2d683
-    byte_size: 2295701
+    sha256: 3cbd27621c503245a39fd099e54592bae6c456c2b7dc40848c70de6b1ea51611
+    byte_size: 1799792
     width: 1344
     height: 768
     media_type: image/png
     source:
-      url: https://upload.wikimedia.org/wikipedia/commons/0/00/Puddle_in_the_Volkspark_Wilmersdorf_2023-06-26_01.jpg
-      file_page: https://commons.wikimedia.org/wiki/File:Puddle_in_the_Volkspark_Wilmersdorf_2023-06-26_01.jpg
-      commons_sha1: 0a82c29409be073ba9d34448d4e1bbb97bb19821
+      url: https://upload.wikimedia.org/wikipedia/commons/1/1d/Rain_splashes_on_rooftop_5.jpg
+      file_page: https://commons.wikimedia.org/wiki/File:Rain_splashes_on_rooftop_5.jpg
+      commons_sha1: 18ebd89e4ef4056f9d2b721cb6af161b29f7389f
       license: CC0-1.0
-      author: Leonhard Lenz
-      crop_box: [0, 410, 8384, 5201]
+      author: W.carter
+      crop_box: [0, 114, 4823, 2870]
   tea-kettles:
     sha256: 382f2eb04fb8759da717dd0797f99a99e877e6841cd402a5e84d9955e682e9b7
     byte_size: 1391297
@@ -106,7 +106,7 @@ images:
       license: CC0-1.0
       author: Daniel McCullough d_mccullough
       crop_box: [34, 0, 4206, 2384]
-  moored-sailboats:
+  sailboat-passing:
     sha256: b5e4ccfd74f028f3174f0fef4b060d09e7ca2c059aad161c363ae8ae5917271b
     byte_size: 1860409
     width: 1344
@@ -145,19 +145,19 @@ images:
       license: CC0-1.0
       author: freestocks.org from Olsztyn, Poland
       crop_box: [0, 226, 4761, 2947]
-  street-tram:
-    sha256: ec273fd083215ea477d70b5e9bc96d72781b5ee4d0532fcd3c9e9e346c69ca33
-    byte_size: 1536374
+  wind-chimes:
+    sha256: 3667ace0cceaf715dbed95320bb3a87d3be4ab4d29632fd1ccff6215e879c1ba
+    byte_size: 1429864
     width: 1344
     height: 768
     media_type: image/png
     source:
-      url: https://upload.wikimedia.org/wikipedia/commons/0/04/Moscow%2C_Katukova_Street%2C_71%E2%80%93931M_tram_July_2025_02.jpg
-      file_page: https://commons.wikimedia.org/wiki/File:Moscow,_Katukova_Street,_71%E2%80%93931M_tram_July_2025_02.jpg
-      commons_sha1: 80ef1c3d48f061f459f4d42181ed764ff2a394cd
+      url: https://upload.wikimedia.org/wikipedia/commons/a/ab/Wind_chimes_1.jpg
+      file_page: https://commons.wikimedia.org/wiki/File:Wind_chimes_1.jpg
+      commons_sha1: 871a36470e4cc038a2dd1a5d11866af2b8f472f4
       license: CC0-1.0
-      author: Retired electrician
-      crop_box: [0, 247, 5184, 3209]
+      author: Kim Dae Jeung
+      crop_box: [0, 267, 5616, 3476]
   water-fireworks:
     sha256: a2f68c18daf6398ff6162b82392a007d79d52e2f275ff8e77fdbd61dd111cbe7
     byte_size: 635165
@@ -305,14 +305,15 @@ prompts:
     requires_motion: true
     requires_sound: true
   fountain-jets:
-    text: A single continuous shot of a park fountain spraying water into its basin. The jets rising and falling
-      are visible and the splashing water is audible. Fixed camera, no speech, music, subtitles, or cuts.
+    text: A single continuous shot of a tall fountain jet shooting up from a park pond in front of trees. The water
+      rising and falling back into the pond is visible and its splashing is audible. Fixed camera, no speech, music,
+      subtitles, or cuts.
     requires_motion: true
     requires_sound: true
   puddle-rain:
-    text: A single continuous shot of rain starting to fall into a puddle on a park path. The rings spreading on
-      the water are visible and the raindrops pattering is audible. Fixed camera, no speech, music, subtitles, or
-      cuts.
+    text: A single continuous shot of heavy rain splashing into a shallow puddle on a flat roof. The raindrops bursting
+      up from the water are visible and the rain pattering is audible. Fixed camera, no speech, music, subtitles,
+      or cuts.
     requires_motion: true
     requires_sound: true
   tea-kettles:
@@ -325,9 +326,10 @@ prompts:
       and each key clacking is audible. Fixed camera, no speech, music, subtitles, or cuts.
     requires_motion: true
     requires_sound: true
-  moored-sailboats:
-    text: A single continuous shot of sailboats moored between red granite cliffs. The boats rocking on the water
-      is visible and the rigging clinking is audible. Fixed camera, no speech, music, subtitles, or cuts.
+  sailboat-passing:
+    text: A single continuous shot of a sailboat under sail passing pink granite islets, with a second sailboat
+      farther out. The boat gliding across the water is visible and the sails flapping and waves lapping at the
+      hull are audible. Fixed camera, no speech, music, subtitles, or cuts.
     requires_motion: true
     requires_sound: true
   horse-snow:
@@ -340,9 +342,9 @@ prompts:
       is audible. Fixed camera, no speech, music, subtitles, or cuts.
     requires_motion: true
     requires_sound: true
-  street-tram:
-    text: A single continuous shot of a tram moving along a city street. The tram rolling forward is visible and
-      the wheels clattering on the rails is audible. Fixed camera, no speech, music, subtitles, or cuts.
+  wind-chimes:
+    text: A single continuous shot of ceramic bell wind chimes hanging in a garden. The bells swaying on their cords
+      are visible and their clinking chimes are audible. Fixed camera, no speech, music, subtitles, or cuts.
     requires_motion: true
     requires_sound: true
   water-fireworks:
@@ -409,10 +411,10 @@ sets:
       - {case_id: puddle-rain, prompt: puddle-rain, seed: 83, image: puddle-rain}
       - {case_id: tea-kettles, prompt: tea-kettles, seed: 11, image: tea-kettles}
       - {case_id: typewriter-keys, prompt: typewriter-keys, seed: 23, image: typewriter-keys}
-      - {case_id: moored-sailboats, prompt: moored-sailboats, seed: 29, image: moored-sailboats}
+      - {case_id: sailboat-passing, prompt: sailboat-passing, seed: 29, image: sailboat-passing}
       - {case_id: horse-snow, prompt: horse-snow, seed: 47, image: horse-snow}
       - {case_id: pond-ducks, prompt: pond-ducks, seed: 83, image: pond-ducks}
-      - {case_id: street-tram, prompt: street-tram, seed: 11, image: street-tram}
+      - {case_id: wind-chimes, prompt: wind-chimes, seed: 11, image: wind-chimes}
       - {case_id: water-fireworks, prompt: water-fireworks, seed: 23, image: water-fireworks}
       - {case_id: balloon-burner, prompt: balloon-burner, seed: 29, image: balloon-burner}
       - {case_id: espresso-pour, prompt: espresso-pour, seed: 47, image: espresso-pour}
