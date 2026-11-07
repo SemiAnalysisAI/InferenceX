@@ -13,6 +13,7 @@ from typing import Any
 
 from infx.bench_serving.benchmark_outcome import benchmark_outcome
 
+from .collect_events import FILENAME as JOB_EVENT
 from .metadata import parse_component_metadata, run_attempt
 from .power import (
     ALL_POWER_METRIC_KEYS,
@@ -32,6 +33,11 @@ _BASE_ENV_VARS = (
     "DISAGG",
     "MODEL_PREFIX",
     "IMAGE",
+)
+# Validation reasons of a result whose power package never reached the consumer, as opposed
+# to one that arrived invalid.
+_PACKAGE_MISSING_REASONS = frozenset(
+    {"power_artifacts_missing", "manifest_missing", "manifest_malformed"}
 )
 
 
@@ -296,6 +302,35 @@ def aggregate_power_result(
         return int(require_power)
 
 
+def _power_missing(result: Mapping[str, Any], job_event: Path) -> str | None:
+    """Why a result with an invalid power verdict has no power package, else None.
+
+    The reason the launcher recorded in ``job_event`` for measuring no power comes first,
+    then the validation reason that says no package arrived.
+    """
+    if "power_valid" not in result or result["power_valid"] == 1:
+        return None
+    try:
+        skipped = (json.loads(job_event.read_text()).get("power") or {}).get("skipped_reason")
+    except (OSError, ValueError, AttributeError):
+        skipped = None
+    if isinstance(skipped, str) and skipped:
+        return skipped
+    reasons = result.get("power_invalid_reasons") or []
+    return next((reason for reason in reasons if reason in _PACKAGE_MISSING_REASONS), None)
+
+
+def _report_power_missing(name: str, reason: str, env: Mapping[str, str]) -> None:
+    """Print a result's missing-power reason and add it to the GitHub job summary."""
+    print(f"[process_result] {name}: power_missing {reason}", file=sys.stderr)
+    if summary := env.get("GITHUB_STEP_SUMMARY"):
+        try:
+            with open(summary, "a", encoding="utf-8") as handle:
+                handle.write(f"- `{name}`: power_missing `{reason}`\n")
+        except OSError as exc:
+            print(f"[process_result] job summary unavailable: {exc}", file=sys.stderr)
+
+
 def process_result(env: Mapping[str, str]) -> int:
     """Write agg_<RESULT_FILENAME>.json from the benchmark JSON and ``env``, join power when configured.
 
@@ -327,6 +362,9 @@ def process_result(env: Mapping[str, str]) -> int:
             result["power_invalid_reasons"] = ["validation_artifact_unavailable"]
             if env.get("REQUIRE_POWER", "").lower() in {"1", "true", "yes"}:
                 status = 1
+        if missing := _power_missing(result, Path(JOB_EVENT)):
+            result["power_missing"] = missing
+            _report_power_missing(agg_path.name, missing, env)
         agg_path.write_text(json.dumps(result, indent=2))
     with open(agg_path) as f:
         print(json.dumps(json.load(f), indent=2))

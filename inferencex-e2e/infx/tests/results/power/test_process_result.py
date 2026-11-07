@@ -742,7 +742,7 @@ def test_single_node_result_publishes_no_power(tmp_path, single_node_env_vars, r
     aggregate = json.loads((tmp_path / "agg_benchmark_result.json").read_text())
     power_fields = {
         "power_valid", "power_metric_schema_version", "power_invalid_reasons", "power_audit",
-        *WHOLE_METRIC_KEYS,
+        "power_missing", *WHOLE_METRIC_KEYS,
     }
     assert power_fields.isdisjoint(aggregate)
     assert not list(tmp_path.glob("power_validation_*"))
@@ -792,10 +792,18 @@ class TestMultinodePower:
         assert agg["decode_gpu_energy_j"] == 36000.0
         assert agg["prefill_avg_power_w"] == 400.0
         assert agg["decode_avg_power_w"] == 300.0
+        assert "power_missing" not in agg
         assert (tmp_path / "power_validation_benchmark_result.json").is_file()
 
-    def test_missing_package_is_best_effort(self, tmp_path, power_env):
-        result = run_script(tmp_path, power_env, self._bench_without_package())
+    @pytest.mark.parametrize("skipped", [None, "dedicated_discovery"])
+    def test_missing_package_is_best_effort_and_says_why(self, tmp_path, power_env, skipped):
+        if skipped:
+            launcher = {"power": {"dcgm": False, "agentx": False, "skipped_reason": skipped}}
+            (tmp_path / "job_event.json").write_text(json.dumps(launcher))
+        summary = tmp_path / "summary.md"
+        env = {**power_env, "GITHUB_STEP_SUMMARY": str(summary)}
+
+        result = run_script(tmp_path, env, self._bench_without_package())
 
         assert result.returncode == 0, f"Script failed: {result.stderr}"
         agg = json.loads((tmp_path / "agg_benchmark_result.json").read_text())
@@ -804,6 +812,9 @@ class TestMultinodePower:
         for key in WHOLE_METRIC_KEYS + ROLE_METRIC_KEYS:
             assert key not in agg
         assert (tmp_path / "power_validation_benchmark_result.json").is_file()
+        missing = skipped or "power_artifacts_missing"
+        assert agg["power_missing"] == missing
+        assert summary.read_text() == f"- `agg_benchmark_result.json`: power_missing `{missing}`\n"
 
     def test_missing_package_fails_in_strict_mode(self, tmp_path, power_env):
         env = {**power_env, "REQUIRE_POWER": "1"}
@@ -827,6 +838,7 @@ class TestMultinodePower:
             (tmp_path / "power_validation_benchmark_result.json").read_text()
         )
         assert "producer_verdict_mismatch" in validation["reasons"]
+        assert "power_missing" not in agg
 
     def test_strict_mode_passes_on_valid_package(self, tmp_path, power_env):
         benchmark_result = self._build(tmp_path)
