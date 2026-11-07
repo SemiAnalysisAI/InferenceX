@@ -456,7 +456,8 @@ class TestValidPackage:
         assert agg["power_valid"] == 1
         assert "workers" not in agg
 
-    def test_agentx_adapter_consumes_a_real_custom_benchmark_package(self, tmp_path):
+    @pytest.mark.parametrize("decode_gpus", [2, 1])
+    def test_agentx_adapter_consumes_a_real_custom_benchmark_package(self, tmp_path, decode_gpus):
         from infx.results.agentic.power_adapter import run_native_agentic_power
 
         pkg = build_package(tmp_path)
@@ -496,25 +497,33 @@ class TestValidPackage:
                     "conc": 4,
                     "disagg": True,
                     "num_prefill_gpu": 2,
-                    "num_decode_gpu": 2,
+                    "num_decode_gpu": decode_gpus,
                 }
             )
         )
 
-        assert run_native_agentic_power(
+        status = run_native_agentic_power(
             result_dir=result_dir,
             agg_result=pkg.agg_result,
             power_dir=pkg.power_dir,
             logs_root=pkg.logs_root,
             expected_producer_sha=PRODUCER_SHA,
             require_power=True,
-        ) == 0
+        )
 
         agg = pkg.agg()
+        validation = json.loads((result_dir / "power_validation.json").read_text())
+        if decode_gpus != 2:
+            # Throughput per GPU would divide by 3 GPUs while power integrates the planned 4.
+            assert status == 1
+            assert agg["power_valid"] == 0
+            assert "avg_power_w" not in agg
+            assert "topology_row_mismatch" in validation["reasons"]
+            return
+        assert status == 0
         assert agg["power_valid"] == 1
         assert agg["prefill_avg_power_w"] == 400.0
         assert agg["decode_avg_power_w"] == 300.0
-        validation = json.loads((result_dir / "power_validation.json").read_text())
         assert validation["selected_window"]["window_file"] == f"windows/{stem}.json"
 
     def test_trapezoid_matches_hand_computed_ramp(self, tmp_path):
@@ -673,6 +682,15 @@ class TestTopologyGates:
             "workflow env expects role GPUs {'decode': 2, 'prefill': 4}, "
             "manifest plans {'decode': 2, 'prefill': 2}"
         ]
+
+    def test_aggregate_row_dividing_by_other_gpu_total_withholds(self, tmp_path):
+        pkg = build_package(tmp_path)
+        pkg.agg_result.write_text(json.dumps({"disagg": False, "num_aggregate_gpu": 8}))
+
+        assert pkg.run(prefill_gpus=0, decode_gpus=0, aggregate_gpus=8, require_power=True) == 1
+        assert pkg.agg()["power_valid"] == 0
+        assert "avg_power_w" not in pkg.agg()
+        assert "topology_row_mismatch" in pkg.sidecar()["reasons"]
 
     def test_planned_device_never_sampled_withholds(self, tmp_path):
         pkg = build_package(tmp_path)

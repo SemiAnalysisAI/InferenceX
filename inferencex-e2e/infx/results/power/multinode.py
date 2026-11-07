@@ -1426,6 +1426,34 @@ def _host_workers(audit: MultinodePowerAudit) -> list[dict]:
     ]
 
 
+def _row_gpu_mismatch(agg_path: Path, planned: Counter[str]) -> str | None:
+    """Describe how the result row's per-GPU divisors differ from the manifest plan, if they do.
+
+    A disaggregated row divides by each role's GPUs and any other row by the whole deployment's.
+    A row that records no GPU count (single-node fixed-sequence) is not compared.
+    """
+    try:
+        row = json.loads(agg_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not planned or not isinstance(row, dict):
+        return None
+    if row.get("disagg") is True:
+        recorded: Any = {role: row.get(f"num_{role}_gpu") for role in ("prefill", "decode")}
+        expected = {role: planned[role] for role in recorded}
+        if recorded == expected and planned.total() == sum(expected.values()):
+            return None
+    else:
+        counts = [row.get(f"num_{role}_gpu") for role in ("prefill", "decode")]
+        recorded = next(
+            (row[key] for key in ("num_aggregate_gpu", "num_gpus") if key in row),
+            sum(counts) if all(type(count) is int for count in counts) else None,
+        )
+        if recorded is None or recorded == planned.total():
+            return None
+    return f"result row divides by GPUs {recorded}, manifest plans {dict(sorted(planned.items()))}"
+
+
 def _patch_agg(agg_path: Path, audit: MultinodePowerAudit) -> None:
     """Write the ``audit`` verdict and power metrics into the aggregate JSON at ``agg_path``."""
     cpu = audit.cpu
@@ -1548,6 +1576,8 @@ def run(
     )
     for reason in benchmark_reasons:
         _add_reason(audit, reason)
+    if mismatch := _row_gpu_mismatch(agg_result, Counter(audit.per_gpu_role.values())):
+        _add_reason(audit, "topology_row_mismatch", mismatch)
     if benchmark is None or audit.reasons:
         _withhold_metrics(audit)
 

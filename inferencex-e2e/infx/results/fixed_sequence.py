@@ -47,6 +47,7 @@ def manifest_role_env(env: Mapping[str, str]) -> dict[str, str]:
     try:
         from .power.multinode import planned_role_gpus
     except ImportError:
+        # aggregate_power_result records the unimportable power package as an internal error.
         return {}
     planned = planned_role_gpus(Path(env.get("POWER_ARTIFACT_DIR", "LOGS/power")))
     declared = {role for role, name in _ROLE_GPU_ENV.items() if int(env.get(name, "0")) > 0}
