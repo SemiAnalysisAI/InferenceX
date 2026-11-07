@@ -618,6 +618,23 @@ jobs:
           fi
           "$INFERENCEX_RESULTS_PYTHON" -P -m infx.evals.validate_scores --expected-concs "${expected_concs}"
 
+      - name: Fail on a missing power package
+        run: |
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
+          python3 - <<'EOF'
+          import json
+          import pathlib
+          import sys
+
+          try:
+              missing = json.loads(pathlib.Path("job_event.json").read_text()).get("power_missing")
+          except (OSError, ValueError):
+              missing = None
+          if missing:
+              print(f"::error::{missing}: the job measured power but left no power package; its rows were uploaded")
+              sys.exit(1)
+          EOF
+
       - name: Cleanup eval outputs (post-upload)
         if: ${{ always() && (inputs.run-eval || inputs.eval-only) }}
         run: |

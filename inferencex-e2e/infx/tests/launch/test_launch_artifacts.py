@@ -121,6 +121,7 @@ def test_cleanup_outputs_retries_then_removes_nfs_files(tmp_path, monkeypatch, b
 ])  # fmt: skip
 def test_power_collection_records_the_job_status_and_stages_results_either_way(tmp_path, status, rc):
     logs, source, workspace = tmp_path / "logs", tmp_path / "src", tmp_path / "ws"
+    (logs / "power").mkdir(parents=True)
     source.mkdir()
     workspace.mkdir()
     (source / "point_conc4.json").write_text("{}")

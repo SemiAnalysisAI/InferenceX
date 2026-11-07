@@ -10,11 +10,9 @@ from typing import Any
 from .cpu_side import SENSOR_KINDS
 
 _REASON_CODE = re.compile(r"[a-z][a-z0-9_]{0,63}")
-# Validation reasons of a result whose power package never reached the consumer, as opposed
-# to one that arrived invalid.
-_PACKAGE_MISSING_REASONS = frozenset(
-    {"power_artifacts_missing", "manifest_missing", "manifest_malformed"}
-)
+# Validation reasons that say the consumer found no power package, or one without a
+# manifest; every other reason describes a package that arrived invalid.
+_PACKAGE_MISSING_REASONS = frozenset({"power_artifacts_missing", "manifest_missing"})
 _CPU_COUNT_FIELDS = ("expected_sockets", "observed_sockets", "sample_row_count")
 
 

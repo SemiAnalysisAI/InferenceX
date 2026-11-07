@@ -136,3 +136,20 @@ def test_launch_runs_the_python_entrypoint_from_the_project_root(tmp_path, workf
     if workflow == "profile.yml":
         output = dict(line.split("=", 1) for line in github_output.read_text().splitlines())
         assert Path(output["trace"]).read_bytes() == b"fixture trace"
+
+
+@pytest.mark.parametrize("workflow", ["benchmark-tmpl.yml", "benchmark-multinode-tmpl.yml"])
+@pytest.mark.parametrize("missing", [None, "power_artifacts_missing"])
+def test_a_launch_that_marked_its_power_package_missing_fails_the_job(tmp_path, workflow, missing):
+    project = tmp_path / "inferencex-e2e"
+    (project / "configs").mkdir(parents=True)
+    (project / "configs" / "runners.yaml").write_text("{}\n")
+    (project / "job_event.json").write_text(json.dumps({"power_missing": missing}))
+    step = workflow_step(workflow, "Fail on a missing power package")
+    completed = subprocess.run(
+        ["bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", step["run"]],
+        cwd=tmp_path, text=True, capture_output=True, timeout=30,
+    )  # fmt: skip
+
+    assert completed.returncode == (1 if missing else 0), completed.stdout + completed.stderr
+    assert ("::error::power_artifacts_missing" in completed.stdout) is bool(missing)

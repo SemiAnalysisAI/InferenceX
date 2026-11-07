@@ -15,7 +15,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Self
+from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -177,6 +177,9 @@ class JobEvent(_Record):
     batch_queue_s: float | None = None
     launch_path: str | None = None
     power: Power | None = None
+    # Set when a job that measured power left no power package. The launch still succeeds so
+    # the workflow uploads the point's rows, then a later workflow step fails the job.
+    power_missing: Literal["power_artifacts_missing"] | None = None
     golden_acceptance_length: float | None = None
     eval_only: bool = False
     run_eval: bool = False

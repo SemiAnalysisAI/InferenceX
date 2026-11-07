@@ -97,12 +97,18 @@ def finish_single_node(run: SrtRun, submitted: Submitted, fetched: Path) -> int:
 
 
 def _stage_power_package(run: SrtRun, logs: Path) -> int:
-    """Copy the native power package into LOGS; 1 when power was required and a copy failed."""
+    """Copy the job's logs, with any native power package, into LOGS.
+
+    Returns 1 when power was required and a copy failed. A job that left no package gets
+    none, so its audit reads ``power_artifacts_missing``.
+    """
+    if not logs.is_dir():
+        return 0
     try:
         power_dir = logs / "power"
-        power_dir.mkdir(parents=True, exist_ok=True)
-        for name in (EXPORTER_PROVENANCE, "power-producer-sha.txt"):
-            shutil.copyfile(run.workspace / name, power_dir / name)
+        if power_dir.is_dir():
+            for name in (EXPORTER_PROVENANCE, "power-producer-sha.txt"):
+                shutil.copyfile(run.workspace / name, power_dir / name)
         shutil.copytree(logs, run.workspace / "LOGS", symlinks=True, dirs_exist_ok=True)
     except OSError as error:
         message = f"failed to stage the native power package: {error}"
@@ -272,13 +278,23 @@ def stamp_rows_on_exit(run: SrtRun, pattern: str, **fields: object) -> None:
     run.life.callback(lambda: stamp_rows(sorted(run.workspace.glob(pattern)), fields))
 
 
+def mark_power_missing(run: SrtRun, power_dir: Path) -> None:
+    """Record that a job which measured power left no package at ``power_dir``.
+
+    The launch still succeeds, so the workflow uploads the point's rows, which name the
+    missing package; a later workflow step fails the job on this record.
+    """
+    print(f"ERROR: power_artifacts_missing: no {power_dir}", file=sys.stderr, flush=True)
+    run.life.event.set(power_missing="power_artifacts_missing")
+
+
 def collect(
     run: SrtRun, lane: SrtLane, checkout: Checkout, job: Job, power: PowerDecision, infmax: Path
 ) -> int:
     """Stream the job, then stage power, logs, results and evals; return the first failure.
 
-    A job that completed with telemetry bound but left no power package fails, even when its
-    power is best-effort: srt-slurm creates the package before the benchmark starts.
+    A job that completed with telemetry bound but left no power package is marked missing,
+    even when its power is best-effort: srt-slurm creates the package before the benchmark.
     """
     backend, request, event = run.backend, run.request, run.life.event
     fetched = checkout.root / "fetched-outputs"
@@ -305,8 +321,7 @@ def collect(
             event.fail("LogsMissing", f"Logs directory not found at {logs}")
             return 1
         if status.succeeded and power.dcgm and not (logs / "power").is_dir():
-            event.fail("PowerMissing", f"power_artifacts_missing: no {logs / 'power'}")
-            rc = 1
+            mark_power_missing(run, logs / "power")
         if not request.eval_only and (power.agentx or power.adapter):
             require(request, "CONC_LIST")
             audit = (run.workspace, request.result_filename, checkout.commit, request.conc_list)

@@ -665,7 +665,7 @@ def test_nvl72_point_with_dedicated_discovery_skips_default_power(harness):
 
 
 @pytest.mark.parametrize("shape", ["single", "multi"])
-def test_a_measured_point_whose_job_left_no_power_package_fails_though_best_effort(harness, shape):
+def test_a_measured_point_whose_job_left_no_power_package_keeps_its_result_and_is_marked(harness, shape):
     if shape == "single":
         env = single_node_env(harness, "h100-cw", FAKE_POWER_PACKAGE="absent")
     else:
@@ -673,14 +673,11 @@ def test_a_measured_point_whose_job_left_no_power_package_fails_though_best_effo
             harness, "gb300-nv", MODEL_PREFIX="qwen3.5", PRECISION="fp8", FRAMEWORK="dynamo-sglang",
             MODEL="Qwen/Qwen3.5-397B-A17B-FP8", FAKE_POWER_PACKAGE="absent",
         )  # fmt: skip
-    result = launch(env, harness.config, harness.workspace)
+    assert_ok(launch(env, harness.config, harness.workspace))
 
-    assert result.returncode == 1, result.stderr
     event = job_event(harness.workspace)
-    assert event["error"]["type"] == "PowerMissing"
-    if shape == "multi":
-        assert event["power"]["best_effort"] is True
-        assert not (harness.workspace / "LOGS/power").exists()
+    assert (event["power_missing"], event["error"]) == ("power_artifacts_missing", None)
+    assert not (harness.workspace / "LOGS/power").exists()
 
 
 @pytest.mark.parametrize("shape", ["single", "multi"])

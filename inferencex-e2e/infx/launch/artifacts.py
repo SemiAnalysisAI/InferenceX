@@ -196,15 +196,16 @@ def collect_agentic_power_results(
 ) -> int:
     """Stage the AgentX power audit inputs and validate each concurrency's power window.
 
-    ``power/native-job-status.txt`` records the job's final ``status`` for the audit, and
-    only a successful job passes. Every step runs; returns the last failing step's code.
+    A power package gets ``native-job-status.txt``, the job's final ``status`` for the audit;
+    a job that left none gets no package, so its audit reads ``power_artifacts_missing``.
+    Only a successful job passes. Every step runs; returns the last failing step's code.
     """
     if not concurrencies:
         return 1
     logs_dir, workspace = logs_dir.resolve(), workspace.resolve()
     power_dir = logs_dir / "power"
-    power_dir.mkdir(parents=True, exist_ok=True)
-    (power_dir / "native-job-status.txt").write_text(f"{job_id}|{status.raw}\n")
+    if power_dir.is_dir():
+        (power_dir / "native-job-status.txt").write_text(f"{job_id}|{status.raw}\n")
     rc = 0 if status.succeeded else 1
 
     try:

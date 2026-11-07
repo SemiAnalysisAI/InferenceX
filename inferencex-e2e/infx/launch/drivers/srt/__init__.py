@@ -104,13 +104,12 @@ def run_single_node(launch: Launch) -> int:
     eval_args = submit.eval_args(run.env, submit.SINGLE_NODE_EVAL_COMMAND)
 
     def finalize(logs: Path, job_id: str, status: JobStatus) -> int:
-        missing = native_power and status.succeeded and not (logs / "power").is_dir()
-        if missing:
-            event.fail("PowerMissing", f"power_artifacts_missing: no {logs / 'power'}")
-        if native_power:
-            (logs / "power").mkdir(parents=True, exist_ok=True)
-            (logs / "power/native-job-status.txt").write_text(f"{job_id}|{status.raw}\n")
-        return collect.finalize_single_node_results(run, logs, checkout.commit) or int(missing)
+        power_dir = logs / "power"
+        if native_power and power_dir.is_dir():
+            (power_dir / "native-job-status.txt").write_text(f"{job_id}|{status.raw}\n")
+        elif native_power and status.succeeded and logs.is_dir():
+            collect.mark_power_missing(run, power_dir)
+        return collect.finalize_single_node_results(run, logs, checkout.commit)
 
     arguments = ["--set", "benchmark.stream_output=true", *runtime_args, *eval_args]
     return follow_single_node(run, checkout, root, bound, arguments, submitted, fetched, finalize)
