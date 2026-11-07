@@ -2,7 +2,8 @@
 """One evaluator for every system in the power tables.
 
 estimate_breakdown() returns the same PowerEstimate as create_power_model(...)
-.estimate_breakdown(...): the same component tree, totals and errors. Constants and
+.estimate_breakdown(...): the same component tree, totals and errors, except that a
+system's configuration records only the scenario. Constants and
 provenance come from power_model.tables; this module holds only the arithmetic each
 system family applies to them, in the class graph's order of operations.
 """

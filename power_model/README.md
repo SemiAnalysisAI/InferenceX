@@ -67,9 +67,11 @@ python -m power_model --system=mi355 --gpu-level-power-per-gpu=612.5 \
 
 ## Tables
 
-Every model constant and its provenance is also stored as data in `src/power_model/tables/`: one `systems/<id>.yaml` per catalog system, shared `parts.yaml`, `curves.yaml`, `network.yaml`, `assemblies.yaml` and `facility.yaml`, and `provenance.yaml`, which the other tables reference by profile id. `load_tables()` validates each table and every cross-reference when it loads.
+The model's calibrated constants and their provenance are also stored as data in `src/power_model/tables/`: one `systems/<id>.yaml` per catalog system; shared `parts.yaml`, `curves.yaml`, `network.yaml`, `assemblies.yaml` and `facility.yaml`; `inputs.yaml` for the components a measured input replaces; and `provenance.yaml`, which the other tables reference by profile id. Table fields are kebab-case. `load_tables()` validates each table and every cross-reference when it loads.
 
-`power_model.evaluate.estimate_breakdown()` evaluates the tables and returns the same `PowerEstimate` as the classes under `models/advanced/`; the CLI still uses the classes. `tests/test_tables_parity.py` requires the two to agree within 1e-12 relative on the InferenceX-app parity grid. Until the classes are removed, change a constant in both places.
+A few constants are part of the evaluator's method rather than calibration and stay in `evaluate.py`: the fan design state (agentic CPU offloading with active scale-out), the fan and conversion-loss solver limits (128 iterations, 1e-8 W step), and output labels such as `Generic components` and `GPU module, after tray DC/DC`.
+
+`power_model.evaluate.estimate_breakdown()` evaluates the tables and returns the same `PowerEstimate` as the classes under `models/advanced/`, except that each system's `configuration` records only the scenario. The CLI still uses the classes. `tests/test_tables_parity.py` requires the two to agree within 1e-12 relative on the InferenceX-app parity grid. Until the classes are removed, change a constant in both places.
 
 ```python
 from power_model.evaluate import estimate_breakdown
