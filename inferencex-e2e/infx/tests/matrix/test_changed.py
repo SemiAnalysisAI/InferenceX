@@ -9,7 +9,14 @@ import pytest
 import yaml
 
 from infx.matrix import changed
-from infx.tests.srt_recipes import single_node_fragment, write_shared_blocks
+from infx.tests.srt_recipes import (
+    VIDEO_MODEL,
+    VIDEO_SPEC,
+    single_node_fragment,
+    video_fragment,
+    write_shared_blocks,
+    write_video_specs,
+)
 
 ROOT = Path(__file__).resolve().parents[3]
 RECIPES = "benchmarks/single_node/srt-slurm-recipes/fixture"
@@ -26,9 +33,21 @@ def entry(recipe: str, concurrencies: list[int]) -> dict:
     }  # fmt: skip
 
 
-def write(root: Path, master: dict, edited: dict) -> None:
-    (root / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(master))
-    (root / RECIPES / "edited.yaml").write_text(yaml.safe_dump(edited))
+def video_entry() -> dict:
+    return {
+        "image": "example/video:1", "model": VIDEO_MODEL, "model-prefix": "h3",
+        "precision": "bf16", "framework": "sglang", "runner": "cluster:fixture",
+        "multinode": False, "srt-recipe-dir": "fixture",
+        "scenarios": {"video-generation": [{"spec": VIDEO_SPEC, "set": "release-v1", "search-space": [
+            {"gpus": 2, "conc-list": [1], "srt-recipe": "video.yaml"},
+        ]}]},
+    }  # fmt: skip
+
+
+def write(project: Path, master: dict, edited: dict, video: dict) -> None:
+    (project / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(master))
+    (project / RECIPES / "edited.yaml").write_text(yaml.safe_dump(edited))
+    (project / RECIPES / "video.yaml").write_text(yaml.safe_dump(video))
 
 
 def git(root: Path, *args: str) -> str:
@@ -38,47 +57,54 @@ def git(root: Path, *args: str) -> str:
 
 
 def test_keys_with_changed_recipes_or_points_are_listed(tmp_path, monkeypatch, capsys):
-    shutil.copytree(ROOT / "infx", tmp_path / "infx", ignore=shutil.ignore_patterns("__pycache__"))
-    (tmp_path / RECIPES).mkdir(parents=True)
-    write_shared_blocks(tmp_path)
-    (tmp_path / "configs/amd-master.yaml").write_text("{}\n")
-    (tmp_path / "configs/runners.yaml").write_text(yaml.safe_dump({
+    project = tmp_path / "inferencex-e2e"
+    shutil.copytree(ROOT / "infx", project / "infx", ignore=shutil.ignore_patterns("__pycache__"))
+    (project / RECIPES).mkdir(parents=True)
+    write_shared_blocks(project)
+    write_video_specs(tmp_path)
+    (project / "configs/amd-master.yaml").write_text("{}\n")
+    (project / "configs/runners.yaml").write_text(yaml.safe_dump({
         "labels": {"cluster:fixture": ["node-a"]},
         "clusters": {"fixture": {"gpus-per-node": 8, "arch": "x86_64", "scheduler": "slurm",
                                  "slurm": {"partition": "batch", "exclusive": True}}},
     }))  # fmt: skip
-    (tmp_path / RECIPES / "stable.yaml").write_text(yaml.safe_dump(single_node_fragment(4)))
-    write(tmp_path, {
+    (project / RECIPES / "stable.yaml").write_text(yaml.safe_dump(single_node_fragment(4)))
+    write(project, {
         "edited": entry("edited.yaml", [2, 4]), "grown": entry("stable.yaml", [2]),
-        "same": entry("stable.yaml", [8]), "gone": entry("stable.yaml", [2]),
-    }, single_node_fragment(4))  # fmt: skip
+        "same": entry("stable.yaml", [8]), "video": video_entry(), "gone": entry("stable.yaml", [2]),
+    }, single_node_fragment(4), video_fragment())  # fmt: skip
+    (tmp_path / ".gitignore").write_text("__pycache__/\n")
     git(tmp_path, "init", "-q")
     git(tmp_path, "config", "user.name", "Test")
     git(tmp_path, "config", "user.email", "test@example.com")
     git(tmp_path, "add", ".")
     git(tmp_path, "commit", "-qm", "base")
     git(tmp_path, "tag", "base")
-    write(tmp_path, {
+    write(project, {
         "edited": entry("edited.yaml", [2, 4]), "grown": entry("stable.yaml", [2, 4]),
-        "same": entry("stable.yaml", [8]),
-    }, single_node_fragment(4, **{"max-running-requests": 16}))  # fmt: skip
-    monkeypatch.chdir(tmp_path)
+        "same": entry("stable.yaml", [8]), "video": video_entry(),
+    }, single_node_fragment(4, **{"max-running-requests": 16}), video_fragment(**{"max-running-requests": "7"}))  # fmt: skip
+    monkeypatch.chdir(project)
 
     changed.main(["--base", "base", "--json"])
     report = json.loads(capsys.readouterr().out)
 
-    assert (report["config-keys"], report["errors"]) == (4, [])
+    assert (report["config-keys"], report["errors"]) == (5, [])
     assert [
         (change["config-key"], change["base-points"], change["head-points"],
          [point["conc"] for point in change["added"]], [point["conc"] for point in change["removed"]])
         for change in report["changed"]
-    ] == [("edited", 2, 2, [2, 4], [2, 4]), ("grown", 1, 2, [4], []), ("gone", 1, 0, [], [2])]  # fmt: skip
+    ] == [
+        ("edited", 2, 2, [2, 4], [2, 4]), ("grown", 1, 2, [4], []),
+        ("video", 1, 1, [1], [1]), ("gone", 1, 0, [], [2]),
+    ]  # fmt: skip
     assert git(tmp_path, "status", "--porcelain").splitlines() == [
-        f" M {RECIPES}/edited.yaml", " M configs/nvidia-master.yaml",
+        f" M inferencex-e2e/{RECIPES}/edited.yaml", f" M inferencex-e2e/{RECIPES}/video.yaml",
+        " M inferencex-e2e/configs/nvidia-master.yaml",
     ]
 
     changed.main(["--base", "base"])
-    assert capsys.readouterr().out.splitlines()[-1] == "3 of 4 config keys changed since base."
+    assert capsys.readouterr().out.splitlines()[-1] == "4 of 5 config keys changed since base."
 
 
 def test_rows_without_fingerprints_are_compared_individually(tmp_path):

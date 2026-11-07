@@ -14,7 +14,7 @@ import yaml
 from infx.config import MASTER_CONFIGS, RUNNER_CONFIG
 
 from .fingerprint import recipe_fingerprint, row_fingerprint
-from .generate import generate_config_matrix
+from .generate import SCENARIO_TYPES, generate_config_matrix
 from .revision import snapshot
 from .validation import config_root, load_config_files, load_runner_file
 
@@ -43,17 +43,20 @@ def _points(rows: list[dict], root: Path) -> tuple[dict, list[str]]:
     return points, errors
 
 
+def config_points(key: str, master: dict, runners: dict, root: Path) -> tuple[dict, list[str]]:
+    """Every point of config ``key``, across the scenario types a changelog entry can select."""
+    rows = generate_config_matrix(
+        [key], master, runners, scenario_types=SCENARIO_TYPES, eval_mode="none", root=root
+    )
+    return _points(rows, root)
+
+
 def head_matrix(config_files: list[str], runner_config: str) -> Matrix:
     """Generate the working tree's matrix for each config key, as points and fingerprint errors."""
     master = load_config_files(config_files)
     runners = load_runner_file(runner_config)
     root = config_root(config_files)
-    return {
-        key: _points(
-            generate_config_matrix([key], master, runners, eval_mode="none", root=root), root
-        )
-        for key in master
-    }
+    return {key: config_points(key, master, runners, root) for key in master}
 
 
 def base_matrix(ref: str, config_files: list[str]) -> Matrix:
@@ -68,9 +71,8 @@ def base_matrix(ref: str, config_files: list[str]) -> Matrix:
             single.write_text(yaml.safe_dump({key: entry}, sort_keys=False))
             singles.append(str(single))
 
-        requests = [
-            ([key], ["--no-evals"], [single]) for key, single in zip(master, singles, strict=True)
-        ]
+        flags = ["--no-evals", "--scenario-type", *SCENARIO_TYPES]
+        requests = [([key], flags, [single]) for key, single in zip(master, singles, strict=True)]
         rows = revision.generate_each(requests, os.cpu_count() or 1)
         return {
             key: _points(generated, revision.root)
