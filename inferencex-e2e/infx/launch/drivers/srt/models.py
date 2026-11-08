@@ -70,7 +70,7 @@ OVERRIDES: dict[str, tuple[Override, ...]] = {
     ),
     "h200-dgxc": (
         Override(
-            Match(any_of("glm5.3flash"), any_of("fp8"), any_of("sglang"), agentic=True),
+            Match(any_of("glm5.3flash"), any_of("fp8"), any_of("sglang")),
             require_config=True,
             single_node_staged=True,
         ),
