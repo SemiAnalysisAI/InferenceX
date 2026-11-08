@@ -565,9 +565,6 @@ clusters:
             command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
         fabric:
-          rdma-devices: [rdmap86s0, rdmap87s0, rdmap101s0, rdmap102s0, rdmap116s0, rdmap117s0,
-                         rdmap131s0, rdmap132s0, rdmap146s0, rdmap147s0, rdmap161s0, rdmap162s0,
-                         rdmap176s0, rdmap177s0, rdmap191s0, rdmap192s0]
           rdma-device-ports: [mlx5_0:1, mlx5_1:1, mlx5_10:1, mlx5_11:1, mlx5_16:1, mlx5_17:1,
                               mlx5_20:1, mlx5_21:1, mlx5_22:1, mlx5_23:1, mlx5_4:1, mlx5_5:1,
                               mlx5_8:1, mlx5_9:1, mlx5_2:1, mlx5_3:1]

@@ -12473,14 +12473,19 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4904
 
 - config-keys:
-    - minimaxm31flash-fp4-b300-dynamo-vllm-agentic-dspark-disagg
+    - kimik3.1-fp4-gb200-vllm-agentic-dspark-tp8pp2-agg
+    - kimik3.1-fp4-gb200-vllm-agentic-dspark-tp16-disagg
+  scenario-type:
+    - agentic-coding
   description:
-    - "Add MiniMax-M3.1-Flash AgentX on B300 with Dynamo 1.6.0.dev20261023 and vLLM b022bb7 (minimax-m31-flash-x86_64-cu134-b022bb7-mc0.3.13.post1): 1 DEP2 prefill + 1 DEP4 decode (6 GPUs) at conc 48, 64, 96, 128 and 144, and 1 DEP2 prefill + 1 TP4 decode (6 GPUs) at conc 24."
-    - "DSpark with the built-in drafter, 7 draft tokens (golden AL 4.04), DeepGEMM MegaMoE on the expert-parallel workers, NIXL prefill-to-decode transfer and the Dynamo KV router with session affinity."
-    - "Prefill and decode workers run vllm-rs serve beside a Dynamo vLLM sidecar, which parses tool calls and reasoning (minimax_m3)."
-    - "Prefix cache in a shared MooncakeStore pool served by standalone stores, one per socket on the prefill and decode nodes. The 2093 GiB pool fits the 749 GB prefill and 1499 GB decode DRAM shares; prefill workers are store clients and decode takes KV over NIXL only."
-    - "Use the EFA fabric on b300-dsxe: a setup script adds AWS EFA 1.50.0 and the EFA Mooncake wheel at 0.3.13.post1 to the image, Mooncake runs with protocol efa and auto-discovered NICs, and NIXL uses the LIBFABRIC backend."
-    - "Mooncake EFA settings for b300-dsxe: filter discovery to the 16 EFA NICs so the two InfiniBand HCAs do not shift NIC indices, register GPU KV on the NICs beside its GPU, and send same-node store reads over the EFA device instead of libfabric shm."
-    - "Disable the extensible KV cache on prefill and decode: it is VMM-backed, and cuPointerSetAttribute(SYNC_MEMOPS), which the libfabric EFA provider runs on the first RMA of each CUDA MR, returns NOT_SUPPORTED on VMM memory, so every NIXL and Mooncake transfer failed with EINVAL. The KV cache is sized from gpu-memory-utilization instead of measured free memory."
+    - "Re-sweep Kimi-K3.1-Pro GB200 vLLM AgentX with the updated DSpark draft (Inferact/Kimi-K3.1-Pro-DSpark-preview @ 6a2ef20a) and the #4851 golden curve, so throughput forces AL 3.41 at 5 draft tokens and 3.19 at 4."
+    - "Set VLLM_HTTP_TIMEOUT_KEEP_ALIVE to 600 s on the aggregated server so AIPerf's reused session connections outlive uvicorn's 5 s idle timeout."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4864
+
+- config-keys:
+    - minimaxm31flash-fp4-b300-vllm-agentic-dspark
+  description:
+    - "Move MiniMax-M3.1-Flash B300 vLLM AgentX to vllm/vllm-openai:minimax-m31-flash-x86_64-cu134-b022bb7-mc0.3.13.post1 (vLLM b022bb7)."
+    - "Launch the server with vllm-rs, vLLM's Rust OpenAI frontend, instead of vllm serve."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4930
   scenario-type: [agentic-coding]
