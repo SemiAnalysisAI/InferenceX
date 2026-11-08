@@ -12483,6 +12483,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4864
 
 - config-keys:
+    - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
+  description:
+    - "Rerun the unchanged FP8 config to collect GPU power, because its published curve (2026-10-21) predates default-on multinode power collection and carries no valid power."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4413
+  scenario-type: [agentic-coding]
+
+- config-keys:
     - minimaxm31flash-fp4-b300-vllm-agentic-dspark
   description:
     - "Move MiniMax-M3.1-Flash B300 vLLM AgentX to vllm/vllm-openai:minimax-m31-flash-x86_64-cu134-b022bb7-mc0.3.13.post1 (vLLM b022bb7)."
