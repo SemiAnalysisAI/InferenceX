@@ -12463,6 +12463,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4887
 
 - config-keys:
+    - h3-bf16-b200-sglang-video
+    - h3-bf16-h100-sglang-video
+    - h3-bf16-h200-sglang-video
+    - h3-bf16-mi355x-sglang-video
+  scenario-type: [video-generation]
+  description:
+    - "The H3 client polls job status every 0.1 s instead of every 0.5 s. A job counts as done only at the next poll, so each published latency carried up to 0.5 s of polling delay; it now carries up to 0.1 s."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4904
+
+- config-keys:
     - qwen3.5-fp8-mi300x-sglang-agentic-mtp
   description:
     - "Update the SGLang image from v0.5.16-rocm720-mi30x-20260730 to v0.5.22-rocm720-mi30x-20261024, pinned by digest."
