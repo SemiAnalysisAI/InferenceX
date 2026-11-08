@@ -42,9 +42,11 @@ RUNTIMES = {"sglang", "vllm-omni"}
 MAX_JSON_BYTES = 1024 * 1024
 MAX_MEDIA_BYTES = 512 * 1024 * 1024
 MAX_SLOTS = 10000
-MAX_POLLS = 10000
 SOCKET_TIMEOUT_SECONDS = 30.0
-POLL_INTERVAL_SECONDS = 0.5
+# A job is seen as done only at the next poll, so latency includes up to one interval.
+POLL_INTERVAL_SECONDS = 0.1
+# Keeps the poll budget past the default 3600 s attempt timeout.
+MAX_POLLS = 50000
 _ACTIVE_STATUSES = {"queued", "pending", "in_progress", "processing", "running"}
 _FAILED_STATUSES = {"failed", "cancelled", "canceled"}
 _TERMINAL_STATUSES = _FAILED_STATUSES | {"completed", "succeeded", "success"}
