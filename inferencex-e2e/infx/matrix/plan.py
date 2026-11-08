@@ -11,6 +11,7 @@ from infx.config import MASTER_CONFIGS, RUNNER_CONFIG, git_path_at_ref
 
 from .fingerprint import recipe_fingerprint
 from .generate import (
+    SCENARIO_TYPES,
     EvalMode,
     drop_app_colliding_evals,
     freeze_config_value,
@@ -27,7 +28,6 @@ from .validation import (
     load_runner_file,
 )
 
-SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding", "video-generation")
 # An entry without scenario-type reruns these; video runs only for entries that name it.
 DEFAULT_SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding")
 
