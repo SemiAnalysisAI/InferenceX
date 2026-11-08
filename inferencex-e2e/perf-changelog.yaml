@@ -12481,3 +12481,10 @@
     - "Re-sweep Kimi-K3.1-Pro GB200 vLLM AgentX with the updated DSpark draft (Inferact/Kimi-K3.1-Pro-DSpark-preview @ 6a2ef20a) and the #4851 golden curve, so throughput forces AL 3.41 at 5 draft tokens and 3.19 at 4."
     - "Set VLLM_HTTP_TIMEOUT_KEEP_ALIVE to 600 s on the aggregated server so AIPerf's reused session connections outlive uvicorn's 5 s idle timeout."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4864
+
+- config-keys:
+    - qwen3.8next-fp4-gb300-tokenspeed-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Move to the November 6 TokenSpeed 0.1.1.post20261106, CUDA 13 ARM64 kernel 0.1.4.post20261106 and engine 0.1.0.post20261106 wheels, pinned by SHA256. They include lightseekorg/tokenspeed#3012, which exposes the engine's prefill and decode server metrics. The runner image, scheduler 0.1.49, recipe and concurrency points are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

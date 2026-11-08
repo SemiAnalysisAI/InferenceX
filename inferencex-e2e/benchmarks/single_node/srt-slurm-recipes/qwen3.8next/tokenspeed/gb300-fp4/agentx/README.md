@@ -10,8 +10,8 @@ write-back. PLE embeddings are offloaded to the host; in-forward state
 checkpoints and MTP index sharing are enabled.
 
 The recipe pins the public checkpoint revision and installs the unmodified
-TokenSpeed `0.1.1.post20261102` daily wheel, CUDA 13 ARM64/Python 3.12
-kernel `0.1.4.post20261102`, and `tokenspeed-engine` `0.1.0.post20261102`
+TokenSpeed `0.1.1.post20261106` daily wheel, CUDA 13 ARM64/Python 3.12
+kernel `0.1.4.post20261106`, and `tokenspeed-engine` `0.1.0.post20261106`
 wheel by SHA256. All three wheels share upstream revision
 `0e6ee353d7bdc7afeb1c5795d839533eab7ecb9a` so their runtime interfaces match.
 Scheduler `0.1.49` satisfies the daily wheel's minimum
