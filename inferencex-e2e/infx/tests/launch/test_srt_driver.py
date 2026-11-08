@@ -981,6 +981,7 @@ def test_single_node_setup_skips_only_explicitly_disabled_tachometer(harness, en
     assert_ok(launch(env, harness.config, harness.workspace))
     [setup] = lines(harness.logs, "make")
     assert ("--assume-old=tachometer-scraper-download" in setup) is (enabled is False)
+    assert f"TACHOMETER_ENABLED={str(enabled is not False).lower()}" in setup
     [call] = srtctl_calls(harness.logs)
     bound = yaml.safe_load(
         (Path(call["cwd"]) / call["argv"][call["argv"].index("--file") + 1]).read_text()
