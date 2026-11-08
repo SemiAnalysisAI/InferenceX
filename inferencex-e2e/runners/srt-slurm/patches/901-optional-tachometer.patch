@@ -1,0 +1,65 @@
+diff --git a/src/srtctl/cli/submit.py b/src/srtctl/cli/submit.py
+index edbb2d26..9d2ba831 100755
+--- a/src/srtctl/cli/submit.py
++++ b/src/srtctl/cli/submit.py
+@@ -902,7 +902,8 @@ def validate_setup(srtctl_source: Path, config: SrtConfig | None = None) -> None
+         missing.append("configs/etcd")
+     if not (srtctl_source / "bin" / "uv").exists():
+         missing.append("bin/uv (compute-arch uv)")
+-    if not (srtctl_source / "bin" / "tachometer-scraper").exists():
++    tachometer_enabled = config is None or config.observability.tachometer_enabled
++    if tachometer_enabled and not (srtctl_source / "bin" / "tachometer-scraper").exists():
+         missing.append("bin/tachometer-scraper (compute-arch Tachometer scraper)")
+     cpu_power_enabled = (
+         config is not None and config.telemetry.enabled and config.telemetry.cpu_power_exporter is not None
+@@ -925,7 +926,7 @@ def validate_setup(srtctl_source: Path, config: SrtConfig | None = None) -> None
+     # Optional: the default process exporter is host-native and skipped at launch
+     # (with a warning in the sweep log) when its binary is absent. Surface that at
+     # submit time so the gap is not discovered after the run.
+-    if not (configs_dir / "process-exporter").exists():
++    if tachometer_enabled and not (configs_dir / "process-exporter").exists():
+         console.print(
+             "[yellow]WARNING:[/] configs/process-exporter not found; Tachometer will run without per-process/"
+             "per-thread CPU telemetry. Re-run [bold]make setup ARCH=<compute_arch>[/] to install it."
+diff --git a/tests/test_tachometer_optional.py b/tests/test_tachometer_optional.py
+new file mode 100644
+index 00000000..09b96abd
+--- /dev/null
++++ b/tests/test_tachometer_optional.py
+@@ -0,0 +1,36 @@
++from dataclasses import replace
++
++import pytest
++
++from srtctl.cli.submit import validate_setup
++from srtctl.core.schema import BenchmarkConfig, ModelConfig, ResourceConfig, SrtConfig
++
++
++@pytest.mark.parametrize("enabled", [False, True, None])
++@pytest.mark.parametrize("missing_uv", [False, True])
++def test_missing_tachometer_allowed_only_for_explicit_opt_out(tmp_path, enabled, missing_uv):
++    (tmp_path / "configs").mkdir()
++    (tmp_path / "configs/nats-server").touch()
++    (tmp_path / "configs/etcd").touch()
++    (tmp_path / "bin").mkdir()
++    if not missing_uv:
++        (tmp_path / "bin/uv").touch()
++    config = SrtConfig(
++        name="test",
++        model=ModelConfig(path="/model", container="/image", precision="fp8"),
++        resources=ResourceConfig(gpu_type="h200"),
++        benchmark=BenchmarkConfig(type="manual"),
++    )
++    config = replace(
++        config,
++        observability=replace(
++            config.observability,
++            enabled=False,
++            tachometer=replace(config.observability.tachometer, enabled=enabled),
++        ),
++    )
++    if enabled is False and not missing_uv:
++        validate_setup(tmp_path, config)
++    else:
++        with pytest.raises(SystemExit):
++            validate_setup(tmp_path, config)

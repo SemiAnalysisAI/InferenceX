@@ -95,7 +95,9 @@ def run_single_node(launch: Launch) -> int:
             mounts=[(str(hf_cache), request.hf_hub_cache), *cache_mounts],
             cpu_power_source=cpu_source,
         )
-        if rc := run_setup(run, checkout, cpu_power_exporter=cpu_source is not None):
+        if rc := run_setup(
+            run, checkout, cpu_power_exporter=cpu_source is not None, bound_recipe=Path(bound)
+        ):
             return rc
 
     fetched = root / "fetched-outputs"

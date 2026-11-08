@@ -971,6 +971,23 @@ def test_srt_recipe_outside_the_recipe_mirror_fails_before_any_setup(harness):
     assert "recipes/test/lane.yaml is not under benchmarks/multi_node/srt-slurm-recipes" in result.stderr
     assert lines(harness.logs, "git") == []
 
+@pytest.mark.parametrize("enabled", [False, True, None])
+def test_single_node_setup_skips_only_explicitly_disabled_tachometer(harness, enabled):
+    env = single_node_env(harness, "h100-cw")
+    recipe_path = harness.workspace / "recipe.yaml"
+    recipe = yaml.safe_load(recipe_path.read_text())
+    recipe["base"]["observability"] = {"enabled": False, "tachometer": {"enabled": enabled}}
+    recipe_path.write_text(yaml.safe_dump(recipe))
+    assert_ok(launch(env, harness.config, harness.workspace))
+    [setup] = lines(harness.logs, "make")
+    assert ("--assume-old=tachometer-scraper-download" in setup) is (enabled is False)
+    [call] = srtctl_calls(harness.logs)
+    bound = yaml.safe_load(
+        (Path(call["cwd"]) / call["argv"][call["argv"].index("--file") + 1]).read_text()
+    )
+    assert bound["telemetry"]["enabled"] is True
+
+
 def test_setup_retries_only_after_discarding_a_truncated_archive(harness):
     env = lane_env(
         harness, "h200-dgxc", MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang",
