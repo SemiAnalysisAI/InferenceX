@@ -37,7 +37,7 @@ TokenSpeed MTP recipes use the same automatic selection from
 `speculative-num-steps`, with `speculative-num-draft-tokens` equal to the step
 count plus one and `speculative-eagle-topk: 1`. The connector sets
 `synthetic-acceptance-length` and the required `sampling-backend: greedy` for
-AgentX throughput. Eval-only and fixed-sequence runs remove that length and
+synthetic throughput. Eval-only and non-opted-in fixed-sequence runs remove that length and
 select `sampling-backend: flashinfer` for real verification. TokenSpeed's
 connector accepts explicit MTP flags; other speculative algorithms and the
 JSON `speculative-config` shorthand are rejected.
@@ -185,7 +185,8 @@ Before accepting an updated curve, reviewers should verify:
 - Do not hard-code synthetic acceptance lengths in SRT recipes, master configs, or launchers. Do not add manual `SYNTHETIC_ACCEPTANCE_LENGTH`, vLLM `synthetic_acceptance_length`, SGLang `SGLANG_SIMULATE_ACC_LEN`, or TRT-LLM `TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS` settings. The engine examples above show what the connector injects, not what a recipe should set.
 - Submit recipes through the srt driver (`infx/launch/drivers/srt/`). It runs the [`infx/srt_slurm` connector](../srt_slurm/synthetic_acceptance.py), which applies native SRT `--set` / `--unset` overrides. Calling upstream `srtctl` directly skips this selection.
 - Keep the speculative method, draft model, draft-token count, and relevant sampling settings explicit in the recipe. The connector combines the generation role's settings (decode, otherwise aggregated), after caller overrides, with `MODEL_PREFIX` and `THINKING_MODE` to select the curve. For Kimi DSpark, set `draft_sample_method` to `greedy` or `probabilistic`.
-- Eval-only and non-AgentX runs use real verification, and the connector removes stale synthetic settings. Non-speculative roles receive no simulation settings. `RUN_EVAL` does not disable simulation for the throughput portion.
+- AgentX speculative throughput uses golden acceptance automatically. A fixed-sequence recipe can opt in with `benchmark.env.SYNTHETIC_ACCEPTANCE: golden`; the connector selects the measured curve from the model, thinking mode, and draft configuration, never a caller-provided length. Omitting this field preserves real verification for fixed-sequence throughput.
+- Eval-only runs always use real verification, even when the recipe opts in, and the connector removes stale synthetic settings. Non-speculative roles receive no simulation settings. `RUN_EVAL` does not disable simulation for the throughput portion.
 - Missing golden curves or unmeasured draft lengths fail before submission. Add measured golden data for a new combination instead of a guessed or hard-coded length.
 
 ## Curve identities and names

@@ -1,4 +1,4 @@
-"""Select AgentX golden acceptance automatically and pass native srtctl overrides."""
+"""Select golden acceptance for opted-in throughput and pass native srtctl overrides."""
 
 from __future__ import annotations
 
@@ -159,7 +159,7 @@ def acceptance_length(
     *,
     golden_dir: Path = GOLDEN_DIR,
 ) -> float | None:
-    """The golden AL the generation role of a speculative AgentX throughput run simulates,
+    """The golden AL the generation role of a speculative throughput run simulates,
     else None."""
     roles = recipe.get("roles", {})
     generation = roles.get("decode", roles.get("agg", {}))
@@ -187,7 +187,7 @@ def _simulated_length(
     if engine is None:
         return None
     roles = recipe.get("roles", {})
-    synthetic = is_synthetic(environment)
+    synthetic = is_synthetic(environment, recipe)
     generation = generation_role(recipe)
     spec = spec_parameters(generation, engine)
     if not (synthetic and spec):
@@ -233,11 +233,14 @@ def _simulated_length(
     return al
 
 
-def is_synthetic(environment: Mapping[str, str]) -> bool:
-    """AgentX speculative throughput forces golden acceptance; evals verify for real."""
+def is_synthetic(environment: Mapping[str, str], recipe: Mapping[str, Any]) -> bool:
+    """AgentX and opted-in fixed-sequence throughput simulate; evals verify for real."""
+    selection = recipe.get("benchmark", {}).get("env", {}).get("SYNTHETIC_ACCEPTANCE")
+    if selection not in (None, "golden"):
+        raise ValueError("benchmark.env.SYNTHETIC_ACCEPTANCE must be 'golden' when set")
     return (
         environment["EVAL_ONLY"].lower() != "true"
-        and environment["IS_AGENTIC"].lower() in ("1", "true")
+        and (environment["IS_AGENTIC"].lower() in ("1", "true") or selection == "golden")
         and environment["SPEC_DECODING"] != "none"
     )
 
