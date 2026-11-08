@@ -1,14 +1,18 @@
 """``python -m infx.matrix.changed`` lists the config keys whose points differ from a base."""
 
 import json
+import os
 import shutil
 import subprocess
+import sys
+import threading
 from pathlib import Path
 
 import pytest
 import yaml
 
 from infx.matrix import changed
+from infx.matrix.revision import Revision
 from infx.tests.srt_recipes import (
     fixed_seq_entry,
     single_node_fragment,
@@ -101,6 +105,200 @@ def test_keys_with_changed_recipes_or_points_are_listed(tmp_path, monkeypatch, c
     lines = capsys.readouterr().out.splitlines()
     assert lines[-2] == "5 of 6 config keys changed since base."
     assert lines[-1].startswith("warning: 1 rows of unbound have no fingerprint at base: ")
+
+
+BASE_MASTER = {
+    "edited": fixed_seq_entry("edited.yaml", [2, 4]), "grown": fixed_seq_entry("stable.yaml", [2]),
+    "same": fixed_seq_entry("stable.yaml", [8]), "gone": fixed_seq_entry("stable.yaml", [2]),
+}  # fmt: skip
+GROWN_MASTER = {
+    "edited": fixed_seq_entry("edited.yaml", [2, 4]), "grown": fixed_seq_entry("stable.yaml", [2, 4]),
+    "same": fixed_seq_entry("stable.yaml", [8]),
+}  # fmt: skip
+
+
+def write_fixed(root: Path, master: dict, edited: dict) -> None:
+    (root / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(master))
+    (root / RECIPES / "edited.yaml").write_text(yaml.safe_dump(edited))
+
+
+def fixed_project(root: Path, master: dict = BASE_MASTER, **recipes: dict) -> None:
+    """A project of fixed-sequence keys with the real generator and extra ``recipes``, tagged ``base``."""
+    shutil.copytree(ROOT / "infx", root / "infx", ignore=shutil.ignore_patterns("__pycache__"))
+    (root / RECIPES).mkdir(parents=True)
+    write_shared_blocks(root)
+    (root / ".gitignore").write_text("__pycache__/\n")
+    (root / "configs/amd-master.yaml").write_text("{}\n")
+    (root / "configs/runners.yaml").write_text(yaml.safe_dump({
+        "labels": {"cluster:fixture": ["node-a"]},
+        "clusters": {"fixture": {"gpus-per-node": 8, "arch": "x86_64", "scheduler": "slurm",
+                                 "slurm": {"partition": "batch", "exclusive": True}}},
+    }))  # fmt: skip
+    (root / RECIPES / "stable.yaml").write_text(yaml.safe_dump(single_node_fragment(4)))
+    for name, recipe in recipes.items():
+        (root / RECIPES / f"{name}.yaml").write_text(yaml.safe_dump(recipe))
+    write_fixed(root, master, single_node_fragment(4))
+    git(root, "init", "-q")
+    git(root, "config", "user.name", "Test")
+    git(root, "config", "user.email", "test@example.com")
+    git(root, "add", ".")
+    git(root, "commit", "-qm", "base")
+    git(root, "tag", "base")
+
+
+def changes(report: dict) -> list[tuple]:
+    return [
+        (change["config-key"], change["base-points"], change["head-points"],
+         [point["conc"] for point in change["added"]], [point["conc"] for point in change["removed"]])
+        for change in report["changed"]
+    ]  # fmt: skip
+
+
+def run_from(root: Path, *args: str, **env: str) -> subprocess.CompletedProcess[str]:
+    """``python -m infx.matrix.changed`` run in ``root`` with ``root``'s own code."""
+    return subprocess.run(
+        [sys.executable, "-m", "infx.matrix.changed", *args],
+        cwd=root, env={**os.environ, "INFX_REUSE_UNCHANGED": "", **env}, capture_output=True,
+        text=True, check=False, timeout=120,
+    )  # fmt: skip
+
+
+def test_a_base_with_the_same_code_and_recipes_still_reports_every_difference(tmp_path):
+    unbindable = {"unbindable": fixed_seq_entry("unbindable.yaml", [2])}
+    bound = {**single_node_fragment(4), "model": {"path": "hf:org/other"}}
+    fixed_project(tmp_path, {**BASE_MASTER, **unbindable}, unbindable=bound)
+    grown = [("grown", 1, 2, [4], []), ("gone", 1, 0, [], [2])]
+
+    write_fixed(tmp_path, {**GROWN_MASTER, **unbindable}, single_node_fragment(4))
+    reports = [
+        json.loads(run_from(tmp_path, "--base", "base", "--json", **env).stdout)
+        for env in ({}, {"INFX_REUSE_UNCHANGED": "0"})
+    ]
+    for report in reports:
+        assert changes(report) == grown
+        base_error, head_error = report["errors"]
+        assert (base_error["config-key"], base_error["revision"]) == ("unbindable", "base")
+        assert (head_error["config-key"], head_error["revision"]) == ("unbindable", "head")
+        assert str(tmp_path) in head_error["error"] and str(tmp_path) not in base_error["error"]
+
+    (tmp_path / "configs/nvidia-master.yaml").write_text(
+        yaml.safe_dump({"every*": fixed_seq_entry("stable.yaml", [2])})
+    )
+    invalid = run_from(tmp_path, "--base", "base")
+    assert invalid.returncode == 1
+    assert "Wildcard '*' is not allowed" in invalid.stderr
+
+    write_fixed(tmp_path, {**GROWN_MASTER, **unbindable}, single_node_fragment(4, **{"max-running-requests": 16}))
+    git(tmp_path, "add", RECIPES)
+    git(tmp_path, "commit", "-qm", "edit")
+    edited = run_from(tmp_path, "--base", "base", "--json")
+    assert changes(json.loads(edited.stdout)) == [("edited", 2, 2, [2, 4], [2, 4]), *grown]
+
+    write_fixed(tmp_path, {**BASE_MASTER, "late": fixed_seq_entry("late.yaml", [2])}, single_node_fragment(4))
+    git(tmp_path, "commit", "-qam", "late")
+    (tmp_path / RECIPES / "late.yaml").write_text(yaml.safe_dump(single_node_fragment(4)))
+    untracked = run_from(tmp_path, "--base", "HEAD")
+    assert untracked.returncode == 1
+    assert "HEAD could not generate its matrix" in untracked.stderr
+
+
+def test_only_keys_whose_entry_changed_run_the_bases_generator(tmp_path, monkeypatch, capsys):
+    fixed_project(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(changed, "__file__", str(tmp_path / "infx/matrix/changed.py"))
+    generated = []
+    generate_each = Revision.generate_each
+
+    def recording(self, requests, workers):
+        generated.extend(request[0][0] for request in requests)
+        return generate_each(self, requests, workers)
+
+    monkeypatch.setattr(Revision, "generate_each", recording)
+    # The head loads only after the inputs are compared, so a missing wait or join shows.
+    compared = threading.Event()
+    load, same_inputs = changed.load_config_files, changed.same_inputs
+
+    def load_after_comparison(*args, **kwargs):
+        if threading.current_thread() is not threading.main_thread():
+            compared.wait(timeout=5)
+        return load(*args, **kwargs)
+
+    def comparison(*args):
+        try:
+            return same_inputs(*args)
+        finally:
+            compared.set()
+
+    monkeypatch.setattr(changed, "load_config_files", load_after_comparison)
+    monkeypatch.setattr(changed, "same_inputs", comparison)
+
+    def report(reuse: str = "") -> tuple[list, list]:
+        monkeypatch.setenv("INFX_REUSE_UNCHANGED", reuse)
+        compared.set() if reuse else compared.clear()
+        generated.clear()
+        changed.main(["--base", "base", "--json"])
+        return changes(json.loads(capsys.readouterr().out)), sorted(generated)
+
+    assert report() == ([], [])
+    (tmp_path / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(GROWN_MASTER))
+    grown = [("grown", 1, 2, [4], []), ("gone", 1, 0, [], [2])]
+    assert report() == (grown, ["gone", "grown"])
+    assert report("0") == (grown, ["edited", "gone", "grown", "same"])
+
+
+def test_a_bases_points_are_reused_only_when_git_vouches_for_every_other_input(
+    tmp_path, monkeypatch, capfd
+):
+    fixed_project(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(changed, "__file__", str(tmp_path / "infx/matrix/changed.py"))
+    recipe = tmp_path / RECIPES / "stable.yaml"
+
+    def same(ref: str) -> bool:
+        return changed.same_inputs(ref, Revision(tmp_path), changed.MASTER_CONFIGS, changed.RUNNER_CONFIG)
+
+    (tmp_path / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(GROWN_MASTER))
+    (tmp_path / "infx/__pycache__").mkdir()
+    (tmp_path / "infx/__pycache__/ignored.pyc").write_text("")
+    assert same("base")
+    elsewhere = tmp_path.with_name(f"{tmp_path.name}-runners.yaml")
+    shutil.copyfile(tmp_path / changed.RUNNER_CONFIG, elsewhere)
+    assert not changed.same_inputs("base", Revision(tmp_path), changed.MASTER_CONFIGS, str(elsewhere))
+
+    git(tmp_path, "branch", "base")
+    capfd.readouterr()
+    assert same("base")
+    assert capfd.readouterr().err == ""
+    git(tmp_path, "branch", "-D", "base")
+
+    (tmp_path / RECIPES / "untracked.yaml").write_text("{}\n")
+    assert not same("base")
+    (tmp_path / RECIPES / "untracked.yaml").unlink()
+
+    recipe.write_text(recipe.read_text() + "# edited\n")
+    assert not same("base")
+    for hide, show in (("--skip-worktree", "--no-skip-worktree"),
+                       ("--assume-unchanged", "--no-assume-unchanged")):  # fmt: skip
+        git(tmp_path, "update-index", hide, f"{RECIPES}/stable.yaml")
+        assert not same("base")
+        git(tmp_path, "update-index", show, f"{RECIPES}/stable.yaml")
+
+    git(tmp_path, "commit", "-qm", "edit", RECIPES)
+    assert not same("base")
+    assert same("HEAD")
+
+    clone = tmp_path.with_name(f"{tmp_path.name}-clone")
+    git(tmp_path, "clone", "-q", ".", str(clone))
+    monkeypatch.chdir(clone)
+    configs = [str(tmp_path / path) for path in changed.MASTER_CONFIGS]
+    runners = str(tmp_path / changed.RUNNER_CONFIG)
+    assert not changed.same_inputs("HEAD", Revision(clone), configs, runners)
+    monkeypatch.chdir(tmp_path)
+
+    (tmp_path / RECIPES / "link.yaml").symlink_to("stable.yaml")
+    git(tmp_path, "add", RECIPES)
+    git(tmp_path, "commit", "-qm", "link")
+    assert not same("HEAD")
 
 
 def test_rows_without_fingerprints_are_compared_individually(tmp_path):
