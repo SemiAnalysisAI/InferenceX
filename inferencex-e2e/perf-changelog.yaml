@@ -12442,6 +12442,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4902
 
 - config-keys:
+    - musespark-fp4-mi355x-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump to lmsysorg/sglang-rocm:muse-spark-open-mi355-1106."
+    - "Concurrency 6, 10 and 28: TP8/EP8 with GPU-only KV; 28, 36 and 40: TP4/EP4 with a 310 GB-per-rank HiCache DRAM tier."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4881
+
+- config-keys:
     - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
   description:
     - "Update the SGLang image from v0.5.22-cu130 to nightly-dev-cu13-20261025-65633129, pinned by digest."
