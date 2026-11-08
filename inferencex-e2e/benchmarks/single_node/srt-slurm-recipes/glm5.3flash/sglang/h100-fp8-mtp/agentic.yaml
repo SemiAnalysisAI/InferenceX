@@ -74,6 +74,8 @@ zip_override_hicache:
   roles:
     agg:
       args:
+        # At 0.70, long restores exceed the GPU KV pool and Mamba caps c24 admission at 36.
+        mem-fraction-static: 0.85
         max-running-requests: [8, 12, 16, 20, 24, 28, 32, 40, 48]
         cuda-graph-max-bs-decode: [8, 12, 16, 20, 24, 28, 32, 40, 48]
         enable-hierarchical-cache: true
