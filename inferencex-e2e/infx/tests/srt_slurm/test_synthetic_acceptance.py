@@ -70,6 +70,11 @@ def golden_dir(tmp_path: Path) -> Path:
             "muse-spark-open",
             3.4,
         ),
+        (
+            "deepseek-v4.1-flash__dspark__native__probabilistic-block.yaml",
+            "deepseek-v4.1-flash",
+            3.3,
+        ),
     ]:
         (directory / filename).write_text(
             yaml.safe_dump(
@@ -90,6 +95,88 @@ def apply_native(recipe: dict[str, Any], argv: list[str]) -> dict[str, Any]:
     unsets = [argv[i + 1] for i, arg in enumerate(argv[:-1]) if arg == "--unset"]
     apply_overrides_to_recipe(result, parse_overrides(sets, unsets))
     return result
+
+
+def test_tokenspeed_plan_uses_effective_mtp_depth_and_restores_real_sampling(
+    tmp_path: Path, golden_dir: Path
+) -> None:
+    recipe = {
+        "roles": {"agg": {"args": {
+            "speculative-algorithm": "MTP", "speculative-num-steps": 2,
+            "speculative-num-draft-tokens": 3, "speculative-eagle-topk": 1,
+            "synthetic-acceptance-length": 99, "sampling-backend": "flashinfer",
+            "kv-cache-dtype": "bfloat16", "kvstore-size": 80,
+        }, "env": {"KEEP": "worker"}}},
+    }
+    original = copy.deepcopy(recipe)
+    path = tmp_path / "tokenspeed.yaml"
+    path.write_text(yaml.safe_dump(recipe))
+    plans = plan_commands(
+        str(path), "tokenspeed",
+        ["--set", "roles.agg.args.speculative-num-steps=3",
+         "--set", "roles.agg.args.speculative-num-draft-tokens=4"],
+        ENV, golden_dir=golden_dir,
+    )
+    assert len(plans) == 1
+    assert plans[0].acceptance_length == 2.4
+    throughput = apply_native(recipe, plans[0].command)
+    assert throughput["roles"]["agg"]["args"] == {
+        "speculative-algorithm": "MTP", "speculative-num-steps": 3,
+        "speculative-num-draft-tokens": 4, "speculative-eagle-topk": 1,
+        "synthetic-acceptance-length": 2.4, "sampling-backend": "greedy",
+        "kv-cache-dtype": "bfloat16", "kvstore-size": 80,
+    }
+    evaluation = apply_native(throughput, build_overrides(
+        throughput, "tokenspeed", {**ENV, "EVAL_ONLY": "true"},
+        golden_dir=tmp_path / "absent",
+    ))
+    assert "synthetic-acceptance-length" not in evaluation["roles"]["agg"]["args"]
+    assert evaluation["roles"]["agg"]["args"]["sampling-backend"] == "flashinfer"
+    assert evaluation["roles"]["agg"]["env"] == {"KEEP": "worker"}
+    assert recipe == original
+
+
+@pytest.mark.parametrize("environment", [{"IS_AGENTIC": "0"}, {"SPEC_DECODING": "none"}])
+def test_tokenspeed_non_synthetic_runs_remove_forced_acceptance(
+    tmp_path: Path, environment: dict[str, str]
+) -> None:
+    recipe = {"roles": {"agg": {"args": {
+        "speculative-algorithm": "MTP", "synthetic-acceptance-length": 2.5,
+        "sampling-backend": "greedy",
+    }}}}
+    result = apply_native(recipe, build_overrides(
+        recipe, "tokenspeed", {**ENV, **environment}, golden_dir=tmp_path / "absent",
+    ))
+    assert result["roles"]["agg"]["args"] == {
+        "speculative-algorithm": "MTP", "sampling-backend": "flashinfer",
+    }
+
+
+@pytest.mark.parametrize("change,message", [
+    ({"speculative-num-draft-tokens": 3}, "must equal"),
+    ({"speculative-num-draft-tokens": True}, "must equal"),
+    ({"speculative-eagle-topk": 2}, "topk 1"),
+    ({"speculative-algorithm": "DFLASH"}, "only MTP"),
+    ({"speculative-config": {"method": "mtp"}}, "explicit MTP flags"),
+])
+def test_tokenspeed_rejects_unsupported_speculation(golden_dir: Path, change, message) -> None:
+    recipe = {"roles": {"agg": {"args": {
+        "speculative-algorithm": "MTP", "speculative-num-steps": 3,
+        "speculative-num-draft-tokens": 4, "speculative-eagle-topk": 1, **change,
+    }}}}
+    with pytest.raises(ValueError, match=message):
+        build_overrides(recipe, "tokenspeed", ENV, golden_dir=golden_dir)
+
+
+def test_tokenspeed_without_speculation_keeps_the_selected_sampler(tmp_path: Path) -> None:
+    recipe = {"roles": {"agg": {"args": {
+        "sampling-backend": "flashinfer", "synthetic-acceptance-length": 2,
+    }}}}
+    result = apply_native(recipe, build_overrides(
+        recipe, "tokenspeed", {**ENV, "SPEC_DECODING": "none"},
+        golden_dir=tmp_path / "absent",
+    ))
+    assert result["roles"]["agg"]["args"] == {"sampling-backend": "flashinfer"}
 
 
 def vllm_recipe(method: str = "mtp", **extra: Any) -> dict[str, Any]:
@@ -491,6 +578,16 @@ def test_tilert_plan_uses_caller_decode_depth_and_keeps_prefill_real(
     }
 
 
+def test_tilert_dsv41_profile_selects_the_dspark_curve(tmp_path: Path, golden_dir: Path) -> None:
+    recipe = tilert_recipe()
+    recipe["roles"]["decode"]["args"]["model"] = "dsv41"
+    path = tmp_path / "tilert.yaml"
+    path.write_text(yaml.safe_dump(recipe))
+    env = {**ENV, "MODEL_PREFIX": "dsv41flash"}
+    commands = plan_commands(str(path), "tilert", [], env, golden_dir=golden_dir)
+    assert [command.acceptance_length for command in commands] == [3.3]
+
+
 @pytest.mark.parametrize(
     "environment",
     [{"EVAL_ONLY": "true"}, {"IS_AGENTIC": "0"}, {"SPEC_DECODING": "none"}, {}],
@@ -631,7 +728,7 @@ def test_variants_use_resolved_tokens_and_preserve_caller_arguments(
         golden_dir=golden_dir,
     )
     assert len(commands) == 2
-    for index, (command, length) in enumerate(commands):
+    for index, (command, length, *_) in enumerate(commands):
         assert command[:2] == ["srtctl", "apply"]
         assert command[command.index("--tags") + 1] == "x y"
         selector = f"zip_override_test[{index}]"
@@ -720,7 +817,7 @@ def test_cli_forwards_options_and_submission_failure(
         text=True,
     )
     assert result.returncode == returncode, result.stderr
-    assert json.loads(record.read_text()) == {"golden_acceptance_length": None}
+    assert json.loads(record.read_text()) == {"golden_acceptance_length": None, "al_gate": None}
     argv = json.loads(result.stdout)
     assert argv[:5] == ["apply", "-f", str(recipe), "--tags", "a b"]
     result_recipe = apply_native(yaml.safe_load(recipe.read_text()), argv)
@@ -887,55 +984,34 @@ def test_qwen_real_verification_does_not_require_mtp_window(
     assert result["roles"]["agg"]["env"] == {"KEEP": "worker"}
 
 
-GATE = {"AL_GATE": "true", "AL_GATE_CURVE": "deepseek-v4-pro__mtp__native__default-default", "AL_GATE_DRAFT_TOKENS": "3"}
-
-
-def test_the_acceptance_gate_verifies_for_real(tmp_path: Path) -> None:
+def test_an_eval_server_verifies_for_real(tmp_path: Path) -> None:
+    # An agentic eval and its acceptance gate measure the recipe's real acceptance.
     spec = {"method": "mtp", "num_speculative_tokens": 3}
     forced = {**spec, "rejection_sample_method": "synthetic", "synthetic_acceptance_length": 8}
     recipe = {"roles": {"agg": {"args": {"speculative-config": json.dumps(forced)}}}}
-    env = {**ENV, **GATE}
+    env = {**ENV, "EVAL_ONLY": "true", "EVAL_AL_GATE": "true"}
     overrides = build_overrides(recipe, "dynamo-vllm", env, golden_dir=tmp_path / "absent")
     real = apply_native(recipe, overrides)["roles"]["agg"]["args"]
     assert json.loads(real["speculative-config"]) == {**spec, "rejection_sample_method": "block"}
 
 
-MTP3 = {"speculative-config": json.dumps({"method": "mtp", "num_speculative_tokens": 3})}
-
-
-@pytest.mark.parametrize(
-    ("framework", "args", "gate", "error"),
-    [
-        ("vllm", MTP3, {"AL_GATE_CURVE": "x"}, r"drafts \('deepseek-v4-pro__mtp__native__default-default', 3\), .* measures \('x', 3\)"),
-        ("vllm", MTP3, {"AL_GATE_DRAFT_TOKENS": "2"}, r"gate measures \('deepseek-v4-pro__mtp__native__default-default', 2\)"),
-        ("vllm", {"tensor-parallel-size": 8}, {}, "the recipe drafts None"),
-    ],
-    ids=["other-curve", "other-draft-length", "no-drafting"],
-)
-def test_the_acceptance_gate_rejects_a_recipe_drafting_otherwise(
-    tmp_path: Path, framework: str, args: dict[str, Any], gate: dict[str, str], error: str
+@pytest.mark.parametrize(("prefix", "eval_only"), [("kimik3", "false"), ("kimik3", "true"), ("dsv4", "false")])
+def test_synthetic_throughput_drops_kimi_vllm_parsers(
+    golden_dir: Path, prefix: str, eval_only: str
 ) -> None:
-    recipe = tmp_path / "recipe.yaml"
-    recipe.write_text(yaml.safe_dump({"roles": {"agg": {"args": args}}}))
-    environment = {**ENV, **GATE, **gate}
-    with pytest.raises(ValueError, match=error):
-        plan_commands(str(recipe), framework, ["-f", str(recipe)], environment, golden_dir=tmp_path)
+    recipe = vllm_recipe("dspark", draft_sample_method="probabilistic")
+    parsers = {
+        "enable-auto-tool-choice": True,
+        "tool-call-parser": "kimi_k3",
+        "reasoning-parser": "kimi_k3",
+    }
+    recipe["roles"]["agg"]["args"].update(parsers, **{"kv-cache-dtype": "fp8"})
+    env = {**ENV, "MODEL_PREFIX": prefix, "SPEC_DECODING": "dspark", "EVAL_ONLY": eval_only}
+    overrides = build_overrides(recipe, "vllm", env, golden_dir=golden_dir)
+    args = apply_native(recipe, overrides)["roles"]["agg"]["args"]
+    assert args["kv-cache-dtype"] == "fp8"
+    if eval_only == "true" or prefix == "dsv4":
+        assert parsers.items() <= args.items()
+    else:
+        assert parsers.keys().isdisjoint(args)
 
-
-@pytest.mark.parametrize(
-    ("verify", "curve"),
-    [
-        ({}, "kimi-k3__dspark__kimi-k3-dspark__probabilistic-default"),
-        ({"rejection_sample_method": "block"}, "kimi-k3__dspark__kimi-k3-dspark__probabilistic-block"),
-    ],
-    ids=["standard", "block"],
-)
-def test_the_acceptance_gate_checks_the_verifiers_curve(
-    tmp_path: Path, verify: dict[str, str], curve: str
-) -> None:
-    spec = {"method": "dspark", "num_speculative_tokens": 3, "draft_sample_method": "probabilistic"}
-    args = {"speculative-config": json.dumps({**spec, **verify})}
-    recipe = tmp_path / "recipe.yaml"
-    recipe.write_text(yaml.safe_dump({"roles": {"agg": {"args": args}}}))
-    environment = {**ENV, **GATE, "MODEL_PREFIX": "kimik3", "AL_GATE_CURVE": curve}
-    plan_commands(str(recipe), "vllm", ["-f", str(recipe)], environment, golden_dir=tmp_path)

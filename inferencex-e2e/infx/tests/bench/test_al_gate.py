@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -12,6 +13,7 @@ from types import SimpleNamespace
 import pytest
 
 from infx.bench import al_gate, speedbench
+from infx.bench.agentic.venv import Runtime
 from infx.bench.env import BenchError
 from infx.tests.bench.stubs import executable
 
@@ -51,6 +53,12 @@ cp "$COUNTERS_AFTER" "$COUNTERS"
 """
 
 
+# The shim caps the gate with coreutils timeout, which serving images have.
+NEEDS_TIMEOUT = pytest.mark.skipif(
+    shutil.which("timeout", path="/usr/bin:/bin") is None, reason="needs coreutils timeout"
+)
+
+
 class Tokenizer:
     """Renders the user turn between role tags and records each call's options."""
 
@@ -77,9 +85,11 @@ def gate(tmp_path, http_server, monkeypatch):
     monkeypatch.setattr(speedbench, "PROMPTS_SHA256", PROMPTS_SHA256)
     monkeypatch.setattr(al_gate, "SETTLE_INTERVAL_S", 0.01)
     monkeypatch.setattr(al_gate, "_tokenizer", {"test/model": tokenizer}.get)
-    runtime = SimpleNamespace(
-        active=lambda: True, aiperf=executable(tmp_path / "aiperf", FAKE_AIPERF)
-    )
+    # A real Runtime whose venv this process already runs, so the gate drives runtime.aiperf.
+    runtime = Runtime(tmp_path / "runtime")
+    (runtime.venv / "bin").mkdir(parents=True)
+    executable(runtime.aiperf, FAKE_AIPERF)
+    monkeypatch.setattr(sys, "executable", str(runtime.python))
     env = {
         "AL_GATE": "true", "AL_GATE_CURVE": "testmodel_mtp", "AL_GATE_DRAFT_TOKENS": "3",
         "AL_GATE_DATASET": str(dataset), "AL_GATE_OUTPUT_DIR": str(tmp_path / "logs"),
@@ -90,7 +100,9 @@ def gate(tmp_path, http_server, monkeypatch):
         "COUNTERS": str(counters), "COUNTERS_AFTER": str(tmp_path / "after.txt"),
     }  # fmt: skip
 
-    def run(after: tuple[int, int] = (1100, 2160), **overrides: str) -> int:
+    def run(
+        after: tuple[int, int] = (1100, 2160), runtime: Runtime = runtime, **overrides: str
+    ) -> int:
         (tmp_path / "after.txt").write_text(METRICS % after)
         return al_gate.run({**env, **overrides}, runtime, golden_dir=tmp_path / "golden")
 
@@ -117,8 +129,8 @@ def test_the_gate_replays_the_golden_collection_and_reports_the_verdict(gate, af
     assert gate.run(after) == 0
 
     assert gate.document() == {
-        "result_filename": "gate", "framework": "vllm", "curve": "testmodel_mtp",
-        "thinking_mode": "thinking_on", "draft_tokens": 3, "golden_acceptance_length": 3.2,
+        "result_filename": "gate", "framework": "vllm", "eval_framework": None,
+        "eval_suite": None, "curve": "testmodel_mtp", "thinking_mode": "thinking_on", "draft_tokens": 3, "golden_acceptance_length": 3.2,
         "error": None, "report_only": True, **verdict,
     }  # fmt: skip
     # In vllm bench serve's order (random.seed(0); random.shuffle), rendered client-side.
@@ -171,6 +183,22 @@ def test_prompts_other_than_the_golden_ones_are_an_error_before_any_traffic(gate
     assert not gate.raw.exists()
 
 
+def test_an_inactive_runtime_is_prepared_before_any_traffic(gate, tmp_path, monkeypatch):
+    uv_dir = tmp_path / "uv-bin"
+    uv_dir.mkdir()
+    executable(uv_dir / "uv", '#!/bin/sh\n[ "$1" = venv ] && exit 3\nexit 0\n')
+    monkeypatch.setenv("PATH", f"{uv_dir}:{os.environ['PATH']}")
+
+    assert gate.run(runtime=Runtime(tmp_path / "inactive")) == 3
+
+    document = gate.document()
+    assert (document["status"], document["error"]) == (
+        "error",
+        "creating the AIPerf runtime exited with code 3",
+    )
+    assert not gate.raw.exists()
+
+
 BOS, USER, ASSISTANT = "<｜begin▁of▁sentence｜>", "<｜User｜>", "<｜Assistant｜>"
 # DeepSeek-V4's system prefix for reasoning effort "max", from vLLM's deepseek_v4 encoder.
 MAX_EFFORT = (
@@ -200,7 +228,31 @@ def test_deepseek_v4_prompts_render_as_vllms_tokenizer_mode_did(kwargs, effort, 
     assert prompt == f"{BOS}{effort}{USER}Fix it.{ASSISTANT}{opening}"
 
 
-def test_the_srt_shim_records_a_gate_whose_inputs_are_missing(tmp_path):
+@pytest.mark.parametrize(
+    ("kwargs", "effort", "opening"),
+    [
+        # DeepSeek-V4.1 thinks unless told not to, at reasoning effort high.
+        ({"thinking": True, "reasoning_effort": "high"}, 50, "<think>"),
+        ({}, 50, "<think>"),
+        ({"thinking": False}, None, "</think>"),
+        ({"thinking": True, "reasoning_effort": "none"}, None, "</think>"),
+        ({"enable_thinking": True, "reasoning_effort": "max"}, 100, "<think>"),
+    ],
+)
+def test_deepseek_v41_prompts_render_as_vllms_tokenizer_mode_did(kwargs, effort, opening):
+    prompt = al_gate.render("Fix it.", "deepseek_v41", kwargs, tokenizer=None)
+
+    prefix = (
+        f"<｜System｜>Reasoning Effort: {effort} (range 1-100, the higher the value, the more "  # noqa: RUF001
+        "thorough the reasoning)\n\n"
+        if effort
+        else ""
+    )
+    assert prompt == f"{BOS}{prefix}{USER}Fix it.{ASSISTANT}{opening}"
+
+
+@NEEDS_TIMEOUT
+def test_the_srt_shim_records_a_gate_whose_inputs_are_missing_and_exits_0(tmp_path):
     tools = tmp_path / "tools"
     tools.mkdir()
     # The serving image's python3: the inputs are checked before the client venv exists.
@@ -215,10 +267,39 @@ def test_the_srt_shim_records_a_gate_whose_inputs_are_missing(tmp_path):
         env=env, capture_output=True, text=True, timeout=60, check=False,
     )  # fmt: skip
 
+    # Report-only: the eval that follows in the same job still runs.
     missing = "  - AL_GATE_DATASET\n  - THINKING_MODE\n  - MODEL\n  - FRAMEWORK"
-    assert (run.returncode, missing in run.stderr) == (1, True)
+    assert (run.returncode, missing in run.stderr) == (0, True)
+    assert "AL gate exited 1 (report-only)" in run.stderr
     document = json.loads((tmp_path / "al_gate_gate.json").read_text())
     assert (document["curve"], document["draft_tokens"], document["status"]) == (
         "testmodel_mtp", 3, "error",
     )  # fmt: skip
     assert missing in document["error"]
+
+
+@NEEDS_TIMEOUT
+def test_the_srt_shim_stops_a_stalled_gate_at_its_cap_so_the_eval_still_runs(tmp_path):
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    (tools / "python3").symlink_to(sys.executable)
+    # Prompts nobody writes: the gate blocks reading them, as a stalled replay would.
+    dataset = tmp_path / "speedbench_coding.jsonl"
+    os.mkfifo(dataset)
+    env = {
+        "PATH": f"{tools}:/usr/bin:/bin", "AL_GATE_TIMEOUT_S": "2", "AL_GATE": "true",
+        "AL_GATE_CURVE": "testmodel_mtp", "AL_GATE_DRAFT_TOKENS": "3", "AL_GATE_DATASET": str(dataset),
+        "AL_GATE_OUTPUT_DIR": str(tmp_path), "THINKING_MODE": "thinking_on", "RESULT_FILENAME": "gate",
+        "MODEL": "test/model", "FRAMEWORK": "vllm", "AIPERF_SERVER_URL": "http://frontend:8000",
+        "AIPERF_SERVER_METRICS_URLS": "http://worker:9090/metrics",
+    }  # fmt: skip
+
+    run = subprocess.run(
+        ["bash", str(REPO_ROOT / "benchmarks" / "srt_al_gate.sh")],
+        env=env, capture_output=True, text=True, timeout=60, check=False,
+    )  # fmt: skip
+
+    assert run.returncode == 0
+    assert "AL gate exited 124 (report-only)" in run.stderr
+    document = json.loads((tmp_path / "al_gate_gate.json").read_text())
+    assert (document["status"], document["error"]) == ("error", "stopped at the gate's 2s time cap")

@@ -76,7 +76,7 @@ Run from `inferencex-e2e/`:
 uv sync --locked --all-extras --group test
 uvx --exclude-newer PT12H ruff@latest check --fix infx
 uvx --exclude-newer PT12H ruff@latest format infx
-uv run --locked --all-extras --group test python -m pytest -c pyproject.toml infx/tests/ -n 4
+uv run --locked --all-extras --group test python -m pytest -c pyproject.toml infx/tests/ -n 4 --dist worksteal
 ```
 
 Run the focused test path first. Use `--extra workflows` for GitHub integrations and `--extra results` for result tooling. Dependency changes update `pyproject.toml` and `uv.lock` via `uv add` or `uv lock --upgrade-package NAME`. Workflow changes run the [Zizmor CI command](.github/workflows/zizmor.yml) with online checks; do not weaken its policy. Schema and generator checks do not prove serving behavior: run the exact config, inspect its generated fields, then collect smoke, sweep, and eval evidence.
@@ -96,7 +96,7 @@ Run the focused test path first. Use `--extra workflows` for GitHub integrations
 - Launch only through `python -m infx.launch`; add no shell launchers. Cluster facts go in the cluster's `clusters:` record, workload rules in named policy tables; drivers never branch on a cluster id. Retiring a cluster removes its label, record, and policy rows in one PR.
 - srt-slurm host-setup hooks only check or prepare hosts: they never run benchmarks, tune engines, patch containers, or hide failures.
 - Never hard-code synthetic acceptance lengths; the srt driver picks measured values from `infx/golden_al_distribution/` ([details](inferencex-e2e/infx/golden_al_distribution/README.md#using-golden-curves-in-srt-slurm-runs)).
-- `run-sweep.yml` PR sweeps run the report-only [speculative acceptance gate](.github/workflows/README.md#speculative-acceptance-gate) alongside AgentX throughput. New golden curves need a `collection` block with the SPEED-Bench client settings they were measured with.
+- Agentic speculative evals also run the report-only [speculative acceptance gate](inferencex-e2e/infx/evals/EVALS.md#speculative-acceptance-gate) on the eval's own server. New golden curves need a `collection` block with the SPEED-Bench client settings they were measured with.
 
 ## Deprecating benchmark configs
 
