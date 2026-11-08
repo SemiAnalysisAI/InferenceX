@@ -23,18 +23,20 @@ passthrough policy, L0/L1 tokenizer caches, warn logging, and no retries,
 circuit breaker or load monitoring.
 
 The recipe pins the public checkpoint revision and installs the unmodified
-TokenSpeed `0.1.1rc1.post20261108` release-candidate wheel, CUDA 13
-ARM64/Python 3.12 kernel `0.1.4rc1.post20261108`, and `tokenspeed-engine`
-`0.1.0.post20261108` wheel by SHA256. All three wheels share upstream revision
-`c5bb19ef15e862561bfbb562932571fd10f75b62` so their runtime interfaces match.
-Scheduler `0.1.50` from PyPI provides the scheduler fields that revision's
-runtime sets for in-forward checkpoints and checkpoint retention. The base
-runner image is pinned by digest in the master config. Target quantization
-comes from checkpoint metadata; the embedded draft uses `modelopt_mixed` from
-the same checkpoint. The setup script installs SMG at the master config's
-router version and the published FlashInfer `0.7.3` CUDA 13 kernel caches
-matching the runtime dependency. Registry dependencies use PyPI;
-release-candidate wheels and prebuilt kernel caches use upstream release URLs.
+TokenSpeed `0.1.1.post20261108` daily wheel and CUDA 13 ARM64/Python 3.12 kernel
+`0.1.4.post20261108`, built from upstream revision
+`a5a298c293849cd097c50224bb3ae4ee725e68cf`, and the `tokenspeed-engine`
+`0.1.0.post20261108` wheel built from
+`c5bb19ef15e862561bfbb562932571fd10f75b62`, all by SHA256. `tokenspeed-engine/`
+is unchanged between the two revisions, so the runtime interfaces match.
+Scheduler `0.1.50` from PyPI provides the scheduler fields the runtime sets for
+in-forward checkpoints and checkpoint retention. The base runner image is pinned
+by digest in the master config. Target quantization comes from checkpoint
+metadata; the embedded draft uses `modelopt_mixed` from the same checkpoint. The
+setup script installs SMG at the master config's router version and the
+published FlashInfer `0.7.3` CUDA 13 kernel caches matching the runtime
+dependency. Registry dependencies use PyPI; daily wheels and prebuilt kernel
+caches use upstream release URLs.
 
 The golden-AL connector derives throughput acceptance from the committed
 model curve and MTP step count and selects the required greedy sampler.
@@ -52,7 +54,7 @@ The shared srt-slurm pin is
 Workers launch through
 `python3 -m tokenspeed.cli serve --headless` with SMG's ZMQ transport.
 The gateway waits for healthy worker registrations, and metrics collection
-uses each worker's separate HTTP listener. The TokenSpeed release-candidate
-wheel stays unmodified.
+uses each worker's separate HTTP listener. The TokenSpeed daily wheel stays
+unmodified.
 
 A GB300 sweep with real-verification evals is required before merging.
