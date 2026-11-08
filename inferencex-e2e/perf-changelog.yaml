@@ -12442,6 +12442,27 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4902
 
 - config-keys:
+    - musespark-fp4-mi355x-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump to lmsysorg/sglang-rocm:muse-spark-open-mi355-1106."
+    - "Concurrency 6, 10 and 28: TP8/EP8 with GPU-only KV; 28, 36 and 40: TP4/EP4 with a 310 GB-per-rank HiCache DRAM tier."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4881
+
+- config-keys:
+    - kimik3.1-fp4-mi355x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "The image stays vllm/vllm-openai-rocm:kimi-k31@sha256:5f47cc1004d9a7ac65f8a913725edb20c62c99a07e31cbf4ba21741bd0b4f9b1 (vLLM 0.0.0+mum.14d1ec2336)."
+    - "Concurrency 1 moves from TP8 x DCP8 to TP8 x DCP1 (master config dcp-size 8 -> 1; the recipe's c1 override drops decode-context-parallel-size, dcp-comm-backend and cp-kv-cache-interleave-size). It keeps GPU-resident KV, 7 draft tokens and the latency_specialized decode backend. Concurrency 4-48 stay TP8 x DCP8 with DRAM offload."
+    - "Concurrency 4: DSpark draft tokens 5 -> 7, so throughput runs use golden acceptance length 3.69 instead of 3.41. The decode capture sizes change from 6, 12 to 8, 16 to match max-num-seqs 2 x (1 + 7)."
+    - "max-num-seqs at concurrency 10/16/24/32 changes from 6/10/16/24 to 7/8/13/20. Concurrency 10 adds capture size 42 (7 x (1 + 5)). Otherwise the draft lengths, capture lists, max-num-batched-tokens and gpu-memory-utilization at these points, and every setting at concurrency 48, are unchanged."
+    - "No change to the DSpark draft's precision: Inferact/Kimi-K3.1-Pro-DSpark-preview (revision 6a2ef20a) ships all-BF16 weights with no quantization_config, the speculative config names the draft and sets no quantization, so get_draft_quant_config() returns None and K3DSparkModel loads its layers in BF16 with the target's BF16 embedding and LM head. Its KV cache stays FP8, the same as the target's. DCP1 at concurrency 1 and 7 draft tokens at concurrency 4 do not change these types."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4887
+
+- config-keys:
   - qwen3.5-fp4-b200-sglang-agentic-mtp
   description:
   - "Serve nvidia/Qwen3.5-397B-A17B-NVFP4-V2: the original nvidia/Qwen3.5-397B-A17B-NVFP4 directory was removed from the B200 node-local model volume on 2026-10-13 at NVIDIA SRE's request, so the key failed at srtctl startup with Model path does not exist."

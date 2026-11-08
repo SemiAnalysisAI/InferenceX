@@ -625,7 +625,6 @@ collx_slurm_job_name() {
   printf '%s' "$name"
 }
 
-# The job name is prepended so a caller-supplied --job-name wins (salloc takes the last).
 # True only when Slurm says the job is gone: listed as nothing, or purged ("Invalid job id"). A
 # failed query (slurmctld busy or restarting) is not an answer, so it reads as still there.
 collx_job_gone() {
@@ -637,6 +636,7 @@ collx_job_gone() {
   fi
 }
 
+# The job name is prepended so a caller-supplied --job-name wins (salloc takes the last).
 collx_salloc_jobid() {
   local log_label log job_id
   set -- --job-name="$(collx_slurm_job_name)" "$@"
@@ -1122,7 +1122,7 @@ collx_stage_repo() {
   fi
 }
 
-# Results are committed from the checkout, so the staged result JSONs are copied back to its
+# Results are uploaded from the checkout, so the staged result JSONs are copied back to its
 # results/<sku>/, replacing older files for the same cases.
 collx_collect_results() {
   local mount_src="$1" repo_root="$2" dst log
