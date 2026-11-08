@@ -1,0 +1,88 @@
+schema: 2
+
+base:
+  identity:
+    model: {}
+    container: {}
+  dynamo:
+    install: false
+  slurm:
+    time_limit: "8:00:00"
+  health_check:
+    interval_seconds: 10
+    max_attempts: 720
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  engine:
+    type: vllm
+    connector:
+  roles:
+    agg:
+      nodes: 2
+      workers: 1
+      gpus: 16
+      env:
+        # Loading ~1.56 TB of MXFP4 shards can take over 20 minutes.
+        VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+        VLLM_SERVER_DEV_MODE: "1"
+        VLLM_LOG_STATS_INTERVAL: "1"
+        VLLM_RPC_TIMEOUT: "600000"
+        NCCL_CUMEM_ENABLE: "1"
+        HF_HUB_CACHE: /hf_hub_cache
+        HUGGINGFACE_HUB_CACHE: /hf_hub_cache
+      args:
+        served-model-name: moonshotai/Kimi-K3.1-Pro
+        tensor-parallel-size: 16
+        pipeline-parallel-size: 1
+        decode-context-parallel-size: 16
+        # These B200 nodes do not share an MNNVL domain; use NCCL collectives.
+        disable-custom-all-reduce: true
+        trust-remote-code: true
+        load-format: fastsafetensors
+        moe-backend: auto
+        gpu-memory-utilization: 0.92
+        max-model-len: 1048576
+        kv-cache-dtype: fp8
+        # The K3.1 precision policy requires FP32 KDA recurrent state.
+        mamba-ssm-cache-dtype: float32
+        enable-prefix-caching: true
+        enable-auto-tool-choice: true
+        tool-call-parser: kimi_k3
+        reasoning-parser: kimi_k3
+        language-model-only: true
+        # Prefix caching floors chunks to K3.1's 1152-token packed DSA block.
+        max-num-batched-tokens: 10240
+        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":7,"method":"dspark","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  srun_options:
+    container-remap-root: ""
+  telemetry:
+    collector_join_timeout_seconds: 12
+  benchmark:
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+
+override_tp16_c1:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 2
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[8]}'
+
+override_tp16_c2:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 4
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[8,16]}'
+
+override_tp16_c4:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 8
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[8,16,24,32]}'

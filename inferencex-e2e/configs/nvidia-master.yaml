@@ -4985,6 +4985,41 @@ kimik3.1-fp4-b200-dynamo-vllm-agentic-dspark:
           ep: 1
           dp-attn: false
 
+kimik3.1-fp4-b200-dynamo-vllm-agentic-dspark-tp16:
+  image: vllm/vllm-openai:kimi-k31@sha256:904520f3fefc32414abcedf6ba8dadc9c5978db1bcdaf40f58d6b9036ef30a99
+  model: moonshotai/Kimi-K3.1-Pro
+  model-prefix: kimik3.1
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: dynamo-vllm
+  multinode: true
+  disagg: false
+  srt-recipe-dir: kimik3.1/vllm/b200-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [1]
+        num-nodes: 2
+        srt-recipe: agg-tp16-variants.yaml:override_tp16_c1
+        power: true
+        worker: { num-worker: 1, tp: 16, pp: 1, dcp-size: 16, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [2]
+        num-nodes: 2
+        srt-recipe: agg-tp16-variants.yaml:override_tp16_c2
+        power: true
+        worker: { num-worker: 1, tp: 16, pp: 1, dcp-size: 16, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [4]
+        num-nodes: 2
+        srt-recipe: agg-tp16-variants.yaml:override_tp16_c4
+        power: true
+        worker: { num-worker: 1, tp: 16, pp: 1, dcp-size: 16, ep: 1, dp-attn: false }
+
 kimik3.1-fp4-b200-dynamo-sglang-agentic-dflash:
   image: lmsysorg/sglang:dev-kimi-k31-pro@sha256:67fc77d1cbe67de27ca54d874c82757a4844743fea899ea7d0df547e30c2c391
   model: moonshotai/Kimi-K3.1-Pro
