@@ -12487,4 +12487,4 @@
   scenario-type: [agentic-coding]
   description:
     - "Move to the November 6 TokenSpeed 0.1.1.post20261106, CUDA 13 ARM64 kernel 0.1.4.post20261106 and engine 0.1.0.post20261106 wheels, pinned by SHA256. They include lightseekorg/tokenspeed#3012, which exposes the engine's prefill and decode server metrics. The runner image, scheduler 0.1.49, recipe and concurrency points are unchanged."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4932
