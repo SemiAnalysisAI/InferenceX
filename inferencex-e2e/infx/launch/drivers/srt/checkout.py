@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from importlib import metadata
 from pathlib import Path
 
+import yaml
+
 from infx.bench.proc import echo
 from infx.config import repository_root
 from infx.launch import proc
@@ -198,7 +200,13 @@ def _discard_corrupt_archives(configs: Path) -> bool:
     return discarded
 
 
-def run_setup(run: SrtRun, checkout: Checkout, *, cpu_power_exporter: bool = False) -> int:
+def run_setup(
+    run: SrtRun,
+    checkout: Checkout,
+    *,
+    cpu_power_exporter: bool = False,
+    bound_recipe: Path | None = None,
+) -> int:
     """Run ``make setup`` in the checkout, logging to SETUP_LOG; return its exit code.
 
     ``cpu_power_exporter`` pins the cpu-power-exporter release, which makes its download fatal.
@@ -206,9 +214,23 @@ def run_setup(run: SrtRun, checkout: Checkout, *, cpu_power_exporter: bool = Fal
     log = run.workspace / SETUP_LOG
     event = run.life.event
     event.evidence(log)
+    skip_tachometer = False
+    if bound_recipe is not None:
+        recipe = yaml.safe_load(bound_recipe.read_text())
+        skip_tachometer = (
+            recipe.get("observability", {}).get("tachometer", {}).get("enabled") is False
+        )
     for attempt in range(1, SETUP_ATTEMPTS + 1):
         print(f"Setting up srt-slurm, attempt {attempt} (details: {SETUP_LOG})", flush=True)
-        argv = ["make", "setup", f"ARCH={run.cluster.arch}"]
+        argv = [
+            "make",
+            "setup",
+            f"ARCH={run.cluster.arch}",
+            f"TACHOMETER_ENABLED={str(not skip_tachometer).lower()}",
+        ]
+        if skip_tachometer:
+            # Native GPU power collection is independent of Tachometer.
+            argv.append("--assume-old=tachometer-scraper-download")
         if cpu_power_exporter:
             argv.append(f"CPU_POWER_EXPORTER_RELEASE={CPU_POWER_EXPORTER_RELEASE}")
         rc = _run_logged(argv, log, env=run.env, cwd=checkout.root)

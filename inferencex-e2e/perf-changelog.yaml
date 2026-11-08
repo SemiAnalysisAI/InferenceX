@@ -12471,3 +12471,11 @@
   description:
     - "The H3 client polls job status every 0.1 s instead of every 0.5 s. A job counts as done only at the next poll, so each published latency carried up to 0.5 s of polling delay; it now carries up to 0.1 s."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4904
+
+- config-keys:
+    - glm5.3flash-fp8-h100-sglang
+  scenario-type: [fixed-seq-len]
+  description:
+    - "Add H100 GLM-5.3-Flash FP8 TP8/EP8 8192-input/1024-output points at concurrency 1, 2, 4, 8, 16, 32 and 64 without speculative decoding or HiCache."
+    - "Keep existing configurations unchanged and run fresh accuracy evals without speculation."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4926
