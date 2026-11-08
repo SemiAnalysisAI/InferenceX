@@ -12471,3 +12471,16 @@
   description:
     - "The H3 client polls job status every 0.1 s instead of every 0.5 s. A job counts as done only at the next poll, so each published latency carried up to 0.5 s of polling delay; it now carries up to 0.1 s."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4904
+
+- config-keys:
+    - kimik3.1-fp4-mi355x-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Recipe only, same image (lmsysorg/sglang:dev-kimi-k31-pro-mi35x sha256:346a6d83)."
+    - "Concurrency 8 to 56: a prefill every 32 decode steps instead of 16 (8 at concurrency 48 and 56), so prefills interrupt running requests' token streams half as often."
+    - "Concurrency 8, 16 and 32: 6, 8 and 20 running requests; concurrency 16 and 32 verify the current token plus 4 drafts."
+    - "Add concurrency 24: 13 running requests, current token plus 4 drafts."
+    - "Concurrency 1 and 4: verify the current token plus 7 drafts."
+    - "All concurrencies: MoE front and residual stream on row shards in prefill and fused DFLASH ring locations (already on at 48 and 56)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX

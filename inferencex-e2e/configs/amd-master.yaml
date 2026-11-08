@@ -1121,7 +1121,7 @@ kimik3.1-fp4-mi355x-sglang-agentic-dflash:
     - dram-utilization: 0.513
       search-space:
       - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4], srt-recipe: agentic.yaml }
-      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [8, 16, 32, 48, 56], srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [8, 16, 24, 32, 48, 56], srt-recipe: agentic.yaml }
 
 glm5.3flash-fp8-mi325x-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.22-rocm10-mi30x@sha256:5658cd0d8de0c68de10d2e349296f55ceff98053182fa87b2a7e942e5e7f3c2a
