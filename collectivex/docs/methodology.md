@@ -376,6 +376,11 @@ the received rows, the whole padded plane, or, for FlashInfer, only filled slots
 `false` covers both "nothing to stage" (every BF16 row) and the `dequant` hatch. `isolated_sum` is
 derived: isolated dispatch plus combine, never `stage`.
 
+The six windows side by side, four published and two for context
+([editable source](img/ep-timing-methodologies.excalidraw)):
+
+![How CollectiveX times EP dispatch and combine](img/ep-timing-methodologies.svg)
+
 Each point measures two families:
 
 - **Fresh entry** (`roundtrip`, `dispatch`, `combine`, and eager `stage`): one aligned call per
