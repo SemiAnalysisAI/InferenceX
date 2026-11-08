@@ -12483,4 +12483,4 @@
     - "Add concurrency 24: 13 running requests, current token plus 4 drafts."
     - "Concurrency 1 and 4: verify the current token plus 7 drafts."
     - "All concurrencies: MoE front and residual stream on row shards in prefill and fused DFLASH ring locations (already on at 48 and 56)."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4928
