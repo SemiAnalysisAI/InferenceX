@@ -57,7 +57,7 @@ scale-out.
   `-zc`, and `implementation.library_config.ll_zero_copy_opt_out` is `true`. Like
   `COLLX_NCCL_LL_LAYOUT`, it is read from the launching shell's environment, which every rank
   inherits (`srun --export=ALL`), and the `case_id` does not change, so a run with it replaces the
-  case's committed default result.
+  case's stored default result.
 - **Handle.** One handle, rebound to each ladder point's routing in untimed code. TensorRT-LLM
   also creates one handle and updates it every step. A low-latency update does no device work
   (`nccl_ep.cc:4014-4020`).
@@ -121,5 +121,5 @@ wheel version verbatim in `implementation.library_version`, including the nightl
 `kernel_generation`. The value comes from distribution metadata, not the requested pin or native
 library version.
 
-Prefill runs eager; decode remains graph-capable. FP8 zero-copy on the October 15 wheel
-still needs GPU validation. Combine remains BF16 and staged for both LL phases.
+Prefill runs eager; decode remains graph-capable. FP8 zero-copy runs in-domain on
+the pinned wheel. Combine remains BF16 and staged for both LL phases.

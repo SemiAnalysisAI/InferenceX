@@ -89,4 +89,4 @@ jobs:
         if: matrix.check == 'Tests'
         run: |
           python -c "import torch; assert torch.version.cuda is None and torch.version.hip is None"
-          python -m pytest -c inferencex-e2e/pyproject.toml inferencex-e2e/infx/tests/ inferencex-e2e/utils/ inferencex-e2e/runners/ collectivex/tests/ operatorx/tests/ --ignore=inferencex-e2e/utils/srt-slurm -n 4
+          python -m pytest -c inferencex-e2e/pyproject.toml inferencex-e2e/infx/tests/ inferencex-e2e/utils/ inferencex-e2e/runners/ collectivex/tests/ operatorx/tests/ --ignore=inferencex-e2e/utils/srt-slurm -n 4 --dist worksteal

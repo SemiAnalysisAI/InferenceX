@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator, Mapping
+import re
+from collections.abc import Collection, Iterator, Mapping
 from pathlib import Path
 from typing import Any
+
+_AFTER_ID_KEY = re.compile(r'[ \t\r\n]*(:[ \t\r\n]*(?:"([^"]*)")?)?')
 
 
 def resolve_artifact_dir(result_dir: Path) -> Path:
@@ -155,14 +158,34 @@ def _hf_traces_dir(hf_dataset_name: str | None, env: Mapping[str, str]) -> Path 
     return snapshots[0] if len(snapshots) == 1 else None
 
 
-def _iter_trace_blobs(traces_dir: Path) -> Iterator[dict[str, Any]]:
-    """Yield every JSON object from the *.jsonl and *.json files in ``traces_dir``, skipping unreadable ones."""
+def _other_trace(line: str, wanted: Collection[str]) -> bool:
+    """Whether the JSON object on ``line`` is a trace whose ``id`` is surely not in ``wanted``.
+
+    Only an object written without escapes can be told: each of its ``"id"`` keys is then
+    followed by its value as written, so a line that names no wanted id holds no wanted trace.
+    """
+    if not line.startswith("{") or "\\" in line:
+        return False
+    position = line.find('"id"')
+    while position != -1:
+        key, value = _AFTER_ID_KEY.match(line, position + 4).groups()
+        if key is not None and (value is None or value in wanted):
+            return False
+        position = line.find('"id"', position + 4)
+    return True
+
+
+def _iter_trace_blobs(
+    traces_dir: Path, wanted: Collection[str] | None = None
+) -> Iterator[dict[str, Any]]:
+    """Yield the JSON objects of the *.jsonl and *.json files in ``traces_dir``, skipping
+    unreadable ones, and unparsed any *.jsonl trace whose id is surely not in ``wanted``."""
     for path in sorted(traces_dir.glob("*.jsonl")):
         try:
             with open(path) as f:
                 for line in f:
                     line = line.strip()
-                    if not line:
+                    if not line or (wanted is not None and _other_trace(line, wanted)):
                         continue
                     try:
                         yield json.loads(line)
@@ -182,8 +205,12 @@ def _iter_trace_blobs(traces_dir: Path) -> Iterator[dict[str, Any]]:
 def iter_trace_blobs(
     aggregate: Mapping[str, Any],
     env: Mapping[str, str],
+    wanted: Collection[str] | None = None,
 ) -> Iterator[dict[str, Any]]:
-    """Read the declared dataset only when request processing consumes traces."""
+    """Read the declared dataset only when request processing consumes traces.
+
+    ``wanted`` names the trace ids the consumer looks up; other *.jsonl traces are not parsed.
+    """
     metadata = aggregate.get("metadata")
     dataset = metadata.get("dataset") if isinstance(metadata, dict) else None
     hf_dataset_name = dataset.get("hf_dataset_name") if isinstance(dataset, dict) else None
@@ -191,4 +218,4 @@ def iter_trace_blobs(
         return
     traces_dir = _hf_traces_dir(hf_dataset_name, env)
     if traces_dir is not None:
-        yield from _iter_trace_blobs(traces_dir)
+        yield from _iter_trace_blobs(traces_dir, wanted)
