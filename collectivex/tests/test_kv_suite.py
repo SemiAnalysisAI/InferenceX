@@ -19,7 +19,7 @@ from test_chain import document as ep_document  # noqa: E402
 
 
 class KVMatrix(unittest.TestCase):
-    _BASE = {"scale_up_domain": 8, "scale_up_transport": "nvlink"}
+    _BASE = {"scale_up_domain": 8, "scale_up_transport": "nvlink", "gpus_per_node": 4}
     PLATFORMS = {
         "full": {**_BASE, "launcher": "single-slurm", "product": "full",
                  "kv_backends": {"nixl": ["rdma", "mnnvl"]}},
@@ -45,11 +45,13 @@ class KVMatrix(unittest.TestCase):
                          sum(len(s["cases"]) for s in shards.values()))
         for (sku, _, fabric), shard in shards.items():
             with self.subTest(sku=sku, fabric=fabric):
-                self.assertEqual((shard["nodes"], shard["gpus_per_node"]), (2, 1))
+                # one node of prefill ranks, one of decode ranks, every GPU paired
+                self.assertEqual((shard["nodes"], shard["gpus_per_node"]), (2, 4))
+                self.assertEqual(shard["image"], sweep_matrix.KV_SWEEP["image"])
                 self.assertEqual(shard["launcher"], self.PLATFORMS[sku]["launcher"])
                 for case in shard["cases"]:
                     self.assertEqual((case["suite"], case["ep"], case["mode"]),
-                                     ("kv-transfer", 2, fabric))
+                                     ("kv-transfer", 8, fabric))
                     # the app labels a GB rdma leg by its scale-out transport
                     self.assertEqual(case["scale_out_transport"],
                                      "rdma" if fabric == "rdma" else None)
@@ -148,10 +150,13 @@ class BurstTiming(unittest.TestCase):
             return [(lambda i=i: order.append(("post", i)),
                      lambda i=i: order.append(("wait", i))) for i in range(3)]
 
-        burst_ms, request_ms = run_kv.time_bursts(build, warmup=1, reps=2,
-                                           settle=lambda: settled.append(1), rep0=10)
-        self.assertEqual(order[:6], [("post", 0), ("post", 1), ("post", 2),
+        burst_ms, request_ms = run_kv.time_bursts(
+            build, warmup=1, reps=2, settle=lambda: settled.append(1), rep0=10,
+            gate=lambda: order.append("gate"))
+        # the gate (the cross-rank barrier) opens after the untimed build, before any post
+        self.assertEqual(order[:7], ["gate", ("post", 0), ("post", 1), ("post", 2),
                                      ("wait", 0), ("wait", 1), ("wait", 2)])
+        self.assertEqual(order.count("gate"), 3)
         # every rep builds its own burst (fresh handles and tables) from rep0,
         # and handles are released after every burst
         self.assertEqual((built, len(settled)), ([10, 11, 12], 3))
@@ -162,6 +167,39 @@ class BurstTiming(unittest.TestCase):
             marks = request_ms[3 * rep : 3 * rep + 3]
             self.assertEqual(marks, sorted(marks))
             self.assertEqual(burst, marks[-1])
+
+
+class GateAfterFailure(unittest.TestCase):
+    def test_a_failed_burst_still_passes_every_gate(self):
+        # The other ranks wait at one barrier per burst; a rank that stopped passing
+        # them after its failure would hang the case.
+        gates = []
+
+        def build(rep):
+            def post():
+                if rep == 1:
+                    raise RuntimeError("post failed")
+            return [(post, lambda: None)]
+
+        with self.assertRaisesRegex(RuntimeError, "post failed"):
+            run_kv.time_bursts(build, warmup=0, reps=4, settle=lambda: None,
+                               gate=lambda: gates.append(1))
+        self.assertEqual(len(gates), 4)
+
+
+class LinkRate(unittest.TestCase):
+    def test_reads_each_selected_ports_rate(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as root:
+            for dev, port, text in (("mlx5_0", "1", "400 Gb/sec (4X NDR)\n"),
+                                    ("mlx5_1", "2", "200 Gb/sec (4X HDR)\n")):
+                port_dir = Path(root, dev, "ports", port)
+                port_dir.mkdir(parents=True)
+                (port_dir / "rate").write_text(text)
+            self.assertEqual(run_kv.link_gbps("mlx5_0,mlx5_1:2", root), [400.0, 200.0])
+            # one unreadable port means no line rate, never a partial one
+            self.assertEqual(run_kv.link_gbps("mlx5_0,mlx5_9", root), [])
+            self.assertEqual(run_kv.link_gbps("", root), [])
 
 
 def _grid_args(**overrides):
@@ -196,23 +234,25 @@ class KVGrid(unittest.TestCase):
 
 
 def _kv_document(status="success"):
-    def row(kind, page, op, gbps, p50, batch=1):
-        return {"kind": kind, "isl": 32768, "page_tokens": page, "op": op, "batch": batch,
-                "latency_ms": {"p50": p50}, "gbps_p50": gbps}
+    def row(kind, isl, op, ms, gbps, rank_gbps=None, pct=None, batch=1):
+        return {"kind": kind, "isl": isl, "op": op, "batch": batch, "pairs": 4,
+                "latency_ms": {"p50": ms}, "gbps_p50": gbps, "gbps_rank_p50": rank_gbps,
+                "line_rate_pct": pct}
 
     return {
         "version": 1,
-        "identity": {"case_factors": {"sku": "b200-nscale", "case": {
-            "suite": "kv-transfer", "backend": "nixl", "workload": "kv-dsv4",
+        "identity": {"case_factors": {"sku": "gb200", "case": {
+            "suite": "kv-transfer", "backend": "nixl", "workload": "kv-k31",
             "mode": "rdma", "precision": "fp8"}}},
         "measurement": {"rows": [
-            row("paged", 256, "pull", 43.4, 53.1),
-            row("paged", 256, "pull", 96.2, 21.4, batch=16),
-            row("bulk", None, "pull", 48.3, 47.7),
-            row("paged", 256, "push", 48.4, 47.6),
+            row("paged", 32768, "pull", 21.4, 120.0, 31.0, 60.0),
+            row("paged", 131072, "pull", 70.2, 138.6, 36.1, 69.3),
+            row("paged", 131072, "pull", 150.0, 129.0, 33.0, 64.5, batch=2),  # not the b1 lane
+            row("bulk", 131072, "pull", 54.0, 180.0, 46.0, 90.0),
+            row("paged", 131072, "push", 71.0, 137.0, 35.5, 68.5),
         ]},
         "implementation": {"library_version": "1.3.2", "transport": "ucx"},
-        "topology": {"network": "infiniband"},
+        "topology": {"network": "infiniband", "pairs": 4},
         "outcome": {"status": status, "reasons": []},
     }
 
@@ -222,8 +262,10 @@ class KVSummary(unittest.TestCase):
         text = summarize.render([_kv_document()])
         self.assertIn("KV-transfer results", text)
         self.assertNotIn("EP results", text)
-        self.assertIn("| `nixl` | 1.3.2 | rdma | infiniband | ucx | kv-dsv4 | success | pull "
-                      "| 43.4 | 96.2 @b16 | 48.3 | 53.1 |", text)
+        # ms per request at each ISL (batch 1), then the largest ISL's per-rank GB/s, share of
+        # line rate, and request GB/s against the contiguous baseline (138.6 / 180.0)
+        self.assertIn("| `nixl` | 1.3.2 | rdma | infiniband | ucx | kv-k31 | 4 | success | pull "
+                      "| 32k: 21.4 / 128k: 70.2 | 36.1 | 69.3 | 77 |", text)
 
     def test_a_push_only_document_reads_its_push_lane(self):
         doc = _kv_document()
@@ -231,7 +273,7 @@ class KVSummary(unittest.TestCase):
             row for row in doc["measurement"]["rows"] if row["op"] == "push"
         ]
         text = summarize.render([doc])
-        self.assertIn("| push | 48.4 |", text)
+        self.assertIn("| push | 128k: 71.0 | 35.5 | 68.5 | - |", text)
         self.assertNotIn("INVALID", text)
 
     def test_kv_invalid_counts_in_the_banner(self):

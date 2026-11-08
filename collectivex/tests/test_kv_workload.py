@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""vLLM 0.32.0's DSV4 transfer geometry, block tables and verification (numpy stands in
+"""vLLM's K3.1 and DSV4 transfer geometry, block tables and verification (numpy stands in
 for the device)."""
 from __future__ import annotations
 
@@ -106,6 +106,64 @@ class Entries(unittest.TestCase):
         self.assertEqual((sizes // ROW).tolist(), [4, 0, 0, 4, 4, 16, 2])
         self.assertEqual(lo[sizes < ROW].tolist(), [row * ROW + 1_123_200 for row in (10, 11)])
         self.assertEqual(re[sizes // ROW == 4].tolist(), [110 * ROW, 130 * ROW, 170 * ROW])
+
+
+class K31Geometry(unittest.TestCase):
+    """Kimi-K3.1-Pro on one TP16 rank, as the kimi-k31 image registers it. A GB200 production run
+    logged num_regions=88, block lengths {425472, 589824, 69632} and KDA state (32256, 393216)."""
+
+    def test_the_registered_kinds_are_vllms_88_regions_and_the_kda_parts(self):
+        kinds = kv_workload.PRESETS["k31"]["kinds"]
+        regions, parts = kinds[:88], kinds[88:]
+        self.assertEqual({size for _, size in regions}, {425_472, 589_824, 69_632})
+        self.assertEqual([sum(size == n for _, size in regions)
+                          for n in (425_472, 69_632, 589_824)], [35, 24, 29])
+        # a KDA state is read as three conv projections and the recurrent state
+        self.assertEqual(len(parts), 35 * 4)
+        self.assertEqual([size for _, size in parts[:4]], [10_752, 10_752, 10_752, 393_216])
+        self.assertEqual(sum(size for _, size in parts[:4]), 425_472)
+        self.assertEqual((10_752 * 3, 393_216), (32_256, 393_216))
+        # the attention pages tile the row from byte 0; the row is padded to its stride
+        attention = sorted(regions[35:])
+        self.assertEqual(attention[0][0], 0)
+        for (offset, size), (following, _) in zip(attention, attention[1:]):
+            self.assertEqual(offset + size, following)
+        self.assertEqual(sum(size for _, size in attention), 18_776_064)
+        self.assertEqual(kv_workload.PRESETS["k31"]["row_bytes"], 18_800_640)
+
+    def test_a_request_moves_every_prompt_block_and_one_state_block_per_kda_group(self):
+        # descs = 53 B + 276 and bytes = 18,776,064 B + 29,357,568 for B = ceil((isl - 1) / 1024).
+        # The production run averaged 5,007 descriptors and 1.705 GB per rank at 91.5k new tokens.
+        for isl, blocks in ((2048, 2), (1025, 1), (1026, 2), (91_500, 90), (262_144, 256)):
+            with self.subTest(isl=isl):
+                cfg = kv_workload.plan_config("k31", "fp8", isl)
+                self.assertEqual([g["blocks"] for g in cfg["groups"]], [blocks, 1, 1])
+                self.assertEqual(cfg["descs"], blocks + 2)  # rows per request
+                self.assertEqual(cfg["req_bytes"], 18_776_064 * blocks + 29_357_568)
+                rows = kv_workload.block_table(cfg, 5)
+                local, remote, sizes = kv_workload.nixl_entries(cfg, rows, rows[::-1])
+                self.assertEqual((len(sizes), int(sizes.sum())),
+                                 (53 * blocks + 276, cfg["req_bytes"]))
+
+    def test_entries_sit_in_their_own_rows_and_never_overlap(self):
+        cfg = kv_workload.plan_config("k31", "fp8", 4096)
+        local_rows = kv_workload.block_table(cfg, 5)
+        remote_rows = kv_workload.block_table(cfg, 6)
+        local, remote, sizes = kv_workload.nixl_entries(cfg, local_rows, remote_rows)
+        row = cfg["row_bytes"]
+        # attention blocks first (53 pages each), then kda-a's 35 x 4 parts, then kda-b's 34 x 4
+        owners = [*np.repeat(np.arange(4), 53), *[4] * 140, *[5] * 136]
+        self.assertEqual((local // row).tolist(), local_rows[owners].tolist())
+        self.assertEqual((remote // row).tolist(), remote_rows[owners].tolist())
+        np.testing.assert_array_equal(local % row, remote % row)
+        spans = sorted(zip(local.tolist(), sizes.tolist()))
+        for (start, size), (following, _) in zip(spans, spans[1:]):
+            self.assertLessEqual(start + size, following)
+        self.assertTrue((sizes % 8 == 0).all() and (local % 8 == 0).all())
+
+    def test_mooncake_has_no_plan_for_it(self):
+        with self.assertRaises(ValueError):
+            kv_workload.mooncake_regions("k31")
 
 
 class Tables(unittest.TestCase):

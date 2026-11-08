@@ -120,54 +120,58 @@ def _invalid_banner(documents: list[dict]) -> list[str]:
             "the leg fails; see the outcome column below.", ""]
 
 
-def _kv_cell(rows: list[dict], kind: str, op: str, batch: str = "min"):
-    """(GB/s, p50 ms, batch) of a (kind, op) family's largest-ISL row -- the
-    bandwidth-bound point -- at its smallest or largest measured batch."""
-    matching = [r for r in rows if r.get("kind") == kind and r.get("op") == op]
-    if not matching:
-        return "-", "-", "-"
-    isl = max(r["isl"] for r in matching)
-    pick = min if batch == "min" else max
-    row = pick((r for r in matching if r["isl"] == isl), key=lambda r: r["batch"])
-    return row["gbps_p50"], row["latency_ms"]["p50"], row["batch"]
+def _kv_rows(rows: list[dict], kind: str, op: str) -> list[dict]:
+    """A (kind, op) family's one-request-per-burst rows that measured, by ISL."""
+    return sorted((r for r in rows if r.get("kind") == kind and r.get("op") == op
+                   and r.get("batch") == 1 and r.get("latency_ms")), key=lambda r: r["isl"])
 
 
 def render_kv(documents: list[dict]) -> str:
-    """kv-transfer table: paged bandwidth at the bandwidth-bound ISL plus the contiguous
-    baseline and the paged latency, with the fields that tell rows apart (network, the
-    library's transport and version, the largest batch the point actually ran)."""
+    """kv-transfer table: what one request waits for its KV at each prompt length (every TP
+    rank pair of the node transferring at once), then, at the largest prompt, each rank's
+    bandwidth and how much of the node's NIC line rate and of the one-descriptor baseline the
+    request reached."""
     def key(document):
         factors = document["identity"]["case_factors"]
         case = factors["case"]
         return factors["sku"], case["backend"], case["mode"], case["workload"], case["precision"]
 
+    def cell(value):
+        return "-" if value is None else value
+
     lines = ["## CollectiveX KV-transfer results", "", *_invalid_banner(documents),
              "| ver | sku | backend | version | fabric | network | transport | workload "
-             "| outcome | op | paged GB/s b1 | paged GB/s bmax | contig GB/s | paged ms b1 |",
-             "|--:|---|---|---|---|---|---|---|---|---|--:|--:|--:|--:|"]
+             "| rank pairs | outcome | op | ms per request by ISL | GB/s per rank "
+             "| % line rate | % of contig |",
+             "|--:|---|---|---|---|---|---|---|--:|---|---|---|--:|--:|--:|"]
     for document in sorted(documents, key=key):
         sku, backend, fabric, workload, _precision = key(document)
         rows = document["measurement"]["rows"]
         implementation = document.get("implementation") or {}
-        network = (document.get("topology") or {}).get("network") or "-"
-        # Cells read the pull lane when measured, else the push lane (vLLM's Mooncake
-        # connector only pushes); the op column names which lane the numbers come from.
+        topology = document.get("topology") or {}
+        # Cells read the pull lane (vLLM's default) when measured, else the push lane; the op
+        # column names which lane the numbers come from.
         op = next((candidate for candidate in ("pull", "push")
-                   if _kv_cell(rows, "paged", candidate)[0] != "-"), "pull")
-        paged_gbps, paged_ms, _ = _kv_cell(rows, "paged", op)
-        bmax_gbps, _, bmax = _kv_cell(rows, "paged", op, batch="max")
-        bulk_gbps, _, _ = _kv_cell(rows, "bulk", op)
+                   if _kv_rows(rows, "paged", candidate)), "pull")
+        paged, bulk = _kv_rows(rows, "paged", op), _kv_rows(rows, "bulk", op)
+        by_isl = " / ".join(f"{r['isl'] // 1024}k: {r['latency_ms']['p50']}" for r in paged) or "-"
+        top = paged[-1] if paged else {}
+        contig = next((r for r in bulk if r["isl"] == top.get("isl")), None)
+        of_contig = (round(100 * top["gbps_p50"] / contig["gbps_p50"])
+                     if contig and contig.get("gbps_p50") else None)
         lines.append(
             f"| {document['version']} | {sku} | `{backend}` | "
-            f"{implementation.get('library_version') or '-'} | {fabric} | {network} | "
-            f"{implementation.get('transport') or '-'} | {workload} | "
-            f"{document['outcome']['status']} | {op} | {paged_gbps} | "
-            f"{bmax_gbps} @b{bmax} | {bulk_gbps} | {paged_ms} |"
+            f"{implementation.get('library_version') or '-'} | {fabric} | "
+            f"{topology.get('network') or '-'} | {implementation.get('transport') or '-'} | "
+            f"{workload} | {cell(topology.get('pairs'))} | {document['outcome']['status']} | "
+            f"{op} | {by_isl} | {cell(top.get('gbps_rank_p50', top.get('gbps_p50')))} | "
+            f"{cell(top.get('line_rate_pct'))} | {cell(of_contig)} |"
         )
     lines.append(
-        "\n> Largest ISL; b1 = one request per burst, bmax @bN = the largest batch under the "
-        "burst-token cap; contig = the same bytes as one descriptor. One GPU pair in isolation; "
-        "see docs/kv-transfer.md."
+        "\n> One request per burst, p50. ms per request = until the slowest rank pair's transfer "
+        "lands. The last three columns are at the largest ISL: one rank's GB/s, the node's "
+        "share of its NICs' negotiated rate, and the request's GB/s against the same bytes as "
+        "one descriptor per rank. See docs/kv-transfer.md."
     )
     return "\n".join(lines)
 

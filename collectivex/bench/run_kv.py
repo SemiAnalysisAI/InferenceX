@@ -107,12 +107,13 @@ def exchange_verdict(dist, role, verify_side, verify, error: str = "", world_siz
 
 
 def time_bursts(build, warmup: int, reps: int, settle, rep0: int = 0,
-                gate=None) -> tuple[list[float], list[float]]:
+                gate=None, library: list | None = None) -> tuple[list[float], list[float]]:
     """(burst_ms, request_ms), warmups dropped. ``build(rep)`` runs untimed; a burst
     posts every request, then drains the waits in posting order, so each request's
     completion mark is an upper bound and the burst is its last mark. ``gate`` (a
     cross-rank barrier) releases every initiator's burst together; it is passed for
-    every rep even after a failure, so the ranks' barrier counts stay equal."""
+    every rep even after a failure, so the ranks' barrier counts stay equal. What
+    ``settle`` returns (the library's own per-transfer timings) joins ``library``."""
     burst_ms: list[float] = []
     request_ms: list[float] = []
     failure = None
@@ -135,13 +136,15 @@ def time_bursts(build, warmup: int, reps: int, settle, rep0: int = 0,
             for _, wait in transfers:
                 wait()
                 marks.append((time.perf_counter() - start) * 1e3)
-            settle()
+            timings = settle()
         except Exception as exc:  # noqa: BLE001
             failure = exc
             continue
         if rep >= warmup:
             burst_ms.append(marks[-1])
             request_ms.extend(marks)
+            if library is not None and timings:
+                library.extend(timings)
     if failure is not None:
         raise failure
     return burst_ms, request_ms
@@ -336,6 +339,7 @@ def main() -> int:
         verify_side = "initiator" if op == "pull" else "target"
         samples: list[float] = []
         request_samples: list[float] = []
+        library_samples: list[tuple[float, float]] = []
         verdict = {"passed": True, "detail": ""}
         rep, error = 0, ""
         # With other table sets to write, an untimed burst follows the wipe so the
@@ -350,7 +354,7 @@ def main() -> int:
                 return
             try:
                 burst_ms, request_ms = time_bursts(build, warmup, reps, backend.release, rep,
-                                                   gate=dist.barrier)
+                                                   gate=dist.barrier, library=library_samples)
             except Exception as exc:  # noqa: BLE001 - reported through the verdict
                 error = f"transfer raised {exc!r}"
                 return
@@ -376,12 +380,14 @@ def main() -> int:
         repaint()
         gathered = [None] * world_size
         dist.all_gather_object(
-            gathered, (samples, request_samples) if role == "initiator" else None)
+            gathered,
+            (samples, request_samples, library_samples) if role == "initiator" else None)
         if rank != lead:
             return None
         row = {**cfg_row, "op": op, "pairs": pairs, "latency_ms": None, "rank_ms": None,
-               "request_ms": None, "gbps_p50": None, "gbps_rank_p50": None,
-               "line_rate_pct": None, "verify": verdict}
+               "request_ms": None, "library_xfer_ms": None, "library_post_ms": None,
+               "gbps_p50": None, "gbps_rank_p50": None, "line_rate_pct": None,
+               "verify": verdict}
         per_rank = [g[0] for g in gathered[pairs:]]
         if not per_rank[0] or len({len(v) for v in per_rank}) != 1:
             return row  # a burst failed somewhere; the verdict says why
@@ -401,6 +407,13 @@ def main() -> int:
         requests = [ms for g in gathered[pairs:] for ms in g[1]]
         if len(requests) == len(per_rank[0]) * pairs * cfg_row["batch"]:
             row["request_ms"] = {k: round(v, 3) for k, v in kv_workload.pcts(requests).items()}
+        # The library's own duration of each transfer (NIXL telemetry), the statistic vLLM
+        # exports from production; None where the library reports none.
+        timings = [pair for g in gathered[pairs:] for pair in g[2]]
+        if timings:
+            for name, column in (("library_xfer_ms", 0), ("library_post_ms", 1)):
+                row[name] = {k: round(v, 3) for k, v in
+                             kv_workload.pcts([pair[column] for pair in timings]).items()}
         return row
 
     for cfg, allowed in points:

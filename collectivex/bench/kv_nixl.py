@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import time
 
 import numpy as np
 
@@ -30,6 +31,11 @@ class NIXLBackend:
         else:
             config = nixl_agent_config(backends=[plugin], capture_telemetry=True)
         self._agent = nixl_agent(f"{role}-{rank}", config)
+        # vLLM checks a transfer once per engine step; 0 polls continuously (the library's own
+        # completion time). COLLX_KV_POLL_MS sets a step-like interval for comparison runs.
+        self._poll_s = float(os.environ.get("COLLX_KV_POLL_MS") or 0) / 1e3
+        self.library_config["poll_ms"] = self._poll_s * 1e3
+        self._telemetry: list[tuple[float, float]] = []
         self._handles = []
         self._pool = self._bulk = self._peer = None
         self._local_rows = self._remote_rows = None
@@ -95,9 +101,15 @@ class NIXLBackend:
             while True:
                 state = agent.check_xfer_state(h)
                 if state == "DONE":
+                    # NIXL's own timing of this transfer, the figures vLLM exports as
+                    # vllm:nixl_xfer_time_seconds and vllm:nixl_post_time_seconds.
+                    stats = agent.get_xfer_telemetry(h)
+                    self._telemetry.append((stats.xferDuration / 1e3, stats.postDuration / 1e3))
                     return
                 if state == "ERR":
                     raise RuntimeError("nixl transfer errored")
+                if self._poll_s:
+                    time.sleep(self._poll_s)
 
         return post, wait
 
@@ -128,13 +140,16 @@ class NIXLBackend:
             xfer, agent.get_xfer_descs(local_np, mem_type="cuda"),
             agent.get_xfer_descs(remote_np, mem_type="cuda"), self._remote_name))
 
-    def release(self) -> None:
+    def release(self) -> list[tuple[float, float]]:
+        """Release the burst's handles; returns its transfers' (xfer ms, post ms) as NIXL timed them."""
+        telemetry, self._telemetry = self._telemetry, []
         for handle in self._handles:
             try:
                 self._agent.release_xfer_handle(handle)
             except Exception:
                 pass
         self._handles.clear()
+        return telemetry
 
     def teardown(self) -> None:
         self.release()
