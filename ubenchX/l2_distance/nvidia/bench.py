@@ -12,8 +12,8 @@ Paste the CSV into ``results/`` by hand.
 Requirements: CUDA toolkit (nvcc) with cooperative-groups support.
 
 Usage:
-    python ubenchX/sm_l2_distance/bench.py          # auto-detect arch
-    python ubenchX/sm_l2_distance/bench.py --arch sm_100a --num-sms 148
+    python ubenchX/l2_distance/nvidia/bench.py          # auto-detect arch
+    python ubenchX/l2_distance/nvidia/bench.py --arch sm_100a --num-sms 148
 
 Ported from SemiAnalysisAI/microbench-blackwell (sm_l2_distance/).
 """
