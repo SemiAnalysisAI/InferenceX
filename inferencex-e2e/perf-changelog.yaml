@@ -12440,3 +12440,14 @@
     - "Enable ReplaySSM speculative verification, cap server admission and decode graphs at 32, and pin breakable prefill graphs to 8192 tokens with static memory fraction 0.9."
     - "Add GPU-resident client concurrency 64 while preserving the TP8 HiCache points, full AgentX workload, measured MTP acceptance, and simulation-off accuracy evaluation."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4902
+
+- config-keys:
+    - glm5.3flash-fp8-b300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  append-only: true
+  description:
+    - "Add B300 GLM-5.3-Flash FP8 AgentX TP8 concurrency 52 with KV offloading disabled and with HiCache enabled, plus TP4 HiCache concurrency 52 and 64."
+    - "Preserve all existing points, the pinned image, measured MTP acceptance, and full AgentX workload; TP4 HiCache retains the tuned TP4 server settings and 32-request admission cap."
+    - "Set the new TP4 HiCache host-memory fraction to 0.50; retain the existing GPU-proportional DRAM reporting."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4912

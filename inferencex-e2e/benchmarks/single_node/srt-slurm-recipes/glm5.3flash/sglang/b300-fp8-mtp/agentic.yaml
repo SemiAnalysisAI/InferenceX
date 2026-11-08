@@ -51,7 +51,7 @@ override_none:
   roles:
     agg:
       gpus: 4
-      args:
+      args: &tp4_tuned_args
         tensor-parallel-size: 4
         enable-linear-replayssm-spec: true
         max-running-requests: 32
@@ -82,6 +82,29 @@ override_dram:
         hicache-host-memory-fraction: 0.76
         # SGLang resets admission to 48 under EAGLE when unset; 96 is the measured-safe cap.
         max-running-requests: 96
+  benchmark:
+    env:
+      KV_OFFLOADING: dram
+
+override_tp8_none:
+  roles:
+    agg:
+      args:
+        # Match TP8 HiCache admission for the cache-OFF comparison.
+        max-running-requests: 96
+  benchmark:
+    env:
+      KV_OFFLOADING: none
+
+override_tp4_dram:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        <<: *tp4_tuned_args
+        enable-hierarchical-cache: true
+        # Cap the combined TP4 host pools at 50% of available host memory.
+        hicache-host-memory-fraction: 0.50
   benchmark:
     env:
       KV_OFFLOADING: dram
