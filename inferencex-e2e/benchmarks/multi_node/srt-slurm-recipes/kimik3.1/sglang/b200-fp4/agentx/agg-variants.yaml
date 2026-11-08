@@ -91,6 +91,13 @@ override_tp16_c4:
         max-running-requests: 8
         cuda-graph-max-bs-decode: 8
 
+override_tp16_c2:
+  roles:
+    agg:
+      args:
+        max-running-requests: 4
+        cuda-graph-max-bs-decode: 4
+
 override_tp16_c8:
   roles:
     agg:
