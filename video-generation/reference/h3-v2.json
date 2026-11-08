@@ -1,0 +1,292 @@
+{
+  "schema_version": 1,
+  "spec": "specs/h3-v2.yaml",
+  "set": "release-v1",
+  "release": {
+    "repository": "SemiAnalysisAI/InferenceX",
+    "tag": "h3-v2-release-v1-references"
+  },
+  "requirements_lock_sha256": "0e79ab689f0b5285b0cd2a5b4dbb26fce396eb8fdbf599046e5a479cca675988",
+  "model_id": "MiniMaxAI/MiniMax-H3",
+  "model_revision": "42ed227ee7df40d41602854ae760620d6eb651fe",
+  "generation": {
+    "aspect_ratio": "16:9",
+    "audio_channels": 2,
+    "audio_flow_shift": 3.0,
+    "audio_sample_rate_hz": 32000,
+    "duration_seconds": 5,
+    "flow_shift": 12.0,
+    "fps": 24,
+    "frame_count": 124,
+    "height": 768,
+    "num_inference_steps": 49,
+    "width": 1344
+  },
+  "fairness": {
+    "schedule": {
+      "sigma_points": 50,
+      "denoising_updates": 49,
+      "video_flow_shift": 12.0,
+      "audio_flow_shift": 3.0
+    },
+    "encoding": {
+      "video_codec": "libx264",
+      "preset": "ultrafast",
+      "crf": 18,
+      "pixel_format": "yuv420p",
+      "audio_codec": "aac",
+      "audio_sample_rate_hz": 32000,
+      "audio_channels": 2
+    },
+    "conditioning_cache": "disabled_across_requests",
+    "reference_identity": {
+      "implementation": "official-diffusers-t2va",
+      "minimax_code_revision": "199b7d0e1fd95e7b3eafa8c15eca692534142427",
+      "diffusers_revision": "d8c1b13c756df0059bcdb6e477a1eafcd502098d",
+      "model_revision": "42ed227ee7df40d41602854ae760620d6eb651fe",
+      "rng_policy": "cpu_generator_float32_video_then_audio"
+    }
+  },
+  "cases": [
+    {
+      "case_id": "ceramic-wheel",
+      "prompt": "A single continuous shot of a potter shaping a wet clay bowl on a spinning wheel. The action is visible and the wheel humming and wet hands brushing clay is audible. Fixed camera, no speech, music, subtitles, or cuts.",
+      "seed": 11,
+      "requires_motion": true,
+      "requires_sound": true,
+      "asset": "ceramic-wheel.mp4",
+      "sha256": "a4ac6f7f3679810e8c9c8533eaddec4d6a11e5a20010ca63931c2035929768aa",
+      "bytes": 6524325,
+      "receipt_sha256": "e1b67fe6c603c3e9989bcb77186b27eb71d589bbe58a1cccca8d06b96a11af72",
+      "plan_sha256": "5367da02081a442259f29cc224f99a43171c7436842a915d098eb11110f19ec7"
+    },
+    {
+      "case_id": "paper-fold",
+      "prompt": "A single continuous shot of hands folding a blue sheet into a paper crane. The action is visible and the paper creasing is audible. Fixed camera, no speech, music, subtitles, or cuts.",
+      "seed": 23,
+      "requires_motion": true,
+      "requires_sound": true,
+      "asset": "paper-fold.mp4",
+      "sha256": "6b4b38d57d35f927585b1589c07fc999a7b8d7552d02a7dc5e68e16d92a6ffe8",
+      "bytes": 6273811,
+      "receipt_sha256": "c19249ae7a8e58e3d6a13427d302d51f3b939f63c9ce92c03bf91a9ad07b504b",
+      "plan_sha256": "fbfa03afd18e998e1e488aa3417a0bce09dc15e36a427eb578fced0444a99c34"
+    },
+    {
+      "case_id": "wind-chimes",
+      "prompt": "A single continuous shot of three metal wind chimes swinging on a porch. The action is visible and the chimes ringing is audible. Fixed camera, no speech, music, subtitles, or cuts.",
+      "seed": 29,
+      "requires_motion": true,
+      "requires_sound": true,
+      "asset": "wind-chimes.mp4",
+      "sha256": "0a495d81498618f7bfb6e3c3c54a096a407c2c447119ff2182f7fa4c19488dd7",
+      "bytes": 2268482,
+      "receipt_sha256": "70013af0bc288ccf2f654c24192b93c72e4b0e0ab3c662a3fe3d4f9cf809a1e8",
+      "plan_sha256": "fbfa03afd18e998e1e488aa3417a0bce09dc15e36a427eb578fced0444a99c34"
+    },
+    {
+      "case_id": "coffee-grinder",
+      "prompt": "A single continuous shot of a manual coffee grinder turning beside a cup. The action is visible and the grinder rattling is audible. Fixed camera, no speech, music, subtitles, or cuts.",
+      "seed": 47,
+      "requires_motion": true,
+      "requires_sound": true,
+      "asset": "coffee-grinder.mp4",
+      "sha256": "1981ac0affbdbc9a468243f060cd47a37933e2c0401025208ca7f60985247902",
+      "bytes": 3117900,
+      "receipt_sha256": "b84002bd21555e37dc5d352929aed2d6530ccba3ba3e418d982489570ed927fc",
+      "plan_sha256": "fbfa03afd18e998e1e488aa3417a0bce09dc15e36a427eb578fced0444a99c34"
+    },
+    {
+      "case_id": "dog-shake",
+      "prompt": "A single continuous shot of a wet dog shaking water from its fur in a yard. The action is visible and the collar jingling is audible. Fixed camera, no speech, music, subtitles, or cuts.",
+      "seed": 83,
+      "requires_motion": true,
+      "requires_sound": true,
+      "asset": "dog-shake.mp4",
+      "sha256": "b8498affae61218c2a6e3a3e247fb52ce59d2f2c804110d069d01ca78b56dd0d",
+      "bytes": 6942495,
+      "receipt_sha256": "84e22ba809cbffd675588cb154d8a65595ddef181a8a486bbbf46f32796c8517",
+      "plan_sha256": "fbfa03afd18e998e1e488aa3417a0bce09dc15e36a427eb578fced0444a99c34"
+    },
+    {
+      "case_id": "zipper-close",
+      "prompt": "A single continuous shot of a hand closing a zipper on a red canvas bag. The action is visible and the zipper sliding is audible. Fixed camera, no speech, music, subtitles, or cuts.",
+      "seed": 11,
+      "requires_motion": true,
+      "requires_sound": true,
+      "asset": "zipper-close.mp4",
+      "sha256": "360d107e12e5ad7100879436ebf6d77bdd52f32a195239a0c274f24fa2536f94",
+      "bytes": 9307366,
+      "receipt_sha256": "0da87381bab9cce250f41447b66d50c035ac0f70830b4afc26f9c8b8a378e8db",
+      "plan_sha256": "fbfa03afd18e998e1e488aa3417a0bce09dc15e36a427eb578fced0444a99c34"
+    },
+    {
+      "case_id": "rolling-ball",
+      "prompt": "A single continuous shot of a glass ball rolling across a wooden table and stopping at a book. The action is visible and the ball tapping the book is audible. Fixed camera, no speech, music, subtitles, or cuts.",
+      "seed": 23,
+      "requires_motion": true,
+      "requires_sound": true,
+      "asset": "rolling-ball.mp4",
+      "sha256": "489adada3e8d917a7e61ed15f48b0dd5f59f721e9b7f542a7e32279540812d5e",
+      "bytes": 2096816,
+      "receipt_sha256": "281e9d8f742b82466980b2cab267e1aec6910d968bdfa59dd160834676efadee",
+      "plan_sha256": "fbfa03afd18e998e1e488aa3417a0bce09dc15e36a427eb578fced0444a99c34"
+    },
+    {
+      "case_id": "paint-brush",
+      "prompt": "A single continuous shot of a brush painting a yellow stroke across white paper. The action is visible and the brush rubbing the paper is audible. Fixed camera, no speech, music, subtitles, or cuts.",
+      "seed": 29,
+      "requires_motion": true,
+      "requires_sound": true,
+      "asset": "paint-brush.mp4",
+      "sha256": "bb3e58bd2d0be83b044438f2abb994e04aa09bcff4594bfb13c9e7dd1de7292b",
+      "bytes": 4608981,
+      "receipt_sha256": "c19249ae7a8e58e3d6a13427d302d51f3b939f63c9ce92c03bf91a9ad07b504b",
+      "plan_sha256": "fbfa03afd18e998e1e488aa3417a0bce09dc15e36a427eb578fced0444a99c34"
+    },
+    {
+      "case_id": "kettle-pour",
+      "prompt": "A single continuous shot of a kettle pouring hot water into a mug. The action is visible and the water splashing is audible. Fixed camera, no speech, music, subtitles, or cuts.",
+      "seed": 47,
+      "requires_motion": true,
+      "requires_sound": true,
+      "asset": "kettle-pour.mp4",
+      "sha256": "768e016c9c72b642367fba490d4c5a0f1192aa787a46823509a2ba1802216773",
+      "bytes": 2355142,
+      "receipt_sha256": "70013af0bc288ccf2f654c24192b93c72e4b0e0ab3c662a3fe3d4f9cf809a1e8",
+      "plan_sha256": "fbfa03afd18e998e1e488aa3417a0bce09dc15e36a427eb578fced0444a99c34"
+    },
+    {
+      "case_id": "candle-light",
+      "prompt": "A single continuous shot of a match lighting a candle wick. The action is visible and the match striking is audible. Fixed camera, no speech, music, subtitles, or cuts.",
+      "seed": 83,
+      "requires_motion": true,
+      "requires_sound": true,
+      "asset": "candle-light.mp4",
+      "sha256": "9f20d3ec52b24818e931ff9c57a35bff361a1d781c2eeb0095111bb4a2a34443",
+      "bytes": 2733338,
+      "receipt_sha256": "b84002bd21555e37dc5d352929aed2d6530ccba3ba3e418d982489570ed927fc",
+      "plan_sha256": "fbfa03afd18e998e1e488aa3417a0bce09dc15e36a427eb578fced0444a99c34"
+    },
+    {
+      "case_id": "book-pages",
+      "prompt": "A single continuous shot of a hand turning three pages of a book. The action is visible and the pages rustling is audible. Fixed camera, no speech, music, subtitles, or cuts.",
+      "seed": 11,
+      "requires_motion": true,
+      "requires_sound": true,
+      "asset": "book-pages.mp4",
+      "sha256": "af5272bb0aaa4989e0ada1a8321b8f5b6b5192b719bc0729da428ef4765e6d2d",
+      "bytes": 6493490,
+      "receipt_sha256": "84e22ba809cbffd675588cb154d8a65595ddef181a8a486bbbf46f32796c8517",
+      "plan_sha256": "fbfa03afd18e998e1e488aa3417a0bce09dc15e36a427eb578fced0444a99c34"
+    },
+    {
+      "case_id": "basketball-bounce",
+      "prompt": "A single continuous shot of a basketball bouncing three times on an empty court. The action is visible and each ball bounce is audible. Fixed camera, no speech, music, subtitles, or cuts.",
+      "seed": 23,
+      "requires_motion": true,
+      "requires_sound": true,
+      "asset": "basketball-bounce.mp4",
+      "sha256": "20f5b88911fb5c8ac64bdc312f1bcc667f6d706be0663471b9cab0904bc8a1e0",
+      "bytes": 3008554,
+      "receipt_sha256": "0da87381bab9cce250f41447b66d50c035ac0f70830b4afc26f9c8b8a378e8db",
+      "plan_sha256": "fbfa03afd18e998e1e488aa3417a0bce09dc15e36a427eb578fced0444a99c34"
+    },
+    {
+      "case_id": "window-rain",
+      "prompt": "A single continuous shot of raindrops sliding down a window. The action is visible and the light rain pattering is audible. Fixed camera, no speech, music, subtitles, or cuts.",
+      "seed": 29,
+      "requires_motion": true,
+      "requires_sound": true,
+      "asset": "window-rain.mp4",
+      "sha256": "a21af9d365445264a207590e3af8adeb23b549961868217eb14dd23288254e80",
+      "bytes": 2245929,
+      "receipt_sha256": "281e9d8f742b82466980b2cab267e1aec6910d968bdfa59dd160834676efadee",
+      "plan_sha256": "fbfa03afd18e998e1e488aa3417a0bce09dc15e36a427eb578fced0444a99c34"
+    },
+    {
+      "case_id": "leaves-rake",
+      "prompt": "A single continuous shot of a gardener raking dry leaves into a pile. The action is visible and the leaves scraping is audible. Fixed camera, no speech, music, subtitles, or cuts.",
+      "seed": 47,
+      "requires_motion": true,
+      "requires_sound": true,
+      "asset": "leaves-rake.mp4",
+      "sha256": "4e9f84c7ea79db5c1ce6458ebaf98f56a189edaf4475264aab9609451aaec416",
+      "bytes": 8139094,
+      "receipt_sha256": "c19249ae7a8e58e3d6a13427d302d51f3b939f63c9ce92c03bf91a9ad07b504b",
+      "plan_sha256": "fbfa03afd18e998e1e488aa3417a0bce09dc15e36a427eb578fced0444a99c34"
+    },
+    {
+      "case_id": "sewing-machine",
+      "prompt": "A single continuous shot of a sewing machine stitching blue fabric. The action is visible and the motor cycling is audible. Fixed camera, no speech, music, subtitles, or cuts.",
+      "seed": 83,
+      "requires_motion": true,
+      "requires_sound": true,
+      "asset": "sewing-machine.mp4",
+      "sha256": "c07bdf97a2e113eb43daa4f0591a6bc9f6f4b007e5f615178efc7efa90ece7e9",
+      "bytes": 5808216,
+      "receipt_sha256": "70013af0bc288ccf2f654c24192b93c72e4b0e0ab3c662a3fe3d4f9cf809a1e8",
+      "plan_sha256": "fbfa03afd18e998e1e488aa3417a0bce09dc15e36a427eb578fced0444a99c34"
+    },
+    {
+      "case_id": "ping-pong",
+      "prompt": "A single continuous shot of two players exchanging three ping-pong hits. The action is visible and each ball contact is audible. Fixed camera, no speech, music, subtitles, or cuts.",
+      "seed": 11,
+      "requires_motion": true,
+      "requires_sound": true,
+      "asset": "ping-pong.mp4",
+      "sha256": "cd77ad512940a53d3754dc4a72e24f9c2dc61750f56f3aac5ad9a0c9b21c05ab",
+      "bytes": 7919977,
+      "receipt_sha256": "b84002bd21555e37dc5d352929aed2d6530ccba3ba3e418d982489570ed927fc",
+      "plan_sha256": "fbfa03afd18e998e1e488aa3417a0bce09dc15e36a427eb578fced0444a99c34"
+    },
+    {
+      "case_id": "umbrella-open",
+      "prompt": "A single continuous shot of a person opening a folded umbrella on a dry patio. The action is visible and the release clicking is audible. Fixed camera, no speech, music, subtitles, or cuts.",
+      "seed": 23,
+      "requires_motion": true,
+      "requires_sound": true,
+      "asset": "umbrella-open.mp4",
+      "sha256": "586bcde9312aa3c08182857193a49bd6b69e55cf0fb5a4ef680b6f2610972781",
+      "bytes": 4562676,
+      "receipt_sha256": "84e22ba809cbffd675588cb154d8a65595ddef181a8a486bbbf46f32796c8517",
+      "plan_sha256": "fbfa03afd18e998e1e488aa3417a0bce09dc15e36a427eb578fced0444a99c34"
+    },
+    {
+      "case_id": "shoe-laces",
+      "prompt": "A single continuous shot of hands tying the laces of a running shoe. The action is visible and the laces rubbing is audible. Fixed camera, no speech, music, subtitles, or cuts.",
+      "seed": 29,
+      "requires_motion": true,
+      "requires_sound": true,
+      "asset": "shoe-laces.mp4",
+      "sha256": "ff75ad4932b34f8c3f6cf6c53611dca90fac802373b633e196c0dd461d57ca73",
+      "bytes": 6691641,
+      "receipt_sha256": "0da87381bab9cce250f41447b66d50c035ac0f70830b4afc26f9c8b8a378e8db",
+      "plan_sha256": "fbfa03afd18e998e1e488aa3417a0bce09dc15e36a427eb578fced0444a99c34"
+    },
+    {
+      "case_id": "ice-cubes",
+      "prompt": "A single continuous shot of three ice cubes dropping into a clear glass. The action is visible and the cubes clinking is audible. Fixed camera, no speech, music, subtitles, or cuts.",
+      "seed": 47,
+      "requires_motion": true,
+      "requires_sound": true,
+      "asset": "ice-cubes.mp4",
+      "sha256": "e5fad0b9023eb0bed3e7670fa156e1858116a0db7c695863cb16be3301f8a3b5",
+      "bytes": 3997428,
+      "receipt_sha256": "281e9d8f742b82466980b2cab267e1aec6910d968bdfa59dd160834676efadee",
+      "plan_sha256": "fbfa03afd18e998e1e488aa3417a0bce09dc15e36a427eb578fced0444a99c34"
+    },
+    {
+      "case_id": "station-clock",
+      "prompt": "A single continuous shot of an analog clock with a moving second hand. The action is visible and the clock ticking is audible. Fixed camera, no speech, music, subtitles, or cuts.",
+      "seed": 83,
+      "requires_motion": false,
+      "requires_sound": true,
+      "asset": "station-clock.mp4",
+      "sha256": "3e6361b1cd3f665d83bae129098ea6ecdddb72a1cd0e65f05b115bb496059554",
+      "bytes": 2492095,
+      "receipt_sha256": "c19249ae7a8e58e3d6a13427d302d51f3b939f63c9ce92c03bf91a9ad07b504b",
+      "plan_sha256": "fbfa03afd18e998e1e488aa3417a0bce09dc15e36a427eb578fced0444a99c34"
+    }
+  ]
+}
