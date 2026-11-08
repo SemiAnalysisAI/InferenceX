@@ -6,7 +6,7 @@ base:
     gpus_per_node: 8
   frontend:
     type: atomesh
-    container_image: rocm/atom-dev@sha256:e01f202b325049d3674c588273ff0000f14bd5f757cb15cfac769e8aa6332dec
+    container_image: rocm/atom-dev@sha256:90cd052b6a2d1f818f543cb2e275d6bff1a0e2d41cfc3b5431b6837a2fdba3e7
     enable_multiple_frontends: false
   observability:
     enabled: false
@@ -62,7 +62,7 @@ base:
 # running decode instead of interleaving with it, and max-num-seqs 2 (DSpark's
 # block-drafter warmup needs two sequences) with decode graphs at 1 and 2.
 # From concurrency 2 to 32 the delayer runs a decode interval that shrinks as
-# the load grows (192 through c8, 96 at c16, 30 at c32), so a new prefill
+# the load grows (192 through c8, 96 at c16, 40 at c32), so a new prefill
 # does not stall the running decodes, at a small TTFT cost.
 
 override_tp2_c1:
@@ -107,7 +107,7 @@ override_tp2_c32:
       gpus: 2
       env:
         ATOM_ENABLE_PREFILL_DELAYER: '1'
-        ATOM_PREFILL_DECODE_INTERVAL: '30'
+        ATOM_PREFILL_DECODE_INTERVAL: '40'
   benchmark:
     env:
       CONC: '32'
