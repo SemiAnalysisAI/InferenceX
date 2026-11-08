@@ -34,6 +34,7 @@ from typing import Any
 
 from specs.video_spec import canonical_json_bytes, schema_version
 
+from .media import X264_PRESET_OPTIONS
 from .serving import settings as serving_settings, summarize as serving_summary
 
 
@@ -184,6 +185,10 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
             or type(encoding.get("crf")) is not int
         ):
             raise ValueError("schema 2 plans must request fairness.encoding preset and integer crf")
+        if encoding["preset"] not in X264_PRESET_OPTIONS:
+            raise ValueError(
+                f"fairness.encoding preset {encoding['preset']} has no verifiable x264 options"
+            )
     generation = frozen.get("generation")
     if not isinstance(generation, dict):
         raise ValueError("generation must be an object with explicit controls")

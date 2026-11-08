@@ -24,7 +24,7 @@ SPECTRAL_WINDOW_SAMPLES = 1024
 # An MP4 records the codec family, not which encoder produced it.
 _DECODED_VIDEO_CODEC = {"libx264": "h264"}
 # Options a preset fixes in x264's SEI header. Tunes change none of them.
-_X264_PRESET_OPTIONS = {
+X264_PRESET_OPTIONS = {
     "ultrafast": {
         "cabac": "0",
         "ref": "1",
@@ -137,7 +137,7 @@ def _validate_expected(expected: dict) -> None:
                 "expected.encoding must name a known video encoder, a pixel format, and an audio codec"
             )
         if ("preset" in encoding or "crf" in encoding) and (
-            encoding.get("preset") not in _X264_PRESET_OPTIONS
+            encoding.get("preset") not in X264_PRESET_OPTIONS
             or isinstance(encoding.get("crf"), bool)
             or not isinstance(encoding.get("crf"), (int, float))
         ):
@@ -581,7 +581,7 @@ def analyze_media(path: Path, expected: dict | None = None) -> dict:
         )
         if "preset" in encoding:
             wanted = {
-                **_X264_PRESET_OPTIONS[encoding["preset"]],
+                **X264_PRESET_OPTIONS[encoding["preset"]],
                 "crf": f"{float(encoding['crf']):.1f}",
             }
             options = video.get("x264_options") or {}
