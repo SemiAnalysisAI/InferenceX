@@ -12481,3 +12481,10 @@
     - "Re-sweep Kimi-K3.1-Pro GB200 vLLM AgentX with the updated DSpark draft (Inferact/Kimi-K3.1-Pro-DSpark-preview @ 6a2ef20a) and the #4851 golden curve, so throughput forces AL 3.41 at 5 draft tokens and 3.19 at 4."
     - "Set VLLM_HTTP_TIMEOUT_KEEP_ALIVE to 600 s on the aggregated server so AIPerf's reused session connections outlive uvicorn's 5 s idle timeout."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4864
+
+- config-keys:
+    - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
+  description:
+    - "Rerun the unchanged FP8 config to collect GPU power, because its published curve (2026-10-21) predates default-on multinode power collection and carries no valid power."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4413
+  scenario-type: [agentic-coding]
