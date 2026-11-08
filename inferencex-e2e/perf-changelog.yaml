@@ -12478,4 +12478,4 @@
   description:
     - "Add H100 GLM-5.3-Flash FP8 TP8/EP8 8192-input/1024-output points at concurrency 1, 2, 4, 8, 16, 32 and 64 without speculative decoding or HiCache."
     - "Keep existing configurations unchanged and run fresh accuracy evals without speculation."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4926
