@@ -163,3 +163,9 @@
   backends: [flashinfer-ep]
   description:
     - Run flashinfer-ep EP8 on B200.
+- date: 2026-11-07
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4895
+  pools: [b300]
+  backends: [flashinfer-ep]
+  description:
+    - Run flashinfer-ep EP8 on B300.

@@ -12408,6 +12408,17 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4850
 
 - config-keys:
+    - dsv41flash-fp4-mi355x-tilert-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DeepSeek-V4.1-Flash FP4 AgentX on MI355X with a disaggregated TileRT setup at concurrency 1: one vLLM ROCm prefill (ghcr.io/tile-ai/tilert-rocm-prefill:0.1.7: the validated MI355X DeepSeek-V4.1-Flash vLLM nightly e68efc68 plus the multi-protocol Mooncake build and ionic verbs provider of the TileRT ROCm decode image; TP4, vLLM's Rust front end, CUDA graphs up to 8192-token steps) sends the prompt KV over Mooncake to one TileRT decode (ghcr.io/tile-ai/tilert-rocm-decode:0.1.6 with tilert 0.1.7.post2; TP8, five drafts from the checkpoint's own DSpark head) behind the TileRT PD router, with the full 1M context on both ranks and no context cap on the replay."
+    - "Throughput runs simulate the DeepSeek-V4.1-Flash DSpark golden AL at five drafts (3.51): a TileRT decode now takes its draft method from its model profile, and the dsv41 profile maps to dspark."
+    - "The TileRT router renders the chat template and tokenizes each request itself, so the prefill receives token ids: the model's chat template, adapted to render exactly what the prefill's vLLM deepseek_v41 tokenizer mode renders, ships as configs/dsv41flash-tilert-chat-template.jinja. tilert 0.1.7.post1 lets the router do so on the prefill's node; the prefill's flags match the other DeepSeek-V4.1-Flash configs."
+    - "tilert 0.1.7.post2 cuts the time to first token on long agentic contexts: the router asks the prefill for token ids per request (so the prefill runs vLLM's Rust front end) and reuses the token ids of the conversation prefix it has already rendered; the decode imports only the KV past the prefix it already holds from the previous turn, checked byte for byte against what it received then; the prefill stages the KV for the decode in a few vectorised copies."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4756
+
+- config-keys:
     - kimik3.1-fp4-mi355x-sglang-agentic-dflash
   scenario-type:
     - agentic-coding
@@ -12419,6 +12430,16 @@
     - "Add concurrency 56."
     - "Concurrency 8 to 56: SGLANG_HICACHE_MAMBA_HOST_RATIO 12 -> 10; the image's larger device pools grew the pinned host pools past the node's GTT (hipHostMalloc failed at concurrency 32)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4846
+
+- config-keys:
+    - glm5.3flash-fp8-b300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Tune B300 GLM-5.3-Flash FP8 GPU-resident AgentX with TP4, prefill-decode interval 1, 16K prefill chunks, a two-state Mamba path cap, and Mamba/full memory ratio 0.5."
+    - "Enable ReplaySSM speculative verification, cap server admission and decode graphs at 32, and pin breakable prefill graphs to 8192 tokens with static memory fraction 0.9."
+    - "Add GPU-resident client concurrency 64 while preserving the TP8 HiCache points, full AgentX workload, measured MTP acceptance, and simulation-off accuracy evaluation."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4902
 
 - config-keys:
     - qwen3.5-fp8-mi355x-sglang-agentic-mtp

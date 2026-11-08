@@ -32,7 +32,7 @@ library only. Details are under [Backends](#backends).
 | nccl-ep | production for in-domain zero-copy LL rank-major BF16; library otherwise | graph decode; prefill eager | TensorRT-LLM `NcclEP` with NVIDIA/TensorRT-LLM#20631; HT and FP8 (DS_FP8E3M4) are library rows |
 | uccl-ep | candidate | normal eager; LL graph | vLLM's DeepEP configuration on UCCL's drop-in `deep_ep`; no engine ships its selector |
 | mori | production | graph decode; eager prefill | vLLM's MoRI IntraNode / InterNodeV1, LL EP16 only |
-| flashinfer-ep | production | graph decode; eager prefill | vLLM's integration; EP8 on H100/H200/B200, EP8 and EP16 on GB200/GB300 |
+| flashinfer-ep | production | graph decode; eager prefill | vLLM's integration; EP8 on H100/H200/B200/B300, EP8 and EP16 on GB200/GB300 |
 
 ## Timing
 
@@ -194,7 +194,7 @@ and `do_expand=False` into a receive bounded at the next power of two of T, with
 prefill runs eager, as vLLM runs large prefill batches uncaptured. `combine` copies the batch's rows
 into the MoE layer's output, as vLLM's finalize does (`library_config.finalize_copy`); rows without
 that field predate the copy: on b200 EP8 it adds 4-13% to decode `combine`, 4-5% to prefill `combine`
-and 1-2% to the prefill pair period (1-5% for uccl-ep).
+and 1-2% to the prefill pair period; uccl-ep's pair period moves 1-5%.
 
 Scale-up cases request NCCL Device API LSA and fail closed unless the LSA team covers the whole EP
 world, which is also what makes the hybrid choice match vLLM's autoselect: DeepEP goes hybrid only
@@ -223,7 +223,11 @@ and each collective split into a send kernel and a receive hook that runs straig
 runs over intra-node NVLink; multi-node EP16 rides NVSHMEM IBGDA, which wants gdrdrv on the node
 (b200-nscale's bare-metal IB has it), and GB EP16 stays inside MNNVL. B300 registers no DeepEP
 low-latency: the legacy Buffer initializes NVSHMEM with an RDMA transport even on one node, and
-NVSHMEM aborts on topology detection over B300's EFA.
+NVSHMEM aborts on topology detection over B300's EFA. H100's EFA pool registers EP8 only: at EP16
+every rank segfaults during setup, since IBGDA has no EFA transport. Its normal-mode EP16 prefill
+stays registered (`backend_mode_phases` is per backend, not per pool) but does not finish inside the
+per-case guard (`COLLX_RUN_TIMEOUT`) through the EFA proxy: expect those two cases to time out and
+stay unmeasured.
 
 ### UCCL-EP
 
@@ -304,8 +308,8 @@ point, because two handles from one group share its double-buffer parity slots
 
 FlashInfer EP is TensorRT-LLM's one-sided MNNVL `MoeAlltoAll` from FlashInfer 0.7.1, vLLM main's pin:
 each rank writes tokens directly into its peers' workspace windows, so every rank must sit in one
-NVLink domain: EP8 on H100, H200 and B200 (one node), EP8 and EP16 inside MNNVL on GB200/GB300. B300
-is not registered yet. The `flashinfer-mnnvl-…` generation name is kept on the single-node rows. It has one kernel family, so it runs `normal` only, across both ladders.
+NVLink domain: EP8 on H100, H200, B200 and B300 (one node), EP8 and EP16 inside MNNVL on
+GB200/GB300. The `flashinfer-mnnvl-…` generation name is kept on the single-node rows. It has one kernel family, so it runs `normal` only, across both ladders.
 It runs vLLM's integration (`flashinfer_nvlink_one_sided`): combine is handed a caller-owned payload
 with `payload_in_workspace=False`, so FlashInfer's staging copy into the workspace runs, and is timed,
 inside `combine`, as in vLLM (writing the expert output into the workspace directly is TensorRT-LLM's
