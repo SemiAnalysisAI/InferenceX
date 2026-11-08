@@ -12449,4 +12449,4 @@
   description:
     - "Complete the Kimi K3.1 Pro B200 SGLang TP16/DCP16 low-concurrency set by adding concurrency 2 beside the existing concurrency 1 and 4 points."
     - "Preserve every existing point and recipe, including FP32 recurrent state, prefix caching, DFLASH block verification and the committed golden acceptance curve; no KV offload."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4917
