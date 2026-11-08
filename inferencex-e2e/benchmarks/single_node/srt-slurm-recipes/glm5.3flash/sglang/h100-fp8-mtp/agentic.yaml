@@ -59,17 +59,29 @@ base:
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
-override_none:
-  benchmark:
-    env:
-      KV_OFFLOADING: none
-
-override_hicache:
+zip_override_none:
   roles:
     agg:
       args:
-        enable-hierarchical-cache: true
-        hicache-size: 32
+        max-running-requests: [2, 4]
+        cuda-graph-max-bs-decode: [2, 4]
   benchmark:
     env:
+      CONC: ['1', '2']
+      KV_OFFLOADING: none
+
+zip_override_hicache:
+  roles:
+    agg:
+      args:
+        # At 0.70, long restores exceed the GPU KV pool and Mamba caps c24 admission at 36.
+        mem-fraction-static: 0.85
+        max-running-requests: [8, 12, 16, 20, 24, 28, 32, 40, 48]
+        cuda-graph-max-bs-decode: [8, 12, 16, 20, 24, 28, 32, 40, 48]
+        enable-hierarchical-cache: true
+        # Leave room for the separate DSA indexer pool within the node's 90% DRAM budget.
+        hicache-size: 220
+  benchmark:
+    env:
+      CONC: ['4', '6', '8', '10', '12', '14', '16', '20', '24']
       KV_OFFLOADING: dram

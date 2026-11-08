@@ -12471,3 +12471,12 @@
   description:
     - "The H3 client polls job status every 0.1 s instead of every 0.5 s. A job counts as done only at the next poll, so each published latency carried up to 0.5 s of polling delay; it now carries up to 0.1 s."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4904
+
+- config-keys:
+    - glm5.3flash-fp8-h100-sglang-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Raise H100 GLM-5.3-Flash HiCache DRAM utilization to 0.90 and the KV/Mamba host pool to 220 GB per rank, leaving room for the separate DSA indexer pool."
+    - "Add HiCache concurrency 12, 14, 16, 20 and 24; set max-running-requests and cuda-graph-max-bs-decode to twice each point's concurrency, including the GPU-resident concurrency 1 and 2 points."
+    - "Raise mem-fraction-static to 0.85 for HiCache points to expand GPU KV and Mamba capacity without truncating the full-context replay; retain 0.70 for GPU-resident c1/c2."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4903
