@@ -7,7 +7,6 @@ import json
 import re
 import sys
 from collections.abc import Callable, Mapping
-from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -15,6 +14,7 @@ import yaml
 
 from infx.clusters import load_inventory
 from infx.clusters.slurm import slurm_settings
+from infx.fastcopy import deepcopy
 from infx.launch.context import LaunchError
 from infx.launch.drivers.srt import config, lanes, power
 from infx.launch.policy import launch_path
