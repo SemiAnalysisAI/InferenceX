@@ -91,8 +91,7 @@ base:
         enable-state-checkpoint-in-forward: true
         # 0 evicts State checkpoints by their own last use (plain LRU).
         checkpoint-retention-requests: 0
-        # Keeps the checkpoint's FP8 PLE n-gram table on pinned host memory instead of widening it to BF16.
-        hf-overrides: '{"ple_offload_embedding":true,"ple_embed_dtype":"float8_e4m3fn"}'
+        hf-overrides: '{"ple_offload_embedding":true}'
         prefill-graph-max-tokens: 8192
         enable-drafter-prefill-graph: true
         enable-qsa-prefill-bf16-scratch: true
