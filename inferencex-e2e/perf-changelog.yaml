@@ -12471,3 +12471,13 @@
   description:
     - "The H3 client polls job status every 0.1 s instead of every 0.5 s. A job counts as done only at the next poll, so each published latency carried up to 0.5 s of polling delay; it now carries up to 0.1 s."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4904
+
+- config-keys:
+    - kimik3.1-fp4-gb200-vllm-agentic-dspark-tp8pp2-agg
+    - kimik3.1-fp4-gb200-vllm-agentic-dspark-tp16-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Re-sweep Kimi-K3.1-Pro GB200 vLLM AgentX with the updated DSpark draft (Inferact/Kimi-K3.1-Pro-DSpark-preview @ 6a2ef20a) and the #4851 golden curve, so throughput forces AL 3.41 at 5 draft tokens and 3.19 at 4."
+    - "Set VLLM_HTTP_TIMEOUT_KEEP_ALIVE to 600 s on the aggregated server so AIPerf's reused session connections outlive uvicorn's 5 s idle timeout."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4864
