@@ -12487,5 +12487,6 @@
   description:
     - "Move MiniMax-M3.1-Flash B300 vLLM AgentX to vllm/vllm-openai:minimax-m31-flash-x86_64-cu134-b022bb7-mc0.3.13.post1 (vLLM b022bb7)."
     - "Launch the server with vllm-rs, vLLM's Rust OpenAI frontend, instead of vllm serve."
+    - "Run the DSpark drafter on FLASHINFER_TS at every point; the TP4 points used FLASH_ATTN."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4930
   scenario-type: [agentic-coding]
