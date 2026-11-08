@@ -263,6 +263,12 @@ jobs:
             - This is a 🔴 **BLOCKING** issue
             - Comment: "MTP benchmark scripts MUST include `--use-chat-template` flag in the benchmark client configuration. This ensures proper tokenization for speculative decoding. Please add `--use-chat-template` to the benchmark command."
 
+            ## AgentX Stream Interval Validation:
+            When a PR adds or reruns `agentic-coding` (AgentX) points, resolve each point's effective stream interval in every serving role (aggregated, prefill, decode): `stream-interval` / `--stream-interval` (SGLang, vLLM), `stream_interval` (TRT-LLM and Dynamo engine configs), including values inherited from shared `*-variants.yaml` or base recipes.
+            - Any value above 20 is a 🔴 **BLOCKING** issue.
+            - Comment: "AgentX points must use a stream interval of at most 20 tokens. Higher values merge short responses into a single client chunk, which inflates TTFT and makes interactivity meaningless. Please lower this to 20 or less. See `inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md#agentx-stream-interval`."
+            - Do not flag fixed-sequence (non-AgentX) scenarios or untouched points the PR does not rerun.
+
             ## Model Prefix Validation:
             When reviewing changes to `inferencex-e2e/configs/*-master.yaml` files, verify that ALL config keys use valid model prefixes.
 
