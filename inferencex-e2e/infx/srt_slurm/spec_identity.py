@@ -186,7 +186,9 @@ def audit(
 
 def spec_arguments(role: Mapping[str, Any]) -> dict[str, Any]:
     """The speculative arguments of a role, as the snapshot records them."""
-    return {k: v for k, v in (role.get("args") or {}).items() if k.startswith(SPEC_ARGUMENTS)}
+    args = (role.get("args") or {}).items()
+    # TileRT's draft method follows its model profile.
+    return {k: v for k, v in args if k.startswith(SPEC_ARGUMENTS) or k == "model"}
 
 
 def snapshot(matrix: list[Mapping[str, Any]], root: Path) -> list[dict[str, Any]]:

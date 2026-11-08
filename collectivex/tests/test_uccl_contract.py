@@ -220,10 +220,15 @@ class NormalModeLaunchConfig(unittest.TestCase):
 
     def test_dispatch_and_combine_pass_the_resolved_configs(self):
         backend, buffer = _built(self.module)
-        handle = backend.dispatch(types.SimpleNamespace(
-            T=4, dispatch_x="x", topk_idx="idx", topk_weights="weights"))
+        copied = []
+        problem = types.SimpleNamespace(
+            T=4, dispatch_x="x", topk_idx="idx", topk_weights="weights",
+            combine_output=types.SimpleNamespace(copy_=copied.append))
+        handle = backend.dispatch(problem)
         backend.stage(None, handle)
-        backend.combine(None, handle)
+        # vLLM's deepep_ht finalize copies the batch's rows into the layer output.
+        self.assertIs(backend.combine(problem, handle), problem.combine_output)
+        self.assertEqual(copied, ["comb"])
         (_, dispatched), (_, combined) = buffer.calls
         self.assertIs(dispatched["config"], backend.dispatch_config)
         self.assertEqual((dispatched["x"], dispatched["async_finish"]), ("x", False))
