@@ -56,9 +56,10 @@ base:
 # One variant per point. Admission is 2x CONC and the graph batch is CONC,
 # capped at 64. TP4 tokenizes in parallel to keep 256k warmups within the
 # client timeout; TP2 keeps the single tokenizer, whose multi-worker startup
-# races with TP2 HiCache shared-memory initialization. HiCache sizes each of
-# the target KV and Mamba host pools per rank with a 1 GB/rank alignment
-# reserve and the 1/15 NEXTN draft pool: (DRAM - TP) * 15 / TP / 31 GB.
+# races with TP2 HiCache shared-memory initialization. On sglang v0.5.19,
+# hicache-size is the per-rank total of the KV host pool (draft layers packed
+# in) and the Mamba host pool, so it is (DRAM - TP) / TP GB with a 1 GB/rank
+# reserve.
 override_tp4_c1:
   roles:
     agg:
@@ -280,7 +281,7 @@ override_tp4_hicache_c64:
         cuda-graph-max-bs: 64
         page-size: 64
         enable-hierarchical-cache: true
-        hicache-size: 103
+        hicache-size: 213
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
         hicache-write-policy: write_through_selective
@@ -301,7 +302,7 @@ override_tp4_hicache_c66:
         cuda-graph-max-bs: 64
         page-size: 64
         enable-hierarchical-cache: true
-        hicache-size: 103
+        hicache-size: 213
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
         hicache-write-policy: write_through_selective
@@ -322,7 +323,7 @@ override_tp4_hicache_c68:
         cuda-graph-max-bs: 64
         page-size: 64
         enable-hierarchical-cache: true
-        hicache-size: 103
+        hicache-size: 213
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
         hicache-write-policy: write_through_selective
@@ -343,7 +344,7 @@ override_tp4_hicache_c70:
         cuda-graph-max-bs: 64
         page-size: 64
         enable-hierarchical-cache: true
-        hicache-size: 103
+        hicache-size: 213
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
         hicache-write-policy: write_through_selective
@@ -364,7 +365,7 @@ override_tp4_hicache_c72:
         cuda-graph-max-bs: 64
         page-size: 64
         enable-hierarchical-cache: true
-        hicache-size: 103
+        hicache-size: 213
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
         hicache-write-policy: write_through_selective
@@ -449,7 +450,7 @@ override_tp2_hicache_c16:
         cuda-graph-max-bs: 16
         page-size: 64
         enable-hierarchical-cache: true
-        hicache-size: 103
+        hicache-size: 213
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
         hicache-write-policy: write_through_selective
@@ -469,7 +470,7 @@ override_tp2_hicache_c18:
         cuda-graph-max-bs: 18
         page-size: 64
         enable-hierarchical-cache: true
-        hicache-size: 103
+        hicache-size: 213
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
         hicache-write-policy: write_through_selective
@@ -489,7 +490,7 @@ override_tp2_hicache_c20:
         cuda-graph-max-bs: 20
         page-size: 64
         enable-hierarchical-cache: true
-        hicache-size: 103
+        hicache-size: 213
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
         hicache-write-policy: write_through_selective
@@ -509,7 +510,7 @@ override_tp2_hicache_c22:
         cuda-graph-max-bs: 22
         page-size: 64
         enable-hierarchical-cache: true
-        hicache-size: 103
+        hicache-size: 213
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
         hicache-write-policy: write_through_selective
@@ -529,7 +530,7 @@ override_tp2_hicache_c24:
         cuda-graph-max-bs: 24
         page-size: 64
         enable-hierarchical-cache: true
-        hicache-size: 103
+        hicache-size: 213
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
         hicache-write-policy: write_through_selective
@@ -549,7 +550,7 @@ override_tp2_hicache_c28:
         cuda-graph-max-bs: 28
         page-size: 64
         enable-hierarchical-cache: true
-        hicache-size: 103
+        hicache-size: 213
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
         hicache-write-policy: write_through_selective
@@ -569,7 +570,7 @@ override_tp2_hicache_c32:
         cuda-graph-max-bs: 32
         page-size: 64
         enable-hierarchical-cache: true
-        hicache-size: 103
+        hicache-size: 213
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
         hicache-write-policy: write_through_selective

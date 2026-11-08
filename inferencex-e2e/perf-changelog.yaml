@@ -12425,5 +12425,6 @@
   description:
   - "Serve nvidia/Qwen3.5-397B-A17B-NVFP4-V2: the original nvidia/Qwen3.5-397B-A17B-NVFP4 directory was removed from the B200 node-local model volume on 2026-10-13 at NVIDIA SRE's request, so the key failed at srtctl startup with Model path does not exist."
   - "Run on lmsysorg/sglang:v0.5.19-cu130: v0.5.16 loads the V2 checkpoint but hangs while capturing the target prefill CUDA graph at 16384 tokens (sweep 38618495491 canary, 2 h health timeout)."
+  - "Resize hicache-size from 103 to 213 GB per rank: on v0.5.19 it is the per-rank total of the KV host pool (NEXTN draft layers packed in) and the Mamba host pool, so (DRAM - TP) / TP replaces the per-pool formula, which left 61 GB of host KV per rank."
   - "Keep the deployment topology, speculative mode, concurrency points and evaluation coverage unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4066
