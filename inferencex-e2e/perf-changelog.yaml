@@ -12051,6 +12051,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4806
 
 - config-keys:
+    - kimik3.1-fp4-mi355x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Put concurrency 32 and 48 back on the recipe's own max-num-batched-tokens 16384 and gpu-memory-utilization 0.90 instead of the 10240 and 0.91 they overrode, so every point now runs one token budget, and extend their capture lists through the 12288, 14336 and 16384 rungs to match."
+    - "Add concurrency 56 and 64 on the same DRAM-offload recipe at 2 DSpark draft tokens, with the golden acceptance length 2.44 that pairs with that draft length and the same 1799 GB host pool as the other throughput points. Their capture lists follow the recipe's rule: multiples of three up to max-num-seqs of them, then the shared prefill ladder to 16384, giving 90 and 97 buckets."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4858
+
+- config-keys:
     - kimik3.1-fp4-mi355x-sglang-agentic-dflash
   scenario-type:
     - agentic-coding
