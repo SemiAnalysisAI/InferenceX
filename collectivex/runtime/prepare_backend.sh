@@ -191,8 +191,8 @@ deepep_cache_root() {
 deepep_ready() { [ -f "$1/.ready" ] && [ -x "$1/venv/bin/python" ] && [ -d "$1/source" ]; }
 
 # Runtime images (vLLM's) ship a trimmed CUDA toolkit without the cuSPARSE and similar headers that
-# torch's ATen/cuda headers include, which the extension build needs. The venv's torch already
-# pulled the matching CUDA wheels, so link only the headers the toolkit lacks into
+# torch's ATen/cuda headers include, which the extension build needs. The torch the venv sees
+# (its own, or the image's) carries the matching CUDA wheels, so link only the headers the toolkit lacks into
 # <root>/cuda-include: nothing shadows the toolkit's own headers, and full-toolkit images leave
 # the directory empty.
 deepep_cuda_header_overlay() {
@@ -262,8 +262,15 @@ deepep_activate() {
 deepep_probe() {
   "$VIRTUAL_ENV/bin/python" - <<'PY'
 import inspect
+import os
 import deep_ep
+from importlib import metadata
 assert inspect.isclass(deep_ep.ElasticBuffer)
+# The vLLM image also ships a deep_ep with ElasticBuffer; the venv's build must be the one loaded.
+assert os.path.realpath(deep_ep.__file__).startswith(os.path.realpath(os.environ["VIRTUAL_ENV"]) + os.sep), deep_ep.__file__
+# ElasticBuffer needs NCCL >= 2.30.4 at build and run time, whichever site-packages supplies it.
+nccl = tuple(int(part) for part in metadata.version("nvidia-nccl-cu13").split(".")[:3])
+assert nccl >= (2, 30, 4), nccl
 PY
 }
 
@@ -290,7 +297,7 @@ deepep_install() {
       --extra-index-url https://pypi.org/simple "$COLLX_DEEPEP_V2_TORCH_SPEC" >&2 2>&1 \
       || { collx_log "ERROR: $COLLX_DEEPEP_V2_TORCH_SPEC (cu130) installation failed"; return 1; }
   fi
-  # Torch pins an older NCCL than ElasticBuffer needs; the vLLM image already carries >= 2.30.4.
+  # Only the EFA fork installs its own NCCL (2.32.3); "image" uses the image's, checked by deepep_probe.
   if [ "$COLLX_DEEPEP_V2_NCCL_SPEC" != image ]; then
     "${pip[@]}" --force-reinstall --no-deps "$COLLX_DEEPEP_V2_NCCL_SPEC" >&2 2>&1 \
       || { collx_log "ERROR: $COLLX_DEEPEP_V2_NCCL_SPEC installation failed"; return 1; }
