@@ -29,8 +29,8 @@ library only. Details are under [Backends](#backends).
 | Backend | Maturity | Launch | Engine contract |
 |---|---|---|---|
 | deepep-v2 | production | graph; normal prefill eager | vLLM `deepep_v2` and `deepep_low_latency` (MNNVL opt-in on GB pools); LL stops at T=256 |
-| nccl-ep | production for in-domain zero-copy LL rank-major BF16; library otherwise | graph decode; prefill eager | TensorRT-LLM `NcclEP` with NVIDIA/TensorRT-LLM#20631; HT and FP8 (DS_FP8E3M4) are library rows |
-| uccl-ep | candidate | normal eager; LL graph | vLLM's DeepEP configuration on UCCL's drop-in `deep_ep`; no engine ships its selector |
+| nccl-ep | production for LL rank-major BF16 (zero-copy in-domain, staged scale-out); library otherwise | graph decode; prefill eager | TensorRT-LLM `NcclEP` with NVIDIA/TensorRT-LLM#20631; HT and FP8 (DS_FP8E3M4) are library rows |
+| uccl-ep | candidate | normal eager; LL graph at EP8, eager at EP16 | vLLM's DeepEP configuration on UCCL's drop-in `deep_ep`; no engine ships its selector |
 | mori | production | graph decode; eager prefill | vLLM's MoRI IntraNode / InterNodeV1, LL EP16 only |
 | flashinfer-ep | production | graph decode; eager prefill | vLLM's integration; EP8 on H100/H200/B200/B300, EP8 and EP16 on GB200/GB300 |
 
@@ -68,7 +68,11 @@ relative). Graphed replays must rewrite poisoned outputs. Any failure makes the 
 - FP8 `stage` (the dequant) is excluded from `roundtrip` and `pair_period`; do not sum it in.
 - EFA pools (b300, h100) run EP16 through a CPU proxy, so those rows measure the proxy. b300's
   deepep-v2 rows build AWS's EFA fork of DeepEP (`-aws-efa-fork`).
-- On GB200/GB300, eager FP8 prefill chains at T=1024 are bound by the Grace host, not the fabric.
+- On GB200/GB300, deepep-v2 normal's eager FP8 prefill chain at T=1024 is bound by the Grace host,
+  not the fabric.
+- uccl-ep `normal` is eager and host-synced, so at small T its pair period runs above its
+  roundtrip (FP8 by up to 230 µs).
+- Eleven registered EP cases are unmeasured: see [Unmeasured Cases](#unmeasured-cases).
 - Vendor tables time kernels in a profiler; compare them with `cross_rank_min_us` or
   `chain_floor_us`.
 - Limits: no compute between ops, uniform routing, no L2 flush, unlocked clocks (`slow_gpu` flags
@@ -80,8 +84,8 @@ The `kv-transfer` suite's rules and evidence are in [kv-transfer.md](kv-transfer
 
 # Methodology
 
-CollectiveX runs expert-parallel (EP) communication benchmarks by hand on real accelerator
-allocations and writes one result document per case into `collectivex/results/`. Uploading those
+CollectiveX runs expert-parallel (EP) communication benchmarks on real accelerator allocations, by
+hand or through the `CollectiveX Sweep` workflow, and writes one result document per case into `collectivex/results/`. Uploading those
 files to the CollectiveX database publishes them; they are not committed. CollectiveX does not rank,
 recommend or select: the frontend reads `results/cases.json` and the result documents and makes its
 own display decisions. The [Summary](#summary) above states the rules in
@@ -100,7 +104,7 @@ The workload is `deepseek-v4-pro` (DeepSeek-V4-Pro, the `dsv4` model the rest of
 benchmarks): hidden 7168, top-k 6, 384 routed experts, packed placement, uniform routing. Each
 backend/topology runs one pinned configuration, the one its reference engine runs. The token ladders
 live in `configs/sweep.json`: decode T=1..512 and prefill T=1024..8192 tokens per rank, in powers of
-two. `normal` mode runs both ladders with `layout-and-dispatch-v1` semantics. `low-latency` runs each
+two. `normal` mode runs both ladders. `low-latency` runs each
 backend's decode kernels on the decode ladder, and nccl-ep's on the prefill ladder too
 (`backend_mode_phases`); it is enabled cell by cell from the registry's `ll_backends` map.
 
@@ -123,6 +127,21 @@ footprint. That was used once: DeepEP's low-latency combine corrupted the 256 ru
 Blackwell SKU until the pin moved to upstream main with
 [DeepEP #642](https://github.com/deepseek-ai/DeepEP/pull/642), a CTA-scope fence before the combine
 staging buffer is recycled.
+
+### Unmeasured Cases
+
+Eleven registered EP cases have no result in the published run and show as pending:
+
+- **h100-dgxc EP16 prefill, deepep-v2 `normal` and nccl-ep `low-latency`** (four cases). Through
+  the EFA proxy deepep-v2's do not finish inside the per-case guard (`COLLX_RUN_TIMEOUT`); nccl-ep
+  low-latency already takes 18 ms per pair at T=512 there.
+- **mi355x mori EP16** (six cases). Two-node MoRI does not start on the vLLM v0.32.0 ROCm image
+  until the hosts' AINIC user space matches the image's.
+- **mi325x uccl-ep `low-latency` EP16 FP8.** UCCL stalls before the first measurement, after the
+  proxies exchange buffer info ([uccl-project/uccl#1111](https://github.com/uccl-project/uccl/issues/1111));
+  the BF16 case runs.
+
+The twelve kv-transfer cases are registered but have not been uploaded.
 
 ### Precision
 
@@ -149,7 +168,8 @@ bitwise against its eager reference before timing. The DeepEP V2 and UCCL-EP low
 quantize internally. So an FP8 `normal` dispatch covers quantize plus transport, and its BF16
 control covers transport alone. Read that charge as a fixed per-call cost, not a payload-proportional
 one, and compare FP8 with BF16 at the top of the ladder: at small T the FP8 path moves fewer bytes but
-carries the quantize launch, and by T=512 the halved payload repays it.
+carries the quantize launch, and by T=512 the halved payload repays it (except uccl-ep EP8 on b200
+and h100, whose FP8 pair period stays 4-9% above BF16).
 
 `implementation.fp8_consume` names the FP8 consumption the chained roundtrip models. `native`, the
 default, has the expert GEMM consume the dispatched FP8 and scales directly, as vLLM and SGLang do for
@@ -210,7 +230,8 @@ registry's `network.rdma_gbs` supplies the per-GPU rate and the resulting count 
 window `NCCL_WIN_STRICT_ORDERING`, which strips PCIe relaxed ordering; in h200-dgxc's KVM guests
 strict-ordered GPU-NIC writes cap near 10 GB/s per GPU. The build patches the registration behind a
 switch a pool opts into with `rdma_relaxed_ordering` in its `network` block: h200 bf16 decode at T=512
-drops from 3088 µs to 620 µs per roundtrip, oracle green in both precisions. Upstream made the window
+dropped from 3088 µs to 620 µs per roundtrip in the A/B, oracle green in both precisions (the
+published relaxed row reads 857 µs). Upstream made the window
 strict on purpose (DeepEP #661/#674), since a relaxed GIN signal can in principle overtake its data;
 that race has not been reproduced, and a passing oracle does not rule it out. Those rows carry
 `-relaxed-ordering` and never pool with the strict series.
@@ -227,7 +248,7 @@ NVSHMEM aborts on topology detection over B300's EFA. H100's EFA pool registers 
 every rank segfaults during setup, since IBGDA has no EFA transport. Its normal-mode EP16 prefill
 stays registered (`backend_mode_phases` is per backend, not per pool) but does not finish inside the
 per-case guard (`COLLX_RUN_TIMEOUT`) through the EFA proxy: expect those two cases to time out and
-stay unmeasured.
+stay unmeasured ([Unmeasured Cases](#unmeasured-cases)).
 
 ### UCCL-EP
 
@@ -246,6 +267,19 @@ as DeepEP V2 (send kernel plus receive hook) with vLLM's 256-token receive; at E
 keeps it on NVLink. UCCL-EP is built from source at its pin with UCCL's drop-in flags
 `USE_DMABUF=1 PER_EXPERT_BATCHING=1`; `implementation.library_version` names the commit and flags,
 and the import probe rejects any other `deep_ep`.
+
+**Its eager pair period runs above its roundtrip at small T.** A fresh-entry sample hides the host's
+enqueue behind the spin. An eager chain has no spin, and because `normal` dispatch waits on the
+host, the GPU idles while the host prepares the next pair. In the published run the pair period
+exceeds the roundtrip by up to 95 µs in BF16 and up to 230 µs in FP8, where the quantize launch
+adds host work. At EP8 the two meet by T=512; at EP16 on the AMD pools a 70-85 µs gap remains.
+
+**Two builds depart from upstream's defaults.** On AMD, managed allocations become pinned host
+memory, the cooperative `cudaLaunchKernelEx` launch becomes a plain launch (hipify cannot map it),
+`UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC=1` is set, and scale-out sets `UCCL_IB_MAX_INFLIGHT_BYTES=2097152`
+and `UCCL_IB_MAX_INFLIGHT_NORMAL=1`; `library_config` records none of these. On h100-dgxc the EFA
+build's `get_dispatch_config` returns a 520-token RDMA receive ring where the verbs build returns
+140, recorded in `library_config.dispatch_config`.
 
 **h200-dgxc EP16 runs a deeper RDMA receive ring than vLLM.** With vLLM's dispatch config (RDMA
 chunks send 20 / receive 140), BF16 prefill deadlocks inside UCCL on every attempt: the sender
@@ -280,7 +314,8 @@ read stale lines (ROCm/mori#610). `combine()` takes the rank's own routing tenso
 recv-slot indices, because InterNodeV1 keys its node predicate by the rank's own token id
 (ROCm/mori#475). `low-latency` follows vLLM's `mori_low_latency`, which differs only across nodes:
 `InterNodeV1LL` with the arch's tuple, so MoRI has no EP8 low-latency cell. `MORI_ENABLE_SDMA` stays
-unset, as vLLM leaves it; a row run with it set carries `-sdma`.
+unset, as vLLM leaves it; a row run with it set carries `-sdma`. mi355x EP16 is registered but
+unmeasured ([Unmeasured Cases](#unmeasured-cases)).
 
 ### NCCL EP
 
@@ -289,8 +324,8 @@ wheel. [nccl-ep.md](nccl-ep.md) documents its engine contract, row identity and 
 and EP16 on all six NVIDIA SKUs: EP16 stays inside MNNVL on GB200/GB300 and is a 2x8 scale-out over
 the cross-node GIN path on H100, H200, B200 and B300.
 
-`normal` selects `HIGH_THROUGHPUT`, whose FLAT receive and unweighted rank-sum combine match
-`layout-and-dispatch-v1`. No engine runs it, so HT rows are `candidate`. Its timed dispatch carries
+`normal` selects `HIGH_THROUGHPUT`, whose FLAT receive and unweighted rank-sum combine match the
+other backends' `normal` mode. No engine runs it, so HT rows are `candidate`. Its timed dispatch carries
 `ncclEpUpdateHandle`, the per-step routing update the API requires before every dispatch whose
 routing changed, as every backend's dispatch carries its routing work. The update's HT work is sized
 by the handle's capacity, not by T, so every rung carries a term set by the ladder's top. NVIDIA's
@@ -313,10 +348,10 @@ GB200/GB300. The `flashinfer-mnnvl-…` generation name is kept on the single-no
 It runs vLLM's integration (`flashinfer_nvlink_one_sided`): combine is handed a caller-owned payload
 with `payload_in_workspace=False`, so FlashInfer's staging copy into the workspace runs, and is timed,
 inside `combine`, as in vLLM (writing the expert output into the workspace directly is TensorRT-LLM's
-path). FP8 dispatch is DeepSeek blockwise FP8 carried as a fourth payload (vLLM v0.29.0+). Through
-0.6.15 the combine accumulates in BF16 with a pairwise slot tree, which the oracle models exactly
-(`combine_reduction = "topk-slot-tree"`); 0.6.16 moved to FP32, and the adapter picks the model from
-the installed version. Graph replay cuts gb200 EP8 T=1 from 151 µs to 43 µs, so decode replays.
+path). FP8 dispatch is DeepSeek blockwise FP8 carried as a fourth payload (vLLM v0.29.0+). The
+combine accumulates in FP32 with one narrowing store (0.6.16 onwards), which the oracle models as
+`domain-fp32`; the import probe rejects any wheel but the pin. Graph replay cut gb200 EP8 T=1 from
+151 µs to 43 µs when it landed (31 µs in the published run), so decode replays.
 
 ## Workload Identity
 
@@ -395,7 +430,8 @@ the first kernel's launch latency both leave the window. Eager rows queue the sp
 before each sample; graphed rows capture them in the graph ahead of its first event, so no host
 handoff follows the alignment. Before the all-reduce moved into the graph, a late host launch stalled
 the other ranks inside the window (gb200 flashinfer EP8 T=1 roundtrip p99 858 µs); in-graph, graphed
-decode roundtrip p99 runs 1.01-1.19x its p50. That is why graphed rows publish tails. On ROCm, where
+decode roundtrip p99 runs 1.01-1.18x its p50 outside the EFA-proxy EP16 rows (up to 2.4x there).
+That is why graphed rows publish tails. On ROCm, where
 HIP submits a replay node by node from the host, the spin is what gives a lagging host time to submit
 the whole replay before the barrier releases anyone.
 
@@ -425,7 +461,8 @@ Each chain sibling is aligned once, by the all-reduce alone when eager: a spin i
 queue a backlog the GPU drains faster than the host refills it, mixing two speeds into the kept pairs.
 A graphed sibling keeps the captured spin, since its replay is one host call. In host-synced modes
 each eager sibling also passes the host gate, and every rank restarts it together, up to three times,
-if any host ran throttled (`chain_health.host_retried_siblings`, `host_stalled_trials`).
+if any host ran throttled (`chain_health.host_retried_siblings`, `host_stalled_trials`). A point with
+a trial still throttled after its restarts publishes only the pair period's p50.
 
 ### Chained Pair Period
 
@@ -475,7 +512,7 @@ measurement exists to capture.
 **An eager chain can be host-bound.** Prefill chains are eager, so the host enqueues every pair. Where
 its per-pair cost exceeds the GPU's pair time, the slowest host sets the cadence and the other ranks
 wait inside dispatch: on GB200/GB300 the Grace host makes deepep-v2 normal FP8 prefill at T=1024 run
-above its aligned roundtrip (EP8 227-229 µs against 197 µs). The aligned `roundtrip` is the transport
+above its aligned roundtrip (EP8 294-297 µs against 205-207 µs). The aligned `roundtrip` is the transport
 number there.
 
 ### Timing Profile
@@ -484,8 +521,9 @@ One timing profile, defined in `configs/sweep.json` and recorded in `measurement
 
 - Fresh entry: 256 trials x 8 timed iterations = 2048 samples per component.
 - Chained: 4 trials x (128 pairs - 16 dropped) = 448 pairs for the period and 448 for the floors.
-- 32 full dispatch-stage-combine warm-ups before each component at every trial and point, and before
-  each chain trial.
+- 32 dispatch-stage-combine warm-ups before each component at every trial and point, and before
+  each chain trial. An FP8 warm-up stages once and reuses the result; a graphed component adds 32
+  untimed replays.
 - Component order rotates each trial (`trial_order`) over a per-trial-rotated ladder.
 - Each fresh-entry sample is reduced across ranks by MAX before nearest-rank p50/p90/p95/p99.
 
@@ -556,13 +594,12 @@ Every `normal` mode, MoRI InterNodeV1LL and nccl-ep rank-major low-latency use a
 combine. The oracle builds each rank's gate-weighted FP32 expert aggregate, casts it to BF16 as the
 adapter does, and reduces per `implementation.combine_reduction`:
 
-- `domain-fp32` (uccl-ep, MoRI, nccl-ep HT, FlashInfer from 0.6.16): ranks in one scale-up domain
+- `domain-fp32` (uccl-ep, MoRI, nccl-ep HT, FlashInfer): ranks in one scale-up domain
   reduce in FP32, and each domain casts its partial to BF16 before the scale-out sum.
 - `rank-fp32` (deepep-v2, nccl-ep low-latency rank-major): the source sums the first slot of each
   unique destination rank in FP32, since deepep-v2 runs `allow_multiple_reduction=False` and forms no
   per-domain partials. On x86 EP16 that moves one scale-out row per destination rank, about 2.6x the
   per-node combine bytes; the `token-rank` byte basis already counts it.
-- `topk-slot-tree` (FlashInfer before 0.6.16).
 
 The gate is the max elementwise relative error, denominator clamped at 0.02, below `8 * 2^-8`. The other
 low-latency adapters weight inside combine, so the oracle derives a per-(source, expert)-slot gate-scaled
@@ -621,7 +658,7 @@ cases. `implementation.kernel_generation` names the kernel family plus the regim
 
 | Backend | Families |
 |---|---|
-| deepep-v2 | `v2-elastic-buffer-vllm-nosync`, plus `-relaxed-ordering` on h200 EP16; `legacy-buffer-ll-hook`, plus `-ue8m0` for Blackwell FP8 |
+| deepep-v2 | `v2-elastic-buffer-vllm-nosync`, plus `-relaxed-ordering` on h200 EP16 and `-aws-efa-fork` on b300; `legacy-buffer-ll-hook`, plus `-ue8m0` for Blackwell FP8 |
 | uccl-ep | `uccl-legacy-buffer-vllm-ht`; `uccl-legacy-buffer-ll-hook`, plus `-ue8m0` for B200 FP8 |
 | mori | `intranode-vllm`, `inter-node-v1-vllm`, `inter-node-v1ll-vllm`, each plus `-sdma` when SDMA was on |
 | nccl-ep | `nccl-ep-v02-ht-routed-zc-static` (plus `-gum1` graphed), `nccl-ep-v02-ll-rm` (plus `-zc` on the window path) or `nccl-ep-v02-ll-em`, then `-fp8-ds-e3m4` and `-cap<N>-<wheel version>` ([nccl-ep.md](nccl-ep.md)) |
@@ -684,8 +721,8 @@ the pin (plus the GPU architecture and build-recipe generation for GPU builds), 
 committed. The DeepEP V2 build applies one local patch, the opt-in relaxed-ordering switch; UCCL-EP's
 AMD build swaps managed allocations for pinned host memory. MoRI ships in the image and is only
 import-checked. DeepEP V2 builds against the image's torch and NCCL (2.13.0 and 2.30.7 in vLLM
-v0.32.0), as vLLM's installer does and as every other NVIDIA backend runs. The EFA fork on b300 is
-the exception: it needs NCCL 2.32.3, so its venv carries that wheel and torch 2.11.0.
+v0.32.0), as vLLM's installer does and as uccl-ep and FlashInfer run; nccl-ep loads the NCCL its
+wheel bundles. The EFA fork on b300 is the exception: it needs NCCL 2.32.3, so its venv carries that wheel and torch 2.11.0.
 `runtime.framework` and `runtime.collective_library` record the pair per row; rows reporting torch
 2.11.0 with NCCL 2.30.4 predate the change (within 1% on b200 EP8 and 3% on gb300 EP8). The pin is 6
 commits ahead of the DeepEP commit vLLM v0.32.0 packages (d4f41e4); the image's packaged `deep_ep`

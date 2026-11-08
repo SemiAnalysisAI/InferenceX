@@ -12463,6 +12463,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4887
 
 - config-keys:
+    - h3-bf16-b200-sglang-video
+    - h3-bf16-h100-sglang-video
+    - h3-bf16-h200-sglang-video
+    - h3-bf16-mi355x-sglang-video
+  scenario-type: [video-generation]
+  description:
+    - "The H3 client polls job status every 0.1 s instead of every 0.5 s. A job counts as done only at the next poll, so each published latency carried up to 0.5 s of polling delay; it now carries up to 0.1 s."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4904
+
+- config-keys:
     - qwen3.8next-fp4-gb300-tokenspeed-agentic-mtp
   scenario-type:
     - agentic-coding
@@ -12472,4 +12482,4 @@
     - "Turn on prefill CUDA graphs (drop --disable-prefill-graph) including the drafter's (--enable-drafter-prefill-graph); enable --enable-qsa-prefill-bf16-scratch and --checkpoint-retention-requests 0; set the TOKENSPEED_KERNEL_OVERRIDE_ATTENTION_QSA_SPARSE_ATTENTION=cute_dsl_blackwell_qsa_sparse_attention environment variable."
     - "Use 8K prefill chunks, gpu-memory-utilization 0.95 with --disable-cudagraph-memory-reserve, a 236 GB Host L2 with a 4 GB retraction snapshot pool, and smg with the gateway settings ts serve applies (passthrough policy, L0/L1 tokenizer caches, warn logging, no retries, circuit breaker or load monitoring)."
     - "Replace the search space with per-concurrency rows in agg-variants.yaml: concurrency 1, 2, 4 and 108 with 104 request slots, and running caps of 2, 6, 12, 35 and 72 requests at concurrency 8, 20, 36, 56 and 80."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4922
