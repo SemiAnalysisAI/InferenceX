@@ -70,6 +70,11 @@ def golden_dir(tmp_path: Path) -> Path:
             "muse-spark-open",
             3.4,
         ),
+        (
+            "deepseek-v4.1-flash__dspark__native__probabilistic-block.yaml",
+            "deepseek-v4.1-flash",
+            3.3,
+        ),
     ]:
         (directory / filename).write_text(
             yaml.safe_dump(
@@ -571,6 +576,16 @@ def test_tilert_plan_uses_caller_decode_depth_and_keeps_prefill_real(
         "method": "mtp",
         "num_speculative_tokens": 1,
     }
+
+
+def test_tilert_dsv41_profile_selects_the_dspark_curve(tmp_path: Path, golden_dir: Path) -> None:
+    recipe = tilert_recipe()
+    recipe["roles"]["decode"]["args"]["model"] = "dsv41"
+    path = tmp_path / "tilert.yaml"
+    path.write_text(yaml.safe_dump(recipe))
+    env = {**ENV, "MODEL_PREFIX": "dsv41flash"}
+    commands = plan_commands(str(path), "tilert", [], env, golden_dir=golden_dir)
+    assert [command.acceptance_length for command in commands] == [3.3]
 
 
 @pytest.mark.parametrize(
