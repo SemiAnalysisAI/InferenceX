@@ -52,10 +52,6 @@ BACKEND_PRECISIONS = {
     # comparable. vLLM selects it on this transport for DeepSeek blockwise FP8 from v0.29.0.
     "flashinfer-ep": ("bf16", "fp8"),
 }
-# Precisions a backend realizes but that no serving engine can select on that transport, kept out
-# of the default matrix and still reachable by naming them (`--precisions fp8`). Declared here
-# rather than on the adapter because this generator must resolve the matrix with no vendor imports.
-OFF_PATH_PRECISIONS: dict[str, tuple[str, ...]] = {}
 # Short shard-ID slug per non-normal mode. Normal-mode shard IDs carry no mode
 # segment so existing references stay valid; a low-latency shard adds "-ll".
 _MODE_SLUG = {"low-latency": "ll"}
@@ -319,13 +315,9 @@ def resolve_matrix(
                         continue
                     runnable = ep in runnable_eps
                     backend_precisions = BACKEND_PRECISIONS[target]
-                    # Off-path precisions are dropped unless the caller named the precision
-                    # explicitly, so the default matrix carries only deployable configurations.
-                    off_path = OFF_PATH_PRECISIONS.get(target, ())
                     supported = [
                         precision for precision in SWEEP["precisions"]
                         if precision in backend_precisions
-                        and (precision not in off_path or precision in selected_precisions)
                     ]
                     if runnable:
                         cell_modes = [
