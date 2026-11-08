@@ -12447,6 +12447,7 @@
   description:
     - "Serve nvidia/Qwen3.5-397B-A17B-NVFP4-V2; the original nvidia/Qwen3.5-397B-A17B-NVFP4 directory is gone from the B300 node-local model volume, so both keys failed at srtctl startup with Model path does not exist: /scratch/models/Qwen3.5-397B-A17B-NVFP4 (sweep 41290415206 for the single-node key, sweep 40761674921 for the Dynamo key)."
     - "Run the single-node key on lmsysorg/sglang:v0.5.19-cu130, the image the B200 key serves V2 on in PR #4066: v0.5.16 loads the V2 checkpoint but hangs while capturing the target prefill CUDA graph at 16384 tokens. The Dynamo key keeps nightly-dev-20261013-7224fce1, which is newer than v0.5.19."
+    - "Resize the single-node TP2 HiCache points from 144 to 298 GB for v0.5.19, where hicache-size is the per-rank total of the KV host pool (NEXTN draft layers packed in) and the Mamba host pool instead of each pool's size: (599 GB - TP) / TP with a 1 GB/rank reserve. At 144, sweep 42279712232 allocated only 77.87 GB of host KV and 66.14 GB of host Mamba cache per rank."
     - "Point served-model-name, and the single-node tokenizer-path, at V2. Keep the deployment topology, speculative settings, concurrency points and evaluation coverage unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4704
   scenario-type: [agentic-coding]
