@@ -174,6 +174,6 @@
   pools: [h200-dgxc, b200-nscale, b300, gb200, gb300]
   suites: [kv-transfer]
   description:
-    - Move kv-transfer to vLLM's Kimi-K3.1-Pro layout (one TP16 rank) in the K3.1 image.
+    - Replace the DeepSeek-V4 workload with vLLM's Kimi-K3.1-Pro layout (one TP16 rank) in the K3.1 image; drop Mooncake.
     - Transfer every TP rank pair of the node at once; a request lands with its slowest pair.
     - Report per-rank GB/s, the share of NIC line rate and NIXL's own transfer timings.
