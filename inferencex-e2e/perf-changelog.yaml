@@ -12471,3 +12471,11 @@
   description:
     - "The H3 client polls job status every 0.1 s instead of every 0.5 s. A job counts as done only at the next poll, so each published latency carried up to 0.5 s of polling delay; it now carries up to 0.1 s."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4904
+
+- config-keys:
+    - kimik3.1-fp4-gb200-dynamo-sglang-agentic-dflash-disagg
+  scenario-type: [agentic-coding]
+  description:
+    - "Add 1P1D TP16 DCP16 points at conc 64, 76 and 96 with an EP16 decode on DeepGEMM MegaMoE (MXFP8 dispatch, BF16 combine), 96 max running requests, CUDA graphs up to batch 96 and 8 draft tokens. Their prefill uses page size 64 and 8 draft tokens. The image and the existing c16, c32 and c48 points are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  append-only: true
