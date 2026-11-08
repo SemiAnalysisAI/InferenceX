@@ -23,15 +23,14 @@ class KVMatrix(unittest.TestCase):
     PLATFORMS = {
         "full": {**_BASE, "launcher": "single-slurm", "product": "full",
                  "kv_backends": {"nixl": ["rdma", "mnnvl"]}},
-        "push-only": {**_BASE, "launcher": "mi-amds", "product": "push-only",
-                      "kv_backends": {"mooncake": ["rdma"]}},
+        "rdma-only": {**_BASE, "launcher": "mi-amds", "product": "rdma-only",
+                      "kv_backends": {"nixl": ["rdma"]}},
         # no entry, no legs
         "absent": {**_BASE, "launcher": "single-slurm", "product": "absent"},
     }
 
     def _kv(self):
-        sweep = {**sweep_matrix.KV_SWEEP, "allocation_minutes": 100,
-                 "ops": {"nixl": ["pull", "push"], "mooncake": ["push"]}}
+        sweep = {**sweep_matrix.KV_SWEEP, "allocation_minutes": 100}
         with mock.patch.object(sweep_matrix, "PLATFORMS", self.PLATFORMS), \
                 mock.patch.object(sweep_matrix, "KV_SWEEP", sweep):
             return sweep_matrix.resolve_matrix(suites="kv-transfer")
@@ -40,7 +39,7 @@ class KVMatrix(unittest.TestCase):
         matrix = self._kv()
         shards = {(s["sku"], s["backend"], s["cases"][0]["mode"]): s for s in matrix["include"]}
         self.assertEqual(set(shards), {("full", "nixl", "rdma"), ("full", "nixl", "mnnvl"),
-                                       ("push-only", "mooncake", "rdma")})
+                                       ("rdma-only", "nixl", "rdma")})
         self.assertEqual(len(matrix["requested_cases"]),
                          sum(len(s["cases"]) for s in shards.values()))
         for (sku, _, fabric), shard in shards.items():
@@ -55,9 +54,8 @@ class KVMatrix(unittest.TestCase):
                     # the app labels a GB rdma leg by its scale-out transport
                     self.assertEqual(case["scale_out_transport"],
                                      "rdma" if fabric == "rdma" else None)
-        # each library runs the directions the sweep config gives it
+        # the library runs the directions the sweep config gives it
         self.assertEqual(shards[("full", "nixl", "rdma")]["cases"][0]["ops"], "pull push")
-        self.assertEqual(shards[("push-only", "mooncake", "rdma")]["cases"][0]["ops"], "push")
         # run.sh reads the allocation (COLLX_TIME) and exports the fabric off the shard row
         for shard in shards.values():
             self.assertEqual(shard["allocation_minutes"], 100)
@@ -203,7 +201,7 @@ class LinkRate(unittest.TestCase):
 
 
 def _grid_args(**overrides):
-    base = dict(workload_name="kv-dsv4", precision="fp8",
+    base = dict(workload_name="kv-k31", precision="fp8",
                 isl_ladder="2048 8192 32768 65536 131072 524288",
                 batch_sizes="1 2 4 8 16 32", pool_slack=2.0, max_burst_tokens=131072)
     base.update(overrides)

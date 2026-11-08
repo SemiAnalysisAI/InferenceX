@@ -31,7 +31,7 @@ UCX_RECORDED = ("UCX_NET_DEVICES", "UCX_TLS", "UCX_IB_GID_INDEX", "UCX_MAX_RNDV_
 
 
 def add_kv_args(ap: argparse.ArgumentParser) -> None:
-    ap.add_argument("--workload-name", required=True, help="kv-<preset>, e.g. kv-dsv4")
+    ap.add_argument("--workload-name", required=True, help="kv-<preset>, e.g. kv-k31")
     ap.add_argument("--precision", required=True, choices=["bf16", "fp8"])
     ap.add_argument("--fabric", default="rdma", choices=["rdma", "mnnvl"],
                     help="which lane the SKU row claims; mnnvl additionally sets "
@@ -59,8 +59,6 @@ def add_kv_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--scale-up-domain", type=int, default=8)
     ap.add_argument("--scale-up-transport", default="")
     ap.add_argument("--topology-class", default="")
-    ap.add_argument("--socket-ifname", default=os.environ.get("COLLX_SOCKET_IFNAME", ""))
-    ap.add_argument("--kv-mc-port", type=int, default=48830)
 
 
 def export_ucx_selectors(environ=os.environ) -> None:
@@ -220,7 +218,7 @@ def _grid(args) -> tuple[list[tuple[dict, list[int]]], list[int], list[int]]:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="CollectiveX KV-cache transfer sweep")
-    ap.add_argument("--backend", required=True, choices=["nixl", "mooncake"])
+    ap.add_argument("--backend", required=True, choices=["nixl"])
     add_kv_args(ap)
     args = ap.parse_args()
 
@@ -231,15 +229,6 @@ def main() -> int:
               f"{args.case_id} != {computed_case_id}", file=sys.stderr)
         return 2
     args.case_id = args.case_id or computed_case_id
-    if args.backend == "mooncake" and "kinds" in kv_workload.PRESETS.get(
-            args.workload_name.removeprefix("kv-"), {}):
-        print("ERROR: no vLLM MooncakeConnector plan is modelled for this workload",
-              file=sys.stderr)
-        return 2
-    if args.backend == "mooncake" and args.ops.split() != ["push"]:
-        print("ERROR: vLLM's MooncakeConnector only pushes; run mooncake with --ops push",
-              file=sys.stderr)
-        return 2
 
     if args.fabric == "mnnvl":
         os.environ.setdefault("UCX_CUDA_IPC_ENABLE_MNNVL", "y")
@@ -272,10 +261,7 @@ def main() -> int:
     dist.init_process_group("gloo", rank=rank, world_size=world_size,
                             timeout=_dt.timedelta(days=1))
 
-    if args.backend == "mooncake":
-        from kv_mooncake import MooncakeBackend as Backend
-    else:
-        from kv_nixl import NIXLBackend as Backend
+    from kv_nixl import NIXLBackend as Backend
 
     points, isls, batches = _grid(args)
     ops = args.ops.split()
@@ -424,17 +410,12 @@ def main() -> int:
                          for k in range(sets)]
         initiator_tables = [[kv_workload.block_table(cfg, seed_i, r, k)
                              for r in range(allowed[-1])] for k in range(sets)]
-        # req_bytes is the request's KV (its block rows), the same for every
-        # backend, so GB/s compares libraries on one payload; descs and
-        # posted_bytes are what this backend's vLLM shape posts for it (NIXL: a
-        # whole row per id; Mooncake: its transfer regions).
-        _, _, sizes = backend.request_entries(cfg, initiator_tables[0][0],
-                                              target_tables[0][0])
+        # What one rank moves for one request: its descriptors and their bytes.
         base = {
             "kind": "paged", "preset": cfg["preset"], "isl": cfg["isl"],
             "page_tokens": cfg["page_tokens"], "layers": cfg["layers"],
-            "row_bytes": cfg["row_bytes"], "descs": int(len(sizes)),
-            "req_bytes": cfg["req_bytes"], "posted_bytes": int(sizes.sum()),
+            "row_bytes": cfg["row_bytes"], "descs": cfg["descs"],
+            "req_bytes": cfg["req_bytes"],
         }
         for batch in allowed:
             for op in ops:

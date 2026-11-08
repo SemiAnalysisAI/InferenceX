@@ -40,8 +40,7 @@ class NIXLBackend:
         self._pool = self._bulk = self._peer = None
         self._local_rows = self._remote_rows = None
         self._row_bytes = self._rows = 0
-        preset = args.workload_name.removeprefix("kv-")
-        self._kinds = kv_workload.desc_kinds({"preset": preset, "row_bytes": 0})
+        self._kinds = kv_workload.PRESETS[args.workload_name.removeprefix("kv-")]["kinds"]
 
     def register(self, pool, bulk, row_bytes: int) -> None:
         self._pool, self._bulk, self._row_bytes = pool, bulk, row_bytes
@@ -57,13 +56,13 @@ class NIXLBackend:
 
     def _row_descs(self, base: int, nbytes: int, dev: int) -> np.ndarray:
         """The prepped list vLLM builds once per side: every descriptor kind of every row,
-        kind-major (id = kind x rows + row). A whole-row preset has the one kind."""
+        kind-major (id = kind x rows + row)."""
         rows = nbytes // self._row_bytes
         starts = np.uint64(base) + np.arange(rows, dtype=np.uint64) * np.uint64(self._row_bytes)
         out = np.empty((len(self._kinds), rows, 3), dtype=np.uint64)
         for index, (offset, size) in enumerate(self._kinds):
             out[index, :, 0] = starts + np.uint64(offset)
-            out[index, :, 1] = size or self._row_bytes
+            out[index, :, 1] = size
         out[:, :, 2] = dev
         return out.reshape(-1, 3)
 

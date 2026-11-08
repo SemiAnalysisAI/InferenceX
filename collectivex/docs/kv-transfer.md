@@ -49,9 +49,9 @@ and each rep uses a fresh table set (four by default). A burst is `batch` reques
 The batch ladder (1 to 32) stops where `batch × ISL` passes 131,072 prompt tokens (batch 1 always
 runs); the result records what each point ran.
 
-The `kv-dsv4` preset (vLLM 0.32.0's DeepSeek-V4-Pro layout, one whole row per block id) and the
-Mooncake adapter stay in the code for hand runs but are not in the sweep: DeepSeek-V4-Pro has no
-disaggregated recipe any more, and the K3.1 recipes use Mooncake only as a store connector.
+This replaces the earlier DeepSeek-V4-Pro layout, which has no disaggregated recipe any more.
+Mooncake is not timed: the K3.1 recipes use it only as a store connector, not for the
+prefill-to-decode transfer.
 
 ## Rank mapping
 

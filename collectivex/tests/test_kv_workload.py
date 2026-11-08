@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""vLLM's K3.1 and DSV4 transfer geometry, block tables and verification (numpy stands in
-for the device)."""
+"""vLLM's Kimi-K3.1 transfer geometry, block tables and verification (numpy stands in for the
+device)."""
 from __future__ import annotations
 
 import sys
@@ -14,101 +14,10 @@ sys.path[:0] = [str(ROOT), str(ROOT / "bench")]
 
 import kv_workload  # noqa: E402
 
-ROW = 1_435_968
+ROW = 18_800_640
 
 
 class Geometry(unittest.TestCase):
-    def test_pages_follow_vllms_576_byte_padding(self):
-        # round_up(block / tokens_per_state * bytes_per_state, 576), per
-        # vLLM's kv_cache_interface: C4A 64 x 584, its indexer 64 x 132, C128A
-        # 2 x 584, SWA 64 x 584, the fp32 compressor states 4 x 8192,
-        # 4 x 2048 and 8 x 4096.
-        self.assertEqual({c: kv_workload.page_bytes(c) for c in kv_workload.DSV4_CACHES}, {
-            "c4a": 37_440, "c4a-indexer": 8_640, "c128a": 1_728, "swa": 37_440,
-            "c4a-state": 32_832, "c4a-indexer-state": 8_640, "c128a-state": 32_832})
-
-    def test_the_row_is_the_widest_group(self):
-        groups = kv_workload.PRESETS["dsv4"]["groups"]
-        self.assertEqual({g["name"]: kv_workload.group_block_bytes(g) for g in groups}, {
-            "mla": 30 * 37_440 + 30 * 8_640 + 31 * 1_728,       # 1,435,968
-            "swa-a": 31 * 37_440, "swa-b": 30 * 37_440,
-            "c4a-state": 30 * 32_832 + 30 * 8_640, "c128a-state": 31 * 32_832})
-        cfg = kv_workload.plan_config("dsv4", "fp8", 2048)
-        self.assertEqual(cfg["row_bytes"], ROW)
-
-    def test_windowed_groups_move_only_their_live_tail(self):
-        # vLLM's group order; MLA moves every block. vLLM 0.32.0's prefill tails
-        # were [3, 3, 17, 3] ids for the windowed groups at 2048/8192/32768, each
-        # led by one null block; the decode side lists only its live blocks and
-        # the connectors end-trim to that, so 2, 2, 16 and 2 ids move.
-        for isl, blocks, descs in ((2048, [2, 2, 8, 16, 2], 30),
-                                   (131072, [2, 2, 512, 16, 2], 534),
-                                   (524288, [2, 2, 2048, 16, 2], 2070)):
-            with self.subTest(isl=isl):
-                cfg = kv_workload.plan_config("dsv4", "fp8", isl)
-                self.assertEqual([g["blocks"] for g in cfg["groups"]], blocks)
-                self.assertEqual((cfg["descs"], cfg["req_bytes"]), (descs, descs * ROW))
-
-    def test_a_block_leaves_once_the_next_tokens_window_passes_it(self):
-        # get_num_skipped_tokens(isl) = isl - window + 1: 191 tokens free swa's
-        # first 64-token block (and one block of each state group), 190 do not;
-        # a prompt inside every window keeps only the blocks it fills.
-        for isl, blocks in ((190, [3, 3, 1, 17, 3]), (191, [2, 2, 1, 16, 2]),
-                            (8, [1, 1, 1, 1, 2])):
-            with self.subTest(isl=isl):
-                cfg = kv_workload.plan_config("dsv4", "fp8", isl)
-                self.assertEqual([g["blocks"] for g in cfg["groups"]], blocks)
-
-    def test_only_the_architectural_precision_plans(self):
-        with self.assertRaises(ValueError):
-            kv_workload.plan_config("dsv4", "bf16", 2048)
-
-
-class Entries(unittest.TestCase):
-    """What one request posts: NIXL's descriptors and Mooncake's transfer plan."""
-
-    def test_nixl_moves_one_whole_row_per_id(self):
-        # vLLM 0.32.0 registers the backing allocation as ONE region (no
-        # per-layer view of a padded page is the page) and posts a row per id.
-        cfg = kv_workload.plan_config("dsv4", "fp8", 2048)
-        rows = kv_workload.block_table(cfg, 5)
-        local, remote, sizes = kv_workload.nixl_entries(cfg, rows, rows + 1)
-        self.assertEqual(local.tolist(), (rows * ROW).tolist())
-        self.assertEqual(remote.tolist(), ((rows + 1) * ROW).tolist())
-        self.assertEqual(sizes.tolist(), [ROW] * 30)
-
-    def test_mooncake_folds_the_window_views_and_promotes_whole_rows(self):
-        # Five transfer regions: swa-a and swa-b fold into one whole row over
-        # both groups' ids, swa-a's 31st page (30 x 37,440 in, 584 x 64 long)
-        # stays a page region, and MLA plus both state groups tile their rows.
-        self.assertEqual(kv_workload.mooncake_regions("dsv4"), (
-            ((0, 1), 0, None), ((0,), 1_123_200, 37_376),
-            ((2,), 0, None), ((3,), 0, None), ((4,), 0, None)))
-
-    def test_a_mooncake_request_follows_its_regions(self):
-        # Scattered tables: a whole row per id, plus swa-a's ids again as pages.
-        cfg = kv_workload.plan_config("dsv4", "fp8", 2048)
-        local = kv_workload.block_table(cfg, kv_workload.table_seed(cfg, "local", 67))
-        remote = kv_workload.block_table(cfg, kv_workload.table_seed(cfg, "remote", 67))
-        lo, re, sizes = kv_workload.mooncake_entries(cfg, local, remote)
-        self.assertEqual((len(sizes), int(sizes.sum())), (32, 30 * ROW + 2 * 37_376))
-        pages = sizes == 37_376
-        self.assertEqual(lo[pages].tolist(), (local[:2] * ROW + 1_123_200).tolist())
-        self.assertEqual(re[pages].tolist(), (remote[:2] * ROW + 1_123_200).tolist())
-        # Runs coalesce where both sides advance by one: across swa-a into swa-b
-        # (one region), never on the page region, never across regions (the
-        # state groups' rows continue each other here), and they break where
-        # only the remote side jumps (inside the MLA ids).
-        local = np.array([10, 11, 12, 13, *range(30, 38), *range(40, 56), 56, 57])
-        remote = np.array([110, 111, 112, 113, 130, 131, 132, 133, 170, 171, 172, 173,
-                           *range(140, 156), 156, 157])
-        lo, re, sizes = kv_workload.mooncake_entries(cfg, local, remote)
-        self.assertEqual((sizes // ROW).tolist(), [4, 0, 0, 4, 4, 16, 2])
-        self.assertEqual(lo[sizes < ROW].tolist(), [row * ROW + 1_123_200 for row in (10, 11)])
-        self.assertEqual(re[sizes // ROW == 4].tolist(), [110 * ROW, 130 * ROW, 170 * ROW])
-
-
-class K31Geometry(unittest.TestCase):
     """Kimi-K3.1-Pro on one TP16 rank, as the kimi-k31 image registers it. A GB200 production run
     logged num_regions=88, block lengths {425472, 589824, 69632} and KDA state (32256, 393216)."""
 
@@ -138,7 +47,8 @@ class K31Geometry(unittest.TestCase):
             with self.subTest(isl=isl):
                 cfg = kv_workload.plan_config("k31", "fp8", isl)
                 self.assertEqual([g["blocks"] for g in cfg["groups"]], [blocks, 1, 1])
-                self.assertEqual(cfg["descs"], blocks + 2)  # rows per request
+                self.assertEqual(cfg["rows"], blocks + 2)
+                self.assertEqual(cfg["descs"], 53 * blocks + 276)
                 self.assertEqual(cfg["req_bytes"], 18_776_064 * blocks + 29_357_568)
                 rows = kv_workload.block_table(cfg, 5)
                 local, remote, sizes = kv_workload.nixl_entries(cfg, rows, rows[::-1])
@@ -161,14 +71,14 @@ class K31Geometry(unittest.TestCase):
             self.assertLessEqual(start + size, following)
         self.assertTrue((sizes % 8 == 0).all() and (local % 8 == 0).all())
 
-    def test_mooncake_has_no_plan_for_it(self):
+    def test_only_the_served_precision_plans(self):
         with self.assertRaises(ValueError):
-            kv_workload.mooncake_regions("k31")
+            kv_workload.plan_config("k31", "bf16", 2048)
 
 
 class Tables(unittest.TestCase):
     def test_deterministic_and_distinct_per_side_and_seed(self):
-        cfg = kv_workload.plan_config("dsv4", "fp8", 8192)
+        cfg = kv_workload.plan_config("k31", "fp8", 8192)
         local = kv_workload.table_seed(cfg, "local", 67)
         remote = kv_workload.table_seed(cfg, "remote", 67)
         np.testing.assert_array_equal(kv_workload.block_table(cfg, local),
@@ -178,15 +88,15 @@ class Tables(unittest.TestCase):
         self.assertNotEqual(local, kv_workload.table_seed(cfg, "local", 68))
 
     def test_every_table_set_and_request_takes_disjoint_rows(self):
-        cfg = kv_workload.plan_config("dsv4", "fp8", 2048, batch_max=4)
+        cfg = kv_workload.plan_config("k31", "fp8", 2048, batch_max=4)
         rows = np.concatenate([kv_workload.block_table(cfg, 5, r, k)
                                for k in range(cfg["table_sets"]) for r in range(4)])
-        self.assertEqual(len(rows), cfg["table_sets"] * 4 * 30)
+        self.assertEqual(len(rows), cfg["table_sets"] * 4 * cfg["rows"])
         self.assertEqual(len(rows), len(set(rows.tolist())))
         self.assertLess(rows.max(), cfg["pool_rows"])
 
     def test_a_request_beyond_the_pool_fails_closed(self):
-        cfg = kv_workload.plan_config("dsv4", "fp8", 2048, table_sets=1)
+        cfg = kv_workload.plan_config("k31", "fp8", 2048, table_sets=1)
         with self.assertRaises(ValueError):
             kv_workload.block_table(cfg, 5, request=0, table_set=5)
 
@@ -194,14 +104,11 @@ class Tables(unittest.TestCase):
 class Verify(unittest.TestCase):
     SRC_SALT, DST_SALT = 1, 0
 
-    def _setup(self, entries="rows"):
-        cfg = kv_workload.plan_config("dsv4", "fp8", 2048)
+    def _setup(self):
+        cfg = kv_workload.plan_config("k31", "fp8", 2048, table_sets=1)
         dst_rows = kv_workload.block_table(cfg, kv_workload.table_seed(cfg, "local", 67))
         src_rows = kv_workload.block_table(cfg, kv_workload.table_seed(cfg, "remote", 67))
-        if entries == "rows":
-            dst, src, sizes = kv_workload.nixl_entries(cfg, dst_rows, src_rows)
-        else:
-            dst, src, sizes = kv_workload.mooncake_entries(cfg, dst_rows, src_rows)
+        dst, src, sizes = kv_workload.nixl_entries(cfg, dst_rows, src_rows)
         words = cfg["pool_bytes"] // 8
         pool = kv_workload.pattern_words(0, words, self.DST_SALT)
         src_pool = kv_workload.pattern_words(0, words, self.SRC_SALT)
@@ -211,11 +118,9 @@ class Verify(unittest.TestCase):
         return pool, dst, src, sizes
 
     def test_a_faithful_transfer_verifies(self):
-        for entries in ("rows", "mooncake"):
-            with self.subTest(entries=entries):
-                pool, dst, src, sizes = self._setup(entries)
-                ok, detail = kv_workload.verify_entries(pool, dst, src, sizes, self.SRC_SALT)
-                self.assertTrue(ok, detail)
+        pool, dst, src, sizes = self._setup()
+        ok, detail = kv_workload.verify_entries(pool, dst, src, sizes, self.SRC_SALT)
+        self.assertTrue(ok, detail)
 
     def test_wrong_transfers_fail(self):
         pool, dst, src, sizes = self._setup()
