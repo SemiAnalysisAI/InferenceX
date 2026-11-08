@@ -12461,3 +12461,13 @@
     - "max-num-seqs at concurrency 10/16/24/32 changes from 6/10/16/24 to 7/8/13/20. Concurrency 10 adds capture size 42 (7 x (1 + 5)). Otherwise the draft lengths, capture lists, max-num-batched-tokens and gpu-memory-utilization at these points, and every setting at concurrency 48, are unchanged."
     - "No change to the DSpark draft's precision: Inferact/Kimi-K3.1-Pro-DSpark-preview (revision 6a2ef20a) ships all-BF16 weights with no quantization_config, the speculative config names the draft and sets no quantization, so get_draft_quant_config() returns None and K3DSparkModel loads its layers in BF16 with the target's BF16 embedding and LM head. Its KV cache stays FP8, the same as the target's. DCP1 at concurrency 1 and 7 draft tokens at concurrency 4 do not change these types."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4887
+
+- config-keys:
+    - h3-bf16-b200-sglang-video
+    - h3-bf16-h100-sglang-video
+    - h3-bf16-h200-sglang-video
+    - h3-bf16-mi355x-sglang-video
+  scenario-type: [video-generation]
+  description:
+    - "The H3 client polls job status every 0.1 s instead of every 0.5 s. A job counts as done only at the next poll, so each published latency carried up to 0.5 s of polling delay; it now carries up to 0.1 s."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4904
