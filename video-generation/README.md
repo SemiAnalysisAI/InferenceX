@@ -47,9 +47,10 @@ latency and leaves cross-engine quality unjudged.
 5-second H3 contract under the `release-v1` selector. It requests 49 denoising
 updates, expects 124 delivered frames, and uses a disjoint warmup. The runner
 sends each engine's explicit H.264 options and records the encoding policy in
-the plan hash. Media decoding verifies observable stream properties; preset,
-CRF, exact encoder implementation, and cross-engine quality still require
-separate evidence. Comparisons leave cross-engine quality unjudged, while
+the plan hash. Media decoding verifies observable stream properties, plus CRF
+and the preset's fixed options from x264's SEI header. A plan may request only
+a preset whose options the check can verify. Exact encoder implementation and
+cross-engine quality still require separate evidence. Comparisons leave cross-engine quality unjudged, while
 same-implementation numerical checks require matching sealed image, launch,
 environment, GPU and algorithm identity.
 
