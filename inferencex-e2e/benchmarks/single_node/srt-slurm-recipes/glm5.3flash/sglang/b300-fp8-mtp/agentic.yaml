@@ -17,8 +17,6 @@ base:
       nodes: 1
       workers: 1
       gpus: 8
-      # Serve flags follow the cookbook's B300 Low Latency cell at
-      # https://docs.sglang.io/cookbook/autoregressive/GLM/GLM-5.3-Flash.
       args:
         served-model-name: zai-org/GLM-5.3-Flash
         tensor-parallel-size: 8
@@ -50,6 +48,26 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
 override_none:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        enable-linear-replayssm-spec: true
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+        cuda-graph-backend-prefill: breakable
+        cuda-graph-max-bs-prefill: 8192
+        mem-fraction-static: 0.9
+        prefill-decode-interval: 1
+        chunked-prefill-size: 16384
+        mamba-max-states-per-path: 2
+        mamba-full-memory-ratio: 0.5
+        random-seed: 316023864
+        weight-loader-prefetch-checkpoints: true
+        weight-loader-prefetch-num-threads: 16
+        watchdog-timeout: 3600
+        enable-cache-report: true
   benchmark:
     env:
       KV_OFFLOADING: none

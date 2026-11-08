@@ -133,6 +133,23 @@ def _mvp_command(arguments: argparse.Namespace) -> int:
             print(json.dumps(result, indent=2, sort_keys=True, allow_nan=False))
             return {"pass": 0, "fail": 1, "inconclusive": 2}[result["overall_status"]]
 
+        if arguments.command == "score-quality":
+            from .quality import score_quality
+
+            bundles = dict(arguments.bundles)
+            if len(bundles) != len(arguments.bundles):
+                raise ValueError("each artifact ID may appear only once")
+            result = score_quality(
+                bundles=bundles,
+                references=arguments.references,
+                descriptor=arguments.descriptor,
+                run_id=arguments.run_id,
+                source_revision=arguments.source_revision,
+                output=arguments.output,
+            )
+            print(json.dumps(result, indent=2, sort_keys=True, allow_nan=False))
+            return 0
+
         if arguments.command == "inspect-media":
             from .media import analyze_media
 
@@ -147,6 +164,13 @@ def _mvp_command(arguments: argparse.Namespace) -> int:
         print(json.dumps({"status": "error", "error": message}, allow_nan=False), file=sys.stderr)
         return 2
     raise AssertionError(arguments.command)
+
+
+def _bundle_argument(value: str) -> tuple[int, Path]:
+    artifact, separator, path = value.partition("=")
+    if not separator or not artifact.isdigit() or not path:
+        raise argparse.ArgumentTypeError("expected ARTIFACT_ID=PATH")
+    return int(artifact), Path(path)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -209,6 +233,23 @@ def _parser() -> argparse.ArgumentParser:
     compare.add_argument(
         "--report", type=Path, help="new portable HTML report plus a local media-assets directory"
     )
+
+    score = subparsers.add_parser(
+        "score-quality",
+        help="score stored h3-results clips against the public Diffusers reference release",
+    )
+    score.add_argument(
+        "bundles",
+        nargs="+",
+        type=_bundle_argument,
+        metavar="ARTIFACT_ID=PATH",
+        help="h3-results bundle, as a zip or directory, and its GitHub artifact ID",
+    )
+    score.add_argument("--descriptor", required=True, type=Path)
+    score.add_argument("--references", required=True, type=Path, help="directory of release MP4s")
+    score.add_argument("--run-id", required=True, help="GitHub run that stores the bundles")
+    score.add_argument("--source-revision", required=True, help="git commit of this scorer")
+    score.add_argument("--output", required=True, type=Path, help="new attachment directory")
 
     inspect = subparsers.add_parser(
         "inspect-media", help="fully decode a file and measure technical media integrity"
