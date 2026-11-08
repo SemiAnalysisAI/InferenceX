@@ -1,0 +1,199 @@
+base:
+  schema: 2
+  name: kimik3.1-fp4-b300-vllm-agentic
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  # Loading ~1.56 TB of MXFP4 shards plus the latency_specialized decode autotune can take
+  # most of VLLM_ENGINE_READY_TIMEOUT_S.
+  health_check:
+    interval_seconds: 10
+    max_attempts: 720
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: moonshotai/Kimi-K3.1-Pro
+        tensor-parallel-size: 8
+        trust-remote-code: true
+        language-model-only: true
+        load-format: fastsafetensors
+        enable-auto-tool-choice: true
+        tool-call-parser: kimi_k3
+        reasoning-parser: kimi_k3
+        kv-cache-dtype: fp8
+        attention-config: '{"indexer_kv_dtype":"mxfp4"}'
+        # The K3.1 week-1 precision policy requires an FP32 KDA recurrent state.
+        mamba-ssm-cache-dtype: float32
+        enable-prefix-caching: true
+        max-num-batched-tokens: 16384
+        gpu-memory-utilization: 0.9
+        stream-interval: 10
+        disable-uvicorn-access-log: true
+        # TOTAL_CPU_DRAM_GB split across the 8 TP ranks.
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":281125000000,"lazy_offload":false}}'
+      env:
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+        PYTHONUNBUFFERED: '1'
+        # Identical prefixes must hash to identical block keys run-to-run.
+        PYTHONHASHSEED: '42'
+        # Outlast AIPerf's pooled-connection idle gaps.
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '900'
+  benchmark:
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '2249'
+
+# Admission is 2x CONC. DSpark drafts match the SGLang recipe's DFLASH drafts: 7 through c8,
+# 6 at c16, 5 at c24-c40 and 4 from c48. The largest decode graph covers max-num-seqs x (1 + drafts),
+# rounded up to a default capture size; throughput runs replace block rejection with the
+# golden acceptance length. Plain TP8 at c1-c2, where the KV fits on GPU and DCP's decode
+# collectives cost most; DCP8 from c4 for ~7x the KV tokens.
+# Low-latency decode (the fused CuTe DSL path) runs only where every decode graph has at
+# most 64 rows (c1-c4): this image launches its 65-320-row MoE experts on 152 CTAs that
+# must all be resident, which a 148-SM B300 cannot hold.
+override_tp8_c1:
+  roles:
+    agg:
+      args:
+        additional-config: '{"decode_backend":"latency_specialized"}'
+        max-num-seqs: 2
+        max-cudagraph-capture-size: 16
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp8_c2:
+  roles:
+    agg:
+      args:
+        additional-config: '{"decode_backend":"latency_specialized"}'
+        max-num-seqs: 4
+        max-cudagraph-capture-size: 32
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  benchmark:
+    env:
+      CONC: '2'
+
+override_dcp8_c4:
+  roles:
+    agg:
+      args:
+        additional-config: '{"decode_backend":"latency_specialized"}'
+        decode-context-parallel-size: 8
+        max-num-seqs: 8
+        max-cudagraph-capture-size: 64
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  benchmark:
+    env:
+      CONC: '4'
+
+override_dcp8_c8:
+  roles:
+    agg:
+      args:
+        decode-context-parallel-size: 8
+        max-num-seqs: 16
+        max-cudagraph-capture-size: 128
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  benchmark:
+    env:
+      CONC: '8'
+
+override_dcp8_c16:
+  roles:
+    agg:
+      args:
+        decode-context-parallel-size: 8
+        max-num-seqs: 32
+        max-cudagraph-capture-size: 224
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":6,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  benchmark:
+    env:
+      CONC: '16'
+
+override_dcp8_c24:
+  roles:
+    agg:
+      args:
+        decode-context-parallel-size: 8
+        max-num-seqs: 48
+        max-cudagraph-capture-size: 288
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  benchmark:
+    env:
+      CONC: '24'
+
+override_dcp8_c32:
+  roles:
+    agg:
+      args:
+        decode-context-parallel-size: 8
+        max-num-seqs: 64
+        max-cudagraph-capture-size: 384
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  benchmark:
+    env:
+      CONC: '32'
+
+override_dcp8_c40:
+  roles:
+    agg:
+      args:
+        decode-context-parallel-size: 8
+        max-num-seqs: 80
+        max-cudagraph-capture-size: 480
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  benchmark:
+    env:
+      CONC: '40'
+
+override_dcp8_c48:
+  roles:
+    agg:
+      args:
+        decode-context-parallel-size: 8
+        max-num-seqs: 96
+        max-cudagraph-capture-size: 480
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  benchmark:
+    env:
+      CONC: '48'
+
+override_dcp8_c56:
+  roles:
+    agg:
+      args:
+        decode-context-parallel-size: 8
+        max-num-seqs: 112
+        max-cudagraph-capture-size: 560
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  benchmark:
+    env:
+      CONC: '56'
+
+override_dcp8_c70:
+  roles:
+    agg:
+      args:
+        decode-context-parallel-size: 8
+        max-num-seqs: 140
+        max-cudagraph-capture-size: 704
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  benchmark:
+    env:
+      CONC: '70'

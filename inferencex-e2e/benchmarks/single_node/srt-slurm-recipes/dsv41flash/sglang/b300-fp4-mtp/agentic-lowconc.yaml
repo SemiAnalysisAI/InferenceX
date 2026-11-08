@@ -1,0 +1,93 @@
+base:
+  schema: 2
+  name: dsv41flash-fp4-b300-sglang-agentic-lowconc
+  identity:
+    model:
+      revision: dba1be0a40aa45a94ad051997016db3960a90277
+    container: {}
+    frameworks:
+      sglang: 0.0.0.dev1+g684fea8af
+      sglang-router: 0.3.2
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        trust-remote-code: true
+        # Overlap checkpoint reads with weight loading from local NVMe.
+        weight-loader-prefetch-checkpoints: true
+        chunked-prefill-size: 16384
+        # Keep active decode requests progressing while long prefixes are queued.
+        prefill-decode-interval: 16
+        # DSpark is the checkpoint's bundled draft; the block size is its only knob.
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 5
+        # Capture decode graphs up to batch 64.
+        cuda-graph-max-bs-decode: 64
+        reasoning-parser: auto
+        tool-call-parser: auto
+        # Draft passes under long-context load outlast the 1800 s default watchdog.
+        watchdog-timeout: 3600
+        enable-metrics: true
+        tokenizer-backend: fastokens
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        # AgentX measures thinking on, the regime of the golden acceptance curve.
+        SGLANG_DEFAULT_THINKING: '1'
+        SGLANG_DSV41_REASONING_EFFORT: high
+        # Row-sharded host Engram tables free HBM for the 1M-context working set.
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+  benchmark:
+    env:
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+override_tp4_c1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        cuda-graph-max-bs-decode: 1
+        expert-parallel-size: 1
+        max-running-requests: 1
+        mem-fraction-static: 0.7
+        schedule-policy: lpm
+        swa-prefix-tails: 128
+        tensor-parallel-size: 4
+  benchmark:
+    env:
+      CONC: '1'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp4_c4:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        expert-parallel-size: 1
+        max-running-requests: 8
+        mem-fraction-static: 0.7
+        prefill-decode-interval: 192
+        swa-prefix-tails: 256
+        tensor-parallel-size: 4
+  benchmark:
+    env:
+      CONC: '4'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'

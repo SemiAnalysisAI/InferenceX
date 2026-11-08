@@ -26,14 +26,14 @@ from power_model.models.advanced.networking import QM9790NDRInfiniBandSwitch
 
 @pytest.mark.parametrize(
     "state, expected",
-    [("Idle", 160), ("FixedSeqLen", 240), ("Agentic", 300), ("AgenticOffloadingOn", 400)],
+    [("Idle", 160), ("FixedSeqLen", 330), ("Agentic", 360), ("AgenticOffloadingOn", 390)],
 )
 def test_x86_state_selects_fixed_power_for_two_cpus(state, expected):
     result = ComponentGroup(component=X86CPU(state=state), quantity=2).estimate_breakdown()
     assert result.power_w == expected
     assert dict(result.details)["state"] == state
     assert dict(result.details)["architecture"] == "x86"
-    assert result.provenance.kind == "assumed"
+    assert result.provenance.kind == "estimated"
 
 
 @pytest.mark.parametrize(
@@ -46,16 +46,16 @@ def test_invalid_x86_state_or_power_override_is_rejected(inputs):
 
 
 @pytest.mark.parametrize(
-    "nic_class, active_w, idle_w, total_w, bandwidth",
+    "nic_class, active_w, idle_w, total_w, bandwidth, kind",
     [
-        (ConnectX7NICCard, 50, 15, 65, 400),
-        (ConnectX8NICCard, 100, 30, 130, 800),
-        (Thor2NICCard, 60, 20, 80, 400),
-        (PollaraNICCard, 60, 20, 80, 400),
+        (ConnectX7NICCard, 50, 15, 65, 400, "assumed"),
+        (ConnectX8NICCard, 100, 30, 130, 800, "assumed"),
+        (Thor2NICCard, 60, 20, 80, 400, "assumed"),
+        (PollaraNICCard, 69, 34.5, 103.5, 400, "estimated"),
     ],
 )
 def test_nic_state_selects_fixed_power_without_changing_capacity_metadata(
-    nic_class, active_w, idle_w, total_w, bandwidth
+    nic_class, active_w, idle_w, total_w, bandwidth, kind
 ):
     active = nic_class(state=NICState.ACTIVE)
     idle = nic_class(state="idle")
@@ -73,13 +73,13 @@ def test_nic_state_selects_fixed_power_without_changing_capacity_metadata(
     assert dict(active_group.details)["state"] == "active"
     assert dict(idle_group.details)["idle_power_w"] == idle_w
     assert dict(active_group.details)["active_power_w"] == active_w / 2
-    assert active_group.provenance.kind == "assumed"
+    assert active_group.provenance.kind == kind
 
 
-@pytest.mark.parametrize("state, expected", [("idle", 121.6), ("active", 224)])
-def test_ddr5_state_selects_power_for_32_dimms(state, expected):
+@pytest.mark.parametrize("state", ["idle", "active"])
+def test_ddr5_power_is_the_same_idle_or_offloading_for_32_dimms(state):
     result = ComponentGroup(component=DDR5DIMM(state=state), quantity=32).estimate_breakdown()
-    assert result.power_w == pytest.approx(expected)
+    assert result.power_w == pytest.approx(88)
     assert dict(result.details)["state"] == state
     assert dict(result.details)["capacity_gb_per_dimm"] == 64
 

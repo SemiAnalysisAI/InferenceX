@@ -16,11 +16,10 @@ OPERATOR_FIELDS = {
 NETWORK_FIELDS = {
     "socket_ifname", "rdma_devices", "ib_gid_index", "rdma_service_level",
     "rdma_traffic_class", "rail_isolated", "single_node_rdma_devices", "rdma_fabric",
-    "rdma_relaxed_ordering", "rdma_gbs", "host_verbs_provider",
+    "rdma_relaxed_ordering", "rdma_gbs", "host_verbs_provider", "uccl_rdma_recv_tokens",
+    "deepep_efa_fork",
 }
-# Timing knobs, in the order the legacy colon-string encoded them, paired with the run_ep flag
-# each one drives. The names match configs/sweep.json so a case's timing block is readable
-# rather than positional.
+# Timing knobs paired with the run_ep flag each one drives. The names match configs/sweep.json.
 _TIMING_FLAGS = (
     ("iters_per_trial", "--iters"),
     ("trials_per_point", "--trials"),
@@ -31,29 +30,13 @@ _TIMING_FLAGS = (
 )
 
 
-def _migrate_timing(timing: object) -> dict:
-    """The one place a legacy colon-string timing profile is decoded.
-
-    Current shards carry an object keyed by the _TIMING_FLAGS names. A replayed pre-chain
-    shard carries "iters:trials:warmup" and a replayed post-chain one all six, positionally;
-    three fields emit no --chain-* flags, so run_ep's argparse defaults supply them rather
-    than this file duplicating the values. Anything else fails closed.
-
-    Worth knowing when replaying an old shard: timing was never part of case_id, so a
-    pre-chain case re-run today lands under its original identity while measured with
-    today's chain budget.
-    """
-    names = tuple(key for key, _ in _TIMING_FLAGS)
-    if isinstance(timing, dict):
-        if set(timing) not in (set(names), set(names[:3])):
-            print(f"unrecognised timing object {timing!r}", file=sys.stderr)
-            raise SystemExit(1)
-        return timing
-    fields = str(timing).split(":")
-    if len(fields) not in (3, 6):
-        print(f"unrecognised timing profile {timing!r}", file=sys.stderr)
+def _timing(timing: object) -> dict:
+    """A case's timing object, which must name exactly the _TIMING_FLAGS knobs: a renamed or
+    missing one would otherwise fall back to run_ep's default."""
+    if not isinstance(timing, dict) or set(timing) != {key for key, _ in _TIMING_FLAGS}:
+        print(f"unrecognised timing object {timing!r}", file=sys.stderr)
         raise SystemExit(1)
-    return dict(zip(names, fields))
+    return timing
 
 
 def _platforms() -> dict:
@@ -76,12 +59,8 @@ def emit(values: dict[str, object]) -> None:
 def _network_overlay(runner: str) -> dict[str, object]:
     """Repo-tracked per-SKU scale-out RDMA selectors — the `network` block of the
     SKU's configs/platform_config.json entry — overlaid onto the base operator
-    config. Only NETWORK_FIELDS are taken, so identity keys and notes are ignored;
-    a missing/invalid file is a no-op fallback to the base network fields."""
-    try:
-        block = _platforms().get(runner, {}).get("network", {})
-    except (KeyError, OSError, TypeError, json.JSONDecodeError):
-        return {}
+    config. Only NETWORK_FIELDS are taken, so identity keys and notes are ignored."""
+    block = _platforms()[runner].get("network", {})
     return {key: value for key, value in block.items() if key in NETWORK_FIELDS}
 
 
@@ -155,10 +134,9 @@ def _ep_argv(case: dict, version: object, runner: str) -> list[str]:
         "topology_class transport case_id suite workload_name",
         tokens_ladder="ladder", workload_name="workload",
     ) + ["--runner", runner, "--version", str(version)]
-    timing = _migrate_timing(case["timing"])
+    timing = _timing(case["timing"])
     for key, flag in _TIMING_FLAGS:
-        if key in timing:
-            argv += [flag, str(timing[key])]
+        argv += [flag, str(timing[key])]
     return argv
 
 
@@ -170,11 +148,22 @@ def _swap_argv(case: dict, version: object, runner: str) -> list[str]:
         case, "case_id profile layout seed device max_payload_bytes warmup iterations")
 
 
+def _kv_argv(case: dict, version: object, runner: str) -> list[str]:
+    return _flag_pairs(
+        case,
+        "backend workload_name precision fabric isl_ladder batch_sizes ops "
+        "warmup reps trials pool_slack max_burst_tokens seed case_id suite gpus_per_node "
+        "scale_up_domain scale_up_transport topology_class",
+        workload_name="workload", fabric="mode",
+    ) + ["--runner", runner, "--version", str(version)]
+
+
 # suite -> (bench/<entrypoint>.py, argv codec, output flag). The rank wrapper in
 # runtime/common.sh execs the entrypoint the leading --entrypoint pair names.
 _SUITES = {
     "ep-core": ("run_ep", _ep_argv, "--out"),
     "swap-blocks": ("run_swap_blocks", _swap_argv, "--output"),
+    "kv-transfer": ("run_kv", _kv_argv, "--out"),
 }
 
 
@@ -185,8 +174,7 @@ def _emit_argv(case: dict, version: object, runner: str) -> None:
         raise SystemExit(1)
     entrypoint, codec, out_flag = _SUITES[case["suite"]]
     # case_id is the canonical identity, so a new identity axis cannot be omitted from the
-    # filename. One committed file per case: a re-run replaces it, and git history keeps the
-    # result it replaced.
+    # filename. One file per case: a re-run replaces it.
     out = f"results/{runner}/{case['case_id']}.json"
     argv = ["--entrypoint", entrypoint, *codec(case, version, runner), out_flag, out]
     sys.stdout.buffer.write(b"\0".join(part.encode() for part in argv) + b"\0")

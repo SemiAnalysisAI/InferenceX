@@ -21,6 +21,7 @@ base:
         tensor-parallel-size: 8
         expert-parallel-size: 8
         served-model-name: amd/Muse-Spark-Open-816B-A42B-Quark-MXFP4
+        revision: c7bc74fd64371315a091bc15f9723882eead0dc1
         attention-backend: aiter
         page-size: 16
         kv-cache-dtype: fp8_e4m3
@@ -46,6 +47,7 @@ base:
         PYTHONNOUSERSITE: '1'
         # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        SGLANG_WARMUP_TIMEOUT: '1800'
         SGLANG_USE_AITER: '1'
         SGLANG_USE_AITER_UNIFIED_ATTN: '1'
         MUSE_MOE_BACKEND: flydsl
@@ -59,82 +61,145 @@ base:
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
-override_tp8_c1:
-  benchmark:
-    env:
-      CONC: '1'
-      KV_OFFLOADING: none
-
-override_tp8_c2:
-  benchmark:
-    env:
-      CONC: '2'
-      KV_OFFLOADING: none
-
-override_tp8_c4:
-  benchmark:
-    env:
-      CONC: '4'
-      KV_OFFLOADING: none
-
-override_tp8_c8:
-  benchmark:
-    env:
-      CONC: '8'
-      KV_OFFLOADING: none
-
-override_tp8_c16:
+override_tp8_c6:
   roles:
     agg:
       args:
-        enable-hierarchical-cache: true
-        hicache-size: 253
-        hicache-write-policy: write_through
-        hicache-io-backend: kernel
-        hicache-mem-layout: page_first
+        monokernel-backend: amd
+        max-running-requests: 1
+        cuda-graph-max-bs-decode: 1
+        stream-interval: 128
   benchmark:
     env:
-      CONC: '16'
-      KV_OFFLOADING: dram
+      CONC: '6'
+      KV_OFFLOADING: none
 
-override_tp8_c32:
+override_tp8_c10:
   roles:
     agg:
       args:
-        enable-hierarchical-cache: true
-        hicache-size: 253
-        hicache-write-policy: write_through
-        hicache-io-backend: kernel
-        hicache-mem-layout: page_first
+        monokernel-backend: amd
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+        prefill-decode-interval: 64
+        swa-full-tokens-ratio: 0.3
+        schedule-policy: shortest-prefill-first
+        stream-interval: 40
   benchmark:
     env:
-      CONC: '32'
-      KV_OFFLOADING: dram
+      CONC: '10'
+      KV_OFFLOADING: none
 
-override_tp8_c48:
+override_tp8_c28:
   roles:
     agg:
       args:
-        enable-hierarchical-cache: true
-        hicache-size: 253
-        hicache-write-policy: write_through
-        hicache-io-backend: kernel
-        hicache-mem-layout: page_first
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+        chunked-prefill-size: 32512
+        max-prefill-tokens: 32512
+        mem-fraction-static: 0.88
+        prefill-decode-interval: 64
+        schedule-policy: fcfs
+        stream-interval: 20
+        min-free-slots-delay: 4
   benchmark:
     env:
-      CONC: '48'
-      KV_OFFLOADING: dram
+      CONC: '28'
+      KV_OFFLOADING: none
 
-override_tp8_c64:
+override_tp4_c28:
   roles:
     agg:
       args:
+        tensor-parallel-size: 4
+        page-size: 128
+        expert-parallel-size: 4
         enable-hierarchical-cache: true
-        hicache-size: 253
         hicache-write-policy: write_through
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
+        hicache-size: 310
+        swa-full-tokens-ratio: 0.3
+        schedule-policy: shortest-prefill-first
+        max-running-requests: 56
+        cuda-graph-max-bs-decode: 56
+        chunked-prefill-size: 16384
+        max-prefill-tokens: 16384
+        prefill-decode-interval: 80
+        stream-interval: 20
+        scheduler-recv-interval: 1
+        mem-fraction-static: 0.86
+      env:
+        PYTORCH_HIP_ALLOC_CONF: expandable_segments:True
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
+        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
+      gpus: 4
   benchmark:
     env:
-      CONC: '64'
+      CONC: '28'
       KV_OFFLOADING: dram
+
+override_tp4_c36:
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 4
+        page-size: 128
+        expert-parallel-size: 4
+        enable-hierarchical-cache: true
+        hicache-write-policy: write_through
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        hicache-size: 310
+        swa-full-tokens-ratio: 0.2
+        schedule-policy: shortest-prefill-first
+        max-running-requests: 72
+        cuda-graph-max-bs-decode: 72
+        chunked-prefill-size: 16384
+        max-prefill-tokens: 16384
+        prefill-decode-interval: 48
+        stream-interval: 20
+        mem-fraction-static: 0.86
+      env:
+        PYTORCH_HIP_ALLOC_CONF: expandable_segments:True
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
+      gpus: 4
+  benchmark:
+    env:
+      CONC: '36'
+      KV_OFFLOADING: dram
+
+override_tp4_c40:
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 4
+        page-size: 128
+        expert-parallel-size: 4
+        enable-hierarchical-cache: true
+        hicache-write-policy: write_through
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        hicache-size: 310
+        swa-full-tokens-ratio: 0.2
+        schedule-policy: shortest-prefill-first
+        max-running-requests: 80
+        cuda-graph-max-bs-decode: 80
+        chunked-prefill-size: 16384
+        max-prefill-tokens: 16384
+        prefill-decode-interval: 24
+        stream-interval: 20
+        mem-fraction-static: 0.86
+      env:
+        PYTORCH_HIP_ALLOC_CONF: expandable_segments:True
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
+      gpus: 4
+  benchmark:
+    env:
+      CONC: '40'
+      KV_OFFLOADING: dram
+

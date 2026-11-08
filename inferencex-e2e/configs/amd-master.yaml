@@ -107,6 +107,7 @@ dsr1-fp8-mi300x-sglang:
         conc-start: 4
         conc-end: 64
         srt-recipe: 8k1k.yaml
+        cpu-power: true
 
 dsr1-fp8-mi325x-sglang:
   image: lmsysorg/sglang:v0.5.22-rocm720-mi30x@sha256:58b6bc333f527c88fe5ff1b4bd8d17e82214eabcb3044549117159878967c930
@@ -126,6 +127,7 @@ dsr1-fp8-mi325x-sglang:
         conc-start: 4
         conc-end: 64
         srt-recipe: 8k1k.yaml
+        cpu-power: true
 
 dsr1-fp8-mi355x-sglang:
   image: lmsysorg/sglang:v0.5.22-rocm720-mi35x@sha256:c4b61360b251d62bb17da63f175d571ab22479eb46a144548d79f3ed3998ea11
@@ -170,66 +172,7 @@ dsr1-fp8-mi355x-sglang-mtp:
         conc-end: 64
         spec-decoding: mtp
         srt-recipe: 8k1k.yaml
-
-qwen3.5-fp8-mi325x-sglang:
-  image: lmsysorg/sglang:v0.5.22-rocm720-mi30x@sha256:58b6bc333f527c88fe5ff1b4bd8d17e82214eabcb3044549117159878967c930
-  model: Qwen/Qwen3.5-397B-A17B-FP8
-  model-prefix: qwen3.5
-  runner: mi325x
-  precision: fp8
-  framework: sglang
-  multinode: false
-  srt-recipe-dir: qwen3.5/sglang/mi325x-fp8
-  scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - tp: 8
-        conc-start: 4
-        conc-end: 64
-        srt-recipe: 8k1k.yaml
-
-qwen3.5-fp8-mi355x-sglang:
-  image: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260924
-  model: Qwen/Qwen3.5-397B-A17B-FP8
-  model-prefix: qwen3.5
-  runner: mi355x
-  precision: fp8
-  framework: sglang
-  multinode: false
-  srt-recipe-dir: qwen3.5/sglang/mi355x-fp8
-  scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - tp: 4
-        ep: 1
-        conc-start: 4
-        conc-end: 256
-        srt-recipe: 8k1k.yaml
-
-qwen3.5-fp8-mi355x-sglang-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260924
-  model: Qwen/Qwen3.5-397B-A17B-FP8
-  model-prefix: qwen3.5
-  runner: mi355x
-  precision: fp8
-  framework: sglang
-  multinode: false
-  srt-recipe-dir: qwen3.5/sglang/mi355x-fp8-mtp
-  scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - tp: 4
-        ep: 1
-        conc-start: 4
-        conc-end: 256
-        spec-decoding: mtp
-        srt-recipe: 8k1k.yaml
+        cpu-power: true
 
 # MI355X FP8 AgentX, TP4 only. The grid follows the TP4 band of the B200 FP8
 # AgentX arm so the two SKUs are directly comparable point for point, with the
@@ -276,63 +219,6 @@ qwen3.5-fp8-mi325x-sglang-agentic-mtp:
       - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 24, 32, 40, 48, 64, 80], srt-recipe: agentic.yaml }
       - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [4, 16, 24, 32, 40, 48, 64], srt-recipe: agentic.yaml }
 
-qwen3.5-fp8-mi355x-atom:
-  image: rocm/atom-dev:nightly_202610190554@sha256:9765777e2f56c5c17fefc9e141b37c51f1ab2dea009b158bcf1823f10030cea3
-  model: Qwen/Qwen3.5-397B-A17B-FP8
-  model-prefix: qwen3.5
-  runner: mi355x
-  precision: fp8
-  framework: atom
-  multinode: false
-  srt-recipe-dir: qwen3.5/atom/mi355x-fp8
-  scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - tp: 2
-        ep: 1
-        conc-start: 4
-        conc-end: 256
-        srt-recipe: 8k1k.yaml
-      - tp: 4
-        ep: 1
-        conc-start: 4
-        conc-end: 256
-        srt-recipe: 8k1k.yaml
-      - tp: 8
-        ep: 1
-        conc-start: 4
-        conc-end: 256
-        srt-recipe: 8k1k.yaml
-
-qwen3.5-fp8-mi355x-atom-mtp:
-  image: rocm/atom-dev:nightly_202610080328@sha256:9c3070bb7d2600d2e1bcfd03cf5f71e4dc0941f3e1d20d3a5845056aae2334eb
-  model: Qwen/Qwen3.5-397B-A17B-FP8
-  model-prefix: qwen3.5
-  runner: mi355x
-  precision: fp8
-  framework: atom
-  multinode: false
-  srt-recipe-dir: qwen3.5/atom/mi355x-fp8-mtp
-  scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - tp: 4
-        ep: 1
-        conc-start: 4
-        conc-end: 256
-        spec-decoding: mtp
-        srt-recipe: 8k1k.yaml
-      - tp: 8
-        ep: 1
-        conc-start: 4
-        conc-end: 256
-        spec-decoding: mtp
-        srt-recipe: 8k1k.yaml
-
 # MI355X FP8 AgentX via ATOM with MTP (3 draft tokens), TP4 only, following the
 # standalone recipe (ROCm/ATOM PR 2592). CONC 1-40 serve off the GPU prefix
 # cache; CONC 48-80 add the LMCache DRAM tier at 363 GB per rank (253 GB KV +
@@ -353,121 +239,6 @@ qwen3.5-fp8-mi355x-atom-agentic-mtp:
       - { tp: 4, ep: 1, kv-offloading: none, conc-list: [1, 4, 8, 16, 24, 32, 40], spec-decoding: mtp, srt-recipe: agentic.yaml }
       - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.6.dev139+gf22dec28" }, conc-list: [48, 56, 64, 80], spec-decoding: mtp, srt-recipe: agentic.yaml }
 
-qwen3.5-fp8-mi355x-sglang-disagg:
-  image: lmsysorg/sglang:v0.5.16-rocm720-mi35x
-  model: Qwen/Qwen3.5-397B-A17B-FP8
-  model-prefix: qwen3.5
-  runner: cluster:mi355x-amds
-  precision: fp8
-  framework: sglang-disagg
-  router: { name: sglang-router, version: "0.3.2" }
-  kv-p2p-transfer: mori
-  multinode: true
-  disagg: true
-  srt-recipe-dir: qwen3.5/sglang/mi355x-fp8/8k1k
-  scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
-      search-space:
-      # The srt-slurm recipe owns the complete c8-c128 sweep in one Slurm
-      # allocation so model initialization is paid once instead of per point.
-      # 1P+1D TP4P+TP8D/EP1 remains the current baseline: TP4 prefill saves
-      # four GPUs without changing the TP8 decode service.
-      # dp-attn intentionally false: with --enable-dp-attention +
-      # --moe-a2a-backend mori, sglang auto-promotes moe_ep_size=tp_size,
-      # but is_deepep_class_backend() excludes MoRI, so
-      # num_shared_slots stays at the global value (1) and the
-      # (num_experts - num_shared_slots) % moe_ep_size assertion in
-      # fused_moe_triton/layer.py fires for Qwen3.5 (512 routed + 1 shared).
-      - spec-decoding: "none"
-        conc-list: [8, 16, 32, 64, 128]
-        srt-recipe: disagg-1p1d-p-tp4-d-tp8.yaml
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=0"
-
-qwen3.5-fp4-mi355x-sglang:
-  image: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260927
-  model: amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2
-  model-prefix: qwen3.5
-  runner: mi355x
-  precision: fp4
-  framework: sglang
-  multinode: false
-  srt-recipe-dir: qwen3.5/sglang/mi355x-fp4
-  scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - tp: 2
-        conc-start: 4
-        conc-end: 256
-        srt-recipe: 8k1k.yaml
-      - tp: 4
-        conc-start: 4
-        conc-end: 16
-        srt-recipe: 8k1k.yaml
-
-qwen3.5-fp4-mi355x-atom:
-  image: rocm/atom-dev:nightly_202610080328
-  model: amd/Qwen3.5-397B-A17B-MXFP4
-  model-prefix: qwen3.5
-  runner: mi355x
-  precision: fp4
-  framework: atom
-  multinode: false
-  srt-recipe-dir: qwen3.5/atom/mi355x-fp4
-  scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - tp: 2
-        conc-start: 4
-        conc-end: 256
-        srt-recipe: 8k1k.yaml
-      - tp: 4
-        conc-start: 4
-        conc-end: 16
-        srt-recipe: 8k1k.yaml
-
-qwen3.5-fp4-mi355x-sglang-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260927
-  model: amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2
-  model-prefix: qwen3.5
-  runner: mi355x
-  precision: fp4
-  framework: sglang
-  multinode: false
-  srt-recipe-dir: qwen3.5/sglang/mi355x-fp4-mtp
-  scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - tp: 2
-        conc-start: 4
-        conc-end: 128
-        spec-decoding: mtp
-        srt-recipe: 8k1k.yaml
-      - tp: 4
-        conc-start: 4
-        conc-end: 16
-        spec-decoding: mtp
-        srt-recipe: 8k1k.yaml
-
 qwen3.5-fp4-mi355x-sglang-agentic-mtp:
   image: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260927
   model: amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2
@@ -485,56 +256,27 @@ qwen3.5-fp4-mi355x-sglang-agentic-mtp:
       - { tp: 2, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12], srt-recipe: agentic.yaml }
       - { tp: 2, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 20, 24, 28, 32, 36, 40], srt-recipe: agentic.yaml }
 
-qwen3.5-fp4-mi355x-sglang-disagg:
-  image: lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809
-  model: amd/Qwen3.5-397B-A17B-MXFP4
-  model-prefix: qwen3.5
+# Qwen3.8-Flash-Next Quark MXFP4 MoE (MTP experts included), FP8 attention and
+# FP8 PLE, AgentX on MI355X via SGLang with native NEXTN MTP (3 steps,
+# eagle-topk 1, 4 draft tokens). TP1: the ~116 GiB checkpoint fits on one MI355X.
+# Concurrency 1-16 serve from GPU KV; 24, 48 and 80 add an FP8 KV cache and HiCache
+# host-DRAM offload.
+qwen3.8next-fp4-mi355x-sglang-agentic-mtp:
+  image: lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261031@sha256:3867dc07ba2530f914e1f210ed829f7a572a75286c8c362dbc22cbecf9b5a7e6
+  model: amd/Qwen3.8-Flash-Next-Quark-MXFP4-AttnFP8-PLEFP8
+  model-prefix: qwen3.8next
   runner: cluster:mi355x-amds
   precision: fp4
-  framework: sglang-disagg
-  router: { name: sglang-router, version: "0.3.2" }
-  kv-p2p-transfer: mori
-  multinode: true
-  disagg: true
-  srt-recipe-dir: qwen3.5/sglang/mi355x-fp4/8k1k
-  scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - spec-decoding: "none"
-        # The recipe owns the complete production search in one allocation.
-        conc-list: [8, 16, 32, 64, 128, 256, 512]
-        srt-recipe: disagg-1p1d-tp8.yaml
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-
-qwen3.5-fp8-mi300x-sglang:
-  image: lmsysorg/sglang:v0.5.12-rocm720-mi30x
-  model: Qwen/Qwen3.5-397B-A17B-FP8
-  model-prefix: qwen3.5
-  runner: mi300x
-  precision: fp8
   framework: sglang
   multinode: false
-  srt-recipe-dir: qwen3.5/sglang/mi300x-fp8
+  srt-recipe-dir: qwen3.8next/sglang/mi355x-fp4-mtp
   scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
+    agentic-coding:
+    # HiCache rows take the 0.80 policy share per GPU (299 GB); the recipe's hicache-size stays within it.
+    - dram-utilization: 0.80
       search-space:
-      - tp: 8
-        conc-start: 4
-        conc-end: 64
-        srt-recipe: 8k1k.yaml
+      - { tp: 1, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 12, 16], srt-recipe: agentic.yaml }
+      - { tp: 1, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [24, 48, 80], srt-recipe: agentic.yaml }
 
 # AgentX Pareto sweep for Qwen3.5 FP8 on MI300X. The fast discovery run peaks
 # at c24; c32 records the post-knee throughput and latency cliff.
@@ -553,6 +295,30 @@ qwen3.5-fp8-mi300x-sglang-agentic-mtp:
       search-space:
       - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [4, 16, 20, 24, 32], srt-recipe: agentic.yaml }
       - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [4, 16, 20, 24, 32], srt-recipe: agentic.yaml }
+
+glm5.3flash-fp8-mi300x-sglang-agentic-mtp:
+  image: lmsysorg/sglang:v0.5.22-rocm10-mi30x@sha256:5658cd0d8de0c68de10d2e349296f55ceff98053182fa87b2a7e942e5e7f3c2a
+  model: zai-org/GLM-5.3-Flash
+  model-prefix: glm5.3flash
+  runner: cluster:mi300x-amd
+  precision: fp8
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: glm5.3flash/sglang/mi300x-fp8
+  scenarios:
+    agentic-coding:
+    # 570 GB covers the largest measured HiCache host allocation: conc 24, 4 x 140.85 GB/rank (KV + Mamba + indexer).
+    - dram-utilization: 0.71
+      search-space:
+      - { tp: 4, ep: 4, conc-list: [1], spec-decoding: mtp, kv-offloading: none, srt-recipe: agentx/agg-variants.yaml:override_tp4_ep4_c1 }
+      - { tp: 4, ep: 4, conc-list: [2], spec-decoding: mtp, kv-offloading: none, srt-recipe: agentx/agg-variants.yaml:override_tp4_ep4_c2 }
+      - { tp: 4, ep: 4, conc-list: [4], spec-decoding: mtp, kv-offloading: none, srt-recipe: agentx/agg-variants.yaml:override_tp4_ep4_c4 }
+      - { tp: 4, ep: 4, conc-list: [8], spec-decoding: mtp, kv-offloading: none, srt-recipe: agentx/agg-variants.yaml:override_tp4_ep4_c8 }
+      - { tp: 4, ep: 4, conc-list: [12], spec-decoding: mtp, kv-offloading: none, srt-recipe: agentx/agg-variants.yaml:override_tp4_ep4_c12 }
+      - { tp: 4, ep: 4, conc-list: [16], spec-decoding: mtp, kv-offloading: none, srt-recipe: agentx/agg-variants.yaml:override_tp4_ep4_c16 }
+      - { tp: 4, ep: 4, conc-list: [24], spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, srt-recipe: agentx/agg-variants.yaml:override_tp4_ep4_c24_hicache }
+      - { tp: 4, ep: 4, conc-list: [32], spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, srt-recipe: agentx/agg-variants.yaml:override_tp4_ep4_c32_hicache }
+      - { tp: 4, ep: 4, conc-list: [40], spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, srt-recipe: agentx/agg-variants.yaml:override_tp4_ep4_c40_hicache }
 
 dsr1-fp8-mi355x-atom:
   image: rocm/atom-dev:nightly_202610161458@sha256:7782d69e15b5cf88ad550095a8ec18429af852d07897824b8c35f9ce32f89f33
@@ -713,119 +479,6 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
           ep: 1
           dp-attn: false
 
-# Kimi-K3 MXFP4 agentic-coding benchmark on MI355X via ATOM with DSpark
-# speculative decoding. Acceptance is pinned to the committed golden curve in
-# infx/golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml
-# at both draft lengths used here: 7 draft tokens -> AL 3.84 at concurrency 1 and 4,
-# 4 draft tokens -> AL 3.36 from concurrency 14 up.
-# Companion to kimik3-fp4-mi355x-vllm-agentic-mtp: same checkpoint, same runner.
-# TP8 only -- the 1.56 TB MXFP4 checkpoint is ~195 GB/GPU and TP4 cannot load,
-# which is also why there is no DP-attention arm.
-# Three serving bands, tracking the ATOM recipe:
-#   interactive (1, 4)        the latency floor, GPU-resident, dcp 1.
-#   mid         (14, 16)      decode is KV-bandwidth-bound over 100k+ token
-#                             contexts, so dcp-size 8 shards the KV read across
-#                             all 8 GPUs and the LMCache DRAM tier backs the
-#                             paged KV.
-#   throughput  (48, 56, 72)  same shape, with the draft model.
-# Two utilization blocks because the per-rank LMCache pool differs, and the
-# launcher divides the aggregate budget by TP:
-#   0.343 -> 1028 GB aggregate -> 128 GB/rank (conc 14 through 48).
-#   0.513 -> 1538 GB aggregate -> 192 GB/rank (conc 56 and 72), where the
-#            wider in-flight window needs the deeper pool to keep the paged KV
-#            resident.
-kimik3-fp4-mi355x-atom-agentic-mtp:
-  image: rocm/atom-dev:nightly_202610131505
-  model: moonshotai/Kimi-K3
-  model-prefix: kimik3
-  runner: cluster:mi355x-amds
-  precision: fp4
-  framework: atom
-  multinode: false
-  srt-recipe-dir: kimik3/atom/mi355x-fp4-mtp
-  scenarios:
-    agentic-coding:
-    - dram-utilization: 0.343
-      search-space:
-      - { tp: 8, kv-offloading: none, conc-list: [1, 4], spec-decoding: mtp, srt-recipe: agentic.yaml }
-      - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [14, 16, 48], spec-decoding: mtp, srt-recipe: agentic.yaml }
-    - dram-utilization: 0.513
-      search-space:
-      - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [56, 72], spec-decoding: mtp, srt-recipe: agentic.yaml }
-
-# Kimi-K3 MXFP4 agentic-coding on MI355X via vLLM with DSpark speculative
-# decoding. Companion to kimik3-fp4-mi355x-atom-agentic-mtp: same checkpoint and
-# runner. TP8 only -- the 1.56 TB MXFP4 checkpoint is ~195 GB/GPU. Three bands:
-#   interactive (1, 4)   GPU-resident, dcp 8, DSpark draft; 1 runs the
-#                        latency_specialized decode (vllm-project/vllm#60683).
-#   mid         (4-32)   dcp 8, DSpark draft, SimpleCPUOffload DRAM tier.
-#   throughput  (48-60)  dcp 8 shards the KV read across all 8 GPUs, DRAM
-#                        offload, 4-token DSpark draft with synthetic acceptance.
-# dram-utilization 0.6 -> TOTAL_CPU_DRAM_GB 1799 at TP8 (node cap 2861022 MiB),
-# split evenly across the eight ranks by the launcher.
-kimik3-fp4-mi355x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:nightly-rocm100-df6603f0583375f244d1ac6d36265462b7490392
-  model: moonshotai/Kimi-K3
-  model-prefix: kimik3
-  runner: cluster:mi355x-amds
-  precision: fp4
-  framework: vllm
-  multinode: false
-  srt-recipe-dir: kimik3/vllm/mi355x-fp4-mtp
-  scenarios:
-    agentic-coding:
-    - dram-utilization: 0.6
-      search-space:
-      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: none, conc-list: [1, 4], spec-decoding: mtp, srt-recipe: agentic.yaml }
-      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [4, 10, 16, 24, 32, 48, 52, 60], spec-decoding: mtp, srt-recipe: agentic.yaml }
-
-# Restore run 34609443618 attempt 2; upstream monokernel supports TP4 only.
-minimaxm3-fp4-mi355x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:nightly-df6603f0583375f244d1ac6d36265462b7490392@sha256:81899892d73777a4ae81e16f39e749169687f29249505eb4c56da83bd097d41c
-  model: amd/MiniMax-M3-MXFP4
-  model-prefix: minimaxm3
-  runner: cluster:mi355x-amds
-  precision: fp4
-  framework: vllm
-  multinode: false
-  srt-recipe-dir: minimaxm3/vllm/mi355x-fp4-mtp
-  scenarios:
-    agentic-coding:
-    - dram-utilization: 0.20
-      search-space:
-      - { tp: 4, kv-offloading: none, conc-list: [1], spec-decoding: mtp, srt-recipe: agg-variants.yaml:override_tp4_c1 }
-      - { tp: 4, kv-offloading: none, conc-list: [4], spec-decoding: mtp, srt-recipe: agg-variants.yaml:override_tp4_c4 }
-      - { tp: 4, kv-offloading: none, conc-list: [5], spec-decoding: mtp, srt-recipe: agg-variants.yaml:override_tp4_c5 }
-      - { tp: 4, kv-offloading: none, conc-list: [8], spec-decoding: mtp, srt-recipe: agg-variants.yaml:override_tp4_c8 }
-      - { tp: 4, kv-offloading: none, conc-list: [10], spec-decoding: mtp, srt-recipe: agg-variants.yaml:override_tp4_c10 }
-      - { tp: 4, kv-offloading: none, conc-list: [12], spec-decoding: mtp, srt-recipe: agg-variants.yaml:override_tp4_c12 }
-      - { tp: 4, kv-offloading: none, conc-list: [15], spec-decoding: mtp, srt-recipe: agg-variants.yaml:override_tp4_c15 }
-      - { tp: 4, kv-offloading: none, conc-list: [20], spec-decoding: mtp, srt-recipe: agg-variants.yaml:override_tp4_c20 }
-      - { tp: 4, kv-offloading: none, conc-list: [24], spec-decoding: mtp, srt-recipe: agg-variants.yaml:override_tp4_c24 }
-      - { tp: 4, kv-offloading: none, conc-list: [32], spec-decoding: mtp, srt-recipe: agg-variants.yaml:override_tp4_c32 }
-      - { tp: 2, kv-offloading: none, conc-list: [1], spec-decoding: mtp, srt-recipe: agg-variants.yaml:override_tp2_c1 }
-      - { tp: 2, kv-offloading: none, conc-list: [2], spec-decoding: mtp, srt-recipe: agg-variants.yaml:override_tp2_c2 }
-
-minimaxm3-fp4-mi355x-atom-agentic-mtp:
-  image: rocm/atom-dev:nightly_202610070333
-  model: amd/MiniMax-M3-MXFP4
-  model-prefix: minimaxm3
-  runner: cluster:mi355x-amds
-  precision: fp4
-  framework: atom
-  multinode: false
-  srt-recipe-dir: minimaxm3/atom/mi355x-fp4-mtp
-  scenarios:
-    agentic-coding:
-    # 0.687 targets ~256 GB/rank on the dram-offload arms: LMCACHE_MAX_LOCAL_CPU_SIZE
-    # = TOTAL_CPU_DRAM_GB / TP = node_DRAM * dram-utilization / 8 (TP-independent).
-    - dram-utilization: 0.687
-      search-space:
-      - { tp: 4, kv-offloading: none, conc-list: [1, 2, 4, 5, 8, 10, 12, 15, 20, 24, 28], spec-decoding: mtp, srt-recipe: agentic.yaml }
-      - { tp: 2, kv-offloading: none, conc-list: [1, 2, 4], spec-decoding: mtp, srt-recipe: agentic.yaml }
-      - { tp: 2, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.6.dev139+gf22dec28" }, conc-list: [20, 25, 30], spec-decoding: mtp, srt-recipe: agentic.yaml }
-      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.6.dev139+gf22dec28" }, conc-list: [40, 48], spec-decoding: mtp, srt-recipe: agentic.yaml }
-
 dsr1-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809
   model: amd/DeepSeek-R1-0528-MXFP4-v2
@@ -964,74 +617,6 @@ dsr1-fp8-mi325x-sglang-mtp:
         spec-decoding: mtp
         srt-recipe: 8k1k.yaml
 
-qwen3.5-fp8-mi325x-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.12-rocm720-mi30x
-  model: Qwen/Qwen3.5-397B-A17B-FP8
-  model-prefix: qwen3.5
-  runner: mi325x
-  precision: fp8
-  framework: sglang
-  multinode: false
-  srt-recipe-dir: qwen3.5/sglang/mi325x-fp8-mtp
-  scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - tp: 8
-        ep: 1
-        conc-start: 4
-        conc-end: 64
-        spec-decoding: mtp
-        srt-recipe: 8k1k.yaml
-
-# DeepSeek-V4-Pro-0813 FP4 AgentX on one MI355X node using vLLM DSpark K6.
-# Keep the historical config key for changelog compatibility.
-dsv4-fp4-mi355x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:nightly-e9757321527ca1ecd514c07c1418dd2c53da3d19
-  model: deepseek-ai/DeepSeek-V4-Pro-0813
-  model-prefix: dsv4
-  runner: cluster:mi355x-amds
-  precision: fp4
-  framework: vllm
-  multinode: false
-  srt-recipe-dir: dsv4/vllm/mi355x-fp4-mtp
-  scenarios:
-    agentic-coding:
-    - dram-utilization: 0.60
-      search-space:
-      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 8, 16, 32, 40, 48, 56, 64], srt-recipe: agentic.yaml }
-      # Single-node validation found c128 to be the DPA throughput peak among
-      # c64/c128/c256. Add c192 to locate the knee before the c256 regression.
-      - { tp: 8, ep: 1, dp-attn: true, kv-offloading: none, spec-decoding: draft_model, conc-list: [64, 128, 192], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
-      # LMCache invalid-block recovery currently assumes one KV-cache group,
-      # while speculative decoding creates two. Restore these points after the
-      # upstream hybrid KV recovery fix lands:
-      # https://github.com/vllm-project/vllm/pull/45497
-
-# DeepSeek-V4-Pro-0813 FP4 AgentX on one MI355X node using ATOM DSpark K6.
-# Both throughput bands use thinking_on golden AL 3.77; eval uses real
-# acceptance. Keep the historical config key for changelog compatibility.
-# C256 and C384 offload KV to an LMCache MP server whose 1000 GB L1 fits the
-# 1019 GB budget of dram-utilization 0.34. Every point runs ATOM's bounded
-# state replay with prompt-end state checkpoints only.
-dsv4-fp4-mi355x-atom-agentic-mtp:
-  image: rocm/atom-dev:nightly_202610141644
-  model: deepseek-ai/DeepSeek-V4-Pro-0813
-  model-prefix: dsv4
-  runner: cluster:mi355x-amds
-  precision: fp4
-  framework: atom
-  multinode: false
-  srt-recipe-dir: dsv4/atom/mi355x-fp4-mtp
-  scenarios:
-    agentic-coding:
-    - dram-utilization: 0.34
-      search-space:
-      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 8, 16], srt-recipe: agentic.yaml }
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: draft_model, conc-list: [48, 64, 96, 128], srt-recipe: agentic.yaml }
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.6.dev139+gf22dec28" }, spec-decoding: draft_model, conc-list: [256, 384], srt-recipe: agentic.yaml }
-
 dsr1-fp4-mi355x-sglang-disagg-mtp:
   image: lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809
   model: amd/DeepSeek-R1-0528-MXFP4-v2
@@ -1077,24 +662,6 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           dp-attn: true
         decode: {num-worker: 1, tp: 8, ep: 8, dp-attn: true}
 
-minimaxm3-fp8-mi300x-vllm-agentic-mtp:
-  # -rocm72 keeps the ROCm 7.2 stack the LMCache v0.5.3 ROCm wheel is ABI-matched to.
-  image: vllm/vllm-openai-rocm:nightly-rocm72-c50aca14416ef29f6ed0ed256302f30646726dcd@sha256:ebda27e713fcd6146dbb55fd1a5efa29def2424d59f60b8153819485319c63db
-  model: MiniMaxAI/MiniMax-M3-MXFP8
-  model-prefix: minimaxm3
-  runner: cluster:mi300x-amd
-  precision: fp8
-  framework: vllm
-  multinode: false
-  srt-recipe-dir: minimaxm3/vllm/mi300x-fp8-mtp
-  scenarios:
-    agentic-coding:
-    # Sizes the LMCache server's 1280 GB L1.
-    - dram-utilization: 0.7972
-      search-space:
-      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [2, 4, 6, 8, 10], srt-recipe: agentic.yaml }
-      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.3" }, conc-list: [16], srt-recipe: agentic.yaml }
-
 # DeepSeek-V4.1-Flash AgentX on MI300X (gfx942), a copy of the validated MI355X vLLM
 # arm (run 34710937012) on the same ROCm nightly. gfx942 is not in the upstream
 # hardware table (h100, h200, b200, gb200, gb300, mi350x); TP8 rather than TP4
@@ -1103,7 +670,7 @@ minimaxm3-fp8-mi300x-vllm-agentic-mtp:
 # golden AL 3.51 for throughput, real block verification for evals, adaptive
 # verification off on ROCm.
 dsv41flash-fp4-mi300x-vllm-agentic-dspark:
-  image: vllm/vllm-openai-rocm:v0.32.0@sha256:14f6a575e1fb0a580b0f633c09e06f648709d60405b85f6a7ff3f80d49f39905
+  image: vllm/vllm-openai-rocm:v0.33.0@sha256:4fcd39b758b660c4e9c345c021e2ea8f0ccdb31e3c32507d676cc3005ae83fba
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi300x-amd
@@ -1148,21 +715,6 @@ glm5.2-fp8-mi325x-sglang-agentic-mtp:
       search-space:
       - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 3, 4, 5, 6, 8], srt-recipe: agentic.yaml }
 
-minimaxm3-fp8-mi325x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:v0.32.0@sha256:14f6a575e1fb0a580b0f633c09e06f648709d60405b85f6a7ff3f80d49f39905
-  model: MiniMaxAI/MiniMax-M3-MXFP8
-  model-prefix: minimaxm3
-  runner: cluster:mi325x-amd
-  precision: fp8
-  framework: vllm
-  multinode: false
-  srt-recipe-dir: minimaxm3/vllm/mi325x-fp8-mtp
-  scenarios:
-    agentic-coding:
-    - dram-utilization: 0.20
-      search-space:
-      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 10, 12, 14, 16, 18], srt-recipe: agentic.yaml }
-
 # DeepSeek-V4.1-Flash AgentX on MI325X (gfx942), a copy of the validated MI355X vLLM
 # arm (run 34710937012) on the same ROCm nightly. gfx942 is not in the upstream
 # hardware table (h100, h200, b200, gb200, gb300, mi350x); TP8 rather than TP4
@@ -1171,7 +723,7 @@ minimaxm3-fp8-mi325x-vllm-agentic-mtp:
 # golden AL 3.51 for throughput, real block verification for evals, adaptive
 # verification off on ROCm.
 dsv41flash-fp4-mi325x-vllm-agentic-dspark:
-  image: vllm/vllm-openai-rocm:v0.32.0@sha256:14f6a575e1fb0a580b0f633c09e06f648709d60405b85f6a7ff3f80d49f39905
+  image: vllm/vllm-openai-rocm:v0.33.0@sha256:4fcd39b758b660c4e9c345c021e2ea8f0ccdb31e3c32507d676cc3005ae83fba
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi325x-amd
@@ -1196,255 +748,20 @@ dsv41flash-fp4-mi325x-vllm-agentic-dspark:
       # recipe halves the indexer buffer and caps the scheduler here.
       - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32], srt-recipe: agentic.yaml }
 
-dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark:
-  image: lmsysorg/sglang-rocm:v0.5.22-rocm10-mi35x-20261026
-  model: deepseek-ai/DeepSeek-V4-Pro-0813
-  model-prefix: dsv4
-  runner: cluster:mi355x-amds
-  precision: fp4
-  framework: sglang-disagg
-  kv-p2p-transfer: mori
-  multinode: true
-  disagg: true
-  srt-recipe-dir: dsv4/sglang/mi355x-fp4/agentx
-  scenarios:
-    agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
-      - spec-decoding: "draft_model"
-        conc-list: [1]
-        kv-offloading: dram
-        kv-offload-backend: { name: umbp-linker }
-        srt-recipe: disagg-umbp-dspark.yaml:override_c1
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-      - spec-decoding: "draft_model"
-        conc-list: [16]
-        kv-offloading: dram
-        kv-offload-backend: { name: umbp-linker }
-        srt-recipe: disagg-umbp-dspark.yaml:override_c16
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-      - spec-decoding: "draft_model"
-        conc-list: [32]
-        kv-offloading: dram
-        kv-offload-backend: { name: umbp-linker }
-        srt-recipe: disagg-umbp-dspark.yaml:override_c32
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-      - spec-decoding: "draft_model"
-        conc-list: [48]
-        kv-offloading: dram
-        kv-offload-backend: { name: umbp-linker }
-        srt-recipe: disagg-umbp-dspark.yaml:override_c48
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-      # The DP-attention arm runs MegaMoE on prefill (DEP8) and the fp8 unified
-      # KV pool on both roles; decode stays EP1.
-      - spec-decoding: "draft_model"
-        conc-list: [192]
-        kv-offloading: dram
-        kv-offload-backend: { name: umbp-linker }
-        srt-recipe: disagg-umbp-dspark.yaml:override_c192
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: true
-      - spec-decoding: "draft_model"
-        conc-list: [256]
-        kv-offloading: dram
-        kv-offload-backend: { name: umbp-linker }
-        srt-recipe: disagg-umbp-dspark.yaml:override_c256
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: true
-      # c384/c512 extend the DP-attention arm with MegaMoE on prefill (DEP8)
-      # and the fp8 unified KV pool on both roles; decode stays EP1, as above.
-      - spec-decoding: "draft_model"
-        conc-list: [384]
-        kv-offloading: dram
-        kv-offload-backend: { name: umbp-linker }
-        srt-recipe: disagg-umbp-dspark.yaml:override_c384
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: true
-      - spec-decoding: "draft_model"
-        conc-list: [512]
-        kv-offloading: dram
-        kv-offload-backend: { name: umbp-linker }
-        srt-recipe: disagg-umbp-dspark.yaml:override_c512
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: true
-
-dsv4-fp4-mi355x-atom-disagg-agentic-lmcache-dspark:
-  image: rocm/atom-dev:nightly_202609221542
-  # DSpark needs the draft head the -0813 checkpoint bundles
-  # (dspark_target_layer_ids in config.json); the base Pro checkpoint has none.
-  model: deepseek-ai/DeepSeek-V4-Pro-0813
-  model-prefix: dsv4
-  runner: cluster:mi355x-amds
-  precision: fp4
-  framework: atom-disagg
-  router: { name: atomesh, version: "087b82d9c1f630e79149ba37e6213257ec9a76f8" }
-  kv-p2p-transfer: mooncake
-  multinode: true
-  disagg: true
-  srt-recipe-dir: dsv4/atom/mi355x-fp4/agentx
-  scenarios:
-    agentic-coding:
-    # srt-slurm recipe benchmarks/multi_node/srt-slurm-recipes/dsv4/atom/mi355x-fp4/agentx/disagg-lmcache-dspark.yaml
-    # (ATOM recipes/DeepSeek-V4-Agentic-PD-Max.md). Concurrency 1/16 run plain
-    # TP8; 64/128 add DP attention with prefill TBO and the cache-aware router.
-    - dram-utilization: 0.80
-      search-space:
-      - spec-decoding: "draft_model"
-        conc-list: [ 1 ]
-        kv-offloading: none
-        srt-recipe: disagg-lmcache-dspark.yaml:override_tp8_c1
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-      - spec-decoding: "draft_model"
-        conc-list: [ 16 ]
-        kv-offloading: none
-        srt-recipe: disagg-lmcache-dspark.yaml:override_tp8_c16
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-      - spec-decoding: "draft_model"
-        conc-list: [ 64 ]
-        kv-offloading: none
-        srt-recipe: disagg-lmcache-dspark.yaml:override_dpa8_c64
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: true
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: true
-      - spec-decoding: "draft_model"
-        conc-list: [ 128 ]
-        kv-offloading: none
-        srt-recipe: disagg-lmcache-dspark.yaml:override_dpa8_c128
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: true
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: true
-    # DP attention plus ATOM's in-process LMCache CPU offload on prefill
-    # (lmcache_offload); decode is plain Mooncake. dram-utilization 0.50 as
-    # measured in run 35825955863.
-    - dram-utilization: 0.50
-      search-space:
-      - spec-decoding: "draft_model"
-        conc-list: [ 256 ]
-        kv-offloading: dram
-        kv-offload-backend: { name: lmcache }
-        srt-recipe: disagg-lmcache-dspark.yaml:override_dpa8_c256_lmcache
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: true
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: true
-
 # GLM-5.2 FP4 agentic-coding benchmark on MI355X via SGLang with MTP speculative
-# decoding. Two arms:
+# decoding. Three arms:
 # (1) TP4/EP4 with HiCache KV offloading to DRAM at concurrency [4, 8, 10, 12, 14, 16];
 #     serves the high-concurrency, throughput-dominant regime.
-# (2) TP8/EP1 without KV offloading, concurrency sweep [1, 2, 4];
+# (2) TP4/EP4 with DCP4 at concurrency [16, 24, 40, 48]; striping the latent KV
+#     across the four ranks holds the working set on device without HiCache,
+#     which DSA DCP rejects.
+# (3) TP8/EP1 without KV offloading, concurrency sweep [1, 2, 4];
 #     EP=1 eliminates the MoE all-to-all collective, reducing ITL at low-to-mid
 #     concurrency; GPU-resident KV keeps latency independent of DRAM bandwidth.
-#     c4 intentionally overlaps both arms to compare the topology crossover.
+#     c4 intentionally overlaps arms (1) and (3) to compare the topology crossover.
 # SA selects the Pareto-optimal arm per concurrency point.
 glm5.2-fp4-mi355x-sglang-agentic-mtp:
-  image: lmsysorg/sglang:v0.5.22-rocm720-mi35x@sha256:c4b61360b251d62bb17da63f175d571ab22479eb46a144548d79f3ed3998ea11
+  image: lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261028
   model: amd/GLM-5.2-MXFP4
   model-prefix: glm5.2
   runner: cluster:mi355x-amds
@@ -1457,13 +774,14 @@ glm5.2-fp4-mi355x-sglang-agentic-mtp:
     - dram-utilization: 0.85
       search-space:
       - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [4, 8, 10, 12, 14, 16], spec-decoding: mtp, srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 4, dcp-size: 4, kv-offloading: none, conc-list: [16, 24, 40, 48], spec-decoding: mtp, srt-recipe: agentic.yaml }
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4], spec-decoding: mtp, srt-recipe: agentic.yaml }
 
 # GLM-5.2 FP8 agentic-coding benchmark on MI355X via SGLang with MTP speculative
 # decoding: the FP8 precision sibling of glm5.2-fp4-mi355x-sglang-agentic-mtp,
 # serving the upstream zai-org/GLM-5.2-FP8 checkpoint (~756 GB block-FP8).
 # Same EAGLE shape as the MXFP4 sibling (num-steps 5, 6 draft tokens) with
-# acceptance pinned to the golden AL 3.61 (glm5.2_mtp.yaml, thinking_on, K=5,
+# acceptance pinned to the golden AL 3.61 (glm-5.2-fp8__mtp__native__default-default.yaml, thinking_on, K=5,
 # measured on glm-5.2-fp8). TP8-only: ~94.5 GB/rank of weights leaves a ~150
 # GB/rank fp8 KV pool at --mem-fraction-static 0.85; TP4 would leave ~56 GB/rank
 # and is not attempted on day zero (the MI325X FP8 sibling is TP8-only too).
@@ -1536,24 +854,6 @@ glm5.2-fp4-mi355x-atom-agentic-mtp-mono:
       search-space:
       - { tp: 4, kv-offloading: none, conc-list: [1, 2], spec-decoding: mtp, srt-recipe: agentic.yaml }
 
-dsv4-fp4-mi355x-sglang-agentic-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261019
-  model: deepseek-ai/DeepSeek-V4-Pro-0813
-  model-prefix: dsv4
-  runner: cluster:mi355x-amds
-  precision: fp4
-  framework: sglang
-  multinode: false
-  srt-recipe-dir: dsv4/sglang/mi355x-fp4-mtp
-  scenarios:
-    agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
-      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, conc-list: [1, 4, 16], spec-decoding: draft_model, srt-recipe: agentic.yaml }
-      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32, 48], spec-decoding: draft_model, srt-recipe: agentic.yaml }
-      - { tp: 8, ep: 1, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [128], spec-decoding: draft_model, srt-recipe: agentic.yaml }
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [128, 256, 384], spec-decoding: draft_model, srt-recipe: agentic.yaml }
-
 # Upstream ROCm nightly rather than the deepseekv41-flash-0909 release tag: that
 # tag predates vllm-project/vllm#56503, which moves the mHC delayed pre block off
 # the eager Torch reference and onto AITER. MI355X run 34710937012 passed the
@@ -1585,12 +885,31 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark:
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2], srt-recipe: agentic.yaml }
       - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64], srt-recipe: agentic.yaml }
 
+# Single-point TP8 c1 scan of DeepSeek-V4.1-Flash on MI355X with mono decode
+# (--monokernel) on the latest vLLM ROCm 10.0 nightly (2026-10-30), which carries
+# vllm-project/vllm#64101 (mono decode at TP8; earlier builds refuse --monokernel
+# outside TP2/TP4). Kept as its own key so the TP4/TP2 grid above does not rerun.
+dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp8-c1:
+  image: vllm/vllm-openai-rocm:nightly-335dd77b09161c5d63139b4e7ae51bb9928305b1@sha256:3c634cc2c51eda7eb840a236b1f09a5ecf6a4b0cb92c4b8486e2158770507291
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  srt-recipe-dir: dsv41flash/vllm/mi355x-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.60
+      search-space:
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1], srt-recipe: agentic.yaml }
+
 # MiniMax-M3.1-Flash AgentX on MI355X: day-zero vLLM ROCm image from
 # https://vllm.ai/blog/2026-10-23-minimax-m31-flash, verified 2026-10-23.
 # AMD's Quark MXFP4 export (routed experts in MXFP4, W4A4 on the AITER MoE)
 # at TP4 with native DSpark: 7 drafts, mono decode and an FP8 KV cache at
-# c1-c8; 3 drafts, an NVFP4 KV cache and DBO from c16. Throughput runs use the
-# minimaxm31flash_dspark golden AL.
+# c1-c8; 7 drafts, an NVFP4 KV cache and DBO at c16-c32; 3 drafts, DBO and a
+# CPU KV tier at c64. Throughput runs use the minimax-m3.1-flash__dspark__native__probabilistic-block golden AL.
 minimaxm31flash-fp4-mi355x-vllm-agentic-dspark:
   image: vllm/vllm-openai-rocm:minimax-m31-flash@sha256:ae8681212aa5291d8c27f06e90016435e3fca144a68fd5c439231f6475f74569
   model: amd/MiniMax-M3.1-Flash-Quark-MXFP4
@@ -1602,9 +921,28 @@ minimaxm31flash-fp4-mi355x-vllm-agentic-dspark:
   srt-recipe-dir: minimaxm31flash/vllm/mi355x-fp4
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    - dram-utilization: 0.90
       search-space:
-      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64], srt-recipe: agentic.yaml }
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32], srt-recipe: agentic.yaml }
+      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [64], srt-recipe: agentic.yaml:override_tp4_dspark3_c64_offload }
+
+kimik3.1-fp4-mi355x-vllm-agentic-dspark:
+  image: vllm/vllm-openai-rocm:kimi-k31@sha256:5f47cc1004d9a7ac65f8a913725edb20c62c99a07e31cbf4ba21741bd0b4f9b1
+  model: moonshotai/Kimi-K3.1-Pro
+  model-prefix: kimik3.1
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  srt-recipe-dir: kimik3.1/vllm/mi355x-fp4-mtp
+  scenarios:
+    agentic-coding:
+    # 0.6 resolves to 1799 GB of host DRAM, which the recipe's Simple CPU offload splits across the 8 TP ranks.
+    - dram-utilization: 0.6
+      search-space:
+      # The ~1.56 TB MXFP4 checkpoint needs all 8 GPUs. c1 keeps the KV cache on the GPUs.
+      - { tp: 8, ep: 1, dcp-size: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [4, 10, 16, 24, 32, 48], srt-recipe: agentic.yaml }
 
 # MiniMax-M3.1-Flash AgentX on MI355X with SGLang: day-zero image from the SGLang
 # cookbook (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1),
@@ -1612,7 +950,7 @@ minimaxm31flash-fp4-mi355x-vllm-agentic-dspark:
 # MI355X Low-Latency (TP4) cell. Its High-Throughput cell (HiCache) crashes on MI355X
 # with this image, so concurrency 48-64 stays GPU-resident on the Low-Latency cell.
 # Seven-token DSpark (bundled draft); synthetic acceptance follows
-# infx/golden_al_distribution/minimaxm31flash_dspark.yaml.
+# infx/golden_al_distribution/minimax-m3.1-flash__dspark__native__probabilistic-block.yaml.
 minimaxm31flash-fp4-mi355x-sglang-agentic-dspark:
   image: lmsysorg/sglang:dev-minimax-m31-flash-mi35x@sha256:2d74f6ea339964befdfc97f8d74d9ce5bbecd4a29b343f2868a29d13d51ec3f8
   model: MiniMaxAI/MiniMax-M3.1-Flash
@@ -1626,7 +964,11 @@ minimaxm31flash-fp4-mi355x-sglang-agentic-dspark:
     agentic-coding:
     - search-space:
       # Low-Latency: TP4, GPU-resident.
-      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 48, 64], srt-recipe: agentic.yaml }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32], srt-recipe: agentic.yaml }
+    - dram-utilization: 0.49
+      search-space:
+      # High-Throughput: TP4 + HiCache, 180 GB of host KV per rank (720 of 735 GB).
+      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [48, 64], srt-recipe: agentic.yaml }
 
 # DeepSeek-V4.1-Flash on ATOM, following the upstream TP2 / TP4 AgentX recipe.
 # Five-token DSpark uses golden AL 3.51 for throughput and real acceptance for eval.
@@ -1645,8 +987,8 @@ dsv41flash-fp4-mi355x-atom-agentic-dspark:
       - { tp: 2, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 6, 8, 16, 32, 64], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 8, 32], srt-recipe: agentic.yaml }
 
-# The golden acceptance curve remains the provisional GLM-5.2-derived curve
-# documented in infx/golden_al_distribution/glm5.3_mtp.yaml.
+# The golden acceptance curve is the GLM-5.3 NVFP4 SGLang curve in
+# infx/golden_al_distribution/glm-5.3-nvfp4__mtp__native__default-default.yaml.
 glm5.3-fp8-mi355x-tilert-agentic:
   image: ghcr.io/tile-ai/tilert-rocm-decode:0.1.6
   model: zai-org/GLM-5.3
@@ -1678,6 +1020,58 @@ glm5.3-fp8-mi355x-tilert-agentic:
           ep: 1
           dp-attn: false
 
+dsv41flash-fp4-mi355x-tilert-agentic-dspark:
+  image: ghcr.io/tile-ai/tilert-rocm-decode:0.1.6@sha256:48c30d7636a561b4edf781ac3c7712e09fa9a0b2f1292863b72c2d8e4bcb492a
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: tilert
+  router: { name: tilert-pd-router, version: "0.1.7.post2" }
+  multinode: true
+  disagg: true
+  kv-p2p-transfer: mooncake
+  srt-recipe-dir: dsv41flash/tilert/mi355x-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: "mtp"
+        conc-list: [1]
+        srt-recipe: disagg-1p1d-tp4-tp8-mtp.yaml
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_IMAGE=ghcr.io/tile-ai/tilert-rocm-prefill:0.1.7@sha256:8a88e2aa51105facd103217b0dc353258f3fc9368318c3bb62f0400bb8dd1ed5"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+
+# SGLang cookbook MI355X FP8 Low Latency recipe on four GPUs: HBM-only KV up to
+# c32, the cookbook HiCache L1 + L2 tier above it.
+glm5.3flash-fp8-mi355x-sglang-agentic-mtp:
+  image: lmsysorg/sglang:v0.5.22-rocm10-mi35x@sha256:1438dd8b9000adaefb5828edb1cc5713992815d4296f4ad1a1e98dee4e9c7e5f
+  model: zai-org/GLM-5.3-Flash
+  model-prefix: glm5.3flash
+  runner: cluster:mi355x-amds
+  precision: fp8
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: glm5.3flash/sglang/mi355x-fp8-mtp
+  scenarios:
+    agentic-coding:
+    # HiCache allocates 187.33 GB of host memory per rank (113.10 GB KV, 66.94 GB KDA
+    # state, 7.29 GB DSA indexer), 749.33 GB for the TP4 server; dram-utilization 0.501
+    # -> TOTAL_CPU_DRAM_GB = 2861022 MiB cap * 0.501 * 4/8 = 716,686 MiB = 751 GB.
+    - dram-utilization: 0.501
+      search-space:
+      - { tp: 4, ep: 4, kv-offloading: none, conc-list: [1, 2, 8, 16, 24, 32], spec-decoding: mtp, srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [40, 48], spec-decoding: mtp, srt-recipe: agentic.yaml }
+
 # SGLang ROCm 10 MI35X release image. TP2/EP1 up to c32, TP4/EP1 up to c16,
 # DP2 attention with TP MoE at c32 and c64 (c32 overlaps TP2). Host Engram on all.
 dsv41flash-fp4-mi355x-sglang-agentic-dspark:
@@ -1698,7 +1092,7 @@ dsv41flash-fp4-mi355x-sglang-agentic-dspark:
       - { tp: 2, ep: 1, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [32, 64], srt-recipe: agentic.yaml }
 
 musespark-fp4-mi355x-sglang-agentic-dflash:
-  image: lmsysorg/sglang-rocm:muse-spark-open-1020@sha256:7343002d0dc2c1e525c0563f0c5c0377b471f966b3d604343b93a6366c2f7935
+  image: lmsysorg/sglang-rocm:muse-spark-open-mi355-1106@sha256:d231181df079a5b271a0459d024492c84a36caf8cb26ee019abad29e17eea4d2
   model: amd/Muse-Spark-Open-816B-A42B-Quark-MXFP4
   model-prefix: musespark
   runner: cluster:mi355x-amds
@@ -1710,109 +1104,65 @@ musespark-fp4-mi355x-sglang-agentic-dflash:
     agentic-coding:
     - dram-utilization: 0.85
       search-space:
-      - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 8], srt-recipe: agentic.yaml }
-      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [16, 32, 48, 64], srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [6, 10, 28], srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [28, 36, 40], srt-recipe: agentic.yaml }
 
-# Native Kimi-K3 PD with TP8 workers and MoRIIO READ.
-kimik3-fp4-mi355x-vllm-disagg-agentic:
-  image: vllm/vllm-openai-rocm:nightly-81198e97ba7eee2a22540caaa756b7fdddcb4d93@sha256:a401e4f46872dcde77e07ae3d7fa2d3a71b7f2773714316116532e2b39deb179
-  model: moonshotai/Kimi-K3
-  model-prefix: kimik3
+kimik3.1-fp4-mi355x-sglang-agentic-dflash:
+  image: lmsysorg/sglang:dev-kimi-k31-pro-mi35x@sha256:346a6d832bbfcb5776d8d938154870682a891278a8adc264ed996ccf3d3b6762
+  model: moonshotai/Kimi-K3.1-Pro
+  model-prefix: kimik3.1
   runner: cluster:mi355x-amds
   precision: fp4
-  framework: vllm-disagg
-  router: { name: vllm-router, version: nightly-20260913-83944c4 }
-  kv-p2p-transfer: moriio
-  multinode: true
-  disagg: true
-  srt-recipe-dir: kimik3/vllm/mi355x-fp4/agentx
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: kimik3.1/sglang/mi355x-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.6
+    - dram-utilization: 0.513
       search-space:
-      - spec-decoding: mtp
-        conc-list: [12]
-        kv-offloading: dram
-        kv-offload-backend: { name: vllm-simple }
-        srt-recipe: disagg-variants.yaml:override_1p3d_c12
-        prefill:
-          num-worker: 1
-          tp: 8
-          dcp-size: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - TOTAL_CPU_DRAM_GB=1799
-        decode: { num-worker: 3, tp: 8, dcp-size: 1, ep: 1, dp-attn: false }
-      - spec-decoding: mtp
-        conc-list: [24]
-        kv-offloading: dram
-        kv-offload-backend: { name: vllm-simple }
-        srt-recipe: disagg-variants.yaml:override_1p3d_c24
-        prefill:
-          num-worker: 1
-          tp: 8
-          dcp-size: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - TOTAL_CPU_DRAM_GB=1799
-        decode: { num-worker: 3, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
-      - spec-decoding: mtp
-        conc-list: [24]
-        kv-offloading: dram
-        kv-offload-backend: { name: vllm-simple }
-        srt-recipe: disagg-variants.yaml:override_1p2d_c24
-        prefill:
-          num-worker: 1
-          tp: 8
-          dcp-size: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - TOTAL_CPU_DRAM_GB=1799
-        decode: { num-worker: 2, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
-      - spec-decoding: mtp
-        conc-list: [48]
-        kv-offloading: dram
-        kv-offload-backend: { name: vllm-simple }
-        srt-recipe: disagg-variants.yaml:override_1p1d_c48
-        prefill:
-          num-worker: 1
-          tp: 8
-          dcp-size: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          # Recipe enables P-only scratch reclaim; D and GMU0.90 are unchanged.
-          - TOTAL_CPU_DRAM_GB=1799
-        decode: { num-worker: 1, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
-      - spec-decoding: mtp
-        conc-list: [56]
-        kv-offloading: dram
-        kv-offload-backend: { name: vllm-simple }
-        srt-recipe: disagg-variants.yaml:override_1p1d_c56
-        prefill:
-          num-worker: 1
-          tp: 8
-          dcp-size: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - TOTAL_CPU_DRAM_GB=1799
-        decode: { num-worker: 1, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
-      - spec-decoding: mtp
-        conc-list: [48]
-        kv-offloading: dram
-        kv-offload-backend: { name: vllm-simple }
-        srt-recipe: disagg-variants.yaml:override_1p2d_c48
-        prefill:
-          num-worker: 1
-          tp: 8
-          dcp-size: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          # Inherits the same P-only scratch-reclaim setting as 1P1D c48.
-          - TOTAL_CPU_DRAM_GB=1799
-        decode: { num-worker: 2, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
+      - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4], srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [8, 16, 32, 48, 56], srt-recipe: agentic.yaml }
+
+glm5.3flash-fp8-mi325x-sglang-agentic-mtp:
+  image: lmsysorg/sglang:v0.5.22-rocm10-mi30x@sha256:5658cd0d8de0c68de10d2e349296f55ceff98053182fa87b2a7e942e5e7f3c2a
+  model: zai-org/GLM-5.3-Flash
+  model-prefix: glm5.3flash
+  runner: cluster:mi325x-amd
+  precision: fp8
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: glm5.3flash/sglang/mi325x-fp8-mtp
+  scenarios:
+    agentic-coding:
+    # 1051 GB covers the largest measured HiCache host allocation: conc 16, 4 x 261.22 GB/rank (KV + Mamba + indexer).
+    - dram-utilization: 0.87
+      search-space:
+      - { tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 12], srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 24, 32], srt-recipe: agentic.yaml }
+
+h3-bf16-mi355x-sglang-video:
+  image: lmsysorg/sglang:v0.5.23-rocm724-mi35x@sha256:e5278f805bb4482cadc4957af63633a0b914b40c778f7f3ea63693a31ee04fdf
+  model: MiniMaxAI/MiniMax-H3
+  model-prefix: h3
+  runner: cluster:mi355x-amds
+  precision: bf16
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: h3/sglang/mi355x-bf16
+  scenarios:
+    video-generation:
+      - spec: h3-v2.yaml
+        set: release-v1
+        search-space:
+          - gpus: 1
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
+          - gpus: 2
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
+          - gpus: 4
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
+          - gpus: 8
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
