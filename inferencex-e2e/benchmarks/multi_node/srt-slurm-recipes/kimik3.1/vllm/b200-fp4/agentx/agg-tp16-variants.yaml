@@ -39,6 +39,8 @@ base:
         tensor-parallel-size: 16
         pipeline-parallel-size: 1
         decode-context-parallel-size: 16
+        # These B200 nodes do not share an MNNVL domain; use NCCL collectives.
+        disable-custom-all-reduce: true
         trust-remote-code: true
         load-format: fastsafetensors
         moe-backend: auto
