@@ -81,7 +81,6 @@ base:
         mamba-track-interval: 1048576
         mamba-max-states-per-path: 3
         disaggregation-mode: prefill
-        disaggregation-bootstrap-port: 31000
         load-balance-method: round_robin
         page-size: 64
         attention-backend: trtllm_mha
