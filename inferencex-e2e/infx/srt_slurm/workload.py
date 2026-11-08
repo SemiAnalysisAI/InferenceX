@@ -84,6 +84,7 @@ BOUND_ENV = {
         *_AGENTIC_ENV,
         *_WORKFLOW_ENV,
         *_SINGLE_NODE_ENV,
+        "AIPERF_DATASET_MMAP_CACHE_DIR",
         "ENABLE_AGENTX_POWER",
     ),
     (True, True): (
