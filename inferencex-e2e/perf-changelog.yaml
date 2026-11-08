@@ -12473,6 +12473,39 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4904
 
 - config-keys:
+    - kimik3.1-fp4-gb200-vllm-agentic-dspark-tp8pp2-agg
+    - kimik3.1-fp4-gb200-vllm-agentic-dspark-tp16-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Re-sweep Kimi-K3.1-Pro GB200 vLLM AgentX with the updated DSpark draft (Inferact/Kimi-K3.1-Pro-DSpark-preview @ 6a2ef20a) and the #4851 golden curve, so throughput forces AL 3.41 at 5 draft tokens and 3.19 at 4."
+    - "Set VLLM_HTTP_TIMEOUT_KEEP_ALIVE to 600 s on the aggregated server so AIPerf's reused session connections outlive uvicorn's 5 s idle timeout."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4864
+
+- config-keys:
+    - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
+  description:
+    - "Rerun the unchanged FP8 config to collect GPU power, because its published curve (2026-10-21) predates default-on multinode power collection and carries no valid power."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4413
+  scenario-type: [agentic-coding]
+
+- config-keys:
+  - qwen3.5-fp4-b200-sglang-agentic-mtp
+  description:
+  - "Serve nvidia/Qwen3.5-397B-A17B-NVFP4-V2: the original nvidia/Qwen3.5-397B-A17B-NVFP4 directory was removed from the B200 node-local model volume on 2026-10-13 at NVIDIA SRE's request, so the key failed at srtctl startup with Model path does not exist."
+  - "Run on lmsysorg/sglang:v0.5.19-cu130: v0.5.16 loads the V2 checkpoint but hangs while capturing the target prefill CUDA graph at 16384 tokens (sweep 38618495491 canary, 2 h health timeout)."
+  - "Keep the deployment topology, speculative mode, concurrency points and evaluation coverage unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4066
+
+- config-keys:
+    - glm5.3-fp8-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GLM-5.3 FP8 MI355X SGLang AgentX: TP8 EP1, EAGLE MTP 3-1-4, FP8 E4M3 KV cache, and the AMD monokernel (--enable-amd-monokernel) at concurrency 1, 2, 4, and 10."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4875
+
+- config-keys:
     - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
   description:
     - "Update the SGLang image from v0.5.22-cu130 to nightly-dev-cu13-20261025-65633129, pinned by digest."
