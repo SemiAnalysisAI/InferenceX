@@ -199,3 +199,19 @@ override_dram_c48:
       KV_OFFLOADING: 'dram'
       TOTAL_CPU_DRAM_GB: '1799'
 
+
+override_dram_c56:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 56
+        max-num-batched-tokens: 10240
+        gpu-memory-utilization: 0.92
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":8192,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,224,256,288,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192]}'
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":3,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  benchmark:
+    env:
+      CONC: '56'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '1799'
+
