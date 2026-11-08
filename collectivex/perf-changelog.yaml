@@ -151,3 +151,21 @@
   modes: [normal]
   description:
     - Charge vLLM's finalize copy in UCCL-EP normal combine.
+- date: 2026-11-07
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4883
+  pools: [h100-dgxc, h200-dgxc, b200-nscale, gb200, gb300]
+  backends: [deepep-v2]
+  description:
+    - Build DeepEP V2 against the image's torch and NCCL instead of an isolated venv (torch 2.11.0, NCCL 2.30.4).
+- date: 2026-11-07
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4883
+  pools: [b200-nscale]
+  backends: [flashinfer-ep]
+  description:
+    - Run flashinfer-ep EP8 on B200.
+- date: 2026-11-07
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4895
+  pools: [b300]
+  backends: [flashinfer-ep]
+  description:
+    - Run flashinfer-ep EP8 on B300.

@@ -71,7 +71,8 @@ def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
     if engine == "tilert":
         if args.get("with-mtp") is not True:
             return {}
-        return {"method": "mtp", "num_speculative_tokens": args.get("num-mtp")}
+        method = "dspark" if args.get("model") == "dsv41" else "mtp"
+        return {"method": method, "num_speculative_tokens": args.get("num-mtp")}
     if engine == "atom":
         method = args.get("method")
         if not method:
