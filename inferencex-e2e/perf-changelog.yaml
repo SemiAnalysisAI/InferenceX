@@ -12437,5 +12437,5 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Kimi-K3.1-Pro GB300 Dynamo+vLLM: add a c=192 point with two TP8/DCP8 prefill engines, the DEP32 decode and an adaptive prefill chunk cap (long-prefill-token-threshold 4096); drop c=64, c=80 and c=300; explicit KV cache size at c=352."
+    - "Kimi-K3.1-Pro GB300 Dynamo+vLLM: add a c=192 point with two TP8/DCP8 prefill engines, the DEP32 decode, six draft tokens and an adaptive prefill chunk cap (long-prefill-token-threshold 4096); drop c=64, c=80 and c=300; explicit KV cache size at c=352."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4907

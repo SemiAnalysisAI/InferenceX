@@ -449,7 +449,17 @@ override_hyb4_2p1d_lpt4k:
         <<: *override_hyb4_3p1d_prefill_args
         long-prefill-token-threshold: 4096
         long-prefill-token-threshold-adaptive: true
-    decode: *override_hyb4_3p1d_decode
+        # Six draft tokens measured faster than four at c=192 on this decode.
+        speculative-config: &spec_k6 '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","method":"dspark","num_speculative_tokens":6,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+    decode: &override_hyb4_2p1d_lpt4k_decode
+      <<: *override_hyb4_3p1d_decode
+      args: &override_hyb4_2p1d_lpt4k_decode_args
+        <<: *override_hyb4_3p1d_decode_args
+        speculative-config: *spec_k6
+        # Decode graphs in multiples of K+1 = 7, up to max-num-seqs x 7.
+        max-num-batched-tokens: 1792
+        max-cudagraph-capture-size: 1792
+        compilation-config: '{"cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,105,112,119,126,133,140,147,154,161,168,175,182,189,196,203,210,217,224,231,238,245,252,259,266,273,280,287,294,301,308,315,322,329,336,343,350,357,364,371,378,385,392,399,406,413,420,427,434,441,448,476,504,532,560,588,616,644,672,700,728,756,784,812,840,868,896,924,952,980,1008,1036,1064,1092,1120,1148,1176,1204,1232,1260,1288,1316,1344,1372,1400,1428,1456,1484,1512,1540,1568,1596,1624,1652,1680,1708,1736,1764,1792]}'
 
 override_hyb4_2p1d_lpt4k_eval:
   engine:
@@ -465,9 +475,9 @@ override_hyb4_2p1d_lpt4k_eval:
         dyn-reasoning-parser: kimi_k3
         dyn-enable-structural-tag: true
     decode:
-      <<: *override_hyb4_3p1d_decode
+      <<: *override_hyb4_2p1d_lpt4k_decode
       args:
-        <<: *override_hyb4_3p1d_decode_args
+        <<: *override_hyb4_2p1d_lpt4k_decode_args
         reasoning-parser: kimi_k3
         dyn-tool-call-parser: kimi_k3
         dyn-reasoning-parser: kimi_k3
