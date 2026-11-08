@@ -63,13 +63,15 @@ base:
       TOTAL_CPU_DRAM_GB: '2249'
 
 # CUDA graphs cover prefill and mixed steps up to 4096 tokens as well as decode. c24 runs TP8 x DCP8 with DSpark
-# drafting 3 tokens; c40 and c48 add routed experts EP8 on MegaMoE with the one-sided NVLink all-to-all and draft 4.
+# drafting 3 tokens; c40 adds routed experts EP8 on MegaMoE with the one-sided NVLink all-to-all and drafts 4.
 # Throughput runs replace block rejection with the golden acceptance length.
 
 override_dcp8_c24:
   roles:
     agg:
       args:
+        # Admit prefill once every 8 engine steps; the fused decode serves pure decode steps only.
+        prefill-schedule-interval: 8
         decode-context-parallel-size: 8
         dcp-comm-backend: a2a
         use-replayssm: true
@@ -88,6 +90,8 @@ override_dcp8_ep8_c40:
   roles:
     agg:
       args:
+        # Admit prefill once every 8 engine steps; the fused decode serves pure decode steps only.
+        prefill-schedule-interval: 8
         decode-context-parallel-size: 8
         dcp-comm-backend: a2a
         use-replayssm: true
@@ -104,24 +108,3 @@ override_dcp8_ep8_c40:
   benchmark:
     env:
       CONC: '40'
-
-override_dcp8_ep8_c48:
-  roles:
-    agg:
-      args:
-        decode-context-parallel-size: 8
-        dcp-comm-backend: a2a
-        use-replayssm: true
-        enable-expert-parallel: true
-        moe-backend: deep_gemm_mega_moe
-        all2all-backend: flashinfer_nvlink_one_sided
-        max-num-seqs: 96
-        cudagraph-capture-sizes: [1, 2, 4, 5, 8, 10, 15, 16, 20, 24, 25, 30, 32, 35, 40, 45, 48, 50, 55, 56, 60, 64, 65, 70, 72, 75, 80, 85, 88, 90, 95, 96, 100, 104, 105, 110, 112, 115, 120, 125, 128, 130, 135, 136, 140, 144, 145, 150, 152, 155, 160, 165, 168, 170, 175, 176, 180, 184, 185, 190, 192, 195, 200, 205, 208, 210, 215, 216, 220, 224, 225, 230, 232, 235, 240, 245, 248, 250, 255, 256, 260, 265, 270, 272, 275, 280, 285, 288, 290, 295, 300, 304, 305, 310, 315, 320, 325, 330, 335, 336, 340, 345, 350, 352, 355, 360, 365, 368, 370, 375, 380, 384, 385, 390, 395, 400, 405, 410, 415, 416, 420, 425, 430, 432, 435, 440, 445, 448, 450, 455, 460, 464, 465, 470, 475, 480, 512, 640, 768, 1024, 1280, 1536, 1792, 2048, 2560, 3072, 3584, 4096]
-        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","revision":"6a2ef20a05efe88aabbf9ecaa12d020c3b0edf94","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-      env:
-        VLLM_USE_DIRECT_DCP_A2A: '1'
-        VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
-        VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
-  benchmark:
-    env:
-      CONC: '48'
