@@ -1,11 +1,13 @@
 from decimal import Decimal
 
 import pytest
+import yaml
 
 from infx.workflows.ci_priority import (
     PriorityContext,
     annotate_jobs,
     calculate_priority,
+    load_policy,
     queue_token,
 )
 
@@ -30,6 +32,19 @@ def policy():
         },
         "patchwork-score": -5,
     }
+
+
+@pytest.mark.parametrize(("misspell", "unknown"), [
+    (lambda p: p["adjustments"].update({"multinode": p["adjustments"].pop("multi-node")}),
+     "adjustments.multinode"),
+    (lambda p: p.update({"patchwork_score": p.pop("patchwork-score")}), "patchwork_score"),
+])
+def test_load_policy_rejects_misspelled_keys(policy, tmp_path, misspell, unknown):
+    misspell(policy)
+    path = tmp_path / "ci-priority.yaml"
+    path.write_text(yaml.safe_dump(policy))
+    with pytest.raises(ValueError, match=f"^Unknown CI priority policy keys: {unknown}$"):
+        load_policy(path)
 
 
 def test_combined_signals_add_their_configured_weights(policy):

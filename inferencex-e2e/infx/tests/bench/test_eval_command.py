@@ -192,7 +192,9 @@ def test_single_node_shim_stages_the_eval_in_the_checkout_and_records_its_status
     assert staged == ["meta_env.json", "results_stub.json", "samples_gsm8k_stub.jsonl"]
     assert json.loads((checkout / "results_stub.json").read_text()) == {"answer": "42"}
     assert openai.requests == [("POST", "/v1/chat/completions")]
-    assert [uv_step(argv) for argv in trace(tmp_path / "uv.jsonl")][:1] == ["install lm-eval[api]"]
+    [install] = trace(tmp_path / "uv.jsonl")
+    assert uv_step(install) == "git pin"
+    assert "huggingface-hub>=1.5,<2" in install
     [run] = trace(tmp_path / "lm_eval.jsonl")
     assert run["tasks_found"] and run["patched"]
     assert {"model=served-model", "num_concurrent=8", "max_length=8192"} <= set(model_args(run))
@@ -396,22 +398,38 @@ def test_request_budget_is_the_benchmark_context_capped_at_the_checkpoint(
     assert lm_eval.max_output_tokens(context) == max_tokens
 
 
+@pytest.mark.parametrize(("config", "context"), [
+    ({"model_type": "unregistered", "text_config": {"max_position_embeddings": 262144}}, 262144),
+    ({"max_position_embeddings": 4096, "text_config": {"max_position_embeddings": 262144}}, 262144),
+    ({"max_position_embeddings": 8192, "text_config": {"max_position_embeddings": None}}, 8192),
+    ({"text_config": {"max_position_embeddings": True, "seq_length": 32768}}, 32768),
+])  # fmt: skip
+def test_native_context_reads_text_model_limits_without_registered_architecture(
+    tmp_path, config, context
+):
+    (tmp_path / "config.json").write_text(json.dumps(config))
+
+    assert lm_eval.native_context_length(str(tmp_path)) == context
+
+
 def uv_step(argv: list[str]) -> str:
     """Name one recorded ``uv`` call of the lm-eval install into this interpreter."""
     assert argv[0] == "pip" and argv[-2:] == ["--python", sys.executable]
     assert "--break-system-packages" in argv
-    spec = argv[-3]
+    spec = next(arg for arg in argv[2:] if not arg.startswith("-"))
     if argv[1] == "uninstall":
         return f"uninstall {spec}"
-    if {"--no-deps", "--reinstall"} <= set(argv):
-        return "git pin" if spec.startswith("git+") else "archive pin"
+    if spec.startswith("lm-eval[api,hf] @ "):
+        assert "--no-deps" not in argv
+        assert lm_eval.REF in spec
+        return "git pin" if " @ git+" in spec else "archive pin"
     return f"install {spec}"
 
 
 @pytest.mark.parametrize(("image", "git", "failing", "expected"), [
-    ("rocm/atom:latest", True, "git+", ["uninstall torchvision", "install lm-eval[api]", "git pin", "archive pin"]),
-    ("lmsysorg/sglang:latest", True, None, ["install lm-eval[api]", "git pin"]),
-    ("lmsysorg/sglang:latest", False, None, ["install lm-eval[api]", "archive pin"]),
+    ("rocm/atom:latest", True, "git+", ["uninstall torchvision", "git pin", "archive pin"]),
+    ("lmsysorg/sglang:latest", True, None, ["git pin"]),
+    ("lmsysorg/sglang:latest", False, None, ["archive pin"]),
 ])  # fmt: skip
 def test_lm_eval_install_drops_torchvision_on_atom_and_falls_back_to_the_archive(
     base_env, tmp_path, image, git, failing, expected

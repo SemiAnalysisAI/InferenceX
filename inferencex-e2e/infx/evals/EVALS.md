@@ -7,21 +7,27 @@ from throughput. Selection lives in `mark_eval_entries()` in
 
 ## Selection
 
-- **Fixed-sequence, single-node:** 8k1k only, at the highest and median
-  concurrency for every model, runner, framework, precision, TP, and decoding
-  configuration.
+- **Fixed-sequence, single-node:** 8k1k only. Each group of model, runner,
+  framework, precision, spec-decoding, and dp-attn runs evals at the highest
+  and the median of its concurrencies of 16 or above. Every row at those concurrencies
+  gets an eval, and TP/EP do not split groups.
 - **Fixed-sequence, multi-node:** 8k1k only, with one job per parallelism
   topology at its highest eligible concurrency. Rows differing only by
   concurrency share a topology.
 - **Agentic GSM8K (every model, including Kimi K3 and MiniMax M3):** selected
   by default as a separate eval-only job at the highest concurrency of each
   single-node group of model, runner, framework, precision, spec-decoding,
-  dp-attn and image (the 8k1k keys plus image). TP/EP and KV offloading do not
-  split groups. Multi-node rows use the highest eligible concurrency per
-  topology; a deployment with no topology at concurrency 16 or above gets one
-  eval at its highest concurrency. Throughput for every agentic point still
-  runs. Scores use the same GSM8K floors in `thresholds.yaml` as
-  fixed-sequence 8k1k evals.
+  dp-attn, image and engine environment (the 8k1k keys plus image and engine
+  environment). The engine environment is the bound srt recipe's recipe-wide
+  `environment` plus every role's `env`, so a point whose recipe override turns
+  on a different kernel path through an env var (for example a mono or
+  megakernel decode at low concurrency) gets its own eval. Frontend and
+  benchmark env do not split groups, and neither do TP/EP, KV offloading or
+  CLI args. Multi-node rows use the highest eligible concurrency per topology;
+  each deployment and engine environment that no topology at concurrency 16 or
+  above covers gets one eval at its highest concurrency. Throughput for every
+  agentic point still runs. Scores use the same GSM8K floors in
+  `thresholds.yaml` as fixed-sequence 8k1k evals.
 - **Kimi K3 agentic, in addition:** every generated point automatically runs
   `kimi-vendor` with `kimi_tool_call_schema_full` (204 schema cases in two
   stream modes, 408 checks). The two-check smoke requires an explicit override.
@@ -67,10 +73,11 @@ agentic coverage, and `all-evals` wins over default eval coverage.
 ### Tool-use support contract
 
 The tool-use adapters are backend-independent clients of the local
-OpenAI-compatible endpoint. The deployment-smoke target set contains every
-generated Kimi K3 and MiniMax M3 agentic configuration in the NVIDIA and AMD
-master configs, including their single-node and multi-node vLLM and
-Dynamo-vLLM recipes. A configuration is verified only when the current PR head
+OpenAI-compatible endpoint. Kimi K3 and MiniMax M3 have no active master
+configs; their vendor suites and generator mappings remain available for
+explicit research configurations and historical results. The Kimi K3 and
+MiniMax M3 commands below require a caller-supplied config rather than the
+retired master entries. A configuration is verified only when the current PR head
 launches its tool-aware endpoint, the matching vendor smoke and `bfcl_smoke`
 complete their expected sample counts, and the native and
 `inferencex-eval-v1` artifacts are collected without `integration_error`.
@@ -461,8 +468,8 @@ mismatched parser/chat template.
 staging, the workflow upload, the collector, and the score validator. It projects
 the four-case aggregate as task `bfcl_smoke` and the four one-case diagnostic
 tasks shown above. Every row uses lm-eval-compatible `acc,none` (plus
-`acc_stderr,none`); BFCL workflows therefore validate with metric prefix
-`acc,` rather than the default exact-match prefix.
+`acc_stderr,none`), and every task config declares the `acc` metric, so the
+score validator selects `acc,` without a metric override.
 
 The `bfcl_smoke` and four `bfcl_<category>` thresholds are `0.0`, so all five
 scores remain diagnostic. Dependency, endpoint, timeout, malformed-output,
@@ -502,10 +509,11 @@ adapter rejects missing, unexpected, or duplicate result IDs and score headers
 whose counts or accuracy do not reconcile with the selected corpus.
 
 The compatibility result publishes `bfcl_vllm_minimax_m3` or
-`bfcl_vllm_kimi` as the aggregate task and preserves per-category
-`bfcl_<category>` tasks. Kimi also publishes a combined `bfcl_multi_turn`
-task. Full-suite thresholds are `0.0`; they are diagnostic until repeated
-hardware runs establish model, precision, and backend baselines. A completed
+`bfcl_vllm_kimi` as the aggregate task, plus one `<suite>_<category>` task per
+category, such as `bfcl_vllm_kimi_simple_python`. Kimi also publishes a
+combined `bfcl_vllm_kimi_multi_turn` task. Full-suite thresholds are `0.0`, so
+they stay diagnostic until repeated hardware runs establish model, precision,
+and backend baselines. A completed
 zero-score run therefore passes threshold validation, while dependency,
 transport, timeout, malformed-output, and integration failures still fail.
 
@@ -565,6 +573,46 @@ Multi-node evals on AMD and NVIDIA Slurm clusters run through [srt-slurm](https:
 
 For multi-node `all-evals`, `EVAL_CONC` is a space-separated list. When it contains multiple values, `python3 -m infx.bench eval` runs those concurrency points sequentially against the same live engine, stages each result with a `_concN` filename suffix, and records expected/completed/failed points in `meta_env.json`.
 
+### Speculative acceptance gate
+
+AgentX throughput forces each speculative deployment's acceptance to its golden AL, so it
+cannot show a weak draft head, and an eval cannot either: speculative decoding is lossless.
+Each agentic eval whose generation role drafts therefore also measures its real acceptance
+length (AL) on the same server, in the same Slurm job, before its eval. It is report-only:
+it never fails or blocks the eval or any submission. Only deployments that run agentic evals
+are gated.
+
+- The `al-gate-prompts` job ([`al-gate-prompts.yml`](../../../.github/workflows/al-gate-prompts.yml))
+  restores the 80 SPEED-Bench Qualitative `coding` prompts every golden curve was measured on
+  from the Actions cache, keyed on `infx/bench/speedbench.py`, or prepares them on a miss
+  (digest-checked). It uploads them as the `al_gate_dataset` artifact. The agentic eval jobs
+  of `run-sweep.yml` and `e2e-tests.yml` wait for it and download it; if it fails, they run
+  without the gate; a sweep's call is capped at 30 minutes. Pushes to `main` and a weekly schedule keep the cache entry warm, because
+  a cache saved by a PR run is visible only to that PR.
+- When the prompts are present, the srt driver sets `EVAL_AL_GATE=true`. The golden
+  acceptance planner (`infx/srt_slurm/synthetic_acceptance.py`) reads the resolved recipe and
+  `infx/srt_slurm/al_gate.py` picks the curve, by the generation role's method, draft and
+  verifier as synthetic acceptance does, and its draft length. The submission then runs
+  `benchmarks/srt_al_gate.sh` as srt-slurm's benchmark stage, the only stage that receives the
+  workers' metrics endpoints, followed by the usual post-benchmark eval. srt-slurm runs a
+  benchmark stage only without `EVAL_ONLY`, so the job is submitted with
+  `EVAL_ONLY=false RUN_EVAL=true` and power telemetry off; `srt_eval.sh` restores
+  `EVAL_ONLY=true` for the eval.
+- `python3 -m infx.bench al-gate` replays the prompts at concurrency 64 with the curve's
+  recorded [collection settings](../golden_al_distribution/README.md#collection-settings),
+  reads `AL = 1 + accepted draft tokens / verification steps` from the engine's own
+  Prometheus counters, and writes `al_gate_<RESULT_FILENAME>.json` with `pass` (within 5% of
+  golden), `below`, `above`, `no-counters`, `no-drafting` or `error`. The shim always exits 0,
+  so the eval runs after any outcome. The eval shares the job's time limit, so the shim stops
+  the gate after `AL_GATE_TIMEOUT_S` (default 1800 s) and the gate records an `error`.
+- A gate that cannot run is `skipped` with its reason: no prompts, a curve without collection
+  settings, TileRT (no streaming `/v1/completions`, no metrics), or a multi-node Dynamo
+  vLLM data-parallel worker whose metrics srtctl exposes only on its leader. Dynamo TRT-LLM is
+  gated: srtctl publishes TensorRT-LLM metrics by default, and a recipe that turns them off
+  (`backend.publish_metrics: false`) reports `no-counters`.
+- The result travels in the eval artifact; the raw replay files (`al_gate/`) are in the eval
+  server logs. `collect-evals` adds a "Speculative acceptance gate" table to its step summary.
+
 ### Workflow structure
 - `e2e-tests.yml`: `test-sweep-evals` (single-node fixed-seq-len), `test-sweep-multi-node-evals`
   (multi-node fixed-seq-len), `test-sweep-agentic-evals` (single-node agentic), and
@@ -573,6 +621,7 @@ For multi-node `all-evals`, `EVAL_CONC` is a space-separated list. When it conta
   `sweep-multi-node-agentic-evals` (same four-way split)
 - All four use their respective benchmark templates (`benchmark-tmpl.yml` for single-node,
   `benchmark-multinode-tmpl.yml` for multi-node) with `eval-only: true`, `run-eval: true`
+- `al-gate-prompts` runs before the two agentic eval jobs (see [Speculative acceptance gate](#speculative-acceptance-gate))
 - `collect-evals` depends on all four eval jobs; `collect-results` only runs when benchmark jobs ran
 - `infx.matrix.plan` splits eval results by node count and scenario type into `evals`
   (single-node fixed-seq-len), `agentic_evals` (single-node agentic), `multinode_evals`

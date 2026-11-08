@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator, Mapping
+import re
+from collections.abc import Collection, Iterator, Mapping
 from pathlib import Path
 from typing import Any
+
+_AFTER_ID_KEY = re.compile(r'[ \t\r\n]*(:[ \t\r\n]*(?:"([^"]*)")?)?')
 
 
 def resolve_artifact_dir(result_dir: Path) -> Path:
@@ -21,11 +24,13 @@ def resolve_artifact_dir(result_dir: Path) -> Path:
 
 
 def load_aggregate(path: Path) -> dict[str, Any]:
+    """Return the JSON object stored at ``path``."""
     with open(path) as f:
         return json.load(f)
 
 
 def load_records(path: Path) -> list[dict[str, Any]]:
+    """Return the profiled, error-free records from the profile_export.jsonl at ``path``."""
     records, _ = load_records_with_accounting(path)
     return records
 
@@ -73,6 +78,7 @@ def load_records_with_accounting(
 
 
 def _error_category(error: Any) -> str:
+    """Reduce a record's ``error`` field to a short category name, ``"unknown"`` when empty."""
     if isinstance(error, dict):
         for key in ("type", "error_type", "code", "class", "status"):
             value = error.get(key)
@@ -90,6 +96,7 @@ def _error_category(error: Any) -> str:
 
 
 def load_server_metrics(path: Path) -> dict[str, Any]:
+    """Return the server metrics JSON at ``path``, or an empty dict when the file is missing."""
     if not path.exists():
         return {}
     with open(path) as f:
@@ -97,6 +104,7 @@ def load_server_metrics(path: Path) -> dict[str, Any]:
 
 
 def load_server_log_head(path: Path, max_bytes: int = 64 * 1024 * 1024) -> str | None:
+    """Return up to ``max_bytes`` of the log at ``path`` as text without NUL bytes, or None if missing."""
     if not path.exists():
         return None
     with open(path, "rb") as f:
@@ -105,6 +113,7 @@ def load_server_log_head(path: Path, max_bytes: int = 64 * 1024 * 1024) -> str |
 
 
 def find_server_log_paths(result_dir: Path) -> list[Path]:
+    """List server.log in ``result_dir`` and watchtower-*.out files from it and three parents, deduplicated."""
     paths: list[Path] = []
     direct = result_dir / "server.log"
     if direct.is_file():
@@ -127,6 +136,10 @@ def find_server_log_paths(result_dir: Path) -> list[Path]:
 
 
 def _hf_traces_dir(hf_dataset_name: str | None, env: Mapping[str, str]) -> Path | None:
+    """Return the single cached snapshot dir of the HF dataset named ``hf_dataset_name``, else None.
+
+    The hub cache root comes from HF_HUB_CACHE, HUGGINGFACE_HUB_CACHE or HF_HOME in ``env``.
+    """
     if not hf_dataset_name:
         return None
 
@@ -145,13 +158,34 @@ def _hf_traces_dir(hf_dataset_name: str | None, env: Mapping[str, str]) -> Path 
     return snapshots[0] if len(snapshots) == 1 else None
 
 
-def _iter_trace_blobs(traces_dir: Path) -> Iterator[dict[str, Any]]:
+def _other_trace(line: str, wanted: Collection[str]) -> bool:
+    """Whether the JSON object on ``line`` is a trace whose ``id`` is surely not in ``wanted``.
+
+    Only an object written without escapes can be told: each of its ``"id"`` keys is then
+    followed by its value as written, so a line that names no wanted id holds no wanted trace.
+    """
+    if not line.startswith("{") or "\\" in line:
+        return False
+    position = line.find('"id"')
+    while position != -1:
+        key, value = _AFTER_ID_KEY.match(line, position + 4).groups()
+        if key is not None and (value is None or value in wanted):
+            return False
+        position = line.find('"id"', position + 4)
+    return True
+
+
+def _iter_trace_blobs(
+    traces_dir: Path, wanted: Collection[str] | None = None
+) -> Iterator[dict[str, Any]]:
+    """Yield the JSON objects of the *.jsonl and *.json files in ``traces_dir``, skipping
+    unreadable ones, and unparsed any *.jsonl trace whose id is surely not in ``wanted``."""
     for path in sorted(traces_dir.glob("*.jsonl")):
         try:
             with open(path) as f:
                 for line in f:
                     line = line.strip()
-                    if not line:
+                    if not line or (wanted is not None and _other_trace(line, wanted)):
                         continue
                     try:
                         yield json.loads(line)
@@ -171,8 +205,12 @@ def _iter_trace_blobs(traces_dir: Path) -> Iterator[dict[str, Any]]:
 def iter_trace_blobs(
     aggregate: Mapping[str, Any],
     env: Mapping[str, str],
+    wanted: Collection[str] | None = None,
 ) -> Iterator[dict[str, Any]]:
-    """Read the declared dataset only when request processing consumes traces."""
+    """Read the declared dataset only when request processing consumes traces.
+
+    ``wanted`` names the trace ids the consumer looks up; other *.jsonl traces are not parsed.
+    """
     metadata = aggregate.get("metadata")
     dataset = metadata.get("dataset") if isinstance(metadata, dict) else None
     hf_dataset_name = dataset.get("hf_dataset_name") if isinstance(dataset, dict) else None
@@ -180,4 +218,4 @@ def iter_trace_blobs(
         return
     traces_dir = _hf_traces_dir(hf_dataset_name, env)
     if traces_dir is not None:
-        yield from _iter_trace_blobs(traces_dir)
+        yield from _iter_trace_blobs(traces_dir, wanted)

@@ -59,8 +59,6 @@ def test_an_installer_fails_without_the_version_the_binder_writes(tmp_path, scri
     ("vllm-router.sh", {"ROUTER_VERSION": "9.8.7"}, {"vllm-router==9.8.7"}),
     ("vllm-mooncake.sh", {"KV_OFFLOAD_BACKEND_VERSION": "9.8.7"},
      {"mooncake-transfer-engine-cuda13==9.8.7"}),
-    ("lmcache-mp-rocm.sh", {"KV_OFFLOAD_BACKEND_VERSION": "9.8.7"},
-     {"lmcache==9.8.7", "https://github.com/LMCache/LMCache/releases/expanded_assets/v9.8.7-rocm"}),
     ("glm5.3-tilert-rocm.sh", {"ROUTER_VERSION": "9.8.7", "TILERT_ROLE": "prefill"}, {"tilert==9.8.7"}),
 ])  # fmt: skip
 def test_an_installer_installs_exactly_the_bound_version(tmp_path, script, env, expected):
@@ -68,3 +66,32 @@ def test_an_installer_installs_exactly_the_bound_version(tmp_path, script, env, 
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert expected <= set(installs[0])
+
+
+def test_tokenspeed_installer_uses_direct_private_wheels_and_one_public_index(tmp_path):
+    result, installs = run(tmp_path, "tokenspeed-nightly.sh", {
+        "TOKENSPEED_WHEEL_URL": "https://example.test/tokenspeed.whl#sha256=abc",
+        "TOKENSPEED_KERNEL_WHEEL_URL": "https://example.test/kernel.whl#sha256=def",
+        "TOKENSPEED_ENGINE_WHEEL_URL": "https://example.test/engine.whl#sha256=123",
+        "TOKENSPEED_SCHEDULER_VERSION": "0.1.48",
+        "TOKENSPEED_FLASHINFER_VERSION": "0.7.2.post1",
+        "TOKENSPEED_CUDA_VERSION": "13.0",
+        "ROUTER_VERSION": "1.13.0.post20261027",
+    })
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert installs == [[
+        "-m", "pip", "install", "--break-system-packages", "--upgrade",
+        "--index-url", "https://pypi.org/simple",
+        "https://example.test/tokenspeed.whl#sha256=abc",
+        "https://example.test/kernel.whl#sha256=def",
+        "https://example.test/engine.whl#sha256=123",
+        "tokenspeed-scheduler==0.1.48",
+        "tokenspeed-smg==1.13.0.post20261027",
+    ]]
+    calls = [json.loads(line) for line in (tmp_path / "python3.jsonl").read_text().splitlines()]
+    assert calls[-2:] == [
+        ["-m", "flashinfer", "download-kernels", "--cuda-version", "13.0",
+         "--flashinfer-version", "0.7.2.post1"],
+        ["-m", "pip", "check"],
+    ]

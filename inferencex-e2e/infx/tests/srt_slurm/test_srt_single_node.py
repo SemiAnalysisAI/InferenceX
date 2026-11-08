@@ -8,8 +8,10 @@ from pathlib import Path
 import pytest
 import yaml
 
-from infx.srt_slurm.single_node import runtime_arguments, select_recipe, submission_fields
+from infx.srt_slurm import single_node
+from infx.srt_slurm.single_node import main, runtime_arguments, select_recipe, submission_fields
 from infx.srt_slurm.synthetic_acceptance import Planned, plan_commands
+from infx.srt_slurm.variants import expand_variants
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "utils/srt-slurm/src"))
@@ -69,6 +71,43 @@ def test_native_binding_submits_one_point_and_keeps_server_settings(point):
     }
 
 
+def test_tokenspeed_binding_preserves_native_args_and_eval_context(point):
+    path, recipe, env = point
+    recipe["engine"] = "tokenspeed"
+    recipe["roles"]["agg"]["args"] = {
+        "attn-tp-size": 2, "data-parallel-size": 2, "ep-size": 4,
+        "pipeline-parallel-size": 1, "max-model-len": 512,
+        "speculative-algorithm": "MTP", "speculative-num-steps": 3,
+        "speculative-num-draft-tokens": 4, "sampling-backend": "flashinfer",
+        "kvstore-size": 80, "kvstore-write-policy": "write_back",
+    }
+    path.write_text(yaml.safe_dump({"base": recipe}))
+    env = {**env, "FRAMEWORK": "tokenspeed", "EP_SIZE": "4", "DP_ATTENTION": "true",
+           "SPEC_DECODING": "mtp", "EVAL_ONLY": "true", "MAX_MODEL_LEN": "1024"}
+    _, bound = select_recipe(f"{path}:base", env)
+    argv = runtime_arguments(f"{path}:base", env)
+    apply_overrides_to_recipe(bound, parse_overrides(argv[1::2], []))
+    assert bound["roles"]["agg"]["args"] == {
+        "attn-tp-size": 2, "data-parallel-size": 2, "ep-size": 4,
+        "pipeline-parallel-size": 1, "max-model-len": 1024,
+        "speculative-algorithm": "MTP", "speculative-num-steps": 3,
+        "speculative-num-draft-tokens": 4, "sampling-backend": "flashinfer",
+        "kvstore-size": 80, "kvstore-write-policy": "write_back",
+    }
+    assert bound["benchmark"]["env"]["USE_CHAT_TEMPLATE"] == "true"
+    for field, value, message in [
+        ("TP", "2", "attention TP x DP"),
+        ("EP_SIZE", "1", "ep-size"),
+        ("DP_ATTENTION", "false", "DP_ATTENTION"),
+    ]:
+        with pytest.raises(ValueError, match=message):
+            select_recipe(f"{path}:base", {**env, field: value})
+    recipe["roles"]["agg"]["args"]["pipeline-parallel-size"] = 2
+    path.write_text(yaml.safe_dump({"base": recipe}))
+    with pytest.raises(ValueError, match="pipeline-parallel-size"):
+        select_recipe(f"{path}:base", env)
+
+
 @pytest.mark.parametrize("field,value,message", [
     ("TP", "2", "tensor-parallel-size"), ("RUN_EVAL", "yes", "RUN_EVAL"),
     ("PP_SIZE", "2", "PP_SIZE"), ("RESULT_FILENAME", "", "Missing runtime input"),
@@ -114,6 +153,32 @@ def test_ambiguous_native_variants_are_rejected(point):
         runtime_arguments(str(path), env)
 
 
+def test_a_variant_missing_a_required_field_is_reported_not_raised(point):
+    path, recipe, env = point
+    broken = {"roles": {"agg": {"args": {"tensor-parallel-size": None}}}}
+    path.write_text(yaml.safe_dump({"base": recipe, "override_good": {}, "override_broken": broken}))
+    assert select_recipe(str(path), env)[0] == f"{path}:override_good"
+    with pytest.raises(ValueError, match="override_broken: .*'tensor-parallel-size'"):
+        select_recipe(f"{path}:override_broken", env)
+
+
+def test_prepare_refuses_an_arguments_file_named_like_the_bound_recipe(
+    point, tmp_path, monkeypatch, capsys
+):
+    path, _, env = point
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    output = tmp_path / "job" / "recipe.yaml"
+    output.parent.mkdir()
+    argv = ["single_node", "prepare", f"{path}:base", str(output), "--fabric", "{}"]
+    monkeypatch.setattr(sys, "argv", argv)
+    with pytest.raises(SystemExit) as exit_info:
+        main()
+    assert exit_info.value.code == 2
+    assert "would overwrite the bound recipe" in capsys.readouterr().err
+    assert not output.exists()
+
+
 @pytest.mark.parametrize("algorithm,spec_decoding", [("EAGLE", "mtp"), ("DFLASH", "draft_model")])
 def test_speculative_binding_uses_real_verification_and_the_chat_template(
     point, tmp_path, algorithm, spec_decoding
@@ -151,6 +216,84 @@ def test_concurrency_selects_its_variant_before_binding(point):
         select_recipe(f"{path}:zip_override_conc[1]", env)
     with pytest.raises(ValueError, match="exactly one"):
         select_recipe(str(path), {**env, "CONC": "8"})
+
+
+CONC_VARIANTS = {"zip_override_conc": {"benchmark": {"env": {"CONC": ["2", "4"]}}}}
+OTHER_POINT = {"benchmark": {"env": {"CONC": "4"}}}
+
+
+@pytest.mark.parametrize(("blocks", "selector", "inputs"), [
+    (CONC_VARIANTS, "", {}),
+    (CONC_VARIANTS, "", {"CONC": "8"}),
+    (CONC_VARIANTS, "", {"CONC": "02"}),
+    (CONC_VARIANTS, "", {"IMAGE": ""}),
+    (CONC_VARIANTS, ":zip_override_conc[1]", {}),
+    (CONC_VARIANTS, ":zip_override_conc[1]", {"CONC": "4"}),
+    (CONC_VARIANTS, ":base", {}),
+    ({"override_first": {}, "override_second": {}}, "", {}),
+    ({"override_fit": {}, "override_other": {**OTHER_POINT, "identity": ["malformed"]}}, "", {}),
+    ({"override_fit": {}, "override_other": {"benchmark": {"env": ["CONC=4"]}}}, "", {}),
+    ({"override_fit": {}, "override_other": {"benchmark": "bash client.sh"}}, "", {}),
+])  # fmt: skip
+def test_the_planner_selects_what_binding_every_variant_selects(point, blocks, selector, inputs):
+    path, recipe, env = point
+    path.write_text(yaml.safe_dump({"base": recipe, **blocks}))
+
+    def selection(expand):
+        try:
+            return select_recipe(f"{path}{selector}", {**env, **inputs}, expand=expand)
+        except Exception as error:  # noqa: BLE001
+            return type(error), str(error)
+
+    assert selection(expand_variants) == selection(lambda raw, selector: expand_variants(raw, selector))
+
+
+def test_planner_selections_of_one_point_share_no_state(point):
+    path, recipe, env = point
+    cached = {**recipe, "model": {"cache": {"dir": "/models"}}}
+    path.write_text(yaml.safe_dump({"base": cached, "override_only": {}}))
+
+    _, first = select_recipe(str(path), env, expand=expand_variants)
+    first["model"]["cache"]["dir"] = "/elsewhere"
+    first["roles"]["agg"]["args"]["max-running-requests"] = 1
+    _, second = select_recipe(str(path), env, expand=expand_variants)
+
+    assert second["model"]["cache"] == {"dir": "/models"}
+    assert second["roles"]["agg"]["args"]["max-running-requests"] == 32
+
+
+def test_the_planner_composes_a_fragment_once_and_binds_only_its_points_variants(point, monkeypatch):
+    path, recipe, env = point
+    path.write_text(yaml.safe_dump({"base": recipe, "zip_override_conc": {
+        "benchmark": {"env": {"CONC": ["2", "4", "8"]}},
+    }}))  # fmt: skip
+    calls = []
+    for name in ("compose_recipe", "bind_workload"):
+        def counted(*args, _name=name, _call=getattr(single_node, name), **kwargs):
+            calls.append(_name)
+            return _call(*args, **kwargs)
+
+        monkeypatch.setattr(single_node, name, counted)
+
+    bound = [
+        select_recipe(str(path), {**env, "CONC": conc}, expand=expand_variants)[1]["benchmark"]["env"]["CONC"]
+        for conc in ("2", "4", "8")
+    ]
+
+    assert bound == ["2", "4", "8"]
+    assert calls == ["compose_recipe", "bind_workload", "bind_workload", "bind_workload"]
+
+
+def test_the_planner_sees_an_edit_to_the_telemetry_block_it_composed(point, tmp_path):
+    path, _, env = point
+    block = tmp_path / "configs/srt-recipes/telemetry-native.yaml"
+
+    _, before = select_recipe(str(path), env, expand=expand_variants)
+    block.write_text(yaml.safe_dump({"telemetry": {"enabled": True, "required": False, "interval": 7}}))
+    _, after = select_recipe(str(path), env, expand=expand_variants)
+
+    assert "interval" not in before["telemetry"]
+    assert after["telemetry"]["interval"] == 7
 
 
 def test_eval_binding_changes_context_without_changing_selected_concurrency(point):
@@ -251,11 +394,22 @@ def test_atom_binding_uses_allocation_tp_and_native_mtp_arguments(point):
         runtime_arguments(f"{path}:base", env)
 
 
+@pytest.mark.parametrize("flag", ["dcp-size", "decode-context-parallel-size"])
+def test_sglang_decode_context_parallel_size_must_match_the_point(point, flag):
+    path, recipe, env = point
+    recipe["roles"]["agg"]["args"][flag] = 4
+    path.write_text(yaml.safe_dump({"base": recipe}))
+    runtime_arguments(f"{path}:base", {**env, "DCP_SIZE": "4"})
+    with pytest.raises(ValueError, match=r"DCP_SIZE: recipe/matrix '1' != '4'"):
+        runtime_arguments(f"{path}:base", env)
+
+
 @pytest.mark.parametrize("record,expected", [
     ({"status": "submitted", "slurm_job_id": "42", "output_dir": "/shared/42"}, ("42", "/shared/42")),
     ({"status": "error"}, None),
     ({"status": "submitted", "slurm_job_id": "42;43", "output_dir": "/shared/42"}, None),
     ({"status": "submitted", "slurm_job_id": "42", "output_dir": "relative"}, None),
+    (["42"], None),
 ])
 def test_submission_manifest(tmp_path, record, expected):
     path = tmp_path / "submission.json"

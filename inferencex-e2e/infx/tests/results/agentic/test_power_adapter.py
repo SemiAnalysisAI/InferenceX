@@ -54,7 +54,7 @@ def test_single_node_collector_finalizes_native_agentx_power(
     env = {**os.environ, "INFERENCEX_RESULTS_PYTHON": sys.executable,
            "REQUIRE_POWER": str(int(require_power)),
            "PYTHONPATH": str(Path(__file__).resolve().parents[4])}
-    request = SimpleNamespace(is_agentic=True, eval_only=False, run_eval=False,
+    request = SimpleNamespace(is_agentic=True, eval_only=False, al_gate=False, run_eval=False,
                               require_power=require_power, inferencex_results_python=sys.executable,
                               result_filename="point", env=env)
     run = SimpleNamespace(request=request, env=env, workspace=tmp_path, life=Lifecycle())
@@ -285,6 +285,20 @@ def test_build_power_window_rejects_ambiguous_inputs(
 
     assert window is None
     assert expected_reason in reasons
+
+
+@pytest.mark.parametrize(
+    ("aggregate", "records"),
+    [(["2023-11-14T22:13:21+00:00"], None), (None, [["not", "an", "object"]])],
+)
+def test_build_power_window_rejects_non_object_profile_json(
+    tmp_path: Path, aggregate: list | None, records: list | None
+):
+    from infx.results.agentic.power_adapter import build_power_window
+
+    result_dir = _write_artifacts(tmp_path, aggregate=aggregate, records=records)
+
+    assert build_power_window(result_dir) == (None, ["profile_artifacts_invalid"])
 
 
 _RETIRED_FORK_WINDOW_ENV = (

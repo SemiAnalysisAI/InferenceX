@@ -52,9 +52,11 @@ class SrtRun:
 
     @property
     def workspace(self) -> Path:
+        """Return the request's runner workspace directory."""
         return self.request.workspace
 
     def prepend_path(self, directory: Path) -> None:
+        """Put ``directory`` first on the children's ``PATH``."""
         self.env["PATH"] = os.pathsep.join(filter(None, (str(directory), self.env.get("PATH"))))
 
 
@@ -66,6 +68,7 @@ def require(request: LaunchRequest, *names: str) -> None:
 
 
 def slurm_backend(launch: Launch) -> SlurmBackend:
+    """Return the launch's Slurm backend, or raise TypeError if it uses another backend."""
     if not isinstance(launch.backend, SlurmBackend):
         raise TypeError(
             f"{launch.path} needs the Slurm backend, got {type(launch.backend).__name__}"

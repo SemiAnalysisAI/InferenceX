@@ -55,7 +55,7 @@ import types
 
 import torch
 
-from ep_backend import EPBackend
+from ep_backend import EPBackend, blockwise_fp8_codec
 
 # Stamped by the kernel into the expert-id payload of every receive slot it did not fill.
 # -1 is safe: real ids are [0, num_experts).
@@ -100,31 +100,9 @@ def _version_slug(version: str) -> str:
     return re.sub(r"[^A-Za-z0-9.]+", "-", version).strip("-") or "unknown"
 
 
-# FP8 block size, matching the DeepSeek-V3 recipe every other FP8 backend here uses.
-_FP8_BLOCK = 128
-
-
-def _blockwise_cast_to_fp8(x):
-    """Per-128-channel e4m3 quantize: (values [m, n], FP32 scales [m, n//128]).
-
-    The layout vLLM dispatches on this transport: `per_token_group_quant_fp8(x, 128)`, row-major
-    FP32 scales, sent as the payload after the values. Local rather than shared on purpose:
-    deepep-v2 and uccl-ep must match their own libraries' in-kernel bits, while nothing here
-    quantises in-kernel, so this copy only has to round-trip self-consistently. Three contracts,
-    not three copies of one.
-    """
-    m, n = x.shape
-    blocks = x.view(m, -1, _FP8_BLOCK)
-    amax = blocks.abs().float().amax(dim=2).view(m, -1).clamp(1e-4)
-    values = (blocks * (448.0 / amax.unsqueeze(2))).to(torch.float8_e4m3fn).view(m, n)
-    return values, (amax / 448.0).view(m, -1)
-
-
-def _blockwise_cast_back(values, scales):
-    """Inverse of _blockwise_cast_to_fp8, to BF16."""
-    m, n = values.shape
-    blocks = values.view(m, -1, _FP8_BLOCK).float()
-    return (blocks * scales.view(m, -1, 1)).view(m, n).to(torch.bfloat16)
+# vLLM's layout on this transport: per_token_group_quant_fp8(x, 128), FP32 scales sent after
+# the values.
+_blockwise_cast_to_fp8, _blockwise_cast_back = blockwise_fp8_codec(torch.float8_e4m3fn, 448.0)
 
 
 class FlashInferEPBackend(EPBackend):
@@ -156,18 +134,14 @@ class FlashInferEPBackend(EPBackend):
 
     def __init__(self, args, rank, world_size, local_rank, device):
         super().__init__(args, rank, world_size, local_rank, device)
-        self._fp8 = self.precision == "fp8"
         if self._fp8:
             # The codec, bytes and block size of deepep-v2/uccl-ep, so the same label.
             self._enable_fp8("fp8-e4m3fn", _blockwise_cast_to_fp8, _blockwise_cast_back)
-        # BF16 stage() is a pointer hand-off, so only the FP8 dequant is device work to hoist.
-        self.stage_device_work = self._fp8
         self._a2a = None
         self._max_tokens = None
         self._workspace_sizing = {}
         # Which of vLLM's two combine calls this wheel takes; resolved in create_buffer.
         self._combine_takes_output = False
-        self.experts_per_rank = args.experts // world_size
 
     # ---- setup -------------------------------------------------------------------------------
 
@@ -443,11 +417,8 @@ def _communicator(group):
     `CommBackend` declares them abstract, not because the fabric path calls them: `MnnvlMemory`
     exchanges handles with `allgather` alone. What the ordering actually needs is the explicit
     `torch.distributed.barrier` in create_buffer.
-    Built as a subclass of the upstream class, which in the image's 0.6.8.post1 is an ABC, so an
-    interface change is an import-time error here rather than another asynchronous fault on the
-    cluster. Later wheels (0.6.18.post1, 0.7.0.post1) make `CommBackend` a `typing.Protocol`
-    (flashinfer/comm/abstractions.py), under which a missing method raises nothing at import:
-    recheck this class against the protocol when the pin moves.
+    `CommBackend` is a `typing.Protocol` (flashinfer/comm/abstractions.py), under which a missing
+    method raises nothing at import: recheck this class against the protocol when the pin moves.
     """
     import torch.distributed as dist
     from flashinfer.comm.mnnvl import CommBackend

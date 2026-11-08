@@ -77,7 +77,7 @@ class Plan:
 
 
 def _require_single_point(env: Mapping[str, str], conc: str) -> None:
-    """AgentX measures one concurrency per fresh server deployment."""
+    """Raise ``InputError`` unless ``CONC_LIST`` is unset or equals ``conc``, as AgentX measures one concurrency per server."""
     points = env.get("CONC_LIST")
     if points is not None and points != conc:
         raise inputs.InputError(
@@ -88,7 +88,7 @@ def _require_single_point(env: Mapping[str, str], conc: str) -> None:
 
 
 def _validate_kv_offload(env: Mapping[str, str]) -> None:
-    """The served KV-offload configuration, as the matrix ``kv-offloading`` field allows."""
+    """Raise ``InputError`` unless ``env``'s KV-offload settings match a matrix ``kv-offloading`` value."""
     mode = inputs.require("KV_OFFLOADING", env=env)["KV_OFFLOADING"]
     backend = env.get("KV_OFFLOAD_BACKEND")
     if mode == "none":
@@ -105,6 +105,7 @@ def _validate_kv_offload(env: Mapping[str, str]) -> None:
 
 
 def _power_mode(switches: Mapping[str, str], env: Mapping[str, str]) -> PowerMode:
+    """Pick the power mode from ``ENABLE_AGENTX_POWER`` and the srt-slurm window directory."""
     if switches.get("ENABLE_AGENTX_POWER") not in TRUE_VALUES:
         return "off"
     return "window" if env.get("SRT_MEASUREMENT_WINDOW_DIR") else "missing"
@@ -144,6 +145,7 @@ def execute(plan: Plan, runtime: Runtime, environ: Mapping[str, str]) -> int:
 
 
 def _download_traces(cfg: ReplayConfig, runtime: Runtime, env: Mapping[str, str]) -> int:
+    """Download ``cfg``'s trace dataset with the runtime's ``hf`` and return its status."""
     print(f"Loading traces via aiperf public-dataset: {cfg.loader} ({cfg.dataset})", flush=True)
     rc = proc.call([str(runtime.hf), "download", "--repo-type", "dataset", cfg.dataset], env)
     if rc:
@@ -195,21 +197,24 @@ def _power_audit(plan: Plan, replay_rc: int) -> list[str] | None:
 
 
 def _window(plan: Plan, state: str) -> list[str]:
+    """Power adapter arguments that write the multinode window in ``state``."""
     return ["--concurrency", str(plan.replay.concurrency), "--write-multinode-window", state]
 
 
 def _power_adapter(plan: Plan, python: str, env: Mapping[str, str], *args: str) -> int:
+    """Run the power adapter for ``plan`` with ``args`` and return its status."""
     strict = ["--require-power"] if plan.require_power else []
     adapter = ["agentic.power_adapter", "--result-dir", str(plan.result_dir), *args, *strict]
     return _results(python, env, *adapter)
 
 
 def _results(python: str, env: Mapping[str, str], module: str, *args: str) -> int:
+    """Run ``infx.results.<module>`` with ``args`` under ``python`` and return its status."""
     return proc.call([python, "-m", f"infx.results.{module}", *args], env)
 
 
 def _check_server_metrics(artifact_dir: Path, prefix: str | None) -> None:
-    """Opt-in: fail rather than publish trace charts without the engine's metrics."""
+    """When ``prefix`` is set, raise ``BenchError`` unless ``artifact_dir`` has non-empty metrics with that prefix."""
     if not prefix:
         return
     exported = artifact_dir / "server_metrics_export.json"
@@ -235,6 +240,7 @@ def _contains(path: Path, needle: bytes) -> bool:
 
 
 def _nonempty(path: Path) -> bool:
+    """Whether ``path`` is a file with at least one byte."""
     return path.is_file() and path.stat().st_size > 0
 
 

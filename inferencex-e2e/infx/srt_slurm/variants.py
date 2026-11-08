@@ -8,8 +8,9 @@ selectors a master config accepts.
 from __future__ import annotations
 
 import re
-from copy import deepcopy
 from typing import Any
+
+from infx.fastcopy import deepcopy
 
 ZIP_VARIANT = re.compile(r"(zip_override_[\w-]+)\[(\d+)\]")
 
@@ -28,6 +29,7 @@ def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]
 
 
 def _list_lengths(group: dict[str, Any]) -> list[int]:
+    """Return the length of every list value in ``group``, nested mappings included."""
     lengths = []
     for value in group.values():
         if isinstance(value, list):
@@ -49,6 +51,7 @@ def _zip_length(group: dict[str, Any]) -> int:
 
 
 def _zip_slice(group: dict[str, Any], index: int) -> dict[str, Any]:
+    """Return ``group`` with each list replaced by its ``index`` item, or its only item."""
     sliced = {}
     for key, value in group.items():
         if isinstance(value, list):
@@ -60,8 +63,13 @@ def _zip_slice(group: dict[str, Any], index: int) -> dict[str, Any]:
     return sliced
 
 
-def _block_variants(raw: dict[str, Any], key: str) -> list[tuple[str, dict[str, Any]]]:
-    """Each variant of one ``override_*`` or ``zip_override_*`` block, named by its selector."""
+def _block_variants(
+    raw: dict[str, Any], key: str, only: int | None = None
+) -> list[tuple[str, dict[str, Any]]]:
+    """Each variant of one ``override_*`` or ``zip_override_*`` block, named by its selector.
+
+    ``only`` keeps the zip variant at that index, or none when the block is shorter.
+    """
     base, block = raw["base"], raw[key]
     base_name = base.get("name", "unnamed")
     if key.startswith("override_"):
@@ -71,7 +79,8 @@ def _block_variants(raw: dict[str, Any], key: str) -> list[tuple[str, dict[str, 
         return [(key, merged)]
     group = key.removeprefix("zip_override_")
     variants = []
-    for index in range(_zip_length(block)):
+    indexes = range(_zip_length(block))
+    for index in indexes if only is None else indexes[only : only + 1]:
         merged = deep_merge(base, _zip_slice(block, index))
         if not isinstance(block.get("name"), list):
             merged["name"] = f"{base_name}_{group}_{index}"
@@ -80,6 +89,7 @@ def _block_variants(raw: dict[str, Any], key: str) -> list[tuple[str, dict[str, 
 
 
 def without_nulls(value: Any) -> Any:
+    """Return ``value`` with null-valued keys removed from every nested mapping."""
     if isinstance(value, dict):
         return {key: without_nulls(item) for key, item in value.items() if item is not None}
     return value
@@ -106,10 +116,10 @@ def expand_variants(
     elif selector == "base":
         selected = [("base", deepcopy(raw["base"]))]
     elif zipped and zipped[1] in raw:
-        variants = _block_variants(raw, zipped[1])
-        if int(zipped[2]) >= len(variants):
-            raise ValueError(f"{selector}: {zipped[1]} has {len(variants)} variants")
-        selected = [variants[int(zipped[2])]]
+        selected = _block_variants(raw, zipped[1], int(zipped[2]))
+        if not selected:
+            count = _zip_length(raw[zipped[1]])
+            raise ValueError(f"{selector}: {zipped[1]} has {count} variants")
     elif selector.startswith("override_") and selector in raw:
         selected = _block_variants(raw, selector)
     else:

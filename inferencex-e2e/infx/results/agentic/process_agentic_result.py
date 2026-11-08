@@ -9,6 +9,7 @@ from pathlib import Path
 
 from infx.results.agentic import build_result
 from infx.results.agentic.common import round_floats
+from infx.results.agentic.request_metrics import replayed_trace_ids
 from infx.results.metadata import run_attempt
 
 from .artifacts import (
@@ -23,6 +24,7 @@ from .artifacts import (
 
 
 def main() -> int:
+    """Build the AgentX aggregate from RESULT_DIR artifacts, write it to AGENTIC_OUTPUT_DIR and return the exit code."""
     result_filename = os.environ.get("RESULT_FILENAME", "")
     if not result_filename:
         print("ERROR: RESULT_FILENAME env var not set", file=sys.stderr)
@@ -51,7 +53,7 @@ def main() -> int:
             server_metrics,
             os.environ,
             request_accounting=request_accounting,
-            traces=iter_trace_blobs(aggregate, os.environ),
+            traces=iter_trace_blobs(aggregate, os.environ, replayed_trace_ids(records)),
             server_logs=(load_server_log_head(path) for path in server_log_paths),
         )
     )

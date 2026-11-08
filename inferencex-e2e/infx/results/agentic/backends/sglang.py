@@ -26,6 +26,7 @@ class SglangBackend(ServerMetricsBackend):
     _DP_SIZE_RE = re.compile(r"\bdp_size=(?P<dp_size>\d+)\b")
 
     def matches(self, metrics: dict[str, dict[str, Any]], framework: str) -> bool:
+        """Return True for sglang: metric names, or for an empty scrape when ``framework`` is sglang."""
         metric_names = set(metrics)
         return any(name.startswith("sglang:") for name in metric_names) or (
             not metrics and framework.lower() == "sglang"
@@ -37,6 +38,7 @@ class SglangBackend(ServerMetricsBackend):
         flat: dict[str, Any],
         nested: dict[str, Any],
     ) -> None:
+        """Fill token totals, cache hit rates by source and GPU/host KV usage from SGLang ``metrics``."""
         prompt_total = sum_stat(
             metrics,
             "sglang:prompt_tokens",
@@ -146,6 +148,7 @@ class SglangBackend(ServerMetricsBackend):
         metrics: dict[str, dict[str, Any]],  # noqa: ARG002
         server_logs: Iterable[str | None],
     ) -> int | None:
+        """Return the summed SGLang KV pool size parsed from ``server_logs``, ignoring ``metrics``."""
         return sum_server_log_capacities(
             server_logs,
             self.kv_cache_pool_tokens_from_server_log,
@@ -153,6 +156,10 @@ class SglangBackend(ServerMetricsBackend):
 
     @classmethod
     def kv_cache_pool_tokens_from_server_log(cls, server_log: str | None) -> int | None:
+        """Return the KV pool tokens from max_total_num_tokens lines in ``server_log``, or None.
+
+        Sums distinct DP/TP/EP ranks and scales a single logged rank by dp_size.
+        """
         if not server_log:
             return None
 
@@ -187,6 +194,7 @@ class SglangBackend(ServerMetricsBackend):
 
     @classmethod
     def _dp_size(cls, server_log: str) -> int | None:
+        """Return the positive dp_size logged in ``server_log``, or None."""
         match = cls._DP_SIZE_RE.search(server_log)
         if not match:
             return None

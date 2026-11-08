@@ -30,24 +30,50 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from infx.config import git_repository_root, project_root
 
+from .prepare_perf_changelog_merge import (
+    canonicalize_appended_links,
+    resolve_conflict_bytes,
+)
+from .sweep_runs import (
+    artifact_names,
+    completed_pr_runs,
+    has_reusable_result_artifacts,
+    pr_commit_shas,
+)
+from .validate_perf_changelog import read_git_file
+
 try:
     import git as gitpython
+    import requests
 
-    from github import Github, GithubException
+    from github import Auth, Github, GithubException, RateLimitExceededException
+
+    _NETWORK_ERRORS: tuple[type[Exception], ...] = (
+        ConnectionError,
+        TimeoutError,
+        requests.ConnectionError,
+        requests.Timeout,
+        requests.exceptions.RetryError,
+    )
 except ImportError:
     gitpython = None  # type: ignore[assignment]
     Github = None  # type: ignore[assignment, misc]
+    Auth = None  # type: ignore[assignment]
+    _NETWORK_ERRORS = (ConnectionError, TimeoutError)
 
     class GithubException(Exception):  # type: ignore[no-redef]  # noqa: N818
         """Stub when PyGithub is not installed."""
 
         status = 0
         data: object = None
-        headers: dict = {}  # type: ignore[type-arg]  # noqa: RUF012
+        headers: ClassVar[dict] = {}  # type: ignore[type-arg]
+
+    class RateLimitExceededException(GithubException):  # type: ignore[no-redef]
+        """Stub when PyGithub is not installed."""
 
 
 _WORKFLOWS_AVAILABLE = gitpython is not None
@@ -56,17 +82,6 @@ if TYPE_CHECKING:
     from github.PullRequest import PullRequest
     from github.Repository import Repository
 
-from .prepare_perf_changelog_merge import (  # noqa: E402
-    canonicalize_appended_links,
-    resolve_conflict_bytes,
-)
-from .sweep_runs import (  # noqa: E402
-    artifact_names,
-    completed_pr_runs,
-    has_reusable_result_artifacts,
-    pr_commit_shas,
-)
-from .validate_perf_changelog import read_git_file  # noqa: E402
 
 DEFAULT_REPO = "SemiAnalysisAI/InferenceX"
 DEFAULT_CHECK_TIMEOUT = 900
@@ -104,14 +119,17 @@ _RESET = "\033[0m"
 
 
 def log(msg: str) -> None:
+    """Print msg as a progress line."""
     print(f"{_CYAN_BOLD}→{_RESET} {msg}")
 
 
 def ok(msg: str) -> None:
+    """Print msg as a success line."""
     print(f"{_GREEN_BOLD}✓{_RESET} {msg}")
 
 
 def die(msg: str) -> int:
+    """Print msg as an error on stderr and return exit code 1."""
     print(f"{_RED_BOLD}✗{_RESET} {msg}", file=sys.stderr)
     return 1
 
@@ -140,21 +158,25 @@ def _resolve_token() -> str:
 def _make_github(token: str) -> Github:
     """Build a PyGithub ``Github`` client, respecting ``GITHUB_API_URL``."""
     base_url = os.environ.get("GITHUB_API_URL") or "https://api.github.com"
-    return Github(login_or_token=token, base_url=base_url)
+    return Github(auth=Auth.Token(token), base_url=base_url)
 
 
-_TRANSIENT_HTTP_STATUSES = frozenset({403, 429, 500, 502, 503, 504})
+_TRANSIENT_HTTP_STATUSES = frozenset({429, 500, 502, 503, 504})
 
 
 def _is_transient_error(exc: Exception) -> bool:
     """Return True for API errors safe to retry during check polling.
 
-    Covers server errors (5xx), rate limits (403/429), and connection-level
-    failures from requests/urllib3.
+    Covers server errors (5xx), rate limits (429, and 403 rate-limit
+    responses), and connection-level failures from requests/urllib3.
+    PyGithub reports network failures as requests exceptions and raises
+    RetryError once its own retries run out, so both count as transient.
     """
+    if isinstance(exc, RateLimitExceededException):
+        return True
     if isinstance(exc, GithubException):
         return exc.status in _TRANSIENT_HTTP_STATUSES
-    return isinstance(exc, (ConnectionError, TimeoutError))
+    return isinstance(exc, _NETWORK_ERRORS)
 
 
 def _retry_delay(exc: Exception) -> float:
@@ -180,17 +202,21 @@ class GitOps:
     """
 
     def __init__(self, repo: gitpython.Repo | None = None) -> None:
+        """Wrap repo, or the repository containing the current directory."""
         self.repo = repo or gitpython.Repo(".", search_parent_directories=True)
 
     def is_clean(self) -> bool:
+        """Return True if the working tree has no changes or untracked files."""
         return not self.repo.is_dirty(untracked_files=True)
 
     def current_ref(self) -> str:
+        """Return the current branch name, or the commit SHA when HEAD is detached."""
         if self.repo.head.is_detached:
             return self.repo.head.commit.hexsha
         return self.repo.active_branch.name
 
     def rev_parse(self, ref: str = "HEAD") -> str:
+        """Return the full commit SHA that ref resolves to."""
         return self.repo.rev_parse(ref).hexsha
 
     def diff_name_only_unmerged(self) -> str:
@@ -221,9 +247,11 @@ class GitOps:
         )
 
     def fetch(self, *args: str) -> None:
+        """Run git fetch with args."""
         self.repo.git.fetch(*args)
 
     def checkout(self, *args: str) -> None:
+        """Run git checkout with args."""
         self.repo.git.checkout(*args)
 
     def merge(self, *args: str) -> int:
@@ -235,19 +263,24 @@ class GitOps:
             return exc.status or 1
 
     def add(self, *paths: str) -> None:
+        """Stage paths with git add."""
         self.repo.git.add(*paths)
 
     def commit(self, *args: str) -> None:
+        """Run git commit with args."""
         self.repo.git.commit(*args)
 
     def push(self, *args: str) -> None:
+        """Run git push with args."""
         self.repo.git.push(*args)
 
     def branch_delete(self, name: str) -> None:
+        """Force-delete local branch name, ignoring git errors."""
         with contextlib.suppress(gitpython.GitCommandError):
             self.repo.git.branch("-D", name)
 
     def merge_abort(self) -> None:
+        """Abort an in-progress merge, ignoring git errors."""
         with contextlib.suppress(gitpython.GitCommandError):
             self.repo.git.merge("--abort")
 
@@ -279,27 +312,39 @@ def find_eligible_run(
     return None
 
 
-def _latest_check_runs(check_runs: list) -> list:
-    """Dedupe check runs by name, keeping the one with the latest started_at/id.
+def _check_run_recency(cr: object) -> tuple:
+    """Order check runs oldest first. A queued run without started_at counts as newest."""
+    started_at = getattr(cr, "started_at", None)
+    return (started_at is None, str(started_at or ""), getattr(cr, "id", 0))
+
+
+def _latest_check_runs(check_runs: list, suite_workflows: dict | None = None) -> list:
+    """Dedupe check runs, keeping the most recent per key.
 
     GitHub can return superseded re-runs for the same check name.  This mirrors
-    ``gh pr checks --watch --fail-fast`` which only considers the latest run
-    per check name.
+    ``gh pr checks --watch --fail-fast``, which keys Actions check runs on
+    name, workflow and event, and other check runs on name alone.
+    *suite_workflows* maps a check suite id to its ``(workflow_id, event)``.
     """
-    by_name: dict[str, object] = {}
+    suite_workflows = suite_workflows or {}
+    by_key: dict[tuple, object] = {}
     for cr in check_runs:
-        existing = by_name.get(cr.name)
+        key = (cr.name, suite_workflows.get(getattr(cr, "check_suite_id", None)))
+        existing = by_key.get(key)
         if existing is None:
-            by_name[cr.name] = cr
+            by_key[key] = cr
             continue
-        cr_key = (str(cr.started_at or ""), getattr(cr, "id", 0))
-        ex_key = (
-            str(getattr(existing, "started_at", "") or ""),
-            getattr(existing, "id", 0),
-        )
-        if cr_key > ex_key:
-            by_name[cr.name] = cr
-    return list(by_name.values())
+        if _check_run_recency(cr) > _check_run_recency(existing):
+            by_key[key] = cr
+    return list(by_key.values())
+
+
+def _suite_workflows(gh_repo: Repository, sha: str) -> dict:
+    """Map each Actions check suite on *sha* to its ``(workflow_id, event)``."""
+    return {
+        run.check_suite_id: (run.workflow_id, run.event)
+        for run in gh_repo.get_workflow_runs(head_sha=sha)
+    }
 
 
 def _latest_statuses(statuses: list) -> list:
@@ -344,8 +389,9 @@ def wait_for_checks(
     is treated as pending (the check needs re-evaluation).  ``skipped``
     and ``neutral`` count as passing.
 
-    Check runs are deduped by name (latest ``started_at``/``id`` wins) and
-    commit statuses by context to ignore superseded re-runs.
+    Check runs are deduped by name, workflow and event (latest
+    ``started_at``/``id`` wins) and commit statuses by context to ignore
+    superseded re-runs.
 
     Transient API errors (5xx, rate limits, connection failures) are retried
     with backoff until the timeout expires.
@@ -359,7 +405,9 @@ def wait_for_checks(
 
     while time.monotonic() < deadline:
         try:
-            check_runs = _latest_check_runs(list(commit.get_check_runs()))
+            check_runs = _latest_check_runs(
+                list(commit.get_check_runs()), _suite_workflows(gh_repo, sha)
+            )
 
             all_completed = True
             for cr in check_runs:
@@ -413,6 +461,8 @@ def wait_for_check(
 
     Returns 0 on success, 1 on failure or timeout.
     Transient API errors are retried with backoff until the timeout expires.
+    Skipped runs are ignored when another exists, because unrelated label
+    events re-run the workflow with this job skipped on the same SHA.
     """
     log(f"Waiting for {check_name} on {sha[:8]}")
     deadline = time.monotonic() + timeout
@@ -422,8 +472,9 @@ def wait_for_check(
         try:
             check_runs = list(commit.get_check_runs())
             matching = [cr for cr in check_runs if cr.name == check_name]
+            matching = [cr for cr in matching if cr.conclusion != "skipped"] or matching
             if matching:
-                matching.sort(key=lambda cr: str(cr.started_at or ""))
+                matching.sort(key=_check_run_recency)
                 latest = matching[-1]
 
                 if latest.status == "completed":
@@ -494,6 +545,7 @@ class _MergeState:
     __slots__ = ("local_branch",)
 
     def __init__(self) -> None:
+        """Start with no local branch recorded."""
         self.local_branch = ""
 
 
@@ -525,6 +577,7 @@ def merge_pr(
     state = _MergeState()
 
     def cleanup() -> None:
+        """Abort any merge, restore the original branch and delete the temporary local branch."""
         git_ops.merge_abort()
         with contextlib.suppress(Exception):
             git_ops.checkout("--quiet", original_branch)
@@ -564,6 +617,10 @@ def _merge_pr_inner(
     git_ops: GitOps,
     state: _MergeState,
 ) -> int:
+    """Merge PR number pr once its reusable sweep, changelog and checks are in place.
+
+    Returns 0 on success, non-zero on failure. Records the local branch in state for cleanup.
+    """
     gh_repo = gh.get_repo(repo)
     pull = gh_repo.get_pull(pr)
 
@@ -715,6 +772,7 @@ _INSTALL_HINT = (
 
 
 def main() -> int:
+    """Merge the PR named on the command line using env settings and return the exit code."""
     if not _WORKFLOWS_AVAILABLE:
         print(_INSTALL_HINT, file=sys.stderr)
         return 1

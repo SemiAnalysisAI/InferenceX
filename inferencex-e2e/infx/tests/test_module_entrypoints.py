@@ -26,7 +26,7 @@ def invoke(tmp_path):
 
 
 @pytest.mark.parametrize("payload,expected", [
-    (None, []),
+    (None, None),
     ('{"value": 3}', [{"value": 3}]),
     ('[{"value": 3}, {"value": 4}]', [[{"value": 3}, {"value": 4}]]),
 ])
@@ -40,8 +40,28 @@ def test_collector_preserves_nested_json_and_empty_inputs(invoke, tmp_path, payl
     result = invoke("infx.results.collect_results", "inputs", "test")
 
     assert result.returncode == 0, result.stderr
-    assert result.stdout == result.stderr == ""
-    assert json.loads((tmp_path / "agg_test.json").read_text()) == expected
+    assert result.stderr == ""
+    output = tmp_path / "agg_test.json"
+    if expected is None:
+        assert result.stdout == "No benchmark JSON artifacts to aggregate.\n"
+        assert not output.exists()
+    else:
+        assert result.stdout == ""
+        assert json.loads(output.read_text()) == expected
+
+
+def test_collector_orders_rows_by_artifact_path(invoke, tmp_path):
+    for name in ("tp8_conc64", "tp4_conc4", "tp8_conc4", "tp2_conc16", "tp4_conc64", "tp1_conc1"):
+        artifact = tmp_path / "inputs" / f"bmk_dsr1_1k1k_{name}"
+        artifact.mkdir(parents=True)
+        (artifact / f"dsr1_1k1k_{name}.json").write_text(json.dumps({"point": name}))
+
+    result = invoke("infx.results.collect_results", "inputs", "test")
+
+    assert result.returncode == 0, result.stderr
+    assert [row["point"] for row in json.loads((tmp_path / "agg_test.json").read_text())] == [
+        "tp1_conc1", "tp2_conc16", "tp4_conc4", "tp4_conc64", "tp8_conc4", "tp8_conc64",
+    ]
 
 
 @pytest.mark.parametrize("published", [None, b'[{"previous": true}]\n'])

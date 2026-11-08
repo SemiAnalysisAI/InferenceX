@@ -15,7 +15,10 @@ from typing import Any, NamedTuple
 
 import yaml
 
+from infx import yamlio
+from infx.bench.proc import status
 from infx.golden_al_distribution import GOLDEN_DIR, golden_length
+from infx.golden_al_distribution.identity import Fact
 from infx.srt_slurm.variants import ZIP_VARIANT, without_nulls
 
 ENGINES = {
@@ -24,12 +27,14 @@ ENGINES = {
     "vllm-disagg": "vllm",
     "vllm": "vllm",
     "dynamo-vllm": "vllm",
+    "llmd-vllm": "vllm",
     "dynamo-sglang": "sglang",
     "trt": "trtllm",
     "dynamo-trt": "trtllm",
     "atom": "atom",
     "atom-disagg": "atom",
     "tilert": "tilert",
+    "tokenspeed": "tokenspeed",
 }
 SGLANG_VARIABLES = (
     "SGLANG_SIMULATE_ACC_LEN",
@@ -38,14 +43,36 @@ SGLANG_VARIABLES = (
 )
 TRT_VARIABLE = "TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS"
 TILERT_VARIABLES = ("TILERT_SIMULATE_ACC_LEN", "TILERT_SIMULATE_ACC_METHOD")
+# Synthetic acceptance streams unverified draft tokens. Kimi's parsers stop streaming on them.
+KIMI_VLLM_PARSER_ARGS = ("enable-auto-tool-choice", "tool-call-parser", "reasoning-parser")
 
 
 def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
+    """Return a role's speculative config for ``engine`` as method, draft length and draft model.
+
+    Empty when the role does not speculate. DFlash's draft length is its verify block minus the
+    current token. Raises ValueError on a malformed or conflicting config.
+    """
     args = role.get("args", {})
+    if engine == "tokenspeed":
+        if "speculative-config" in args:
+            raise ValueError(
+                "TokenSpeed AgentX requires explicit MTP flags, not speculative-config"
+            )
+        algorithm = str(args.get("speculative-algorithm", "")).lower()
+        if not algorithm:
+            return {}
+        if algorithm != "mtp":
+            raise ValueError("TokenSpeed AgentX currently supports only MTP speculation")
+        return {
+            "method": "mtp",
+            "num_speculative_tokens": args.get("speculative-num-steps"),
+        }
     if engine == "tilert":
         if args.get("with-mtp") is not True:
             return {}
-        return {"method": "mtp", "num_speculative_tokens": args.get("num-mtp")}
+        method = "dspark" if args.get("model") == "dsv41" else "mtp"
+        return {"method": method, "num_speculative_tokens": args.get("num-mtp")}
     if engine == "atom":
         method = args.get("method")
         if not method:
@@ -78,7 +105,6 @@ def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
         if not algorithm:
             return {}
         if algorithm == "dflash":
-            # DFlash verifies a block of the current token plus its drafts.
             width = args.get("speculative-num-draft-tokens")
             return {
                 "method": "dflash",
@@ -106,6 +132,26 @@ def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
     }
 
 
+def verifier(role: Mapping[str, Any], engine: str) -> Fact:
+    """How a role verifies drafts. Block, relaxed and adaptive verification are opt-in, so an
+    unset flag means standard; a synthetic sampler becomes block on real runs. ATOM and TileRT
+    do not expose their verifier."""
+    args = role.get("args") or {}
+    if engine == "vllm":
+        method = spec_parameters(role, engine).get("rejection_sample_method")
+        if method == "synthetic":
+            return Fact("block", "documented")
+        return Fact(method, "explicit") if method else Fact("standard", "documented")
+    if engine == "sglang" and args.get("speculative-use-block-verification") is True:
+        return Fact("block", "explicit")
+    config = args.get("speculative_config") or {}
+    if engine == "trtllm" and config.get("use_relaxed_acceptance_for_thinking") is True:
+        return Fact("relaxed", "explicit")
+    if engine in ("sglang", "trtllm"):
+        return Fact("standard", "documented")
+    return Fact(None, "unknown")
+
+
 def acceptance_length(
     recipe: Mapping[str, Any],
     framework: str,
@@ -113,27 +159,70 @@ def acceptance_length(
     *,
     golden_dir: Path = GOLDEN_DIR,
 ) -> float | None:
-    """The golden AL a speculative AgentX throughput run of ``recipe`` simulates, else None."""
+    """The golden AL the generation role of a speculative AgentX throughput run simulates,
+    else None."""
+    roles = recipe.get("roles", {})
+    generation = roles.get("decode", roles.get("agg", {}))
+    if (
+        ENGINES.get(framework) == "vllm"
+        and spec_parameters(generation, "vllm").get("enable_adaptive_verification") is True
+    ):
+        return None
+    return _simulated_length(recipe, framework, environment, golden_dir=golden_dir)
+
+
+def _simulated_length(
+    recipe: Mapping[str, Any],
+    framework: str,
+    environment: Mapping[str, str],
+    *,
+    golden_dir: Path = GOLDEN_DIR,
+) -> float | None:
+    """The golden AL ``build_overrides`` sets on non-adaptive speculative roles, else None.
+
+    Raises ValueError unless a Qwen3.5 SGLang MTP generation role's window is its draft steps
+    plus one verification token.
+    """
     engine = ENGINES.get(framework)
     if engine is None:
         return None
     roles = recipe.get("roles", {})
-    synthetic = (
-        environment["EVAL_ONLY"].lower() != "true"
-        and environment["IS_AGENTIC"].lower() in ("1", "true")
-        and environment["SPEC_DECODING"] != "none"
-    )
-    generation = roles.get("decode", roles.get("agg", {}))
+    synthetic = is_synthetic(environment)
+    generation = generation_role(recipe)
     spec = spec_parameters(generation, engine)
     if not (synthetic and spec):
         return None
-    al = golden_length(environment["MODEL_PREFIX"], spec, environment["THINKING_MODE"], golden_dir)
+    if engine == "vllm" and all(
+        spec_parameters(role, engine).get("enable_adaptive_verification") is True
+        for name, role in roles.items()
+        if name in ("agg", "prefill", "decode") and spec_parameters(role, engine)
+    ):
+        return None
+    al = golden_length(
+        environment["MODEL_PREFIX"],
+        spec,
+        environment["THINKING_MODE"],
+        golden_dir,
+        verifier(generation, engine).value,
+    )
+    if engine == "tokenspeed":
+        args = generation.get("args", {})
+        drafts = args.get("speculative-num-draft-tokens")
+        if (
+            not isinstance(drafts, int)
+            or isinstance(drafts, bool)
+            or drafts != spec["num_speculative_tokens"] + 1
+        ):
+            raise ValueError(
+                "TokenSpeed speculative-num-draft-tokens must equal speculative-num-steps + 1"
+            )
+        if args.get("speculative-eagle-topk") != 1:
+            raise ValueError("TokenSpeed synthetic acceptance requires speculative-eagle-topk 1")
     if (
         engine == "sglang"
         and environment["MODEL_PREFIX"] == "qwen3.5"
         and spec.get("method") in ("eagle", "nextn", "mtp")
     ):
-        # The generation role's MTP window includes one verification token.
         drafts = generation.get("args", {}).get("speculative-num-draft-tokens")
         expected = spec["num_speculative_tokens"] + 1
         if not isinstance(drafts, int) or isinstance(drafts, bool) or drafts != expected:
@@ -142,6 +231,21 @@ def acceptance_length(
                 f"must be an integer equal to speculative-num-steps + 1 ({expected})"
             )
     return al
+
+
+def is_synthetic(environment: Mapping[str, str]) -> bool:
+    """AgentX speculative throughput forces golden acceptance; evals verify for real."""
+    return (
+        environment["EVAL_ONLY"].lower() != "true"
+        and environment["IS_AGENTIC"].lower() in ("1", "true")
+        and environment["SPEC_DECODING"] != "none"
+    )
+
+
+def generation_role(recipe: Mapping[str, Any]) -> Mapping[str, Any]:
+    """The worker whose drafts are verified: decode, otherwise the aggregated worker."""
+    roles = recipe.get("roles", {})
+    return roles.get("decode", roles.get("agg", {}))
 
 
 def build_overrides(
@@ -156,7 +260,7 @@ def build_overrides(
     if engine is None:
         return []
     roles = recipe.get("roles", {})
-    al = acceptance_length(recipe, framework, environment, golden_dir=golden_dir)
+    al = _simulated_length(recipe, framework, environment, golden_dir=golden_dir)
     overrides = []
     variables = {
         "sglang": SGLANG_VARIABLES,
@@ -185,10 +289,23 @@ def build_overrides(
         if worker_engine == "vllm":
             if not worker_spec:
                 continue
-            if worker_al is not None:
+            if worker_spec.get("enable_adaptive_verification") is True:
+                if (
+                    worker_spec.get("rejection_sample_method") == "synthetic"
+                    or "synthetic_acceptance_length" in worker_spec
+                ):
+                    worker_spec["rejection_sample_method"] = "block"
+                    worker_spec.pop("synthetic_acceptance_length", None)
+                else:
+                    continue
+            elif worker_al is not None:
                 worker_spec.update(
                     rejection_sample_method="synthetic", synthetic_acceptance_length=worker_al
                 )
+                if environment["MODEL_PREFIX"].startswith("kimi"):
+                    for key in KIMI_VLLM_PARSER_ARGS:
+                        if key in (role.get("args") or {}):
+                            overrides += ["--unset", f"{prefix}.args.{key}"]
             elif (
                 worker_spec.get("rejection_sample_method") == "synthetic"
                 or "synthetic_acceptance_length" in worker_spec
@@ -201,6 +318,16 @@ def build_overrides(
                 "--set",
                 f"{prefix}.args.speculative-config={json.dumps(worker_spec)}",
             ]
+        elif worker_engine == "tokenspeed":
+            key = "synthetic-acceptance-length"
+            if worker_al is not None and worker_spec:
+                overrides += ["--set", f"{prefix}.args.{key}={worker_al:g}"]
+                overrides += ["--set", f'{prefix}.args.sampling-backend="greedy"']
+            else:
+                if key in (role.get("args") or {}):
+                    overrides += ["--unset", f"{prefix}.args.{key}"]
+                if worker_spec:
+                    overrides += ["--set", f'{prefix}.args.sampling-backend="flashinfer"']
         elif worker_engine == "atom":
             key = "spec-decode-acceptance-length"
             if worker_al is not None and worker_spec:
@@ -263,10 +390,16 @@ def selected_recipes(
 
 
 class Planned(NamedTuple):
-    """One ``srtctl apply`` command and the golden AL it simulates (None: real acceptance)."""
+    """One ``srtctl apply`` command and the golden AL it simulates (None: real acceptance).
+
+    ``al_gate`` is an agentic eval's acceptance gate (``al_gate.plan``), which ``environment``
+    adds to the submission's environment to run; None without one.
+    """
 
     command: list[str]
     acceptance_length: float | None
+    al_gate: dict[str, Any] | None = None
+    environment: tuple[tuple[str, str], ...] = ()
 
 
 def plan_commands(
@@ -278,13 +411,16 @@ def plan_commands(
     golden_dir: Path = GOLDEN_DIR,
 ) -> list[Planned]:
     """Build native arguments for every selected variant before submitting jobs."""
+    from infx.srt_slurm import al_gate
+
     command = ["srtctl", "apply", *arguments]
     if framework not in ENGINES:
-        return [Planned([*command, "--file", config], None)]
+        gate = al_gate.plan({}, framework, environment) if al_gate.requested(environment) else None
+        return [Planned([*command, "--file", config], None, gate)]
     from srtctl.core.overrides import apply_overrides_to_recipe, parse_overrides
 
     path, _, selector = config.partition(":")
-    raw = yaml.safe_load(Path(path).read_text())
+    raw = yamlio.safe_load(Path(path).read_text())
     if not isinstance(raw, dict):
         raise ValueError("Recipe must be a mapping")
     parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
@@ -309,14 +445,24 @@ def plan_commands(
         selected_recipes(materialized, variant)
         selected_file = f"{path}:{variant}" if variant is not None else path
         length = acceptance_length(recipe, framework, environment, golden_dir=golden_dir)
-        plans.append(Planned([*command, "--file", selected_file, *arguments_to_add], length))
+        gate, srt_environment = None, {}
+        if al_gate.requested(environment):
+            gate = al_gate.plan(recipe, framework, environment, golden_dir=golden_dir)
+            if gate is not None and gate.get("status") != "skipped":
+                arguments_to_add = [*arguments_to_add, *al_gate.overrides(gate, environment)]
+                srt_environment = al_gate.SRT_ENVIRONMENT
+        argv = [*command, "--file", selected_file, *arguments_to_add]
+        plans.append(Planned(argv, length, gate, tuple(srt_environment.items())))
     return plans
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Plan srtctl commands with golden acceptance from ``argv``, run them and return the rc."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--record", type=Path, help="write the plan's golden acceptance length here as JSON"
+        "--record",
+        type=Path,
+        help="write the plan's golden acceptance length and acceptance gate here as JSON",
     )
     parser.add_argument("config")
     parser.add_argument("framework")
@@ -331,11 +477,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.record is not None:
         lengths = {plan.acceptance_length for plan in plans}
         length = lengths.pop() if len(lengths) == 1 else None
-        args.record.write_text(json.dumps({"golden_acceptance_length": length}) + "\n")
+        gate = next((plan.al_gate for plan in plans if plan.al_gate is not None), None)
+        record = {"golden_acceptance_length": length, "al_gate": gate}
+        args.record.write_text(json.dumps(record) + "\n")
     for plan in plans:
-        result = subprocess.run(plan.command, check=False)
+        result = subprocess.run(
+            plan.command, env={**os.environ, **dict(plan.environment)}, check=False
+        )
         if result.returncode:
-            return result.returncode
+            return status(result.returncode)
     return 0
 
 

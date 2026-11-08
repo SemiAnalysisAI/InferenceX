@@ -29,6 +29,9 @@ base:
         SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
         # Explicitly disable the prohibited draft precision conversion path.
         SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
+        # NVIDIA runtime optimizations: compact verify sampling (verify tokens sampled on the top-k support before
+        # temperature and top-p; same distribution), post-verify CUDA graphs and their fast paths.
+        SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION: '1'
       args:
         served-model-name: nvidia/Qwen3.8-Flash-Next-NVFP4
         revision: fc694b54fb0174e0913e6adf86691ef85a4ead47
@@ -64,7 +67,7 @@ base:
         # The native connector injects model-specific golden AL for throughput;
         # quality evaluations use real verification. No manual AL override.
         enable-linear-replayssm-spec: true
-        cuda-graph-backend-prefill: disabled
+        cuda-graph-backend-prefill: breakable
         cuda-graph-backend-decode: full
         cuda-graph-max-bs-decode: 96
         cuda-graph-bs-decode: [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96]
@@ -98,46 +101,174 @@ base:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       # Native single-node binding verifies these against the generated point.
-      TOTAL_CPU_DRAM_GB: '225'
+      TOTAL_CPU_DRAM_GB: '241'
       KV_OFFLOADING: dram
 
-# Only client concurrency changes; serving/admission/graph/cache settings stay fixed.
-override_c1:
+override_tp4_c3:
+  roles:
+    agg:
+      gpus: 4
+      env:
+        # Captures the decode step's host-side metadata preparation in the decode CUDA graph.
+        SGLANG_ENABLE_METADATA_GLUE_GRAPH: '1'
+      args:
+        <<: &gpu_only_args
+          # null drops the base setting, so SGLang's default applies.
+          enable-hierarchical-cache: null
+          hicache-size: null
+          hicache-io-backend: null
+          hicache-mem-layout: null
+          hicache-write-policy: null
+          mamba-radix-cache-strategy: null
+          mamba-track-interval: null
+          max-mamba-cache-size: null
+          # Dense small sizes: decode batches up to 16 pad by at most one request.
+          cuda-graph-bs-decode: [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96]
+          tokenizer-worker-num: 6
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        # SGLang's custom all-reduce instead of the FlashInfer fused all-reduce.
+        enforce-disable-flashinfer-allreduce-fusion: true
+        # Keep the per-layer embedding table in GPU memory instead of pinned host memory.
+        ple-offload-embedding: null
+        ple-offload-backend: null
+        no-ple-offload-embedding: true
+        # Running cap: one request decodes at a time; the other sessions wait for their first token.
+        max-running-requests: 1
   benchmark:
     env:
-      CONC: '1'
-
-override_c2:
-  benchmark:
-    env:
-      CONC: '2'
-
-override_c4:
-  benchmark:
-    env:
-      CONC: '4'
+      <<: &gpu_only_client
+        KV_OFFLOADING: none
+        TOTAL_CPU_DRAM_GB: '0'
+      CONC: '3'
 
 override_c8:
+  roles:
+    agg:
+      args:
+        <<: *gpu_only_args
+        # Running cap with shortest-prefill-first admission: two requests decode; short new requests start first.
+        max-running-requests: 2
+        schedule-policy: shortest-prefill-first
   benchmark:
     env:
+      <<: *gpu_only_client
       CONC: '8'
 
-override_c16:
+override_c20:
+  roles:
+    agg:
+      env:
+        # Cache-aware admission skips its in-batch prefix check, which holds short new requests behind long ones.
+        IN_BATCH_PREFIX_CACHING_CHECK_THRESHOLD: '-1'
+        # One fused MoE routing kernel for 17+ token batches instead of the split path; outputs are bitwise equal.
+        FLASHINFER_ROUTING_FORCE_BLOCK_PER_TOKEN: '0'
+      args:
+        <<: *gpu_only_args
+        kv-cache-dtype: fp8_e4m3
+        speculative-draft-kv-cache-dtype: fp8_e4m3
+        # Context length: no decode-time Mamba checkpoints; the AgentX replay never re-sends model output.
+        mamba-track-interval: 262144
+        cuda-graph-bs-decode: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96]
+        # Running cap with shortest-prefill-first admission: short new requests start first; long ones wait.
+        max-running-requests: 6
+        schedule-policy: shortest-prefill-first
+        # Hold new prefills until two running slots are free, so they share one prefill pass.
+        min-free-slots-delay: 2
+        # FP8 QSA indexer: the sparse-attention indexer keeps its keys in FP8 and scores with FP8 GEMMs.
+        qsa-indexer-dtype: fp8_e4m3
   benchmark:
     env:
-      CONC: '16'
+      <<: *gpu_only_client
+      CONC: '20'
 
-override_c32:
+override_c36:
+  roles:
+    agg:
+      env:
+        <<: &hicache_env
+          # The switch's post-verify CUDA graphs and their fast paths stay off here: capturing them lazily while
+          # serving ran out of GPU memory at concurrency 80, and they gave no gain at 36 and 56.
+          # Compact verify sampling stays on.
+          SGLANG_ENABLE_EAGLE_POST_VERIFY_CUDA_GRAPH: '0'
+          SGLANG_OPT_SPEC_VERIFY_REUSE_STAGED_INPUTS: '0'
+          SGLANG_OPT_SPEC_POST_VERIFY_ONE_LAUNCH_LOAD: '0'
+          SGLANG_OPT_SMALL_FIELD_COPY_VECTORIZED: '0'
+          SGLANG_OPT_SPEC_PACKED_VERIFY_BCAST: '0'
+          SGLANG_OPT_CUDA_GRAPH_FILL_FAST_PATH: '0'
+        IN_BATCH_PREFIX_CACHING_CHECK_THRESHOLD: '-1'
+        FLASHINFER_ROUTING_FORCE_BLOCK_PER_TOKEN: '0'
+      args:
+        <<: &hicache_fp8_kv_args
+          kv-cache-dtype: fp8_e4m3
+          speculative-draft-kv-cache-dtype: fp8_e4m3
+          # Context length: no decode-time Mamba checkpoints; the AgentX replay never re-sends model output.
+          mamba-track-interval: 262144
+          min-free-slots-delay: 2
+        # Two draft steps (three draft tokens): a smaller verify batch per decode step at these running sizes.
+        speculative-num-steps: 2
+        speculative-num-draft-tokens: 3
+        max-mamba-cache-size: 720
+        cuda-graph-bs-decode: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 56, 64, 72, 80, 88, 96]
+        max-running-requests: 12
+        schedule-policy: shortest-prefill-first
   benchmark:
     env:
-      CONC: '32'
+      CONC: '36'
 
-override_c48:
+override_c56:
+  roles:
+    agg:
+      env: *hicache_env
+      args:
+        <<: *hicache_fp8_kv_args
+        max-mamba-cache-size: 720
+        cuda-graph-bs-decode: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 60, 64, 72, 80, 88, 96]
+        # Running cap: at most 35 requests decode; the rest wait for their first token.
+        max-running-requests: 35
+        # Hold prefill until the queue reaches min(20% of running, 4) requests or 300 ms pass; at most four per pass.
+        enable-prefill-delayer: true
+        prefill-delayer-queue-min-ratio: 0.2
+        prefill-delayer-max-delay-ms: 300
+        prefill-max-requests: 4
+        # After a prefill pass, run ten decode rounds before the next while 12 or more requests are running.
+        prefill-decode-interval: 10
+        prefill-decode-interval-min-bs: 12
+        # FP8 QSA indexer: the sparse-attention indexer keeps its keys in FP8 and scores with FP8 GEMMs.
+        qsa-indexer-dtype: fp8_e4m3
   benchmark:
     env:
-      CONC: '48'
+      CONC: '56'
 
-override_c64:
+override_c80:
+  roles:
+    agg:
+      env: *hicache_env
+      args:
+        <<: *hicache_fp8_kv_args
+        speculative-num-steps: 2
+        speculative-num-draft-tokens: 3
+        mem-fraction-static: 0.90
+        # The whole per-GPU host allowance (TOTAL_CPU_DRAM_GB 241).
+        hicache-size: 241
+        max-mamba-cache-size: 448
+        max-running-requests: 72
+        cuda-graph-max-bs-decode: 128
+        # Every size to 80, so decode batches at this concurrency never pad.
+        cuda-graph-bs-decode: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 128]
+        # Cache only the prompt on finish; the AgentX replay never re-sends model output.
+        strip-thinking-cache: true
+        # At most two Mamba states per conversation path; stale interior states skip host write-back.
+        mamba-max-states-per-path: 2
+        # The concurrency-56 admission merging, triggered at 10% of running, with eight decode rounds between prefills.
+        enable-prefill-delayer: true
+        prefill-delayer-queue-min-ratio: 0.1
+        prefill-delayer-max-delay-ms: 300
+        prefill-max-requests: 4
+        prefill-decode-interval: 8
+        prefill-decode-interval-min-bs: 12
+        # FP8 QSA indexer: the sparse-attention indexer keeps its keys in FP8 and scores with FP8 GEMMs.
+        qsa-indexer-dtype: fp8_e4m3
   benchmark:
     env:
-      CONC: '64'
+      CONC: '80'

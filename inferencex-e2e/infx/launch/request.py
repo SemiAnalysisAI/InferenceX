@@ -21,14 +21,17 @@ class RequestError(ValueError):
 
     @classmethod
     def missing(cls, *names: str) -> RequestError:
+        """Return an error naming the unset environment variables ``names``."""
         return cls(f"required environment variables are not set: {', '.join(names)}")
 
 
 def _equals(*truthy: str) -> BeforeValidator:
+    """Return a validator reading a string as True when it is one of ``truthy``."""
     return BeforeValidator(lambda value: value if isinstance(value, bool) else value in truthy)
 
 
 def _int_list(value: Any) -> Any:
+    """Split a whitespace-separated string into a list, passing other values through."""
     return value.split() if isinstance(value, str) else value
 
 
@@ -39,6 +42,7 @@ IntList = Annotated[list[int], BeforeValidator(_int_list)]
 
 
 def _describe(error: ValidationError) -> str:
+    """Render a validation error as one message listing missing then invalid inputs."""
     missing: list[str] = []
     invalid: list[str] = []
     for detail in error.errors(include_url=False, include_input=False):
@@ -70,6 +74,7 @@ class LaunchRequest(BaseModel):
     spec_decoding: str | None = Field(None, alias="SPEC_DECODING")
     is_multinode: TrueFlag = Field(False, alias="IS_MULTINODE")
     is_agentic: OneFlag = Field(False, alias="IS_AGENTIC")
+    scenario_type: str | None = Field(None, alias="SCENARIO_TYPE")
     bench_script_override: str | None = Field(None, alias="BENCH_SCRIPT_OVERRIDE")
     batch_reentry: OneFlag = Field(False, alias=BATCH_REENTRY_ENV)
     conc: int | None = Field(None, alias="CONC")
@@ -113,6 +118,7 @@ class LaunchRequest(BaseModel):
 
     @property
     def workspace(self) -> Path:
+        """Return ``GITHUB_WORKSPACE``, or raise ``RequestError`` if it is unset."""
         if self.github_workspace is None:
             raise RequestError.missing("GITHUB_WORKSPACE")
         return self.github_workspace
@@ -133,6 +139,7 @@ class SrtRequest(LaunchRequest):
     eval_only: TrueFlag = Field(alias="EVAL_ONLY")
     thinking_mode: str | None = Field(None, alias="THINKING_MODE")
     require_power: PowerFlag = Field(False, alias="REQUIRE_POWER")
+    cpu_power: OneFlag = Field(False, alias="CPU_POWER")
     inferencex_results_python: str | None = Field(None, alias="INFERENCEX_RESULTS_PYTHON")
 
     @model_validator(mode="after")
@@ -172,6 +179,24 @@ class SingleNodeRequest(SrtRequest):
     salloc_time_limit: int = Field(alias="SALLOC_TIME_LIMIT")
 
 
+class VideoRequest(SrtRequest):
+    """One native video-generation job: one server, every CONC_LIST concurrency in turn.
+
+    The video client and server come from ``video-generation`` (``VIDEO_SPEC`` names
+    the YAML workload under its ``specs/`` and ``VIDEO_SET`` its selected set); the model is
+    served from the HF hub cache.
+    """
+
+    srt_recipe: str = Field(alias="SRT_RECIPE")
+    model: str = Field(alias="MODEL")
+    gpu_count: int = Field(alias="GPU_COUNT", gt=0)
+    conc_list: IntList = Field(alias="CONC_LIST", min_length=1)
+    video_spec: str = Field(alias="VIDEO_SPEC", min_length=1)
+    video_set: str = Field(alias="VIDEO_SET", min_length=1)
+    hf_hub_cache: str = Field(alias="HF_HUB_CACHE")
+    salloc_time_limit: int = Field(alias="SALLOC_TIME_LIMIT")
+
+
 class ScriptRequest(LaunchRequest):
     """One explicit script (``BENCH_SCRIPT_OVERRIDE``, e.g. a SPEED-Bench collector)."""
 
@@ -181,17 +206,3 @@ class ScriptRequest(LaunchRequest):
     model: str = Field(alias="MODEL")
     gpu_count: int = Field(alias="GPU_COUNT")
     salloc_time_limit: int = Field(alias="SALLOC_TIME_LIMIT")
-
-
-class LlmdRequest(SrtRequest):
-    """An llm-d vLLM multinode job submitted through benchmarks/multi_node/llm-d."""
-
-    model: str = Field(alias="MODEL")
-    disagg: TrueFlag = Field(alias="DISAGG")
-    prefill_nodes: int = Field(alias="PREFILL_NODES")
-    decode_nodes: int = Field(alias="DECODE_NODES")
-    prefill_num_workers: int = Field(1, alias="PREFILL_NUM_WORKERS")
-    decode_num_workers: int = Field(1, alias="DECODE_NUM_WORKERS")
-    isl: int = Field(alias="ISL")
-    osl: int = Field(alias="OSL")
-    random_range_ratio: str = Field(alias="RANDOM_RANGE_RATIO")

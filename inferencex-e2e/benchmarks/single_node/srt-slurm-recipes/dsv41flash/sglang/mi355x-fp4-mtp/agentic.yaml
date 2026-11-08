@@ -50,7 +50,7 @@ base:
         ROCM_QUICK_REDUCE_QUANTIZATION: INT8
         SGLANG_OPT_HIP_OPUS_SPARSE_PREFILL: 'true'
         SGLANG_OPT_HIP_FLYDSL_MXFP8: '1'
-        AITER_BF16_FP8_MOE_BOUND: '0'
+        SGLANG_HIP_FP4_INDEXER_ROWGROUP: '1'
         TORCH_BLAS_PREFER_HIPBLASLT: '1'
         HSA_NO_SCRATCH_RECLAIM: '0'
         GPU_MAX_HW_QUEUES: '2'
@@ -76,6 +76,7 @@ override_tp2_c1:
         schedule-policy: lpm
         swa-prefix-tails: 128
         max-running-requests: 2
+        monokernel-backend: amd
   benchmark:
     env:
       CONC: '1'
@@ -92,6 +93,7 @@ override_tp2_c2:
         schedule-policy: lpm
         swa-prefix-tails: 128
         max-running-requests: 4
+        monokernel-backend: amd
   benchmark:
     env:
       CONC: '2'
@@ -108,6 +110,7 @@ override_tp2_c4:
         schedule-policy: lpm
         swa-prefix-tails: 256
         max-running-requests: 8
+        monokernel-backend: amd
   benchmark:
     env:
       CONC: '4'
@@ -124,6 +127,7 @@ override_tp2_c8:
         schedule-policy: lpm
         swa-prefix-tails: 512
         max-running-requests: 16
+        monokernel-backend: amd
   benchmark:
     env:
       CONC: '8'
@@ -139,6 +143,7 @@ override_tp2_c16:
         prefill-decode-interval: 96
         swa-prefix-tails: 1024
         max-running-requests: 32
+        monokernel-backend: amd
   benchmark:
     env:
       CONC: '16'
@@ -154,6 +159,9 @@ override_tp2_c32:
         prefill-decode-interval: 32
         swa-prefix-tails: 2048
         max-running-requests: 64
+      env:
+        # The AMD monokernel refuses this page-8 index-K layout.
+        SGLANG_HIP_DSV41_INDEX_K_PAGE8: '1'
   benchmark:
     env:
       CONC: '32'
@@ -211,6 +219,7 @@ override_tp2_c32_dp:
         SGLANG_DP_USE_REDUCE_SCATTER: '1'
         SGLANG_AITER_CAPTURE_COPY_IN: '1'
         GPU_MAX_HW_QUEUES: '5'
+        SGLANG_HIP_DSV41_INDEX_K_PAGE8: '1'
   benchmark:
     env:
       CONC: '32'
@@ -252,6 +261,7 @@ override_tp2_c64_dp:
         SGLANG_DP_USE_REDUCE_SCATTER: '1'
         SGLANG_AITER_CAPTURE_COPY_IN: '1'
         GPU_MAX_HW_QUEUES: '5'
+        SGLANG_HIP_DSV41_INDEX_K_PAGE8: '1'
   benchmark:
     env:
       CONC: '64'
@@ -270,6 +280,7 @@ override_tp4_c1:
         schedule-policy: lpm
         swa-prefix-tails: 128
         max-running-requests: 2
+        monokernel-backend: amd
   benchmark:
     env:
       CONC: '1'
@@ -286,6 +297,7 @@ override_tp4_c2:
         schedule-policy: lpm
         swa-prefix-tails: 128
         max-running-requests: 4
+        monokernel-backend: amd
   benchmark:
     env:
       CONC: '2'
@@ -302,6 +314,7 @@ override_tp4_c4:
         schedule-policy: lpm
         swa-prefix-tails: 256
         max-running-requests: 8
+        monokernel-backend: amd
   benchmark:
     env:
       CONC: '4'
@@ -318,6 +331,7 @@ override_tp4_c8:
         schedule-policy: lpm
         swa-prefix-tails: 512
         max-running-requests: 16
+        monokernel-backend: amd
   benchmark:
     env:
       CONC: '8'
@@ -333,6 +347,7 @@ override_tp4_c16:
         prefill-decode-interval: 96
         swa-prefix-tails: 1024
         max-running-requests: 32
+        monokernel-backend: amd
   benchmark:
     env:
       CONC: '16'

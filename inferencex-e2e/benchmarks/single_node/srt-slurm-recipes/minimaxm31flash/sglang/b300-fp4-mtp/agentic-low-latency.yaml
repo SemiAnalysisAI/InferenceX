@@ -1,0 +1,64 @@
+base:
+  schema: 2
+  name: minimaxm31flash-fp4-b300-sglang-agentic-low-latency
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  # Cold loads of the 250 GB checkpoint plus JIT MSA kernel builds and graph capture outlast the default.
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      # The MSA-V1 MonoKernel serves batch-size-1 DSpark steps; larger batches take
+      # the standard path.
+      args:
+        served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
+        trust-remote-code: true
+        reasoning-parser: minimax-m3
+        tool-call-parser: minimax-m3
+        tensor-parallel-size: 4
+        moe-runner-backend: flashinfer_trtllm_routed
+        page-size: 128
+        speculative-algorithm: DSPARK
+        speculative-use-block-verification: true
+        speculative-num-steps: 1
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 8
+        speculative-dspark-block-size: 7
+        monokernel-backend: msa
+        disable-attn-tp-gather: true
+        max-running-requests: 8
+        mem-fraction-static: 0.8
+        watchdog-timeout: 3600
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+        FMHA_SM100_ALLOW_JIT: '1'
+        ALLOW_JIT: '1'
+        # Canonical MegaAttention placement; it needs the GPUs to itself.
+        SGLANG_FORCE_COARSE_WAR_BARRIER: '1'
+  benchmark:
+    env:
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+override_tp4_c1:
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none

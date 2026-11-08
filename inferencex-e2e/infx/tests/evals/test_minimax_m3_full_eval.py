@@ -138,6 +138,40 @@ def test_fetch_source_reports_exhausted_retries(
     assert sleeps == [0.5]
 
 
+def test_fetch_source_retries_a_truncated_download(monkeypatch: pytest.MonkeyPatch) -> None:
+    content = b"pinned source"
+    monkeypatch.setattr(
+        full, "REQUIRED_SOURCE_SHA256", {"verify.py": hashlib.sha256(content).hexdigest()}
+    )
+    monkeypatch.setattr(full.time, "sleep", lambda _: None)
+    bodies = [content[:6], content]
+
+    class Response:
+        status = 200
+        headers: dict[str, str] = {}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def geturl(self) -> str:
+            return full.source_url("verify.py")
+
+        def read(self, _: int) -> bytes:
+            return bodies.pop(0)
+
+    class Opener:
+        def open(self, request, *, timeout):
+            return Response()
+
+    monkeypatch.setattr(full, "_NO_REDIRECT_OPENER", Opener())
+
+    assert full._fetch_source("verify.py") == content
+    assert bodies == []
+
+
 def test_verifier_command_is_one_102_row_run_with_fixed_m3_settings(
     tmp_path: Path,
 ) -> None:
@@ -269,6 +303,23 @@ def test_projection_rejects_incomplete_or_transport_failed_native_results(
 
     with pytest.raises(full.FullSuiteError, match=message):
         full.project_native_artifacts(output_dir=tmp_path, model="MiniMax-M3")
+
+
+@pytest.mark.parametrize("separator", ["\u2028", "\u2029", "\x85"])
+def test_projection_counts_rows_whose_text_holds_unicode_line_separators(
+    tmp_path: Path, separator: str
+) -> None:
+    _write_native_run(tmp_path)
+    rows = [{"data_index": index, "status": "success"} for index in range(1, 103)]
+    rows[4]["response"] = f"first{separator}second"
+    (tmp_path / full.NATIVE_RESULTS_FILENAME).write_text(
+        "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8"
+    )
+
+    compatibility_path = full.project_native_artifacts(output_dir=tmp_path, model="MiniMax-M3")
+
+    compatibility = json.loads(compatibility_path.read_text(encoding="utf-8"))
+    assert compatibility["n-samples"]["minimax_m3_full"] == {"original": 102, "effective": 102}
 
 
 def test_upstream_process_failure_is_nonzero_and_publishes_all_failure_artifacts(

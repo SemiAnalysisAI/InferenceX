@@ -6,17 +6,17 @@ import traceback
 from collections import defaultdict
 from contextlib import ExitStack
 
-import yaml
-
+from infx import yamlio
 from infx.config import MASTER_CONFIGS, RUNNER_CONFIG, git_path_at_ref
 
 from .fingerprint import recipe_fingerprint
 from .generate import (
+    SCENARIO_TYPES,
     EvalMode,
     drop_app_colliding_evals,
     freeze_config_value,
     generate_config_matrix,
-    seq_len_to_str,
+    seq_len_itos,
     trim_conc,
 )
 from .revision import GENERATOR, snapshot
@@ -28,10 +28,15 @@ from .validation import (
     load_runner_file,
 )
 
-SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding")
+# An entry without scenario-type reruns these; video runs only for entries that name it.
+DEFAULT_SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding")
 
 
 def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
+    """Return the lines ``filepath`` gained between two git refs, joined by newlines.
+
+    Raise RuntimeError when git diff fails and ValueError when any non-blank line was deleted.
+    """
     result = subprocess.run(
         [
             "git",
@@ -43,10 +48,17 @@ def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
         capture_output=True,
         text=True,
     )
+    if result.returncode != 0:
+        raise RuntimeError(f"git diff of {filepath} failed: {result.stderr.strip()}")
 
     added_lines = []
+    in_hunk = False
     for line in result.stdout.split("\n"):
-        if line.startswith("-") and not line.startswith("---"):
+        if line.startswith("@@"):
+            in_hunk = True
+        elif not in_hunk:
+            continue
+        elif line.startswith("-"):
             deleted_content = line[1:]
             if deleted_content.strip():
                 raise ValueError(
@@ -54,13 +66,14 @@ def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
                     f"Only additions to the changelog are permitted. "
                     f"Found deleted line: {deleted_content}"
                 )
-        elif line.startswith("+") and not line.startswith("+++"):
+        elif line.startswith("+"):
             added_lines.append(line[1:])
 
     return "\n".join(added_lines)
 
 
 def filter_eval_rows_by_prefill_ep(eval_rows: list[dict], min_prefill_ep: int | None) -> list[dict]:
+    """Keep rows with no prefill block or a prefill EP of at least ``min_prefill_ep`` if set."""
     if min_prefill_ep is None:
         return eval_rows
     kept: list[dict] = []
@@ -78,6 +91,10 @@ def filter_eval_rows_by_prefill_ep(eval_rows: list[dict], min_prefill_ep: int | 
 
 
 def get_config_keys_from_master(config_keys: list[str], master_config: dict) -> list[str]:
+    """Expand ``*`` wildcards against the master config and return the matching keys in order.
+
+    Raise ValueError for a key or pattern that matches nothing.
+    """
     resolved_keys = {}
     for key in config_keys:
         if "*" in key:
@@ -97,6 +114,7 @@ def get_config_keys_from_master(config_keys: list[str], master_config: dict) -> 
 
 
 def _matrix_curve_key(entry: dict) -> tuple:
+    """Return a hashable identity of a matrix row's curve, ignoring its conc and naming fields."""
     return tuple(
         sorted(
             (key, freeze_config_value(value))
@@ -107,6 +125,7 @@ def _matrix_curve_key(entry: dict) -> tuple:
 
 
 def _matrix_visual_series_key(entry: dict) -> tuple:
+    """Return the fields that place a matrix row on one visual curve of the dashboard."""
     is_agentic = entry.get("scenario-type") == "agentic-coding"
     kv_offloading = entry.get("kv-offloading", "none")
     offload_mode = "off" if kv_offloading in (None, "", "none") else "on"
@@ -130,6 +149,9 @@ def _matrix_visual_series_key(entry: dict) -> tuple:
 
 
 def _matrix_concurrencies(entry: dict) -> tuple[int, ...]:
+    """Return a row's concurrencies as a tuple, or raise ValueError if they are not ints."""
+    if entry.get("scenario-type") == "video-generation":
+        raise ValueError("video-generation requires a regular sweep; append-only is not supported")
     conc = entry.get("conc")
     if isinstance(conc, int):
         return (conc,)
@@ -139,6 +161,11 @@ def _matrix_concurrencies(entry: dict) -> tuple[int, ...]:
 
 
 def append_only_delta(base_entries: list[dict], head_entries: list[dict]) -> list[dict]:
+    """Return the head rows trimmed to the concurrency points the base revision lacks.
+
+    Raise ValueError when head removes base curves or points, adds nothing, or adds points to a
+    curve without exactly one unchanged image.
+    """
     base_groups: dict[tuple, set[int]] = defaultdict(set)
     head_groups: dict[tuple, set[int]] = defaultdict(set)
     for entry in base_entries:
@@ -204,6 +231,7 @@ def validate_append_only_scope(
     head_master: dict,
     selected_config_scenarios: dict[str, set[str]],
 ) -> None:
+    """Raise ValueError if append-only edits touch unselected configs or scenarios."""
     selected_configs = selected_config_scenarios.keys()
     all_keys = base_master.keys() | head_master.keys()
     unrelated_changes = [
@@ -249,6 +277,7 @@ def group_unseen_scenarios(
     scenarios: tuple[str, ...],
     seen: dict[str, set[str]],
 ) -> dict[tuple[str, ...], list[str]]:
+    """Group configs by the requested scenarios not yet in ``seen``, marking them as seen."""
     groups: dict[tuple[str, ...], list[str]] = defaultdict(list)
     for config in config_keys:
         unseen = tuple(
@@ -264,6 +293,7 @@ def group_unseen_scenarios(
 
 class MatrixGenerationError(ValueError):
     def __init__(self, command: list[str], cause: Exception) -> None:
+        """Wrap the generation error ``cause`` with the equivalent generator ``command``."""
         super().__init__(str(cause))
         self.command, self.cause = command, cause
 
@@ -279,11 +309,18 @@ def build_plan(
     all_evals: bool = False,
     evals_only: bool = False,
 ) -> ChangelogMatrixEntry:
+    """Build the sweep matrix for changelog entries added between ``base_ref`` and ``head_ref``.
+
+    Raise ValueError for invalid entry combinations, append-only violations, and fixed-sequence
+    points with no sweep job in run-sweep.yml, and MatrixGenerationError when generation fails.
+    """
     if not changelog_data:
         raise ValueError("No valid YAML entries found in the changelog additions.")
 
     with ExitStack() as stack:
         parsed_entries = [ChangelogEntry.model_validate(entry) for entry in changelog_data]
+        if any(entry.retired for entry in parsed_entries) and (all_evals or evals_only):
+            raise ValueError("retired entries cannot use all-evals or evals-only modifiers")
         if any(entry.no_evals for entry in parsed_entries) and (all_evals or evals_only):
             raise ValueError("no-evals entries cannot use all-evals or evals-only modifiers")
         has_append_only = any(entry.append_only for entry in parsed_entries)
@@ -323,6 +360,7 @@ def build_plan(
             mode: EvalMode,
             scenarios: tuple[str, ...] | None,
         ) -> list[dict]:
+            """Generate the working tree's rows for ``keys``, or raise MatrixGenerationError."""
             nonlocal runner_data
             try:
                 if runner_data is None:
@@ -352,18 +390,46 @@ def build_plan(
                 raise MatrixGenerationError(command, error) from error
 
         resolved_entries = []
+        base = None
+        base_master = {}
         for entry in parsed_entries:
+            if entry.retired:
+                if base is None:
+                    base = stack.enter_context(snapshot(base_ref))
+                    base_master = load_config_files(base.master_configs, validate=False)
+                retired_configs = get_config_keys_from_master(entry.config_keys, base_master)
+                still_active = sorted(set(retired_configs) & master_config.keys())
+                if still_active:
+                    raise ValueError(f"retired configs still exist in head: {still_active}")
+                continue
             all_configs = get_config_keys_from_master(entry.config_keys, master_config)
+            # Wildcards may match video configs a non-video entry means to skip; a named one must plan.
+            selected = set(entry.scenario_type or DEFAULT_SCENARIO_TYPES)
+            empty = [
+                key
+                for key in entry.config_keys
+                if "*" not in key
+                and "video-generation" in master_config[key]["scenarios"]
+                and not selected & master_config[key]["scenarios"].keys()
+            ]
+            if empty:
+                fix = "add video-generation to the entry's scenario-type"
+                if set(empty) != set(all_configs):
+                    fix += " and keep fixed-seq-len and agentic-coding for its other configs"
+                raise ValueError(
+                    f"{fix}; under {sorted(selected)} these video configs plan no jobs: {empty}"
+                )
             resolved_entries.append((entry, all_configs))
 
-        base = None
         if has_append_only:
             base = stack.enter_context(snapshot(base_ref))
             base_master = load_config_files(base.master_configs, validate=False)
             selected_config_scenarios: dict[str, set[str]] = defaultdict(set)
             for entry, configs in resolved_entries:
                 for config in configs:
-                    selected_config_scenarios[config].update(entry.scenario_type or SCENARIO_TYPES)
+                    selected_config_scenarios[config].update(
+                        entry.scenario_type or DEFAULT_SCENARIO_TYPES
+                    )
             selected_configs = selected_config_scenarios.keys()
             missing_from_base = selected_configs - base_master.keys()
             if missing_from_base:
@@ -380,7 +446,7 @@ def build_plan(
         resolved_entries.sort(key=lambda item: not item[0].all_evals)
 
         for entry, all_configs in resolved_entries:
-            entry_scenarios = tuple(entry.scenario_type or SCENARIO_TYPES)
+            entry_scenarios = tuple(entry.scenario_type or DEFAULT_SCENARIO_TYPES)
             expand_all_evals = all_evals or entry.all_evals
             suppress_throughput = evals_only or entry.evals_only or entry.all_evals
 
@@ -389,7 +455,7 @@ def build_plan(
                     all_configs, entry_scenarios, benchmark_scenarios_seen
                 )
                 for scenarios, benchmark_configs in benchmark_groups.items():
-                    selection = scenarios if scenarios != SCENARIO_TYPES else None
+                    selection = scenarios if scenarios != DEFAULT_SCENARIO_TYPES else None
                     head_results = generate_current(benchmark_configs, "none", selection)
                     if entry.append_only:
                         if base is None:
@@ -425,11 +491,18 @@ def build_plan(
         for result in all_benchmark_results:
             result["recipe-fingerprint"] = recipe_fingerprint(result, root)
             node_type = "multi_node" if result.get("prefill") is not None else "single_node"
-            scenario = (
-                "agentic"
-                if result.get("scenario-type") == "agentic-coding"
-                else seq_len_to_str(result["isl"], result["osl"])
-            )
+            if result.get("scenario-type") == "agentic-coding":
+                scenario = "agentic"
+            elif result.get("scenario-type") == "video-generation":
+                scenario = "video"
+            else:
+                scenario = seq_len_itos.get((result["isl"], result["osl"]))
+                if scenario is None:
+                    raise ValueError(
+                        f"{result['exp-name']}: fixed-sequence isl={result['isl']} "
+                        f"osl={result['osl']} has no sweep job; supported: "
+                        f"{', '.join(seq_len_itos.values())}"
+                    )
             final_results[node_type][scenario].append(result)
 
         all_eval_results = [
@@ -446,6 +519,7 @@ def build_plan(
 
 
 def main() -> None:
+    """Print the sweep matrix, as JSON, for the changelog lines added between two refs."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-ref", type=str, required=True)
     parser.add_argument("--head-ref", type=str, required=True)
@@ -468,7 +542,7 @@ def main() -> None:
     if not added_yaml.strip():
         raise ValueError("No additions found in the changelog file.")
 
-    changelog_data = yaml.safe_load(added_yaml)
+    changelog_data = yamlio.load(added_yaml, yamlio.UniqueKeySafeLoader)
 
     try:
         result = build_plan(
@@ -487,6 +561,7 @@ def main() -> None:
 
 
 def _generation_flags(mode: EvalMode, scenarios: tuple[str, ...] | None) -> list[str]:
+    """Return the generator flags that select ``mode`` evals and the given scenario types."""
     flags = ["--no-evals"] if mode == "none" else ["--evals-only"]
     if mode == "all":
         flags.append("--all-evals")

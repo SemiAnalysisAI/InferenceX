@@ -6,12 +6,12 @@
   "device": 0,
   "allocation_minutes": 45,
   "images": {
-    "nvidia": "vllm/vllm-openai:v0.25.1",
-    "amd": "vllm/vllm-openai-rocm:v0.27.1"
+    "nvidia": "vllm/vllm-openai:v0.32.0",
+    "amd": "vllm/vllm-openai-rocm:v0.32.0"
   },
   "sku_images": {
     "h100-dgxc": {
-      "image": "vllm/vllm-openai:v0.27.1",
+      "image": "vllm/vllm-openai:v0.32.0",
       "staged_image_dir": "/mnt/nfs/lustre/containers"
     }
   },
@@ -20,7 +20,7 @@
       "block_bytes": [257, 4096, 65536, 262144],
       "num_blocks": [1, 4, 16, 64, 256, 1024, 2048],
       "warmup": 4,
-      "iterations": 20,
+      "iterations": 100,
       "max_payload_bytes": 2147483648
     },
     "standard": {
@@ -34,7 +34,7 @@
       "block_bytes": [257, 4096, 65536, 262144, 1048576, 4194304, 16777216, 67108864, 268435456, 1073741824],
       "num_blocks": [1, 4, 16, 64, 256, 1024, 2048],
       "warmup": 4,
-      "iterations": 20,
+      "iterations": 100,
       "max_payload_bytes": 1073741824
     }
   }

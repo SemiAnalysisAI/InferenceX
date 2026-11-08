@@ -8,6 +8,10 @@ LETTERS = "ABCD"
 def process_docs(
     dataset: datasets.Dataset, n_repeats: int = 2, seed: int = 3407
 ) -> datasets.Dataset:
+    """Return dataset repeated n_repeats times with answers shuffled into A to D by seed.
+
+    Each row gets its correct letter in answer and its repeat index in repeat_id.
+    """
     rng = random.Random(seed)  # noqa: S311
     docs = list(dataset)
 

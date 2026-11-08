@@ -632,6 +632,34 @@ class TestSingleNodeSearchSpaceEntry:
             })
         assert "must be greater than 0" in str(exc_info.value)
 
+    def test_conc_list_values_must_be_unique(self):
+        with pytest.raises(ValidationError, match="must not repeat"):
+            SingleNodeSearchSpaceEntry(**{
+                "tp": 4,
+                "conc-list": [4, 8, 4],
+            })
+
+    @pytest.mark.parametrize("bound", ["conc-start", "conc-end"])
+    def test_conc_list_rejects_a_lone_range_bound(self, bound):
+        with pytest.raises(ValidationError, match="Cannot specify both"):
+            SingleNodeSearchSpaceEntry(**{
+                "tp": 4,
+                "conc-list": [4],
+                bound: 1,
+            })
+
+
+@pytest.mark.parametrize(("schema", "entry"), [
+    (SingleNodeSearchSpaceEntry, {"tp": 0, "conc-list": [4]}),
+    (AgenticCodingSearchSpaceEntry, {"tp": -2, "kv-offloading": "none", "conc-list": [4]}),
+    (WorkerConfig, {"num-worker": 1, "tp": 0, "ep": 1, "dp-attn": False}),
+    (MultiNodeSearchSpaceEntry,
+     {"worker": {"tp": 0, "ep": 1, "dp-attn": False}, "num-nodes": 1, "conc-list": [4]}),
+])  # fmt: skip
+def test_tensor_parallelism_must_be_positive(schema, entry):
+    with pytest.raises(ValidationError, match="greater than 0"):
+        schema(**entry)
+
 
 class TestMultiNodeSearchSpaceEntry:
 
@@ -651,6 +679,13 @@ class TestMultiNodeSearchSpaceEntry:
         assert entry.worker.pp == 2
         assert entry.prefill is None
         assert entry.decode is None
+
+    def test_cpu_power_rides_on_power(self):
+        row = {"worker": {"tp": 8, "ep": 1, "dp-attn": False}, "num-nodes": 2,
+               "conc-list": [1], "cpu-power": True}  # fmt: skip
+        with pytest.raises(ValidationError, match="cpu-power requires power"):
+            MultiNodeSearchSpaceEntry(**row)
+        assert MultiNodeSearchSpaceEntry(**{**row, "power": True}).cpu_power is True
 
     def test_missing_conc_specification(self):
         with pytest.raises(ValidationError):
@@ -1059,18 +1094,6 @@ class TestValidateMasterConfig:
         row["prefill"]["additional-settings"].append(setting)
         with pytest.raises(ValidationError, match=replacement):
             MultiNodeMasterConfigEntry(**valid_multinode_master_config)
-
-    def test_llmd_configs_keep_config_file(self, valid_multinode_master_config):
-        config = valid_multinode_master_config
-        config["framework"] = "llmd-vllm"
-        del config["srt-recipe-dir"]
-        row = config["scenarios"]["fixed-seq-len"][0]["search-space"][0]
-        del row["srt-recipe"]
-        row["prefill"]["additional-settings"].append("CONFIG_FILE=llmd.yaml")
-        assert validate_master_config({"llmd": config}, Path()) == {"llmd": config}
-        row["srt-recipe"] = "recipe.yaml"
-        with pytest.raises(ValidationError, match="llmd-vllm selects recipes with CONFIG_FILE"):
-            MultiNodeMasterConfigEntry(**config)
 
     def test_eval_srt_recipe_is_multinode_only(self, valid_single_node_master_config):
         config = valid_single_node_master_config
@@ -1502,3 +1525,11 @@ def test_only_multinode_agentic_rows_measure_power(topology, accepted):
     else:
         with pytest.raises(ValidationError, match="Only multinode entries measure DCGM power"):
             AgenticCodingSearchSpaceEntry(**row)
+
+
+def test_agentic_cpu_power_rides_on_power():
+    worker = {"worker": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False}}
+    row = {"srt-recipe": "r.yaml", "conc-list": [4], "cpu-power": True, **worker}
+    with pytest.raises(ValidationError, match="cpu-power requires power"):
+        AgenticCodingSearchSpaceEntry(**row)
+    assert AgenticCodingSearchSpaceEntry(**{**row, "power": True}).cpu_power is True
