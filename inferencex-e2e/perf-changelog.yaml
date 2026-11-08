@@ -12448,4 +12448,4 @@
   description:
     - "Add Kimi K3.1 Pro B200 vLLM AgentX at concurrency 1, 2 and 4 using one TP16/DCP16 worker across two nodes, without pipeline parallelism or KV offload."
     - "Preserve the existing TP8/PP2 curve, pinned image, FP32 recurrent state, prefix caching, seven-token DSpark block-verification golden curve, and full AgentX workload."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4916
