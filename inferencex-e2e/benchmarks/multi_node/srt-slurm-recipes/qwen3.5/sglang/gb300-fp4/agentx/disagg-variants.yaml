@@ -730,7 +730,6 @@ override_1p2d_p_tp4_d_tp8_cap32_gc_default:
       gpus: 4
       env: {}
       args:
-        served-model-name: null
         model-path: null
         disable-cuda-graph: null
         tensor-parallel-size: 4
@@ -760,7 +759,6 @@ override_1p2d_p_tp4_d_tp8_cap32_gc_default:
         SGLANG_SCHEDULER_SKIP_ALL_GATHER: '1'
         SGLANG_NVIDIA_MEGAKERNEL_SLOTS: route,route_topk,mkm,gdn_verify,gdn_pdl,gdn_conv,hop,hop_fp8,hop_mid,draft_loop,draft_extend,draft_moe,draft_q1,draft_xchg,draft_hop,draft_fin,draft_front,draft_skv2,draft_multi,draft_embed,gdn_push,gdn_front,route_shared,skv2,skv2_cp,mka,mka_push,mkm_wide,mkm_m32,mkm_m64,mkm_m128,mkm_m256,mkm_m512,multi_request,lowm_in,lowm_out,lowm_se,lowm_push,draft_q1_cp,draft_skv2_cp,sharded_gumbel
       args:
-        served-model-name: null
         model-path: null
         tensor-parallel-size: 8
         data-parallel-size: 1
@@ -824,7 +822,6 @@ override_1p1d_p_tp4_d_tp8_cap1_p_gc_default:
       gpus: 4
       env: {}
       args:
-        served-model-name: null
         model-path: null
         disable-cuda-graph: null
         tensor-parallel-size: 4
@@ -853,7 +850,6 @@ override_1p1d_p_tp4_d_tp8_cap1_p_gc_default:
         SGLANG_SCHEDULER_SKIP_ALL_GATHER: '1'
         SGLANG_NVIDIA_MEGAKERNEL_SLOTS: route,route_topk,mkm,gdn_verify,gdn_pdl,gdn_conv,hop,hop_fp8,hop_mid,draft_loop,draft_extend,draft_moe,draft_q1,draft_xchg,draft_hop,draft_fin,draft_front,draft_skv2,draft_multi,draft_embed,gdn_push,gdn_front,route_shared,skv2,skv2_cp,mka,mka_push,mkm_wide,mkm_m32,mkm_m64,mkm_m128,mkm_m256,mkm_m512,multi_request,lowm_in,lowm_out,lowm_se,lowm_push,draft_q1_cp,draft_skv2_cp,sharded_gumbel
       args:
-        served-model-name: null
         model-path: null
         tensor-parallel-size: 8
         data-parallel-size: 1
@@ -890,7 +886,6 @@ override_1p1d_p_tp4_d_tp8_cap4:
       gpus: 4
       env: {}
       args:
-        served-model-name: null
         model-path: null
         disable-cuda-graph: null
         gc-threshold:
@@ -923,7 +918,6 @@ override_1p1d_p_tp4_d_tp8_cap4:
         SGLANG_SCHEDULER_SKIP_ALL_GATHER: '1'
         SGLANG_NVIDIA_MEGAKERNEL_SLOTS: route,route_topk,mkm,gdn_verify,gdn_pdl,gdn_conv,hop,hop_fp8,hop_mid,draft_loop,draft_extend,draft_moe,draft_q1,draft_xchg,draft_hop,draft_fin,draft_front,draft_skv2,draft_multi,draft_embed,gdn_push,gdn_front,route_shared,skv2,skv2_cp,mka,mka_push,mkm_wide,mkm_m32,mkm_m64,mkm_m128,mkm_m256,mkm_m512,multi_request,lowm_in,lowm_out,lowm_se,lowm_push,draft_q1_cp,draft_skv2_cp,sharded_gumbel
       args:
-        served-model-name: null
         model-path: null
         gc-threshold:
         - 50000
@@ -963,7 +957,6 @@ override_1p1d_p_tp4_d_tp8_cap1:
       gpus: 4
       env: {}
       args:
-        served-model-name: null
         model-path: null
         disable-cuda-graph: null
         gc-threshold:
@@ -996,7 +989,6 @@ override_1p1d_p_tp4_d_tp8_cap1:
         SGLANG_SCHEDULER_SKIP_ALL_GATHER: '1'
         SGLANG_NVIDIA_MEGAKERNEL_SLOTS: route,route_topk,mkm,gdn_verify,gdn_pdl,gdn_conv,hop,hop_fp8,hop_mid,draft_loop,draft_extend,draft_moe,draft_q1,draft_xchg,draft_hop,draft_fin,draft_front,draft_skv2,draft_multi,draft_embed,gdn_push,gdn_front,route_shared,skv2,skv2_cp,mka,mka_push,mkm_wide,mkm_m32,mkm_m64,mkm_m128,mkm_m256,mkm_m512,multi_request,lowm_in,lowm_out,lowm_se,lowm_push,draft_q1_cp,draft_skv2_cp,sharded_gumbel
       args:
-        served-model-name: null
         model-path: null
         tensor-parallel-size: 8
         data-parallel-size: 1
@@ -1033,7 +1025,6 @@ override_1p1d_p_tp4_d_tp8_cap8:
       gpus: 4
       env: {}
       args:
-        served-model-name: null
         model-path: null
         disable-cuda-graph: null
         gc-threshold:
@@ -1066,7 +1057,6 @@ override_1p1d_p_tp4_d_tp8_cap8:
         SGLANG_SCHEDULER_SKIP_ALL_GATHER: '1'
         SGLANG_NVIDIA_MEGAKERNEL_SLOTS: route,route_topk,mkm,gdn_verify,gdn_pdl,gdn_conv,hop,hop_fp8,hop_mid,draft_loop,draft_extend,draft_moe,draft_q1,draft_xchg,draft_hop,draft_fin,draft_front,draft_skv2,draft_multi,draft_embed,gdn_push,gdn_front,route_shared,skv2,skv2_cp,mka,mka_push,mkm_wide,mkm_m32,mkm_m64,mkm_m128,mkm_m256,mkm_m512,multi_request,lowm_in,lowm_out,lowm_se,lowm_push,draft_q1_cp,draft_skv2_cp,sharded_gumbel
       args:
-        served-model-name: null
         model-path: null
         gc-threshold:
         - 50000
@@ -1110,7 +1100,6 @@ override_1p2d_p_tp4_d_tp8_cap32:
       gpus: 4
       env: {}
       args:
-        served-model-name: null
         model-path: null
         disable-cuda-graph: null
         gc-threshold:
@@ -1144,7 +1133,6 @@ override_1p2d_p_tp4_d_tp8_cap32:
         SGLANG_SCHEDULER_SKIP_ALL_GATHER: '1'
         SGLANG_NVIDIA_MEGAKERNEL_SLOTS: route,route_topk,mkm,gdn_verify,gdn_pdl,gdn_conv,hop,hop_fp8,hop_mid,draft_loop,draft_extend,draft_moe,draft_q1,draft_xchg,draft_hop,draft_fin,draft_front,draft_skv2,draft_multi,draft_embed,gdn_push,gdn_front,route_shared,skv2,skv2_cp,mka,mka_push,mkm_wide,mkm_m32,mkm_m64,mkm_m128,mkm_m256,mkm_m512,multi_request,lowm_in,lowm_out,lowm_se,lowm_push,draft_q1_cp,draft_skv2_cp,sharded_gumbel
       args:
-        served-model-name: null
         model-path: null
         gc-threshold:
         - 50000
@@ -1212,7 +1200,6 @@ override_4p1d_p_tp2_d_tp8_ep4_cap128:
       gpus: 2
       env: {}
       args:
-        served-model-name: null
         model-path: null
         disable-cuda-graph: null
         tensor-parallel-size: 2
@@ -1247,7 +1234,6 @@ override_4p1d_p_tp2_d_tp8_ep4_cap128:
         SGLANG_PLB_SCATTER_DEFER: '1'
         SGLANG_NVIDIA_MEGAKERNEL_SLOTS: route,mkm,gdn_verify,gdn_pdl,gdn_conv,hop,hop_fp8,hop_mid,draft_loop,draft_extend,draft_moe,draft_q1,draft_xchg,draft_hop,draft_fin,draft_front,draft_skv2,draft_multi,draft_embed,gdn_push,gdn_front,route_shared,skv2,skv2_cp,mka,mka_push,mkm_wide,mkm_m32,mkm_m64,mkm_m128,mkm_m256,mkm_m512,multi_request,lowm_in,lowm_out,lowm_se,lowm_push,draft_q1_cp,draft_skv2_cp,sharded_gumbel
       args:
-        served-model-name: null
         model-path: null
         tensor-parallel-size: 8
         data-parallel-size: 1
@@ -1349,7 +1335,6 @@ override_2p1d_p_tp2_d_tp8_ep4_cap64:
       gpus: 2
       env: {}
       args:
-        served-model-name: null
         model-path: null
         disable-cuda-graph: null
         tensor-parallel-size: 2
@@ -1384,7 +1369,6 @@ override_2p1d_p_tp2_d_tp8_ep4_cap64:
         SGLANG_PLB_SCATTER_DEFER: '1'
         SGLANG_NVIDIA_MEGAKERNEL_SLOTS: route,mkm,gdn_verify,gdn_pdl,gdn_conv,hop,hop_fp8,hop_mid,draft_loop,draft_extend,draft_moe,draft_q1,draft_xchg,draft_hop,draft_fin,draft_front,draft_skv2,draft_multi,draft_embed,gdn_push,gdn_front,route_shared,skv2,skv2_cp,mka,mka_push,mkm_wide,mkm_m32,mkm_m64,mkm_m128,mkm_m256,mkm_m512,multi_request,lowm_in,lowm_out,lowm_se,lowm_push,draft_q1_cp,draft_skv2_cp,sharded_gumbel
       args:
-        served-model-name: null
         model-path: null
         tensor-parallel-size: 8
         data-parallel-size: 1
@@ -1478,7 +1462,6 @@ override_1p2d_p_tp4_d_tp8_cap32_flashinfer_prefill:
       gpus: 4
       env: {}
       args:
-        served-model-name: null
         model-path: null
         disable-cuda-graph: null
         gc-threshold:
@@ -1513,7 +1496,6 @@ override_1p2d_p_tp4_d_tp8_cap32_flashinfer_prefill:
         SGLANG_SCHEDULER_SKIP_ALL_GATHER: '1'
         SGLANG_NVIDIA_MEGAKERNEL_SLOTS: route,route_topk,mkm,gdn_verify,gdn_pdl,gdn_conv,hop,hop_fp8,hop_mid,draft_loop,draft_extend,draft_moe,draft_q1,draft_xchg,draft_hop,draft_fin,draft_front,draft_skv2,draft_multi,draft_embed,gdn_push,gdn_front,route_shared,skv2,skv2_cp,mka,mka_push,mkm_wide,mkm_m32,mkm_m64,mkm_m128,mkm_m256,mkm_m512,multi_request,lowm_in,lowm_out,lowm_se,lowm_push,draft_q1_cp,draft_skv2_cp,sharded_gumbel
       args:
-        served-model-name: null
         model-path: null
         gc-threshold:
         - 50000
@@ -1582,7 +1564,6 @@ override_3p1d_dep8_cap36:
       env:
         SGLANG_PP_LAYER_PARTITION: 16,16,16,12
       args:
-        served-model-name: null
         model-path: null
         gc-threshold:
         - 50000
@@ -1613,7 +1594,6 @@ override_3p1d_dep8_cap36:
         SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '4'
         SGLANG_NVIDIA_MEGAKERNEL_SLOTS: route,mkm,gdn_verify,gdn_pdl,gdn_conv,hop,hop_fp8,hop_mid,draft_loop,draft_extend,draft_moe,draft_q1,draft_xchg,draft_hop,draft_fin,draft_front,draft_skv2,draft_multi,draft_embed,gdn_push,gdn_front,route_shared,skv2,skv2_cp,mka,mka_push,mkm_wide,mkm_m32,mkm_m64,mkm_m128,mkm_m256,mkm_m512,multi_request,lowm_in,lowm_out,lowm_se,lowm_push,draft_q1_cp,draft_skv2_cp,sharded_gumbel
       args:
-        served-model-name: null
         model-path: null
         gc-warning-threshold-secs: 0.2
         gc-threshold:
@@ -1650,7 +1630,6 @@ override_2p1d_p_tp2_d_tp8_ep4_cap64_prefill32k:
       gpus: 2
       env: {}
       args:
-        served-model-name: null
         model-path: null
         disable-cuda-graph: null
         tensor-parallel-size: 2
@@ -1685,7 +1664,6 @@ override_2p1d_p_tp2_d_tp8_ep4_cap64_prefill32k:
         SGLANG_PLB_SCATTER_DEFER: '1'
         SGLANG_NVIDIA_MEGAKERNEL_SLOTS: route,mkm,gdn_verify,gdn_pdl,gdn_conv,hop,hop_fp8,hop_mid,draft_loop,draft_extend,draft_moe,draft_q1,draft_xchg,draft_hop,draft_fin,draft_front,draft_skv2,draft_multi,draft_embed,gdn_push,gdn_front,route_shared,skv2,skv2_cp,mka,mka_push,mkm_wide,mkm_m32,mkm_m64,mkm_m128,mkm_m256,mkm_m512,multi_request,lowm_in,lowm_out,lowm_se,lowm_push,draft_q1_cp,draft_skv2_cp,sharded_gumbel
       args:
-        served-model-name: null
         model-path: null
         tensor-parallel-size: 8
         data-parallel-size: 1
@@ -1779,7 +1757,6 @@ override_2p1d_p_tp2_d_tp8_ep4_cap64_prefill32k_flashinfer:
       gpus: 2
       env: {}
       args:
-        served-model-name: null
         model-path: null
         disable-cuda-graph: null
         tensor-parallel-size: 2
@@ -1815,7 +1792,6 @@ override_2p1d_p_tp2_d_tp8_ep4_cap64_prefill32k_flashinfer:
         SGLANG_PLB_SCATTER_DEFER: '1'
         SGLANG_NVIDIA_MEGAKERNEL_SLOTS: route,mkm,gdn_verify,gdn_pdl,gdn_conv,hop,hop_fp8,hop_mid,draft_loop,draft_extend,draft_moe,draft_q1,draft_xchg,draft_hop,draft_fin,draft_front,draft_skv2,draft_multi,draft_embed,gdn_push,gdn_front,route_shared,skv2,skv2_cp,mka,mka_push,mkm_wide,mkm_m32,mkm_m64,mkm_m128,mkm_m256,mkm_m512,multi_request,lowm_in,lowm_out,lowm_se,lowm_push,draft_q1_cp,draft_skv2_cp,sharded_gumbel
       args:
-        served-model-name: null
         model-path: null
         tensor-parallel-size: 8
         data-parallel-size: 1
