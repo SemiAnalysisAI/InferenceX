@@ -12473,6 +12473,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4904
 
 - config-keys:
+    - kimik3.1-fp4-gb200-vllm-agentic-dspark-tp8pp2-agg
+    - kimik3.1-fp4-gb200-vllm-agentic-dspark-tp16-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Re-sweep Kimi-K3.1-Pro GB200 vLLM AgentX with the updated DSpark draft (Inferact/Kimi-K3.1-Pro-DSpark-preview @ 6a2ef20a) and the #4851 golden curve, so throughput forces AL 3.41 at 5 draft tokens and 3.19 at 4."
+    - "Set VLLM_HTTP_TIMEOUT_KEEP_ALIVE to 600 s on the aggregated server so AIPerf's reused session connections outlive uvicorn's 5 s idle timeout."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4864
+
+- config-keys:
   - qwen3.5-fp4-b200-sglang-agentic-mtp
   description:
   - "Serve nvidia/Qwen3.5-397B-A17B-NVFP4-V2: the original nvidia/Qwen3.5-397B-A17B-NVFP4 directory was removed from the B200 node-local model volume on 2026-10-13 at NVIDIA SRE's request, so the key failed at srtctl startup with Model path does not exist."
