@@ -47,7 +47,7 @@ Every AgentX (`agentic-coding`) point that a PR adds or reruns must run with an 
 
 AgentX metrics are client-side. A response shorter than the stream interval can reach the client as a single chunk, so TTFT absorbs decode time and interactivity becomes meaningless. Many AgentX responses are short; at an interval of 100, about 30% of a MiniMax M3 workload was affected. NVIDIA's TRT-LLM engineers recommended 20 as the lowest value that avoids the CPU overhead of per-token streaming, and it was adopted in [PR #2685](https://github.com/SemiAnalysisAI/InferenceX/pull/2685).
 
-Existing points with higher values are not retroactively rejected, but a PR that reruns them must lower them to 20 or less. There are no per-submission exceptions; raising the ceiling requires changing this section. Fixed-sequence (non-AgentX) scenarios are not covered by this rule.
+Existing points with higher values are not retroactively rejected, but a PR that reruns them must lower them to 20 or less. `append-only: true` is not allowed for an AgentX config or scenario whose existing points run above 20, because the published curve would mix intervals; rerun the whole curve at 20 or less instead. Klaud image refreshes follow the same rule. There are no per-submission exceptions; raising the ceiling requires changing this section. Fixed-sequence (non-AgentX) scenarios are not covered by this rule.
 
 ## Unverified draft precision
 
