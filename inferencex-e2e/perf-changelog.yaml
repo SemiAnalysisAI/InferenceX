@@ -12440,3 +12440,12 @@
     - "Enable ReplaySSM speculative verification, cap server admission and decode graphs at 32, and pin breakable prefill graphs to 8192 tokens with static memory fraction 0.9."
     - "Add GPU-resident client concurrency 64 while preserving the TP8 HiCache points, full AgentX workload, measured MTP acceptance, and simulation-off accuracy evaluation."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4902
+
+- config-keys:
+    - qwen3.5-fp8-h200-sglang-agentic-hicache-mtp
+    - qwen3.5-fp8-h200-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update SGLang image to v0.5.23-cu130; TP4/EP4 c8 HiCache mem-fraction-static 0.92 -> 0.86."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4899
