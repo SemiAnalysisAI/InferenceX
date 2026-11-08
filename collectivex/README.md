@@ -6,7 +6,7 @@ result file per case into `results/` on the cluster that ran it. A second suite,
 [vLLM `swap_blocks` benchmark](docs/swap-blocks.md), measures pinned CPU↔GPU and same-GPU block
 copies through the same matrix and pool launchers. A third, the
 [KV-cache transfer benchmark](docs/kv-transfer.md), times one request's prefill-to-decode KV move
-between two nodes through NIXL and Mooncake.
+between two nodes through NIXL, every TP rank pair at once.
 
 CollectiveX runs through the [CollectiveX Sweep](#running-in-ci) workflow or by hand on each pool
 (see [Running By Hand](#running-by-hand)). Uploading the
@@ -43,9 +43,9 @@ Eleven of the registered EP cases are unmeasured in the published run: MI355X Mo
 prefill for DeepEP V2 and NCCL EP low-latency, and MI325X UCCL-EP low-latency EP16 FP8.
 [docs/methodology.md](docs/methodology.md#unmeasured-cases) gives each reason.
 
-`results/cases.json` is the committed copy of the full matrix: 294 requested cases, of which 254 are
-runnable EP cases, 18 are swap-blocks cases (two per pool), 12 are kv-transfer cases (one per pool,
-backend and fabric) and 10 are unsupported EP cells (UCCL-EP EP16 on MI355X and FlashInfer EP16 on
+`results/cases.json` is the committed copy of the full matrix: 289 requested cases, of which 254 are
+runnable EP cases, 18 are swap-blocks cases (two per pool), 7 are kv-transfer cases (one per pool
+and fabric) and 10 are unsupported EP cells (UCCL-EP EP16 on MI355X and FlashInfer EP16 on
 H100, H200, B200 and B300, once per phase; FlashInfer's MNNVL workspace needs every rank inside one NVLink
 domain).
 A cell is listed as unsupported only when its backend runs on that SKU at another EP size, and

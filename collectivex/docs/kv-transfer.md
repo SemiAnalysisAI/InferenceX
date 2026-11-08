@@ -1,125 +1,161 @@
 # KV-cache transfer benchmark
 
 `bench/run_kv.py` times the hop a disaggregated engine makes between prefill and decode: one
-request's KV cache moving from a GPU on one node to a GPU on another. It drives NIXL and Mooncake
-in the shape vLLM 0.32.0's connectors post for DeepSeek-V4-Pro, through the builds the
-`vllm/vllm-openai:v0.32.0` image ships, and verifies every timed transfer. It needs two nodes with
-one GPU each; run it on a pool with `run.sh` (below).
+request's KV cache moving from the prefill engine's GPUs on one node to the decode engine's GPUs on
+another. It posts what vLLM's `NixlConnector` posts for Kimi-K3.1-Pro, through the NIXL build the
+`vllm/vllm-openai:kimi-k31` image ships, with every TP rank pair of the node transferring at once,
+and verifies every timed transfer. It needs two nodes; run it on a pool with `run.sh` (below).
 
 ## Workload
 
-vLLM 0.32.0 packs every DeepSeek-V4-Pro cache into one allocation of 1,435,968-byte block rows (the
-widest cache group's bytes per block) and overlays its five transfer groups on each row from byte 0,
-since a block id belongs to one group at a time. The shape below was dumped from vLLM itself on b300:
-its KV cache config, NIXL's registration, the block ids its scheduler hands the connector, and
-Mooncake's own registration and region planner run on the same views.
+The preset `kv-k31` is one rank of a TP16 engine serving Kimi-K3.1-Pro with `kv-cache-dtype fp8`, an
+MXFP4 indexer, float32 KDA state and the DSpark draft, the configuration InferenceX's GB200
+disaggregated recipe runs. vLLM sets the block size to 1024 tokens and packs every cache into one
+allocation of 18,800,640-byte block rows, with its three cache groups overlaid from row byte 0.
 
-| Group | Caches | Tokens per block | Window | Ids moved per request (ISL ladder) |
-|---|---|---|---|---|
-| `swa-a`, `swa-b` | 31 and 30 sliding-window layers | 64 | 128 | 2 |
-| `mla` | 31 C128A, 30 C4A indexer and 30 C4A layers | 256 | none | ceil(ISL/256) |
-| `c128a-state` | 31 compressor states | 8 | 128 | 16 |
-| `c4a-state` | 30 indexer and 30 attention compressor states | 4 | 8 | 2 |
+| Cache | Layers | Bytes per block, per rank | What a request moves |
+|---|---|---|---|
+| DSA indexer | 24 | 69,632 (68 B × 1024 tokens) | every prompt block |
+| MLA | 24 | 589,824 (576 B × 1024 tokens) | every prompt block |
+| DSpark draft MLA | 5 | 589,824 | every prompt block |
+| KDA state | 69, in two groups of 35 and 34 | 425,472 (conv 3 × 10,752 + recurrent 393,216) | one running-state block per group |
 
-A windowed group moves only its blocks still inside the window. The prefill side's tail is
-`cdiv(window, block) + 1` ids and, once the prompt outgrows the window, starts with the null block:
-vLLM frees the blocks behind the window (`isl - window + 1` tokens) to block 0. The decode side lists
-only its live blocks, though, and both connectors end-trim the prefill ids to that count, so the
-null block never moves. Pages are padded to 576 bytes, and the dtype mix is architectural
-(fp8_ds_mla states, fp8 indexer, fp32 compressor states), so the preset runs fp8 at block size 256
-only.
+The MLA, indexer and draft pages are replicated on every TP rank, so each rank moves a full copy; the
+KDA state is sharded (6 of 96 heads per rank). NIXL registers 88 regions per block (the 53 attention
+pages and 35 KDA slots) and reads each KDA state as four descriptors: its three conv projections and
+the recurrent state. The decode side loads `ISL - 1` tokens. With `B = ceil((ISL - 1) / 1024)`:
 
-| ISL | Ids per request | Request bytes | Mooncake entries | Largest batch |
-|---|---|---|---|---|
-| 2048 | 30 | 43.1 MB | 32 | 32 |
-| 8192 | 54 | 77.5 MB | 56 | 16 |
-| 32768 | 150 | 215.4 MB | 152 | 4 |
-| 65536 | 278 | 399.2 MB | 280 | 2 |
-| 131072 | 534 | 766.8 MB | 536 | 1 |
-| 524288 | 2070 | 2972.5 MB | 2072 | 1 |
+- descriptors per rank = `53 × B + 276`
+- bytes per rank = `18,776,064 × B + 29,357,568`
+
+| ISL | Blocks | Descriptors per rank | Bytes per rank |
+|---|---|---|---|
+| 2048 | 2 | 382 | 66.9 MB |
+| 8192 | 8 | 700 | 179.6 MB |
+| 32768 | 32 | 1,972 | 630.2 MB |
+| 131072 | 128 | 7,060 | 2,432.7 MB |
+| 262144 | 256 | 13,844 | 4,836.0 MB |
+
+The layout was read from the vLLM source in the image and checked against a GB200 production run
+(run 42312889917, TP16 to TP16, 994 requests). That run's workers logged `num_regions=88`,
+`block_len_per_layer={425472, 589824, 69632}` and `mamba_ssm_size=(32256, 393216)`, and its 15,904
+transfers (one per rank per request) averaged 5,007 descriptors and 1.705 GB. The closed forms give
+5,007 and 1.705 GB at 89.3 blocks. The draft's layer count (5) is inferred: it is the one value that
+gives 88 regions and the logged block count.
 
 Block tables are seed-keyed and random, the block-granular scatter a real allocator leaves. Both
-ranks derive both sides' tables from the case and its seed; every request and table set takes
-disjoint live rows, and each rep uses a fresh table set (four by default), as each request a decode
-worker admits carries fresh block ids. A burst is `batch` requests posted together. The batch ladder
-(1 to 32) stops where `batch × ISL` passes 131,072 prompt tokens (batch 1 always runs); the result
-records what each point ran.
+sides' tables derive from the case and its seed; every request and table set takes disjoint rows,
+and each rep uses a fresh table set (four by default). A burst is `batch` requests posted together.
+The batch ladder (1 to 32) stops where `batch × ISL` passes 131,072 prompt tokens (batch 1 always
+runs); the result records what each point ran.
 
-## Backends
+The `kv-dsv4` preset (vLLM 0.32.0's DeepSeek-V4-Pro layout, one whole row per block id) and the
+Mooncake adapter stay in the code for hand runs but are not in the sweep: DeepSeek-V4-Pro has no
+disaggregated recipe any more, and the K3.1 recipes use Mooncake only as a store connector.
 
-| Backend | Engine path (`maturity`) | Ops | What one request posts |
-|---|---|---|---|
-| `nixl` | vLLM `NixlConnector` over UCX, `LIBFABRIC` on EFA pools (`production`) | `pull` (READ, vLLM's default) and `push` (WRITE) | one whole row per id |
-| `mooncake` | vLLM `MooncakeConnector` (`candidate`) | `push`, the connector's only direction | its five transfer regions |
+## Rank mapping
 
-NIXL takes a layer's view as its own region only when the view is the whole page. A DSV4 view spans
-its states while its page carries the padding, so vLLM registers the allocation as one region and
-every descriptor is a whole row. Each side preps one descriptor list over every row (local at
-registration, remote at connect), and each request is a fresh `make_prepped_xfer` with a
-notification, released once it completes. Agent config and environment follow vLLM: `num_threads` 4
-on UCX, telemetry capture on, and `UCX_RCACHE_MAX_UNRELEASED=1024` before NIXL loads. MNNVL rows
-allocate the pool as cuMem fabric memory (UCX's cross-node CUDA IPC engages on nothing else, as
-vLLM needs its cumem allocator there), set `UCX_CUDA_IPC_ENABLE_MNNVL=y`, and restrict UCX to
-`cuda_copy,cuda_ipc,tcp`, so a failed NVLink attach fails the row instead of measuring the IB rails;
-the RDMA rows pin UCX to the operator's validated devices, since auto-selection lands on the wrong
-fabric on some pools. Deployment tuning that InferenceX's serving
-recipes add on top of vLLM (`NIXL_UCX_SGL_ENABLE`, `UCX_MEMTYPE_CACHE` and the like) is not applied.
+A shard is two nodes with every GPU in use: the first node's ranks are the prefill engine's, the
+second node's the decode engine's, and decode rank *i* transfers with prefill rank *i*, as vLLM maps
+equal TP sizes. A barrier releases every pair's burst together, so the pairs share the node's NICs
+and host CPUs the way one request's TP ranks do. On GB200 that is four pairs per node pair; the
+production TP16 engine is four such node pairs side by side.
 
-Mooncake keeps the per-layer views, folds views at the same offset and length into one region, and
-merges a group's consecutive views into whole rows. For DSV4 that leaves five regions:
+## Backend
 
-- one whole row over the `swa-a` and `swa-b` ids, whose pages coincide;
-- `swa-a`'s 31st page per id (37,376 bytes at row offset 1,123,200);
-- a whole row each for `mla` and the two state groups.
+`nixl` drives vLLM's `NixlConnector` path (`maturity: production`): UCX, or `LIBFABRIC` on EFA
+pools, with vLLM's agent config (`num_threads` 4 on UCX, telemetry capture on,
+`UCX_RCACHE_MAX_UNRELEASED=1024` before NIXL loads). Each side preps one descriptor list over every
+region of every row (local at registration, remote at connect), and each request is one
+`make_prepped_xfer` with a notification, released once it completes. `pull` (READ) is vLLM's
+default; `push` (WRITE) is timed too.
 
-Whole-row ids whose local and remote rows both advance by one merge into one entry. On random tables
-a request is therefore a row per id plus `swa-a`'s ids again as pages. Each burst is one
-`batch_transfer_sync_write` on a 10-worker executor over P2PHANDSHAKE, as the connector sends a
-ready group of requests, so its requests complete together and its rows carry no per-request
-`request_ms` above batch 1. RDMA rows pin the engine to the validated HCAs the row's network
-describes. The image's cuda13 build runs over verbs; EFA pools swap in the same
-version's EFA build with protocol `efa`. On b300, vLLM 0.32.0 could not start `MooncakeConnector`
-for DSV4 at all. vLLM sets the cache config's block size to the hybrid layout's smallest group, 4,
-and the worker's kernel block-size check then fails: `ValueError: No common block size for 4
-(DEEPSEEK_SPARSE_SWA: [MultipleOf(32)]; CompressorBackend: [MultipleOf(1)]; ...)`. So these rows
-time the library on the plan the connector's code builds, and are `candidate`.
+MNNVL rows allocate the pool as cuMem fabric memory (UCX's cross-node CUDA IPC engages on nothing
+else, as vLLM needs its cumem allocator there), set `UCX_CUDA_IPC_ENABLE_MNNVL=y`, and restrict UCX
+to `cuda_copy,cuda_ipc,tcp`, so a failed NVLink attach fails the row instead of measuring the IB
+rails. The RDMA rows pin UCX to the operator's validated devices, since auto-selection lands on the
+wrong fabric on some pools; a `UCX_*` value the host environment already sets wins and is recorded.
+Deployment tuning that serving recipes add on top of vLLM is not applied.
 
-MoRI-IO, vLLM's ROCm connector, is not ported. Two-node RDMA on MI355X waits on the hosts' AINIC
-user space matching the image's, and the ROCm image ships no Mooncake.
+## Timing and what a row reports
 
-## Timing and verification
+Each initiator times its burst on the host, from posting its first request to the completion of its
+last, polling the transfer state continuously. Building tables and descriptor lists runs untimed;
+posting includes handle creation, as in vLLM. Each point runs 3 trials of 2 warmup and 16 timed
+bursts.
 
-The initiator times each burst on the host, from posting its first request to the completion of its
-last. `request_ms` records each request's completion within the burst; it is an upper bound, since
-waits drain in posting order. Building tables and descriptor lists runs untimed; posting includes
-handle creation, as in vLLM. Each point runs 3 trials of 2 warmup and 16 timed bursts. GB/s is
-`req_bytes × batch / p50 burst latency`, where `req_bytes` is the request's block rows, the same for
-every backend; `descs` and `posted_bytes` record what that backend posts for them. The `contig` row
-moves the same bytes as one descriptor (capped at 8 GiB).
+| Field | Meaning |
+|---|---|
+| `latency_ms` | Time until the slowest rank pair's burst lands: what one request (at batch 1) waits for its KV. |
+| `rank_ms` | Each pair's own burst time, pooled. |
+| `gbps_p50`, `gbps_rank_p50` | The node's and one rank's GB/s at the p50 (`req_bytes` is the bytes the request moves on one rank). |
+| `line_rate_pct` | The node's GB/s as a share of its selected NICs' negotiated rate (read from sysfs; absent on MNNVL). |
+| `library_xfer_ms`, `library_post_ms` | NIXL's own timing of each transfer, the figures vLLM exports as `vllm:nixl_xfer_time_seconds` and `vllm:nixl_post_time_seconds`. |
+| `request_ms` | Each request's completion within its burst (an upper bound, since waits drain in posting order). |
 
-Compare libraries on `push`, the one direction both serve. Rows are one GPU pair in isolation, not
-node-level bandwidth or TTFT: a lone pair may stripe across NICs that its GPU shares with the others
-when every GPU transfers, and how far it does depends on the library and the pool's NIC layout. The
-`contig` row runs on the same allocation and devices, so paged against `contig` compares across
-SKUs more fairly than raw GB/s.
+The `contig` rows move the same bytes as one descriptor per rank (capped at 8 GiB), under the same
+concurrency, so paged against `contig` shows what the descriptor list costs and compares across
+pools more fairly than raw GB/s.
 
 Every 8-byte word of a pool holds its word index XORed with its rank's salt, so no two words match.
 Each trial's last burst lands on a destination wiped to a sentinel, after one untimed burst on
-another table set. The verify after it checks the first, last and one interior word (a different one
-per burst and request) of every entry of every request against the source rank's pattern,
-so a missed, shifted, truncated, swapped or loopback copy fails the case. Mooncake's page entries
-re-send bytes its whole-row entries already cover, so no check can see them separately. A transfer
-or check that raises fails its row on both ranks, and the document keeps every row before it.
+another table set. The verify after it checks the first, last and one interior word of every
+descriptor of every request on every pair against the source rank's pattern, so a missed, shifted,
+truncated, swapped or loopback copy fails the case.
+
+## Against production
+
+The same GB200 production run exported NIXL's timings from its decode engine. NIXL stamps a
+transfer's duration when the application next checks its state, and vLLM checks once per engine
+step, so production's figure is the wire time plus the wait for the next step. Setting
+`COLLX_KV_POLL_MS=15` makes the benchmark check every 15 ms instead of continuously and reproduces
+this: a 67 MB transfer that lands in 1.4 ms reports 15.3 ms.
+
+| | Benchmark (GB200, IB, 4 pairs, continuous polling) | Production run |
+|---|---|---|
+| Per-rank bandwidth | 48.4 GB/s (97% of one NDR400 port) | 36.9 GB/s (total bytes / total reported time) |
+| Mean transfer, 1.705 GB | 35 ms on the wire | 46 ms reported |
+| Transfers of 134 MB or less | under 3 ms | at least 9 in 10 report over 5 ms |
+| Post time | 0.3 to 1.5 ms | 0.9 ms mean |
+
+So the wire is at line rate and production's extra ~11 ms per transfer matches a decode step of
+10 to 25 ms, not a slower fabric. The benchmark's default rows are the library's floor; they do not
+include the engine's step, the handshake on first contact, the scheduler's wait or the release of
+the prefill side's blocks.
+
+## What is left to climb
+
+First GB200 runs (hand runs from the branch, not yet published), pull, one request per burst:
+
+| ISL | IB rails, ms per request | MNNVL, ms per request | MNNVL `contig`, ms |
+|---|---|---|---|
+| 2048 | 1.4 | 2.3 | 0.14 |
+| 32768 | 13.1 | 9.0 | 0.82 |
+| 131072 | 50.2 | 29.9 | 3.5 |
+| 262144 | 99.8 | 60.5 | 7.4 |
+
+Over the IB rails NIXL holds 96 to 97% of line rate at every prompt length and batch, paged or
+contiguous, so nothing is left there short of more NICs. Over MNNVL the same request reaches 80 GB/s
+per rank against about 700 GB/s for one descriptor: it is bound by the descriptor list (51 of the
+60 ms at 262,144 tokens is NIXL's post time, about 4 µs per descriptor). A block's 53 attention
+pages are contiguous in its row, and vLLM posts them unmerged.
+
+## Known limits
+
+- One model and one deployment shape (TP16 per rank). Pools with eight GPUs per node run eight pairs
+  of the same per-rank shape; the production recipe exists on GB200 only.
+- The GPUs are otherwise idle. Production transfers while both engines serve.
+- One run per case.
 
 ## Pools and running
 
 `kv_backends` in `configs/platform_config.json` lists each pool's (backend, fabric) pairs; each is
-one shard holding one case on 2 nodes × 1 GPU, allocated for 120 minutes. `run.sh` runs kv only
-when asked:
+one shard holding one case on 2 nodes × every GPU, allocated for 120 minutes, in the
+`vllm/vllm-openai:kimi-k31` image. `run.sh` runs kv only when asked:
 
 ```bash
-collectivex/run.sh b300 --suite kv-transfer --list-shards
-setsid nohup collectivex/run.sh b300 --suite kv-transfer > run-kv-b300.log 2>&1 < /dev/null &
+collectivex/run.sh gb200 --suite kv-transfer --list-shards
+setsid nohup collectivex/run.sh gb200 --suite kv-transfer > run-kv-gb200.log 2>&1 < /dev/null &
 ```
 
 Results are `case-attempt` documents, published like EP results (see the [README](../README.md)).

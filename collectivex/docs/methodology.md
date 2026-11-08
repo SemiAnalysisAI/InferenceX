@@ -123,7 +123,7 @@ Eleven registered EP cases have no result in the published run and show as pendi
   proxies exchange buffer info ([uccl-project/uccl#1111](https://github.com/uccl-project/uccl/issues/1111));
   the BF16 case runs.
 
-The twelve kv-transfer cases are registered but have not been uploaded.
+The seven kv-transfer cases are registered but have not been uploaded.
 
 ### Precision
 
