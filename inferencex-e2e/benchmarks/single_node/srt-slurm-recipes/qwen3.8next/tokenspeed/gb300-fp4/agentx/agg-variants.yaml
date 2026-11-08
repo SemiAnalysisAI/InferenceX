@@ -1,0 +1,199 @@
+schema: 2
+
+base:
+  name: qwen3.8next-fp4-gb300-tokenspeed-agentic-mtp
+  identity:
+    model:
+      revision: fc694b54fb0174e0913e6adf86691ef85a4ead47
+    container: {}
+    frameworks:
+      tokenspeed: 0.1.1rc1.post20261108
+      tokenspeed-kernel: 0.1.4rc1.post20261108
+      tokenspeed-engine: <ENGINE_VERSION>
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  slurm:
+    time_limit: '6:00:00'
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  frontend:
+    type: smg
+    enable_multiple_frontends: false
+    args:
+      reasoning-parser: qwen3_thinking
+      health-check-timeout-secs: 610
+      # TokenSpeed's own launcher (ts serve) starts smg with these; srtctl adds none of them.
+      policy: passthrough
+      disable-circuit-breaker: true
+      disable-retries: true
+      disable-load-monitoring: true
+      tokenizer-cache-enable-l0: true
+      tokenizer-cache-enable-l1: true
+      log-level: warn
+  engine: tokenspeed
+  setup_script: tokenspeed-nightly.sh
+  environment:
+    # Enroot needs these before container creation because the base image omits them.
+    NVIDIA_VISIBLE_DEVICES: all
+    NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    PYTHONNOUSERSITE: '1'
+    PYTHONUNBUFFERED: '1'
+    PYTHONSAFEPATH: '1'
+    NO_COLOR: '1'
+    TOKENSPEED_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-nightly-v0.1.1rc1.post20261108/tokenspeed-0.1.1rc1.post20261108-py3-none-any.whl#sha256=5f365b902f0bcd171884420c0c2eebb9100e8754f61dbdb5767623f66f3f1d35
+    TOKENSPEED_KERNEL_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-nightly-v0.1.4rc1.post20261108-cu130/tokenspeed_kernel-0.1.4rc1.post20261108-cp312-cp312-manylinux_2_28_aarch64.whl#sha256=9b7be88198dd68d6d69c61cc24e52760d9dea371b357f844dd7c7ceb5fac7d66
+    TOKENSPEED_ENGINE_WHEEL_URL: <ENGINE_WHEEL_URL>
+    TOKENSPEED_SCHEDULER_VERSION: 0.1.50
+    TOKENSPEED_FLASHINFER_VERSION: 0.7.3
+    TOKENSPEED_CUDA_VERSION: '13.0'
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 1
+      env:
+        TOKENSPEED_JIT_COMPILE_CHECK: error
+        TOKENSPEED_HEALTH_CHECK_TIMEOUT: '600'
+        TOKENSPEED_QWEN4_EXP_QSA_TOPK_PATH: auto
+        TOKENSPEED_QWEN4_EXP_QSA_MAX_LOGITS_MB: '2048'
+        # FP8 QSA prefill calls outside the BF16 scratch use the CuTe DSL kernel instead of FlashInfer FA2.
+        TOKENSPEED_KERNEL_OVERRIDE_ATTENTION_QSA_SPARSE_ATTENTION: cute_dsl_blackwell_qsa_sparse_attention
+      args:
+        served-model-name: nvidia/Qwen3.8-Flash-Next-NVFP4
+        revision: fc694b54fb0174e0913e6adf86691ef85a4ead47
+        trust-remote-code: true
+        # The checkpoint selects mixed target/draft quantization without conversion.
+        speculative-draft-model-quantization: modelopt_mixed
+        max-model-len: 262144
+        attn-tp-size: 1
+        data-parallel-size: 1
+        ep-size: 1
+        pipeline-parallel-size: 1
+        attention-backend: trtllm
+        drafter-attention-backend: trtllm
+        moe-backend: flashinfer_trtllm
+        draft-moe-backend: flashinfer_trtllm
+        mamba-ssm-dtype: bfloat16
+        kv-cache-dtype: fp8_e4m3
+        gpu-memory-utilization: 0.95
+        max-num-seqs: 104
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        speculative-algorithm: MTP
+        draft-model-path-use-base: true
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+        # The connector selects greedy sampling only for synthetic throughput.
+        sampling-backend: flashinfer
+        enable-state-checkpoint-in-forward: true
+        # 0 evicts State checkpoints by their own last use (plain LRU).
+        checkpoint-retention-requests: 0
+        # Keeps the checkpoint's FP8 PLE n-gram table on pinned host memory instead of widening it to BF16.
+        hf-overrides: '{"ple_offload_embedding":true,"ple_embed_dtype":"float8_e4m3fn"}'
+        prefill-graph-max-tokens: 8192
+        enable-drafter-prefill-graph: true
+        enable-qsa-prefill-bf16-scratch: true
+        disable-cudagraph-memory-reserve: true
+        max-cudagraph-capture-size: 104
+        cudagraph-capture-sizes: [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 84, 88, 92, 96, 100, 104]
+        enable-prefix-caching: true
+        # Host L2 plus the retraction snapshot pool stay under the 241 GB per-GPU DRAM allowance.
+        kvstore-size: 236
+        retraction-snapshot-host-gb: 4
+        kvstore-io-backend: kernel
+        kvstore-write-policy: write_back
+        enable-metrics: true
+        metrics-host: 0.0.0.0
+        stream-interval: 20
+        decode-log-interval: 10
+        seed: 35
+  sbatch_directives:
+    mem: '0'
+    exclusive: ''
+  srun_options:
+    mem: '0'
+    container-remap-root: ''
+  benchmark:
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'tokenspeed:'
+      TOTAL_CPU_DRAM_GB: '241'
+      KV_OFFLOADING: dram
+
+override_tp1_c1:
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp1_c2:
+  benchmark:
+    env:
+      CONC: '2'
+
+override_tp1_c4:
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp1_c8:
+  roles:
+    agg:
+      args:
+        # Running cap below concurrency: the other sessions wait for their first token.
+        max-num-seqs: 2
+        max-cudagraph-capture-size: 2
+        cudagraph-capture-sizes: [1, 2]
+  benchmark:
+    env:
+      CONC: '8'
+
+override_tp1_c20:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 6
+        max-cudagraph-capture-size: 6
+        cudagraph-capture-sizes: [1, 2, 3, 4, 5, 6]
+  benchmark:
+    env:
+      CONC: '20'
+
+override_tp1_c36:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 12
+        max-cudagraph-capture-size: 12
+        cudagraph-capture-sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+  benchmark:
+    env:
+      CONC: '36'
+
+override_tp1_c56:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 35
+        max-cudagraph-capture-size: 35
+        cudagraph-capture-sizes: [1, 2, 4, 8, 12, 16, 20, 24, 28, 32, 35]
+  benchmark:
+    env:
+      CONC: '56'
+
+override_tp1_c80:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 72
+        max-cudagraph-capture-size: 72
+        cudagraph-capture-sizes: [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72]
+  benchmark:
+    env:
+      CONC: '80'
+
+override_tp1_c108:
+  benchmark:
+    env:
+      CONC: '108'
