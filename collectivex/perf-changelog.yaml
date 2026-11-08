@@ -169,3 +169,11 @@
   backends: [flashinfer-ep]
   description:
     - Run flashinfer-ep EP8 on B300.
+- date: 2026-11-08
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4925
+  pools: [h200-dgxc, b200-nscale, b300, gb200, gb300]
+  suites: [kv-transfer]
+  description:
+    - Move kv-transfer to vLLM's Kimi-K3.1-Pro layout (one TP16 rank) in the K3.1 image.
+    - Transfer every TP rank pair of the node at once; a request lands with its slowest pair.
+    - Report per-rank GB/s, the share of NIC line rate and NIXL's own transfer timings.
