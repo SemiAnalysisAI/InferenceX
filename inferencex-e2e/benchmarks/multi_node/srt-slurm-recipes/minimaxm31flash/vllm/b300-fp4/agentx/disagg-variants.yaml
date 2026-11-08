@@ -9,6 +9,15 @@ base:
     install: true
     source:
       wheel: 1.6.0.dev20261023
+    # Workers run vllm-rs serve beside a Dynamo sidecar; the sidecar parses tool calls and reasoning.
+    sidecar: true
+    sidecar_args:
+      - --grpc-startup-deadline-secs
+      - '7200'
+      - --dyn-tool-call-parser
+      - minimax_m3
+      - --dyn-reasoning-parser
+      - minimax_m3
   resources:
     gpu_type: b300
     gpus_per_node: 8
@@ -224,8 +233,8 @@ base:
         disable-hybrid-kv-cache-manager: true
         max-model-len: 1048576
         kernel-config: '{"moe_backend":"deep_gemm_mega_moe"}'
-        dyn-tool-call-parser: minimax_m3
-        dyn-reasoning-parser: minimax_m3
+        # Parse once, in the Dynamo sidecar.
+        reasoning-parser: None
         speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         tensor-parallel-size: 1
         data-parallel-size: 2
@@ -271,8 +280,8 @@ base:
         attention-config: '{"indexer_kv_dtype":"nvfp4","use_prefill_query_quantization":true}'
         disable-hybrid-kv-cache-manager: true
         max-model-len: 1048576
-        dyn-tool-call-parser: minimax_m3
-        dyn-reasoning-parser: minimax_m3
+        # Parse once, in the Dynamo sidecar.
+        reasoning-parser: None
         speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         gpu-memory-utilization: 0.95
         max-num-seqs: 48
