@@ -222,9 +222,14 @@ def run_setup(
         )
     for attempt in range(1, SETUP_ATTEMPTS + 1):
         print(f"Setting up srt-slurm, attempt {attempt} (details: {SETUP_LOG})", flush=True)
-        argv = ["make", "setup", f"ARCH={run.cluster.arch}"]
+        argv = [
+            "make",
+            "setup",
+            f"ARCH={run.cluster.arch}",
+            f"TACHOMETER_ENABLED={str(not skip_tachometer).lower()}",
+        ]
         if skip_tachometer:
-            # Skip only this prerequisite; native GPU power collection is independent.
+            # Native GPU power collection is independent of Tachometer.
             argv.append("--assume-old=tachometer-scraper-download")
         if cpu_power_exporter:
             argv.append(f"CPU_POWER_EXPORTER_RELEASE={CPU_POWER_EXPORTER_RELEASE}")

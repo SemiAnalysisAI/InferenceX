@@ -1,3 +1,18 @@
+diff --git a/Makefile b/Makefile
+index 028724fa..a60825e9 100644
+--- a/Makefile
++++ b/Makefile
+@@ -213,7 +213,9 @@ setup: tachometer-scraper-download cpu-power-exporter-setup otel-collector-downl
+ 	fi; \
+ 	echo ""; \
+ 	echo "--- process-exporter $(PROCESS_EXPORTER_VERSION) (Tachometer per-process/thread telemetry) ---"; \
+-	if [ -f configs/process-exporter ] && file configs/process-exporter | grep -q "$$ARCH_FILE_PATTERN"; then \
++	if [ "$(TACHOMETER_ENABLED)" = "false" ]; then \
++		echo "Skipping process-exporter: Tachometer is disabled"; \
++	elif [ -f configs/process-exporter ] && file configs/process-exporter | grep -q "$$ARCH_FILE_PATTERN"; then \
+ 		echo "✅ process-exporter already installed at configs/process-exporter ($(ARCH))"; \
+ 	else \
+ 		echo "⬇️  Downloading process-exporter ($(PROCESS_EXPORTER_VERSION)) for $$ARCH_SHORT..."; \
 diff --git a/src/srtctl/cli/submit.py b/src/srtctl/cli/submit.py
 index edbb2d26..9d2ba831 100755
 --- a/src/srtctl/cli/submit.py
@@ -23,11 +38,16 @@ index edbb2d26..9d2ba831 100755
              "per-thread CPU telemetry. Re-run [bold]make setup ARCH=<compute_arch>[/] to install it."
 diff --git a/tests/test_tachometer_optional.py b/tests/test_tachometer_optional.py
 new file mode 100644
-index 00000000..09b96abd
+index 00000000..d9b4c473
 --- /dev/null
 +++ b/tests/test_tachometer_optional.py
-@@ -0,0 +1,36 @@
+@@ -0,0 +1,75 @@
 +from dataclasses import replace
++import os
++from pathlib import Path
++import platform
++import shutil
++import subprocess
 +
 +import pytest
 +
@@ -63,3 +83,37 @@ index 00000000..09b96abd
 +    else:
 +        with pytest.raises(SystemExit):
 +            validate_setup(tmp_path, config)
++
++
++@pytest.mark.parametrize("enabled", ["false", "true", None])
++def test_make_setup_skips_process_exporter_only_when_disabled(tmp_path, enabled):
++    shutil.copy(Path(__file__).parents[1] / "Makefile", tmp_path / "Makefile")
++    (tmp_path / "configs").mkdir()
++    (tmp_path / "bin").mkdir()
++    for name in ["configs/nats-server", "configs/etcd", "configs/etcdctl", "bin/uv"]:
++        shutil.copy("/bin/true", tmp_path / name)
++    (tmp_path / "srtslurm.yaml").touch()
++    wget = tmp_path / "bin/wget"
++    wget.write_text("#!/bin/sh\nexit 1\n")
++    wget.chmod(0o755)
++    file_probe = tmp_path / "bin/file"
++    file_probe.write_text("#!/bin/sh\necho 'ELF x86-64 aarch64'\n")
++    file_probe.chmod(0o755)
++    argv = [
++        "make", "setup", f"ARCH={platform.machine()}",
++        "--assume-old=tachometer-scraper-download",
++        "--assume-old=cpu-power-exporter-setup",
++        "--assume-old=otel-collector-download",
++    ]
++    if enabled is not None:
++        argv.append(f"TACHOMETER_ENABLED={enabled}")
++    result = subprocess.run(
++        argv, cwd=tmp_path, capture_output=True, text=True, timeout=10,
++        env={**os.environ, "PATH": f"{tmp_path / 'bin'}:{os.environ['PATH']}"},
++    )
++    assert (result.returncode == 0) is (enabled == "false"), result.stdout + result.stderr
++    if enabled == "false":
++        assert "Skipping process-exporter" in result.stdout
++        assert "uv already installed" in result.stdout
++    else:
++        assert "Failed to download process-exporter" in result.stdout
