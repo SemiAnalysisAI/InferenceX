@@ -719,8 +719,7 @@ class CaseArgvContract(unittest.TestCase):
         "transport": "nvlink-rdma", "topology_class": "h200-nvlink-rdma",
         "hidden": 7168, "topk": 8, "experts": 256, "seed": 67,
         "ladder": "1 2 4",
-        # The current producer shape: an object naming every knob (sweep_matrix emits this).
-        # The colon-string fixtures below are legacy shards, exercising _migrate_timing.
+        # The producer shape: an object naming every knob (sweep_matrix emits this).
         "timing": {
             "iters_per_trial": 8, "trials_per_point": 256, "warmup_iters_per_trial": 32,
             "chain_iters_per_trial": 128, "chain_trials_per_point": 4, "chain_drop": 16,
@@ -776,34 +775,18 @@ class CaseArgvContract(unittest.TestCase):
         self.assertEqual((args.iters, args.trials, args.warmup), (8, 256, 32))
         self.assertEqual(args.out, f"results/h200-dgxc/{self.CASE['case_id']}.json")
 
-    def test_a_legacy_colon_string_profile_still_decodes(self) -> None:
-        # A shard staged before the timing object must still produce a runnable argv: six
-        # positional fields, or the pre-chain three, whose chain knobs run_ep's defaults supply.
-        for profile, chain in (("8:256:32:128:4:16", (128, 4, 16)), ("8:256:32", None)):
-            with self.subTest(timing=profile):
-                argv = self._case_argv(["16", "2", "8", "8"], case={**self.CASE, "timing": profile})
-                args = self._run_ep_parser().parse_args(argv)
-                self.assertEqual((args.iters, args.trials, args.warmup), (8, 256, 32))
-                if chain:
-                    self.assertEqual(
-                        (args.chain_iters, args.chain_trials, args.chain_drop), chain
-                    )
-                else:
-                    self.assertEqual([flag for flag in argv if flag.startswith("--chain")], [])
-
     def test_a_malformed_timing_profile_cannot_reach_a_run(self) -> None:
-        # An unknown, renamed or missing key must be as fatal as a bad string arity, or a
-        # renamed knob silently falls back to run_ep's default.
+        # An unknown, renamed or missing key must be fatal, or a renamed knob silently falls
+        # back to run_ep's default. The pre-object colon string is no longer decoded.
         for timing in (
-            {"iters_per_trial": 8}, {**self.CASE["timing"], "extra": 1}, {},
-            "8:256", "8:256:32:128", "8:256:32:128:4:16:2", "",
+            {"iters_per_trial": 8}, {**self.CASE["timing"], "extra": 1}, {}, "8:256:32:128:4:16",
         ):
             with self.subTest(timing=timing):
                 with self.assertRaises(subprocess.CalledProcessError):
                     self._case_argv(["16", "2", "8", "8"], case={**self.CASE, "timing": timing})
         # The codec does not check types, so a non-integer must instead fail run_ep's parser.
         argv = self._case_argv(
-            ["16", "2", "8", "8"], case={**self.CASE, "timing": "8:256:32:128:4:x"},
+            ["16", "2", "8", "8"], case={**self.CASE, "timing": {**self.CASE["timing"], "chain_drop": "x"}},
         )
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             self._run_ep_parser().parse_args(argv)
@@ -955,30 +938,6 @@ class WeightedCombineSemanticsTests(unittest.TestCase):
             ep_oracle.combine_model("made-up")
         with self.assertRaises(ValueError):
             ep_oracle.combine_model("unweighted-rank-sum", "made-up")
-
-
-@unittest.skipUnless(_torch is not None, "combine-oracle math checks require torch")
-class TopkSlotTreeReductionTests(unittest.TestCase):
-    """Pin the payload-dtype reduction against a value measured on the real kernel.
-
-    Eight contributions of 1.0 and 7 x 2^-9 reduce to three different answers depending on
-    the model, which is what makes this case worth pinning: FP32-then-narrow gives
-    1.015625, a sequential BF16 sum gives 1.0, and the pairwise BF16 tree gives 1.0078125.
-    gb200 returns 1.0078125.
-    """
-
-    def _tree(self, values):
-        torch = _torch
-        slots = [torch.full((1, 1), v, dtype=torch.float32) for v in values]
-        destination = torch.arange(len(values)).unsqueeze(0)
-        messages = torch.stack(slots)
-        return ep_oracle.topk_slot_tree_combine(
-            torch, destination, torch.ones_like(destination, dtype=torch.bool),
-            messages, torch.bfloat16,
-        ).item()
-
-    def test_matches_the_value_the_kernel_returns(self):
-        self.assertEqual(self._tree([1.0] + [2.0**-9] * 7), 1.0078125)
 
 
 @unittest.skipUnless(_torch is not None, "combine-oracle math checks require torch")

@@ -39,6 +39,10 @@ runs the decode and prefill ladders; `low-latency` runs decode, plus prefill for
 Every backend runs a BF16 dispatch control and an FP8 dispatch; nccl-ep's FP8 is its internal
 DS_FP8E3M4 recipe, low-latency prefill and decode. Combine is always BF16. Coverage is uniform routing only.
 
+Eleven of the registered EP cases are unmeasured in the published run: MI355X MoRI EP16, H100 EP16
+prefill for DeepEP V2 and NCCL EP low-latency, and MI325X UCCL-EP low-latency EP16 FP8.
+[docs/methodology.md](docs/methodology.md#unmeasured-cases) gives each reason.
+
 `results/cases.json` is the committed copy of the full matrix: 294 requested cases, of which 254 are
 runnable EP cases, 18 are swap-blocks cases (two per pool), 12 are kv-transfer cases (one per pool,
 backend and fabric) and 10 are unsupported EP cells (UCCL-EP EP16 on MI355X and FlashInfer EP16 on
@@ -54,7 +58,7 @@ contract, row identity and wheel pin are in [docs/nccl-ep.md](docs/nccl-ep.md).
 Dispatch the `CollectiveX Sweep` workflow, choosing a pool (or `all`) and the same filters `run.sh`
 takes. Each shard becomes one job in the InferenceX CI priority queue, scored through
 `inferencex-e2e/configs/ci-priority.yaml`, where `collectivex` ranks above every engine
-benchmark. The job lands on the pool's runner (`runner_label` and `runner_partition` in
+benchmark except a model that file boosts further (currently `kimik3.1`). The job lands on the pool's runner (`runner_label` and `runner_partition` in
 `configs/platform_config.json`), runs `run.sh --shard` and uploads `results/<sku>/` as an artifact
 to publish as below. Hand runs bypass the queue and wait for whatever CI holds the nodes.
 
@@ -169,7 +173,7 @@ needs its own `squash_dir` or `storage_roots` as well: each shard creates its ba
 Every non-MNNVL EP16 placement requires `rdma_devices`, the operator-approved scale-out devices.
 The other network fields are `socket_ifname`, `ib_gid_index`, `rdma_service_level`,
 `rdma_traffic_class`, `rail_isolated`, `rdma_fabric`, `rdma_relaxed_ordering`, `rdma_gbs`,
-`uccl_rdma_recv_tokens` and `single_node_rdma_devices`. Without `socket_ifname` each node's default-route interface carries the
+`uccl_rdma_recv_tokens`, `host_verbs_provider`, `deepep_efa_fork` and `single_node_rdma_devices`. Without `socket_ifname` each node's default-route interface carries the
 cross-node sockets (h100-dgxc, h200-dgxc, b300). HCAs are never guessed, and every scale-out node must
 show its socket interface up and an active port on each listed device before backend setup; the
 methodology's [Execution Isolation](docs/methodology.md#execution-isolation) says what each field
