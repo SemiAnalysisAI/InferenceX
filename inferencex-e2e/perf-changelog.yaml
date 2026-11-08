@@ -12467,7 +12467,9 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Add Qwen3.5-397B-A17B MXFP4 (amd/Qwen3.5-397B-A17B-MXFP4) AgentX on MI355X via ATOM on rocm/atom-dev:nightly_202610181506, reusing the FP8 standalone recipe (ROCm/ATOM PR 2592) on the MXFP4 checkpoint."
-    - "TP4 with MTP at 3 draft tokens; throughput runs take the golden AL from golden_al_distribution/qwen3.5_mtp.yaml (3.39), evaluations use real acceptance."
+    - "Add Qwen3.5-397B-A17B MXFP4 with FP8 attention (amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2, Hugging Face revision 410f915f) AgentX on MI355X via ATOM on rocm/atom-dev:nightly_202611071509 (ATOM 0.1.10.dev45+g6d22f7dbf, built from ROCm/ATOM main; digest sha256:39ac8572890358741585bf5281f7ce49117d99f9b8bc84a09b70749cf1df893e, also the atomesh router container_image), reusing the FP8 standalone recipe (ROCm/ATOM PR 2592) on this checkpoint."
+    - "The checkpoint is served as shipped, with no online_quant_config. It stores the Gated DeltaNet in_proj_qkv/in_proj_z/in_proj_a/in_proj_b/out_proj of the 45 linear-attention layers and the q/k/v/o_proj of the 15 full-attention layers in PTPC FP8 (static per-channel weights, dynamic per-token activations), and the routed and shared experts in MXFP4. The MoE routers, shared_expert_gate, conv1d, embeddings, lm_head and the whole MTP layer (mtp.*) stay BF16, so the MTP draft runs in BF16 as shipped. KV cache stays FP8."
+    - "No integer all-reduce: the recipe does not set AITER_QUICK_REDUCE_QUANTIZATION and the image sets no quick-reduce variable. The pinned AITER (f7b65674b) defaults it to NONE, which disables quick reduce, and ATOM forces INT4 only for llama model types, while this checkpoint's text model type is qwen3_5_moe_text."
+    - "TP4 with MTP at 3 draft tokens; throughput runs take the golden AL from golden_al_distribution/qwen3.5-397b-a17b-nvfp4__mtp__native__default-default.yaml (3.39), evaluations use real acceptance."
     - "Eleven points: CONC 1, 4, 8, 16, 24, 32 and 40 on the GPU prefix cache, and CONC 48, 56, 64 and 80 with the LMCache DRAM tier (0.5.6.dev139+gf22dec28) at 253 GiB of KV plus 110 GiB of GDN state per rank, at dram-utilization 1.0 (TOTAL_CPU_DRAM_GB 1499)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4310

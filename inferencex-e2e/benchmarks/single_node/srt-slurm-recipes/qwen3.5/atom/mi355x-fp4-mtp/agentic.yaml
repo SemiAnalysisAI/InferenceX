@@ -6,7 +6,7 @@ base:
     gpus_per_node: 8
   frontend:
     type: atomesh
-    container_image: rocm/atom-dev@sha256:1bb1909ada9e3d178e315a3f89d041c05c7e90e7cc32de8d507ff5ab4cd4702c
+    container_image: rocm/atom-dev@sha256:39ac8572890358741585bf5281f7ce49117d99f9b8bc84a09b70749cf1df893e
     enable_multiple_frontends: false
   observability:
     enabled: false
@@ -18,7 +18,7 @@ base:
       nodes: 1
       workers: 1
       args:
-        served-model-name: amd/Qwen3.5-397B-A17B-MXFP4
+        served-model-name: amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2
         # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
         timeout-keep-alive: 1800
         kv_cache_dtype: fp8
@@ -33,7 +33,6 @@ base:
         PYTHONNOUSERSITE: '1'
         PYTHONHASHSEED: '0'
         AITER_LOG_LEVEL: WARNING
-        AITER_QUICK_REDUCE_QUANTIZATION: INT4
         ATOM_ENABLE_QK_NORM_ROPE_CACHE_QUANT_FUSION: '1'
         ATOM_PA_FLYDSL: '1'
         ATOM_GDN_STATE_MIDSTEP: '1'
