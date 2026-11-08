@@ -228,6 +228,8 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as exc:
         parser.error(str(exc))
 
+    if os.environ.get("RANK", "0") != "0":
+        return 0  # probe branch: second rank only holds the second GPU
     import torch
     try:  # one-off probe branch: Hopper vs Blackwell short-kernel cost
         import sys

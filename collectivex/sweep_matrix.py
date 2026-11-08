@@ -186,8 +186,8 @@ def _swap_shard(sku: str, profile_name: str) -> tuple[list[dict[str, Any]], dict
             "seed": SWAP_SWEEP["seed"],
             "device": SWAP_SWEEP["device"],
             "nodes": 1,
-            "gpus_per_node": 1,
-            "scale_up_domain": 1,
+            "gpus_per_node": 2,
+            "scale_up_domain": 2,
         }
         case["case_id"] = ep_harness.slug_id((sku, "swap-blocks", profile_name, layout))
         cases.append(case)
