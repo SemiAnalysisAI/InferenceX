@@ -12478,4 +12478,4 @@
   description:
     - "Add H200 GLM-5.3-Flash FP8 TP8/EP8 8192-input/1024-output points at concurrency 1, 2, 4, 8, 16, 32, 64 and 128 without speculative decoding or HiCache."
     - "Use the staged H200 checkpoint for fixed-sequence jobs, preserve existing configurations and run fresh accuracy evals without speculation."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4927
