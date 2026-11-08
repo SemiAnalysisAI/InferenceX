@@ -201,8 +201,9 @@ def _swap_shard(sku: str, profile_name: str) -> tuple[list[dict[str, Any]], dict
 
 
 def _kv_shards(sku: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """The kv-transfer shards one pool runs: one 2-node x 1-GPU shard per (backend, fabric) in
-    its registry ``kv_backends``; ops come per backend from kv_sweep.json (Mooncake only pushes)."""
+    """The kv-transfer shards one pool runs: one two-node shard per (backend, fabric) in its
+    registry ``kv_backends``, every GPU of one node paired with its peer on the other (the
+    prefill and decode engines' TP ranks); ops come per backend from kv_sweep.json."""
     platform = PLATFORMS[sku]
     timing = KV_SWEEP["timing"]
     minutes = KV_SWEEP["allocation_minutes"]
@@ -219,7 +220,7 @@ def _kv_shards(sku: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
                         "routing": "paged",
                         "precision": precision,
                         "phase": "xfer",
-                        "ep": 2,
+                        "ep": 2 * platform["gpus_per_node"],
                         "mode": fabric,
                         "isl_ladder": " ".join(map(str, KV_SWEEP["isl_ladder"])),
                         "batch_sizes": " ".join(map(str, KV_SWEEP["batch_sizes"])),
@@ -231,7 +232,7 @@ def _kv_shards(sku: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
                         "reps": timing["reps_per_trial"],
                         "trials": timing["trials_per_point"],
                         "nodes": 2,
-                        "gpus_per_node": 1,
+                        "gpus_per_node": platform["gpus_per_node"],
                         "scale_up_domain": platform["scale_up_domain"],
                         "scale_up_transport": platform["scale_up_transport"],
                         "scale_out_transport": "rdma" if fabric == "rdma" else None,
@@ -242,7 +243,8 @@ def _kv_shards(sku: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
             requested += _runnable(sku, cases)
             shards.append(_shard(
                 sku, f"{sku}-kv-{backend}-{fabric}", backend, cases,
-                suite=KV_SWEEP["suite"], fabric=fabric, allocation_minutes=minutes))
+                suite=KV_SWEEP["suite"], fabric=fabric, allocation_minutes=minutes,
+                image=KV_SWEEP["image"]))
     return requested, shards
 
 

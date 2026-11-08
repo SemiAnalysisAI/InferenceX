@@ -1,7 +1,7 @@
 {
   "suite": "kv-transfer",
   "workloads": {
-    "kv-dsv4": [
+    "kv-k31": [
       "fp8"
     ]
   },
@@ -9,9 +9,8 @@
     2048,
     8192,
     32768,
-    65536,
     131072,
-    524288
+    262144
   ],
   "batch_sizes": [
     1,
@@ -26,9 +25,6 @@
     "nixl": [
       "pull",
       "push"
-    ],
-    "mooncake": [
-      "push"
     ]
   },
   "timing": {
@@ -38,5 +34,6 @@
   },
   "pool_slack": 2.0,
   "allocation_minutes": 120,
-  "seed": 67
+  "seed": 67,
+  "image": "vllm/vllm-openai:kimi-k31"
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""NIXL adapter, driven the way vLLM 0.32.0's NixlConnector drives it."""
+"""NIXL adapter, driven the way vLLM's NixlConnector drives it."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import kv_workload
 class NIXLBackend:
     maturity = "production"
 
-    def __init__(self, args, role, device):
+    def __init__(self, args, role, device, rank: int = 0):
         # vLLM sets this before nixl (and so UCX) loads (nixl_utils.py).
         os.environ.setdefault("UCX_RCACHE_MAX_UNRELEASED", "1024")
         from nixl._api import nixl_agent, nixl_agent_config
@@ -29,14 +29,17 @@ class NIXLBackend:
             self.library_config["num_threads"] = 4
         else:
             config = nixl_agent_config(backends=[plugin], capture_telemetry=True)
-        self._agent = nixl_agent(role, config)
+        self._agent = nixl_agent(f"{role}-{rank}", config)
         self._handles = []
         self._pool = self._bulk = self._peer = None
         self._local_rows = self._remote_rows = None
-        self._row_bytes = 0
+        self._row_bytes = self._rows = 0
+        preset = args.workload_name.removeprefix("kv-")
+        self._kinds = kv_workload.desc_kinds({"preset": preset, "row_bytes": 0})
 
     def register(self, pool, bulk, row_bytes: int) -> None:
         self._pool, self._bulk, self._row_bytes = pool, bulk, row_bytes
+        self._rows = pool.nbytes // row_bytes
         reg = self._agent.get_reg_descs([(pool.ptr, pool.nbytes, pool.device, "pool"),
                                          (bulk.ptr, bulk.nbytes, bulk.device, "bulk")],
                                         mem_type="cuda")
@@ -47,12 +50,16 @@ class NIXLBackend:
             mem_type="cuda")
 
     def _row_descs(self, base: int, nbytes: int, dev: int) -> np.ndarray:
+        """The prepped list vLLM builds once per side: every descriptor kind of every row,
+        kind-major (id = kind x rows + row). A whole-row preset has the one kind."""
         rows = nbytes // self._row_bytes
-        out = np.empty((rows, 3), dtype=np.uint64)
-        out[:, 0] = np.uint64(base) + np.arange(rows, dtype=np.uint64) * np.uint64(self._row_bytes)
-        out[:, 1] = self._row_bytes
-        out[:, 2] = dev
-        return out
+        starts = np.uint64(base) + np.arange(rows, dtype=np.uint64) * np.uint64(self._row_bytes)
+        out = np.empty((len(self._kinds), rows, 3), dtype=np.uint64)
+        for index, (offset, size) in enumerate(self._kinds):
+            out[index, :, 0] = starts + np.uint64(offset)
+            out[index, :, 1] = size or self._row_bytes
+        out[:, :, 2] = dev
+        return out.reshape(-1, 3)
 
     def publish(self) -> dict:
         return {
@@ -103,8 +110,9 @@ class NIXLBackend:
                 for local, remote, request_id in requests]
 
     def make_paged(self, cfg, op, local_rows, remote_rows, request_id: int = 0):
-        local = np.asarray(local_rows, dtype=np.int32)
-        remote = np.asarray(remote_rows, dtype=np.int32)
+        kinds, positions = kv_workload.request_descs(cfg)
+        local = (kinds * self._rows + np.asarray(local_rows)[positions]).astype(np.int32)
+        remote = (kinds * self._rows + np.asarray(remote_rows)[positions]).astype(np.int32)
         notif = f"{request_id}:2".encode()  # vLLM: f"{remote_req_id}:{world_size}"
         agent, xfer = self._agent, "READ" if op == "pull" else "WRITE"
         return self._post_wait(lambda: agent.make_prepped_xfer(

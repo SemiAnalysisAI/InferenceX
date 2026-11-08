@@ -152,7 +152,7 @@ def _kv_argv(case: dict, version: object, runner: str) -> list[str]:
     return _flag_pairs(
         case,
         "backend workload_name precision fabric isl_ladder batch_sizes ops "
-        "warmup reps trials pool_slack max_burst_tokens seed case_id suite gpus_per_node "
+        "warmup reps trials pool_slack max_burst_tokens seed case_id suite ep gpus_per_node "
         "scale_up_domain scale_up_transport topology_class",
         workload_name="workload", fabric="mode",
     ) + ["--runner", runner, "--version", str(version)]

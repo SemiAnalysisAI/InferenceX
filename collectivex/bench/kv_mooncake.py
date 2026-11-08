@@ -29,7 +29,7 @@ def iface_ipv4(iface: str) -> str:
 class MooncakeBackend:
     maturity = "candidate"
 
-    def __init__(self, args, role, device):
+    def __init__(self, args, role, device, rank: int = 0):
         # Inside one NVLink domain the NVLink-IPC transport claims cross-node segments
         # and then fails the address import; this row measures the rdma lane. vLLM sets
         # no MC_* variable; this one only keeps the row runnable.
@@ -48,7 +48,7 @@ class MooncakeBackend:
             raise RuntimeError("mooncake needs --socket-ifname for its P2P handshake address")
         self._engine = TransferEngine()
         self._ip = iface_ipv4(args.socket_ifname)
-        local = f"{self._ip}:{args.kv_mc_port + (0 if role == 'target' else 1)}"
+        local = f"{self._ip}:{args.kv_mc_port + rank}"
         # The validated HCAs the row's network label describes (and NIXL's UCX runs on).
         # EFA keeps the engine's own choice, the configuration that ran on b300.
         devices = "" if protocol == "efa" else ",".join(

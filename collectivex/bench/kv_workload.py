@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""KV-transfer workload: vLLM 0.32.0's DeepSeek-V4-Pro block layout, tables and verification."""
+"""KV-transfer workloads: the block layouts vLLM registers for Kimi-K3.1-Pro (the served preset)
+and DeepSeek-V4-Pro, the descriptors its NixlConnector posts for one request, tables and
+verification."""
 
 from __future__ import annotations
 
@@ -49,6 +51,68 @@ PRESETS = {
 }
 DEFAULT_TABLE_SETS = 4
 
+# Kimi-K3.1-Pro on one rank of a TP16 engine, as the vllm/vllm-openai:kimi-k31 image (vLLM
+# 0.1.dev24216) lays it out with kv-cache-dtype fp8, an mxfp4 indexer, float32 KDA state and the
+# DSpark draft: 1024-token blocks, one allocation of 18,800,640-byte rows with every cache group
+# overlaid from row byte 0. A GB200 production run logged the same shape (88 regions,
+# block lengths {425472, 589824, 69632}, KDA state (32256, 393216)); docs/kv-transfer.md.
+K31_INDEXER = 69_632          # 24 DSA indexers: (128/2 + 128/32) B x 1024 tokens
+K31_MLA = 589_824             # 24 MLA layers and 5 draft layers: (512 + 64) B x 1024 tokens
+K31_KDA = 425_472             # one KDA layer's state on one of 16 ranks
+# NIXL reads a KDA state as its three conv projections and the recurrent state.
+K31_KDA_PARTS = ((0, 10_752), (10_752, 10_752), (21_504, 10_752), (32_256, 393_216))
+K31_ATTENTION = tuple(
+    [(k * K31_INDEXER, K31_INDEXER) for k in range(24)]
+    + [(24 * K31_INDEXER + m * K31_MLA, K31_MLA) for m in range(29)])
+K31_KDA_SLOTS = 35            # 69 KDA layers in two overlaid groups of 35 and 34
+PRESETS["k31"] = dict(
+    model_class="kimi-k3.1-pro",
+    precisions=("fp8",),
+    model_layers=93,
+    block_tokens=1024,
+    vllm_version="0.1.dev24216 (vllm/vllm-openai:kimi-k31)",
+    tp_size=16,
+    row_bytes=18_800_640,     # the attention group's 18,776,064 B, padded to its stride alignment
+    # What vLLM registers per block: its 88 regions, then each KDA region's four parts.
+    kinds=(tuple((j * K31_KDA, K31_KDA) for j in range(K31_KDA_SLOTS)) + K31_ATTENTION
+           + tuple((j * K31_KDA + off, size) for j in range(K31_KDA_SLOTS)
+                   for off, size in K31_KDA_PARTS)),
+    # A request moves every prompt block's attention pages and one running-state block per KDA
+    # group. kinds index into the tuple above.
+    groups=(
+        dict(name="attention", state=False,
+             kinds=tuple(range(K31_KDA_SLOTS, K31_KDA_SLOTS + len(K31_ATTENTION)))),
+        dict(name="kda-a", state=True, kinds=tuple(range(88, 88 + 4 * 35))),
+        dict(name="kda-b", state=True, kinds=tuple(range(88, 88 + 4 * 34))),
+    ),
+)
+
+
+def _is_regions(preset: str) -> bool:
+    """A preset whose connector posts per-layer regions (K3.1), not whole rows (DSV4)."""
+    return "kinds" in PRESETS[preset]
+
+
+def desc_kinds(cfg: dict) -> tuple[tuple[int, int], ...]:
+    """(row offset, bytes) of every descriptor kind the connector preps for each pool row."""
+    shape = PRESETS[cfg["preset"]]
+    return shape["kinds"] if _is_regions(cfg["preset"]) else ((0, cfg["row_bytes"]),)
+
+
+def request_descs(cfg: dict) -> tuple[np.ndarray, np.ndarray]:
+    """(kind index, position in the request's row list) of each descriptor one request posts,
+    in posting order."""
+    if not _is_regions(cfg["preset"]):
+        return np.zeros(cfg["descs"], dtype=np.int64), np.arange(cfg["descs"], dtype=np.int64)
+    kinds, rows, first = [], [], 0
+    for group, plan in zip(PRESETS[cfg["preset"]]["groups"], cfg["groups"]):
+        members = np.asarray(group["kinds"], dtype=np.int64)
+        for row in range(first, first + plan["blocks"]):
+            kinds.append(members)
+            rows.append(np.full(len(members), row, dtype=np.int64))
+        first += plan["blocks"]
+    return np.concatenate(kinds), np.concatenate(rows)
+
 
 def view_bytes(cache: str) -> int:
     """Bytes one layer's view spans in each block: its states without the page's padding."""
@@ -82,6 +146,8 @@ def mooncake_regions(preset: str) -> tuple[tuple[tuple[int, ...], int, int | Non
     it moves, row offset, bytes per id; None = the whole row): layer views at an
     already-registered (offset, length) fold into that region, consecutive views of
     one group set merge, and a run from row byte 0 becomes the whole row."""
+    if _is_regions(preset):
+        raise ValueError(f"no vLLM MooncakeConnector plan is modelled for {preset}")
     groups = PRESETS[preset]["groups"]
     row = max(group_block_bytes(g) for g in groups)
     regions, seen = [], {}
@@ -134,11 +200,15 @@ def mooncake_entries(cfg: dict, local_rows, remote_rows) -> tuple[np.ndarray, ..
 
 
 def nixl_entries(cfg: dict, local_rows, remote_rows) -> tuple[np.ndarray, ...]:
-    """(local offsets, remote offsets, sizes) as vLLM 0.32.0's NixlConnector posts
-    one request: one whole-row descriptor per block id."""
-    row = np.uint64(cfg["row_bytes"])
-    return (np.asarray(local_rows, dtype=np.uint64) * row,
-            np.asarray(remote_rows, dtype=np.uint64) * row, np.full(cfg["descs"], row))
+    """(local offsets, remote offsets, sizes) as vLLM's NixlConnector posts one request:
+    for DSV4 one whole-row descriptor per block id, for K3.1 each block's regions."""
+    table = np.asarray(desc_kinds(cfg), dtype=np.int64)
+    kinds, rows = request_descs(cfg)
+    row = cfg["row_bytes"]
+    offsets, sizes = table[kinds, 0], table[kinds, 1]
+    local = np.asarray(local_rows, dtype=np.int64)[rows] * row + offsets
+    remote = np.asarray(remote_rows, dtype=np.int64)[rows] * row + offsets
+    return local.astype(np.uint64), remote.astype(np.uint64), sizes.astype(np.uint64)
 
 
 def plan_config(preset: str, precision: str, isl: int, pool_slack: float = 2.0,
@@ -150,12 +220,20 @@ def plan_config(preset: str, precision: str, isl: int, pool_slack: float = 2.0,
     shape = PRESETS[preset]
     if precision not in shape["precisions"]:
         raise ValueError(f"{preset} runs {shape['precisions']}, not {precision}")
-    row_bytes = max(group_block_bytes(g) for g in shape["groups"])
-    groups = [dict(name=g["name"], blocks=group_blocks(g, isl)) for g in shape["groups"]]
+    if _is_regions(preset):
+        # The decode side loads isl - 1 tokens (vLLM recomputes the last one); a state group
+        # moves its one running-state block.
+        row_bytes = shape["row_bytes"]
+        groups = [dict(name=g["name"],
+                       blocks=1 if g["state"] else max(1, math.ceil((isl - 1) / shape["block_tokens"])))
+                  for g in shape["groups"]]
+    else:
+        row_bytes = max(group_block_bytes(g) for g in shape["groups"])
+        groups = [dict(name=g["name"], blocks=group_blocks(g, isl)) for g in shape["groups"]]
     descs = sum(g["blocks"] for g in groups)
     per_request = max(pool_slack, batch_max * 1.25)
     pool_rows = int(descs * table_sets * per_request) + 8
-    return dict(
+    cfg = dict(
         preset=preset,
         isl=isl,
         page_tokens=shape["block_tokens"],
@@ -169,10 +247,14 @@ def plan_config(preset: str, precision: str, isl: int, pool_slack: float = 2.0,
         pool_rows=pool_rows,
         pool_bytes=pool_rows * row_bytes,
     )
+    if _is_regions(preset):  # the request's KV is the regions it moves, not whole rows
+        sizes = np.asarray(desc_kinds(cfg), dtype=np.int64)[request_descs(cfg)[0], 1]
+        cfg["req_bytes"] = int(sizes.sum())
+    return cfg
 
 
 def block_table(cfg: dict, seed: int, request: int = 0, table_set: int = 0) -> np.ndarray:
-    """One request's row ids in group order (deterministic, seed-keyed): a slice
+    """One request's row ids (``descs`` of them) in group order (deterministic, seed-keyed): a slice
     of one random permutation of the pool's rows. Every (table set, request)
     slices a disjoint range, as a real allocator's live requests never alias
     blocks."""

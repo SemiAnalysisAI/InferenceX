@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""CollectiveX KV-cache transfer entrypoint: rank 0 is the target, rank 1 the timed initiator.
+"""CollectiveX KV-cache transfer entrypoint.
 
-Every trial's last burst lands on a destination wiped to a sentinel, so the verify
-after it proves that timed burst moved every entry (docs/kv-transfer.md).
+The first half of the ranks are targets (the prefill engine's TP ranks) and the second half the
+timed initiators (the decode engine's): initiator i transfers with target i, and every pair
+posts its part of a request at once, as vLLM's TP workers do. Every trial's last burst lands on a
+destination wiped to a sentinel, so the verify after it proves that timed burst moved every
+entry (docs/kv-transfer.md).
 """
 
 from __future__ import annotations
@@ -50,6 +53,8 @@ def add_kv_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--suite", default="kv-transfer")
     ap.add_argument("--version", type=int, default=1)
     ap.add_argument("--out", default="")
+    ap.add_argument("--ep", type=int, default=2,
+                    help="ranks in the case: half targets, half initiators")
     ap.add_argument("--gpus-per-node", type=int, default=8)
     ap.add_argument("--scale-up-domain", type=int, default=8)
     ap.add_argument("--scale-up-transport", default="")
@@ -71,8 +76,22 @@ def export_ucx_selectors(environ=os.environ) -> None:
         environ["UCX_IB_GID_INDEX"] = str(gid)
 
 
-def exchange_verdict(dist, role, verify_side, verify, error: str = ""):
-    """Every rank returns one verdict: a rank's own error first, else the verifying
+def link_gbps(devices: str, root: str = "/sys/class/infiniband") -> list[float]:
+    """Each selected HCA port's negotiated rate in Gb/s (sysfs ``rate``, e.g. "400 Gb/sec
+    (4X NDR)"); empty when any is unreadable, so a row never claims a partial line rate."""
+    rates = []
+    for dev in filter(None, devices.split(",")):
+        name, _, port = dev.partition(":")
+        try:
+            with open(os.path.join(root, name, "ports", port or "1", "rate")) as handle:
+                rates.append(float(handle.read().split()[0]))
+        except (OSError, ValueError, IndexError):
+            return []
+    return rates
+
+
+def exchange_verdict(dist, role, verify_side, verify, error: str = "", world_size: int = 2):
+    """Every rank returns one verdict: a rank's own error first, else a verifying
     rank's check of its destination pool (a raising check fails the row)."""
     verdict = {"passed": False, "detail": error} if error else None
     if verdict is None and role == verify_side:
@@ -81,32 +100,50 @@ def exchange_verdict(dist, role, verify_side, verify, error: str = ""):
         except Exception as exc:  # noqa: BLE001 - the row fails; both ranks must still agree
             passed, detail = False, f"verify raised {exc!r}"
         verdict = {"passed": passed, "detail": detail}
-    gathered = [None, None]
+    gathered = [None] * world_size
     dist.all_gather_object(gathered, verdict)
     failed = [v for v in gathered if v is not None and not v["passed"]]
-    return failed[0] if failed else gathered[0 if verify_side == "target" else 1]
+    return failed[0] if failed else next(v for v in gathered if v is not None)
 
 
-def time_bursts(build, warmup: int, reps: int, settle,
-                rep0: int = 0) -> tuple[list[float], list[float]]:
+def time_bursts(build, warmup: int, reps: int, settle, rep0: int = 0,
+                gate=None) -> tuple[list[float], list[float]]:
     """(burst_ms, request_ms), warmups dropped. ``build(rep)`` runs untimed; a burst
     posts every request, then drains the waits in posting order, so each request's
-    completion mark is an upper bound and the burst is its last mark."""
+    completion mark is an upper bound and the burst is its last mark. ``gate`` (a
+    cross-rank barrier) releases every initiator's burst together; it is passed for
+    every rep even after a failure, so the ranks' barrier counts stay equal."""
     burst_ms: list[float] = []
     request_ms: list[float] = []
+    failure = None
     for rep in range(warmup + reps):
-        transfers = build(rep0 + rep)
-        start = time.perf_counter()
-        for post, _ in transfers:
-            post()
-        marks = []
-        for _, wait in transfers:
-            wait()
-            marks.append((time.perf_counter() - start) * 1e3)
-        settle()
+        transfers = None
+        if failure is None:
+            try:
+                transfers = build(rep0 + rep)
+            except Exception as exc:  # noqa: BLE001 - re-raised once the gates are passed
+                failure = exc
+        if gate is not None:
+            gate()
+        if failure is not None:
+            continue
+        try:
+            start = time.perf_counter()
+            for post, _ in transfers:
+                post()
+            marks = []
+            for _, wait in transfers:
+                wait()
+                marks.append((time.perf_counter() - start) * 1e3)
+            settle()
+        except Exception as exc:  # noqa: BLE001
+            failure = exc
+            continue
         if rep >= warmup:
             burst_ms.append(marks[-1])
             request_ms.extend(marks)
+    if failure is not None:
+        raise failure
     return burst_ms, request_ms
 
 
@@ -152,7 +189,7 @@ def kv_case(args) -> dict:
         "workload": args.workload_name,
         "mode": args.fabric,
         "phase": "xfer",
-        "ep": 2,
+        "ep": args.ep,
         "routing": "paged",
         "precision": args.precision,
     }
@@ -191,6 +228,11 @@ def main() -> int:
               f"{args.case_id} != {computed_case_id}", file=sys.stderr)
         return 2
     args.case_id = args.case_id or computed_case_id
+    if args.backend == "mooncake" and "kinds" in kv_workload.PRESETS.get(
+            args.workload_name.removeprefix("kv-"), {}):
+        print("ERROR: no vLLM MooncakeConnector plan is modelled for this workload",
+              file=sys.stderr)
+        return 2
     if args.backend == "mooncake" and args.ops.split() != ["push"]:
         print("ERROR: vLLM's MooncakeConnector only pushes; run mooncake with --ops push",
               file=sys.stderr)
@@ -211,13 +253,17 @@ def main() -> int:
 
     rank = int(os.environ.get("RANK", "0"))
     world_size = int(os.environ.get("WORLD_SIZE", "2"))
-    if world_size != 2:
-        print(f"ERROR: kv-transfer runs exactly 2 ranks, got {world_size}", file=sys.stderr)
+    if world_size < 2 or world_size % 2 or world_size != args.ep:
+        print(f"ERROR: kv-transfer case wants {args.ep} ranks (even), got {world_size}",
+              file=sys.stderr)
         return 2
+    pairs = world_size // 2
     local_rank = int(os.environ.get("LOCAL_RANK", "0"))
     torch.cuda.set_device(local_rank)
     device = torch.device(f"cuda:{local_rank}")
-    role = "target" if rank == 0 else "initiator"
+    role = "target" if rank < pairs else "initiator"
+    peer = rank + pairs if role == "target" else rank - pairs
+    lead = pairs  # the first initiator assembles the rows
     # A slow grid point can outlast gloo's 30-minute default while the target waits at
     # the next gather; the per-case hang guard (COLLX_RUN_TIMEOUT) ends a dead run, not gloo.
     dist.init_process_group("gloo", rank=rank, world_size=world_size,
@@ -258,13 +304,17 @@ def main() -> int:
         bulk.fill_pattern(salt=rank)
 
     repaint()
-    backend = Backend(args, role, device)
+    backend = Backend(args, role, device, rank)
     backend.register(pool, bulk, row_bytes)
-    payloads = [None, None]
+    payloads = [None] * world_size
     dist.all_gather_object(payloads, backend.publish())
-    backend.connect(payloads[1 - rank])
+    backend.connect(payloads[peer])
     dist.barrier()
-    if rank == 1:
+    # Per-rank share of the node's selected NICs, in GB/s (None off RDMA or unreadable).
+    rates = [] if args.fabric == "mnnvl" else link_gbps(os.environ.get("COLLX_RDMA_DEVICES", ""))
+    ranks_per_node = min(args.gpus_per_node, pairs)
+    line_rate = sum(rates) / 8 / ranks_per_node if rates else None
+    if rank == lead:
         print(f"[run_kv] backend={args.backend} workload={args.workload_name} "
               f"precision={args.precision} fabric={args.fabric} isls={isls} "
               f"batches={batches} pool={pool_bytes >> 20}MiB case={args.case_id}",
@@ -278,9 +328,11 @@ def main() -> int:
             print(f"[run_kv] {json.dumps(row)}", flush=True)
 
     def measure(build, cfg_row: dict, op: str, verify, wipe, table_sets: int):
-        """One grid point: per trial, warmup + reps-1 bursts, then the destination
-        owner (the initiator on pull, the target on push) wipes to SENTINEL, the
-        initiator times the last burst, and the owner verifies that burst's table set."""
+        """One grid point: per trial, warmup + reps-1 bursts, then each destination
+        owner (the initiators on pull, the targets on push) wipes to SENTINEL, the
+        initiators time the last burst, and the owners verify that burst's table set.
+        A barrier releases every pair's burst together, so the pairs share the node's
+        NICs as one request's TP ranks do."""
         verify_side = "initiator" if op == "pull" else "target"
         samples: list[float] = []
         request_samples: list[float] = []
@@ -293,9 +345,12 @@ def main() -> int:
         def timed(warmup, reps):
             nonlocal error
             if role != "initiator" or error:
+                for _ in range(warmup + reps):  # keep pace with the timing ranks' gates
+                    dist.barrier()
                 return
             try:
-                burst_ms, request_ms = time_bursts(build, warmup, reps, backend.release, rep)
+                burst_ms, request_ms = time_bursts(build, warmup, reps, backend.release, rep,
+                                                   gate=dist.barrier)
             except Exception as exc:  # noqa: BLE001 - reported through the verdict
                 error = f"transfer raised {exc!r}"
                 return
@@ -315,27 +370,39 @@ def main() -> int:
             rep += 1
             dist.barrier()  # the last burst completes before anyone inspects it
             verdict = exchange_verdict(dist, role, verify_side,
-                                       lambda: verify(final_set, seed), error)
+                                       lambda: verify(final_set, seed), error, world_size)
             if not verdict["passed"]:
                 break
         repaint()
-        dist.barrier()
-        if role != "initiator":
+        gathered = [None] * world_size
+        dist.all_gather_object(
+            gathered, (samples, request_samples) if role == "initiator" else None)
+        if rank != lead:
             return None
-        row = {**cfg_row, "op": op, "latency_ms": None, "request_ms": None,
-               "gbps_p50": None, "verify": verdict}
-        if not samples:  # the first burst failed; the verdict says why
-            return row
-        stats = kv_workload.pcts(samples)
+        row = {**cfg_row, "op": op, "pairs": pairs, "latency_ms": None, "rank_ms": None,
+               "request_ms": None, "gbps_p50": None, "gbps_rank_p50": None,
+               "line_rate_pct": None, "verify": verdict}
+        per_rank = [g[0] for g in gathered[pairs:]]
+        if not per_rank[0] or len({len(v) for v in per_rank}) != 1:
+            return row  # a burst failed somewhere; the verdict says why
+        # A request is ready once its last rank's transfer lands: burst i is the
+        # slowest pair's burst i. rank_ms pools every pair's own bursts.
+        stats = kv_workload.pcts([max(marks) for marks in zip(*per_rank)])
+        rank_stats = kv_workload.pcts([ms for marks in per_rank for ms in marks])
+        nbytes = cfg_row["req_bytes"] * cfg_row["batch"]
         row["latency_ms"] = {k: round(v, 3) for k, v in stats.items()}
-        row["gbps_p50"] = round(cfg_row["req_bytes"] * cfg_row["batch"] / stats["p50"] / 1e6, 2)
+        row["rank_ms"] = {k: round(v, 3) for k, v in rank_stats.items()}
+        row["gbps_p50"] = round(nbytes * pairs / stats["p50"] / 1e6, 2)
+        row["gbps_rank_p50"] = round(nbytes / rank_stats["p50"] / 1e6, 2)
+        if line_rate:
+            row["line_rate_pct"] = round(100 * nbytes / stats["p50"] / 1e6 / line_rate, 1)
         # Each request's host-observed completion within its burst (an upper bound, as
         # waits drain in posting order), where the library completes requests one by one.
-        if len(request_samples) == len(samples) * cfg_row["batch"]:
-            row["request_ms"] = {k: round(v, 3) for k, v in kv_workload.pcts(request_samples).items()}
+        requests = [ms for g in gathered[pairs:] for ms in g[1]]
+        if len(requests) == len(per_rank[0]) * pairs * cfg_row["batch"]:
+            row["request_ms"] = {k: round(v, 3) for k, v in kv_workload.pcts(requests).items()}
         return row
 
-    peer = 1 - rank
     for cfg, allowed in points:
         sets = cfg["table_sets"]
         seed_t = kv_workload.table_seed(cfg, "remote", args.seed)
@@ -393,9 +460,9 @@ def main() -> int:
 
     backend.teardown()
 
-    gathered: list = [None, None]
-    dist.all_gather_object(gathered, rows if rank == 1 else None)
-    rows = gathered[1] or []
+    gathered: list = [None] * world_size
+    dist.all_gather_object(gathered, rows if rank == lead else None)
+    rows = gathered[lead] or []
     all_ok = bool(rows) and all(r["verify"]["passed"] for r in rows)
 
     if rank == 0:
@@ -445,8 +512,11 @@ def main() -> int:
                 # ride the NVLink domain regardless.
                 "network": ("mnnvl" if args.fabric == "mnnvl"
                             else os.environ.get("COLLX_RDMA_LINK_LAYER") or None),
-                "nodes": 2,
-                "ranks_per_node": 1,
+                "nodes": 2 * -(-pairs // ranks_per_node),
+                "ranks_per_node": ranks_per_node,
+                "pairs": pairs,
+                "link_gbps": rates or None,
+                "line_rate_gbs_per_rank": round(line_rate, 2) if line_rate else None,
                 "scale_up_domain": args.scale_up_domain,
                 "scale_up_transport": args.scale_up_transport or None,
                 "topology_class": args.topology_class or None,
@@ -462,8 +532,8 @@ def main() -> int:
         print(f"[run_kv] status={doc['outcome']['status']} rows={len(rows)}"
               + (f" -> {args.out}" if args.out else ""), flush=True)
 
-    # all_ok is rank-invariant (both ranks hold rank 1's gathered rows); the
-    # barrier keeps a failing rank 1 from exiting before rank 0 writes --out.
+    # all_ok is rank-invariant (every rank holds the lead's gathered rows); the
+    # barrier keeps a failing rank from exiting before rank 0 writes --out.
     dist.barrier()
     return 0 if all_ok else 3
 
