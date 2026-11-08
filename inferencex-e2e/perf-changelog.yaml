@@ -12449,4 +12449,4 @@
     - "Add H200 GLM-5.3-Flash FP8 TP8/EP8 MTP throughput at 8192 input and 1024 output tokens, with concurrency 1 through 128."
     - "Opt into the committed golden acceptance curve for synthetic throughput; retain real verification for accuracy evals and disable HiCache and radix prefix caching."
     - "Use the existing staged H200 checkpoint for fixed-sequence launches as well as AgentX."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4914
