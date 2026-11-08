@@ -12449,5 +12449,5 @@
   description:
     - "Add B300 GLM-5.3-Flash FP8 AgentX TP8 concurrency 52 with KV offloading disabled and with HiCache enabled, plus TP4 HiCache concurrency 52 and 64."
     - "Preserve all existing points, the pinned image, measured MTP acceptance, and full AgentX workload; TP4 HiCache retains the tuned TP4 server settings and 32-request admission cap."
-    - "Limit the new TP4 HiCache host pools to half the TP8 memory fraction, matching their 4/8 share of node DRAM."
+    - "Set the new TP4 HiCache host-memory fraction to 0.50; retain the existing GPU-proportional DRAM reporting."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4912

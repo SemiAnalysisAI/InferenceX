@@ -103,8 +103,8 @@ override_tp4_dram:
       args:
         <<: *tp4_tuned_args
         enable-hierarchical-cache: true
-        # The exclusive job sees all host RAM; give TP4 only 4/8 of the TP8 pool budget.
-        hicache-host-memory-fraction: 0.38
+        # Cap the combined TP4 host pools at 50% of available host memory.
+        hicache-host-memory-fraction: 0.50
   benchmark:
     env:
       KV_OFFLOADING: dram
