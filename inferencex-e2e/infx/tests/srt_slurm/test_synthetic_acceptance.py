@@ -97,6 +97,43 @@ def apply_native(recipe: dict[str, Any], argv: list[str]) -> dict[str, Any]:
     return result
 
 
+def test_fixed_sequence_opt_in_selects_golden_and_eval_clears_it(
+    tmp_path: Path, golden_dir: Path
+) -> None:
+    recipe = {
+        "benchmark": {"env": {"SYNTHETIC_ACCEPTANCE": "golden"}},
+        "roles": {"agg": {"args": {
+            "speculative-algorithm": "EAGLE", "speculative-num-steps": 3,
+            "speculative-num-draft-tokens": 4, "speculative-eagle-topk": 1,
+        }}},
+    }
+    path = tmp_path / "fixed.yaml"
+    path.write_text(yaml.safe_dump(recipe))
+    environment = {**ENV, "IS_AGENTIC": "0", "RUN_EVAL": "true"}
+    [plan] = plan_commands(str(path), "sglang", [], environment, golden_dir=golden_dir)
+    assert plan.acceptance_length == 2.4
+    throughput = apply_native(recipe, plan.command)
+    assert throughput["roles"]["agg"]["env"] == {
+        "SGLANG_SIMULATE_ACC_LEN": "2.4",
+        "SGLANG_SIMULATE_ACC_METHOD": "match-expected",
+        "SGLANG_SIMULATE_ACC_TOKEN_MODE": "real-draft-token",
+    }
+    path.write_text(yaml.safe_dump(throughput))
+    [evaluation] = plan_commands(
+        str(path), "sglang", [], {**environment, "EVAL_ONLY": "true"},
+        golden_dir=tmp_path / "absent",
+    )
+    assert evaluation.acceptance_length is None
+    assert apply_native(throughput, evaluation.command)["roles"]["agg"]["env"] == {}
+
+
+@pytest.mark.parametrize("selection", ["3.6", "true", 3.6])
+def test_fixed_sequence_rejects_invalid_acceptance_selection(selection, golden_dir):
+    recipe = {"benchmark": {"env": {"SYNTHETIC_ACCEPTANCE": selection}}}
+    with pytest.raises(ValueError, match="SYNTHETIC_ACCEPTANCE must be 'golden'"):
+        build_overrides(recipe, "sglang", {**ENV, "IS_AGENTIC": "0"}, golden_dir=golden_dir)
+
+
 def test_tokenspeed_plan_uses_effective_mtp_depth_and_restores_real_sampling(
     tmp_path: Path, golden_dir: Path
 ) -> None:
@@ -1014,4 +1051,3 @@ def test_synthetic_throughput_drops_kimi_vllm_parsers(
         assert parsers.items() <= args.items()
     else:
         assert parsers.keys().isdisjoint(args)
-
