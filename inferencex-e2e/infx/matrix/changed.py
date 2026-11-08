@@ -14,7 +14,7 @@ import yaml
 from infx.config import MASTER_CONFIGS, RUNNER_CONFIG, git_repository_root
 
 from .fingerprint import recipe_fingerprint, row_fingerprint
-from .generate import generate_config_matrix
+from .generate import SCENARIO_TYPES, generate_config_matrix
 from .revision import NESTED_PROJECT, REPOSITORY_PATHS, SNAPSHOT_PATHS, Revision, snapshot
 from .validation import config_root, load_config_files, load_runner_file
 
@@ -43,14 +43,30 @@ def _points(rows: list[dict], root: Path) -> tuple[dict, list[str]]:
     return points, errors
 
 
+def config_points(key: str, master: dict, runners: dict, root: Path) -> tuple[dict, list[str]]:
+    """Every point of config ``key``, across the scenario types a changelog entry can select."""
+    rows = generate_config_matrix(
+        [key], master, runners, scenario_types=SCENARIO_TYPES, eval_mode="none", root=root
+    )
+    return _points(rows, root)
+
+
 def head_matrix(master: dict, runners: dict, root: Path) -> Matrix:
     """Generate the working tree's matrix for each config key, as points and fingerprint errors."""
-    return {
-        key: _points(
-            generate_config_matrix([key], master, runners, eval_mode="none", root=root), root
-        )
-        for key in master
-    }
+    return {key: config_points(key, master, runners, root) for key in master}
+
+
+def _base_video_points(revision: Revision, key: str, single: str) -> tuple[dict, list[str]]:
+    """The video points of config ``key`` at ``revision``, or its generator's failure as an error.
+
+    That generator exits when a video recipe cannot be bound, where head records the error per key.
+    """
+    flags = ["--no-evals", "--scenario-type", "video-generation"]
+    try:
+        rows = revision.generate([key], flags, [single])
+    except subprocess.CalledProcessError as error:
+        return {}, [error.stderr.strip().rsplit("\n", 1)[-1]]
+    return _points(rows, revision.root)
 
 
 def same_inputs(ref: str, revision: Revision, config_files: list[str], runner_config: str) -> bool:
@@ -120,10 +136,17 @@ def base_matrix(
                 singles[key].write_text(yaml.safe_dump({key: master[key]}, sort_keys=False))
             requests = [([key], ["--no-evals"], [str(singles[key])]) for key in keys]
             rows = revision.generate_each(requests, os.cpu_count() or 1)
-            return {
-                key: _points(generated, revision.root)
-                for key, generated in zip(keys, rows, strict=True)
-            }
+            generated: Matrix = {}
+            for key, key_rows in zip(keys, rows, strict=True):
+                points, errors = _points(key_rows, revision.root)
+                if "video-generation" in master[key].get("scenarios", {}):
+                    video_points, video_errors = _base_video_points(
+                        revision, key, str(singles[key])
+                    )
+                    points.update(video_points)
+                    errors.extend(video_errors)
+                generated[key] = (points, errors)
+            return generated
 
         reusable = set(unchanged(revision, master))
         matrix = generate([key for key in master if key not in reusable])

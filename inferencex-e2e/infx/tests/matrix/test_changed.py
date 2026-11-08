@@ -13,26 +13,23 @@ import yaml
 
 from infx.matrix import changed
 from infx.matrix.revision import Revision
-from infx.tests.srt_recipes import single_node_fragment, write_shared_blocks
+from infx.tests.srt_recipes import (
+    fixed_seq_entry,
+    single_node_fragment,
+    video_entry,
+    video_fragment,
+    write_shared_blocks,
+    write_video_specs,
+)
 
 ROOT = Path(__file__).resolve().parents[3]
 RECIPES = "benchmarks/single_node/srt-slurm-recipes/fixture"
 
 
-def entry(recipe: str, concurrencies: list[int]) -> dict:
-    return {
-        "image": "example/image:1", "model": "org/model", "model-prefix": "dsr1",
-        "precision": "fp8", "framework": "sglang", "runner": "cluster:fixture",
-        "multinode": False, "srt-recipe-dir": "fixture",
-        "scenarios": {"fixed-seq-len": [{"isl": 1024, "osl": 128, "search-space": [
-            {"tp": 4, "conc-list": concurrencies, "srt-recipe": recipe},
-        ]}]},
-    }  # fmt: skip
-
-
-def write(root: Path, master: dict, edited: dict) -> None:
-    (root / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(master))
-    (root / RECIPES / "edited.yaml").write_text(yaml.safe_dump(edited))
+def write(project: Path, master: dict, edited: dict, video: dict) -> None:
+    (project / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(master))
+    (project / RECIPES / "edited.yaml").write_text(yaml.safe_dump(edited))
+    (project / RECIPES / "video.yaml").write_text(yaml.safe_dump(video))
 
 
 def git(root: Path, *args: str) -> str:
@@ -41,18 +38,92 @@ def git(root: Path, *args: str) -> str:
     ).stdout
 
 
+def test_keys_with_changed_recipes_or_points_are_listed(tmp_path, monkeypatch, capsys):
+    project = tmp_path / "inferencex-e2e"
+    shutil.copytree(ROOT / "infx", project / "infx", ignore=shutil.ignore_patterns("__pycache__"))
+    (project / RECIPES).mkdir(parents=True)
+    write_shared_blocks(project)
+    write_video_specs(tmp_path)
+    (project / "configs/amd-master.yaml").write_text("{}\n")
+    (project / "configs/runners.yaml").write_text(yaml.safe_dump({
+        "labels": {"cluster:fixture": ["node-a"]},
+        "clusters": {"fixture": {"gpus-per-node": 8, "arch": "x86_64", "scheduler": "slurm",
+                                 "slurm": {"partition": "batch", "exclusive": True}}},
+    }))  # fmt: skip
+    (project / RECIPES / "stable.yaml").write_text(yaml.safe_dump(single_node_fragment(4)))
+    unbound = video_fragment()
+    del unbound["services"][0]["env"]["VIDEO_RUNTIME_REVISION"]
+    (project / RECIPES / "unbound.yaml").write_text(yaml.safe_dump(unbound))
+    write(project, {
+        "edited": fixed_seq_entry("edited.yaml", [2, 4]),
+        "grown": fixed_seq_entry("stable.yaml", [2]),
+        "same": fixed_seq_entry("stable.yaml", [8]),
+        "video": video_entry(),
+        "unbound": video_entry("unbound.yaml"),
+        "gone": fixed_seq_entry("stable.yaml", [2]),
+    }, single_node_fragment(4), video_fragment())  # fmt: skip
+    (tmp_path / ".gitignore").write_text("__pycache__/\n")
+    git(tmp_path, "init", "-q")
+    git(tmp_path, "config", "user.name", "Test")
+    git(tmp_path, "config", "user.email", "test@example.com")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-qm", "base")
+    git(tmp_path, "tag", "base")
+    write(project, {
+        "edited": fixed_seq_entry("edited.yaml", [2, 4]),
+        "grown": fixed_seq_entry("stable.yaml", [2, 4]),
+        "same": fixed_seq_entry("stable.yaml", [8]),
+        "video": video_entry(),
+        "unbound": video_entry("unbound.yaml"),
+    }, single_node_fragment(4, **{"max-running-requests": 16}), video_fragment(**{"max-running-requests": "7"}))  # fmt: skip
+    (project / RECIPES / "unbound.yaml").write_text(yaml.safe_dump(video_fragment()))
+    monkeypatch.chdir(project)
+
+    changed.main(["--base", "base", "--json"])
+    report = json.loads(capsys.readouterr().out)
+
+    assert report["config-keys"] == 6
+    [error] = report["errors"]
+    assert (error["config-key"], error["revision"]) == ("unbound", "base")
+    assert error["error"].endswith("video service requires a pinned VIDEO_RUNTIME_REVISION")
+    assert [
+        (change["config-key"], change["base-points"], change["head-points"],
+         [point["conc"] for point in change["added"]], [point["conc"] for point in change["removed"]])
+        for change in report["changed"]
+    ] == [
+        ("edited", 2, 2, [2, 4], [2, 4]), ("grown", 1, 2, [4], []), ("unbound", 0, 1, [1], []),
+        ("video", 1, 1, [1], [1]), ("gone", 1, 0, [], [2]),
+    ]  # fmt: skip
+    assert git(tmp_path, "status", "--porcelain").splitlines() == [
+        f" M inferencex-e2e/{RECIPES}/edited.yaml",
+        f" M inferencex-e2e/{RECIPES}/unbound.yaml",
+        f" M inferencex-e2e/{RECIPES}/video.yaml",
+        " M inferencex-e2e/configs/nvidia-master.yaml",
+    ]
+
+    changed.main(["--base", "base"])
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[-2] == "5 of 6 config keys changed since base."
+    assert lines[-1].startswith("warning: 1 rows of unbound have no fingerprint at base: ")
+
+
 BASE_MASTER = {
-    "edited": entry("edited.yaml", [2, 4]), "grown": entry("stable.yaml", [2]),
-    "same": entry("stable.yaml", [8]), "gone": entry("stable.yaml", [2]),
+    "edited": fixed_seq_entry("edited.yaml", [2, 4]), "grown": fixed_seq_entry("stable.yaml", [2]),
+    "same": fixed_seq_entry("stable.yaml", [8]), "gone": fixed_seq_entry("stable.yaml", [2]),
 }  # fmt: skip
 GROWN_MASTER = {
-    "edited": entry("edited.yaml", [2, 4]), "grown": entry("stable.yaml", [2, 4]),
-    "same": entry("stable.yaml", [8]),
+    "edited": fixed_seq_entry("edited.yaml", [2, 4]), "grown": fixed_seq_entry("stable.yaml", [2, 4]),
+    "same": fixed_seq_entry("stable.yaml", [8]),
 }  # fmt: skip
 
 
-def project(root: Path, master: dict = BASE_MASTER, **recipes: dict) -> None:
-    """A project holding the real generator, ``master`` and extra ``recipes``, tagged ``base``."""
+def write_fixed(root: Path, master: dict, edited: dict) -> None:
+    (root / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(master))
+    (root / RECIPES / "edited.yaml").write_text(yaml.safe_dump(edited))
+
+
+def fixed_project(root: Path, master: dict = BASE_MASTER, **recipes: dict) -> None:
+    """A project of fixed-sequence keys with the real generator and extra ``recipes``, tagged ``base``."""
     shutil.copytree(ROOT / "infx", root / "infx", ignore=shutil.ignore_patterns("__pycache__"))
     (root / RECIPES).mkdir(parents=True)
     write_shared_blocks(root)
@@ -66,7 +137,7 @@ def project(root: Path, master: dict = BASE_MASTER, **recipes: dict) -> None:
     (root / RECIPES / "stable.yaml").write_text(yaml.safe_dump(single_node_fragment(4)))
     for name, recipe in recipes.items():
         (root / RECIPES / f"{name}.yaml").write_text(yaml.safe_dump(recipe))
-    write(root, master, single_node_fragment(4))
+    write_fixed(root, master, single_node_fragment(4))
     git(root, "init", "-q")
     git(root, "config", "user.name", "Test")
     git(root, "config", "user.email", "test@example.com")
@@ -83,26 +154,6 @@ def changes(report: dict) -> list[tuple]:
     ]  # fmt: skip
 
 
-def test_keys_with_changed_recipes_or_points_are_listed(tmp_path, monkeypatch, capsys):
-    project(tmp_path)
-    write(tmp_path, GROWN_MASTER, single_node_fragment(4, **{"max-running-requests": 16}))
-    monkeypatch.chdir(tmp_path)
-
-    changed.main(["--base", "base", "--json"])
-    report = json.loads(capsys.readouterr().out)
-
-    assert (report["config-keys"], report["errors"]) == (4, [])
-    assert changes(report) == [
-        ("edited", 2, 2, [2, 4], [2, 4]), ("grown", 1, 2, [4], []), ("gone", 1, 0, [], [2]),
-    ]  # fmt: skip
-    assert git(tmp_path, "status", "--porcelain").splitlines() == [
-        f" M {RECIPES}/edited.yaml", " M configs/nvidia-master.yaml",
-    ]
-
-    changed.main(["--base", "base"])
-    assert capsys.readouterr().out.splitlines()[-1] == "3 of 4 config keys changed since base."
-
-
 def run_from(root: Path, *args: str, **env: str) -> subprocess.CompletedProcess[str]:
     """``python -m infx.matrix.changed`` run in ``root`` with ``root``'s own code."""
     return subprocess.run(
@@ -113,12 +164,12 @@ def run_from(root: Path, *args: str, **env: str) -> subprocess.CompletedProcess[
 
 
 def test_a_base_with_the_same_code_and_recipes_still_reports_every_difference(tmp_path):
-    unbindable = {"unbindable": entry("unbindable.yaml", [2])}
+    unbindable = {"unbindable": fixed_seq_entry("unbindable.yaml", [2])}
     bound = {**single_node_fragment(4), "model": {"path": "hf:org/other"}}
-    project(tmp_path, {**BASE_MASTER, **unbindable}, unbindable=bound)
+    fixed_project(tmp_path, {**BASE_MASTER, **unbindable}, unbindable=bound)
     grown = [("grown", 1, 2, [4], []), ("gone", 1, 0, [], [2])]
 
-    write(tmp_path, {**GROWN_MASTER, **unbindable}, single_node_fragment(4))
+    write_fixed(tmp_path, {**GROWN_MASTER, **unbindable}, single_node_fragment(4))
     reports = [
         json.loads(run_from(tmp_path, "--base", "base", "--json", **env).stdout)
         for env in ({}, {"INFX_REUSE_UNCHANGED": "0"})
@@ -131,19 +182,19 @@ def test_a_base_with_the_same_code_and_recipes_still_reports_every_difference(tm
         assert str(tmp_path) in head_error["error"] and str(tmp_path) not in base_error["error"]
 
     (tmp_path / "configs/nvidia-master.yaml").write_text(
-        yaml.safe_dump({"every*": entry("stable.yaml", [2])})
+        yaml.safe_dump({"every*": fixed_seq_entry("stable.yaml", [2])})
     )
     invalid = run_from(tmp_path, "--base", "base")
     assert invalid.returncode == 1
     assert "Wildcard '*' is not allowed" in invalid.stderr
 
-    write(tmp_path, {**GROWN_MASTER, **unbindable}, single_node_fragment(4, **{"max-running-requests": 16}))
+    write_fixed(tmp_path, {**GROWN_MASTER, **unbindable}, single_node_fragment(4, **{"max-running-requests": 16}))
     git(tmp_path, "add", RECIPES)
     git(tmp_path, "commit", "-qm", "edit")
     edited = run_from(tmp_path, "--base", "base", "--json")
     assert changes(json.loads(edited.stdout)) == [("edited", 2, 2, [2, 4], [2, 4]), *grown]
 
-    write(tmp_path, {**BASE_MASTER, "late": entry("late.yaml", [2])}, single_node_fragment(4))
+    write_fixed(tmp_path, {**BASE_MASTER, "late": fixed_seq_entry("late.yaml", [2])}, single_node_fragment(4))
     git(tmp_path, "commit", "-qam", "late")
     (tmp_path / RECIPES / "late.yaml").write_text(yaml.safe_dump(single_node_fragment(4)))
     untracked = run_from(tmp_path, "--base", "HEAD")
@@ -152,7 +203,7 @@ def test_a_base_with_the_same_code_and_recipes_still_reports_every_difference(tm
 
 
 def test_only_keys_whose_entry_changed_run_the_bases_generator(tmp_path, monkeypatch, capsys):
-    project(tmp_path)
+    fixed_project(tmp_path)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(changed, "__file__", str(tmp_path / "infx/matrix/changed.py"))
     generated = []
@@ -198,7 +249,7 @@ def test_only_keys_whose_entry_changed_run_the_bases_generator(tmp_path, monkeyp
 def test_a_bases_points_are_reused_only_when_git_vouches_for_every_other_input(
     tmp_path, monkeypatch, capfd
 ):
-    project(tmp_path)
+    fixed_project(tmp_path)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(changed, "__file__", str(tmp_path / "infx/matrix/changed.py"))
     recipe = tmp_path / RECIPES / "stable.yaml"
