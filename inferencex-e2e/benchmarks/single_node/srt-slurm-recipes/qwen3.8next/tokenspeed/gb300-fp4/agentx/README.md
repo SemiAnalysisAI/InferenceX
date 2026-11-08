@@ -25,7 +25,7 @@ circuit breaker or load monitoring.
 The recipe pins the public checkpoint revision and installs the unmodified
 TokenSpeed `0.1.1rc1.post20261108` release-candidate wheel, CUDA 13
 ARM64/Python 3.12 kernel `0.1.4rc1.post20261108`, and `tokenspeed-engine`
-`<ENGINE_VERSION>` wheel by SHA256. All three wheels share upstream revision
+`0.1.0.post20261108` wheel by SHA256. All three wheels share upstream revision
 `c5bb19ef15e862561bfbb562932571fd10f75b62` so their runtime interfaces match.
 Scheduler `0.1.50` from PyPI provides the scheduler fields that revision's
 runtime sets for in-forward checkpoints and checkpoint retention. The base

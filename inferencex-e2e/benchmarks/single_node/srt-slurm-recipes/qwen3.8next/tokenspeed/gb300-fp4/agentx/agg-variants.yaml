@@ -9,7 +9,7 @@ base:
     frameworks:
       tokenspeed: 0.1.1rc1.post20261108
       tokenspeed-kernel: 0.1.4rc1.post20261108
-      tokenspeed-engine: <ENGINE_VERSION>
+      tokenspeed-engine: 0.1.0.post20261108
   resources:
     gpu_type: gb300
     gpus_per_node: 4
@@ -44,7 +44,7 @@ base:
     NO_COLOR: '1'
     TOKENSPEED_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-nightly-v0.1.1rc1.post20261108/tokenspeed-0.1.1rc1.post20261108-py3-none-any.whl#sha256=5f365b902f0bcd171884420c0c2eebb9100e8754f61dbdb5767623f66f3f1d35
     TOKENSPEED_KERNEL_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-nightly-v0.1.4rc1.post20261108-cu130/tokenspeed_kernel-0.1.4rc1.post20261108-cp312-cp312-manylinux_2_28_aarch64.whl#sha256=9b7be88198dd68d6d69c61cc24e52760d9dea371b357f844dd7c7ceb5fac7d66
-    TOKENSPEED_ENGINE_WHEEL_URL: <ENGINE_WHEEL_URL>
+    TOKENSPEED_ENGINE_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-engine-nightly-v0.1.0.post20261108/tokenspeed_engine-0.1.0.post20261108-cp312-cp312-linux_aarch64.whl#sha256=0e6a961f8c73db885d176fd7f065c4a3612e1063d92edc78d86b5f06dcf4db4c
     TOKENSPEED_SCHEDULER_VERSION: 0.1.50
     TOKENSPEED_FLASHINFER_VERSION: 0.7.3
     TOKENSPEED_CUDA_VERSION: '13.0'
