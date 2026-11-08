@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import hashlib
 import math
-import mmap
 import time
 from itertools import zip_longest
 from pathlib import Path
@@ -82,12 +81,12 @@ def _positive_number(value: Any) -> float | None:
 
 def _x264_options(path: Path) -> dict[str, str] | None:
     """Return the options x264 wrote into the stream's SEI, or None if it wrote none."""
-    with path.open("rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as data:
-        start = data.find(b"x264 - core ")
-        if start < 0:
-            return None
-        end = data.find(b"\0", start, start + 4096)
-        header = data[start : end if end >= 0 else start + 4096].decode("ascii", "replace")
+    data = path.read_bytes()
+    start = data.find(b"x264 - core ")
+    if start < 0:
+        return None
+    end = data.find(b"\0", start, start + 4096)
+    header = data[start : end if end >= 0 else start + 4096].decode("ascii", "replace")
     _, _, options = header.partition(" - options: ")
     return dict(option.split("=", 1) for option in options.split() if "=" in option)
 
