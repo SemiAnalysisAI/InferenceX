@@ -30,19 +30,23 @@ runs the decode and prefill ladders; `low-latency` runs decode, plus prefill for
 
 | Backend | Engine selector (`maturity`) | `normal` | `low-latency` |
 |---|---|---|---|
-| `deepep-v2` | vLLM `--all2all-backend deepep_v2`, SGLang `--moe-a2a-backend deepep` (`production`) | EP8, EP16: H100, H200, B200, B300, GB200, GB300 | EP8, EP16: H100, H200, B200, GB200, GB300 |
+| `deepep-v2` | vLLM `--all2all-backend deepep_v2`, SGLang `--moe-a2a-backend deepep` (`production`) | EP8, EP16: H100, H200, B200, B300, GB200, GB300 | EP8: H100. EP8, EP16: H200, B200, GB200, GB300 |
 | `mori` | vLLM `--all2all-backend mori_*`, SGLang `--moe-a2a-backend mori` (`production`) | EP8, EP16: MI300X, MI325X, MI355X | EP16: MI300X, MI325X, MI355X |
 | `uccl-ep` | none; engines load it as a drop-in `deep_ep` under vLLM's DeepEP backends (`candidate`) | EP8: H100, H200, B200, MI300X, MI325X, MI355X. EP16: H100, H200, B200, MI300X, MI325X | EP8: B200. EP8, EP16: H100, H200. EP16: MI300X, MI325X |
 | `nccl-ep` | TensorRT-LLM `NcclEP` (`production` for low-latency rank-major BF16 where it matches, `candidate` otherwise) | EP8, EP16: H100, H200, B200, B300, GB200, GB300 | EP8: B300. EP8, EP16: H100, H200, B200, GB200, GB300 |
-| `flashinfer-ep` | vLLM `--all2all-backend flashinfer_nvlink_one_sided` (`production`) | EP8: H100, H200. EP8, EP16: GB200, GB300 | none |
+| `flashinfer-ep` | vLLM `--all2all-backend flashinfer_nvlink_one_sided` (`production`) | EP8: H100, H200, B200, B300. EP8, EP16: GB200, GB300 | none |
 
 Every backend runs a BF16 dispatch control and an FP8 dispatch; nccl-ep's FP8 is its internal
 DS_FP8E3M4 recipe, low-latency prefill and decode. Combine is always BF16. Coverage is uniform routing only.
 
-`results/cases.json` is the committed copy of the full matrix: 284 requested cases, of which 248 are
+Eleven of the registered EP cases are unmeasured in the published run: MI355X MoRI EP16, H100 EP16
+prefill for DeepEP V2 and NCCL EP low-latency, and MI325X UCCL-EP low-latency EP16 FP8.
+[docs/methodology.md](docs/methodology.md#unmeasured-cases) gives each reason.
+
+`results/cases.json` is the committed copy of the full matrix: 294 requested cases, of which 254 are
 runnable EP cases, 18 are swap-blocks cases (two per pool), 12 are kv-transfer cases (one per pool,
-backend and fabric) and 6 are unsupported EP cells (UCCL-EP EP16 on MI355X and FlashInfer EP16 on
-H100 and H200, once per phase; FlashInfer's MNNVL workspace needs every rank inside one NVLink
+backend and fabric) and 10 are unsupported EP cells (UCCL-EP EP16 on MI355X and FlashInfer EP16 on
+H100, H200, B200 and B300, once per phase; FlashInfer's MNNVL workspace needs every rank inside one NVLink
 domain).
 A cell is listed as unsupported only when its backend runs on that SKU at another EP size, and
 low-latency adds only runnable cells, so a missing low-latency cell (DeepEP V2 on B300, for example)
@@ -54,7 +58,7 @@ contract, row identity and wheel pin are in [docs/nccl-ep.md](docs/nccl-ep.md).
 Dispatch the `CollectiveX Sweep` workflow, choosing a pool (or `all`) and the same filters `run.sh`
 takes. Each shard becomes one job in the InferenceX CI priority queue, scored through
 `inferencex-e2e/configs/ci-priority.yaml`, where `collectivex` ranks above every engine
-benchmark. The job lands on the pool's runner (`runner_label` and `runner_partition` in
+benchmark except a model that file boosts further (currently `kimik3.1`). The job lands on the pool's runner (`runner_label` and `runner_partition` in
 `configs/platform_config.json`), runs `run.sh --shard` and uploads `results/<sku>/` as an artifact
 to publish as below. Hand runs bypass the queue and wait for whatever CI holds the nodes.
 
@@ -169,7 +173,7 @@ needs its own `squash_dir` or `storage_roots` as well: each shard creates its ba
 Every non-MNNVL EP16 placement requires `rdma_devices`, the operator-approved scale-out devices.
 The other network fields are `socket_ifname`, `ib_gid_index`, `rdma_service_level`,
 `rdma_traffic_class`, `rail_isolated`, `rdma_fabric`, `rdma_relaxed_ordering`, `rdma_gbs`,
-`uccl_rdma_recv_tokens` and `single_node_rdma_devices`. Without `socket_ifname` each node's default-route interface carries the
+`uccl_rdma_recv_tokens`, `host_verbs_provider`, `deepep_efa_fork` and `single_node_rdma_devices`. Without `socket_ifname` each node's default-route interface carries the
 cross-node sockets (h100-dgxc, h200-dgxc, b300). HCAs are never guessed, and every scale-out node must
 show its socket interface up and an active port on each listed device before backend setup; the
 methodology's [Execution Isolation](docs/methodology.md#execution-isolation) says what each field
