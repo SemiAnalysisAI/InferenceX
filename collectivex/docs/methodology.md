@@ -84,27 +84,14 @@ The `kv-transfer` suite's rules and evidence are in [kv-transfer.md](kv-transfer
 
 # Methodology
 
-CollectiveX runs expert-parallel (EP) communication benchmarks on real accelerator allocations, by
-hand or through the `CollectiveX Sweep` workflow, and writes one result document per case into `collectivex/results/`. Uploading those
-files to the CollectiveX database publishes them; they are not committed. CollectiveX does not rank,
-recommend or select: the frontend reads `results/cases.json` and the result documents and makes its
-own display decisions. The [Summary](#summary) above states the rules in
-brief. Where the docs disagree with the code in `collectivex/bench/`, the code is authoritative.
-
-## Product Boundary
-
-CollectiveX is a communication microbenchmark for comparing EP libraries on one chip and topology,
-and EP latency and logical payload bandwidth across systems under the same workload. It reports
-unsupported, failed, invalid and unstable cases rather than hiding them. It does not predict serving
-throughput: no expert compute runs, so it measures neither compute/communication overlap nor a layer.
+The evidence behind each rule in the [Summary](#summary). Each case writes one result document into
+`collectivex/results/`; uploading those files to the CollectiveX database publishes them, and they are
+not committed.
 
 ## Matrix
 
-The workload is `deepseek-v4-pro` (DeepSeek-V4-Pro, the `dsv4` model the rest of InferenceX
-benchmarks): hidden 7168, top-k 6, 384 routed experts, packed placement, uniform routing. Each
-backend/topology runs one pinned configuration, the one its reference engine runs. The token ladders
-live in `configs/sweep.json`: decode T=1..512 and prefill T=1024..8192 tokens per rank, in powers of
-two. `normal` mode runs both ladders. `low-latency` runs each
+Each backend/topology runs one pinned configuration, the one its reference engine runs. The token
+ladders live in `configs/sweep.json`. `normal` mode runs both ladders. `low-latency` runs each
 backend's decode kernels on the decode ladder, and nccl-ep's on the prefill ladder too
 (`backend_mode_phases`); it is enabled cell by cell from the registry's `ll_backends` map.
 
@@ -121,12 +108,7 @@ benchmark's return code.
 A backend may clamp the ladder, and `workload.ladder_measured`, `ladder_dropped` and `ladder_cap`
 record what ran. DeepEP V2, UCCL-EP and MoRI allocate their low-latency receive at 256 tokens per
 rank (vLLM's batched-DP budget; for MoRI, the harness's shared cap), so their low-latency ladders stop
-at 256. NCCL EP sizes its group to the ladder's top and runs every rung. DeepEP V2's receive is sized
-from a constant rather than the ladder, so clamping around a kernel defect cannot change the
-footprint. That was used once: DeepEP's low-latency combine corrupted the 256 rung on every
-Blackwell SKU until the pin moved to upstream main with
-[DeepEP #642](https://github.com/deepseek-ai/DeepEP/pull/642), a CTA-scope fence before the combine
-staging buffer is recycled.
+at 256. NCCL EP sizes its group to the ladder's top and runs every rung.
 
 ### Unmeasured Cases
 
@@ -213,7 +195,7 @@ and `do_expand=False` into a receive bounded at the next power of two of T, with
 `allow_multiple_reduction=False`. No deepep-v2 dispatch waits on the host. Decode replays a graph and
 prefill runs eager, as vLLM runs large prefill batches uncaptured. `combine` copies the batch's rows
 into the MoE layer's output, as vLLM's finalize does (`library_config.finalize_copy`); rows without
-that field predate the copy: on b200 EP8 it adds 4-13% to decode `combine`, 4-5% to prefill `combine`
+that field predate the copy. On b200 EP8 it adds 4-13% to decode `combine`, 4-5% to prefill `combine`
 and 1-2% to the prefill pair period; uccl-ep's pair period moves 1-5%.
 
 Scale-up cases request NCCL Device API LSA and fail closed unless the LSA team covers the whole EP
@@ -245,10 +227,8 @@ runs over intra-node NVLink; multi-node EP16 rides NVSHMEM IBGDA, which wants gd
 (b200-nscale's bare-metal IB has it), and GB EP16 stays inside MNNVL. B300 registers no DeepEP
 low-latency: the legacy Buffer initializes NVSHMEM with an RDMA transport even on one node, and
 NVSHMEM aborts on topology detection over B300's EFA. H100's EFA pool registers EP8 only: at EP16
-every rank segfaults during setup, since IBGDA has no EFA transport. Its normal-mode EP16 prefill
-stays registered (`backend_mode_phases` is per backend, not per pool) but does not finish inside the
-per-case guard (`COLLX_RUN_TIMEOUT`) through the EFA proxy: expect those two cases to time out and
-stay unmeasured ([Unmeasured Cases](#unmeasured-cases)).
+every rank segfaults during setup, since IBGDA has no EFA transport. Its normal-mode EP16 prefill stays registered but
+unmeasured ([Unmeasured Cases](#unmeasured-cases)).
 
 ### UCCL-EP
 
@@ -350,8 +330,7 @@ with `payload_in_workspace=False`, so FlashInfer's staging copy into the workspa
 inside `combine`, as in vLLM (writing the expert output into the workspace directly is TensorRT-LLM's
 path). FP8 dispatch is DeepSeek blockwise FP8 carried as a fourth payload (vLLM v0.29.0+). The
 combine accumulates in FP32 with one narrowing store (0.6.16 onwards), which the oracle models as
-`domain-fp32`; the import probe rejects any wheel but the pin. Graph replay cut gb200 EP8 T=1 from
-151 µs to 43 µs when it landed (31 µs in the published run), so decode replays.
+`domain-fp32`; the import probe rejects any wheel but the pin.
 
 ## Workload Identity
 
@@ -376,21 +355,24 @@ the received rows, the whole padded plane, or, for FlashInfer, only filled slots
 `false` covers both "nothing to stage" (every BF16 row) and the `dequant` hatch. `isolated_sum` is
 derived: isolated dispatch plus combine, never `stage`.
 
-The six windows side by side, four published and two for context
-([editable source](img/ep-timing-methodologies.excalidraw)):
+![How CollectiveX times dispatch and combine](img/ep-timing-methodologies.svg)
 
-![How CollectiveX times EP dispatch and combine](img/ep-timing-methodologies.svg)
+The diagram ([source](img/ep-timing-methodologies.excalidraw)) shows the four published windows and
+two for context:
 
-Each point measures two families:
-
-- **Fresh entry** (`roundtrip`, `dispatch`, `combine`, and eager `stage`): one aligned call per
-  sample, reduced across ranks by MAX, because a layer finishes with its slowest rank.
-  [Rank Alignment](#rank-alignment) describes how each sample opens.
-- **Chained** (`pair_period`, `chain_floor_us`, `chain_health`): pairs issued back to back with no host
-  sync, as a decode loop issues them. `pair_period` is the **headline** for every row, graphed or
-  eager. See [Chained Pair Period](#chained-pair-period).
-
-![One fresh-entry sample](img/fresh-entry.svg)
+1. **Fresh entry** (`roundtrip`, `dispatch`, `combine`): one aligned call per sample, reduced across
+   ranks by MAX, because a layer finishes with its slowest rank. A graphed row captures the spin and
+   all-reduce inside the graph it replays; an eager row (every prefill, uccl-ep `normal`, uccl-ep
+   `low-latency` at EP16) queues them on the stream. `combine` runs behind an untimed dispatch.
+   uccl-ep `normal` polls the host inside its dispatch, so a host probe runs before and after each
+   sample, outside the window ([Rank Alignment](#rank-alignment)).
+2. **Stage**: eager FP8 rows only, timed behind an untimed dispatch.
+3. **Profiler kernel time** (context): what [vendor tables](#vendor-tables) report.
+4. **Chain floors** (`chain_floor_us`): events around each op, MIN across ranks.
+5. **Pair period** (`pair_period`), the **headline** for every row: events around each pair, MEDIAN
+   across ranks ([Chained Pair Period](#chained-pair-period)).
+6. **Production decode** (context): the expert GEMM runs between dispatch and combine and can
+   overlap them. CollectiveX runs no compute.
 
 Every row also carries `cross_rank_min_us` (the same samples reduced by MIN) and
 `cross_rank_spread_us` (roundtrip MAX minus MIN). Alignment removes entry skew, but ranks still leave a
@@ -426,6 +408,8 @@ so a capture-unsafe call fails instead of being recorded. Graphed rows carry `-c
 
 ### Rank Alignment
 
+![One fresh-entry sample on three ranks](img/fresh-entry.svg)
+
 Every fresh-entry sample opens the way DeepEP's `bench_kineto` does: a GPU spin, then a device
 all-reduce, with no host sync before the start event. The spin lasts 2 ms of wall time
 (`COLLX_ALIGN_SPIN_US`), calibrated after each warm-up because `torch.cuda._sleep` counts cycles. It
@@ -433,8 +417,7 @@ outlasts the host's enqueue of the sample, so the last rank to arrive already ha
 when the all-reduce releases everyone, and every window opens at the barrier's exit: entry skew and
 the first kernel's launch latency both leave the window. Eager rows queue the spin and all-reduce
 before each sample; graphed rows capture them in the graph ahead of its first event, so no host
-handoff follows the alignment. Before the all-reduce moved into the graph, a late host launch stalled
-the other ranks inside the window (gb200 flashinfer EP8 T=1 roundtrip p99 858 µs); in-graph, graphed
+handoff follows the alignment. Graphed
 decode roundtrip p99 runs 1.01-1.18x its p50 outside the EFA-proxy EP16 rows (up to 2.4x there).
 That is why graphed rows publish tails. On ROCm, where
 HIP submits a replay node by node from the host, the spin is what gives a lagging host time to submit
@@ -471,21 +454,17 @@ a trial still throttled after its restarts publishes only the pair period's p50.
 
 ### Chained Pair Period
 
-Fresh-entry components start every sample from an idle pipeline. A decode loop never stops, and what it
-pays per MoE layer is the pipeline's steady-state **period**. `benchmark_chain` issues dispatch→combine
-pairs back to back with events enqueued on-stream and no host sync inside the loop, drops the first 16
-pairs as pipeline fill, and pools 4 trials per point over the same rotated ladder order as the
-fresh-entry pass. The pairing is `run_roundtrip`'s, so `pair_period` excludes staging on the same rule
-`roundtrip` does.
+A decode loop never stops, and what it pays per MoE layer is the pipeline's steady-state **period**.
+`benchmark_chain` issues dispatch→combine pairs back to back with no host sync inside the loop, drops
+the first 16 pairs as pipeline fill, and pools 4 trials per point. The pairing is `run_roundtrip`'s,
+so `pair_period` excludes staging as `roundtrip` does.
 
 ![Two sibling chains](img/chained-pairs.svg)
 
-Each trial runs **two sibling chains** of 128 pairs, so the statistics do not carry the
-instrumentation that collects them. One chain with six `record()` calls per pair charged the inner
-records into the period wherever the device drained faster than the host enqueued, a roughly
-T-independent 10-30 µs on every vendor at once. So a **floors chain** runs first with only the four
-op-window events, and a **period chain** second with only the outer pair events, whose host cost lands
-in the inter-pair gap.
+Each trial runs **two sibling chains** of 128 pairs, because one chain carrying both sets of events
+charged its inner `record()` calls into the period (10-30 µs, flat in T). The **floors chain** has
+only the four op-window events; the **period chain** has only the outer pair events, whose host cost
+lands in the inter-pair gap.
 
 - `components.pair_period` (origin `chained-median`): each pair window, reduced across ranks by MEDIAN.
   The period is a rate: the collectives phase-lock every rank into one cadence, and a MAX would publish
@@ -499,7 +478,7 @@ in the inter-pair gap.
 - `chain_health.pair_spread_us`: per-pair cross-rank spread. Large next to `pair_period` means a paced
   or slow rank, and the point is not a steady-state period.
 - `chain_health.interpair_gap_us`: start-to-start median minus pair-window median, the cost outside
-  the window and the regression guard against the six-events defect.
+  the window.
 - `chain_health.settle_drift_us`: late-half minus early-half period, the proof that 16 dropped pairs
   were enough.
 
@@ -728,10 +707,7 @@ AMD build swaps managed allocations for pinned host memory. MoRI ships in the im
 import-checked. DeepEP V2 builds against the image's torch and NCCL (2.13.0 and 2.30.7 in vLLM
 v0.32.0), as vLLM's installer does and as uccl-ep and FlashInfer run; nccl-ep loads the NCCL its
 wheel bundles. The EFA fork on b300 is the exception: it needs NCCL 2.32.3, so its venv carries that wheel and torch 2.11.0.
-`runtime.framework` and `runtime.collective_library` record the pair per row; rows reporting torch
-2.11.0 with NCCL 2.30.4 predate the change (within 1% on b200 EP8 and 3% on gb300 EP8). The pin is 6
-commits ahead of the DeepEP commit vLLM v0.32.0 packages (d4f41e4); the image's packaged `deep_ep`
-matched the pin within 1% on b200 EP8 from T=4 up. Runtime probes fail closed before reuse, and a cache that fails them is rejected, not
+`runtime.framework` and `runtime.collective_library` record the pair per row. Runtime probes fail closed before reuse, and a cache that fails them is rejected, not
 reset, so a concurrent allocation cannot lose files it is using.
 
 ## Result Delivery
