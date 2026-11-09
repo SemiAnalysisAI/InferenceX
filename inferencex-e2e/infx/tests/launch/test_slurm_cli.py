@@ -18,6 +18,7 @@ from infx.launch.backends.slurm.cli import (
     Resources,
     SlurmError,
     final_status,
+    follow_log,
     queue_state,
     salloc,
     srun_argv,
@@ -168,6 +169,28 @@ def test_waiting_for_a_log_accepts_one_created_just_before_the_job_left_the_queu
     wait_for_log(Job("77"), batch_log, wait_s=0)
     assert calls(scontrol) == []
     assert "ERROR" not in capsys.readouterr().err
+
+
+def test_waiting_for_a_log_outlasts_a_squeue_outage(fake_bin, tmp_path, monkeypatch):
+    batch_log, polls = tmp_path / "batch.log", tmp_path / "polls"
+    fake_bin("squeue", f"echo poll >> {polls}; "
+             f"if [ \"$(wc -l < {polls})\" -le 3 ]; then exit 1; fi; "
+             f"echo started > {batch_log}; echo '77|RUNNING'")
+    monkeypatch.setattr(cli, "SQUEUE_RETRY_S", 0)
+    wait_for_log(Job("77"), batch_log, wait_s=0)
+    assert batch_log.read_text() == "started\n"
+
+
+def test_following_a_log_outlasts_a_squeue_outage(fake_bin, tmp_path, monkeypatch):
+    batch_log, polls = tmp_path / "batch.log", tmp_path / "polls"
+    batch_log.write_text("")
+    fake_bin("squeue", f"echo poll >> {polls}; n=$(wc -l < {polls}); "
+             "if [ \"$n\" -le 3 ]; then exit 1; fi; "
+             "if [ \"$n\" -eq 4 ]; then echo '77|RUNNING'; fi")
+    monkeypatch.setattr(cli, "SQUEUE_RETRY_S", 0)
+    monkeypatch.setattr(cli.time, "sleep", lambda seconds: None)
+    follow_log(Job("77"), batch_log)
+    assert len(polls.read_text().splitlines()) == 5
 
 
 def slurm_backend() -> slurm.SlurmBackend:
