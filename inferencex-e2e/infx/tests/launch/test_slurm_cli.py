@@ -193,6 +193,19 @@ def test_following_a_log_outlasts_a_squeue_outage(fake_bin, tmp_path, monkeypatc
     assert len(polls.read_text().splitlines()) == 5
 
 
+def test_following_a_log_ends_when_accounting_reports_the_job_over_during_an_outage(
+    fake_bin, tmp_path, monkeypatch
+):
+    batch_log, polls = tmp_path / "batch.log", tmp_path / "polls"
+    batch_log.write_text("")
+    fake_bin("squeue", f"echo poll >> {polls}; [ \"$(wc -l < {polls})\" -gt 9 ] || exit 1")
+    fake_bin("sacct", "echo 'FAILED|1:0|n1|1|2|3|cpu=1'")
+    monkeypatch.setattr(cli, "SQUEUE_RETRY_S", 0)
+    monkeypatch.setattr(cli.time, "sleep", lambda seconds: None)
+    follow_log(Job("77"), batch_log)
+    assert len(polls.read_text().splitlines()) == 3
+
+
 def slurm_backend() -> slurm.SlurmBackend:
     """A Slurm backend for runner ``c_0`` of a minimal cluster."""
     record = {"gpus-per-node": 8, "arch": "x86_64", "scheduler": "slurm",

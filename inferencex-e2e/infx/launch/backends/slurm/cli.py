@@ -164,10 +164,10 @@ def queue_state(job: Job, *, echo_command: bool = True) -> str | None:
         return None
 
 
-def is_active(job: Job, *, echo_command: bool = True) -> bool:
+def is_active(job: Job) -> bool:
     """Whether squeue lists the job; a squeue that keeps failing cannot rule it out."""
     try:
-        return _listed_state(job, echo_command=echo_command) is not None
+        return _listed_state(job, echo_command=True) is not None
     except SlurmError:
         return True
 
@@ -329,13 +329,24 @@ def final_status(job: Job, *, attempts: int = 10, delay_s: float = 1.0) -> JobSt
     return status
 
 
+def _left_queue(job: Job) -> bool:
+    """Whether the job has left the queue.
+
+    When squeue keeps failing, accounting decides; a job neither can place is waited on.
+    """
+    try:
+        return _listed_state(job, echo_command=False) is None
+    except SlurmError:
+        return observe(job).state not in _UNSETTLED
+
+
 def wait_for_log(job: Job, path: Path, *, wait_s: float = 5.0) -> None:
     """Wait until ``job`` creates ``path``.
 
     Raises ``SlurmError``, after printing ``scontrol show job``, if the job ends first.
     """
     while not path.exists():
-        if not is_active(job, echo_command=False) and not path.exists():
+        if _left_queue(job) and not path.exists():
             print(f"ERROR: job {job.id} failed before creating {path}", file=sys.stderr)
             with contextlib.suppress(FileNotFoundError):
                 proc.run(["scontrol", "show", "job", job.id])
@@ -351,7 +362,7 @@ def follow_log(job: Job, path: Path) -> None:
     echo(tail_argv)
     tail = subprocess.Popen(tail_argv, stderr=subprocess.DEVNULL)
     try:
-        while is_active(job, echo_command=False):
+        while not _left_queue(job):
             time.sleep(10)
     finally:
         sentinel.kill()
