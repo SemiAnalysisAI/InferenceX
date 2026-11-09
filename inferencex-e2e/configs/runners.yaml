@@ -789,6 +789,7 @@ clusters:
       MORI_RDMA_TC: '@fabric.rdma-tc'
     models:
       entries:
+        Kimi-K3.1-Pro: {root: it-share-data, dir: Kimi-K3.1-Pro}
         DeepSeek-R1-0528-MXFP4-v2: {root: it-share-data, dir: DeepSeek-R1-0528-MXFP4-v2}
         GLM-5.3: {root: it-share-data, dir: GLM-5.3}
         Qwen3.5-397B-A17B-FP8: {root: it-share-data, dir: Qwen3.5-397B-A17B-FP8}
