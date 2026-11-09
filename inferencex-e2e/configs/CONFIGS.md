@@ -104,7 +104,7 @@ The below list describes what each field is:
     - `osl`: An integer representing the output sequence length, e.g., `1024`
     - PR sweeps run only `isl`/`osl` pairs 1024/1024 and 8192/1024; the changelog planner rejects any other pair.
     - `search-space`: A list of configurations to run with respective `isl` and `osl`, each entry must be a dict with the following fields:
-      - `tp`: A positive integer representing the tensor parallelism level that the configuration will be served at.
+      - `tp`: A positive integer representing the benchmark's parallel width. In native single-node SRT recipes, its mapping depends on the engine: TokenSpeed and vLLM use attention TP/TP times data parallelism, while SGLang and TensorRT-LLM compare their TP fields directly. See [single-node parallelism validation](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md#single-node-parallelism-validation) for the full mapping and mismatch behavior.
       - `conc-start`: An integer representing the starting level of concurrency e.g., `4`
       - `conc-end`: An integer representing the ending level of concurrency (inclusive) e.g., `128`
       - Note: the step factor between `conc-start` and `conc-end` is 2, so if `conc-start` is 4 and `conc-end` is 128, all concurrencies `4, 8, 16, 32, ..., 128` will be run.
@@ -153,7 +153,8 @@ input.
 
 Notes:
 - The fields above are the common ones, not the full schema. The Pydantic models in [`infx/matrix/validation.py`](../infx/matrix/validation.py) are the authoritative contract; they also accept fields such as `spec-decoding`, `num-nodes`, `require-power` and `power`, and they reject any field they do not define, which fails matrix generation.
-- A multinode search-space entry with `power: true` measures DCGM power: its rows carry `power: true`, the launcher merges the shared telemetry block into the recipe and rejects lanes without a power rule.
+- Every multinode benchmark point on a cluster with a GPU exporter measures GPU power (DCGM where the cluster sets `srt-slurm.power-exporter-port`, its `default_gpu_exporter` elsewhere), and CPU power where the cluster declares a `cpu-power-exporter`, unless its recipe runs etcd and NATS on a dedicated node; it keeps its result when telemetry fails. A search-space entry with `power: true` makes failed telemetry or invalid AgentX power fail the point, and is rejected on a cluster without a GPU exporter.
+- A multinode entry with `cpu-power: true` beside `power: true` also measures CPU power: its rows carry `cpu-power: true` and the launcher binds the cluster's `cpu-power-exporter` record beside the GPU telemetry block. Native single-node points measure CPU power by default on a cluster that declares a `cpu-power-exporter`; a single-node fixed-sequence entry sets `cpu-power: true` alone to count a missing CPU leg as invalid.
 - srt-slurm entries require `srt-recipe-dir`. Every row requires `srt-recipe: <file>[:<selector>]` under it (selector: `base`, `override_<name>` or `zip_override_<name>[<i>]`). Multinode rows may add `eval-srt-recipe`. Validation rejects missing files or variants, and `CONFIG_FILE`/`EVAL_CONFIG_FILE` settings. Only `llmd-vllm` keeps `CONFIG_FILE`. Generated rows carry the path from `inferencex-e2e/`.
 - Setting the fields above only guarantees that their values are passed as environment variables to benchmark scripts. Single-node jobs receive `PP_SIZE`, `DCP_SIZE`, and `PCP_SIZE`. Multinode jobs receive `PREFILL_PP_SIZE`, `PREFILL_DCP_SIZE`, `PREFILL_PCP_SIZE`, `DECODE_PP_SIZE`, `DECODE_DCP_SIZE`, and `DECODE_PCP_SIZE`. Actually using those variables is an implementation detail of the benchmark Bash script.
 
@@ -264,8 +265,13 @@ schema; unknown keys fail.
 - `slurm.srt-slurm` is the cluster's srt-slurm profile: `volume-mounts` maps
   volumes every job mounts to container paths, `mounts` does the same for host
   paths outside the volumes (devices), `agentic-volume-mounts` adds world-writable
-  volumes for multi-node AgentX jobs, `power-exporter-port` is the DCGM exporter port
-  of power points, `env` is the environment of the srt-slurm
+  volumes for multi-node AgentX jobs (a single-node AgentX benchmark mounts only its
+  `aiperf-cache`, the shared replay dataset cache), `power-exporter-port` is the DCGM exporter port
+  of multi-node power points (without it they use `extra.default_gpu_exporter`), `cpu-power-exporter` (`source: acpi` or `rapl`) is the CPU power exporter native
+  single-node points and `cpu-power` rows bind beside it (`make setup` installs it from the pinned srt-slurm
+  release; a RAPL job's host setup gives the job user the RAPL counters until teardown, so `rapl`
+  needs `slurm.exclusive` and `single-node-exclusive`),
+  `env` is the environment of the srt-slurm
   launch, `container-aliases` and `nginx-aliases` name the recipe containers that
   resolve to the main image and to the staged nginx, and `outputs`,
   `shared-run-root` and `uv-cache-root` are the directories the srt-slurm launcher
@@ -281,13 +287,15 @@ schema; unknown keys fail.
   same way; they resolve when the record loads, and `env` still rejects the commas of a
   list.
 - `slurm.srt-slurm.extra.default_gpu_exporter` is the cluster's native power exporter.
-  Native single-node throughput and AgentX jobs inherit it when the bound recipe
-  enables telemetry without selecting its own exporter; eval-only jobs collect no power.
-  A cluster without the block stops preparation before the benchmark starts. An invalid
+  Native single-node throughput and AgentX jobs, and multi-node points on a cluster
+  without `power-exporter-port`, inherit it when the bound recipe enables telemetry
+  without selecting its own exporter; eval-only jobs collect no power. A single-node job
+  on a cluster without the block stops preparation before the benchmark starts; a
+  multi-node point measures no GPU power and keeps its result. An invalid
   measurement fails the job under `REQUIRE_POWER=1` and otherwise records an invalid
   verdict without energy metrics. NVIDIA clusters run `dcgm-exporter`; AMD clusters use
   srt-slurm's
-  [`kind: custom` schema](https://github.com/NVIDIA/srt-slurm/blob/59920ea16a13017a990e449d034a495c0b05bc57/docs/power-telemetry.md#gpu-exporter-labels-and-metrics),
+  [`kind: custom` schema](https://github.com/NVIDIA/srt-slurm/blob/acfb4dcc3bd48fd6a1e7b615e849e7954c0c3852/docs/power-telemetry.md#gpu-exporter-labels-and-metrics),
   which requires `gpu_labels` and `gpu_metrics` and rejects unknown keys such as the
   former `power_profile`. The AMD exporter reads
   [`runners/srt-slurm/exporters/amd-power.json`](../runners/srt-slurm/exporters/amd-power.json);

@@ -2,8 +2,11 @@
 
 import json
 import math
+import re
+from pathlib import Path
 
 import pytest
+import yaml
 
 from infx.golden_al_distribution import (
     GOLDEN_DIR,
@@ -11,14 +14,19 @@ from infx.golden_al_distribution import (
     curve_name,
     golden_length,
     list_curves,
+    load_curve,
 )
 from infx.golden_al_distribution.__main__ import main
+
+SOURCE_RUN = r"https://github\.com/SemiAnalysisAI/InferenceX/actions/runs/\d+"
 
 
 def test_every_committed_curve_is_valid() -> None:
     curves = list_curves()
-    assert {curve.name for curve in curves} == {path.stem for path in GOLDEN_DIR.glob("*.yaml")}
+    stems = {path.stem for path in GOLDEN_DIR.glob("*.yaml")} - {"identities"}
+    assert {curve.name for curve in curves} == stems
     for curve in curves:
+        assert re.fullmatch(SOURCE_RUN, curve.source_run or ""), curve.name
         assert set(curve.modes) <= set(THINKING_MODES), curve.name
         for mode in curve.modes:
             assert curve.tokens(mode), (curve.name, mode)
@@ -28,24 +36,77 @@ def test_every_committed_curve_is_valid() -> None:
                 assert 1 <= value <= tokens + 1
 
 
+def test_collection_settings_sit_beside_the_model(tmp_path: Path) -> None:
+    collection = {
+        "renderer": "deepseek_v4",
+        "modes": {"thinking_on": {"chat_template_kwargs": None, "sampling": {"temperature": 1.0}}},
+    }
+    curves = {
+        "recorded": {
+            "source_run": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/1",
+            "deepseek-v4-pro": {"thinking_on": {3: 3.01}},
+            "collection": collection,
+        },
+        "unrecorded": {"kimi-k3": {"thinking_on": {7: 3.78}}},
+        "two_models": {"a": {"thinking_on": {1: 1.5}}, "b": {}, "collection": collection},
+    }
+    for name, document in curves.items():
+        (tmp_path / f"{name}.yaml").write_text(yaml.safe_dump(document))
+    recorded = load_curve("recorded", tmp_path)
+    assert (recorded.model, recorded.acceptance("thinking_on", 3)) == ("deepseek-v4-pro", 3.01)
+    assert recorded.collection == collection
+    assert recorded.source_run == "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/1"
+    unrecorded = load_curve("unrecorded", tmp_path)
+    assert (unrecorded.collection, unrecorded.source_run) == (None, None)
+    with pytest.raises(ValueError, match="Expected one model in golden curve two_models.yaml"):
+        load_curve("two_models", tmp_path)
+
+
 @pytest.mark.parametrize(
     ("model", "spec", "expected"),
     [
-        ("qwen3.5", {"method": "mtp"}, "qwen3.5_mtp"),
-        ("qwen3.5", {"method": "NEXTN"}, "qwen3.5_mtp"),
-        ("glm5.2", {"method": "eagle"}, "glm5.2_mtp"),
-        ("minimaxm3", {"method": "eagle"}, "minimaxm3_eagle3"),
-        ("minimaxm3", {"method": "eagle3", "model": "org/MiniMax-M3-EAGLE3-GQA"}, "minimaxm3_eagle3_gqa"),
-        ("dsv4dsparkprob", {"method": "dspark"}, "dsv4-pro-0813-dspark"),
-        ("dsv41flash", {"method": "dspark"}, "dsv41flash_dspark"),
-        ("musespark", {"method": "dflash"}, "musespark_dflash"),
-        ("mimov2.6flash", {"method": "dflash"}, "mimov2.6flash_dflash"),
-        ("minimaxm31flash", {"method": "dspark"}, "minimaxm31flash_dspark"),
-        ("kimik3", {"method": "dspark", "draft_sample_method": "greedy"}, "kimik3_dspark"),
+        ("qwen3.5", {"method": "mtp"}, "qwen3.5-397b-a17b-nvfp4__mtp__native__default-default"),
+        ("qwen3.5", {"method": "NEXTN"}, "qwen3.5-397b-a17b-nvfp4__mtp__native__default-default"),
+        ("glm5.2", {"method": "eagle"}, "glm-5.2-fp8__mtp__native__default-default"),
+        (
+            "minimaxm3",
+            {"method": "eagle"},
+            "minimax-m3__eagle3__minimax-m3-eagle3__default-default",
+        ),
+        (
+            "minimaxm3",
+            {"method": "eagle3", "model": "org/MiniMax-M3-EAGLE3-GQA"},
+            "minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default",
+        ),
+        (
+            "dsv4dsparkprob",
+            {"method": "dspark"},
+            "deepseek-v4-pro-0813__dspark__native__probabilistic-default",
+        ),
+        (
+            "dsv41flash",
+            {"method": "dspark"},
+            "deepseek-v4.1-flash__dspark__native__probabilistic-block",
+        ),
+        (
+            "musespark",
+            {"method": "dflash"},
+            "muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default",
+        ),
+        (
+            "minimaxm31flash",
+            {"method": "dspark"},
+            "minimax-m3.1-flash__dspark__native__probabilistic-block",
+        ),
+        (
+            "kimik3",
+            {"method": "dspark", "draft_sample_method": "greedy"},
+            "kimi-k3__dspark__kimi-k3-dspark__default-default",
+        ),
         (
             "kimik3",
             {"method": "dspark", "draft_sample_method": "probabilistic"},
-            "kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method",
+            "kimi-k3__dspark__kimi-k3-dspark__probabilistic-block",
         ),
     ],
 )
@@ -57,10 +118,16 @@ def test_curve_name_resolves_committed_curves(model, spec, expected) -> None:
 @pytest.mark.parametrize(
     ("spec", "message"),
     [
-        ({"method": "dspark", "num_speculative_tokens": 7}, "Kimi DSpark golden curve"),
-        ({"method": "dspark", "draft_sample_method": "greedy", "num_speculative_tokens": 0}, "positive integer"),
-        ({"method": "dspark", "draft_sample_method": "greedy", "num_speculative_tokens": 99}, "No golden acceptance"),
-        ({"method": "eagle3", "num_speculative_tokens": 3}, "No committed golden curve"),
+        ({"method": "dspark", "num_speculative_tokens": 7}, "No kimik3 dspark golden curve"),
+        (
+            {"method": "dspark", "draft_sample_method": "greedy", "num_speculative_tokens": 0},
+            "positive integer",
+        ),
+        (
+            {"method": "dspark", "draft_sample_method": "greedy", "num_speculative_tokens": 99},
+            "No golden acceptance",
+        ),
+        ({"method": "eagle3", "num_speculative_tokens": 3}, "No golden curve for model prefix"),
     ],
 )
 def test_golden_length_rejects_unknown_cells(spec, message) -> None:
@@ -70,12 +137,19 @@ def test_golden_length_rejects_unknown_cells(spec, message) -> None:
 
 def test_cli_lookup_matches_library(capsys) -> None:
     assert main(["lookup", "qwen3.5", "eagle", "3", "--thinking", "thinking_off"]) == 0
-    expected = golden_length("qwen3.5", {"method": "mtp", "num_speculative_tokens": 3}, "thinking_off")
+    expected = golden_length(
+        "qwen3.5", {"method": "mtp", "num_speculative_tokens": 3}, "thinking_off"
+    )
     assert float(capsys.readouterr().out) == expected
 
-    assert main(["lookup", "kimik3", "dspark", "7", "--draft-sample-method", "probabilistic", "--json"]) == 0
+    assert (
+        main(
+            ["lookup", "kimik3", "dspark", "7", "--draft-sample-method", "probabilistic", "--json"]
+        )
+        == 0
+    )
     result = json.loads(capsys.readouterr().out)
-    assert result["curve"] == "kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method"
+    assert result["curve"] == "kimi-k3__dspark__kimi-k3-dspark__probabilistic-block"
     assert result["tokens"] == 7
 
 
@@ -84,8 +158,8 @@ def test_cli_list_and_show(capsys) -> None:
     listed = json.loads(capsys.readouterr().out)
     assert [row["curve"] for row in listed] == [curve.name for curve in list_curves()]
 
-    assert main(["show", "glm5.3_mtp"]) == 0
-    assert "glm-5.3-fp8" in capsys.readouterr().out
+    assert main(["show", "glm-5.3-nvfp4__mtp__native__default-default"]) == 0
+    assert "glm-5.3-nvfp4" in capsys.readouterr().out
 
 
 def test_cli_reports_errors(capsys) -> None:
@@ -103,6 +177,16 @@ def test_cli_show_rejects_a_curve_outside_the_golden_dir(tmp_path, capsys) -> No
 
 
 def test_a_thinking_mode_written_as_a_list_is_rejected(tmp_path) -> None:
+    fact = "{value: null, source: default}"
+    (tmp_path / "identities.yaml").write_text(
+        "m_mtp:\n  select: {model_prefixes: [m], method: mtp}\n  collection:\n"
+        "    engine: vllm\n    draft: native\n"
+        + "".join(f"    {field}: {fact}\n" for field in (
+            "draft_sample", "verify", "adaptive", "draft_precision", "draft_kv_cache_dtype",
+            "kv_cache_dtype",
+        ))
+        + "    topology: {value: chain, source: documented}\n"
+    )
     (tmp_path / "m_mtp.yaml").write_text("m:\n  thinking_on: [1.5, 2.3, 2.9]\n")
     spec = {"method": "mtp", "num_speculative_tokens": 2}
 
