@@ -141,6 +141,19 @@ kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark-preview__probabilistic-block:
     draft_kv_cache_dtype: {value: null, source: default}
     kv_cache_dtype: {value: fp8, source: explicit}
 
+mimo-v2.6-flash-rl__dflash__native__default-default:
+  select: {model_prefixes: [mimov2.6flash], method: dflash}
+  collection:
+    engine: vllm
+    draft: native
+    draft_sample: {value: null, source: default}
+    verify: {value: standard, source: documented}
+    adaptive: {value: false, source: documented}
+    topology: {value: chain, source: documented}
+    draft_precision: {value: null, source: default}
+    draft_kv_cache_dtype: {value: null, source: default}
+    kv_cache_dtype: {value: null, source: default}
+
 minimax-m3__eagle3__minimax-m3-eagle3__default-default:
   select: {model_prefixes: [minimaxm3], method: eagle3, draft_family: default}
   collection:

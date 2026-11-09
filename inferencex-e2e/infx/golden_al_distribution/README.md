@@ -179,6 +179,7 @@ Before accepting an updated curve, reviewers should verify:
 | GLM-5.3-Flash | MTP | [`glm-5.3-flash__mtp__native__default-default.yaml`](glm-5.3-flash__mtp__native__default-default.yaml) |
 | Qwen3.8-Flash-Next | MTP (native) | [`qwen3.8-flash-next-fp8__mtp__native__default-default.yaml`](qwen3.8-flash-next-fp8__mtp__native__default-default.yaml) |
 | Muse Spark Open | DFlash2 | [`muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml`](muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml) |
+| MiMo-V2.6-Flash | DFlash | [`mimo-v2.6-flash-rl__dflash__native__default-default.yaml`](mimo-v2.6-flash-rl__dflash__native__default-default.yaml) |
 
 ## Using golden curves in srt-slurm runs
 

@@ -94,6 +94,11 @@ def test_collection_settings_sit_beside_the_model(tmp_path: Path) -> None:
             "muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default",
         ),
         (
+            "mimov2.6flash",
+            {"method": "dflash"},
+            "mimo-v2.6-flash-rl__dflash__native__default-default",
+        ),
+        (
             "minimaxm31flash",
             {"method": "dspark"},
             "minimax-m3.1-flash__dspark__native__probabilistic-block",

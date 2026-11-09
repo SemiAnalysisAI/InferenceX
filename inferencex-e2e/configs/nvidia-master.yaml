@@ -5919,7 +5919,7 @@ musespark-fp4-b200-sglang-agentic-dflash:
 
 # MiMo-V2.6-Flash AgentX on B200 with vLLM and the checkpoint's own DFlash drafter
 # (dflash/, BF16), following vLLM's MiMo-V2.6-Flash-RL recipe. Synthetic acceptance
-# follows infx/golden_al_distribution/mimov2.6flash_dflash.yaml.
+# follows infx/golden_al_distribution/mimo-v2.6-flash-rl__dflash__native__default-default.yaml.
 mimov2.6flash-fp4-b200-vllm-agentic-dflash:
   image: vllm/vllm-openai:v0.31.0@sha256:c1c9f6fd5c109ba7f0546a59f5b2f15fb87f64c77782e90a27b648b42a8e67c3
   model: XiaomiMiMo/MiMo-V2.6-Flash-RL
