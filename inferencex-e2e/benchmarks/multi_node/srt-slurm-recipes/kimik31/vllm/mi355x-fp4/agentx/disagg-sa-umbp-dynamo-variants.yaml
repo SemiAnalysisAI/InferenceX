@@ -329,6 +329,8 @@ override_2p3d_c176: {}
 
 override_1p2d_c48:
   name: k31-sa-umbp-dynamo-p1d2-c48
+  environment:
+    DYNAMO_PYTHON: /infmax-workspace/benchmarks/k31_dynamo_worker_python.py
   roles:
     prefill:
       nodes: 1
