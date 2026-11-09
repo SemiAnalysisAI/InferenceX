@@ -12535,3 +12535,11 @@
   description:
     - "Update the vLLM ROCm image of both keys to nightly-4fab5a07475822c6eaa971dceb2e2220d0446808."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4876
+
+- config-keys:
+    - dsv41flash-fp4-gb200-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update vLLM image from cu134-nightly-40941f2c to cu134-nightly-1648fefa."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4897

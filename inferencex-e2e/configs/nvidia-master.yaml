@@ -5834,7 +5834,7 @@ dsv41flash-fp4-h100-sglang-agentic-dspark-dpa:
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [4, 8, 16, 20], srt-recipe: agentic.yaml }
 
 dsv41flash-fp4-gb200-vllm-agentic-dspark:
-  image: vllm/vllm-openai:cu134-nightly-40941f2c4ba96fba0a7e282a5355e89cd74d9ac5@sha256:13e92fcd97268013d13d07fb97d80803227cf0beae0161f8dce95a8200eaafb0
+  image: vllm/vllm-openai:cu134-nightly-1648fefab91204f3b15bf8062217316f07f2c4bb@sha256:bec82f0f8415716ccee67dc06d7d0064a9834682a5dc1c972bb422a79f7d535d
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:gb200-nv
