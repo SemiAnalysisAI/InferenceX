@@ -102,10 +102,11 @@ count, precision, concurrency and `spec.json` `server` flags. Only the flags its
 declared optimizations set may differ: `OPTIMIZATION_SERVER_KEYS` in
 [`evaluator/quality.py`](evaluator/quality.py) lets `subblock-sparse-attn` change
 `attention_backend`. Each clip pairs with the same case and repetition and is scored
-only when the prompt, seed, generation settings and sealed request hash are equal.
-Other clips are listed under `unscored` as `no_baseline`, `ambiguous_baseline`,
-`invalid_baseline`, `settings_mismatch` with the differing fields,
-`invalid_candidate` or `checksum_mismatch`.
+only when its model ID and revision, generation and fairness settings, prompt, seed
+and sealed request hash equal the baseline clip's. Other clips are listed under
+`unscored` as `no_baseline`, `ambiguous_baseline`, `invalid_baseline`,
+`settings_mismatch` with the differing fields, `invalid_candidate` or
+`checksum_mismatch`.
 
 SSIM and LPIPS take about 55 s per clip on a GitHub-hosted runner, and
 byte-identical frames skip both. Before scoring, the job refuses a dispatch whose
@@ -113,12 +114,20 @@ differing clips would need more than 100 of its 120 minutes (`--budget-minutes`,
 about 109 clips), so it fails with a message instead of timing out with no artifact.
 
 Each pair gets per-frame PSNR, SSIM on BT.601 luma with a Gaussian window of
-σ 1.5, and LPIPS (AlexNet, v0.1, weight hashes pinned), with the clip mean and
-the worst frame of each. Each deployment gets the median and worst clip. An
-identical clip has `video_identical` true, PSNR `null`, SSIM 1 and LPIPS 0. The
-`h3-paired-quality-<run>-<attempt>-<baseline-run>-<baseline-attempt>` artifact holds `quality.json`
-with `mode: paired_lossless`, and `quality_status` stays `unjudged`. Reference
-scoring stays PSNR only, and its artifact name is unchanged.
+σ 1.5, and LPIPS (AlexNet, v0.1, weight hashes pinned), plus the worst frame of
+each. The clip PSNR comes from the MSE pooled over all frames, as in reference
+scoring; the clip SSIM and LPIPS are frame means. An identical clip has
+`video_identical` true, PSNR `null`, SSIM 1 and LPIPS 0.
+
+Each deployment records its scored `pairs`, its `unscored` clip count, the
+`identical` count, and the median and worst clip of each metric. The median PSNR
+ranks an identical clip as infinite, so it is `null` once at least half the clips
+are identical. Each matched baseline records `server_difference`: the argv options
+and environment variables whose values differ between the two server launches, as
+`[baseline, candidate]`. The
+`h3-paired-quality-<run>-<attempt>-<baseline-run>-<baseline-attempt>` artifact
+holds `quality.json` with `mode: paired_lossless`, and `quality_status` stays
+`unjudged`. Reference scoring stays PSNR only, and its artifact name is unchanged.
 
 ## Local checks
 

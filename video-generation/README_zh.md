@@ -89,19 +89,25 @@ revision、GPU 数、精度、并发数以及 `spec.json` 中的 `server` 参数
 配对。只有该部署所声明的优化自身设置的参数可以不同：
 [`evaluator/quality.py`](evaluator/quality.py) 中的 `OPTIMIZATION_SERVER_KEYS`
 允许 `subblock-sparse-attn` 改变 `attention_backend`。每段视频与同一 case、同一
-重复轮次的视频配对，且只有 prompt、seed、生成参数和封存请求的哈希都相同时才评分。
-其余视频列在 `unscored` 中，原因为 `no_baseline`、`ambiguous_baseline`、
-`invalid_baseline`、`settings_mismatch`（附不一致的字段）、`invalid_candidate` 或
-`checksum_mismatch`。
+重复轮次的视频配对，且只有模型 ID 与 revision、生成参数、`fairness` 设置、prompt、
+seed 和封存请求的哈希都与基准视频相同时才评分。其余视频列在 `unscored` 中，原因为
+`no_baseline`、`ambiguous_baseline`、`invalid_baseline`、`settings_mismatch`
+（附不一致的字段）、`invalid_candidate` 或 `checksum_mismatch`。
 
 在 GitHub 托管的 runner 上，SSIM 和 LPIPS 每段视频约需 55 秒，逐字节相同的帧跳过这
 两项计算。若与基准不同的视频所需时间超过任务 120 分钟时限中的 100 分钟
 （`--budget-minutes`，约 109 段），任务会在评分前报错退出，而不是超时后不留任何产物。
 
 每一对视频逐帧计算 PSNR、SSIM（BT.601 亮度，σ 1.5 的高斯窗口）和 LPIPS（AlexNet，
-v0.1，权重哈希固定），并给出各指标的整段均值与最差帧。每个部署给出视频级的中位数与
-最差值。完全相同的视频记为 `video_identical` 为 true，PSNR 为 `null`，SSIM 为 1，
-LPIPS 为 0。`h3-paired-quality-<run>-<attempt>-<baseline-run>-<baseline-attempt>` 产物包含
+v0.1，权重哈希固定），并记录各指标的最差帧。整段 PSNR 与参考评分相同，由全部帧合并
+计算的 MSE 得出；整段 SSIM 和 LPIPS 取逐帧均值。完全相同的视频记为
+`video_identical` 为 true，PSNR 为 `null`，SSIM 为 1，LPIPS 为 0。
+
+每个部署记录已评分的 `pairs`、未评分视频数 `unscored`、完全相同的视频数 `identical`，
+以及各指标的视频级中位数与最差值。PSNR 中位数把完全相同的视频视为无穷大，因此当至少
+一半视频完全相同时为 `null`。每个匹配的基准部署还记录 `server_difference`：两次服务器
+启动之间取值不同的 argv 选项和环境变量，格式为 `[baseline, candidate]`。
+`h3-paired-quality-<run>-<attempt>-<baseline-run>-<baseline-attempt>` 产物包含
 `mode: paired_lossless` 的 `quality.json`，`quality_status` 仍为 `unjudged`。
 参考评分仍只计算 PSNR，产物名称不变。
 
