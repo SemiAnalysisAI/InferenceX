@@ -366,6 +366,19 @@ def _summary(comparisons: list[dict]) -> dict[str, Any]:
     }
 
 
+def _read(
+    bundles: dict[int, Path], run_id: str, scratch: Path
+) -> tuple[list[_Deployment], list[dict]]:
+    deployments, unreadable = [], []
+    for artifact_id, path in sorted(bundles.items()):
+        try:
+            root = _unpack(path, scratch / str(artifact_id))
+            deployments += _deployments(root, run_id, artifact_id)
+        except READ_ERRORS as error:
+            unreadable.append({"artifact_id": artifact_id, "error": _error(error)})
+    return deployments, unreadable
+
+
 def score_paired(
     *,
     bundles: dict[int, Path],
@@ -379,61 +392,42 @@ def score_paired(
     scorer = _scorer(source_revision)
     if output.exists():
         raise ValueError(f"output already exists: {output}")
-    lossless: dict[str, list[_Deployment]] = {}
-    pairs, unscored, unreadable, deployments = [], [], [], []
-    baseline_unreadable = []
+    pairs, unscored, deployments = [], [], []
     with tempfile.TemporaryDirectory() as scratch:
-        for artifact_id, path in sorted(baselines.items()):
-            try:
-                root = _unpack(path, Path(scratch, "baseline", str(artifact_id)))
-                found = _deployments(root, baseline_run_id, artifact_id)
-            except READ_ERRORS as error:
-                baseline_unreadable.append({"artifact_id": artifact_id, "error": _error(error)})
-                continue
-            for deployment in found:
-                if not deployment.optimizations:
-                    lossless.setdefault(_setup_key(deployment.setup), []).append(deployment)
-        for artifact_id, path in sorted(bundles.items()):
-            try:
-                root = _unpack(path, Path(scratch, "candidate", str(artifact_id)))
-                found = _deployments(root, run_id, artifact_id)
-            except READ_ERRORS as error:
-                unreadable.append({"artifact_id": artifact_id, "error": _error(error)})
-                continue
-            for deployment in found:
-                matches = lossless.get(_setup_key(deployment.setup), [])
-                comparisons = []
-                for clip in deployment.clips:
-                    baseline, reason, fields = _pair(clip, matches)
-                    if reason is not None:
-                        unscored.append(
-                            {"candidate": clip.entry, "reason": reason, "fields": fields}
-                        )
-                        continue
-                    comparison = media.compare_media(baseline.media, clip.media, per_frame=True)
-                    comparisons.append(comparison)
-                    pairs.append(
-                        {
-                            "candidate": clip.entry,
-                            "baseline": baseline.entry,
-                            "comparison": comparison,
-                        }
-                    )
-                deployments.append(
-                    {
-                        "candidate": {
-                            "artifact_id": artifact_id,
-                            "cell_id": deployment.cell_id,
-                            "optimizations": deployment.optimizations,
-                        },
-                        "baseline": [
-                            {"artifact_id": match.artifact_id, "cell_id": match.cell_id}
-                            for match in matches
-                        ],
-                        "setup": deployment.setup,
-                        "summary": _summary(comparisons),
-                    }
+        found, baseline_unreadable = _read(baselines, baseline_run_id, Path(scratch, "baseline"))
+        lossless: dict[str, list[_Deployment]] = {}
+        for deployment in found:
+            if not deployment.optimizations:
+                lossless.setdefault(_setup_key(deployment.setup), []).append(deployment)
+        candidates, unreadable = _read(bundles, run_id, Path(scratch, "candidate"))
+        for deployment in candidates:
+            matches = lossless.get(_setup_key(deployment.setup), [])
+            comparisons = []
+            for clip in deployment.clips:
+                baseline, reason, fields = _pair(clip, matches)
+                if reason is not None:
+                    unscored.append({"candidate": clip.entry, "reason": reason, "fields": fields})
+                    continue
+                comparison = media.compare_media(baseline.media, clip.media, per_frame=True)
+                comparisons.append(comparison)
+                pairs.append(
+                    {"candidate": clip.entry, "baseline": baseline.entry, "comparison": comparison}
                 )
+            deployments.append(
+                {
+                    "candidate": {
+                        "artifact_id": deployment.artifact_id,
+                        "cell_id": deployment.cell_id,
+                        "optimizations": deployment.optimizations,
+                    },
+                    "baseline": [
+                        {"artifact_id": match.artifact_id, "cell_id": match.cell_id}
+                        for match in matches
+                    ],
+                    "setup": deployment.setup,
+                    "summary": _summary(comparisons),
+                }
+            )
     attachment = {
         "schema_version": 1,
         "mode": "paired_lossless",
