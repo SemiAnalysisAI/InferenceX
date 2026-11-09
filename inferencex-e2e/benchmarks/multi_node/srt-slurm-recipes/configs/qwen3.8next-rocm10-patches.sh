@@ -19,6 +19,9 @@
 #   - 05 sglang#41683  strided GDN prefill projection views on HIP
 #   - 06 sglang#41879  GDN prefill conv on AITER FlyDSL, SGLANG_AITER_GDN_CONV
 #   - 07 sglang#44103  GDN chunked prefill on AITER, SGLANG_AITER_GDN_PREFILL[_H]
+#   - 08 sglang#48090  MTP verify target probs on the top-k support instead of a vocabulary-wide
+#                      sort (on with SGLANG_USE_AITER under rejection sampling; the image lacks
+#                      sglang#41916, so the patch carries its top-p rescale helper)
 # The image already has the monokernel (--enable-amd-monokernel), the AITER topk_gating router
 # (sglang#40708), ratio-3 GDN packing (sglang#44302) and the 128-row hc_mix (sglang#41880), so
 # none of them is patched. All Python. A wheel that does not install, or a patch that no longer
@@ -93,5 +96,6 @@ apply /sgl-workspace/sglang 04-sglang-45529-qwen35-fuse-selfattn-prepare.patch
 apply /sgl-workspace/sglang 05-sglang-41683-gdn-prefill-strided-views.patch
 apply /sgl-workspace/sglang 06-sglang-41879-aiter-gdn-conv-prefill.patch
 apply /sgl-workspace/sglang 07-sglang-44103-aiter-gdn-chunked-prefill.patch
+apply /sgl-workspace/sglang 08-sglang-48090-mtp-sparse-rejection-target-probs.patch
 
 echo "$digest" > "$marker"

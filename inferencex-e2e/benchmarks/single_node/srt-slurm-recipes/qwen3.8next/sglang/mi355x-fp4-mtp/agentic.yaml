@@ -19,7 +19,7 @@ base:
   # cp312 build, the one whose prebuilt kernels match the image's torch, which is built for
   # HIP 7.15; the ROCm 10.0 and 10.1 wheels fail on any tensor call; FlyDSL 0.4.2 is what
   # that release requires) and patches SGLang with open upstream PRs (sgl-project/sglang
-  # #48648, #45196, #48649, #45529, #41683, #41879, #44103).
+  # #48648, #45196, #48649, #45529, #41683, #41879, #44103, #48090).
   # The patch files are in patches/ next to this recipe.
   setup_script: qwen3.8next-rocm10-patches.sh
   environment:
