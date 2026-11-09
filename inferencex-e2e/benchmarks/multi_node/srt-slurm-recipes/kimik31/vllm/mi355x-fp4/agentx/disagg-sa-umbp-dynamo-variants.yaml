@@ -1,0 +1,320 @@
+base:
+  schema: 2
+  name: k31-sa-umbp-dynamo-p2d3-c176
+  identity:
+    model:
+      revision: 6d0a0202956796543364d666ab19c6ad1a494ee1
+    frameworks:
+      dynamo: 1.6.0.dev20261023
+      vllm: 0.0.0+mum.65de218
+  slurm:
+    time_limit: 08:00:00
+  sbatch_directives:
+    mem: '0'
+  srun_options:
+    container-remap-root: ''
+    container-writable: ''
+    mem: '0'
+  container_mounts:
+    /dev/infiniband: /dev/infiniband
+  extra_mount:
+  - /usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so:/usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so:ro
+  - /var/lib/hf-hub-cache:/k31-preview:ro
+  - /it-share/data/yiczhu-k31-pd-1109/dynamo-site/site-packages:/k31-dynamo-site:ro
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+    placement:
+      node: head
+    args:
+      router-mode: least-loaded
+      router-session-affinity-ttl-secs: 900
+      dyn-chat-processor: dynamo
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  health_check:
+    interval_seconds: 10
+    max_attempts: 720
+  engine:
+    type: vllm
+    connector: moriio
+  roles:
+    prefill:
+      nodes: 2
+      workers: 2
+      gpus: 8
+      args:
+        served-model-name: moonshotai/Kimi-K3.1-Pro
+        trust-remote-code: true
+        moe-backend: auto
+        tensor-parallel-size: 8
+        load-format: fastsafetensors
+        gpu-memory-utilization: 0.91
+        language-model-only: true
+        max-model-len: 1048576
+        enable-prefix-caching: true
+        kv-cache-dtype: fp8
+        stream-interval: 10
+        seed: 7
+        decode-context-parallel-size: 8
+        dcp-comm-backend: a2a
+        max-num-seqs: 48
+        max-num-batched-tokens: 10240
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":10240,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,224,256,288,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240]}'
+        speculative-config: '{"model":"/k31-preview/models--Inferact--Kimi-K3.1-Pro-DSpark-preview/snapshots/6a2ef20a05efe88aabbf9ecaa12d020c3b0edf94","num_speculative_tokens":3,"method":"dspark","attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        additional-config: '{"kda_prefill_backend":"fused"}'
+        kv-transfer-config: '{"kv_connector": "MultiConnector", "kv_role": "kv_both", "kv_load_failure_policy": "fail", "kv_connector_extra_config": {"connectors":
+          [{"kv_connector": "MoRIIOConnector", "kv_role": "kv_producer", "kv_load_failure_policy": "fail", "kv_connector_extra_config": {"backend": "rdma", "read_mode":
+          true}}, {"kv_connector": "UMBPStoreConnector", "kv_role": "kv_both", "kv_connector_extra_config": {"mode": "standalone", "endpoint": "/run/k31-umbp/pool.sock",
+          "timeout_ms": 60000, "lazy_offload": false}}]}}'
+        attention-config: '{"indexer_kv_dtype":"mxfp4"}'
+        hf-overrides: '{"text_config":{"dsa_config":{"indexer_use_fp8":true}}}'
+        prefix-match-unit: 64
+        cp-kv-cache-interleave-size: 1
+        quantization-config: '{"targets":{"*in_proj_qkvgfab":"fp8_per_channel"}}'
+        mamba-ssm-cache-dtype: float32
+        mamba-cache-mode: align
+        block-size: 64
+      env:
+        PYTHONPATH: /opt/mum
+        HF_HOME: /private-state/huggingface
+        HF_HUB_CACHE: /private-state/huggingface/hub
+        HF_HUB_OFFLINE: '1'
+        VLLM_USE_V2_MODEL_RUNNER: '1'
+        VLLM_ROCM_USE_AITER_MOE_SITUV2: '1'
+        NCCL_IB_HCA: '@fabric.rdma-devices'
+        NCCL_SOCKET_IFNAME: '@fabric.socket-ifname'
+        GLOO_SOCKET_IFNAME: '@fabric.socket-ifname'
+        VLLM_ROCM_USE_AITER: '1'
+        AITER_BF16_FP8_MOE_BOUND: '0'
+        AITER_FLYDSL_STAGE2_FP8: '0'
+        VLLM_ROCM_AITER_MLA_ASM_PADDING: asm
+        VLLM_ROCM_AITER_MLA_DCP_VERIFY: asm
+        VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: NONE
+        SAFETENSORS_FAST_GPU: '1'
+        VLLM_SSM_CONV_STATE_LAYOUT: DS
+        VLLM_KV_CACHE_LAYOUT: BLHNC
+        NCCL_DMABUF_ENABLE: '0'
+        HSA_ENABLE_IPC_MODE_LEGACY: '1'
+        HIP_FORCE_DEV_KERNARG: '1'
+        PYTHONHASHSEED: '42'
+        VLLM_USE_DIRECT_DCP_A2A: '0'
+        VLLM_USE_DIRECT_DCP_Q_GATHER: '0'
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '0'
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+        VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1200'
+        PYTHONNOUSERSITE: '1'
+        VLLM_SERVER_DEV_MODE: '0'
+        MORI_IO_SQ_BACKOFF_TIMEOUT_US: '50000'
+        MORI_IO_QP_MAX_SEND_WR: '16384'
+        MORI_IO_QP_MAX_CQE: '32768'
+        MORI_IO_QP_MAX_SGE: '2'
+        MORI_RDMA_TC: '@fabric.rdma-tc'
+        MORI_IO_TC: '@fabric.rdma-tc'
+        MORI_IO_TC_DISABLE: '0'
+        HSA_NO_SCRATCH_RECLAIM: '1'
+        MORI_UMBP_LOG_LEVEL: info
+        UMBP_ENDPOINT: /run/k31-umbp/pool.sock
+        UMBP_DRAM_CAPACITY: '1799000000000'
+        UMBP_DISTRIBUTED_MEDIUM: DRAM
+        UMBP_DISTRIBUTED_DRAM_PAGE_SIZE: '2097152'
+        UMBP_DISTRIBUTED_LOCAL_FIRST: '1'
+        UMBP_DISTRIBUTED_CACHE_REMOTE_FETCHES: '1'
+        UMBP_DISTRIBUTED_RANGED_LOCALITY_PREFETCH: '1'
+        UMBP_DISTRIBUTED_RANGED_SCRATCH_BYTES: '268435456'
+        UMBP_DRAM_HIGH_WM: '0.99'
+        UMBP_DRAM_LOW_WM: '0.97'
+        UMBP_SSD_ENABLED: '0'
+        UMBP_DRAM_USE_HUGEPAGES: '1'
+        UMBP_DRAM_HUGEPAGE_SIZE: '2097152'
+        UMBP_DRAM_PREFAULT: '1'
+        UMBP_DRAM_NUMA_NODE: 0,1
+        UMBP_DRAM_HOST_REGISTER: '1'
+        UMBP_DRAM_MAX_MR_BYTES: '549755813888'
+        UMBP_POOL_MAX_RD_ATOMIC: '1'
+        VLLM_FASTSAFETENSORS_QUEUE_SIZE: '-1'
+        VLLM_USE_BREAKABLE_CUDAGRAPH: '1'
+        VLLM_ROCM_USE_AITER_FLYDSL_SPARSE_MLA: '1'
+        AITER_FLYDSL_SPARSE_MLA: '1'
+        VLLM_ROCM_DCP_AITER_ALLGATHER: '1'
+        VLLM_ROCM_DSA_DCP_GLOBAL_KEY_PREFILL: '1'
+        VLLM_ROCM_DSA_DCP_ROWSHARD_PREFILL: '1'
+        MORI_IO_ENABLE_NOTIFICATION: '0'
+        THP_MEM_ALLOC_ENABLE: '1'
+    decode:
+      nodes: 3
+      workers: 3
+      gpus: 8
+      args:
+        served-model-name: moonshotai/Kimi-K3.1-Pro
+        trust-remote-code: true
+        moe-backend: auto
+        tensor-parallel-size: 8
+        load-format: fastsafetensors
+        gpu-memory-utilization: 0.91
+        language-model-only: true
+        max-model-len: 1048576
+        enable-prefix-caching: true
+        kv-cache-dtype: fp8
+        stream-interval: 10
+        seed: 7
+        decode-context-parallel-size: 8
+        dcp-comm-backend: a2a
+        max-num-seqs: 128
+        max-num-batched-tokens: 10240
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":512,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256,260,264,268,272,276,280,284,288,292,296,300,304,308,312,316,320,324,328,332,336,340,344,348,352,356,360,364,368,372,376,380,384,388,392,396,400,404,408,412,416,420,424,428,432,436,440,444,448,452,456,460,464,468,472,476,480,484,488,492,496,500,504,508,512]}'
+        speculative-config: '{"model":"/k31-preview/models--Inferact--Kimi-K3.1-Pro-DSpark-preview/snapshots/6a2ef20a05efe88aabbf9ecaa12d020c3b0edf94","num_speculative_tokens":3,"method":"dspark","attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        additional-config: '{"kda_prefill_backend":"fused"}'
+        kv-transfer-config: '{"kv_connector": "MultiConnector", "kv_role": "kv_both", "kv_load_failure_policy": "fail", "kv_connector_extra_config": {"connectors":
+          [{"kv_connector": "MoRIIOConnector", "kv_role": "kv_consumer", "kv_load_failure_policy": "fail", "kv_connector_extra_config": {"backend": "rdma", "read_mode":
+          true}}, {"kv_connector": "UMBPStoreConnector", "kv_role": "kv_consumer", "kv_connector_extra_config": {"mode": "standalone", "endpoint": "/run/k31-umbp/pool.sock",
+          "timeout_ms": 60000, "enable_lookup": false, "save_decode_cache": false}}]}}'
+        attention-config: '{"indexer_kv_dtype":"mxfp4"}'
+        hf-overrides: '{"text_config":{"dsa_config":{"indexer_use_fp8":true}}}'
+        prefix-match-unit: 64
+        cp-kv-cache-interleave-size: 1
+        quantization-config: '{"targets":{"*in_proj_qkvgfab":"fp8_per_channel"}}'
+        mamba-ssm-cache-dtype: float32
+        mamba-cache-mode: align
+        block-size: 64
+      env:
+        PYTHONPATH: /opt/mum
+        HF_HOME: /private-state/huggingface
+        HF_HUB_CACHE: /private-state/huggingface/hub
+        HF_HUB_OFFLINE: '1'
+        VLLM_USE_V2_MODEL_RUNNER: '1'
+        VLLM_ROCM_USE_AITER_MOE_SITUV2: '1'
+        NCCL_IB_HCA: '@fabric.rdma-devices'
+        NCCL_SOCKET_IFNAME: '@fabric.socket-ifname'
+        GLOO_SOCKET_IFNAME: '@fabric.socket-ifname'
+        VLLM_ROCM_USE_AITER: '1'
+        AITER_BF16_FP8_MOE_BOUND: '0'
+        AITER_FLYDSL_STAGE2_FP8: '0'
+        VLLM_ROCM_AITER_MLA_ASM_PADDING: asm
+        VLLM_ROCM_AITER_MLA_DCP_VERIFY: asm
+        VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: NONE
+        SAFETENSORS_FAST_GPU: '1'
+        VLLM_SSM_CONV_STATE_LAYOUT: DS
+        VLLM_KV_CACHE_LAYOUT: BLHNC
+        NCCL_DMABUF_ENABLE: '0'
+        HSA_ENABLE_IPC_MODE_LEGACY: '1'
+        HIP_FORCE_DEV_KERNARG: '1'
+        PYTHONHASHSEED: '42'
+        VLLM_USE_DIRECT_DCP_A2A: '0'
+        VLLM_USE_DIRECT_DCP_Q_GATHER: '0'
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '0'
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+        VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1200'
+        PYTHONNOUSERSITE: '1'
+        VLLM_SERVER_DEV_MODE: '0'
+        MORI_IO_SQ_BACKOFF_TIMEOUT_US: '50000'
+        MORI_IO_QP_MAX_SEND_WR: '16384'
+        MORI_IO_QP_MAX_CQE: '32768'
+        MORI_IO_QP_MAX_SGE: '2'
+        MORI_RDMA_TC: '@fabric.rdma-tc'
+        MORI_IO_TC: '@fabric.rdma-tc'
+        MORI_IO_TC_DISABLE: '0'
+        HSA_NO_SCRATCH_RECLAIM: '1'
+        MORI_UMBP_LOG_LEVEL: info
+        UMBP_ENDPOINT: /run/k31-umbp/pool.sock
+        UMBP_DRAM_CAPACITY: '1799000000000'
+        UMBP_DISTRIBUTED_MEDIUM: DRAM
+        UMBP_DISTRIBUTED_DRAM_PAGE_SIZE: '2097152'
+        UMBP_DISTRIBUTED_LOCAL_FIRST: '1'
+        UMBP_DISTRIBUTED_CACHE_REMOTE_FETCHES: '1'
+        UMBP_DISTRIBUTED_RANGED_LOCALITY_PREFETCH: '1'
+        UMBP_DISTRIBUTED_RANGED_SCRATCH_BYTES: '268435456'
+        UMBP_DRAM_HIGH_WM: '0.99'
+        UMBP_DRAM_LOW_WM: '0.97'
+        UMBP_SSD_ENABLED: '0'
+        UMBP_DRAM_USE_HUGEPAGES: '1'
+        UMBP_DRAM_HUGEPAGE_SIZE: '2097152'
+        UMBP_DRAM_PREFAULT: '1'
+        UMBP_DRAM_NUMA_NODE: 0,1
+        UMBP_DRAM_HOST_REGISTER: '1'
+        UMBP_DRAM_MAX_MR_BYTES: '549755813888'
+        UMBP_POOL_MAX_RD_ATOMIC: '1'
+        VLLM_FASTSAFETENSORS_QUEUE_SIZE: '-1'
+        VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
+        VLLM_ROCM_USE_AITER_FLYDSL_SPARSE_MLA: '1'
+        AITER_FLYDSL_SPARSE_MLA: '1'
+        VLLM_ROCM_DCP_AITER_ALLGATHER: '1'
+        VLLM_ROCM_DSA_DCP_GLOBAL_KEY_PREFILL: '1'
+        VLLM_ROCM_DSA_DCP_ROWSHARD_PREFILL: '1'
+        MORI_IO_ENABLE_NOTIFICATION: '0'
+        THP_MEM_ALLOC_ENABLE: '1'
+  benchmark:
+    command: env -u HF_HUB_OFFLINE -u TRANSFORMERS_OFFLINE bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      TOKENIZER: /model
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_BENCHMARK_GRACE_PERIOD: '300'
+      AGENTIC_WARMUP_GRACE_PERIOD: '300'
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+    placement:
+      node: head
+  setup_script: k31-seven-dynamo-venv.sh
+  host_setup:
+    nodes: workers
+    timeout_seconds: 1800
+    commands:
+    - IBDEVICES=rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/setup.sh"
+    - page_kb=$(awk '/^Hugepagesize:/ {print $2}' /proc/meminfo); test "$page_kb" = 2048; pages=$(( (1799000000000 / (page_kb * 1024) + 1) * 102 / 100 )); HUGEPAGES_TARGET=$pages
+      HUGEPAGE_GROW_TOLERANCE_PCT=1 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/hugepage_sanity.sh"
+    teardown:
+    - HUGEPAGES_TARGET=0 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/hugepage_sanity.sh"
+  services:
+  - name: umbp-master
+    type: generic
+    container: null
+    placement:
+      node: head
+    start: before_workers
+    critical: true
+    inherit_discovery_env: false
+    command:
+    - /usr/local/bin/umbp_master
+    - 0.0.0.0:25190
+    - '25191'
+    env:
+      MORI_UMBP_LOG_LEVEL: info
+      UMBP_ROUTE_PUT_SELECT_ALGO: most_available
+      UMBP_ROUTE_PUT_NODE_AFFINITY: none
+    readiness:
+      port: 25190
+      timeout_seconds: 900
+  - name: gpu-memory
+    type: generic
+    placement:
+      node: workers
+    start: before_workers
+    critical: false
+    inherit_discovery_env: false
+    cpus_per_task: 1
+    command:
+    - python3
+    - -u
+    - /infmax-workspace/benchmarks/k31_gpu_memory.py
+    - --interval-seconds
+    - '60'
+    - --duration-seconds
+    - '28800'
+  environment:
+    SRT_MORIIO_EXPLICIT_REGISTRATION: '1'
+    DYNAMO_VENV_ROOT: /private-state/k31-dynamo
+    DYNAMO_VERSION: 1.6.0.dev20261023
+    DYNAMO_ENGINE_GRPC_VERSION: 1.78.0
+    DYNAMO_BASE_PYTHON: /opt/runtime-venv/bin/python
+    DYNAMO_SITE_PACKAGES: /k31-dynamo-site
+    DYN_TCP_RPC_HOST: '@fabric.socket-ifname'
+    DYN_TCP_RESPONSE_STREAM_HOST: '@fabric.socket-ifname'
+  dynamo:
+    install: false
+    source:
+      pypi: 1.6.0.dev20261023

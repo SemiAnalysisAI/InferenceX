@@ -12562,3 +12562,13 @@
     - "At concurrency 80 the overall prefix cache hit rate is flat: 93.5% of prompt tokens on the previous image and policy (run 36743632401) against 94.0% here (run 39763900198). What moves is the tier split -- the HiCache host tier serves 49.1% of prompt tokens instead of 43.3%, and the GPU tier 44.9% instead of 50.2%. Per-GPU throughput goes from 59,233 to 60,839 tok/s (+2.7%), p90 end-to-end latency from 50.9 s to 47.9 s, and mean TTFT from 3.12 s to 2.68 s."
     - "That concurrency 80 comparison is not a single-variable A/B: the 36743632401 baseline ran hicache-size 400 on lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260929, while this point runs hicache-size 374 on the v0.5.22 image, so the image, the write policy and the host pool size all differ."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4374
+
+- config-keys:
+    - kimik31-sa-umbp-p2d3-c176
+  scenario-type: [agentic-coding]
+  description:
+    - Add Kimi-K3.1-Pro 2P3D c176 with Dynamo, MoRIIO READ, and distributed UMBP on MI355X.
+    - Pin the validated PD base image with MoRI e65d1a3e READ-cap support; set MORI_IO_QP_MAX_RD_ATOMIC=1 only for standalone pools.
+    - Use full-NIC TC104, a 1799 GB HugeTLB pool per worker node, and pool-local soft memlock elevation to the inherited hard limit.
+    - Keep prefill breakable graphs and decode full graphs through 512 tokens, with decode max-num-seqs 128.
+  pr-link: XXX

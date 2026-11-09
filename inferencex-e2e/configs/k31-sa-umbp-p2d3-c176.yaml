@@ -1,0 +1,40 @@
+kimik31-sa-umbp-p2d3-c176:
+  image: yukiozzz/vllm-openai-rocm:apex-k31-readcap-1109@sha256:d9ec0365bd9cef13693c48e7d816c86d7da9c41bad18e3a182c8b89e31ad071a
+  model: moonshotai/Kimi-K3.1-Pro
+  model-prefix: kimik3.1
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: dynamo-vllm
+  router:
+    name: dynamo-router
+    version: 1.6.0.dev20261023
+  kv-p2p-transfer: moriio
+  multinode: true
+  disagg: true
+  srt-recipe-dir: kimik31/vllm/mi355x-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.6
+      search-space:
+      - spec-decoding: mtp
+        conc-list:
+        - 176
+        kv-offloading: dram
+        kv-offload-backend:
+          name: umbp
+        srt-recipe: disagg-sa-umbp-dynamo-variants.yaml:base
+        prefill:
+          num-worker: 2
+          tp: 8
+          dcp-size: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - TOTAL_CPU_DRAM_GB=1799
+          - MODEL_PATH=/var/lib/hf-hub-cache/models--moonshotai--Kimi-K3.1-Pro/snapshots/6d0a0202956796543364d666ab19c6ad1a494ee1
+        decode:
+          num-worker: 3
+          tp: 8
+          dcp-size: 8
+          ep: 1
+          dp-attn: false

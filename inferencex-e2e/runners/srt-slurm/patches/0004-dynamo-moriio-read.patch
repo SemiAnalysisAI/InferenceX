@@ -1,0 +1,87 @@
+diff --git a/src/srtctl/backends/vllm.py b/src/srtctl/backends/vllm.py
+index fc9c9371..2c02a186 100644
+--- a/src/srtctl/backends/vllm.py
++++ b/src/srtctl/backends/vllm.py
+@@ -589,9 +589,16 @@ class VLLMBackend(Backend):
+                 f"{process.endpoint_mode} worker on {process.node} has no MoRI-IO listeners; "
+                 "the topology was built without a discovery connector"
+             )
++        proxy = (
++            {}
++            if runtime.environment.get("SRT_MORIIO_EXPLICIT_REGISTRATION") == "1"
++            else {
++                "proxy_ip": runtime.head_node_ip,
++                "proxy_ping_port": str(VLLM_DISCOVERY_PORT),
++            }
++        )
+         return {
+-            "proxy_ip": runtime.head_node_ip,
+-            "proxy_ping_port": str(VLLM_DISCOVERY_PORT),
++            **proxy,
+             "http_port": str(process.http_port),
+             # Upstream falls back to its own interface guess, which is the wrong NIC on multi-homed nodes.
+             "host_ip": get_hostname_ip(process.node, runtime.network_interface),
+@@ -1392,9 +1399,16 @@ class VLLMBackend(Backend):
+         # Base command - use dynamo.vllm module
+         cmd.extend(
+             [
+-                "python3",
+-                "-m",
+-                "dynamo.vllm",
++                (
++                    f"{runtime.environment['DYNAMO_VENV_ROOT']}/{runtime.job_id}/bin/python"
++                    if "DYNAMO_VENV_ROOT" in runtime.environment
++                    else "python3"
++                ),
++                *(
++                    ["/configs/dynamo_moriio_worker.py"]
++                    if runtime.environment.get("SRT_MORIIO_EXPLICIT_REGISTRATION") == "1"
++                    else ["-m", "dynamo.vllm"]
++                ),
+                 "--model",
+                 model_arg,
+                 "--served-model-name",
+diff --git a/src/srtctl/core/schema.py b/src/srtctl/core/schema.py
+index 7e0d228c..b45415b9 100755
+--- a/src/srtctl/core/schema.py
++++ b/src/srtctl/core/schema.py
+@@ -3149,7 +3149,9 @@ class SrtConfig:
+         """
+         if not isinstance(self.backend, VLLMBackend) or not self.backend.discovers_workers():
+             return
+-        if self.frontend.type != "vllm-router":
++        if self.frontend.type != "vllm-router" and not (
++            self.frontend.type == "dynamo" and self.environment.get("SRT_MORIIO_EXPLICIT_REGISTRATION") == "1"
++        ):
+             raise ValidationError(
+                 "a discovery connector (engine.connector: moriio) registers workers with the vLLM Router; "
+                 f"it requires frontend.type: vllm-router (got {self.frontend.type!r})"
+diff --git a/src/srtctl/frontends/dynamo.py b/src/srtctl/frontends/dynamo.py
+index d574f3c1..893042bc 100644
+--- a/src/srtctl/frontends/dynamo.py
++++ b/src/srtctl/frontends/dynamo.py
+@@ -222,7 +222,12 @@ class DynamoFrontend(DynamicFrontend):
+             logger.info("Starting dynamo frontend %d on %s", idx, node)
+ 
+             frontend_log = runtime.log_dir / f"{node}_frontend_{idx}.out"
+-            cmd = ["python3", "-m", "dynamo.frontend", f"--http-port={topology.frontend_port}"]
++            python = (
++                f"{runtime.environment['DYNAMO_VENV_ROOT']}/{runtime.job_id}/bin/python"
++                if "DYNAMO_VENV_ROOT" in runtime.environment
++                else "python3"
++            )
++            cmd = [python, "-m", "dynamo.frontend", f"--http-port={topology.frontend_port}"]
+             cmd.extend(self.get_frontend_args_list(frontend_args))
+ 
+             automatic_nsys = getattr(config, "observability_nsys_enabled", False) is True
+@@ -255,6 +260,10 @@ class DynamoFrontend(DynamicFrontend):
+             # Add global recipe environment, including values derived from
+             # dynamo.source.wheel, before frontend-specific overrides.
+             env_to_set.update(runtime.environment)
++            if "DYNAMO_VENV_ROOT" in runtime.environment:
++                env_to_set["HOME"] = (
++                    f"{runtime.environment['DYNAMO_VENV_ROOT']}/{runtime.job_id}/home"
++                )
+ 
+             # Add frontend env from config
+             if config.frontend.env:
