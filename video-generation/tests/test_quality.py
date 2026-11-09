@@ -337,8 +337,8 @@ def test_an_lpips_error_fails_the_job_instead_of_marking_the_pair_incompatible(
 
 
 def test_a_same_run_dispatch_pairs_two_deployments_but_never_one_with_itself(tmp_path):
-    media = [encode_media(tmp_path / "same.mp4")] * 3
-    bundles = [f"{artifact}={_bundle(tmp_path / str(artifact), media)}" for artifact in (3, 4)]
+    clips = [encode_media(tmp_path / "same.mp4")] * 3
+    bundles = [f"{artifact}={_bundle(tmp_path / str(artifact), clips)}" for artifact in (3, 4)]
     arguments = ["score-quality", *bundles, "--baseline", bundles[0], "--baseline", bundles[1]]
     arguments += ["--run-id", "41", "--baseline-run-id", "41", "--source-revision", REVISION]
     assert cli.main([*arguments, "--output", str(tmp_path / "out")]) == 0

@@ -283,10 +283,11 @@ def _deployments(root: Path, run_id: str, artifact_id: int) -> list[_Deployment]
             configuration = json.loads((cell / "baseline" / "run.json").read_bytes())[
                 "configuration"
             ]
+            identity = configuration["numerical_identity"]
             setup = {
                 "hardware": aggregate["cluster"].partition("-")[0],
                 "engine": configuration["runtime"],
-                "image_digest": configuration["numerical_identity"]["image_digest"],
+                "image_digest": identity["image_digest"],
                 "runtime_revision": configuration["runtime_revision"],
                 "gpu_count": aggregate["num_gpus"],
                 "precision": aggregate["precision"],
@@ -295,7 +296,6 @@ def _deployments(root: Path, run_id: str, artifact_id: int) -> list[_Deployment]
                 "server": json.loads((cell / "spec.json").read_bytes())["server"],
             }
             optimizations = sorted(configuration.get("optimizations") or [])
-            identity = configuration["numerical_identity"]
             launch = {
                 "argv": identity["server_argv"],
                 "environment": identity["server_environment"],
