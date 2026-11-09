@@ -34,11 +34,12 @@ It forwards every point's image as `VIDEO_CONTAINER_IMAGE`; the server refuses a
 image without a SHA256 digest and records the digest in its launch receipt.
 A recipe that enables a lossy optimization, such as Cache-DiT or sparse attention,
 declares it in a top-level `optimizations:` list of App registry keys (`cache-dit`,
-`subblock-sparse-attn`). The binder passes the list to the client, which records it
-as `configuration.optimizations` in each cell's `run.json`, so the App draws the run
-apart from the lossless deployment. A lossy deployment keeps the lossless key's
-image, layout and workload under its own key, so its clips can be scored against
-the lossless clips.
+`subblock-sparse-attn`). The binder rejects a key the runtime's work attestation
+cannot prove, so a misspelled key fails before submission. It passes the list to
+the client, which records it as `configuration.optimizations` in each cell's
+`run.json`, so the App draws the run apart from the lossless deployment. A lossy
+deployment keeps the lossless key's image, layout and workload under its own key,
+so its clips can be scored against the lossless clips.
 
 The launch receipt records recipe-wide `environment` and server `env` values
 after binding, with server values taking precedence. Use these fields only for

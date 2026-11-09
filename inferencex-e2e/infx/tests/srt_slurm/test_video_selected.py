@@ -66,7 +66,7 @@ def test_declared_optimizations_reach_the_client_and_leave_the_recipe(native_fra
         '["cache-dit", "subblock-sparse-attn"]'
     )
 
-    for malformed in (["cache-dit", "cache-dit"], ["Cache DiT"], "cache-dit"):
+    for malformed in (["cache-dit", "cache-dit"], ["Cache DiT"], "cache-dit", ["cachedit"]):
         raw["optimizations"] = malformed
         with pytest.raises(ValueError, match="optimizations must list distinct registry keys"):
             video.prepare(write(raw), point, root=ROOT)
