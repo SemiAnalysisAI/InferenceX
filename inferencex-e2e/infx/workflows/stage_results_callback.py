@@ -13,6 +13,7 @@ from urllib.parse import parse_qs, quote, urlsplit
 from infx import github
 
 STAGING_SITE = "https://inferencemax-app-git-staging-semianalysisai.vercel.app"
+INFERENCE_PATH = "/infx/inference"
 
 
 def chart_links(payload: dict[str, Any], run_id: str, run_date: str) -> list[str]:
@@ -22,7 +23,7 @@ def chart_links(payload: dict[str, Any], run_id: str, run_date: str) -> list[str
     """
     links = payload.get("chart-links")
     if links is None:
-        return [f"{STAGING_SITE}/inference?i_dates={quote(f'{run_date}~r{run_id}')}"]
+        return [f"{STAGING_SITE}{INFERENCE_PATH}?i_dates={quote(f'{run_date}~r{run_id}')}"]
     if not isinstance(links, list):
         raise RuntimeError("Callback chart-links must be a list")
     result = []
@@ -38,7 +39,7 @@ def chart_links(payload: dict[str, Any], run_id: str, run_date: str) -> list[str
         query = parse_qs(parsed.query)
         if (
             f"{parsed.scheme}://{parsed.netloc}" != STAGING_SITE
-            or parsed.path != "/inference"
+            or parsed.path != INFERENCE_PATH
             or parsed.fragment
             or not all(query.get(key) for key in ("g_model", "i_seq", "i_prec", "i_gpus"))
             or len(query.get("i_dates", [])) != 1
