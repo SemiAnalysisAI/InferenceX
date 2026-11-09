@@ -13,8 +13,9 @@ base:
   container_mounts:
     /dev/infiniband: /dev/infiniband
   extra_mount:
-    # Match the host's Ionic provider without replacing the image's verbs core.
+    # The image has no Ionic verbs provider; libibverbs loads the host's only through its driver entry.
     - /usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so:/usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so:ro
+    - /etc/libibverbs.d/ionic.driver:/etc/libibverbs.d/ionic.driver:ro
   resources:
     gpu_type: mi355x
     gpus_per_node: 8
