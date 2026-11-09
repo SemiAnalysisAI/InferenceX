@@ -39,6 +39,8 @@ def _bundle(
     server: dict | None = None,
     precision: str = "bf16",
     optimizations: list[str] | None = None,
+    argv: list[str] | None = None,
+    environment: dict[str, str] | None = None,
 ) -> Path:
     """An h3-results bundle whose c1 cell measured CASES in order with these media files."""
     cell = bundle / "gpu/c1"
@@ -69,7 +71,11 @@ def _bundle(
     configuration = {
         "runtime": "sglang",
         "runtime_revision": "e" * 40,
-        "numerical_identity": {"image_digest": "f" * 64},
+        "numerical_identity": {
+            "image_digest": "f" * 64,
+            "server_argv": ["serve", "--port", "30000", *(argv or [])],
+            "server_environment": {"VGBENCH_GPU_UUIDS": "GPU-a", **(environment or {})},
+        },
         "serving": {"concurrency": 1},
         "optimizations": optimizations or [],
     }
@@ -241,6 +247,8 @@ def paired_arguments(tmp_path_factory) -> list[str]:
         seeds={"reseeded": 99},
         server={"attention_backend": "subblock_sparse_attn"},
         optimizations=["subblock-sparse-attn"],
+        argv=["--attention-backend", "subblock_sparse_attn"],
+        environment={"VGBENCH_GPU_UUIDS": "GPU-b"},
     )
     offload = _bundle(root / "offload", [same, other, same], server={"dit_cpu_offload": True})
     fp8 = _bundle(root / "fp8", [same, changed, same], precision="fp8", optimizations=["cache-dit"])
@@ -272,7 +280,17 @@ def test_pairs_each_clip_with_the_same_case_of_the_lossless_deployment(paired):
     assert len(changed["video_ssim_frames"]) == len(changed["video_lpips_frames"]) == 8
     summary = next(item for item in paired["deployments"] if item["candidate"]["artifact_id"] == 7)
     assert summary["candidate"]["optimizations"] == ["subblock-sparse-attn"]
-    assert summary["baseline"] == [{"artifact_id": 3, "cell_id": "c1"}]
+    assert summary["baseline"] == [
+        {
+            "artifact_id": 3,
+            "cell_id": "c1",
+            "server_difference": {
+                "argv": {"--attention-backend": [None, ["subblock_sparse_attn"]]},
+                "environment": {"VGBENCH_GPU_UUIDS": ["GPU-a", "GPU-b"]},
+            },
+        }
+    ]
+    assert (summary["summary"]["pairs"], summary["summary"]["unscored"]) == (2, 1)
     assert summary["summary"]["identical"] == 1
     assert summary["summary"]["video_psnr_db"]["worst"] == changed["video_psnr_db"]
     assert summary["summary"]["video_ssim"]["worst"] == changed["video_ssim"]

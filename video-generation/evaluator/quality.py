@@ -267,6 +267,7 @@ class _Deployment(NamedTuple):
     cell_id: str
     setup: dict
     optimizations: list[str]
+    launch: dict
     clips: list[_Clip]
 
 
@@ -294,7 +295,14 @@ def _deployments(root: Path, run_id: str, artifact_id: int) -> list[_Deployment]
                 "server": json.loads((cell / "spec.json").read_bytes())["server"],
             }
             optimizations = sorted(configuration.get("optimizations") or [])
-            cells[cell_id] = _Deployment(run_id, artifact_id, cell_id, setup, optimizations, [])
+            identity = configuration["numerical_identity"]
+            launch = {
+                "argv": identity["server_argv"],
+                "environment": identity["server_environment"],
+            }
+            cells[cell_id] = _Deployment(
+                run_id, artifact_id, cell_id, setup, optimizations, launch, []
+            )
         slot = entry["slot_id"]
         request = f"gpu/{cell_id}/baseline/requests/{slot}.json"
         sealed = (
@@ -357,7 +365,29 @@ def _pair(clip: _Clip, lossless: list[_Deployment]) -> tuple[_Clip | None, str |
     return baseline, ("settings_mismatch" if fields else None), fields
 
 
-def _summary(comparisons: list[dict]) -> dict[str, Any]:
+def _flags(argv: list[str]) -> dict[str, list[str]]:
+    """Each option in a server argv with the values that follow it."""
+    flags: dict[str, list[str]] = {"": []}
+    option = ""
+    for token in argv:
+        if token.startswith("-"):
+            option = token
+            flags.setdefault(option, [])
+        else:
+            flags[option].append(token)
+    return flags
+
+
+def _changed(baseline: dict, candidate: dict) -> dict[str, list]:
+    """Each key whose value differs, as [baseline, candidate] with null for a missing key."""
+    return {
+        key: [baseline.get(key), candidate.get(key)]
+        for key in sorted(baseline.keys() | candidate.keys())
+        if baseline.get(key) != candidate.get(key)
+    }
+
+
+def _summary(comparisons: list[dict], unscored: int) -> dict[str, Any]:
     """Median and worst clip over the compatible pairs; an identical clip's PSNR ranks as best."""
     metrics = [comparison["metrics"] for comparison in comparisons if comparison["compatible"]]
     psnr = [math.inf if m["video_psnr_db"] is None else m["video_psnr_db"] for m in metrics]
@@ -369,6 +399,7 @@ def _summary(comparisons: list[dict]) -> dict[str, Any]:
 
     return {
         "pairs": len(comparisons),
+        "unscored": unscored,
         "compatible": len(metrics),
         "identical": sum(m["video_identical"] for m in metrics),
         "video_psnr_db": {
@@ -457,11 +488,22 @@ def score_paired(
                         "optimizations": deployment.optimizations,
                     },
                     "baseline": [
-                        {"artifact_id": match.artifact_id, "cell_id": match.cell_id}
+                        {
+                            "artifact_id": match.artifact_id,
+                            "cell_id": match.cell_id,
+                            "server_difference": {
+                                "argv": _changed(
+                                    _flags(match.launch["argv"]), _flags(deployment.launch["argv"])
+                                ),
+                                "environment": _changed(
+                                    match.launch["environment"], deployment.launch["environment"]
+                                ),
+                            },
+                        }
                         for match in matches
                     ],
                     "setup": deployment.setup,
-                    "summary": _summary(comparisons),
+                    "summary": _summary(comparisons, len(clips) - len(comparisons)),
                 }
             )
     attachment = {
