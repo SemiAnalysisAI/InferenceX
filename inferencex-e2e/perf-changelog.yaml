@@ -12512,3 +12512,10 @@
   description:
     - "Update the SGLang image from nightly-dev-cu13-20261029-c10e0e17 to nightly-dev-cu13-20261107-e45e1d0c."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4906
+
+- config-keys:
+    - dsv41flash-fp4-h200-vllm-agentic-dspark
+  description:
+    - "Update the vLLM image from v0.32.0 to v0.33.0."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4879
+  scenario-type: [agentic-coding]
