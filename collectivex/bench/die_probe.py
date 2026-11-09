@@ -18,22 +18,26 @@ SRC = r"""
   printf("{\"error\": \"%s line %d\"}\n", cudaGetErrorString(e_), __LINE__); exit(0); } } while (0)
 typedef unsigned long long u64;
 
-__global__ void ticker(volatile u64 *ctr, volatile int *stop) {
-  u64 c = 0; while (!*stop) { *ctr = ++c; }
-}
 __global__ void setflag(volatile int *stop) { *stop = 1; __threadfence_system(); }
-// Every block is one side of a ping-pong pair. near: blocks (2p, 2p+1); far: (p, p + B/2).
-__global__ void pairs(volatile int *flags, volatile u64 *ctr, u64 *out, int rounds, int far, int B) {
+// Every block is one side of a ping-pong pair and counts the round trips it finishes before the
+// host raises `stop`. near: blocks (2p, 2p+1); far: (p, p + B/2).
+__global__ void pairs(volatile int *flags, volatile int *stop, u64 *out, int max_rounds, int far, int B) {
   int b = blockIdx.x, half = B / 2, p, first;
   if (far) { p = b % half; first = b < half; } else { p = b / 2; first = !(b & 1); }
   volatile int *mine = flags + (p * 2 + (first ? 0 : 1)) * 64;
   volatile int *theirs = flags + (p * 2 + (first ? 1 : 0)) * 64;
-  u64 t0 = *ctr;
-  for (int i = 0; i < rounds; ++i) {
-    if (first) { *theirs = 2 * i + 1; __threadfence_system(); while (*mine != 2 * i + 2) {} }
-    else { while (*mine != 2 * i + 1) {} *theirs = 2 * i + 2; __threadfence_system(); }
+  int i = 0; bool live = true;
+  for (; live && i < max_rounds; ++i) {
+    unsigned spins = 0;
+    if (first) {
+      *theirs = 2 * i + 1; __threadfence_system();
+      while (*mine != 2 * i + 2) { if ((++spins & 63) == 0 && *stop) { live = false; break; } }
+    } else {
+      while (*mine != 2 * i + 1) { if ((++spins & 63) == 0 && *stop) { live = false; break; } }
+      if (live) { *theirs = 2 * i + 2; __threadfence_system(); }
+    }
   }
-  if (first) out[p] = *ctr - t0;
+  if (first) out[p] = i;
 }
 __global__ void pingpong(volatile int *mine, volatile int *theirs, int rounds, int first) {
   for (int i = 0; i < rounds; ++i) {
@@ -46,35 +50,32 @@ static double now_us() {
       std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
-// Per-pair round-trip time (us) with `active` pairs running at once.
-static void pair_test(const char *name, int B, int far, int rounds) {
-  int *flags, *stop; u64 *ctr, *out; cudaStream_t sc, sp, ss;
-  CK(cudaMalloc(&flags, 1 << 20)); CK(cudaMalloc(&stop, 4096)); CK(cudaMalloc(&ctr, 4096));
-  CK(cudaMalloc(&out, 8 * 4096));
-  CK(cudaMemset(flags, 0, 1 << 20)); CK(cudaMemset(stop, 0, 4096)); CK(cudaMemset(ctr, 0, 4096));
-  CK(cudaMemset(out, 0, 8 * 4096));
-  CK(cudaStreamCreate(&sc)); CK(cudaStreamCreate(&sp)); CK(cudaStreamCreate(&ss));
+// Per-pair round-trip time (us): round trips finished inside a host-timed window.
+static void pair_test(const char *name, int B, int far) {
+  int *flags, *stop; u64 *out; cudaStream_t sp, ss;
+  CK(cudaMalloc(&flags, 1 << 20)); CK(cudaMalloc(&stop, 4096)); CK(cudaMalloc(&out, 8 * 4096));
+  CK(cudaMemset(flags, 0, 1 << 20)); CK(cudaMemset(stop, 0, 4096)); CK(cudaMemset(out, 0, 8 * 4096));
+  CK(cudaStreamCreate(&sp)); CK(cudaStreamCreate(&ss));
   CK(cudaDeviceSynchronize());
   double t0 = now_us();
-  ticker<<<1, 1, 0, sc>>>((volatile u64 *)ctr, stop);
-  pairs<<<B, 1, 0, sp>>>(flags, (volatile u64 *)ctr, out, rounds, far, B);
-  CK(cudaStreamSynchronize(sp));
+  pairs<<<B, 1, 0, sp>>>(flags, stop, out, 2000000, far, B);
+  while (now_us() - t0 < 60000.0) {}
   setflag<<<1, 1, 0, ss>>>(stop);
-  CK(cudaStreamSynchronize(sc));
-  double wall = now_us() - t0;
-  u64 total; CK(cudaMemcpy(&total, ctr, 8, cudaMemcpyDeviceToHost));
+  CK(cudaStreamSynchronize(ss));
+  double window = now_us() - t0;
+  CK(cudaStreamSynchronize(sp));
+  double total = now_us() - t0;
   std::vector<u64> host(B / 2); CK(cudaMemcpy(host.data(), out, 8 * (B / 2), cudaMemcpyDeviceToHost));
-  double us_per_tick = wall / (double)total;
-  printf(", \"%s\": {\"wall_us\": %.0f, \"ticks\": %llu, \"per_round_us\": [", name, wall, total);
-  for (int p = 0; p < B / 2; ++p) printf("%s%.3f", p ? ", " : "", host[p] * us_per_tick / rounds);
-  printf("]}");
-  CK(cudaFree(flags)); CK(cudaFree(stop)); CK(cudaFree(ctr)); CK(cudaFree(out));
+  printf(", \"%s\": {\"window_us\": %.0f, \"total_us\": %.0f, \"per_round_us\": [", name, window, total);
+  for (int p = 0; p < B / 2; ++p) printf("%s%.3f", p ? ", " : "", host[p] ? window / (double)host[p] : -1.0);
+  printf("]}"); fflush(stdout);
+  CK(cudaFree(flags)); CK(cudaFree(stop)); CK(cudaFree(out));
 }
 
 static double ping_at(int *fa, int *fb, int rounds) {
   cudaStream_t sa, sb; CK(cudaStreamCreate(&sa)); CK(cudaStreamCreate(&sb));
   std::vector<double> s;
-  for (int rep = 0; rep < 5; ++rep) {
+  for (int rep = 0; rep < 3; ++rep) {
     CK(cudaMemset(fa, 0, 64)); CK(cudaMemset(fb, 0, 64)); CK(cudaDeviceSynchronize());
     double t0 = now_us();
     pingpong<<<1, 1, 0, sb>>>(fb, fa, rounds, 0);
@@ -92,22 +93,22 @@ int main() {
   cudaDeviceProp prop; CK(cudaGetDeviceProperties(&prop, 0));
   int sms = prop.multiProcessorCount;
   size_t freeb, totalb; CK(cudaMemGetInfo(&freeb, &totalb));
-  printf("{\"sms\": %d, \"mem_gb\": %.1f", sms, totalb / 1e9);
+  printf("{\"sms\": %d, \"mem_gb\": %.1f", sms, totalb / 1e9); fflush(stdout);
   int B = (sms - 2) & ~1;
-  pair_test("near_all", B, 0, 20000);
-  pair_test("far_all", B, 1, 20000);
-  pair_test("near_all_repeat", B, 0, 20000);
-  pair_test("near_8pairs", 16, 0, 20000);
-  pair_test("near_1pair", 2, 0, 20000);
+  pair_test("near_all", B, 0);
+  pair_test("far_all", B, 1);
+  pair_test("near_all_repeat", B, 0);
+  pair_test("near_8pairs", 16, 0);
+  pair_test("near_1pair", 2, 0);
   // Memory placement: one pair, flags placed in 16 chunks spread over ~85% of memory.
   const int chunks = 16; size_t chunk = (size_t)(freeb * 0.85 / chunks) & ~((size_t)4095);
   std::vector<int *> ptr(chunks, nullptr);
   int got = 0;
   for (int i = 0; i < chunks; ++i) { if (cudaMalloc(&ptr[i], chunk) != cudaSuccess) break; ++got; }
   printf(", \"chunk_gb\": %.2f, \"ping_by_chunk_us\": [", chunk / 1e9);
-  for (int i = 0; i < got; ++i) printf("%s%.3f", i ? ", " : "", ping_at(ptr[i], ptr[i] + 2048, 20000));
+  for (int i = 0; i < got; ++i) printf("%s%.3f", i ? ", " : "", ping_at(ptr[i], ptr[i] + 2048, 5000)); fflush(stdout);
   printf("], \"ping_cross_chunk_us\": [");
-  for (int i = 1; i < got; ++i) printf("%s%.3f", i > 1 ? ", " : "", ping_at(ptr[0], ptr[i], 20000));
+  for (int i = 1; i < got; ++i) printf("%s%.3f", i > 1 ? ", " : "", ping_at(ptr[0], ptr[i], 5000)); fflush(stdout);
   printf("]}\n");
   return 0;
 }
@@ -125,11 +126,16 @@ def run(out_dir):
         if build.returncode:
             out = {"error": "build: " + build.stderr[-1500:]}
         else:
-            proc = subprocess.run([exe], capture_output=True, text=True, timeout=600)
             try:
-                out = json.loads(proc.stdout.strip().splitlines()[-1])
+                proc = subprocess.run([exe], capture_output=True, text=True, timeout=150)
+                stdout, note = proc.stdout, f"rc={proc.returncode} err={proc.stderr[-400:]}"
+            except subprocess.TimeoutExpired as exc:
+                stdout = exc.stdout.decode() if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+                note = "timeout"
+            try:
+                out = json.loads(stdout.strip().splitlines()[-1])
             except Exception:
-                out = {"error": f"rc={proc.returncode} out={proc.stdout[-800:]} err={proc.stderr[-800:]}"}
+                out = {"error": note, "partial": stdout[-6000:]}
     text = json.dumps(out)
     print("DIEPROBE " + text, flush=True)
     with open(os.path.join(out_dir, "die_probe.json"), "w") as handle:
