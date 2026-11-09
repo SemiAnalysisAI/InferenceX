@@ -12566,8 +12566,11 @@
 - config-keys:
     - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
     - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dep16-disagg
+    - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-agg
   scenario-type:
     - agentic-coding
   description:
-    - "Kimi-K3.1-Pro GB300 Dynamo+vLLM: add a c=192 point with two TP8/DCP8 prefill engines, the DEP32 decode, six draft tokens and an adaptive prefill chunk cap (long-prefill-token-threshold 4096); drop c=64, c=80 and c=300; explicit KV cache size at c=352."
+    - "Kimi-K3.1-Pro GB300 Dynamo+vLLM: add a c=192 point with two TP8/DCP8 prefill engines, the DEP32 decode, six draft tokens and an adaptive prefill chunk cap (long-prefill-token-threshold 4096); drop c=48, c=64, c=80 and c=300; explicit KV cache size at c=352."
+    - "Both config groups move to vllm/vllm-openai:kimi-k31-mc@sha256:044da4014842203362dde5fee1329a1c2ef09db166908578592009c94f23a1a3 (vLLM 0.23.1rc1.dev7346+gdde0c511f). c=352 pins block-size 16384 on prefill and decode, the size the previous image picked by itself at TP1."
+    - "c=1 moves from the 1P1D TP8/DCP8 disaggregated point to one aggregated TP16/DCP16 engine (new key kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-agg, agg-variants.yaml): seven draft tokens, max-num-seqs 1, CUDA graphs captured up to 2048 tokens."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4907
