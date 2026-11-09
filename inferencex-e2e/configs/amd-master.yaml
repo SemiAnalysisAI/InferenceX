@@ -970,12 +970,6 @@ minimaxm31flash-fp4-mi355x-sglang-agentic-dspark:
       # High-Throughput: TP4 + HiCache, 180 GB of host KV per rank (720 of 735 GB).
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [48, 64], srt-recipe: agentic.yaml }
 
-# MiniMax-M3.1-Flash AgentX on MI355X with ATOM: AMD's Quark MXFP4 export served as
-# shipped (no online quantization, no shared-expert fusion, no quick-reduce
-# quantization) at TP4 with the bundled seven-token DSpark draft, FP8 KV and FP8
-# index cache. C1-C16 run the prefill delayer; C16-C48 add the LMCache CPU tier.
-# Throughput runs use the minimax-m3.1-flash__dspark__native__probabilistic-block
-# golden AL.
 minimaxm31flash-fp4-mi355x-atom-agentic-dspark:
   image: rocm/atom-dev:nightly_202611060646@sha256:857297cc5d6024ef9a5e9c5a4efa11b7d8bcde7ad69a7ef55a312f47a53860cb
   model: amd/MiniMax-M3.1-Flash-Quark-MXFP4

@@ -57,14 +57,6 @@ base:
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'atom:'
 
-# One variant per point. Admission is 2x CONC (at least 2); decode graphs cover
-# every batch size up to 8, then steps of 2 / 4 / 8 / 16 up to the admission.
-# C1-C16 run the TP-local prefill delayer: after a prefill, no new prefill is
-# admitted for 20000 scheduler passes while requests decode. C16-C48 add the
-# LMCache CPU tier at 200 GiB per rank (800 GiB, 859 GB per server), since the
-# FP8 KV and index pool alone (about 7.3M tokens) is smaller than the AgentX
-# working set at C48.
-
 override_tp4_c1:
   roles:
     agg:
@@ -72,6 +64,7 @@ override_tp4_c1:
         max-num-seqs: 2
         cudagraph-capture-sizes: '[1,2]'
       env:
+        # After a prefill, admit no new prefill for 20000 scheduler passes while requests decode.
         ATOM_PREFILL_DECODE_INTERVAL: '20000'
   benchmark:
     env:
@@ -119,6 +112,7 @@ override_tp4_c16_lmcache:
       args:
         max-num-seqs: 32
         cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,10,12,14,16,20,24,28,32]'
+        # The FP8 KV and index pool (about 7.3M tokens) is smaller than the C48 working set.
         extra-kv-connectors: &lmcache_offload
           - kv_connector: lmcache_offload
             kv_role: offload
