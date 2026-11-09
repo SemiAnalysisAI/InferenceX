@@ -34,6 +34,8 @@ base:
         moe-runner-backend: flashinfer_mxfp4
         chunked-prefill-size: 16384
         mem-fraction-static: 0.85
+        # SGLang's MiMo-V2.6-Flash value; the 0.8 default spent 84 GiB/rank on 128-token windows.
+        swa-full-tokens-ratio: 0.03
         stream-interval: 50
         scheduler-recv-interval: 10
         tokenizer-worker-num: 6
