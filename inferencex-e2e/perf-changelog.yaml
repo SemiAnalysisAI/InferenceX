@@ -12255,3 +12255,13 @@
     - "Prefill CUDA graphs are disabled because the image's default prefill graph faults with an illegal address during long-context replay on H100; decode CUDA graphs are unchanged."
     - "Serve the pinned checkpoint revision 46a050bec13002ad29ee795c16e61cf4fa3c4a9c offline from the shared H100 Hugging Face cache."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4717
+
+- config-keys:
+    - h3-bf16-h100-sglang-cachedit-video
+    - h3-bf16-h100-sglang-subblock-video
+  scenario-type: [video-generation]
+  description:
+    - "Add two lossy H3 C1 deployments on four H100 GPUs, each paired with h3-bf16-h100-sglang-video: same SGLang v0.5.23 (297e54fd) image, TP2/Ulysses2 layout, prompts and seeds."
+    - "Cache-DiT with SGLang's audited H3 profile (Fn 1, Bn 0, warmup 4, residual threshold 0.04, at most 1 consecutive cached step), and SubBlock sparse attention at its defaults with a dense FA text encoder."
+    - "Each run declares its optimization in run.json, and the job attests it from the engine log."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

@@ -7482,6 +7482,42 @@ h3-bf16-h100-sglang-video:
             srt-recipe: serving-client.yaml
             conc-list: [1]
 
+h3-bf16-h100-sglang-cachedit-video:
+  image: lmsysorg/sglang:v0.5.23@sha256:f7876bef696ccf9cf75a2bf7ccb82970f5fac577f082fb8ca95c9a59d2160eb5
+  model: MiniMaxAI/MiniMax-H3
+  model-prefix: h3
+  runner: cluster:h100-dsxe
+  precision: bf16
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: h3/sglang/h100-bf16
+  scenarios:
+    video-generation:
+      - spec: h3-v2.yaml
+        set: release-v1
+        search-space:
+          - gpus: 4
+            srt-recipe: serving-client-cachedit.yaml
+            conc-list: [1]
+
+h3-bf16-h100-sglang-subblock-video:
+  image: lmsysorg/sglang:v0.5.23@sha256:f7876bef696ccf9cf75a2bf7ccb82970f5fac577f082fb8ca95c9a59d2160eb5
+  model: MiniMaxAI/MiniMax-H3
+  model-prefix: h3
+  runner: cluster:h100-dsxe
+  precision: bf16
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: h3/sglang/h100-bf16
+  scenarios:
+    video-generation:
+      - spec: h3-v2.yaml
+        set: release-v1
+        search-space:
+          - gpus: 4
+            srt-recipe: serving-client-subblock.yaml
+            conc-list: [1]
+
 h3-bf16-b200-sglang-video:
   image: lmsysorg/sglang:v0.5.23@sha256:f7876bef696ccf9cf75a2bf7ccb82970f5fac577f082fb8ca95c9a59d2160eb5
   model: MiniMaxAI/MiniMax-H3
