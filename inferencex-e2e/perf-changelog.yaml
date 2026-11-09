@@ -12543,3 +12543,11 @@
   description:
     - "Update vLLM image from cu134-nightly-40941f2c to cu134-nightly-1648fefa."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4897
+
+- config-keys:
+    - kimik3.1-fp4-gb200-dynamo-sglang-agentic-dflash-disagg
+  scenario-type: [agentic-coding]
+  description:
+    - "Add 1P1D TP16 DCP16 points at conc 64, 76 and 96 with an EP16 decode on DeepGEMM MegaMoE (MXFP8 dispatch, BF16 combine), 96 max running requests, CUDA graphs up to batch 96 and 8 draft tokens. Their prefill uses page size 64 and 8 draft tokens. The image and the existing c16, c32 and c48 points are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4929
+  append-only: true
