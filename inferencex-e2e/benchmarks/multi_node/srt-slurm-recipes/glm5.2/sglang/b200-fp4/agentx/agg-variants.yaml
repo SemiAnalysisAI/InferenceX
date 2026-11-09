@@ -171,5 +171,6 @@ override_tp8_dp8attn_c32:
         chunked-prefill-size: 65536
         max-running-requests: 128
         cuda-graph-max-bs-decode: 16
-        # Unsplit attention weights per rank; leaves room for the DSA indexer's fp32 prefill logits.
-        mem-fraction-static: 0.82
+        # Unsplit attention weights per rank; leaves room for the DSA indexer's fp32 prefill logits
+        # and for SGLang v0.5.23's DSA metadata Triton kernels, which load after serving starts.
+        mem-fraction-static: 0.78
