@@ -57,17 +57,24 @@ def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
     if engine == "tokenspeed":
         if "speculative-config" in args:
             raise ValueError(
-                "TokenSpeed AgentX requires explicit MTP flags, not speculative-config"
+                "TokenSpeed AgentX requires explicit speculative flags, not speculative-config"
             )
         algorithm = str(args.get("speculative-algorithm", "")).lower()
         if not algorithm:
             return {}
-        if algorithm != "mtp":
-            raise ValueError("TokenSpeed AgentX currently supports only MTP speculation")
-        return {
-            "method": "mtp",
-            "num_speculative_tokens": args.get("speculative-num-steps"),
-        }
+        if algorithm == "mtp":
+            return {
+                "method": "mtp",
+                "num_speculative_tokens": args.get("speculative-num-steps"),
+            }
+        if algorithm == "dflash":
+            # DFlash drafts its steps in one block; the verify window adds the current token.
+            return {
+                "method": "dflash",
+                "num_speculative_tokens": args.get("speculative-num-steps"),
+                "model": args.get("speculative-draft-model-path", ""),
+            }
+        raise ValueError("TokenSpeed AgentX supports MTP and DFLASH speculation")
     if engine == "tilert":
         if args.get("with-mtp") is not True:
             return {}
@@ -320,13 +327,21 @@ def build_overrides(
             ]
         elif worker_engine == "tokenspeed":
             key = "synthetic-acceptance-length"
+            sampled = "enable-speculative-sampling"
             if worker_al is not None and worker_spec:
                 overrides += ["--set", f"{prefix}.args.{key}={worker_al:g}"]
                 overrides += ["--set", f'{prefix}.args.sampling-backend="greedy"']
+                # The greedy sampler verifies by exact match and rejects sampled verification.
+                if sampled in (role.get("args") or {}):
+                    overrides += ["--unset", f"{prefix}.args.{sampled}"]
             else:
                 if key in (role.get("args") or {}):
                     overrides += ["--unset", f"{prefix}.args.{key}"]
-                if worker_spec:
+                if worker_spec.get("method") == "dflash":
+                    # Only the triton sampler reads the DFlash2 draft distribution.
+                    overrides += ["--set", f'{prefix}.args.sampling-backend="triton"']
+                    overrides += ["--set", f"{prefix}.args.{sampled}=true"]
+                elif worker_spec:
                     overrides += ["--set", f'{prefix}.args.sampling-backend="flashinfer"']
         elif worker_engine == "atom":
             key = "spec-decode-acceptance-length"

@@ -136,6 +136,31 @@ def test_tokenspeed_plan_uses_effective_mtp_depth_and_restores_real_sampling(
     assert recipe == original
 
 
+def test_tokenspeed_dflash_forces_greedy_throughput_and_restores_sampled_verification(
+    tmp_path: Path, golden_dir: Path
+) -> None:
+    recipe = {"roles": {"agg": {"args": {
+        "speculative-algorithm": "DFLASH",
+        "speculative-draft-model-path": "RadixArk/Muse-Spark-Open-DFlash2",
+        "speculative-num-steps": 3, "speculative-num-draft-tokens": 4,
+        "speculative-eagle-topk": 1, "sampling-backend": "triton",
+        "enable-speculative-sampling": True,
+    }}}}
+    environment = {**ENV, "MODEL_PREFIX": "musespark", "SPEC_DECODING": "draft_model"}
+    throughput = apply_native(
+        recipe, build_overrides(recipe, "tokenspeed", environment, golden_dir=golden_dir)
+    )
+    args = throughput["roles"]["agg"]["args"]
+    assert args["synthetic-acceptance-length"] == 3.4
+    assert args["sampling-backend"] == "greedy"
+    assert "enable-speculative-sampling" not in args
+    evaluation = apply_native(throughput, build_overrides(
+        throughput, "tokenspeed", {**environment, "EVAL_ONLY": "true"},
+        golden_dir=tmp_path / "absent",
+    ))
+    assert evaluation == recipe
+
+
 @pytest.mark.parametrize("environment", [{"IS_AGENTIC": "0"}, {"SPEC_DECODING": "none"}])
 def test_tokenspeed_non_synthetic_runs_remove_forced_acceptance(
     tmp_path: Path, environment: dict[str, str]
@@ -156,8 +181,8 @@ def test_tokenspeed_non_synthetic_runs_remove_forced_acceptance(
     ({"speculative-num-draft-tokens": 3}, "must equal"),
     ({"speculative-num-draft-tokens": True}, "must equal"),
     ({"speculative-eagle-topk": 2}, "topk 1"),
-    ({"speculative-algorithm": "DFLASH"}, "only MTP"),
-    ({"speculative-config": {"method": "mtp"}}, "explicit MTP flags"),
+    ({"speculative-algorithm": "EAGLE3"}, "MTP and DFLASH"),
+    ({"speculative-config": {"method": "mtp"}}, "explicit speculative flags"),
 ])
 def test_tokenspeed_rejects_unsupported_speculation(golden_dir: Path, change, message) -> None:
     recipe = {"roles": {"agg": {"args": {
