@@ -1030,7 +1030,7 @@ def compare_media(baseline: Path, candidate: Path, *, per_frame: bool = False) -
             }
         )
         result["notes"] += [
-            "Per-frame PSNR uses the same peak and is null for an identical frame.",
+            "Per-frame PSNR uses the same peak. An identical frame has PSNR null, SSIM 1 and LPIPS 0 without running either model.",
             "SSIM uses BT.601 luma of the RGB24 frame, an 11x11 Gaussian window with sigma 1.5 and data range 255; the clip value is the frame mean.",
             "LPIPS uses AlexNet v0.1 at full resolution with SHA256-pinned weights; the clip value is the frame mean.",
             "video_worst_frames holds the index of the lowest-PSNR, lowest-SSIM and highest-LPIPS frame.",
@@ -1123,7 +1123,7 @@ def compare_media(baseline: Path, candidate: Path, *, per_frame: bool = False) -
             if similarity is not None:
                 frame_mse = frame_squared / (x.size * 255.0 * 255.0)
                 frame_psnr.append(-10.0 * math.log10(frame_mse) if frame_mse > 0 else None)
-                ssim, distance = similarity(x, y)
+                ssim, distance = similarity(x, y) if frame_squared > 0 else (1.0, 0.0)
                 frame_ssim.append(ssim)
                 frame_lpips.append(distance)
             samples += x.size
