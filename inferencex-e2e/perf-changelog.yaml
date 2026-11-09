@@ -12564,11 +12564,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4374
 
 - config-keys:
-    - kimik31-sa-umbp-p2d3-c176
+    - kimik31-sa-umbp-dynamo
   scenario-type: [agentic-coding]
   description:
     - Add Kimi-K3.1-Pro 2P3D c176 with Dynamo, MoRIIO READ, and distributed UMBP on MI355X.
     - Pin the validated PD base image with MoRI e65d1a3e READ-cap support; set MORI_IO_QP_MAX_RD_ATOMIC=1 only for standalone pools.
     - Use full-NIC TC104, a 1799 GB HugeTLB pool per worker node, and pool-local soft memlock elevation to the inherited hard limit.
     - Keep prefill breakable graphs and decode full graphs through 512 tokens, with decode max-num-seqs 128.
+    - Add 1P2D global c48 with decode max-num-seqs 48 and graphs through 192 tokens; use the mounted target snapshot for the AgentX tokenizer.
   pr-link: XXX

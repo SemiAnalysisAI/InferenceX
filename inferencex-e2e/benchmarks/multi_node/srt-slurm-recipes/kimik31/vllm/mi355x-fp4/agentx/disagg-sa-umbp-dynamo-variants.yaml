@@ -251,7 +251,7 @@ base:
   benchmark:
     command: env -u HF_HUB_OFFLINE -u TRANSFORMERS_OFFLINE bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      TOKENIZER: /model
+      TOKENIZER: /srtctl-model-cache/snapshots/6d0a0202956796543364d666ab19c6ad1a494ee1
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_BENCHMARK_GRACE_PERIOD: '300'
       AGENTIC_WARMUP_GRACE_PERIOD: '300'
@@ -318,3 +318,18 @@ base:
     install: false
     source:
       pypi: 1.6.0.dev20261023
+
+override_2p3d_c176: {}
+
+override_1p2d_c48:
+  name: k31-sa-umbp-dynamo-p1d2-c48
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+    decode:
+      nodes: 2
+      workers: 2
+      args:
+        max-num-seqs: 48
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":192,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192]}'
