@@ -12843,3 +12843,11 @@
     - "The new ATOM brings DeepSeek-V4.1 DP attention (ROCm/ATOM#2376), the V4.1 MXFP8 KV cache with DSpark on an FP8 cache (ROCm/ATOM#2725), DP-attention prefill balancing and graph replay (ROCm/ATOM#2551, #2696, #2697) and the default HIP Mega-MHC kernel on gfx950 (ROCm/ATOM#2568)."
     - "No change to the DSpark draft's weight precision: ATOM loads the checkpoint's mtp.0-2 layers as shipped (FP8 E4M3 attention, shared experts and main_proj with 32x32 UE8M0 scales, MXFP4 routed experts, BF16 router, norms and heads) at both images. The draft shares the target's KV pool, so its KV cache follows the target from BF16 to MXFP8."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3965
+
+- config-keys:
+    - minimaxm31flash-fp4-mi355x-vllm-agentic-dspark-disagg
+  scenario-type: [agentic-coding]
+  description:
+    - "Add MiniMax-M3.1-Flash PD-disaggregated AgentX on MI355X with vLLM: TP4 prefill and decode engines moving KV over MoRI-IO RDMA WRITE behind vllm-router 0.1.16 with consistent-hash routing, at concurrency 40, 48, 64, 72 and 80. Seven-token DSpark, NVFP4 KV and indexer caches, and a host KV tier on the prefill engine (1349 GB at c40-c64, 1499 GB at c72-c80). At c80 the prefill schedules at most 4096 tokens of a prompt per step."
+    - "Use vllm/vllm-openai-rocm:nightly-96710245ece8fe57a0df3ea18cdc79cbb8ce93cf, which includes vllm-project/vllm#65822 (MoRI-IO WRITE skips the blocks the decoder's prefix cache already holds)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4973

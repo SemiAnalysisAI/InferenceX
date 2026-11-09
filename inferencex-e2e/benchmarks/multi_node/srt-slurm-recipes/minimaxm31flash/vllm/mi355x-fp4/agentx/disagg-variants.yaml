@@ -1,0 +1,193 @@
+# MiniMax-M3.1-Flash AgentX on MI355X with vLLM PD disaggregation: TP4 prefill and
+# decode engines exchange KV over MoRI-IO RDMA WRITE behind vllm-router with
+# consistent-hash routing. Follows the mi355x_agentx_pd preset of
+# https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3.1-Flash (vllm-project/recipes in
+# vllm-project/vllm#66268). Checkpoint, DSpark and caches as in the single-node MI355X
+# lane; prefill runs without DBO.
+schema: 2
+
+base:
+  name: minimaxm31flash-fp4-mi355x-vllm-disagg-agentic
+  identity:
+    model: {}
+    container: {}
+  slurm:
+    time_limit: "08:00:00"
+  container_mounts:
+    /dev/infiniband: /dev/infiniband
+  extra_mount:
+    # The image has no Ionic verbs provider; libibverbs loads the host's only through its driver entry.
+    - /usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so:/usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so:ro
+    - /etc/libibverbs.d/ionic.driver:/etc/libibverbs.d/ionic.driver:ro
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  # Cold loads of the 240 GB checkpoint can take the full VLLM_ENGINE_READY_TIMEOUT_S.
+  health_check:
+    interval_seconds: 10
+    max_attempts: 720
+  environment:
+    NCCL_SOCKET_IFNAME: '@fabric.socket-ifname'
+    GLOO_SOCKET_IFNAME: '@fabric.socket-ifname'
+    NCCL_IB_HCA: '@fabric.rdma-devices'
+    NCCL_IB_GID_INDEX: '@fabric.rdma-gid-index'
+    # Prefill and decode must hash prefix blocks alike.
+    PYTHONHASHSEED: '42'
+    # Installed by moriio-rdma-setup.sh; must equal the master router version.
+    SETUP_PIP_PACKAGES: vllm-router==0.1.16
+  frontend:
+    type: vllm-router
+    enable_multiple_frontends: false
+    # Every turn of a conversation reaches the engines that cache its prefix.
+    args:
+      policy: consistent_hash
+      prefill-policy: consistent_hash
+      decode-policy: consistent_hash
+  setup_script: moriio-rdma-setup.sh
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: moriio
+    # Each engine sees only its own four GPUs, as in the validated runs, instead of all
+    # eight plus --device-ids.
+    set_visible_devices: true
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args: &common_args
+        served-model-name: amd/MiniMax-M3.1-Flash-Quark-MXFP4
+        tensor-parallel-size: 4
+        gpu-memory-utilization: 0.85
+        language-model-only: true
+        trust-remote-code: true
+        reasoning-parser: minimax_m3
+        tool-call-parser: minimax_m3
+        enable-auto-tool-choice: true
+        # MSA sparse/index cache needs 128-token blocks.
+        block-size: 128
+        kv-cache-dtype: nvfp4
+        attention-config: '{"indexer_kv_dtype":"nvfp4","indexer_decode_cp":true}'
+        moe-backend: aiter
+        disable-hybrid-kv-cache-manager: true
+        enable-prefix-caching: true
+        max-model-len: 1048576
+        disable-uvicorn-access-log: true
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        max-num-batched-tokens: 32768
+      env: &common_env
+        VLLM_ROCM_USE_AITER: '1'
+        VLLM_ROCM_USE_AITER_MOE: '1'
+        VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: '0'
+        VLLM_USE_V2_MODEL_RUNNER: '1'
+        DEBUG_HIP_DYNAMIC_QUEUES: '0'
+        VLLM_ROCM_MINIMAX_M3_MONO_DRAFTER: '1'
+        VLLM_ROCM_PARALLEL_INDEX_TOPK: '1'
+        VLLM_USE_RUST_FRONTEND: '1'
+        VLLM_ROCM_USE_SKINNY_GEMM: '0'
+        HIP_FORCE_DEV_KERNARG: '1'
+        NCCL_DMABUF_ENABLE: '0'
+        HSA_ENABLE_IPC_MODE_LEGACY: '1'
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        AITER_LOG_LEVEL: WARNING
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+        VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1200'
+        # Outlast the router's pooled-connection idle gaps.
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '3600'
+        # Bound RDMA queue resources and the wait for a free send slot.
+        MORI_IO_SQ_BACKOFF_TIMEOUT_US: '1000000'
+        MORI_IO_QP_MAX_SEND_WR: '16384'
+        MORI_IO_QP_MAX_CQE: '32768'
+        MORI_IO_QP_MAX_SGE: '2'
+        MORI_IO_TC_DISABLE: '0'
+        # Log why MoRI falls back from ibv_reg_mr to dmabuf registration (default ERROR hides it).
+        MORI_APP_LOG_LEVEL: warn
+        ROCPROFILER_REGISTER_ENABLED: '0'
+    decode:
+      nodes: 1
+      workers: 2
+      gpus: 4
+      args:
+        <<: *common_args
+        max-num-batched-tokens: 8192
+        # WRITE: decode allocates first and prefill pushes; four QPs per transfer, since
+        # one overflows its 16384-WR send queue on a ~230K-token prompt.
+        kv-transfer-config: '{"kv_connector":"MoRIIOConnector","kv_role":"kv_consumer","kv_connector_extra_config":{"backend":"rdma","num_workers":4,"qp_per_transfer":4,"read_mode":false}}'
+      env: *common_env
+  sbatch_directives:
+    cpus-per-task: "128"
+    mem: "0"
+  srun_options:
+    mem: "0"
+    container-writable: ""
+    container-remap-root: ""
+  benchmark:
+    placement:
+      node: head
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+
+# Prefill admits 2x CONC and holds the host KV tier: 1349 GB at c40-c64 and 1499 GB at
+# c72-c80, the prefill's dram-utilization share (0.9, 1.0) of its node. Each decode
+# engine caps its batch; its graphs cover that batch x (1 + 7 draft tokens).
+override_c40:
+  roles:
+    prefill:
+      args:
+        max-num-seqs: 80
+        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_connector_extra_config":{"connectors":[{"kv_connector":"MoRIIOConnector","kv_role":"kv_producer","kv_connector_extra_config":{"backend":"rdma","num_workers":4,"qp_per_transfer":4,"read_mode":false}},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1349000000000,"lazy_offload":false}}]}}'
+    decode:
+      args:
+        max-num-seqs: 10
+        compilation-config: '{"cudagraph_capture_sizes":[8,16,24,32,40,48,56,64,72,80],"max_cudagraph_capture_size":80}'
+
+override_c48:
+  roles:
+    prefill:
+      args:
+        max-num-seqs: 96
+        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_connector_extra_config":{"connectors":[{"kv_connector":"MoRIIOConnector","kv_role":"kv_producer","kv_connector_extra_config":{"backend":"rdma","num_workers":4,"qp_per_transfer":4,"read_mode":false}},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1349000000000,"lazy_offload":false}}]}}'
+    decode:
+      args:
+        max-num-seqs: 12
+        compilation-config: '{"cudagraph_capture_sizes":[8,16,24,32,40,48,56,64,72,80,88,96],"max_cudagraph_capture_size":96}'
+
+override_c64:
+  roles:
+    prefill:
+      args:
+        max-num-seqs: 128
+        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_connector_extra_config":{"connectors":[{"kv_connector":"MoRIIOConnector","kv_role":"kv_producer","kv_connector_extra_config":{"backend":"rdma","num_workers":4,"qp_per_transfer":4,"read_mode":false}},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1349000000000,"lazy_offload":false}}]}}'
+    decode:
+      args:
+        max-num-seqs: 16
+        compilation-config: '{"cudagraph_capture_sizes":[8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128],"max_cudagraph_capture_size":128}'
+
+override_c72:
+  roles:
+    prefill:
+      args:
+        max-num-seqs: 144
+        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_connector_extra_config":{"connectors":[{"kv_connector":"MoRIIOConnector","kv_role":"kv_producer","kv_connector_extra_config":{"backend":"rdma","num_workers":4,"qp_per_transfer":4,"read_mode":false}},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1499000000000,"lazy_offload":false}}]}}'
+    decode:
+      args:
+        max-num-seqs: 18
+        compilation-config: '{"cudagraph_capture_sizes":[8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144],"max_cudagraph_capture_size":144}'
+
+override_c80:
+  roles:
+    prefill:
+      args:
+        max-num-seqs: 160
+        # Without the cap, prompts queue behind long prefills and TTFT p90 reaches 5.3 s.
+        long-prefill-token-threshold: 4096
+        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_connector_extra_config":{"connectors":[{"kv_connector":"MoRIIOConnector","kv_role":"kv_producer","kv_connector_extra_config":{"backend":"rdma","num_workers":4,"qp_per_transfer":4,"read_mode":false}},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1499000000000,"lazy_offload":false}}]}}'
+    decode:
+      args:
+        max-num-seqs: 20
+        compilation-config: '{"cudagraph_capture_sizes":[8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160],"max_cudagraph_capture_size":160}'
