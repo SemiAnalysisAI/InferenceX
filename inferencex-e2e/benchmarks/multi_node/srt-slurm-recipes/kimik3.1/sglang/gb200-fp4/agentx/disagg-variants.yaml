@@ -212,3 +212,30 @@ override_1p1d_tp16_c48:
         speculative-num-draft-tokens: 6
         max-running-requests: 96
         cuda-graph-max-bs-decode: 96
+
+# EP16 decode with DeepGEMM MegaMoE (MXFP8 dispatch, BF16 combine) frees about 5 GB of
+# weights per GPU, which raises the decode KV pool from 878k to 1.18M tokens per rank.
+override_1p1d_tp16_ep16:
+  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-disagg-1p1d-tp16-ep16-dflash7
+  roles:
+    prefill:
+      args:
+        page-size: 64
+        speculative-num-draft-tokens: 8
+    decode:
+      env:
+        # MegaMoE replaces the sharded MoE front.
+        SGLANG_K3_SHARDED_MOE: null
+        # SGLang's Kimi MegaMoE check bounds a rank's rows by max-running-requests x draft
+        # tokens per attention-DP rank (96 x 8 without attention DP).
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '1536'
+        NVSHMEM_REMOTE_TRANSPORT: none
+      args:
+        expert-parallel-size: 16
+        moe-a2a-backend: megamoe
+        page-size: 64
+        # DCP16 without the megakernel merges indexer top-k through an fp32 buffer of
+        # verify rows x 1M context (4 MiB per row); 96 x 8 rows is 3 GiB of HBM.
+        max-running-requests: 96
+        cuda-graph-max-bs-decode: 96
+        speculative-num-draft-tokens: 8
