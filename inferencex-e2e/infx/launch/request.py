@@ -57,10 +57,6 @@ def _describe(error: ValidationError) -> str:
 
 
 BATCH_REENTRY_ENV = "INFX_BATCH_REENTRY"
-AL_GATE_EXEMPT_FRAMEWORKS = {
-    "dynamo-trt": "the Dynamo TRT-LLM recipes disable TRT-LLM metrics",
-    "tilert": "TileRT rejects streaming /v1/completions and serves no metrics",
-}
 
 
 class LaunchRequest(BaseModel):
@@ -78,47 +74,17 @@ class LaunchRequest(BaseModel):
     spec_decoding: str | None = Field(None, alias="SPEC_DECODING")
     is_multinode: TrueFlag = Field(False, alias="IS_MULTINODE")
     is_agentic: OneFlag = Field(False, alias="IS_AGENTIC")
+    scenario_type: str | None = Field(None, alias="SCENARIO_TYPE")
     bench_script_override: str | None = Field(None, alias="BENCH_SCRIPT_OVERRIDE")
     batch_reentry: OneFlag = Field(False, alias=BATCH_REENTRY_ENV)
     conc: int | None = Field(None, alias="CONC")
     conc_list: IntList = Field(default_factory=list, alias="CONC_LIST")
     run_eval: TrueFlag = Field(False, alias="RUN_EVAL")
     eval_only: TrueFlag = Field(False, alias="EVAL_ONLY")
-    al_gate: TrueFlag = Field(False, alias="AL_GATE")
-    al_gate_curve: str | None = Field(None, alias="AL_GATE_CURVE")
-    al_gate_draft_tokens: int | None = Field(None, alias="AL_GATE_DRAFT_TOKENS")
-    al_gate_dataset: str | None = Field(None, alias="AL_GATE_DATASET")
     salloc_time_limit: int | None = Field(None, alias="SALLOC_TIME_LIMIT")
     enroot_import_time_limit: int | None = Field(None, alias="ENROOT_IMPORT_TIME_LIMIT")
 
     env: dict[str, str] = Field(default_factory=dict, exclude=True, repr=False)
-
-    @model_validator(mode="after")
-    def _acceptance_gate(self) -> Self:
-        """The acceptance gate measures one AgentX speculative srt-slurm point.
-
-        Its container reads the prompts the workflow downloaded into the workspace, which it
-        mounts at ``/infmax-workspace``; it never prepares them.
-        """
-        if not self.al_gate:
-            return self
-        if not (
-            self.al_gate_curve
-            and (self.al_gate_draft_tokens or 0) > 0
-            and self.is_agentic
-            and self.spec_decoding not in (None, "none")
-            and not (self.eval_only or self.run_eval or self.bench_script_override)
-            and self.framework not in AL_GATE_EXEMPT_FRAMEWORKS
-        ):
-            raise ValueError(
-                "AL_GATE needs AL_GATE_CURVE, a positive AL_GATE_DRAFT_TOKENS, IS_AGENTIC=1 and a "
-                "SPEC_DECODING method, and no eval, BENCH_SCRIPT_OVERRIDE or exempt framework"
-            )
-        workspace, dataset = self.workspace.resolve(), Path(self.al_gate_dataset or "")
-        staged = (workspace / dataset).resolve()
-        if dataset.is_absolute() or not staged.is_relative_to(workspace) or not staged.is_file():
-            raise ValueError(f"AL_GATE_DATASET {self.al_gate_dataset} is not a file in {workspace}")
-        return self
 
     @model_validator(mode="after")
     def _one_agentx_concurrency(self) -> Self:
@@ -209,6 +175,24 @@ class SingleNodeRequest(SrtRequest):
     isl: int = Field(alias="ISL")
     osl: int = Field(alias="OSL")
     random_range_ratio: str = Field(alias="RANDOM_RANGE_RATIO")
+    hf_hub_cache: str = Field(alias="HF_HUB_CACHE")
+    salloc_time_limit: int = Field(alias="SALLOC_TIME_LIMIT")
+
+
+class VideoRequest(SrtRequest):
+    """One native video-generation job: one server, every CONC_LIST concurrency in turn.
+
+    The video client and server come from ``video-generation`` (``VIDEO_SPEC`` names
+    the YAML workload under its ``specs/`` and ``VIDEO_SET`` its selected set); the model is
+    served from the HF hub cache.
+    """
+
+    srt_recipe: str = Field(alias="SRT_RECIPE")
+    model: str = Field(alias="MODEL")
+    gpu_count: int = Field(alias="GPU_COUNT", gt=0)
+    conc_list: IntList = Field(alias="CONC_LIST", min_length=1)
+    video_spec: str = Field(alias="VIDEO_SPEC", min_length=1)
+    video_set: str = Field(alias="VIDEO_SET", min_length=1)
     hf_hub_cache: str = Field(alias="HF_HUB_CACHE")
     salloc_time_limit: int = Field(alias="SALLOC_TIME_LIMIT")
 

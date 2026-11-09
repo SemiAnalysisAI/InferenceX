@@ -11,6 +11,7 @@ from infx.config import MASTER_CONFIGS, RUNNER_CONFIG, git_path_at_ref
 
 from .fingerprint import recipe_fingerprint
 from .generate import (
+    SCENARIO_TYPES,
     EvalMode,
     drop_app_colliding_evals,
     freeze_config_value,
@@ -27,7 +28,8 @@ from .validation import (
     load_runner_file,
 )
 
-SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding")
+# An entry without scenario-type reruns these; video runs only for entries that name it.
+DEFAULT_SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding")
 
 
 def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
@@ -148,6 +150,8 @@ def _matrix_visual_series_key(entry: dict) -> tuple:
 
 def _matrix_concurrencies(entry: dict) -> tuple[int, ...]:
     """Return a row's concurrencies as a tuple, or raise ValueError if they are not ints."""
+    if entry.get("scenario-type") == "video-generation":
+        raise ValueError("video-generation requires a regular sweep; append-only is not supported")
     conc = entry.get("conc")
     if isinstance(conc, int):
         return (conc,)
@@ -399,6 +403,22 @@ def build_plan(
                     raise ValueError(f"retired configs still exist in head: {still_active}")
                 continue
             all_configs = get_config_keys_from_master(entry.config_keys, master_config)
+            # Wildcards may match video configs a non-video entry means to skip; a named one must plan.
+            selected = set(entry.scenario_type or DEFAULT_SCENARIO_TYPES)
+            empty = [
+                key
+                for key in entry.config_keys
+                if "*" not in key
+                and "video-generation" in master_config[key]["scenarios"]
+                and not selected & master_config[key]["scenarios"].keys()
+            ]
+            if empty:
+                fix = "add video-generation to the entry's scenario-type"
+                if set(empty) != set(all_configs):
+                    fix += " and keep fixed-seq-len and agentic-coding for its other configs"
+                raise ValueError(
+                    f"{fix}; under {sorted(selected)} these video configs plan no jobs: {empty}"
+                )
             resolved_entries.append((entry, all_configs))
 
         if has_append_only:
@@ -407,7 +427,9 @@ def build_plan(
             selected_config_scenarios: dict[str, set[str]] = defaultdict(set)
             for entry, configs in resolved_entries:
                 for config in configs:
-                    selected_config_scenarios[config].update(entry.scenario_type or SCENARIO_TYPES)
+                    selected_config_scenarios[config].update(
+                        entry.scenario_type or DEFAULT_SCENARIO_TYPES
+                    )
             selected_configs = selected_config_scenarios.keys()
             missing_from_base = selected_configs - base_master.keys()
             if missing_from_base:
@@ -424,7 +446,7 @@ def build_plan(
         resolved_entries.sort(key=lambda item: not item[0].all_evals)
 
         for entry, all_configs in resolved_entries:
-            entry_scenarios = tuple(entry.scenario_type or SCENARIO_TYPES)
+            entry_scenarios = tuple(entry.scenario_type or DEFAULT_SCENARIO_TYPES)
             expand_all_evals = all_evals or entry.all_evals
             suppress_throughput = evals_only or entry.evals_only or entry.all_evals
 
@@ -433,7 +455,7 @@ def build_plan(
                     all_configs, entry_scenarios, benchmark_scenarios_seen
                 )
                 for scenarios, benchmark_configs in benchmark_groups.items():
-                    selection = scenarios if scenarios != SCENARIO_TYPES else None
+                    selection = scenarios if scenarios != DEFAULT_SCENARIO_TYPES else None
                     head_results = generate_current(benchmark_configs, "none", selection)
                     if entry.append_only:
                         if base is None:
@@ -471,14 +493,16 @@ def build_plan(
             node_type = "multi_node" if result.get("prefill") is not None else "single_node"
             if result.get("scenario-type") == "agentic-coding":
                 scenario = "agentic"
+            elif result.get("scenario-type") == "video-generation":
+                scenario = "video"
             else:
                 scenario = seq_len_itos.get((result["isl"], result["osl"]))
-            if scenario is None:
-                raise ValueError(
-                    f"{result['exp-name']}: fixed-sequence isl={result['isl']} "
-                    f"osl={result['osl']} has no sweep job; supported: "
-                    f"{', '.join(seq_len_itos.values())}"
-                )
+                if scenario is None:
+                    raise ValueError(
+                        f"{result['exp-name']}: fixed-sequence isl={result['isl']} "
+                        f"osl={result['osl']} has no sweep job; supported: "
+                        f"{', '.join(seq_len_itos.values())}"
+                    )
             final_results[node_type][scenario].append(result)
 
         all_eval_results = [

@@ -10,7 +10,7 @@ from infx.golden_al_distribution.identity import (
     load_identities,
     parse_identity,
 )
-from infx.srt_slurm.spec_identity import audit, run_collection
+from infx.srt_slurm.spec_identity import audit, run_collection, spec_arguments
 
 DEFAULT = {"value": None, "source": "default"}
 CHAIN = {"value": "chain", "source": "documented"}
@@ -148,6 +148,36 @@ def test_atom_verifier_is_unknown_and_reported_unverified() -> None:
     assert ["unverified", "verify", "unknown", "block (explicit)"] in findings
 
 
+@pytest.mark.parametrize(
+    ("topk", "topology"),
+    [
+        (1, Fact("chain", "explicit")),
+        (4, Fact("tree-topk4", "explicit")),
+        (None, Fact(None, "unknown")),
+    ],
+)
+def test_tokenspeed_identity_keeps_unread_semantics_unknown(
+    topk: int | None, topology: Fact
+) -> None:
+    args = {
+        "speculative-algorithm": "MTP",
+        "speculative-num-steps": 3,
+        "speculative-draft-model-quantization": "modelopt_mixed",
+        "kv-cache-dtype": "bfloat16",
+        "sampling-backend": "greedy",
+    }
+    if topk is not None:
+        args["speculative-eagle-topk"] = topk
+    run = run_collection("qwen3.8next", _role(**args), "tokenspeed")
+    assert run.engine == "tokenspeed"
+    assert run.draft == "native"
+    assert run.topology == topology
+    assert run.draft_precision == Fact("modelopt_mixed", "explicit")
+    assert run.kv_cache_dtype == Fact("bf16", "explicit")
+    assert run.draft_kv_cache_dtype == Fact(None, "default")
+    assert run.verify == run.draft_sample == run.adaptive == Fact(None, "unknown")
+
+
 def test_adaptive_run_is_reported() -> None:
     spec = {
         "method": "dspark", "num_speculative_tokens": 5, "draft_sample_method": "probabilistic",
@@ -176,3 +206,8 @@ def test_precision_and_kv_cache_dtypes_are_read_per_engine() -> None:
     config = {"decoding_type": "MTP", "max_draft_len": 3}
     trt = _role(speculative_config=config, kv_cache_config={"dtype": "fp8"})
     assert run_collection("dsv4", trt, "dynamo-trt").kv_cache_dtype == Fact("fp8", "explicit")
+
+
+def test_snapshot_arguments_keep_the_tilert_model_profile() -> None:
+    role = _role(model="dsv41", **{"with-mtp": True, "num-mtp": 5, "model-weights-dir": "/w"})
+    assert spec_arguments(role) == {"model": "dsv41", "with-mtp": True, "num-mtp": 5}

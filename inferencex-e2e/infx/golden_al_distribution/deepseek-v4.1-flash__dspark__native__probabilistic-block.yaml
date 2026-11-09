@@ -21,3 +21,13 @@ deepseek-v4.1-flash:
     3: 2.90
     4: 3.26
     5: 3.51
+
+collection:
+  renderer: deepseek_v41
+  modes:
+    thinking_on:
+      chat_template_kwargs: {thinking: true, reasoning_effort: high}
+      sampling: {temperature: 1.0, repetition_penalty: 1.0}
+    thinking_off:
+      chat_template_kwargs: {thinking: false}
+      sampling: {temperature: 1.0, repetition_penalty: 1.0}
