@@ -941,7 +941,7 @@ kimik3.1-fp4-mi355x-vllm-agentic-dspark:
     - dram-utilization: 0.6
       search-space:
       # The ~1.56 TB MXFP4 checkpoint needs all 8 GPUs. c1 keeps the KV cache on the GPUs.
-      - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 1, dcp-size: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: agentic.yaml }
       - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [4, 10, 16, 24, 32, 48], srt-recipe: agentic.yaml }
 
 # MiniMax-M3.1-Flash AgentX on MI355X with SGLang: day-zero image from the SGLang
@@ -989,6 +989,19 @@ dsv41flash-fp4-mi355x-atom-agentic-dspark:
 
 # The golden acceptance curve is the GLM-5.3 NVFP4 SGLang curve in
 # infx/golden_al_distribution/glm-5.3-nvfp4__mtp__native__default-default.yaml.
+glm5.3-fp8-mi355x-sglang-agentic-mtp:
+  image: lmsysorg/sglang-rocm:v0.5.23-rocm720-mi35x-20261105@sha256:33efb7dc35be2a099a21cd14e8d50eddaad0808b7ac71177f3aa1bdc990cfdec
+  model: zai-org/GLM-5.3
+  model-prefix: glm5.3
+  runner: cluster:mi355x-amds
+  precision: fp8
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: glm5.3/sglang/mi355x-fp8-mtp
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 10], spec-decoding: mtp, srt-recipe: agentic.yaml }
 glm5.3-fp8-mi355x-tilert-agentic:
   image: ghcr.io/tile-ai/tilert-rocm-decode:0.1.6
   model: zai-org/GLM-5.3
@@ -1014,6 +1027,37 @@ glm5.3-fp8-mi355x-tilert-agentic:
           dp-attn: false
           additional-settings:
           - "PREFILL_IMAGE=ghcr.io/tile-ai/tilert-rocm-prefill:0.1.6.post1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+
+dsv41flash-fp4-mi355x-tilert-agentic-dspark:
+  image: ghcr.io/tile-ai/tilert-rocm-decode:0.1.6@sha256:48c30d7636a561b4edf781ac3c7712e09fa9a0b2f1292863b72c2d8e4bcb492a
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: tilert
+  router: { name: tilert-pd-router, version: "0.1.7.post2" }
+  multinode: true
+  disagg: true
+  kv-p2p-transfer: mooncake
+  srt-recipe-dir: dsv41flash/tilert/mi355x-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: "mtp"
+        conc-list: [1]
+        srt-recipe: disagg-1p1d-tp4-tp8-mtp.yaml
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_IMAGE=ghcr.io/tile-ai/tilert-rocm-prefill:0.1.7@sha256:8a88e2aa51105facd103217b0dc353258f3fc9368318c3bb62f0400bb8dd1ed5"
         decode:
           num-worker: 1
           tp: 8
@@ -1061,7 +1105,7 @@ dsv41flash-fp4-mi355x-sglang-agentic-dspark:
       - { tp: 2, ep: 1, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [32, 64], srt-recipe: agentic.yaml }
 
 musespark-fp4-mi355x-sglang-agentic-dflash:
-  image: lmsysorg/sglang-rocm:muse-spark-open-1027@sha256:7184d3ae2bfdc75a5bb8eb497b768e370ef7b213879cb4d97fbaaa3e8e5f5040
+  image: lmsysorg/sglang-rocm:muse-spark-open-mi355-1106@sha256:d231181df079a5b271a0459d024492c84a36caf8cb26ee019abad29e17eea4d2
   model: amd/Muse-Spark-Open-816B-A42B-Quark-MXFP4
   model-prefix: musespark
   runner: cluster:mi355x-amds
@@ -1073,8 +1117,8 @@ musespark-fp4-mi355x-sglang-agentic-dflash:
     agentic-coding:
     - dram-utilization: 0.85
       search-space:
-      - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 8, 13], srt-recipe: agentic.yaml }
-      - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [10, 16, 24, 28, 36, 40], srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [6, 10, 28], srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [28, 36, 40], srt-recipe: agentic.yaml }
 
 kimik3.1-fp4-mi355x-sglang-agentic-dflash:
   image: lmsysorg/sglang:dev-kimi-k31-pro-mi35x@sha256:346a6d832bbfcb5776d8d938154870682a891278a8adc264ed996ccf3d3b6762

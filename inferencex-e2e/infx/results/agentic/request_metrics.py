@@ -349,6 +349,14 @@ def _trace_output_lengths(traces: Iterable[dict[str, Any]]) -> dict[str, list[in
     return out
 
 
+def replayed_trace_ids(records: list[dict[str, Any]]) -> set[str] | None:
+    """Return the trace ids ``records`` look up, or None when a conversation id is not text."""
+    conversations = [record.get("metadata", {}).get("conversation_id") for record in records]
+    if not all(isinstance(conversation, str) for conversation in conversations if conversation):
+        return None
+    return {conversation.split("::", 1)[0] for conversation in conversations if conversation}
+
+
 def _expected_output_lengths(
     records: list[dict[str, Any]], traces: Iterable[dict[str, Any]]
 ) -> list[int]:
