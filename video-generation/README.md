@@ -87,7 +87,7 @@ dispatch the workflow with its `run_id` and `run_attempt`.
 cd video-generation
 PYTHONPATH=../inferencex-e2e uv run --no-project --python 3.12 \
   --with 'av==16.1.0' --with 'numpy==2.3.5' \
-  --with 'pyyaml>=6,<7' --with 'pytest>=8,<9' python -m pytest -q
+  --with 'pyyaml>=6,<7' --with 'pytest>=9.0.3,<10' python -m pytest -q
 ```
 
 [Test Video Harness](../.github/workflows/test-video-harness.yml) runs these

@@ -43,7 +43,7 @@ Both hashes below and the runner's recorded `plan_sha256` are SHA-256 over those
 From the repository root:
 
 ```bash
-uv run --no-project --python 3.12 --with 'pyyaml>=6,<7' --with 'pytest>=8,<9' python -m pytest video-generation/tests/test_video_spec.py -q
+uv run --no-project --python 3.12 --with 'pyyaml>=6,<7' --with 'pytest>=9.0.3,<10' python -m pytest video-generation/tests/test_video_spec.py -q
 uv run --no-project --python 3.12 --with 'pyyaml>=6,<7' python video-generation/specs/video_spec.py
 ```
 
