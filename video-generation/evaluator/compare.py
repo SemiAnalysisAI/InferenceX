@@ -378,6 +378,7 @@ def _expected(plan: dict, case: dict) -> dict:
         generation["encoding"] = encoding
     for field in ("requires_motion", "requires_sound"):
         generation[field] = bool(case.get(field, False))
+    generation["requires_picture"] = True
     return generation
 
 
