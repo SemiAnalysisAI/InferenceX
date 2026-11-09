@@ -76,6 +76,7 @@ base:
         weight-loader-prefetch-checkpoints: true
         model-loader-extra-config: '{"enable_multithread_load": true}'
         mem-fraction-static: 0.8
+        cuda-graph-max-bs-prefill: 2048
         context-length: 1048576
         enable-hierarchical-cache: true
         hicache-write-policy: write_back

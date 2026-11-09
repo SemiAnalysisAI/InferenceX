@@ -61,6 +61,8 @@ base:
         max-prefill-tokens: 8192
         # TP4 weights take ~111 GiB per rank: ~0.7M-token KV pool, ~27 GiB activation headroom.
         mem-fraction-static: 0.85
+        # SGLang v0.5.23 raised the MLA prefill CUDA graph default from 2048 to 8192 tokens; keep 2048.
+        cuda-graph-max-bs-prefill: 2048
         speculative-algorithm: EAGLE
         speculative-num-steps: 5
         speculative-eagle-topk: 1
