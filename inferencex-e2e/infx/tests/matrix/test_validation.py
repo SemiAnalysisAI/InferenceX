@@ -680,6 +680,13 @@ class TestMultiNodeSearchSpaceEntry:
         assert entry.prefill is None
         assert entry.decode is None
 
+    def test_cpu_power_rides_on_power(self):
+        row = {"worker": {"tp": 8, "ep": 1, "dp-attn": False}, "num-nodes": 2,
+               "conc-list": [1], "cpu-power": True}  # fmt: skip
+        with pytest.raises(ValidationError, match="cpu-power requires power"):
+            MultiNodeSearchSpaceEntry(**row)
+        assert MultiNodeSearchSpaceEntry(**{**row, "power": True}).cpu_power is True
+
     def test_missing_conc_specification(self):
         with pytest.raises(ValidationError):
             MultiNodeSearchSpaceEntry(**{
@@ -1518,3 +1525,11 @@ def test_only_multinode_agentic_rows_measure_power(topology, accepted):
     else:
         with pytest.raises(ValidationError, match="Only multinode entries measure DCGM power"):
             AgenticCodingSearchSpaceEntry(**row)
+
+
+def test_agentic_cpu_power_rides_on_power():
+    worker = {"worker": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False}}
+    row = {"srt-recipe": "r.yaml", "conc-list": [4], "cpu-power": True, **worker}
+    with pytest.raises(ValidationError, match="cpu-power requires power"):
+        AgenticCodingSearchSpaceEntry(**row)
+    assert AgenticCodingSearchSpaceEntry(**{**row, "power": True}).cpu_power is True

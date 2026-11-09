@@ -90,7 +90,7 @@ base:
         FI_EFA_FORK_SAFE: "1"
         DYN_SIDECAR_GRPC_STARTUP_DEADLINE_SECS: "9000"
       args:
-        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_connector_module_path":"vllm.distributed.kv_transfer.kv_connector.v1.nixl.push_as_nixl","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["LIBFABRIC"],"enforce_handshake_compat":false,"kv_lease_duration":120}},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":75161927680,"lazy_offload":true}}]}}'
+        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"transfer_mode":"push","backends":["LIBFABRIC"],"enforce_handshake_compat":false,"kv_lease_duration":120}},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":75161927680,"lazy_offload":true}}]}}'
         served-model-name: "deepseek-ai/DeepSeek-V4.1-Flash"
         language-model-only: true
         tokenizer-mode: "deepseek_v41"
@@ -143,7 +143,7 @@ base:
         DYN_SIDECAR_GRPC_STARTUP_DEADLINE_SECS: "9000"
         VLLM_MAX_ASYNC_KV_ADMITS_PER_STEP: "4"
       args:
-        kv-transfer-config: '{"kv_connector":"NixlConnector","kv_connector_module_path":"vllm.distributed.kv_transfer.kv_connector.v1.nixl.push_as_nixl","kv_role":"kv_consumer","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["LIBFABRIC"],"enforce_handshake_compat":false,"kv_lease_duration":120}}'
+        kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_consumer","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"transfer_mode":"push","backends":["LIBFABRIC"],"enforce_handshake_compat":false,"kv_lease_duration":120}}'
         served-model-name: "deepseek-ai/DeepSeek-V4.1-Flash"
         language-model-only: true
         tokenizer-mode: "deepseek_v41"

@@ -19,6 +19,7 @@ from infx.clusters.slurm import slurm_settings
 from infx.launch.context import LaunchError
 from infx.launch.drivers.srt.lanes import srt_time_limit
 from infx.launch.drivers.srt.recipe import HEALTH_ATTEMPTS
+from infx.srt_slurm.workload import NATIVE
 
 if TYPE_CHECKING:
     from infx.clusters import Cluster
@@ -28,10 +29,22 @@ if TYPE_CHECKING:
     from infx.launch.drivers.srt.power import PowerDecision
     from infx.launch.drivers.srt.run import SrtRun
     from infx.launch.request import SrtRequest
+    from infx.srt_slurm.workload import CpuPowerSource, GpuPower
 
 NGINX_IMAGE = "nginx:1.27.4"
 EXPORTER_PROVENANCE = "exporter-image.sha256"
 HEALTH_CHECK = {"max_attempts": HEALTH_ATTEMPTS, "interval_seconds": 10}
+# energy_uj is root-only (CVE-2020-8694); the glob matches only the top-level package zones.
+# A failed grant warns and continues: it costs the CPU leg, whose verdict enforces required
+# power, not the benchmark. A cancelled job skips teardown, so the CI account keeps read
+# access until the next RAPL job's teardown; that account already has sudo on these hosts.
+RAPL_COUNTERS = "/sys/class/powercap/intel-rapl/intel-rapl:*/energy_uj"
+RAPL_GRANT = (
+    f"for zone in {RAPL_COUNTERS}; do"
+    ' test -r "$zone" || sudo -n chown "$(id -un)" "$zone"'
+    ' || echo "cannot read $zone; CPU power will be missing" >&2; done'
+)
+RAPL_RESTORE = f"sudo -n chown root {RAPL_COUNTERS}"
 
 
 @dataclass(frozen=True)
@@ -50,6 +63,7 @@ class SrtJob:
     single_node: bool = False
     account: str | None = None
     mem_mib: int | None = None
+    cpu_power_source: CpuPowerSource | None = None
 
 
 def pyxis_spelling(image: str) -> str:
@@ -91,7 +105,11 @@ def volume_path(cluster: Cluster, volume: str) -> Path:
 
 
 def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
-    """The srtslurm.yaml mapping of ``job`` on ``cluster``; ``srt-slurm.extra`` only adds keys."""
+    """The srtslurm.yaml mapping of ``job`` on ``cluster``; ``srt-slurm.extra`` only adds keys.
+
+    A job whose CPU power exporter reads RAPL gives the job user the RAPL counters until
+    teardown.
+    """
     settings = slurm_settings(cluster)
     srt = settings.srt_slurm
     if srt is None:
@@ -131,9 +149,8 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
         config["use_segment_sbatch_directive"] = False
     elif srt.segment_directive is not None:
         config["use_segment_sbatch_directive"] = srt.segment_directive
-    config["use_exclusive_sbatch_directive"] = (
-        srt.single_node_exclusive if job.single_node else settings.exclusive
-    )
+    exclusive = srt.single_node_exclusive if job.single_node else settings.exclusive
+    config["use_exclusive_sbatch_directive"] = exclusive
     directives: dict[str, str] = {}
     if settings.exclude:
         directives["exclude"] = ",".join(settings.exclude)
@@ -154,6 +171,10 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
         if setup.nodes is not None:
             host_setup["nodes"] = setup.nodes
         config["default_host_setup"] = host_setup
+    if job.cpu_power_source == "rapl":
+        host_setup = config.setdefault("default_host_setup", {"commands": []})
+        host_setup["commands"].append(RAPL_GRANT)
+        host_setup.setdefault("teardown", []).append(RAPL_RESTORE)
     if shadowed := sorted(config.keys() & srt.extra.keys()):
         raise LaunchError(f"cluster {cluster.id!r} srt-slurm.extra sets rendered keys {shadowed}")
     config.update(srt.extra)
@@ -167,10 +188,9 @@ def write(path: Path, config: Mapping[str, Any]) -> None:
 
 def stage_gpu_exporter(run: SrtRun, *, single_node: bool = False) -> tuple[str, str]:
     """Stage the cluster's GPU exporter image: its recipe name and the reference jobs start from."""
-    exporter = run.srt.extra.get("default_gpu_exporter")
-    if not isinstance(exporter, dict) or not exporter.get("container_image"):
-        raise LaunchError("native power requires a cluster GPU exporter")
-    image = exporter["container_image"]
+    image = run.srt.gpu_exporter_image
+    if image is None:
+        raise LaunchError("power requires a cluster GPU exporter")
     staged = run.backend.stage_image(image, helper="dcgm-exporter", single_node=single_node)
     (run.workspace / EXPORTER_PROVENANCE).write_text(f"{run.backend.image_provenance(staged)}\n")
     return image, staged.reference
@@ -239,6 +259,26 @@ _CLIENT_CACHES = {
 }
 
 
+def single_node_dataset_cache(run: SrtRun) -> tuple[list[tuple[str, str]], list[str]]:
+    """The mount and srtctl arguments that hand a single-node AgentX job the cluster's shared
+    replay dataset cache, where its agentic jobs mount one.
+
+    Without it the client rebuilds the dataset in every job while the server holds its GPUs.
+    """
+    name = "AIPERF_DATASET_MMAP_CACHE_DIR"
+    [volume], _ = _CLIENT_CACHES[name]
+    mounts: list[tuple[str, str]] = []
+    target = run.srt.volume_mounts.get(volume)
+    if target is None:
+        target = run.srt.agentic_volume_mounts.get(volume)
+        if target is None:
+            return [], []
+        host = volume_path(run.cluster, volume)
+        _create_dir(host, world_writable=True)
+        mounts.append((str(host), target))
+    return mounts, ["--set", f"benchmark.env.{name}={json.dumps(target)}"]
+
+
 def agentic_client_env(
     cluster: Cluster, srt: SrtSlurmSettings, lane: SrtLane, request: SrtRequest
 ) -> dict[str, str]:
@@ -252,27 +292,52 @@ def agentic_client_env(
     return env
 
 
+def cpu_power_source(
+    cluster: Cluster, srt: SrtSlurmSettings, cpu_power: bool, *, default: bool = False
+) -> CpuPowerSource | None:
+    """The cluster's CPU power exporter source when the point selected cpu-power, or measures
+    it by ``default`` on a cluster that declares an exporter; else None.
+    """
+    if srt.cpu_power_exporter is not None and (cpu_power or default):
+        return srt.cpu_power_exporter.source
+    if cpu_power:
+        raise LaunchError(
+            f"cluster {cluster.id!r} declares no srt-slurm.cpu-power-exporter for cpu-power"
+        )
+    return None
+
+
 def binder_inputs(
     cluster: Cluster,
     srt: SrtSlurmSettings,
     lane: SrtLane,
     request: SrtRequest,
     decision: PowerDecision,
-) -> tuple[int | None, dict[str, str]]:
-    """The DCGM exporter port and AgentX client env a multi-node recipe is bound with.
+) -> tuple[GpuPower | None, str | None, dict[str, str]]:
+    """The GPU power telemetry, CPU exporter source and AgentX client env a recipe is bound with.
 
-    The client marks power windows exactly when the launcher collects the point's AgentX power,
-    and fails invalid power when the workflow or the lane's power rule requires it.
+    GPU power is the DCGM block on the cluster's ``power-exporter-port`` where it declares one,
+    else the cluster's own GPU exporter. The CPU source is the cluster's CPU exporter when the
+    point selected cpu-power. The client marks power windows exactly when the launcher collects
+    the point's AgentX power, and fails invalid power when the workflow or the lane's power rule
+    requires it.
     """
-    port = srt.power_exporter_port if decision.dcgm else None
+    gpu_power: GpuPower | None = None
+    if decision.dcgm:
+        gpu_power = NATIVE if srt.power_exporter_port is None else srt.power_exporter_port
+    cpu_source = cpu_power_source(cluster, srt, decision.cpu)
     if not request.is_agentic:
-        return port, {}
-    return port, {
-        **agentic_client_env(cluster, srt, lane, request),
-        "IS_MULTINODE": str(request.is_multinode).lower(),
-        "ENABLE_AGENTX_POWER": "1" if decision.agentx or decision.adapter else "0",
-        "REQUIRE_POWER": "1" if decision.require or request.require_power else "0",
-    }
+        return gpu_power, cpu_source, {}
+    return (
+        gpu_power,
+        cpu_source,
+        {
+            **agentic_client_env(cluster, srt, lane, request),
+            "IS_MULTINODE": str(request.is_multinode).lower(),
+            "ENABLE_AGENTX_POWER": "1" if decision.agentx or decision.adapter else "0",
+            "REQUIRE_POWER": "1" if decision.require or request.require_power else "0",
+        },
+    )
 
 
 def write_lane_config(
@@ -312,6 +377,7 @@ def write_lane_config(
         model_paths=model_paths,
         mounts=lane_mounts(run, lane),
         account=run.account,
+        cpu_power_source=cpu_power_source(run.cluster, run.srt, power.cpu),
     )
     config_yaml = checkout.root / "srtslurm.yaml"
     write(config_yaml, render(run.cluster, job))

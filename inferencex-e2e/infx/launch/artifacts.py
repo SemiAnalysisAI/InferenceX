@@ -12,7 +12,7 @@ import re
 import shutil
 import sys
 import tarfile
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -129,18 +129,18 @@ def copy_agentic_results(source_dir: Path, workspace: Path, result_filename: str
     _say(f"Copied {len(files)} agentic result file(s)")
 
 
-def copy_gate_results(logs_dir: Path, workspace: Path, result_filename: str) -> None:
-    """Copy the acceptance gate's raw ``al_gate/`` files, then its verdict, which must exist."""
-    raw = logs_dir / "al_gate"
-    try:
-        if raw.is_dir():
-            shutil.copytree(raw, workspace / raw.name, symlinks=True, dirs_exist_ok=True)
-    except OSError as error:
-        raise ArtifactError(f"failed to stage {raw}: {error}") from error
+def copy_al_gate_result(logs_dir: Path, workspace: Path, result_filename: str) -> None:
+    """Copy an eval's acceptance gate verdict when the job ran one; a failed copy only warns.
+
+    Its raw replay files stay in the server logs.
+    """
     verdict = logs_dir / f"al_gate_{result_filename}.json"
-    if not verdict.is_file() or verdict.stat().st_size == 0:
-        raise ArtifactError(f"acceptance gate result {verdict} is missing or empty")
-    copy_to_workspace(verdict, workspace / verdict.name)
+    if not verdict.is_file():
+        return
+    try:
+        copy_to_workspace(verdict, workspace / verdict.name)
+    except ArtifactError as error:
+        _warn(f"WARNING: {error}")
 
 
 def copy_eval_artifacts(eval_dir: Path, workspace: Path) -> None:
@@ -174,6 +174,8 @@ def collect_agentic_power_results(
     concurrencies: Sequence[int],
     *,
     results_python: str | None,
+    require_power: bool = True,
+    expected_cpu: bool = False,
 ) -> int:
     """Stage the AgentX power audit inputs and validate each concurrency's power window.
 
@@ -196,7 +198,7 @@ def collect_agentic_power_results(
 
     if step := validate_agentic_power(
         logs_dir, workspace, result_filename, producer_sha, concurrencies,
-        results_python=results_python, require_power=True,
+        results_python=results_python, require_power=require_power, expected_cpu=expected_cpu,
     ):  # fmt: skip
         rc = step
     return rc
@@ -211,10 +213,12 @@ def validate_agentic_power(
     *,
     results_python: str | None,
     require_power: bool,
+    expected_cpu: bool = False,
 ) -> int:
     """Run the AgentX power adapter for every concurrency; return the last failing code.
 
-    With ``require_power`` a concurrency without a valid power window fails.
+    With ``require_power`` a concurrency without a valid power window fails, and with
+    ``expected_cpu`` one without a valid Grace CPU leg fails too.
     """
     logs_dir = logs_dir.resolve()
     workspace = workspace.resolve()
@@ -228,10 +232,68 @@ def validate_agentic_power(
             results_python, workspace, logs_dir,
             logs_dir / "agentic" / f"conc_{concurrency}",
             workspace / f"{result_filename}_conc{concurrency}.json",
-            producer_sha, require_power=require_power,
+            producer_sha,
+            "--audit-source", f"LOGS/agentic/conc_{concurrency}/power_validation.json",
+            *(["--expected-cpu-power"] if expected_cpu else []),
+            require_power=require_power,
         ):  # fmt: skip
             rc = step
     return rc
+
+
+def validate_video_results(
+    results_python: str,
+    workspace: Path,
+    logs_dir: Path,
+    producer_sha: str,
+    *,
+    result_filename: str,
+    concurrencies: Sequence[int],
+    gpu_count: int,
+    require_power: bool,
+    identity: Mapping[str, str],
+) -> int:
+    """Join every concurrency's video result to the native power package under ``logs_dir``."""
+    argv = [
+        results_python, "-P", "-m", "infx.results.video",
+        "--logs-root", str(logs_dir), "--workspace", str(workspace),
+        "--result-filename", result_filename, "--gpu-count", str(gpu_count),
+        "--expected-producer-sha", producer_sha,
+        "--concurrencies", *map(str, concurrencies),
+        *(f"--{name}={value}" for name, value in identity.items()),
+        *(["--require-power"] if require_power else []),
+    ]  # fmt: skip
+    return proc.run(argv, env=_results_env(), cwd=workspace).returncode
+
+
+def build_video_bundle(
+    results_python: str,
+    workspace: Path,
+    logs_dir: Path,
+    *,
+    package: Path,
+    output: Path,
+    result_filename: str,
+    concurrencies: Sequence[int],
+) -> int:
+    """Assemble the app-facing video bundle from the job's results and validation sidecars."""
+    argv = [
+        results_python, "-P", "-m", "evaluator.cli", "srt-finalize",
+        "--video-dir", str(logs_dir / "video"), "--power-dir", str(logs_dir / "power"),
+        "--workspace", str(workspace), "--result-filename", result_filename,
+        "--output", str(output), "--concurrencies", *map(str, concurrencies),
+    ]  # fmt: skip
+    env = _results_env()
+    env["PYTHONPATH"] = f"{package}{os.pathsep}{env['PYTHONPATH']}"
+    return proc.run(argv, env=env, cwd=workspace).returncode
+
+
+def _results_env() -> dict[str, str]:
+    python_path = os.environ.get("PYTHONPATH")
+    return {
+        **os.environ,
+        "PYTHONPATH": f"{_PROJECT_ROOT}:{python_path}" if python_path else str(_PROJECT_ROOT),
+    }
 
 
 def run_power_adapter(
@@ -245,11 +307,6 @@ def run_power_adapter(
     require_power: bool,
 ) -> int:
     """Join one AgentX point's aggregate to the power package under ``logs_dir``."""
-    python_path = os.environ.get("PYTHONPATH")
-    env = {
-        **os.environ,
-        "PYTHONPATH": f"{_PROJECT_ROOT}:{python_path}" if python_path else str(_PROJECT_ROOT),
-    }
     argv = [
         results_python, "-m", "infx.results.agentic.power_adapter",
         "--result-dir", str(result_dir),
@@ -260,4 +317,4 @@ def run_power_adapter(
         *extra,
         *(["--require-power"] if require_power else []),
     ]  # fmt: skip
-    return proc.run(argv, env=env, cwd=workspace).returncode
+    return proc.run(argv, env=_results_env(), cwd=workspace).returncode
