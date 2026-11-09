@@ -1,0 +1,80 @@
+base:
+  schema: 2
+  name: qwen3.8next-fp4-mi355x-atom-agentic
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: atomesh
+    container_image: rocm/atom-dev@sha256:1bb1909ada9e3d178e315a3f89d041c05c7e90e7cc32de8d507ff5ab4cd4702c
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: atom
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 1
+      args:
+        served-model-name: amd/Qwen3.8-Flash-Next-Quark-MXFP4
+        trust-remote-code: true
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        timeout-keep-alive: 1800
+        gpu-memory-utilization: 0.95
+        max-num-seqs: 160
+        max-num-batched-tokens: 16384
+        max-model-len: 262144
+        block-size: 64
+        kv_cache_dtype: fp8
+        # BF16 index keys with 64-token blocks route the prefill index scoring to FlyDSL.
+        index-cache-dtype: bf16
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,18,20,22,24,26,28,30,32,40,48,56,64]'
+        enable_prefix_caching: true
+        state-checkpoint-interval-tokens: 8192
+        # Experts stay MXFP4 as shipped; attention and dense layers go to PTPC FP8.
+        # mtp.* keeps the whole draft head at its shipped BF16.
+        online_quant_config: '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","*mlp.gate","*shared_expert_gate","*mlp.experts*","*mlp.shared_expert*","*hyper_connection*","*indexer*","*.ple.*","model.visual.*","mtp.*"]}'
+        method: mtp
+        num-speculative-tokens: 3
+      env:
+        PYTHONNOUSERSITE: '1'
+        AITER_LOG_LEVEL: WARNING
+  benchmark:
+    env:
+      # Long AgentX stalls exceed AIPerf's 30 s TCP_USER_TIMEOUT default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'atom:'
+      AIPERF_APPLY_CHAT_TEMPLATE: 'true'
+
+override_c1:
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_c2:
+  benchmark:
+    env:
+      CONC: '2'
+      KV_OFFLOADING: none
+
+override_c4:
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_c8:
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
+override_c16:
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: none
