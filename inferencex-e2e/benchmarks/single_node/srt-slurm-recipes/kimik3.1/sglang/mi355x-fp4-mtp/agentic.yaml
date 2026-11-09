@@ -81,7 +81,8 @@ override_tp8_c1:
     agg:
       args:
         enable-amd-monokernel: true
-        max-running-requests: 4
+        # One running request: agent fan-out queues instead of sharing decode steps.
+        max-running-requests: 1
         cuda-graph-max-bs-decode: 4
         # 150 state slots keep agent sessions' prefixes cached.
         max-mamba-cache-size: 150
