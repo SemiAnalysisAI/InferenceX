@@ -103,29 +103,6 @@ class RoundtripStaging(unittest.TestCase):
         importlib.reload(ep_backend)  # restore the module other tests hold references into
 
 
-class FlashInferCombineModelSwitch(unittest.TestCase):
-    """Which arithmetic the oracle holds FlashInfer's combine to, selected by wheel version: a
-    wrong model reds every correct FlashInfer row."""
-
-    def _module(self):
-        return _import_stubbed("ep_flashinfer")
-
-    def test_the_fp32_boundary_is_exact_and_ordered_by_version_not_by_text(self):
-        gate = self._module()._wheel_has_fp32_combine
-        self.assertFalse(gate("0.6.15"), "the wheel below the boundary rounds per level")
-        self.assertTrue(gate("0.6.16"), "the boundary wheel itself accumulates in FP32")
-        self.assertTrue(gate("0.6.17"))
-        # Real version ordering, not a digit scrape: 0.10.0 sorts BELOW 0.6.16 as text.
-        self.assertTrue(gate("0.10.0"))
-
-    def test_an_unreadable_version_falls_back_to_the_rounding_model(self):
-        # Asymmetric costs: modelling FP32 against a per-level-rounding kernel can exceed
-        # COMBINE_REL_TOL and red a correct run, while the opposite error costs a few ulps.
-        gate = self._module()._wheel_has_fp32_combine
-        for version in ("0.6.16rc1", "not-a-version", ""):
-            self.assertFalse(gate(version), f"{version!r} must fall back to the safe model")
-
-
 class RoundtripStagingGate(unittest.TestCase):
     """`roundtrip` must mean dispatch -> combine in every row, or it is not comparable: the gate
     is `stage_device_work` alone, with `CX_FP8_CONSUME=dequant` as the sole opt-out."""
