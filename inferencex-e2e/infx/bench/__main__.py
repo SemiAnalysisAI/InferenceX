@@ -15,6 +15,7 @@ COMMANDS = {
     "eval": "infx.bench.eval",
     "al-gate": "infx.bench.al_gate",
     "video": "infx.bench.video",
+    "dynamo-mum-compat": "infx.bench.dynamo_compat",
 }
 
 

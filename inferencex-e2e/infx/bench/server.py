@@ -138,6 +138,25 @@ def wait_chat_route(
     print(f"OpenAI chat endpoint ready for model {model!r}: {chat_url}", flush=True)
 
 
+def wait_model_registered(
+    base_url: str, model: str, timeout_s: int, *, poll_s: float = POLL_S
+) -> None:
+    """Require the requested model and chat route, independently of process health."""
+    deadline = time.monotonic() + timeout_s
+    while True:
+        models = http_json(f"{base_url}/v1/models")
+        entries = models.get("data") if isinstance(models, dict) else None
+        served = isinstance(entries, list) and any(
+            isinstance(entry, dict) and entry.get("id") == model for entry in entries
+        )
+        if served and http_status(f"{base_url}/v1/chat/completions") == 405:
+            print(f"Model registered and chat route mounted: {model!r} at {base_url}", flush=True)
+            return
+        if time.monotonic() >= deadline:
+            raise NotReadyError(f"model {model!r} not registered at {base_url} within {timeout_s}s")
+        time.sleep(poll_s)
+
+
 def main(argv: list[str]) -> int:
     """Run the ``wait`` command."""
     parser = argparse.ArgumentParser(prog="python3 -m infx.bench wait")

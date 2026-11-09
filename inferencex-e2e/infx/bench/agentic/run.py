@@ -114,6 +114,12 @@ def _power_mode(switches: Mapping[str, str], env: Mapping[str, str]) -> PowerMod
 def execute(plan: Plan, runtime: Runtime, environ: Mapping[str, str]) -> int:
     """Run ``plan`` with ``runtime``'s tools; ``environ`` seeds every child's environment."""
     cfg = plan.replay
+    if inputs.optional("AGENTIC_MODEL_READY_TIMEOUT_SECONDS", environ) is not None:
+        server.wait_model_registered(
+            cfg.url.rstrip("/"),
+            cfg.model,
+            inputs.positive_int("AGENTIC_MODEL_READY_TIMEOUT_SECONDS", environ),
+        )
     python = str(runtime.python)
     env = {
         **environ,

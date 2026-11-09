@@ -20,6 +20,8 @@ if not (source / 'dynamo').is_dir():
     raise RuntimeError(f'Missing validated Dynamo package snapshot: {source}')
 (Path(site.getsitepackages()[0]) / 'k31-dynamo.pth').write_text(str(source) + '\n' + sys.argv[2] + '\n')
 PY
+        venv_site=$("$venv_path/bin/python" -c 'import site; print(site.getsitepackages()[0])')
+        PYTHONPATH="/infmax-workspace${PYTHONPATH:+:$PYTHONPATH}" "$venv_path/bin/python" -m infx.bench dynamo-mum-compat --source "$DYNAMO_SITE_PACKAGES/dynamo" --target "$venv_site/dynamo"
         touch "$venv_path/.install-complete"
     fi
 ) 200>"${venv_path}.lock"
@@ -53,4 +55,4 @@ if actual != base:
 print({'engine_packages': actual,
        'versions': {p: version(p) for p in ('ai-dynamo', 'ai-dynamo-runtime', 'vllm', 'torch')}})
 PY
-"$venv_path/bin/python" -c 'import sys; from dynamo.frontend.main import parse_args; sys.argv = ["dynamo.frontend", "--dyn-chat-processor", "dynamo", "--router-mode", "least-loaded", "--router-session-affinity-ttl-secs", "900"]; cfg, vllm_flags, sglang_flags = parse_args(); assert cfg.chat_processor == "dynamo" and vllm_flags is None and sglang_flags is None; print("Dynamo Rust chat preflight passed")'
+"$venv_path/bin/python" -c 'import dynamo.frontend.main; print("Dynamo frontend package:", dynamo.frontend.main.__file__)'

@@ -32,7 +32,12 @@ base:
     args:
       router-mode: least-loaded
       router-session-affinity-ttl-secs: 900
-      dyn-chat-processor: dynamo
+      dyn-chat-processor: vllm
+      trust-remote-code: true
+      no-enable-prefix-caching: true
+      dyn-preprocess-workers: 0
+    env:
+      PYTHONPATH: /opt/mum
   observability:
     enabled: false
     tachometer:
@@ -151,6 +156,7 @@ base:
       workers: 3
       gpus: 8
       args:
+        dyn-endpoint-types: chat
         served-model-name: moonshotai/Kimi-K3.1-Pro
         trust-remote-code: true
         moe-backend: auto
@@ -252,6 +258,7 @@ base:
     command: env -u HF_HUB_OFFLINE -u TRANSFORMERS_OFFLINE bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
       TOKENIZER: /srtctl-model-cache/snapshots/6d0a0202956796543364d666ab19c6ad1a494ee1
+      AGENTIC_MODEL_READY_TIMEOUT_SECONDS: '300'
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_BENCHMARK_GRACE_PERIOD: '300'
       AGENTIC_WARMUP_GRACE_PERIOD: '300'

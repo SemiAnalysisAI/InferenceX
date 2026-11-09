@@ -106,6 +106,20 @@ It writes one bound recipe per fixed-sequence or AgentX point, validated by the 
 
 ## Recipe fingerprints
 
+The K3.1 SA UMBP Dynamo variants use a private copy of the pinned Dynamo Python
+package with the MUM image's vLLM frontend APIs. `dynamo-mum-compat` verifies the
+three source file hashes before copying or adapting them; changing the Dynamo
+snapshot requires reviewing this adapter. The frontend uses the vLLM chat
+processor and `/opt/mum`, while decode workers expose chat with token input so
+MoRIIO prefill handoff remains enabled. Frontend prefix caching is disabled
+because that process owns no KV cache; both engine roles retain prefix caching.
+
+These variants set `AGENTIC_MODEL_READY_TIMEOUT_SECONDS=300`. AgentX requires the
+requested model in `/v1/models` and the chat route to be mounted before replay;
+a healthy process alone is insufficient. Other recipes leave this opt-in gate
+unset. CPU registration and chat-routing checks do not establish GPU inference,
+KV transfer correctness, or formal benchmark completion.
+
 The planner gives every benchmark row a `recipe-fingerprint`: a SHA-256 of its matrix fields (except `conc` and `exp-name`) and the bound variant the launcher submits, composed with its shared block and the native single-node or multi-node `power: true` telemetry block (the DCGM block, whatever the cluster's exporter); the default multi-node telemetry stays out. Concurrency values, the job `name` and everything the launcher adds for a cluster stay out, so a recipe keeps one fingerprint across concurrencies and clusters. An `eval-srt-recipe` contributes only its path; rows without an srt-slurm recipe hash their matrix fields alone.
 
 The planner selects variants without srtctl ([`variants.py`](../../../infx/srt_slurm/variants.py)), the way the launcher does, so a row that no variant serves fails planning instead of its launch. Before writing a `perf-changelog.yaml` entry, list the config keys whose results the change invalidates:

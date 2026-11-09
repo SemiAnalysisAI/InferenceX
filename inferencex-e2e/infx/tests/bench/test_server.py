@@ -185,3 +185,24 @@ def test_chat_route_deadline_counts_time_spent_in_slow_probes(http_server, monke
     assert clock.now == 17
     chat = f"{url}/v1/chat/completions"
     assert capsys.readouterr().out == f"Waiting for {chat} ('m'): 8/10s\n"
+
+
+@pytest.mark.parametrize("models,chat", [(["other"], 405), (["m"], 404), (None, 405)])
+def test_model_gate_rejects_healthy_unregistered_or_unmounted_route(http_server, models, chat):
+    url = http_server(frontend(models, chat=chat, health=200))
+    with pytest.raises(server.NotReadyError, match="not registered"):
+        server.wait_model_registered(url, "m", 0, poll_s=0.01)
+
+
+def test_model_gate_waits_for_matching_registration(http_server):
+    calls = []
+
+    def respond(_method: str, path: str) -> tuple[int, object]:
+        calls.append(path)
+        if path == "/v1/models":
+            model = "m" if calls.count(path) > 1 else "other"
+            return 200, {"data": [{"id": model}]}
+        return 405, {}
+
+    server.wait_model_registered(http_server(respond), "m", 2, poll_s=0.01)
+    assert calls == ["/v1/models", "/v1/models", "/v1/chat/completions"]
