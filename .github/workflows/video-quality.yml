@@ -142,11 +142,13 @@ jobs:
           for zip in "$RUNNER_TEMP"/baselines/*.zip; do
             bundles+=(--baseline "$(basename "$zip" .zip)=$zip")
           done
+          # 100 of the job's 120 min; the rest covers setup and downloading the bundles.
           uv run --no-project --python 3.12 --index https://download.pytorch.org/whl/cpu \
             --with 'av==16.1.0' --with 'numpy==2.3.5' --with 'torch==2.14.0' \
             --with 'torchvision==0.29.2' --with 'lpips==0.1.4' --with 'scikit-image==0.26.0' \
             python -m evaluator.cli score-quality "${bundles[@]}" \
             --baseline-run-id "$BASELINE_RUN_ID" --run-id "$RUN_ID" \
+            --budget-minutes 100 \
             --source-revision "$GITHUB_SHA" --output "$RUNNER_TEMP/h3-quality"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

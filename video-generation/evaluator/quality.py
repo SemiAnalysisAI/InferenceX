@@ -18,6 +18,9 @@ CASE_FIELDS = ("case_id", "prompt", "seed", "requires_motion", "requires_sound")
 READ_ERRORS = (OSError, ValueError, KeyError, TypeError, zipfile.BadZipFile)
 # spec.json server keys a declared optimization sets, so they may differ from the lossless twin.
 OPTIMIZATION_SERVER_KEYS = {"subblock-sparse-attn": {"attention_backend"}}
+# Wall time of SSIM and LPIPS on one 124-frame 1344x768 clip on a GitHub-hosted runner.
+# Byte-identical clips skip both and are not counted.
+SECONDS_PER_DIFFERING_CLIP = 55
 
 
 def _digest(path: Path) -> str:
@@ -404,8 +407,12 @@ def score_paired(
     baseline_run_id: str,
     source_revision: str,
     output: Path,
+    budget_minutes: float | None = None,
 ) -> dict[str, Any]:
-    """Score each clip against the same case from the lossless deployment with the same setup."""
+    """Score each clip against the same case from the lossless deployment with the same setup.
+
+    Refuses, before scoring, a dispatch whose differing clips need longer than ``budget_minutes``.
+    """
     scorer = _scorer(source_revision)
     if output.exists():
         raise ValueError(f"output already exists: {output}")
@@ -414,11 +421,26 @@ def score_paired(
         found, baseline_unreadable = _read(baselines, baseline_run_id, Path(scratch, "baseline"))
         lossless = [deployment for deployment in found if not deployment.optimizations]
         candidates, unreadable = _read(bundles, run_id, Path(scratch, "candidate"))
+        matched = []
         for deployment in candidates:
             matches = _matches(deployment, lossless)
+            clips = [(clip, *_pair(clip, matches)) for clip in deployment.clips]
+            matched.append((deployment, matches, clips))
+        differing = sum(
+            reason is None and clip.entry["media_sha256"] != baseline.entry["media_sha256"]
+            for _, _, clips in matched
+            for clip, baseline, reason, _ in clips
+        )
+        needed = differing * SECONDS_PER_DIFFERING_CLIP / 60
+        if budget_minutes is not None and needed > budget_minutes:
+            raise ValueError(
+                f"{differing} clips differ from their lossless pair and need about {needed:.0f} min "
+                f"of SSIM and LPIPS at {SECONDS_PER_DIFFERING_CLIP} s each, over the "
+                f"{budget_minutes:g}-min budget; score fewer bundles per job"
+            )
+        for deployment, matches, clips in matched:
             comparisons = []
-            for clip in deployment.clips:
-                baseline, reason, fields = _pair(clip, matches)
+            for clip, baseline, reason, fields in clips:
                 if reason is not None:
                     unscored.append({"candidate": clip.entry, "reason": reason, "fields": fields})
                     continue

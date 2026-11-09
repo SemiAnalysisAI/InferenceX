@@ -153,9 +153,12 @@ def _mvp_command(arguments: argparse.Namespace) -> int:
                     baseline_run_id=arguments.baseline_run_id,
                     source_revision=arguments.source_revision,
                     output=arguments.output,
+                    budget_minutes=arguments.budget_minutes,
                 )
-            elif None in references or arguments.baseline_run_id is not None:
+            elif None in references:
                 raise ValueError("reference scoring takes --descriptor and --references")
+            elif arguments.baseline_run_id is not None or arguments.budget_minutes is not None:
+                raise ValueError("--baseline-run-id and --budget-minutes need --baseline")
             else:
                 result = score_quality(
                     bundles=bundles,
@@ -275,6 +278,11 @@ def _parser() -> argparse.ArgumentParser:
         help="h3-results bundle of the lossless run; repeat for each deployment",
     )
     score.add_argument("--baseline-run-id", help="GitHub run that stores the baseline bundles")
+    score.add_argument(
+        "--budget-minutes",
+        type=float,
+        help="with --baseline, refuse before scoring when the differing clips need longer",
+    )
     score.add_argument("--run-id", required=True, help="GitHub run that stores the bundles")
     score.add_argument("--source-revision", required=True, help="git commit of this scorer")
     score.add_argument("--output", required=True, type=Path, help="new attachment directory")

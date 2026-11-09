@@ -107,6 +107,11 @@ Other clips are listed under `unscored` as `no_baseline`, `ambiguous_baseline`,
 `invalid_baseline`, `settings_mismatch` with the differing fields,
 `invalid_candidate` or `checksum_mismatch`.
 
+SSIM and LPIPS take about 55 s per clip on a GitHub-hosted runner, and
+byte-identical frames skip both. Before scoring, the job refuses a dispatch whose
+differing clips would need more than 100 of its 120 minutes (`--budget-minutes`,
+about 109 clips), so it fails with a message instead of timing out with no artifact.
+
 Each pair gets per-frame PSNR, SSIM on BT.601 luma with a Gaussian window of
 σ 1.5, and LPIPS (AlexNet, v0.1, weight hashes pinned), with the clip mean and
 the worst frame of each. Each deployment gets the median and worst clip. An

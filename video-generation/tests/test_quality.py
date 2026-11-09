@@ -228,7 +228,7 @@ def _fixed_similarity():
 
 
 @pytest.fixture(scope="module")
-def paired(tmp_path_factory):
+def paired_arguments(tmp_path_factory) -> list[str]:
     root = tmp_path_factory.mktemp("paired")
     same, other = encode_media(root / "same.mp4"), encode_media(root / "other.mp4")
     changed = encode_media(root / "changed.mp4", video_change=True)
@@ -247,9 +247,14 @@ def paired(tmp_path_factory):
     shutil.make_archive(str(root / "lossless"), "zip", lossless)
     arguments = ["score-quality", f"7={lossy}", f"8={offload}", f"9={fp8}", "--baseline"]
     arguments += [f"3={root / 'lossless.zip'}", "--baseline", f"4={lossy_peer}"]
-    arguments += ["--baseline-run-id", "40", "--run-id", "41", "--source-revision", REVISION]
-    assert cli.main([*arguments, "--output", str(root / "out")]) == 0
-    return json.loads((root / "out/quality.json").read_bytes())
+    return [*arguments, "--baseline-run-id", "40", "--run-id", "41", "--source-revision", REVISION]
+
+
+@pytest.fixture(scope="module")
+def paired(paired_arguments, tmp_path_factory):
+    output = tmp_path_factory.mktemp("paired-output") / "out"
+    assert cli.main([*paired_arguments, "--output", str(output)]) == 0
+    return json.loads((output / "quality.json").read_bytes())
 
 
 def test_pairs_each_clip_with_the_same_case_of_the_lossless_deployment(paired):
@@ -288,6 +293,17 @@ def test_lists_clips_without_a_matched_lossless_clip_instead_of_scoring_them(pai
         (9, "changed", "no_baseline", []),
         (9, "reseeded", "no_baseline", []),
     ]
+
+
+def test_refuses_a_dispatch_whose_differing_clips_exceed_the_budget(paired_arguments, tmp_path):
+    # One clip differs (55 s); the two identical clips skip SSIM and LPIPS and do not count.
+    refused = cli.main(
+        [*paired_arguments, "--budget-minutes", "0.9", "--output", str(tmp_path / "a")]
+    )
+    assert (refused, (tmp_path / "a").exists()) == (2, False)
+    assert (
+        cli.main([*paired_arguments, "--budget-minutes", "1", "--output", str(tmp_path / "b")]) == 0
+    )
 
 
 def test_a_same_run_dispatch_pairs_two_deployments_but_never_one_with_itself(tmp_path):

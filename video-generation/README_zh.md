@@ -94,6 +94,10 @@ revision、GPU 数、精度、并发数以及 `spec.json` 中的 `server` 参数
 `invalid_baseline`、`settings_mismatch`（附不一致的字段）、`invalid_candidate` 或
 `checksum_mismatch`。
 
+在 GitHub 托管的 runner 上，SSIM 和 LPIPS 每段视频约需 55 秒，逐字节相同的帧跳过这
+两项计算。若与基准不同的视频所需时间超过任务 120 分钟时限中的 100 分钟
+（`--budget-minutes`，约 109 段），任务会在评分前报错退出，而不是超时后不留任何产物。
+
 每一对视频逐帧计算 PSNR、SSIM（BT.601 亮度，σ 1.5 的高斯窗口）和 LPIPS（AlexNet，
 v0.1，权重哈希固定），并给出各指标的整段均值与最差帧。每个部署给出视频级的中位数与
 最差值。完全相同的视频记为 `video_identical` 为 true，PSNR 为 `null`，SSIM 为 1，
