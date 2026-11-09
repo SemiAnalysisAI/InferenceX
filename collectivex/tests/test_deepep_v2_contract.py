@@ -118,8 +118,17 @@ def _built(module, world_size=8, env=None, max_tokens=512, **updates):
     return backend
 
 
+class _Output:
+    """The MoE layer's output: records what combine copied into it."""
+
+    def copy_(self, value):
+        self.value = value
+        return self
+
+
 def _problem(tokens):
-    return types.SimpleNamespace(T=tokens, dispatch_x="x", topk_idx="i", topk_weights="w")
+    return types.SimpleNamespace(T=tokens, dispatch_x="x", topk_idx="i", topk_weights="w",
+                                 combine_output=_Output())
 
 
 class ElasticBufferContract(unittest.TestCase):
@@ -158,7 +167,11 @@ class ElasticBufferContract(unittest.TestCase):
         # one the kernels run with, and dispatch and combine pass nothing of their own.
         self.assertEqual(backend.buffer.sm_calls, [((384, 6), {})])
         backend.dispatch(_problem(3))
-        backend.combine(_problem(3), types.SimpleNamespace(combine_input="staged", handle="h"))
+        problem = _problem(3)
+        output = backend.combine(problem, types.SimpleNamespace(combine_input="staged", handle="h"))
+        # vLLM's finalize copies the batch's rows of the combined plane into the layer output.
+        self.assertIs(output, problem.combine_output)
+        self.assertEqual(output.value, "com")
         dispatched, combined = backend.buffer.dispatches[-1], backend.buffer.combines[-1]
         self.assertEqual(dispatched["num_sms"], 0)
         self.assertNotIn("num_qps", dispatched)
