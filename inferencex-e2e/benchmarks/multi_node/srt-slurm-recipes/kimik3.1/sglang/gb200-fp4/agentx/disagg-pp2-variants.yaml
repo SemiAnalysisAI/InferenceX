@@ -1,0 +1,259 @@
+schema: 2
+
+base:
+  identity:
+    model: {}
+    container: {}
+    frameworks:
+      dynamo: "1.6.0"
+      sglang: "0.0.0.dev1+ge79de62d2.d20261104"
+  resources:
+    gpu_type: gb200
+    gpus_per_node: 4
+  dynamo:
+    install: false
+    request_plane: tcp
+    event_plane: zmq
+  environment:
+    HF_HUB_CACHE: /hf_hub_cache
+  observability:
+    tachometer:
+      enabled: false
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+    env:
+      DYN_ROUTER_TEMPERATURE: '0'
+      DYN_ROUTER_QUEUE_THRESHOLD: None
+      DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: '3600'
+      DYN_TCP_CHANNEL_BUFFER: '128'
+      DYN_TCP_REQUEST_TIMEOUT: '60'
+      DYN_TOKENIZER_CACHE: '1'
+      DYN_TOKENIZER_CACHE_BYTES: '8000000000'
+    args:
+      router-mode: kv
+      # The frontend's own tokenizer cannot load kimi_k31; SGLang's chat processor renders requests.
+      dyn-chat-processor: sglang
+      dyn-preprocess-workers: '4'
+      trust-remote-code: true
+      active-decode-blocks-threshold: None
+      active-prefill-tokens-threshold: None
+      active-prefill-tokens-threshold-frac: None
+  engine: sglang
+  roles:
+    # A single prefill worker leaves the KV router nothing to choose, so it publishes no KV events.
+    prefill:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      env:
+        TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+        PYTHONUNBUFFERED: '1'
+        PYTHONNOUSERSITE: '1'
+        PIP_BREAK_SYSTEM_PACKAGES: '1'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '3600'
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '3600'
+        # Mooncake moves P->D KV over multi-node NVLink from its own registered pool.
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+        MC_FORCE_MNNVL: '1'
+        NCCL_MNNVL_ENABLE: '1'
+        NCCL_CUMEM_ENABLE: '1'
+        SGLANG_K3_SHARDED_MOE: '0'
+        # The last stage also runs the DFLASH draft and lm_head; 48/45 evens the two stages.
+        SGLANG_PP_LAYER_PARTITION: 48,45
+        # In-batch prefix deferral holds cold requests behind shared prefixes and doubles the TTFT tail at a saturated prefill.
+        IN_BATCH_PREFIX_CACHING_CHECK_THRESHOLD: '-1'
+      args:
+        served-model-name: moonshotai/Kimi-K3.1-Pro
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        pipeline-parallel-size: 2
+        dcp-size: 8
+        expert-parallel-size: 2
+        page-size: 64
+        kv-cache-dtype: fp8_e4m3
+        # Week-1 K3.1 precision policy: FP32 KDA recurrent state.
+        mamba-ssm-dtype: float32
+        # K3.1 with DCP rejects every other PD transfer backend.
+        disaggregation-transfer-backend: mooncake
+        # At 0.85 a prefill rank can fall under 0.1 GiB free and fail the draft GEMM in cuBLAS.
+        mem-fraction-static: 0.82
+        chunked-prefill-size: 16384
+        max-prefill-tokens: 16384
+        schedule-policy: shortest-prefill-first
+        max-running-requests: 64
+        # The Run:ai streamer cannot load a pipeline-parallel model.
+        load-format: auto
+        weight-loader-prefetch-checkpoints: true
+        model-loader-extra-config: '{"enable_multithread_load":true}'
+        weight-loader-drop-cache-after-load: false
+        dist-timeout: 3600
+        dyn-reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: RadixArk/Kimi-K3.1-Dflash2-Preview
+        speculative-draft-kv-cache-dtype: fp8_e4m3
+        speculative-draft-attention-backend: cutedsl_mla
+        speculative-use-block-verification: true
+        speculative-num-draft-tokens: 6
+        enable-hierarchical-cache: true
+        # Host KV, Mamba and DSA indexer pools total ~1.1 x hicache-size per rank; 108 fits a tray's 487 GB offload share.
+        hicache-size: 108
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+        hicache-write-policy: write_back
+        mamba-max-states-per-path: 1
+        router-mode: kv
+        router-host-cache-hit-weight: 1
+        router-kv-overlap-score-credit: 4
+        router-session-affinity-ttl-secs: '14400'
+        watchdog-timeout: 3600
+        enable-metrics: true
+    decode:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      env:
+        TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+        PYTHONUNBUFFERED: '1'
+        PYTHONNOUSERSITE: '1'
+        PIP_BREAK_SYSTEM_PACKAGES: '1'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '3600'
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '3600'
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+        MC_FORCE_MNNVL: '1'
+        NCCL_MNNVL_ENABLE: '1'
+        NCCL_CUMEM_ENABLE: '1'
+        # SGLang's Kimi MegaMoE check bounds a rank's rows by max-running-requests / attention DP x draft tokens.
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '1152'
+        NVSHMEM_REMOTE_TRANSPORT: none
+      args:
+        served-model-name: moonshotai/Kimi-K3.1-Pro
+        trust-remote-code: true
+        # TP16 attention runs as DCP8 x attention DP2: 12 KDA heads per rank engage the fused KDA decode.
+        tensor-parallel-size: 16
+        dcp-size: 8
+        attn-dp-size: 2
+        # DFLASH with attention DP needs the DP LM head.
+        enable-dp-lm-head: true
+        expert-parallel-size: 16
+        moe-a2a-backend: megamoe
+        # Shards the replicated BF16 shared experts (~22 GiB) under MegaMoE.
+        shared-experts-tp-size: 8
+        page-size: 64
+        kv-cache-dtype: fp8_e4m3
+        mamba-ssm-dtype: float32
+        disaggregation-transfer-backend: mooncake
+        disaggregation-decode-extra-slots: 16
+        disaggregation-decode-enable-radix-cache: true
+        mem-fraction-static: 0.85
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 64
+        load-format: runai_streamer
+        model-loader-extra-config: '{"concurrency":16,"distributed":true}'
+        weight-loader-drop-cache-after-load: false
+        dist-timeout: 3600
+        dyn-reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: RadixArk/Kimi-K3.1-Dflash2-Preview
+        speculative-draft-kv-cache-dtype: fp8_e4m3
+        speculative-draft-attention-backend: cutedsl_mla
+        speculative-use-block-verification: true
+        speculative-num-draft-tokens: 6
+        # Without ReplaySSM, DFLASH keeps one KDA state per draft token and the KV pool
+        # collapses; prefill never verifies and rejects the flag.
+        enable-linear-replayssm-spec: true
+        watchdog-timeout: 3600
+        enable-metrics: true
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 10
+  benchmark:
+    env:
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+    # Disables Dynamo's per-request lifecycle span export; InferenceX does not read it.
+    - name: otel-collector
+      type: otel-collector
+      enabled: false
+  sbatch_directives:
+    mem: '0'
+    cpus-per-task: '144'
+  srun_options:
+    mem: '0'
+    container-remap-root: ''
+
+override_1p2d_c76:
+  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-disagg-1p2d-pp2-c76-dflash7
+  frontend:
+    args:
+      # Balances the decode hop across the two workers by active requests.
+      router-decode-active-request-weight: '1000000'
+  roles:
+    prefill:
+      args:
+        speculative-num-draft-tokens: 8
+    decode:
+      nodes: 8
+      workers: 2
+      args:
+        speculative-num-draft-tokens: 8
+
+override_1p2d_c150:
+  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-disagg-1p2d-pp2-c150-dflash5
+  frontend:
+    args:
+      router-decode-active-request-weight: '1000000'
+  roles:
+    prefill:
+      env:
+        # Warms the BF16 GEMMs up to the 32k chunk.
+        SGLANG_WARMUP_BF16_GEMM_MAX_M: '32768'
+        # Halves the DSA indexer logits transient of a 32k chunk.
+        SGLANG_DSA_MQA_LOGITS_FREE_MEM_FRACTION: '0.1'
+      args:
+        chunked-prefill-size: 32768
+        max-prefill-tokens: 32768
+    decode:
+      nodes: 8
+      workers: 2
+
+override_1p1d_c150:
+  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-disagg-1p1d-pp2-c150-dflash4
+  roles:
+    prefill:
+      env:
+        SGLANG_WARMUP_BF16_GEMM_MAX_M: '32768'
+        SGLANG_DSA_MQA_LOGITS_FREE_MEM_FRACTION: '0.1'
+      args:
+        chunked-prefill-size: 32768
+        max-prefill-tokens: 32768
+        speculative-num-draft-tokens: 5
+    decode:
+      args:
+        mem-fraction-static: 0.87
+        max-running-requests: 192
+        cuda-graph-max-bs-decode: 96
+        speculative-num-draft-tokens: 5
+
+override_1p1d_c200:
+  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-disagg-1p1d-pp2-c200-dflash5
+  roles:
+    prefill:
+      args:
+        speculative-num-draft-tokens: 6
+    decode:
+      args:
+        speculative-num-draft-tokens: 6

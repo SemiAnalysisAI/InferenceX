@@ -239,3 +239,39 @@ override_1p1d_tp16_ep16:
         max-running-requests: 96
         cuda-graph-max-bs-decode: 96
         speculative-num-draft-tokens: 8
+
+override_1p2d_tp16_c32:
+  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-disagg-1p2d-tp16-c32-dflash7
+  frontend:
+    args:
+      # Balances the decode hop across the two workers by active requests.
+      router-decode-active-request-weight: '1000000'
+  roles:
+    prefill:
+      # A single prefill worker leaves the KV router nothing to choose, so it publishes no KV events.
+      kv_events: null
+      env:
+        # In-batch prefix deferral holds cold requests behind shared prefixes and doubles the TTFT tail at a saturated prefill.
+        IN_BATCH_PREFIX_CACHING_CHECK_THRESHOLD: '-1'
+      args:
+        expert-parallel-size: 4
+        # Host KV, Mamba and DSA indexer pools total ~1.1 x hicache-size per rank; 108 fits a tray's 487 GB offload share.
+        hicache-size: 108
+        load-format: runai_streamer
+        model-loader-extra-config: '{"concurrency":16,"distributed":true}'
+        weight-loader-prefetch-checkpoints: null
+        weight-loader-drop-cache-after-load: false
+        dist-timeout: 3600
+        speculative-num-draft-tokens: 8
+    decode:
+      nodes: 8
+      workers: 2
+      args:
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+        load-format: runai_streamer
+        model-loader-extra-config: '{"concurrency":16,"distributed":true}'
+        weight-loader-prefetch-checkpoints: null
+        weight-loader-drop-cache-after-load: false
+        dist-timeout: 3600
+        speculative-num-draft-tokens: 8

@@ -1,0 +1,143 @@
+schema: 2
+
+base:
+  identity:
+    model: {}
+    container: {}
+    frameworks:
+      dynamo: "1.6.0"
+      sglang: "0.0.0.dev1+ge79de62d2.d20261104"
+  resources:
+    gpu_type: gb200
+    gpus_per_node: 4
+  dynamo:
+    install: false
+    request_plane: tcp
+    event_plane: zmq
+  environment:
+    HF_HUB_CACHE: /hf_hub_cache
+  observability:
+    tachometer:
+      enabled: false
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+    env:
+      DYN_ROUTER_TEMPERATURE: '0'
+      DYN_ROUTER_QUEUE_THRESHOLD: None
+      DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: '3600'
+      DYN_TCP_CHANNEL_BUFFER: '128'
+      DYN_TCP_REQUEST_TIMEOUT: '60'
+      DYN_TOKENIZER_CACHE: '1'
+      DYN_TOKENIZER_CACHE_BYTES: '8000000000'
+    args:
+      router-mode: kv
+      # The frontend's own tokenizer cannot load kimi_k31; SGLang's chat processor renders requests.
+      dyn-chat-processor: sglang
+      dyn-preprocess-workers: '4'
+      trust-remote-code: true
+      active-decode-blocks-threshold: None
+      active-prefill-tokens-threshold: None
+      active-prefill-tokens-threshold-frac: None
+  engine: sglang
+  roles:
+    # A single worker leaves the KV router nothing to choose, so it publishes no KV events.
+    agg:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      env:
+        TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+        PYTHONUNBUFFERED: '1'
+        PYTHONNOUSERSITE: '1'
+        PIP_BREAK_SYSTEM_PACKAGES: '1'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
+        NCCL_MNNVL_ENABLE: '1'
+        NCCL_CUMEM_ENABLE: '1'
+        # SGLang's K3 sharded MoE front has no output tile for TP16's N=1048 (k3_ar_fusion); this selects the engine's replicated fused front.
+        SGLANG_K3_SHARDED_MOE: '0'
+      args:
+        served-model-name: moonshotai/Kimi-K3.1-Pro
+        trust-remote-code: true
+        tensor-parallel-size: 16
+        # The per-layer DCP combine on each verify and draft step spans two trays instead of four.
+        dcp-size: 8
+        kv-cache-dtype: fp8_e4m3
+        # Week-1 K3.1 precision policy: FP32 KDA recurrent state.
+        mamba-ssm-dtype: float32
+        chunked-prefill-size: 16384
+        max-prefill-tokens: 16384
+        load-format: runai_streamer
+        model-loader-extra-config: '{"concurrency":16,"distributed":true}'
+        weight-loader-drop-cache-after-load: false
+        dist-timeout: 3600
+        dyn-reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: RadixArk/Kimi-K3.1-Dflash2-Preview
+        speculative-draft-kv-cache-dtype: fp8_e4m3
+        speculative-draft-attention-backend: cutedsl_mla
+        speculative-use-block-verification: true
+        speculative-num-draft-tokens: 8
+        # Without ReplaySSM, DFLASH keeps one KDA state per draft token and the KV pool collapses.
+        enable-linear-replayssm-spec: true
+        enable-hierarchical-cache: true
+        # Host KV, Mamba and DSA indexer pools total ~1.1 x hicache-size per rank; 108 fits a tray's 487 GB offload share.
+        hicache-size: 108
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+        hicache-write-policy: write_back
+        mamba-max-states-per-path: 1
+        router-mode: kv
+        router-host-cache-hit-weight: 1
+        router-kv-overlap-score-credit: 4
+        router-session-affinity-ttl-secs: '14400'
+        watchdog-timeout: 3600
+        enable-metrics: true
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 10
+  benchmark:
+    env:
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+    # Disables Dynamo's per-request lifecycle span export; InferenceX does not read it.
+    - name: otel-collector
+      type: otel-collector
+      enabled: false
+  sbatch_directives:
+    mem: '0'
+    cpus-per-task: '144'
+  srun_options:
+    mem: '0'
+    container-remap-root: ''
+
+override_tp16_dcp8_c1:
+  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-agg-tp16-dcp8-c1-dflash7
+  roles:
+    agg:
+      args:
+        expert-parallel-size: 1
+        mem-fraction-static: 0.85
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+
+override_tp16_ep4_dcp8_c4:
+  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-agg-tp16-ep4-dcp8-c4-dflash7
+  roles:
+    agg:
+      args:
+        # EP4 shards the routed experts four ways and shortens the weight-read-bound decode step.
+        expert-parallel-size: 4
+        # At 0.85 an EP4 rank can fall under 0.1 GiB free and fail the draft GEMM in cuBLAS.
+        mem-fraction-static: 0.82
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
