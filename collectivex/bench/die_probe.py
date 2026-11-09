@@ -239,6 +239,27 @@ def run(out_dir):
                 if isinstance(value, dict) and "phase_ms" in value:
                     clocks[name] = _phase(rows, value["phase_ms"])
             out["smi_by_phase"] = clocks
+    info = {}
+    for key, cmd in (
+        ("driver", "nvidia-smi --query-gpu=name,driver_version,vbios_version,pci.bus_id,pcie.link.gen.current,pcie.link.width.current,ecc.mode.current,compute_mode,persistence_mode --format=csv,noheader -i 0"),
+        ("smi_q", "nvidia-smi -q -i 0 | grep -iE 'Virtualization|GPU Operation|Addressing|Host VGPU|MIG|Accounting|Product Architecture|Firmware|GSP|Drain|Fabric|IBMNPU|Bridge' | tr -s ' ' | tr '\\n' ';'"),
+        ("conf_compute", "nvidia-smi conf-compute -f 2>&1 | head -3 | tr '\\n' ';'"),
+        ("nvlink", "nvidia-smi nvlink -s -i 0 2>&1 | head -4 | tr '\\n' ';'"),
+        ("nvlink_cap", "nvidia-smi nvlink -c -i 0 2>&1 | sed -n '2,10p' | tr '\\n' ';'"),
+        ("proc_version", "cat /proc/driver/nvidia/version 2>&1 | head -2 | tr '\\n' ';'"),
+        ("proc_params", "cat /proc/driver/nvidia/params 2>&1 | tr '\\n' ';'"),
+        ("uvm_params", "for f in /sys/module/nvidia_uvm/parameters/*; do echo \"$(basename $f)=$(cat $f 2>/dev/null)\"; done 2>&1 | tr '\\n' ';'"),
+        ("cmdline", "cat /proc/cmdline"),
+        ("kernel", "uname -srm"),
+        ("cpu", "lscpu | grep -E 'Model name|Hypervisor|Virtualization|^CPU\\(s\\)' | tr -s ' ' | tr '\\n' ';'"),
+        ("dmi", "cat /sys/class/dmi/id/sys_vendor /sys/class/dmi/id/product_name 2>&1 | tr '\\n' ';'"),
+        ("iommu", "ls /sys/kernel/iommu_groups 2>/dev/null | wc -l"),
+    ):
+        try:
+            info[key] = subprocess.run(["sh", "-c", cmd], capture_output=True, text=True, timeout=30).stdout.strip()[:6000]
+        except Exception as exc:
+            info[key] = f"error: {exc}"
+    out["sysinfo"] = info
     text = json.dumps(out)
     print("DIEPROBE " + text, flush=True)
     with open(os.path.join(out_dir, "die_probe.json"), "w") as handle:
