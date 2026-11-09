@@ -36,6 +36,8 @@ base:
       env:
         VLLM_ENGINE_READY_TIMEOUT_S: "3600"
         VLLM_RPC_TIMEOUT: "600000"
+        # AIPerf reuses a session's connection across turns; outlast uvicorn's 5 s idle timeout.
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "600"
         NCCL_CUMEM_ENABLE: "1"
         NCCL_MNNVL_ENABLE: "1"
         NCCL_NVLS_ENABLE: "1"
