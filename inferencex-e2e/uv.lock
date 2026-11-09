@@ -969,33 +969,33 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "codeowners", marker = "extra == 'workflows'", specifier = ">=0.9,<0.10" },
-    { name = "gitpython", marker = "extra == 'workflows'", specifier = ">=3.1,<4" },
-    { name = "jinja2", marker = "extra == 'recipes'", specifier = ">=3.1,<4" },
-    { name = "marshmallow", marker = "extra == 'recipes'", specifier = ">=3.20,<5" },
-    { name = "marshmallow-dataclass", marker = "extra == 'recipes'", specifier = ">=8.6,<9" },
-    { name = "psycopg2-binary", marker = "extra == 'results'", specifier = ">=2,<3" },
-    { name = "pydantic", specifier = ">=2.10,<3" },
-    { name = "pygithub", marker = "extra == 'workflows'", specifier = ">=2.6,<3" },
-    { name = "pyyaml", specifier = ">=6,<7" },
-    { name = "requests", marker = "extra == 'recipes'", specifier = ">=2.31,<3" },
-    { name = "rich", marker = "extra == 'recipes'", specifier = ">=13,<16" },
-    { name = "ruamel-yaml", marker = "extra == 'recipes'", specifier = ">=0.18,<0.20" },
-    { name = "tabulate", marker = "extra == 'results'", specifier = ">=0.10,<0.11" },
+    { name = "codeowners", marker = "extra == 'workflows'", specifier = "==0.9.0" },
+    { name = "gitpython", marker = "extra == 'workflows'", specifier = "==3.2.1" },
+    { name = "jinja2", marker = "extra == 'recipes'", specifier = "==3.1.6" },
+    { name = "marshmallow", marker = "extra == 'recipes'", specifier = "==4.3.1" },
+    { name = "marshmallow-dataclass", marker = "extra == 'recipes'", specifier = "==8.7.1" },
+    { name = "psycopg2-binary", marker = "extra == 'results'", specifier = "==2.9.13" },
+    { name = "pydantic", specifier = "==2.14.2" },
+    { name = "pygithub", marker = "extra == 'workflows'", specifier = "==2.10.0" },
+    { name = "pyyaml", specifier = "==6.0.3" },
+    { name = "requests", marker = "extra == 'recipes'", specifier = "==2.34.2" },
+    { name = "rich", marker = "extra == 'recipes'", specifier = "==15.0.0" },
+    { name = "ruamel-yaml", marker = "extra == 'recipes'", specifier = "==0.19.1" },
+    { name = "tabulate", marker = "extra == 'results'", specifier = "==0.10.0" },
 ]
 provides-extras = ["recipes", "workflows", "results"]
 
 [package.metadata.requires-dev]
 test = [
-    { name = "aiohttp", specifier = ">=3,<4" },
-    { name = "matplotlib", specifier = ">=3,<4" },
-    { name = "numpy", specifier = ">=2,<3" },
-    { name = "packaging", specifier = ">=26,<27" },
-    { name = "pytest", specifier = ">=9,<10" },
-    { name = "pytest-xdist", specifier = ">=3,<4" },
-    { name = "torch", marker = "sys_platform != 'darwin'", specifier = ">=2,<3", index = "https://download.pytorch.org/whl/cpu" },
-    { name = "torch", marker = "sys_platform == 'darwin'", specifier = ">=2,<3" },
-    { name = "transformers", specifier = ">=5,<6" },
+    { name = "aiohttp", specifier = "==3.14.5" },
+    { name = "matplotlib", specifier = "==3.11.2" },
+    { name = "numpy", specifier = "==2.5.4" },
+    { name = "packaging", specifier = "==26.3" },
+    { name = "pytest", specifier = "==9.2.0" },
+    { name = "pytest-xdist", specifier = "==3.8.0" },
+    { name = "torch", marker = "sys_platform != 'darwin'", specifier = "==2.15.0", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "torch", marker = "sys_platform == 'darwin'", specifier = "==2.15.0" },
+    { name = "transformers", specifier = "==5.22.1" },
 ]
 
 [[package]]

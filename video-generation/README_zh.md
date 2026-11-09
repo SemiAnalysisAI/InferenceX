@@ -77,7 +77,7 @@ python -m evaluator.cli score-quality <artifact-id>=<bundle.zip|dir> ... \
 cd video-generation
 PYTHONPATH=../inferencex-e2e uv run --no-project --python 3.12 \
   --with 'av==16.1.0' --with 'numpy==2.3.5' \
-  --with 'pyyaml>=6,<7' --with 'pytest>=9.0.3,<10' python -m pytest -q
+  --with 'pyyaml>=6,<7' --with 'pytest==9.2.0' python -m pytest -q
 ```
 
 [Test Video Harness](../.github/workflows/test-video-harness.yml) 会在相关
