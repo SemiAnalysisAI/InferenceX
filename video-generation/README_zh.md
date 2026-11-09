@@ -75,8 +75,8 @@ python -m evaluator.cli score-quality <artifact-id>=<bundle.zip|dir> ... \
 
 在 `run.json` 的 `configuration.optimizations` 中声明了有损优化（如 `cache-dit`）
 的部署，以其无损对照部署为基准评分，而不是 Diffusers 参考视频。手动触发
-Video Quality 时，将 `baseline_run_id` 设为包含无损部署的运行，也可以是同一次运行。
-任务下载两次运行各自最新的 `h3-results-*` bundle，然后运行：
+Video Quality 时，将 `baseline_run_id` 设为包含无损部署的运行。也可以是同一次运行，
+但部署不会与自身配对。任务下载两次运行各自最新的 `h3-results-*` bundle，然后运行：
 
 ```bash
 python -m evaluator.cli score-quality <artifact-id>=<bundle.zip|dir> ... \

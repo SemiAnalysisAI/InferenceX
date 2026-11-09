@@ -259,6 +259,7 @@ class _Clip(NamedTuple):
 
 
 class _Deployment(NamedTuple):
+    run_id: str
     artifact_id: int
     cell_id: str
     setup: dict
@@ -290,7 +291,7 @@ def _deployments(root: Path, run_id: str, artifact_id: int) -> list[_Deployment]
                 "server": json.loads((cell / "spec.json").read_bytes())["server"],
             }
             optimizations = sorted(configuration.get("optimizations") or [])
-            cells[cell_id] = _Deployment(artifact_id, cell_id, setup, optimizations, [])
+            cells[cell_id] = _Deployment(run_id, artifact_id, cell_id, setup, optimizations, [])
         slot = entry["slot_id"]
         request = f"gpu/{cell_id}/baseline/requests/{slot}.json"
         sealed = (
@@ -311,7 +312,8 @@ def _deployments(root: Path, run_id: str, artifact_id: int) -> list[_Deployment]
 
 
 def _matches(deployment: _Deployment, lossless: list[_Deployment]) -> list[_Deployment]:
-    """Lossless deployments whose setup differs only in the server keys the optimizations set."""
+    """Other lossless deployments whose setup differs only in the server keys the optimizations set."""
+    source = (deployment.run_id, deployment.artifact_id, deployment.cell_id)
     owned = set().union(
         *(OPTIMIZATION_SERVER_KEYS.get(name, ()) for name in deployment.optimizations)
     )
@@ -319,7 +321,12 @@ def _matches(deployment: _Deployment, lossless: list[_Deployment]) -> list[_Depl
     def key(setup: dict) -> dict:
         return {**setup, "server": {k: v for k, v in setup["server"].items() if k not in owned}}
 
-    return [match for match in lossless if key(match.setup) == key(deployment.setup)]
+    return [
+        match
+        for match in lossless
+        if key(match.setup) == key(deployment.setup)
+        and (match.run_id, match.artifact_id, match.cell_id) != source
+    ]
 
 
 def _pair(clip: _Clip, lossless: list[_Deployment]) -> tuple[_Clip | None, str | None, list[str]]:

@@ -288,3 +288,16 @@ def test_lists_clips_without_a_matched_lossless_clip_instead_of_scoring_them(pai
         (9, "changed", "no_baseline", []),
         (9, "reseeded", "no_baseline", []),
     ]
+
+
+def test_a_same_run_dispatch_pairs_two_deployments_but_never_one_with_itself(tmp_path):
+    media = [encode_media(tmp_path / "same.mp4")] * 3
+    bundles = [f"{artifact}={_bundle(tmp_path / str(artifact), media)}" for artifact in (3, 4)]
+    arguments = ["score-quality", *bundles, "--baseline", bundles[0], "--baseline", bundles[1]]
+    arguments += ["--run-id", "41", "--baseline-run-id", "41", "--source-revision", REVISION]
+    assert cli.main([*arguments, "--output", str(tmp_path / "out")]) == 0
+    quality = json.loads((tmp_path / "out/quality.json").read_bytes())
+    assert [
+        (pair["candidate"]["artifact_id"], pair["baseline"]["artifact_id"])
+        for pair in quality["pairs"]
+    ] == [(3, 4)] * 3 + [(4, 3)] * 3

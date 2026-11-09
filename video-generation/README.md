@@ -86,8 +86,9 @@ dispatch the workflow with its `run_id` and `run_attempt`.
 A deployment that lists lossy optimizations in `run.json`
 `configuration.optimizations`, such as `cache-dit`, is scored against its lossless
 twin instead of the Diffusers reference. Dispatch Video Quality with
-`baseline_run_id` set to the run that holds the lossless deployment; it may be the
-same run. The job downloads the newest `h3-results-*` bundles of both runs and runs:
+`baseline_run_id` set to the run that holds the lossless deployment. It may be the
+same run, but a deployment never pairs with itself. The job downloads the newest
+`h3-results-*` bundles of both runs and runs:
 
 ```bash
 python -m evaluator.cli score-quality <artifact-id>=<bundle.zip|dir> ... \
