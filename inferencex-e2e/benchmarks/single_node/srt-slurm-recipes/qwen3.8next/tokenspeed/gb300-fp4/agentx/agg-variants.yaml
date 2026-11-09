@@ -79,8 +79,8 @@ base:
         kv-cache-dtype: fp8_e4m3
         gpu-memory-utilization: 0.95
         max-num-seqs: 104
-        chunked-prefill-size: 8192
-        max-prefill-tokens: 8192
+        chunked-prefill-size: 16384
+        max-prefill-tokens: 16384
         speculative-algorithm: MTP
         draft-model-path-use-base: true
         speculative-num-steps: 3

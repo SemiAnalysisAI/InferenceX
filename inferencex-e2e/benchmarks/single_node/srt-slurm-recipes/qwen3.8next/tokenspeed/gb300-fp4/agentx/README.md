@@ -6,17 +6,17 @@ row. Every row uses one GB300 serving GPU, TP1/EP1, and the native AgentX
 client. Concurrency 1, 2, 4 and 108 run with 104 request slots. Concurrency 8,
 20, 36, 56 and 80 cap running requests at 2, 6, 12, 35 and 72, with CUDA graphs
 captured up to the cap. Sessions beyond the running limit wait for their first
-token. The remaining settings are shared: 256K context, 8K prefill chunks, an
+token. The remaining settings are shared: 256K context, 16K prefill chunks, an
 FP8 E4M3 KV cache for the target and the embedded MTP draft, BF16 SSM state,
 three MTP steps, four verify tokens, and a 236 decimal GB Host L2 cache with
 kernel I/O and write-back plus a 4 GB retraction snapshot pool, sized together
 under the 241 GB per-GPU host DRAM allowance. The PLE n-gram table stays on
 pinned host memory, in TokenSpeed's default dtype. In-forward state
 checkpoints, which also demote superseded checkpoints, and plain-LRU
-checkpoint retention are enabled. Breakable prefill CUDA graphs cover the
-target and the MTP drafter; target prefill calls of at least 2048 rows attend
-over a BF16 copy of the FP8 KV pages, and the remaining FP8 QSA prefill calls
-use the CuTe DSL kernel through
+checkpoint retention are enabled. Breakable prefill CUDA graphs, captured up
+to 8192 tokens, cover the target and the MTP drafter; target prefill calls of
+at least 2048 rows attend over a BF16 copy of the FP8 KV pages, and the
+remaining FP8 QSA prefill calls use the CuTe DSL kernel through
 `TOKENSPEED_KERNEL_OVERRIDE_ATTENTION_QSA_SPARSE_ATTENTION`. The SMG frontend
 runs with the gateway settings TokenSpeed's `ts serve` launcher applies:
 passthrough policy, L0/L1 tokenizer caches, warn logging, and no retries,
