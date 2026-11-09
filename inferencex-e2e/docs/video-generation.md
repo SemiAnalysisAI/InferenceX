@@ -152,9 +152,10 @@ Their presence does not establish final-head GPU qualification.
    arguments and log, that every request ran the declared shape, seed and denoising
    steps without quantization or LoRA, and that the log shows exactly the run's
    declared optimizations running, so undeclared step caching or sparse attention
-   fails; a failed attestation leaves the cell unverified. A valid `release-v1` deployment needs 20
-   valid measured C1 clips plus its separate warmup. Four-sample B200 cells remain History evidence below the
-   App's ten-valid-sample chart floor.
+   fails; a failed attestation leaves the cell unverified. A valid `release-v1`
+   deployment needs 20 valid measured C1 clips plus its separate warmup.
+   Four-sample B200 cells remain History evidence below the App's ten-valid-sample
+   chart floor.
 
 During execution, native `recipe.lock.yaml` and the scheduler job record identify
 the submitted configuration. Inspect `logs/video/server/launch.json` for the actual

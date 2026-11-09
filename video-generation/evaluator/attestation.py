@@ -3,8 +3,9 @@
 Cross-engine speed numbers compare only when each engine generated the declared clip the
 declared way: same resolution, frame count, seed and denoising steps, without quantization,
 LoRA or reused conditioning, and with step caching or sparse attention only when the run
-declares that optimization. The client cannot observe any of that; the engine's log can. The document keeps the log's SHA256, selected server arguments,
-per-request parameters and check results, never log text, paths, hosts or addresses.
+declares that optimization. The client cannot observe any of that; the engine's log can. The
+document keeps the log's SHA256, selected server arguments, per-request parameters and check
+results, never log text, paths, hosts or addresses.
 """
 
 from __future__ import annotations

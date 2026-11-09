@@ -381,7 +381,7 @@ def bind_video(
         "VIDEO_RUNTIME_REVISION": revision,
         "GPU_COUNT": str(gpus),
     }
-    # A deployment without optimizations renders exactly as before, keeping its fingerprint.
+    # Omitted when empty so lossless recipes keep their fingerprints.
     if optimizations:
         values["VIDEO_OPTIMIZATIONS"] = json.dumps(sorted(optimizations))
     workload.update(values)
