@@ -19,6 +19,7 @@ SRC = r"""
 #include <cstdio>
 #include <cstdlib>
 #include <algorithm>
+#include <vector>
 #define CK(x) do { cudaError_t e_ = (x); if (e_ != cudaSuccess) { \
   printf("\"error\": \"%s line %d\"}\n", cudaGetErrorString(e_), __LINE__); fflush(stdout); exit(0); } } while (0)
 
@@ -40,6 +41,11 @@ __device__ __forceinline__ void red_gpu(int *p, int v) { asm volatile("red.relea
 __device__ __forceinline__ void red_sys(int *p, int v) { asm volatile("red.release.sys.global.add.s32 [%0], %1;" :: "l"(p), "r"(v) : "memory"); }
 
 __global__ void empty() {}
+// Write n bytes into dst (local or peer), one thread per 16 bytes like a tiny dispatch.
+__global__ void put(unsigned char *dst, int n) {
+  int i = (blockIdx.x * blockDim.x + threadIdx.x) * 16;
+  for (int k = 0; k < 16 && i + k < n; ++k) dst[i + k] = (unsigned char)(i + k);
+}
 // N threads each run the same ordering op in a loop, one per block or one per warp of a block.
 __global__ void fencers(int *p, int rounds, int op, int nactive) {
   if (threadIdx.x % 32 != 0) return;
@@ -110,6 +116,36 @@ template <class F> static double timed(F f, int reps = 3) {
   }
   return best;
 }
+static double med(std::vector<double> v) { std::sort(v.begin(), v.end()); return v[v.size() / 2]; }
+// GPU-timed cost of one kernel in a chain of 64 writing n bytes from GPU 0 into memory on `target`.
+static double putcost(int target, int n) {
+  unsigned char *dst; CK(cudaSetDevice(target)); CK(cudaMalloc(&dst, 1 << 26)); CK(cudaMemset(dst, 0, 1 << 26));
+  CK(cudaDeviceSynchronize()); CK(cudaSetDevice(0));
+  cudaEvent_t a, b; CK(cudaEventCreate(&a)); CK(cudaEventCreate(&b));
+  int threads = (n + 15) / 16, blocks = (threads + 255) / 256;
+  std::vector<double> s;
+  for (int rep = 0; rep < 60; ++rep) {
+    CK(cudaEventRecord(a));
+    for (int k = 0; k < 64; ++k) put<<<blocks, 256>>>(dst, n);
+    CK(cudaEventRecord(b)); CK(cudaEventSynchronize(b));
+    float ms; CK(cudaEventElapsedTime(&ms, a, b)); s.push_back(ms * 1000.0 / 64);
+  }
+  return med(s);
+}
+static double emptycost(int blocks) {
+  CK(cudaSetDevice(0));
+  cudaEvent_t a, b; CK(cudaEventCreate(&a)); CK(cudaEventCreate(&b));
+  std::vector<double> s;
+  for (int rep = 0; rep < 60; ++rep) {
+    CK(cudaEventRecord(a));
+    for (int k = 0; k < 64; ++k) empty<<<blocks, 256>>>();
+    CK(cudaEventRecord(b)); CK(cudaEventSynchronize(b));
+    float ms; CK(cudaEventElapsedTime(&ms, a, b)); s.push_back(ms * 1000.0 / 64);
+  }
+  return med(s);
+}
+static const int PUT_SIZES[] = {64, 14336, 86016, 1 << 20, 1 << 24};
+
 int main() {
   int n; CK(cudaGetDeviceCount(&n));
   CK(cudaSetDevice(0));
@@ -132,11 +168,14 @@ int main() {
     printf(", \"ping_local_%s_us\": %.4f", modes[m], (timed([&] { ping<<<8, 1>>>(flags, flags + 4096, 20000, 4, m); }) - base) / 20000.0);
     fflush(stdout);
   }
+  printf(", \"empty_kernel_1block_us\": %.3f, \"empty_kernel_4blocks_us\": %.3f", emptycost(1), emptycost(4)); fflush(stdout);
+  for (int i = 0; i < 5; ++i) { printf(", \"put_local_%d_us\": %.3f", PUT_SIZES[i], putcost(0, PUT_SIZES[i])); fflush(stdout); }
   if (n > 1) {
     // Same ops against memory on the peer GPU, and a ping whose two flags both live on the peer.
     int *peer; CK(cudaSetDevice(1)); CK(cudaMalloc(&peer, 1 << 20)); CK(cudaMemset(peer, 0, 1 << 20)); CK(cudaDeviceSynchronize());
     CK(cudaDeviceEnablePeerAccess(0, 0));
     CK(cudaSetDevice(0)); CK(cudaDeviceEnablePeerAccess(1, 0));
+    for (int i = 0; i < 5; ++i) { printf(", \"put_peer_%d_us\": %.3f", PUT_SIZES[i], putcost(1, PUT_SIZES[i])); fflush(stdout); }
     int peer_ops[] = {8, 10, 12, 14, 16, 18, 20};
     for (int i = 0; i < 7; ++i) {
       int op = peer_ops[i], rounds = 50000;
