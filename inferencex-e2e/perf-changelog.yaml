@@ -12568,7 +12568,7 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Image lmsysorg/sglang:dev-kimi-k31-pro-mi35x@sha256:5901db14 (was sha256:346a6d83): SGLang de0f491836, the #48427 branch with the SiTU gate fix (sgl-project/sglang#49152) and the PD commits, on AITER ROCm/aiter#7620 (5405ee0026, flydsl 0.4.2) and sgl-amd-mono 219f40be9a."
+    - "Image lmsysorg/sglang:dev-kimi-k31-pro-mi35x@sha256:5901db14 (was sha256:346a6d83): SGLang de0f491836 with the SiTU gate fix and the PD commits, on AITER 5405ee0026 (flydsl 0.4.2) and sgl-amd-mono 219f40be9a."
     - "Concurrency 1: one running request instead of 4, so an agent's parallel tool calls queue instead of sharing decode steps."
     - "Concurrency 8 to 56: a prefill every 32 decode steps instead of 16 (8 at concurrency 48 and 56), so prefills interrupt running requests' token streams half as often."
     - "Concurrency 8, 16 and 32: 6, 8 and 20 running requests; concurrency 16 and 32 verify the current token plus 4 drafts."
