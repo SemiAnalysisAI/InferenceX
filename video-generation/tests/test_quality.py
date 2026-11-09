@@ -324,6 +324,18 @@ def test_refuses_a_dispatch_whose_differing_clips_exceed_the_budget(paired_argum
     )
 
 
+def test_an_lpips_error_fails_the_job_instead_of_marking_the_pair_incompatible(
+    paired_arguments, tmp_path, monkeypatch, capsys
+):
+    def broken(x, y):
+        raise RuntimeError("LPIPS failed")
+
+    monkeypatch.setattr(media, "_frame_similarity", lambda: broken)
+    assert cli.main([*paired_arguments, "--output", str(tmp_path / "out")]) == 2
+    assert "LPIPS failed" in capsys.readouterr().err
+    assert not (tmp_path / "out").exists()
+
+
 def test_a_same_run_dispatch_pairs_two_deployments_but_never_one_with_itself(tmp_path):
     media = [encode_media(tmp_path / "same.mp4")] * 3
     bundles = [f"{artifact}={_bundle(tmp_path / str(artifact), media)}" for artifact in (3, 4)]

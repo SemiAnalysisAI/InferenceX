@@ -1178,7 +1178,7 @@ def compare_media(baseline: Path, candidate: Path, *, per_frame: bool = False) -
         )
         result["metrics"] = metrics
         result["compatible"] = True
-    except Exception as exc:
+    except (av.FFmpegError, ValueError) as exc:
         checks.append(
             _check(
                 "pair.full_stream_alignment",
