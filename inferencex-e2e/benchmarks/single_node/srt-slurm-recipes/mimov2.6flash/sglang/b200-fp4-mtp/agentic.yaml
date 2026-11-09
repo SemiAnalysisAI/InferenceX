@@ -57,6 +57,8 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
 # The verify block is the current token plus 7 drafts up to CONC 16 and 3 above.
+# HiCache DRAM points: the DFLASH draft host pool sits outside hicache-size at 0.705x it, so
+# 4 ranks x (120 + 85) GB = 819 GB of host KV, under the 858 GB DRAM budget.
 override_tp4_c1:
   roles:
     agg:
@@ -113,7 +115,7 @@ override_tp4_c32:
         cuda-graph-max-bs-decode: 32
         speculative-num-draft-tokens: 4
         enable-hierarchical-cache: true
-        hicache-size: 200
+        hicache-size: 120
         hicache-write-policy: write_through
         hicache-mem-layout: page_first_direct
         hicache-io-backend: direct
@@ -131,7 +133,7 @@ override_tp4_c64:
         cuda-graph-max-bs-decode: 64
         speculative-num-draft-tokens: 4
         enable-hierarchical-cache: true
-        hicache-size: 200
+        hicache-size: 120
         hicache-write-policy: write_through
         hicache-mem-layout: page_first_direct
         hicache-io-backend: direct
@@ -149,7 +151,7 @@ override_tp4_c128:
         cuda-graph-max-bs-decode: 128
         speculative-num-draft-tokens: 4
         enable-hierarchical-cache: true
-        hicache-size: 200
+        hicache-size: 120
         hicache-write-policy: write_through
         hicache-mem-layout: page_first_direct
         hicache-io-backend: direct
@@ -167,7 +169,7 @@ override_tp4_c256:
         cuda-graph-max-bs-decode: 256
         speculative-num-draft-tokens: 4
         enable-hierarchical-cache: true
-        hicache-size: 200
+        hicache-size: 120
         hicache-write-policy: write_through
         hicache-mem-layout: page_first_direct
         hicache-io-backend: direct
