@@ -113,6 +113,27 @@ class ImageDigestResolutionTests(unittest.TestCase):
             self.assertEqual(
                 probe.resolve_image_digest("ghcr.io/org/image:tag", opener=opener), "")
 
+    def test_only_a_registry_404_reports_the_tag_missing(self) -> None:
+        def answering(code):
+            def open_(request, timeout=None):
+                url = request if isinstance(request, str) else request.full_url
+                if "scope=" in url:
+                    return _FakeRegistry._Response(
+                        body=json.dumps({"token": "anonymous"}).encode())
+                if not request.get_header("Authorization"):
+                    raise urllib.error.HTTPError(url, 401, "unauthorized", {
+                        "WWW-Authenticate": 'Bearer realm="https://auth.example/token"',
+                    }, None)
+                raise urllib.error.HTTPError(url, code, "denied", {}, None)
+            return types.SimpleNamespace(open=open_)
+
+        image = "ghcr.io/org/image:tag"
+        down = types.SimpleNamespace(open=mock.Mock(side_effect=OSError("no route")))
+        self.assertTrue(probe.image_tag_missing(image, opener=answering(404)))
+        self.assertEqual(probe.resolve_image_digest(image, opener=answering(404)), "")
+        for opener in (answering(429), answering(500), down, _FakeRegistry(self.DIGEST)):
+            self.assertFalse(probe.image_tag_missing(image, opener=opener))
+
 
 # The staged squash path is a pure function of platform + image reference (keying it by run
 # re-imports tens of GB per run; by digest, a registry blip misses the staged file), and

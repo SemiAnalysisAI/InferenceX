@@ -342,6 +342,34 @@ def _pinned_digest(image: str) -> str:
     return image.rpartition("@")[2] if "@sha256:" in image else ""
 
 
+def resolve_digests(cells: list[dict], images: dict, probe) -> None:
+    """Set each cell's digest, falling back to the backend's own image (with any recipe env)
+    for an InferenceX image whose tag the registry has pruned; the cell records the swap.
+
+    Raises RuntimeError for an image the registry did not answer for.
+    """
+    digests: dict[str, str] = {}
+    pruned: dict[str, bool] = {}
+
+    def digest(image: str) -> str:
+        if image not in digests:
+            digests[image] = _pinned_digest(image) or probe.resolve_image_digest(image)
+        return digests[image]
+
+    for cell in cells:
+        image = cell["image"]
+        fallback = images[cell["backends"][0]]["image"]
+        if not digest(image) and image != fallback:
+            if image not in pruned:
+                pruned[image] = probe.image_tag_missing(image)
+            if pruned[image]:
+                cell["recipe_image_unavailable" if cell.get("recipe") else "image_unavailable"] = image
+                cell["image"] = fallback
+        if not digest(cell["image"]):
+            raise RuntimeError(f"cannot resolve image digest: {cell['image']}")
+        cell["digest"] = digest(cell["image"])
+
+
 def image_key(image: str, digest: str, image_platform: str) -> str:
     # keep the existing amd64 cache keys; Arm imports get their own
     suffix = "" if image_platform == "linux/amd64" else f":{image_platform}"
@@ -879,26 +907,10 @@ def main() -> None:
             find_recipe=recipes.find,
             default_image=recipes.default_image,
         )
-        digests = {c["image"]: "" for c in result["include"]}
-        for image in digests:
-            digests[image] = _pinned_digest(image) or probe_module().resolve_image_digest(image)
-        for cell in result["include"]:
-            # an InferenceX image (a recipe's or the hardware's default) whose tag the registry
-            # has pruned: the backend's own image, with any recipe env; the manifest records it
-            fallback = images[cell["backends"][0]]["image"]
-            if not digests[cell["image"]] and cell["image"] != fallback:
-                cell["recipe_image_unavailable" if cell.get("recipe") else "image_unavailable"] = cell["image"]
-                cell["image"] = fallback
-                if not digests.get(cell["image"]):
-                    digests[cell["image"]] = (_pinned_digest(cell["image"])
-                                              or probe_module().resolve_image_digest(cell["image"]))
-        for image in {c["image"] for c in result["include"]}:
-            if not digests.get(image):
-                raise RuntimeError(f"cannot resolve image digest: {image}")
+        resolve_digests(result["include"], images, probe_module())
         from infx.launch.backends.slurm.squash import enroot_uri
 
         for cell in result["include"]:
-            cell["digest"] = digests[cell["image"]]
             # InferenceX's import URI: a digest-pinned image imports by digest
             cell["import_uri"] = enroot_uri(cell["image"])
             cell["queue-token"] = hashlib.sha256(
