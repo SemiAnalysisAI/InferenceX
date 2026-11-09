@@ -120,10 +120,24 @@ def test_attestation_fails_when_the_log_does_not_prove_the_declared_work(tmp_pat
     assert (document["valid"], _failed(document)) == (False, failed)
 
 
-@pytest.mark.parametrize("optimization", sorted(OPTIMIZATION_LINES))
-def test_a_declared_optimization_attests_when_the_log_shows_it_running(tmp_path, optimization):
+# H3 masks its first segment's query blocks, so its SubBlock layers log the heterogeneous form.
+HETEROGENEOUS_BSA_LINES = (
+    "[11-04 11:00:02] Using subblock_sparse_attn attention backend\n"
+    "[11-04 11:00:09] SubBlock heterogeneous BSA active: Sq=40320 Sk=40320 heads=24; "
+    "selected query blocks keep 74/295 key blocks and unselected query blocks are dense\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("optimization", "lines"),
+    [*OPTIMIZATION_LINES.items(), ("subblock-sparse-attn", HETEROGENEOUS_BSA_LINES)],
+    ids=[*OPTIMIZATION_LINES, "subblock-heterogeneous-bsa"],
+)
+def test_a_declared_optimization_attests_when_the_log_shows_it_running(
+    tmp_path, optimization, lines
+):
     log = tmp_path / "server.out"
-    log.write_bytes(LOG.read_bytes() + OPTIMIZATION_LINES[optimization].encode("utf-8"))
+    log.write_bytes(LOG.read_bytes() + lines.encode("utf-8"))
 
     document = attest("sglang", log, PLAN, RECORDS, "bf16", [optimization])
 
