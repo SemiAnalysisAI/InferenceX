@@ -134,19 +134,37 @@ def _mvp_command(arguments: argparse.Namespace) -> int:
             return {"pass": 0, "fail": 1, "inconclusive": 2}[result["overall_status"]]
 
         if arguments.command == "score-quality":
-            from .quality import score_quality
+            from .quality import score_paired, score_quality
 
             bundles = dict(arguments.bundles)
-            if len(bundles) != len(arguments.bundles):
+            baselines = dict(arguments.baseline)
+            if len(bundles) != len(arguments.bundles) or len(baselines) != len(arguments.baseline):
                 raise ValueError("each artifact ID may appear only once")
-            result = score_quality(
-                bundles=bundles,
-                references=arguments.references,
-                descriptor=arguments.descriptor,
-                run_id=arguments.run_id,
-                source_revision=arguments.source_revision,
-                output=arguments.output,
-            )
+            references = (arguments.descriptor, arguments.references)
+            if baselines:
+                if arguments.baseline_run_id is None or references != (None, None):
+                    raise ValueError(
+                        "paired scoring takes --baseline-run-id and no --descriptor or --references"
+                    )
+                result = score_paired(
+                    bundles=bundles,
+                    baselines=baselines,
+                    run_id=arguments.run_id,
+                    baseline_run_id=arguments.baseline_run_id,
+                    source_revision=arguments.source_revision,
+                    output=arguments.output,
+                )
+            elif None in references or arguments.baseline_run_id is not None:
+                raise ValueError("reference scoring takes --descriptor and --references")
+            else:
+                result = score_quality(
+                    bundles=bundles,
+                    references=arguments.references,
+                    descriptor=arguments.descriptor,
+                    run_id=arguments.run_id,
+                    source_revision=arguments.source_revision,
+                    output=arguments.output,
+                )
             print(json.dumps(result, indent=2, sort_keys=True, allow_nan=False))
             return 0
 
@@ -236,7 +254,8 @@ def _parser() -> argparse.ArgumentParser:
 
     score = subparsers.add_parser(
         "score-quality",
-        help="score stored h3-results clips against the public Diffusers reference release",
+        help="score stored h3-results clips against the public Diffusers reference release, "
+        "or with --baseline against the matched lossless deployment",
     )
     score.add_argument(
         "bundles",
@@ -245,8 +264,17 @@ def _parser() -> argparse.ArgumentParser:
         metavar="ARTIFACT_ID=PATH",
         help="h3-results bundle, as a zip or directory, and its GitHub artifact ID",
     )
-    score.add_argument("--descriptor", required=True, type=Path)
-    score.add_argument("--references", required=True, type=Path, help="directory of release MP4s")
+    score.add_argument("--descriptor", type=Path)
+    score.add_argument("--references", type=Path, help="directory of release MP4s")
+    score.add_argument(
+        "--baseline",
+        action="append",
+        default=[],
+        type=_bundle_argument,
+        metavar="ARTIFACT_ID=PATH",
+        help="h3-results bundle of the lossless run; repeat for each deployment",
+    )
+    score.add_argument("--baseline-run-id", help="GitHub run that stores the baseline bundles")
     score.add_argument("--run-id", required=True, help="GitHub run that stores the bundles")
     score.add_argument("--source-revision", required=True, help="git commit of this scorer")
     score.add_argument("--output", required=True, type=Path, help="new attachment directory")

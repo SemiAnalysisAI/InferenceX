@@ -81,12 +81,46 @@ the descriptor and `SHA256SUMS`. PSNR measures technical fidelity to one referen
 implementation, so `quality_status` stays `unjudged`. To score an earlier run,
 dispatch the workflow with its `run_id` and `run_attempt`.
 
+## Paired lossless quality
+
+A deployment that lists lossy optimizations in `run.json`
+`configuration.optimizations`, such as `cache-dit`, is scored against its lossless
+twin instead of the Diffusers reference. Dispatch Video Quality with
+`baseline_run_id` set to the run that holds the lossless deployment; it may be the
+same run. The job downloads the newest `h3-results-*` bundles of both runs and runs:
+
+```bash
+python -m evaluator.cli score-quality <artifact-id>=<bundle.zip|dir> ... \
+  --baseline <artifact-id>=<bundle.zip|dir> ... --baseline-run-id <run> \
+  --run-id <run> --source-revision <git-sha> --output <new-dir>
+```
+
+Only baseline deployments without optimizations are baselines. A deployment pairs
+with the one that has the same hardware, engine, image digest, runtime revision,
+GPU count, TP and Ulysses degree, and concurrency; precision is not part of the
+key. Each clip pairs with the same case and repetition and is scored only when the
+prompt, seed, generation settings and sealed request hash are equal. Other clips
+are listed under `unscored` as `no_baseline`, `ambiguous_baseline`,
+`invalid_baseline`, `settings_mismatch` with the differing fields,
+`invalid_candidate` or `checksum_mismatch`.
+
+Each pair gets per-frame PSNR, SSIM on BT.601 luma with a Gaussian window of
+σ 1.5, and LPIPS (AlexNet, v0.1, weight hashes pinned), with the clip mean and
+the worst frame of each. Each deployment gets the median and worst clip. An
+identical clip has `video_identical` true, PSNR `null`, SSIM 1 and LPIPS 0. The
+`h3-paired-quality-<run>-<attempt>-<baseline-run>` artifact holds `quality.json`
+with `mode: paired_lossless`, and `quality_status` stays `unjudged`. Reference
+scoring stays PSNR only, and its artifact name is unchanged.
+
 ## Local checks
 
 ```bash
 cd video-generation
 PYTHONPATH=../inferencex-e2e uv run --no-project --python 3.12 \
+  --index https://download.pytorch.org/whl/cpu \
   --with 'av==16.1.0' --with 'numpy==2.3.5' \
+  --with 'torch==2.14.0' --with 'torchvision==0.29.2' \
+  --with 'lpips==0.1.4' --with 'scikit-image==0.26.0' \
   --with 'pyyaml>=6,<7' --with 'pytest>=8,<9' python -m pytest -q
 ```
 

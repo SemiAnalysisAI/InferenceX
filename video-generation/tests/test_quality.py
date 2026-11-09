@@ -31,6 +31,64 @@ def _sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _bundle(
+    bundle: Path,
+    media: list[Path],
+    *,
+    seeds: dict[str, int] | None = None,
+    server: dict | None = None,
+    optimizations: list[str] | None = None,
+) -> Path:
+    """An h3-results bundle whose c1 cell measured CASES in order with these media files."""
+    cell = bundle / "gpu/c1"
+    (cell / "baseline/artifacts").mkdir(parents=True)
+    (cell / "baseline/requests").mkdir()
+    records = []
+    for index, (case, source) in enumerate(zip(CASES, media, strict=True), 1):
+        slot = f"measurement-r001-c{index:03d}"
+        seed = (seeds or {}).get(case["case_id"], case["seed"])
+        shutil.copyfile(source, cell / f"baseline/artifacts/{slot}.mp4")
+        (cell / f"baseline/requests/{slot}.json").write_text(
+            json.dumps({"prompt": case["prompt"], "seed": seed})
+        )
+        records.append(
+            {
+                "phase": "measurement",
+                "slot_id": slot,
+                "repetition": 1,
+                "case_id": case["case_id"],
+                "prompt": case["prompt"],
+                "seed": seed,
+                "status": "succeeded",
+                "media": {"valid": True},
+                "artifact_path": f"artifacts/{slot}.mp4",
+                "sha256": _sha(source),
+            }
+        )
+    configuration = {
+        "runtime": "sglang",
+        "runtime_revision": "e" * 40,
+        "numerical_identity": {"image_digest": "f" * 64},
+        "serving": {"concurrency": 1},
+        "optimizations": optimizations or [],
+    }
+    run = {"plan": {**SETTINGS, "cases": CASES}, "records": records, "configuration": configuration}
+    (cell / "baseline/run.json").write_text(json.dumps(run))
+    (cell / "aggregate.json").write_text(json.dumps({"cluster": "h100-dsxe", "num_gpus": 4}))
+    layout = {"tp_size": 2, "ulysses_degree": 2, **(server or {})}
+    (cell / "spec.json").write_text(json.dumps({"server": layout}))
+    (bundle / "serving-smoke.json").write_text(json.dumps({"cells": [{"concurrency": 1}]}))
+    (bundle / "manifest.json").write_text(json.dumps({"run_id": "41"}))
+    (bundle / "SHA256SUMS").write_text(
+        "".join(
+            f"{_sha(path)}  {path.relative_to(bundle).as_posix()}\n"
+            for path in sorted(bundle.rglob("*"))
+            if path.is_file()
+        )
+    )
+    return bundle
+
+
 def _setup(root: Path) -> tuple[Path, Path, Path]:
     references = root / "references"
     references.mkdir()
@@ -56,36 +114,11 @@ def _setup(root: Path) -> tuple[Path, Path, Path]:
             }
         )
     )
-    bundle = root / "bundle"
-    artifacts = bundle / "gpu/c1/baseline/artifacts"
-    artifacts.mkdir(parents=True)
-    shutil.copyfile(references / "same.mp4", artifacts / "measurement-r001-c001.mp4")
-    encode_media(artifacts / "measurement-r001-c002.mp4", video_change=True)
-    shutil.copyfile(references / "reseeded.mp4", artifacts / "measurement-r001-c003.mp4")
-    records = [
-        {
-            "phase": "measurement",
-            "slot_id": f"measurement-r001-c{index:03d}",
-            "case_id": case["case_id"],
-            "prompt": case["prompt"],
-            "seed": 99 if case["case_id"] == "reseeded" else case["seed"],
-            "status": "succeeded",
-            "media": {"valid": True},
-            "artifact_path": f"artifacts/measurement-r001-c{index:03d}.mp4",
-            "sha256": _sha(artifacts / f"measurement-r001-c{index:03d}.mp4"),
-        }
-        for index, case in enumerate(CASES, 1)
-    ]
-    run = {"plan": {**SETTINGS, "cases": CASES}, "records": records}
-    (bundle / "gpu/c1/baseline/run.json").write_text(json.dumps(run))
-    (bundle / "serving-smoke.json").write_text(json.dumps({"cells": [{"concurrency": 1}]}))
-    (bundle / "manifest.json").write_text(json.dumps({"run_id": "41"}))
-    (bundle / "SHA256SUMS").write_text(
-        "".join(
-            f"{_sha(path)}  {path.relative_to(bundle).as_posix()}\n"
-            for path in sorted(bundle.rglob("*"))
-            if path.is_file()
-        )
+    changed = encode_media(root / "changed.mp4", video_change=True)
+    bundle = _bundle(
+        root / "bundle",
+        [references / "same.mp4", changed, references / "reseeded.mp4"],
+        seeds={"reseeded": 99},
     )
     shutil.make_archive(str(root / "bundle"), "zip", bundle)
     return descriptor, references, bundle
@@ -177,3 +210,59 @@ def test_refuses_a_reference_asset_that_differs_from_the_descriptor(tmp_path):
     (references / "changed.mp4").write_bytes(tampered)
     assert _score(descriptor, references, tmp_path / "out", f"7={bundle}") == 2
     assert not (tmp_path / "out").exists()
+
+
+@pytest.fixture(scope="module")
+def paired(tmp_path_factory):
+    root = tmp_path_factory.mktemp("paired")
+    same, other = encode_media(root / "same.mp4"), encode_media(root / "other.mp4")
+    changed = encode_media(root / "changed.mp4", video_change=True)
+    lossless = _bundle(root / "lossless", [same, other, same])
+    # A lossy deployment with the same setup in the baseline run is not a baseline.
+    lossy_peer = _bundle(root / "lossy-peer", [other, other, other], optimizations=["teacache"])
+    lossy = _bundle(
+        root / "lossy", [same, changed, same], seeds={"reseeded": 99}, optimizations=["cache-dit"]
+    )
+    relayout = _bundle(root / "relayout", [same, other, same], server={"ulysses_degree": 4})
+    shutil.make_archive(str(root / "lossless"), "zip", lossless)
+    arguments = ["score-quality", f"7={lossy}", f"8={relayout}", "--baseline"]
+    arguments += [f"3={root / 'lossless.zip'}", "--baseline", f"4={lossy_peer}"]
+    arguments += ["--baseline-run-id", "40", "--run-id", "41", "--source-revision", REVISION]
+    assert cli.main([*arguments, "--output", str(root / "out")]) == 0
+    return json.loads((root / "out/quality.json").read_bytes())
+
+
+def test_pairs_each_clip_with_the_same_case_of_the_lossless_deployment(paired):
+    pairs = {pair["candidate"]["case_id"]: pair for pair in paired["pairs"]}
+    assert paired["mode"] == "paired_lossless"
+    assert sorted(pairs) == ["changed", "same"]
+    assert {pair["candidate"]["artifact_id"] for pair in paired["pairs"]} == {7}
+    assert {pair["baseline"]["artifact_id"] for pair in paired["pairs"]} == {3}
+    same = pairs["same"]["comparison"]["metrics"]
+    assert same["video_identical"] is True
+    assert (same["video_psnr_db"], same["video_ssim"], same["video_lpips"]) == (None, 1.0, 0.0)
+    changed = pairs["changed"]["comparison"]["metrics"]
+    assert 0 < changed["video_psnr_db"] < 15
+    assert 0 <= changed["video_ssim"] < 1
+    assert changed["video_lpips"] > 0
+    assert len(changed["video_ssim_frames"]) == len(changed["video_lpips_frames"]) == 8
+    summary = next(item for item in paired["deployments"] if item["candidate"]["artifact_id"] == 7)
+    assert summary["candidate"]["optimizations"] == ["cache-dit"]
+    assert summary["baseline"] == [{"artifact_id": 3, "cell_id": "c1"}]
+    assert summary["summary"]["identical"] == 1
+    assert summary["summary"]["video_psnr_db"]["worst"] == changed["video_psnr_db"]
+    assert summary["summary"]["video_ssim"]["worst"] == changed["video_ssim"]
+    assert summary["summary"]["video_lpips"]["worst"] == changed["video_lpips"]
+
+
+def test_lists_clips_without_a_matched_lossless_clip_instead_of_scoring_them(paired):
+    assert [
+        (item["candidate"]["artifact_id"], item["candidate"]["case_id"], item["reason"])
+        + (item["fields"],)
+        for item in paired["unscored"]
+    ] == [
+        (7, "reseeded", "settings_mismatch", ["seed", "request_sha256"]),
+        (8, "same", "no_baseline", []),
+        (8, "changed", "no_baseline", []),
+        (8, "reseeded", "no_baseline", []),
+    ]

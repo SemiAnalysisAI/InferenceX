@@ -71,12 +71,42 @@ python -m evaluator.cli score-quality <artifact-id>=<bundle.zip|dir> ... \
 `quality_status` 仍为 `unjudged`。如需为较早的运行补算，按其 `run_id` 与
 `run_attempt` 手动触发该 workflow。
 
+## 与无损部署配对评分
+
+在 `run.json` 的 `configuration.optimizations` 中声明了有损优化（如 `cache-dit`）
+的部署，以其无损对照部署为基准评分，而不是 Diffusers 参考视频。手动触发
+Video Quality 时，将 `baseline_run_id` 设为包含无损部署的运行，也可以是同一次运行。
+任务下载两次运行各自最新的 `h3-results-*` bundle，然后运行：
+
+```bash
+python -m evaluator.cli score-quality <artifact-id>=<bundle.zip|dir> ... \
+  --baseline <artifact-id>=<bundle.zip|dir> ... --baseline-run-id <run> \
+  --run-id <run> --source-revision <git-sha> --output <new-dir>
+```
+
+只有未声明任何优化的部署才能作为基准。部署与硬件、引擎、镜像 digest、runtime
+revision、GPU 数、TP 与 Ulysses 并行度以及并发数都相同的无损部署配对；精度不在
+配对键中。每段视频与同一 case、同一重复轮次的视频配对，且只有 prompt、seed、
+生成参数和封存请求的哈希都相同时才评分。其余视频列在 `unscored` 中，原因为
+`no_baseline`、`ambiguous_baseline`、`invalid_baseline`、`settings_mismatch`
+（附不一致的字段）、`invalid_candidate` 或 `checksum_mismatch`。
+
+每一对视频逐帧计算 PSNR、SSIM（BT.601 亮度，σ 1.5 的高斯窗口）和 LPIPS（AlexNet，
+v0.1，权重哈希固定），并给出各指标的整段均值与最差帧。每个部署给出视频级的中位数与
+最差值。完全相同的视频记为 `video_identical` 为 true，PSNR 为 `null`，SSIM 为 1，
+LPIPS 为 0。`h3-paired-quality-<run>-<attempt>-<baseline-run>` 产物包含
+`mode: paired_lossless` 的 `quality.json`，`quality_status` 仍为 `unjudged`。
+参考评分仍只计算 PSNR，产物名称不变。
+
 ## 本地检查
 
 ```bash
 cd video-generation
 PYTHONPATH=../inferencex-e2e uv run --no-project --python 3.12 \
+  --index https://download.pytorch.org/whl/cpu \
   --with 'av==16.1.0' --with 'numpy==2.3.5' \
+  --with 'torch==2.14.0' --with 'torchvision==0.29.2' \
+  --with 'lpips==0.1.4' --with 'scikit-image==0.26.0' \
   --with 'pyyaml>=6,<7' --with 'pytest>=8,<9' python -m pytest -q
 ```
 

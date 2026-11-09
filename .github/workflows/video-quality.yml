@@ -2,6 +2,7 @@ name: Video Quality
 run-name: >-
   Video quality - run ${{ inputs.run_id || github.event.workflow_run.id }}
   attempt ${{ inputs.run_attempt || github.event.workflow_run.run_attempt }}
+  ${{ inputs.baseline_run_id && format('vs lossless run {0}', inputs.baseline_run_id) || '' }}
 
 on:
   workflow_run: # zizmor: ignore[dangerous-triggers] reads the triggering run's artifacts only as data
@@ -17,16 +18,22 @@ on:
         description: Attempt that names the quality artifact
         type: string
         required: true
+      baseline_run_id:
+        description: Lossless run to pair each deployment with instead of the references
+        type: string
+        required: false
+        default: ''
 
 permissions: {}
 
 concurrency:
-  group: video-quality-${{ inputs.run_id || github.event.workflow_run.id }}-${{ inputs.run_attempt || github.event.workflow_run.run_attempt }}
+  group: video-quality-${{ inputs.run_id || github.event.workflow_run.id }}-${{ inputs.run_attempt || github.event.workflow_run.run_attempt }}-${{ inputs.baseline_run_id }}
   cancel-in-progress: false
 
 env:
   RUN_ID: ${{ inputs.run_id || github.event.workflow_run.id }}
   RUN_ATTEMPT: ${{ inputs.run_attempt || github.event.workflow_run.run_attempt }}
+  BASELINE_RUN_ID: ${{ inputs.baseline_run_id }}
 
 jobs:
   find:
@@ -39,6 +46,7 @@ jobs:
       actions: read # List the run's artifacts.
     outputs:
       artifacts: ${{ steps.list.outputs.artifacts }}
+      baselines: ${{ steps.list.outputs.baselines }}
     steps:
       - name: List the newest h3-results bundle of each deployment
         id: list
@@ -50,20 +58,37 @@ jobs:
             echo "::error::run_id and run_attempt must be numeric"
             exit 1
           }
+          [[ -z "$BASELINE_RUN_ID" || "$BASELINE_RUN_ID" =~ ^[0-9]+$ ]] || {
+            echo "::error::baseline_run_id must be numeric"
+            exit 1
+          }
           # Names are h3-results-<run>-<attempt>-<fingerprint>; a rerun's bundle replaces the
           # earlier attempt's, and a bundle from a later attempt is never scored.
-          artifacts=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" \
-            --jq '.artifacts[] | select((.expired | not) and (.name | startswith("h3-results-"))) | {id, name}' \
-            | jq -sc --arg run "$RUN_ID" --argjson attempt "$RUN_ATTEMPT" '
-                [.[] | (.name | split("-")) as $p
-                  | select(($p | length) == 5 and $p[2] == $run and ($p[3] | tonumber) <= $attempt)
-                  | {id, attempt: ($p[3] | tonumber), fingerprint: $p[4]}]
-                | group_by(.fingerprint) | map(max_by(.attempt).id) | sort')
+          newest() {
+            gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$1/artifacts" \
+              --jq '.artifacts[] | select((.expired | not) and (.name | startswith("h3-results-"))) | {id, name}' \
+              | jq -sc --arg run "$1" --argjson attempt "$2" '
+                  [.[] | (.name | split("-")) as $p
+                    | select(($p | length) == 5 and $p[2] == $run and ($p[3] | tonumber) <= $attempt)
+                    | {id, attempt: ($p[3] | tonumber), fingerprint: $p[4]}]
+                  | group_by(.fingerprint) | map(max_by(.attempt).id) | sort'
+          }
+          artifacts=$(newest "$RUN_ID" "$RUN_ATTEMPT")
           echo "artifacts=$artifacts" >> "$GITHUB_OUTPUT"
           [[ "$artifacts" != "[]" ]] || echo "Run $RUN_ID has no h3-results artifacts; nothing to score."
+          baselines='[]'
+          if [[ -n "$BASELINE_RUN_ID" ]]; then
+            latest=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BASELINE_RUN_ID" --jq .run_attempt)
+            baselines=$(newest "$BASELINE_RUN_ID" "$latest")
+            [[ "$baselines" != "[]" ]] || {
+              echo "::error::Baseline run $BASELINE_RUN_ID has no h3-results artifacts"
+              exit 1
+            }
+          fi
+          echo "baselines=$baselines" >> "$GITHUB_OUTPUT"
 
   score:
-    name: Score H3 clips against references
+    name: Score H3 clips against ${{ inputs.baseline_run_id && 'the lossless run' || 'references' }}
     needs: find
     if: needs.find.outputs.artifacts != '[]'
     runs-on: ubuntu-latest
@@ -80,15 +105,22 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           ARTIFACTS: ${{ needs.find.outputs.artifacts }}
+          BASELINES: ${{ needs.find.outputs.baselines }}
         run: |
-          tag=$(jq -r .release.tag video-generation/reference/h3-v2.json)
-          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern '*.mp4' \
-            --dir "$RUNNER_TEMP/references"
-          mkdir "$RUNNER_TEMP/bundles"
+          if [[ -z "$BASELINE_RUN_ID" ]]; then
+            tag=$(jq -r .release.tag video-generation/reference/h3-v2.json)
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern '*.mp4' \
+              --dir "$RUNNER_TEMP/references"
+          fi
+          mkdir "$RUNNER_TEMP/bundles" "$RUNNER_TEMP/baselines"
           for id in $(jq -r '.[]' <<< "$ARTIFACTS"); do
             gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > "$RUNNER_TEMP/bundles/$id.zip"
           done
+          for id in $(jq -r '.[]' <<< "$BASELINES"); do
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > "$RUNNER_TEMP/baselines/$id.zip"
+          done
       - name: Score every measured clip
+        if: env.BASELINE_RUN_ID == ''
         working-directory: video-generation
         run: |
           bundles=()
@@ -99,8 +131,26 @@ jobs:
             python -m evaluator.cli score-quality "${bundles[@]}" \
             --descriptor reference/h3-v2.json --references "$RUNNER_TEMP/references" \
             --run-id "$RUN_ID" --source-revision "$GITHUB_SHA" --output "$RUNNER_TEMP/h3-quality"
+      - name: Score every measured clip against its lossless pair
+        if: env.BASELINE_RUN_ID != ''
+        working-directory: video-generation
+        run: |
+          bundles=()
+          for zip in "$RUNNER_TEMP"/bundles/*.zip; do
+            bundles+=("$(basename "$zip" .zip)=$zip")
+          done
+          for zip in "$RUNNER_TEMP"/baselines/*.zip; do
+            bundles+=(--baseline "$(basename "$zip" .zip)=$zip")
+          done
+          uv run --no-project --python 3.12 --index https://download.pytorch.org/whl/cpu \
+            --with 'av==16.1.0' --with 'numpy==2.3.5' --with 'torch==2.14.0' \
+            --with 'torchvision==0.29.2' --with 'lpips==0.1.4' --with 'scikit-image==0.26.0' \
+            python -m evaluator.cli score-quality "${bundles[@]}" \
+            --baseline-run-id "$BASELINE_RUN_ID" --run-id "$RUN_ID" \
+            --source-revision "$GITHUB_SHA" --output "$RUNNER_TEMP/h3-quality"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: h3-quality-${{ env.RUN_ID }}-${{ env.RUN_ATTEMPT }}
+          # The App trusts h3-quality-<run>-<attempt> as reference PSNR, so paired scores use another name.
+          name: ${{ env.BASELINE_RUN_ID && format('h3-paired-quality-{0}-{1}-{2}', env.RUN_ID, env.RUN_ATTEMPT, env.BASELINE_RUN_ID) || format('h3-quality-{0}-{1}', env.RUN_ID, env.RUN_ATTEMPT) }}
           path: ${{ runner.temp }}/h3-quality
           if-no-files-found: error

@@ -7,15 +7,23 @@ performed. PyAV and NumPy are optional and imported only when a measurement runs
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import math
 import time
+from collections.abc import Callable
 from itertools import zip_longest
 from pathlib import Path
 from typing import Any
 
 
 IMPLEMENTATION_VERSION = "1.1.0"
+BT601_LUMA = (0.299, 0.587, 0.114)
+# torchvision's AlexNet backbone and the LPIPS v0.1 linear heads shipped in the lpips wheel.
+LPIPS_WEIGHTS_SHA256 = {
+    "alexnet-owt-7be5be79.pth": "7be5be791159472b1fbf3c69796f7cb30dca7ad8466c2df70058c37116cdee02",
+    "lpips-v0.1-alex.pth": "df73285e35b22355a2df87cdb6b70b343713b667eddbda73e1977e0c860835c0",
+}
 SILENCE_AMPLITUDE = 1e-4  # -80 dBFS sample threshold, also used for RMS presence.
 CLIPPING_AMPLITUDE = 1.0 - 1.0 / 32768.0
 FROZEN_MAE = 1.0 / 1024.0
@@ -49,6 +57,50 @@ def _libraries() -> tuple[Any, Any]:
     except ImportError as exc:
         raise RuntimeError("Media measurements require PyAV and NumPy: uv sync") from exc
     return av, np
+
+
+@functools.cache
+def _frame_similarity() -> Callable[[Any, Any], tuple[float, float]]:
+    """SSIM and LPIPS of one decoded RGB24 frame pair, with the LPIPS weights verified."""
+    try:
+        import lpips
+        import numpy as np
+        import torch
+        from skimage.metrics import structural_similarity
+    except ImportError as exc:
+        raise RuntimeError(
+            "SSIM and LPIPS require torch, torchvision, lpips and scikit-image"
+        ) from exc
+    model = lpips.LPIPS(net="alex", version="0.1", verbose=False).eval()
+    weights = {
+        "alexnet-owt-7be5be79.pth": Path(
+            torch.hub.get_dir(), "checkpoints", "alexnet-owt-7be5be79.pth"
+        ),
+        "lpips-v0.1-alex.pth": Path(lpips.__file__).parent / "weights" / "v0.1" / "alex.pth",
+    }
+    for name, path in weights.items():
+        with path.open("rb") as stream:
+            if hashlib.file_digest(stream, "sha256").hexdigest() != LPIPS_WEIGHTS_SHA256[name]:
+                raise RuntimeError(f"LPIPS weights {path.name} do not match their pinned SHA256")
+    luma = np.asarray(BT601_LUMA)
+
+    def tensor(frame: Any) -> Any:
+        return torch.from_numpy(frame).permute(2, 0, 1).unsqueeze(0).float() / 127.5 - 1.0
+
+    def similarity(x: Any, y: Any) -> tuple[float, float]:
+        ssim = structural_similarity(
+            x @ luma,
+            y @ luma,
+            data_range=255.0,
+            gaussian_weights=True,
+            sigma=1.5,
+            use_sample_covariance=False,
+        )
+        with torch.inference_mode():
+            distance = model(tensor(x), tensor(y))
+        return float(ssim), float(distance)
+
+    return similarity
 
 
 def _check(name: str, passed: bool | None, observed: Any, expected: Any, detail: str) -> dict:
@@ -928,14 +980,16 @@ def _compare_audio(
     }
 
 
-def compare_media(baseline: Path, candidate: Path) -> dict:
+def compare_media(baseline: Path, candidate: Path, *, per_frame: bool = False) -> dict:
     """Measure full-stream decoded fidelity only when geometry/timing agree.
 
     The caller chooses calibrated decision thresholds. Compatible means the
     measurements share shape and timing, not that the candidate is good quality.
     Any incompatibility leaves *all* quality-comparison metrics unavailable.
+    ``per_frame`` adds per-frame PSNR, SSIM and LPIPS with their clip aggregates.
     """
     av, np = _libraries()
+    similarity = _frame_similarity() if per_frame else None
     baseline, candidate = Path(baseline), Path(candidate)
     result: dict[str, Any] = {
         "compatible": False,
@@ -964,6 +1018,23 @@ def compare_media(baseline: Path, candidate: Path) -> dict:
             "Timestamp alignment permits at most one native container tick (or one audio sample); the actual maximum delta is reported.",
         ],
     }
+    if per_frame:
+        result["metrics"].update(
+            {
+                "video_psnr_db_frames": [],
+                "video_ssim": None,
+                "video_ssim_frames": [],
+                "video_lpips": None,
+                "video_lpips_frames": [],
+                "video_worst_frames": None,
+            }
+        )
+        result["notes"] += [
+            "Per-frame PSNR uses the same peak and is null for an identical frame.",
+            "SSIM uses BT.601 luma of the RGB24 frame, an 11x11 Gaussian window with sigma 1.5 and data range 255; the clip value is the frame mean.",
+            "LPIPS uses AlexNet v0.1 at full resolution with SHA256-pinned weights; the clip value is the frame mean.",
+            "video_worst_frames holds the index of the lowest-PSNR, lowest-SSIM and highest-LPIPS frame.",
+        ]
     left, right = analyze_media(baseline), analyze_media(candidate)
     checks = result["checks"]
     checks.append(
@@ -1026,6 +1097,7 @@ def compare_media(baseline: Path, candidate: Path) -> dict:
     if any(check["status"] == "failed" for check in checks):
         return result
     metrics = dict(result["metrics"])
+    frame_psnr, frame_ssim, frame_lpips = [], [], []
     try:
         count = samples = 0
         absolute_sum = squared_sum = max_alignment_delta = 0.0
@@ -1041,13 +1113,38 @@ def compare_media(baseline: Path, candidate: Path) -> dict:
             x, y = a.to_ndarray(format="rgb24"), b.to_ndarray(format="rgb24")
             if x.shape != y.shape:
                 raise ValueError("video geometry changed during comparison")
+            frame_squared = 0.0
             for row in range(0, x.shape[0], 64):
                 difference = x[row : row + 64].astype(np.float64) - y[row : row + 64]
                 absolute_sum += float(np.abs(difference).sum())
-                squared_sum += float((difference * difference).sum())
+                squared = float((difference * difference).sum())
+                squared_sum += squared
+                frame_squared += squared
+            if similarity is not None:
+                frame_mse = frame_squared / (x.size * 255.0 * 255.0)
+                frame_psnr.append(-10.0 * math.log10(frame_mse) if frame_mse > 0 else None)
+                ssim, distance = similarity(x, y)
+                frame_ssim.append(ssim)
+                frame_lpips.append(distance)
             samples += x.size
             count += 1
         mse = squared_sum / (samples * 255.0 * 255.0)
+        if similarity is not None:
+            scored = [index for index, value in enumerate(frame_psnr) if value is not None]
+            metrics.update(
+                {
+                    "video_psnr_db_frames": frame_psnr,
+                    "video_ssim": sum(frame_ssim) / count,
+                    "video_ssim_frames": frame_ssim,
+                    "video_lpips": sum(frame_lpips) / count,
+                    "video_lpips_frames": frame_lpips,
+                    "video_worst_frames": {
+                        "psnr_db": min(scored, key=frame_psnr.__getitem__, default=None),
+                        "ssim": min(range(count), key=frame_ssim.__getitem__),
+                        "lpips": max(range(count), key=frame_lpips.__getitem__),
+                    },
+                }
+            )
         metrics.update(
             {
                 "video_mae": absolute_sum / (samples * 255.0),
