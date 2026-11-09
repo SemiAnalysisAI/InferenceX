@@ -5867,7 +5867,7 @@ dsv41flash-fp4-gb200-vllm-agentic-dspark:
 # --speculative-dspark-block-size 5), thinking on, golden AL 3.51 for
 # throughput, real verification for evals.
 dsv41flash-fp4-gb200-sglang-agentic-dspark:
-  image: lmsysorg/sglang:nightly-dev-cu13-20261027-5884e4fe@sha256:61b9083bdcb7cf3741366f487cb996c05ea33ad2ddddc820d10cbc1c0cfb0a86
+  image: lmsysorg/sglang:nightly-dev-cu13-20261107-e45e1d0c@sha256:81eb456abfaa3cf50a2ac463abe02705486f3f1e10929ca306e5929b937d5388
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:gb200-nv
