@@ -321,14 +321,19 @@ point, because two handles from one group share its double-buffer parity slots
 
 ### FlashInfer EP
 
-FlashInfer EP is TensorRT-LLM's one-sided MNNVL `MoeAlltoAll` from FlashInfer 0.7.1, vLLM main's pin:
+FlashInfer EP is TensorRT-LLM's one-sided MNNVL all-to-all, `flashinfer.moe_ep.NVLinkOneSidedAlltoAll`
+from FlashInfer 0.7.3, vLLM main's pin:
 each rank writes tokens directly into its peers' workspace windows, so every rank must sit in one
 NVLink domain: EP8 on H100, H200, B200 and B300 (one node), EP8 and EP16 inside MNNVL on
 GB200/GB300. The `flashinfer-mnnvl-…` generation name is kept on the single-node rows. It has one kernel family, so it runs `normal` only, across both ladders.
 It runs vLLM's integration (`flashinfer_nvlink_one_sided`): combine is handed a caller-owned payload
 with `payload_in_workspace=False`, so FlashInfer's staging copy into the workspace runs, and is timed,
 inside `combine`, as in vLLM (writing the expert output into the workspace directly is TensorRT-LLM's
-path). FP8 dispatch is DeepSeek blockwise FP8 carried as a fourth payload (vLLM v0.29.0+). The
+path). On sm_100/sm_103 FlashInfer by default takes its Lamport transport
+([flashinfer#7498](https://github.com/flashinfer-ai/flashinfer/pull/7498)) for steps of up to
+`lamport_max_tokens` (at least 159) tokens per rank, whose combine pushes the payload from where it
+lies instead of staging it.
+FP8 dispatch is DeepSeek blockwise FP8 carried as a fourth payload (vLLM v0.29.0+). The
 combine accumulates in FP32 with one narrowing store (0.6.16 onwards), which the oracle models as
 `domain-fp32`; the import probe rejects any wheel but the pin.
 
