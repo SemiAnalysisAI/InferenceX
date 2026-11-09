@@ -116,7 +116,7 @@ Each pair gets per-frame PSNR, SSIM on BT.601 luma with a Gaussian window of
 σ 1.5, and LPIPS (AlexNet, v0.1, weight hashes pinned), with the clip mean and
 the worst frame of each. Each deployment gets the median and worst clip. An
 identical clip has `video_identical` true, PSNR `null`, SSIM 1 and LPIPS 0. The
-`h3-paired-quality-<run>-<attempt>-<baseline-run>` artifact holds `quality.json`
+`h3-paired-quality-<run>-<attempt>-<baseline-run>-<baseline-attempt>` artifact holds `quality.json`
 with `mode: paired_lossless`, and `quality_status` stays `unjudged`. Reference
 scoring stays PSNR only, and its artifact name is unchanged.
 

@@ -47,6 +47,7 @@ jobs:
     outputs:
       artifacts: ${{ steps.list.outputs.artifacts }}
       baselines: ${{ steps.list.outputs.baselines }}
+      baseline_attempt: ${{ steps.list.outputs.baseline_attempt }}
     steps:
       - name: List the newest h3-results bundle of each deployment
         id: list
@@ -77,6 +78,7 @@ jobs:
           echo "artifacts=$artifacts" >> "$GITHUB_OUTPUT"
           [[ "$artifacts" != "[]" ]] || echo "Run $RUN_ID has no h3-results artifacts; nothing to score."
           baselines='[]'
+          latest=''
           if [[ -n "$BASELINE_RUN_ID" ]]; then
             latest=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BASELINE_RUN_ID" --jq .run_attempt)
             baselines=$(newest "$BASELINE_RUN_ID" "$latest")
@@ -86,6 +88,7 @@ jobs:
             }
           fi
           echo "baselines=$baselines" >> "$GITHUB_OUTPUT"
+          echo "baseline_attempt=$latest" >> "$GITHUB_OUTPUT"
 
   score:
     name: Score H3 clips against ${{ inputs.baseline_run_id && 'the lossless run' || 'references' }}
@@ -153,6 +156,6 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           # The App trusts h3-quality-<run>-<attempt> as reference PSNR, so paired scores use another name.
-          name: ${{ env.BASELINE_RUN_ID && format('h3-paired-quality-{0}-{1}-{2}', env.RUN_ID, env.RUN_ATTEMPT, env.BASELINE_RUN_ID) || format('h3-quality-{0}-{1}', env.RUN_ID, env.RUN_ATTEMPT) }}
+          name: ${{ env.BASELINE_RUN_ID && format('h3-paired-quality-{0}-{1}-{2}-{3}', env.RUN_ID, env.RUN_ATTEMPT, env.BASELINE_RUN_ID, needs.find.outputs.baseline_attempt) || format('h3-quality-{0}-{1}', env.RUN_ID, env.RUN_ATTEMPT) }}
           path: ${{ runner.temp }}/h3-quality
           if-no-files-found: error

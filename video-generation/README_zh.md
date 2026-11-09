@@ -101,7 +101,7 @@ revision、GPU 数、精度、并发数以及 `spec.json` 中的 `server` 参数
 每一对视频逐帧计算 PSNR、SSIM（BT.601 亮度，σ 1.5 的高斯窗口）和 LPIPS（AlexNet，
 v0.1，权重哈希固定），并给出各指标的整段均值与最差帧。每个部署给出视频级的中位数与
 最差值。完全相同的视频记为 `video_identical` 为 true，PSNR 为 `null`，SSIM 为 1，
-LPIPS 为 0。`h3-paired-quality-<run>-<attempt>-<baseline-run>` 产物包含
+LPIPS 为 0。`h3-paired-quality-<run>-<attempt>-<baseline-run>-<baseline-attempt>` 产物包含
 `mode: paired_lossless` 的 `quality.json`，`quality_status` 仍为 `unjudged`。
 参考评分仍只计算 PSNR，产物名称不变。
 
