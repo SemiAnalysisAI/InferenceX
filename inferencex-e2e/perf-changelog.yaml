@@ -12572,5 +12572,5 @@
     - Use full-NIC TC104, a 1799 GB HugeTLB pool per worker node, and pool-local soft memlock elevation to the inherited hard limit.
     - Keep prefill breakable graphs and decode full graphs through 512 tokens, with decode max-num-seqs 128.
     - Add 1P2D global c48 with decode max-num-seqs 48 and graphs through 192 tokens; use the mounted target snapshot for the AgentX tokenizer.
-    - Use the MUM vLLM frontend processor for K3.1 chat tokenization, with a private pinned Dynamo Python compatibility overlay and token-level MoRIIO workers; require model registration before AgentX.
+    - Use the MUM vLLM frontend processor for K3.1 chat tokenization, with the digest-pinned image containing Dynamo/MUM API compatibility and token-level MoRIIO workers; require model registration before AgentX.
   pr-link: XXX

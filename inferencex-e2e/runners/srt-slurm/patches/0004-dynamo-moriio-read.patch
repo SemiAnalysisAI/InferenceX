@@ -1,8 +1,6 @@
-diff --git a/src/srtctl/backends/vllm.py b/src/srtctl/backends/vllm.py
-index fc9c9371..2c02a186 100644
 --- a/src/srtctl/backends/vllm.py
 +++ b/src/srtctl/backends/vllm.py
-@@ -589,9 +589,16 @@ class VLLMBackend(Backend):
+@@ -589,9 +589,16 @@
                  f"{process.endpoint_mode} worker on {process.node} has no MoRI-IO listeners; "
                  "the topology was built without a discovery connector"
              )
@@ -21,31 +19,22 @@ index fc9c9371..2c02a186 100644
              "http_port": str(process.http_port),
              # Upstream falls back to its own interface guess, which is the wrong NIC on multi-homed nodes.
              "host_ip": get_hostname_ip(process.node, runtime.network_interface),
-@@ -1392,9 +1399,16 @@ class VLLMBackend(Backend):
+@@ -1411,7 +1418,11 @@
          # Base command - use dynamo.vllm module
          cmd.extend(
              [
 -                "python3",
--                "-m",
--                "dynamo.vllm",
 +                (
-+                    f"{runtime.environment['DYNAMO_VENV_ROOT']}/{runtime.job_id}/bin/python"
-+                    if "DYNAMO_VENV_ROOT" in runtime.environment
++                    runtime.environment["DYNAMO_PYTHON"]
++                    if "DYNAMO_PYTHON" in runtime.environment
 +                    else "python3"
 +                ),
-+                *(
-+                    ["/configs/dynamo_moriio_worker.py"]
-+                    if runtime.environment.get("SRT_MORIIO_EXPLICIT_REGISTRATION") == "1"
-+                    else ["-m", "dynamo.vllm"]
-+                ),
+                 "-m",
+                 "dynamo.vllm",
                  "--model",
-                 model_arg,
-                 "--served-model-name",
-diff --git a/src/srtctl/core/schema.py b/src/srtctl/core/schema.py
-index 7e0d228c..b45415b9 100755
 --- a/src/srtctl/core/schema.py
 +++ b/src/srtctl/core/schema.py
-@@ -3149,7 +3149,9 @@ class SrtConfig:
+@@ -3255,7 +3255,9 @@
          """
          if not isinstance(self.backend, VLLMBackend) or not self.backend.discovers_workers():
              return
@@ -56,32 +45,19 @@ index 7e0d228c..b45415b9 100755
              raise ValidationError(
                  "a discovery connector (engine.connector: moriio) registers workers with the vLLM Router; "
                  f"it requires frontend.type: vllm-router (got {self.frontend.type!r})"
-diff --git a/src/srtctl/frontends/dynamo.py b/src/srtctl/frontends/dynamo.py
-index d574f3c1..893042bc 100644
 --- a/src/srtctl/frontends/dynamo.py
 +++ b/src/srtctl/frontends/dynamo.py
-@@ -222,7 +222,12 @@ class DynamoFrontend(DynamicFrontend):
+@@ -246,7 +246,12 @@
              logger.info("Starting dynamo frontend %d on %s", idx, node)
  
              frontend_log = runtime.log_dir / f"{node}_frontend_{idx}.out"
 -            cmd = ["python3", "-m", "dynamo.frontend", f"--http-port={topology.frontend_port}"]
 +            python = (
-+                f"{runtime.environment['DYNAMO_VENV_ROOT']}/{runtime.job_id}/bin/python"
-+                if "DYNAMO_VENV_ROOT" in runtime.environment
++                runtime.environment["DYNAMO_PYTHON"]
++                if "DYNAMO_PYTHON" in runtime.environment
 +                else "python3"
 +            )
 +            cmd = [python, "-m", "dynamo.frontend", f"--http-port={topology.frontend_port}"]
              cmd.extend(self.get_frontend_args_list(frontend_args))
  
              automatic_nsys = getattr(config, "observability_nsys_enabled", False) is True
-@@ -255,6 +260,10 @@ class DynamoFrontend(DynamicFrontend):
-             # Add global recipe environment, including values derived from
-             # dynamo.source.wheel, before frontend-specific overrides.
-             env_to_set.update(runtime.environment)
-+            if "DYNAMO_VENV_ROOT" in runtime.environment:
-+                env_to_set["HOME"] = (
-+                    f"{runtime.environment['DYNAMO_VENV_ROOT']}/{runtime.job_id}/home"
-+                )
- 
-             # Add frontend env from config
-             if config.frontend.env:

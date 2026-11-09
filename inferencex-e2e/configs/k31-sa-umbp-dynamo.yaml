@@ -1,5 +1,5 @@
 kimik31-sa-umbp-dynamo:
-  image: yukiozzz/vllm-openai-rocm:apex-k31-readcap-1109@sha256:d9ec0365bd9cef13693c48e7d816c86d7da9c41bad18e3a182c8b89e31ad071a
+  image: yukiozzz/vllm-openai-rocm:apex-k31-dynamo-readcap-1109@sha256:b54558fe4377373ba216c29fdcecae8237dc4b0694ef68f20675e34aeea037af
   model: moonshotai/Kimi-K3.1-Pro
   model-prefix: kimik3.1
   runner: cluster:mi355x-amds

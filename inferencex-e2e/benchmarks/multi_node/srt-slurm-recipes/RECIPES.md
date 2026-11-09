@@ -106,13 +106,15 @@ It writes one bound recipe per fixed-sequence or AgentX point, validated by the 
 
 ## Recipe fingerprints
 
-The K3.1 SA UMBP Dynamo variants use a private copy of the pinned Dynamo Python
-package with the MUM image's vLLM frontend APIs. `dynamo-mum-compat` verifies the
-three source file hashes before copying or adapting them; changing the Dynamo
-snapshot requires reviewing this adapter. The frontend uses the vLLM chat
-processor and `/opt/mum`, while decode workers expose chat with token input so
-MoRIIO prefill handoff remains enabled. Frontend prefix caching is disabled
-because that process owns no KV cache; both engine roles retain prefix caching.
+The K3.1 SA UMBP Dynamo variants use a digest-pinned image containing Dynamo,
+its MoRIIO READ protocol integration, and the MUM frontend API compatibility
+changes. Image provenance is recorded in `/opt/k31-dynamo-provenance.json`;
+`DYNAMO_PYTHON` selects the installed interpreter. Setup verifies the protocol
+and starts the pool; it does not install dependencies or modify packages.
+The frontend uses the vLLM chat processor and `/opt/mum`. Decode workers expose
+chat with token input so MoRIIO prefill handoff remains enabled. Frontend
+prefix caching is disabled because it owns no KV cache; both engine roles
+retain prefix caching.
 
 These variants set `AGENTIC_MODEL_READY_TIMEOUT_SECONDS=300`. AgentX requires the
 requested model in `/v1/models` and the chat route to be mounted before replay;

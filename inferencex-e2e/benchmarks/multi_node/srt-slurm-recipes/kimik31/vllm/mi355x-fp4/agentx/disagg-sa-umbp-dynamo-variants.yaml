@@ -20,7 +20,6 @@ base:
   extra_mount:
   - /usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so:/usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so:ro
   - /var/lib/hf-hub-cache:/k31-preview:ro
-  - /it-share/data/yiczhu-k31-pd-1109/dynamo-site/site-packages:/k31-dynamo-site:ro
   resources:
     gpu_type: mi355x
     gpus_per_node: 8
@@ -37,6 +36,7 @@ base:
       no-enable-prefix-caching: true
       dyn-preprocess-workers: 0
     env:
+      HOME: /private-state/k31-dynamo-home
       PYTHONPATH: /opt/mum
   observability:
     enabled: false
@@ -86,6 +86,7 @@ base:
         mamba-cache-mode: align
         block-size: 64
       env:
+        HOME: /private-state/k31-dynamo-home
         PYTHONPATH: /opt/mum
         HF_HOME: /private-state/huggingface
         HF_HUB_CACHE: /private-state/huggingface/hub
@@ -189,6 +190,7 @@ base:
         mamba-cache-mode: align
         block-size: 64
       env:
+        HOME: /private-state/k31-dynamo-home
         PYTHONPATH: /opt/mum
         HF_HOME: /private-state/huggingface
         HF_HUB_CACHE: /private-state/huggingface/hub
@@ -266,7 +268,7 @@ base:
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
     placement:
       node: head
-  setup_script: k31-seven-dynamo-venv.sh
+  setup_script: k31-dynamo-image.sh
   host_setup:
     nodes: workers
     timeout_seconds: 1800
@@ -314,11 +316,8 @@ base:
     - '28800'
   environment:
     SRT_MORIIO_EXPLICIT_REGISTRATION: '1'
-    DYNAMO_VENV_ROOT: /private-state/k31-dynamo
+    DYNAMO_PYTHON: /opt/k31-dynamo/bin/python
     DYNAMO_VERSION: 1.6.0.dev20261023
-    DYNAMO_ENGINE_GRPC_VERSION: 1.78.0
-    DYNAMO_BASE_PYTHON: /opt/runtime-venv/bin/python
-    DYNAMO_SITE_PACKAGES: /k31-dynamo-site
     DYN_TCP_RPC_HOST: '@fabric.socket-ifname'
     DYN_TCP_RESPONSE_STREAM_HOST: '@fabric.socket-ifname'
   dynamo:
