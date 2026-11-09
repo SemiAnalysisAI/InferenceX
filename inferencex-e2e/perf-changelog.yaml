@@ -12562,3 +12562,15 @@
     - "At concurrency 80 the overall prefix cache hit rate is flat: 93.5% of prompt tokens on the previous image and policy (run 36743632401) against 94.0% here (run 39763900198). What moves is the tier split -- the HiCache host tier serves 49.1% of prompt tokens instead of 43.3%, and the GPU tier 44.9% instead of 50.2%. Per-GPU throughput goes from 59,233 to 60,839 tok/s (+2.7%), p90 end-to-end latency from 50.9 s to 47.9 s, and mean TTFT from 3.12 s to 2.68 s."
     - "That concurrency 80 comparison is not a single-variable A/B: the 36743632401 baseline ran hicache-size 400 on lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260929, while this point runs hicache-size 374 on the v0.5.22 image, so the image, the write policy and the host pool size all differ."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4374
+
+- config-keys:
+    - minimaxm31flash-fp4-mi355x-atom-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "New MiniMax-M3.1-Flash AgentX config on MI355X with ATOM: image rocm/atom-dev:nightly_202611060646 (sha256:857297cc, ATOM 0.1.10.dev36+ge1295074f, AITER b0e8ce03d), serving amd/MiniMax-M3.1-Flash-Quark-MXFP4 as shipped."
+    - "Points: TP4 at concurrency 1, 2, 4 and 8 GPU-resident, and at concurrency 16, 32 and 48 with the LMCache 0.5.6.dev139+gf22dec28 CPU tier (dram-utilization 0.58)."
+    - "Server settings: FP8 KV and index cache, 128-token blocks, prefix caching, gpu-memory-utilization 0.9, max-num-batched-tokens 32768, ATOM_FORCE_ATTN_TRITON=1, and max-num-seqs at twice the concurrency, with decode graphs at every batch size up to 8 and then in steps of 2, 4, 8 and 16 up to max-num-seqs. Concurrency 1 to 16 run the prefill delayer (ATOM_PREFILL_DECODE_INTERVAL=20000); 32 and 48 run without it. The LMCache points (lmcache_offload) store 200 GiB per rank with PYTHONHASHSEED=0. Speculative decoding uses the checkpoint's bundled DSpark draft with seven tokens; throughput runs take acceptance from the minimax-m3.1-flash golden AL curve (4.04 at seven draft tokens)."
+    - "Relevant ATOM changes in the image: ROCm/ATOM#2678 (MiniMax-M3.1-Flash day-0 support: Quark MXFP4 checkpoint and DSpark draft) and the MiniMax-M3 PAGE-only LMCache offload layout from ROCm/ATOM#2140 and #2166. ROCm/ATOM#2686 changes only the mono decode path, which these points do not enable."
+    - "Draft data type: the DSpark draft runs as shipped, MXFP8 (1x32 UE8M0 scales) attention and MLP linears with BF16 fc, Markov and confidence heads, sharing the target's embedding and LM head, with FP8 draft KV inherited from the target; no online quantization, quick-reduce quantization, shared-expert fusion or index sharing is enabled."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4860
