@@ -12575,4 +12575,5 @@
     - Use the MUM vLLM frontend processor for K3.1 chat tokenization, with the digest-pinned image containing Dynamo/MUM API compatibility and token-level MoRIIO workers; require model registration before AgentX.
     - Enable synchronous ROCm error logging on the 1P2D prefill worker to retain native loader failures without changing compute or cache settings.
     - For 1P2D, record process limits and raise the Dynamo process soft memlock to its inherited hard limit before exec; this is a candidate mitigation for native loader resource failures, not a validated fix.
+    - Extend the worker memlock entrypoint to 2P3D c176 after SA 1P2D completed its full-hour run with zero request errors; preserve the 2P3D compute settings and pinned image.
   pr-link: XXX

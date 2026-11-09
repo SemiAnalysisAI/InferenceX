@@ -325,7 +325,9 @@ base:
     source:
       pypi: 1.6.0.dev20261023
 
-override_2p3d_c176: {}
+override_2p3d_c176:
+  environment:
+    DYNAMO_PYTHON: /infmax-workspace/benchmarks/k31_dynamo_worker_python.py
 
 override_1p2d_c48:
   name: k31-sa-umbp-dynamo-p1d2-c48
