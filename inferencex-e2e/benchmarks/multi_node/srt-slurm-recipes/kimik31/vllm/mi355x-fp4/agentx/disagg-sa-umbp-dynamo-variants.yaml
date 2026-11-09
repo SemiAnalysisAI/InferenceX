@@ -333,6 +333,9 @@ override_1p2d_c48:
     prefill:
       nodes: 1
       workers: 1
+      env:
+        AMD_LOG_LEVEL: '1'
+        AMD_LOG_ASYNC: '0'
     decode:
       nodes: 2
       workers: 2
