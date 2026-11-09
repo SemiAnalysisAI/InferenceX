@@ -14,11 +14,6 @@ from infx import github
 
 from . import reuse, sweep_runs
 
-FULL_SWEEP_LABELS = (
-    "full-sweep-enabled",
-    "non-canary-full-sweep-enabled",
-    "full-sweep-fail-fast",
-)
 COMMAND_SPACE = "\t\n\v\f\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
 
 
@@ -44,7 +39,7 @@ def full_sweep_at(events: list[dict[str, Any]], created_at: str) -> bool:
         if timestamp(event.get("created_at")) > created:
             break
         name = (event.get("label") or {}).get("name")
-        if name in FULL_SWEEP_LABELS:
+        if name in sweep_runs.FULL_SWEEP_LABELS:
             if event["event"] == "labeled":
                 active.add(name)
             elif event["event"] == "unlabeled":
@@ -197,7 +192,7 @@ def request(repo: str, event: dict[str, Any], token: str) -> dict[str, str] | No
     pull = github.api(repo, f"/pulls/{pr_number}", token)
     labels = {label if isinstance(label, str) else label.get("name") for label in pull["labels"]}
     reuse_run_id = None
-    if not labels.intersection(FULL_SWEEP_LABELS):
+    if not labels.intersection(sweep_runs.FULL_SWEEP_LABELS):
         try:
             reuse_run_id = pinned_reuse_run(repo, pr_number, pull, token)
         except RuntimeError as exc:
@@ -209,7 +204,7 @@ def request(repo: str, event: dict[str, Any], token: str) -> dict[str, str] | No
             reject(
                 "PR does not have a full-sweep label",
                 f"@{actor} staging requires a completed run from a PR using one of: "
-                + ", ".join(f"`{label}`" for label in FULL_SWEEP_LABELS)
+                + ", ".join(f"`{label}`" for label in sweep_runs.FULL_SWEEP_LABELS)
                 + ", or an accepted `/use <run-id>` reuse request.",
             )
     run = resolve_run(repo, pr_number, pull, token, command[1], reuse_run_id)

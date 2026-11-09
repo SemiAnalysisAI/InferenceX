@@ -38,6 +38,7 @@ from .prepare_perf_changelog_merge import (
     resolve_conflict_bytes,
 )
 from .sweep_runs import (
+    FULL_SWEEP_LABELS,
     artifact_names,
     completed_pr_runs,
     has_reusable_result_artifacts,
@@ -93,14 +94,6 @@ def changelog_path() -> str:
     checkout = git_repository_root()
     return (project_root(checkout) / "perf-changelog.yaml").relative_to(checkout).as_posix()
 
-
-SWEEP_LABEL_NAMES = frozenset(
-    {
-        "full-sweep-enabled",
-        "non-canary-full-sweep-enabled",
-        "full-sweep-fail-fast",
-    }
-)
 
 REUSE_INCOMPATIBLE_LABELS = frozenset({"evals-only", "agentx-fast"})
 
@@ -639,7 +632,7 @@ def _merge_pr_inner(
     head_branch: str = pull.head.ref
     labels = [label.name for label in pull.labels]
 
-    sweep_labels = [name for name in labels if name in SWEEP_LABEL_NAMES]
+    sweep_labels = [name for name in labels if name in FULL_SWEEP_LABELS]
     if len(sweep_labels) > 1:
         return die(f"PR #{pr} has multiple conflicting sweep labels")
 
