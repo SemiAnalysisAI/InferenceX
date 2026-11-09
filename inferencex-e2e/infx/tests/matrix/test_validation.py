@@ -361,6 +361,16 @@ class TestAgenticMatrixEntries:
                 "conc-list": [1],
             })
 
+    def test_only_the_kebab_case_key_sets_spec_decoding(self):
+        entry = {
+            "prefill": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+            "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+            "conc-list": [1],
+        }
+        assert MultiNodeSearchSpaceEntry(**entry, **{"spec-decoding": "mtp"}).spec_decoding == "mtp"
+        with pytest.raises(ValidationError, match="spec_decoding"):
+            MultiNodeSearchSpaceEntry(**entry, spec_decoding="mtp")
+
     def test_kv_offload_backend_accepts_optional_version(self):
         entry = AgenticCodingSearchSpaceEntry(**{
             "tp": 8,
