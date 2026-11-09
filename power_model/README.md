@@ -67,4 +67,4 @@ python -m power_model --system=mi355 --gpu-level-power-per-gpu=612.5 \
 
 ## License
 
-`power_model` is licensed under GPL-3.0-only; see [LICENSE](LICENSE). The rest of this repository is Apache-2.0.
+`power_model` is licensed under GPL-3.0-only (see [LICENSE](LICENSE)), unlike the repository's Apache-2.0 root license.
