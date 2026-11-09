@@ -1,4 +1,4 @@
-# Probe: fp8 KV through Triton DiffKV on vLLM v0.33.0, at the BF16 c64 canary's point.
+# Probe: fp8 KV through Triton DiffKV on vLLM v0.33.0, at the BF16 TP4 c256 point.
 base:
   schema: 2
   name: mimov2.6flash-fp4-b200-vllm-agentic-dflash-fp8kv-probe
@@ -54,20 +54,20 @@ base:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
-override_tp4_c64_dram:
+override_tp4_c256_dram:
   roles:
     agg:
       gpus: 4
       args:
         tensor-parallel-size: 4
-        max-num-seqs: 128
-        max-cudagraph-capture-size: 256
+        max-num-seqs: 512
+        max-cudagraph-capture-size: 1024
         speculative-config: '{"method":"dflash","model":"/mnt/hf_hub_cache/models--XiaomiMiMo--MiMo-V2.6-Flash-RL/snapshots/f657ba2f7d24c9adc5730675baaa2d34de878a49/dflash","num_speculative_tokens":3}'
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":858000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
     env:
-      CONC: '64'
+      CONC: '256'
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '858'

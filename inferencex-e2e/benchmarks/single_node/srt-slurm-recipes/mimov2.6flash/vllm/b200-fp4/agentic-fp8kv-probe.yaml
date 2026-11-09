@@ -1,4 +1,4 @@
-# Probe: fp8 KV through Triton DiffKV on vLLM v0.33.0, at the BF16 c64 canary's point.
+# Probe: fp8 KV through Triton DiffKV on vLLM v0.33.0, at the BF16 TP4 c256 point.
 base:
   schema: 2
   name: mimov2.6flash-fp4-b200-vllm-agentic-fp8kv-probe
@@ -51,14 +51,14 @@ base:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
-override_tp4_c64:
+override_tp4_c256:
   roles:
     agg:
       args:
-        max-num-seqs: 128
-        max-cudagraph-capture-size: 64
+        max-num-seqs: 512
+        max-cudagraph-capture-size: 256
   benchmark:
     env:
-      CONC: '64'
+      CONC: '256'
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '858'
