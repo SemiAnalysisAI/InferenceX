@@ -12498,6 +12498,53 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4066
 
 - config-keys:
+    - glm5.3-fp8-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GLM-5.3 FP8 MI355X SGLang AgentX: TP8 EP1, EAGLE MTP 3-1-4, FP8 E4M3 KV cache, and the AMD monokernel (--enable-amd-monokernel) at concurrency 1, 2, 4, and 10."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4875
+
+- config-keys:
+    - dsv41flash-fp4-b200-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the SGLang image from nightly-dev-cu13-20261029-c10e0e17 to nightly-dev-cu13-20261107-e45e1d0c."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4906
+
+- config-keys:
+    - dsv41flash-fp4-h200-vllm-agentic-dspark
+  description:
+    - "Update the vLLM image from v0.32.0 to v0.33.0."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4879
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - qwen3.8next-fp8-h200-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump SGLang image from v0.5.22-cu130 to v0.5.23-cu130."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4888
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp8-c1
+  scenario-type: [agentic-coding]
+  description:
+    - "Update the vLLM ROCm image of both keys to nightly-4fab5a07475822c6eaa971dceb2e2220d0446808."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4876
+
+- config-keys:
+    - dsv41flash-fp4-gb200-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update vLLM image from cu134-nightly-40941f2c to cu134-nightly-1648fefa."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4897
+
+- config-keys:
     - kimik3.1-fp4-gb200-dynamo-sglang-agentic-dflash-disagg
   scenario-type: [agentic-coding]
   description:
