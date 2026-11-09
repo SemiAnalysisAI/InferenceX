@@ -4133,8 +4133,8 @@ minimaxm31flash-fp4-h200-vllm-agentic-dspark:
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 12, 16, 20, 24], srt-recipe: agentic.yaml }
 
 qwen3.5-fp4-b200-sglang-agentic-mtp:
-  image: lmsysorg/sglang:v0.5.16-cu130
-  model: nvidia/Qwen3.5-397B-A17B-NVFP4
+  image: lmsysorg/sglang:v0.5.19-cu130
+  model: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
   model-prefix: qwen3.5
   runner: cluster:b200-nscale
   precision: fp4
@@ -5981,7 +5981,7 @@ dsv41flash-fp4-b200-vllm-agentic-dspark:
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [224, 256, 384, 512, 544, 576], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
 
 dsv41flash-fp4-b200-sglang-agentic-dspark:
-  image: lmsysorg/sglang:nightly-dev-cu13-20261029-c10e0e17@sha256:78142f9f4b7fb3ee27f59065615dc7bb263f643ed256c9299c3861086ade4d47
+  image: lmsysorg/sglang:nightly-dev-cu13-20261107-e45e1d0c@sha256:81eb456abfaa3cf50a2ac463abe02705486f3f1e10929ca306e5929b937d5388
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:b200-nscale
