@@ -12264,4 +12264,4 @@
     - "Add two lossy H3 C1 deployments on four H100 GPUs, each paired with h3-bf16-h100-sglang-video: same SGLang v0.5.23 (297e54fd) image, TP2/Ulysses2 layout, prompts and seeds."
     - "Cache-DiT with SGLang's audited H3 profile (Fn 1, Bn 0, warmup 4, residual threshold 0.04, at most 1 consecutive cached step), and SubBlock sparse attention at its defaults with a dense FA text encoder."
     - "Each run declares its optimization in run.json, and the job attests it from the engine log."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4958
