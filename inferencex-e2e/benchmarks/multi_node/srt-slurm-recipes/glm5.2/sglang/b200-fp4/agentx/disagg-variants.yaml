@@ -128,7 +128,7 @@ base:
         dsa-decode-backend: trtllm
         fp4-gemm-backend: flashinfer_cutlass
         skip-tokenizer-init: true
-        stream-interval: 30
+        stream-interval: 20
         enable-flashinfer-allreduce-fusion: true
         weight-loader-prefetch-checkpoints: true
         model-loader-extra-config: '{"enable_multithread_load": true}'
