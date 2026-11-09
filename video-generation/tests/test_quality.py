@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from evaluator import cli
+from evaluator import cli, media
 from test_media import encode_media
 
 REVISION = "a" * 40
@@ -212,6 +212,14 @@ def test_refuses_a_reference_asset_that_differs_from_the_descriptor(tmp_path):
     assert not (tmp_path / "out").exists()
 
 
+@pytest.fixture(scope="module", autouse=True)
+def _fixed_similarity():
+    """Stands in for SSIM and the LPIPS network, whose weights torchvision downloads."""
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(media, "_frame_similarity", lambda: lambda x, y: (0.5, 0.25))
+        yield
+
+
 @pytest.fixture(scope="module")
 def paired(tmp_path_factory):
     root = tmp_path_factory.mktemp("paired")
@@ -243,8 +251,7 @@ def test_pairs_each_clip_with_the_same_case_of_the_lossless_deployment(paired):
     assert (same["video_psnr_db"], same["video_ssim"], same["video_lpips"]) == (None, 1.0, 0.0)
     changed = pairs["changed"]["comparison"]["metrics"]
     assert 0 < changed["video_psnr_db"] < 15
-    assert 0 <= changed["video_ssim"] < 1
-    assert changed["video_lpips"] > 0
+    assert (changed["video_ssim"], changed["video_lpips"]) == (0.5, 0.25)
     assert len(changed["video_ssim_frames"]) == len(changed["video_lpips_frames"]) == 8
     summary = next(item for item in paired["deployments"] if item["candidate"]["artifact_id"] == 7)
     assert summary["candidate"]["optimizations"] == ["cache-dit"]

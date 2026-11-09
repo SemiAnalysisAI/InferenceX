@@ -103,10 +103,7 @@ LPIPS 为 0。`h3-paired-quality-<run>-<attempt>-<baseline-run>` 产物包含
 ```bash
 cd video-generation
 PYTHONPATH=../inferencex-e2e uv run --no-project --python 3.12 \
-  --index https://download.pytorch.org/whl/cpu \
   --with 'av==16.1.0' --with 'numpy==2.3.5' \
-  --with 'torch==2.14.0' --with 'torchvision==0.29.2' \
-  --with 'lpips==0.1.4' --with 'scikit-image==0.26.0' \
   --with 'pyyaml>=6,<7' --with 'pytest>=8,<9' python -m pytest -q
 ```
 
