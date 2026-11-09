@@ -299,11 +299,13 @@ a green sweep alone is not enough. Verify the command directly from the comments
   Inline mentions and bare `/use` do not count.
   ```bash
   gh api repos/${REPO}/issues/${PR_NUMBER}/comments \
-    --paginate --jq '.[] | {user: .user.login, association: .author_association, body: .body}'
+    --paginate --jq '.[] | {user: .user.login, body: .body}'
+  gh api repos/${REPO}/collaborators/<user>/permission --jq '{permission, role_name}'
   ```
-- PASS only if a matching comment exists whose `author_association` is `OWNER`,
-  `MEMBER`, or `COLLABORATOR`. Both command names share this requirement; the newest
-  authorized matching comment across both names determines the requested source.
+- PASS only if a matching comment exists whose author has write access to the repository:
+  both `permission` and `role_name` are `admin`, `maintain`, or `write`. Both command names
+  share this requirement; the newest authorized matching comment across both names
+  determines the requested source.
 - WARN if no authorized reuse command is present. This is an advisory warning,
   not a failing criterion, but it must always be shown expanded in the verdict.
   State: "No authorized reuse command has been posted on this PR" and tell the

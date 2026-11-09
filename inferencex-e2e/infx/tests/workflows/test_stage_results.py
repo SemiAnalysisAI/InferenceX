@@ -290,12 +290,15 @@ def test_pinned_trusted_external_run_stages_on_its_pr(
         stage_results.request("example/project", staging["event"], "token")
 
 
-def recovery_pr(staging, association="MEMBER"):
+def recovery_pr(staging, login="reviewer"):
     staging["responses"]["/pulls/7"] = {"labels": [], "head": {"ref": "recovery"}, "state": "open"}
     staging["responses"]["/pulls/7/commits"] = [{"sha": "recovery-head"}]
     staging["responses"]["/issues/7/timeline"] = []
+    staging["responses"]["/collaborators/reader/permission"] = {
+        "permission": "read", "role_name": "read",
+    }
     staging["responses"]["/issues/7/comments"] = [{
-        "id": 50, "created_at": "2026-09-02T00:00:00Z", "author_association": association,
+        "id": 50, "created_at": "2026-09-02T00:00:00Z", "user": {"login": login},
         "body": "/use 123",
     }]
 
@@ -322,7 +325,7 @@ def test_recovery_pr_only_stages_its_pinned_run(staging):
 
 
 def test_recovery_pr_rejects_unauthorized_or_invalid_reuse_source(staging):
-    recovery_pr(staging, association="CONTRIBUTOR")
+    recovery_pr(staging, login="reader")
     with pytest.raises(RuntimeError, match="PR does not have a full-sweep label"):
         stage_results.request("example/project", staging["event"], "token")
     recovery_pr(staging)

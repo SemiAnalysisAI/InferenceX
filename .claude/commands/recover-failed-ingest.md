@@ -188,7 +188,7 @@ git diff --check origin/main...HEAD || exit 1
 git push origin "$BRANCH"
 ```
 
-An authorized `OWNER`, `MEMBER`, or `COLLABORATOR` then pins the source with
+A maintainer with write access to the repository then pins the source with
 `/use $SOURCE_RUN_ID` (legacy `/reuse-sweep-run <run_id>` is also accepted). The
 source commit belongs to the original PR, not the recovery PR, so expect the bot to
 react 👍 and post an outside-PR warning comment. Require the 👍 before merging.

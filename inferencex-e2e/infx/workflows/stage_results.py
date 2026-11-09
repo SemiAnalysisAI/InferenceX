@@ -57,8 +57,7 @@ def pinned_reuse_run(repo: str, pr_number: int, pull: dict[str, Any], token: str
 
     Raises RuntimeError when the pinned run fails reuse validation.
     """
-    allowed = set(reuse.DEFAULT_ALLOWED_AUTHOR_ASSOCIATIONS)
-    comment, run_id = reuse.find_reuse_request(repo, pr_number, token, "/reuse-sweep-run", allowed)
+    comment, run_id = reuse.find_reuse_request(repo, pr_number, token, "/reuse-sweep-run")
     if comment is None or run_id is None:
         return None
     reuse.resolve_reusable_run(repo, "run-sweep.yml", pr_number, pull, token, run_id)

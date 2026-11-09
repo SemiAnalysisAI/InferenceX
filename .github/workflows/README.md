@@ -298,7 +298,7 @@ Acceptance does not
 certify a green full sweep. Verify coverage and pin the run ID when a full sweep
 is required by the review process.
 
-The latest matching comment across both names by an `OWNER`, `MEMBER`, or `COLLABORATOR` wins.
+The latest matching comment across both names by a user with write access to the repository wins.
 The bot reacts with 👍 after validating the request, or 👎 on rejection. When the
 pinned run's commit is not part of the PR, it also posts one warning comment for
 that request and run; reuse still proceeds. Details are in the Actions run summary.
