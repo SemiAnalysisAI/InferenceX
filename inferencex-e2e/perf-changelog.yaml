@@ -12567,5 +12567,5 @@
     - minimaxm31flash-fp4-mi355x-vllm-agentic-dspark
   scenario-type: [agentic-coding]
   description:
-    - "Update vLLM image from minimax-m31-flash to nightly-cf5cea2d and turn off DBO, which it rejects for this model."
+    - "Update vLLM image from minimax-m31-flash to nightly-cf5cea2d, without DBO or the minimax_m3 reasoning parser."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4936
