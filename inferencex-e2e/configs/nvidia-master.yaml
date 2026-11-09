@@ -5918,7 +5918,7 @@ musespark-fp4-b200-sglang-agentic-dflash:
       - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [7, 16, 24, 40], srt-recipe: agentic.yaml }
 
 musespark-fp4-h200-sglang-agentic-dflash:
-  image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
+  image: lmsysorg/sglang:v0.5.23@sha256:f832b5c39559c9caa900b22ad37c76fcce66470676855c42052102c537812f1f
   model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
   model-prefix: musespark
   runner: cluster:h200-dgxc
