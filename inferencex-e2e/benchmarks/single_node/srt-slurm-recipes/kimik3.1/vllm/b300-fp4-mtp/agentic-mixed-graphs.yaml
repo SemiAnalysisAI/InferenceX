@@ -62,9 +62,29 @@ base:
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '2249'
 
-# CUDA graphs cover prefill and mixed steps up to 4096 tokens as well as decode. c24 runs TP8 x DCP8 with DSpark
+# CUDA graphs cover prefill and mixed steps up to 4096 tokens as well as decode. c20 and c24 run TP8 x DCP8 with DSpark
 # drafting 3 tokens; c40 adds routed experts EP8 on MegaMoE with the one-sided NVLink all-to-all and drafts 4.
 # Throughput runs replace block rejection with the golden acceptance length.
+
+override_dcp8_c20:
+  roles:
+    agg:
+      args:
+        # Admit prefill once every 8 engine steps; the fused decode serves pure decode steps only.
+        prefill-schedule-interval: 8
+        decode-context-parallel-size: 8
+        dcp-comm-backend: a2a
+        use-replayssm: true
+        max-num-seqs: 96
+        cudagraph-capture-sizes: [1, 2, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144, 148, 152, 156, 160, 164, 168, 172, 176, 180, 184, 188, 192, 196, 200, 204, 208, 212, 216, 220, 224, 228, 232, 236, 240, 244, 248, 252, 256, 260, 264, 268, 272, 276, 280, 284, 288, 292, 296, 300, 304, 308, 312, 316, 320, 324, 328, 332, 336, 340, 344, 348, 352, 356, 360, 364, 368, 372, 376, 380, 384, 512, 640, 768, 1024, 1280, 1536, 1792, 2048, 2560, 3072, 3584, 4096]
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","revision":"6a2ef20a05efe88aabbf9ecaa12d020c3b0edf94","num_speculative_tokens":3,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+      env:
+        VLLM_USE_DIRECT_DCP_A2A: '1'
+        VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
+  benchmark:
+    env:
+      CONC: '20'
 
 override_dcp8_c24:
   roles:
