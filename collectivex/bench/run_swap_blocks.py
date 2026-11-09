@@ -234,8 +234,8 @@ def main(argv: list[str] | None = None) -> int:
     try:  # one-off probe branch: Hopper vs Blackwell short-kernel cost
         import sys
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-        import gen_probe
-        gen_probe.run(str(args.output.parent))
+        import die_probe
+        die_probe.run(str(args.output.parent))
     except Exception as exc:
         print(f"GENPROBE-FAILED {exc!r}", flush=True)
     import vllm
