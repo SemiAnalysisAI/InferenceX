@@ -75,8 +75,8 @@ base:
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '2249'
 
-# Admission is 2x CONC, except CONC at c6 and 16 at c12. FULL_DECODE_ONLY graphs cover decode steps of 5 rows
-# (1 + 4 draft tokens) per admitted request (up to 60 rows at c12) with the fused Kimi-K3 decode (decode_backend
+# Admission is 2 at c1 and 6 at c6. FULL_DECODE_ONLY graphs cover decode steps of 5 rows
+# (1 + 4 draft tokens) per admitted request (up to 30 rows at c6) with the fused Kimi-K3 decode (decode_backend
 # latency_specialized); a step above the captured sizes runs eager at about 10x the graphed step time. Throughput
 # runs replace block rejection with the golden acceptance length.
 
@@ -92,18 +92,6 @@ override_c1:
     env:
       CONC: '1'
 
-override_c4:
-  roles:
-    agg:
-      args:
-        max-num-seqs: 8
-        additional-config: '{"decode_backend":"latency_specialized"}'
-        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[5,10,15,20,25,30,35,40]}'
-        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","revision":"6a2ef20a05efe88aabbf9ecaa12d020c3b0edf94","attention_backend":"TOKENSPEED_MLA","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-  benchmark:
-    env:
-      CONC: '4'
-
 override_c6:
   roles:
     agg:
@@ -115,39 +103,3 @@ override_c6:
   benchmark:
     env:
       CONC: '6'
-
-override_c8:
-  roles:
-    agg:
-      args:
-        max-num-seqs: 16
-        additional-config: '{"decode_backend":"latency_specialized"}'
-        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[5,10,15,20,25,30,35,40,45,50,55,60]}'
-        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","revision":"6a2ef20a05efe88aabbf9ecaa12d020c3b0edf94","attention_backend":"TOKENSPEED_MLA","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-  benchmark:
-    env:
-      CONC: '8'
-
-override_c12:
-  roles:
-    agg:
-      args:
-        max-num-seqs: 16
-        additional-config: '{"decode_backend":"latency_specialized"}'
-        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[5,10,15,20,25,30,35,40,45,50,55,60]}'
-        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","revision":"6a2ef20a05efe88aabbf9ecaa12d020c3b0edf94","attention_backend":"TOKENSPEED_MLA","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-  benchmark:
-    env:
-      CONC: '12'
-
-override_c16:
-  roles:
-    agg:
-      args:
-        max-num-seqs: 32
-        additional-config: '{"decode_backend":"latency_specialized"}'
-        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100,105,110,115,120,125,130,135,140,145,150,155,160]}'
-        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","revision":"6a2ef20a05efe88aabbf9ecaa12d020c3b0edf94","attention_backend":"TOKENSPEED_MLA","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-  benchmark:
-    env:
-      CONC: '16'

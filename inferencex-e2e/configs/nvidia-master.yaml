@@ -5960,11 +5960,10 @@ kimik3.1-fp4-b300-vllm-agentic-dspark:
     - dram-utilization: 0.75
       search-space:
       # The ~1.56 TB MXFP4 checkpoint needs all 8 GPUs. Fused Kimi-K3 decode on TP8 x DCP8; DSpark drafts 4 tokens.
-      - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 4, 6, 8, 12, 16], srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 6], srt-recipe: agentic.yaml }
       # CUDA graphs also cover prefill and mixed steps up to 4096 tokens: TP8 x DCP8 with DSpark drafting 3 tokens at
-      # c20 and c24, routed experts EP8 on MegaMoE drafting 4 at c40. Prefill is admitted once every 8 engine steps.
-      - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [20, 24], srt-recipe: agentic-mixed-graphs.yaml }
-      - { tp: 8, ep: 8, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [40], srt-recipe: agentic-mixed-graphs.yaml }
+      # c12 and c24. Prefill is admitted once every 8 engine steps.
+      - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [12, 24], srt-recipe: agentic-mixed-graphs.yaml }
     # 1.0 resolves to 2999 GB of host DRAM.
     - dram-utilization: 1.0
       search-space:

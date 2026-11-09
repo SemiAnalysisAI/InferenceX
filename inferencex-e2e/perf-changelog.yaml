@@ -12511,7 +12511,8 @@
     - agentic-coding
   description:
     - "Update Kimi-K3.1-Pro B300 vLLM aggregated AgentX configs."
-    - "Concurrency 1-16: TP8 x DCP8 with FULL_DECODE_ONLY graphs; add concurrency 6 and 16."
-    - "Concurrency 20, 24 and 40: CUDA graphs also for prefill and mixed steps up to 4096 tokens (#4878 recipe without the TEP shared-expert variable); DSpark drafts 3 tokens at 20 and 24, EP8 MegaMoE at 40; prefill-schedule-interval 8; add concurrency 20."
+    - "Sweep seven frontier points: concurrency 1, 6, 12, 24, 48, 64 and 72."
+    - "Concurrency 1 and 6: TP8 x DCP8 with FULL_DECODE_ONLY graphs."
+    - "Concurrency 12 and 24: CUDA graphs also for prefill and mixed steps up to 4096 tokens (#4878 recipe without the TEP shared-expert variable); DSpark drafts 3 tokens; prefill-schedule-interval 8."
     - "Concurrency 48, 64 and 72: EP8 MegaMoE with FULL_DECODE_ONLY graphs, max-num-batched-tokens 16384 and prefill-schedule-interval 8; gpu-memory-utilization 0.98 at 64 and 72; add concurrency 72."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4871

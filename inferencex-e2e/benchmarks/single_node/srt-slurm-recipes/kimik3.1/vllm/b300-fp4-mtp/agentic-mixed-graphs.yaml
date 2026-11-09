@@ -62,11 +62,11 @@ base:
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '2249'
 
-# CUDA graphs cover prefill and mixed steps up to 4096 tokens as well as decode. c20 and c24 run TP8 x DCP8 with DSpark
-# drafting 3 tokens; c40 adds routed experts EP8 on MegaMoE with the one-sided NVLink all-to-all and drafts 4.
+# CUDA graphs cover prefill and mixed steps up to 4096 tokens as well as decode. c12 and c24 run TP8 x DCP8
+# with DSpark drafting 3 tokens.
 # Throughput runs replace block rejection with the golden acceptance length.
 
-override_dcp8_c20:
+override_dcp8_c12:
   roles:
     agg:
       args:
@@ -84,7 +84,7 @@ override_dcp8_c20:
         VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
   benchmark:
     env:
-      CONC: '20'
+      CONC: '12'
 
 override_dcp8_c24:
   roles:
@@ -105,26 +105,3 @@ override_dcp8_c24:
   benchmark:
     env:
       CONC: '24'
-
-override_dcp8_ep8_c40:
-  roles:
-    agg:
-      args:
-        # Admit prefill once every 8 engine steps; the fused decode serves pure decode steps only.
-        prefill-schedule-interval: 8
-        decode-context-parallel-size: 8
-        dcp-comm-backend: a2a
-        use-replayssm: true
-        enable-expert-parallel: true
-        moe-backend: deep_gemm_mega_moe
-        all2all-backend: flashinfer_nvlink_one_sided
-        max-num-seqs: 96
-        cudagraph-capture-sizes: [1, 2, 4, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140, 145, 150, 155, 160, 165, 170, 175, 180, 185, 190, 195, 200, 205, 210, 215, 220, 225, 230, 235, 240, 768, 1024, 1280, 1536, 1792, 2048, 2560, 3072, 3584, 4096]
-        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","revision":"6a2ef20a05efe88aabbf9ecaa12d020c3b0edf94","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-      env:
-        VLLM_USE_DIRECT_DCP_A2A: '1'
-        VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
-        VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
-  benchmark:
-    env:
-      CONC: '40'
