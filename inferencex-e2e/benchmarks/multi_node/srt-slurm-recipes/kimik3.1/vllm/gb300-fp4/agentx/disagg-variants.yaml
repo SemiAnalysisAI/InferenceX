@@ -6,7 +6,7 @@ base:
     model: {}
     container: {}
     frameworks:
-      vllm: "0.23.1rc1.dev7347+gc92eaa62c"
+      vllm: "0.1.dev24218+g78e9a0c28"
       dynamo: "3dd0744eb72c707d76d4c520ae4dea9e286a4ab6"
 
   # ai-dynamo/dynamo#18124 head: the first Dynamo that registers the kimi_k31 model type.
