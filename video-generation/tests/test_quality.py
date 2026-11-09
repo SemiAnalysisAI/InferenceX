@@ -37,6 +37,7 @@ def _bundle(
     *,
     seeds: dict[str, int] | None = None,
     server: dict | None = None,
+    precision: str = "bf16",
     optimizations: list[str] | None = None,
 ) -> Path:
     """An h3-results bundle whose c1 cell measured CASES in order with these media files."""
@@ -74,9 +75,15 @@ def _bundle(
     }
     run = {"plan": {**SETTINGS, "cases": CASES}, "records": records, "configuration": configuration}
     (cell / "baseline/run.json").write_text(json.dumps(run))
-    (cell / "aggregate.json").write_text(json.dumps({"cluster": "h100-dsxe", "num_gpus": 4}))
-    layout = {"tp_size": 2, "ulysses_degree": 2, **(server or {})}
-    (cell / "spec.json").write_text(json.dumps({"server": layout}))
+    aggregate = {"cluster": "h100-dsxe", "num_gpus": 4, "precision": precision}
+    (cell / "aggregate.json").write_text(json.dumps(aggregate))
+    layout = {
+        "tp_size": 2,
+        "ulysses_degree": 2,
+        "encoder_parallel": "auto",
+        "dit_cpu_offload": False,
+    }
+    (cell / "spec.json").write_text(json.dumps({"server": {**layout, **(server or {})}}))
     (bundle / "serving-smoke.json").write_text(json.dumps({"cells": [{"concurrency": 1}]}))
     (bundle / "manifest.json").write_text(json.dumps({"run_id": "41"}))
     (bundle / "SHA256SUMS").write_text(
@@ -229,11 +236,16 @@ def paired(tmp_path_factory):
     # A lossy deployment with the same setup in the baseline run is not a baseline.
     lossy_peer = _bundle(root / "lossy-peer", [other, other, other], optimizations=["teacache"])
     lossy = _bundle(
-        root / "lossy", [same, changed, same], seeds={"reseeded": 99}, optimizations=["cache-dit"]
+        root / "lossy",
+        [same, changed, same],
+        seeds={"reseeded": 99},
+        server={"attention_backend": "subblock_sparse_attn"},
+        optimizations=["subblock-sparse-attn"],
     )
-    relayout = _bundle(root / "relayout", [same, other, same], server={"ulysses_degree": 4})
+    offload = _bundle(root / "offload", [same, other, same], server={"dit_cpu_offload": True})
+    fp8 = _bundle(root / "fp8", [same, changed, same], precision="fp8", optimizations=["cache-dit"])
     shutil.make_archive(str(root / "lossless"), "zip", lossless)
-    arguments = ["score-quality", f"7={lossy}", f"8={relayout}", "--baseline"]
+    arguments = ["score-quality", f"7={lossy}", f"8={offload}", f"9={fp8}", "--baseline"]
     arguments += [f"3={root / 'lossless.zip'}", "--baseline", f"4={lossy_peer}"]
     arguments += ["--baseline-run-id", "40", "--run-id", "41", "--source-revision", REVISION]
     assert cli.main([*arguments, "--output", str(root / "out")]) == 0
@@ -254,7 +266,7 @@ def test_pairs_each_clip_with_the_same_case_of_the_lossless_deployment(paired):
     assert (changed["video_ssim"], changed["video_lpips"]) == (0.5, 0.25)
     assert len(changed["video_ssim_frames"]) == len(changed["video_lpips_frames"]) == 8
     summary = next(item for item in paired["deployments"] if item["candidate"]["artifact_id"] == 7)
-    assert summary["candidate"]["optimizations"] == ["cache-dit"]
+    assert summary["candidate"]["optimizations"] == ["subblock-sparse-attn"]
     assert summary["baseline"] == [{"artifact_id": 3, "cell_id": "c1"}]
     assert summary["summary"]["identical"] == 1
     assert summary["summary"]["video_psnr_db"]["worst"] == changed["video_psnr_db"]
@@ -272,4 +284,7 @@ def test_lists_clips_without_a_matched_lossless_clip_instead_of_scoring_them(pai
         (8, "same", "no_baseline", []),
         (8, "changed", "no_baseline", []),
         (8, "reseeded", "no_baseline", []),
+        (9, "same", "no_baseline", []),
+        (9, "changed", "no_baseline", []),
+        (9, "reseeded", "no_baseline", []),
     ]

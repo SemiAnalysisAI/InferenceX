@@ -85,11 +85,14 @@ python -m evaluator.cli score-quality <artifact-id>=<bundle.zip|dir> ... \
 ```
 
 只有未声明任何优化的部署才能作为基准。部署与硬件、引擎、镜像 digest、runtime
-revision、GPU 数、TP 与 Ulysses 并行度以及并发数都相同的无损部署配对；精度不在
-配对键中。每段视频与同一 case、同一重复轮次的视频配对，且只有 prompt、seed、
-生成参数和封存请求的哈希都相同时才评分。其余视频列在 `unscored` 中，原因为
-`no_baseline`、`ambiguous_baseline`、`invalid_baseline`、`settings_mismatch`
-（附不一致的字段）、`invalid_candidate` 或 `checksum_mismatch`。
+revision、GPU 数、精度、并发数以及 `spec.json` 中的 `server` 参数都相同的无损部署
+配对。只有该部署所声明的优化自身设置的参数可以不同：
+[`evaluator/quality.py`](evaluator/quality.py) 中的 `OPTIMIZATION_SERVER_KEYS`
+允许 `subblock-sparse-attn` 改变 `attention_backend`。每段视频与同一 case、同一
+重复轮次的视频配对，且只有 prompt、seed、生成参数和封存请求的哈希都相同时才评分。
+其余视频列在 `unscored` 中，原因为 `no_baseline`、`ambiguous_baseline`、
+`invalid_baseline`、`settings_mismatch`（附不一致的字段）、`invalid_candidate` 或
+`checksum_mismatch`。
 
 每一对视频逐帧计算 PSNR、SSIM（BT.601 亮度，σ 1.5 的高斯窗口）和 LPIPS（AlexNet，
 v0.1，权重哈希固定），并给出各指标的整段均值与最差帧。每个部署给出视频级的中位数与

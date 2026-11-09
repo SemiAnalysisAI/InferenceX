@@ -96,11 +96,13 @@ python -m evaluator.cli score-quality <artifact-id>=<bundle.zip|dir> ... \
 ```
 
 Only baseline deployments without optimizations are baselines. A deployment pairs
-with the one that has the same hardware, engine, image digest, runtime revision,
-GPU count, TP and Ulysses degree, and concurrency; precision is not part of the
-key. Each clip pairs with the same case and repetition and is scored only when the
-prompt, seed, generation settings and sealed request hash are equal. Other clips
-are listed under `unscored` as `no_baseline`, `ambiguous_baseline`,
+with the one that has the same hardware, engine, image digest, runtime revision, GPU
+count, precision, concurrency and `spec.json` `server` flags. Only the flags its
+declared optimizations set may differ: `OPTIMIZATION_SERVER_KEYS` in
+[`evaluator/quality.py`](evaluator/quality.py) lets `subblock-sparse-attn` change
+`attention_backend`. Each clip pairs with the same case and repetition and is scored
+only when the prompt, seed, generation settings and sealed request hash are equal.
+Other clips are listed under `unscored` as `no_baseline`, `ambiguous_baseline`,
 `invalid_baseline`, `settings_mismatch` with the differing fields,
 `invalid_candidate` or `checksum_mismatch`.
 

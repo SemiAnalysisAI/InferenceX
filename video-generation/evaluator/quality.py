@@ -16,6 +16,8 @@ from . import media
 PLAN_FIELDS = ("model_id", "model_revision", "generation", "fairness")
 CASE_FIELDS = ("case_id", "prompt", "seed", "requires_motion", "requires_sound")
 READ_ERRORS = (OSError, ValueError, KeyError, TypeError, zipfile.BadZipFile)
+# spec.json server keys a declared optimization sets, so they may differ from the lossless twin.
+OPTIMIZATION_SERVER_KEYS = {"subblock-sparse-attn": {"attention_backend"}}
 
 
 def _digest(path: Path) -> str:
@@ -273,7 +275,6 @@ def _deployments(root: Path, run_id: str, artifact_id: int) -> list[_Deployment]
         if cell_id not in cells:
             cell = root / "gpu" / cell_id
             aggregate = json.loads((cell / "aggregate.json").read_bytes())
-            server = json.loads((cell / "spec.json").read_bytes())["server"]
             configuration = json.loads((cell / "baseline" / "run.json").read_bytes())[
                 "configuration"
             ]
@@ -283,9 +284,10 @@ def _deployments(root: Path, run_id: str, artifact_id: int) -> list[_Deployment]
                 "image_digest": configuration["numerical_identity"]["image_digest"],
                 "runtime_revision": configuration["runtime_revision"],
                 "gpu_count": aggregate["num_gpus"],
-                "tp_size": server.get("tp_size"),
-                "ulysses_degree": server.get("ulysses_degree"),
+                "precision": aggregate["precision"],
                 "concurrency": configuration["serving"]["concurrency"],
+                # Every deployment flag the producer records, including the parallel layout.
+                "server": json.loads((cell / "spec.json").read_bytes())["server"],
             }
             optimizations = sorted(configuration.get("optimizations") or [])
             cells[cell_id] = _Deployment(artifact_id, cell_id, setup, optimizations, [])
@@ -308,8 +310,16 @@ def _deployments(root: Path, run_id: str, artifact_id: int) -> list[_Deployment]
     return list(cells.values())
 
 
-def _setup_key(setup: dict) -> str:
-    return json.dumps(setup, sort_keys=True)
+def _matches(deployment: _Deployment, lossless: list[_Deployment]) -> list[_Deployment]:
+    """Lossless deployments whose setup differs only in the server keys the optimizations set."""
+    owned = set().union(
+        *(OPTIMIZATION_SERVER_KEYS.get(name, ()) for name in deployment.optimizations)
+    )
+
+    def key(setup: dict) -> dict:
+        return {**setup, "server": {k: v for k, v in setup["server"].items() if k not in owned}}
+
+    return [match for match in lossless if key(match.setup) == key(deployment.setup)]
 
 
 def _pair(clip: _Clip, lossless: list[_Deployment]) -> tuple[_Clip | None, str | None, list[str]]:
@@ -395,13 +405,10 @@ def score_paired(
     pairs, unscored, deployments = [], [], []
     with tempfile.TemporaryDirectory() as scratch:
         found, baseline_unreadable = _read(baselines, baseline_run_id, Path(scratch, "baseline"))
-        lossless: dict[str, list[_Deployment]] = {}
-        for deployment in found:
-            if not deployment.optimizations:
-                lossless.setdefault(_setup_key(deployment.setup), []).append(deployment)
+        lossless = [deployment for deployment in found if not deployment.optimizations]
         candidates, unreadable = _read(bundles, run_id, Path(scratch, "candidate"))
         for deployment in candidates:
-            matches = lossless.get(_setup_key(deployment.setup), [])
+            matches = _matches(deployment, lossless)
             comparisons = []
             for clip in deployment.clips:
                 baseline, reason, fields = _pair(clip, matches)
