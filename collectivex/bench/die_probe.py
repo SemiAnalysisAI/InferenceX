@@ -40,6 +40,23 @@ __device__ __forceinline__ void red_gpu(int *p, int v) { asm volatile("red.relea
 __device__ __forceinline__ void red_sys(int *p, int v) { asm volatile("red.release.sys.global.add.s32 [%0], %1;" :: "l"(p), "r"(v) : "memory"); }
 
 __global__ void empty() {}
+// N threads each run the same ordering op in a loop, one per block or one per warp of a block.
+__global__ void fencers(int *p, int rounds, int op, int nactive) {
+  if (threadIdx.x % 32 != 0) return;
+  int warps = (blockDim.x + 31) / 32, id = blockIdx.x * warps + threadIdx.x / 32;
+  if (id >= nactive) return;
+  int *slot = p + id * 64, acc = 0;
+  for (int i = 0; i < rounds; ++i) {
+    switch (op) {
+      case 0: f_acq_sys(); break;
+      case 1: st_rel_sys(slot, i); break;
+      case 2: f_acq_gpu(); break;
+      case 3: st_rel_gpu(slot, i); break;
+      case 4: acc += ld_rlx_gpu(slot + (acc & 1)); break;
+    }
+  }
+  if (acc == 12345) slot[1] = acc;
+}
 // One op per iteration; the running value feeds the next iteration so ops cannot overlap.
 __global__ void single(int *p, int rounds, int op, int *out) {
   int acc = 0;
@@ -130,6 +147,26 @@ int main() {
       CK(cudaSetDevice(1)); CK(cudaMemset(peer, 0, 1 << 20)); CK(cudaDeviceSynchronize()); CK(cudaSetDevice(0));
       printf(", \"ping_flags_on_peer_%s_us\": %.4f", modes[m], (timed([&] { ping<<<8, 1>>>(peer, peer + 4096, 5000, 4, m); }, 2) - base) / 5000.0);
       fflush(stdout);
+    }
+  }
+  {
+    const char *ops[] = {"fence_sys", "st_release_sys", "fence_gpu", "st_release_gpu", "ld_relaxed"};
+    int nb[] = {1, 2, 3, 4, 5, 6, 8, 12, 16, 24, 32, 64, 128}, nw[] = {1, 2, 4, 8, 16, 32};
+    const int rounds = 3000;
+    for (int op = 0; op < 5; ++op) {
+      printf(", \"conc_blocks_%s_ns\": [", ops[op]);
+      for (int i = 0; i < 13; ++i) {
+        int N = nb[i];
+        printf("%s%.1f", i ? ", " : "", (timed([&] { fencers<<<N, 1>>>(flags, rounds, op, N); }, 2) - base) * 1000.0 / rounds);
+        fflush(stdout);
+      }
+      printf("], \"conc_warps_%s_ns\": [", ops[op]);
+      for (int i = 0; i < 6; ++i) {
+        int N = nw[i];
+        printf("%s%.1f", i ? ", " : "", (timed([&] { fencers<<<1, N * 32>>>(flags, rounds, op, N); }, 2) - base) * 1000.0 / rounds);
+        fflush(stdout);
+      }
+      printf("]"); fflush(stdout);
     }
   }
   printf("}\n");
