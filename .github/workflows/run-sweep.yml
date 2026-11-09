@@ -757,8 +757,10 @@ jobs:
                 needs.canary-multi-node-sweep.result == 'success' ||
                 needs.sweep-single-node-1k1k.result != 'skipped' ||
                 needs.sweep-single-node-8k1k.result != 'skipped' ||
+                needs.sweep-agentic.result != 'skipped' ||
                 needs.sweep-multi-node-1k1k.result != 'skipped' ||
-                needs.sweep-multi-node-8k1k.result != 'skipped'
+                needs.sweep-multi-node-8k1k.result != 'skipped' ||
+                needs.sweep-multi-node-agentic.result != 'skipped'
               )
             }}
         uses: $/.github/workflows/collect-results.yml
