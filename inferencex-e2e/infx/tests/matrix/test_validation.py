@@ -202,6 +202,7 @@ def recipe_root(tmp_path):
             "base": {}, "override_a": {}, "zip_override_z": {"benchmark": {"c": [1, 2], "d": [3]}},
         }))
         (recipes / "broken.yaml").write_text("base: [\n")
+        (recipes / "repeated.yaml").write_text("resources:\n  gpu: 8\n  gpu: 4\n")
     return tmp_path
 
 
@@ -1134,6 +1135,7 @@ class TestValidateMasterConfig:
         ("srt-recipe", "bundle.yaml:zip_override_z[2]", r"has no variant zip_override_z\[2\]"),
         ("srt-recipe", "recipe.yaml:base", "only an override bundle"),
         ("srt-recipe", "broken.yaml", "fixture/broken.yaml is not valid YAML"),
+        ("srt-recipe", "repeated.yaml", "fixture/repeated.yaml is not valid YAML"),
     ])
     def test_load_time_validation_resolves_the_selected_variant(
         self, recipe_root, valid_multinode_master_config, field, reference, error,
@@ -1522,6 +1524,12 @@ labels:
         with pytest.raises(ValueError) as exc_info:
             load_runner_file(str(runner_file))
         assert "must be a list" in str(exc_info.value)
+
+    def test_a_repeated_key_is_rejected(self, tmp_path):
+        runner_file = tmp_path / "runners.yaml"
+        runner_file.write_text("labels:\n  h100: [h100-node-0]\n  h100: [h100-node-1]\n")
+        with pytest.raises(yaml.YAMLError, match="found duplicate key 'h100'"):
+            load_runner_file(str(runner_file), validate=False)
 
 
 @pytest.mark.parametrize(("topology", "accepted"), [

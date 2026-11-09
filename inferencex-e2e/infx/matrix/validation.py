@@ -1151,7 +1151,7 @@ def _check_srt_recipe(root: Path, reference: str, recipes: dict[str, Any]) -> No
         if not (root / path).is_file():
             raise ValueError(f"{reference} does not exist")
         try:
-            recipes[path] = yamlio.safe_load((root / path).read_text())
+            recipes[path] = yamlio.load((root / path).read_text(), yamlio.UniqueKeySafeLoader)
         except yaml.YAMLError as error:
             raise ValueError(f"{path} is not valid YAML") from error
     recipe = recipes[path]
@@ -1372,7 +1372,7 @@ def load_runner_file(runner_file: str, validate: bool = True) -> dict:
     """
     try:
         with open(runner_file) as f:
-            runner_config = yamlio.safe_load(f)
+            runner_config = yamlio.load(f, yamlio.UniqueKeySafeLoader)
     except FileNotFoundError as e:
         raise ValueError(f"Runner config file '{runner_file}' does not exist.") from e
 
