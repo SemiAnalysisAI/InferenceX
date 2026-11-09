@@ -1,0 +1,75 @@
+# Probe: can trtllm_mha serve MiMoV2 with an fp8 KV cache at page size 64?
+base:
+  schema: 2
+  name: mimov2.6flash-fp4-b200-sglang-agentic-dflash-fp8kv-probe
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  setup_script: mimov2.6flash-dflash-draft.sh
+  health_check:
+    interval_seconds: 10
+    max_attempts: 720
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        served-model-name: XiaomiMiMo/MiMo-V2.6-Flash-RL
+        revision: f657ba2f7d24c9adc5730675baaa2d34de878a49
+        trust-remote-code: true
+        tensor-parallel-size: 4
+        data-parallel-size: 1
+        expert-parallel-size: 1
+        attention-backend: trtllm_mha
+        page-size: 64
+        kv-cache-dtype: fp8_e4m3
+        moe-runner-backend: flashinfer_mxfp4
+        chunked-prefill-size: 16384
+        mem-fraction-static: 0.85
+        stream-interval: 50
+        scheduler-recv-interval: 10
+        tokenizer-worker-num: 6
+        reasoning-parser: mimo
+        tool-call-parser: mimo
+        watchdog-timeout: 3600
+        enable-metrics: true
+        enable-cache-report: true
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: /mnt/hf_hub_cache/models--XiaomiMiMo--MiMo-V2.6-Flash-RL/snapshots/f657ba2f7d24c9adc5730675baaa2d34de878a49/dflash
+        speculative-draft-attention-backend: fa4
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        # Outlast AIPerf's 300 s client connection pool.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+  benchmark:
+    env:
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+override_tp4_c32:
+  roles:
+    agg:
+      args:
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 32
+        speculative-num-draft-tokens: 4
+        enable-hierarchical-cache: true
+        hicache-size: 200
+        hicache-write-policy: write_through
+        hicache-mem-layout: page_first_direct
+        hicache-io-backend: direct
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '858'

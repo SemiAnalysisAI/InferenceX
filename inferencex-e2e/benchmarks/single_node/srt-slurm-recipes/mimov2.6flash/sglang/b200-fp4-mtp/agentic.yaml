@@ -28,8 +28,8 @@ base:
         tensor-parallel-size: 4
         data-parallel-size: 1
         expert-parallel-size: 1
-        # trtllm_mha and flashinfer reject MiMoV2's 192/128 K/V head dims, and FA4
-        # cannot read an fp8 KV cache, so KV stays BF16.
+        # FA4 cannot read an fp8 KV cache, so KV stays BF16. trtllm_mha would read MiMoV2's
+        # 128-wide V rows at the 192-wide K head dim.
         attention-backend: fa4
         moe-runner-backend: flashinfer_mxfp4
         chunked-prefill-size: 16384
