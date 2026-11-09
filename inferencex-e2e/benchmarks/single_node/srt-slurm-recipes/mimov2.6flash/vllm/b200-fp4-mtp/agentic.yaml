@@ -29,6 +29,8 @@ base:
         # Pinned so the target and the draft path come from the same snapshot.
         revision: f657ba2f7d24c9adc5730675baaa2d34de878a49
         trust-remote-code: true
+        # No kv-cache-dtype: vLLM v0.31.0's DiffKV backends reject fp8 for MiMoV2's
+        # 192/128 K/V head dims.
         gpu-memory-utilization: 0.95
         # Largest context the KV pool holds; the uncapped AgentX corpus needs it.
         max-model-len: auto
@@ -239,3 +241,171 @@ override_tp2_c32:
     env:
       CONC: '32'
       KV_OFFLOADING: none
+
+override_tp4_c12:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-seqs: 24
+        max-cudagraph-capture-size: 96
+        speculative-config: '{"method":"dflash","model":"/mnt/hf_hub_cache/models--XiaomiMiMo--MiMo-V2.6-Flash-RL/snapshots/f657ba2f7d24c9adc5730675baaa2d34de878a49/dflash","num_speculative_tokens":7}'
+  benchmark:
+    env:
+      CONC: '12'
+      KV_OFFLOADING: none
+
+override_tp4_c24:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-seqs: 48
+        max-cudagraph-capture-size: 96
+        speculative-config: '{"method":"dflash","model":"/mnt/hf_hub_cache/models--XiaomiMiMo--MiMo-V2.6-Flash-RL/snapshots/f657ba2f7d24c9adc5730675baaa2d34de878a49/dflash","num_speculative_tokens":3}'
+  benchmark:
+    env:
+      CONC: '24'
+      KV_OFFLOADING: none
+
+override_tp8_c16:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        max-num-seqs: 32
+        max-cudagraph-capture-size: 128
+        speculative-config: '{"method":"dflash","model":"/mnt/hf_hub_cache/models--XiaomiMiMo--MiMo-V2.6-Flash-RL/snapshots/f657ba2f7d24c9adc5730675baaa2d34de878a49/dflash","num_speculative_tokens":7}'
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: none
+
+override_tp4_c32_dram:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-seqs: 64
+        max-cudagraph-capture-size: 128
+        speculative-config: '{"method":"dflash","model":"/mnt/hf_hub_cache/models--XiaomiMiMo--MiMo-V2.6-Flash-RL/snapshots/f657ba2f7d24c9adc5730675baaa2d34de878a49/dflash","num_speculative_tokens":3}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":858000000000,"lazy_offload":true}}'
+      env:
+        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '858'
+
+override_tp4_c64_dram:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-seqs: 128
+        max-cudagraph-capture-size: 256
+        speculative-config: '{"method":"dflash","model":"/mnt/hf_hub_cache/models--XiaomiMiMo--MiMo-V2.6-Flash-RL/snapshots/f657ba2f7d24c9adc5730675baaa2d34de878a49/dflash","num_speculative_tokens":3}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":858000000000,"lazy_offload":true}}'
+      env:
+        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
+  benchmark:
+    env:
+      CONC: '64'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '858'
+
+override_tp4_c128_dram:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-seqs: 256
+        max-cudagraph-capture-size: 512
+        speculative-config: '{"method":"dflash","model":"/mnt/hf_hub_cache/models--XiaomiMiMo--MiMo-V2.6-Flash-RL/snapshots/f657ba2f7d24c9adc5730675baaa2d34de878a49/dflash","num_speculative_tokens":3}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":858000000000,"lazy_offload":true}}'
+      env:
+        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
+  benchmark:
+    env:
+      CONC: '128'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '858'
+
+override_tp4_c256_dram:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-seqs: 512
+        max-cudagraph-capture-size: 1024
+        speculative-config: '{"method":"dflash","model":"/mnt/hf_hub_cache/models--XiaomiMiMo--MiMo-V2.6-Flash-RL/snapshots/f657ba2f7d24c9adc5730675baaa2d34de878a49/dflash","num_speculative_tokens":3}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":858000000000,"lazy_offload":true}}'
+      env:
+        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
+  benchmark:
+    env:
+      CONC: '256'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '858'
+
+override_tp8_c64_dram:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        max-num-seqs: 128
+        max-cudagraph-capture-size: 256
+        speculative-config: '{"method":"dflash","model":"/mnt/hf_hub_cache/models--XiaomiMiMo--MiMo-V2.6-Flash-RL/snapshots/f657ba2f7d24c9adc5730675baaa2d34de878a49/dflash","num_speculative_tokens":3}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1717000000000,"lazy_offload":true}}'
+      env:
+        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
+  benchmark:
+    env:
+      CONC: '64'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1717'
+
+override_tp8_c128_dram:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        max-num-seqs: 256
+        max-cudagraph-capture-size: 512
+        speculative-config: '{"method":"dflash","model":"/mnt/hf_hub_cache/models--XiaomiMiMo--MiMo-V2.6-Flash-RL/snapshots/f657ba2f7d24c9adc5730675baaa2d34de878a49/dflash","num_speculative_tokens":3}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1717000000000,"lazy_offload":true}}'
+      env:
+        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
+  benchmark:
+    env:
+      CONC: '128'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1717'
+
+override_tp8_c256_dram:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        max-num-seqs: 512
+        max-cudagraph-capture-size: 1024
+        speculative-config: '{"method":"dflash","model":"/mnt/hf_hub_cache/models--XiaomiMiMo--MiMo-V2.6-Flash-RL/snapshots/f657ba2f7d24c9adc5730675baaa2d34de878a49/dflash","num_speculative_tokens":3}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1717000000000,"lazy_offload":true}}'
+      env:
+        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
+  benchmark:
+    env:
+      CONC: '256'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1717'

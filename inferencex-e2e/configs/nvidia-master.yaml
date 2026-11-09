@@ -5936,6 +5936,56 @@ mimov2.6flash-fp4-b200-vllm-agentic-dflash:
       - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 8, 16, 32, 64], srt-recipe: agentic.yaml }
       - { tp: 2, ep: 1, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 8, 16, 32], srt-recipe: agentic.yaml }
 
+mimov2.6flash-fp4-b200-vllm-agentic-dflash-kvx:
+  image: vllm/vllm-openai:v0.31.0@sha256:c1c9f6fd5c109ba7f0546a59f5b2f15fb87f64c77782e90a27b648b42a8e67c3
+  model: XiaomiMiMo/MiMo-V2.6-Flash-RL
+  model-prefix: mimov2.6flash
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: vllm
+  multinode: false
+  srt-recipe-dir: mimov2.6flash/vllm/b200-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 8, 12, 16, 24], srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: draft_model, conc-list: [32, 64, 128, 256], srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: draft_model, conc-list: [16], srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: draft_model, conc-list: [64, 128, 256], srt-recipe: agentic.yaml }
+
+mimov2.6flash-fp4-b200-vllm-agentic-kvx:
+  image: vllm/vllm-openai:v0.31.0@sha256:c1c9f6fd5c109ba7f0546a59f5b2f15fb87f64c77782e90a27b648b42a8e67c3
+  model: XiaomiMiMo/MiMo-V2.6-Flash-RL
+  model-prefix: mimov2.6flash
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: vllm
+  multinode: false
+  srt-recipe-dir: mimov2.6flash/vllm/b200-fp4
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [32, 64, 128, 256], srt-recipe: agentic-kvx.yaml }
+
+mimov2.6flash-fp4-b200-sglang-agentic-dflash:
+  # Has sgl-project/sglang#48298: every TP rank draws the same forced DFLASH accept length.
+  image: lmsysorg/sglang:nightly-dev-cu13-20261107-e45e1d0c@sha256:81eb456abfaa3cf50a2ac463abe02705486f3f1e10929ca306e5929b937d5388
+  model: XiaomiMiMo/MiMo-V2.6-Flash-RL
+  model-prefix: mimov2.6flash
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: mimov2.6flash/sglang/b200-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 8, 16], srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [32, 64, 128, 256], srt-recipe: agentic.yaml }
+
 musespark-fp4-h200-sglang-agentic-dflash:
   image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
   model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4

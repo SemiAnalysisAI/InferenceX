@@ -1,0 +1,176 @@
+base:
+  schema: 2
+  name: mimov2.6flash-fp4-b200-sglang-agentic-dflash
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  setup_script: mimov2.6flash-dflash-draft.sh
+  health_check:
+    interval_seconds: 10
+    max_attempts: 720
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        served-model-name: XiaomiMiMo/MiMo-V2.6-Flash-RL
+        revision: f657ba2f7d24c9adc5730675baaa2d34de878a49
+        trust-remote-code: true
+        tensor-parallel-size: 4
+        data-parallel-size: 1
+        expert-parallel-size: 1
+        # trtllm_mha and flashinfer reject MiMoV2's 192/128 K/V head dims, and FA4
+        # cannot read an fp8 KV cache, so KV stays BF16.
+        attention-backend: fa4
+        moe-runner-backend: flashinfer_mxfp4
+        chunked-prefill-size: 16384
+        mem-fraction-static: 0.85
+        stream-interval: 50
+        scheduler-recv-interval: 10
+        tokenizer-worker-num: 6
+        reasoning-parser: mimo
+        tool-call-parser: mimo
+        watchdog-timeout: 3600
+        enable-metrics: true
+        enable-cache-report: true
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: /mnt/hf_hub_cache/models--XiaomiMiMo--MiMo-V2.6-Flash-RL/snapshots/f657ba2f7d24c9adc5730675baaa2d34de878a49/dflash
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        # Outlast AIPerf's 300 s client connection pool.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+  benchmark:
+    env:
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+# The verify block is the current token plus 7 drafts up to CONC 16 and 3 above.
+override_tp4_c1:
+  roles:
+    agg:
+      args:
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 1
+        speculative-num-draft-tokens: 8
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp4_c4:
+  roles:
+    agg:
+      args:
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 4
+        speculative-num-draft-tokens: 8
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp4_c8:
+  roles:
+    agg:
+      args:
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 8
+        speculative-num-draft-tokens: 8
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
+override_tp4_c16:
+  roles:
+    agg:
+      args:
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 16
+        speculative-num-draft-tokens: 8
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: none
+
+override_tp4_c32:
+  roles:
+    agg:
+      args:
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 32
+        speculative-num-draft-tokens: 4
+        enable-hierarchical-cache: true
+        hicache-size: 200
+        hicache-write-policy: write_through
+        hicache-mem-layout: page_first_direct
+        hicache-io-backend: direct
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '858'
+
+override_tp4_c64:
+  roles:
+    agg:
+      args:
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 64
+        speculative-num-draft-tokens: 4
+        enable-hierarchical-cache: true
+        hicache-size: 200
+        hicache-write-policy: write_through
+        hicache-mem-layout: page_first_direct
+        hicache-io-backend: direct
+  benchmark:
+    env:
+      CONC: '64'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '858'
+
+override_tp4_c128:
+  roles:
+    agg:
+      args:
+        max-running-requests: 256
+        cuda-graph-max-bs-decode: 128
+        speculative-num-draft-tokens: 4
+        enable-hierarchical-cache: true
+        hicache-size: 200
+        hicache-write-policy: write_through
+        hicache-mem-layout: page_first_direct
+        hicache-io-backend: direct
+  benchmark:
+    env:
+      CONC: '128'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '858'
+
+override_tp4_c256:
+  roles:
+    agg:
+      args:
+        max-running-requests: 512
+        cuda-graph-max-bs-decode: 256
+        speculative-num-draft-tokens: 4
+        enable-hierarchical-cache: true
+        hicache-size: 200
+        hicache-write-policy: write_through
+        hicache-mem-layout: page_first_direct
+        hicache-io-backend: direct
+  benchmark:
+    env:
+      CONC: '256'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '858'
