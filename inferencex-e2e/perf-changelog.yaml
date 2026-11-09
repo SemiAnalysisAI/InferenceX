@@ -12775,3 +12775,15 @@
     - "Concurrency 12 and 24: CUDA graphs also for prefill and mixed steps up to 4096 tokens (#4878 recipe without the TEP shared-expert variable); DSpark drafts 3 tokens; prefill-schedule-interval 8."
     - "Concurrency 48 and 64: EP8 MegaMoE with FULL_DECODE_ONLY graphs, max-num-batched-tokens 16384, prefill-schedule-interval 8 and gpu-memory-utilization 0.97."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4871
+
+- config-keys:
+    - kimik3.1-fp4-b300-dynamo-sglang-agentic-dflash-agg
+    - kimik3.1-fp4-b300-dynamo-sglang-agentic-dflash-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add B300 Dynamo+SGLang curves for Kimi-K3.1-Pro on the existing lmsysorg/sglang:dev-kimi-k31-pro image, behind a Dynamo KV-router frontend with session affinity."
+    - "Aggregated, one 8-GPU node: TP8 at concurrency 1 (2 max running requests, the image's K3.1 GB runtime bundle) and 4 with 8 DFLASH verify tokens, and TP8 EP2 DCP8 with the TRT-LLM DSA backend (FP8 query) at concurrency 32 and 40 (6 verify tokens, 64 max running requests), 48 (5 verify tokens, 96 max running requests) and 56 (5 verify tokens, 48 max running requests, mem-fraction-static 0.89). Each DCP8 point tunes the prefill-decode interval."
+    - "Disaggregated: one TP8 EP2 DCP8 prefill worker with one TP8 EP2 DCP8 decode worker at concurrency 48, or two at concurrency 24 and 56. Mooncake moves KV over TCP; prefill runs shortest-prefill-first with write-back HiCache, and each decode worker admits 64 requests with 6 verify tokens."
+    - "Every point keeps FP32 KDA recurrent state, FP8 KV, DFLASH block verification with the committed golden acceptance curve, and 230 GB of HiCache host memory per aggregated or prefill rank."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
