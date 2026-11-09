@@ -1,0 +1,64 @@
+# Probe: fp8 KV through Triton DiffKV on vLLM v0.33.0, at the BF16 c64 canary's point.
+base:
+  schema: 2
+  name: mimov2.6flash-fp4-b200-vllm-agentic-fp8kv-probe
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  health_check:
+    interval_seconds: 10
+    max_attempts: 720
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        served-model-name: XiaomiMiMo/MiMo-V2.6-Flash-RL
+        revision: f657ba2f7d24c9adc5730675baaa2d34de878a49
+        trust-remote-code: true
+        tensor-parallel-size: 4
+        # Forced: the auto-picked FLASH_ATTN_DIFFKV raises on fp8 KV for 192/128 heads.
+        attention-backend: TRITON_ATTN_DIFFKV
+        kv-cache-dtype: fp8
+        gpu-memory-utilization: 0.95
+        max-model-len: auto
+        max-num-batched-tokens: 16384
+        reasoning-parser: mimo
+        tool-call-parser: mimo
+        enable-auto-tool-choice: true
+        stream-interval: 20
+        disable-uvicorn-access-log: true
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":858000000000,"lazy_offload":true}}'
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+        # Outlast AIPerf's pooled-connection idle gaps.
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '600'
+        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
+  benchmark:
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+
+override_tp4_c64:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 128
+        max-cudagraph-capture-size: 64
+  benchmark:
+    env:
+      CONC: '64'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '858'

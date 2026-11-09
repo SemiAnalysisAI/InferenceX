@@ -6016,6 +6016,36 @@ mimov2.6flash-fp4-b200-sglang-agentic-dflash-fp8kv-probe:
       search-space:
       - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [32], srt-recipe: agentic-fp8kv-probe.yaml }
 
+mimov2.6flash-fp4-b200-vllm-agentic-fp8kv-probe:
+  image: vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e
+  model: XiaomiMiMo/MiMo-V2.6-Flash-RL
+  model-prefix: mimov2.6flash
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: vllm
+  multinode: false
+  srt-recipe-dir: mimov2.6flash/vllm/b200-fp4
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [64], srt-recipe: agentic-fp8kv-probe.yaml }
+
+mimov2.6flash-fp4-b200-vllm-agentic-dflash-fp8kv-probe:
+  image: vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e
+  model: XiaomiMiMo/MiMo-V2.6-Flash-RL
+  model-prefix: mimov2.6flash
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: vllm
+  multinode: false
+  srt-recipe-dir: mimov2.6flash/vllm/b200-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: draft_model, conc-list: [64], srt-recipe: agentic-fp8kv-probe.yaml }
+
 musespark-fp4-h200-sglang-agentic-dflash:
   image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
   model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
