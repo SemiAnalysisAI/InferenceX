@@ -111,6 +111,8 @@ def main(argv: list[str]) -> int:
         if not concurrencies or len(set(concurrencies)) != len(concurrencies):
             raise env.InputError("CONC_LIST must contain distinct positive integers")
         window_dir = Path(env.require("SRT_MEASUREMENT_WINDOW_DIR")["SRT_MEASUREMENT_WINDOW_DIR"])
+        declared = env.optional("VIDEO_OPTIMIZATIONS")
+        optimizations = None if declared is None else json.loads(declared)
         output.mkdir(parents=True, exist_ok=True)
         window_dir.mkdir(parents=True, exist_ok=True)
         url = endpoint()
@@ -124,6 +126,7 @@ def main(argv: list[str]) -> int:
             gpus=gpus,
             window_dir=window_dir,
             request_seconds=args.request_seconds,
+            optimizations=optimizations,
         )
         for concurrency, run in runs.items():
             print(

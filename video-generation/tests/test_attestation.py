@@ -35,6 +35,21 @@ RECORDS = [
 ]
 
 
+# Each optimization's lines in the format sgl-project/sglang@297e54fd logs them.
+OPTIMIZATION_LINES = {
+    "cache-dit": (
+        "[11-04 11:00:02] Enabling cache-dit on transformer with config: Fn=1, Bn=0, W=4, "
+        "R=0.04, MC=1, DMD=False (history=6, rank=0, svd=medium), TaylorSeer=False (order=1), "
+        "steps=49\n"
+    ),
+    "subblock-sparse-attn": (
+        "[11-04 11:00:02] Using subblock_sparse_attn attention backend\n"
+        "[11-04 11:00:09] SubBlock sparse attention active: Sq=40320 Sk=40320 heads=24 "
+        "keeping 74/295 key blocks per query block (sparsity 0.7492)\n"
+    ),
+}
+
+
 def _failed(document):
     checks = document["server"]["checks"] + [
         check for request in document["requests"] for check in request["checks"]
@@ -43,7 +58,7 @@ def _failed(document):
 
 
 def test_sglang_log_attests_that_every_request_did_the_declared_work():
-    document = attest("sglang", LOG, PLAN, RECORDS, "bf16")
+    document = attest("sglang", LOG, PLAN, RECORDS, "bf16", [])
 
     assert (document["valid"], _failed(document)) == (True, set())
     assert document["server_log"]["sha256"] == hashlib.sha256(LOG.read_bytes()).hexdigest()
@@ -71,11 +86,13 @@ def test_sglang_log_attests_that_every_request_did_the_declared_work():
             {"request.server_record", "request.parameters", "request.denoise_steps"},
         ),
         ("unknown_runtime", {"runtime.supported"}),
+        ("undeclared_cache_dit", {"server.optimizations"}),
+        ("declared_but_not_logged", {"server.optimizations"}),
     ],
 )
 def test_attestation_fails_when_the_log_does_not_prove_the_declared_work(tmp_path, fault, failed):
     text = LOG.read_bytes().decode("utf-8")
-    runtime, records = "sglang", RECORDS
+    runtime, records, optimizations = "sglang", RECORDS, []
     if fault == "step_cache":
         text = text.replace('"cache_dit_config": null', '"cache_dit_config": {"enabled": true}')
     elif fault == "sparse_attention":
@@ -89,11 +106,25 @@ def test_attestation_fails_when_the_log_does_not_prove_the_declared_work(tmp_pat
         text = text.replace("49/49 [", "48/49 [")
     elif fault == "unserved_request":
         records = [*RECORDS, {**RECORDS[1], "slot_id": "measurement-r001-c002", "job_id": "x"}]
+    elif fault == "undeclared_cache_dit":
+        text += OPTIMIZATION_LINES["cache-dit"]
+    elif fault == "declared_but_not_logged":
+        optimizations = ["subblock-sparse-attn"]
     else:
         runtime = "vllm-omni"
     log = tmp_path / "server.out"
     log.write_bytes(text.encode("utf-8"))
 
-    document = attest(runtime, log, PLAN, records, "bf16")
+    document = attest(runtime, log, PLAN, records, "bf16", optimizations)
 
     assert (document["valid"], _failed(document)) == (False, failed)
+
+
+@pytest.mark.parametrize("optimization", sorted(OPTIMIZATION_LINES))
+def test_a_declared_optimization_attests_when_the_log_shows_it_running(tmp_path, optimization):
+    log = tmp_path / "server.out"
+    log.write_bytes(LOG.read_bytes() + OPTIMIZATION_LINES[optimization].encode("utf-8"))
+
+    document = attest("sglang", log, PLAN, RECORDS, "bf16", [optimization])
+
+    assert (document["valid"], _failed(document)) == (True, set())

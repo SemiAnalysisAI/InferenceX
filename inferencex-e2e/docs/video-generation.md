@@ -32,6 +32,13 @@ fairness plan, the binder also requires SGLang's `--disable-conditioning-cache`
 or vLLM-Omni's `OMNI_DIFFUSION_PROMPT_EMBED_CACHE=0` in the selected recipe.
 It forwards every point's image as `VIDEO_CONTAINER_IMAGE`; the server refuses an
 image without a SHA256 digest and records the digest in its launch receipt.
+A recipe that enables a lossy optimization, such as Cache-DiT or sparse attention,
+declares it in a top-level `optimizations:` list of App registry keys (`cache-dit`,
+`subblock-sparse-attn`). The binder passes the list to the client, which records it
+as `configuration.optimizations` in each cell's `run.json`, so the App draws the run
+apart from the lossless deployment. A lossy deployment keeps the lossless key's
+image, layout and workload under its own key, so its clips can be scored against
+the lossless clips.
 
 The launch receipt records recipe-wide `environment` and server `env` values
 after binding, with server values taking precedence. Use these fields only for
@@ -142,8 +149,9 @@ Their presence does not establish final-head GPU qualification.
    `manifest.json`, `ci.json`, `SHA256SUMS` and `gpu/c*/` request, media and power
    evidence. Each cell's `attestation.json` checks, from the engine's own startup
    arguments and log, that every request ran the declared shape, seed and denoising
-   steps without step caching, quantization, LoRA or sparse attention; a failed
-   attestation leaves the cell unverified. A valid `release-v1` deployment needs 20
+   steps without quantization or LoRA, and that the log shows exactly the run's
+   declared optimizations running, so undeclared step caching or sparse attention
+   fails; a failed attestation leaves the cell unverified. A valid `release-v1` deployment needs 20
    valid measured C1 clips plus its separate warmup. Four-sample B200 cells remain History evidence below the
    App's ten-valid-sample chart floor.
 

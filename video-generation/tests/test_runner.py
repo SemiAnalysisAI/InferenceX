@@ -357,9 +357,17 @@ def test_fairness_request_and_disjoint_warmup_reach_local_http_fixture(
         "server_environment": {"CACHE": "0"},
         "gpu_topology": {"gpu_uuids": ["GPU-fixture"]},
     }
-    run = execute(plan, tmp_path / runtime, endpoint, runtime=runtime, numerical_identity=identity)
+    run = execute(
+        plan,
+        tmp_path / runtime,
+        endpoint,
+        runtime=runtime,
+        numerical_identity=identity,
+        optimizations=["teacache", "cache-dit"],
+    )
     assert run["summary"]["valid"] == 20
     assert run["configuration"]["numerical_identity"] == identity
+    assert run["configuration"]["optimizations"] == ["cache-dit", "teacache"]
     assert len(server["posts"]) == 21
     assert all(
         record["expected_media"]["duration_seconds"] == 124 / 24 for record in run["records"]

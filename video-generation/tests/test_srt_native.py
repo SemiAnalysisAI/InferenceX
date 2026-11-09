@@ -118,6 +118,7 @@ def test_matrix_runs_every_concurrency_against_one_server_and_publishes_windows(
         gpus=2,
         window_dir=windows,
         request_seconds=900,
+        optimizations=None,
     )
 
     assert [(c, r, rev) for c, _, r, rev in seen] == [

@@ -654,6 +654,7 @@ def run_plan(
     serving_concurrency: int | None = None,
     delivery_deadline_seconds: float | None = None,
     numerical_identity: dict[str, Any] | None = None,
+    optimizations: list[str] | None = None,
 ) -> dict[str, Any]:
     """Execute a serial or explicit closed-loop run, retaining every outcome.
 
@@ -752,6 +753,8 @@ def run_plan(
     }
     if numerical_identity is not None:
         configuration["numerical_identity"] = numerical_identity
+    if optimizations is not None:
+        configuration["optimizations"] = sorted(optimizations)
     if serving:
         from . import serving as serving_module
 

@@ -372,7 +372,12 @@ def build_bundle(
         power = _power(validation, series, run, bench, gpu_uuids, malformed)
         write_json(target / "power.json", power)
         attestation = attest(
-            configuration.get("runtime"), server_log, plan, run.get("records") or [], precision
+            configuration.get("runtime"),
+            server_log,
+            plan,
+            run.get("records") or [],
+            precision,
+            configuration.get("optimizations") or [],
         )
         write_json(target / "attestation.json", attestation)
         attested = {"sha256": _hash(target / "attestation.json"), "valid": attestation["valid"]}

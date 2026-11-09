@@ -53,6 +53,25 @@ def test_fairness_requires_disabled_cross_request_caches(native_fragment):
     assert recipe["services"][0]["env"]["OMNI_DIFFUSION_PROMPT_EMBED_CACHE"] == "0"
 
 
+def test_declared_optimizations_reach_the_client_and_leave_the_recipe(native_fragment):
+    raw, write = native_fragment
+    point = {**ENV, "FRAMEWORK": "sglang"}
+    recipe = video.prepare(write(raw), point, root=ROOT)
+    assert "VIDEO_OPTIMIZATIONS" not in recipe["benchmark"]["env"]
+
+    raw["optimizations"] = ["subblock-sparse-attn", "cache-dit"]
+    recipe = video.prepare(write(raw), point, root=ROOT)
+    assert "optimizations" not in recipe
+    assert recipe["benchmark"]["env"]["VIDEO_OPTIMIZATIONS"] == (
+        '["cache-dit", "subblock-sparse-attn"]'
+    )
+
+    for malformed in (["cache-dit", "cache-dit"], ["Cache DiT"], "cache-dit"):
+        raw["optimizations"] = malformed
+        with pytest.raises(ValueError, match="optimizations must list distinct registry keys"):
+            video.prepare(write(raw), point, root=ROOT)
+
+
 def test_server_port_must_be_a_tcp_port_before_submission(native_fragment):
     raw, write = native_fragment
     port = 65536

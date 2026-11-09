@@ -51,6 +51,7 @@ VIDEO_ENV = (
     "VIDEO_CONTAINER_IMAGE",
     "VIDEO_RUNTIME",
     "VIDEO_RUNTIME_REVISION",
+    "VIDEO_OPTIMIZATIONS",
 )
 _BOUND_KEYS = (
     ("model",),
@@ -71,6 +72,7 @@ _SERVICE_ENV = (
     "GPU_COUNT",
 )
 _RECIPE_ENV_KEYS = "VIDEO_RECIPE_ENV_KEYS"
+_OPTIMIZATION = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 # The server recipe pins VIDEO_RUNTIME_REVISION itself; the binder copies it to the client.
 _RESERVED_ENV = (
     set(VIDEO_ENV)
@@ -281,6 +283,14 @@ def bind_video(
     }
     bound.update((key, deepcopy(value)) for key, value in recipe.items() if key not in bound)
     bound["resources"] = {**bound.get("resources", {}), "gpus_per_node": gpus}
+    # App registry keys of the lossy optimizations the server runs; the job attests each one.
+    optimizations = bound.pop("optimizations", [])
+    if (
+        not isinstance(optimizations, list)
+        or len(set(optimizations)) != len(optimizations)
+        or not all(isinstance(key, str) and _OPTIMIZATION.fullmatch(key) for key in optimizations)
+    ):
+        raise ValueError("optimizations must list distinct registry keys such as cache-dit")
     service = _pool_service(bound)
     recipe_env_keys = _declared_server_env_keys(bound, service)
     benchmark = bound.setdefault("benchmark", {})
@@ -351,6 +361,9 @@ def bind_video(
         "VIDEO_RUNTIME_REVISION": revision,
         "GPU_COUNT": str(gpus),
     }
+    # A deployment without optimizations renders exactly as before, keeping its fingerprint.
+    if optimizations:
+        values["VIDEO_OPTIMIZATIONS"] = json.dumps(sorted(optimizations))
     workload.update(values)
     service["env"] = {
         **(service.get("env") or {}),

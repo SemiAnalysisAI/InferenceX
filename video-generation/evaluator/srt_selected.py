@@ -293,6 +293,7 @@ def run_matrix(
     gpus: int,
     window_dir: Path,
     request_seconds: float,
+    optimizations: list[str] | None,
 ) -> dict[int, dict]:
     numerical_identity = _sealed_identity(
         output / "server" / "launch.json", plan, runtime=runtime, gpus=gpus
@@ -311,6 +312,7 @@ def run_matrix(
             timeout_seconds=request_seconds,
             serving_concurrency=concurrency,
             numerical_identity=numerical_identity,
+            optimizations=optimizations,
         )
         after = time.time() - time.monotonic()
         contract = benchmark_window(run, utc_minus_monotonic=(before + after) / 2)

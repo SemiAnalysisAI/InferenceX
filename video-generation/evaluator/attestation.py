@@ -1,9 +1,9 @@
 """Attest, from the serving engine's own startup arguments and log, that every request did the declared work.
 
 Cross-engine speed numbers compare only when each engine generated the declared clip the
-declared way: same resolution, frame count, seed and denoising steps, without step caching,
-quantization, LoRA, sparse attention or reused conditioning. The client cannot observe any of
-that; the engine's log can. The document keeps the log's SHA256, selected server arguments,
+declared way: same resolution, frame count, seed and denoising steps, without quantization,
+LoRA or reused conditioning, and with step caching or sparse attention only when the run
+declares that optimization. The client cannot observe any of that; the engine's log can. The document keeps the log's SHA256, selected server arguments,
 per-request parameters and check results, never log text, paths, hosts or addresses.
 """
 
@@ -24,6 +24,15 @@ BUNDLE_TYPE = "h3_work_attestation"
 
 
 @dataclass(frozen=True)
+class Optimization:
+    """A lossy optimization a run can declare: the log line that shows it ran, and the
+    attention backends it adds to the dense ones."""
+
+    evidence: re.Pattern[str]
+    attention: frozenset[str] = frozenset()
+
+
+@dataclass(frozen=True)
 class Policy:
     """What one runtime's log must show for its measurement to count as the declared work."""
 
@@ -31,6 +40,7 @@ class Policy:
     recorded_args: tuple[str, ...]
     dense_attention: frozenset[str]
     dit_dtypes: Mapping[str, str]
+    optimizations: Mapping[str, Optimization]
 
 
 SGLANG = Policy(
@@ -62,6 +72,20 @@ SGLANG = Policy(
         {"fa", "fa2", "torch_sdpa", "torch_cudnn_sdpa", "dynamic_cudnn_sdpa", "aiter"}
     ),
     dit_dtypes={"bf16": "torch.bfloat16"},
+    # Keys are the App's optimization registry keys. SGLANG_CACHE_DIT_ENABLED leaves
+    # server_args.cache_dit_config null, so the mount line, which names the single DiT
+    # "transformer", is the only evidence. SubBlock's construction line only marks a layer
+    # eligible; the active line is logged once sparse attention runs.
+    optimizations={
+        "cache-dit": Optimization(re.compile(r"Enabling cache-dit on \S+ with config: ")),
+        "subblock-sparse-attn": Optimization(
+            re.compile(
+                r"SubBlock (?:sparse attention|heterogeneous BSA) active: .*"
+                r"keep(?:ing)? \d+/\d+ key blocks"
+            ),
+            frozenset({"subblock_sparse_attn"}),
+        ),
+    },
 )
 POLICIES: dict[str, Policy] = {"sglang": SGLANG}
 
@@ -112,7 +136,9 @@ def _attention_backends(text: str) -> list[str]:
     return sorted(set(names))
 
 
-def _server(policy: Policy, text: str, precision: str) -> tuple[dict, list[dict]]:
+def _server(
+    policy: Policy, text: str, precision: str, declared: list[str]
+) -> tuple[dict, list[dict]]:
     lines = _SERVER_ARGS.findall(text)
     args = _json_object(lines[0]) if len(lines) == 1 else None
     present = args or {}
@@ -126,6 +152,10 @@ def _server(policy: Policy, text: str, precision: str) -> tuple[dict, list[dict]
     observed = {key: present[key] for key in policy.recorded_args if key in present}
     observed["reduced_precision_numerics"] = bool(_REDUCED_NUMERICS.search(text))
     ipc_fallbacks = text.count(_IPC_FALLBACK)
+    shown = sorted(key for key, item in policy.optimizations.items() if item.evidence.search(text))
+    attention = policy.dense_attention.union(
+        *(policy.optimizations[key].attention for key in declared if key in policy.optimizations)
+    )
     return observed, [
         _check(
             "server.args",
@@ -142,11 +172,19 @@ def _server(policy: Policy, text: str, precision: str) -> tuple[dict, list[dict]
             "no step cache, quantization, precision override or LoRA; conditioning cache disabled",
         ),
         _check(
+            "server.optimizations",
+            shown == sorted(declared),
+            shown,
+            sorted(declared),
+            "the log shows exactly the run's declared optimizations running",
+        ),
+        _check(
             "server.attention_backends",
-            bool(backends) and set(backends) <= policy.dense_attention,
+            bool(backends) and set(backends) <= attention,
             backends,
-            sorted(policy.dense_attention),
-            "every reported attention backend is dense and full precision",
+            sorted(attention),
+            "every reported attention backend is dense and full precision, "
+            "or belongs to a declared optimization",
         ),
         _check(
             "server.dit_dtype",
@@ -222,8 +260,16 @@ def _requests(text: str, generation: Mapping[str, Any], records: list[dict]) -> 
     return attested
 
 
-def attest(runtime: str, server_log: Path, plan: dict, records: list[dict], precision: str) -> dict:
-    """Check the engine's log against the plan and every attempted request; a missing log fails."""
+def attest(
+    runtime: str,
+    server_log: Path,
+    plan: dict,
+    records: list[dict],
+    precision: str,
+    optimizations: list[str],
+) -> dict:
+    """Check the engine's log against the plan, the run's declared optimizations and every
+    attempted request; a missing log fails."""
     try:
         data = server_log.read_bytes()
     except OSError:
@@ -239,7 +285,7 @@ def attest(runtime: str, server_log: Path, plan: dict, records: list[dict], prec
     observed, server_checks, requests = {}, [supported], []
     if policy is not None:
         text = (data or b"").decode("utf-8", errors="replace")
-        observed, policy_checks = _server(policy, text, precision)
+        observed, policy_checks = _server(policy, text, precision, optimizations)
         server_checks += policy_checks
         requests = _requests(text, plan["generation"], records)
     every = server_checks + [check for request in requests for check in request["checks"]]

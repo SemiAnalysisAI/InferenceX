@@ -200,6 +200,7 @@ def test_client_rejects_a_missing_or_mismatched_sealed_launch_before_requests(
             gpus=4,
             window_dir=tmp_path / "window",
             request_seconds=1200,
+            optimizations=None,
         )
     assert sorted(path.name for path in tmp_path.iterdir()) == ["server"]
 
