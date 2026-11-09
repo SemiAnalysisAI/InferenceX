@@ -240,6 +240,8 @@ override_tp2_c8:
         max-cudagraph-capture-size: 16
         max-num-batched-tokens: 8192
         max-num-seqs: 2
+        # Holds prefill until 96 steps after the last prefill-carrying step while a request decodes.
+        prefill-schedule-interval: 96
   benchmark:
     env:
       CONC: '8'
@@ -254,6 +256,7 @@ override_tp2_c16:
         max-cudagraph-capture-size: 1024
         max-num-batched-tokens: 8192
         max-num-seqs: 4
+        prefill-schedule-interval: 96
   benchmark:
     env:
       CONC: '16'

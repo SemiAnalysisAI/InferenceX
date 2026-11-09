@@ -867,7 +867,7 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark:
   # ROCm 10.0 nightly carrying vllm-project/vllm#59039 (decoder SWA bounded
   # replay on ROCm), #61082 (mono decode on all 40 backbone layers) and #62131
   # (mono decode on the DSpark draft layers), all switched by --monokernel.
-  image: vllm/vllm-openai-rocm:nightly-4fab5a07475822c6eaa971dceb2e2220d0446808@sha256:6f126f27a3b58959da3c16076248fc99eb31e26d0a3ae9f8563bda7317d6a7e6
+  image: vllm/vllm-openai-rocm:nightly-083fbac021348c2c7af8a7bc71ba18199d0dd7a4@sha256:07ebdd53fe5b6dfb37f99b6cd084df2734faa2fef17c79317e283a68d30b5d2a
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds
