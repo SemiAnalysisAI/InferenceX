@@ -12568,5 +12568,5 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Add Qwen3.8-Flash-Next MXFP4 on MI355X via ATOM (rocm/atom-dev:nightly_202611081546, ATOM main 6d22f7dbf), TP1 with native MTP at three draft tokens, concurrency 1, 2, 4, 8 and 16 on GPU-resident KV. Attention and dense layers use online PTPC FP8; the BF16 MTP head and the MXFP4 experts stay as shipped."
+    - "Add Qwen3.8-Flash-Next MXFP4 on MI355X via ATOM (rocm/atom-dev:nightly_202611081546, ATOM main 6d22f7dbf), TP1 with native MTP at three draft tokens, concurrency 1, 2, 4, 8 and 16 on GPU-resident KV. The checkpoint is served as shipped: MXFP4 experts, BF16 attention, dense layers and MTP head, with no online quantization."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4939

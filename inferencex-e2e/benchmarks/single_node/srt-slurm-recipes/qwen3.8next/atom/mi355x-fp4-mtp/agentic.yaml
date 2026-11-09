@@ -34,9 +34,6 @@ base:
         cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,18,20,22,24,26,28,30,32,40,48,56,64]'
         enable_prefix_caching: true
         state-checkpoint-interval-tokens: 8192
-        # Experts stay MXFP4 as shipped; attention and dense layers go to PTPC FP8.
-        # mtp.* keeps the whole draft head at its shipped BF16.
-        online_quant_config: '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","*mlp.gate","*shared_expert_gate","*mlp.experts*","*mlp.shared_expert*","*hyper_connection*","*indexer*","*.ple.*","model.visual.*","mtp.*"]}'
         method: mtp
         num-speculative-tokens: 3
       env:
