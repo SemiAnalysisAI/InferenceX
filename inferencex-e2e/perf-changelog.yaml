@@ -12584,5 +12584,6 @@
   description:
     - "Add Kimi-K3.1-Pro MI355X SGLang PD AgentX on lmsysorg/sglang:dev-kimi-k31-pro-mi35x@sha256:5901db14: 1P1D with TP8 DCP8 on both roles, KV over Mooncake RDMA, five-token DFLASH (DFlash2) on both roles, and MXFP4 DSA index keys sent with the KV."
     - "Prefill: 16k chunks, shortest-prefill-first, a KDA checkpoint every 64 tokens, and a write-back HiCache host tier (ratio 4.0, KDA host ratio 5) under the node's pinned-memory limit. Decode: up to 144 (concurrency 128) or 160 (concurrency 144) running requests with matching decode graphs and a decode radix cache."
+    - "Both roles: a 7200 s HTTP keep-alive, so the router's idle pooled connections stay open, and rank 0's greedy DFLASH accept broadcast to every rank."
     - "Measured on two MI355X nodes over 3600 s with golden acceptance 3.25, with these settings and SGLang commits on the previous image's AITER (285579b): concurrency 144 at 21,435 tok/s/GPU (p90 interactivity 31.7, TTFT p50 3.75 s) and concurrency 128 at 21,124 (32.8, 3.67 s); GSM8K 97.88% at native acceptance on the same configuration."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4928

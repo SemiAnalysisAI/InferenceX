@@ -92,8 +92,8 @@ base:
         MC_MAX_CONCURRENT_REG_MR: '8'
         SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '3600'
         SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '3600'
-        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
-        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        # Outlasts the router's pooled connections, idle through the warmup's long tail.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '7200'
         SGLANG_USE_AITER: '1'
         SGLANG_AITER_K3_OPT: '1'
         AITER_FLYDSL_FORCE: '1'
@@ -111,6 +111,8 @@ base:
         SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_STREAM: '1'
         # A draft block's ring locations in one launch.
         SGLANG_OPT_DFLASH_RING_LOCS_FUSED: '1'
+        # Every rank commits rank 0's greedy accept; a rank that diverges hangs the batch.
+        SGLANG_SPEC_TP_SYNC: init,dflash-accept-greedy
         # Keeps every rank on the Rust TreeCore; write-back asserts on a mix with the Python one.
         RUSTUP_TOOLCHAIN: stable
         # Pinned host pools; registered pageable pools stall every GPU queue on page migration.
