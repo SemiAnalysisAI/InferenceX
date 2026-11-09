@@ -32,7 +32,7 @@ if [[ "$THINKING_MODES" != "on" ]]; then
 fi
 
 SERVE_MODEL="${MODEL_PATH}"
-DRAFT_MODEL="${DRAFT_MODEL:-RadixArk/Muse-Spark-Open-DFlash2}"
+DRAFT_MODEL="RadixArk/Muse-Spark-Open-DFlash2"
 
 MODEL_KEY="$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')"
 # AL is a per-draft accept/reject property independent of batch size, so batch the
