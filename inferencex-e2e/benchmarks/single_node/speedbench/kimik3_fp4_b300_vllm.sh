@@ -263,6 +263,9 @@ run_cell() {
     local bench_rc=$?
     if [[ $bench_rc -ne 0 ]]; then
         echo "  -> benchmark client exited rc=$bench_rc (thinking=$mode dspark=$mtp); cell will be N/A"
+        AL_RESULT["${mode}_${mtp}"]="N/A"
+        cleanup_server
+        return
     fi
 
     acc_after=$(fetch_metric "$PORT" "vllm:spec_decode_num_accepted_tokens_total")

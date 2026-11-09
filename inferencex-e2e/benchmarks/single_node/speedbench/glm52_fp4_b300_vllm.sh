@@ -183,6 +183,13 @@ run_cell() {
         --temperature "$TEMPERATURE" \
         --top-p "$TOP_P" \
         "${think_args[@]}"
+    local bench_rc=$?
+    if [[ $bench_rc -ne 0 ]]; then
+        echo "  -> benchmark client exited rc=$bench_rc (thinking=$mode mtp=$mtp), recording N/A"
+        AL_RESULT["${mode}_${mtp}"]="N/A"
+        cleanup_server
+        return
+    fi
 
     acc_after=$(fetch_metric "$PORT" "vllm:spec_decode_num_accepted_tokens_total")
     drf_after=$(fetch_metric "$PORT" "vllm:spec_decode_num_drafts_total")
