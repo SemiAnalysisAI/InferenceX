@@ -12,6 +12,8 @@ repository root in an environment with the required device libraries.
 | [sm_l2_distance](sm_l2_distance/bench.py) | Per-SM L2 pointer-chase latency differences | NVIDIA GPU and CUDA toolkit (`nvcc`) |
 | [gpc_query](gpc_query/) | GPC/TPC configuration from cluster scheduling | NVIDIA GPU with `sm_90+` and CUDA toolkit |
 | [trn3_dma_bw](trn3_dma_bw/) | Trainium3 HBM-SBUF DMA bandwidth for static, hardware and software descriptor generation | Trainium3 instance with the Neuron driver and Docker |
+| [trn3_psum_bw](trn3_psum_bw/) | Trainium3 PSUM-to-SBUF `tensor_copy` bandwidth on VectorE and ScalarE, alone and concurrently | Trainium3 instance with the Neuron driver and Docker |
+| [trn3_exp_bw](trn3_exp_bw/) | Trainium3 exp and activation-function throughput on VectorE and ScalarE | Trainium3 instance with the Neuron driver and Docker |
 
 ## GEMM
 
@@ -91,7 +93,9 @@ runtime refuses a NEFF built for a newer revision than the chip. `sweep.sh` runs
 `load_static`, capping each point at about 1,024 copies so compiles stay short. `allcore.sh`
 runs a solo baseline on core 0, then one process per core on `NCORES` cores at once; each runs
 `NUM_EXEC` back-to-back executions and profiles every `PROFILE_EVERY`-th, so profiled
-executions fall while all cores are busy.
+executions fall while all cores are busy. At LNC=1, core IDs run eight per chip (chip k is
+cores 8k to 8k+7), so on a multi-chip host `CORE` also selects the chip and `allcore.sh` always
+uses chip 0.
 
 Bandwidth comes from the Neuron profiler's per-packet `DmaPacket` table for one profiled
 execution: payload bytes divided by the time from the first burst packet's start to the last
@@ -101,9 +105,10 @@ bytes (`input` for static, `hardware_dynamic` for hwdge, `software_dynamic` for 
 shares the burst's queue type; `parse.py` trims it by byte count (`trimmed_bytes`) and fails if
 it overlaps the burst. `bytes_ok` confirms the trace holds every byte of the burst, and
 `kernel_GBps_lb` divides the same bytes by the whole execution. `report.py` prints the modes side
-by side, a per-kernel table and a chip table; per-core MBU uses 612.5 GB/s (4.9 TB/s chip HBM
+by side, a per-kernel table, a chip table and, given both CSVs, single-core next to chip MBU; per-core MBU uses 612.5 GB/s (4.9 TB/s chip HBM
 over 8 NeuronCores) and chip MBU sums the per-core medians. `plot.py` draws bandwidth against
-message size per mode (requires `matplotlib`).
+message size per mode from a single-core CSV, or with `--chip` the chip total from an all-core
+CSV (requires `matplotlib`).
 
 `results/trn3pd98_2026-11-03_*` were measured on a trn3pd98.3xlarge with revision-v1 silicon
 (`trn3pre`). With rows of 8 KiB or more, all three modes reach 588-611 GB/s per core; at 16 KiB
@@ -111,5 +116,102 @@ rows all eight cores together reach 4.58-4.62 TB/s. At 0.5 KiB rows, loads/store
 descriptors, 108/110 with hwdge and 94/91 with swdge: each hwdge copy costs at least about
 0.6 us and each swdge copy about 0.7 us, so small copies are bound by instruction rate, not HBM.
 
-The kernels do not check transferred data against a reference. The `store_static` fdim=512
-profile captures only about half of its packets (`bytes_ok` is false). Only LNC=1 is covered.
+`results/trn3_48xlarge_rev2_*` were measured on chip 0 of a trn3.48xlarge with revision-v2
+silicon (`trn3`); `trn3_48xlarge_rev2_2026-11-05_report.md` holds the `report.py` tables. Its
+chip data ran `allcore.sh` for every kernel at every `sweep.sh` fdim, with `TOTAL_MIB` capped as
+in `sweep.sh`. With rows of 8 KiB or more, per-core results match v1 within 0.2%. Smaller copies
+are faster with hwdge: at 0.5 KiB rows loads/stores reach 398/476 GB/s with hwdge (v1: 108/110),
+492/544 with static descriptors (v1: 412/544) and 95/93 with swdge. A hwdge copy costs about
+0.14-0.17 us instead of about 0.6 us, and hwdge sends 4 KiB packets that each carry several rows,
+where v1 sent one packet per row; swdge still costs about 0.7 us per copy. All eight cores
+together reach 4.71-4.81 TB/s at 16 KiB rows (v1: 4.58-4.62) and 4.57/4.61 TB/s for hwdge
+loads/stores at 2 KiB rows (v1: 3.42/3.52). The chip-level gain at large rows may partly reflect
+the different instance rather than the silicon revision. Chip MBU is 0 to 3.2 points below
+single-core MBU: about 0 where the per-copy cost limits bandwidth (swdge up to 256 KiB per copy,
+hwdge at 64-128 KiB), and 2-3 points from 1 MiB per copy, where one core alone reaches
+99-99.8% of its share and the chip 96-98% of 4.9 TB/s (v1: 4.5-5.9 points at 2 MiB). A lone
+core peaks at about 611 GB/s, roughly its 16 DMA engines at about 38 GB/s each, so single-core
+MBU may reflect the engine limit rather than HBM.
+
+The kernels do not check transferred data against a reference. On both revisions the
+`store_static` fdim=512 profile captures only about half of its packets (`bytes_ok` is false;
+`report.py` marks it `*`). Only LNC=1 is covered.
+
+## Trainium3 PSUM to SBUF copy bandwidth
+
+`trn3_psum_bw` measures how fast VectorE and ScalarE read PSUM, the TensorE output buffer, on one
+Trainium3 NeuronCore at LNC=1. Each kernel is one burst of 1,024 fp32 `[pdim, fdim]`
+`nisa.tensor_copy` instructions from PSUM to SBUF: `copy_vector` and `copy_scalar` on one engine,
+and `dual_alternate` with 1,024 copies on each engine, alternating in program order, reading
+different PSUM tiles and writing separate SBUF rings (the usual way kernels split PSUM evacuation).
+With fdim <= 512 (one 2 KiB PSUM bank of fp32 per partition) copies cycle through 8 PSUM tiles.
+It uses the `trn3_dma_bw` Docker image and `run.sh`:
+
+```bash
+NEURON_TARGET=trn3 OUT_DIR=ubenchX/trn3_psum_bw/runs/r0 CORE=0 KERNELS="copy_vector copy_scalar" \
+  ubenchX/trn3_dma_bw/run.sh ubenchX/trn3_psum_bw/sweep.sh
+NEURON_TARGET=trn3 OUT_DIR=ubenchX/trn3_psum_bw/runs/dual_r0 CORE=0 KERNELS=dual_alternate \
+  FDIMS="64 128 256 512 1024 2048" ubenchX/trn3_dma_bw/run.sh ubenchX/trn3_psum_bw/sweep.sh
+
+ubenchX/trn3_dma_bw/run.sh python ubenchX/trn3_psum_bw/parse.py ubenchX/trn3_psum_bw/runs/r*/* --csv psum.csv
+ubenchX/trn3_dma_bw/run.sh python ubenchX/trn3_psum_bw/parse.py ubenchX/trn3_psum_bw/runs/dual_r0/* --csv dual.csv
+ubenchX/trn3_dma_bw/run.sh python ubenchX/trn3_psum_bw/report.py psum.csv
+```
+
+`sweep.sh` runs fdim 64 to 4096 (all of PSUM) at pdim=128, plus pdim 32 and 64 for `copy_vector`;
+`FDIMS` overrides the sizes. Bandwidth comes from the profiler's per-instruction table: PSUM bytes
+read divided by the time from the first copy's start to the last copy's end. For `dual_alternate`,
+`parse.py` also reports each engine's rate over its own busy window and how much the two windows
+overlap. `report.py` fits ns per copy = fixed cost + bytes / streaming rate. `plot.py` and
+`plot_partition.py` draw time per copy, `plot_bpc.py` bytes per cycle (`--solo` for the
+single-engine CSV) and `plot_overlay.py` each engine alone against both together (all need
+`matplotlib`).
+
+`results/trn3_48xlarge_rev2_*` were measured on NeuronCore 0 of a trn3.48xlarge with revision-v2
+silicon; `trn3_48xlarge_rev2_2026-11-06_report.md` holds the `report.py` tables. Both engines
+stream at 614 GB/s, 512 bytes per 1.2 GHz cycle, one fp32 per partition per cycle. The fixed cost
+per copy is about 15 cycles (12.5 ns) on VectorE and 8 cycles (6.7 ns) on ScalarE, so 32 KiB copies
+reach 497 and 545 GB/s and 2 MiB copies 612 and 613 GB/s. Two sweep repeats agree to within 0.1%.
+When both engines copy at once, each runs at its single-engine rate with its window fully
+overlapping the other's, so the aggregate doubles: 993 GB/s at 32 KiB per engine and 1,219 GB/s
+(1,016 bytes per cycle) at 1 MiB per engine. Only LNC=1 and fp32 are covered, and copied data is
+not checked.
+
+## Trainium3 exp and activation throughput
+
+`trn3_exp_bw` measures the instruction rate of transcendental functions on one Trainium3
+NeuronCore at LNC=1. Each kernel is one burst of 1,024 instructions that each read one fp32
+`[128, fdim]` SBUF tile and write SBUF:
+
+- Softmax exp, fp32 to bf16, subtracting the row max and accumulating the row sum across the
+  burst: `exp_vector_softmax` uses `nisa.exponential` on VectorE, `exp_scalar_softmax` uses
+  `nisa.activation(nl.exp)` on ScalarE.
+- ScalarE `nisa.activation` with no scale, bias or reduction: `act_silu` (fp32 to bf16) and
+  `act_sigmoid`, `act_rsqrt`, `act_softplus`, `act_sqrt`, `act_tanh` (fp32 to fp32).
+
+```bash
+NEURON_TARGET=trn3 OUT_DIR=ubenchX/trn3_exp_bw/runs/r0 CORE=0 \
+  KERNELS="exp_vector_softmax exp_scalar_softmax act_silu act_sigmoid act_rsqrt act_softplus act_sqrt act_tanh" \
+  ubenchX/trn3_dma_bw/run.sh ubenchX/trn3_exp_bw/sweep.sh
+
+ubenchX/trn3_dma_bw/run.sh python ubenchX/trn3_exp_bw/parse.py ubenchX/trn3_exp_bw/runs/r0/* --csv act.csv
+ubenchX/trn3_dma_bw/run.sh python ubenchX/trn3_exp_bw/report.py act.csv
+```
+
+`sweep.sh` runs fdim 8 to 4096 at pdim=128. `parse.py` takes the initiation interval (II) from the
+profiler's per-instruction table: (last start - first start) / 1,023, converted to cycles with the
+engine clock in the trace (1.2 GHz). `report.py` fits II cycles = issue overhead + fdim x cycles
+per element over fdim >= 256. `plot.py` draws softmax exp cycles per instruction, or with `--epc`
+elements per cycle for the whole engine, and `plot_act.py` the activation functions' elements per
+cycle (both need `matplotlib`).
+
+`results/trn3_48xlarge_rev2_2026-11-06_*` were measured on NeuronCore 0 of a trn3.48xlarge with
+revision-v2 silicon. ScalarE processes one fp32 element per partition per cycle (128 per cycle, its
+documented fp32 width) with a fixed 22.1-cycle issue overhead for all six activation functions,
+whose timings are identical, and 23.1 cycles for softmax exp. VectorE `nisa.exponential` processes
+two per partition per cycle (256 per cycle, its documented fp32 width) with a 25.1-cycle overhead
+from fdim 256, but takes at least about 56 cycles per instruction below fdim 128. Whole-engine
+throughput at fdim 8 / 64 / 512 / 4096 is 18 / 147 / 233 / 253 elements per cycle on VectorE and
+33 / 94 / 123 / 127 on ScalarE: ScalarE is faster below fdim 32 and VectorE approaches twice
+ScalarE at large fdim. The architecture guide's 4x VectorE advantage for exp was not observed with
+fp32 input; bf16 input was not measured. Results are not checked against a reference.

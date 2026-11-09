@@ -17,5 +17,5 @@ if [ -t 0 ] && [ -t 1 ]; then tty=(-it); fi
 # The host uid keeps outputs owned by the caller; `-e NAME` forwards only variables the caller set.
 exec docker run --rm "${tty[@]}" "${devices[@]}" --user "$(id -u):$(id -g)" -e HOME=/tmp \
   -e NEURON_TARGET -e OUT_DIR -e CORE -e KERNELS -e KERNEL -e FDIM -e TOTAL_MIB -e NCORES \
-  -e NUM_EXEC -e PROFILE_EVERY -e NEURON_RT_VISIBLE_CORES \
+  -e NUM_EXEC -e PROFILE_EVERY -e NEURON_RT_VISIBLE_CORES -e FDIMS \
   -v "$repo:/InferenceX" -w /InferenceX "$image" "$@"

@@ -2,6 +2,8 @@
 
   python ubenchX/trn3_dma_bw/report.py --single single.csv --allcore allcore.csv
 
+With both CSVs it also prints single-core MBU next to chip MBU for each message size.
+
 MBU denominator: Trainium3 HBM peak of 4.9 TB/s per chip (spec), i.e. 612.5 GB/s per NeuronCore
 share (8 NeuronCores per chip at LNC=1). GB/s here = 1e9 bytes/s.
 """
@@ -74,14 +76,47 @@ def allcore(df):
     df = df.assign(solo=df["run"] == "solo", _o=df.kernel.map(ORDER)).sort_values(["_o", "fdim"])
     out = ["| kernel | fdim | DMA packet | solo core GB/s | per-core GB/s, all cores running (median, min) "
            "| cores | chip GB/s (sum of per-core medians) | chip MBU |", "|---|---|---|---|---|---|---|---|"]
-    assert df.bytes_ok.all(), "some all-core traces are partial captures"
     for (k, f), g in df.groupby(["kernel", "fdim"], sort=False):
         solo = g[g.solo].GBps.median()
         conc = g[~g.solo]
         per_core = conc.groupby("core").GBps.median()
         chip = per_core.sum()
+        mark = "" if g.bytes_ok.all() else " *"
         out.append(f"| {k} | {f} | {kib(g.pkt_bytes.iloc[0])} | {solo:.0f} | {conc.GBps.median():.0f}, {conc.GBps.min():.0f} "
-                   f"| {per_core.size} | {chip:.0f} | {100 * chip / CHIP_HBM_GBPS:.1f}% |")
+                   f"| {per_core.size} | {chip:.0f}{mark} | {100 * chip / CHIP_HBM_GBPS:.1f}% |")
+    out.append("\n`*` = partial capture (GB/s covers only the captured part of the burst).")
+    return "\n".join(out)
+
+
+def mbu(sdf, adf):
+    """Single-core MBU (vs one core's HBM share) next to chip MBU (vs chip HBM) at pdim=128, per mode."""
+    sdf = sdf[sdf.pdim == 128]
+    core = sdf.groupby(["kernel", "fdim"]).agg(gbps=("GBps", "median"), ok=("bytes_ok", "all"),
+                                               xfer=("transfer_bytes", "first"))
+    conc = adf[adf["run"] != "solo"]
+    chip = conc.groupby(["kernel", "fdim", "core"]).GBps.median().groupby(["kernel", "fdim"]).sum()
+    chip_ok = adf.groupby(["kernel", "fdim"]).bytes_ok.all()
+    m = core.join(chip.rename("chip"), how="inner").join(chip_ok.rename("chip_ok")).reset_index()
+    m["core_mbu"] = 100 * m.gbps / CORE_SHARE_GBPS
+    m["chip_mbu"] = 100 * m.chip / CHIP_HBM_GBPS
+    m["direction"], m["mode"] = m.kernel.str.split("_").str[0], m.kernel.str.split("_").str[1]
+    present = [x for x in MODES if x in set(m["mode"])]
+    out = ["| direction | fdim | message size | " + " | ".join(f"{x} MBU core / chip (gap)" for x in present) + " |",
+           "|" + "---|" * (3 + len(present))]
+    for (d, f), r in m.groupby(["direction", "fdim"], sort=True):
+        r = r.set_index("mode")
+        cells = []
+        for x in present:
+            if x not in r.index:
+                cells.append("-")
+                continue
+            y = r.loc[x]
+            mark = "" if y.ok and y.chip_ok else " *"
+            cells.append(f"{y.core_mbu:.1f}% / {y.chip_mbu:.1f}% ({y.chip_mbu - y.core_mbu:+.1f}){mark}")
+        out.append(f"| {d} | {f} | {kib(r.xfer.iloc[0])} | " + " | ".join(cells) + " |")
+    out.append(f"\nCore MBU uses {CORE_SHARE_GBPS:g} GB/s (one NeuronCore's share); chip MBU uses {CHIP_HBM_GBPS:g} GB/s "
+               "and sums the per-core medians while all cores run. Gap is in percentage points. "
+               "`*` = partial capture.")
     return "\n".join(out)
 
 
@@ -96,6 +131,8 @@ def main():
         print("### One NeuronCore (LNC=1)\n\n" + single(sdf) + "\n")
     if a.allcore:
         print("### All NeuronCores of one chip at once (LNC=1)\n\n" + allcore(pd.read_csv(a.allcore)) + "\n")
+    if a.single and a.allcore:
+        print("### MBU, one NeuronCore vs full chip (pdim=128)\n\n" + mbu(sdf, pd.read_csv(a.allcore)) + "\n")
 
 
 if __name__ == "__main__":
