@@ -10,6 +10,10 @@ services:
     nodes: 1
     critical: true
     start: before_workers
+    # Slurm masks the job's GPUs with ROCR_VISIBLE_DEVICES, and the Ray import in
+    # vLLM refuses to start unless HIP_VISIBLE_DEVICES is set too. HIP numbers
+    # devices inside that mask, so it is 0..N-1 here.
+    preamble: 'export HIP_VISIBLE_DEVICES=$(seq -s, 0 $(( {gpus_per_node} - 1 )))'
     command: [python3, -m, infx.bench, video, serve]
     args:
       - --model-view
