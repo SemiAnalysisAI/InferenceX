@@ -1244,7 +1244,7 @@ override_4p1d_p_tp2_d_tp8_ep4_cap128:
         moe-a2a-backend: none
         speculative-moe-runner-backend: flashinfer_trtllm
         speculative-moe-a2a-backend: none
-        mem-fraction-static: 0.76
+        mem-fraction-static: 0.72
         max-mamba-cache-size: 936
         max-running-requests: 128
         stream-interval: 20
