@@ -12677,6 +12677,6 @@
     - agentic-coding
   description:
     - "Add Muse Spark Open MXFP4 MI355X AgentX on TokenSpeed: attention TP8, MoE TP8/EP1, the DFlash2 draft as it ships (BF16, seven draft tokens), FP8 KV cache and 1M context, at concurrency 1, 2, 4, 8 and 16 with per-concurrency running-request caps and prefill/decode intervals."
-    - "Pin the TokenSpeed 0.1.1.post20261109 nightly, ROCm 7.2 kernel and kernel-amd 0.1.4.post20261109 and engine 0.1.0.post20261109 (all from 578b9c80df3866f9ad687be3e6cd4af8477b6ce5) by SHA256, scheduler 0.1.52, and the runner image by digest. Add tokenspeed-nightly-rocm.sh, which keeps the image's ROCm torch."
+    - "Pin the TokenSpeed 0.1.1.post20261110 nightly, ROCm 7.2 kernel and kernel-amd 0.1.4.post20261110 and engine 0.1.0.post20261110 (all from e8b98dd83f65795d554bb51b54684e088c69552c) by SHA256, scheduler 0.1.53, the runner image by digest, and the checkpoint and DFlash2 draft revisions. Add tokenspeed-nightly-rocm.sh, which keeps the image's ROCm torch."
     - "Select golden DFlash2 acceptance and the greedy sampler for TokenSpeed DFLASH throughput; evals verify for real with the triton sampler and speculative sampling."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4962

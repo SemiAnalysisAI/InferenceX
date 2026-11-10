@@ -6,10 +6,10 @@ base:
       revision: c7bc74fd64371315a091bc15f9723882eead0dc1
     container: {}
     frameworks:
-      tokenspeed: 0.1.1.post20261109
-      tokenspeed-kernel: 0.1.4.post20261109
-      tokenspeed-kernel-amd: 0.1.4.post20261109
-      tokenspeed-engine: 0.1.0.post20261109
+      tokenspeed: 0.1.1.post20261110
+      tokenspeed-kernel: 0.1.4.post20261110
+      tokenspeed-kernel-amd: 0.1.4.post20261110
+      tokenspeed-engine: 0.1.0.post20261110
   resources:
     gpu_type: mi355x
     gpus_per_node: 8
@@ -43,11 +43,11 @@ base:
     PYTHONUNBUFFERED: '1'
     PYTHONSAFEPATH: '1'
     NO_COLOR: '1'
-    TOKENSPEED_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-nightly-v0.1.1.post20261109/tokenspeed-0.1.1.post20261109-py3-none-any.whl#sha256=d49d1d9baa054973013073da9eca649079740bc5286c5fd8ad983d9fe19fd5db
-    TOKENSPEED_KERNEL_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-nightly-v0.1.4.post20261109-rocm72/tokenspeed_kernel-0.1.4.post20261109-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=39b77687b4d73c42a28b644e806f489e6a5729a02ef9000b754f2f6a347d2af1
-    TOKENSPEED_KERNEL_AMD_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-amd-nightly-v0.1.4.post20261109/tokenspeed_kernel_amd-0.1.4.post20261109-py3-none-any.whl#sha256=14ea5952332cbd55bbb5f2459df0d7e79ceb5c03d3c1a1ebcd3b6fe1b5d920f9
-    TOKENSPEED_ENGINE_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-engine-nightly-v0.1.0.post20261109/tokenspeed_engine-0.1.0.post20261109-cp312-cp312-linux_x86_64.whl#sha256=06dbfdb331e14b02c40cdb904f75053fef835196f7df083ce646918b5a899908
-    TOKENSPEED_SCHEDULER_VERSION: 0.1.52
+    TOKENSPEED_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-nightly-v0.1.1.post20261110/tokenspeed-0.1.1.post20261110-py3-none-any.whl#sha256=5efa0ecdb4e84e44a9407f48d8ca1b1e83feb71057483e2eacaabc88aa5c065b
+    TOKENSPEED_KERNEL_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-nightly-v0.1.4.post20261110-rocm72/tokenspeed_kernel-0.1.4.post20261110-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=46c32a9bbad19134083667a0b8f1989bb558ae9e2b63d1fd4d6d058973ce5ce7
+    TOKENSPEED_KERNEL_AMD_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-amd-nightly-v0.1.4.post20261110/tokenspeed_kernel_amd-0.1.4.post20261110-py3-none-any.whl#sha256=b340c4cff4e4492b31202d0bc7b13cac393097f3f0a3cf900b2f835c01ef3707
+    TOKENSPEED_ENGINE_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-engine-nightly-v0.1.0.post20261110/tokenspeed_engine-0.1.0.post20261110-cp312-cp312-linux_x86_64.whl#sha256=13aa5eb7408419f53466e0186bb0b7ab2946314b95cd8be72bc541f37f600909
+    TOKENSPEED_SCHEDULER_VERSION: 0.1.53
   roles:
     agg:
       nodes: 1
@@ -65,7 +65,7 @@ base:
         HF_HUB_OFFLINE: '1'
       args:
         served-model-name: amd/Muse-Spark-Open-816B-A42B-Quark-MXFP4
-        # No `revision`: TokenSpeed 0.1.1.post20261109 also applies it to the draft repo, which lacks that commit.
+        revision: c7bc74fd64371315a091bc15f9723882eead0dc1
         dtype: bfloat16
         quantization: mxfp4
         # Attention TP8; MoE TP8 with EP1 keeps all 256 experts on every GPU.
@@ -93,6 +93,7 @@ base:
         # DFlash2 drafts seven tokens per step; the verify window adds the current token.
         speculative-algorithm: DFLASH
         speculative-draft-model-path: RadixArk/Muse-Spark-Open-DFlash2
+        speculative-draft-model-revision: 46c90f412549c472941a68382d91a99e5e6372a0
         speculative-num-steps: 7
         speculative-eagle-topk: 1
         speculative-num-draft-tokens: 8

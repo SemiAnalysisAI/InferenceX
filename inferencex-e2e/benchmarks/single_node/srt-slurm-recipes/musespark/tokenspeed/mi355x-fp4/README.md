@@ -24,17 +24,16 @@ A cap below the concurrency queues the extra requests. With an interval of N,
 the scheduler runs N decode rounds after each prefill chunk. Both keep decode
 batches small, which lowers TPOT, at the cost of time to first token.
 
-The recipe installs the unmodified TokenSpeed `0.1.1.post20261109` nightly,
-the ROCm 7.2 Python 3.12 kernel and kernel-amd `0.1.4.post20261109`, and
-`tokenspeed-engine` `0.1.0.post20261109` by SHA256, all built from upstream
-revision `578b9c80df3866f9ad687be3e6cd4af8477b6ce5`, with scheduler `0.1.52`.
+The recipe installs the unmodified TokenSpeed `0.1.1.post20261110` nightly,
+the ROCm 7.2 Python 3.12 kernel and kernel-amd `0.1.4.post20261110`, and
+`tokenspeed-engine` `0.1.0.post20261110` by SHA256, all built from upstream
+revision `e8b98dd83f65795d554bb51b54684e088c69552c`, with scheduler `0.1.53`.
 The engine embeds the scheduler, so it must come from the same revision as the
 runtime. The runner image, pinned by digest in the master config, provides
 ROCm torch; `tokenspeed-nightly-rocm.sh` installs the pinned wheels without
-replacing it and checks that torch is still a ROCm build. The recipe records
-the checkpoint revision in its identity; the worker loads the checkpoint and
-draft without one, because this nightly applies `revision` to the draft
-repository as well.
+replacing it and checks that torch is still a ROCm build. The worker pins the
+checkpoint with `revision` and the DFlash2 draft with
+`speculative-draft-model-revision`.
 
 Workers launch through `python3 -m tokenspeed.cli serve --headless` with
 SMG's ZMQ transport. srtctl runs SMG directly, so the recipe passes the
