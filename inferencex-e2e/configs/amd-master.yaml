@@ -297,7 +297,7 @@ qwen3.5-fp8-mi300x-sglang-agentic-mtp:
       - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [4, 16, 20, 24, 32], srt-recipe: agentic.yaml }
 
 glm5.3flash-fp8-mi300x-sglang-agentic-mtp:
-  image: lmsysorg/sglang:v0.5.22-rocm10-mi30x@sha256:5658cd0d8de0c68de10d2e349296f55ceff98053182fa87b2a7e942e5e7f3c2a
+  image: lmsysorg/sglang:v0.5.23-rocm10-mi30x@sha256:84615bde43049c4380587b267b0163455c4916173535cb1c3574fc3e9f35abcf
   model: zai-org/GLM-5.3-Flash
   model-prefix: glm5.3flash
   runner: cluster:mi300x-amd
@@ -1137,7 +1137,7 @@ kimik3.1-fp4-mi355x-sglang-agentic-dflash:
       - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [8, 16, 32, 48, 56], srt-recipe: agentic.yaml }
 
 glm5.3flash-fp8-mi325x-sglang-agentic-mtp:
-  image: lmsysorg/sglang:v0.5.22-rocm10-mi30x@sha256:5658cd0d8de0c68de10d2e349296f55ceff98053182fa87b2a7e942e5e7f3c2a
+  image: lmsysorg/sglang:v0.5.23-rocm10-mi30x@sha256:84615bde43049c4380587b267b0163455c4916173535cb1c3574fc3e9f35abcf
   model: zai-org/GLM-5.3-Flash
   model-prefix: glm5.3flash
   runner: cluster:mi325x-amd
