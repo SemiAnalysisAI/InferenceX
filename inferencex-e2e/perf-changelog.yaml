@@ -12564,6 +12564,50 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4374
 
 - config-keys:
+    - h3-bf16-b200-vllm-omni-video
+  scenario-type: [video-generation]
+  description:
+    - "Add vLLM-Omni v0.32.0, pinned by its linux/amd64 digest, on the B200 H3 workload SGLang runs (h3-v2.yaml release-v1, C1) on 1, 2, 4 and 8 GPUs: Ulysses across all GPUs with text-encoder TP and tiled VAE patch parallelism of the same degree, with the prompt-embedding cache and cross-request AdaLN projection reuse disabled."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4874
+
+- config-keys:
+    - qwen3.8next-fp4-gb300-tokenspeed-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update to the TokenSpeed daily wheels tokenspeed 0.1.1.post20261108 and CUDA 13 ARM64 kernel 0.1.4.post20261108, built from lightseekorg/tokenspeed@a5a298c293849cd097c50224bb3ae4ee725e68cf, and engine 0.1.0.post20261108, built from lightseekorg/tokenspeed@c5bb19ef15e862561bfbb562932571fd10f75b62 (no tokenspeed-engine changes between the two), all pinned by SHA256; tokenspeed-scheduler 0.1.50 from PyPI; FlashInfer 0.7.3 caches; and the cu130-torch-2.14.0-flashinfer-0.7.3 runner image by digest."
+    - "kv-cache-dtype bfloat16 -> fp8_e4m3 for the target and the embedded MTP draft. hf-overrides drop index_share_for_mtp_iteration."
+    - "Turn on prefill CUDA graphs up to 8192 tokens (drop --disable-prefill-graph) including the drafter's (--enable-drafter-prefill-graph); enable --enable-qsa-prefill-bf16-scratch and --checkpoint-retention-requests 0; set the TOKENSPEED_KERNEL_OVERRIDE_ATTENTION_QSA_SPARSE_ATTENTION=cute_dsl_blackwell_qsa_sparse_attention environment variable."
+    - "Use gpu-memory-utilization 0.95 with --disable-cudagraph-memory-reserve, a 236 GB Host L2 with a 4 GB retraction snapshot pool, and smg with the gateway settings ts serve applies (passthrough policy, L0/L1 tokenizer caches, warn logging, no retries, circuit breaker or load monitoring)."
+    - "Replace the search space with per-concurrency rows in agg-variants.yaml: concurrency 1, 2, 4 and 108 with 104 request slots, and running caps of 2, 6, 12, 35 and 72 requests at concurrency 8, 20, 36, 56 and 80."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4922
+
+- config-keys:
+    - kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-disagg
+    - kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-agg-mk
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Retune the Kimi-K3.1-Pro GB300 Dynamo+SGLang AgentX search space on the same lmsysorg/sglang:dev-kimi-k31-pro image and RadixArk/Kimi-K3.1-Dflash2-Preview DFLASH draft."
+    - "TP16-decode rows (TP8/DCP8 prefill, one TP16 DCP8 x attention DP2 EP16 MegaMoE decode worker): 4P1D c520 and 3P1D c340 verify 5 tokens with a 132 GB per-rank prefill HiCache; 2P1D c180 verifies 6 tokens; 1P1D c60 verifies 8."
+    - "TP8-decode rows: 1P3D c50 verifies 8 tokens; 1P4D c36 and c16 verify 9."
+    - "Aggregated megakernel rows: c2 with max-running-requests 1; c4 with max-running-requests 2 and K31MK_* megakernel schedule options."
+    - "Remove 3P1D c300, 1P1D c76, 1P3D c60 and c36, 1P4D c32 and the c1 megakernel row."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4893
+
+- config-keys:
+    - musespark-fp4-gb300-dynamo-sglang-agentic-dflash-agg
+    - musespark-fp4-gb300-dynamo-sglang-agentic-dflash-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Run the GB300 Muse Spark Open Dynamo + SGLang points on lmsysorg/sglang:nightly-dev-cu13-20261103-797af717 (digest sha256:b4323a896f349d43a267c419c0267538b06c64a73110a0d0fd87496234df5dcd) with the ai-dynamo 1.7.0.dev20261102 it ships (dynamo.install: false)."
+    - "Aggregated: add musespark-fp4-gb300-dynamo-sglang-agentic-dflash-agg with TP4 at c46, c50 and c56 (140 GB per-rank HiCache, 0.80 DRAM utilization) and two-node TP8 at c1 and c36."
+    - "Disaggregated: add musespark-fp4-gb300-dynamo-sglang-agentic-dflash-disagg with TP8 prefill and TP8 decode workers: 1P2D at c160 and c224, 1P3D at c224, 1P4D at c32, c56 and c112, 1P5D at c120, 2P3D at c352 and 3P4D at c672. Mooncake KV transfer and prefill HiCache (150 GB per rank, 0.80 DRAM utilization)."
+    - "Remove musespark-fp4-gb300-dynamo-sglang-agentic-dflash (TP4 c8, c16, c20, c32 and c40 and TP8 c3, c4, c10 and c14 on the dev-muse-spark-open image)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4757
+
+- config-keys:
     - dsv41flash-fp4-b300-dynamo-vllm-agentic-dspark-agg
     - dsv41flash-fp4-b300-dynamo-vllm-agentic-dspark-disagg
   scenario-type:
