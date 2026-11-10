@@ -12572,5 +12572,5 @@
     - "Sweep seven frontier points: concurrency 1, 6, 12, 24, 48, 64 and 72."
     - "Concurrency 1 and 6: TP8 x DCP8 with FULL_DECODE_ONLY graphs."
     - "Concurrency 12 and 24: CUDA graphs also for prefill and mixed steps up to 4096 tokens (#4878 recipe without the TEP shared-expert variable); DSpark drafts 3 tokens; prefill-schedule-interval 8."
-    - "Concurrency 48, 64 and 72: EP8 MegaMoE with FULL_DECODE_ONLY graphs, max-num-batched-tokens 16384 and prefill-schedule-interval 8; gpu-memory-utilization 0.98 at 64 and 72; add concurrency 72."
+    - "Concurrency 48, 64 and 72: EP8 MegaMoE with FULL_DECODE_ONLY graphs, max-num-batched-tokens 16384 and prefill-schedule-interval 8; gpu-memory-utilization 0.98 at 64 and 0.97 at 72; add concurrency 72."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4871
