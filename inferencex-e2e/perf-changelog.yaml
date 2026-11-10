@@ -12606,3 +12606,12 @@
     - "Disaggregated: add musespark-fp4-gb300-dynamo-sglang-agentic-dflash-disagg with TP8 prefill and TP8 decode workers: 1P2D at c160 and c224, 1P3D at c224, 1P4D at c32, c56 and c112, 1P5D at c120, 2P3D at c352 and 3P4D at c672. Mooncake KV transfer and prefill HiCache (150 GB per rank, 0.80 DRAM utilization)."
     - "Remove musespark-fp4-gb300-dynamo-sglang-agentic-dflash (TP4 c8, c16, c20, c32 and c40 and TP8 c3, c4, c10 and c14 on the dev-muse-spark-open image)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4757
+
+- config-keys:
+    - dsv41flash-fp4-gb300-tilert-agentic-dspark-tp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add TileRT on GB300 NVL72 for DeepSeek-V4.1-Flash FP4 AgentX at concurrency 1: one vLLM prefill (TP4, vllm/vllm-openai:nightly-00b6c4c5 by digest) sends the prompt KV over NVLink to one TileRT decode, at TP8 (two trays) and at 24 GPUs (three TP8 groups, six trays). The decode runs tilert 0.1.8 from PyPI on the CUDA 13.2 runtime image by digest; the TileRT router runs on the prefill's node in the prefill image and tokenizes with vLLM's DeepSeek-V4.1 tokenizer mode."
+    - "DSpark with five drafts at the golden simulated acceptance 3.51; the public decode masks tool-call tokens and the prefill runs without a tool-call parser."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4976
