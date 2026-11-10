@@ -12608,6 +12608,27 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4757
 
 - config-keys:
+    - kimik3.1-fp4-mi355x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the MI355X Kimi-K3.1 vLLM AgentX image from vllm/vllm-openai-rocm:kimi-k31 (sha256:5f47cc10) to vllm/vllm-openai-rocm:kimi-k31-d73dd529 (sha256:5b54f223). The vLLM build string (0.0.0+mum.14d1ec2336), AITER and torch are unchanged; the new image adds a DSA attention path to the Kimi-K3.1 specialized decode used at concurrency 1."
+    - "Concurrency 48 moves from 3 to 6 DSpark draft tokens, with decode CUDA graph sizes 7 to 336 in steps of 7, max-num-batched-tokens 10240, prefill-schedule-interval 8 and an adaptive long-prefill-token-threshold of 10240. At max-num-batched-tokens 10240 the threshold does not cap any chunk."
+    - "Concurrency 32 adds prefill-schedule-interval 8 and an adaptive long-prefill-token-threshold of 10240 on its existing max-num-batched-tokens 10240, keeping 3 draft tokens and max-num-seqs 20."
+    - "Drop the concurrency 10 point. Concurrencies 1, 4, 16 and 24 keep their settings."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4948
+
+- config-keys:
+    - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dep16-disagg
+    - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update Kimi-K3.1-Pro GB300 Dynamo+vLLM AgentX configs: aggregated TP16/DCP16 c1 and DEP16 c352 on image 5c243ce0 (explicit KV cache and block size at c352), 2P1D c192; drop c48, c64, c80 and c300."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4907
+
+- config-keys:
     - dsv41flash-fp4-gb300-dynamo-trt-agentic-dspark-disagg
   scenario-type:
     - agentic-coding
@@ -12616,4 +12637,4 @@
     - "c11718, c7000, c7900, c5100, c7600, c2286 and c1283 run the DSpark draft's routed experts on CUTLASS at their shipped MXFP4 precision (speculative_config.moe_backend: CUTLASS) and use a KV router with session affinity, their prefill workers start a new conversation on the attention-DP rank the router chose, and the AgentX client runs on a dedicated node; c240, c180, c140, c114 and c84 route by least load without session affinity."
     - "The seven points port the feat-ds-v4.1-bringup-1.4.0a0 trtllm-serve AgentX Pareto to Dynamo: 5P DEP2 + 1D DEP8 (MegaMoE CuTe DSL, batch 320, three-token DSpark) at c7000, 7P DEP2 + 1D DEP16 (MegaMoE CuTe DSL, batch 128, three-token DSpark) at c7900, 5P DEP2 + 1D DEP16 (MegaMoE CuTe DSL, batch 64, three-token DSpark) at c5100, 7P DEP2 + 1D DEP32 (MegaMoE CuTe DSL, batch 25, five-token DSpark) at c7600, and 1P DEP2 + 4D TEP8 (TRTLLM MoE) at c240 (batch 4, three-token DSpark), c140 (batch 2, five-token DSpark) and c84 (batch 1, five-token DSpark)."
     - "Five more points fill the regions that Pareto leaves empty: 10P DEP2 + 1D DEP16 (MegaMoE CuTe DSL, batch 256, three-token DSpark) at c11718, 3P DEP2 + 1D DEP32 (MegaMoE CuTe DSL, batch 8, five-token DSpark) at c2286, 2P DEP2 + 1D DEP32 (MegaMoE CuTe DSL, batch 4, five-token DSpark) at c1283, and 1P DEP2 + 6D TP4 (TRTLLM MoE at MoE TP4, no attention DP, five-token DSpark) at c180 (batch 2) and c114 (batch 1)."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4991
