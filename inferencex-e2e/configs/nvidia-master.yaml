@@ -5977,7 +5977,7 @@ kimik3.1-fp4-b300-vllm-agentic-dspark:
       search-space:
       # Routed experts EP8 on MegaMoE keep the fused decode at every batch size; DSpark drafts 4 tokens and prefill is
       # admitted once every 8 engine steps.
-      - { tp: 8, ep: 8, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [48, 64, 72], srt-recipe: agentic-ep.yaml }
+      - { tp: 8, ep: 8, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [48, 64], srt-recipe: agentic-ep.yaml }
 
 dsv41flash-fp4-b200-vllm-agentic-dspark:
   image: vllm/vllm-openai:cu134-nightly-40941f2c4ba96fba0a7e282a5355e89cd74d9ac5@sha256:13e92fcd97268013d13d07fb97d80803227cf0beae0161f8dce95a8200eaafb0
