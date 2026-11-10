@@ -419,14 +419,15 @@ def test_cli_run_records_the_declared_numerical_identity(
 def test_request_encoding_comes_from_the_plan(tmp_path):
     path = Path(__file__).resolve().parents[1] / "specs/h3-v2.yaml"
     plan = video_spec.plan_for(video_spec.load_spec(path), "release-v1")
-    plan["fairness"]["encoding"]["preset"] = "veryfast"
-    sglang = runner.preview_plan(plan, runtime="sglang")["slots"][0]["request"]
-    vllm = runner.preview_plan(plan, runtime="vllm-omni")["slots"][0]["request"]
-    assert (sglang["x264_preset"], sglang["output_compression"]) == ("veryfast", 63)
-    assert vllm["extra_params"]["video_codec_options"] == {"preset": "veryfast", "crf": "18"}
     plan["fairness"]["encoding"]["crf"] = 23
+    vllm = runner.preview_plan(plan, runtime="vllm-omni")["slots"][0]["request"]
+    assert vllm["extra_params"]["video_codec_options"] == {"preset": "ultrafast", "crf": "23"}
     output = tmp_path / "not-created"
     with pytest.raises(ValueError, match="SGLang cannot request CRF 23"):
+        execute(plan, output, "http://127.0.0.1:1")
+    assert not output.exists()
+    plan["fairness"]["encoding"].update(preset="veryfast", crf=18)
+    with pytest.raises(ValueError, match="veryfast has no verifiable x264 options"):
         execute(plan, output, "http://127.0.0.1:1")
     assert not output.exists()
 

@@ -1,9 +1,9 @@
 # Native video delivery
 
 The `video-generation` scenario schedules one server job per deployment. SGLang
-selects C1 deployments on 1, 2, 4 and 8 B200 GPUs (Ulysses across all GPUs), on
-2, 4 and 8 H100 GPUs (TP2, since the model does not fit one 80 GB GPU) and on 4
-MI355X GPUs, all using
+selects C1 deployments on 1, 2, 4 and 8 B200, H200 or MI355X GPUs (Ulysses
+across all GPUs) and on 2, 4 and 8 H100 GPUs (TP2, since the model does not fit
+one 80 GB GPU), and vLLM-Omni the same four B200 deployments, all using
 `h3-v2.yaml`: 20 distinct measured prompts, a separate warmup, 49 denoising
 updates, and 124 frames at 24 fps and 1344×768. A five-second request produces
 124/24 seconds of video. Config presence is not GPU or quality qualification.
@@ -47,6 +47,8 @@ explicitly selected model view, records the final command, then starts it.
 It adds no engine flags or performance environment defaults. The SGLang child
 checks the assigned UUID order before importing its engine. The previous B200
 `frozen-c124` four-clip JSON and YAML artifacts remain readable as historical evidence.
+The App shows their four-sample cells in History, below its ten-valid-sample chart
+floor.
 Each recipe's `readiness.timeout_seconds` sets how long the server may load and
 warm up.
 
@@ -95,67 +97,24 @@ the first native video reuse request; a PR-local checker cannot bypass that gate
 
 ## Contribute a video deployment
 
-For an existing video runtime/API, change its native recipe and master config rather
-than adding a launcher or modifying the Python client. The configured deployments
-are the `*-video` keys in [`configs/nvidia-master.yaml`](../configs/nvidia-master.yaml)
-and [`configs/amd-master.yaml`](../configs/amd-master.yaml);
-each names its recipe directory under
-[`benchmarks/single_node/srt-slurm-recipes/h3/`](../benchmarks/single_node/srt-slurm-recipes/h3/).
-Their presence does not establish final-head GPU qualification.
+To add or change a deployment, follow the
+[H3 submission guide](../../video-generation/SUBMITTING.md).
 
-1. Choose an existing combination and keep its frozen workload, model revision,
-   concurrency population and measurement boundary. Put the full engine command
-   after `services[].args`' `--`; put nonsecret process settings in `services[].env`
-   or recipe-wide `environment`. Keep the native serve/client entrypoints and
-   telemetry binding. A new model, engine API, topology or model-view format
-   needs maintainer adapter validation before it becomes a recipe-only contribution.
-2. Change the existing row in its master config, or copy it with a
-   distinct key and recipe for a deployment that must remain separately selectable.
-   Pin the image by digest and use its real interpreter and architecture. The
-   H100/B200 SGLang rows use the public CUDA amd64 image and the MI355X row its
-   ROCm MI35x build. A shared image does
-   not qualify a different topology or SKU: validate
-   the selected deployments through their sweep. Maintainers stage model snapshots in the runner's
-   existing HF cache; contributors do not patch the cache or SSH extra launch flags.
-3. Render locally from `inferencex-e2e/`, using the repository's pinned srt-slurm
-   submodule and locked dependencies. This writes files only and submits no job:
+### Render a deployment locally
 
-   ```bash
-   recipe_output=$(mktemp -d)
-   uv run --locked --extra recipes infx generate \
-     --config-key h3-bf16-h100-sglang-video --output-dir "$recipe_output"
-   uv run --locked --all-extras --group test python -m infx.matrix.changed \
-     --base origin/main --json
-   ```
+Render locally from `inferencex-e2e/`, using the repository's pinned srt-slurm
+submodule and locked dependencies. This writes files only and submits no job:
 
-   Inspect `manifest.json` and its generated YAML for the selected config, image,
-   model, GPU count, full command, environment and client concurrency. The recipe
-   fingerprint binds the matrix row and rendered recipe; a successful render
-   proves schema/binding, not model execution. Run the focused binder, entrypoint,
-   matrix and result tests for changed behavior.
-4. Append the PR's single `perf-changelog.yaml` entry with every affected config
-   key and a `scenario-type` that lists `video-generation`. The planner rejects an
-   entry whose named video config would otherwise plan no jobs. Follow [the contribution workflow](../../CONTRIBUTING.md) for review,
-   CODEOWNER sign-off, the primary sweep label and trusted reuse. A maintainer
-   controls fork scheduling. Use the final PR-selected matrix and preserve failed
-   attempts; an ad-hoc diagnostic cannot replace its qualifying sweep.
-5. Inspect the original run artifacts. `video-sweep-manifest` identifies the
-   selected attempt and deployments. Each `h3-results-*` bundle retains
-   `manifest.json`, `ci.json`, `SHA256SUMS` and `gpu/c*/` request, media and power
-   evidence. A valid `release-v1` deployment needs 20 valid measured C1 clips plus
-   its separate warmup. Four-sample B200 cells remain History evidence below the
-   App's ten-valid-sample chart floor.
+```bash
+recipe_output=$(mktemp -d)
+uv run --locked --extra recipes infx generate \
+  --config-key h3-bf16-h100-sglang-video --output-dir "$recipe_output"
+uv run --locked --all-extras --group test python -m infx.matrix.changed \
+  --base origin/main --json
+```
 
-During execution, native `recipe.lock.yaml` and the scheduler job record identify
-the submitted configuration. Inspect `logs/video/server/launch.json` for the actual
-argv/environment and assigned GPU UUIDs; `spec.json` retains the selected model
-and workload. Service startup failures are in `logs/service_video-server.out` and
-`logs/sweep_<job>.log`. Client failures remain in each cell's `baseline/run.json`;
-native power failures retain `power-validation.json`. Keep run ID, attempt, source
-head, executed checkout, recipe fingerprint and plan hash distinct when reporting
-a problem. Never hand-edit a bundle to make its result eligible.
-
-After authorized merge and publication, use the App's published History and
-read-only video API to retrieve the original source. An unpublished source is not
-an official result, and opening a comparison must not publish it. Follow the
-publication handoff above rather than copying media by hand.
+Inspect `manifest.json` and its generated YAML for the selected config, image,
+model, GPU count, full command, environment and client concurrency. The recipe
+fingerprint binds the matrix row and rendered recipe; a successful render
+proves schema/binding, not model execution. Run the focused binder, entrypoint,
+matrix and result tests for changed behavior.
