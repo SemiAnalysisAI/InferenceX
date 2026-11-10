@@ -155,6 +155,19 @@ __global__ void keep_busy(int *src, long long ns, int mode, long long *out) {
   }
   out[0] = n; out[1] = acc; out[2] = (long long)t0; out[3] = (long long)t;
 }
+// v9: one thread stores to `dst` every `gap` ns (0 = back to back) for `ns`, rotating over 64 lines.
+__global__ void keep_writing(int *dst, long long ns, long long gap, int sys, long long *out) {
+  unsigned long long t0 = gtimer(), t = t0, next = t0; long long n = 0;
+  while ((long long)(t - t0) < ns) {
+    if (gap == 0 || t >= next) {
+      int *line = dst + (n & 63) * 32;
+      if (sys) st_rlx_sys(line, (int)n); else st_rlx_gpu(line, (int)n);
+      ++n; next = t + gap;
+    }
+    t = gtimer();
+  }
+  out[0] = n; out[1] = 0; out[2] = (long long)t0; out[3] = (long long)t;
+}
 static double now_us() {
   return std::chrono::duration<double, std::micro>(
       std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -243,8 +256,10 @@ static void print_chunks(const char *key, int op, int *p, unsigned *dbuf) {
 }
 
 static int core(bool blocking);
+static int writers(int n);
 int main(int argc, char **argv) {
   int n; CK(cudaGetDeviceCount(&n));
+  if (argc > 1 && !strcmp(argv[1], "writers")) return writers(n);
   if (argc > 1 && !strcmp(argv[1], "blocking")) return core(true);
   if (argc > 1 && !strcmp(argv[1], "core")) return core(false);
   CK(cudaSetDevice(0));
@@ -410,6 +425,47 @@ int main(int argc, char **argv) {
   return 0;
 }
 
+// v9: fences re-timed while one thread on another SM keeps writing local, host or peer memory at
+// a set interval. If pending system writes from anywhere on the GPU make a system fence flush the
+// path to host memory, a writer turns a fast fence slow.
+static int writers(int n) {
+  CK(cudaSetDevice(0));
+  int *flags, *wl; long long *dout, *wout;
+  CK(cudaMalloc(&flags, 1 << 16)); CK(cudaMemset(flags, 0, 1 << 16)); CK(cudaMalloc(&wl, 1 << 16)); CK(cudaMemset(wl, 0, 1 << 16));
+  CK(cudaMalloc(&dout, 256)); CK(cudaMalloc(&wout, 64));
+  int *hp; CK(cudaHostAlloc((void **)&hp, 1 << 16, cudaHostAllocMapped)); memset(hp, 0, 1 << 16);
+  int *hd; CK(cudaHostGetDevicePointer((void **)&hd, hp, 0));
+  int *peerbuf = nullptr;
+  if (n > 1) {
+    CK(cudaSetDevice(1)); CK(cudaMalloc(&peerbuf, 1 << 16)); CK(cudaMemset(peerbuf, 0, 1 << 16)); CK(cudaDeviceSynchronize());
+    CK(cudaSetDevice(0)); CK(cudaDeviceEnablePeerAccess(1, 0));
+  }
+  cudaStream_t sa, sb; CK(cudaStreamCreateWithFlags(&sa, cudaStreamNonBlocking)); CK(cudaStreamCreateWithFlags(&sb, cudaStreamNonBlocking));
+  const char *tnames[] = {"none", "local", "host", "peer"};
+  int *targets[] = {nullptr, wl, hd, peerbuf};
+  const long long gaps[] = {0, 1000, 10000, 100000};
+  printf("{\"_\": 0");
+  for (int t = 0; t < 4; ++t) {
+    if (t == 3 && !peerbuf) continue;
+    for (int gi = 0; gi < 4; ++gi) {
+      if (t == 0 && gi > 0) continue;
+      if (t > 0) { keep_writing<<<1, 1, 0, sb>>>(targets[t], 400000000LL, gaps[gi], t >= 2, wout); CK(cudaGetLastError()); }
+      std::this_thread::sleep_for(std::chrono::milliseconds(20));
+      Res fs = measure(3, flags, 40000, dout, 1, sa);
+      Res fg = measure(2, flags, 100000, dout, 1, sa);
+      long long hw[4] = {0, 0, 0, 0};
+      if (t > 0) { CK(cudaStreamSynchronize(sb)); CK(cudaMemcpy(hw, wout, sizeof hw, cudaMemcpyDeviceToHost)); }
+      bool ok = t == 0 || (hw[2] <= fs.t0 && fg.t1 <= hw[3]);
+      double rate = hw[0] ? hw[0] / ((hw[3] - hw[2]) / 1000.0) : 0;  // writes per microsecond
+      printf(", \"%s_gap%lld\": {\"fence_sys\": %.1f, \"fence_gpu\": %.1f, \"writes_per_us\": %.4f, \"overlap\": %s}",
+             tnames[t], gaps[gi], fs.ns, fg.ns, rate, ok ? "true" : "false");
+      fflush(stdout);
+    }
+  }
+  printf("}\n");
+  return 0;
+}
+
 // Core costs in a fresh process: with `blocking` the host thread sleeps while the GPU works, so
 // the CPU can idle; without it this reruns the core set (used for the ahead-of-time build).
 static int core(bool blocking) {
@@ -501,6 +557,11 @@ def run(out_dir):
                 out["v8_blocking"] = json.loads(blk.stdout.strip().splitlines()[-1])
             except Exception as exc:
                 out["v8_blocking"] = {"error": repr(exc)[:300]}
+            try:  # v9: fences while another SM keeps writing local, host or peer memory
+                wr = subprocess.run([exe, "writers"], capture_output=True, text=True, timeout=300)
+                out["v9_writers"] = json.loads(wr.stdout.strip().splitlines()[-1])
+            except Exception as exc:
+                out["v9_writers"] = {"error": repr(exc)[:300], "partial": (wr.stdout[-600:] if "wr" in dir() else "")}
             # v8: the default build is PTX that the installed driver compiles at load time, so two
             # drivers can run different machine code. Rebuild ahead of time for this GPU, rerun
             # the core set, and keep the fence instructions the compiler emitted.
@@ -565,6 +626,10 @@ def run(out_dir):
         ("cpuidle", "cat /sys/devices/system/cpu/cpuidle/current_driver /sys/devices/system/cpu/cpuidle/current_governor_ro 2>/dev/null | tr '\n' ' '; for s in /sys/devices/system/cpu/cpu0/cpuidle/state*; do echo \"$(cat $s/name):lat=$(cat $s/latency):dis=$(cat $s/disable)\"; done 2>/dev/null | tr '\n' ' '"),
         ("cpufreq", "cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_driver /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>&1 | tr '\n' ' '"),
         ("lspci_tree", "lspci -tv 2>&1 | head -80 | tr '\n' ';'"),
+        # v9: agents that could keep the GPU writing host memory in the background (read-only)
+        ("procs", "ps -eo user,comm,args 2>/dev/null | grep -iE 'dcgm|hostengine|exporter|nvidia-smi|nsys|ncu|cupti|persistenced|fabricmanager|imex|nvsm|telegraf|datadog|cloudwatch|gpu-?monitor|node.exporter' | grep -v grep | cut -c1-200 | head -30 | tr '\n' ';'"),
+        ("compute_apps", "nvidia-smi --query-compute-apps=gpu_bus_id,pid,process_name,used_memory --format=csv,noheader 2>&1 | head -30 | tr '\n' ';'"),
+        ("listen_ports", "(ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null) | grep -E ':(5555|9400|9100|9835) ' | tr -s ' ' | tr '\n' ';'"),
     ):
         try:
             info[key] = subprocess.run(["sh", "-c", cmd], capture_output=True, text=True, timeout=30).stdout.strip()[:6000]
