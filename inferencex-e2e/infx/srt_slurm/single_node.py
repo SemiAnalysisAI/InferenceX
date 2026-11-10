@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import os
 import re
@@ -13,10 +14,14 @@ from typing import Any
 import yaml
 
 from infx.config import repository_root
+from infx.fastcopy import deepcopy
 from infx.srt_slurm.synthetic_acceptance import ENGINES, selected_recipes, spec_parameters
+from infx.srt_slurm.variants import expand_variants
 from infx.srt_slurm.workload import (
     BOUND_RECIPE,
     NATIVE,
+    NATIVE_TELEMETRY_BLOCK,
+    SHARED_BLOCKS,
     CpuPowerSource,
     add_cpu_power_source_argument,
     add_fabric_argument,
@@ -24,6 +29,7 @@ from infx.srt_slurm.workload import (
     bind_workload,
     check_setup_script,
     compose_recipe,
+    point_concurrency,
     resolve_fabric,
 )
 
@@ -80,32 +86,13 @@ def parallelism_constraints(
     raise ValueError(f"Unsupported single-node SRT engine: {engine!r}")
 
 
-def select_recipe(
-    config: str,
-    environment: Mapping[str, str],
-    *,
-    root: Path | None = None,
-    expand: Callable[..., list[tuple[str | None, dict[str, Any]]]] = selected_recipes,
-    cpu_power_source: CpuPowerSource | None = None,
-) -> tuple[str, dict[str, Any]]:
-    """Resolve a matrix point to one native variant, never submit an entire sweep.
+Variants = list[tuple[str | None, dict[str, Any]]]
 
-    Variants are composed with the shared block under ``root`` (default: this
-    repository) and bound before they are validated. ``expand`` lists the selected
-    variants: srtctl at launch, ``variants.expand_variants`` in the planner.
-    ``cpu_power_source`` adds the cluster's CPU power exporter to the native telemetry.
-    """
-    path, _, selector = config.partition(":")
-    agentic = environment["IS_AGENTIC"] == "1"
-    raw = compose_recipe(
-        Path(path),
-        agentic=agentic,
-        multinode=False,
-        root=root or repository_root(),
-        gpu_power=NATIVE if environment.get("EVAL_ONLY") != "true" else None,
-        cpu_power_source=cpu_power_source,
-    )
-    recipes = expand(raw, selector or None)
+
+def _matching(
+    recipes: Variants, environment: Mapping[str, str], path: str, agentic: bool
+) -> tuple[list[tuple[str, dict[str, Any]]], list[str]]:
+    """Bind each variant to the point; return those that fit and why the others do not."""
     matches = []
     errors = []
     for name, recipe in recipes:
@@ -119,6 +106,104 @@ def select_recipe(
             errors.append(f"{name}: missing or malformed field {exc}")
         else:
             matches.append((f"{path}:{name}" if name else path, recipe))
+    return matches, errors
+
+
+def _recipe_texts(path: str, root: Path, agentic: bool, native: bool) -> tuple[str, ...]:
+    """The text of every file ``compose_recipe`` reads for a single-node fragment."""
+    blocks = [SHARED_BLOCKS[agentic, False], *([NATIVE_TELEMETRY_BLOCK] if native else [])]
+    return (Path(path).read_text(), *((root / block).read_text() for block in blocks))
+
+
+@functools.lru_cache(maxsize=256)
+def _planner_variants(
+    texts: tuple[str, ...],
+    path: str,
+    root: Path,
+    agentic: bool,
+    native: bool,
+    cpu_power_source: CpuPowerSource | None,
+    selector: str,
+) -> Variants:
+    """The variants ``expand_variants`` selects from the files that hold ``texts``, composed
+    once per process. Callers copy a variant before they bind it."""
+    raw = compose_recipe(
+        Path(path),
+        agentic=agentic,
+        multinode=False,
+        root=root,
+        gpu_power=NATIVE if native else None,
+        cpu_power_source=cpu_power_source,
+    )
+    variants = expand_variants(raw, selector or None)
+    if _recipe_texts(path, root, agentic, native) != texts:
+        raise RuntimeError(f"{path} changed while it was composed")
+    return variants
+
+
+def _other_conc(recipe: Mapping[str, Any], conc: str) -> bool:
+    """Whether ``bind_workload`` is sure to reject ``recipe`` for naming a CONC other than ``conc``.
+
+    True only where nothing ``bind_workload`` reads before that check can raise an error that
+    ``_matching`` does not record as a mismatch.
+    """
+    benchmark, identity = recipe.get("benchmark"), recipe.get("identity")
+    workload = benchmark.get("env") if type(benchmark) is dict else None
+    return (
+        type(workload) is dict
+        and "CONC" in workload
+        and str(workload["CONC"]) != conc
+        and (not identity or type(identity) is dict)
+    )
+
+
+def select_recipe(
+    config: str,
+    environment: Mapping[str, str],
+    *,
+    root: Path | None = None,
+    expand: Callable[..., Variants] = selected_recipes,
+    cpu_power_source: CpuPowerSource | None = None,
+) -> tuple[str, dict[str, Any]]:
+    """Resolve a matrix point to one native variant, never submit an entire sweep.
+
+    Variants are composed with the shared block under ``root`` (default: this
+    repository) and bound before they are validated. ``expand`` lists the selected
+    variants: srtctl at launch, ``variants.expand_variants`` in the planner.
+    ``cpu_power_source`` adds the cluster's CPU power exporter to the native telemetry.
+    """
+    path, _, selector = config.partition(":")
+    agentic = environment["IS_AGENTIC"] == "1"
+    root = root or repository_root()
+    native = environment.get("EVAL_ONLY") != "true"
+    if expand is expand_variants:
+        # The planner binds every point of a fragment: compose it once and bind only the
+        # variants that can be this point's. Anything but one match takes the full path below.
+        try:
+            conc = str(point_concurrency(environment))
+            texts = _recipe_texts(path, root, agentic, native)
+            variants = _planner_variants(
+                texts, path, root, agentic, native, cpu_power_source, selector
+            )
+            likely = [
+                (name, deepcopy(recipe))
+                for name, recipe in variants
+                if not _other_conc(recipe, conc)
+            ]
+            matches, _ = _matching(likely, environment, path, agentic)
+        except Exception:  # noqa: BLE001
+            matches = []
+        if len(matches) == 1:
+            return matches[0]
+    raw = compose_recipe(
+        Path(path),
+        agentic=agentic,
+        multinode=False,
+        root=root,
+        gpu_power=NATIVE if native else None,
+        cpu_power_source=cpu_power_source,
+    )
+    matches, errors = _matching(expand(raw, selector or None), environment, path, agentic)
     if len(matches) != 1:
         detail = "; ".join(errors) if not matches else ", ".join(name for name, _ in matches)
         raise ValueError(f"Expected exactly one matching single-node SRT recipe; {detail}")
@@ -171,22 +256,32 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
             raise ValueError(f"Single-node SRT {name}: recipe/matrix {actual!r} != {wanted!r}")
 
 
+def srun_overrides(environment: Mapping[str, str]) -> list[str]:
+    if not environment.get("SRT_SRUN_OPTIONS"):
+        return []
+    options = json.loads(environment["SRT_SRUN_OPTIONS"])
+    if not isinstance(options, dict) or any(
+        not re.fullmatch(r"[a-z][a-z0-9-]*", key) or not isinstance(value, str)
+        for key, value in options.items()
+    ):
+        raise ValueError("SRT_SRUN_OPTIONS must map option names to string values")
+    overrides: list[str] = []
+    for key, value in options.items():
+        overrides += ["--set", f"srun_options.{key}={json.dumps(value)}"]
+    return overrides
+
+
 def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
     """Bind only runtime-owned values after validating the selected recipe."""
     select_recipe(config, environment)
     for name in ("RUN_EVAL", "EVAL_ONLY", "DP_ATTENTION"):
         if environment[name] not in {"true", "false"}:
             raise ValueError(f"{name} must be true or false")
-    overrides = ["--set", f"srun_options.gpus-per-node={json.dumps(environment['GPU_COUNT'])}"]
-    if environment.get("SRT_SRUN_OPTIONS"):
-        options = json.loads(environment["SRT_SRUN_OPTIONS"])
-        if not isinstance(options, dict) or any(
-            not re.fullmatch(r"[a-z][a-z0-9-]*", key) or not isinstance(value, str)
-            for key, value in options.items()
-        ):
-            raise ValueError("SRT_SRUN_OPTIONS must map option names to string values")
-        for key, value in options.items():
-            overrides += ["--set", f"srun_options.{key}={json.dumps(value)}"]
+    overrides = [
+        "--set",
+        f"srun_options.gpus-per-node={json.dumps(environment['GPU_COUNT'])}",
+        *srun_overrides(environment),
+    ]
     agentic = environment["IS_AGENTIC"] == "1"
     names = ["RESULT_FILENAME", "RUN_EVAL", "EVAL_ONLY", "FRAMEWORK"]
     if agentic:

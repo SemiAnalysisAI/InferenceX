@@ -259,6 +259,26 @@ _CLIENT_CACHES = {
 }
 
 
+def single_node_dataset_cache(run: SrtRun) -> tuple[list[tuple[str, str]], list[str]]:
+    """The mount and srtctl arguments that hand a single-node AgentX job the cluster's shared
+    replay dataset cache, where its agentic jobs mount one.
+
+    Without it the client rebuilds the dataset in every job while the server holds its GPUs.
+    """
+    name = "AIPERF_DATASET_MMAP_CACHE_DIR"
+    [volume], _ = _CLIENT_CACHES[name]
+    mounts: list[tuple[str, str]] = []
+    target = run.srt.volume_mounts.get(volume)
+    if target is None:
+        target = run.srt.agentic_volume_mounts.get(volume)
+        if target is None:
+            return [], []
+        host = volume_path(run.cluster, volume)
+        _create_dir(host, world_writable=True)
+        mounts.append((str(host), target))
+    return mounts, ["--set", f"benchmark.env.{name}={json.dumps(target)}"]
+
+
 def agentic_client_env(
     cluster: Cluster, srt: SrtSlurmSettings, lane: SrtLane, request: SrtRequest
 ) -> dict[str, str]:
