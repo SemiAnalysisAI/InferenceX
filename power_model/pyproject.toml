@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=77"]
+requires = ["setuptools==84.2.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -10,13 +10,13 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = "GPL-3.0-only"
 license-files = ["LICENSE"]
-dependencies = ["pydantic>=2.10,<3"]
+dependencies = ["pydantic==2.14.2"]
 
 [project.scripts]
 power_model = "power_model.cli:main"
 
 [project.optional-dependencies]
-dev = ["pytest>=8,<10", "ruff>=0.11,<1", "build>=1,<2"]
+dev = ["pytest==9.2.0", "ruff==0.17.3", "build==1.6.1"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
