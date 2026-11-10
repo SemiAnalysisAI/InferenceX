@@ -12613,4 +12613,4 @@
     - agentic-coding
   description:
     - "Lower the TP8 concurrency 6 stream interval from 128 to 50 and rerun every point on the same lmsysorg/sglang-rocm:muse-spark-open-mi355-1106 image; the rest of the recipe and the search space are unchanged."
-  pr-link: XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4983
