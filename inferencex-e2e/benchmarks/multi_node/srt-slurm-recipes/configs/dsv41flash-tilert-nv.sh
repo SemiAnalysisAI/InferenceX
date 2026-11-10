@@ -23,17 +23,37 @@ if [[ "$TILERT_ROLE" == decode && -n "${BOOTSTRAP_TORCH:-}" ]]; then
     python3 -m pip install --quiet --no-cache-dir --index-url "${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cu132}" "$BOOTSTRAP_TORCH"
 fi
 
+# Every role runs the exact wheel that was tested and signed off for this recipe: download it,
+# check its sha256, then use that file.
+declare -A TILERT_WHEEL_SHA256=(
+    [0.1.8]=17ae557029a14c2676e20ae5d61c895fb5658a06f0bdd232fe7b21d478f1f838
+)
+want_sha=${TILERT_WHEEL_SHA256[$ROUTER_VERSION]:-}
+if [[ -z "$want_sha" ]]; then
+    echo "No pinned sha256 for tilert $ROUTER_VERSION" >&2
+    exit 1
+fi
+wheel_dir=/tmp/tilert-wheel
+python3 -m pip download --quiet --no-cache-dir --no-deps -d "$wheel_dir" "tilert==$ROUTER_VERSION"
+tilert_wheel=$(python3 - "$wheel_dir" "$want_sha" <<'PY'
+import hashlib, pathlib, sys
+(wheel,) = pathlib.Path(sys.argv[1]).glob("tilert-*.whl")
+got = hashlib.sha256(wheel.read_bytes()).hexdigest()
+if got != sys.argv[2]:
+    raise SystemExit(f"{wheel.name}: sha256 {got}, want {sys.argv[2]}")
+print(wheel)
+PY
+)
+
 if [[ "$TILERT_ROLE" != decode ]]; then
     # The prefill (KV connector) and the router run in the prefill image and load only
     # tilert/pd_vllm, as a namespace package, without tilert/__init__.py, which would load the
     # decode library built for another Torch. The prefill image's vLLM / Torch / serving stack
     # stays as it is; the router uses vLLM's tokenizer from it.
     pd_root=/tmp/tilert-pd-vllm
-    python3 -m pip download --quiet --no-cache-dir --no-deps -d "$pd_root/wheel" "tilert==$ROUTER_VERSION"
-    python3 - "$pd_root" <<'PY'
+    python3 - "$tilert_wheel" "$pd_root" <<'PY'
 import pathlib, sys, zipfile
-root = pathlib.Path(sys.argv[1])
-(wheel,) = (root / "wheel").glob("tilert-*.whl")
+wheel, root = sys.argv[1], pathlib.Path(sys.argv[2])
 with zipfile.ZipFile(wheel) as z:
     z.extractall(root / "pkg", [n for n in z.namelist() if n.startswith("tilert/pd_vllm/")])
 PY
@@ -49,7 +69,7 @@ PY
     fi
 else
     # The tilert release carries the serving layer (PD code and its engine API).
-    python3 -m pip install --quiet --no-cache-dir "tilert==$ROUTER_VERSION"
+    python3 -m pip install --quiet --no-cache-dir "$tilert_wheel"
 fi
 
 # The prompt KV moves over the NVLink fabric inside one NVL72; no Mooncake is needed.
