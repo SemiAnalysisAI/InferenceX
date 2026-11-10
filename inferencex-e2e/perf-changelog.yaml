@@ -12606,3 +12606,13 @@
     - "Disaggregated: add musespark-fp4-gb300-dynamo-sglang-agentic-dflash-disagg with TP8 prefill and TP8 decode workers: 1P2D at c160 and c224, 1P3D at c224, 1P4D at c32, c56 and c112, 1P5D at c120, 2P3D at c352 and 3P4D at c672. Mooncake KV transfer and prefill HiCache (150 GB per rank, 0.80 DRAM utilization)."
     - "Remove musespark-fp4-gb300-dynamo-sglang-agentic-dflash (TP4 c8, c16, c20, c32 and c40 and TP8 c3, c4, c10 and c14 on the dev-muse-spark-open image)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4757
+
+- config-keys:
+    - glm5.3-fp8-mi300x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add native GLM-5.3 FP8 AgentX on MI300X with the digest-pinned SGLang v0.5.22 ROCm 7.2.0 MI30x image, TP8 and MTP (EAGLE 3/1/4)."
+    - "GPU-resident KV at concurrency 1, 2, 3, 4 and 6; SGLang HiCache with the auto-sized host tier at concurrency 8, 12 and 16."
+    - "Use gfx942 TileLang DSA with Torch DSA top-k, FP8 KV and full 1M context."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4986
