@@ -12606,3 +12606,14 @@
     - "Disaggregated: add musespark-fp4-gb300-dynamo-sglang-agentic-dflash-disagg with TP8 prefill and TP8 decode workers: 1P2D at c160 and c224, 1P3D at c224, 1P4D at c32, c56 and c112, 1P5D at c120, 2P3D at c352 and 3P4D at c672. Mooncake KV transfer and prefill HiCache (150 GB per rank, 0.80 DRAM utilization)."
     - "Remove musespark-fp4-gb300-dynamo-sglang-agentic-dflash (TP4 c8, c16, c20, c32 and c40 and TP8 c3, c4, c10 and c14 on the dev-muse-spark-open image)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4757
+
+- config-keys:
+    - dsv41flash-fp4-b300-vllm-agentic-dspark
+    - dsv41flash-fp4-b300-vllm-agentic-dspark-a2b
+    - dsv41flash-fp4-b300-vllm-agentic-dspark-a2b-lpt4k
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DEP2 concurrency 48 without KV offload and concurrency 256, 384 and 512 with DRAM KV offload, and select the DeepGEMM sparse-indexer top-k kernel (deep_select) at concurrency 64 and 128."
+    - "Add keys dsv41flash-fp4-b300-vllm-agentic-dspark-a2b (TP4 concurrency 16 and 32, DEP8 concurrency 192, 384 and 768) and dsv41flash-fp4-b300-vllm-agentic-dspark-a2b-lpt4k (DEP8 concurrency 768) on vllm/vllm-openai:cu134-nightly-a2bcb5657a881a002e79d0adab3c6b5e39436121."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4972

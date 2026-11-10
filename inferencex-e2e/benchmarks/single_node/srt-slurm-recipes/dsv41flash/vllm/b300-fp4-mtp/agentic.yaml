@@ -95,21 +95,27 @@ zip_override_dep2:
         tensor-parallel-size: 1
         data-parallel-size: 2
         enable-expert-parallel: true
-        kernel-config: '{"enable_flashinfer_autotune":true,"moe_backend":"deep_gemm_mega_moe"}'
+        kernel-config:
+          - '{"enable_flashinfer_autotune":true,"moe_backend":"deep_gemm_mega_moe"}'
+          - '{"enable_flashinfer_autotune":true,"moe_backend":"deep_gemm_mega_moe"}'
+          - '{"enable_flashinfer_autotune":true,"moe_backend":"deep_gemm_mega_moe"}'
+          - '{"enable_flashinfer_autotune":true,"moe_backend":"deep_gemm_mega_moe","sparse_indexer_topk_backend":"deep_select"}'
+          - '{"enable_flashinfer_autotune":true,"moe_backend":"deep_gemm_mega_moe","sparse_indexer_topk_backend":"deep_select"}'
         engram-config: '{"cpu_offload":true,"embedding_across_dp":true}'
         attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV41","indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
-        max-num-seqs: [16, 16, 32, 64]
+        max-num-seqs: [16, 16, 32, 64, 64]
         compilation-config:
           - '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190]}'
           - '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190]}'
           - '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048,2304,2560,2816,3072,3328,3584,3840,4096]}'
           - '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048,2304,2560,2816,3072,3328,3584,3840,4096]}'
+          - '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048,2304,2560,2816,3072,3328,3584,3840,4096]}'
         max-cudagraph-capture-size: 8190
-        max-num-batched-tokens: [16384, 16384, 16384, 32768]
-        prefill-schedule-interval: [80, 80, 80, 56]
+        max-num-batched-tokens: [16384, 16384, 16384, 32768, 32768]
+        prefill-schedule-interval: [80, 80, 80, 56, 56]
   benchmark:
     env:
-      CONC: ['8', '16', '32', '64']
+      CONC: ['8', '16', '32', '48', '64']
 
 # MegaAttention, with KV blocks offloaded to DRAM.
 zip_override_dep2_offload:
@@ -129,20 +135,28 @@ zip_override_dep2_offload:
         tensor-parallel-size: 1
         data-parallel-size: 2
         enable-expert-parallel: true
-        kernel-config: '{"enable_flashinfer_autotune":true,"moe_backend":"deep_gemm_mega_moe"}'
+        kernel-config:
+          - '{"enable_flashinfer_autotune":true,"moe_backend":"deep_gemm_mega_moe","sparse_indexer_topk_backend":"deep_select"}'
+          - '{"enable_flashinfer_autotune":true,"moe_backend":"deep_gemm_mega_moe"}'
+          - '{"enable_flashinfer_autotune":true,"moe_backend":"deep_gemm_mega_moe"}'
+          - '{"enable_flashinfer_autotune":true,"moe_backend":"deep_gemm_mega_moe"}'
+          - '{"enable_flashinfer_autotune":true,"moe_backend":"deep_gemm_mega_moe"}'
         engram-config: '{"cpu_offload":true,"embedding_across_dp":true}'
         attention-config: '{"backend":"FLASHMLA_MEGA_ATTN_DSV41","indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
-        max-num-seqs: [128, 192]
+        max-num-seqs: [128, 192, 192, 192, 256]
         compilation-config:
           - '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048,2304,2560,2816,3072,3328,3584,3840,4096]}'
           - '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048]}'
-        max-cudagraph-capture-size: [8190, 4092]
+          - '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048,2304,2560,2816,3072,3328,3584,3840,4096]}'
+          - '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048,2304,2560,2816,3072,3328,3584,3840,4096]}'
+          - '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048,2304,2560,2816,3072,3328,3584,3840,4096]}'
+        max-cudagraph-capture-size: [8190, 4092, 8190, 8190, 8190]
         max-num-batched-tokens: 16384
         prefill-schedule-interval: 32
         # Lazy: blocks are written to DRAM only when evicted from HBM.
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":53687091200,"lazy_offload":true}}'
   benchmark:
     env:
-      CONC: ['128', '192']
+      CONC: ['128', '192', '256', '384', '512']
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '599'
