@@ -24,7 +24,7 @@ if [ "$PRODUCT" = gb200 ]; then default_time=30; else default_time=90; fi
 TIME_MIN="${COLLX_TIME:-$default_time}"
 IMAGE="$COLLX_IMAGE"
 case "$COLLX_BENCH" in
-  deepep-v2 | nccl-ep | flashinfer-ep | swap-blocks | nixl | mooncake) ;;
+  deepep-v2 | nccl-ep | flashinfer-ep | swap-blocks) ;;
   *) collx_die "unsupported $PRODUCT backend: $COLLX_BENCH" ;;
 esac
 collx_require_vars COLLX_IMAGE COLLX_IMAGE_PLATFORM COLLX_PARTITION COLLX_ACCOUNT COLLX_SQUASH_DIR COLLX_STAGE_DIR
@@ -48,7 +48,7 @@ allocation=(--partition="$PARTITION" --account="$ACCOUNT" --nodes="$NODES"
 [ -z "${COLLX_EXCLUDE_NODES:-}" ] || allocation+=(--exclude="$COLLX_EXCLUDE_NODES")
 collx_salloc_jobid "${allocation[@]}"
 [ -n "$JOB_ID" ] || collx_die "no JOB_ID from salloc"
-# A no-op inside the NVL domain; the kv rdma legs (mnnvl-rdma) prove their socket iface and HCAs.
+# A no-op inside the NVL domain.
 if ! collx_validate_network_profile_on_job "$JOB_ID" "$NODES" "$COLLX_TRANSPORT"; then
   collx_log_tail "${COLLX_NETWORK_PROFILE_LOG:-}"
   collx_die "allocated nodes failed the network profile"
