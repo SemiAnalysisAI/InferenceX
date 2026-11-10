@@ -4,9 +4,9 @@ The `agentic.yaml` recipe backs the
 `musespark-fp4-mi355x-tokenspeed-agentic-dflash` matrix: one TokenSpeed
 worker on eight MI355X GPUs with attention TP8 and MoE TP8/EP1, so every GPU
 holds all 256 experts and no tokens move between GPUs. The DFlash2 draft
-proposes seven tokens per step, with FP8 weight-only quantization of its MLP,
-`o_proj` and LM-head weights. The KV cache is FP8, the context is the
-checkpoint's native 1M tokens, and prefill runs in 8K chunks.
+proposes seven tokens per step and is served as it ships, in BF16. The KV
+cache is FP8, the context is the checkpoint's native 1M tokens, and prefill
+runs in 8K chunks.
 
 Each concurrency has its own override with the running-request cap
 (`max-num-seqs`) and prefill/decode interval from TokenSpeed's Muse Spark

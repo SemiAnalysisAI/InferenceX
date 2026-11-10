@@ -93,7 +93,6 @@ base:
         # DFlash2 drafts seven tokens per step; the verify window adds the current token.
         speculative-algorithm: DFLASH
         speculative-draft-model-path: RadixArk/Muse-Spark-Open-DFlash2
-        speculative-draft-model-quantization: fp8_weight_only
         speculative-num-steps: 7
         speculative-eagle-topk: 1
         speculative-num-draft-tokens: 8
