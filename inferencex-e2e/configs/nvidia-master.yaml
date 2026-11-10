@@ -6001,7 +6001,7 @@ dsv41flash-fp4-b200-sglang-agentic-dspark:
       - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [48, 64, 96, 128, 192, 256], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: agentic.yaml }
 
 dsv41flash-fp4-gb300-vllm-agentic-dspark:
-  image: vllm/vllm-openai:nightly-00b6c4c565a8732c131e1f452d4a17803bb0842b@sha256:76a9614ed4ed20694914c87e82a0344bd73e1c6e081459a2467175ab903657e4
+  image: vllm/vllm-openai:cu134-nightly-a2bcb5657a881a002e79d0adab3c6b5e39436121@sha256:76a533475156ffdb3656ccc389d0c71f5cec16897c0f490ac43e4f379c4b4f0d
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:gb300-nv
@@ -6013,12 +6013,8 @@ dsv41flash-fp4-gb300-vllm-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
-      # TP4 covers low concurrency with FlashInfer attention and THP Engram tables.
-      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 16], srt-recipe: agentic.yaml }
-      # DEP2 is native TP1 x DP2 + EP2 with MegaMoE behind a consistent-hash vLLM
-      # Router; FlashInfer attention up to conc 64, MegaAttention above.
-      - { tp: 2, ep: 2, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [8, 16, 32, 64, 128, 192], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 10, 16, 24, 32, 48], srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [136, 170, 200, 256, 320, 384, 512, 640, 768, 1024], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
 
 # MiniMax-M3.1-Flash AgentX on GB300: the B200 recipe and search space plus a
 # DEP4 c96 point, with the vLLM blog's FlashInfer PrimiTS DSpark drafter and the
