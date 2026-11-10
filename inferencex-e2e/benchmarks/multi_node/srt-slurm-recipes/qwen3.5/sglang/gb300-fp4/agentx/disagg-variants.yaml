@@ -1213,7 +1213,7 @@ override_4p1d_p_tp2_d_tp8_ep4_cap128:
         max-prefill-tokens: 16384
         chunked-prefill-size: 16384
         hicache-mem-layout: page_first_direct
-        hicache-ratio: 1.5
+        hicache-ratio: 1.0
         moe-dense-tp-size: 2
         gc-threshold:
         - 50000
@@ -1348,7 +1348,7 @@ override_2p1d_p_tp2_d_tp8_ep4_cap64:
         max-prefill-tokens: 16384
         chunked-prefill-size: 16384
         hicache-mem-layout: page_first
-        hicache-ratio: 1.5
+        hicache-ratio: 1.0
         moe-dense-tp-size: 2
         gc-threshold:
         - 50000
@@ -1643,7 +1643,7 @@ override_2p1d_p_tp2_d_tp8_ep4_cap64_prefill32k:
         max-prefill-tokens: 32768
         chunked-prefill-size: 32768
         hicache-mem-layout: page_first
-        hicache-ratio: 1.5
+        hicache-ratio: 1.0
         moe-dense-tp-size: 2
         gc-threshold:
         - 50000
@@ -1770,7 +1770,7 @@ override_2p1d_p_tp2_d_tp8_ep4_cap64_prefill32k_flashinfer:
         max-prefill-tokens: 32768
         chunked-prefill-size: 32768
         hicache-mem-layout: page_first
-        hicache-ratio: 1.5
+        hicache-ratio: 1.0
         moe-dense-tp-size: 2
         gc-threshold:
         - 50000
