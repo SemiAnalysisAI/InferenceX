@@ -12616,5 +12616,5 @@
     - agentic-coding
   description:
     - "Power telemetry's dcgm-exporter samples every 1000 ms (--collect-interval=1000) instead of every 100 ms, matching the collector's 1 s scrape and each cluster's default GPU exporter."
-    - "100 ms sampling might slow down disaggregated serving during request bursts."
+    - "100 ms sampling might slow down serving during request bursts."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4974
