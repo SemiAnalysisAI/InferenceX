@@ -186,8 +186,9 @@ def _swap_shard(sku: str, profile_name: str) -> tuple[list[dict[str, Any]], dict
             "seed": SWAP_SWEEP["seed"],
             "device": SWAP_SWEEP["device"],
             "nodes": 1,
-            "gpus_per_node": 2,
-            "scale_up_domain": 2,
+            # probe branch: hold the whole node so the probe can sweep every GPU on it
+            "gpus_per_node": PLATFORMS[sku]["gpus_per_node"],
+            "scale_up_domain": PLATFORMS[sku]["gpus_per_node"],
         }
         case["case_id"] = ep_harness.slug_id((sku, "swap-blocks", profile_name, layout))
         cases.append(case)

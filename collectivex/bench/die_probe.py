@@ -1,7 +1,11 @@
-"""One-off probe (v3): decompose why a kernel-to-kernel memory handoff is slower on Blackwell.
+"""One-off probe (v3, extended through v8): decompose why a kernel-to-kernel memory handoff is slower on Blackwell.
 
 Splits the handoff into fence cost, load latency per cache level, store->load, atomics, same-SM vs
 cross-SM, concurrency, and whether a busy GPU (clock / power state) changes it. Probe branch only.
+
+v8 asks why one system departs from the rest: every result carries the SM clock it ran at, every
+visible GPU is swept, the per-op cost is checked for stalls, the round trip to host memory is
+measured, and the fences are re-timed while the PCIe link is kept busy and while the host sleeps.
 """
 
 import datetime
@@ -20,6 +24,8 @@ SRC = r"""
 #include <cstdlib>
 #include <algorithm>
 #include <vector>
+#include <thread>
+#include <cstring>
 #define CK(x) do { cudaError_t e_ = (x); if (e_ != cudaSuccess) { \
   printf("\"error\": \"%s line %d\"}\n", cudaGetErrorString(e_), __LINE__); fflush(stdout); exit(0); } } while (0)
 
@@ -103,6 +109,52 @@ __global__ void ping(int *a, int *b, int rounds, int kb, int mode) {
     }
   }
 }
+__device__ __forceinline__ unsigned long long gtimer() {
+  unsigned long long t; asm volatile("mov.u64 %0, %%globaltimer;" : "=l"(t)); return t;
+}
+// v8: one op per call, chosen at compile time so the loop adds only a few cycles.
+template <int OP> __device__ __forceinline__ void do_op(int *p, int i, int &acc) {
+  if (OP == 0) asm volatile("add.s32 %0, %0, %1;" : "+r"(acc) : "r"(i));
+  else if (OP == 2) f_acq_gpu();
+  else if (OP == 3) f_acq_sys();
+  else if (OP == 10) st_rel_sys(p, i + acc);
+  else if (OP == 11) acc += ld_rlx_gpu(p + (acc & 1));
+  else if (OP == 12) acc += ld_rlx_sys(p + (acc & 1));
+  else if (OP == 23) { st_rlx_sys(p, i + acc); f_acq_sys(); }
+  else if (OP == 24) { st_rlx_gpu(p, i + acc); f_acq_gpu(); }
+}
+// The op loop bracketed by SM cycles and the global nanosecond timer: each result carries the
+// clock it ran at and excludes launch cost.
+template <int OP> __global__ void top(int *p, int rounds, long long *out) {
+  int acc = 0;
+  long long c0 = clock64(); unsigned long long t0 = gtimer();
+  for (int i = 0; i < rounds; ++i) do_op<OP>(p, i, acc);
+  long long c1 = clock64(); unsigned long long t1 = gtimer();
+  out[0] = c1 - c0; out[1] = (long long)(t1 - t0); out[2] = acc; out[3] = (long long)t0; out[4] = (long long)t1;
+}
+// Cycles per chunk of `per` consecutive ops, kept in shared memory so recording adds no global
+// store for the next fence to wait on. A fixed cost gives one narrow peak; stalls give a tail.
+template <int OP> __global__ void chunks(int *p, int nchunks, int per, unsigned *out) {
+  __shared__ unsigned buf[2048];
+  int acc = 0;
+  for (int c = 0; c < nchunks; ++c) {
+    long long c0 = clock64();
+    for (int k = 0; k < per; ++k) do_op<OP>(p, c * per + k, acc);
+    buf[c] = (unsigned)(clock64() - c0);
+  }
+  for (int c = 0; c < nchunks; ++c) out[c] = buf[c];
+  if (acc == 12345) out[0] = 0;
+}
+// Keeps one SM busy for `ns`: mode 0 spins on registers, mode 1 keeps re-reading `src` (local,
+// peer or host memory), which keeps the link to that memory active.
+__global__ void keep_busy(int *src, long long ns, int mode, long long *out) {
+  unsigned long long t0 = gtimer(), t = t0; long long n = 0; int acc = 0;
+  while ((long long)(t - t0) < ns) {
+    if (mode) acc += ld_rlx_sys(src + (acc & 1)); else asm volatile("add.s32 %0, %0, 1;" : "+r"(acc));
+    ++n; t = gtimer();
+  }
+  out[0] = n; out[1] = acc; out[2] = (long long)t0; out[3] = (long long)t;
+}
 static double now_us() {
   return std::chrono::duration<double, std::micro>(
       std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -146,8 +198,55 @@ static double emptycost(int blocks) {
 }
 static const int PUT_SIZES[] = {64, 14336, 86016, 1 << 20, 1 << 24};
 
-int main() {
+static void launch_top(int op, int *p, int rounds, long long *out, cudaStream_t s) {
+  switch (op) {
+    case 0: top<0><<<1, 1, 0, s>>>(p, rounds, out); break;
+    case 2: top<2><<<1, 1, 0, s>>>(p, rounds, out); break;
+    case 3: top<3><<<1, 1, 0, s>>>(p, rounds, out); break;
+    case 10: top<10><<<1, 1, 0, s>>>(p, rounds, out); break;
+    case 11: top<11><<<1, 1, 0, s>>>(p, rounds, out); break;
+    case 12: top<12><<<1, 1, 0, s>>>(p, rounds, out); break;
+    case 23: top<23><<<1, 1, 0, s>>>(p, rounds, out); break;
+    case 24: top<24><<<1, 1, 0, s>>>(p, rounds, out); break;
+  }
+  CK(cudaGetLastError());
+}
+struct Res { double ns, mhz; long long t0, t1; };
+// Device-timed ns per op and the SM clock during it; best of `reps` by ns.
+static Res measure(int op, int *p, int rounds, long long *dout, int reps = 3, cudaStream_t s = 0) {
+  Res best{1e30, 0, 0, 0};
+  for (int r = 0; r < reps; ++r) {
+    launch_top(op, p, rounds, dout, s); CK(cudaStreamSynchronize(s));
+    long long h[5]; CK(cudaMemcpy(h, dout, sizeof h, cudaMemcpyDeviceToHost));
+    double ns = (double)h[1] / rounds, mhz = h[1] ? 1000.0 * (double)h[0] / (double)h[1] : 0;
+    if (ns < best.ns) best = {ns, mhz, h[3], h[4]};
+  }
+  return best;
+}
+static void print_res(const char *key, Res r, bool first = false) {
+  printf("%s\"%s\": {\"ns\": %.2f, \"mhz\": %.0f}", first ? "" : ", ", key, r.ns, r.mhz);
+}
+// Per-op cycles from 2048 chunks of 8 ops: percentiles, and the share of chunks above 1.5x the median.
+static void print_chunks(const char *key, int op, int *p, unsigned *dbuf) {
+  const int nchunks = 2048, per = 8;
+  if (op == 2) chunks<2><<<1, 1>>>(p, nchunks, per, dbuf); else if (op == 3) chunks<3><<<1, 1>>>(p, nchunks, per, dbuf);
+  else chunks<10><<<1, 1>>>(p, nchunks, per, dbuf);
+  CK(cudaGetLastError()); CK(cudaDeviceSynchronize());
+  std::vector<unsigned> h(nchunks); CK(cudaMemcpy(h.data(), dbuf, nchunks * sizeof(unsigned), cudaMemcpyDeviceToHost));
+  std::vector<double> v; for (int i = 1; i < nchunks; ++i) v.push_back(h[i] / (double)per);
+  std::sort(v.begin(), v.end());
+  double q[] = {0.0, 0.01, 0.1, 0.5, 0.9, 0.99, 1.0};
+  printf(", \"%s\": {\"cycles_per_op_q\": [", key);
+  for (int i = 0; i < 7; ++i) printf("%s%.0f", i ? ", " : "", v[std::min((size_t)(q[i] * (v.size() - 1)), v.size() - 1)]);
+  double med = v[v.size() / 2]; int slow = 0; for (double x : v) slow += x > 1.5 * med;
+  printf("], \"share_above_1p5x_median\": %.4f}", slow / (double)v.size());
+}
+
+static int core(bool blocking);
+int main(int argc, char **argv) {
   int n; CK(cudaGetDeviceCount(&n));
+  if (argc > 1 && !strcmp(argv[1], "blocking")) return core(true);
+  if (argc > 1 && !strcmp(argv[1], "core")) return core(false);
   CK(cudaSetDevice(0));
   int *flags, *out; CK(cudaMalloc(&flags, 1 << 20)); CK(cudaMemset(flags, 0, 1 << 20)); CK(cudaMalloc(&out, 4096));
   double base = timed([&] { empty<<<1, 1>>>(); }, 20);
@@ -208,6 +307,125 @@ int main() {
       printf("]"); fflush(stdout);
     }
   }
+  // ---------------- v8 ----------------
+  {
+    CK(cudaSetDevice(0));
+    long long *dout; CK(cudaMalloc(&dout, 256));
+    int *hp; CK(cudaHostAlloc((void **)&hp, 1 << 16, cudaHostAllocMapped | cudaHostAllocPortable));
+    memset(hp, 0, 1 << 16);
+    int *hd; CK(cudaHostGetDevicePointer((void **)&hd, hp, 0));
+    printf(", \"v8_bus_ids\": [");
+    for (int d = 0; d < n; ++d) { char bus[32]; CK(cudaDeviceGetPCIBusId(bus, 32, d)); printf("%s\"%s\"", d ? ", " : "", bus); }
+    printf("]"); fflush(stdout);
+    // 1. Device-timed costs on GPU 0, each with the SM clock it ran at.
+    printf(", \"v8_dev0\": {");
+    print_res("loop", measure(0, flags, 200000, dout), true);
+    print_res("fence_gpu", measure(2, flags, 100000, dout));
+    print_res("fence_sys", measure(3, flags, 50000, dout));
+    print_res("st_release_sys", measure(10, flags, 50000, dout));
+    print_res("ld_relaxed_gpu", measure(11, flags, 100000, dout));
+    print_res("st_relaxed_gpu_then_fence_gpu", measure(24, flags, 100000, dout));
+    print_res("st_relaxed_sys_then_fence_sys", measure(23, flags, 50000, dout));
+    print_res("host_ld_relaxed_sys", measure(12, hd, 20000, dout));
+    print_res("host_st_release_sys", measure(10, hd, 20000, dout));
+    print_res("host_st_relaxed_sys_then_fence_sys", measure(23, hd, 20000, dout));
+    printf("}"); fflush(stdout);
+    // 2. Every visible GPU.
+    printf(", \"v8_per_device\": [");
+    for (int d = 0; d < n; ++d) {
+      CK(cudaSetDevice(d));
+      int *f; long long *o; CK(cudaMalloc(&f, 1 << 16)); CK(cudaMemset(f, 0, 1 << 16)); CK(cudaMalloc(&o, 256));
+      char bus[32]; CK(cudaDeviceGetPCIBusId(bus, 32, d));
+      printf("%s{\"bus\": \"%s\"", d ? ", " : "", bus);
+      print_res("loop", measure(0, f, 200000, o));
+      print_res("fence_gpu", measure(2, f, 100000, o));
+      print_res("fence_sys", measure(3, f, 30000, o));
+      print_res("st_release_sys", measure(10, f, 30000, o));
+      print_res("ld_relaxed_gpu", measure(11, f, 100000, o));
+      print_res("host_ld_relaxed_sys", measure(12, hd, 10000, o));
+      printf("}"); fflush(stdout);
+      CK(cudaFree(f)); CK(cudaFree(o));
+    }
+    printf("]"); fflush(stdout);
+    CK(cudaSetDevice(0));
+    // 3. Forty back-to-back trials: does the cost hold steady or switch between levels?
+    {
+      const int ops[] = {3, 2}; const char *keys[] = {"fence_sys", "fence_gpu"}; const int rounds[] = {10000, 40000};
+      printf(", \"v8_series\": {");
+      for (int k = 0; k < 2; ++k) {
+        std::vector<Res> rs; for (int t = 0; t < 40; ++t) rs.push_back(measure(ops[k], flags, rounds[k], dout, 1));
+        printf("%s\"%s_ns\": [", k ? ", " : "", keys[k]);
+        for (int t = 0; t < 40; ++t) printf("%s%.1f", t ? ", " : "", rs[t].ns);
+        printf("], \"%s_mhz\": [", keys[k]);
+        for (int t = 0; t < 40; ++t) printf("%s%.0f", t ? ", " : "", rs[t].mhz);
+        printf("]");
+      }
+      printf("}"); fflush(stdout);
+    }
+    // 4. Per-op distribution.
+    {
+      unsigned *dbuf; CK(cudaMalloc(&dbuf, 2048 * sizeof(unsigned)));
+      printf(", \"v8_chunks\": {\"_\": 0");
+      print_chunks("fence_gpu", 2, flags, dbuf);
+      print_chunks("fence_sys", 3, flags, dbuf);
+      print_chunks("st_release_sys", 10, flags, dbuf);
+      printf("}"); fflush(stdout);
+      CK(cudaFree(dbuf));
+    }
+    // 5. Fences re-timed while another SM keeps a link busy (none, registers, local HBM, host, peer).
+    {
+      cudaStream_t sa, sb; CK(cudaStreamCreateWithFlags(&sa, cudaStreamNonBlocking)); CK(cudaStreamCreateWithFlags(&sb, cudaStreamNonBlocking));
+      long long *bout; CK(cudaMalloc(&bout, 64));
+      int *peerbuf = nullptr;
+      if (n > 1) {
+        CK(cudaSetDevice(1)); CK(cudaMalloc(&peerbuf, 1 << 16)); CK(cudaMemset(peerbuf, 0, 1 << 16)); CK(cudaDeviceSynchronize());
+        CK(cudaSetDevice(0));
+        cudaError_t e = cudaDeviceEnablePeerAccess(1, 0); if (e != cudaErrorPeerAccessAlreadyEnabled) CK(e); cudaGetLastError();
+      }
+      const char *names[] = {"none", "spin", "local", "host", "peer"};
+      int *srcs[] = {nullptr, flags + 8192, flags + 8192, hd + 64, peerbuf};
+      int modes[] = {-1, 0, 1, 1, 1};
+      printf(", \"v8_busy\": {\"_\": 0");
+      for (int b = 0; b < 5; ++b) {
+        if (b == 4 && !peerbuf) continue;
+        printf(", \"%s\": {", names[b]);
+        const int ops[] = {3, 2}; const char *keys[] = {"fence_sys", "fence_gpu"}; const int rounds[] = {40000, 100000};
+        for (int k = 0; k < 2; ++k) {
+          if (modes[b] >= 0) { keep_busy<<<1, 1, 0, sb>>>(srcs[b], 400000000LL, modes[b], bout); CK(cudaGetLastError()); }
+          std::this_thread::sleep_for(std::chrono::milliseconds(20));
+          Res r = measure(ops[k], flags, rounds[k], dout, 1, sa);
+          long long hb[4] = {0, 0, 0, 0};
+          if (modes[b] >= 0) { CK(cudaStreamSynchronize(sb)); CK(cudaMemcpy(hb, bout, sizeof hb, cudaMemcpyDeviceToHost)); }
+          bool overlap = modes[b] < 0 || (hb[2] <= r.t0 && r.t1 <= hb[3]);
+          double busy_ns = hb[0] ? (double)(hb[3] - hb[2]) / hb[0] : 0;
+          printf("%s\"%s\": {\"ns\": %.2f, \"mhz\": %.0f, \"overlap\": %s, \"busy_ns_per_iter\": %.1f}",
+                 k ? ", " : "", keys[k], r.ns, r.mhz, overlap ? "true" : "false", busy_ns);
+        }
+        printf("}"); fflush(stdout);
+      }
+      printf("}"); fflush(stdout);
+    }
+  }
+  printf("}\n");
+  return 0;
+}
+
+// Core costs in a fresh process: with `blocking` the host thread sleeps while the GPU works, so
+// the CPU can idle; without it this reruns the core set (used for the ahead-of-time build).
+static int core(bool blocking) {
+  if (blocking) CK(cudaSetDeviceFlags(cudaDeviceScheduleBlockingSync));  // before GPU 0's context exists
+  CK(cudaSetDevice(0));
+  unsigned flags_now = 0; CK(cudaGetDeviceFlags(&flags_now));
+  int *flags; long long *dout; CK(cudaMalloc(&flags, 1 << 16)); CK(cudaMemset(flags, 0, 1 << 16)); CK(cudaMalloc(&dout, 256));
+  int *hp; CK(cudaHostAlloc((void **)&hp, 1 << 16, cudaHostAllocMapped)); memset(hp, 0, 1 << 16);
+  int *hd; CK(cudaHostGetDevicePointer((void **)&hd, hp, 0));
+  printf("{\"device_flags\": %u", flags_now);
+  print_res("loop", measure(0, flags, 200000, dout));
+  print_res("fence_gpu", measure(2, flags, 100000, dout));
+  print_res("fence_sys", measure(3, flags, 50000, dout));
+  print_res("st_release_sys", measure(10, flags, 50000, dout));
+  print_res("ld_relaxed_gpu", measure(11, flags, 100000, dout));
+  print_res("host_ld_relaxed_sys", measure(12, hd, 20000, dout));
   printf("}\n");
   return 0;
 }
@@ -258,7 +476,7 @@ def run(out_dir):
             sampler = subprocess.Popen(["nvidia-smi", f"--query-gpu={SMI}", "--format=csv,noheader", "-i", "0",
                                         "-lms", "100", "-f", log])
             try:
-                proc = subprocess.run([exe], capture_output=True, text=True, timeout=420)
+                proc = subprocess.run([exe], capture_output=True, text=True, timeout=900)
                 stdout, note = proc.stdout, f"rc={proc.returncode} err={proc.stderr[-400:]}"
             except subprocess.TimeoutExpired as exc:
                 stdout = exc.stdout.decode() if isinstance(exc.stdout, bytes) else (exc.stdout or "")
@@ -278,6 +496,38 @@ def run(out_dir):
                 if isinstance(value, dict) and "phase_ms" in value:
                     clocks[name] = _phase(rows, value["phase_ms"])
             out["smi_by_phase"] = clocks
+            try:  # v8: same core costs with the host thread asleep instead of spinning
+                blk = subprocess.run([exe, "blocking"], capture_output=True, text=True, timeout=300)
+                out["v8_blocking"] = json.loads(blk.stdout.strip().splitlines()[-1])
+            except Exception as exc:
+                out["v8_blocking"] = {"error": repr(exc)[:300]}
+            # v8: the default build is PTX that the installed driver compiles at load time, so two
+            # drivers can run different machine code. Rebuild ahead of time for this GPU, rerun
+            # the core set, and keep the fence instructions the compiler emitted.
+            try:
+                cap = subprocess.run(["nvidia-smi", "--query-gpu=compute_cap", "--format=csv,noheader", "-i", "0"],
+                                     capture_output=True, text=True, timeout=30).stdout.strip().replace(".", "")
+                native = os.path.join(tmp, "die_native")
+                nb = subprocess.run([nvcc, "-O2", f"-gencode=arch=compute_{cap},code=sm_{cap}", "-o", native, src],
+                                    capture_output=True, text=True, timeout=300)
+                if nb.returncode:
+                    out["v8_native"] = {"error": "build: " + nb.stderr[-800:]}
+                else:
+                    nat = subprocess.run([native, "core"], capture_output=True, text=True, timeout=300)
+                    out["v8_native"] = json.loads(nat.stdout.strip().splitlines()[-1])
+                    out["v8_native"]["arch"] = f"sm_{cap}"
+                    cuobjdump = os.path.join(os.path.dirname(nvcc), "cuobjdump")
+                    sass = subprocess.run([cuobjdump, "-sass", native], capture_output=True, text=True, timeout=120).stdout
+                    keep, fn = [], ""
+                    for line in sass.splitlines():
+                        if "Function :" in line:
+                            fn = line.split("Function :")[-1].strip()
+                        elif fn.startswith("_Z3topILi") and any(t in line for t in ("MEMBAR", "FENCE", "ERRBAR", "CCTL", "CGAERRBAR", "ST.E", "LD.E", "RED.E")):
+                            ins = line.split("*/")[1].split("/*")[0] if "*/" in line else line
+                            keep.append(fn[:16] + " " + " ".join(ins.split()))
+                    out["v8_native_sass"] = keep[:80]
+            except Exception as exc:
+                out["v8_native"] = {"error": repr(exc)[:300]}
     info = {}
     for key, cmd in (
         ("driver", "nvidia-smi --query-gpu=name,driver_version,vbios_version,pci.bus_id,pcie.link.gen.current,pcie.link.width.current,ecc.mode.current,compute_mode,persistence_mode --format=csv,noheader -i 0"),
@@ -293,6 +543,28 @@ def run(out_dir):
         ("cpu", "lscpu | grep -E 'Model name|Hypervisor|Virtualization|^CPU\\(s\\)' | tr -s ' ' | tr '\\n' ';'"),
         ("dmi", "cat /sys/class/dmi/id/sys_vendor /sys/class/dmi/id/product_name 2>&1 | tr '\\n' ';'"),
         ("iommu", "ls /sys/kernel/iommu_groups 2>/dev/null | wc -l"),
+    ):
+        try:
+            info[key] = subprocess.run(["sh", "-c", cmd], capture_output=True, text=True, timeout=30).stdout.strip()[:6000]
+        except Exception as exc:
+            info[key] = f"error: {exc}"
+    bus = ""
+    if isinstance(out.get("v8_bus_ids"), list) and out["v8_bus_ids"]:
+        bus = out["v8_bus_ids"][0].lower()
+        if len(bus.split(":")[0]) > 4:
+            bus = bus[-12:]
+    dev = f"/sys/bus/pci/devices/{bus}" if bus else "/nonexistent"
+    for key, cmd in (
+        ("hostname", "hostname"),
+        ("topo", "nvidia-smi topo -m 2>&1 | head -16 | tr -s ' \t' ' ' | tr '\n' ';'"),
+        ("clocks", "nvidia-smi -q -i 0 -d CLOCK,PERFORMANCE 2>&1 | tr -s ' ' | tr '\n' ';'"),
+        ("mig", "nvidia-smi -q -i 0 2>&1 | grep -A2 -i 'MIG Mode' | tr -s ' ' | tr '\n' ';'"),
+        ("pci_path", f"readlink -f {dev}"),
+        ("pci_link", f"cd {dev} && echo speed=$(cat current_link_speed) width=$(cat current_link_width) max=$(cat max_link_speed) x$(cat max_link_width) numa=$(cat numa_node); for f in link/*; do echo \"$f=$(cat $f 2>/dev/null)\"; done 2>/dev/null | tr '\n' ' '"),
+        ("aspm_policy", "cat /sys/module/pcie_aspm/parameters/policy 2>&1"),
+        ("cpuidle", "cat /sys/devices/system/cpu/cpuidle/current_driver /sys/devices/system/cpu/cpuidle/current_governor_ro 2>/dev/null | tr '\n' ' '; for s in /sys/devices/system/cpu/cpu0/cpuidle/state*; do echo \"$(cat $s/name):lat=$(cat $s/latency):dis=$(cat $s/disable)\"; done 2>/dev/null | tr '\n' ' '"),
+        ("cpufreq", "cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_driver /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>&1 | tr '\n' ' '"),
+        ("lspci_tree", "lspci -tv 2>&1 | head -80 | tr '\n' ';'"),
     ):
         try:
             info[key] = subprocess.run(["sh", "-c", cmd], capture_output=True, text=True, timeout=30).stdout.strip()[:6000]
