@@ -12617,4 +12617,4 @@
   description:
     - "Power telemetry's dcgm-exporter samples every 1000 ms (--collect-interval=1000) instead of every 100 ms, matching the collector's 1 s scrape and each cluster's default GPU exporter."
     - "100 ms sampling slowed GB300 disaggregated serving. With identical recipes, the Qwen3.5 TRT-LLM AgentX c176 point of PR 4747 (no power telemetry, Tachometer's 1000 ms exporter) moved prefill-to-decode KV at 118.5 GB/s during a request burst against 52.6 GB/s for PR 4834 (100 ms power exporter), and e2e p90 rose from 3.67 to 4.33 s."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4974
