@@ -12587,4 +12587,4 @@
   scenario-type: [video-generation]
   description:
     - "Add vllm/vllm-omni-rocm:v0.30.0, the newest stable vLLM-Omni ROCm image, pinned by its linux/amd64 digest, on the MI355X H3 workload SGLang runs (h3-v2.yaml release-v1, C1) on 1, 2, 4 and 8 GPUs: Ulysses across all GPUs with text-encoder TP and tiled VAE patch parallelism of the same degree, the AITER FLASH_ATTN diffusion attention backend, vLLM quick all-reduce quantization set to NONE, and the prompt-embedding cache and cross-request AdaLN projection reuse disabled."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4971
