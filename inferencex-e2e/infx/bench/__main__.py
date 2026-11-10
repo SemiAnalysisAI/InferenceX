@@ -16,6 +16,7 @@ COMMANDS = {
     "al-gate": "infx.bench.al_gate",
     "video": "infx.bench.video",
     "umbp-health": "infx.bench.umbp_health",
+    "umbp-registration": "infx.bench.umbp_registration",
 }
 
 

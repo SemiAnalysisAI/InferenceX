@@ -60,6 +60,41 @@ for numa_node in "${numa_nodes[@]}"; do
     read -r numa_free < "/sys/devices/system/node/node${numa_node}/hugepages/hugepages-2048kB/free_hugepages"
     (( numa_free * 2097152 >= (UMBP_DRAM_CAPACITY + ${#numa_nodes[@]} - 1) / ${#numa_nodes[@]} ))
 done
+check_env_vars UMBP_MR_PREFLIGHT
+if [[ $UMBP_MR_PREFLIGHT == 1 ]]; then
+    check_env_vars UMBP_MR_PREFLIGHT_COMPARE_BYTES UMBP_MR_PREFLIGHT_TIMEOUT_SECONDS
+    registration_args=()
+    # MoRI SplitNumaCapacity gives only the final arena the unaligned remainder.
+    numa_part=$(( UMBP_DRAM_CAPACITY / UMBP_DISTRIBUTED_DRAM_PAGE_SIZE / ${#numa_nodes[@]} * UMBP_DISTRIBUTED_DRAM_PAGE_SIZE ))
+    for ((numa_index=0; numa_index<${#numa_nodes[@]}; numa_index++)); do
+        arena_bytes=$numa_part
+        if (( numa_index == ${#numa_nodes[@]} - 1 )); then
+            arena_bytes=$(( UMBP_DRAM_CAPACITY - numa_part * numa_index ))
+        fi
+        registration_args+=(--arena "${numa_nodes[numa_index]}:$arena_bytes")
+    done
+    IFS=',' read -r -a rdma_devices <<< "${NCCL_IB_HCA#=}"
+    for rdma_device in "${rdma_devices[@]}"; do
+        [[ $rdma_device =~ ^[a-zA-Z0-9_.-]+(:[1-9][0-9]*)?$ ]]
+        registration_args+=(--nic "${rdma_device%%:*}")
+    done
+    registration_failed=0
+    for mr_limit in "$UMBP_DRAM_MAX_MR_BYTES" "$UMBP_MR_PREFLIGHT_COMPARE_BYTES"; do
+        if ! (
+            ulimit -Sl "$(ulimit -Hl)"
+            PYTHONPATH=/infmax-workspace timeout "$UMBP_MR_PREFLIGHT_TIMEOUT_SECONDS" /opt/runtime-venv/bin/python -m infx.bench umbp-registration "${registration_args[@]}" --segment-bytes "$mr_limit" --page-bytes "$UMBP_DRAM_HUGEPAGE_SIZE" --access-flags 15 --execute
+        ); then
+            registration_failed=1
+        fi
+    done
+    if (( registration_failed )); then
+        echo 'UMBP MR preflight failed; retaining both arms and refusing model startup' >&2
+        exit 1
+    fi
+elif [[ $UMBP_MR_PREFLIGHT != 0 ]]; then
+    echo 'UMBP_MR_PREFLIGHT must be 0 or 1' >&2
+    exit 1
+fi
 [[ ! -e $UMBP_ENDPOINT ]]
 mkdir -p "$(dirname "$UMBP_ENDPOINT")"
 log_dir=$(mktemp -d /private-state/umbp-pool-XXXXXX)

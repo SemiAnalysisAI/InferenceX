@@ -12565,6 +12565,7 @@
 
 - config-keys:
     - kimik31-sa-umbp-dynamo
+    - kimik31-sa-umbp-dynamo-short
   scenario-type: [agentic-coding]
   description:
     - Add Kimi-K3.1-Pro 2P3D c176 with Dynamo, MoRIIO READ, and distributed UMBP on MI355X.
@@ -12578,4 +12579,6 @@
     - Extend the worker memlock entrypoint to 2P3D c176 after SA 1P2D completed its full-hour run with zero request errors; preserve the 2P3D compute settings and pinned image.
     - Stage pinned, checksum-verified model metadata in a private worker directory before Dynamo starts, so partial node-local HF caches cannot split prefill workers into incompatible MDC cohorts. Preserve the shared weights and existing compatibility checks.
     - Fail the SA worker when its UMBP pool exits or store/load failures persist across three metric intervals, preventing formal measurement against a dead or degraded pool.
+    - Align the complete native MoRI stack to PR779 head62046b79 plus the READ-cap commit, preserving the MUM and Dynamo application code. Require a short 2P3D c176 run before formal measurement.
+    - On the short variant, register all NUMA pool segments on every configured NIC with both the current MR limit and a128GiB comparison; refuse model startup if either arm fails.
   pr-link: XXX

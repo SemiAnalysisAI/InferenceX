@@ -322,6 +322,7 @@ base:
     UMBP_HEALTH_POLL_SECONDS: '1'
     UMBP_HEALTH_FAILURE_INTERVALS: '3'
     UMBP_HEALTH_STOP_TIMEOUT: '10'
+    UMBP_MR_PREFLIGHT: '0'
     K31_MODEL_METADATA_MANIFEST: /infmax-workspace/benchmarks/multi_node/srt-slurm-recipes/configs/k31-pro-metadata-6d0a0202.json
     DYN_TCP_RPC_HOST: '@fabric.socket-ifname'
     DYN_TCP_RESPONSE_STREAM_HOST: '@fabric.socket-ifname'
@@ -333,6 +334,14 @@ base:
 override_2p3d_c176:
   environment:
     DYNAMO_PYTHON: /infmax-workspace/benchmarks/k31_dynamo_worker_python.py
+
+override_2p3d_c176_short:
+  name: k31-sa-umbp-dynamo-p2d3-c176-short
+  environment:
+    DYNAMO_PYTHON: /infmax-workspace/benchmarks/k31_dynamo_worker_python.py
+    UMBP_MR_PREFLIGHT: '1'
+    UMBP_MR_PREFLIGHT_COMPARE_BYTES: '137438953472'
+    UMBP_MR_PREFLIGHT_TIMEOUT_SECONDS: '900'
 
 override_1p2d_c48:
   name: k31-sa-umbp-dynamo-p1d2-c48
