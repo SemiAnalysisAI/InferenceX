@@ -71,6 +71,8 @@ if [[ $UMBP_MR_PREFLIGHT == 1 ]]; then
         if (( numa_index == ${#numa_nodes[@]} - 1 )); then
             arena_bytes=$(( UMBP_DRAM_CAPACITY - numa_part * numa_index ))
         fi
+        # HostPageMemorySource exposes the HugeTLB-rounded allocation size.
+        arena_bytes=$(( (arena_bytes + UMBP_DRAM_HUGEPAGE_SIZE - 1) / UMBP_DRAM_HUGEPAGE_SIZE * UMBP_DRAM_HUGEPAGE_SIZE ))
         registration_args+=(--arena "${numa_nodes[numa_index]}:$arena_bytes")
     done
     IFS=',' read -r -a rdma_devices <<< "${NCCL_IB_HCA#=}"

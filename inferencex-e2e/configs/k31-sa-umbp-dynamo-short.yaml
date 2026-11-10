@@ -22,7 +22,7 @@ kimik31-sa-umbp-dynamo-short:
         kv-offloading: dram
         kv-offload-backend:
           name: umbp
-        srt-recipe: disagg-sa-umbp-dynamo-variants.yaml:override_2p3d_c176_short
+        srt-recipe: disagg-sa-umbp-dynamo-variants.yaml:override_2p3d_c176_short_mr128
         prefill:
           num-worker: 2
           tp: 8
