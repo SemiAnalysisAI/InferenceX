@@ -130,18 +130,6 @@ override_tp16_ep4_dcp8_c4:
         cuda-graph-max-bs-decode: 8
         gc-threshold: [700, 10, 100000]
 
-override_tp16_ep2_dcp16_c8:
-  roles:
-    agg:
-      env:
-        SGLANG_CUSTOM_ALL_REDUCE_V2_MAX_SIZE_KB: null
-        SGLANG_DCP_PUSH_COMBINE_MAX_ROWS: null
-      args:
-        dcp-size: 16
-        ep-size: 2
-        max-running-requests: 16
-        cuda-graph-max-bs-decode: 16
-
 override_tp16_ep4_dcp8_c12:
   roles:
     agg:
@@ -163,6 +151,15 @@ override_tp16_ep4_dcp8_c20:
         max-running-requests: 28
         cuda-graph-max-bs-decode: 28
         # The verify batch grows with the running requests, so larger points verify fewer tokens per step.
+        speculative-num-draft-tokens: 6
+
+override_tp16_ep4_dcp8_c24:
+  roles:
+    agg:
+      args:
+        max-running-requests: 36
+        cuda-graph-max-bs-decode: 36
+        # 24 x 6 keeps MSCCL++ verify all-reduces within 146 tokens per step.
         speculative-num-draft-tokens: 6
 
 override_tp16_ep4_dcp8_c28:
