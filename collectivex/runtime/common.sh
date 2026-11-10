@@ -28,7 +28,7 @@ COLLX_DEEPEP_V2_EFA_COMMIT="a227152ac29513b1c702860745a1d1e0111ae0dc"
 COLLX_DEEPEP_V2_NCCL_SPEC="image"
 COLLX_DEEPEP_V2_EFA_NCCL_SPEC="nvidia-nccl-cu13==2.32.3"
 
-# Selects this pool's DeepEP V2 source into COLLX_DEEPEP_V2_REPO/COMMIT/NCCL_SPEC (the venv cache is keyed
+# Selects this pool's DeepEP V2 source into COLLX_DEEPEP_V2_REPO/COMMIT/NCCL_SPEC/TORCH_SPEC (the venv cache is keyed
 # on the commit, so the two sources never share a build).
 collx_select_deepep_v2_source() {
   # Opt-in per pool, not per fabric: on h100-dgxc (p5, 32 EFA NICs per node) the fork's
@@ -37,6 +37,8 @@ collx_select_deepep_v2_source() {
   COLLX_DEEPEP_V2_REPO="$COLLX_DEEPEP_V2_EFA_REPO"
   COLLX_DEEPEP_V2_COMMIT="$COLLX_DEEPEP_V2_EFA_COMMIT"
   COLLX_DEEPEP_V2_NCCL_SPEC="$COLLX_DEEPEP_V2_EFA_NCCL_SPEC"
+  # 2.10.0+cu130's bundled CUDA userland poisons the CUDA context during nvshmem symmetric-heap
+  # init over MNNVL on sm103/driver 580.159.03 (gb300).
   COLLX_DEEPEP_V2_TORCH_SPEC="torch==2.11.0"
 }
 
@@ -45,9 +47,7 @@ collx_select_deepep_v2_source() {
 # (gb300); every CUDA call after buffer creation fails cudaErrorUnknown. Part of the venv cache key.
 COLLX_DEEPEP_V2_NVSHMEM_SPEC="nvidia-nvshmem-cu13==3.4.5"
 
-# "image" builds against the image's torch (vLLM v0.32.0: 2.13.0). The fork's venv pins its own:
-# 2.10.0+cu130's bundled CUDA userland poisons the CUDA context during nvshmem symmetric-heap
-# init over MNNVL on sm103/driver 580.159.03 (gb300). Part of the venv cache key.
+# "image" builds against the image's torch (vLLM v0.32.0: 2.13.0). Part of the venv cache key.
 COLLX_DEEPEP_V2_TORCH_SPEC="image"
 
 # Build-recipe generation for the DeepEP venv cache key: bump when build flags change without
@@ -115,10 +115,7 @@ collx_set_placement() {
   export COLLX_NGPUS="$NGPUS" COLLX_NODES="$NODES"
   export COLLX_GPUS_PER_NODE="$GPN" COLLX_SCALE_UP_DOMAIN="$SCALE_UP_DOMAIN"
   COLLX_TRANSPORT="$4"
-  # A shard that names the rdma fabric on an MNNVL rack (the kv-transfer rdma legs) leaves the
-  # NVL domain, so it takes the same network profile and validation as any other scale-out.
-  { [ "$4" = mnnvl ] && [ "${COLLX_FABRIC:-}" != rdma ]; } || [ "$NODES" -le 1 ] \
-    || COLLX_TRANSPORT="$4-rdma"
+  [ "$4" = mnnvl ] || [ "$NODES" -le 1 ] || COLLX_TRANSPORT="$4-rdma"
   export COLLX_TRANSPORT
 }
 
@@ -286,10 +283,6 @@ collx_add_efa_host_mounts() {
     mounts+=",/usr/include/infiniband:$COLLX_EFA_HOST_ROOT/include/infiniband:ro"
     mounts+=",/usr/include/rdma:$COLLX_EFA_HOST_ROOT/include/rdma:ro"
   fi
-  # NIXL's LIBFABRIC plugin links libhwloc.so.15, which the vLLM image does not ship; the host's
-  # (the same Ubuntu and glibc as the image) is bound alone into the profile's library dir.
-  [ "${COLLX_BENCH:-}" != nixl ] \
-    || mounts+=",$(collx_efa_host_libdir "${COLLX_IMAGE_PLATFORM:-}")/libhwloc.so.15:$COLLX_EFA_HOST_ROOT/lib/libhwloc.so.15:ro"
   CONTAINER_MOUNTS="$CONTAINER_MOUNTS,$mounts"
 }
 
@@ -552,8 +545,8 @@ collx_allocation_nodes_csv() {
 collx_resolve_slurm_rendezvous() {
   local job_id="$1" master_addr master_port socket_ifname="${COLLX_SOCKET_IFNAME:-}"
   [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || collx_die "invalid rendezvous allocation"
-  # Inside an MNNVL domain the socket interface is never validated (the GB registry names it for
-  # the kv rdma legs only), so rank zero keeps resolving by hostname there.
+  # Inside an MNNVL domain the socket interface is never validated, so rank zero keeps resolving
+  # by hostname there.
   [ "${COLLX_TRANSPORT:-}" != mnnvl ] || socket_ifname=""
   # Relative node zero hosts global rank 0. Prefer the address on the validated socket interface:
   # a short hostname may resolve onto a management network that ranks cannot use.
@@ -611,7 +604,7 @@ export RANK="$SLURM_PROCID" WORLD_SIZE="$SLURM_NTASKS"
 export LOCAL_RANK="$SLURM_LOCALID" LOCAL_WORLD_SIZE="$COLLX_GPUS_PER_NODE"
 # config.py case-args leads every argv with the suite's entrypoint.
 [ "${1:-}" = --entrypoint ] || exit 67
-case "${2:-}" in run_ep|run_swap_blocks|run_kv) ;; *) exit 67 ;; esac
+case "${2:-}" in run_ep|run_swap_blocks) ;; *) exit 67 ;; esac
 entry="$2"; shift 2
 exec python3 "bench/$entry.py" "$@"
 BASH
@@ -625,7 +618,6 @@ collx_slurm_job_name() {
   printf '%s' "$name"
 }
 
-# The job name is prepended so a caller-supplied --job-name wins (salloc takes the last).
 # True only when Slurm says the job is gone: listed as nothing, or purged ("Invalid job id"). A
 # failed query (slurmctld busy or restarting) is not an answer, so it reads as still there.
 collx_job_gone() {
@@ -637,6 +629,7 @@ collx_job_gone() {
   fi
 }
 
+# The job name is prepended so a caller-supplied --job-name wins (salloc takes the last).
 collx_salloc_jobid() {
   local log_label log job_id
   set -- --job-name="$(collx_slurm_job_name)" "$@"
@@ -1122,7 +1115,7 @@ collx_stage_repo() {
   fi
 }
 
-# Results are committed from the checkout, so the staged result JSONs are copied back to its
+# Results are uploaded from the checkout, so the staged result JSONs are copied back to its
 # results/<sku>/, replacing older files for the same cases.
 collx_collect_results() {
   local mount_src="$1" repo_root="$2" dst log

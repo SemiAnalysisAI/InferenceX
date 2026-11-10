@@ -191,8 +191,8 @@ deepep_cache_root() {
 deepep_ready() { [ -f "$1/.ready" ] && [ -x "$1/venv/bin/python" ] && [ -d "$1/source" ]; }
 
 # Runtime images (vLLM's) ship a trimmed CUDA toolkit without the cuSPARSE and similar headers that
-# torch's ATen/cuda headers include, which the extension build needs. The venv's torch already
-# pulled the matching CUDA wheels, so link only the headers the toolkit lacks into
+# torch's ATen/cuda headers include, which the extension build needs. The torch the venv sees
+# (its own, or the image's) carries the matching CUDA wheels, so link only the headers the toolkit lacks into
 # <root>/cuda-include: nothing shadows the toolkit's own headers, and full-toolkit images leave
 # the directory empty.
 deepep_cuda_header_overlay() {
@@ -262,8 +262,15 @@ deepep_activate() {
 deepep_probe() {
   "$VIRTUAL_ENV/bin/python" - <<'PY'
 import inspect
+import os
 import deep_ep
+from importlib import metadata
 assert inspect.isclass(deep_ep.ElasticBuffer)
+# The vLLM image also ships a deep_ep with ElasticBuffer; the venv's build must be the one loaded.
+assert os.path.realpath(deep_ep.__file__).startswith(os.path.realpath(os.environ["VIRTUAL_ENV"]) + os.sep), deep_ep.__file__
+# ElasticBuffer needs NCCL >= 2.30.4 at build and run time, whichever site-packages supplies it.
+nccl = tuple(int(part) for part in metadata.version("nvidia-nccl-cu13").split(".")[:3])
+assert nccl >= (2, 30, 4), nccl
 PY
 }
 
@@ -290,7 +297,7 @@ deepep_install() {
       --extra-index-url https://pypi.org/simple "$COLLX_DEEPEP_V2_TORCH_SPEC" >&2 2>&1 \
       || { collx_log "ERROR: $COLLX_DEEPEP_V2_TORCH_SPEC (cu130) installation failed"; return 1; }
   fi
-  # Torch pins an older NCCL than ElasticBuffer needs; the vLLM image already carries >= 2.30.4.
+  # Only the EFA fork installs its own NCCL (2.32.3); "image" uses the image's, checked by deepep_probe.
   if [ "$COLLX_DEEPEP_V2_NCCL_SPEC" != image ]; then
     "${pip[@]}" --force-reinstall --no-deps "$COLLX_DEEPEP_V2_NCCL_SPEC" >&2 2>&1 \
       || { collx_log "ERROR: $COLLX_DEEPEP_V2_NCCL_SPEC installation failed"; return 1; }
@@ -1026,47 +1033,6 @@ verbs_provider_prepare() {
   collx_log "verbs provider: installed host $name"
 }
 
-# kv-transfer libraries come from the image: vLLM's release images ship its KV connectors (built with
-# INSTALL_KV_CONNECTORS=true: nixl and the cuda13 Mooncake wheel), so a row measures the build vLLM
-# itself deploys. EFA pools are the one swap: every regular Mooncake build is verbs-RC only, which
-# EFA does not offer, so the same Mooncake version's EFA build replaces it (vLLM's EFA image target,
-# vllm-project/vllm#58768, makes the same swap). The ROCm image ships nixl but no Mooncake.
-MOONCAKE_EFA_DIST=mooncake-transfer-engine-efa-cuda13
-kv_nixl_prepare() {
-  python3 -c "import nixl._api" \
-    || { collx_log "ERROR: the image carries no importable nixl"; return 1; }
-  # EFA rows run NIXL's LIBFABRIC plugin, which loads only with the host libhwloc bound in
-  # (collx_add_efa_host_mounts); prove it starts before the cases do.
-  [ "${COLLX_RDMA_FABRIC:-}" != efa ] || python3 -c "
-from nixl._api import nixl_agent, nixl_agent_config
-agent = nixl_agent('collectivex-prepare', nixl_agent_config(backends=['LIBFABRIC']))
-assert 'LIBFABRIC' in agent.backends" \
-    || { collx_log "ERROR: nixl cannot start its LIBFABRIC backend"; return 1; }
-}
-
-kv_mooncake_prepare() {
-  local version wheels
-  if [ "${COLLX_RDMA_FABRIC:-}" = efa ] \
-      && ! python3 -c "import importlib.metadata as m; m.version('$MOONCAKE_EFA_DIST')" 2>/dev/null; then
-    version="$(python3 -c "import importlib.metadata as m; print(m.version('mooncake-transfer-engine-cuda13'))")" \
-      || { collx_log "ERROR: the image carries no cuda13 Mooncake build to match"; return 1; }
-    # Fetch the EFA build before removing the image's, so a missing wheel leaves the node as it was.
-    wheels="$(mktemp -d)" || return 1
-    python3 -m pip download -q --disable-pip-version-check --no-input --no-deps \
-        --only-binary=:all: -d "$wheels" "$MOONCAKE_EFA_DIST==$version" \
-      && compgen -G "$wheels/*.whl" >/dev/null \
-      || { collx_log "ERROR: no Mooncake EFA $version wheel for this image"; return 1; }
-    { python3 -m pip uninstall -y -q mooncake-transfer-engine-cuda13 \
-        || python3 -m pip uninstall -y -q --break-system-packages mooncake-transfer-engine-cuda13; } \
-      && { python3 -m pip install -q --disable-pip-version-check --no-index --no-deps "$wheels"/*.whl \
-           || python3 -m pip install -q --disable-pip-version-check --no-index --no-deps \
-             --break-system-packages "$wheels"/*.whl; } \
-      || { collx_log "ERROR: Mooncake EFA $version install failed"; return 1; }
-  fi
-  python3 -c "import mooncake.engine" \
-    || { collx_log "ERROR: the image carries no importable Mooncake engine"; return 1; }
-}
-
 main() {
   collx_apply_network_profile "${COLLX_NODES:-1}" "${COLLX_TRANSPORT:-}" || return 1
   verbs_provider_prepare || return 1
@@ -1086,8 +1052,6 @@ main() {
       python3 -c "from vllm._custom_ops import swap_blocks" \
         || { collx_log "ERROR: vLLM swap_blocks import failed"; return 1; }
       ;;
-    nixl) kv_nixl_prepare || return 1 ;;
-    mooncake) kv_mooncake_prepare || return 1 ;;
     *)
       collx_log "ERROR: unknown backend preparation request"
       return 1
