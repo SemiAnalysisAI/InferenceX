@@ -12564,6 +12564,25 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4374
 
 - config-keys:
+    - h3-bf16-b200-vllm-omni-video
+  scenario-type: [video-generation]
+  description:
+    - "Add vLLM-Omni v0.32.0, pinned by its linux/amd64 digest, on the B200 H3 workload SGLang runs (h3-v2.yaml release-v1, C1) on 1, 2, 4 and 8 GPUs: Ulysses across all GPUs with text-encoder TP and tiled VAE patch parallelism of the same degree, with the prompt-embedding cache and cross-request AdaLN projection reuse disabled."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4874
+
+- config-keys:
+    - qwen3.8next-fp4-gb300-tokenspeed-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update to the TokenSpeed daily wheels tokenspeed 0.1.1.post20261108 and CUDA 13 ARM64 kernel 0.1.4.post20261108, built from lightseekorg/tokenspeed@a5a298c293849cd097c50224bb3ae4ee725e68cf, and engine 0.1.0.post20261108, built from lightseekorg/tokenspeed@c5bb19ef15e862561bfbb562932571fd10f75b62 (no tokenspeed-engine changes between the two), all pinned by SHA256; tokenspeed-scheduler 0.1.50 from PyPI; FlashInfer 0.7.3 caches; and the cu130-torch-2.14.0-flashinfer-0.7.3 runner image by digest."
+    - "kv-cache-dtype bfloat16 -> fp8_e4m3 for the target and the embedded MTP draft. hf-overrides drop index_share_for_mtp_iteration."
+    - "Turn on prefill CUDA graphs up to 8192 tokens (drop --disable-prefill-graph) including the drafter's (--enable-drafter-prefill-graph); enable --enable-qsa-prefill-bf16-scratch and --checkpoint-retention-requests 0; set the TOKENSPEED_KERNEL_OVERRIDE_ATTENTION_QSA_SPARSE_ATTENTION=cute_dsl_blackwell_qsa_sparse_attention environment variable."
+    - "Use gpu-memory-utilization 0.95 with --disable-cudagraph-memory-reserve, a 236 GB Host L2 with a 4 GB retraction snapshot pool, and smg with the gateway settings ts serve applies (passthrough policy, L0/L1 tokenizer caches, warn logging, no retries, circuit breaker or load monitoring)."
+    - "Replace the search space with per-concurrency rows in agg-variants.yaml: concurrency 1, 2, 4 and 108 with 104 request slots, and running caps of 2, 6, 12, 35 and 72 requests at concurrency 8, 20, 36, 56 and 80."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4922
+
+- config-keys:
     - qwen3.5-fp8-mi325x-sglang-agentic-mtp
   description:
     - "Update SGLang image from lmsysorg/sglang:v0.5.22-rocm720-mi30x to v0.5.23-rocm720-mi30x."
