@@ -78,10 +78,6 @@ relative). Graphed replays must rewrite poisoned outputs. Any failure makes the 
 - Limits: no compute between ops, uniform routing, no L2 flush, unlocked clocks (`slow_gpu` flags
   outliers), interior chain pairs unvalidated.
 
-## KV-cache transfer
-
-The `kv-transfer` suite's rules and evidence are in [kv-transfer.md](kv-transfer.md).
-
 # Methodology
 
 The evidence behind each rule in the [Summary](#summary). Each case writes one result document into
@@ -122,8 +118,6 @@ Eleven registered EP cases have no result in the published run and show as pendi
 - **mi325x uccl-ep `low-latency` EP16 FP8.** UCCL stalls before the first measurement, after the
   proxies exchange buffer info ([uccl-project/uccl#1111](https://github.com/uccl-project/uccl/issues/1111));
   the BF16 case runs.
-
-The twelve kv-transfer cases are registered but have not been uploaded.
 
 ### Precision
 
