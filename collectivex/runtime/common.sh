@@ -115,10 +115,7 @@ collx_set_placement() {
   export COLLX_NGPUS="$NGPUS" COLLX_NODES="$NODES"
   export COLLX_GPUS_PER_NODE="$GPN" COLLX_SCALE_UP_DOMAIN="$SCALE_UP_DOMAIN"
   COLLX_TRANSPORT="$4"
-  # A shard that names the rdma fabric on an MNNVL rack (the kv-transfer rdma legs) leaves the
-  # NVL domain, so it takes the same network profile and validation as any other scale-out.
-  { [ "$4" = mnnvl ] && [ "${COLLX_FABRIC:-}" != rdma ]; } || [ "$NODES" -le 1 ] \
-    || COLLX_TRANSPORT="$4-rdma"
+  [ "$4" = mnnvl ] || [ "$NODES" -le 1 ] || COLLX_TRANSPORT="$4-rdma"
   export COLLX_TRANSPORT
 }
 
@@ -286,10 +283,6 @@ collx_add_efa_host_mounts() {
     mounts+=",/usr/include/infiniband:$COLLX_EFA_HOST_ROOT/include/infiniband:ro"
     mounts+=",/usr/include/rdma:$COLLX_EFA_HOST_ROOT/include/rdma:ro"
   fi
-  # NIXL's LIBFABRIC plugin links libhwloc.so.15, which the vLLM image does not ship; the host's
-  # (the same Ubuntu and glibc as the image) is bound alone into the profile's library dir.
-  [ "${COLLX_BENCH:-}" != nixl ] \
-    || mounts+=",$(collx_efa_host_libdir "${COLLX_IMAGE_PLATFORM:-}")/libhwloc.so.15:$COLLX_EFA_HOST_ROOT/lib/libhwloc.so.15:ro"
   CONTAINER_MOUNTS="$CONTAINER_MOUNTS,$mounts"
 }
 
@@ -611,7 +604,7 @@ export RANK="$SLURM_PROCID" WORLD_SIZE="$SLURM_NTASKS"
 export LOCAL_RANK="$SLURM_LOCALID" LOCAL_WORLD_SIZE="$COLLX_GPUS_PER_NODE"
 # config.py case-args leads every argv with the suite's entrypoint.
 [ "${1:-}" = --entrypoint ] || exit 67
-case "${2:-}" in run_ep|run_swap_blocks|run_kv) ;; *) exit 67 ;; esac
+case "${2:-}" in run_ep|run_swap_blocks) ;; *) exit 67 ;; esac
 entry="$2"; shift 2
 exec python3 "bench/$entry.py" "$@"
 BASH
