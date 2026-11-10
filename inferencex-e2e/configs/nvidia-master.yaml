@@ -4109,14 +4109,12 @@ minimaxm31flash-fp4-h100-vllm-agentic-dspark:
       # KV per 80 GB GPU, about 2x MiniMax-M3 H100 (cliff c5-c6).
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 6, 8, 10, 12], srt-recipe: agentic.yaml }
 
-# MiniMax-M3.1-Flash AgentX on H200: day-zero vLLM image from
-# https://vllm.ai/blog/2026-10-23-minimax-m31-flash, multiarch manifest verified
-# 2026-10-23 (amd64 is minimax-m31-flash-x86_64-cu134). Serve flags follow the
+# MiniMax-M3.1-Flash AgentX on H200. Serve flags follow the
 # Hopper TP8 recipe: FP8 KV and indexer caches, NVFP4 experts on Marlin MoE.
 # Upstream does not enable DSpark on Hopper; this adds the GB200 recipe's
 # three-token DSpark, with synthetic acceptance from minimax-m3.1-flash__dspark__native__probabilistic-block.yaml.
 minimaxm31flash-fp4-h200-vllm-agentic-dspark:
-  image: vllm/vllm-openai:minimax-m31-flash@sha256:86f582dae25ea92802353727164ae4eb03b37b18baf9119b805ffaec2a7ef07c
+  image: vllm/vllm-openai:cu134-nightly-cf5cea2da37d3dfed27d2e0aa3041c3e553c2d57@sha256:78d6583c2d9c63d69e4250733eb0aacaa30d9afd4f867b65f1b7f1f51e20da4a
   model: MiniMaxAI/MiniMax-M3.1-Flash
   model-prefix: minimaxm31flash
   runner: cluster:h200-dgxc
