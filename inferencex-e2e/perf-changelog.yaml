@@ -12576,4 +12576,5 @@
     - Enable synchronous ROCm error logging on the 1P2D prefill worker to retain native loader failures without changing compute or cache settings.
     - For 1P2D, record process limits and raise the Dynamo process soft memlock to its inherited hard limit before exec; this is a candidate mitigation for native loader resource failures, not a validated fix.
     - Extend the worker memlock entrypoint to 2P3D c176 after SA 1P2D completed its full-hour run with zero request errors; preserve the 2P3D compute settings and pinned image.
+    - Stage pinned, checksum-verified model metadata in a private worker directory before Dynamo starts, so partial node-local HF caches cannot split prefill workers into incompatible MDC cohorts. Preserve the shared weights and existing compatibility checks.
   pr-link: XXX

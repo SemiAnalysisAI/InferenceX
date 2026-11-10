@@ -157,3 +157,22 @@ The initial migration also resolves compatibility issues that `srtctl migrate` c
 - Post-eval selection uses native `post_eval.command` and `post_eval.passthrough_env` with [`srt_eval.sh`](../srt_eval.sh). TRT AgentX recipes declare their existing Dynamo fork with `dynamo.source.git`; launchers no longer rewrite the srt-slurm source.
 
 Append a new entry to the physical end of `perf-changelog.yaml`, covering the listed config keys, when `infx.matrix.changed` lists any; add none when it lists none. Preserve all historical bytes. When you append an entry, validate the PR with `full-sweep-fail-fast`, including evals, before following the repository's review and artifact-reuse merge process.
+
+## K3.1 Dynamo model metadata
+
+The SA K3.1 Dynamo recipe stages a worker-private model view through
+`benchmarks/k31_dynamo_worker_python.py`. Set `K31_MODEL_METADATA_DIR` to the
+same container path on every worker and `K31_MODEL_METADATA_MANIFEST` to the
+pinned manifest. The helper copies checksum-verified metadata and symlinks the
+existing safetensors weights; it never modifies the shared model cache.
+Missing metadata is fetched from the manifest's immutable Hugging Face revision
+using `HF_TOKEN` when supplied. Existing mismatched metadata fails startup.
+
+Dynamo includes extra non-weight files, including the safetensors index JSON,
+in its model-card compatibility checksum. Partial node caches can therefore
+reject an otherwise healthy second prefill worker. Do not disable that check.
+The `model_metadata_ready` stdout event records the revision, canonical path,
+and every metadata hash for cross-worker comparisons. After launch, verify that
+both prefills register without model-card rejection and receive requests before
+interpreting a 2P3D throughput result. CPU metadata checks alone do not prove
+serving success. Updating the model revision requires a new verified manifest.

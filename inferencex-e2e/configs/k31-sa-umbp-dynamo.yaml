@@ -31,6 +31,7 @@ kimik31-sa-umbp-dynamo:
           dp-attn: false
           additional-settings:
           - TOTAL_CPU_DRAM_GB=1799
+          - K31_MODEL_METADATA_MANIFEST=/infmax-workspace/benchmarks/multi_node/srt-slurm-recipes/configs/k31-pro-metadata-6d0a0202.json
           - MODEL_PATH=/var/lib/hf-hub-cache/models--moonshotai--Kimi-K3.1-Pro/snapshots/6d0a0202956796543364d666ab19c6ad1a494ee1
         decode:
           num-worker: 3
@@ -53,6 +54,7 @@ kimik31-sa-umbp-dynamo:
           dp-attn: false
           additional-settings:
           - TOTAL_CPU_DRAM_GB=1799
+          - K31_MODEL_METADATA_MANIFEST=/infmax-workspace/benchmarks/multi_node/srt-slurm-recipes/configs/k31-pro-metadata-6d0a0202.json
           - MODEL_PATH=/var/lib/hf-hub-cache/models--moonshotai--Kimi-K3.1-Pro/snapshots/6d0a0202956796543364d666ab19c6ad1a494ee1
         decode:
           num-worker: 2

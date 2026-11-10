@@ -1,0 +1,54 @@
+{
+  "repo": "moonshotai/Kimi-K3.1-Pro",
+  "revision": "6d0a0202956796543364d666ab19c6ad1a494ee1",
+  "files": {
+    "config.json": {
+      "size": 7303,
+      "sha256": "d95037631e3f23bf527a9f476f25209b231b46853a84877b9c56d5672b8d1202"
+    },
+    "configuration_kimi_k3.py": {
+      "size": 11414,
+      "sha256": "7156d9489ee9bf14ac4c5e9410bfa0f9679f5831a26bf6d007296f14e90ab329"
+    },
+    "encoding_k3.py": {
+      "size": 26311,
+      "sha256": "e52c0427af2c2f263b56b3a94683acae3a1f634f96e516e473370b563b175bf1"
+    },
+    "generation_config.json": {
+      "size": 53,
+      "sha256": "c6648c25e9705af7fba8847e243840d21b5cc63ddeb6297f750a7ddbb6a02836"
+    },
+    "kimi_k3_processor.py": {
+      "size": 7660,
+      "sha256": "ec9f7e86d2ab0eee07a8e7e7c037046e77ac3c25a710ad1298ec13be3b585b54"
+    },
+    "kimi_k3_vision_processing.py": {
+      "size": 6686,
+      "sha256": "d122b30bfd3a51a6f05d4bfcfda1e657827322b1353f7caefeebc2835d7736b5"
+    },
+    "media_utils.py": {
+      "size": 13844,
+      "sha256": "78403540328f9847d6b7ebc5c44eb2e6a752863de0afb7d0710728bb161dc60d"
+    },
+    "model.safetensors.index.json": {
+      "size": 59776878,
+      "sha256": "6500b553254ae3955e19bbf93d8cf3eee17101df4430493b33ce44d8ea1e2925"
+    },
+    "preprocessor_config.json": {
+      "size": 1011,
+      "sha256": "4be333605990c53a816e586dee9d5dd545afb7a59947c17f8f7ef26b4782668e"
+    },
+    "tiktoken.model": {
+      "size": 2795286,
+      "sha256": "b6c497a7469b33ced9c38afb1ad6e47f03f5e5dc05f15930799210ec050c5103"
+    },
+    "tokenization_kimi.py": {
+      "size": 16199,
+      "sha256": "204ee39fbf13a6d6608b0d3ca1b4b04a14ac5f0a062a7fdee02e61f5d936f9c6"
+    },
+    "tokenizer_config.json": {
+      "size": 3448,
+      "sha256": "9fc322181b8ec44236e148916aea4b6c2467b66ded7bfaff0efe623ad750b852"
+    }
+  }
+}

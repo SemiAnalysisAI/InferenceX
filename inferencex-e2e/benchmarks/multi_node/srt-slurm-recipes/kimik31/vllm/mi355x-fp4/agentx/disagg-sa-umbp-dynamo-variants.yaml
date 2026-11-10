@@ -318,6 +318,8 @@ base:
     SRT_MORIIO_EXPLICIT_REGISTRATION: '1'
     DYNAMO_PYTHON: /opt/k31-dynamo/bin/python
     DYNAMO_VERSION: 1.6.0.dev20261023
+    K31_MODEL_METADATA_DIR: /private-state/k31-dynamo-model
+    K31_MODEL_METADATA_MANIFEST: /infmax-workspace/benchmarks/multi_node/srt-slurm-recipes/configs/k31-pro-metadata-6d0a0202.json
     DYN_TCP_RPC_HOST: '@fabric.socket-ifname'
     DYN_TCP_RESPONSE_STREAM_HOST: '@fabric.socket-ifname'
   dynamo:
