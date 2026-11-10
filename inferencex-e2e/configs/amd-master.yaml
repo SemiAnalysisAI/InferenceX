@@ -1142,7 +1142,7 @@ kimik3.1-fp4-mi355x-sglang-agentic-dflash-disagg:
   model-prefix: kimik3.1
   runner: cluster:mi355x-amds
   precision: fp4
-  framework: sglang-disagg
+  framework: sglang
   router: { name: sglang-router, version: "0.3.2" }
   kv-p2p-transfer: mooncake
   multinode: true
