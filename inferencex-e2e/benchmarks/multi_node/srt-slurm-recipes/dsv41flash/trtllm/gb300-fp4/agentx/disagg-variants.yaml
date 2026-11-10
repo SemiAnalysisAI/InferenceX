@@ -65,8 +65,8 @@ base:
     numa_cpu_bind: true
     # Worker memory comes from the GPU's own NUMA node first instead of interleaving across both.
     numa_memory_bind: preferred
-    # Workers publish TensorRT-LLM iteration, KV-cache and request metrics without KV events, and
-    # srtctl advertises their /metrics to AIPerf.
+    # Workers publish TensorRT-LLM iteration and KV-cache metrics without KV events (per-request perf
+    # metrics stay off), and srtctl advertises their /metrics to AIPerf.
     publish_metrics: true
   roles:
     prefill:
@@ -279,7 +279,9 @@ override_5p1d_dep2_dep8_c7000:
         speculative_config:
           max_draft_len: 3
           block_size: 3
-          moe_backend: MEGAMOE_CUTEDSL
+          # The draft's routed experts ship as MXFP4; CUTLASS keeps their default W4A8 (MXFP8
+          # activation) path, while a MegaMoE draft would re-encode them as NVFP4.
+          moe_backend: CUTLASS
         stream_interval: 20
         tensor_parallel_size: 8
 
@@ -346,7 +348,9 @@ override_7p1d_dep2_dep32_c7600:
         speculative_config:
           max_draft_len: 5
           block_size: 5
-          moe_backend: MEGAMOE_CUTEDSL
+          # The draft's routed experts ship as MXFP4; CUTLASS keeps their default W4A8 (MXFP8
+          # activation) path, while a MegaMoE draft would re-encode them as NVFP4.
+          moe_backend: CUTLASS
         stream_interval: 20
         tensor_parallel_size: 32
 
@@ -451,7 +455,9 @@ override_7p1d_dep2_dep16_c7900:
         speculative_config:
           max_draft_len: 3
           block_size: 3
-          moe_backend: MEGAMOE_CUTEDSL
+          # The draft's routed experts ship as MXFP4; CUTLASS keeps their default W4A8 (MXFP8
+          # activation) path, while a MegaMoE draft would re-encode them as NVFP4.
+          moe_backend: CUTLASS
         stream_interval: 20
         tensor_parallel_size: 16
 
@@ -516,7 +522,9 @@ override_5p1d_dep2_dep16_c5100:
         speculative_config:
           max_draft_len: 3
           block_size: 3
-          moe_backend: MEGAMOE_CUTEDSL
+          # The draft's routed experts ship as MXFP4; CUTLASS keeps their default W4A8 (MXFP8
+          # activation) path, while a MegaMoE draft would re-encode them as NVFP4.
+          moe_backend: CUTLASS
         stream_interval: 20
         tensor_parallel_size: 16
 
@@ -662,7 +670,9 @@ override_10p1d_dep2_dep16_c11718:
         speculative_config:
           max_draft_len: 3
           block_size: 3
-          moe_backend: MEGAMOE_CUTEDSL
+          # The draft's routed experts ship as MXFP4; CUTLASS keeps their default W4A8 (MXFP8
+          # activation) path, while a MegaMoE draft would re-encode them as NVFP4.
+          moe_backend: CUTLASS
         stream_interval: 20
         tensor_parallel_size: 16
 
@@ -729,7 +739,9 @@ override_3p1d_dep2_dep32_c2286:
         speculative_config:
           max_draft_len: 5
           block_size: 5
-          moe_backend: MEGAMOE_CUTEDSL
+          # The draft's routed experts ship as MXFP4; CUTLASS keeps their default W4A8 (MXFP8
+          # activation) path, while a MegaMoE draft would re-encode them as NVFP4.
+          moe_backend: CUTLASS
         stream_interval: 20
         tensor_parallel_size: 32
 
@@ -796,7 +808,9 @@ override_2p1d_dep2_dep32_c1283:
         speculative_config:
           max_draft_len: 5
           block_size: 5
-          moe_backend: MEGAMOE_CUTEDSL
+          # The draft's routed experts ship as MXFP4; CUTLASS keeps their default W4A8 (MXFP8
+          # activation) path, while a MegaMoE draft would re-encode them as NVFP4.
+          moe_backend: CUTLASS
         stream_interval: 20
         tensor_parallel_size: 32
 
