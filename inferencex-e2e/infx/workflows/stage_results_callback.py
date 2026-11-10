@@ -13,7 +13,10 @@ from urllib.parse import parse_qs, quote, urlsplit
 from infx import github
 
 APP_REPOSITORY = os.environ.get("APP_REPO") or "SemiAnalysisAI/InferenceX-app"
-STAGING_SITE = "https://inferencemax-app-git-staging-semianalysisai.vercel.app"
+STAGING_SITE = (
+    os.environ.get("STAGING_APP_URL")
+    or "https://inferencemax-app-git-staging-semianalysisai.vercel.app"
+)
 INFERENCE_PATH = "/infx/inference"
 
 
