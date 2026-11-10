@@ -1,0 +1,893 @@
+schema: 2
+
+base:
+  name: dsv41flash-fp4-gb300-dynamo-trt-agentx-disagg
+  identity:
+    model: {}
+    container: {}
+    frameworks:
+      dynamo: "1.7.0.dev20261110"
+      tensorrt_llm: "1.4.0a0.dev202610310238"
+  dynamo:
+    install: true
+    source:
+      wheel: "1.7.0.dev20261110"
+    request_plane: tcp
+    event_plane: zmq
+  observability:
+    tachometer:
+      enabled: false
+  slurm:
+    time_limit: "3:00:00"
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 10
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+    - name: otel-collector
+      type: otel-collector
+      enabled: false
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+    # Decode hosts have the free host memory; prefill hosts hold the host KV tiers and Engram
+    # tables, and a dedicated node would leave a quarter of the 5P1D GPUs idle.
+    placement:
+      node: first_decode
+    env:
+      DYN_ROUTER_TEMPERATURE: "0"
+      DYN_ROUTER_QUEUE_THRESHOLD: None
+      DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: "3600"
+      DYN_TOKENIZER: fastokens
+      DYN_TOKENIZER_CACHE: "1"
+      DYN_TOKENIZER_CACHE_BYTES: "8000000000"
+      DYN_TCP_CHANNEL_BUFFER: "128"
+      DYN_TCP_REQUEST_TIMEOUT: "60"
+      # Token IDs cross the request plane as one packed buffer instead of a Python list, which
+      # holds the GIL for the whole ~130K-token prompt.
+      DYN_TOKEN_IDS_AS_BYTES: "1"
+    args:
+      router-mode: kv
+      router-session-affinity-ttl-secs: "14400"
+      no-kv-events: true
+      active-decode-blocks-threshold: "None"
+      active-prefill-tokens-threshold: "None"
+      active-prefill-tokens-threshold-frac: "None"
+  engine:
+    type: trtllm
+    served_model_name: nvidia/DeepSeek-V4.1-Flash-NVFP4
+    numa_cpu_bind: true
+    # Worker memory comes from the GPU's own NUMA node first instead of interleaving across both.
+    numa_memory_bind: preferred
+    # Workers publish TensorRT-LLM iteration and KV-cache metrics without KV events (per-request perf
+    # metrics stay off), and srtctl advertises their /metrics to AIPerf.
+    publish_metrics: true
+  roles:
+    prefill:
+      gpus: 2
+      # Each DEP2 worker spans both NUMA nodes, so each rank's host KV tier and Engram table
+      # stay on its own GPU's node.
+      gpu_indices: [[0, 2], [1, 3]]
+      env:
+        TLLM_LOG_LEVEL: INFO
+        TRTLLM_SERVER_DISABLE_GC: "1"
+        TRTLLM_WORKER_DISABLE_GC: "1"
+        NCCL_GRAPH_MIXING_SUPPORT: "0"
+        MIMALLOC_ARENA_RESERVE: "0"
+        OMP_NUM_THREADS: "1"
+        OMPI_MCA_coll: ^ucc,hcoll
+        TLLM_NUMA_AWARE_WORKER_AFFINITY: "1"
+        TRTLLM_PINNED_WEIGHT_STAGING: "1"
+        TLLM_PROFILE_LOG_RANKS: all
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+        CUDA_SCALE_LAUNCH_QUEUES: 4x
+        TLLM_V2_CTX_DEMOTE_UNCACHED_TOKENS: "16384"
+        TLLM_V2_CTX_DEMOTE_MAX_ITERS: "16"
+        TLLM_INDEXER_MQA_LOGITS_ELEM_BUDGET: "1073741824"
+        # NIXL registers the KV pool as GPU memory only through UCX's CUDA transports.
+        UCX_TLS: cuda_ipc,cuda_copy,sm,self,tcp
+        DYN_ENGINE_CONV_AFFINITY: "1"
+        DYN_TOOL_CALL_PARSER: deepseek_v41
+        DYN_REASONING_PARSER: deepseek_v41
+        # Dynamo 1.7 backend admission rejects turns with 529 once a DP rank holds
+        # max_batch_size requests; the TensorRT-LLM scheduler queues them instead.
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: "10000"
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT: "10000"
+        DYN_BACKEND_ADMISSION_REQUEST_QUEUE_LIMIT: "10000"
+        DYN_TOKEN_IDS_AS_BYTES: "1"
+      args:
+        attention_dp_config:
+          kv_cache_routing_conversation_affinity: true
+        cache_transceiver_config:
+          backend: NIXL
+          kv_transfer_timeout_ms: 600000
+          transceiver_runtime: PYTHON
+        cuda_graph_config:
+        custom_tokenizer: deepseek_v41
+        # Without it the vision encoder makes the model multimodal, which the breakable prefill
+        # CUDA graph rejects.
+        disable_mm_encoder: true
+        disable_overlap_scheduler: false
+        enable_attention_dp: true
+        enable_chunked_prefill: true
+        enable_iter_perf_stats: true
+        iter_perf_stats_interval: 40
+        kv_cache_config:
+          avg_seq_len: 160000
+          block_reuse_config:
+            max_num_turns: 5
+            policy: per_conversation
+          dtype: fp8
+          enable_block_reuse: true
+          event_buffer_max_size: 0
+          free_gpu_memory_fraction: 0.8
+          host_cache_bind_to_gpu_numa_node: true
+          iteration_stats_interval: 40
+          tokens_per_block: 128
+        max_batch_size: 256
+        max_num_tokens: 32768
+        max_seq_len: 990016
+        moe_config:
+          backend: CUTEDSL
+        moe_expert_parallel_size: 2
+        pipeline_parallel_size: 1
+        prefill_cuda_graph_backend: breakable
+        print_iter_log: true
+        scheduler_config:
+          capacity_scheduler_policy: MAX_UTILIZATION
+        sparse_attention_config:
+          algorithm: csa2
+        tensor_parallel_size: 2
+    decode:
+      env:
+        TLLM_LOG_LEVEL: INFO
+        TRTLLM_SERVER_DISABLE_GC: "1"
+        TRTLLM_WORKER_DISABLE_GC: "1"
+        NCCL_GRAPH_MIXING_SUPPORT: "0"
+        MIMALLOC_ARENA_RESERVE: "0"
+        OMP_NUM_THREADS: "1"
+        OMPI_MCA_coll: ^ucc,hcoll
+        TLLM_NUMA_AWARE_WORKER_AFFINITY: "1"
+        TRTLLM_PINNED_WEIGHT_STAGING: "1"
+        TLLM_PROFILE_LOG_RANKS: all
+        UCX_TLS: cuda_ipc,cuda_copy,sm,self,tcp
+        # Hands attention-DP placement to TensorRT-LLM instead of a strict Dynamo-chosen rank.
+        DYN_ENGINE_CONV_AFFINITY: "1"
+        DYN_TOOL_CALL_PARSER: deepseek_v41
+        DYN_REASONING_PARSER: deepseek_v41
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: "10000"
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT: "10000"
+        DYN_BACKEND_ADMISSION_REQUEST_QUEUE_LIMIT: "10000"
+        DYN_TOKEN_IDS_AS_BYTES: "1"
+      args:
+        cache_transceiver_config:
+          backend: NIXL
+          kv_transfer_timeout_ms: 600000
+          transceiver_runtime: PYTHON
+        cuda_graph_config:
+          enable_padding: true
+        custom_tokenizer: deepseek_v41
+        disable_mm_encoder: true
+        enable_iter_perf_stats: true
+        kv_cache_config:
+          avg_seq_len: 160000
+          dtype: fp8
+          enable_block_reuse: false
+          event_buffer_max_size: 0
+          free_gpu_memory_fraction: 0.85
+          host_cache_size: 0
+          tokens_per_block: 128
+        max_seq_len: 996595
+        moe_config:
+          use_low_precision_moe_combine: true
+        num_postprocess_workers: 4
+        pipeline_parallel_size: 1
+        print_iter_log: true
+        sparse_attention_config:
+          algorithm: csa2
+          enable_heuristic_topk: true
+        speculative_config:
+          decoding_type: DSpark
+  sbatch_directives:
+    mem: "0"
+    exclusive: ""
+  srun_options:
+    container-remap-root: ""
+    # Host KV tiers and Engram tables need the node's full memory in every worker step.
+    mem: "0"
+  benchmark:
+    placement:
+      node: last_decode
+    env:
+      AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: "14400"
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+      # The client splits this value on whitespace, so it has none.
+      AIPERF_EXTRA_INPUTS: '{"chat_template_kwargs":{"reasoning_effort":"high","thinking":true},"temperature":1}'
+      AIPERF_DATASET_MMAP_CACHE_ENABLED: "true"
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: trtllm_kv_cache_utilization
+
+override_5p1d_dep2_dep8_c7000:
+  name: dsv41flash-fp4-gb300-dynamo-trt-agentx-disagg-5p1d-dep2-dep8-c7000
+  benchmark:
+    # The client's thousands of concurrent sessions stay off the decode node's CPUs.
+    placement:
+      node: dedicated
+  roles:
+    prefill:
+      nodes: 3
+      workers: 5
+      env:
+        # A subagent's first turn goes to the attention-DP rank the KV router matched to its parent.
+        DYN_ENGINE_CONV_AFFINITY_DP_RANK_SOURCE: dynamo
+      args:
+        attention_dp_config:
+          kv_cache_routing_new_conv_placement: least_prefill
+          kv_cache_routing_strict_conversation_affinity: true
+          kv_cache_routing_strict_affinity_max_wait_iters: 2000
+        kv_cache_config:
+          fp8_context_mla_kv_len_cap: 8000000
+          free_gpu_memory_fraction: 0.9
+          host_cache_size: 134217728000
+    decode:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      args:
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76,
+            80, 84, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144, 148, 152,
+            156, 160, 164, 168, 172, 176, 180, 184, 188, 192, 196, 200, 204, 208, 212, 216, 220, 224,
+            228, 232, 236, 240, 244, 248, 252, 256, 260, 264, 268, 272, 276, 280, 284, 288, 292, 296,
+            300, 304, 308, 312, 316, 320]
+        enable_attention_dp: true
+        enable_client_io_during_gpu_wait: true
+        enable_lm_head_tp_in_adp: true
+        gen_prompt_tail_tokens: 8192
+        iter_perf_stats_interval: 400
+        kv_cache_config:
+          free_gpu_memory_fraction: 0.6
+          iteration_stats_interval: 400
+        max_batch_size: 320
+        max_num_tokens: 1280
+        moe_config:
+          backend: MEGAMOE_CUTEDSL
+          megamoe_fuse_shared_expert: true
+          load_balancer:
+            num_slots: 384
+            layer_updates_per_iter: 0
+            warmup_placement:
+              start_step: 0
+              interval_steps: 4000
+              max_migrations: 100000
+              min_rows: 1048576
+              min_pos: 2
+              planner: lpt
+              decay: 0.5
+              max_moved_fraction: 0.1
+              min_gain: 0.01
+              count_every_steps: 4
+        moe_expert_parallel_size: 8
+        scheduler_config:
+          max_gen_init_admissions_per_pass: 1
+        speculative_config:
+          max_draft_len: 3
+          block_size: 3
+          # The draft's routed experts ship as MXFP4; CUTLASS keeps their default W4A8 (MXFP8
+          # activation) path, while a MegaMoE draft would re-encode them as NVFP4.
+          moe_backend: CUTLASS
+        stream_interval: 20
+        tensor_parallel_size: 8
+
+override_7p1d_dep2_dep32_c7600:
+  name: dsv41flash-fp4-gb300-dynamo-trt-agentx-disagg-7p1d-dep2-dep32-c7600
+  benchmark:
+    # The client's thousands of concurrent sessions stay off the decode node's CPUs.
+    placement:
+      node: dedicated
+  roles:
+    prefill:
+      nodes: 4
+      workers: 7
+      env:
+        # A subagent's first turn goes to the attention-DP rank the KV router matched to its parent.
+        DYN_ENGINE_CONV_AFFINITY_DP_RANK_SOURCE: dynamo
+      args:
+        attention_dp_config:
+          kv_cache_routing_new_conv_placement: least_prefill
+          kv_cache_routing_strict_conversation_affinity: true
+          kv_cache_routing_strict_affinity_max_wait_iters: 2000
+        kv_cache_config:
+          fp8_context_mla_kv_len_cap: 8000000
+          host_cache_size: 119185342464
+    decode:
+      nodes: 8
+      workers: 1
+      gpus: 32
+      env:
+        TRTLLM_V41_ENCODER_REPLAY: "0"
+      args:
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4, 8, 10, 12, 14, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]
+        enable_attention_dp: true
+        enable_client_io_during_gpu_wait: true
+        enable_lm_head_tp_in_adp: true
+        gen_prompt_tail_tokens: 8192
+        iter_perf_stats_interval: 400
+        kv_cache_config:
+          iteration_stats_interval: 400
+        max_batch_size: 25
+        max_num_tokens: 150
+        moe_config:
+          backend: MEGAMOE_CUTEDSL
+          megamoe_fuse_shared_expert: true
+          load_balancer:
+            num_slots: 416
+            layer_updates_per_iter: 0
+            warmup_placement:
+              start_step: 0
+              interval_steps: 12000
+              max_migrations: 100000
+              min_rows: 1048576
+              min_pos: 2
+              planner: cost
+              decay: 0.5
+              max_moved_fraction: 0.1
+              min_gain: 0.01
+              min_round_gain: 0.5
+              count_every_steps: 4
+        moe_expert_parallel_size: 32
+        scheduler_config:
+          max_gen_init_admissions_per_pass: 1
+        speculative_config:
+          max_draft_len: 5
+          block_size: 5
+          # The draft's routed experts ship as MXFP4; CUTLASS keeps their default W4A8 (MXFP8
+          # activation) path, while a MegaMoE draft would re-encode them as NVFP4.
+          moe_backend: CUTLASS
+        stream_interval: 20
+        tensor_parallel_size: 32
+
+override_1p4d_dep2_tep8_c84:
+  name: dsv41flash-fp4-gb300-dynamo-trt-agentx-disagg-1p4d-dep2-tep8-c84
+  frontend:
+    args:
+      # Session affinity pins each session to one batch-1 decode worker, leaving others idle.
+      router-mode: least-loaded
+      router-session-affinity-ttl-secs: null
+      no-kv-events: null
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpu_indices: [0, 2]
+      args:
+        kv_cache_config:
+          host_cache_size: 85899345920
+    decode:
+      nodes: 8
+      workers: 4
+      gpus: 8
+      args:
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4]
+        enable_attention_dp: false
+        enable_lm_head_tp_in_adp: false
+        iter_perf_stats_interval: 40
+        kv_cache_config:
+          iteration_stats_interval: 40
+        max_batch_size: 1
+        max_num_tokens: 256
+        moe_config:
+          backend: TRTLLM
+        moe_expert_parallel_size: 2
+        speculative_config:
+          max_draft_len: 5
+          block_size: 5
+        stream_interval: 20
+        tensor_parallel_size: 8
+
+override_7p1d_dep2_dep16_c7900:
+  name: dsv41flash-fp4-gb300-dynamo-trt-agentx-disagg-7p1d-dep2-dep16-c7900
+  benchmark:
+    # The client's thousands of concurrent sessions stay off the decode node's CPUs.
+    placement:
+      node: dedicated
+  roles:
+    prefill:
+      nodes: 4
+      workers: 7
+      env:
+        # A subagent's first turn goes to the attention-DP rank the KV router matched to its parent.
+        DYN_ENGINE_CONV_AFFINITY_DP_RANK_SOURCE: dynamo
+      args:
+        attention_dp_config:
+          kv_cache_routing_new_conv_placement: least_prefill
+          kv_cache_routing_strict_conversation_affinity: true
+          kv_cache_routing_strict_affinity_max_wait_iters: 2000
+        kv_cache_config:
+          fp8_context_mla_kv_len_cap: 8000000
+          host_cache_size: 134217728000
+    decode:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      args:
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72,
+            76, 80, 84, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 128]
+        enable_attention_dp: true
+        enable_client_io_during_gpu_wait: true
+        enable_lm_head_tp_in_adp: true
+        gen_prompt_tail_tokens: 8192
+        iter_perf_stats_interval: 400
+        kv_cache_config:
+          free_gpu_memory_fraction: 0.6
+          iteration_stats_interval: 400
+        max_batch_size: 128
+        max_num_tokens: 512
+        moe_config:
+          backend: MEGAMOE_CUTEDSL
+          megamoe_fuse_shared_expert: true
+          load_balancer:
+            num_slots: 384
+            layer_updates_per_iter: 0
+            warmup_placement:
+              start_step: 0
+              interval_steps: 4000
+              max_migrations: 100000
+              min_rows: 1048576
+              min_pos: 2
+              planner: lpt
+              decay: 0.5
+              max_moved_fraction: 0.1
+              min_gain: 0.01
+              count_every_steps: 4
+        moe_expert_parallel_size: 16
+        scheduler_config:
+          max_gen_init_admissions_per_pass: 1
+        speculative_config:
+          max_draft_len: 3
+          block_size: 3
+          # The draft's routed experts ship as MXFP4; CUTLASS keeps their default W4A8 (MXFP8
+          # activation) path, while a MegaMoE draft would re-encode them as NVFP4.
+          moe_backend: CUTLASS
+        stream_interval: 20
+        tensor_parallel_size: 16
+
+override_5p1d_dep2_dep16_c5100:
+  name: dsv41flash-fp4-gb300-dynamo-trt-agentx-disagg-5p1d-dep2-dep16-c5100
+  benchmark:
+    # The client's thousands of concurrent sessions stay off the decode node's CPUs.
+    placement:
+      node: dedicated
+  roles:
+    prefill:
+      nodes: 3
+      workers: 5
+      env:
+        # A subagent's first turn goes to the attention-DP rank the KV router matched to its parent.
+        DYN_ENGINE_CONV_AFFINITY_DP_RANK_SOURCE: dynamo
+      args:
+        attention_dp_config:
+          kv_cache_routing_new_conv_placement: least_prefill
+          kv_cache_routing_strict_conversation_affinity: true
+          kv_cache_routing_strict_affinity_max_wait_iters: 2000
+        kv_cache_config:
+          fp8_context_mla_kv_len_cap: 8000000
+          host_cache_size: 134217728000
+    decode:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      args:
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64]
+        enable_attention_dp: true
+        enable_client_io_during_gpu_wait: true
+        enable_lm_head_tp_in_adp: true
+        gen_prompt_tail_tokens: 8192
+        iter_perf_stats_interval: 400
+        kv_cache_config:
+          free_gpu_memory_fraction: 0.6
+          iteration_stats_interval: 400
+        max_batch_size: 64
+        max_num_tokens: 256
+        moe_config:
+          backend: MEGAMOE_CUTEDSL
+          megamoe_fuse_shared_expert: true
+          load_balancer:
+            num_slots: 384
+            layer_updates_per_iter: 0
+            warmup_placement:
+              start_step: 0
+              interval_steps: 4000
+              max_migrations: 100000
+              min_rows: 1048576
+              min_pos: 2
+              planner: lpt
+              decay: 0.5
+              max_moved_fraction: 0.1
+              min_gain: 0.01
+              count_every_steps: 4
+        moe_expert_parallel_size: 16
+        scheduler_config:
+          max_gen_init_admissions_per_pass: 1
+        speculative_config:
+          max_draft_len: 3
+          block_size: 3
+          # The draft's routed experts ship as MXFP4; CUTLASS keeps their default W4A8 (MXFP8
+          # activation) path, while a MegaMoE draft would re-encode them as NVFP4.
+          moe_backend: CUTLASS
+        stream_interval: 20
+        tensor_parallel_size: 16
+
+override_1p4d_dep2_tep8_c240:
+  name: dsv41flash-fp4-gb300-dynamo-trt-agentx-disagg-1p4d-dep2-tep8-c240
+  frontend:
+    args:
+      # Session affinity pins each session to one small-batch decode worker, leaving others idle.
+      router-mode: least-loaded
+      router-session-affinity-ttl-secs: null
+      no-kv-events: null
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpu_indices: [0, 2]
+      args:
+        kv_cache_config:
+          host_cache_size: 85899345920
+    decode:
+      nodes: 8
+      workers: 4
+      gpus: 8
+      args:
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4]
+        enable_attention_dp: false
+        enable_lm_head_tp_in_adp: false
+        iter_perf_stats_interval: 40
+        kv_cache_config:
+          iteration_stats_interval: 40
+        max_batch_size: 4
+        max_num_tokens: 256
+        moe_config:
+          backend: TRTLLM
+        moe_expert_parallel_size: 2
+        speculative_config:
+          max_draft_len: 3
+          block_size: 3
+        stream_interval: 20
+        tensor_parallel_size: 8
+
+override_1p4d_dep2_tep8_c140:
+  name: dsv41flash-fp4-gb300-dynamo-trt-agentx-disagg-1p4d-dep2-tep8-c140
+  frontend:
+    args:
+      # Session affinity pins each session to one small-batch decode worker, leaving others idle.
+      router-mode: least-loaded
+      router-session-affinity-ttl-secs: null
+      no-kv-events: null
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpu_indices: [0, 2]
+      args:
+        kv_cache_config:
+          host_cache_size: 85899345920
+    decode:
+      nodes: 8
+      workers: 4
+      gpus: 8
+      args:
+        cuda_graph_config:
+          batch_sizes: [1, 2]
+        enable_attention_dp: false
+        enable_lm_head_tp_in_adp: false
+        iter_perf_stats_interval: 40
+        kv_cache_config:
+          iteration_stats_interval: 40
+        max_batch_size: 2
+        max_num_tokens: 256
+        moe_config:
+          backend: TRTLLM
+        moe_expert_parallel_size: 2
+        speculative_config:
+          max_draft_len: 5
+          block_size: 5
+        stream_interval: 20
+        tensor_parallel_size: 8
+
+override_10p1d_dep2_dep16_c11718:
+  name: dsv41flash-fp4-gb300-dynamo-trt-agentx-disagg-10p1d-dep2-dep16-c11718
+  benchmark:
+    # The client's thousands of concurrent sessions stay off the decode node's CPUs.
+    placement:
+      node: dedicated
+  roles:
+    prefill:
+      nodes: 5
+      workers: 10
+      env:
+        # A subagent's first turn goes to the attention-DP rank the KV router matched to its parent.
+        DYN_ENGINE_CONV_AFFINITY_DP_RANK_SOURCE: dynamo
+      args:
+        attention_dp_config:
+          kv_cache_routing_new_conv_placement: least_prefill
+          kv_cache_routing_strict_conversation_affinity: true
+          kv_cache_routing_strict_affinity_max_wait_iters: 2000
+        kv_cache_config:
+          fp8_context_mla_kv_len_cap: 8000000
+          host_cache_size: 134217728000
+    decode:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      args:
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72,
+            76, 80, 84, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144, 148,
+            152, 156, 160, 164, 168, 172, 176, 180, 184, 188, 192, 196, 200, 204, 208, 212, 216,
+            220, 224, 228, 232, 236, 240, 244, 248, 252, 256]
+        enable_attention_dp: true
+        enable_client_io_during_gpu_wait: true
+        enable_lm_head_tp_in_adp: true
+        gen_prompt_tail_tokens: 8192
+        iter_perf_stats_interval: 400
+        kv_cache_config:
+          free_gpu_memory_fraction: 0.6
+          iteration_stats_interval: 400
+        max_batch_size: 256
+        max_num_tokens: 1024
+        moe_config:
+          backend: MEGAMOE_CUTEDSL
+          megamoe_fuse_shared_expert: true
+          load_balancer:
+            num_slots: 384
+            layer_updates_per_iter: 0
+            warmup_placement:
+              start_step: 0
+              interval_steps: 4000
+              max_migrations: 100000
+              min_rows: 1048576
+              min_pos: 2
+              planner: lpt
+              decay: 0.5
+              max_moved_fraction: 0.1
+              min_gain: 0.01
+              count_every_steps: 4
+        moe_expert_parallel_size: 16
+        scheduler_config:
+          max_gen_init_admissions_per_pass: 1
+        speculative_config:
+          max_draft_len: 3
+          block_size: 3
+          # The draft's routed experts ship as MXFP4; CUTLASS keeps their default W4A8 (MXFP8
+          # activation) path, while a MegaMoE draft would re-encode them as NVFP4.
+          moe_backend: CUTLASS
+        stream_interval: 20
+        tensor_parallel_size: 16
+
+override_3p1d_dep2_dep32_c2286:
+  name: dsv41flash-fp4-gb300-dynamo-trt-agentx-disagg-3p1d-dep2-dep32-c2286
+  benchmark:
+    # The client's thousands of concurrent sessions stay off the decode node's CPUs.
+    placement:
+      node: dedicated
+  roles:
+    prefill:
+      nodes: 2
+      workers: 3
+      env:
+        # A subagent's first turn goes to the attention-DP rank the KV router matched to its parent.
+        DYN_ENGINE_CONV_AFFINITY_DP_RANK_SOURCE: dynamo
+      args:
+        attention_dp_config:
+          kv_cache_routing_new_conv_placement: least_prefill
+          kv_cache_routing_strict_conversation_affinity: true
+          kv_cache_routing_strict_affinity_max_wait_iters: 2000
+        kv_cache_config:
+          fp8_context_mla_kv_len_cap: 8000000
+          host_cache_size: 119185342464
+    decode:
+      nodes: 8
+      workers: 1
+      gpus: 32
+      env:
+        TRTLLM_V41_ENCODER_REPLAY: "0"
+      args:
+        cuda_graph_config:
+          batch_sizes: [1, 2, 3, 4, 5, 6, 7, 8]
+        enable_attention_dp: true
+        enable_client_io_during_gpu_wait: true
+        enable_lm_head_tp_in_adp: true
+        gen_prompt_tail_tokens: 8192
+        iter_perf_stats_interval: 400
+        kv_cache_config:
+          iteration_stats_interval: 400
+        max_batch_size: 8
+        max_num_tokens: 256
+        moe_config:
+          backend: MEGAMOE_CUTEDSL
+          megamoe_fuse_shared_expert: true
+          load_balancer:
+            num_slots: 416
+            layer_updates_per_iter: 0
+            warmup_placement:
+              start_step: 0
+              interval_steps: 12000
+              max_migrations: 100000
+              min_rows: 1048576
+              min_pos: 2
+              planner: cost
+              decay: 0.5
+              max_moved_fraction: 0.1
+              min_gain: 0.01
+              min_round_gain: 0.5
+              count_every_steps: 4
+        moe_expert_parallel_size: 32
+        scheduler_config:
+          max_gen_init_admissions_per_pass: 1
+        speculative_config:
+          max_draft_len: 5
+          block_size: 5
+          # The draft's routed experts ship as MXFP4; CUTLASS keeps their default W4A8 (MXFP8
+          # activation) path, while a MegaMoE draft would re-encode them as NVFP4.
+          moe_backend: CUTLASS
+        stream_interval: 20
+        tensor_parallel_size: 32
+
+override_2p1d_dep2_dep32_c1283:
+  name: dsv41flash-fp4-gb300-dynamo-trt-agentx-disagg-2p1d-dep2-dep32-c1283
+  benchmark:
+    # The client's thousands of concurrent sessions stay off the decode node's CPUs.
+    placement:
+      node: dedicated
+  roles:
+    prefill:
+      nodes: 1
+      workers: 2
+      env:
+        # A subagent's first turn goes to the attention-DP rank the KV router matched to its parent.
+        DYN_ENGINE_CONV_AFFINITY_DP_RANK_SOURCE: dynamo
+      args:
+        attention_dp_config:
+          kv_cache_routing_new_conv_placement: least_prefill
+          kv_cache_routing_strict_conversation_affinity: true
+          kv_cache_routing_strict_affinity_max_wait_iters: 2000
+        kv_cache_config:
+          fp8_context_mla_kv_len_cap: 8000000
+          host_cache_size: 119185342464
+    decode:
+      nodes: 8
+      workers: 1
+      gpus: 32
+      env:
+        TRTLLM_V41_ENCODER_REPLAY: "0"
+      args:
+        cuda_graph_config:
+          batch_sizes: [1, 2, 3, 4]
+        enable_attention_dp: true
+        enable_client_io_during_gpu_wait: true
+        enable_lm_head_tp_in_adp: true
+        gen_prompt_tail_tokens: 8192
+        iter_perf_stats_interval: 400
+        kv_cache_config:
+          iteration_stats_interval: 400
+        max_batch_size: 4
+        max_num_tokens: 256
+        moe_config:
+          backend: MEGAMOE_CUTEDSL
+          megamoe_fuse_shared_expert: true
+          load_balancer:
+            num_slots: 416
+            layer_updates_per_iter: 0
+            warmup_placement:
+              start_step: 0
+              interval_steps: 12000
+              max_migrations: 100000
+              min_rows: 1048576
+              min_pos: 2
+              planner: cost
+              decay: 0.5
+              max_moved_fraction: 0.1
+              min_gain: 0.01
+              min_round_gain: 0.5
+              count_every_steps: 4
+        moe_expert_parallel_size: 32
+        scheduler_config:
+          max_gen_init_admissions_per_pass: 1
+        speculative_config:
+          max_draft_len: 5
+          block_size: 5
+          # The draft's routed experts ship as MXFP4; CUTLASS keeps their default W4A8 (MXFP8
+          # activation) path, while a MegaMoE draft would re-encode them as NVFP4.
+          moe_backend: CUTLASS
+        stream_interval: 20
+        tensor_parallel_size: 32
+
+override_1p6d_dep2_tp4_c180:
+  name: dsv41flash-fp4-gb300-dynamo-trt-agentx-disagg-1p6d-dep2-tp4-c180
+  frontend:
+    args:
+      # Session affinity pins each session to one small-batch decode worker, leaving others idle.
+      router-mode: least-loaded
+      router-session-affinity-ttl-secs: null
+      no-kv-events: null
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpu_indices: [0, 2]
+      args:
+        kv_cache_config:
+          host_cache_size: 85899345920
+    decode:
+      nodes: 6
+      workers: 6
+      gpus: 4
+      args:
+        cuda_graph_config:
+          batch_sizes: [1, 2]
+        enable_attention_dp: false
+        enable_lm_head_tp_in_adp: false
+        iter_perf_stats_interval: 40
+        kv_cache_config:
+          iteration_stats_interval: 40
+        max_batch_size: 2
+        max_num_tokens: 256
+        moe_config:
+          backend: TRTLLM
+        moe_expert_parallel_size: 1
+        speculative_config:
+          max_draft_len: 5
+          block_size: 5
+        stream_interval: 20
+        tensor_parallel_size: 4
+
+override_1p6d_dep2_tp4_c114:
+  name: dsv41flash-fp4-gb300-dynamo-trt-agentx-disagg-1p6d-dep2-tp4-c114
+  frontend:
+    args:
+      # Session affinity pins each session to one small-batch decode worker, leaving others idle.
+      router-mode: least-loaded
+      router-session-affinity-ttl-secs: null
+      no-kv-events: null
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpu_indices: [0, 2]
+      args:
+        kv_cache_config:
+          host_cache_size: 85899345920
+    decode:
+      nodes: 6
+      workers: 6
+      gpus: 4
+      args:
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4]
+        enable_attention_dp: false
+        enable_lm_head_tp_in_adp: false
+        iter_perf_stats_interval: 40
+        kv_cache_config:
+          iteration_stats_interval: 40
+        max_batch_size: 1
+        max_num_tokens: 256
+        moe_config:
+          backend: TRTLLM
+        moe_expert_parallel_size: 1
+        speculative_config:
+          max_draft_len: 5
+          block_size: 5
+        stream_interval: 20
+        tensor_parallel_size: 4
