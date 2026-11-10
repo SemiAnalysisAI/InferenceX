@@ -952,7 +952,7 @@ kimik3.1-fp4-mi355x-vllm-agentic-dspark:
 # Seven-token DSpark (bundled draft); synthetic acceptance follows
 # infx/golden_al_distribution/minimax-m3.1-flash__dspark__native__probabilistic-block.yaml.
 minimaxm31flash-fp4-mi355x-sglang-agentic-dspark:
-  image: lmsysorg/sglang:dev-minimax-m31-flash-mi35x@sha256:2d74f6ea339964befdfc97f8d74d9ce5bbecd4a29b343f2868a29d13d51ec3f8
+  image: lmsysorg/sglang:v0.5.23-rocm720-mi35x@sha256:1f45d56fa6708a62a74fdf4211616fb0d57c336131b45729d2646c6db309eff6
   model: MiniMaxAI/MiniMax-M3.1-Flash
   model-prefix: minimaxm31flash
   runner: cluster:mi355x-amds
