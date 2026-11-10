@@ -1088,7 +1088,7 @@ glm5.3flash-fp8-mi355x-sglang-agentic-mtp:
 # SGLang ROCm 10 MI35X release image. TP2/EP1 up to c32, TP4/EP1 up to c16,
 # DP2 attention with TP MoE at c32 and c64 (c32 overlaps TP2). Host Engram on all.
 dsv41flash-fp4-mi355x-sglang-agentic-dspark:
-  image: lmsysorg/sglang-rocm:v0.5.22-rocm10-mi35x-20261021
+  image: lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261109@sha256:1e1f3b01515f1da88cee3c835b0a703f151f4af43ff9fb4a72bd045d77c7ea00
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds
