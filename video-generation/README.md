@@ -47,9 +47,10 @@ latency and leaves cross-engine quality unjudged.
 5-second H3 contract under the `release-v1` selector. It requests 49 denoising
 updates, expects 124 delivered frames, and uses a disjoint warmup. The runner
 sends each engine's explicit H.264 options and records the encoding policy in
-the plan hash. Media decoding verifies observable stream properties; preset,
-CRF, exact encoder implementation, and cross-engine quality still require
-separate evidence. Comparisons leave cross-engine quality unjudged, while
+the plan hash. Media decoding verifies observable stream properties, plus CRF
+and the preset's fixed options from x264's SEI header. A plan may request only
+a preset whose options the check can verify. Exact encoder implementation and
+cross-engine quality still require separate evidence. Comparisons leave cross-engine quality unjudged, while
 same-implementation numerical checks require matching sealed image, launch,
 environment, GPU and algorithm identity.
 
@@ -86,7 +87,7 @@ dispatch the workflow with its `run_id` and `run_attempt`.
 cd video-generation
 PYTHONPATH=../inferencex-e2e uv run --no-project --python 3.12 \
   --with 'av==16.1.0' --with 'numpy==2.3.5' \
-  --with 'pyyaml>=6,<7' --with 'pytest>=8,<9' python -m pytest -q
+  --with 'pyyaml>=6,<7' --with 'pytest==9.2.0' python -m pytest -q
 ```
 
 [Test Video Harness](../.github/workflows/test-video-harness.yml) runs these
