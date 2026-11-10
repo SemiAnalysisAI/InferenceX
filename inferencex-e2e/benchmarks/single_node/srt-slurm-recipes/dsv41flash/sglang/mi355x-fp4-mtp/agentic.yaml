@@ -63,7 +63,9 @@ base:
 # One variant per point; the saturation point gets a longer warmup drain. A longer
 # prefill-decode interval trades TTFT for P90 ITL: 192 with lpm up to c8, 96 at c16
 # and 32 at c32. amd-master.yaml runs TP2 through c32, TP4 through c16; DP2 covers
-# c32 and c64.
+# c32 and c64. TP4 c1 and TP2 c4, c16 and c32 cap running requests at 1, 1, 4 and 8:
+# sessions past the cap queue instead of joining the decode batch, which keeps each
+# token stream at small-batch speed and lifts P90 interactivity at the cost of TTFT.
 override_tp2_c1:
   roles:
     agg:
@@ -109,7 +111,7 @@ override_tp2_c4:
         prefill-decode-interval: 192
         schedule-policy: lpm
         swa-prefix-tails: 256
-        max-running-requests: 8
+        max-running-requests: 1
         monokernel-backend: amd
   benchmark:
     env:
@@ -142,7 +144,7 @@ override_tp2_c16:
         chunked-prefill-size: 16384
         prefill-decode-interval: 96
         swa-prefix-tails: 1024
-        max-running-requests: 32
+        max-running-requests: 4
         monokernel-backend: amd
   benchmark:
     env:
@@ -158,7 +160,7 @@ override_tp2_c32:
         chunked-prefill-size: 16384
         prefill-decode-interval: 32
         swa-prefix-tails: 2048
-        max-running-requests: 64
+        max-running-requests: 8
       env:
         # The AMD monokernel refuses this page-8 index-K layout.
         SGLANG_HIP_DSV41_INDEX_K_PAGE8: '1'
@@ -279,7 +281,7 @@ override_tp4_c1:
         prefill-decode-interval: 192
         schedule-policy: lpm
         swa-prefix-tails: 128
-        max-running-requests: 2
+        max-running-requests: 1
         monokernel-backend: amd
   benchmark:
     env:
