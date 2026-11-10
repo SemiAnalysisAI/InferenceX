@@ -34,7 +34,7 @@ base:
         max-prefill-tokens: 16384
         chunked-prefill-size: 16384
         scheduler-recv-interval: 60
-        stream-interval: 50
+        stream-interval: 20
         # Parallel tokenization keeps 256k warmups within the client timeout.
         tokenizer-worker-num: 6
         reasoning-parser: qwen3

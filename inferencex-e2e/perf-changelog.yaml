@@ -12599,5 +12599,7 @@
     - qwen3.5-fp8-mi355x-sglang-agentic-mtp
   scenario-type: [agentic-coding]
   description:
-    - "Update the SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261020 to lmsysorg/sglang-rocm:v0.5.23-rocm720-mi35x-20261109 (amd64 digest sha256:e728a52213cce18493a46ac8ac62d5c9eaee66591941871acd213fe989e55957). Image-only change: the HiCache write_through policy, the TP4 concurrency grid, the srt-slurm recipe and all serving flags are unchanged, and the other MI355X arms stay on their current tags."
+    - "Update the SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261020 to lmsysorg/sglang-rocm:v0.5.23-rocm720-mi35x-20261109 (amd64 digest sha256:e728a52213cce18493a46ac8ac62d5c9eaee66591941871acd213fe989e55957). The other MI355X arms stay on their current tags."
+    - "Lower stream-interval from 50 to 20 in the shared aggregated-role args of the srt-slurm recipe, so all 19 points (c1 through c80) stream at most 20 tokens per chunk, the AgentX limit. No point overrides it. This sweep therefore changes both the image and the stream interval."
+    - "The HiCache write_through policy, the TP4 concurrency grid and every other serving flag are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4975
