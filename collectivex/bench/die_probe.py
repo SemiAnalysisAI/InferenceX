@@ -573,5 +573,8 @@ def run(out_dir):
     out["sysinfo"] = info
     text = json.dumps(out)
     print("DIEPROBE " + text, flush=True)
-    with open(os.path.join(out_dir, "die_probe.json"), "w") as handle:
+    name = "die_probe.json"  # the shard runs the probe once per case; keep the repeat too
+    if os.path.exists(os.path.join(out_dir, name)):
+        name = "die_probe_2.json"
+    with open(os.path.join(out_dir, name), "w") as handle:
         handle.write(text)
