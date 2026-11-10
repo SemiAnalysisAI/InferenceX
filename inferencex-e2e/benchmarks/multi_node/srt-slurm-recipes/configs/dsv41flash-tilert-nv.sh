@@ -62,14 +62,16 @@ PY
     python3 -c 'import importlib.util as u; assert u.find_spec("tilert.pd_vllm.prefill_connector"), "no tilert.pd_vllm.prefill_connector"'
     if [[ "$TILERT_ROLE" == router ]]; then
         python3 -c 'import tilert.pd_vllm.pd_router, vllm.tokenizers.deepseek_v41'
-        # srt-slurm starts the router as `python -m tilert.pd_vllm.pd_router`.
-        if ! command -v python >/dev/null 2>&1; then
-            ln -sf "$(command -v python3)" /usr/local/bin/python
-        fi
     fi
 else
     # The tilert release carries the serving layer (PD code and its engine API).
     python3 -m pip install --quiet --no-cache-dir "$tilert_wheel"
+fi
+
+# srt-slurm starts the decode server and the router as `python -m ...`; the CUDA runtime decode
+# image has only python3.
+if ! command -v python >/dev/null 2>&1; then
+    ln -sf "$(command -v python3)" /usr/local/bin/python
 fi
 
 # The prompt KV moves over the NVLink fabric inside one NVL72; no Mooncake is needed.
