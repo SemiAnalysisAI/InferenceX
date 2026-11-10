@@ -47,7 +47,8 @@ binding.
   revision.
 - Pin the image by SHA256 digest, and use its real interpreter and architecture.
   The H100, H200, and B200 SGLang rows and the B200 vLLM-Omni row use the public CUDA
-  amd64 image. The MI355X row uses its ROCm MI35x build.
+  amd64 image. The MI355X SGLang row uses its ROCm MI35x build, and the MI355X
+  vLLM-Omni row the public `vllm/vllm-omni-rocm` amd64 image.
 
 A shared image does not qualify a different topology or SKU. Each selected
 deployment qualifies through its own sweep. Maintainers stage model snapshots in the
