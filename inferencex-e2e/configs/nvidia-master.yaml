@@ -5945,13 +5945,49 @@ dsv41flash-fp4-b300-vllm-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      # Engram weights use UVA DRAM; DEP2 at conc 128 and 192 also offloads KV blocks to DRAM.
+      # Engram weights use UVA DRAM; DEP2 at conc 128 to 512 also offloads KV blocks to DRAM.
       # TP4 covers low concurrency with FlashInfer attention and THP Engram tables.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 8, 16], srt-recipe: agentic.yaml }
       # DEP2 is native TP1 x DP2 + EP2 with MegaMoE behind a consistent-hash vLLM
       # Router; FlashInfer attention up to conc 64, MegaAttention above.
-      - { tp: 2, ep: 2, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [8, 16, 32, 64], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
-      - { tp: 2, ep: 2, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [128, 192], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
+      - { tp: 2, ep: 2, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [8, 16, 32, 48, 64], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
+      - { tp: 2, ep: 2, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [128, 192, 256, 384, 512], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
+
+# Official cu134 nightly at vLLM a2bcb565, multiarch manifest pinned for B300.
+dsv41flash-fp4-b300-vllm-agentic-dspark-a2b:
+  image: vllm/vllm-openai:cu134-nightly-a2bcb5657a881a002e79d0adab3c6b5e39436121@sha256:76a533475156ffdb3656ccc389d0c71f5cec16897c0f490ac43e4f379c4b4f0d
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: vllm
+  multinode: false
+  srt-recipe-dir: dsv41flash/vllm/b300-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [16, 32], srt-recipe: agentic-a2b.yaml }
+      # DEP8 is native TP1 x DP8 + EP8 with MegaMoE and MegaAttention behind a consistent-hash vLLM Router.
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [192, 768], router: { name: vllm-router, version: "0.1.16" }, srt-recipe: agentic-a2b.yaml }
+      # c384 routes sticky-least-loaded, which needs vLLM Router 0.1.17.
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [384], router: { name: vllm-router, version: "0.1.17" }, srt-recipe: agentic-a2b.yaml }
+
+dsv41flash-fp4-b300-vllm-agentic-dspark-a2b-lpt4k:
+  image: vllm/vllm-openai:cu134-nightly-a2bcb5657a881a002e79d0adab3c6b5e39436121@sha256:76a533475156ffdb3656ccc389d0c71f5cec16897c0f490ac43e4f379c4b4f0d
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: vllm
+  multinode: false
+  srt-recipe-dir: dsv41flash/vllm/b300-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # DEP8 c768 with a 4096-token long-prefill threshold and a 32-step prefill schedule interval.
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [768], router: { name: vllm-router, version: "0.1.16" }, srt-recipe: agentic-a2b-lpt4k.yaml }
 
 kimik3.1-fp4-b300-vllm-agentic-dspark:
   image: vllm/vllm-openai:kimi-k31@sha256:904520f3fefc32414abcedf6ba8dadc9c5978db1bcdaf40f58d6b9036ef30a99
