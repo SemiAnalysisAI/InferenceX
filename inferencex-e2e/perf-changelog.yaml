@@ -12570,7 +12570,7 @@
     - agentic-coding
   description:
     - "Add B300 DeepSeek-V4.1-Flash FP4 Dynamo + vLLM AgentX aggregated and disaggregated recipes with DSpark."
-    - "Use the vLLM EFA image without an EFA dependency setup script."
+    - "Pin both recipes to the November 10 DockerHub vllm/vllm-openai:cu134-nightly-96710245ece8fe57a0df3ea18cdc79cbb8ce93cf image (amd64 digest sha256:674371934305e99c6957c7b74f604cc7a2ab3b7750f24e6ecbf04af0f4ece4d2), using CUDA 13.4 and upstream EFA libraries without an EFA dependency setup script."
     - "Configure EFA-backed NIXL transfers and host KV offloading for disaggregated workers."
     - "Place the B300 Dynamo + vLLM AgentX frontend on the allocation head for eval-only jobs."
     - "Capture DSpark step sizes at multiples of five and six through 40 for aggregated TP4 concurrency 1."

@@ -5954,7 +5954,7 @@ dsv41flash-fp4-b300-vllm-agentic-dspark:
       - { tp: 2, ep: 2, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [128, 192], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
 
 dsv41flash-fp4-b300-dynamo-vllm-agentic-dspark-agg:
-  image: public.ecr.aws/q9t5s3a7/vllm-release-repo:76c6f3f2a95f6049657db1e513133b824a5c8175-x86_64-efa@sha256:e1a207c35ef8617d32a694ace609e7719448ab6600442bca2bf8e5002c19d4fe
+  image: vllm/vllm-openai:cu134-nightly-96710245ece8fe57a0df3ea18cdc79cbb8ce93cf@sha256:674371934305e99c6957c7b74f604cc7a2ab3b7750f24e6ecbf04af0f4ece4d2
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:b300-dsxe
@@ -5990,7 +5990,7 @@ dsv41flash-fp4-b300-dynamo-vllm-agentic-dspark-agg:
           dp-attn: false
 
 dsv41flash-fp4-b300-dynamo-vllm-agentic-dspark-disagg:
-  image: public.ecr.aws/q9t5s3a7/vllm-release-repo:76c6f3f2a95f6049657db1e513133b824a5c8175-x86_64-efa@sha256:e1a207c35ef8617d32a694ace609e7719448ab6600442bca2bf8e5002c19d4fe
+  image: vllm/vllm-openai:cu134-nightly-96710245ece8fe57a0df3ea18cdc79cbb8ce93cf@sha256:674371934305e99c6957c7b74f604cc7a2ab3b7750f24e6ecbf04af0f4ece4d2
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:b300-dsxe
