@@ -12606,3 +12606,16 @@
     - "Disaggregated: add musespark-fp4-gb300-dynamo-sglang-agentic-dflash-disagg with TP8 prefill and TP8 decode workers: 1P2D at c160 and c224, 1P3D at c224, 1P4D at c32, c56 and c112, 1P5D at c120, 2P3D at c352 and 3P4D at c672. Mooncake KV transfer and prefill HiCache (150 GB per rank, 0.80 DRAM utilization)."
     - "Remove musespark-fp4-gb300-dynamo-sglang-agentic-dflash (TP4 c8, c16, c20, c32 and c40 and TP8 c3, c4, c10 and c14 on the dev-muse-spark-open image)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4757
+
+- config-keys:
+    - dsv41flash-fp4-b300-dynamo-vllm-agentic-dspark-agg
+    - dsv41flash-fp4-b300-dynamo-vllm-agentic-dspark-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add B300 DeepSeek-V4.1-Flash FP4 Dynamo + vLLM AgentX aggregated and disaggregated recipes with DSpark."
+    - "Pin both recipes to the November 10 DockerHub vllm/vllm-openai:cu134-nightly-96710245ece8fe57a0df3ea18cdc79cbb8ce93cf image (amd64 digest sha256:674371934305e99c6957c7b74f604cc7a2ab3b7750f24e6ecbf04af0f4ece4d2), using CUDA 13.4 and upstream EFA libraries without an EFA dependency setup script."
+    - "Configure EFA-backed NIXL transfers and host KV offloading for disaggregated workers."
+    - "Place the B300 Dynamo + vLLM AgentX frontend on the allocation head for eval-only jobs."
+    - "Capture DSpark step sizes at multiples of five and six through 40 for aggregated TP4 concurrency 1."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4585
