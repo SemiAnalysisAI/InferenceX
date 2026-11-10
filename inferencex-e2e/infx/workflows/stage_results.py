@@ -206,14 +206,21 @@ def request(repo: str, event: dict[str, Any], token: str) -> dict[str, str] | No
                 f"Pinned reuse source is not reusable: {exc}",
                 f"@{actor} the run pinned by this PR's reuse request cannot be staged: {exc}",
             )
-        if reuse_run_id is None:
+    # Eligibility comes from the label history when the run was created, not current labels.
+    try:
+        run = resolve_run(repo, pr_number, pull, token, command[1], reuse_run_id)
+    except RuntimeError as exc:
+        if command[1] is None and str(exc).startswith("No stageable"):
             reject(
-                "PR does not have a full-sweep label",
-                f"@{actor} staging requires a completed run from a PR using one of: "
+                str(exc),
+                f"@{actor} {exc}. Staging requires a completed `run-sweep.yml` run "
+                "triggered while one of "
                 + ", ".join(f"`{label}`" for label in FULL_SWEEP_LABELS)
-                + ", or an accepted `/use <run-id>` reuse request.",
+                + " was applied, or an accepted `/use <run-id>` reuse request.",
             )
-    run = resolve_run(repo, pr_number, pull, token, command[1], reuse_run_id)
+        if str(exc).startswith(f"Run {command[1] or reuse_run_id} cannot"):
+            reject(str(exc), f"@{actor} {exc}.")
+        raise
     attempt = run.get("run_attempt")
     return {
         "run-id": str(run["id"]),
