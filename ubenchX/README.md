@@ -14,6 +14,7 @@ repository root in an environment with the required device libraries.
 | [trn3_dma_bw](trn3_dma_bw/) | Trainium3 HBM-SBUF DMA bandwidth for static, hardware and software descriptor generation | Trainium3 instance with the Neuron driver and Docker |
 | [trn3_psum_bw](trn3_psum_bw/) | Trainium3 PSUM-to-SBUF `tensor_copy` bandwidth on VectorE and ScalarE, alone and concurrently | Trainium3 instance with the Neuron driver and Docker |
 | [trn3_exp_bw](trn3_exp_bw/) | Trainium3 exp and activation-function throughput on VectorE and ScalarE | Trainium3 instance with the Neuron driver and Docker |
+| [trn3_matmul](trn3_matmul/) | Trainium3 TensorE bf16 matmul initiation interval and latency across N and M, with a fixed or a new stationary per matmul | Trainium3 instance with the Neuron driver and Docker |
 
 ## GEMM
 
@@ -215,3 +216,51 @@ throughput at fdim 8 / 64 / 512 / 4096 is 18 / 147 / 233 / 253 elements per cycl
 33 / 94 / 123 / 127 on ScalarE: ScalarE is faster below fdim 32 and VectorE approaches twice
 ScalarE at large fdim. The architecture guide's 4x VectorE advantage for exp was not observed with
 fp32 input; bf16 input was not measured. Results are not checked against a reference.
+
+## Trainium3 Tensor Engine matmul timing
+
+`trn3_matmul` measures the initiation interval (II) and latency of TensorE matmuls on one Trainium3
+NeuronCore at LNC=1. Each kernel is one burst of 1,024 `nisa.nc_matmul` instructions, bf16 x bf16 to
+fp32 PSUM, with K=128, a `[128, M]` stationary tile and a `[128, N]` moving tile resident in SBUF.
+Matmul i overwrites PSUM tile i % 8, so no matmul depends on another:
+
+- `mm_bf16_fixed` reuses one stationary tile, so the compiler emits one LoadStationary
+  (LDWEIGHTS) and 1,024 MATMULs.
+- `ls_bf16_alt` alternates between two stationary tiles, so every matmul has its own LDWEIGHTS.
+
+```bash
+NEURON_TARGET=trn3 OUT_DIR=ubenchX/trn3_matmul/runs/r0 CORE=0 \
+  ubenchX/trn3_dma_bw/run.sh ubenchX/trn3_matmul/sweep.sh
+NEURON_TARGET=trn3 OUT_DIR=ubenchX/trn3_matmul/runs/alt_r0 CORE=0 KERNEL=ls_bf16_alt \
+  ubenchX/trn3_dma_bw/run.sh ubenchX/trn3_matmul/sweep.sh
+
+ubenchX/trn3_dma_bw/run.sh python ubenchX/trn3_matmul/parse.py ubenchX/trn3_matmul/runs/r0/* --csv fixed.csv
+ubenchX/trn3_dma_bw/run.sh python ubenchX/trn3_matmul/plot_fixed.py fixed.csv fixed_ii.png
+```
+
+`sweep.sh` runs N 8 to 512 at M=128 and M 16 to 96 at N=512, 12 executions per point with every
+4th profiled. `parse.py` reads the profiler's per-instruction table. TensorE starts a burst
+throttled, and the trace's Throttle table records when it is released to full rate. Over the
+MATMULs that start after the release, II is (last start - first start) / (count - 1) and latency is
+the median start-to-end time of one MATMUL, both in cycles of the 2.4 GHz TensorE clock from the
+trace. The first profiled execution often stays throttled throughout; the plots take the median of
+the three profiled executions. `plot_fixed.py` draws II, or latency with `--latency`, against N
+with its prediction, and `plot_m.py` draws both against M (both need `matplotlib`).
+
+`results/trn3_48xlarge_rev2_2026-11-10_*` were measured on NeuronCore 0 of a trn3.48xlarge with
+revision-v2 silicon.
+
+- **II with one stationary tile:** N + 6 cycles from N = 64 to 512. That is one moving column per
+  cycle through the 128x128 array plus a 6-cycle issue overhead. N = 512 runs at 77.7 TFLOPS, 99%
+  of the 78.6 TFLOPS bf16 peak at 2.4 GHz. Smaller matmuls take longer than N + 6: 42 cycles at
+  N = 32 and 30 at N = 8.
+- **Latency:** within 6 cycles of N + 393 at every N, from 398 cycles at N = 8 to 905 at N = 512.
+  The 393 cycles are 127 to fill the rows, 127 to drain the columns and about 139 more that the
+  array does not account for. So 1.75 matmuls are in flight at N = 512 and 13 at N = 8.
+- **M:** at N = 512, M = 16 to 128 all give II 518 and latency 905 cycles. M only sets how many
+  array columns hold weights, so TFLOPS scales with M.
+- **A new stationary tile for every matmul:** II and latency are unchanged from N = 64 up, because
+  each load overlaps the previous matmul. At N = 32 II rises to 46 cycles, and at N = 8 to 80.
+
+Only bf16, K = 128 and independent matmuls are covered; a chain of dependent matmuls would pay the
+full latency each time. Results are not checked against a reference.

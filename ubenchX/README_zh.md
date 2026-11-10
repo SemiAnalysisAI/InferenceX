@@ -14,6 +14,7 @@
 | [trn3_dma_bw](trn3_dma_bw/) | Trainium3 HBM 与 SBUF 之间的 DMA 带宽，覆盖静态、硬件和软件描述符生成 | 安装 Neuron 驱动和 Docker 的 Trainium3 实例 |
 | [trn3_psum_bw](trn3_psum_bw/) | Trainium3 上 VectorE 与 ScalarE 的 PSUM 到 SBUF `tensor_copy` 带宽，含单引擎与双引擎并发 | 安装 Neuron 驱动和 Docker 的 Trainium3 实例 |
 | [trn3_exp_bw](trn3_exp_bw/) | Trainium3 上 VectorE 与 ScalarE 的 exp 及激活函数吞吐量 | 安装 Neuron 驱动和 Docker 的 Trainium3 实例 |
+| [trn3_matmul](trn3_matmul/) | Trainium3 TensorE bf16 矩阵乘法在不同 N 和 M 下的发射间隔与延迟，含固定或每次新加载的 stationary | 安装 Neuron 驱动和 Docker 的 Trainium3 实例 |
 
 ## GEMM
 
@@ -198,3 +199,49 @@ fdim 256 起发射开销为 25.1 个周期，但 fdim 低于 128 时每条指令
 512 / 4096 时，整个引擎每周期处理的元素数在 VectorE 上为 18 / 147 / 233 / 253，在 ScalarE 上为
 33 / 94 / 123 / 127：fdim 低于 32 时 ScalarE 更快，fdim 较大时 VectorE 接近 ScalarE 的两倍。在
 fp32 输入下未观察到架构指南所说的 VectorE exp 4 倍优势；未测量 bf16 输入。结果未与参考值比对。
+
+## Trainium3 Tensor Engine 矩阵乘法时序
+
+`trn3_matmul` 在 LNC=1 下测量单个 Trainium3 NeuronCore 上 TensorE 矩阵乘法的发射间隔（II）和延迟。
+每个 kernel 是一次由 1,024 条 `nisa.nc_matmul` 指令组成的突发，bf16 x bf16 到 fp32 PSUM，K=128，
+`[128, M]` 的 stationary tile 和 `[128, N]` 的 moving tile 均常驻 SBUF。第 i 次矩阵乘法覆盖写入
+PSUM tile i % 8，因此各次矩阵乘法互不依赖：
+
+- `mm_bf16_fixed` 复用同一个 stationary tile，编译器只生成一条 LoadStationary（LDWEIGHTS）和
+  1,024 条 MATMUL。
+- `ls_bf16_alt` 在两个 stationary tile 之间交替，因此每次矩阵乘法都有自己的 LDWEIGHTS。
+
+```bash
+NEURON_TARGET=trn3 OUT_DIR=ubenchX/trn3_matmul/runs/r0 CORE=0 \
+  ubenchX/trn3_dma_bw/run.sh ubenchX/trn3_matmul/sweep.sh
+NEURON_TARGET=trn3 OUT_DIR=ubenchX/trn3_matmul/runs/alt_r0 CORE=0 KERNEL=ls_bf16_alt \
+  ubenchX/trn3_dma_bw/run.sh ubenchX/trn3_matmul/sweep.sh
+
+ubenchX/trn3_dma_bw/run.sh python ubenchX/trn3_matmul/parse.py ubenchX/trn3_matmul/runs/r0/* --csv fixed.csv
+ubenchX/trn3_dma_bw/run.sh python ubenchX/trn3_matmul/plot_fixed.py fixed.csv fixed_ii.png
+```
+
+`sweep.sh` 在 M=128 下运行 N 8 到 512，在 N=512 下运行 M 16 到 96，每个点执行 12 次，每 4 次
+profile 一次。`parse.py` 读取 profiler 的逐指令表。TensorE 在突发开始时处于限速状态，trace 的
+Throttle 表记录其恢复全速的时刻。对恢复之后开始的 MATMUL，II 为（最后一条开始时间 - 第一条开始
+时间）/（条数 - 1），延迟为单条 MATMUL 从开始到结束时间的中位数，二者均用 trace 中的 TensorE
+时钟（2.4 GHz）换算成周期。第一次 profile 的执行常常全程限速；绘图取三次 profile 执行的中位数。
+`plot_fixed.py` 画 II 随 N 的变化（加 `--latency` 则画延迟）及其预测值，`plot_m.py` 画二者随 M 的
+变化（均需要 `matplotlib`）。
+
+`results/trn3_48xlarge_rev2_2026-11-10_*` 在一台 revision-v2 芯片的 trn3.48xlarge 的 NeuronCore 0
+上测得。
+
+- **单个 stationary tile 时的 II：** N 从 64 到 512 时为 N + 6 个周期，即 128x128 阵列每周期推进
+  一列 moving 数据，外加 6 个周期的发射开销。N = 512 时达到 77.7 TFLOPS，为 2.4 GHz 下 bf16 峰值
+  78.6 TFLOPS 的 99%。更小的矩阵乘法比 N + 6 更慢：N = 32 时为 42 个周期，N = 8 时为 30 个周期。
+- **延迟：** 在每个 N 上都与 N + 393 相差不超过 6 个周期，从 N = 8 的 398 个周期到 N = 512 的
+  905 个周期。393 个周期中，127 个用于填充各行，127 个用于排空各列，另有约 139 个周期无法用阵列
+  解释。因此 N = 512 时同时在执行的矩阵乘法为 1.75 个，N = 8 时为 13 个。
+- **M：** N = 512 时，M 从 16 到 128 的 II 均为 518 个周期，延迟均为 905 个周期。M 只决定阵列中
+  有多少列装载权重，因此 TFLOPS 与 M 成正比。
+- **每次矩阵乘法使用新的 stationary tile：** N 从 64 起，II 和延迟都不变，因为每次加载与前一次
+  矩阵乘法重叠。N = 32 时 II 升至 46 个周期，N = 8 时升至 80 个周期。
+
+只覆盖 bf16、K = 128 和互不依赖的矩阵乘法；一串相互依赖的矩阵乘法每次都要付出完整延迟。结果未与
+参考值比对。
