@@ -88,6 +88,7 @@ for ((attempt=0; attempt<900; attempt++)); do
             exit 1
         fi
         echo "UMBP pool ready at $UMBP_ENDPOINT; log: $log_dir/server.log"
+        PYTHONPATH=/infmax-workspace /opt/runtime-venv/bin/python -m infx.bench umbp-health --pool-state "$UMBP_ENDPOINT.health.json" --record-pid "$server_pid"
         exit 0
     fi
     sleep 1

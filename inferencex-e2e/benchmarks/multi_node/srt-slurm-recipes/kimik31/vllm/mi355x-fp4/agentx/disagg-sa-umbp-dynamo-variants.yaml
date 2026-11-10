@@ -319,6 +319,9 @@ base:
     DYNAMO_PYTHON: /opt/k31-dynamo/bin/python
     DYNAMO_VERSION: 1.6.0.dev20261023
     K31_MODEL_METADATA_DIR: /private-state/k31-dynamo-model
+    UMBP_HEALTH_POLL_SECONDS: '1'
+    UMBP_HEALTH_FAILURE_INTERVALS: '3'
+    UMBP_HEALTH_STOP_TIMEOUT: '10'
     K31_MODEL_METADATA_MANIFEST: /infmax-workspace/benchmarks/multi_node/srt-slurm-recipes/configs/k31-pro-metadata-6d0a0202.json
     DYN_TCP_RPC_HOST: '@fabric.socket-ifname'
     DYN_TCP_RESPONSE_STREAM_HOST: '@fabric.socket-ifname'

@@ -12577,4 +12577,5 @@
     - For 1P2D, record process limits and raise the Dynamo process soft memlock to its inherited hard limit before exec; this is a candidate mitigation for native loader resource failures, not a validated fix.
     - Extend the worker memlock entrypoint to 2P3D c176 after SA 1P2D completed its full-hour run with zero request errors; preserve the 2P3D compute settings and pinned image.
     - Stage pinned, checksum-verified model metadata in a private worker directory before Dynamo starts, so partial node-local HF caches cannot split prefill workers into incompatible MDC cohorts. Preserve the shared weights and existing compatibility checks.
+    - Fail the SA worker when its UMBP pool exits or store/load failures persist across three metric intervals, preventing formal measurement against a dead or degraded pool.
   pr-link: XXX
