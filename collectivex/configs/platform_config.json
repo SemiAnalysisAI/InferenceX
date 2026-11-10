@@ -110,7 +110,7 @@
       "runner_label": "cluster:gb200-nv",
       "backends": {"deepep-v2": [8, 16], "nccl-ep": [8, 16], "flashinfer-ep": [8, 16]},
       "ll_backends": {"deepep-v2": [8, 16], "nccl-ep": [8, 16]},
-      "fabric": {"nic": "4x ConnectX-7 NDR400 InfiniBand (KV scale-out; EP stays MNNVL)", "switch": "NVLink NVL72 + Quantum-2"},
+      "fabric": {"nic": "4x ConnectX-7 NDR400 InfiniBand", "switch": "NVLink NVL72 + Quantum-2"},
       "operator": {
         "partition": "batch",
         "account": "benchmark",
@@ -136,7 +136,7 @@
       "runner_partition": "batch_1",
       "backends": {"deepep-v2": [8, 16], "nccl-ep": [8, 16], "flashinfer-ep": [8, 16]},
       "ll_backends": {"deepep-v2": [8, 16], "nccl-ep": [8, 16]},
-      "fabric": {"nic": "4x ConnectX-8 XDR800 InfiniBand (KV scale-out; EP stays MNNVL)", "switch": "NVLink NVL72 + Quantum-X800"},
+      "fabric": {"nic": "4x ConnectX-8 XDR800 InfiniBand", "switch": "NVLink NVL72 + Quantum-X800"},
       "operator": {
         "partition": "batch_1",
         "account": "benchmark",

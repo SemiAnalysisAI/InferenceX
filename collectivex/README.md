@@ -42,9 +42,9 @@ prefill for DeepEP V2 and NCCL EP low-latency, and MI325X UCCL-EP low-latency EP
 [docs/methodology.md](docs/methodology.md#unmeasured-cases) gives each reason.
 
 `results/cases.json` is the committed copy of the full matrix: 282 requested cases, of which 254 are
-runnable EP cases, 18 are swap-blocks cases (two per pool) and 10 are unsupported EP cells (UCCL-EP EP16 on MI355X and FlashInfer EP16 on
-H100, H200, B200 and B300, once per phase; FlashInfer's MNNVL workspace needs every rank inside one NVLink
-domain).
+runnable EP cases, 18 are swap-blocks cases (two per pool) and 10 are unsupported EP cells (UCCL-EP
+EP16 on MI355X and FlashInfer EP16 on H100, H200, B200 and B300, once per phase; FlashInfer's MNNVL
+workspace needs every rank inside one NVLink domain).
 A cell is listed as unsupported only when its backend runs on that SKU at another EP size, and
 low-latency adds only runnable cells, so a missing low-latency cell (DeepEP V2 on B300, for example)
 appears nowhere; [docs/methodology.md](docs/methodology.md#backends) gives each reason. The NCCL EP

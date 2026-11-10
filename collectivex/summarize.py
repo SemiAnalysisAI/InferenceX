@@ -120,18 +120,6 @@ def _invalid_banner(documents: list[dict]) -> list[str]:
             "the leg fails; see the outcome column below.", ""]
 
 
-def _kv_cell(rows: list[dict], kind: str, op: str, batch: str = "min"):
-    """(GB/s, p50 ms, batch) of a (kind, op) family's largest-ISL row -- the
-    bandwidth-bound point -- at its smallest or largest measured batch."""
-    matching = [r for r in rows if r.get("kind") == kind and r.get("op") == op]
-    if not matching:
-        return "-", "-", "-"
-    isl = max(r["isl"] for r in matching)
-    pick = min if batch == "min" else max
-    row = pick((r for r in matching if r["isl"] == isl), key=lambda r: r["batch"])
-    return row["gbps_p50"], row["latency_ms"]["p50"], row["batch"]
-
-
 def render(documents: list[dict]) -> str:
     return render_ep(documents)
 

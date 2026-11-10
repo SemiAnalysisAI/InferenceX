@@ -545,8 +545,8 @@ collx_allocation_nodes_csv() {
 collx_resolve_slurm_rendezvous() {
   local job_id="$1" master_addr master_port socket_ifname="${COLLX_SOCKET_IFNAME:-}"
   [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || collx_die "invalid rendezvous allocation"
-  # Inside an MNNVL domain the socket interface is never validated (the GB registry names it for
-  # the kv rdma legs only), so rank zero keeps resolving by hostname there.
+  # Inside an MNNVL domain the socket interface is never validated, so rank zero keeps resolving
+  # by hostname there.
   [ "${COLLX_TRANSPORT:-}" != mnnvl ] || socket_ifname=""
   # Relative node zero hosts global rank 0. Prefer the address on the validated socket interface:
   # a short hostname may resolve onto a management network that ranks cannot use.

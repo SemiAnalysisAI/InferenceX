@@ -48,7 +48,7 @@ allocation=(--partition="$PARTITION" --account="$ACCOUNT" --nodes="$NODES"
 [ -z "${COLLX_EXCLUDE_NODES:-}" ] || allocation+=(--exclude="$COLLX_EXCLUDE_NODES")
 collx_salloc_jobid "${allocation[@]}"
 [ -n "$JOB_ID" ] || collx_die "no JOB_ID from salloc"
-# A no-op inside the NVL domain; the kv rdma legs (mnnvl-rdma) prove their socket iface and HCAs.
+# A no-op inside the NVL domain.
 if ! collx_validate_network_profile_on_job "$JOB_ID" "$NODES" "$COLLX_TRANSPORT"; then
   collx_log_tail "${COLLX_NETWORK_PROFILE_LOG:-}"
   collx_die "allocated nodes failed the network profile"

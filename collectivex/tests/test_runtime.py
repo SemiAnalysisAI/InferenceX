@@ -399,8 +399,8 @@ class RendezvousTests(unittest.TestCase):
         return result.stdout.strip()
 
     def test_the_nvl_domain_resolves_rank_zero_by_hostname(self) -> None:
-        # The GB registry names a socket interface for the kv rdma legs only; inside MNNVL it is
-        # never validated, so EP and kv MNNVL shards keep resolving rank zero by host name.
+        # Inside MNNVL the socket interface is never validated, so rank zero resolves by host
+        # name; a scale-out transport uses the address on the interface.
         self.assertEqual(self._master_addr("mnnvl"), "node-a")
         self.assertEqual(self._master_addr("mnnvl-rdma"), "192.0.2.7")
 
