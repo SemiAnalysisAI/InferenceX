@@ -1153,6 +1153,23 @@ glm5.3flash-fp8-mi325x-sglang-agentic-mtp:
       - { tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 12], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 24, 32], srt-recipe: agentic.yaml }
 
+glm5.3-fp8-mi325x-sglang-agentic-mtp:
+  image: lmsysorg/sglang:v0.5.22-rocm720-mi30x@sha256:58b6bc333f527c88fe5ff1b4bd8d17e82214eabcb3044549117159878967c930
+  model: zai-org/GLM-5.3
+  model-prefix: glm5.3
+  runner: cluster:mi325x-amd
+  precision: fp8
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: glm5.3/sglang/mi325x-fp8-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 3, 4, 6, 8], srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [2, 3], srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [12, 16], srt-recipe: agentic.yaml }
+
 h3-bf16-mi355x-sglang-video:
   image: lmsysorg/sglang:v0.5.23-rocm724-mi35x@sha256:e5278f805bb4482cadc4957af63633a0b914b40c778f7f3ea63693a31ee04fdf
   model: MiniMaxAI/MiniMax-H3
