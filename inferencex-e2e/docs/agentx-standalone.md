@@ -102,3 +102,12 @@ the chart draws. To mark a frontier on other axes too, add `--frontier X,Y` once
 null where it lacks either metric. The axes are the median, p75 or p90 `intvty`, `ttft` or
 `e2el`, `tput_per_gpu`, `input_tput_per_gpu`, `output_tput_per_gpu`, `tput_per_physical_gpu`
 and `tok_per_usd`; latencies count lower as better, the rest higher.
+
+The frontier, `physical_gpus`, `tput_per_physical_gpu` and `tok_per_usd` are computed by the
+script from each row's published fields to match the dashboard's charts. They are not read from
+the dashboard, so they can differ from it if its formulas change.
+
+Binding fetches each producing commit and runs that commit's own matrix generator, so it
+executes code from GitHub on your machine. Only runs of `--repository` (default
+`SemiAnalysisAI/InferenceX`) are bound, but a commit fetched through its pull request head may
+come from a fork.
