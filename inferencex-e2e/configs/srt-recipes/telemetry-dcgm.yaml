@@ -9,5 +9,4 @@ telemetry:
   request_timeout_seconds: 2
   dcgm_exporter:
     container_image: dcgm-exporter
-    # Sample only as often as collect_interval_ms scrapes; faster DCGM sampling slowed GB300 serving.
     command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
