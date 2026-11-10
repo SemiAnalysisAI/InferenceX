@@ -12581,3 +12581,12 @@
     - "Use gpu-memory-utilization 0.95 with --disable-cudagraph-memory-reserve, a 236 GB Host L2 with a 4 GB retraction snapshot pool, and smg with the gateway settings ts serve applies (passthrough policy, L0/L1 tokenizer caches, warn logging, no retries, circuit breaker or load monitoring)."
     - "Replace the search space with per-concurrency rows in agg-variants.yaml: concurrency 1, 2, 4 and 108 with 104 request slots, and running caps of 2, 6, 12, 35 and 72 requests at concurrency 8, 20, 36, 56 and 80."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4922
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
+  description:
+    - "Move to the GB200 P/D recipe and image of #4865 (vllm/vllm-openai:cu134-arm64-1107-mdev, Mooncake 0.3.13.post1+hbm): vLLM engines behind Dynamo sidecars (TCP request plane, ZMQ event plane, no NATS, no setup script), KV routing without KV events or busy thresholds at temperature 0 with prefill to the least-loaded worker and soft session affinity on decode, the auto-sized Mooncake HBM pool on prefill, decode EPLB, and at most 8 requests per decode DP rank (max-num-seqs 48 -> 8, max-cudagraph-capture-size 384 -> 64) with at most 64 in-flight async KV loads, 4 new per step."
+    - "Keep the GB300 Mooncake DRAM segment (180GB) and cpus-per-task (144). gpu-memory-utilization 0.85 -> 0.90 on prefill and 0.95 -> 0.92 on decode."
+    - "Prefill moves from DEP2 to DEP4 workers. Points: 3 DEP4 prefill + DEP8 decode at conc 400, 2 DEP4 prefill + DEP8 decode at conc 278, and 3 DEP4 prefill + DEP16 decode at conc 360 and 400. Drop 6 DEP2 prefill + DEP8 decode at conc 280, 320, 360 and 400, and 6 DEP2 prefill + DEP16 decode at conc 300 and 360."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  scenario-type: [agentic-coding]
