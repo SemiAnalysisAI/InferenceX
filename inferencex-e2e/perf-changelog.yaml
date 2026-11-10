@@ -12590,11 +12590,3 @@
     - "Keep three points: 2 DEP4 prefill + DEP8 decode at conc 260 and 3 DEP4 prefill + DEP16 decode at conc 340 and 380. Drop 4 DEP4 prefill + DEP16 decode at conc 352, 3 DEP4 prefill + DEP16 decode at conc 280, 320 and 360, 3 DEP4 prefill + DEP8 decode at conc 256 and 288, and 2 DEP4 prefill + DEP8 decode at conc 224 and 256."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4865
   scenario-type: [agentic-coding]
-
-- config-keys:
-    - minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
-  description:
-    - "Run the GB200 P/D recipe and image of this PR (vllm/vllm-openai:cu134-arm64-1107-mdev, Mooncake 0.3.13.post1+hbm) on GB300, keeping only the GB300 Mooncake DRAM segment (180GB) and cpus-per-task (144), with gpu-memory-utilization 0.90 on prefill (0.85 before) and 0.92 on decode (0.95 before): vLLM engines behind Dynamo sidecars with the same KV routing, no setup script, the auto-sized Mooncake HBM pool on prefill, decode EPLB, and at most 8 requests per decode DP rank (max-num-seqs 48 -> 8, max-cudagraph-capture-size 384 -> 64) with at most 64 in-flight async KV loads, 4 new per step."
-    - "Prefill moves from DEP2 to DEP4 workers. Points: 3 DEP4 prefill + DEP8 decode at conc 400, 2 DEP4 prefill + DEP8 decode at conc 278, and 3 DEP4 prefill + DEP16 decode at conc 360 and 400. Drop 6 DEP2 prefill + DEP8 decode at conc 280, 320, 360 and 400, and 6 DEP2 prefill + DEP16 decode at conc 300 and 360."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4865
-  scenario-type: [agentic-coding]
