@@ -1,0 +1,67 @@
+schema: 2
+name: h3-vllm-omni-serving-client
+
+resources:
+  gpu_type: h100
+
+services:
+  - name: video-server
+    type: generic
+    nodes: 1
+    critical: true
+    start: before_workers
+    command: [python3, -m, infx.bench, video, serve]
+    args:
+      - --model-view
+      - h3-fl2va
+      - --
+      - vllm
+      - serve
+      - "{model_path}"
+      - --served-model-name
+      - "{model_id}"
+      - --omni
+      - --host
+      - 0.0.0.0
+      - --port
+      - "30283"
+      - --trust-remote-code
+      - --task-type
+      - fl2va
+      - --num-gpus
+      - "{gpus_per_node}"
+      # H3 does not fit one 80 GB GPU, and Ulysses replicates the DiT on every rank.
+      - --tensor-parallel-size
+      - "2"
+      - --usp
+      - "1"
+      - --ring
+      - "1"
+      - --text-encoder-tp-size
+      - "{gpus_per_node}"
+      - --vae-patch-parallel-size
+      - "{gpus_per_node}"
+      - --vae-parallel-mode
+      - tile
+      - --vae-use-tiling
+      # H3 reuses AdaLN projection outputs across requests by default; the plan disables
+      # cross-request conditioning reuse.
+      - --cache-config
+      - '{"minimax_h3_adaln_cache": false}'
+    env:
+      PYTHONPATH: /video-package:/infmax-workspace
+      PYTHONUNBUFFERED: "1"
+      VIDEO_SERVER_PORT: "30283"
+      VIDEO_RUNTIME_REVISION: 5917730a4b02aedb44d374173cdc1b10484ccd52
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      VLLM_WORKER_MULTIPROC_METHOD: spawn
+      OMNI_DIFFUSION_PROMPT_EMBED_CACHE: "0"
+      VLLM_OMNI_VIDEO_SYNC_TIMEOUT: "14400"
+      VLLM_OMNI_SERVER_STORAGE__PATH: /logs/video/server/storage
+    readiness:
+      http:
+        port: 30283
+        path: /health
+      timeout_seconds: 1800
+      interval_seconds: 5

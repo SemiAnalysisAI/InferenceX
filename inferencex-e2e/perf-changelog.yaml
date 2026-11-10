@@ -12581,3 +12581,10 @@
     - "Use gpu-memory-utilization 0.95 with --disable-cudagraph-memory-reserve, a 236 GB Host L2 with a 4 GB retraction snapshot pool, and smg with the gateway settings ts serve applies (passthrough policy, L0/L1 tokenizer caches, warn logging, no retries, circuit breaker or load monitoring)."
     - "Replace the search space with per-concurrency rows in agg-variants.yaml: concurrency 1, 2, 4 and 108 with 104 request slots, and running caps of 2, 6, 12, 35 and 72 requests at concurrency 8, 20, 36, 56 and 80."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4922
+
+- config-keys:
+    - h3-bf16-h100-vllm-omni-video
+  scenario-type: [video-generation]
+  description:
+    - "Add vLLM-Omni v0.32.0, pinned by its linux/amd64 digest, on the H100 H3 workload SGLang runs (h3-v2.yaml release-v1, C1) on 2, 4 and 8 GPUs: DiT TP2 with Ulysses 1, 2 and 4, since H3 does not fit one 80 GB GPU, with text-encoder TP and tiled VAE patch parallelism across all GPUs, and with the prompt-embedding cache and cross-request AdaLN projection reuse disabled."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4969
