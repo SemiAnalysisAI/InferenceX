@@ -6914,6 +6914,222 @@ dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg:
           ep: 32
           dp-attn: true
 
+dsv41flash-fp4-gb300-dynamo-trt-agentic-dspark-disagg:
+  image: nvcr.io/nvidia/tensorrt-llm/release:feat-ds-v4.1-bringup-1.4.0a0.dev202610310238@sha256:960406744410b9601d134334d2b4f468f8fee5875f9194aaad1dccea5d7880e7
+  model: nvidia/DeepSeek-V4.1-Flash-NVFP4
+  model-prefix: dsv41flash
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-trt
+  router: { name: dynamo-router, version: "1.7.0.dev20261110" }
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  srt-recipe-dir: dsv41flash/trtllm/gb300-fp4/agentx
+  scenarios:
+    agentic-coding:
+    # Both ranks of each DEP2 prefill worker hold a 125 GiB host KV tier.
+    - dram-utilization: 0.556522
+      search-space:
+      - spec-decoding: mtp
+        power: true
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.4.0a0.dev202610310238" }
+        srt-recipe: disagg-variants.yaml:override_5p1d_dep2_dep8_c7000
+        conc-list: [7000]
+        prefill:
+          num-worker: 5
+          tp: 2
+          ep: 2
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      - spec-decoding: mtp
+        power: true
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.4.0a0.dev202610310238" }
+        srt-recipe: disagg-variants.yaml:override_7p1d_dep2_dep16_c7900
+        conc-list: [7900]
+        prefill:
+          num-worker: 7
+          tp: 2
+          ep: 2
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      - spec-decoding: mtp
+        power: true
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.4.0a0.dev202610310238" }
+        srt-recipe: disagg-variants.yaml:override_5p1d_dep2_dep16_c5100
+        conc-list: [5100]
+        prefill:
+          num-worker: 5
+          tp: 2
+          ep: 2
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      - spec-decoding: mtp
+        power: true
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.4.0a0.dev202610310238" }
+        srt-recipe: disagg-variants.yaml:override_10p1d_dep2_dep16_c11718
+        conc-list: [11718]
+        prefill:
+          num-worker: 10
+          tp: 2
+          ep: 2
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+    # Both ranks of each DEP2 prefill worker hold a 111 GiB host KV tier.
+    - dram-utilization: 0.494191
+      search-space:
+      - spec-decoding: mtp
+        power: true
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.4.0a0.dev202610310238" }
+        srt-recipe: disagg-variants.yaml:override_7p1d_dep2_dep32_c7600
+        conc-list: [7600]
+        prefill:
+          num-worker: 7
+          tp: 2
+          ep: 2
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      - spec-decoding: mtp
+        power: true
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.4.0a0.dev202610310238" }
+        srt-recipe: disagg-variants.yaml:override_3p1d_dep2_dep32_c2286
+        conc-list: [2286]
+        prefill:
+          num-worker: 3
+          tp: 2
+          ep: 2
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      - spec-decoding: mtp
+        power: true
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.4.0a0.dev202610310238" }
+        srt-recipe: disagg-variants.yaml:override_2p1d_dep2_dep32_c1283
+        conc-list: [1283]
+        prefill:
+          num-worker: 2
+          tp: 2
+          ep: 2
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+    # Both ranks of the DEP2 prefill worker hold an 80 GiB host KV tier.
+    - dram-utilization: 0.356174
+      search-space:
+      - spec-decoding: mtp
+        power: true
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.4.0a0.dev202610310238" }
+        srt-recipe: disagg-variants.yaml:override_1p4d_dep2_tep8_c84
+        conc-list: [84]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+        decode:
+          num-worker: 4
+          tp: 8
+          ep: 2
+          dp-attn: false
+      - spec-decoding: mtp
+        power: true
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.4.0a0.dev202610310238" }
+        srt-recipe: disagg-variants.yaml:override_1p4d_dep2_tep8_c240
+        conc-list: [240]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+        decode:
+          num-worker: 4
+          tp: 8
+          ep: 2
+          dp-attn: false
+      - spec-decoding: mtp
+        power: true
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.4.0a0.dev202610310238" }
+        srt-recipe: disagg-variants.yaml:override_1p4d_dep2_tep8_c140
+        conc-list: [140]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+        decode:
+          num-worker: 4
+          tp: 8
+          ep: 2
+          dp-attn: false
+      - spec-decoding: mtp
+        power: true
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.4.0a0.dev202610310238" }
+        srt-recipe: disagg-variants.yaml:override_1p6d_dep2_tp4_c180
+        conc-list: [180]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+        decode:
+          num-worker: 6
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        power: true
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.4.0a0.dev202610310238" }
+        srt-recipe: disagg-variants.yaml:override_1p6d_dep2_tp4_c114
+        conc-list: [114]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+        decode:
+          num-worker: 6
+          tp: 4
+          ep: 1
+          dp-attn: false
+
 qwen3.8next-fp4-gb300-sglang-agentic-mtp:
   image: lmsysorg/sglang:nightly-dev-cu13-20261103-797af717@sha256:c7c348bc52c410f0e367a46a2a733146017e3de9709694cd42f004fe5d6c763f
   model: nvidia/Qwen3.8-Flash-Next-NVFP4
