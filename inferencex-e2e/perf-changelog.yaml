@@ -12609,25 +12609,13 @@
 
 - config-keys:
     - kimik3.1-fp4-mi355x-sglang-agentic-dflash
-  scenario-type:
-    - agentic-coding
-  description:
-    - "Image lmsysorg/sglang:dev-kimi-k31-pro-mi35x@sha256:5901db14 (was sha256:346a6d83): SGLang de0f491836 with the SiTU gate fix and the PD commits, on AITER 5405ee0026 (flydsl 0.4.2) and sgl-amd-mono 219f40be9a."
-    - "Concurrency 1: one running request instead of 4, so an agent's parallel tool calls queue instead of sharing decode steps."
-    - "Concurrency 8 to 56: a prefill every 32 decode steps instead of 16 (8 at concurrency 48 and 56), so prefills interrupt running requests' token streams half as often."
-    - "Concurrency 8, 16 and 32: 6, 8 and 20 running requests; concurrency 16 and 32 verify the current token plus 4 drafts."
-    - "Add concurrency 24: 13 running requests, current token plus 4 drafts."
-    - "Concurrency 1 and 4: verify the current token plus 7 drafts."
-    - "All concurrencies: MoE front and residual stream on row shards in prefill and fused DFLASH ring locations (already on at 48 and 56)."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4928
-
-- config-keys:
     - kimik3.1-fp4-mi355x-sglang-agentic-dflash-disagg
   scenario-type:
     - agentic-coding
   description:
-    - "Add Kimi-K3.1-Pro MI355X SGLang PD AgentX on lmsysorg/sglang:dev-kimi-k31-pro-mi35x@sha256:5901db14: 1P1D with TP8 DCP8 on both roles, KV over Mooncake RDMA, five-token DFLASH (DFlash2) on both roles, and MXFP4 DSA index keys sent with the KV."
-    - "Prefill: 16k chunks, shortest-prefill-first, a KDA checkpoint every 64 tokens, and a write-back HiCache host tier (ratio 4.0, KDA host ratio 5) under the node's pinned-memory limit. Decode: up to 144 (concurrency 128) or 160 (concurrency 144) running requests with matching decode graphs and a decode radix cache."
-    - "Both roles: a 7200 s HTTP keep-alive, so the router's idle pooled connections stay open, and rank 0's greedy DFLASH accept broadcast to every rank."
-    - "Measured on two MI355X nodes over 3600 s with golden acceptance 3.25, with these settings and SGLang commits on the previous image's AITER (285579b): concurrency 144 at 21,435 tok/s/GPU (p90 interactivity 31.7, TTFT p50 3.75 s) and concurrency 128 at 21,124 (32.8, 3.67 s); GSM8K 97.88% at native acceptance on the same configuration."
+    - "Image lmsysorg/sglang:dev-kimi-k31-pro-mi35x@sha256:5901db14 (was sha256:346a6d83)."
+    - "Single-node: prefill every 32 decode steps at concurrency 8 to 56 (was 16, and 8 at 48 and 56)."
+    - "Single-node: cap running requests at 1, 6, 8 and 20 at concurrency 1, 8, 16 and 32 (was 4, 8, 16 and 32); verify 8 tokens at concurrency 1 and 4 and 5 tokens at 16 and 32 (was 6)."
+    - "Single-node: row-sharded prefill MoE and residual stream and fused DFLASH ring locations at every concurrency (was 48 and 56 only); add concurrency 24 with 13 running requests and 5-token verify."
+    - "Add 1P1D PD at concurrency 128 and 144: TP8 DCP8 prefill and decode, KV over Mooncake RDMA, prefill HiCache."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4928
