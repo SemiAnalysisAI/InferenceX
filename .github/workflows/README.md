@@ -197,6 +197,14 @@ classify its diff from the merge
 base only for patchwork, so engine-patching branches still run last. Klaud runs
 and revisions already on `main` keep unclassified scoring.
 
+Patchwork classification requires concrete evidence of engine/runtime source
+changes, a local engine build, or a fork/image containing unmerged changes.
+Runtime tuning through environment variables (including `K31MK_*`) or CLI/config
+options does not qualify by itself, nor does a dev/nightly image tag. The
+classifier must cite the file and code, command, or explicit provenance behind
+its verdict; unknown provenance alone does not qualify. Actual patching still
+counts when configured through YAML or environment variables.
+
 The canary is the lowest-concurrency non-eval candidate among single-node
 fixed-sequence 1k/1k, 8k/1k, or AgentX entries, falling back to multi-node AgentX.
 It is removed from the remaining matrix. If none qualify, fan-out proceeds
