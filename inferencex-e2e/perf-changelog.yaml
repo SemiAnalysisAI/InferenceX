@@ -12612,6 +12612,9 @@
     - kimik3.1-fp4-gb200-vllm-agentic-dspark-tp16-disagg
     - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
     - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dep16-disagg
+    - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
+    - kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-disagg
+    - kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-agg-mk
   scenario-type:
     - agentic-coding
   description:
