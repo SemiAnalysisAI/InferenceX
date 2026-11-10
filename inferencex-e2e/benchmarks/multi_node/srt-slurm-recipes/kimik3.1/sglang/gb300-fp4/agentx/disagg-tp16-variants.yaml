@@ -208,18 +208,33 @@ base:
       AIPERF_DATASET_MMAP_CACHE_ENABLED: "true"
       AGENTIC_WARMUP_GRACE_PERIOD: "1800"
 
-override_3p1d_c300:
-  name: kimik3.1-fp4-gb300-dynamo-sglang-agentx-disagg-tp16-3p1d-c300
+override_4p1d_c520:
+  name: kimik3.1-fp4-gb300-dynamo-sglang-agentx-disagg-tp16-4p1d-c520
+  roles:
+    prefill:
+      nodes: 8
+      workers: 4
+      args:
+        # 132 GB per rank, 528 GB per prefill node: a larger host cache cuts prefill recompute.
+        hicache-size: 132
+        # Verifies the current token plus 4 drafts: at this batch the shorter block is faster.
+        speculative-num-draft-tokens: 5
+    decode:
+      args:
+        speculative-num-draft-tokens: 5
+
+override_3p1d_c340:
+  name: kimik3.1-fp4-gb300-dynamo-sglang-agentx-disagg-tp16-3p1d-c340
   roles:
     prefill:
       nodes: 6
       workers: 3
       args:
-        # Verifies the current token plus 5 drafts: at this batch the shorter block is faster.
-        speculative-num-draft-tokens: 6
+        hicache-size: 132
+        speculative-num-draft-tokens: 5
     decode:
       args:
-        speculative-num-draft-tokens: 6
+        speculative-num-draft-tokens: 5
 
 override_2p1d_c180:
   name: kimik3.1-fp4-gb300-dynamo-sglang-agentx-disagg-tp16-2p1d-c180
@@ -227,6 +242,12 @@ override_2p1d_c180:
     prefill:
       nodes: 4
       workers: 2
+      args:
+        # Verifies the current token plus 5 drafts.
+        speculative-num-draft-tokens: 6
+    decode:
+      args:
+        speculative-num-draft-tokens: 6
 
-override_1p1d_c76:
-  name: kimik3.1-fp4-gb300-dynamo-sglang-agentx-disagg-tp16-1p1d-c76
+override_1p1d_c60:
+  name: kimik3.1-fp4-gb300-dynamo-sglang-agentx-disagg-tp16-1p1d-c60
