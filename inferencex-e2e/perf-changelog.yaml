@@ -12606,3 +12606,11 @@
     - "Disaggregated: add musespark-fp4-gb300-dynamo-sglang-agentic-dflash-disagg with TP8 prefill and TP8 decode workers: 1P2D at c160 and c224, 1P3D at c224, 1P4D at c32, c56 and c112, 1P5D at c120, 2P3D at c352 and 3P4D at c672. Mooncake KV transfer and prefill HiCache (150 GB per rank, 0.80 DRAM utilization)."
     - "Remove musespark-fp4-gb300-dynamo-sglang-agentic-dflash (TP4 c8, c16, c20, c32 and c40 and TP8 c3, c4, c10 and c14 on the dev-muse-spark-open image)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4757
+
+- config-keys:
+    - musespark-fp4-mi355x-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Lower the TP8 concurrency 6 stream interval from 128 to 50 and rerun every point on the same lmsysorg/sglang-rocm:muse-spark-open-mi355-1106 image; the rest of the recipe and the search space are unchanged."
+  pr-link: XXX
