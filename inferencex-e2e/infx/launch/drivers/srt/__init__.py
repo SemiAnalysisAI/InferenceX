@@ -74,6 +74,10 @@ def run_single_node(launch: Launch) -> int:
         if rc := submit.bind_point(run, checkout, root / "arguments", cpu_source):
             return rc
         selected, bound, runtime_args = submit.bound_arguments(root / "arguments")
+        cache_mounts: list[tuple[str, str]] = []
+        if request.is_agentic and not request.eval_only:
+            cache_mounts, cache_args = config.single_node_dataset_cache(run)
+            runtime_args += cache_args
         event.set(recipe=selected.removeprefix(f"{run.workspace}/"))
         containers = {}
         if native_power:
@@ -88,7 +92,7 @@ def run_single_node(launch: Launch) -> int:
             nginx=config.NGINX_IMAGE if run.srt.nginx_aliases else None,
             containers=containers,
             model_paths={f"hf:{request.model}": model_path},
-            mounts=[(str(hf_cache), request.hf_hub_cache)],
+            mounts=[(str(hf_cache), request.hf_hub_cache), *cache_mounts],
             cpu_power_source=cpu_source,
         )
         if rc := run_setup(run, checkout, cpu_power_exporter=cpu_source is not None):

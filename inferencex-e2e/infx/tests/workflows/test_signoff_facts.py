@@ -1,10 +1,21 @@
 """Exercise the verifier's deterministic facts against controlled inputs."""
 
 import json
+import subprocess
 
 import pytest
+import yaml
 
 from infx.klaud.models import Feed
+from infx.matrix.validation import VIDEO_SPEC_DIR
+from infx.tests.srt_recipes import (
+    VIDEO_SPEC,
+    fixed_seq_entry,
+    single_node_fragment,
+    video_entry,
+    video_fragment,
+    write_shared_blocks,
+)
 from infx.workflows import signoff_facts
 
 SERIES = ["--model", "m", "--precision", "fp4", "--framework", "sglang", "--hardware", "b200"]
@@ -268,3 +279,41 @@ def test_eval_gap_estimates_zero_standard_errors_from_sample_size():
 def test_digest_pins_are_inspected_by_digest(monkeypatch, image, inspected):
     monkeypatch.setattr(signoff_facts, "_inspect", lambda reference: {"inspected": reference})
     assert signoff_facts.inspect_image(image)["inspected"] == inspected
+
+
+def test_matrix_at_generates_llm_points_only_and_runs_no_revision_code(tmp_path, monkeypatch):
+    project = tmp_path / "inferencex-e2e"
+    recipes = project / "benchmarks/single_node/srt-slurm-recipes/fixture"
+    write_shared_blocks(project)
+    (project / "configs/runners.yaml").write_text(yaml.safe_dump({
+        "labels": {"cluster:fixture": ["node-a"]},
+        "clusters": {"fixture": {"gpus-per-node": 8, "arch": "x86_64", "scheduler": "slurm",
+                                 "slurm": {"partition": "batch", "exclusive": True}}},
+    }))  # fmt: skip
+    (project / "configs/nvidia-master.yaml").write_text(
+        yaml.safe_dump({"llm": fixed_seq_entry("stable.yaml", [2]), "video": video_entry()})
+    )
+    (project / "configs/amd-master.yaml").write_text("{}\n")
+    recipes.mkdir(parents=True)
+    (recipes / "stable.yaml").write_text(yaml.safe_dump(single_node_fragment(4)))
+    (recipes / "video.yaml").write_text(yaml.safe_dump(video_fragment()))
+    # git archive rejects a DATA_PATHS entry that the tree lacks.
+    (project / "benchmarks/multi_node/srt-slurm-recipes").mkdir(parents=True)
+    (project / "benchmarks/multi_node/srt-slurm-recipes/.keep").touch()
+    specs = tmp_path / VIDEO_SPEC_DIR
+    specs.mkdir(parents=True)
+    (specs / "video_spec.py").write_text('raise RuntimeError("video_spec.py from the revision tree ran")\n')
+    (specs / VIDEO_SPEC).write_text("{}\n")
+    for args in (["init", "-q"], ["add", "."], ["commit", "-qm", "base"]):
+        subprocess.run(
+            ["git", "-c", "user.name=t", "-c", "user.email=t@example.com", *args],
+            cwd=tmp_path, check=True, capture_output=True,
+        )  # fmt: skip
+    monkeypatch.chdir(tmp_path)
+
+    matrix, errors = signoff_facts.matrix_at("HEAD", tmp_path / "work")
+
+    assert errors == {}
+    assert {
+        key: ([conc for _, conc in points], messages) for key, (points, messages) in matrix.items()
+    } == {"llm": ([2], []), "video": ([], [])}

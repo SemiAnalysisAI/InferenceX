@@ -42,8 +42,9 @@ diffusion 引擎在单节点上提供服务，选定的冻结 YAML 工作负载�
 [`specs/h3-v2.yaml`](specs/h3-v2.yaml) 提供独立的 H3 5 秒、20 个不同
 prompt 合同，集合选择器为 `release-v1`。请求使用 49 次去噪更新，预期输出
 124 帧，warmup prompt 与测量集不重叠。runner 按引擎发送显式 H.264 参数，
-并把编码策略计入计划哈希。媒体解码只验证可观察的流属性；preset、CRF、
-实际编码器实现和跨引擎质量仍需单独证据。比较器将跨引擎质量标为未评估；
+并把编码策略计入计划哈希。媒体解码验证可观察的流属性，并从 x264 的 SEI
+头读取 CRF 和 preset 固定的参数加以核对。计划只能使用这项检查能核对的
+preset。实际编码器实现和跨引擎质量仍需单独证据。比较器将跨引擎质量标为未评估；
 同实现数值检查则要求封存的镜像、启动命令、环境、GPU 和算法身份一致。
 
 ## 参考 PSNR
@@ -76,7 +77,7 @@ python -m evaluator.cli score-quality <artifact-id>=<bundle.zip|dir> ... \
 cd video-generation
 PYTHONPATH=../inferencex-e2e uv run --no-project --python 3.12 \
   --with 'av==16.1.0' --with 'numpy==2.3.5' \
-  --with 'pyyaml>=6,<7' --with 'pytest>=8,<9' python -m pytest -q
+  --with 'pyyaml>=6,<7' --with 'pytest==9.2.0' python -m pytest -q
 ```
 
 [Test Video Harness](../.github/workflows/test-video-harness.yml) 会在相关
