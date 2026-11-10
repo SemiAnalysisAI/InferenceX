@@ -9,6 +9,7 @@ replaces ``'@fabric.<name>'`` values with the job's cluster facts.
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import os
 import re
@@ -83,6 +84,7 @@ BOUND_ENV = {
         *_AGENTIC_ENV,
         *_WORKFLOW_ENV,
         *_SINGLE_NODE_ENV,
+        "AIPERF_DATASET_MMAP_CACHE_DIR",
         "ENABLE_AGENTX_POWER",
     ),
     (True, True): (
@@ -151,8 +153,8 @@ def _fragment_versions(block: Any, path: str) -> Iterator[str]:
                 yield from _fragment_versions(value, where)
 
 
-def check_fragment(raw: Mapping[str, Any], source: Path, *, agentic: bool, multinode: bool) -> None:
-    """Reject a fragment that sets a bound key, even to the value the binder would write."""
+def _bound_keys(raw: Mapping[str, Any], *, agentic: bool, multinode: bool) -> list[str]:
+    """Where a fragment sets a bound key, even to the value the binder would write."""
     keys = (
         *_POINT_KEYS,
         *(("benchmark", "env", name) for name in BOUND_ENV[agentic, multinode]),
@@ -170,11 +172,13 @@ def check_fragment(raw: Mapping[str, Any], source: Path, *, agentic: bool, multi
             if present and not (conc_allowed and key == ("benchmark", "env", "CONC")):
                 found.append(f"{'.'.join(filter(None, (name, *key)))} (= {value!r})")
         found.extend(_fragment_versions(block, name or ""))
-    if found:
-        raise ValueError(
-            f"{source}: remove {', '.join(found)} from the fragment; "
-            "the launcher or the workflow sets them"
-        )
+    return found
+
+
+@functools.lru_cache(maxsize=512)
+def _text_bound_keys(text: str, agentic: bool, multinode: bool) -> tuple[str, ...]:
+    """``_bound_keys`` of the fragment with this YAML ``text``, computed once per process."""
+    return tuple(_bound_keys(yamlio.safe_load(text), agentic=agentic, multinode=multinode))
 
 
 def _block(path: Path) -> dict[str, Any]:
@@ -215,10 +219,15 @@ def compose_recipe(
     ``gpu_power`` adds its telemetry block, and ``cpu_power_source`` the cluster's CPU power
     exporter to the telemetry block.
     """
-    raw = yamlio.safe_load(path.read_text())
+    text = path.read_text()
+    raw = yamlio.safe_load(text)
     if not isinstance(raw, dict):
         raise ValueError(f"{path}: recipe must be a mapping")
-    check_fragment(raw, path, agentic=agentic, multinode=multinode)
+    if found := _text_bound_keys(text, agentic, multinode):
+        raise ValueError(
+            f"{path}: remove {', '.join(found)} from the fragment; "
+            "the launcher or the workflow sets them"
+        )
     shared = _block(root / SHARED_BLOCKS[agentic, multinode])
     if gpu_power == NATIVE:
         shared = merge_blocks(shared, _block(root / NATIVE_TELEMETRY_BLOCK))
@@ -252,6 +261,11 @@ def _positive(value: str, name: str) -> int:
     if not value.isascii() or not value.isdecimal() or int(value) <= 0:
         raise ValueError(f"{name} must be a positive integer: {value!r}")
     return int(value)
+
+
+def point_concurrency(environment: Mapping[str, str]) -> int:
+    """Return the point's CONC, or raise ValueError if it is blank or not a positive integer."""
+    return _positive(_required(environment, "CONC"), "CONC")
 
 
 def parse_concurrencies(conc_list: str) -> list[int]:
@@ -344,7 +358,7 @@ def bind_workload(
     if multinode:
         concurrencies = parse_concurrencies(_required(environment, "CONC_LIST"))
     else:
-        conc = _positive(_required(environment, "CONC"), "CONC")
+        conc = point_concurrency(environment)
         if "CONC" in workload and str(workload["CONC"]) != str(conc):
             raise ValueError(f"CONC: recipe {workload['CONC']} != point {conc}")
         workload.update(MODEL=model, CONC=str(conc))

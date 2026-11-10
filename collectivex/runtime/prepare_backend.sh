@@ -191,19 +191,21 @@ deepep_cache_root() {
 deepep_ready() { [ -f "$1/.ready" ] && [ -x "$1/venv/bin/python" ] && [ -d "$1/source" ]; }
 
 # Runtime images (vLLM's) ship a trimmed CUDA toolkit without the cuSPARSE and similar headers that
-# torch's ATen/cuda headers include, which the extension build needs. The venv's torch already
-# pulled the matching CUDA wheels, so link only the headers the toolkit lacks into
+# torch's ATen/cuda headers include, which the extension build needs. The torch the venv sees
+# (its own, or the image's) carries the matching CUDA wheels, so link only the headers the toolkit lacks into
 # <root>/cuda-include: nothing shadows the toolkit's own headers, and full-toolkit images leave
 # the directory empty.
 deepep_cuda_header_overlay() {
   local root="$1" cuda_home="$2" overlay="$1/cuda-include" wheel_include header
   mkdir -p "$overlay" || return 1
-  for wheel_include in "$root"/venv/lib/python*/site-packages/nvidia/cu13/include; do
+  local nvidia_dir
+  while IFS= read -r nvidia_dir; do
+    wheel_include="$nvidia_dir/cu13/include"
     [ -d "$wheel_include" ] || continue
     for header in "$wheel_include"/*.h; do
       [ -e "$cuda_home/include/${header##*/}" ] || ln -sfn "$header" "$overlay/" || return 1
     done
-  done
+  done < <("$root/venv/bin/python" -c 'import nvidia; print("\n".join(nvidia.__path__))')
 }
 
 deepep_activate() {
@@ -260,8 +262,15 @@ deepep_activate() {
 deepep_probe() {
   "$VIRTUAL_ENV/bin/python" - <<'PY'
 import inspect
+import os
 import deep_ep
+from importlib import metadata
 assert inspect.isclass(deep_ep.ElasticBuffer)
+# The vLLM image also ships a deep_ep with ElasticBuffer; the venv's build must be the one loaded.
+assert os.path.realpath(deep_ep.__file__).startswith(os.path.realpath(os.environ["VIRTUAL_ENV"]) + os.sep), deep_ep.__file__
+# ElasticBuffer needs NCCL >= 2.30.4 at build and run time, whichever site-packages supplies it.
+nccl = tuple(int(part) for part in metadata.version("nvidia-nccl-cu13").split(".")[:3])
+assert nccl >= (2, 30, 4), nccl
 PY
 }
 
@@ -274,19 +283,25 @@ deepep_install() {
   fi
   mkdir -m 700 "$root" \
     || { collx_log "ERROR: DeepEP V2 cache-create failed"; return 1; }
-  python3 -m venv "$venv" \
+  # "image" builds against the image's own torch and NCCL, as vLLM's installer does.
+  local -a venv_flags=() tools=("pip==26.1.2" "setuptools==82.0.1" "wheel==0.47.0" "ninja==1.13.0")
+  if [ "$COLLX_DEEPEP_V2_TORCH_SPEC" = image ]; then venv_flags=(--system-site-packages)
+  else tools+=("numpy==2.2.6"); fi
+  python3 -m venv "${venv_flags[@]}" "$venv" \
     || { collx_log "ERROR: DeepEP V2 venv creation failed"; return 1; }
   pip=("$venv/bin/python" -m pip install -q --disable-pip-version-check --no-input)
-  "${pip[@]}" \
-    "pip==26.1.2" "setuptools==82.0.1" "wheel==0.47.0" "ninja==1.13.0" \
-    "numpy==2.2.6" "$COLLX_DEEPEP_V2_NVSHMEM_SPEC" >&2 2>&1 \
+  "${pip[@]}" "${tools[@]}" "$COLLX_DEEPEP_V2_NVSHMEM_SPEC" >&2 2>&1 \
     || { collx_log "ERROR: DeepEP V2 build-tool installation failed"; return 1; }
-  "${pip[@]}" --index-url https://download.pytorch.org/whl/cu130 \
-    --extra-index-url https://pypi.org/simple "$COLLX_DEEPEP_V2_TORCH_SPEC" >&2 2>&1 \
-    || { collx_log "ERROR: $COLLX_DEEPEP_V2_TORCH_SPEC (cu130) installation failed"; return 1; }
-  # Torch pins NCCL 2.28.9; see COLLX_DEEPEP_V2_NCCL_SPEC for what each source needs.
-  "${pip[@]}" --force-reinstall --no-deps "$COLLX_DEEPEP_V2_NCCL_SPEC" >&2 2>&1 \
-    || { collx_log "ERROR: $COLLX_DEEPEP_V2_NCCL_SPEC installation failed"; return 1; }
+  if [ "$COLLX_DEEPEP_V2_TORCH_SPEC" != image ]; then
+    "${pip[@]}" --index-url https://download.pytorch.org/whl/cu130 \
+      --extra-index-url https://pypi.org/simple "$COLLX_DEEPEP_V2_TORCH_SPEC" >&2 2>&1 \
+      || { collx_log "ERROR: $COLLX_DEEPEP_V2_TORCH_SPEC (cu130) installation failed"; return 1; }
+  fi
+  # Only the EFA fork installs its own NCCL (2.32.3); "image" uses the image's, checked by deepep_probe.
+  if [ "$COLLX_DEEPEP_V2_NCCL_SPEC" != image ]; then
+    "${pip[@]}" --force-reinstall --no-deps "$COLLX_DEEPEP_V2_NCCL_SPEC" >&2 2>&1 \
+      || { collx_log "ERROR: $COLLX_DEEPEP_V2_NCCL_SPEC installation failed"; return 1; }
+  fi
   local toolchain cuda_home cccl
   toolchain="$(cuda_toolchain_paths)" || return 1
   IFS=$'\t' read -r cuda_home cccl <<< "$toolchain"
