@@ -15,6 +15,7 @@ concurrency:
 jobs:
   digest:
     name: digest
+    if: vars.RUNNER_OFFLINE_DIGEST_ENABLED == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: List offline runners

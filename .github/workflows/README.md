@@ -360,13 +360,14 @@ the Merge Ingest run fails and nothing is benchmarked or ingested.
 ## Repository Variables for Copies
 
 A copy of this repository sets these repository variables to change where its
-workflows send results and whether its agent runs:
+workflows send results and which of its scheduled jobs run:
 
 | Variable          | Default                                                       | Effect                                                                                                                                                                                                                                                         |
 | ----------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `APP_REPO`        | `SemiAnalysisAI/InferenceX-app`                               | App repository that `merge-ingest`, `recover-reused-ingest`, `operatorx-sweep`, and `stage-results` dispatch ingest, video, and staging events to, and the only source the ingest and staging callbacks accept. `FRONTEND_PAT` must be able to dispatch to it. |
 | `STAGING_APP_URL` | `https://inferencemax-app-git-staging-semianalysisai.vercel.app` | Origin of that app's staging site, without a trailing slash. Staged-run comments link to it, and the staging callback accepts chart links only on it. Set it to the app repository's own `STAGING_APP_URL`.                                                   |
 | `KLAUD_ENABLED`   | unset                                                         | Klaud's planner, resume, and wake jobs run only when this is `true`. Without it the scheduled `klaud-plan` runs skip every job instead of failing for missing secrets.                                                                                          |
+| `RUNNER_OFFLINE_DIGEST_ENABLED` | unset                                         | `runner-offline-digest` runs only when this is `true`. Without it the daily run skips instead of failing for a missing `RUNNERS_PAT` or `SLACK_BOT_TOKEN`, and a copy never posts to this repository's Slack channel.                                       |
 
 ## Validation Architecture
 
