@@ -12596,6 +12596,18 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4893
 
 - config-keys:
+    - musespark-fp4-gb300-dynamo-sglang-agentic-dflash-agg
+    - musespark-fp4-gb300-dynamo-sglang-agentic-dflash-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Run the GB300 Muse Spark Open Dynamo + SGLang points on lmsysorg/sglang:nightly-dev-cu13-20261103-797af717 (digest sha256:b4323a896f349d43a267c419c0267538b06c64a73110a0d0fd87496234df5dcd) with the ai-dynamo 1.7.0.dev20261102 it ships (dynamo.install: false)."
+    - "Aggregated: add musespark-fp4-gb300-dynamo-sglang-agentic-dflash-agg with TP4 at c46, c50 and c56 (140 GB per-rank HiCache, 0.80 DRAM utilization) and two-node TP8 at c1 and c36."
+    - "Disaggregated: add musespark-fp4-gb300-dynamo-sglang-agentic-dflash-disagg with TP8 prefill and TP8 decode workers: 1P2D at c160 and c224, 1P3D at c224, 1P4D at c32, c56 and c112, 1P5D at c120, 2P3D at c352 and 3P4D at c672. Mooncake KV transfer and prefill HiCache (150 GB per rank, 0.80 DRAM utilization)."
+    - "Remove musespark-fp4-gb300-dynamo-sglang-agentic-dflash (TP4 c8, c16, c20, c32 and c40 and TP8 c3, c4, c10 and c14 on the dev-muse-spark-open image)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4757
+
+- config-keys:
     - qwen3.5-fp8-h100-sglang-agentic
     - qwen3.5-fp8-h100-sglang-agentic-mtp
   description:
