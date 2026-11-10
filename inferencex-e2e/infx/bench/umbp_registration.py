@@ -19,6 +19,15 @@ def api(lib: Any, name: str, result: Any, args: list[Any]) -> Any:
     return fn
 
 
+def bind_numa(mbind: Any, ptr: int, size: int, node: int) -> None:
+    bits = ct.sizeof(ct.c_ulong) * 8
+    mask = (ct.c_ulong * (node // bits + 1))()
+    mask[node // bits] = 1 << (node % bits)
+    # Match MoRI's word-sized mask; older kernels drop the last maxnode bit.
+    if mbind(ptr, size, 2, mask, len(mask) * bits, 0) != 0:
+        raise OSError(ct.get_errno(), f"mbind node {node}")
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         description="Register every pool segment on every requested NIC"
@@ -138,11 +147,7 @@ def main(argv: list[str]) -> int:
             if ptr == ct.c_void_p(-1).value:
                 raise OSError(ct.get_errno(), f"HugeTLB mmap {mapped}")
             buffers.append((ptr, mapped))
-            bits = ct.sizeof(ct.c_ulong) * 8
-            mask = (ct.c_ulong * (node // bits + 1))()
-            mask[node // bits] = 1 << (node % bits)
-            if mbind(ptr, mapped, 2, mask, node + 1, 1) != 0:
-                raise OSError(ct.get_errno(), f"mbind node {node}")
+            bind_numa(mbind, ptr, mapped, node)
             for offset in range(0, mapped, args.page_bytes):
                 ct.c_ubyte.from_address(ptr + offset).value = 0
             emit(
