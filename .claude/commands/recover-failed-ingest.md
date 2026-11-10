@@ -208,7 +208,7 @@ Require passing `check-changelog` and `reuse-sweep-gate`, with `setup` and GPU j
 skipped. Merge only with explicit authorization; never bypass failed or pending
 checks. Admin merge is allowed only when passing checks leave repository policy as
 the sole blocker. Do not use `merge_with_reuse` here. It posts its own
-`/reuse-sweep-run` chosen from the recovery PR's commits, which supersedes the pinned
+`/use <run_id>` chosen from the recovery PR's commits, which supersedes the pinned
 source and finds no sweep. Merge directly:
 
 ```bash

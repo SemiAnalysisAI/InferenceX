@@ -944,7 +944,7 @@ class TestMergePrCommentPosting:
             pytest.raises(StopIteration),
         ):
             merge_pr(7, repo="example/repo", _git_ops=git_ops, _gh=gh)
-        pull.create_issue_comment.assert_called_once_with("/reuse-sweep-run 123")
+        pull.create_issue_comment.assert_called_once_with("/use 123")
 
     def test_a_merge_that_aborts_on_a_conflict_posts_no_comment(self):
         pull = make_mock_pull()

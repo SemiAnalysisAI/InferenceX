@@ -2,7 +2,7 @@
 
 Merge ``origin/main`` into the PR branch (a ``perf-changelog.yaml`` conflict is
 resolved by keeping main's entries and re-appending the PR's with the canonical
-PR URL), post ``/reuse-sweep-run``, push a sync commit so the reuse gate sees
+PR URL), post ``/use <run_id>``, push a sync commit so the reuse gate sees
 the authorization on the new head, then squash-merge with admin bypass.
 
 From the repository root::
@@ -691,8 +691,8 @@ def _merge_pr_inner(
 
     post_merge = git_ops.rev_parse()
 
-    log(f"Posting /reuse-sweep-run {eligible_run} on PR #{pr}")
-    pull.create_issue_comment(f"/reuse-sweep-run {eligible_run}")
+    log(f"Posting /use {eligible_run} on PR #{pr}")
+    pull.create_issue_comment(f"/use {eligible_run}")
     ok("Comment posted")
 
     log(f"Pushing prepared commit {post_merge[:8]}")
