@@ -100,6 +100,7 @@ BOUND_ENV = {
 FABRIC_REFERENCE = "@fabric."
 INSTALLERS = {
     "tokenspeed-nightly.sh": ("router", "smg"),
+    "dsv41flash-tilert-nv.sh": ("router", "tilert-pd-router"),
     "glm5.3-tilert-rocm.sh": ("router", "tilert-pd-router"),
     "vllm-mooncake.sh": ("kv-offload-backend", "mooncake"),
     "vllm-router.sh": ("router", "vllm-router"),

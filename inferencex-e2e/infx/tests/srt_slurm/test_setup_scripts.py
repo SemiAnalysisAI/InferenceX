@@ -68,6 +68,16 @@ def test_an_installer_installs_exactly_the_bound_version(tmp_path, script, env, 
     assert expected <= set(installs[0])
 
 
+def test_tilert_nv_installer_refuses_a_version_without_a_pinned_sha256(tmp_path):
+    result, installs = run(tmp_path, "dsv41flash-tilert-nv.sh", {
+        "ROUTER_VERSION": "9.8.7", "TILERT_ROLE": "decode",
+    })
+
+    assert result.returncode == 1
+    assert "No pinned sha256 for tilert 9.8.7" in result.stderr
+    assert installs == []
+
+
 def test_tokenspeed_installer_uses_direct_private_wheels_and_one_public_index(tmp_path):
     result, installs = run(tmp_path, "tokenspeed-nightly.sh", {
         "TOKENSPEED_WHEEL_URL": "https://example.test/tokenspeed.whl#sha256=abc",
