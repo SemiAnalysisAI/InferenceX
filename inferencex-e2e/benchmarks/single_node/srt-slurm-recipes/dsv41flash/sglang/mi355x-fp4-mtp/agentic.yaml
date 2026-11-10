@@ -77,6 +77,9 @@ override_tp2_c1:
         swa-prefix-tails: 128
         max-running-requests: 2
         monokernel-backend: amd
+      env:
+        # 5325cfabd757's folded DSpark proposal reads an NVIDIA wrapper the AMD monokernel lacks.
+        SGLANG_DSPARK_FOLDED_PROPOSAL: '0'
   benchmark:
     env:
       CONC: '1'
@@ -94,6 +97,9 @@ override_tp2_c2:
         swa-prefix-tails: 128
         max-running-requests: 4
         monokernel-backend: amd
+      env:
+        # 5325cfabd757's folded DSpark proposal reads an NVIDIA wrapper the AMD monokernel lacks.
+        SGLANG_DSPARK_FOLDED_PROPOSAL: '0'
   benchmark:
     env:
       CONC: '2'
@@ -111,6 +117,9 @@ override_tp2_c4:
         swa-prefix-tails: 256
         max-running-requests: 8
         monokernel-backend: amd
+      env:
+        # 5325cfabd757's folded DSpark proposal reads an NVIDIA wrapper the AMD monokernel lacks.
+        SGLANG_DSPARK_FOLDED_PROPOSAL: '0'
   benchmark:
     env:
       CONC: '4'
@@ -128,6 +137,9 @@ override_tp2_c8:
         swa-prefix-tails: 512
         max-running-requests: 16
         monokernel-backend: amd
+      env:
+        # 5325cfabd757's folded DSpark proposal reads an NVIDIA wrapper the AMD monokernel lacks.
+        SGLANG_DSPARK_FOLDED_PROPOSAL: '0'
   benchmark:
     env:
       CONC: '8'
@@ -144,6 +156,9 @@ override_tp2_c16:
         swa-prefix-tails: 1024
         max-running-requests: 32
         monokernel-backend: amd
+      env:
+        # 5325cfabd757's folded DSpark proposal reads an NVIDIA wrapper the AMD monokernel lacks.
+        SGLANG_DSPARK_FOLDED_PROPOSAL: '0'
   benchmark:
     env:
       CONC: '16'
@@ -281,6 +296,9 @@ override_tp4_c1:
         swa-prefix-tails: 128
         max-running-requests: 2
         monokernel-backend: amd
+      env:
+        # 5325cfabd757's folded DSpark proposal reads an NVIDIA wrapper the AMD monokernel lacks.
+        SGLANG_DSPARK_FOLDED_PROPOSAL: '0'
   benchmark:
     env:
       CONC: '1'
@@ -298,6 +316,9 @@ override_tp4_c2:
         swa-prefix-tails: 128
         max-running-requests: 4
         monokernel-backend: amd
+      env:
+        # 5325cfabd757's folded DSpark proposal reads an NVIDIA wrapper the AMD monokernel lacks.
+        SGLANG_DSPARK_FOLDED_PROPOSAL: '0'
   benchmark:
     env:
       CONC: '2'
@@ -315,6 +336,9 @@ override_tp4_c4:
         swa-prefix-tails: 256
         max-running-requests: 8
         monokernel-backend: amd
+      env:
+        # 5325cfabd757's folded DSpark proposal reads an NVIDIA wrapper the AMD monokernel lacks.
+        SGLANG_DSPARK_FOLDED_PROPOSAL: '0'
   benchmark:
     env:
       CONC: '4'
@@ -332,6 +356,9 @@ override_tp4_c8:
         swa-prefix-tails: 512
         max-running-requests: 16
         monokernel-backend: amd
+      env:
+        # 5325cfabd757's folded DSpark proposal reads an NVIDIA wrapper the AMD monokernel lacks.
+        SGLANG_DSPARK_FOLDED_PROPOSAL: '0'
   benchmark:
     env:
       CONC: '8'
@@ -348,6 +375,9 @@ override_tp4_c16:
         swa-prefix-tails: 1024
         max-running-requests: 32
         monokernel-backend: amd
+      env:
+        # 5325cfabd757's folded DSpark proposal reads an NVIDIA wrapper the AMD monokernel lacks.
+        SGLANG_DSPARK_FOLDED_PROPOSAL: '0'
   benchmark:
     env:
       CONC: '16'
