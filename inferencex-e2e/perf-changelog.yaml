@@ -12568,7 +12568,7 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Replace the TP16/DCP16 aggregated curve that SGLang served directly with a TP16 EP4 DCP8 aggregated curve behind a Dynamo KV-router frontend at concurrency 1, 2, 4, 12, 16, 20, 24 and 28, on the same image. The eleven TP16/DCP16 points and their agg-variants.yaml recipe are removed."
+    - "Replace the TP16/DCP16 aggregated curve that SGLang served directly with a TP16 EP4 DCP8 aggregated curve behind a Dynamo KV-router frontend at concurrency 1, 2, 4, 12, 16, 20, 24 and 28, on the same image. The eleven TP16/DCP16 points are removed, and agg-variants.yaml now holds only the new design."
     - "The points use MSCCL++ all-reduce over the cluster's RDMA HCAs, DCP push-combine, a 32 MiB custom all-reduce buffer, one mamba state per path and Run:ai streamer loading. max-running-requests equals the CUDA-graph limit: 8 through concurrency 4, then 24 to 36. DFLASH verifies 8 tokens through concurrency 16, 6 at concurrency 20 and 24, and 5 at concurrency 28, which keeps MSCCL++ verify all-reduces within 146 tokens per step."
     - "The points keep FP32 KDA recurrent state, FP8 KV, DFLASH block verification and the committed golden acceptance curve, with no KV offload."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
