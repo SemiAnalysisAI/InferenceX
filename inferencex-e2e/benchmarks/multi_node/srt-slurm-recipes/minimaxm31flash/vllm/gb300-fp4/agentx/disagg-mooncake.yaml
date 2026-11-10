@@ -256,8 +256,8 @@ override_1p1d_dep16_c200:
         eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
         max-num-seqs: 5
         max-cudagraph-capture-size: 40
-override_3p1d_dep16_c440:
-  name: minimaxm31flash-gb300-disagg-mooncake-3p1d-dep16-c440
+override_3p1d_dep16_c500:
+  name: minimaxm31flash-gb300-disagg-mooncake-3p1d-dep16-c500
   roles:
     decode:
       nodes: 4
@@ -267,18 +267,8 @@ override_3p1d_dep16_c440:
         eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
         max-num-seqs: 10
         max-cudagraph-capture-size: 80
-override_1p1d_c280:
-  name: minimaxm31flash-gb300-disagg-mooncake-1p1d-c280
-  roles:
-    prefill:
-      nodes: 1
-      workers: 1
-    decode:
-      args:
-        max-num-seqs: 10
-        max-cudagraph-capture-size: 80
-override_3p1d_dep16_c780:
-  name: minimaxm31flash-gb300-disagg-mooncake-3p1d-dep16-c780
+override_3p1d_dep16_c600:
+  name: minimaxm31flash-gb300-disagg-mooncake-3p1d-dep16-c600
   roles:
     decode:
       nodes: 4
@@ -288,8 +278,8 @@ override_3p1d_dep16_c780:
         eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
         max-num-seqs: 14
         max-cudagraph-capture-size: 112
-override_4p1d_dep16_c1100:
-  name: minimaxm31flash-gb300-disagg-mooncake-4p1d-dep16-c1100
+override_4p1d_dep16_c800:
+  name: minimaxm31flash-gb300-disagg-mooncake-4p1d-dep16-c800
   roles:
     prefill:
       nodes: 4
@@ -302,3 +292,17 @@ override_4p1d_dep16_c1100:
         eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
         max-num-seqs: 20
         max-cudagraph-capture-size: 160
+override_5p1d_dep16_c800:
+  name: minimaxm31flash-gb300-disagg-mooncake-5p1d-dep16-c800
+  roles:
+    prefill:
+      nodes: 5
+      workers: 5
+    decode:
+      nodes: 4
+      gpus: 16
+      args:
+        data-parallel-size: 16
+        eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
+        max-num-seqs: 22
+        max-cudagraph-capture-size: 176
