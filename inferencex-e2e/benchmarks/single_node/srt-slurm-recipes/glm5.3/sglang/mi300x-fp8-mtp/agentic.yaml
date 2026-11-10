@@ -35,8 +35,9 @@ base:
         tool-call-parser: glm47
         reasoning-parser: glm45
         context-length: 1048576
-        chunked-prefill-size: 32768
-        mem-fraction-static: 0.85
+        # 32k chunks exhausted GPU memory in the indexer top-k on long contexts and stall decode for a whole chunk.
+        chunked-prefill-size: 8192
+        mem-fraction-static: 0.82
         speculative-algorithm: EAGLE
         speculative-num-steps: 3
         speculative-eagle-topk: 1
@@ -45,6 +46,9 @@ base:
         enable-metrics: true
         enable-cache-report: true
       env:
+        # Concurrent launches otherwise exhaust the Hub API rate limit; weights are in the node-local cache.
+        HF_HUB_OFFLINE: '1'
+        TRANSFORMERS_OFFLINE: '1'
         PYTHONNOUSERSITE: '1'
         # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
@@ -53,6 +57,8 @@ base:
         SGLANG_OPT_USE_TOPK_V2: 'false'
   benchmark:
     env:
+      HF_HUB_OFFLINE: ''
+      TRANSFORMERS_OFFLINE: ''
       # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
@@ -104,6 +110,17 @@ override_tp8_c4:
       CONC: '4'
       KV_OFFLOADING: none
 
+override_tp8_c5:
+  roles:
+    agg:
+      args:
+        max-running-requests: 10
+        cuda-graph-max-bs-decode: 10
+  benchmark:
+    env:
+      CONC: '5'
+      KV_OFFLOADING: none
+
 override_tp8_c6:
   roles:
     agg:
@@ -130,32 +147,17 @@ override_tp8_c8_hicache:
       CONC: '8'
       KV_OFFLOADING: dram
 
-override_tp8_c12_hicache:
+override_tp8_c10_hicache:
   roles:
     agg:
       args:
-        max-running-requests: 24
-        cuda-graph-max-bs-decode: 24
+        max-running-requests: 20
+        cuda-graph-max-bs-decode: 20
         enable-hierarchical-cache: true
         hicache-host-memory-fraction: 0.60
         hicache-io-backend: direct
         hicache-mem-layout: page_first_direct
   benchmark:
     env:
-      CONC: '12'
-      KV_OFFLOADING: dram
-
-override_tp8_c16_hicache:
-  roles:
-    agg:
-      args:
-        max-running-requests: 32
-        cuda-graph-max-bs-decode: 32
-        enable-hierarchical-cache: true
-        hicache-host-memory-fraction: 0.60
-        hicache-io-backend: direct
-        hicache-mem-layout: page_first_direct
-  benchmark:
-    env:
-      CONC: '16'
+      CONC: '10'
       KV_OFFLOADING: dram
