@@ -12410,7 +12410,7 @@
 - config-keys:
     - minimaxm31flash-fp4-b300-dynamo-vllm-agentic-dspark-disagg
   description:
-    - "Add MiniMax-M3.1-Flash AgentX on B300 with Dynamo 1.6.0.dev20261023 and vLLM bc9a3ac (minimax-m31-flash-x86_64-cu134-bc9a3ac-mc0.3.13.post1): 1 DEP2 prefill + 1 DEP4 decode (6 GPUs) at conc 48, 64, 96, 128 and 144, and 1 DEP2 prefill + 1 TP4 decode (6 GPUs) at conc 24."
+    - "Add MiniMax-M3.1-Flash AgentX on B300 with Dynamo 1.6.0.dev20261023 and vLLM 05caae0 (minimax-m31-flash-x86_64-cu134-05caae0-mc0.3.13.post1): 1 DEP2 prefill + 1 DEP4 decode (6 GPUs) at conc 48, 64, 96, 128 and 144, and 1 DEP2 prefill + 1 TP4 decode (6 GPUs) at conc 24."
     - "DSpark with the built-in drafter, 7 draft tokens (golden AL 4.04), DeepGEMM MegaMoE on the expert-parallel workers, NIXL prefill-to-decode transfer and the Dynamo KV router with session affinity."
     - "Prefix cache in a shared MooncakeStore pool served by standalone stores, one per socket on the prefill and decode nodes. The 2093 GiB pool fits the 749 GB prefill and 1499 GB decode DRAM shares; prefill workers are store clients and decode takes KV over NIXL only."
     - "Use the EFA fabric on b300-dsxe: a setup script adds AWS EFA 1.50.0 and the EFA Mooncake wheel at 0.3.13.post1 to the image, Mooncake runs with protocol efa and auto-discovered NICs, and NIXL uses the LIBFABRIC backend."
