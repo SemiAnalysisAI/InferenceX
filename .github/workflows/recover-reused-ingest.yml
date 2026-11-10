@@ -103,6 +103,7 @@ jobs:
                 MERGE_RUN_ID: ${{ inputs.merge-run-id || github.run_id }}
                 # A supplied merge run keeps the original agentic-only behavior.
                 AGENTIC: ${{ inputs.merge-run-id != '' && 'true' || steps.plan.outputs.agentic }}
+                APP_REPO: ${{ vars.APP_REPO || 'SemiAnalysisAI/InferenceX-app' }}
               with:
                 github-token: ${{ secrets.FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
                 script: |
@@ -112,9 +113,10 @@ jobs:
                     "merge-run-id": process.env.MERGE_RUN_ID,
                   };
                   if (agentic) client_payload["database-target"] = "production";
+                  const [owner, repo] = process.env.APP_REPO.split("/");
                   await github.rest.repos.createDispatchEvent({
-                    owner: "SemiAnalysisAI",
-                    repo: "InferenceX-app",
+                    owner,
+                    repo,
                     event_type: agentic ? "ingest-agentic-results" : "ingest-results",
                     client_payload,
                   });

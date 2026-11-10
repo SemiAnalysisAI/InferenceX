@@ -12608,6 +12608,17 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4757
 
 - config-keys:
+    - kimik3.1-fp4-mi355x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the MI355X Kimi-K3.1 vLLM AgentX image from vllm/vllm-openai-rocm:kimi-k31 (sha256:5f47cc10) to vllm/vllm-openai-rocm:kimi-k31-d73dd529 (sha256:5b54f223). The vLLM build string (0.0.0+mum.14d1ec2336), AITER and torch are unchanged; the new image adds a DSA attention path to the Kimi-K3.1 specialized decode used at concurrency 1."
+    - "Concurrency 48 moves from 3 to 6 DSpark draft tokens, with decode CUDA graph sizes 7 to 336 in steps of 7, max-num-batched-tokens 10240, prefill-schedule-interval 8 and an adaptive long-prefill-token-threshold of 10240. At max-num-batched-tokens 10240 the threshold does not cap any chunk."
+    - "Concurrency 32 adds prefill-schedule-interval 8 and an adaptive long-prefill-token-threshold of 10240 on its existing max-num-batched-tokens 10240, keeping 3 draft tokens and max-num-seqs 20."
+    - "Drop the concurrency 10 point. Concurrencies 1, 4, 16 and 24 keep their settings."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4948
+
+- config-keys:
     - glm5.3-fp8-mi300x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
