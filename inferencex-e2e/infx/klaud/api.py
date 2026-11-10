@@ -33,6 +33,7 @@ ENDPOINTS = {
     "workflow-info": PUBLIC + "/api/v1/workflow-info",
     "evaluations": PUBLIC + "/api/v1/evaluations",
     "benchmark-siblings": PUBLIC + "/api/v1/benchmark-siblings",
+    "options": PUBLIC + "/api/v1/views/options",
 }
 USER_AGENT = "InferenceX-Klaud-Cold/1.0"
 MAX_BYTES = 16 * 1024 * 1024
@@ -80,13 +81,14 @@ def fetch(
     date: str | None = None,
     exact: bool = True,
     benchmark: int | None = None,
+    benchmark_type: str | None = None,
     clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     opener: Callable[..., Any] | None = None,
     sleeper: Callable[[float], None] = time.sleep,
 ) -> Feed:
     """GET one ``resource`` from ENDPOINTS and return it as a Feed.
 
-    ``model``, ``date``, ``benchmark`` and ``token`` fill the query or auth header where the
+    ``model``, ``date``, ``benchmark``, ``benchmark_type`` and ``token`` fill the query or auth header where the
     resource takes them. Retries transient failures, then raises ReadError with a fixed code.
     """
     query = {}
@@ -104,6 +106,8 @@ def fetch(
         query["date"] = date
         if resource == "benchmarks" and exact:
             query["exact"] = "true"
+    if resource == "workflow-info" and benchmark_type:
+        query["benchmarkType"] = benchmark_type
     url = ENDPOINTS[resource] + ("?" + urllib.parse.urlencode(query) if query else "")
     headers = {"Accept": "application/json", "User-Agent": USER_AGENT}
     if resource == "scheduler":
