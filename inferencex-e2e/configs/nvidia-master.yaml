@@ -5129,6 +5129,102 @@ kimik3.1-fp4-b200-dynamo-sglang-agentic-dflash:
           dcp-size: 16
           ep: 1
           dp-attn: false
+      - spec-decoding: draft_model
+        kv-offloading: none
+        conc-list: [1]
+        num-nodes: 2
+        srt-recipe: agg-tp16-ep-variants.yaml:override_tp16_ep4_dcp8_c1
+        power: true
+        worker:
+          num-worker: 1
+          tp: 16
+          dcp-size: 8
+          ep: 4
+          dp-attn: false
+      - spec-decoding: draft_model
+        kv-offloading: none
+        conc-list: [2]
+        num-nodes: 2
+        srt-recipe: agg-tp16-ep-variants.yaml:override_tp16_ep4_dcp8_c2
+        power: true
+        worker:
+          num-worker: 1
+          tp: 16
+          dcp-size: 8
+          ep: 4
+          dp-attn: false
+      - spec-decoding: draft_model
+        kv-offloading: none
+        conc-list: [4]
+        num-nodes: 2
+        srt-recipe: agg-tp16-ep-variants.yaml:override_tp16_ep4_dcp8_c4
+        power: true
+        worker:
+          num-worker: 1
+          tp: 16
+          dcp-size: 8
+          ep: 4
+          dp-attn: false
+      - spec-decoding: draft_model
+        kv-offloading: none
+        conc-list: [8]
+        num-nodes: 2
+        srt-recipe: agg-tp16-ep-variants.yaml:override_tp16_ep2_dcp16_c8
+        power: true
+        worker:
+          num-worker: 1
+          tp: 16
+          dcp-size: 16
+          ep: 2
+          dp-attn: false
+      - spec-decoding: draft_model
+        kv-offloading: none
+        conc-list: [12]
+        num-nodes: 2
+        srt-recipe: agg-tp16-ep-variants.yaml:override_tp16_ep4_dcp8_c12
+        power: true
+        worker:
+          num-worker: 1
+          tp: 16
+          dcp-size: 8
+          ep: 4
+          dp-attn: false
+      - spec-decoding: draft_model
+        kv-offloading: none
+        conc-list: [16]
+        num-nodes: 2
+        srt-recipe: agg-tp16-ep-variants.yaml:override_tp16_ep4_dcp8_c16
+        power: true
+        worker:
+          num-worker: 1
+          tp: 16
+          dcp-size: 8
+          ep: 4
+          dp-attn: false
+      - spec-decoding: draft_model
+        kv-offloading: none
+        conc-list: [20]
+        num-nodes: 2
+        srt-recipe: agg-tp16-ep-variants.yaml:override_tp16_ep4_dcp8_c20
+        power: true
+        worker:
+          num-worker: 1
+          tp: 16
+          dcp-size: 8
+          ep: 4
+          dp-attn: false
+      - spec-decoding: draft_model
+        kv-offloading: none
+        conc-list: [28]
+        num-nodes: 2
+        srt-recipe: agg-tp16-ep-variants.yaml:override_tp16_ep4_dcp8_c28
+        power: true
+        worker:
+          num-worker: 1
+          tp: 16
+          dcp-size: 8
+          ep: 4
+          dp-attn: false
 
 glm5.2-fp4-gb200-dynamo-sglang-agentic-agg:
   image: lmsysorg/sglang:nightly-dev-20261020-ab580b2e@sha256:0af411bb320a95bb5e1c58b4c20c9852920a19aa9f12f148f69731b0dca3b576
