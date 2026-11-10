@@ -12564,6 +12564,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4374
 
 - config-keys:
+    - h3-bf16-b200-vllm-omni-video
+  scenario-type: [video-generation]
+  description:
+    - "Add vLLM-Omni v0.32.0, pinned by its linux/amd64 digest, on the B200 H3 workload SGLang runs (h3-v2.yaml release-v1, C1) on 1, 2, 4 and 8 GPUs: Ulysses across all GPUs with text-encoder TP and tiled VAE patch parallelism of the same degree, with the prompt-embedding cache and cross-request AdaLN projection reuse disabled."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4874
+
+- config-keys:
     - qwen3.5-fp4-mi355x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding

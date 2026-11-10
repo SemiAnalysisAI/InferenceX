@@ -14,7 +14,7 @@ from power_model.models.advanced.profiles import B300_BOARD_BASELINE
 
 
 class B300HGXBoard(NVIDIA8WayHGXBoard):
-    gpu_tdp_w: Literal[1200] = 1200
+    gpu_tdp_w: Literal[1100] = 1100
     nic: ConnectX8NICCard = Field(default_factory=lambda: ConnectX8NICCard(state="idle"))
     provenance: Provenance = B300_BOARD_BASELINE
 
