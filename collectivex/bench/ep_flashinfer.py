@@ -11,34 +11,34 @@ writes straight into the target's workspace and then sets a flag — on MNNVL, w
 is directly addressable across the 72-GPU domain, that degenerates to ordinary stores over the
 fabric with no rendezvous, which is exactly why it wins on this topology.
 
-Upstream surface (flashinfer.comm.trtllm_moe_alltoall):
+Upstream surface (flashinfer.moe_ep):
 
-    MoeAlltoAll(mapping, max_num_tokens, top_k, num_experts,
-                workspace_size_per_rank=..., mnnvl_config=...)
-    .dispatch(token_selected_experts, input_payloads, runtime_max_tokens_per_rank)
-        -> list of [ep_size, runtime_max_tokens_per_rank, *] workspace-backed receives
-    .combine(payload, runtime_max_tokens_per_rank, payload_in_workspace=False[, output=...])
-        -> [local_num_tokens, elements_per_token]
+    create_communication(BootstrapConfig(world_size, rank, device=, process_group=),
+                         MoEEpCommParams(num_experts, top_k, max_tokens_per_rank, hidden_size, ...),
+                         backend=NVLinkOneSidedConfig(comm_backend=...))
+        -> NVLinkOneSidedAlltoAll
+    .dispatch(hidden_states, topk_ids, topk_weights, *, hidden_states_scale=None,
+              runtime_max_tokens_per_rank=...)
+        -> MoEEpDispatchResult of [ep_size * runtime_max_tokens_per_rank, *] workspace-backed receives
+    .combine(expert_output, *, output=...) -> [local_num_tokens, hidden_size]
 
-The contract is vLLM's integration (`FlashInferNVLinkOneSidedManager.combine_into` and the
+The contract is vLLM's integration (`FlashInferNVLinkOneSidedManager` and the
 `flashinfer_nvlink_one_sided` prepare/finalize). Its finalize hands combine the experts' output, a
-tensor the caller owns, and never sets `payload_in_workspace`, so combine first stages that payload
-into the workspace itself: that copy is part of what vLLM's combine costs, and the timed combine
-pays it. Having the expert GEMM write straight into the workspace region instead is TensorRT-LLM's
-path (and SGLang's, with its `flashinfer_cutlass` MoE runner only). Wheels from 0.6.16 combine into
-a caller-supplied `output=`; before that vLLM copies the returned tensor into its own, and so does
-`_combine_into`.
+tensor the caller owns, so combine first stages that payload into the workspace itself: that copy
+is part of what vLLM's combine costs, and the timed combine pays it. Having the expert GEMM write
+straight into the workspace region instead is TensorRT-LLM's path (and SGLang's, with its
+`flashinfer_cutlass` MoE runner only).
 
 Three properties of that API shape this adapter:
 
-  * Strict phase pairing. `dispatch` asserts "called twice without combine", `combine` asserts
-    the phase is "dispatched", and the internal state resets after each combine. So a timed
+  * Strict phase pairing. `dispatch` raises "called twice without an intervening combine",
+    `combine` "called before dispatch", and the round state resets after each combine. So a timed
     combine needs a fresh dispatch and a timed dispatch needs a draining combine — the same
     contract MoRI and the DeepEP V2 low-latency path already declare.
-  * A PADDED receive. Dispatch returns `[ep_size, runtime_max_tokens_per_rank, hidden]`, not a
+  * A PADDED receive. Dispatch returns `[ep_size * runtime_max_tokens_per_rank, hidden]`, not a
     compact buffer, so every oracle view must read valid slots only. Padding is untouched
     workspace memory; reading it would feed garbage to the correctness gate.
-  * `runtime_max_tokens_per_rank <= max_num_tokens`, so the workspace is sized once from the
+  * `runtime_max_tokens_per_rank <= max_tokens_per_rank`, so the workspace is sized once from the
     ladder maximum and each call passes the current rung.
 
 `normal` mode only. FlashInfer exposes one one-sided A2A kernel family, not a separate
@@ -48,7 +48,6 @@ phase is still covered — `normal` runs the full decode and prefill ladders.
 """
 from __future__ import annotations
 
-import inspect
 import os
 import re
 import types
@@ -60,17 +59,6 @@ from ep_backend import EPBackend, blockwise_fp8_codec
 # Stamped by the kernel into the expert-id payload of every receive slot it did not fill.
 # -1 is safe: real ids are [0, num_experts).
 _INVALID_EXPERT = -1
-
-def _accepts_keyword(fn, name) -> bool:
-    """vLLM's `supports_kw(fn, name, allow_var_kwargs=False)`: whether `name` is an explicit
-    parameter of `fn`. vLLM picks its combine call by this probe, not by version (`output=` and
-    `use_low_precision` both arrived in 0.6.16), so the adapter makes the same choice the same way."""
-    try:
-        parameter = inspect.signature(fn).parameters.get(name)
-    except (TypeError, ValueError):
-        return False
-    return parameter is not None and parameter.kind not in (parameter.VAR_POSITIONAL, parameter.VAR_KEYWORD)
-
 
 def _version_slug(version: str) -> str:
     """The wheel version as a `kernel_generation` segment: a local tag such as `+cu130` keeps its
@@ -118,8 +106,6 @@ class FlashInferEPBackend(EPBackend):
         self._a2a = None
         self._max_tokens = None
         self._workspace_sizing = {}
-        # Which of vLLM's two combine calls this wheel takes; resolved in create_buffer.
-        self._combine_takes_output = False
 
     # ---- setup -------------------------------------------------------------------------------
 
@@ -143,17 +129,19 @@ class FlashInferEPBackend(EPBackend):
         return problem
 
     def create_buffer(self, spec):
-        """Build the one MoeAlltoAll for this group, sized to the ladder maximum.
+        """Build the one NVLinkOneSidedAlltoAll for this group, sized to the ladder maximum.
 
-        The communicator handed to MnnvlConfig must span exactly the EP group: the kernel
-        asserts `workspace.size(0) == moe_ep_size`, so a wider group silently mis-sizes it.
+        The communicator handed to NVLinkOneSidedConfig must span exactly the EP group: FlashInfer
+        checks its rank and size against the bootstrap's, and the kernel asserts
+        `workspace.size(0) == ep_size`.
         """
         import flashinfer
-        from flashinfer.comm import Mapping
-        from flashinfer.comm.mnnvl import MnnvlConfig
-        from flashinfer.comm.trtllm_moe_alltoall import (
-            MoeAlltoAll,
-            moe_a2a_get_workspace_size_per_rank,
+        from flashinfer.fused_moe import QuantFormat
+        from flashinfer.moe_ep import (
+            BootstrapConfig,
+            MoEEpCommParams,
+            NVLinkOneSidedConfig,
+            create_communication,
         )
 
         self._max_tokens = spec.max_tokens_per_rank
@@ -167,36 +155,33 @@ class FlashInferEPBackend(EPBackend):
             + top_k * 4 + top_k * 4
         )
         combine_bytes = hidden * 2
-        workspace_size = moe_a2a_get_workspace_size_per_rank(
-            ep_size=self.world_size,
-            max_num_tokens=self._max_tokens,
-            total_dispatch_payload_size_per_token=dispatch_bytes,
-            combine_payload_size_per_token=combine_bytes,
+        params = MoEEpCommParams(
+            num_experts=self.args.experts,
+            top_k=top_k,
+            max_tokens_per_rank=self._max_tokens,
+            hidden_size=hidden,
+            dtype=torch.bfloat16,
+            # vLLM's flashinfer_one_sided_dispatch_layout for BF16 and 128x128-block FP8.
+            dispatch_format=QuantFormat.DeepSeekFp8 if self._fp8 else QuantFormat.BF16,
+            invalid_expert_id=_INVALID_EXPERT,
+        )
+        bootstrap = BootstrapConfig(
+            world_size=self.world_size,
+            rank=self.rank,
+            device=torch.cuda.current_device(),
+            process_group=_ep_group(),
+        )
+        self._a2a = create_communication(
+            bootstrap, params, backend=NVLinkOneSidedConfig(comm_backend=_communicator(_ep_group()))
         )
         self._workspace_sizing = {
             "capacity_tokens_per_rank": self._max_tokens,
             "dispatch_bytes_per_token": dispatch_bytes,
             "combine_bytes_per_token": combine_bytes,
-            "workspace_bytes_per_rank": workspace_size,
+            "workspace_bytes_per_rank": int(self._a2a.metainfo[self._a2a._index.WORKSPACE_SIZE_INDEX]),
         }
-        mapping = Mapping(
-            self.world_size,
-            self.rank,
-            self.args.gpus_per_node,
-            tp_size=self.world_size,
-            moe_ep_size=self.world_size,
-        )
-        self._a2a = MoeAlltoAll(
-            mapping=mapping,
-            max_num_tokens=self._max_tokens,
-            top_k=top_k,
-            num_experts=self.args.experts,
-            workspace_size_per_rank=workspace_size,
-            mnnvl_config=MnnvlConfig(comm_backend=_communicator(_ep_group())),
-        )
         self.library_version = flashinfer.__version__
         self.kernel_generation = f"{type(self).kernel_generation}-{_version_slug(self.library_version)}"
-        self._combine_takes_output = _accepts_keyword(self._a2a.combine, "output")
         # Every rank must finish mapping its workspace before any peer writes into it;
         # vLLM barriers here for the same reason. Scoped to the EP group, not the world.
         torch.distributed.barrier(group=_ep_group())
@@ -212,37 +197,29 @@ class FlashInferEPBackend(EPBackend):
         intended shape — the upstream workspace accounting budgets exactly `top_k * 4` for
         int32 ids plus `top_k * 4` for fp32 weights on top of the hidden bytes.
 
-        `invalid_token_expert_id` + `expert_id_payload_index` are how a receiver tells which
-        rows are real: the receive planes are `[ep_size, max_tokens, *]` and a rank only gets
-        the tokens that selected one of its experts, so the kernel stamps the sentinel into the
-        expert-id payload of every slot it did not fill.
+        `invalid_expert_id` is how a receiver tells which rows are real: the receive planes are
+        `[ep_size * T, *]` and a rank only gets the tokens that selected one of its experts, so
+        the kernel stamps the sentinel into the expert ids of every slot it did not fill.
         """
         # Quantise here, not in make_problem: production runs one fused bf16->fp8 kernel per
         # forward pass immediately before this collective. The scales then ride as their own
-        # payload, which shifts the expert ids to index 2 -- four payloads, and the kernel's
-        # kMaxPayloads is exactly 4, matching vLLM's own [values, scales, ids, weights] order.
+        # payload, in vLLM's own [values, scales, ids, weights] order.
         if self._fp8:
             values, scales = self._quant(p.dispatch_x)
-            payloads = [values, scales, p.topk_idx, p.topk_weights]
-            expert_id_index = 2
         else:
-            payloads = [p.dispatch_x, p.topk_idx, p.topk_weights]
-            expert_id_index = 1
+            values, scales = p.dispatch_x, None
         received = self._a2a.dispatch(
+            values,
             p.topk_idx,
-            payloads,
-            p.T,
-            invalid_token_expert_id=_INVALID_EXPERT,
-            expert_id_payload_index=expert_id_index,
+            p.topk_weights,
+            hidden_states_scale=scales,
+            runtime_max_tokens_per_rank=p.T,
         )
-        # One received tensor per payload. Under FP8 `recv_x` stays the VALUES plane and the
-        # scales ride beside it, so every shape-sensitive consumer keeps working on a tensor.
-        if self._fp8:
-            recv_x, recv_scales, recv_idx, recv_w = received
-        else:
-            (recv_x, recv_idx, recv_w), recv_scales = received, None
+        # Under FP8 `recv_x` stays the VALUES plane and the scales ride beside it, so every
+        # shape-sensitive consumer keeps working on a tensor.
         return types.SimpleNamespace(
-            recv_x=recv_x, recv_scales=recv_scales, recv_idx=recv_idx, recv_w=recv_w,
+            recv_x=received.hidden_states, recv_scales=received.hidden_states_scale,
+            recv_idx=received.topk_ids, recv_w=received.topk_weights,
             tokens=p.T, topk=p.topk_idx.shape[1], combine_input=None,
         )
 
@@ -260,12 +237,12 @@ class FlashInferEPBackend(EPBackend):
         return index
 
     def stage(self, p, h):
-        """Hand combine the payload vLLM's finalize would: a caller-owned BF16 `[ep, T, hidden]`.
+        """Hand combine the payload vLLM's finalize would: a caller-owned BF16 `[ep * T, hidden]`.
 
         In vLLM that is the experts' output, written beside the receive, never into the workspace
         combine region, so combine stages it there itself (`payload_in_workspace=False`). With no
         expert the received rows are that output, and under BF16 the receive already is a
-        contiguous BF16 `[ep, T, hidden]` tensor disjoint from the combine region, so the hand-off
+        contiguous BF16 `[ep * T, hidden]` tensor disjoint from the combine region, so the hand-off
         is a pointer and the staging copy is timed inside combine.
 
         Under FP8 the received values are 1-byte, so the dequant into a fresh BF16 tensor stands
@@ -285,18 +262,13 @@ class FlashInferEPBackend(EPBackend):
         h.combine_input = payload
 
     def combine(self, p, h):
-        return self._combine_into(h.combine_input, h.tokens, p.combine_output)
+        return self._combine_into(h.combine_input, p.combine_output)
 
-    def _combine_into(self, payload, tokens, output):
-        """vLLM's `combine_into`: a caller-owned payload, which combine stages into the workspace,
-        combined into the caller's `output`. A wheel without `output=` (before 0.6.16) returns a
-        fresh tensor that vLLM copies into its own, so that copy is timed here too.
-        `use_low_precision` stays at FlashInfer's default, False, as vLLM's
-        VLLM_FLASHINFER_MOE_A2A_LOW_PRECISION_COMBINE leaves it."""
-        if self._combine_takes_output:
-            self._a2a.combine(payload, tokens, payload_in_workspace=False, output=output)
-        else:
-            output.copy_(self._a2a.combine(payload, tokens, payload_in_workspace=False))
+    def _combine_into(self, payload, output):
+        """vLLM's finalize: a caller-owned payload, which combine stages into the workspace,
+        combined into the caller's `output`. `use_low_precision_combine` stays at FlashInfer's
+        default, False, as vLLM's VLLM_FLASHINFER_MOE_A2A_LOW_PRECISION_COMBINE leaves it."""
+        self._a2a.combine(payload, output=output)
         return output
 
     def recv_tokens(self, h):
@@ -313,7 +285,7 @@ class FlashInferEPBackend(EPBackend):
     def inspect_dispatch(self, p, h):
         """Compact per-received-row view for the correctness oracle.
 
-        The receive is `[ep_size, max_tokens, *]` with a rank's tokens only in the slots the
+        The receive is `[ep_size * T, *]` with a rank's tokens only in the slots the
         kernel filled, so flatten and keep rows whose expert-id payload is not the sentinel.
 
         Ids come back exactly as sent, i.e. GLOBAL and covering the token's whole top-k —
@@ -340,17 +312,15 @@ class FlashInferEPBackend(EPBackend):
     def combine_transformed(self, p, h, transformed):
         """Combine an oracle-transformed payload through the timed path's call (`_combine_into`).
 
-        Scattered into a fresh caller-owned BF16 `[ep, T, hidden]` payload, as the experts'
+        Scattered into a fresh caller-owned BF16 `[ep * T, hidden]` payload, as the experts'
         output is, so combine's own staging copy moves it into the workspace.
         """
         payload = torch.zeros(h.recv_x.shape, dtype=torch.bfloat16, device=h.recv_x.device)
         payload.view(-1, payload.shape[-1])[self._valid_rows(h)] = transformed.to(torch.bfloat16)
-        return self._combine_into(payload, h.tokens, p.combine_output)
+        return self._combine_into(payload, p.combine_output)
 
     def implementation_details(self):
         """What this run handed the library (`EPBackend.implementation_details`)."""
-        from flashinfer.comm import trtllm_moe_alltoall
-
         return {
             "flashinfer_version": self.library_version,
             # vLLM's contract: combine stages a caller-owned payload; the dispatch receive is
@@ -358,12 +328,11 @@ class FlashInferEPBackend(EPBackend):
             "combine_payload": "caller-owned",
             "payload_in_workspace": False,
             "zero_copy": False,
-            "combine_output": "output-kw" if self._combine_takes_output else "copy",
+            "combine_output": "output-kw",
             "low_precision_combine": False,
             "dispatch_scale_format": "fp32-per-128-block-row-major" if self._fp8 else None,
-            # Left at the library's device default by vLLM and here alike; wheels before 0.6.16
-            # have no programmatic dependent launch at all.
-            "pdl_available": _accepts_keyword(trtllm_moe_alltoall.moe_a2a_combine, "enable_pdl"),
+            # Left at the library's device default by vLLM and here alike.
+            "pdl_available": True,
             # One CTA per token: the grid follows T and there is no SM budget, and NVLink loads
             # and stores need no queue pairs.
             "num_sms": None,
@@ -383,7 +352,7 @@ def _ep_group():
     return dist.group.WORLD
 
 def _communicator(group):
-    """Bridge MnnvlConfig to the process group the harness already established.
+    """Bridge NVLinkOneSidedConfig to the process group the harness already established.
 
     FlashInfer needs a communicator spanning exactly the EP group to exchange MNNVL fabric
     handles; the harness has one in torch.distributed, so wrap that rather than standing up a

@@ -169,3 +169,9 @@
   backends: [flashinfer-ep]
   description:
     - Run flashinfer-ep EP8 on B300.
+- date: 2026-11-09
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4955
+  pools: [h100-dgxc, h200-dgxc, b200-nscale, b300, gb200, gb300]
+  backends: [flashinfer-ep]
+  description:
+    - Run flashinfer-ep on FlashInfer 0.7.3 (flashinfer.moe_ep.NVLinkOneSidedAlltoAll) with its default transports, which take Lamport for small steps on sm_100/sm_103.

@@ -822,49 +822,54 @@ flashinfer_activate() {
 }
 
 # FlashInfer takes a file lock and reruns ninja on every load of a JIT module, which fails on
-# NFS without lock support and relinks the library while other ranks load it. An artifact in the
-# package's own AOT directory loads without either, so the module is built once under the cache
-# lock and copied there.
+# NFS without lock support and relinks the library while other ranks load it. An AOT artifact loads
+# without either: a jit-cache provider for this GPU already is one, and otherwise the module is built
+# once under the cache lock and copied into the package's own AOT directory.
 flashinfer_promote_aot() {
   python3 - <<'PY'
 import os
 import shutil
 
-from flashinfer.comm.trtllm_moe_alltoall import gen_moe_alltoall_module
 from flashinfer.jit import env as jit_env
+from flashinfer.jit.comm import gen_nvlink_one_sided_alltoall_module
 
-spec = gen_moe_alltoall_module("legacy")
+spec = gen_nvlink_one_sided_alltoall_module()
 spec.build_and_load()
-target = jit_env.FLASHINFER_AOT_DIR / spec.name / f"{spec.name}.so"
-target.parent.mkdir(parents=True, exist_ok=True)
-staged = target.with_name(target.name + ".tmp")
-shutil.copyfile(spec.jit_library_path, staged)
-os.chmod(staged, 0o755)
-os.replace(staged, target)
+if not spec.is_aot:
+    target = jit_env.FLASHINFER_AOT_DIR / spec.name / f"{spec.name}.so"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    staged = target.with_name(target.name + ".tmp")
+    shutil.copyfile(spec.jit_library_path, staged)
+    os.chmod(staged, 0o755)
+    os.replace(staged, target)
 PY
 }
 
-# Asserts the pinned wheel and that the all-to-all module loads from the AOT directory.
+# Asserts the pinned wheel and that the all-to-all module loads as an AOT artifact.
 flashinfer_probe() {
   python3 - "${COLLX_FLASHINFER_SPEC%% *}" <<'PY'
 import sys
 
 import flashinfer
-from flashinfer.comm import Mapping  # noqa: F401
-from flashinfer.comm.mnnvl import MnnvlConfig  # noqa: F401
-from flashinfer.comm.trtllm_moe_alltoall import (  # noqa: F401
-    MoeAlltoAll,
-    gen_moe_alltoall_module,
-    get_moe_alltoall_module,
-    moe_a2a_get_workspace_size_per_rank,
+from flashinfer.comm.mnnvl import CommBackend  # noqa: F401
+from flashinfer.fused_moe import QuantFormat  # noqa: F401
+from flashinfer.jit.comm import gen_nvlink_one_sided_alltoall_module
+from flashinfer.moe_ep import (  # noqa: F401
+    BootstrapConfig,
+    MoEEpCommParams,
+    NVLinkOneSidedConfig,
+    create_communication,
+)
+from flashinfer.moe_ep.backends.split.comm.nvlink_one_sided.kernels import (
+    get_nvlink_one_sided_alltoall_module,
 )
 
 pinned = sys.argv[1].split("==")[1]
 if flashinfer.__version__ != pinned:
     raise SystemExit(f"flashinfer {flashinfer.__version__} loaded, {pinned} pinned")
-if not gen_moe_alltoall_module("legacy").is_aot:
-    raise SystemExit("the all-to-all module is not in FlashInfer's AOT directory")
-get_moe_alltoall_module()
+if not gen_nvlink_one_sided_alltoall_module().is_aot:
+    raise SystemExit("the all-to-all module is not an AOT artifact")
+get_nvlink_one_sided_alltoall_module()
 print(f"FlashInfer {flashinfer.__version__} one-sided A2A available", file=sys.stderr)
 PY
 }

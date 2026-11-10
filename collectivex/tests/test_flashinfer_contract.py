@@ -3,12 +3,15 @@
 and its prepare/finalize), checked against CPU fakes: what the adapter hands the library."""
 from __future__ import annotations
 
+import dataclasses
+import enum
 import importlib
 import os
 import sys
 import types
 import unittest
 from pathlib import Path
+from typing import Any, Optional
 from unittest import mock
 
 sys.path[:0] = [str(Path(__file__).resolve().parents[1] / "bench")]
@@ -62,6 +65,7 @@ def fake_torch(allocations):
     torch.empty, torch.zeros = allocate("empty"), allocate("zeros")
     torch.compile = lambda fn, **_: fn
     torch._dynamo = types.SimpleNamespace(config=types.SimpleNamespace(cache_size_limit=8))
+    torch.cuda = types.SimpleNamespace(current_device=lambda: 1)
     dist = types.ModuleType("torch.distributed")
     dist.group = types.SimpleNamespace(WORLD="ep-group")
     dist.barrier = lambda group=None: None
@@ -69,88 +73,115 @@ def fake_torch(allocations):
     return {"torch": torch, "torch.distributed": dist}
 
 
-# Every fake MoeAlltoAll built, newest last.
+class QuantFormat(enum.Enum):
+    BF16 = 0
+    DeepSeekFp8 = 3
+
+
+@dataclasses.dataclass(frozen=True)
+class BootstrapConfig:
+    world_size: int
+    rank: int
+    device: Optional[int] = None
+    process_group: Any = None
+
+
+@dataclasses.dataclass(frozen=True)
+class MoEEpCommParams:
+    num_experts: int
+    top_k: int
+    max_tokens_per_rank: int
+    hidden_size: int
+    dtype: Any = None
+    dispatch_format: Any = None
+    invalid_expert_id: int = -1
+
+
+@dataclasses.dataclass
+class NVLinkOneSidedConfig:
+    """0.7.3's fields and defaults."""
+
+    backend_name: str = "nvlink_one_sided"
+    extra_payload_bytes_per_token: int = 0
+    eplb_stats_num_experts: int = 0
+    enable_rank_mask: bool = False
+    use_low_precision_combine: bool = False
+    comm_backend: Any = None
+    cft: Optional[bool] = None
+    cft_max_tokens_for_dispatch: int = 128
+    cft_max_tokens_for_combine: int = 128
+    lamport: Optional[bool] = None
+    lamport_max_tokens: Optional[int] = None
+    timeout_sec: int = 300
+    enable_pdl: Optional[bool] = None
+
+
+# Every fake NVLinkOneSidedAlltoAll built, newest last.
 BUILT_A2A = []
 
 
-class _A2ABase:
-    """MoeAlltoAll's dispatch, plus the zero-copy workspace API vLLM never calls."""
+class NVLinkOneSidedAlltoAll:
+    """The 0.7.3 one-sided communicator's dispatch and combine, plus the zero-copy workspace API
+    vLLM's finalize does not use here."""
 
-    def __init__(self, mapping, max_num_tokens, top_k, num_experts, workspace_size_per_rank, mnnvl_config):
-        self.constructed = {"mapping": mapping, "max_num_tokens": max_num_tokens, "top_k": top_k,
-                            "num_experts": num_experts, "workspace_size_per_rank": workspace_size_per_rank}
+    def __init__(self, bootstrap, params, config):
+        self.constructed = {"bootstrap": bootstrap, "params": params, "config": config}
+        self.metainfo = [0, 4096]
+        self._index = types.SimpleNamespace(WORKSPACE_SIZE_INDEX=1)
         self.dispatches, self.combines = [], []
         BUILT_A2A.append(self)
 
-    def dispatch(self, token_selected_experts, input_payloads, runtime_max_tokens_per_rank,
-                 invalid_token_expert_id=None, expert_id_payload_index=None):
-        self.dispatches.append({
-            "experts": token_selected_experts, "payloads": list(input_payloads),
-            "tokens": runtime_max_tokens_per_rank, "invalid": invalid_token_expert_id,
-            "id_index": expert_id_payload_index,
-        })
-        return [FakeTensor((EP, runtime_max_tokens_per_rank, payload.shape[1]), payload.dtype, f"recv{i}")
-                for i, payload in enumerate(input_payloads)]
+    def dispatch(self, hidden_states, topk_ids, topk_weights=None, *, hidden_states_scale=None,
+                 runtime_max_tokens_per_rank=None, eplb_local_stats=None, active_rank_mask=None):
+        tokens = runtime_max_tokens_per_rank
+        self.dispatches.append({"hidden": hidden_states, "ids": topk_ids, "weights": topk_weights,
+                                "scale": hidden_states_scale, "tokens": tokens})
+        scale = hidden_states_scale
+        return types.SimpleNamespace(
+            hidden_states=FakeTensor((EP * tokens, hidden_states.shape[1]), hidden_states.dtype, "recv0"),
+            hidden_states_scale=None if scale is None else FakeTensor((EP * tokens, scale.shape[1]), scale.dtype,
+                                                                      "recv1"),
+            topk_ids=FakeTensor((EP * tokens, TOPK), "int32", "recv-ids"),
+            topk_weights=FakeTensor((EP * tokens, TOPK), "float32", "recv-weights"),
+            tokens_per_rank=tokens,
+        )
 
-    def get_combine_payload_tensor_in_workspace(self, *args, **kwargs):
-        raise AssertionError("vLLM never writes the combine payload into the workspace")
+    def get_combine_input_buffer(self, dtype):
+        raise AssertionError("combine is handed a caller-owned payload, not the workspace region")
 
-
-class A2AWithOutput(_A2ABase):
-    """MoeAlltoAll.combine as of FlashInfer 0.6.16."""
-
-    def combine(self, payload, runtime_max_tokens_per_rank, payload_in_workspace=False, output_dtype=None,
-                output_scales=None, output_scalar_scale=1.0, sf_layout=None, output=None, *,
-                use_low_precision=False, active_rank_mask=None):
-        self.combines.append({"payload": payload, "tokens": runtime_max_tokens_per_rank,
-                              "in_workspace": payload_in_workspace, "output": output,
-                              "low_precision": use_low_precision})
+    def combine(self, expert_output, *, output=None, active_rank_mask=None):
+        self.combines.append({"payload": expert_output, "output": output})
         return output
 
 
-class A2ABeforeOutput(_A2ABase):
-    """MoeAlltoAll.combine through FlashInfer 0.6.15 (the image's 0.6.8.post1 included)."""
-
-    def combine(self, payload, runtime_max_tokens_per_rank, payload_in_workspace=False):
-        result = FakeTensor((T, HIDDEN), "bfloat16", "library-output")
-        self.combines.append({"payload": payload, "tokens": runtime_max_tokens_per_rank,
-                              "in_workspace": payload_in_workspace, "result": result})
-        return result
-
-
-def fake_flashinfer(version, a2a_class, sizes, pdl=True):
+def fake_flashinfer(version, constructions):
     package = types.ModuleType("flashinfer")
     package.__version__ = version
+    fused_moe = types.ModuleType("flashinfer.fused_moe")
+    fused_moe.QuantFormat = QuantFormat
+    moe_ep = types.ModuleType("flashinfer.moe_ep")
+    moe_ep.BootstrapConfig, moe_ep.MoEEpCommParams = BootstrapConfig, MoEEpCommParams
+    moe_ep.NVLinkOneSidedConfig = NVLinkOneSidedConfig
+
+    def create_communication(bootstrap, params, backend, **options):
+        constructions.append({"options": options})
+        return NVLinkOneSidedAlltoAll(bootstrap, params, backend)
+
+    moe_ep.create_communication = create_communication
     comm = types.ModuleType("flashinfer.comm")
-    comm.Mapping = lambda *a, **k: ("mapping", a, k)
     mnnvl = types.ModuleType("flashinfer.comm.mnnvl")
-    mnnvl.MnnvlConfig = lambda comm_backend: ("mnnvl-config", comm_backend)
     mnnvl.CommBackend = type("CommBackend", (), {})
-    a2a = types.ModuleType("flashinfer.comm.trtllm_moe_alltoall")
-    a2a.MoeAlltoAll = a2a_class
-
-    def workspace_size(**kwargs):
-        sizes.append(kwargs)
-        return 4096
-
-    a2a.moe_a2a_get_workspace_size_per_rank = workspace_size
-    if pdl:
-        a2a.moe_a2a_combine = lambda payload, *a, enable_pdl=None, **k: None
-    else:
-        a2a.moe_a2a_combine = lambda payload, local_num_tokens, workspace, payload_in_workspace=False: None
-    package.comm, comm.mnnvl, comm.trtllm_moe_alltoall = comm, mnnvl, a2a
-    return {"flashinfer": package, "flashinfer.comm": comm, "flashinfer.comm.mnnvl": mnnvl,
-            "flashinfer.comm.trtllm_moe_alltoall": a2a}
+    package.comm, package.fused_moe, package.moe_ep, comm.mnnvl = comm, fused_moe, moe_ep, mnnvl
+    return {"flashinfer": package, "flashinfer.fused_moe": fused_moe, "flashinfer.moe_ep": moe_ep,
+            "flashinfer.comm": comm, "flashinfer.comm.mnnvl": mnnvl}
 
 
 class Harness:
     """One adapter built and buffered against the fakes, with the fakes kept installed."""
 
-    def __init__(self, test, precision="bf16", version="0.6.8.post1", a2a_class=A2ABeforeOutput, pdl=False,
-                 phase="decode"):
-        self.allocations, self.sizes = [], []
-        modules = {**fake_torch(self.allocations),
-                   **fake_flashinfer(version, a2a_class, self.sizes, pdl=pdl)}
+    def __init__(self, test, precision="bf16", version="0.7.3", phase="decode"):
+        self.allocations, self.constructions = [], []
+        modules = {**fake_torch(self.allocations), **fake_flashinfer(version, self.constructions)}
         patcher = mock.patch.dict(sys.modules, modules)
         patcher.start()
         test.addCleanup(patcher.stop)
@@ -180,7 +211,7 @@ class Harness:
 
 class Bf16Contract(unittest.TestCase):
     def test_stage_hands_off_the_receive_and_combine_stages_it(self):
-        rig = Harness(self, a2a_class=A2AWithOutput, version="0.7.0.post1")
+        rig = Harness(self)
         backend, a2a = rig.backend, rig.a2a
         problem = rig.problem()
         handle = backend.dispatch(problem)
@@ -193,39 +224,23 @@ class Bf16Contract(unittest.TestCase):
         self.assertFalse(backend.stage_excluded_from_roundtrip)
         out = backend.combine(problem, handle)
         (call,) = a2a.combines
-        # vLLM combine_into: caller-owned payload, payload_in_workspace at its False default, the
-        # caller's output, use_low_precision at its False default.
+        # vLLM's finalize: the caller-owned payload, combined into the caller's output.
         self.assertIs(call["payload"], handle.recv_x)
-        self.assertEqual(call["tokens"], T)
-        self.assertIs(call["in_workspace"], False)
         self.assertIs(call["output"], problem.combine_output)
-        self.assertIs(call["low_precision"], False)
         self.assertIs(out, problem.combine_output)
         self.assertEqual(problem.combine_output.copied_from, [])
-
-    def test_a_wheel_without_output_copies_the_result_into_the_callers_tensor(self):
-        rig = Harness(self, a2a_class=A2ABeforeOutput)
-        problem = rig.problem()
-        handle = rig.backend.dispatch(problem)
-        rig.backend.stage(problem, handle)
-        out = rig.backend.combine(problem, handle)
-        (call,) = rig.a2a.combines
-        self.assertIs(call["payload"], handle.recv_x)
-        self.assertIs(call["in_workspace"], False)
-        self.assertEqual(problem.combine_output.copied_from, [call["result"]])
-        self.assertIs(out, problem.combine_output)
 
     def test_dispatch_payloads_follow_vllm_prepare(self):
         rig = Harness(self)
         problem = rig.problem()
         rig.backend.dispatch(problem)
         (call,) = rig.a2a.dispatches
-        self.assertEqual([p.name for p in call["payloads"]], ["x", "idx.to(int32)", "weights"])
-        self.assertIs(call["experts"], problem.topk_idx)
-        self.assertEqual((call["invalid"], call["id_index"], call["tokens"]), (-1, 1, T))
+        self.assertEqual((call["hidden"].name, call["ids"].name, call["weights"].name, call["scale"]),
+                         ("x", "idx.to(int32)", "weights", None))
+        self.assertEqual(call["tokens"], T)
 
     def test_output_is_allocated_once_per_rung_outside_any_window(self):
-        rig = Harness(self, a2a_class=A2AWithOutput)
+        rig = Harness(self)
         problem = rig.problem()
         self.assertEqual((problem.combine_output.shape, problem.combine_output.dtype), ((T, HIDDEN), "bfloat16"))
         for _ in range(2):
@@ -244,14 +259,15 @@ class Fp8Contract(unittest.TestCase):
         # x_sf_bytes_per_token vLLM's dispatch layout budgets.
         self.assertEqual((backend.dispatch_value_bytes, backend.dispatch_scale_bytes_per_copy),
                          (1, HIDDEN // 128 * 4))
+        self.assertIs(rig.a2a.constructed["params"].dispatch_format, QuantFormat.DeepSeekFp8)
         problem = rig.problem()
         backend.dispatch(problem)
         (call,) = rig.a2a.dispatches
-        self.assertEqual([p.name for p in call["payloads"]], ["values", "scales", "idx.to(int32)", "weights"])
-        self.assertEqual((call["invalid"], call["id_index"]), (-1, 2))
+        self.assertEqual((call["hidden"].name, call["scale"].name, call["ids"].name, call["weights"].name),
+                         ("values", "scales", "idx.to(int32)", "weights"))
 
     def test_stage_dequantizes_filled_slots_into_a_caller_owned_bf16_payload(self):
-        rig = Harness(self, precision="fp8", a2a_class=A2AWithOutput, version="0.7.0.post1")
+        rig = Harness(self, precision="fp8")
         backend = rig.backend
         self.assertTrue(backend.stage_device_work)
         self.assertTrue(backend.stage_excluded_from_roundtrip)  # hoisted like every FP8 stage
@@ -271,32 +287,28 @@ class Fp8Contract(unittest.TestCase):
         backend.combine(problem, handle)
         (call,) = rig.a2a.combines
         self.assertIs(call["payload"], payload)
-        self.assertIs(call["in_workspace"], False)
 
 
 class OracleContract(unittest.TestCase):
     def test_transformed_payload_takes_the_timed_call(self):
-        for a2a_class in (A2AWithOutput, A2ABeforeOutput):
-            with self.subTest(wheel=a2a_class.__name__):
-                rig = Harness(self, a2a_class=a2a_class)
-                problem = rig.problem()
-                handle = rig.backend.dispatch(problem)
-                rig.backend._valid_rows = lambda h: "valid"
-                out = rig.backend.combine_transformed(problem, handle, FakeTensor((), "float32", "transformed"))
-                payload = rig.allocations[-1]
-                self.assertEqual((payload.name, payload.shape, payload.dtype),
-                                 ("zeros", handle.recv_x.shape, "bfloat16"))
-                self.assertEqual([(index, value.name) for _, index, value in payload.writes],
-                                 [("valid", "transformed.to(bfloat16)")])
-                (call,) = rig.a2a.combines
-                self.assertIs(call["payload"], payload)
-                self.assertIs(call["in_workspace"], False)
-                self.assertIs(out, problem.combine_output)
+        rig = Harness(self)
+        problem = rig.problem()
+        handle = rig.backend.dispatch(problem)
+        rig.backend._valid_rows = lambda h: "valid"
+        out = rig.backend.combine_transformed(problem, handle, FakeTensor((), "float32", "transformed"))
+        payload = rig.allocations[-1]
+        self.assertEqual((payload.name, payload.shape, payload.dtype),
+                         ("zeros", handle.recv_x.shape, "bfloat16"))
+        self.assertEqual([(index, value.name) for _, index, value in payload.writes],
+                         [("valid", "transformed.to(bfloat16)")])
+        (call,) = rig.a2a.combines
+        self.assertIs(call["payload"], payload)
+        self.assertIs(out, problem.combine_output)
 
 
 class Provenance(unittest.TestCase):
     def test_kernel_generation_and_library_version_carry_the_wheel(self):
-        for version, slug in (("0.7.1", "0.7.1"), ("0.7.1+cu130", "0.7.1-cu130")):
+        for version, slug in (("0.7.3", "0.7.3"), ("0.7.3+cu130", "0.7.3-cu130")):
             with self.subTest(version=version):
                 backend = Harness(self, version=version).backend
                 self.assertEqual(backend.library_version, version)
@@ -306,28 +318,27 @@ class Provenance(unittest.TestCase):
                     self.assertEqual(ep_harness.kernel_generation(backend),
                                      f"flashinfer-mnnvl-one-sided-staged-{slug}-cudagraph-spin-ar")
 
-    def test_workspace_and_mapping_are_sized_as_vllm_initialize_sizes_them(self):
-        for precision, x_bytes, sf_bytes in (("bf16", HIDDEN * 2, 0), ("fp8", HIDDEN, HIDDEN // 128 * 4)):
+    def test_the_communicator_is_built_as_vllm_initialize_builds_it(self):
+        for precision, dispatch_format in (("bf16", QuantFormat.BF16), ("fp8", QuantFormat.DeepSeekFp8)):
             with self.subTest(precision=precision):
                 rig = Harness(self, precision=precision)
-                (sizes,) = rig.sizes
-                self.assertEqual(sizes, {
-                    "ep_size": EP, "max_num_tokens": 64,
-                    "total_dispatch_payload_size_per_token": x_bytes + sf_bytes + TOPK * 4 + TOPK * 4,
-                    "combine_payload_size_per_token": HIDDEN * 2,
-                })
-                self.assertEqual(rig.a2a.constructed["mapping"],
-                                 ("mapping", (EP, 1, 4), {"tp_size": EP, "moe_ep_size": EP}))
+                built = rig.a2a.constructed
+                self.assertEqual(built["bootstrap"], BootstrapConfig(world_size=EP, rank=1, device=1,
+                                                                     process_group="ep-group"))
+                self.assertEqual(built["params"], MoEEpCommParams(
+                    num_experts=16, top_k=TOPK, max_tokens_per_rank=64, hidden_size=HIDDEN,
+                    dtype="bfloat16", dispatch_format=dispatch_format, invalid_expert_id=-1))
+                self.assertEqual(built["config"].comm_backend._group, "ep-group")
+                # Every transport choice, Lamport and CFT included, is left to FlashInfer.
+                self.assertEqual(dataclasses.replace(built["config"], comm_backend=None), NVLinkOneSidedConfig())
+                self.assertEqual(rig.constructions, [{"options": {}}])
 
     def test_implementation_details_record_the_contract(self):
         with mock.patch.dict(os.environ, {"TLLM_MOE_A2A_COMBINE_BLOCK_SIZE": "512", "OTHER": "1"}):
-            # Each read runs while its own fake wheel is the one installed.
-            new = Harness(self, a2a_class=A2AWithOutput, version="0.7.0.post1", pdl=True).backend
-            new = new.implementation_details()
-            old = Harness(self, a2a_class=A2ABeforeOutput, precision="fp8", pdl=False).backend
-            old = old.implementation_details()
+            new = Harness(self).backend.implementation_details()
+            fp8 = Harness(self, precision="fp8").backend.implementation_details()
         self.assertEqual(new, {
-            "flashinfer_version": "0.7.0.post1",
+            "flashinfer_version": "0.7.3",
             "combine_payload": "caller-owned",
             "payload_in_workspace": False,
             "zero_copy": False,
@@ -344,33 +355,10 @@ class Provenance(unittest.TestCase):
             "workspace_bytes_per_rank": 4096,
         })
         self.assertEqual(
-            {key: old[key] for key in ("flashinfer_version", "combine_output", "pdl_available",
-                                       "dispatch_scale_format", "dispatch_bytes_per_token")},
-            {"flashinfer_version": "0.6.8.post1", "combine_output": "copy", "pdl_available": False,
-             "dispatch_scale_format": "fp32-per-128-block-row-major",
+            {key: fp8[key] for key in ("dispatch_scale_format", "dispatch_bytes_per_token")},
+            {"dispatch_scale_format": "fp32-per-128-block-row-major",
              "dispatch_bytes_per_token": HIDDEN + HIDDEN // 128 * 4 + TOPK * 8},
         )
-
-    def test_keyword_probe_matches_vllm_supports_kw(self):
-        module = Harness(self).module
-
-        def explicit(payload, output=None):
-            pass
-
-        def keyword_only(payload, *, output=None):
-            pass
-
-        def var_kwargs(payload, **output):
-            pass
-
-        def absent(payload):
-            pass
-
-        self.assertTrue(module._accepts_keyword(explicit, "output"))
-        self.assertTrue(module._accepts_keyword(keyword_only, "output"))
-        # allow_var_kwargs=False, as vLLM calls it: **kwargs does not promise the keyword.
-        self.assertFalse(module._accepts_keyword(var_kwargs, "output"))
-        self.assertFalse(module._accepts_keyword(absent, "output"))
 
 
 if __name__ == "__main__":
