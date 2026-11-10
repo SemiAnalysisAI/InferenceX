@@ -12606,3 +12606,12 @@
     - "Disaggregated: add musespark-fp4-gb300-dynamo-sglang-agentic-dflash-disagg with TP8 prefill and TP8 decode workers: 1P2D at c160 and c224, 1P3D at c224, 1P4D at c32, c56 and c112, 1P5D at c120, 2P3D at c352 and 3P4D at c672. Mooncake KV transfer and prefill HiCache (150 GB per rank, 0.80 DRAM utilization)."
     - "Remove musespark-fp4-gb300-dynamo-sglang-agentic-dflash (TP4 c8, c16, c20, c32 and c40 and TP8 c3, c4, c10 and c14 on the dev-muse-spark-open image)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4757
+
+- config-keys:
+    - minimaxm31flash-fp4-b300-vllm-agentic-dspark
+  description:
+    - "Move MiniMax-M3.1-Flash B300 vLLM AgentX to vllm/vllm-openai:minimax-m31-flash-x86_64-cu134-569fb50-mc0.3.13.post1 (vLLM 569fb50, which includes the lazy SimpleCPUOffload load-window fix from vllm-project/vllm#66766)."
+    - "Launch the server with vllm-rs, vLLM's Rust OpenAI frontend, instead of vllm serve."
+    - "Run the DSpark drafter on FLASHINFER_TS at every point; the TP4 points used FLASH_ATTN."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4930
+  scenario-type: [agentic-coding]

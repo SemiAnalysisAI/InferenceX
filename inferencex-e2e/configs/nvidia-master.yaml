@@ -4317,10 +4317,9 @@ minimaxm31flash-fp4-gb200-vllm-agentic-dspark:
       - { tp: 4, ep: 4, dp-attn: true, spec-decoding: mtp, kv-offloading: none, conc-list: [64, 128], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
 
 minimaxm31flash-fp4-b300-vllm-agentic-dspark:
-  # Day-0 vLLM image for MiniMax-M3.1-Flash (vllm.ai/blog/2026-10-23-minimax-m31-flash).
   # DSpark uses the checkpoint's built-in drafter; synthetic acceptance follows
   # infx/golden_al_distribution/minimax-m3.1-flash__dspark__native__probabilistic-block.yaml.
-  image: vllm/vllm-openai:minimax-m31-flash@sha256:86f582dae25ea92802353727164ae4eb03b37b18baf9119b805ffaec2a7ef07c
+  image: vllm/vllm-openai:minimax-m31-flash-x86_64-cu134-569fb50-mc0.3.13.post1@sha256:39bd44957b7e0d20d90378668dc80060741d69440e21ad4af959eb8226ca8ea9
   model: MiniMaxAI/MiniMax-M3.1-Flash
   model-prefix: minimaxm31flash
   runner: cluster:b300-dsxe
