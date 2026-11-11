@@ -327,7 +327,7 @@ single `ingest` job first computes the changelog delta with `infx.matrix.plan`.
 For entries with results, it resolves the merge commit's PR, reuse command, and
 source run with `infx.workflows.reuse`, and fails before uploading or dispatching
 anything unless reuse is validly authorized. It then uploads merge-time `changelog-metadata`
-and sends one `repository_dispatch` to InferenceX-app: `ingest-agentic-results`
+and sends one `repository_dispatch` to the app repository (`APP_REPO`, below): `ingest-agentic-results`
 (with `database-target: production`) when the delta has agentic entries,
 otherwise `ingest-results`. The payload's `source-run-id` is the reused PR
 `run-sweep.yml` run and its `merge-run-id` is the Merge Ingest run.
@@ -356,6 +356,17 @@ by that commit, and posts one comment per merge run, updated in place on reruns
 Reuse fails closed when authorized but ineligible or invalid. Pushes to `main`
 never run a sweep: `run-sweep.yml` is PR-only, and without reuse authorization
 the Merge Ingest run fails and nothing is benchmarked or ingested.
+
+## Repository Variables for Copies
+
+A copy of this repository sets these repository variables to change where its
+workflows send results and whether its agent runs:
+
+| Variable          | Default                                                       | Effect                                                                                                                                                                                                                                                         |
+| ----------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `APP_REPO`        | `SemiAnalysisAI/InferenceX-app`                               | App repository that `merge-ingest`, `recover-reused-ingest`, `operatorx-sweep`, and `stage-results` dispatch ingest, video, and staging events to, and the only source the ingest and staging callbacks accept. `FRONTEND_PAT` must be able to dispatch to it. |
+| `STAGING_APP_URL` | `https://inferencemax-app-git-staging-semianalysisai.vercel.app` | Origin of that app's staging site, without a trailing slash. Staged-run comments link to it, and the staging callback accepts chart links only on it. Set it to the app repository's own `STAGING_APP_URL`.                                                   |
+| `KLAUD_ENABLED`   | unset                                                         | Klaud's planner, resume, and wake jobs run only when this is `true`. Without it the scheduled `klaud-plan` runs skip every job instead of failing for missing secrets.                                                                                          |
 
 ## Validation Architecture
 
