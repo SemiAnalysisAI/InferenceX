@@ -5764,6 +5764,22 @@ dsv41flash-fp4-h100-vllm-agentic-dspark:
       # the knee between c16 and the point where 1M-token trajectories preempt.
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 20, 24, 28], srt-recipe: agentic.yaml }
 
+dsv41flash-fp4-a100-vllm-agentic-dspark:
+  # vLLM main has no SM80 path for this model until vllm-project/vllm#66497 merges.
+  image: ghcr.io/semianalysisai/vllm-openai:pr66497-0fe642ac
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:a100-cw
+  precision: fp4
+  framework: vllm
+  multinode: false
+  srt-recipe-dir: dsv41flash/vllm/a100-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 24, 28], srt-recipe: agentic.yaml }
+
 # SGLang arm for DeepSeek-V4.1-Flash AgentX on H100, from the SGLang cookbook
 # (https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1).
 # Latest upstream CUDA 13 nightly, verified 2026-09-22. Manifest digest:

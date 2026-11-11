@@ -304,6 +304,31 @@ nodes and jobs; the MI300X collector must retain only `MI300X-UBUNTU`.
 it for single-node use but had not yet qualified its multi-node fabric at
 handoff; GPU enumeration alone does not validate cross-node collectives.
 
+### CoreWeave A100 outside the priority controller
+
+`a100-cw` is a two-node CoreWeave SUNK cluster with eight A100 80 GB GPUs per node (Slurm
+partition `a100`, account `cw-sup`). Runners `a100-cw_00` and `a100-cw_01` run as `oren` on
+the login pod, under `/mnt/home/oren/gharunners/gharunnerNN/actions-runner`, in the default
+`github-actions` tmux session. Provision with `setup.sh` and tags
+`slurm,a100,a100-cw,cluster:a100-cw`. The login node is a Kubernetes pod without systemd, so
+start the listeners again after a pod restart:
+
+```sh
+bash ~/gharunners/start_runners.sh 0 1 ~/gharunners
+```
+
+Caches live on the shared `/mnt/data` volume: `hf-hub-cache`, `aiperf-cache` and `squash`.
+Image imports run on a compute node; the login pod cannot write enroot's default paths.
+
+The cluster runs no Slurm collector, so the priority controller has no telemetry for it and
+fences both runners with `ci-slurm-unavailable`. Its benchmark jobs skip admission instead:
+`benchmark-tmpl.yml` requests the job's runner label alone (`a100`, `cluster:a100-cw` or a
+node name) and GitHub dispatches each job to an idle runner. Every single-node job takes a
+whole node, so two runners match the two nodes and Slurm queues anything beyond that. The
+other workflows (profiling, SpeedBench, multi-node) keep their admission labels and cannot
+run here. Deploy a collector and remove that exception before the cluster shares capacity
+with multi-node or externally submitted work.
+
 The login node (where the runners live) and the Slurm compute nodes (where benchmarks
 run) exchange everything through the filesystem, so every path the CI touches must be
 visible from the compute node that the job lands on. Each path must either live on

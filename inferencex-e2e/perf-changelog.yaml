@@ -12755,3 +12755,13 @@
     - "Weights run as shipped in amd/GLM-5.2-MXFP4: MXFP4 routed and shared experts in layers 3-77, BF16 elsewhere, with no online quantization flag. ATOM's default MLA absorb runs the kv_b_proj up-projections as FP8 batched GEMMs. All-reduce is BF16 (AITER quick reduce unset, default NONE) and the KV and indexer caches are FP8."
     - "No change to the MTP draft (model.layers.78): it is stored in BF16, including its routed and shared experts, and is served through the image defaults with no draft override, so its kv_b_proj takes the same FP8 MLA absorb as the target and it shares the target's FP8 KV and indexer caches."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4045
+
+- config-keys:
+    - dsv41flash-fp4-a100-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the A100 AgentX arm for DeepSeek-V4.1-Flash on vLLM: TP8 over eight A100-SXM4-80GB on the new CoreWeave a100-cw cluster, five-token DSpark, concurrency 1, 2, 4, 8, 16, 24 and 28."
+    - "Image ghcr.io/semianalysisai/vllm-openai:pr66497-0fe642ac is vLLM at the head (0fe642ac) of the unmerged vllm-project/vllm#66497, which adds the SM80 decode kernels: the official nightly-cf5cea2d image with vLLM reinstalled from that commit through VLLM_USE_PRECOMPILED=1 and the merge-base (116025c6) wheel. The PR changes Python only."
+    - "The recipe is the H100 arm's without the c20 point and without PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True: SM80 falls back to the custom all-reduce, which cannot IPC-register CUDA graph buffers backed by CUDA VMM memory."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4993
