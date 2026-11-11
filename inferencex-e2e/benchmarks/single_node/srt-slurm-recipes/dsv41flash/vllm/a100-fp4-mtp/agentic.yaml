@@ -39,9 +39,9 @@ base:
         max-num-batched-tokens: 4096
         gpu-memory-utilization: 0.92
         disable-uvicorn-access-log: true
-      # No expandable_segments here, unlike the H100 arm: SM80 has no symmetric-memory
-      # all-reduce, so TP falls back to the custom one, which IPC-registers its CUDA graph
-      # buffers and cannot export CUDA VMM memory (cudaIpcGetMemHandle: invalid argument).
+      # PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True kills the workers on SM80: with no
+      # symmetric-memory all-reduce, TP uses the custom one, which cannot IPC-register CUDA
+      # graph buffers backed by CUDA VMM memory (cudaIpcGetMemHandle: invalid argument).
       env:
         VLLM_USE_RUST_FRONTEND: '1'
         PYTHONUNBUFFERED: '1'

@@ -5799,15 +5799,10 @@ dsv41flash-fp4-h100-vllm-agentic-dspark:
       # the knee between c16 and the point where 1M-token trajectories preempt.
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 20, 24, 28], srt-recipe: agentic.yaml }
 
-# A100 AgentX arm for DeepSeek-V4.1-Flash. vLLM main cannot serve this model on
-# SM80, so the image is vLLM at the head (0fe642ac) of the unmerged
-# https://github.com/vllm-project/vllm/pull/66497: the official
-# nightly-cf5cea2d image with vLLM reinstalled from that commit through
-# VLLM_USE_PRECOMPILED=1 and the wheel of its merge-base (116025c6). The PR
-# changes Python only, so this equals a source build of the PR head. A100-SXM4
-# has H100's 80 GB, so the recipe is the H100 arm's, 4096-token batch cap
-# included, without its c20 point.
 dsv41flash-fp4-a100-vllm-agentic-dspark:
+  # vLLM main has no SM80 path for this model. This is the nightly-cf5cea2d image with vLLM
+  # reinstalled from the head (0fe642ac) of the unmerged vllm-project/vllm#66497, which
+  # changes Python only; compiled parts are the merge-base (116025c6) wheel's.
   image: ghcr.io/semianalysisai/vllm-openai:pr66497-0fe642ac
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
