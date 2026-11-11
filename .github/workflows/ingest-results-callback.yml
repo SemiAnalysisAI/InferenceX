@@ -30,4 +30,5 @@ jobs:
         working-directory: inferencex-e2e
         env:
           GH_TOKEN: ${{ github.token }}
+          APP_REPO: ${{ vars.APP_REPO || 'SemiAnalysisAI/InferenceX-app' }}
         run: python3 -m infx.workflows.ingest_results_callback
