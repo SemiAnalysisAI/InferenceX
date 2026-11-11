@@ -284,3 +284,78 @@ override_tp2_c64:
   benchmark:
     env:
       CONC: '64'
+
+override_dp2_c128:
+  frontend: &dp2_router
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      request-timeout-secs: 14400
+      disable-retries: true
+  setup_script: vllm-router.sh
+  services: &umbp_server
+  - name: umbp-server
+    type: generic
+    start: before_workers
+    critical: true
+    preamble: mkdir -p /tmp/umbp
+    # The server binary ships inside the MORI package and loads its libraries from there.
+    command:
+    - bash
+    - -c
+    - P=$(python3 -c 'import mori, os; print(os.path.dirname(mori.__file__))') && LD_LIBRARY_PATH=$P:$LD_LIBRARY_PATH exec $P/umbp_standalone_server unix:///tmp/umbp/standalone.grpc.sock
+    env:
+      UMBP_STANDALONE_ADDRESS: unix:///tmp/umbp/standalone.grpc.sock
+      # TOTAL_CPU_DRAM_GB in bytes.
+      UMBP_DRAM_CAPACITY: '449000000000'
+      # The mi355x-amds host setup releases hugepages, so the pool uses 4 KiB pages.
+      UMBP_DRAM_USE_HUGEPAGES: '0'
+      UMBP_SSD_ENABLED: '0'
+      # The readiness line below is logged at INFO; the default level is WARN.
+      MORI_UMBP_LOG_LEVEL: INFO
+    readiness:
+      log:
+        pattern: '\[StandaloneServer\] listening'
+      # Faulting in a ~450 GB pool on 4 KiB pages takes several minutes.
+      timeout_seconds: 1800
+  roles:
+    agg: &dp2_umbp_agg
+      gpus: 2
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 2
+        # Mono decode supports TP 2/4/8 only and fails at startup with DP.
+        monokernel: false
+        engram-config: '{"cpu_offload":true}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+        kv-transfer-config: '{"kv_connector":"UMBPStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"mode":"standalone","endpoint":"unix:///tmp/umbp/standalone.grpc.sock"}}'
+  benchmark:
+    env:
+      CONC: '128'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '449'
+
+override_dp2_c256:
+  frontend: *dp2_router
+  setup_script: vllm-router.sh
+  services: *umbp_server
+  roles:
+    agg: *dp2_umbp_agg
+  benchmark:
+    env:
+      CONC: '256'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '449'
+
+override_dp2_c384:
+  frontend: *dp2_router
+  setup_script: vllm-router.sh
+  services: *umbp_server
+  roles:
+    agg: *dp2_umbp_agg
+  benchmark:
+    env:
+      CONC: '384'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '449'
