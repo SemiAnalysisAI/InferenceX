@@ -458,9 +458,9 @@ def shared_base(profile: dict, runner: str) -> Path:
         ):
             raise ValueError("AMD staging requires the shared runner _work/_temp path")
         roots = [runner_temp.parent.parent]
-    elif family(runner) == "b300":
+    elif family(runner) in ("b300", "h100"):
         # compute-visible account home, as CollectiveX; the shared squash parent isn't
-        # writable by the GHA service account
+        # writable by the GHA service account (the dsxe pools share one setup)
         roots = [Path(pwd.getpwuid(os.getuid()).pw_dir)]
     elif profile.get("squash_dir"):
         roots = [Path(profile["squash_dir"]).parent]
