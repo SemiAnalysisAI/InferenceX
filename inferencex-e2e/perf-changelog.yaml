@@ -12710,3 +12710,13 @@
     - "Update the TensorRT-LLM image from 1.3.0rc28.dev202609210001 to 1.4.0rc2."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4626
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - qwen3.8next-fp8-mi325x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Qwen3.8-Flash-Next FP8 AgentX on MI325X with the digest-pinned SGLang v0.5.22 ROCm 7.2.0 MI30x image and MTP (EAGLE 3/1/4)."
+    - "TP2/EP2 at concurrency 4, 6, 8, 10, 12, 16, 20, 24 and 28, with ReplaySSM speculative verify (enable-linear-replayssm-spec) at concurrency 8 to 24."
+    - "Use AITER attention with the Triton FP8 MoE runner (SGLANG_USE_AITER=0), following the upstream gfx942 nightly test."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4987

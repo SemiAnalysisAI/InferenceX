@@ -1,0 +1,192 @@
+base:
+  schema: 2
+  name: qwen3.8next-fp8-mi325x-sglang-agentic
+  resources:
+    gpu_type: mi325x
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: Qwen/Qwen3.8-Flash-Next-FP8
+        revision: bcd9f01ddc9cff2316eb84281bebcd5b058bddce
+        trust-remote-code: true
+        data-parallel-size: 1
+        attention-backend: aiter
+        kv-cache-dtype: auto
+        chunked-prefill-size: 16384
+        watchdog-timeout: 1200
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+        reasoning-parser: qwen3
+        tool-call-parser: qwen3_coder
+        scheduler-recv-interval: 10
+        stream-interval: 50
+        tokenizer-worker-num: 6
+        enable-metrics: true
+        enable-cache-report: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        # The released AITER has no paged QSA API on gfx942, so the FP8 MoE runs on the Triton runner.
+        SGLANG_USE_AITER: '0'
+        # Outlast AIPerf's 300 s client connection pool.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+  benchmark:
+    env:
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      AIPERF_APPLY_CHAT_TEMPLATE: 'true'
+
+# Admission and the decode graph batch are 2x CONC. With EAGLE, SGLang reserves 15% of the
+# static budget for the draft model, so TP2 needs 0.95 to fit weights, hybrid state and KV.
+override_tp2_ep2_c4:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        mem-fraction-static: 0.95
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp2_ep2_c6:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        mem-fraction-static: 0.95
+        max-running-requests: 12
+        cuda-graph-max-bs-decode: 12
+  benchmark:
+    env:
+      CONC: '6'
+      KV_OFFLOADING: none
+
+override_tp2_ep2_c8:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        mem-fraction-static: 0.95
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+        enable-linear-replayssm-spec: true  # costs about 1.5M KV tokens, so only up to CONC 24 where the pool has headroom
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
+override_tp2_ep2_c10:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        mem-fraction-static: 0.95
+        max-running-requests: 20
+        cuda-graph-max-bs-decode: 20
+        enable-linear-replayssm-spec: true
+  benchmark:
+    env:
+      CONC: '10'
+      KV_OFFLOADING: none
+
+override_tp2_ep2_c12:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        mem-fraction-static: 0.95
+        max-running-requests: 24
+        cuda-graph-max-bs-decode: 24
+        enable-linear-replayssm-spec: true
+  benchmark:
+    env:
+      CONC: '12'
+      KV_OFFLOADING: none
+
+override_tp2_ep2_c16:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        mem-fraction-static: 0.95
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+        enable-linear-replayssm-spec: true
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: none
+
+override_tp2_ep2_c20:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        mem-fraction-static: 0.95
+        max-running-requests: 40
+        cuda-graph-max-bs-decode: 40
+        enable-linear-replayssm-spec: true
+  benchmark:
+    env:
+      CONC: '20'
+      KV_OFFLOADING: none
+
+override_tp2_ep2_c24:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        mem-fraction-static: 0.95
+        max-running-requests: 48
+        cuda-graph-max-bs-decode: 48
+        enable-linear-replayssm-spec: true
+  benchmark:
+    env:
+      CONC: '24'
+      KV_OFFLOADING: none
+
+override_tp2_ep2_c28:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        mem-fraction-static: 0.95
+        max-running-requests: 56
+        cuda-graph-max-bs-decode: 56
+  benchmark:
+    env:
+      CONC: '28'
+      KV_OFFLOADING: none
