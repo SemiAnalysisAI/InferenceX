@@ -6565,9 +6565,9 @@ qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg:
           ep: 2
           dp-attn: false
 
-# Official 2026-10-20 CUDA 13 nightly, multiarch manifest pinned for B300.
+# Official 2026-11-07 CUDA 13 nightly, multiarch manifest pinned for B300.
 dsv41flash-fp4-b300-sglang-agentic-dspark:
-  image: lmsysorg/sglang:nightly-dev-cu13-20261020-ab580b2e@sha256:0af411bb320a95bb5e1c58b4c20c9852920a19aa9f12f148f69731b0dca3b576
+  image: lmsysorg/sglang:nightly-dev-cu13-20261107-e45e1d0c@sha256:81eb456abfaa3cf50a2ac463abe02705486f3f1e10929ca306e5929b937d5388
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:b300-dsxe
@@ -6583,9 +6583,9 @@ dsv41flash-fp4-b300-sglang-agentic-dspark:
       - { tp: 2, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [16, 32, 48], srt-recipe: agentic.yaml }
       - { tp: 2, ep: 2, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [64, 256], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: agentic.yaml }
 
-# Official 2026-10-14 CUDA 13 nightly, multiarch manifest pinned for B300.
+# Official 2026-11-07 CUDA 13 nightly, multiarch manifest pinned for B300.
 dsv41flash-fp4-b300-sglang-agentic-dspark-lowconc:
-  image: lmsysorg/sglang:nightly-dev-cu13-20261014-684fea8a@sha256:ddae0e399d3d94f7827f16183301cf8dac4cf0eae0ef25590b7dac5881d713d8
+  image: lmsysorg/sglang:nightly-dev-cu13-20261107-e45e1d0c@sha256:81eb456abfaa3cf50a2ac463abe02705486f3f1e10929ca306e5929b937d5388
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:b300-dsxe

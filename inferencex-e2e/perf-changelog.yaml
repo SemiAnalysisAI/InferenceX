@@ -12687,3 +12687,12 @@
   description:
     - "Update vLLM image from cu134-nightly-1648fefa to cu134-nightly-cf5cea2d."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4951
+
+- config-keys:
+    - dsv41flash-fp4-b300-sglang-agentic-dspark
+    - dsv41flash-fp4-b300-sglang-agentic-dspark-lowconc
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update SGLang image to lmsysorg/sglang:nightly-dev-cu13-20261107-e45e1d0c."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4900
