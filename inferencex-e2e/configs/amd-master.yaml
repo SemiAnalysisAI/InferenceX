@@ -977,7 +977,7 @@ dsv41flash-fp4-mi355x-atom-agentic-dspark:
   scenarios:
     agentic-coding:
     - search-space:
-      - { tp: 4, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [8], srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1], srt-recipe: agentic.yaml }
 
 # The golden acceptance curve is the GLM-5.3 NVFP4 SGLang curve in
 # infx/golden_al_distribution/glm-5.3-nvfp4__mtp__native__default-default.yaml.
