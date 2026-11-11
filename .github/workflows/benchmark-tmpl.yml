@@ -163,9 +163,12 @@ permissions:
 
 jobs:
   benchmark:
+    # cluster:a100-cw reports no Slurm telemetry to the priority controller, which would fence
+    # its runners forever, so its jobs target the cluster label and GitHub dispatches them.
     runs-on: >- # zizmor: ignore[self-hosted-runner] GPU Slurm runners by design; callers gate fork PRs behind maintainer-applied sweep labels
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
+        inputs.runner != 'cluster:a100-cw' &&
         (
           vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' &&
           format(

@@ -1,4 +1,7 @@
 labels:
+  a100:
+    - a100-cw_00
+    - a100-cw_01
   h100:
     - h100-cw_00
     - h100-cw_01
@@ -152,6 +155,9 @@ labels:
     - gb300-nv_15
     - gb300-nv_16
     - gb300-nv_17
+  cluster:a100-cw:
+    - a100-cw_00
+    - a100-cw_01
   cluster:h100-cw:
     - h100-cw_00
     - h100-cw_01
@@ -329,6 +335,37 @@ labels:
     - mi355x-amds_08
     - mi355x-amds_09
 clusters:
+  a100-cw:
+    gpus-per-node: 8
+    available-cpu-dram-mib: 2_027_520
+    arch: x86_64
+    scheduler: slurm
+    slurm:
+      partition: a100
+      account: cw-sup
+      exclusive: true
+      gres: "gpu:a100:{gpus}"
+      cpus-per-gpu: 16
+      volumes:
+        hf-hub-cache: {path: /mnt/data/hf-hub-cache}
+        aiperf-cache: {path: /mnt/data/aiperf-cache}
+      squash:
+        dir: /mnt/data/squash
+        visibility: shared
+        import: compute
+        lock-timeout-s: 1800
+        import-step-args: [--exclusive, --mem=0]
+        single-node-import: true
+      srt-slurm:
+        extra:
+          default_gpu_exporter:
+            container_image: nvcr.io#nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless
+            port: 9401
+            command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
+        network-interface: ""
+        gpus-per-node-directive: false
+        agentic-volume-mounts:
+          aiperf-cache: /aiperf_mmap_cache
   h100-cw:
     gpus-per-node: 8
     available-cpu-dram-mib: 1_998_848
