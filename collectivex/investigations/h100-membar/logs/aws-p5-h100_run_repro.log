@@ -1,0 +1,29 @@
+== system
+NVIDIA H100 80GB HBM3, 580.159.03, 96.00.99.00.01, 00000000:53:00.0
+Amazon EC2 p5.48xlarge 
+6.17.0-1019-aws
+== per-op cost on GPU 0 (device-timed)
+{"gpu": "NVIDIA H100 80GB HBM3", "sm_mhz": 1995, "fence_sys_ns": 1773.4, "fence_gpu_ns": 336.8, "host_load_ns": 1452.0, "host_store_then_fence_sys_ns": 1773.8, "fence_sys_with_host_writer_ns": 1773.6}
+== GPU 0 PCIe traffic, MB/s: ~6 s idle, then ~8 s of back-to-back fence.acq_rel.sys
+spin starts 17:27:08
+{"spin_seconds": 8.0, "fence_sys_ns": 1773.6, "fences": 4510576}
+spin ends   17:27:17
+#Time         gpu  rxpci  txpci 
+#HH:MM:SS     Idx   MB/s   MB/s 
+ 17:27:02       0      0      2 
+ 17:27:03       0      0      0 
+ 17:27:04       0      0      2 
+ 17:27:05       0      0      0 
+ 17:27:06       0      0      2 
+ 17:27:07       0      0      0 
+ 17:27:08       0     28     32 
+ 17:27:09       0     16     34 
+ 17:27:10       0     15     34 
+ 17:27:11       0     15     32 
+ 17:27:12       0     15     34 
+ 17:27:13       0     15     32 
+ 17:27:15       0     15     34 
+ 17:27:16       0     15     32 
+ 17:27:17       0     15     34 
+ 17:27:18       0      0      0 
+ 17:27:19       0      0      2

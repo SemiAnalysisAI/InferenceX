@@ -1,0 +1,11 @@
+== <host> NVIDIA H100 80GB HBM3, 580.126.20, 96.00.BC.00.01
+pci 0000:19:00.0: vendor 0x10de device 0x2330 revision 0xa1 subsystem 0x10de:0x16c1
+== per-op cost, no profiler
+op_fence_acq_rel_sys   n=50000    1568.3 ns/op
+op_fence_sc_sys        n=50000    1570.3 ns/op
+op_st_release_sys      n=50000    1567.8 ns/op
+op_red_release_sys     n=50000    1569.1 ns/op
+op_fence_acq_rel_gpu   n=200000    335.4 ns/op
+op_fence_sc_gpu        n=200000    335.2 ns/op
+op_st_release_gpu      n=200000    333.3 ns/op
+op_fence_acq_rel_cta   n=200000      6.1 ns/op

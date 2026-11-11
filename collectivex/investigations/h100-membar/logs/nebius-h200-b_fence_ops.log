@@ -1,0 +1,11 @@
+== <host> NVIDIA H200, 570.195.03, 96.00.A5.00.03
+pci 0000:ab:00.0: vendor 0x10de device 0x2335 revision 0xa1 subsystem 0x10de:0x18be
+== per-op cost, no profiler
+op_fence_acq_rel_sys   n=50000     585.0 ns/op
+op_fence_sc_sys        n=50000     583.9 ns/op
+op_st_release_sys      n=50000     582.3 ns/op
+op_red_release_sys     n=50000     587.4 ns/op
+op_fence_acq_rel_gpu   n=200000    135.8 ns/op
+op_fence_sc_gpu        n=200000    135.7 ns/op
+op_st_release_gpu      n=200000    279.3 ns/op
+op_fence_acq_rel_cta   n=200000      6.1 ns/op

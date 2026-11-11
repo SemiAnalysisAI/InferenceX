@@ -1,0 +1,58 @@
+# Raw output. In-kernel timer, ns per instruction. dmon columns: time, gpu, rxpci MB/s, txpci MB/s.
+
+## AWS p5.48xlarge H100, driver 580.159.03, run_repro.sh
+{"gpu": "NVIDIA H100 80GB HBM3", "sm_mhz": 1995, "fence_sys_ns": 1773.4, "fence_gpu_ns": 336.8, "host_load_ns": 1452.0, "host_store_then_fence_sys_ns": 1773.8, "fence_sys_with_host_writer_ns": 1773.6}
+{"spin_seconds": 8.0, "fence_sys_ns": 1773.6, "fences": 4510576}
+ 17:27:10       0     15     34 
+ 17:27:11       0     15     32 
+ 17:27:12       0     15     34 
+
+## CoreWeave XE9680 H100 (bare metal), driver 580.126.20, node_run.sh
+{"gpu": "NVIDIA H100 80GB HBM3", "sm_mhz": 1980, "fence_sys_ns": 1588.9, "fence_gpu_ns": 335.3, "host_load_ns": 1245.5, "host_store_then_fence_sys_ns": 1593.7, "fence_sys_with_host_writer_ns": 1604.6}
+{"spin_seconds": 8.0, "fence_sys_ns": 1564.0, "fences": 5115120}
+ 02:49:10       0     15     33 
+ 02:49:11       0     15     33 
+ 02:49:12       0     15     33 
+gpu 0 {"gpu": "NVIDIA H100 80GB HBM3", "sm_mhz": 1995, "fence_sys_ns": 1567.5, "fence_gpu_ns": 334.0, "host_load_ns": 1117.1, "host_store_then_fence_sys_ns": 1573.0, "fence_sys_with_host_writer_ns": 1576.8}
+gpu 1 {"gpu": "NVIDIA H100 80GB HBM3", "sm_mhz": 1995, "fence_sys_ns": 1566.4, "fence_gpu_ns": 338.7, "host_load_ns": 1114.4, "host_store_then_fence_sys_ns": 1571.1, "fence_sys_with_host_writer_ns": 1586.0}
+gpu 2 {"gpu": "NVIDIA H100 80GB HBM3", "sm_mhz": 1980, "fence_sys_ns": 1542.0, "fence_gpu_ns": 339.8, "host_load_ns": 1141.1, "host_store_then_fence_sys_ns": 1552.5, "fence_sys_with_host_writer_ns": 1554.8}
+gpu 3 {"gpu": "NVIDIA H100 80GB HBM3", "sm_mhz": 1980, "fence_sys_ns": 1563.8, "fence_gpu_ns": 338.7, "host_load_ns": 1116.8, "host_store_then_fence_sys_ns": 1563.9, "fence_sys_with_host_writer_ns": 1562.7}
+gpu 4 {"gpu": "NVIDIA H100 80GB HBM3", "sm_mhz": 1982, "fence_sys_ns": 1507.3, "fence_gpu_ns": 338.6, "host_load_ns": 1337.8, "host_store_then_fence_sys_ns": 1512.0, "fence_sys_with_host_writer_ns": 1525.3}
+gpu 5 {"gpu": "NVIDIA H100 80GB HBM3", "sm_mhz": 1980, "fence_sys_ns": 1511.9, "fence_gpu_ns": 339.8, "host_load_ns": 1171.4, "host_store_then_fence_sys_ns": 1518.2, "fence_sys_with_host_writer_ns": 1529.4}
+gpu 6 {"gpu": "NVIDIA H100 80GB HBM3", "sm_mhz": 1980, "fence_sys_ns": 1488.8, "fence_gpu_ns": 340.0, "host_load_ns": 1249.3, "host_store_then_fence_sys_ns": 1495.9, "fence_sys_with_host_writer_ns": 1505.9}
+gpu 7 {"gpu": "NVIDIA H100 80GB HBM3", "sm_mhz": 1980, "fence_sys_ns": 1466.4, "fence_gpu_ns": 339.8, "host_load_ns": 1303.2, "host_store_then_fence_sys_ns": 1468.2, "fence_sys_with_host_writer_ns": 1478.0}
+
+## CoreWeave H100, fence_ops
+op_fence_acq_rel_sys   n=50000    1568.3 ns/op
+op_fence_sc_sys        n=50000    1570.3 ns/op
+op_st_release_sys      n=50000    1567.8 ns/op
+op_red_release_sys     n=50000    1569.1 ns/op
+op_fence_acq_rel_gpu   n=200000    335.4 ns/op
+op_fence_sc_gpu        n=200000    335.2 ns/op
+op_st_release_gpu      n=200000    333.3 ns/op
+op_fence_acq_rel_cta   n=200000      6.1 ns/op
+
+## Nebius H200 cluster A, driver 580.173.02, run_repro.sh
+{"gpu": "NVIDIA H200", "sm_mhz": 1980, "fence_sys_ns": 593.7, "fence_gpu_ns": 135.8, "host_load_ns": 1172.7, "host_store_then_fence_sys_ns": 1476.3, "fence_sys_with_host_writer_ns": 1475.8}
+{"spin_seconds": 8.0, "fence_sys_ns": 597.0, "fences": 14238435}
+ 17:26:16       0      0      0 
+ 17:26:17       0      0      0 
+ 17:26:18       0      7      0 
+
+## Nebius H200 cluster B, driver 570.195.03, node_run_1gpu.sh
+{"gpu": "NVIDIA H200", "sm_mhz": 1980, "fence_sys_ns": 583.4, "fence_gpu_ns": 135.8, "host_load_ns": 1254.9, "host_store_then_fence_sys_ns": 1516.6, "fence_sys_with_host_writer_ns": 1513.8}
+{"gpu": "NVIDIA H200", "sm_mhz": 1980, "fence_sys_ns": 583.5, "fence_gpu_ns": 135.8, "host_load_ns": 1231.1, "host_store_then_fence_sys_ns": 1499.0, "fence_sys_with_host_writer_ns": 1513.3}
+{"spin_seconds": 8.0, "fence_sys_ns": 583.3, "fences": 13714304}
+ 02:56:35       0      0      0 
+ 02:56:36       0      0      0 
+ 02:56:37       0      0      5 
+
+## Nebius H200 cluster B, fence_ops
+op_fence_acq_rel_sys   n=50000     585.0 ns/op
+op_fence_sc_sys        n=50000     583.9 ns/op
+op_st_release_sys      n=50000     582.3 ns/op
+op_red_release_sys     n=50000     587.4 ns/op
+op_fence_acq_rel_gpu   n=200000    135.8 ns/op
+op_fence_sc_gpu        n=200000    135.7 ns/op
+op_st_release_gpu      n=200000    279.3 ns/op
+op_fence_acq_rel_cta   n=200000      6.1 ns/op

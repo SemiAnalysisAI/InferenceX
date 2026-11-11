@@ -1,0 +1,53 @@
+== host
+<host>
+Model name:                           Intel(R) Xeon(R) Platinum 8468
+Socket(s):                            2
+Hypervisor vendor:                    KVM
+Virtualization type:                  full
+systemd-detect-virt: docker
+cpuinfo hypervisor flag: 1
+iommu groups: 0
+cmdline (iommu/nvidia tokens only): BOOT_IMAGE=/vmlinuz-6.11.0-1016-nvidia 
+os: Ubuntu 24.04.3 LTS, kernel 6.11.0-1016-nvidia
+Nebius None 
+== visible GPUs: 1; mine: GPU-<uuid> 0000:AB:00.0 (CUDA_VISIBLE_DEVICES=0)
+0, 00000000:AB:00.0, 0 %, 0 MiB
+== my GPU details
+NVIDIA H200, 570.195.03, 96.00.A5.00.03, 00000000:AB:00.0
+CUDA Version : 12.8
+ Persistence Mode : Enabled
+ Addressing Mode : None
+ GPU Virtualization Mode
+ Virtualization Mode : Pass-Through
+ GSP Firmware Version : 570.195.03
+ Max : 5
+ Current : 5
+ Device Current : 5
+ Device Max : 5
+CC status: OFF
+== per-op cost (device-timed), two runs
+{"gpu": "NVIDIA H200", "sm_mhz": 1980, "fence_sys_ns": 583.4, "fence_gpu_ns": 135.8, "host_load_ns": 1254.9, "host_store_then_fence_sys_ns": 1516.6, "fence_sys_with_host_writer_ns": 1513.8}
+{"gpu": "NVIDIA H200", "sm_mhz": 1980, "fence_sys_ns": 583.5, "fence_gpu_ns": 135.8, "host_load_ns": 1231.1, "host_store_then_fence_sys_ns": 1499.0, "fence_sys_with_host_writer_ns": 1513.3}
+== my GPU's PCIe traffic, MB/s: ~6 s idle, then ~8 s of back-to-back fence.acq_rel.sys
+spin starts 02:56:33
+{"spin_seconds": 8.0, "fence_sys_ns": 583.3, "fences": 13714304}
+spin ends   02:56:41
+#Time         gpu  rxpci  txpci 
+#HH:MM:SS     Idx   MB/s   MB/s 
+ 02:56:27       0      0      0 
+ 02:56:28       0      0      0 
+ 02:56:29       0      0      0 
+ 02:56:30       0      0      1 
+ 02:56:31       0      0      0 
+ 02:56:32       0      0      1 
+ 02:56:33       0     26     33 
+ 02:56:34       0      0      0 
+ 02:56:35       0      0      0 
+ 02:56:36       0      0      0 
+ 02:56:37       0      0      5 
+ 02:56:38       0      0      5 
+ 02:56:39       0      0      0 
+ 02:56:40       0      0      0 
+ 02:56:41       0      5     27 
+ 02:56:43       0      4      3 
+ 02:56:44       0      0      3

@@ -1,0 +1,69 @@
+== host
+<host>
+Model name:                           Intel(R) Xeon(R) Platinum 8462Y+
+Socket(s):                            2
+systemd-detect-virt: n/a
+cpuinfo hypervisor flag: 0
+iommu groups: 368
+cmdline (iommu/nvidia tokens only): intel_iommu=on iommu=pt iommu.passthrough=1 amd_iommu=pt nvidia.NVreg_CoherentGPUMemoryMode=driver nvidia.NVreg_EnableStreamMemOPs=1 nvidia.NVreg_RegistryDwords="PeerMappingOverride=1;" pcie_ports=dpc-native
+os: Ubuntu 22.04.5 LTS
+== gpu 0 details
+Driver Version : 580.126.20
+CUDA Version : 13.0
+ Persistence Mode : Enabled
+ Addressing Mode : HMM
+ VBIOS Version : 96.00.BC.00.01
+ GPU Virtualization Mode
+ Virtualization Mode : None
+ GSP Firmware Version : 580.126.20
+ Bus Id : 00000000:19:00.0
+ Max : 5
+ Current : 5
+ Device Current : 5
+ Device Max : 5
+ Host Max : 5
+ Max : 16x
+ Current : 16x
+ MIG Mode
+ Current : Disabled
+ Pending : Disabled
+CC status: OFF
+== other compute processes on the node
+== system
+NVIDIA H100 80GB HBM3, 580.126.20, 96.00.BC.00.01, 00000000:19:00.0
+Dell Inc. PowerEdge XE9680 
+6.8.12-680-6063-coreweave-amd64-f81899c8
+== per-op cost on GPU 0 (device-timed)
+{"gpu": "NVIDIA H100 80GB HBM3", "sm_mhz": 1980, "fence_sys_ns": 1588.9, "fence_gpu_ns": 335.3, "host_load_ns": 1245.5, "host_store_then_fence_sys_ns": 1593.7, "fence_sys_with_host_writer_ns": 1604.6}
+== GPU 0 PCIe traffic, MB/s: ~6 s idle, then ~8 s of back-to-back fence.acq_rel.sys
+spin starts 02:49:05
+{"spin_seconds": 8.0, "fence_sys_ns": 1564.0, "fences": 5115120}
+spin ends   02:49:17
+#Time         gpu  rxpci  txpci 
+#HH:MM:SS     Idx   MB/s   MB/s 
+ 02:48:59       0      0      0 
+ 02:49:00       0      0      0 
+ 02:49:02       0      2      0 
+ 02:49:03       0      0      0 
+ 02:49:04       0      0      0 
+ 02:49:05       0      1      0 
+ 02:49:06       0      7    103 
+ 02:49:07       0      0      1 
+ 02:49:08       0      3      1 
+ 02:49:09       0     15     33 
+ 02:49:10       0     15     33 
+ 02:49:11       0     15     33 
+ 02:49:12       0     15     33 
+ 02:49:13       0     15     33 
+ 02:49:14       0     15     33 
+ 02:49:15       0     15     33 
+ 02:49:16       0     15     40 
+== per-op cost on every GPU
+gpu 0 00000000:19:00.0 {"gpu": "NVIDIA H100 80GB HBM3", "sm_mhz": 1995, "fence_sys_ns": 1567.5, "fence_gpu_ns": 334.0, "host_load_ns": 1117.1, "host_store_then_fence_sys_ns": 1573.0, "fence_sys_with_host_writer_ns": 1576.8}
+gpu 1 00000000:3B:00.0 {"gpu": "NVIDIA H100 80GB HBM3", "sm_mhz": 1995, "fence_sys_ns": 1566.4, "fence_gpu_ns": 338.7, "host_load_ns": 1114.4, "host_store_then_fence_sys_ns": 1571.1, "fence_sys_with_host_writer_ns": 1586.0}
+gpu 2 00000000:4C:00.0 {"gpu": "NVIDIA H100 80GB HBM3", "sm_mhz": 1980, "fence_sys_ns": 1542.0, "fence_gpu_ns": 339.8, "host_load_ns": 1141.1, "host_store_then_fence_sys_ns": 1552.5, "fence_sys_with_host_writer_ns": 1554.8}
+gpu 3 00000000:5D:00.0 {"gpu": "NVIDIA H100 80GB HBM3", "sm_mhz": 1980, "fence_sys_ns": 1563.8, "fence_gpu_ns": 338.7, "host_load_ns": 1116.8, "host_store_then_fence_sys_ns": 1563.9, "fence_sys_with_host_writer_ns": 1562.7}
+gpu 4 00000000:9B:00.0 {"gpu": "NVIDIA H100 80GB HBM3", "sm_mhz": 1982, "fence_sys_ns": 1507.3, "fence_gpu_ns": 338.6, "host_load_ns": 1337.8, "host_store_then_fence_sys_ns": 1512.0, "fence_sys_with_host_writer_ns": 1525.3}
+gpu 5 00000000:BB:00.0 {"gpu": "NVIDIA H100 80GB HBM3", "sm_mhz": 1980, "fence_sys_ns": 1511.9, "fence_gpu_ns": 339.8, "host_load_ns": 1171.4, "host_store_then_fence_sys_ns": 1518.2, "fence_sys_with_host_writer_ns": 1529.4}
+gpu 6 00000000:CB:00.0 {"gpu": "NVIDIA H100 80GB HBM3", "sm_mhz": 1980, "fence_sys_ns": 1488.8, "fence_gpu_ns": 340.0, "host_load_ns": 1249.3, "host_store_then_fence_sys_ns": 1495.9, "fence_sys_with_host_writer_ns": 1505.9}
+gpu 7 00000000:DB:00.0 {"gpu": "NVIDIA H100 80GB HBM3", "sm_mhz": 1980, "fence_sys_ns": 1466.4, "fence_gpu_ns": 339.8, "host_load_ns": 1303.2, "host_store_then_fence_sys_ns": 1468.2, "fence_sys_with_host_writer_ns": 1478.0}

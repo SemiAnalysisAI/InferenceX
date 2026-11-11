@@ -1,0 +1,29 @@
+== system
+NVIDIA H200, 580.173.02, 96.00.A5.00.03, 00000000:8D:00.0
+Nebius None 
+6.11.0-1016-nvidia
+== per-op cost on GPU 0 (device-timed)
+{"gpu": "NVIDIA H200", "sm_mhz": 1980, "fence_sys_ns": 593.7, "fence_gpu_ns": 135.8, "host_load_ns": 1172.7, "host_store_then_fence_sys_ns": 1476.3, "fence_sys_with_host_writer_ns": 1475.8}
+== GPU 0 PCIe traffic, MB/s: ~6 s idle, then ~8 s of back-to-back fence.acq_rel.sys
+spin starts 17:26:11
+{"spin_seconds": 8.0, "fence_sys_ns": 597.0, "fences": 14238435}
+spin ends   17:26:24
+#Time         gpu  rxpci  txpci 
+#HH:MM:SS     Idx   MB/s   MB/s 
+ 17:26:05       0      0      0 
+ 17:26:06       0      0      0 
+ 17:26:07       0      0      0 
+ 17:26:08       0      1      1 
+ 17:26:09       0      0      0 
+ 17:26:11       0      0      2 
+ 17:26:12       0     23     26 
+ 17:26:13       0     19      5 
+ 17:26:14       0      0      0 
+ 17:26:15       0     11     12 
+ 17:26:16       0      0      0 
+ 17:26:17       0      0      0 
+ 17:26:18       0      7      0 
+ 17:26:19       0      0      2 
+ 17:26:20       0      0      0 
+ 17:26:21       0      0      2 
+ 17:26:22       0      0      0
