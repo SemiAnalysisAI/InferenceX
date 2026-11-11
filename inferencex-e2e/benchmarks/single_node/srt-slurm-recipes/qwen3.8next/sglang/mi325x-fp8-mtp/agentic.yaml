@@ -50,7 +50,7 @@ base:
 
 # Admission and the decode graph batch are 2x CONC. With EAGLE, SGLang reserves 15% of the
 # static budget for the draft model, so TP2 needs 0.95 to fit weights, hybrid state and KV.
-override_tp2_ep2_c1:
+override_tp2_ep2_c2:
   roles:
     agg:
       gpus: 2
@@ -58,11 +58,11 @@ override_tp2_ep2_c1:
         tensor-parallel-size: 2
         expert-parallel-size: 2
         mem-fraction-static: 0.95
-        max-running-requests: 2
-        cuda-graph-max-bs-decode: 2
+        max-running-requests: 4
+        cuda-graph-max-bs-decode: 4
   benchmark:
     env:
-      CONC: '1'
+      CONC: '2'
       KV_OFFLOADING: none
 
 override_tp2_ep2_c4:
@@ -90,6 +90,7 @@ override_tp2_ep2_c8:
         mem-fraction-static: 0.95
         max-running-requests: 16
         cuda-graph-max-bs-decode: 16
+        enable-linear-replayssm-spec: true  # costs about 1.5M KV tokens, so only up to CONC 24 where the pool has headroom
   benchmark:
     env:
       CONC: '8'
@@ -105,6 +106,7 @@ override_tp2_ep2_c12:
         mem-fraction-static: 0.95
         max-running-requests: 24
         cuda-graph-max-bs-decode: 24
+        enable-linear-replayssm-spec: true
   benchmark:
     env:
       CONC: '12'
@@ -126,6 +128,22 @@ override_tp2_ep2_c16:
       CONC: '16'
       KV_OFFLOADING: none
 
+override_tp2_ep2_c20:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        mem-fraction-static: 0.95
+        max-running-requests: 40
+        cuda-graph-max-bs-decode: 40
+        enable-linear-replayssm-spec: true
+  benchmark:
+    env:
+      CONC: '20'
+      KV_OFFLOADING: none
+
 override_tp2_ep2_c24:
   roles:
     agg:
@@ -136,9 +154,25 @@ override_tp2_ep2_c24:
         mem-fraction-static: 0.95
         max-running-requests: 48
         cuda-graph-max-bs-decode: 48
+        enable-linear-replayssm-spec: true
   benchmark:
     env:
       CONC: '24'
+      KV_OFFLOADING: none
+
+override_tp2_ep2_c28:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        mem-fraction-static: 0.95
+        max-running-requests: 56
+        cuda-graph-max-bs-decode: 56
+  benchmark:
+    env:
+      CONC: '28'
       KV_OFFLOADING: none
 
 override_tp2_ep2_c32:
@@ -154,35 +188,4 @@ override_tp2_ep2_c32:
   benchmark:
     env:
       CONC: '32'
-      KV_OFFLOADING: none
-
-override_tp2_ep2_c48:
-  roles:
-    agg:
-      gpus: 2
-      args:
-        tensor-parallel-size: 2
-        expert-parallel-size: 2
-        mem-fraction-static: 0.95
-        max-running-requests: 96
-        cuda-graph-max-bs-decode: 96
-        enable-linear-replayssm-spec: true
-  benchmark:
-    env:
-      CONC: '48'
-      KV_OFFLOADING: none
-
-override_tp2_ep2_c64:
-  roles:
-    agg:
-      gpus: 2
-      args:
-        tensor-parallel-size: 2
-        expert-parallel-size: 2
-        mem-fraction-static: 0.95
-        max-running-requests: 128
-        cuda-graph-max-bs-decode: 128
-  benchmark:
-    env:
-      CONC: '64'
       KV_OFFLOADING: none
