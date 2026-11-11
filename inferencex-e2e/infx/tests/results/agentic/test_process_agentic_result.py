@@ -23,7 +23,12 @@ from types import MappingProxyType
 
 import pytest
 
-from infx.results.agentic.request_metrics import compute_qps_stats, compute_request_metrics
+from infx.results.agentic.artifacts import iter_trace_blobs
+from infx.results.agentic.request_metrics import (
+    compute_qps_stats,
+    compute_request_metrics,
+    replayed_trace_ids,
+)
 from infx.results.agentic import _gpu_shape
 from infx.results.agentic import (
     build_result,
@@ -1041,6 +1046,49 @@ def test_server_metrics_reject_unknown_backend() -> None:
         )
 
 
+@pytest.mark.parametrize("with_occupancy", [True, False])
+def test_processor_normalizes_tokenspeed_metrics_without_inventing_cache_counters(
+    tmp_path: Path, with_occupancy: bool,
+) -> None:
+    result_dir = _write_fixture(tmp_path)
+    metrics = {
+        "tokenspeed:num_requests_running": {
+            "type": "gauge",
+            "series": [{"stats": {"max": 5}}],
+        },
+        "tokenspeed:iteration_tokens_total": {
+            "type": "histogram",
+            "series": [{"stats": {"sum": 123456}}],
+        },
+    }
+    if with_occupancy:
+        metrics["tokenspeed:kv_cache_usage_perc"] = {
+            "type": "gauge",
+            "series": [
+                {"labels": {"dp_rank": "0"}, "stats": {"max": 0.25, "avg": 0.1}},
+                {"labels": {"dp_rank": "1"}, "stats": {"max": 0.8, "avg": 0.3}},
+            ],
+        }
+    (result_dir / "aiperf_artifacts/server_metrics_export.json").write_text(
+        json.dumps({"metrics": metrics}),
+    )
+
+    agg = _run_processor(result_dir, tmp_path / "out", env_overrides={"FRAMEWORK": "tokenspeed"})
+    server = agg["server_metrics"]
+
+    assert server["adapter"] == "tokenspeed"
+    assert server["kv_cache"]["gpu_usage_pct"] == (0.8 if with_occupancy else None)
+    assert server["kv_cache"]["gpu_total_tokens"] is None
+    assert server["kv_cache"]["cpu_usage_pct"] is None
+    assert server["cache"]["gpu_cache_hit_rate"] is None
+    assert server["cache"]["cpu_cache_hit_rate"] is None
+    assert server["cache"]["overall_cache_hit_rate"] is None
+    assert server["tokens"]["prompt_total"] == 840
+    assert server["tokens"]["generation_total"] == 275
+    assert server["tokens"]["requests_completed"] == 5
+    _assert_stable_server_metrics_schema(agg)
+
+
 def test_processor_excludes_warmup_phase_records(tmp_path: Path):
     result_dir = tmp_path / "results"
     artifact = result_dir / "aiperf_artifacts"
@@ -1887,6 +1935,61 @@ def test_processor_preserves_validation_before_optional_trace_reads(tmp_path, ov
     assert proc.stderr.rstrip().endswith(message)
     assert proc.stdout == ""
     assert not out.exists()
+
+
+def test_a_broken_trace_the_run_did_not_replay_does_not_fail_the_point(tmp_path):
+    result_dir = _write_fixture(tmp_path)
+    snapshot = tmp_path / "hf" / "datasets--semianalysisai--cc-traces-weka-062126" / "snapshots" / "one"
+    snapshot.mkdir(parents=True)
+    traces = [
+        {"id": "never-replayed", "requests": [{"type": "n", "out": "bad-output"}]},
+        {"id": "trace-A", "requests": [{"type": "n", "out": 23}] * 8},
+    ]
+    (snapshot / "traces.jsonl").write_text("".join(json.dumps(trace) + "\n" for trace in traces))
+
+    result = _run_processor(result_dir, tmp_path / "out", {"HF_HUB_CACHE": str(tmp_path / "hf")})
+
+    assert result["request_metrics"]["tokens"]["output_expected"]["mean"] == 23
+
+
+def test_replayed_traces_are_the_ones_behind_each_conversation():
+    records = [
+        {"metadata": {"conversation_id": "trace-A::aux:000"}},
+        {"metadata": {"conversation_id": "trace-B"}},
+        {"metadata": {"turn_index": 3}},
+        {},
+    ]
+
+    assert replayed_trace_ids(records) == {"trace-A", "trace-B"}
+    assert replayed_trace_ids([*records, {"metadata": {"conversation_id": 7}}]) is None
+
+
+REPLAYED = [{"type": "n", "out": 17}]
+
+
+@pytest.mark.parametrize(("line", "wanted"), [
+    (json.dumps({"id": "trace-A", "requests": REPLAYED}), "trace-A"),
+    ('{"requests": [{"type": "n", "out": 17}], "id" :\t"trace-A"}', "trace-A"),
+    ('{"id": "trace-\\u0041", "requests": [{"type": "n", "out": 17}]}', "trace-A"),
+    ('{"id": "other", "source": {"id": "x"}, "id": "trace-A", "requests": []}', "trace-A"),
+    ('{"id": 7, "requests": [{"type": "n", "out": 17}]}', "7"),
+    ("[1, 2]", "trace-A"),
+])  # fmt: skip
+def test_only_traces_that_may_be_replayed_are_read(tmp_path, line, wanted):
+    snapshot = tmp_path / "datasets--example--traces" / "snapshots" / "one"
+    snapshot.mkdir(parents=True)
+    skipped = [
+        {"id": "trace-B", "requests": REPLAYED, "note": "id"},
+        {"id": "trace-AA", "about": {"id": "trace-C"}, "requests": REPLAYED},
+    ]
+    (snapshot / "traces.jsonl").write_text(
+        "".join(json.dumps(trace) + "\n" for trace in skipped) + line + "\n"
+    )
+    aggregate = {"metadata": {"dataset": {"hf_dataset_name": "example/traces"}}}
+    env = {"HF_HUB_CACHE": str(tmp_path)}
+
+    assert list(iter_trace_blobs(aggregate, env, {wanted})) == [json.loads(line)]
+    assert list(iter_trace_blobs(aggregate, env)) == [*skipped, json.loads(line)]
 
 
 @pytest.mark.parametrize("cache_env", ["HF_HUB_CACHE", "HUGGINGFACE_HUB_CACHE", "HF_HOME"])

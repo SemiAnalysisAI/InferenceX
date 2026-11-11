@@ -6,12 +6,13 @@ on:
     paths: &python-paths
       - '**/*.py'
       - 'collectivex/**'
-      - '.github/scripts/**'
-      - '.github/workflows/ci.yml'
+      - '.github/workflows/**'
       - 'inferencex-e2e/pyproject.toml'
       - 'inferencex-e2e/uv.lock'
       - 'inferencex-e2e/.python-version'
-      - 'inferencex-e2e/infx/ruff.toml'
+      - 'inferencex-e2e/infx/**'
+      - 'inferencex-e2e/benchmarks/**'
+      - 'power_model/pyproject.toml'
       - '**/pytest.ini'
       - 'inferencex-e2e/configs/**'
       - 'inferencex-e2e/utils/srt-slurm'
@@ -40,7 +41,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 1
+          # A pull request checks out its merge commit; HEAD^1 is the base the changelog check compares.
+          fetch-depth: 2
           persist-credentials: false
 
       - name: Set up uv
@@ -56,8 +58,8 @@ jobs:
       - name: Lint and format
         if: matrix.check == 'Lint'
         run: |
-          uvx --exclude-newer PT12H ruff@latest check --output-format=github inferencex-e2e/infx
-          uvx --exclude-newer PT12H ruff@latest format --check --diff inferencex-e2e/infx
+          uvx --exclude-newer PT12H ruff@latest check --output-format=github inferencex-e2e/infx power_model
+          uvx --exclude-newer PT12H ruff@latest format --check --diff inferencex-e2e/infx power_model
 
       - name: Prepare test environment
         if: matrix.check == 'Tests'
@@ -69,7 +71,7 @@ jobs:
       - name: Check CollectiveX coverage manifest
         if: matrix.check == 'Tests'
         run: |
-          python collectivex/sweep_matrix.py --suites ep,swap-blocks,kv-transfer --cases-json collectivex/results/cases.json > /dev/null
+          python collectivex/sweep_matrix.py --suites ep,swap-blocks --cases-json collectivex/results/cases.json > /dev/null
           git diff --exit-code -- collectivex/results/cases.json
 
       - name: Check CollectiveX changelog
@@ -79,8 +81,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           if [ -n "$BASE_REF" ]; then
-            git fetch --no-tags --depth=1 origin "$BASE_REF"
-            python collectivex/changelog.py validate --base-ref FETCH_HEAD --pr-number "$PR_NUMBER"
+            python collectivex/changelog.py validate --base-ref HEAD^1 --pr-number "$PR_NUMBER"
           else
             python collectivex/changelog.py validate
           fi
@@ -89,4 +90,5 @@ jobs:
         if: matrix.check == 'Tests'
         run: |
           python -c "import torch; assert torch.version.cuda is None and torch.version.hip is None"
-          python -m pytest -c inferencex-e2e/pyproject.toml inferencex-e2e/infx/tests/ inferencex-e2e/utils/ inferencex-e2e/runners/ collectivex/tests/ operatorx/tests/ --ignore=inferencex-e2e/utils/srt-slurm -n 4
+          python -m pytest -c inferencex-e2e/pyproject.toml inferencex-e2e/infx/tests/ collectivex/tests/ operatorx/tests/ ubenchX/ -n 4 --dist worksteal
+          python -m pytest -c power_model/pyproject.toml power_model/tests -n 4

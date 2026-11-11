@@ -21,13 +21,14 @@ COLLX_DEEPEP_V2_COMMIT="01dc3aaac82068020353dce2c302e38153c0bfaa"
 # treats EFA as unsupported (deepseek-ai/DeepEP#369).
 COLLX_DEEPEP_V2_EFA_REPO="https://github.com/amazon-contributing/DeepEP"
 COLLX_DEEPEP_V2_EFA_COMMIT="a227152ac29513b1c702860745a1d1e0111ae0dc"
-# ElasticBuffer needs NCCL 2.30.4 (torch pins 2.28.9). The fork sets GIN signal requirements
-# (ginStrongSignalsRequired, ginVaSignalsRequired) that NCCL first declares in 2.32, which is what
-# AWS tests it with. Part of the venv cache key.
-COLLX_DEEPEP_V2_NCCL_SPEC="nvidia-nccl-cu13==2.30.4"
+# ElasticBuffer needs NCCL >= 2.30.4. "image" uses the image's own (vLLM v0.32.0 carries 2.30.7),
+# as vLLM's installer does. The fork sets GIN signal requirements (ginStrongSignalsRequired,
+# ginVaSignalsRequired) that NCCL first declares in 2.32, so it installs that wheel into its venv.
+# Part of the venv cache key.
+COLLX_DEEPEP_V2_NCCL_SPEC="image"
 COLLX_DEEPEP_V2_EFA_NCCL_SPEC="nvidia-nccl-cu13==2.32.3"
 
-# Selects this pool's DeepEP V2 source into COLLX_DEEPEP_V2_REPO/COMMIT/NCCL_SPEC (the venv cache is keyed
+# Selects this pool's DeepEP V2 source into COLLX_DEEPEP_V2_REPO/COMMIT/NCCL_SPEC/TORCH_SPEC (the venv cache is keyed
 # on the commit, so the two sources never share a build).
 collx_select_deepep_v2_source() {
   # Opt-in per pool, not per fabric: on h100-dgxc (p5, 32 EFA NICs per node) the fork's
@@ -36,6 +37,9 @@ collx_select_deepep_v2_source() {
   COLLX_DEEPEP_V2_REPO="$COLLX_DEEPEP_V2_EFA_REPO"
   COLLX_DEEPEP_V2_COMMIT="$COLLX_DEEPEP_V2_EFA_COMMIT"
   COLLX_DEEPEP_V2_NCCL_SPEC="$COLLX_DEEPEP_V2_EFA_NCCL_SPEC"
+  # 2.10.0+cu130's bundled CUDA userland poisons the CUDA context during nvshmem symmetric-heap
+  # init over MNNVL on sm103/driver 580.159.03 (gb300).
+  COLLX_DEEPEP_V2_TORCH_SPEC="torch==2.11.0"
 }
 
 # Must match the image's CUDA line: the cu12 wheel's r12 host library on cu130 images survives
@@ -43,14 +47,12 @@ collx_select_deepep_v2_source() {
 # (gb300); every CUDA call after buffer creation fails cudaErrorUnknown. Part of the venv cache key.
 COLLX_DEEPEP_V2_NVSHMEM_SPEC="nvidia-nvshmem-cu13==3.4.5"
 
-# 2.10.0+cu130's bundled CUDA userland poisons the CUDA context during nvshmem symmetric-heap
-# init over MNNVL on sm103/driver 580.159.03 (gb300); 2.11.0 is what the cu130 image itself
-# ships. Part of the venv cache key.
-COLLX_DEEPEP_V2_TORCH_SPEC="torch==2.11.0"
+# "image" builds against the image's torch (vLLM v0.32.0: 2.13.0). Part of the venv cache key.
+COLLX_DEEPEP_V2_TORCH_SPEC="image"
 
 # Build-recipe generation for the DeepEP venv cache key: bump when build flags change without
 # any pin changing, so venvs that already carry .ready are not reused with a stale recipe.
-COLLX_DEEPEP_V2_BUILD_GEN="dlarch2"
+COLLX_DEEPEP_V2_BUILD_GEN="imgstack1"
 
 COLLX_UCCL_REPO="https://github.com/uccl-project/uccl"
 COLLX_UCCL_COMMIT="df000fd3001da04a397253fd6a2204bde62d32aa"
@@ -113,10 +115,7 @@ collx_set_placement() {
   export COLLX_NGPUS="$NGPUS" COLLX_NODES="$NODES"
   export COLLX_GPUS_PER_NODE="$GPN" COLLX_SCALE_UP_DOMAIN="$SCALE_UP_DOMAIN"
   COLLX_TRANSPORT="$4"
-  # A shard that names the rdma fabric on an MNNVL rack (the kv-transfer rdma legs) leaves the
-  # NVL domain, so it takes the same network profile and validation as any other scale-out.
-  { [ "$4" = mnnvl ] && [ "${COLLX_FABRIC:-}" != rdma ]; } || [ "$NODES" -le 1 ] \
-    || COLLX_TRANSPORT="$4-rdma"
+  [ "$4" = mnnvl ] || [ "$NODES" -le 1 ] || COLLX_TRANSPORT="$4-rdma"
   export COLLX_TRANSPORT
 }
 
@@ -284,10 +283,6 @@ collx_add_efa_host_mounts() {
     mounts+=",/usr/include/infiniband:$COLLX_EFA_HOST_ROOT/include/infiniband:ro"
     mounts+=",/usr/include/rdma:$COLLX_EFA_HOST_ROOT/include/rdma:ro"
   fi
-  # NIXL's LIBFABRIC plugin links libhwloc.so.15, which the vLLM image does not ship; the host's
-  # (the same Ubuntu and glibc as the image) is bound alone into the profile's library dir.
-  [ "${COLLX_BENCH:-}" != nixl ] \
-    || mounts+=",$(collx_efa_host_libdir "${COLLX_IMAGE_PLATFORM:-}")/libhwloc.so.15:$COLLX_EFA_HOST_ROOT/lib/libhwloc.so.15:ro"
   CONTAINER_MOUNTS="$CONTAINER_MOUNTS,$mounts"
 }
 
@@ -353,9 +348,9 @@ collx_apply_network_profile() {
   [[ "$nodes" =~ ^[1-9][0-9]*$ ]] || collx_die "invalid network placement"
   unset NCCL_NET NCCL_NET_PLUGIN NCCL_TUNER_PLUGIN NCCL_GIN_TYPE NCCL_SOCKET_IFNAME
   unset GLOO_SOCKET_IFNAME NCCL_IB_HCA
-  unset NCCL_IB_GID_INDEX NCCL_IB_SL NCCL_IB_MERGE_NICS NCCL_CROSS_NIC
+  unset NCCL_IB_GID_INDEX NCCL_IB_SL NCCL_IB_TC NCCL_IB_MERGE_NICS NCCL_CROSS_NIC
   unset NVSHMEM_ENABLE_NIC_PE_MAPPING
-  unset NVSHMEM_HCA_LIST NVSHMEM_IB_GID_INDEX NVSHMEM_IB_SL
+  unset NVSHMEM_HCA_LIST NVSHMEM_IB_GID_INDEX NVSHMEM_IB_SL NVSHMEM_IB_TRAFFIC_CLASS
   unset NVSHMEM_IB_ENABLE_IBGDA NVSHMEM_IBGDA_NIC_HANDLER
   unset EP_NIC_NAME EP_OVERRIDE_RDMA_SL
   unset MORI_RDMA_DEVICES MORI_SOCKET_IFNAME
@@ -448,7 +443,8 @@ collx_apply_network_profile() {
     [[ "$COLLX_RDMA_TRAFFIC_CLASS" =~ ^[0-9]+$ ]] && [ "$COLLX_RDMA_TRAFFIC_CLASS" -le 255 ] \
       || collx_die "invalid private RDMA traffic class"
     export MORI_RDMA_TC="$COLLX_RDMA_TRAFFIC_CLASS" MORI_IO_TC="$COLLX_RDMA_TRAFFIC_CLASS"
-    export UCCL_IB_TC="$COLLX_RDMA_TRAFFIC_CLASS"
+    export UCCL_IB_TC="$COLLX_RDMA_TRAFFIC_CLASS" NCCL_IB_TC="$COLLX_RDMA_TRAFFIC_CLASS"
+    export NVSHMEM_IB_TRAFFIC_CLASS="$COLLX_RDMA_TRAFFIC_CLASS"
   fi
   local nic_handler=gpu
   export NVSHMEM_IB_ENABLE_IBGDA=1 NVSHMEM_IBGDA_NIC_HANDLER="$nic_handler"
@@ -549,8 +545,8 @@ collx_allocation_nodes_csv() {
 collx_resolve_slurm_rendezvous() {
   local job_id="$1" master_addr master_port socket_ifname="${COLLX_SOCKET_IFNAME:-}"
   [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || collx_die "invalid rendezvous allocation"
-  # Inside an MNNVL domain the socket interface is never validated (the GB registry names it for
-  # the kv rdma legs only), so rank zero keeps resolving by hostname there.
+  # Inside an MNNVL domain the socket interface is never validated, so rank zero keeps resolving
+  # by hostname there.
   [ "${COLLX_TRANSPORT:-}" != mnnvl ] || socket_ifname=""
   # Relative node zero hosts global rank 0. Prefer the address on the validated socket interface:
   # a short hostname may resolve onto a management network that ranks cannot use.
@@ -608,7 +604,7 @@ export RANK="$SLURM_PROCID" WORLD_SIZE="$SLURM_NTASKS"
 export LOCAL_RANK="$SLURM_LOCALID" LOCAL_WORLD_SIZE="$COLLX_GPUS_PER_NODE"
 # config.py case-args leads every argv with the suite's entrypoint.
 [ "${1:-}" = --entrypoint ] || exit 67
-case "${2:-}" in run_ep|run_swap_blocks|run_kv) ;; *) exit 67 ;; esac
+case "${2:-}" in run_ep|run_swap_blocks) ;; *) exit 67 ;; esac
 entry="$2"; shift 2
 exec python3 "bench/$entry.py" "$@"
 BASH
@@ -622,7 +618,6 @@ collx_slurm_job_name() {
   printf '%s' "$name"
 }
 
-# The job name is prepended so a caller-supplied --job-name wins (salloc takes the last).
 # True only when Slurm says the job is gone: listed as nothing, or purged ("Invalid job id"). A
 # failed query (slurmctld busy or restarting) is not an answer, so it reads as still there.
 collx_job_gone() {
@@ -634,6 +629,7 @@ collx_job_gone() {
   fi
 }
 
+# The job name is prepended so a caller-supplied --job-name wins (salloc takes the last).
 collx_salloc_jobid() {
   local log_label log job_id
   set -- --job-name="$(collx_slurm_job_name)" "$@"
@@ -883,8 +879,8 @@ collx_ensure_squash() {
     || { collx_log_tail "$log"; return 1; }
   { exec {lock_fd}>"$locks/${key}.lock"; } 2>> "$log" \
     || { collx_log_tail "$log"; return 1; }
-  # A concurrent leg holds the content-keyed lock for its full import (~18 minutes for the 32 GB
-  # sglang squash on b300), so the wait must outlast an import, and a timeout must log: the
+  # A concurrent leg holds the content-keyed lock for its full import (~18 minutes for a ~30 GB
+  # squash on b300), so the wait must outlast an import, and a timeout must log: the
   # empty import log would otherwise make this a silent launcher death.
   flock -w 2700 "$lock_fd" 2>> "$log" \
     || { collx_log "ERROR: timed out waiting for the container import lock"
@@ -971,7 +967,6 @@ collx_ensure_squash_on_job() {
       --export="$(collx_host_exports)" \
       bash -s -- "$sq" "$lock" "$image" "$COLLX_IMAGE_PLATFORM" "$refresh_epoch" \
       "${COLLX_IMAGE_DIGEST:-}" "$(printf '%s' "$image" | sed 's#[/:@#]#_#g')" \
-      "${COLLX_IMPORT_TMPDIR:-}" \
       > "$log" 2>&1 <<< "$(collx_squash_import_script)" || rc=$?
     [ "$rc" = 0 ] && { printf '%s' "$sq"; return 0; }
     # 13 is the remote block's architecture guard; a platform mismatch never improves on retry.
@@ -1010,13 +1005,7 @@ case "$platform:$machine" in
   linux/amd64:x86_64|linux/amd64:amd64|linux/arm64:aarch64|linux/arm64:arm64) ;;
   *) exit 13 ;;
 esac
-# The caller may select the scratch filesystem used for image-layer conversion.
-if [ -n "$8" ]; then
-  [[ "$8" = /* ]] && [ -d "$8" ] || exit 14
-  compute_home="$(mktemp -d "$8/inferencex-collectivex-home.XXXXXX")"
-else
-  compute_home="$(mktemp -d /tmp/inferencex-collectivex-home.XXXXXX)"
-fi
+compute_home="$(mktemp -d /tmp/inferencex-collectivex-home.XXXXXX)"
 trap 'rm -rf -- "$compute_home"' EXIT
 export HOME="$compute_home" XDG_CACHE_HOME="$compute_home/.cache"
 export ENROOT_TEMP_PATH="$compute_home/enroot-tmp"
@@ -1126,7 +1115,7 @@ collx_stage_repo() {
   fi
 }
 
-# Results are committed from the checkout, so the staged result JSONs are copied back to its
+# Results are uploaded from the checkout, so the staged result JSONs are copied back to its
 # results/<sku>/, replacing older files for the same cases.
 collx_collect_results() {
   local mount_src="$1" repo_root="$2" dst log

@@ -11771,6 +11771,1000 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4686
 
 - config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image for all three arms (TP4/EP4 HiCache, TP4/EP4 DCP4, TP8/EP1) from lmsysorg/sglang:v0.5.22-rocm720-mi35x (digest-pinned release) to the lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261028 nightly, built from SGLang main e0df901d."
+    - "Add TP4/EP4 points with decode context parallelism (DCP4) at concurrency 16, 24, 40 and 48. The latent KV is striped across the four ranks, so these points keep KV on the GPU without HiCache, which SGLang rejects with DCP."
+    - "DCP4 points keep the base recipe: EAGLE with 5 steps, top-k 1 and 6 draft tokens, an FP8 KV cache and the Triton DSA prefill and decode backends. Admission (max-running-requests) is 32, 48, 80 and 96, twice the concurrency, and the decode CUDA graph limit is 32, 48, 64 and 64."
+    - "The new image adds sgl-project/sglang#44322, which enables DCP on the Triton sparse-MLA backend on ROCm, including FP8 KV writes and MTP draft sharding. It also adds DSA fixes for MTP draft decode (#42565) and GLM-5.2 CUDA-graph side-stream replay (#45349). #43735 (DSA DCP with MTP) was already in v0.5.22."
+    - "Draft data types are unchanged: the MTP layer 78 ships in BF16 and is listed in the checkpoint's Quark exclude list, so SGLang loads it unquantized at both the old and new commits. Its KV cache is FP8, shared with the target."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4064
+
+- config-keys:
+    - minimaxm31flash-fp4-mi355x-sglang-agentic-dspark
+  description:
+    - "Conc 48 and 64 move to the cookbook's High-Throughput cell: HiCache with 180 GB of host KV per rank written back on eviction (KV_OFFLOADING=dram, 734 GB declared for 4 of 8 GPUs), mem-fraction-static 0.8, default bf16 draft KV."
+    - "Back the HiCache host pools with hipHostMalloc (HSA_USERPTR_FOR_PAGED_MEM=0) instead of registered pageable memory, which faulted at the first HiCache write on MI355X."
+    - "Set HF_HOME so srtctl pre-downloads the model into the shared HF cache, which lacked preprocessor_config.json and stopped every MI355X server at startup."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4694
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm31flash-fp4-mi355x-vllm-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Image unchanged: vllm/vllm-openai-rocm:minimax-m31-flash (vLLM 0.32.0rc1.dev364+g8d0f05a0c) on amd/MiniMax-M3.1-Flash-Quark-MXFP4, so no upstream framework change."
+    - "Search space: TP4 c1-c32 without KV offloading, and c64 moves to a new TP4 point with host-DRAM KV offload (vllm-simple, agentic.yaml:override_tp4_dspark3_c64_offload); dram-utilization 0.80 -> 0.90."
+    - "C1-C8 are unchanged (DSpark 7, mono decode, FP8 KV and indexer caches, 0.85 memory utilization)."
+    - "C16/C32 (from #4537): DSpark 3 -> 7 on the NVFP4 KV cache with DBO, max-num-seqs 32/64; the base gpu-memory-utilization drops 0.9 -> 0.85 for DBO prefill headroom. Throughput runs use the minimaxm31flash_dspark golden AL, which covers 7 drafts."
+    - "C64 (from #4463): DSpark 3 at 0.9 memory utilization, max-num-seqs 128, plus SimpleCPUOffloadConnector (eager, cpu_bytes_to_use 1349 GB): 185,025 CPU blocks (about 23.7M tokens) beside the 14.6M-token GPU KV cache in run 41003224750."
+    - "C64 also sets PYTHONHASHSEED=42 and VLLM_ROCM_MINIMAX_M3_SP_PREFILL=1. Sequence-parallel prefill stays off on this checkpoint: at 8d0f05a0c it needs an MXFP8 kernel on layer.quant_method.kernel, which the Quark linear method does not expose, and every rank logs it as off."
+    - "Draft data types unchanged: the dspark/ draft loads with its own MXFP8 config (FP8 E4M3 attention and FFN projections with 1x32 UE8M0 scales; BF16 fc, Markov and confidence heads, norms) and an FP8 draft KV cache. Only its length changes, at C16/C32."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4671
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-agg
+    - minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg
+  scenario-type: [agentic-coding]
+  description:
+    - "Add aggregated SGLang behind Dynamo for MiniMax-M3.1-Flash AgentX on GB300 with lmsysorg/sglang:nightly-cu134-20261030-e371881: TP4 at conc 1-16; TP4 with HiCache 180 GB per rank, shortest-prefill-first and prefill-decode interval 32 at conc 24; TP2 with HiCache 180 GB per rank at conc 40 (with and without shortest-prefill-first) and 44."
+    - "Disagg prefill chunk 16384 (8192 per DP rank); add 4 DEP2 prefill workers with a DEP8 decode at conc 224 and 256, 8 DEP2 prefill workers with a DEP8 decode at conc 440 and 480, conc 340 on the 6 DEP2 + DEP8 shape, and conc 360 and 400 on the 6 DEP2 + DEP16 shape."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4698
+
+- config-keys:
+    - qwen3.5-fp4-b200-sglang
+    - qwen3.5-fp4-b200-sglang-mtp
+    - qwen3.5-fp4-b200-trt
+    - qwen3.5-fp4-b200-trt-mtp
+    - qwen3.5-fp4-b300-sglang
+    - qwen3.5-fp4-b300-sglang-mtp
+    - qwen3.5-fp4-gb200-dynamo-sglang-mtp
+    - qwen3.5-fp4-gb300-dynamo-sglang
+    - qwen3.5-fp4-gb300-dynamo-trt
+    - qwen3.5-fp4-gb300-dynamo-trt-mtp
+    - qwen3.5-fp4-mi355x-atom
+    - qwen3.5-fp4-mi355x-sglang
+    - qwen3.5-fp4-mi355x-sglang-disagg
+    - qwen3.5-fp4-mi355x-sglang-mtp
+    - qwen3.5-fp8-b200-sglang
+    - qwen3.5-fp8-b200-sglang-mtp
+    - qwen3.5-fp8-b300-sglang
+    - qwen3.5-fp8-b300-sglang-mtp
+    - qwen3.5-fp8-gb200-dynamo-sglang
+    - qwen3.5-fp8-gb200-dynamo-sglang-mtp
+    - qwen3.5-fp8-gb300-dynamo-sglang
+    - qwen3.5-fp8-gb300-dynamo-sglang-mtp
+    - qwen3.5-fp8-h100-sglang
+    - qwen3.5-fp8-h100-sglang-mtp
+    - qwen3.5-fp8-h200-sglang
+    - qwen3.5-fp8-h200-sglang-mtp
+    - qwen3.5-fp8-mi300x-sglang
+    - qwen3.5-fp8-mi325x-sglang
+    - qwen3.5-fp8-mi325x-sglang-mtp
+    - qwen3.5-fp8-mi355x-atom
+    - qwen3.5-fp8-mi355x-atom-mtp
+    - qwen3.5-fp8-mi355x-sglang
+    - qwen3.5-fp8-mi355x-sglang-disagg
+    - qwen3.5-fp8-mi355x-sglang-mtp
+  retired: true
+  description:
+    - "Retire Qwen3.5 8k1k serving configurations across NVIDIA and AMD and remove their unused recipes."
+    - "Keep Qwen3.5 AgentX coverage, SPEED-Bench collectors, and historical results unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4697
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp8-c1
+  scenario-type:
+    - agentic-coding
+  description:
+    - "New key on vllm/vllm-openai-rocm:nightly-335dd77b09161c5d63139b4e7ae51bb9928305b1 (2026-10-30, digest sha256:3c634cc2c51eda7eb840a236b1f09a5ecf6a4b0cb92c4b8486e2158770507291, the same digest as nightly-rocm100-335dd77b09161c5d63139b4e7ae51bb9928305b1). The TP4/TP2 key dsv41flash-fp4-mi355x-vllm-agentic-dspark stays on nightly-e68efc685ab1e6f1eda004ced7157e3ca411da2f."
+    - "Add one point: TP8, concurrency 1, no KV offloading. The TP4/TP2 search space is unchanged and is not rerun."
+    - "The new override_tp8_c1 recipe variant uses the same settings as TP4 c1: tensor-parallel-size 8, GPU-resident Engram tables, max-num-seqs 1, max-cudagraph-capture-size 8 and max-num-batched-tokens 32768. Shared settings are unchanged: --monokernel, five-token DSpark with probabilistic drafting, block size 128, the MXFP4 sparse-logits indexer and INT4 quick all-reduce."
+    - "The image carries vllm-project/vllm#64101, which lets the mono decode kernels run at TP8 on gfx950 (each rank's 8 heads are padded into one 16-head MFMA tile); earlier nightlies stop at startup with --monokernel outside TP2/TP4. Compared with e68efc685 it also includes #63885 (SWA decode metadata in one launch), #60154 (inverse RoPE and MXFP8 quant fused into the AITER sparse MLA), #63179 and #63915 (MXFP8 activation quant fused into small-M linears), #63576 and #63689 (mono decode fixes), and #63047 (prefill memory budget)."
+    - "Draft data types unchanged: the DSpark draft (mtp.0-2 in the target checkpoint) loads with the checkpoint's FP8 config, as shipped (FP8 E4M3 with 32x32 UE8M0 scales for attention, shared experts and main_proj, MXFP4 routed experts, BF16 gate, norms and heads), inherits the target fp8_ds_mla KV cache, and the mono draft kernels read those weights in place."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4666
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp8-c1
+  scenario-type: [agentic-coding]
+  description:
+    - "Disable integer QuickReduce in the shared DeepSeek-V4.1-Flash MI355X vLLM recipe by setting VLLM_ROCM_QUICK_REDUCE_QUANTIZATION to NONE instead of INT4."
+    - "This supersedes the preceding entry's INT4 setting and TP8-only sweep scope: rerun both the existing TP4/TP2 grid and the new TP8 c1 point with integer QuickReduce disabled. Images, search spaces and draft precision are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4666
+
+- config-keys:
+    - qwen3.8next-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the MI355X Qwen3.8-Flash-Next SGLang AgentX recipe to lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261031@sha256:3867dc07ba2530f914e1f210ed829f7a572a75286c8c362dbc22cbecf9b5a7e6. This nightly's SGLang pins sgl-amd-mono at b10f3b71 (sglang #47483, the merge of sgl-amd-mono #29), so the checkout setup script is removed and no patch is applied."
+    - "c1, c2, c4 and c8 enable the FlyDSL monokernel (--enable-amd-monokernel) for MTP target verify and draft. The kernel writes the per-draft intermediate SSM states and reads the PLE table on the GPU, so those points drop ReplaySSM and PLE offload and admit CONC requests (max-running-requests = cuda-graph-max-bs-decode = 1, 2, 4 and 8). c12 and c16 stay on the round 03 default path: ReplaySSM, PLE offload, and 2x CONC admission. Integer all-reduce stays off (ROCM_QUICK_REDUCE_QUANTIZATION=NONE)."
+    - "The monokernel reads the FP8 and MXFP4 weights in place, keeps per-token FP8 activations for the W8A8 projections and runs the MoE on BF16 activations (a16w4), where the default path quantizes them to MXFP4. c1-c8 also set SGLANG_USE_AITER=1, which the monokernel requires and the image already sets, so they get their own GSM8K eval at c8."
+    - "Every point now serves the model's default thinking-on chat template: the recipe no longer passes --default-chat-template-kwargs '{\"enable_thinking\": false}', so the served mode matches the thinking_on golden AL (2.32 at 3 draft tokens) and the other qwen3.8next recipes."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4542
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg
+    - minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-agg
+  description:
+    - "Add 6P DEP2 + DEP16 points at conc 220, 240 and 260, and a TP4 MonoKernel point at conc 1."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4750
+  scenario-type: [agentic-coding]
+  append-only: true
+
+- config-keys:
+    - glm5.2-fp8-b300-sglang-agentic-mtp
+  description:
+    - "Rerun the unchanged FP8 config to collect GPU-board power. Its published curve (2026-10-14) predates B300 single-node power collection and carries no power fields."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4702
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-atom-agentic-dspark
+  description:
+    - "Rerun the unchanged config to collect GPU-board power. Its published curve (2026-10-13) predates MI355X ATOM power collection and carries no power fields."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4703
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-disagg
+  description:
+    - "Collect GPU-board power for the six aggregated and two disaggregated GLM-5.2 B200 Dynamo-SGLang AgentX points, which currently publish no power."
+    - "Move the disaggregated key from the pruned lmsysorg/sglang:nightly-dev-20260910-00840301 tag (Docker Hub 404) to the digest-pinned v0.5.22-cu130 image the aggregated key already serves."
+    - "Concurrency points and evaluation coverage are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4656
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - qwen3.8next-fp4-gb300-sglang-agentic-mtp
+  description:
+    - "Require valid measured GPU power for the Qwen3.8 GB300 AgentX sweep."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4552
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - qwen3.8next-fp4-b300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update Qwen3.8-Flash-Next FP4 B300 SGLang AgentX to nvidia/Qwen3.8-Flash-Next-NVFP4 on lmsysorg/sglang:nightly-dev-cu13-20261028-586355a8 (digest-pinned)."
+    - "Update the search space to TP4/EP4 at concurrency 1 and 2, TP1/EP1 at concurrency 1, 2, 12 and 24, and TP1/EP1 with HiCache at concurrency 48 and 80."
+    - "Switch the target and draft KV caches from BF16 to FP8 E4M3 at concurrency 12, 24, 48 and 80."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4683
+
+- config-keys:
+    - dsv41flash-fp4-gb300-sglang-agentic-dspark
+  description:
+    - "Update the SGLang image from nightly-dev-cu13-20261021-c1c287a4 to nightly-dev-cu13-20261030-302b78cc, pinned by digest. The image includes sgl-project/sglang#46404 (DSpark simulated-acceptance bonus drawn at the simulated row), #46840 (simulated acceptance keeps the real verify accept cost), #46891 (no host sync in DSpark draft-block metadata) and sgl-nvidia-mega 54b428921749 (megakernel API 2, sgl-project/sglang#47145)."
+    - "TP4 c1 runs the NVIDIA megakernel (fp8_e4m3 KV cache, mem-fraction-static 0.91, decode graph batch 1, Engram host table) with SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION=1 (sgl-project/sglang#47105), which enables the DSpark and Qwen3.5/EAGLE megakernel runtime optimizations; DSpark simulated draws run ahead of the draft launch (SGLANG_OPT_DSV41_DSPARK_SIM_DRAW_AHEAD)."
+    - "TP4 c1/c4/c16 and TP2/EP2 c16/c32 pin dsv4-attn-backend flashmla; auto resolves to MegaAttention, which zero-pads per-rank attention heads to 64. DP-attention points are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4603
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm31flash-fp4-b300-sglang-agentic-dspark
+  description:
+    - "Add TP4 points with DRAM KV offload at conc 20, 44, 52 and 60, and a TP4 point without offload at conc 16, using shortest-prefill-first with a prefill-decode interval of 32."
+    - "Add a TP2 point with DRAM KV offload at conc 44 using shortest-prefill-first with a prefill-decode interval of 32."
+    - "Add TP2 points with DRAM KV offload and a larger HBM KV pool (mem-fraction-static 0.93) at conc 50 and 52 using shortest-prefill-first with a prefill-decode interval of 20."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4726
+  scenario-type: [agentic-coding]
+  append-only: true
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-vllm-agentic-dspark
+  description:
+    - "Retune TP4 c8 and c16 with CUDA graph capture sizes, add TP4 c24 and c40 points, and add TP2 c28, c32 and c36 points with CPU KV offload."
+    - "Image and speculative config are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4662
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Collect Grace CPU power on the Kimi K3 GB300 aggregate AgentX recipe, with cpu-power-exporter v2.66.1."
+    - "Publish CPU socket, rail, SysIO and module power over the GPU window, independent of the GPU verdict, and per-host GPU power in workers[]."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3296
+
+- config-keys:
+    - musespark-fp4-b300-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the Muse Spark Open B300 curve to lmsysorg/sglang:nightly-dev-cu13-20261030-302b78cc; run TP8/EP8 at concurrency 1, 4, 7, 16, 20, 24 and TP4/EP4 HiCache at concurrency 16, 28, 32, 38, 48."
+    - "Disable prefill CUDA graphs at TP4 with mem-fraction-static 0.92 and keep breakable prefill graphs at TP8; retune request admission, prefill-decode interval and stream interval per concurrency, with 250 GB per-rank HiCache and SWA/full ratio 0.2 at concurrency 32 and 38."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4725
+
+- config-keys:
+    - musespark-fp4-gb300-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the Muse Spark Open GB300 curve to lmsysorg/sglang:nightly-dev-cu13-20261030-302b78cc and retune request admission, prefill-decode interval, scheduling and host cache per concurrency."
+    - "Add TP4/EP4 concurrency 4 and 40; drop concurrency 5, 28 and 34."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4724
+
+- config-keys:
+    - kimik3-fp4-mi355x-atom-agentic-mtp
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+    - kimik3-fp4-mi355x-vllm-disagg-agentic
+    - kimik3-fp4-h200-vllm-agentic-latency
+    - kimik3-fp4-h200-vllm-agentic-balanced
+    - kimik3-fp4-h200-vllm-agentic-simple
+    - kimik3-fp4-b300-vllm-agentic-dspark
+    - kimik3-fp4-gb200-dynamo-vllm-agentic
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dep16-disagg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+    - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-disagg
+  description:
+    - "Retire all Kimi-K3 serving benchmarks and remove unused recipes and launch routing."
+    - "Keep historical results, SPEED-Bench collectors, golden AL curves, vendor evals and OperatorX shapes."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4762
+  retired: true
+
+- config-keys:
+    - dsr1-fp8-mi300x-sglang
+    - dsr1-fp8-mi325x-sglang
+    - dsr1-fp8-mi355x-sglang-mtp
+  description:
+    - "Collect per-socket AMD EPYC CPU package power beside GPU power on the MI300X, MI325X and MI355X srt-slurm clusters. Native power points on a cluster that declares a cpu-power-exporter measure CPU power by default; these 8k1k rows set cpu-power, so a missing CPU leg counts as invalid. RAPL jobs get the root-only counters until teardown, and setup installs the pinned cpu-power-exporter release."
+    - "Integrate each package over the formal GPU measurement window and emit cpu_power_valid, avg_cpu_socket_power_w, avg_total_cpu_power_w, and total_cpu_energy_j with sensor_kind rapl_package; RAPL reports no component rails. Concurrency points and evaluation coverage are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4154
+  scenario-type: [fixed-seq-len]
+
+- config-keys:
+    - kimik3.1-fp4-b300-sglang-agentic-dflash
+  description:
+    - "Add Kimi K3.1 Pro B300 SGLang AgentX day-0 points: TP8 (c1-c16) and TP8 DCP8 EP2 (c24-c70), HiCache host offload, RadixArk DFLASH draft with block verification."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4803
+
+- config-keys:
+    - kimik3.1-fp4-b300-vllm-agentic-dspark
+  description:
+    - "Add Kimi-K3.1-Pro day-0 vLLM AgentX on B300: TP8 x DCP8 with DSpark (Inferact/Kimi-K3.1-Pro-DSpark-preview) and Simple CPU KV offload, conc 1-70."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4796
+
+- config-keys:
+    - kimik3.1-fp4-mi355x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi-K3.1-Pro vLLM AgentX on one 8x MI355X node with vLLM's day-0 image vllm/vllm-openai-rocm:kimi-k31@sha256:5f47cc1004d9a7ac65f8a913725edb20c62c99a07e31cbf4ba21741bd0b4f9b1 (vLLM 0.0.0+mum.14d1ec2336, AITER 52846bc2)."
+    - "TP8 x DCP8 (a2a DCP backend) with the Inferact/Kimi-K3.1-Pro-DSpark-preview draft: GPU-resident KV at concurrency 1, and SimpleCPUOffloadConnector DRAM offload at concurrency 4, 10, 16, 24, 32 and 48 (224.875 GB per rank, 1799 GB per node, which is what dram-utilization 0.6 resolves to)."
+    - "Per point at concurrency 1/4/10/16/24/32/48: max-num-seqs 1/2/6/10/16/24/48 and DSpark draft tokens 7/5/5/4/4/3/3. max-num-batched-tokens is 16384 and gpu-memory-utilization 0.90 through concurrency 24; both change to 10240 and 0.91 at concurrency 32 and 48."
+    - "Every point compiles in mode 3 with FULL_AND_PIECEWISE CUDA graphs. Concurrency 1 runs the latency_specialized decode backend, captures sizes 2-16 and turns breakable CUDA graphs off; the offload points keep VLLM_USE_BREAKABLE_CUDAGRAPH=1 and capture max-num-seqs multiples of (1 + draft tokens) plus a prefill ladder up to max-num-batched-tokens."
+    - "Common settings: FP8 KV cache, FP32 KDA state (mamba-ssm-cache-dtype float32), MXFP4 indexer cache (indexer_kv_dtype mxfp4), fused KDA prefill, prefix caching with prefix-match-unit 64, max-model-len 1048576, fastsafetensors loading, stream-interval 10, AITER ASM DCP verify, AITER DCP allgather, FlyDSL sparse MLA, the image's HSA_NO_SCRATCH_RECLAIM=1, transparent huge pages for the offload pool (THP_MEM_ALLOC_ENABLE=1), and 1200 s execute-model and 7200 s engine-ready timeouts."
+    - "K3.1 week-1 precision policy: linear layers and shared experts stay BF16 (no quantization-config); routed experts run A4W4, MXFP4 weights with FP4 activations, through the SiTUv2 FlyDSL MoE (VLLM_ROCM_USE_AITER_MOE_SITUV2=1, the same as the image's auto default); MoE stage 2 stays BF16 (AITER_FLYDSL_STAGE2_FP8=0); all-reduce stays BF16 (VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=NONE)."
+    - "Verification is block rejection with probabilistic draft sampling. Throughput runs replace it with the golden acceptance length for the draft length: 3.69 at 7 tokens, 3.41 at 5, 3.19 at 4 and 2.88 at 3. Evals and AL gates verify for real."
+    - "No change to the DSpark draft's precision: Inferact/Kimi-K3.1-Pro-DSpark-preview (revision 6a2ef20a) ships all-BF16 weights with no quantization_config, the speculative config sets no quantization, so get_draft_quant_config() returns None and K3DSparkModel loads its layers in BF16 with the target's BF16 embedding and LM head. Its KV cache is FP8, the same as the target's."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4806
+
+- config-keys:
+    - kimik3.1-fp4-mi355x-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi-K3.1-Pro MXFP4 AgentX on one 8x MI355X node with SGLang (lmsysorg/sglang:dev-kimi-k31-pro-mi35x) and the DFlash2 draft at 5 draft tokens with block verification."
+    - "TP8 monokernel at concurrency 1 and 4 with GPU-resident KV; TP8/DCP8 with the HiCache host tier at concurrency 8, 16, 32 and 48."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4808
+
+- config-keys:
+    - kimik3.1-fp4-b200-dynamo-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi K3.1 Pro B200 SGLang AgentX on lmsysorg/sglang:dev-kimi-k31-pro: one aggregated worker over two nodes, TP16 with DCP16, no KV offload, concurrency 1, 4, 8, 14, 24, 32, 48, 56, 72, 80 with DFLASH and 96 without speculation."
+    - "DFLASH uses RadixArk/Kimi-K3.1-Dflash2-Preview with block verification, 7 draft tokens through concurrency 14 and 4 above."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4801
+
+- config-keys:
+    - glm5.3flash-fp8-mi325x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GLM-5.3-Flash native FP8 AgentX on MI325X with SGLang v0.5.22 ROCm10 mi30x (pinned by digest): TP4/EP4, BF16 KV, TileLang DSA, AITER MoE, MTP 5/1/6, 1M context."
+    - "GPU-resident KV at concurrency 1, 2, 4, 8 and 12; HiCache host tier (fraction 0.60, direct I/O, page_first_direct) at concurrency 16, 24 and 32."
+    - "Stage checkpoint revision 46a050bec13002ad29ee795c16e61cf4fa3c4a9c in the shared Hugging Face cache under a lock with a 400 GB disk budget."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4722
+
+- config-keys:
+    - kimik3.1-fp4-gb200-dynamo-sglang-agentic-dflash-agg
+    - kimik3.1-fp4-gb200-dynamo-sglang-agentic-dflash-disagg
+  description:
+    - "Add Kimi K3.1 Pro day-0 SGLang AgentX points on GB200: aggregated TP16 DCP16 and 1P1D TP16 DCP16, with RadixArk DFLASH block verification and HiCache CPU offload."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4804
+
+- config-keys:
+    - glm5.3flash-fp8-gb200-sglang-agentic-mtp
+    - glm5.3flash-fp4-gb200-sglang-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Add GLM-5.3-Flash FP8 (zai-org/GLM-5.3-Flash) and NVFP4 (nvidia/GLM-5.3-Flash-NVFP4) AgentX on one GB200 tray with pinned lmsysorg/sglang:v0.5.22-cu130, using the SGLang cookbook GB200 Low Latency recipe: TP4, FP8 KV with TRT-LLM DSA, flashinfer_trtllm MoE, EAGLE MTP 5/1/6 and auto parsers."
+    - "No KV offload at concurrency 1, 4, 8, 12 and 16; HiCache L1 + L2 with SGLang auto-sized host pools at concurrency 24 and 32 for FP8 and 24, 32, 40 and 48 for NVFP4. Native 1M context, shared golden-AL curve for throughput, real acceptance for evals."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4718
+
+- config-keys:
+    - glm5.3flash-fp8-mi300x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add native GLM-5.3-Flash FP8 AgentX on MI300X with the official digest-pinned SGLang v0.5.22 ROCm 10 MI30x image, TP4/EP4 and MTP (EAGLE 5/1/6)."
+    - "GPU-resident KV at concurrency 1, 2, 4, 8, 12 and 16; SGLang HiCache with the auto-sized host tier at concurrency 24, 32 and 40."
+    - "Use gfx942 TileLang DSA with Torch DSA top-k, AITER MoE and FP8 KV, and disable INT8 QuickReduce."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4721
+
+- config-keys:
+    - kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-disagg
+    - kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-agg-mk
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi-K3.1-Pro GB300 Dynamo+SGLang AgentX points on lmsysorg/sglang:dev-kimi-k31-pro with the RadixArk/Kimi-K3.1-Dflash2-Preview DFLASH draft."
+    - "Disaggregated: TP8/DCP8 prefill with a HiCache host tier feeding either one TP16 (DCP8 x attention DP2, EP16 MegaMoE) decode worker (3P1D c300, 2P1D c180, 1P1D c76) or TP8/DCP8 decode workers (1P3D c60 and c36, 1P4D c32)."
+    - "Aggregated low-latency points: one TP16 EP1 worker with the NVIDIA megakernel (--enable-nvidia-megakernel), max-running-requests equal to the concurrency (c1, c2, c4)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4811
+
+- config-keys:
+    - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dep16-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi-K3.1-Pro GB300 Dynamo+vLLM disaggregated AgentX configs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4839
+
+- config-keys:
+    - qwen3.8next-fp4-gb300-tokenspeed-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Qwen3.8-Flash-Next NVFP4 GB300 TP1/EP1 AgentX with TokenSpeed MTP and a 224 GB Host L2 KV store at concurrency 1, 2, 4, 8, 16, 32, 48, and 64."
+    - "Pin the matching November 2 TokenSpeed 0.1.1.post20261102, CUDA 13 ARM64 kernel 0.1.4.post20261102 and engine 0.1.0.post20261102 wheels by SHA256, scheduler 0.1.49, the runner image by digest, and the checkpoint revision. Keep BF16 KV/SSM state, in-forward state checkpoints, and Host L2 write-back."
+    - "Bind native TokenSpeed topology and select golden MTP acceptance automatically for throughput; use real verification for evals. Use the pinned engine's model-owned cache geometry."
+    - "Use srt-slurm v2.66.2 with native headless ZMQ workers, SMG readiness, and engine HTTP metrics discovery. Export NVIDIA runtime settings before Enroot creates the runner containers. Install matching published FlashInfer 0.7.2.post1 CUDA 13 caches. Resolve pinned lm-eval client dependencies and read the checkpoint's native text context for evaluation."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4780
+
+- config-keys:
+    - h3-bf16-h100-sglang-video
+    - h3-bf16-b200-sglang-video
+  scenario-type: [video-generation]
+  description:
+    - "Run native H3 C1 sweeps on four GPUs: H100 SGLang TP2/Ulysses2 and B200 SGLang Ulysses4."
+    - "Select 20 distinct measured prompts, a disjoint warmup, 124 frames, 49 denoising updates, SGLang v0.5.23 (297e54fd), and explicit cross-request conditioning-cache policy."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916
+
+- config-keys:
+    - dsv41flash-fp4-gb200-vllm-agentic-dspark
+  description:
+    - "Update the GB200 DeepSeek-V4.1-Flash vLLM AgentX image from nightly-dev-arm64-cu130-ac9126e58aa7 to the vLLM main nightly vllm/vllm-openai:cu134-nightly-40941f2c4ba96fba0a7e282a5355e89cd74d9ac5 (main 40941f2c, pinned to index sha256:13e92fcd97268013d13d07fb97d80803227cf0beae0161f8dce95a8200eaafb0; arm64 sha256:ab9450628edc1909b5f242be837822e09a2eb9bdd25fea169f69871a59fa6424) and replace the search space. Every point sets gpu-memory-utilization 0.93 and runs five-token DSpark with adaptive verification off (the previous DEP2/DEP4 points had it on)."
+    - "TP4 with FlashInfer sparse MLA and THP Engram host tables at concurrency 4 (max-num-seqs 8, max-num-active-seqs 1, prefill-schedule-interval 16, deep_select indexer top-k), 10 (max-num-seqs 16, max-num-active-seqs 2, prefill-schedule-interval 96) and 16 (max-num-seqs 64, max-num-active-seqs 3, prefill-schedule-interval 96)."
+    - "DEP4 (TP1 x DP4 + EP4, DeepGEMM MegaMoE, FlashMLA mega-attention, deep_select top-k, Engram tables shared across DP ranks, max-num-seqs 128, prefill-schedule-interval 96) behind the consistent-hash vLLM Router at concurrency 64 and 100 (65536-token prefill budget, 16 GiB KV pool, long-prefill-token-threshold 4096 and 8192), 136 and 170 (57344 tokens, 22 GiB, 8192) and 256 (49152 tokens, 28 GiB, 8192); all but 256 use sparse-MLA prefill workspace factor 4. Removes DEP2 (concurrency 8-32), TP4 at concurrency 1, 8 and 32, and DEP4 at concurrency 128."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4783
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-agentic-dspark
+  description:
+    - "Update the B200 DeepSeek-V4.1-Flash vLLM AgentX image from vllm/vllm-openai:v0.32.0 to the vLLM main nightly vllm/vllm-openai:cu134-nightly-40941f2c4ba96fba0a7e282a5355e89cd74d9ac5 (main 40941f2c, pinned to index sha256:13e92fcd97268013d13d07fb97d80803227cf0beae0161f8dce95a8200eaafb0; amd64 sha256:d2a073f6b4da63907c8374313f66407798035649cc4b574287df6d20050753c6) and replace the search space with eleven single-node points. Every point sets gpu-memory-utilization 0.93 (was 0.97) and runs five-token DSpark with adaptive verification off."
+    - "TP4 behind vLLM's own frontend at concurrency 4 (max-num-seqs 8, max-num-active-seqs 1, prefill-schedule-interval 16, FlashInfer sparse MLA, Engram tables on the GPU, deep_select indexer top-k), 10 (max-num-seqs 16, max-num-active-seqs 2, prefill-schedule-interval 96, FlashInfer sparse MLA, THP Engram host tables), 16 (max-num-seqs 64, max-num-active-seqs 3, prefill-schedule-interval 96, FlashMLA sparse attention, THP Engram host tables) and 24 (max-num-seqs 64, max-num-active-seqs 4, prefill-schedule-interval 96, FlashInfer sparse MLA, THP Engram host tables)."
+    - "DEP4 (TP1 x DP4 + EP4, DeepGEMM MegaMoE, FlashMLA mega-attention with sparse-MLA prefill workspace factor 4, deep_select top-k, Engram tables on the GPU shared across DP ranks, max-num-seqs 128, prefill-schedule-interval 96) behind the consistent-hash vLLM Router at concurrency 66, with a 32768-token prefill budget, a 12 GiB KV pool and long-prefill-token-threshold 3072."
+    - "DEP8 (TP1 x DP8 + EP8, the same engine on all eight GPUs) behind the same router at concurrency 224 and 256 (16 GiB KV pool), 384 (32 GiB), 512 (40 GiB), 544 (44 GiB) and 576 (48 GiB), each with a 65536-token prefill budget and long-prefill-token-threshold 8192. Removes TP4 at concurrency 1, 8, 32 and 128, TP2 at concurrency 1, DEP2 at concurrency 8-128 (including the native CPU KV offload points) and DEP4 at concurrency 96 and 128."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4786
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
+  description:
+    - "Collect GPU-board power and require valid AgentX power for the seven existing GB200 Dynamo-SGLang disaggregated variants."
+    - "Rerun the two unchanged aggregated variants in the same sweep so the GB200 Dynamo-SGLang AgentX curve keeps all nine points."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4553
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - h3-bf16-mi355x-sglang-video
+  scenario-type: [video-generation]
+  description:
+    - "Run the native H3 C1 sweep on four MI355X GPUs with SGLang Ulysses4, using the h3-v2.yaml release-v1 workload of the H100 and B200 rows."
+    - "Use the SGLang v0.5.23 ROCm 7.2.4 MI35x image and name ROCm server GPUs by board serial so AMD power samples bind to the server."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4809
+
+- config-keys:
+    - qwen3.8next-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Extend the Qwen3.8-Flash-Next FP4 MI355X SGLang AgentX search space from concurrency 1/2/4/8/12/16 to include 24, 48 and 80, on the same lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261031 image (digest-pinned). Concurrency 1-16 are unchanged."
+    - "Add a TP1/EP1 search-space entry with HiCache DRAM KV offload (kv-offloading: dram, backend hicache) at concurrency 24, 48 and 80; each point takes the 299 GB DRAM share of dram-utilization 0.80 (hicache-size 200 at c24, 298 at c48 and c80)."
+    - "These points store the target and draft KV caches in FP8 E4M3 (kv-cache-dtype and speculative-draft-kv-cache-dtype), use mem-fraction-static 0.88 as given (SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION=1), set SGLANG_USE_AITER_UNIFIED_ATTN=1, and keep ReplaySSM and the PLE offload. The Mamba pool tracks a checkpoint every 256 tokens (mamba-radix-cache-strategy extra_buffer_lazy, mamba-track-interval 256) with max-mamba-cache-size 960, 720 and 640 at c24, c48 and c80."
+    - "Admission is 48 requests at c24 (2x CONC) and 128 at c48 and c80, with decode CUDA graphs up to the same size. HiCache uses the kernel IO backend, page_first layout and write_back policy. c80 also sets strip-thinking-cache and mamba-max-states-per-path 2."
+    - "No patch and no setup script: the settings come from the AMD Qwen3.8 submission recipes for these concurrencies without the extra AITER and SGLang patches they carry (QSA FlyDSL decode, AITER GDN conv and prefill, fused hyper-connection decode)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4779
+
+- config-keys:
+    - kimik3.1-fp4-b200-dynamo-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi K3.1 Pro B200 vLLM AgentX on vllm/vllm-openai:kimi-k31: two nodes, TP8 x PP2 with DCP8, no KV offload, concurrency 1, 4, 8, 14, 24, 32, 48, 56, 72, 80 with DSpark and 96 without speculation."
+    - "DSpark uses Inferact/Kimi-K3.1-Pro-DSpark-preview with probabilistic drafting and block verification, 7 draft tokens through concurrency 14 and 4 above."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4797
+
+- config-keys:
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-hicache
+  scenario-type: [agentic-coding]
+  description:
+    - "Move dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg and dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-hicache to nightly-dev-cu13-20261030-302b78cc (Dynamo 1.7.0.dev20261029, SGLang 0.0.0.dev1+g52604e1d4), pinned by digest."
+    - "Keep one point per interactivity range. Disagg: 3 prefill workers at c700 (decode CUDA graph batch 18, max-running-requests 288, extra slots 27) and c1228, 5 at c2884 and 7 at c5540 (decode CUDA graph batch 96, max-running-requests 1536), where the decode batch cap sits at the rank's equilibrium batch so the queue moves to TTFT instead of decode step time, and 9 at c7480 with decode CUDA graph batch 192, max-running-requests 3072 and total_requests DP balancing, so decode takes every request the saturated prefill delivers. 7P c5540 keeps the base disaggregation-decode-extra-slots of 256."
+    - "Drop the agg TP2/EP2 c16 point (override_tp2_c16), 8 prefill workers at c4096, and 9 at c7480 with decode batch 160. Each lies on or under the line between its neighbours on this curve: agg TP2/EP2 c16 between agg TP4 c16 and 3P c1228 (3P c700 also has higher p90 interactivity and about 3.8x its throughput), 8P c4096 between 5P c2884 and 7P c5540, and 9P batch 160 between 7P c5540 and 9P batch 192."
+    - "Agg TP4 c1, c4 and c16 are unchanged. The agg key is listed so the whole Dynamo + SGLang curve, agg points included, comes from this sweep."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4673
+
+- config-keys:
+    - musespark-fp4-b200-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the Muse Spark Open B200 curve to lmsysorg/sglang:nightly-dev-cu13-20261030-302b78cc and retune request admission, prefill-decode interval and stream interval per concurrency."
+    - "Add TP4/EP4 concurrency 7 and 40; drop TP8 concurrency 2, 6, 8 and 56 and TP4 concurrency 8 and 10."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - musespark-fp4-gb200-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Retune the Muse Spark Open GB200 curve and set SGLANG_FLASHINFER_NVFP4_PER_TOKEN_ACTIVATION=0 at every concurrency; run TP4/EP4 at concurrency 1 without KV offload and at concurrency 4, 7, 10, 14, 16, 28, 36, 40 with HiCache, dropping concurrency 2, 6, 8, 20, 24 and 32."
+    - "Use prefill-decode interval 64-256 and stream interval 20 at every HiCache point, shortest-prefill-first except at concurrency 7, request admission 2-6 at concurrency 4-16, 16K chunked prefill at concurrency 28-40, and at concurrency 40 mem-fraction-static 0.93, a 160 GB HiCache pool and CUDA graphs up to 48."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - glm5.3flash-fp8-b200-sglang-agentic-mtp
+    - glm5.3flash-fp4-b200-sglang-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Add GLM-5.3-Flash FP8 and NVFP4 (nvidia/GLM-5.3-Flash-NVFP4) SGLang AgentX on one 8x B200 node with the pinned lmsysorg/sglang:v0.5.22-cu130 image and the SGLang cookbook B200 Low Latency recipe: TP8, FP8 KV with TRT-LLM DSA, flashinfer_trtllm MoE, EAGLE MTP 5/1/6 and auto parsers."
+    - "Each precision runs concurrency 1, 4, 8, 16, 24 and 32 without KV offload and 40 and 48 with an auto-sized HiCache host tier (default host-memory fraction 0.8, about 1.5 TB per node) instead of the cookbook 32 GB/rank tier, which is smaller than the device KV pool; acceptance comes from the glm-5.3-flash golden AL curve."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4713
+
+- config-keys:
+    - glm5.3flash-fp8-h200-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GLM-5.3-Flash FP8 AgentX on one 8x H200 node with the pinned lmsysorg/sglang:v0.5.22-cu130 image and the SGLang cookbook H200 low-latency recipe: TP8/EP8, BF16 KV, TileLang DSA, DeepGemm MoE and embedded EAGLE MTP 5/1/6."
+    - "GPU-resident KV at concurrency 2-16; HiCache with SGLang's default auto-sized host tier (~119 GiB, 127 GB per rank; ~1,020 GB per node) at concurrency 20, 24, 28 and 32."
+    - "Prefill CUDA graphs are disabled after a CUDA misaligned-address fault during ~336k-token single-request replay at concurrency 1."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4719
+
+- config-keys:
+    - glm5.3flash-fp8-gb300-sglang-agentic-mtp
+    - glm5.3flash-fp4-gb300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add native SGLang GLM-5.3-Flash AgentX on one GB300 tray (TP4/EP1) with lmsysorg/sglang:v0.5.22-cu130, FP8 (zai-org/GLM-5.3-Flash) and NVFP4 (nvidia/GLM-5.3-Flash-NVFP4), embedded EAGLE MTP 5/1/6."
+    - "SGLang cookbook GB300 recipe: TRT-LLM DSA prefill and decode, FP8 E4M3 KV cache, flashinfer_trtllm MoE, auto reasoning and tool-call parsers; NVFP4 adds modelopt_fp4 quantization."
+    - "GPU-resident KV at concurrency 1, 4, 8, 16, 24 and 32; auto-sized HiCache host tier (--hicache-host-memory-fraction 0.90, recorded as 723 GB per node, the measured maximum) at concurrency 40, 44 and 48."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4715
+
+- config-keys:
+    - glm5.3flash-fp8-b300-sglang-agentic-mtp
+    - glm5.3flash-fp4-b300-sglang-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Add GLM-5.3-Flash FP8 (zai-org/GLM-5.3-Flash) and NVFP4 (nvidia/GLM-5.3-Flash-NVFP4) AgentX on one 8x B300 node with the digest-pinned official SGLang v0.5.22-cu130 image: TP8, EAGLE MTP 5/1/6, TRT-LLM DSA, FP8 KV and FlashInfer TRT-LLM MoE, as in the SGLang cookbook's B300 cells."
+    - "GPU-resident KV at concurrency 1/4/8/16/24/32/48 (FP8) and 4/8/16/24/32/48 (NVFP4); HiCache at concurrency 64/96 with auto-sized host pools (host-memory fraction 0.76, about 2.8 TB per node, within the 3 TB cap) instead of the cookbook's 32 GB per rank, which is smaller than the device pool, and max-running-requests 96, since SGLang otherwise resets admission to 48 under EAGLE. Engine defaults set the remaining memory, admission and CUDA graph sizes."
+    - "Acceptance comes from the glm5.3flash MTP golden curve; the shipped draft head is served as stored, with SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE off."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4710
+
+- config-keys:
+    - glm5.3flash-fp8-h100-sglang-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Add native GLM-5.3-Flash FP8 AgentX on one 8x H100 node with the digest-pinned official SGLang v0.5.22-cu130 image and the SGLang cookbook H100 low-latency recipe: TP8/EP8, BF16 KV, TileLang DSA, DeepGEMM MoE, mem-fraction-static 0.70, and the embedded MTP head as EAGLE 5/1/6."
+    - "GPU-resident KV at concurrency 1 and 2; cookbook HiCache L1+L2 host tier (--hicache-size 32 per rank) at concurrency 4, 6, 8 and 10."
+    - "Prefill CUDA graphs are disabled because the image's default prefill graph faults with an illegal address during long-context replay on H100; decode CUDA graphs are unchanged."
+    - "Serve the pinned checkpoint revision 46a050bec13002ad29ee795c16e61cf4fa3c4a9c offline from the shared H100 Hugging Face cache."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4717
+
+- config-keys:
+    - kimik3.1-fp4-b300-vllm-agentic-dspark
+  description:
+    - "Kimi-K3.1-Pro B300 vLLM: enable the recipe's low-latency decode (decode_backend=latency_specialized) at c1-c4, whose decode graphs stay within 64 rows (the image's wider MoE needs 152 resident CTAs, more than a B300's 148 SMs), and run c1-c2 at plain TP8 instead of TP8 x DCP8."
+    - "Match the SGLang recipe's draft depths (DSpark 7 tokens through c8, 6 at c16, 5 at c24-c40, 4 from c48), size each decode graph cap to max-num-seqs x (1 + drafts), and raise the engine-ready timeout and health check to 7200 s."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4833
+
+- config-keys:
+    - h3-bf16-b200-sglang-video
+  scenario-type: [video-generation]
+  description:
+    - "Sweep H3 C1 latency on 1, 2, 4 and 8 B200 GPUs with SGLang Ulysses across all GPUs; the B200 recipe now sets the Ulysses degree from the GPU count, which keeps the 4-GPU point unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4852
+
+- config-keys:
+    - h3-bf16-h100-sglang-video
+  scenario-type: [video-generation]
+  description:
+    - "Sweep H3 C1 latency on 2, 4 and 8 H100 GPUs with SGLang TP2 and Ulysses 1, 2 and 4; H100 starts at 2 GPUs because the model does not fit one 80 GB GPU, and the 4-GPU point keeps its recipe."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4857
+
+- config-keys:
+    - kimik3.1-fp4-gb200-vllm-agentic-dspark-tp8pp2-agg
+    - kimik3.1-fp4-gb200-vllm-agentic-dspark-tp16-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add day-0 Kimi K3.1 Pro vLLM AgentX on GB200: aggregated TP8 x PP2 x DCP8 and disaggregated 1P1D TP16 + EP16 with DSpark (K3.1 golden AL curve) and Simple CPU KV offload."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4799
+
+- config-keys:
+    - glm5.3flash-fp8-mi355x-sglang-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Add native FP8 GLM-5.3-Flash AgentX on MI355X with the official SGLang v0.5.22 ROCm image pinned by digest and the SGLang cookbook MI355X FP8 Low Latency recipe: TP4/EP4, AITER MoE, FP8 KV with TileLang DSA, embedded NextN MTP 5/1/6 served as shipped."
+    - "HBM-only KV at conc 1, 2, 8, 16, 24 and 32; the cookbook HiCache L1 + L2 tier (180 GB per rank, write-through) at conc 40 and 48 recording its 749.33 GB host allocation (187.33 GB per rank) as a 751 GB CPU DRAM share. ROCM_QUICK_REDUCE_QUANTIZATION=NONE per the all-reduce policy."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4720
+
+- config-keys:
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+  description:
+    - "Update the vLLM ROCm image from v0.32.0 to v0.33.0, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4794
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-h100-vllm-agentic-dspark
+  description:
+    - "Update the vLLM image from nightly-e4a5b5537344 to nightly-00b6c4c565a8, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4569
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-gb300-vllm-agentic-dspark
+  description:
+    - "Update the vLLM image from nightly-dev-arm64-cu130-ac9126e58aa7 to the digest-pinned nightly-00b6c4c5."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4558
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - h3-bf16-h200-sglang-video
+  scenario-type: [video-generation]
+  description:
+    - "Restore the H200 row and sweep H3 C1 latency on 1, 2, 4 and 8 H200 GPUs with SGLang Ulysses across all GPUs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4856
+
+- config-keys:
+    - h3-bf16-mi355x-sglang-video
+  scenario-type: [video-generation]
+  description:
+    - "Sweep H3 C1 latency on 1, 2, 4 and 8 MI355X GPUs with SGLang Ulysses across all GPUs; the MI355X recipe now sets the Ulysses degree from the GPU count, which keeps the 4-GPU point unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4818
+
+- config-keys:
+    - qwen3.8next-fp4-gb300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update to lmsysorg/sglang:nightly-dev-cu13-20261103-797af717 and enable SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION and breakable prefill CUDA graphs."
+    - "Replace the search space with TP4/EP4 at concurrency 3, TP1/EP1 at concurrency 8 and 20, and TP1/EP1 with HiCache at concurrency 36, 56 and 80; concurrency 20, 36, 56 and 80 use fp8_e4m3 kv-cache-dtype and speculative-draft-kv-cache-dtype (was bfloat16), concurrency 20, 56 and 80 set qsa-indexer-dtype fp8_e4m3, and concurrency 36 and 80 use 2 speculative steps instead of 3."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4787
+
+- config-keys:
+    - dsv41flash-fp4-mi300x-vllm-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Update the DeepSeek-V4.1-Flash FP4 MI300X vLLM AgentX DSpark image from v0.32.0 to v0.33.0."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4793
+
+- config-keys:
+    - dsv41flash-fp4-gb200-sglang-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Update the SGLang image from nightly-dev-cu13-20261025-65633129 to nightly-dev-cu13-20261027-5884e4fe."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4591
+
+- config-keys:
+    - dsv41flash-fp4-h200-sglang-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Update the H200 SGLang image from nightly-dev-cu13-20261013-7224fce1 to nightly-dev-cu13-20261028-586355a8."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4597
+
+- config-keys:
+    - dsv41flash-fp4-b200-sglang-agentic-dspark
+  description:
+    - "Update the SGLang image from nightly-dev-cu13-20261026-8252e3af to nightly-dev-cu13-20261029-c10e0e17."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4635
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - glm5.2-fp4-b200-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update SGLang image from v0.5.22-cu130 to nightly-dev-cu13-20261027-5884e4fe."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4573
+
+- config-keys:
+    - qwen3.8next-fp4-b200-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update to lmsysorg/sglang:v0.5.23-cu130 and set SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE=0."
+    - "Remove TP1/EP1 at concurrency 1 and 4 and replace the search space with TP1/EP1 at concurrency 8, TP2/EP1 at concurrency 8, and TP1/EP1 with HiCache at concurrency 16, 24 and 32; the HiCache points use fp8_e4m3 kv-cache-dtype, and concurrency 16 and 24 use 2 speculative steps instead of 3."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4850
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-tilert-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DeepSeek-V4.1-Flash FP4 AgentX on MI355X with a disaggregated TileRT setup at concurrency 1: one vLLM ROCm prefill (ghcr.io/tile-ai/tilert-rocm-prefill:0.1.7: the validated MI355X DeepSeek-V4.1-Flash vLLM nightly e68efc68 plus the multi-protocol Mooncake build and ionic verbs provider of the TileRT ROCm decode image; TP4, vLLM's Rust front end, CUDA graphs up to 8192-token steps) sends the prompt KV over Mooncake to one TileRT decode (ghcr.io/tile-ai/tilert-rocm-decode:0.1.6 with tilert 0.1.7.post2; TP8, five drafts from the checkpoint's own DSpark head) behind the TileRT PD router, with the full 1M context on both ranks and no context cap on the replay."
+    - "Throughput runs simulate the DeepSeek-V4.1-Flash DSpark golden AL at five drafts (3.51): a TileRT decode now takes its draft method from its model profile, and the dsv41 profile maps to dspark."
+    - "The TileRT router renders the chat template and tokenizes each request itself, so the prefill receives token ids: the model's chat template, adapted to render exactly what the prefill's vLLM deepseek_v41 tokenizer mode renders, ships as configs/dsv41flash-tilert-chat-template.jinja. tilert 0.1.7.post1 lets the router do so on the prefill's node; the prefill's flags match the other DeepSeek-V4.1-Flash configs."
+    - "tilert 0.1.7.post2 cuts the time to first token on long agentic contexts: the router asks the prefill for token ids per request (so the prefill runs vLLM's Rust front end) and reuses the token ids of the conversation prefix it has already rendered; the decode imports only the KV past the prefix it already holds from the previous turn, checked byte for byte against what it received then; the prefill stages the KV for the decode in a few vectorised copies."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4756
+
+- config-keys:
+    - kimik3.1-fp4-mi355x-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump to lmsysorg/sglang-rocm:dev-kimi-k31-pro-mi35x-1105: SGLang kimi-k3.1-day-0-amd with split-K HIP sparse MLA decode/verify, DFLASH fc row-sharding in prefill and MoE small sort up to 1024 pairs; sgl-amd-mono e52803f9d2."
+    - "Concurrency 1 and 4: max-mamba-cache-size 60 -> 150."
+    - "Bump to lmsysorg/sglang:dev-kimi-k31-pro-mi35x (sha256:346a6d83): SGLang #48427 at 64507491d9 with DCP sharing the TP communicators, the latent-MoE tail column-split up to 384 rows, the radix-4 router and ROCm host pools sized against the pinned-memory limit; sgl-amd-mono 25723f1e46."
+    - "Concurrency 48 and 56: 32k prefill chunks every 8 decode steps, 5-token DFLASH verify, MoE front and residual stream on row shards in prefill (SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_ROUTED_FRONT, SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_STREAM), fused DFLASH ring locations."
+    - "Add concurrency 56."
+    - "Concurrency 8 to 56: SGLANG_HICACHE_MAMBA_HOST_RATIO 12 -> 10; the image's larger device pools grew the pinned host pools past the node's GTT (hipHostMalloc failed at concurrency 32)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4846
+
+- config-keys:
+    - glm5.3flash-fp8-b300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Tune B300 GLM-5.3-Flash FP8 GPU-resident AgentX with TP4, prefill-decode interval 1, 16K prefill chunks, a two-state Mamba path cap, and Mamba/full memory ratio 0.5."
+    - "Enable ReplaySSM speculative verification, cap server admission and decode graphs at 32, and pin breakable prefill graphs to 8192 tokens with static memory fraction 0.9."
+    - "Add GPU-resident client concurrency 64 while preserving the TP8 HiCache points, full AgentX workload, measured MTP acceptance, and simulation-off accuracy evaluation."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4902
+
+- config-keys:
+    - musespark-fp4-mi355x-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump to lmsysorg/sglang-rocm:muse-spark-open-mi355-1106."
+    - "Concurrency 6, 10 and 28: TP8/EP8 with GPU-only KV; 28, 36 and 40: TP4/EP4 with a 310 GB-per-rank HiCache DRAM tier."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4881
+
+- config-keys:
+    - kimik3.1-fp4-mi355x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "The image stays vllm/vllm-openai-rocm:kimi-k31@sha256:5f47cc1004d9a7ac65f8a913725edb20c62c99a07e31cbf4ba21741bd0b4f9b1 (vLLM 0.0.0+mum.14d1ec2336)."
+    - "Concurrency 1 moves from TP8 x DCP8 to TP8 x DCP1 (master config dcp-size 8 -> 1; the recipe's c1 override drops decode-context-parallel-size, dcp-comm-backend and cp-kv-cache-interleave-size). It keeps GPU-resident KV, 7 draft tokens and the latency_specialized decode backend. Concurrency 4-48 stay TP8 x DCP8 with DRAM offload."
+    - "Concurrency 4: DSpark draft tokens 5 -> 7, so throughput runs use golden acceptance length 3.69 instead of 3.41. The decode capture sizes change from 6, 12 to 8, 16 to match max-num-seqs 2 x (1 + 7)."
+    - "max-num-seqs at concurrency 10/16/24/32 changes from 6/10/16/24 to 7/8/13/20. Concurrency 10 adds capture size 42 (7 x (1 + 5)). Otherwise the draft lengths, capture lists, max-num-batched-tokens and gpu-memory-utilization at these points, and every setting at concurrency 48, are unchanged."
+    - "No change to the DSpark draft's precision: Inferact/Kimi-K3.1-Pro-DSpark-preview (revision 6a2ef20a) ships all-BF16 weights with no quantization_config, the speculative config names the draft and sets no quantization, so get_draft_quant_config() returns None and K3DSparkModel loads its layers in BF16 with the target's BF16 embedding and LM head. Its KV cache stays FP8, the same as the target's. DCP1 at concurrency 1 and 7 draft tokens at concurrency 4 do not change these types."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4887
+
+- config-keys:
+    - h3-bf16-b200-sglang-video
+    - h3-bf16-h100-sglang-video
+    - h3-bf16-h200-sglang-video
+    - h3-bf16-mi355x-sglang-video
+  scenario-type: [video-generation]
+  description:
+    - "The H3 client polls job status every 0.1 s instead of every 0.5 s. A job counts as done only at the next poll, so each published latency carried up to 0.5 s of polling delay; it now carries up to 0.1 s."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4904
+
+- config-keys:
+    - kimik3.1-fp4-gb200-vllm-agentic-dspark-tp8pp2-agg
+    - kimik3.1-fp4-gb200-vllm-agentic-dspark-tp16-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Re-sweep Kimi-K3.1-Pro GB200 vLLM AgentX with the updated DSpark draft (Inferact/Kimi-K3.1-Pro-DSpark-preview @ 6a2ef20a) and the #4851 golden curve, so throughput forces AL 3.41 at 5 draft tokens and 3.19 at 4."
+    - "Set VLLM_HTTP_TIMEOUT_KEEP_ALIVE to 600 s on the aggregated server so AIPerf's reused session connections outlive uvicorn's 5 s idle timeout."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4864
+
+- config-keys:
+    - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
+  description:
+    - "Rerun the unchanged FP8 config to collect GPU power, because its published curve (2026-10-21) predates default-on multinode power collection and carries no valid power."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4413
+  scenario-type: [agentic-coding]
+
+- config-keys:
+  - qwen3.5-fp4-b200-sglang-agentic-mtp
+  description:
+  - "Serve nvidia/Qwen3.5-397B-A17B-NVFP4-V2: the original nvidia/Qwen3.5-397B-A17B-NVFP4 directory was removed from the B200 node-local model volume on 2026-10-13 at NVIDIA SRE's request, so the key failed at srtctl startup with Model path does not exist."
+  - "Run on lmsysorg/sglang:v0.5.19-cu130: v0.5.16 loads the V2 checkpoint but hangs while capturing the target prefill CUDA graph at 16384 tokens (sweep 38618495491 canary, 2 h health timeout)."
+  - "Keep the deployment topology, speculative mode, concurrency points and evaluation coverage unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4066
+
+- config-keys:
+    - glm5.3-fp8-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GLM-5.3 FP8 MI355X SGLang AgentX: TP8 EP1, EAGLE MTP 3-1-4, FP8 E4M3 KV cache, and the AMD monokernel (--enable-amd-monokernel) at concurrency 1, 2, 4, and 10."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4875
+
+- config-keys:
+    - dsv41flash-fp4-b200-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the SGLang image from nightly-dev-cu13-20261029-c10e0e17 to nightly-dev-cu13-20261107-e45e1d0c."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4906
+
+- config-keys:
+    - dsv41flash-fp4-h200-vllm-agentic-dspark
+  description:
+    - "Update the vLLM image from v0.32.0 to v0.33.0."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4879
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - qwen3.8next-fp8-h200-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump SGLang image from v0.5.22-cu130 to v0.5.23-cu130."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4888
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp8-c1
+  scenario-type: [agentic-coding]
+  description:
+    - "Update the vLLM ROCm image of both keys to nightly-4fab5a07475822c6eaa971dceb2e2220d0446808."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4876
+
+- config-keys:
+    - dsv41flash-fp4-gb200-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update vLLM image from cu134-nightly-40941f2c to cu134-nightly-1648fefa."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4897
+
+- config-keys:
+    - kimik3.1-fp4-gb200-dynamo-sglang-agentic-dflash-disagg
+  scenario-type: [agentic-coding]
+  description:
+    - "Add 1P1D TP16 DCP16 points at conc 64, 76 and 96 with an EP16 decode on DeepGEMM MegaMoE (MXFP8 dispatch, BF16 combine), 96 max running requests, CUDA graphs up to batch 96 and 8 draft tokens. Their prefill uses page size 64 and 8 draft tokens. The image and the existing c16, c32 and c48 points are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4929
+  append-only: true
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the MI355X Qwen3.5 FP8 AgentX image from lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260929 to lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261020 (amd64 digest sha256:3a75c91365cc4f4e1194bf5d64b92f2f1ef134d8b9045da165fba28a8dada464)."
+    - "Switch every HiCache override on this arm from hicache-write-policy write_through_selective to write_through. GPU-resident points and HiCache sizes stay the same."
+    - "At concurrency 80 the overall prefix cache hit rate is flat: 93.5% of prompt tokens on the previous image and policy (run 36743632401) against 94.0% here (run 39763900198). What moves is the tier split -- the HiCache host tier serves 49.1% of prompt tokens instead of 43.3%, and the GPU tier 44.9% instead of 50.2%. Per-GPU throughput goes from 59,233 to 60,839 tok/s (+2.7%), p90 end-to-end latency from 50.9 s to 47.9 s, and mean TTFT from 3.12 s to 2.68 s."
+    - "That concurrency 80 comparison is not a single-variable A/B: the 36743632401 baseline ran hicache-size 400 on lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260929, while this point runs hicache-size 374 on the v0.5.22 image, so the image, the write policy and the host pool size all differ."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4374
+
+- config-keys:
+    - h3-bf16-b200-vllm-omni-video
+  scenario-type: [video-generation]
+  description:
+    - "Add vLLM-Omni v0.32.0, pinned by its linux/amd64 digest, on the B200 H3 workload SGLang runs (h3-v2.yaml release-v1, C1) on 1, 2, 4 and 8 GPUs: Ulysses across all GPUs with text-encoder TP and tiled VAE patch parallelism of the same degree, with the prompt-embedding cache and cross-request AdaLN projection reuse disabled."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4874
+
+- config-keys:
+    - qwen3.8next-fp4-gb300-tokenspeed-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update to the TokenSpeed daily wheels tokenspeed 0.1.1.post20261108 and CUDA 13 ARM64 kernel 0.1.4.post20261108, built from lightseekorg/tokenspeed@a5a298c293849cd097c50224bb3ae4ee725e68cf, and engine 0.1.0.post20261108, built from lightseekorg/tokenspeed@c5bb19ef15e862561bfbb562932571fd10f75b62 (no tokenspeed-engine changes between the two), all pinned by SHA256; tokenspeed-scheduler 0.1.50 from PyPI; FlashInfer 0.7.3 caches; and the cu130-torch-2.14.0-flashinfer-0.7.3 runner image by digest."
+    - "kv-cache-dtype bfloat16 -> fp8_e4m3 for the target and the embedded MTP draft. hf-overrides drop index_share_for_mtp_iteration."
+    - "Turn on prefill CUDA graphs up to 8192 tokens (drop --disable-prefill-graph) including the drafter's (--enable-drafter-prefill-graph); enable --enable-qsa-prefill-bf16-scratch and --checkpoint-retention-requests 0; set the TOKENSPEED_KERNEL_OVERRIDE_ATTENTION_QSA_SPARSE_ATTENTION=cute_dsl_blackwell_qsa_sparse_attention environment variable."
+    - "Use gpu-memory-utilization 0.95 with --disable-cudagraph-memory-reserve, a 236 GB Host L2 with a 4 GB retraction snapshot pool, and smg with the gateway settings ts serve applies (passthrough policy, L0/L1 tokenizer caches, warn logging, no retries, circuit breaker or load monitoring)."
+    - "Replace the search space with per-concurrency rows in agg-variants.yaml: concurrency 1, 2, 4 and 108 with 104 request slots, and running caps of 2, 6, 12, 35 and 72 requests at concurrency 8, 20, 36, 56 and 80."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4922
+
+- config-keys:
+    - kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-disagg
+    - kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-agg-mk
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Retune the Kimi-K3.1-Pro GB300 Dynamo+SGLang AgentX search space on the same lmsysorg/sglang:dev-kimi-k31-pro image and RadixArk/Kimi-K3.1-Dflash2-Preview DFLASH draft."
+    - "TP16-decode rows (TP8/DCP8 prefill, one TP16 DCP8 x attention DP2 EP16 MegaMoE decode worker): 4P1D c520 and 3P1D c340 verify 5 tokens with a 132 GB per-rank prefill HiCache; 2P1D c180 verifies 6 tokens; 1P1D c60 verifies 8."
+    - "TP8-decode rows: 1P3D c50 verifies 8 tokens; 1P4D c36 and c16 verify 9."
+    - "Aggregated megakernel rows: c2 with max-running-requests 1; c4 with max-running-requests 2 and K31MK_* megakernel schedule options."
+    - "Remove 3P1D c300, 1P1D c76, 1P3D c60 and c36, 1P4D c32 and the c1 megakernel row."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4893
+
+- config-keys:
+    - musespark-fp4-gb300-dynamo-sglang-agentic-dflash-agg
+    - musespark-fp4-gb300-dynamo-sglang-agentic-dflash-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Run the GB300 Muse Spark Open Dynamo + SGLang points on lmsysorg/sglang:nightly-dev-cu13-20261103-797af717 (digest sha256:b4323a896f349d43a267c419c0267538b06c64a73110a0d0fd87496234df5dcd) with the ai-dynamo 1.7.0.dev20261102 it ships (dynamo.install: false)."
+    - "Aggregated: add musespark-fp4-gb300-dynamo-sglang-agentic-dflash-agg with TP4 at c46, c50 and c56 (140 GB per-rank HiCache, 0.80 DRAM utilization) and two-node TP8 at c1 and c36."
+    - "Disaggregated: add musespark-fp4-gb300-dynamo-sglang-agentic-dflash-disagg with TP8 prefill and TP8 decode workers: 1P2D at c160 and c224, 1P3D at c224, 1P4D at c32, c56 and c112, 1P5D at c120, 2P3D at c352 and 3P4D at c672. Mooncake KV transfer and prefill HiCache (150 GB per rank, 0.80 DRAM utilization)."
+    - "Remove musespark-fp4-gb300-dynamo-sglang-agentic-dflash (TP4 c8, c16, c20, c32 and c40 and TP8 c3, c4, c10 and c14 on the dev-muse-spark-open image)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4757
+
+- config-keys:
+    - kimik3.1-fp4-mi355x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the MI355X Kimi-K3.1 vLLM AgentX image from vllm/vllm-openai-rocm:kimi-k31 (sha256:5f47cc10) to vllm/vllm-openai-rocm:kimi-k31-d73dd529 (sha256:5b54f223). The vLLM build string (0.0.0+mum.14d1ec2336), AITER and torch are unchanged; the new image adds a DSA attention path to the Kimi-K3.1 specialized decode used at concurrency 1."
+    - "Concurrency 48 moves from 3 to 6 DSpark draft tokens, with decode CUDA graph sizes 7 to 336 in steps of 7, max-num-batched-tokens 10240, prefill-schedule-interval 8 and an adaptive long-prefill-token-threshold of 10240. At max-num-batched-tokens 10240 the threshold does not cap any chunk."
+    - "Concurrency 32 adds prefill-schedule-interval 8 and an adaptive long-prefill-token-threshold of 10240 on its existing max-num-batched-tokens 10240, keeping 3 draft tokens and max-num-seqs 20."
+    - "Drop the concurrency 10 point. Concurrencies 1, 4, 16 and 24 keep their settings."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4948
+
+- config-keys:
+    - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dep16-disagg
+    - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update Kimi-K3.1-Pro GB300 Dynamo+vLLM AgentX configs: aggregated TP16/DCP16 c1 and DEP16 c352 on image 5c243ce0 (explicit KV cache and block size at c352), 2P1D c192; drop c48, c64, c80 and c300."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4907
+
+- config-keys:
+    - dsv41flash-fp4-b300-vllm-agentic-dspark
+  description:
+    - "Update the B300 DeepSeek-V4.1-Flash vLLM AgentX image from vllm/vllm-openai:cu134-nightly-x86_64-dev-20261019-mk to the vLLM main nightly vllm/vllm-openai:cu134-nightly-a2bcb5657a881a002e79d0adab3c6b5e39436121 (main a2bcb565, pinned to index sha256:76a533475156ffdb3656ccc389d0c71f5cec16897c0f490ac43e4f379c4b4f0d; amd64 sha256:a7192cc1adb903c9052ae91d197ef37d13b2e94e6a5d06687e8a29eecad486db) and replace the search space with fourteen single-node points. Every point sets gpu-memory-utilization 0.93 and runs five-token DSpark with adaptive verification off."
+    - "TP4 with the DeepSeek-V4.1 latency-specialized decode executor (additional-config decode_backend latency_specialized, FlashInfer sparse MLA, THP Engram host tables) behind vLLM's own frontend at concurrency 1 (max-num-seqs 1, prefill-schedule-interval 1), 4 (max-num-seqs 8, max-num-active-seqs 1, prefill-schedule-interval 16), 10 (max-num-seqs 16, max-num-active-seqs 2, prefill-schedule-interval 96) and 16, 24, 32 and 48 (max-num-seqs 64, max-num-active-seqs 3, 4, 6 and 8, prefill-schedule-interval 96 except 64 at concurrency 48)."
+    - "DEP8 (TP1 x DP8 + EP8, DeepGEMM MegaMoE, FlashMLA mega-attention with sparse-MLA prefill workspace factor 4, deep_select top-k, Engram tables on the GPU shared across DP ranks, prefill-schedule-interval 96, NUMA binding) behind the consistent-hash vLLM Router at concurrency 224 and 256 (16 GiB KV pool), 384 (32 GiB), 544 (80 GiB), 768 (64 GiB), 1024 (96 GiB, max-num-seqs 160) and 1280 (112 GiB, max-num-seqs 192), max-num-seqs 128 otherwise, each with a 65536-token prefill budget and long-prefill-token-threshold 8192. Removes TP4 at concurrency 8, DEP2 at concurrency 8-64 and the DEP2 CPU KV offload points at concurrency 128 and 192."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4842
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-gb300-vllm-agentic-dspark
+  description:
+    - "Update the GB300 DeepSeek-V4.1-Flash vLLM AgentX image from vllm/vllm-openai:nightly-00b6c4c565a8732c131e1f452d4a17803bb0842b to the vLLM main nightly vllm/vllm-openai:cu134-nightly-a2bcb5657a881a002e79d0adab3c6b5e39436121 (main a2bcb565, pinned to index sha256:76a533475156ffdb3656ccc389d0c71f5cec16897c0f490ac43e4f379c4b4f0d; arm64 sha256:24541db891c590e3a4022c7206c3ebb00e4be35442f54c20f2edf12eddfef4bf) and replace the search space with seventeen single-node points. Every point sets gpu-memory-utilization 0.93 and runs five-token DSpark with adaptive verification off."
+    - "TP4 with the DeepSeek-V4.1 latency-specialized decode executor (additional-config decode_backend latency_specialized, FlashInfer sparse MLA, THP Engram host tables) behind vLLM's own frontend at concurrency 1 (max-num-seqs 1, prefill-schedule-interval 1), 4 (max-num-seqs 8, max-num-active-seqs 1, prefill-schedule-interval 16), 10 (max-num-seqs 16, max-num-active-seqs 2, prefill-schedule-interval 96) and 16, 24, 32 and 48 (max-num-seqs 64, max-num-active-seqs 3, 4, 6 and 8, prefill-schedule-interval 96)."
+    - "DEP4 (TP1 x DP4 + EP4, DeepGEMM MegaMoE, FlashMLA mega-attention with sparse-MLA prefill workspace factor 4, deep_select top-k, Engram host tables shared across DP ranks, prefill-schedule-interval 96, NUMA binding) behind the consistent-hash vLLM Router at concurrency 136 (24 GiB KV pool), 170 (28 GiB), 200 (32 GiB), 256 (40 GiB), 320 (48 GiB), 384 (56 GiB), 512 (72 GiB, max-num-seqs 192), 640 (96 GiB, max-num-seqs 224), 768 (112 GiB, max-num-seqs 256) and 1024 (128 GiB, max-num-seqs 320), max-num-seqs 128 otherwise, each with a 65536-token prefill budget and long-prefill-token-threshold 8192. Removes TP4 at concurrency 8 and DEP2 at concurrency 8-192."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4844
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - kimik3.1-fp4-b200-dynamo-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Replace the TP16/DCP16 aggregated curve that SGLang served directly with a TP16 EP4 DCP8 aggregated curve behind a Dynamo KV-router frontend at concurrency 1, 2, 4, 12, 16, 20, 24 and 28, on the same image. The eleven TP16/DCP16 points are removed, and agg-variants.yaml now holds only the new design."
+    - "The points use MSCCL++ all-reduce over the cluster's RDMA HCAs, DCP push-combine, a 32 MiB custom all-reduce buffer, one mamba state per path and Run:ai streamer loading. DFLASH verifies 8 tokens through concurrency 16, 6 at concurrency 20 and 24, and 5 at concurrency 28. max-running-requests equals the CUDA-graph limit: 8 through concurrency 4, 18 at concurrency 12 and 16, 24 at concurrency 20 and 24, and 28 at concurrency 28, so even a full batch keeps MSCCL++ verify all-reduces within 146 tokens per step."
+    - "The points keep FP32 KDA recurrent state, FP8 KV, DFLASH block verification and the committed golden acceptance curve, with no KV offload."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4964
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
+    - minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg
+  description:
+    - "Move to the GB200 P/D recipe and image of #4865 (vllm/vllm-openai:cu134-arm64-1107-mdev, Mooncake 0.3.13.post1+hbm): vLLM engines behind Dynamo sidecars (TCP request plane, ZMQ event plane, no NATS, no setup script), KV routing without KV events or busy thresholds at temperature 0 with prefill to the least-loaded worker and soft session affinity on decode, the auto-sized Mooncake HBM pool on prefill, decode EPLB, and at most 64 in-flight async KV loads with 4 new per step."
+    - "Keep the GB300 Mooncake DRAM segment (180GB) and cpus-per-task (144). gpu-memory-utilization 0.85 -> 0.90 on prefill and 0.95 -> 0.92 on decode. max-num-seqs per decode DP rank is set per point (5 to 22, max-cudagraph-capture-size = 8 x max-num-seqs)."
+    - "Prefill moves from DEP2 to DEP4 workers. Points: 1 DEP4 prefill + DEP16 decode at conc 200 (max-num-seqs 5), 3 DEP4 prefill + DEP16 decode at conc 500 (10) and 600 (14), 4 DEP4 prefill + DEP16 decode at conc 800 (20), and 5 DEP4 prefill + DEP16 decode at conc 800 (22). Drop 6 DEP2 prefill + DEP8 decode at conc 280, 320, 360 and 400, and 6 DEP2 prefill + DEP16 decode at conc 300 and 360."
+    - "Aggregated TP4: the same image, with the engine behind a Dynamo sidecar (TCP request plane, ZMQ event plane, no NATS) that parses tools and reasoning. Engine settings are unchanged; only concurrency 1 and 16 remain, and concurrency 4, 8, 32, 40, 48 and 56 are dropped."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4967
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image from v0.32.0 to nightly-rocm100-edad8b03c5285a1c12e7e4f83c1af709b319a01b (digest sha256:009169c114af5b15e25eddc808afb3c1fc3f12c94e746472b16f39fcf39cd716), the 2026-10-28 ROCm 10.0 nightly. It contains vllm-project/vllm#60731 (gfx942 mono decode), its fix #63576 and #59039."
+    - "Add --monokernel to the six TP4 points. vllm-project/vllm#60731 runs each backbone layer of a decode step as two persistent launches on gfx942, and the FFN of the three DSpark draft layers as one launch, for steps of up to 42 rows, i.e. concurrency 1-7 with five DSpark drafts. Larger steps take the regular path. The gfx942 kernels build for TP4 only, so TP2 and TP8 stay without it and change only by the image. The vLLM recipe turns it on for MI325X TP4 in vllm-project/vllm#62713."
+    - "Remove --no-swa-bounded-replay, which turns on decoder SWA bounded replay from vllm-project/vllm#59039 at every point: in eager prefill steps, layer 20 (the last KV source layer) writes its KV for every token, and the rest of layer 20 and layers 21-39 run on each request's last 128 tokens only. Prefix-cache SWA replay, the path whose missing window clamp the flag worked around, stays off: vLLM still forces it off on ROCm."
+    - "Adaptive DSpark verification stays off. With --monokernel on gfx942 the server faults during its CUDA graph profile until vllm-project/vllm#63816 merges."
+    - "No point changes: concurrency 1, 2, 4, 8, 16 and 32 on TP8, TP4 and TP2 (18 points), all re-measured on the new image."
+    - "DSpark draft: vLLM builds it with the checkpoint's own quantization config and the target's fp8_ds_mla KV cache, and its weights are used as shipped (FP8 E4M3 with UE8M0 block scales, MXFP4 routed experts). On the TP4 points --monokernel also runs the routed-expert FFN of the three draft layers as one launch. That launch quantizes the FFN input to MXFP8 against the same MXFP4 expert weights, as it does for the target layers, where vLLM's gfx942 MoE multiplies bf16 activations with them. The draft weights, its KV cache and its attention are unchanged, and the target model's output does not depend on this launch, only how many drafts it accepts."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4617
+
+- config-keys:
+    - minimaxm31flash-fp4-mi355x-vllm-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Image vllm/vllm-openai-rocm:minimax-m31-flash (vLLM 0.32.0rc1.dev364+g8d0f05a0c) -> nightly-4fab5a07475822c6eaa971dceb2e2220d0446808 (vLLM main of 2026-11-05), pinned by digest. It carries the MiniMax-M3.1 ROCm work merged since: decode CP (#64448), qkv input-norm quant fusion (#63637), four-wave decode top-k (#65087), local DSpark 7 indexer scoring below 3 requests (#65432), FFN-side MXFP8 quant fusion (#65478), sparse-decode splits per XCD (#65481), MXFP8 GEMM tile retune for M=17-256 (#65530), DSpark drafter monokernel (#65386) and opt-in parallel top-k (#65267)."
+    - "New env at every point: VLLM_ROCM_MINIMAX_M3_MONO_DRAFTER=1 (fused FlyDSL DSpark 7 draft steps of up to 10 requests; the c64 3-token draft keeps the stock layers), VLLM_ROCM_PARALLEL_INDEX_TOPK=1 (NVFP4 indexer points; the FP8 indexer of c1-c8 bypasses it), VLLM_USE_RUST_FRONTEND=1 and VLLM_ROCM_USE_SKINNY_GEMM=0 (removes the draft LM head's 5-request skinny-GEMM cliff)."
+    - "C16/C32: breakable CUDA graphs (VLLM_USE_BREAKABLE_CUDAGRAPH=1, FULL_AND_PIECEWISE with a multiple-of-8 capture list up to 256, then 384-8192). INT4 quick all-reduce stays off: the image's AITER lacks the QuickAllReduceInt4.compile that vLLM's FlyDSL INT4 path calls, so workers fail at startup. DBO is removed from C16/C32/C64 (C1-C8 already ran without it); the 32768-token prefill budget, max-num-seqs and memory utilization are unchanged."
+    - "C1-C8 (DSpark 7, mono decode, FP8 KV and indexer caches) and C64 (DSpark 3, NVFP4 KV, CPU KV offload) keep their speculative, KV and offload settings."
+    - "Draft data types unchanged: the dspark/ draft keeps its MXFP8 config (FP8 E4M3 projections with 1x32 UE8M0 scales; BF16 fc, Markov and confidence heads, norms) and an FP8 draft KV cache. The drafter kernels replace the draft layers' MXFP8 linear, norm and attention ops, and vLLM's tests/models/minimax_m3/test_dspark_drafter.py holds them to the stock layers' own numerical spread."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4866
+
+- config-keys:
+    - dsv41flash-fp4-gb200-vllm-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Update vLLM image from cu134-nightly-1648fefa to cu134-nightly-cf5cea2d."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4951
+
+- config-keys:
+    - dsv41flash-fp4-b300-sglang-agentic-dspark
+    - dsv41flash-fp4-b300-sglang-agentic-dspark-lowconc
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update SGLang image to lmsysorg/sglang:nightly-dev-cu13-20261107-e45e1d0c."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4900
+
+- config-keys:
+    - glm5.2-fp8-mi325x-sglang-agentic-mtp
+  description:
+    - "Update the SGLang ROCm image from v0.5.22 to v0.5.23, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4870
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp
+  description:
+    - "Update the TensorRT-LLM image from 1.3.0rc28.dev202609210001 to 1.4.0rc2."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4626
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - kimik3.1-fp4-mi355x-sglang-agentic-dflash
+    - kimik3.1-fp4-mi355x-sglang-agentic-dflash-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Image lmsysorg/sglang:dev-kimi-k31-pro-mi35x@sha256:5901db14 (was sha256:346a6d83)."
+    - "Single-node: prefill every 32 decode steps at concurrency 8 to 56 (was 16, and 8 at 48 and 56)."
+    - "Single-node: cap running requests at 1, 6, 8 and 20 at concurrency 1, 8, 16 and 32 (was 4, 8, 16 and 32); verify 8 tokens at concurrency 1 and 4 and 5 tokens at 16 and 32 (was 6)."
+    - "Single-node: row-sharded prefill MoE and residual stream and fused DFLASH ring locations at every concurrency (was 48 and 56 only); add concurrency 24 with 13 running requests and 5-token verify."
+    - "Add 1P1D PD at concurrency 128 and 144: TP8 DCP8 prefill and decode, KV over Mooncake RDMA, prefill HiCache."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4928
+
+- config-keys:
+    - dsv41flash-fp4-gb300-tilert-agentic-dspark-tp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add TileRT on GB300 NVL72 for DeepSeek-V4.1-Flash FP4 AgentX at concurrency 1: one vLLM prefill (TP4, vllm/vllm-openai:nightly-00b6c4c5 by digest) sends the prompt KV over NVLink to one TileRT decode, at TP8 (two trays) and at 24 GPUs (three TP8 groups, six trays). The decode runs tilert 0.1.8 from PyPI on the CUDA 13.2 runtime image by digest; the TileRT router runs on the prefill's node in the prefill image and tokenizes with vLLM's DeepSeek-V4.1 tokenizer mode."
+    - "DSpark with five drafts at the golden simulated acceptance 3.51; the public decode masks tool-call tokens and the prefill runs without a tool-call parser."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4979
+
+- config-keys:
+    - glm5.2-fp4-mi355x-atom-disagg-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GLM-5.2 MXFP4 on MI355X with ATOM prefill/decode disaggregation behind AToMesh, Mooncake RDMA transfer and MTP, on rocm/atom-dev:nightly_202611110332 (ATOM 920a200a3, Mooncake 206d634), pinned by digest."
+    - "Every point has one PP4 x TP1 prefill (layers 20/20/20/18) with a Mooncake Store prefix tier in DRAM: 1P1D with a colocated TP4 DCP4 decode at concurrency 56, 72, 96, 112 and 128; 1P2D with two TP4 DCP4 decodes at 56; 1P3D with three TP4 decodes at 12, 16 and 24."
+    - "MTP draft length 3 for 1P1D, 4 for 1P2D and 5 for 1P3D. 1P1D shares one Store pool (2 x 768 GiB owners); 1P2D and 1P3D use a pool per prefill NIC (4 x 349 GiB) and cache-aware routing. dram-utilization is 1.0."
+    - "Mooncake 206d634 includes kvcache-ai/Mooncake#5151: the RDMA Store owners back their segments with THP through madvise, so no hugepages are reserved."
+    - "Weights run as shipped in amd/GLM-5.2-MXFP4: MXFP4 routed and shared experts in layers 3-77, BF16 elsewhere, with no online quantization flag. ATOM's default MLA absorb runs the kv_b_proj up-projections as FP8 batched GEMMs. All-reduce is BF16 (AITER quick reduce unset, default NONE) and the KV and indexer caches are FP8."
+    - "No change to the MTP draft (model.layers.78): it is stored in BF16, including its routed and shared experts, and is served through the image defaults with no draft override, so its kv_b_proj takes the same FP8 MLA absorb as the target and it shares the target's FP8 KV and indexer caches."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4045
+
+- config-keys:
+    - musespark-fp4-mi355x-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Lower the TP8 concurrency 6 stream interval from 128 to 50 and rerun every point on the same lmsysorg/sglang-rocm:muse-spark-open-mi355-1106 image; the rest of the recipe and the search space are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4983
+
+- config-keys:
     - minimaxm31flash-fp4-gb200-dynamo-sglang-agentic-dspark-agg
     - minimaxm31flash-fp4-gb200-dynamo-sglang-agentic-dspark-disagg
   scenario-type: [agentic-coding]

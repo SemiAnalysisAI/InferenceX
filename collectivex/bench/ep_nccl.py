@@ -50,7 +50,7 @@ from importlib import metadata
 import torch
 import torch.distributed as dist
 
-from ep_backend import EPBackend
+from ep_backend import EPBackend, blockwise_fp8_codec
 
 try:
     import nccl.core as nccl_core
@@ -104,6 +104,9 @@ def _resolve_num_sms(default: int, device_sms: int, env: dict) -> dict:
     return budgets
 
 
+_QUANTIZE, _ = blockwise_fp8_codec(torch.float8_e4m3fn, 448.0)
+
+
 def _blockwise_cast_to_fp8(x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     """Untimed oracle reference for native DS per-128-channel quantization."""
     if x.dim() != 2 or x.size(1) % _FP8_BLOCK_SIZE:
@@ -111,11 +114,7 @@ def _blockwise_cast_to_fp8(x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]
             "NCCL EP FP8 requires a 2D hidden dimension divisible by "
             f"{_FP8_BLOCK_SIZE}, got {tuple(x.shape)}"
         )
-    rows, hidden = x.shape
-    blocks = x.view(rows, -1, _FP8_BLOCK_SIZE)
-    amax = blocks.abs().float().amax(dim=2).clamp(1e-4)
-    values = (blocks * (448.0 / amax.unsqueeze(2))).to(torch.float8_e4m3fn)
-    return values.view(rows, hidden), (amax / 448.0).view(rows, -1)
+    return _QUANTIZE(x)
 
 
 def _blockwise_cast_back_into(
@@ -193,14 +192,11 @@ class NCCLEPBackend(EPBackend):
         # fails (error 5); present -> device_api_support=True and HT+LL groups create.
         os.environ.setdefault("NCCL_CUMEM_ENABLE", "1")
         self.group = dist.group.WORLD
-        self.experts_per_rank = args.experts // world_size
         self.num_local_experts = self.experts_per_rank
         self._internode = world_size > int(args.scale_up_domain)
         self._ll = self.mode == "low-latency"
-        self._fp8 = getattr(self, "precision", "bf16") == "fp8"
         if self._fp8 and not self._ll:
             raise ValueError("NCCL EP FP8 is enabled for low-latency mode only")
-        self.stage_device_work = self._fp8
         # LL layout: rank-major (TensorRT-LLM's NCCL EP contract, the default) or expert-major
         # (DeepEP LL's contract, as vLLM/SGLang decode consume it). Both are native LL layouts.
         layout = os.environ.get("COLLX_NCCL_LL_LAYOUT", "rank-major")
@@ -260,7 +256,8 @@ class NCCLEPBackend(EPBackend):
             self.dispatch_dtype = "fp8-e4m3fn"
             self.dispatch_value_bytes = 1
             self.dispatch_scale_bytes_per_copy = (args.hidden // _FP8_BLOCK_SIZE) * 4
-            self._dequant_into = self.fused_quantize(_blockwise_cast_back_into)
+            # Compiled in both modes: production fuses the dequant, and nothing gates its bits.
+            self._dequant_into = self.compiled(_blockwise_cast_back_into, torch)
         # NCCL EP's handle is explicitly reusable across dispatch/combine cycles (ep_test.py
         # cached mode redispatches and recombines on one handle), so — unlike DeepEP's legacy
         # low-latency Buffer — no timed component needs a fresh dispatch or a draining combine;
@@ -359,8 +356,6 @@ class NCCLEPBackend(EPBackend):
     def create_buffer(self, spec):
         """Bootstrap the communicator, create the EP group sized from the ladder maximum, and
         allocate the persistent receive/combine buffers reused across every ladder shape."""
-        # Unit tests construct a deliberately partial adapter without __init__.
-        self._fp8 = getattr(self, "_fp8", False)
         # Token capacity is the largest step the ladder runs. LL follows TensorRT-LLM, which sizes
         # its one NcclEP group to min(max_num_tokens, moe_max_num_tokens) (nccl_ep.py:98-103) and
         # rejects any step above it (124-129): the smallest such engine serving every rung has
@@ -526,7 +521,6 @@ class NCCLEPBackend(EPBackend):
         the oracle passes), never inside a timed window. Re-entering with the already-bound
         problem returns immediately without a collective or a sync.
         """
-        self._fp8 = getattr(self, "_fp8", False)
         cached = getattr(p, "_nccl", None)
         if cached is not None:
             if self._bound is not cached:

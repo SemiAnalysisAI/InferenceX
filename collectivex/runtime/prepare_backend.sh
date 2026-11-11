@@ -191,19 +191,21 @@ deepep_cache_root() {
 deepep_ready() { [ -f "$1/.ready" ] && [ -x "$1/venv/bin/python" ] && [ -d "$1/source" ]; }
 
 # Runtime images (vLLM's) ship a trimmed CUDA toolkit without the cuSPARSE and similar headers that
-# torch's ATen/cuda headers include, which the extension build needs. The venv's torch already
-# pulled the matching CUDA wheels, so link only the headers the toolkit lacks into
+# torch's ATen/cuda headers include, which the extension build needs. The torch the venv sees
+# (its own, or the image's) carries the matching CUDA wheels, so link only the headers the toolkit lacks into
 # <root>/cuda-include: nothing shadows the toolkit's own headers, and full-toolkit images leave
 # the directory empty.
 deepep_cuda_header_overlay() {
   local root="$1" cuda_home="$2" overlay="$1/cuda-include" wheel_include header
   mkdir -p "$overlay" || return 1
-  for wheel_include in "$root"/venv/lib/python*/site-packages/nvidia/cu13/include; do
+  local nvidia_dir
+  while IFS= read -r nvidia_dir; do
+    wheel_include="$nvidia_dir/cu13/include"
     [ -d "$wheel_include" ] || continue
     for header in "$wheel_include"/*.h; do
       [ -e "$cuda_home/include/${header##*/}" ] || ln -sfn "$header" "$overlay/" || return 1
     done
-  done
+  done < <("$root/venv/bin/python" -c 'import nvidia; print("\n".join(nvidia.__path__))')
 }
 
 deepep_activate() {
@@ -244,8 +246,7 @@ deepep_activate() {
     LD_LIBRARY_PATH="$overlay/lib:$nccl_root/lib:$nvshmem_package/lib:${LD_LIBRARY_PATH:-}" \
     LIBRARY_PATH="$nccl_root/lib${LIBRARY_PATH:+:$LIBRARY_PATH}"
   # LIBRARY_PATH: DeepEP links -l:libnccl.so.2 with only an rpath to the wheel, so the link step
-  # needs the wheel's lib directory on the search path. Images with a system NCCL (SGLang's)
-  # resolved it from /usr/lib; vLLM's image has NCCL only as a pip wheel.
+  # needs the wheel's lib directory on the search path: vLLM's image has NCCL only as a pip wheel.
   unset "${DEEPEP_RANK_UNSETS[@]}"
 
   # Shared JIT caches race across nodes; keep this cache node-local. CUMEM is
@@ -261,8 +262,15 @@ deepep_activate() {
 deepep_probe() {
   "$VIRTUAL_ENV/bin/python" - <<'PY'
 import inspect
+import os
 import deep_ep
+from importlib import metadata
 assert inspect.isclass(deep_ep.ElasticBuffer)
+# The vLLM image also ships a deep_ep with ElasticBuffer; the venv's build must be the one loaded.
+assert os.path.realpath(deep_ep.__file__).startswith(os.path.realpath(os.environ["VIRTUAL_ENV"]) + os.sep), deep_ep.__file__
+# ElasticBuffer needs NCCL >= 2.30.4 at build and run time, whichever site-packages supplies it.
+nccl = tuple(int(part) for part in metadata.version("nvidia-nccl-cu13").split(".")[:3])
+assert nccl >= (2, 30, 4), nccl
 PY
 }
 
@@ -275,19 +283,25 @@ deepep_install() {
   fi
   mkdir -m 700 "$root" \
     || { collx_log "ERROR: DeepEP V2 cache-create failed"; return 1; }
-  python3 -m venv "$venv" \
+  # "image" builds against the image's own torch and NCCL, as vLLM's installer does.
+  local -a venv_flags=() tools=("pip==26.1.2" "setuptools==82.0.1" "wheel==0.47.0" "ninja==1.13.0")
+  if [ "$COLLX_DEEPEP_V2_TORCH_SPEC" = image ]; then venv_flags=(--system-site-packages)
+  else tools+=("numpy==2.2.6"); fi
+  python3 -m venv "${venv_flags[@]}" "$venv" \
     || { collx_log "ERROR: DeepEP V2 venv creation failed"; return 1; }
   pip=("$venv/bin/python" -m pip install -q --disable-pip-version-check --no-input)
-  "${pip[@]}" \
-    "pip==26.1.2" "setuptools==82.0.1" "wheel==0.47.0" "ninja==1.13.0" \
-    "numpy==2.2.6" "$COLLX_DEEPEP_V2_NVSHMEM_SPEC" >&2 2>&1 \
+  "${pip[@]}" "${tools[@]}" "$COLLX_DEEPEP_V2_NVSHMEM_SPEC" >&2 2>&1 \
     || { collx_log "ERROR: DeepEP V2 build-tool installation failed"; return 1; }
-  "${pip[@]}" --index-url https://download.pytorch.org/whl/cu130 \
-    --extra-index-url https://pypi.org/simple "$COLLX_DEEPEP_V2_TORCH_SPEC" >&2 2>&1 \
-    || { collx_log "ERROR: $COLLX_DEEPEP_V2_TORCH_SPEC (cu130) installation failed"; return 1; }
-  # Torch pins NCCL 2.28.9; see COLLX_DEEPEP_V2_NCCL_SPEC for what each source needs.
-  "${pip[@]}" --force-reinstall --no-deps "$COLLX_DEEPEP_V2_NCCL_SPEC" >&2 2>&1 \
-    || { collx_log "ERROR: $COLLX_DEEPEP_V2_NCCL_SPEC installation failed"; return 1; }
+  if [ "$COLLX_DEEPEP_V2_TORCH_SPEC" != image ]; then
+    "${pip[@]}" --index-url https://download.pytorch.org/whl/cu130 \
+      --extra-index-url https://pypi.org/simple "$COLLX_DEEPEP_V2_TORCH_SPEC" >&2 2>&1 \
+      || { collx_log "ERROR: $COLLX_DEEPEP_V2_TORCH_SPEC (cu130) installation failed"; return 1; }
+  fi
+  # Only the EFA fork installs its own NCCL (2.32.3); "image" uses the image's, checked by deepep_probe.
+  if [ "$COLLX_DEEPEP_V2_NCCL_SPEC" != image ]; then
+    "${pip[@]}" --force-reinstall --no-deps "$COLLX_DEEPEP_V2_NCCL_SPEC" >&2 2>&1 \
+      || { collx_log "ERROR: $COLLX_DEEPEP_V2_NCCL_SPEC installation failed"; return 1; }
+  fi
   local toolchain cuda_home cccl
   toolchain="$(cuda_toolchain_paths)" || return 1
   IFS=$'\t' read -r cuda_home cccl <<< "$toolchain"
@@ -361,7 +375,7 @@ readonly UCCL_BUILD_RECORD=collx_uccl_build.json
 uccl_probe() {
   # import torch FIRST so libc10 is resident before the uccl.ep extension dlopens (it links
   # libc10/libtorch); importing deep_ep before torch fails with "libc10.so: cannot open".
-  # DeepSeek's DeepEP, which the sglang images ship, has the same legacy Buffer API, so capability
+  # DeepSeek's DeepEP, which an image may ship, has the same legacy Buffer API, so capability
   # checks cannot tell the two apart. Identity can: UCCL's wrapper re-exports uccl.ep's Config, both
   # must load from this cache, and its build record must name the pinned commit.
   python3 - "$1/site" "$COLLX_UCCL_COMMIT" "$UCCL_BUILD_RECORD" <<'PY'
@@ -439,7 +453,7 @@ uccl_install() {
   fi
   mkdir -m 700 "$root" || { collx_log "ERROR: UCCL cache-create failed"; return 1; }
   collx_log "UCCL-EP: building $COLLX_UCCL_COMMIT from source (${flags[*]})"
-  # Some sglang/rocm images mark the system env externally-managed (PEP 668).
+  # Some images mark the system env externally-managed (PEP 668).
   { python3 -m pip install -q --disable-pip-version-check --no-input nanobind \
       || python3 -m pip install -q --disable-pip-version-check --no-input \
            --break-system-packages nanobind; } >&2 2>&1 \
@@ -1019,47 +1033,6 @@ verbs_provider_prepare() {
   collx_log "verbs provider: installed host $name"
 }
 
-# kv-transfer libraries come from the image: vLLM's release images ship its KV connectors (built with
-# INSTALL_KV_CONNECTORS=true: nixl and the cuda13 Mooncake wheel), so a row measures the build vLLM
-# itself deploys. EFA pools are the one swap: every regular Mooncake build is verbs-RC only, which
-# EFA does not offer, so the same Mooncake version's EFA build replaces it (vLLM's EFA image target,
-# vllm-project/vllm#58768, makes the same swap). The ROCm image ships nixl but no Mooncake.
-MOONCAKE_EFA_DIST=mooncake-transfer-engine-efa-cuda13
-kv_nixl_prepare() {
-  python3 -c "import nixl._api" \
-    || { collx_log "ERROR: the image carries no importable nixl"; return 1; }
-  # EFA rows run NIXL's LIBFABRIC plugin, which loads only with the host libhwloc bound in
-  # (collx_add_efa_host_mounts); prove it starts before the cases do.
-  [ "${COLLX_RDMA_FABRIC:-}" != efa ] || python3 -c "
-from nixl._api import nixl_agent, nixl_agent_config
-agent = nixl_agent('collectivex-prepare', nixl_agent_config(backends=['LIBFABRIC']))
-assert 'LIBFABRIC' in agent.backends" \
-    || { collx_log "ERROR: nixl cannot start its LIBFABRIC backend"; return 1; }
-}
-
-kv_mooncake_prepare() {
-  local version wheels
-  if [ "${COLLX_RDMA_FABRIC:-}" = efa ] \
-      && ! python3 -c "import importlib.metadata as m; m.version('$MOONCAKE_EFA_DIST')" 2>/dev/null; then
-    version="$(python3 -c "import importlib.metadata as m; print(m.version('mooncake-transfer-engine-cuda13'))")" \
-      || { collx_log "ERROR: the image carries no cuda13 Mooncake build to match"; return 1; }
-    # Fetch the EFA build before removing the image's, so a missing wheel leaves the node as it was.
-    wheels="$(mktemp -d)" || return 1
-    python3 -m pip download -q --disable-pip-version-check --no-input --no-deps \
-        --only-binary=:all: -d "$wheels" "$MOONCAKE_EFA_DIST==$version" \
-      && compgen -G "$wheels/*.whl" >/dev/null \
-      || { collx_log "ERROR: no Mooncake EFA $version wheel for this image"; return 1; }
-    { python3 -m pip uninstall -y -q mooncake-transfer-engine-cuda13 \
-        || python3 -m pip uninstall -y -q --break-system-packages mooncake-transfer-engine-cuda13; } \
-      && { python3 -m pip install -q --disable-pip-version-check --no-index --no-deps "$wheels"/*.whl \
-           || python3 -m pip install -q --disable-pip-version-check --no-index --no-deps \
-             --break-system-packages "$wheels"/*.whl; } \
-      || { collx_log "ERROR: Mooncake EFA $version install failed"; return 1; }
-  fi
-  python3 -c "import mooncake.engine" \
-    || { collx_log "ERROR: the image carries no importable Mooncake engine"; return 1; }
-}
-
 main() {
   collx_apply_network_profile "${COLLX_NODES:-1}" "${COLLX_TRANSPORT:-}" || return 1
   verbs_provider_prepare || return 1
@@ -1079,8 +1052,6 @@ main() {
       python3 -c "from vllm._custom_ops import swap_blocks" \
         || { collx_log "ERROR: vLLM swap_blocks import failed"; return 1; }
       ;;
-    nixl) kv_nixl_prepare || return 1 ;;
-    mooncake) kv_mooncake_prepare || return 1 ;;
     *)
       collx_log "ERROR: unknown backend preparation request"
       return 1

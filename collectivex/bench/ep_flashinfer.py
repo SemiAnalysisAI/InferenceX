@@ -55,33 +55,11 @@ import types
 
 import torch
 
-from ep_backend import EPBackend
+from ep_backend import EPBackend, blockwise_fp8_codec
 
 # Stamped by the kernel into the expert-id payload of every receive slot it did not fill.
 # -1 is safe: real ids are [0, num_experts).
 _INVALID_EXPERT = -1
-
-# 0.6.16 ("Port the TensorRT-LLM one-sided A2A optimizations") rewrote the combine
-# accumulator from the payload dtype to FP32 with a single narrowing store. Earlier wheels
-# round at every level of the top-k reduction tree, which is a few BF16 ulps the plain
-# FP32 expectation does not carry, so the oracle needs to know which kernel it is facing.
-_COMBINE_FP32_SINCE = (0, 6, 16)
-
-
-def _wheel_has_fp32_combine(version: str) -> bool:
-    """Does this wheel accumulate combine in FP32, per `_COMBINE_FP32_SINCE`?
-
-    Needs real version ordering, not a digit scrape: reading `0.6.16rc1` as 0.6.16 models FP32
-    against a per-level-rounding kernel, which can exceed COMBINE_REL_TOL and red a correct run.
-    The opposite error costs a few ulps, so anything unparseable answers False.
-    """
-    from packaging.version import InvalidVersion, Version
-
-    try:
-        return Version(version) >= Version(".".join(str(n) for n in _COMBINE_FP32_SINCE))
-    except InvalidVersion:
-        return False
-
 
 def _accepts_keyword(fn, name) -> bool:
     """vLLM's `supports_kw(fn, name, allow_var_kwargs=False)`: whether `name` is an explicit
@@ -100,31 +78,9 @@ def _version_slug(version: str) -> str:
     return re.sub(r"[^A-Za-z0-9.]+", "-", version).strip("-") or "unknown"
 
 
-# FP8 block size, matching the DeepSeek-V3 recipe every other FP8 backend here uses.
-_FP8_BLOCK = 128
-
-
-def _blockwise_cast_to_fp8(x):
-    """Per-128-channel e4m3 quantize: (values [m, n], FP32 scales [m, n//128]).
-
-    The layout vLLM dispatches on this transport: `per_token_group_quant_fp8(x, 128)`, row-major
-    FP32 scales, sent as the payload after the values. Local rather than shared on purpose:
-    deepep-v2 and uccl-ep must match their own libraries' in-kernel bits, while nothing here
-    quantises in-kernel, so this copy only has to round-trip self-consistently. Three contracts,
-    not three copies of one.
-    """
-    m, n = x.shape
-    blocks = x.view(m, -1, _FP8_BLOCK)
-    amax = blocks.abs().float().amax(dim=2).view(m, -1).clamp(1e-4)
-    values = (blocks * (448.0 / amax.unsqueeze(2))).to(torch.float8_e4m3fn).view(m, n)
-    return values, (amax / 448.0).view(m, -1)
-
-
-def _blockwise_cast_back(values, scales):
-    """Inverse of _blockwise_cast_to_fp8, to BF16."""
-    m, n = values.shape
-    blocks = values.view(m, -1, _FP8_BLOCK).float()
-    return (blocks * scales.view(m, -1, 1)).view(m, n).to(torch.bfloat16)
+# vLLM's layout on this transport: per_token_group_quant_fp8(x, 128), FP32 scales sent after
+# the values.
+_blockwise_cast_to_fp8, _blockwise_cast_back = blockwise_fp8_codec(torch.float8_e4m3fn, 448.0)
 
 
 class FlashInferEPBackend(EPBackend):
@@ -144,8 +100,8 @@ class FlashInferEPBackend(EPBackend):
     # combine_weight_semantics stays the base's unweighted-rank-sum: the kernel scatters expert
     # outputs back to the supplying rank without multiplying by the routing weights (those ride
     # along as a caller payload, and vLLM applies them in the MoE layer, not in the A2A).
-    # Set per wheel in create_buffer; see _COMBINE_FP32_SINCE.
-    combine_reduction = "topk-slot-tree"
+    # The pinned wheel accumulates combine in FP32 with one narrowing store (0.6.16 onwards).
+    combine_reduction = "domain-fp32"
     # Forced by the phase asserts described in the module docstring.
     requires_fresh_pair = True
 
@@ -156,18 +112,14 @@ class FlashInferEPBackend(EPBackend):
 
     def __init__(self, args, rank, world_size, local_rank, device):
         super().__init__(args, rank, world_size, local_rank, device)
-        self._fp8 = self.precision == "fp8"
         if self._fp8:
             # The codec, bytes and block size of deepep-v2/uccl-ep, so the same label.
             self._enable_fp8("fp8-e4m3fn", _blockwise_cast_to_fp8, _blockwise_cast_back)
-        # BF16 stage() is a pointer hand-off, so only the FP8 dequant is device work to hoist.
-        self.stage_device_work = self._fp8
         self._a2a = None
         self._max_tokens = None
         self._workspace_sizing = {}
         # Which of vLLM's two combine calls this wheel takes; resolved in create_buffer.
         self._combine_takes_output = False
-        self.experts_per_rank = args.experts // world_size
 
     # ---- setup -------------------------------------------------------------------------------
 
@@ -245,8 +197,6 @@ class FlashInferEPBackend(EPBackend):
         self.library_version = flashinfer.__version__
         self.kernel_generation = f"{type(self).kernel_generation}-{_version_slug(self.library_version)}"
         self._combine_takes_output = _accepts_keyword(self._a2a.combine, "output")
-        if _wheel_has_fp32_combine(flashinfer.__version__):
-            self.combine_reduction = "domain-fp32"
         # Every rank must finish mapping its workspace before any peer writes into it;
         # vLLM barriers here for the same reason. Scoped to the EP group, not the world.
         torch.distributed.barrier(group=_ep_group())

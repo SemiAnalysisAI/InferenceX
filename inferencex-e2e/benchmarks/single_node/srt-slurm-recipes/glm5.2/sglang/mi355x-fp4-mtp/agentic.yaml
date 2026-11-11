@@ -152,6 +152,67 @@ override_tp4_c16_hicache:
       CONC: '16'
       KV_OFFLOADING: dram
 
+# DSA DCP rejects HiCache; DCP4 stripes the latent KV across the TP4 ranks instead.
+override_tp4_dcp4_c16:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        decode-context-parallel-size: 4
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: none
+
+override_tp4_dcp4_c24:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        decode-context-parallel-size: 4
+        max-running-requests: 48
+        cuda-graph-max-bs-decode: 48
+  benchmark:
+    env:
+      CONC: '24'
+      KV_OFFLOADING: none
+
+override_tp4_dcp4_c40:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        decode-context-parallel-size: 4
+        max-running-requests: 80
+        cuda-graph-max-bs-decode: 64
+  benchmark:
+    env:
+      CONC: '40'
+      KV_OFFLOADING: none
+
+override_tp4_dcp4_c48:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        decode-context-parallel-size: 4
+        max-running-requests: 96
+        cuda-graph-max-bs-decode: 64
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: none
+
 override_tp8_c1:
   roles:
     agg:

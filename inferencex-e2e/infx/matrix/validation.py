@@ -37,10 +37,13 @@ class Fields(Enum):
 
     FIXED_SEQ_LEN = "fixed-seq-len"
     AGENTIC_CODING = "agentic-coding"
+    VIDEO_GENERATION = "video-generation"
 
     ISL = "isl"
     OSL = "osl"
     SEARCH_SPACE = "search-space"
+    SPEC = "spec"
+    GPUS = "gpus"
 
     TP = "tp"
     SRT_RECIPE = "srt-recipe"
@@ -79,6 +82,7 @@ class Fields(Enum):
     DURATION = "duration"
     REQUIRE_POWER = "require-power"
     POWER = "power"
+    CPU_POWER = "cpu-power"
 
     CONC = "conc"
     MAX_MODEL_LEN = "max-model-len"
@@ -142,7 +146,7 @@ def _validate_tp_context_topology(self: Any) -> Any:
 
 
 class SingleNodeMatrixEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     image: str
     srt_recipe: str | None = Field(default=None, alias=Fields.SRT_RECIPE.value, min_length=1)
@@ -169,6 +173,7 @@ class SingleNodeMatrixEntry(BaseModel):
     eval_framework: str | None = Field(default=None, alias=Fields.EVAL_FRAMEWORK.value)
     eval_suite: str | None = Field(default=None, alias=Fields.EVAL_SUITE.value)
     router: ComponentMetadata | None = None
+    cpu_power: bool = Field(default=False, alias=Fields.CPU_POWER.value, strict=True)
     recipe_fingerprint: str | None = Field(
         default=None,
         alias=Fields.RECIPE_FINGERPRINT.value,
@@ -182,7 +187,7 @@ class SingleNodeMatrixEntry(BaseModel):
 
 
 class WorkerConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     num_worker: int = Field(alias=Fields.NUM_WORKER.value)
     tp: int = Field(gt=0)
@@ -212,7 +217,7 @@ class WorkerConfig(BaseModel):
 
 
 class AggregateWorkerConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     num_worker: int = Field(default=1, alias=Fields.NUM_WORKER.value, gt=0, strict=True)
     tp: int = Field(gt=0)
@@ -245,7 +250,7 @@ def _validate_worker_hardware_pair(self: Any) -> Any:
 
 
 class MultiNodeMatrixEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     image: str
     model: str
@@ -263,6 +268,7 @@ class MultiNodeMatrixEntry(BaseModel):
     osl: int
     require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     power: bool = Field(default=False, strict=True)
+    cpu_power: bool = Field(default=False, alias=Fields.CPU_POWER.value, strict=True)
     prefill: WorkerConfig
     decode: WorkerConfig
     conc: list[int]
@@ -299,9 +305,10 @@ class MultiNodeMatrixEntry(BaseModel):
 
 
 class SingleNodeAgenticMatrixEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     image: str
+    require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     srt_recipe: str | None = Field(default=None, alias=Fields.SRT_RECIPE.value, min_length=1)
     model: str
     model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value)
@@ -349,9 +356,10 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
 
 
 class MultiNodeAgenticMatrixEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     image: str
+    require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     model: str
     model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value)
     precision: str
@@ -364,6 +372,7 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     )
     node_count: int = Field(alias=Fields.NODE_COUNT.value, gt=0, strict=True)
     power: bool = Field(default=False, strict=True)
+    cpu_power: bool = Field(default=False, alias=Fields.CPU_POWER.value, strict=True)
     prefill: WorkerConfig
     decode: WorkerConfig
     conc: list[int]
@@ -423,6 +432,65 @@ def validate_agentic_matrix_entry(entry: dict) -> dict:
     except ValidationError as e:
         raise ValueError(
             f"The following parsed agentic matrix entry failed validation:\n{pprint.pformat(entry)}\n{e}"
+        ) from e
+    return entry
+
+
+VIDEO_SPEC_DIR = "video-generation/specs"
+
+
+def _video_spec_path(value: str) -> str:
+    """A YAML workload file name under video-generation/specs, without directories."""
+    if not value or value != PurePosixPath(value).name or not value.endswith((".yaml", ".yml")):
+        raise ValueError(f"{value!r} must be a YAML file name under {VIDEO_SPEC_DIR}")
+    return value
+
+
+VideoSpec = Annotated[str, AfterValidator(_video_spec_path)]
+
+
+class VideoMatrixEntry(BaseModel):
+    """One video-generation job: every concurrency of ``conc`` against one server."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    image: str
+    srt_recipe: str = Field(alias=Fields.SRT_RECIPE.value, min_length=1)
+    model: str
+    model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value)
+    precision: str
+    framework: str
+    runner: str
+    spec: VideoSpec
+    video_set: str = Field(alias="set", pattern=r"^[A-Za-z0-9_-]+$")
+    gpus: int = Field(gt=0, strict=True)
+    conc_list: list[int] = Field(alias=Fields.CONC_LIST.value, min_length=1)
+    exp_name: str = Field(alias=Fields.EXP_NAME.value)
+    scenario_type: Literal["video-generation"] = Field(alias=Fields.SCENARIO_TYPE.value)
+    spec_decoding: Literal["none"] = Field(alias=Fields.SPEC_DECODING.value)
+    disagg: Literal[False]
+    dp_attn: Literal[False] = Field(alias=Fields.DP_ATTN.value)
+    run_eval: Literal[False] = Field(alias=Fields.RUN_EVAL.value)
+    recipe_fingerprint: str | None = Field(
+        default=None,
+        alias=Fields.RECIPE_FINGERPRINT.value,
+        pattern=r"^[0-9a-f]{64}$",
+    )
+
+    @model_validator(mode="after")
+    def validate_conc(self) -> Self:
+        conc = self.conc_list
+        if any(value <= 0 for value in conc) or len(set(conc)) != len(conc):
+            raise ValueError("conc-list must list unique positive concurrencies")
+        return self
+
+
+def validate_video_matrix_entry(entry: dict) -> dict:
+    try:
+        VideoMatrixEntry(**entry)
+    except ValidationError as e:
+        raise ValueError(
+            f"The following parsed video matrix entry failed validation:\n{pprint.pformat(entry)}\n{e}"
         ) from e
     return entry
 
@@ -494,6 +562,11 @@ def _validate_agentic_runner_is_cluster(runner: str, scenarios: Any) -> None:
             f"Agentic master configs must use a '{CLUSTER_LABEL_PREFIX}<name>' runner "
             "so every point runs on one exact hardware fleet."
         )
+    if getattr(scenarios, "video_generation", None) and not runner.startswith(CLUSTER_LABEL_PREFIX):
+        raise ValueError(
+            f"Video-generation master configs must use a '{CLUSTER_LABEL_PREFIX}<name>' runner "
+            "so every point runs on one exact hardware fleet."
+        )
 
 
 def _validate_kv_offload_fields(self: Any) -> Any:
@@ -550,7 +623,7 @@ RecipeReference = Annotated[str, AfterValidator(_recipe_reference)]
 
 
 class SingleNodeSearchSpaceEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     tp: int = Field(gt=0)
     srt_recipe: RecipeReference | None = Field(default=None, alias=Fields.SRT_RECIPE.value)
@@ -563,6 +636,8 @@ class SingleNodeSearchSpaceEntry(BaseModel):
     )
     dp_attn: bool | None = Field(default=None, alias=Fields.DP_ATTN.value)
     router: ComponentMetadata | None = None
+    # Native single-node points always measure GPU power; this adds the cluster's CPU exporter.
+    cpu_power: bool = Field(default=False, alias=Fields.CPU_POWER.value, strict=True)
     conc_start: int | None = Field(default=None, alias=Fields.CONC_START.value)
     conc_end: int | None = Field(default=None, alias=Fields.CONC_END.value)
     conc_list: list[int] | None = Field(default=None, alias=Fields.CONC_LIST.value)
@@ -578,8 +653,15 @@ class SingleNodeSearchSpaceEntry(BaseModel):
         return _validate_tp_context_topology(self)
 
 
+def _cpu_power_rides_on_power(self: Any) -> Any:
+    """``cpu-power`` adds the cluster's Grace CPU exporter to a point that measures power."""
+    if self.cpu_power and not self.power:
+        raise ValueError(f"{Fields.CPU_POWER.value} requires {Fields.POWER.value} on the entry")
+    return self
+
+
 class MultiNodeSearchSpaceEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     spec_decoding: Literal["mtp", "draft_model", "none"] = Field(
         default="none", alias=Fields.SPEC_DECODING.value
@@ -592,6 +674,7 @@ class MultiNodeSearchSpaceEntry(BaseModel):
         default=None, alias=Fields.EVAL_SRT_RECIPE.value
     )
     power: bool = Field(default=False, strict=True)
+    cpu_power: bool = Field(default=False, alias=Fields.CPU_POWER.value, strict=True)
     num_nodes: int | None = Field(default=None, alias=Fields.NUM_NODES.value, gt=0, strict=True)
     router: ComponentMetadata | None = None
     kv_p2p_transfer: str | None = Field(
@@ -600,6 +683,10 @@ class MultiNodeSearchSpaceEntry(BaseModel):
     conc_start: int | None = Field(default=None, alias=Fields.CONC_START.value)
     conc_end: int | None = Field(default=None, alias=Fields.CONC_END.value)
     conc_list: list[int] | None = Field(default=None, alias=Fields.CONC_LIST.value)
+
+    @model_validator(mode="after")
+    def validate_cpu_power(self) -> Self:
+        return _cpu_power_rides_on_power(self)
 
     @model_validator(mode="after")
     def validate_conc_fields(self) -> Self:
@@ -625,7 +712,7 @@ class MultiNodeSearchSpaceEntry(BaseModel):
 
 
 class SingleNodeSeqLenConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     isl: int
     osl: int
@@ -633,7 +720,7 @@ class SingleNodeSeqLenConfig(BaseModel):
 
 
 class MultiNodeSeqLenConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     isl: int
     osl: int
@@ -642,14 +729,16 @@ class MultiNodeSeqLenConfig(BaseModel):
 
 
 class AgenticCodingSearchSpaceEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
+    require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     tp: int | None = Field(default=None, gt=0)
     srt_recipe: RecipeReference | None = Field(default=None, alias=Fields.SRT_RECIPE.value)
     eval_srt_recipe: RecipeReference | None = Field(
         default=None, alias=Fields.EVAL_SRT_RECIPE.value
     )
     power: bool = Field(default=False, strict=True)
+    cpu_power: bool = Field(default=False, alias=Fields.CPU_POWER.value, strict=True)
     pp: int = Field(default=1, gt=0, strict=True)
     dcp_size: int = Field(default=1, alias=Fields.DCP_SIZE.value, gt=0, strict=True)
     pcp_size: int = Field(default=1, alias=Fields.PCP_SIZE.value, gt=0, strict=True)
@@ -716,6 +805,7 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
                     f"Only multinode entries measure DCGM power; remove {Fields.POWER.value}"
                 )
             _validate_tp_context_topology(self)
+        _cpu_power_rides_on_power(self)
         if has_aggregate_worker or has_complete_multinode:
             explicitly_single_node_fields = {
                 "pp",
@@ -741,7 +831,7 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
 
 
 class AgenticCodingConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     search_space: list[AgenticCodingSearchSpaceEntry] = Field(alias=Fields.SEARCH_SPACE.value)
     dram_utilization: float | None = Field(
@@ -767,8 +857,36 @@ class AgenticCodingConfig(BaseModel):
         return self
 
 
+class VideoGenerationSearchSpaceEntry(BaseModel):
+    """One video serving job: a GPU count and the concurrencies one server serves in turn."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    gpus: int = Field(gt=0, strict=True)
+    srt_recipe: RecipeReference = Field(alias=Fields.SRT_RECIPE.value)
+    conc_list: list[int] = Field(alias=Fields.CONC_LIST.value, min_length=1)
+
+    @model_validator(mode="after")
+    def validate_conc_list(self) -> Self:
+        if any(conc <= 0 for conc in self.conc_list):
+            raise ValueError(f"Input '{Fields.CONC_LIST.value}' entries must be greater than 0.")
+        if len(set(self.conc_list)) != len(self.conc_list):
+            raise ValueError(f"Input '{Fields.CONC_LIST.value}' entries must be unique.")
+        return self
+
+
+class VideoGenerationConfig(BaseModel):
+    """One selected set of the video YAML workload and the deployments that serve it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    spec: VideoSpec
+    video_set: str = Field(alias="set", pattern=r"^[A-Za-z0-9_-]+$")
+    search_space: list[VideoGenerationSearchSpaceEntry] = Field(alias=Fields.SEARCH_SPACE.value)
+
+
 class SingleNodeScenarios(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     fixed_seq_len: list[SingleNodeSeqLenConfig] | None = Field(
         default=None, alias=Fields.FIXED_SEQ_LEN.value
@@ -776,17 +894,20 @@ class SingleNodeScenarios(BaseModel):
     agentic_coding: list[AgenticCodingConfig] | None = Field(
         default=None, alias=Fields.AGENTIC_CODING.value
     )
+    video_generation: list[VideoGenerationConfig] | None = Field(
+        default=None, alias=Fields.VIDEO_GENERATION.value
+    )
 
     @model_validator(mode="after")
     def at_least_one_scenario(self) -> Self:
         """Return the scenarios, raising ValueError when none is set."""
-        if not self.fixed_seq_len and not self.agentic_coding:
+        if not self.fixed_seq_len and not self.agentic_coding and not self.video_generation:
             raise ValueError("At least one scenario type must be specified")
         return self
 
 
 class MultiNodeScenarios(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     fixed_seq_len: list[MultiNodeSeqLenConfig] | None = Field(
         default=None, alias=Fields.FIXED_SEQ_LEN.value
@@ -810,6 +931,7 @@ def _master_search_space_entries(self: BaseModel) -> list[BaseModel]:
         for scenario_configs in (
             self.scenarios.fixed_seq_len,
             self.scenarios.agentic_coding,
+            getattr(self.scenarios, "video_generation", None),
         )
         for scenario_config in scenario_configs or []
         for entry in scenario_config.search_space
@@ -929,7 +1051,7 @@ def _validate_srt_recipes(self: Any) -> Any:
 
 
 class SingleNodeMasterConfigEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     image: str
     model: str
@@ -966,7 +1088,7 @@ class SingleNodeMasterConfigEntry(BaseModel):
 
 
 class MultiNodeMasterConfigEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     image: str
     model: str
@@ -1029,7 +1151,7 @@ def _check_srt_recipe(root: Path, reference: str, recipes: dict[str, Any]) -> No
         if not (root / path).is_file():
             raise ValueError(f"{reference} does not exist")
         try:
-            recipes[path] = yamlio.safe_load((root / path).read_text())
+            recipes[path] = yamlio.load((root / path).read_text(), yamlio.UniqueKeySafeLoader)
         except yaml.YAMLError as error:
             raise ValueError(f"{path} is not valid YAML") from error
     recipe = recipes[path]
@@ -1116,7 +1238,7 @@ def validate_runner_config(runner_configs: dict) -> dict:
 
 
 class ChangelogEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     config_keys: list[str] = Field(alias="config-keys", min_length=1)
     description: list[str] = Field(min_length=1)
@@ -1145,11 +1267,16 @@ class ChangelogEntry(BaseModel):
             "threshold are dropped after eval selection."
         ),
     )
-    scenario_type: list[Literal["fixed-seq-len", "agentic-coding"]] | None = Field(
-        alias="scenario-type",
-        default=None,
-        min_length=1,
-        description="Restrict to specific scenario types (e.g., ['fixed-seq-len', 'agentic-coding'])",
+    scenario_type: list[Literal["fixed-seq-len", "agentic-coding", "video-generation"]] | None = (
+        Field(
+            alias="scenario-type",
+            default=None,
+            min_length=1,
+            description=(
+                "Restrict to specific scenario types "
+                "(e.g., ['fixed-seq-len', 'agentic-coding', 'video-generation'])"
+            ),
+        )
     )
 
     @model_validator(mode="after")
@@ -1184,11 +1311,11 @@ class ChangelogMetadata(BaseModel):
 
 
 class ChangelogMatrixEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
-    single_node: dict[str, list[SingleNodeMatrixEntry | SingleNodeAgenticMatrixEntry]] = Field(
-        default_factory=dict
-    )
+    single_node: dict[
+        str, list[SingleNodeMatrixEntry | SingleNodeAgenticMatrixEntry | VideoMatrixEntry]
+    ] = Field(default_factory=dict)
     multi_node: dict[str, list[MultiNodeMatrixEntry | MultiNodeAgenticMatrixEntry]] = Field(
         default_factory=dict
     )
@@ -1245,7 +1372,7 @@ def load_runner_file(runner_file: str, validate: bool = True) -> dict:
     """
     try:
         with open(runner_file) as f:
-            runner_config = yamlio.safe_load(f)
+            runner_config = yamlio.load(f, yamlio.UniqueKeySafeLoader)
     except FileNotFoundError as e:
         raise ValueError(f"Runner config file '{runner_file}' does not exist.") from e
 
