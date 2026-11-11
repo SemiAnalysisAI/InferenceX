@@ -1,0 +1,77 @@
+name: Build vLLM PR 66497 image
+
+# One-off build of ghcr.io/semianalysisai/vllm-openai:pr66497-0fe642ac from
+# experimental/vllm-pr66497-image. It lives on this branch only and never merges.
+on:
+  push:
+    branches:
+      - klaud/build-vllm-pr66497-image
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      packages: write
+    env:
+      PACKAGE: semianalysisai/vllm-openai
+      TAG: pr66497-0fe642ac
+      CONTEXT: experimental/vllm-pr66497-image
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check package write access
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          basic=$(printf '%s:%s' "$GITHUB_ACTOR" "$GITHUB_TOKEN" | base64 -w0)
+          echo "::add-mask::$basic"
+          token=$(curl -fsS -H @- "https://ghcr.io/token?scope=repository:${PACKAGE}:pull,push" \
+            <<< "Authorization: Basic $basic" | jq -r .token)
+          echo "::add-mask::$token"
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H @- \
+            "https://ghcr.io/v2/${PACKAGE}/blobs/uploads/" <<< "Authorization: Bearer $token")
+          echo "blob upload session: HTTP $code"
+          test "$code" = 202
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/share/swift
+          docker system prune --all --force > /dev/null
+          df -h /
+
+      - name: Build and verify against the PR head
+        run: docker build --progress=plain --target verify --file "$CONTEXT/Dockerfile" "$CONTEXT"
+
+      - name: Build the image
+        run: |
+          docker build --target image --tag "ghcr.io/$PACKAGE:$TAG" \
+            --file "$CONTEXT/Dockerfile" "$CONTEXT"
+          docker image inspect "ghcr.io/$PACKAGE:$TAG" \
+            --format '{{json .Config.Labels}} {{json .Config.Entrypoint}}'
+          df -h /
+
+      - name: Start the image
+        run: |
+          docker run --rm --entrypoint python3 "ghcr.io/$PACKAGE:$TAG" \
+            -c "import vllm; print('vllm', vllm.__version__)"
+
+      - name: Push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin <<< "$GITHUB_TOKEN"
+          docker push "ghcr.io/$PACKAGE:$TAG"
+          docker buildx imagetools inspect "ghcr.io/$PACKAGE:$TAG" | tee -a "$GITHUB_STEP_SUMMARY"
+          docker logout ghcr.io
