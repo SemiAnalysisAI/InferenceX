@@ -146,7 +146,7 @@ def _validate_tp_context_topology(self: Any) -> Any:
 
 
 class SingleNodeMatrixEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     image: str
     srt_recipe: str | None = Field(default=None, alias=Fields.SRT_RECIPE.value, min_length=1)
@@ -187,7 +187,7 @@ class SingleNodeMatrixEntry(BaseModel):
 
 
 class WorkerConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     num_worker: int = Field(alias=Fields.NUM_WORKER.value)
     tp: int = Field(gt=0)
@@ -217,7 +217,7 @@ class WorkerConfig(BaseModel):
 
 
 class AggregateWorkerConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     num_worker: int = Field(default=1, alias=Fields.NUM_WORKER.value, gt=0, strict=True)
     tp: int = Field(gt=0)
@@ -250,7 +250,7 @@ def _validate_worker_hardware_pair(self: Any) -> Any:
 
 
 class MultiNodeMatrixEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     image: str
     model: str
@@ -305,7 +305,7 @@ class MultiNodeMatrixEntry(BaseModel):
 
 
 class SingleNodeAgenticMatrixEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     image: str
     require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
@@ -356,7 +356,7 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
 
 
 class MultiNodeAgenticMatrixEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     image: str
     require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
@@ -452,7 +452,7 @@ VideoSpec = Annotated[str, AfterValidator(_video_spec_path)]
 class VideoMatrixEntry(BaseModel):
     """One video-generation job: every concurrency of ``conc`` against one server."""
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     image: str
     srt_recipe: str = Field(alias=Fields.SRT_RECIPE.value, min_length=1)
@@ -623,7 +623,7 @@ RecipeReference = Annotated[str, AfterValidator(_recipe_reference)]
 
 
 class SingleNodeSearchSpaceEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     tp: int = Field(gt=0)
     srt_recipe: RecipeReference | None = Field(default=None, alias=Fields.SRT_RECIPE.value)
@@ -661,7 +661,7 @@ def _cpu_power_rides_on_power(self: Any) -> Any:
 
 
 class MultiNodeSearchSpaceEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     spec_decoding: Literal["mtp", "draft_model", "none"] = Field(
         default="none", alias=Fields.SPEC_DECODING.value
@@ -712,7 +712,7 @@ class MultiNodeSearchSpaceEntry(BaseModel):
 
 
 class SingleNodeSeqLenConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     isl: int
     osl: int
@@ -720,7 +720,7 @@ class SingleNodeSeqLenConfig(BaseModel):
 
 
 class MultiNodeSeqLenConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     isl: int
     osl: int
@@ -729,7 +729,7 @@ class MultiNodeSeqLenConfig(BaseModel):
 
 
 class AgenticCodingSearchSpaceEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     tp: int | None = Field(default=None, gt=0)
@@ -831,7 +831,7 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
 
 
 class AgenticCodingConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     search_space: list[AgenticCodingSearchSpaceEntry] = Field(alias=Fields.SEARCH_SPACE.value)
     dram_utilization: float | None = Field(
@@ -860,7 +860,7 @@ class AgenticCodingConfig(BaseModel):
 class VideoGenerationSearchSpaceEntry(BaseModel):
     """One video serving job: a GPU count and the concurrencies one server serves in turn."""
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     gpus: int = Field(gt=0, strict=True)
     srt_recipe: RecipeReference = Field(alias=Fields.SRT_RECIPE.value)
@@ -878,7 +878,7 @@ class VideoGenerationSearchSpaceEntry(BaseModel):
 class VideoGenerationConfig(BaseModel):
     """One selected set of the video YAML workload and the deployments that serve it."""
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     spec: VideoSpec
     video_set: str = Field(alias="set", pattern=r"^[A-Za-z0-9_-]+$")
@@ -886,7 +886,7 @@ class VideoGenerationConfig(BaseModel):
 
 
 class SingleNodeScenarios(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     fixed_seq_len: list[SingleNodeSeqLenConfig] | None = Field(
         default=None, alias=Fields.FIXED_SEQ_LEN.value
@@ -907,7 +907,7 @@ class SingleNodeScenarios(BaseModel):
 
 
 class MultiNodeScenarios(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     fixed_seq_len: list[MultiNodeSeqLenConfig] | None = Field(
         default=None, alias=Fields.FIXED_SEQ_LEN.value
@@ -1051,7 +1051,7 @@ def _validate_srt_recipes(self: Any) -> Any:
 
 
 class SingleNodeMasterConfigEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     image: str
     model: str
@@ -1088,7 +1088,7 @@ class SingleNodeMasterConfigEntry(BaseModel):
 
 
 class MultiNodeMasterConfigEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     image: str
     model: str
@@ -1151,7 +1151,7 @@ def _check_srt_recipe(root: Path, reference: str, recipes: dict[str, Any]) -> No
         if not (root / path).is_file():
             raise ValueError(f"{reference} does not exist")
         try:
-            recipes[path] = yamlio.safe_load((root / path).read_text())
+            recipes[path] = yamlio.load((root / path).read_text(), yamlio.UniqueKeySafeLoader)
         except yaml.YAMLError as error:
             raise ValueError(f"{path} is not valid YAML") from error
     recipe = recipes[path]
@@ -1238,7 +1238,7 @@ def validate_runner_config(runner_configs: dict) -> dict:
 
 
 class ChangelogEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     config_keys: list[str] = Field(alias="config-keys", min_length=1)
     description: list[str] = Field(min_length=1)
@@ -1311,7 +1311,7 @@ class ChangelogMetadata(BaseModel):
 
 
 class ChangelogMatrixEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     single_node: dict[
         str, list[SingleNodeMatrixEntry | SingleNodeAgenticMatrixEntry | VideoMatrixEntry]
@@ -1372,7 +1372,7 @@ def load_runner_file(runner_file: str, validate: bool = True) -> dict:
     """
     try:
         with open(runner_file) as f:
-            runner_config = yamlio.safe_load(f)
+            runner_config = yamlio.load(f, yamlio.UniqueKeySafeLoader)
     except FileNotFoundError as e:
         raise ValueError(f"Runner config file '{runner_file}' does not exist.") from e
 
