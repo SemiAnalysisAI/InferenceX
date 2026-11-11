@@ -51,29 +51,17 @@ base:
       AIPERF_TIMING_CANCEL_DRAIN_TIMEOUT: '300'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'atom:'
 
-# One variant per point, on an MXFP8 KV cache: plain TP2 at concurrency 1, 2, 16
-# and 32, plain TP4 at 1, 2, 4 and 8, DTP2 (DP attention, MoE over TP) at 64
-# and DEP2 (DP attention plus expert parallelism) at 128 and 256. max-num-seqs is ATOM's default except at
-# concurrency 1; decode graphs cover every size through 32 plus 48, 64 and 128
-# (and 256 on the c256 point).
-#
-# Concurrency 1 follows the C1 recipe of ROCm/ATOM#2659: the prefill delayer
-# with a decode interval no step reaches, so a new turn's prefill waits for the
-# running decode instead of interleaving with it, and max-num-seqs 2 (DSpark's
-# block-drafter warmup needs two sequences) with decode graphs at 1 and 2.
-# From concurrency 2 to 32 the delayer runs a decode interval that shrinks as
-# the load grows (192 through c8, 96 at c16, 40 at c32), so a new prefill
-# does not stall the running decodes, at a small TTFT cost.
-
 override_tp2_c1:
   roles:
     agg:
       gpus: 2
       args: &c1_args
+        # DSpark's block-drafter warmup needs two sequences.
         max-num-seqs: 2
         cudagraph-capture-sizes: '[1,2]'
       env: &c1_env
         ATOM_ENABLE_PREFILL_DELAYER: '1'
+        # No step reaches this interval, so a new turn's prefill waits for the running decode.
         ATOM_PREFILL_DECODE_INTERVAL: '1000000'
   benchmark:
     env:
@@ -155,16 +143,12 @@ override_tp4_c8:
     env:
       CONC: '8'
 
-# DTP2 / DEP2: DP attention without TBO (which does not support SWA bounded
-# replay); DEP2 adds expert parallelism, the DEP2 cell of ROCm/ATOM#2784. Each
-# AIPerf session stays on one DP rank and at least 10 decode passes run between
-# prefills.
-
 override_tp2_c64_dtp:
   roles:
     agg:
       gpus: 2
       args:
+        # TBO stays off: it does not support SWA bounded replay.
         enable-dp-attention: true
         # ATOM_DP_LB_REQ_EQUIV weights in-flight requests under least_tokens.
         dp-load-balance: least_tokens
