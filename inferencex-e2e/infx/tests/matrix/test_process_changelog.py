@@ -537,6 +537,24 @@ def test_cli_entry_mode_truth_table(changelog_run, cli_flags, expected_modes, en
         assert output["changelog_metadata"]["entries"][0][flag] is value
 
 
+UPSTREAM_PR = "https://github.com/SemiAnalysisAI/InferenceX/pull/1"
+OTHER_PR = "https://github.com/semianalysisai/other/pull/2"
+
+
+@pytest.mark.parametrize("links,repository,kept", [
+    ([UPSTREAM_PR], "SemiAnalysisAI/InferenceX", [UPSTREAM_PR]),
+    ([UPSTREAM_PR], "SemiAnalysisAI/Other", []),
+    ([UPSTREAM_PR, OTHER_PR], "SemiAnalysisAI/Other", [OTHER_PR]),
+    (["TBD"], "SemiAnalysisAI/Other", ["TBD"]),
+])
+def test_repository_plans_only_entries_not_linked_to_another_repository(
+    changelog_run, links, repository, kept
+):
+    output = changelog_run([{"pr-link": link} for link in links], ["--repository", repository])
+    assert [entry["pr-link"] for entry in output["changelog_metadata"]["entries"]] == kept
+    assert bool(output["single_node"]) == bool(kept)
+
+
 def test_overlapping_scenarios_preserve_eval_precedence_and_buckets(changelog_run):
     output = changelog_run([
         {"config-keys": ["*"], "scenario-type": ["fixed-seq-len"]},
@@ -691,6 +709,7 @@ def test_merge_ingest_executes_the_plan_before_classifying_retirement(
             **os.environ, "PATH": f"{fake_bin}:{os.environ['PATH']}", "PYTHONPATH": str(project),
             "GITHUB_WORKSPACE": str(workspace), "GITHUB_OUTPUT": str(output),
             "RUNNER_TEMP": str(tmp_path), "PUSH_BEFORE": base, "PUSH_AFTER": head,
+            "GITHUB_REPOSITORY": "SemiAnalysisAI/InferenceX",
         },
     )
     if expected is None:

@@ -330,7 +330,9 @@ anything unless reuse is validly authorized. It then uploads merge-time `changel
 and sends one `repository_dispatch` to the app repository (`APP_REPO`, below): `ingest-agentic-results`
 (with `database-target: production`) when the delta has agentic entries,
 otherwise `ingest-results`. The payload's `source-run-id` is the reused PR
-`run-sweep.yml` run and its `merge-run-id` is the Merge Ingest run.
+`run-sweep.yml` run and its `merge-run-id` is the Merge Ingest run. The delta
+leaves out entries whose `pr-link` is a pull request in another repository; when
+none remain, Merge Ingest uploads and dispatches nothing.
 
 For a nonempty delta consisting entirely of `retired: true` entries, the planner
 verifies that the selected configs existed in the base and are absent from the
@@ -357,16 +359,20 @@ Reuse fails closed when authorized but ineligible or invalid. Pushes to `main`
 never run a sweep: `run-sweep.yml` is PR-only, and without reuse authorization
 the Merge Ingest run fails and nothing is benchmarked or ingested.
 
-## Repository Variables for Copies
+## Repository Scope
 
-A copy of this repository sets these repository variables to change where its
-workflows send results and whether its agent runs:
+Scheduled and run-completion jobs (Klaud, the runner offline digest,
+`close-inactive`, AL gate prompt warming, video quality scoring) and the pull
+request bots (Claude review, recipe reminder, infx diff comment, CODEOWNER
+sign-off verification) run only in `SemiAnalysisAI/InferenceX`.
+`test_upstream_only_automation.py` fails for an unattended job without that
+check. Sweeps, CI, staging, and ingest run in any repository, configured by
+these repository variables:
 
 | Variable          | Default                                                       | Effect                                                                                                                                                                                                                                                         |
 | ----------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `APP_REPO`        | `SemiAnalysisAI/InferenceX-app`                               | App repository that `merge-ingest`, `recover-reused-ingest`, `operatorx-sweep`, and `stage-results` dispatch ingest, video, and staging events to, and the only source the ingest and staging callbacks accept. `FRONTEND_PAT` must be able to dispatch to it. |
 | `STAGING_APP_URL` | `https://inferencemax-app-git-staging-semianalysisai.vercel.app` | Origin of that app's staging site, without a trailing slash. Staged-run comments link to it, and the staging callback accepts chart links only on it. Set it to the app repository's own `STAGING_APP_URL`.                                                   |
-| `KLAUD_ENABLED`   | unset                                                         | Klaud's planner, resume, and wake jobs run only when this is `true`. Without it the scheduled `klaud-plan` runs skip every job instead of failing for missing secrets.                                                                                          |
 
 ## Validation Architecture
 

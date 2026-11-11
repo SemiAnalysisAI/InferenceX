@@ -23,6 +23,7 @@ from .revision import GENERATOR, snapshot
 from .validation import (
     ChangelogEntry,
     ChangelogMatrixEntry,
+    ChangelogMetadata,
     config_root,
     load_config_files,
     load_runner_file,
@@ -70,6 +71,20 @@ def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
             added_lines.append(line[1:])
 
     return "\n".join(added_lines)
+
+
+PULL_REQUEST_LINK = re.compile(r"https://github\.com/([^/]+/[^/]+)/pull/[0-9]+")
+
+
+def entries_from_repository(entries: list, repository: str) -> list:
+    """Return the entries whose pr-link is not a pull request in a repository other than ``repository``."""
+
+    def elsewhere(entry: object) -> bool:
+        link = str(entry.get("pr-link", "")) if isinstance(entry, dict) else ""
+        match = PULL_REQUEST_LINK.fullmatch(link)
+        return match is not None and match.group(1).lower() != repository.lower()
+
+    return [entry for entry in entries if not elsewhere(entry)]
 
 
 def filter_eval_rows_by_prefill_ep(eval_rows: list[dict], min_prefill_ep: int | None) -> list[dict]:
@@ -535,6 +550,10 @@ def main() -> None:
         action="store_true",
         help="Suppress throughput for every changelog entry without expanding eval selection.",
     )
+    parser.add_argument(
+        "--repository",
+        help="Plan only entries whose pr-link is not a pull request in another owner/name repository.",
+    )
     args = parser.parse_args()
 
     added_yaml = get_added_lines(args.base_ref, args.head_ref, args.changelog_file)
@@ -543,6 +562,13 @@ def main() -> None:
         raise ValueError("No additions found in the changelog file.")
 
     changelog_data = yamlio.load(added_yaml, yamlio.UniqueKeySafeLoader)
+    if args.repository and isinstance(changelog_data, list):
+        changelog_data = entries_from_repository(changelog_data, args.repository)
+        if not changelog_data:
+            metadata = ChangelogMetadata(base_ref=args.base_ref, head_ref=args.head_ref, entries=[])
+            empty = ChangelogMatrixEntry(changelog_metadata=metadata)
+            print(empty.model_dump_json(by_alias=True, exclude_none=True))
+            return
 
     try:
         result = build_plan(

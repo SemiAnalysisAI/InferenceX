@@ -15,6 +15,7 @@ concurrency:
 jobs:
   close:
     name: close
+    if: github.repository == 'SemiAnalysisAI/InferenceX'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

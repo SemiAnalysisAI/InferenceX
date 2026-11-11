@@ -56,7 +56,8 @@ jobs:
   recover:
     name: Reconcile interrupted candidates
     if: >-
-      vars.KLAUD_ENABLED == 'true' && github.ref == 'refs/heads/main' && github.run_attempt == 1
+      github.repository == 'SemiAnalysisAI/InferenceX' && github.ref == 'refs/heads/main'
+      && github.run_attempt == 1
       && inputs.resume-parent == ''
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -371,7 +372,8 @@ jobs:
   resume:
     name: Run candidate ${{ inputs.resume-candidate }}
     if: >-
-      vars.KLAUD_ENABLED == 'true' && github.ref == 'refs/heads/main' && github.run_attempt == 1
+      github.repository == 'SemiAnalysisAI/InferenceX' && github.ref == 'refs/heads/main'
+      && github.run_attempt == 1
       && inputs.resume-parent != ''
       && github.actor == 'Klaud-Cold'
     permissions:
