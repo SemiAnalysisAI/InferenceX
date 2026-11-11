@@ -334,7 +334,7 @@ glm5.3-fp8-mi300x-sglang-agentic-mtp:
     - dram-utilization: 0.80
       search-space:
       - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 3], srt-recipe: agentic.yaml }
-      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [4, 6, 8, 10], srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [4, 5, 6, 7, 8], srt-recipe: agentic.yaml }
 
 dsr1-fp8-mi355x-atom:
   image: rocm/atom-dev:nightly_202610161458@sha256:7782d69e15b5cf88ad550095a8ec18429af852d07897824b8c35f9ce32f89f33

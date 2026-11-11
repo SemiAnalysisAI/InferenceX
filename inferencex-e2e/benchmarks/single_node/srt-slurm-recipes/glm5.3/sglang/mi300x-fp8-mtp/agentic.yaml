@@ -110,6 +110,21 @@ override_tp8_c4_hicache:
       CONC: '4'
       KV_OFFLOADING: dram
 
+override_tp8_c5_hicache:
+  roles:
+    agg:
+      args:
+        max-running-requests: 10
+        cuda-graph-max-bs-decode: 10
+        enable-hierarchical-cache: true
+        hicache-host-memory-fraction: 0.60
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+  benchmark:
+    env:
+      CONC: '5'
+      KV_OFFLOADING: dram
+
 override_tp8_c6_hicache:
   roles:
     agg:
@@ -125,6 +140,21 @@ override_tp8_c6_hicache:
       CONC: '6'
       KV_OFFLOADING: dram
 
+override_tp8_c7_hicache:
+  roles:
+    agg:
+      args:
+        max-running-requests: 14
+        cuda-graph-max-bs-decode: 14
+        enable-hierarchical-cache: true
+        hicache-host-memory-fraction: 0.60
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+  benchmark:
+    env:
+      CONC: '7'
+      KV_OFFLOADING: dram
+
 override_tp8_c8_hicache:
   roles:
     agg:
@@ -138,19 +168,4 @@ override_tp8_c8_hicache:
   benchmark:
     env:
       CONC: '8'
-      KV_OFFLOADING: dram
-
-override_tp8_c10_hicache:
-  roles:
-    agg:
-      args:
-        max-running-requests: 20
-        cuda-graph-max-bs-decode: 20
-        enable-hierarchical-cache: true
-        hicache-host-memory-fraction: 0.60
-        hicache-io-backend: direct
-        hicache-mem-layout: page_first_direct
-  benchmark:
-    env:
-      CONC: '10'
       KV_OFFLOADING: dram
