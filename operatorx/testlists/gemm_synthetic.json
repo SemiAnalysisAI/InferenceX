@@ -1,0 +1,9892 @@
+[
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1,
+      "n": 24,
+      "k": 40960,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2,
+      "n": 24,
+      "k": 40960,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3,
+      "n": 24,
+      "k": 40960,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 24,
+      "k": 40960,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6,
+      "n": 24,
+      "k": 40960,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 24,
+      "k": 40960,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 725,
+      "n": 24,
+      "k": 40960,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1684,
+      "n": 24,
+      "k": 40960,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2335,
+      "n": 24,
+      "k": 40960,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3161,
+      "n": 24,
+      "k": 40960,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4717,
+      "n": 24,
+      "k": 40960,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6042,
+      "n": 24,
+      "k": 40960,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6072,
+      "n": 24,
+      "k": 40960,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 7152,
+      "n": 24,
+      "k": 40960,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 7586,
+      "n": 24,
+      "k": 40960,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 7936,
+      "n": 24,
+      "k": 40960,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 10236,
+      "n": 24,
+      "k": 40960,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 11304,
+      "n": 24,
+      "k": 40960,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 11872,
+      "n": 24,
+      "k": 40960,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 12560,
+      "n": 24,
+      "k": 40960,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 12930,
+      "n": 24,
+      "k": 40960,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 12936,
+      "n": 24,
+      "k": 40960,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 12960,
+      "n": 24,
+      "k": 40960,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 13072,
+      "n": 24,
+      "k": 40960,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16384,
+      "n": 24,
+      "k": 40960,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16386,
+      "n": 24,
+      "k": 40960,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1,
+      "n": 24,
+      "k": 49152,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2,
+      "n": 24,
+      "k": 49152,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3,
+      "n": 24,
+      "k": 49152,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 24,
+      "k": 49152,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6,
+      "n": 24,
+      "k": 49152,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 24,
+      "k": 49152,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 725,
+      "n": 24,
+      "k": 49152,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1684,
+      "n": 24,
+      "k": 49152,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2813,
+      "n": 24,
+      "k": 49152,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4868,
+      "n": 24,
+      "k": 49152,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6072,
+      "n": 24,
+      "k": 49152,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6515,
+      "n": 24,
+      "k": 49152,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 7112,
+      "n": 24,
+      "k": 49152,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 7936,
+      "n": 24,
+      "k": 49152,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8177,
+      "n": 24,
+      "k": 49152,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 24,
+      "k": 49152,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 10442,
+      "n": 24,
+      "k": 49152,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 10776,
+      "n": 24,
+      "k": 49152,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 13072,
+      "n": 24,
+      "k": 49152,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 13116,
+      "n": 24,
+      "k": 49152,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16384,
+      "n": 24,
+      "k": 49152,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16386,
+      "n": 24,
+      "k": 49152,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1,
+      "n": 64,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2,
+      "n": 64,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3,
+      "n": 64,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 64,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6,
+      "n": 64,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 64,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 725,
+      "n": 64,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1684,
+      "n": 64,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2335,
+      "n": 64,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3161,
+      "n": 64,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4717,
+      "n": 64,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6042,
+      "n": 64,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6072,
+      "n": 64,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 7152,
+      "n": 64,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 7586,
+      "n": 64,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 7936,
+      "n": 64,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 10236,
+      "n": 64,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 11304,
+      "n": 64,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 11872,
+      "n": 64,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 12560,
+      "n": 64,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 12930,
+      "n": 64,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 12936,
+      "n": 64,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 12960,
+      "n": 64,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 13072,
+      "n": 64,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16384,
+      "n": 64,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16386,
+      "n": 64,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1,
+      "n": 64,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2,
+      "n": 64,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3,
+      "n": 64,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 64,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6,
+      "n": 64,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 64,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 725,
+      "n": 64,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1684,
+      "n": 64,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2813,
+      "n": 64,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4868,
+      "n": 64,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6072,
+      "n": 64,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6515,
+      "n": 64,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 7112,
+      "n": 64,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 7936,
+      "n": 64,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8177,
+      "n": 64,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 64,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 10442,
+      "n": 64,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 10776,
+      "n": 64,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 13072,
+      "n": 64,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 13116,
+      "n": 64,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16384,
+      "n": 64,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16386,
+      "n": 64,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1,
+      "n": 120,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2,
+      "n": 120,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3,
+      "n": 120,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 120,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6,
+      "n": 120,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 120,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 725,
+      "n": 120,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1684,
+      "n": 120,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2813,
+      "n": 120,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4868,
+      "n": 120,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6072,
+      "n": 120,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6515,
+      "n": 120,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 7112,
+      "n": 120,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 7936,
+      "n": 120,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8177,
+      "n": 120,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 120,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 10442,
+      "n": 120,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 10776,
+      "n": 120,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 13072,
+      "n": 120,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 13116,
+      "n": 120,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16384,
+      "n": 120,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16386,
+      "n": 120,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1,
+      "n": 192,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2,
+      "n": 192,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3,
+      "n": 192,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 192,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6,
+      "n": 192,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 192,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 725,
+      "n": 192,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1684,
+      "n": 192,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2335,
+      "n": 192,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3161,
+      "n": 192,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4717,
+      "n": 192,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6042,
+      "n": 192,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6072,
+      "n": 192,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 7152,
+      "n": 192,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 7586,
+      "n": 192,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 7936,
+      "n": 192,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 10236,
+      "n": 192,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 11304,
+      "n": 192,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 11872,
+      "n": 192,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 12560,
+      "n": 192,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 12930,
+      "n": 192,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 12936,
+      "n": 192,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 12960,
+      "n": 192,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 13072,
+      "n": 192,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16384,
+      "n": 192,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16386,
+      "n": 192,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1,
+      "n": 256,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2,
+      "n": 256,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3,
+      "n": 256,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 256,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6,
+      "n": 256,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 256,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 725,
+      "n": 256,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1684,
+      "n": 256,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2335,
+      "n": 256,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3161,
+      "n": 256,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4717,
+      "n": 256,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6042,
+      "n": 256,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6072,
+      "n": 256,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 7152,
+      "n": 256,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 7586,
+      "n": 256,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 7936,
+      "n": 256,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 10236,
+      "n": 256,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 11304,
+      "n": 256,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 11872,
+      "n": 256,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 12560,
+      "n": 256,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 12930,
+      "n": 256,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 12936,
+      "n": 256,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 12960,
+      "n": 256,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 13072,
+      "n": 256,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16384,
+      "n": 256,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16386,
+      "n": 256,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1,
+      "n": 256,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2,
+      "n": 256,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3,
+      "n": 256,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 256,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6,
+      "n": 256,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 256,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 725,
+      "n": 256,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1684,
+      "n": 256,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2813,
+      "n": 256,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4868,
+      "n": 256,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6072,
+      "n": 256,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6515,
+      "n": 256,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 7112,
+      "n": 256,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 7936,
+      "n": 256,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8177,
+      "n": 256,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 256,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 10442,
+      "n": 256,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 10776,
+      "n": 256,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 13072,
+      "n": 256,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 13116,
+      "n": 256,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16384,
+      "n": 256,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16386,
+      "n": 256,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1,
+      "n": 320,
+      "k": 7168,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2,
+      "n": 320,
+      "k": 7168,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3,
+      "n": 320,
+      "k": 7168,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 320,
+      "k": 7168,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6,
+      "n": 320,
+      "k": 7168,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 320,
+      "k": 7168,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 9,
+      "n": 320,
+      "k": 7168,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 11,
+      "n": 320,
+      "k": 7168,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 14,
+      "n": 320,
+      "k": 7168,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 725,
+      "n": 320,
+      "k": 7168,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 978,
+      "n": 320,
+      "k": 7168,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1684,
+      "n": 320,
+      "k": 7168,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2420,
+      "n": 320,
+      "k": 7168,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3161,
+      "n": 320,
+      "k": 7168,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4049,
+      "n": 320,
+      "k": 7168,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 5290,
+      "n": 320,
+      "k": 7168,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6736,
+      "n": 320,
+      "k": 7168,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6830,
+      "n": 320,
+      "k": 7168,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 7112,
+      "n": 320,
+      "k": 7168,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 7936,
+      "n": 320,
+      "k": 7168,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 9446,
+      "n": 320,
+      "k": 7168,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 10128,
+      "n": 320,
+      "k": 7168,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 12136,
+      "n": 320,
+      "k": 7168,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 13790,
+      "n": 320,
+      "k": 7168,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 15312,
+      "n": 320,
+      "k": 7168,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 15982,
+      "n": 320,
+      "k": 7168,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1,
+      "n": 512,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2,
+      "n": 512,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3,
+      "n": 512,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 512,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6,
+      "n": 512,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 512,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 725,
+      "n": 512,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1684,
+      "n": 512,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2335,
+      "n": 512,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3161,
+      "n": 512,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4717,
+      "n": 512,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6042,
+      "n": 512,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6072,
+      "n": 512,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 7152,
+      "n": 512,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 7586,
+      "n": 512,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 7936,
+      "n": 512,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 10236,
+      "n": 512,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 11304,
+      "n": 512,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 11872,
+      "n": 512,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 12560,
+      "n": 512,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 12930,
+      "n": 512,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 12936,
+      "n": 512,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 12960,
+      "n": 512,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 13072,
+      "n": 512,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16384,
+      "n": 512,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16386,
+      "n": 512,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1,
+      "n": 512,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2,
+      "n": 512,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3,
+      "n": 512,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 512,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6,
+      "n": 512,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 512,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 725,
+      "n": 512,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1684,
+      "n": 512,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2813,
+      "n": 512,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4868,
+      "n": 512,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6072,
+      "n": 512,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6515,
+      "n": 512,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 7112,
+      "n": 512,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 7936,
+      "n": 512,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8177,
+      "n": 512,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 512,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 10442,
+      "n": 512,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 10776,
+      "n": 512,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 13072,
+      "n": 512,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 13116,
+      "n": 512,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16384,
+      "n": 512,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16386,
+      "n": 512,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1,
+      "n": 1024,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2,
+      "n": 1024,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3,
+      "n": 1024,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 1024,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6,
+      "n": 1024,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 1024,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 725,
+      "n": 1024,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1684,
+      "n": 1024,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2335,
+      "n": 1024,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3161,
+      "n": 1024,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4717,
+      "n": 1024,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6042,
+      "n": 1024,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6072,
+      "n": 1024,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 7152,
+      "n": 1024,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 7586,
+      "n": 1024,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 7936,
+      "n": 1024,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 10236,
+      "n": 1024,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 11304,
+      "n": 1024,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 11872,
+      "n": 1024,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 12560,
+      "n": 1024,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 12930,
+      "n": 1024,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 12936,
+      "n": 1024,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 12960,
+      "n": 1024,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 13072,
+      "n": 1024,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16384,
+      "n": 1024,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16386,
+      "n": 1024,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1,
+      "n": 1024,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2,
+      "n": 1024,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3,
+      "n": 1024,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 1024,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6,
+      "n": 1024,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 1024,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 725,
+      "n": 1024,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1684,
+      "n": 1024,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2813,
+      "n": 1024,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4868,
+      "n": 1024,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6072,
+      "n": 1024,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6515,
+      "n": 1024,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 7112,
+      "n": 1024,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 7936,
+      "n": 1024,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8177,
+      "n": 1024,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 1024,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 10442,
+      "n": 1024,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 10776,
+      "n": 1024,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 13072,
+      "n": 1024,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 13116,
+      "n": 1024,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16384,
+      "n": 1024,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16386,
+      "n": 1024,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1,
+      "n": 8080,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1,
+      "n": 8080,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 8192,
+      "k": 8192,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16384,
+      "n": 8192,
+      "k": 8192,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1,
+      "n": 129280,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2,
+      "n": 129280,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3,
+      "n": 129280,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 129280,
+      "k": 10240,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1,
+      "n": 129280,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2,
+      "n": 129280,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3,
+      "n": 129280,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 129280,
+      "k": 12288,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 10,
+      "n": 384,
+      "k": 7168,
+      "a": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "e4m3",
+          "static": false,
+          "group": [
+            1,
+            16
+          ]
+        },
+        "scale2": {
+          "dtype": "fp32",
+          "static": true,
+          "group": [
+            -1,
+            -1
+          ]
+        }
+      },
+      "b": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "e4m3",
+          "static": true,
+          "group": [
+            1,
+            16
+          ]
+        },
+        "scale2": {
+          "dtype": "fp32",
+          "static": true,
+          "group": [
+            -1,
+            -1
+          ]
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 42,
+      "n": 384,
+      "k": 7168,
+      "a": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "e4m3",
+          "static": false,
+          "group": [
+            1,
+            16
+          ]
+        },
+        "scale2": {
+          "dtype": "fp32",
+          "static": true,
+          "group": [
+            -1,
+            -1
+          ]
+        }
+      },
+      "b": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "e4m3",
+          "static": true,
+          "group": [
+            1,
+            16
+          ]
+        },
+        "scale2": {
+          "dtype": "fp32",
+          "static": true,
+          "group": [
+            -1,
+            -1
+          ]
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 85,
+      "n": 384,
+      "k": 7168,
+      "a": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "e4m3",
+          "static": false,
+          "group": [
+            1,
+            16
+          ]
+        },
+        "scale2": {
+          "dtype": "fp32",
+          "static": true,
+          "group": [
+            -1,
+            -1
+          ]
+        }
+      },
+      "b": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "e4m3",
+          "static": true,
+          "group": [
+            1,
+            16
+          ]
+        },
+        "scale2": {
+          "dtype": "fp32",
+          "static": true,
+          "group": [
+            -1,
+            -1
+          ]
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 170,
+      "n": 384,
+      "k": 7168,
+      "a": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "e4m3",
+          "static": false,
+          "group": [
+            1,
+            16
+          ]
+        },
+        "scale2": {
+          "dtype": "fp32",
+          "static": true,
+          "group": [
+            -1,
+            -1
+          ]
+        }
+      },
+      "b": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "e4m3",
+          "static": true,
+          "group": [
+            1,
+            16
+          ]
+        },
+        "scale2": {
+          "dtype": "fp32",
+          "static": true,
+          "group": [
+            -1,
+            -1
+          ]
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 10922,
+      "n": 384,
+      "k": 7168,
+      "a": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "e4m3",
+          "static": false,
+          "group": [
+            1,
+            16
+          ]
+        },
+        "scale2": {
+          "dtype": "fp32",
+          "static": true,
+          "group": [
+            -1,
+            -1
+          ]
+        }
+      },
+      "b": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "e4m3",
+          "static": true,
+          "group": [
+            1,
+            16
+          ]
+        },
+        "scale2": {
+          "dtype": "fp32",
+          "static": true,
+          "group": [
+            -1,
+            -1
+          ]
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 43690,
+      "n": 384,
+      "k": 7168,
+      "a": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "e4m3",
+          "static": false,
+          "group": [
+            1,
+            16
+          ]
+        },
+        "scale2": {
+          "dtype": "fp32",
+          "static": true,
+          "group": [
+            -1,
+            -1
+          ]
+        }
+      },
+      "b": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "e4m3",
+          "static": true,
+          "group": [
+            1,
+            16
+          ]
+        },
+        "scale2": {
+          "dtype": "fp32",
+          "static": true,
+          "group": [
+            -1,
+            -1
+          ]
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 8192,
+      "k": 8192,
+      "a": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "e4m3",
+          "static": false,
+          "group": [
+            1,
+            16
+          ]
+        },
+        "scale2": {
+          "dtype": "fp32",
+          "static": true,
+          "group": [
+            -1,
+            -1
+          ]
+        }
+      },
+      "b": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "e4m3",
+          "static": true,
+          "group": [
+            1,
+            16
+          ]
+        },
+        "scale2": {
+          "dtype": "fp32",
+          "static": true,
+          "group": [
+            -1,
+            -1
+          ]
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 8192,
+      "k": 8192,
+      "a": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "ue8m0",
+          "static": false,
+          "group": [
+            1,
+            32
+          ]
+        }
+      },
+      "b": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "ue8m0",
+          "static": true,
+          "group": [
+            1,
+            32
+          ]
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 8192,
+      "k": 8192,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "fp32",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "fp32",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1,
+      "n": 1088,
+      "k": 7168,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2,
+      "n": 1088,
+      "k": 7168,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 1088,
+      "k": 7168,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 1088,
+      "k": 7168,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16,
+      "n": 1088,
+      "k": 7168,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 18,
+      "n": 1088,
+      "k": 7168,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 32,
+      "n": 1088,
+      "k": 7168,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 48,
+      "n": 1088,
+      "k": 7168,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 64,
+      "n": 1088,
+      "k": 7168,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 128,
+      "n": 1088,
+      "k": 7168,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 192,
+      "n": 1088,
+      "k": 7168,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "n": 1088,
+      "k": 7168,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 512,
+      "n": 1088,
+      "k": 7168,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 768,
+      "n": 1088,
+      "k": 7168,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1024,
+      "n": 1088,
+      "k": 7168,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1543,
+      "n": 1088,
+      "k": 7168,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1792,
+      "n": 1088,
+      "k": 7168,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2048,
+      "n": 1088,
+      "k": 7168,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4096,
+      "n": 1088,
+      "k": 7168,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 5376,
+      "n": 1088,
+      "k": 7168,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 1088,
+      "k": 7168,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16384,
+      "n": 1088,
+      "k": 7168,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 32768,
+      "n": 1088,
+      "k": 7168,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 65536,
+      "n": 1088,
+      "k": 7168,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1,
+      "n": 7168,
+      "k": 65536,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2,
+      "n": 7168,
+      "k": 65536,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 7168,
+      "k": 65536,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 7168,
+      "k": 65536,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16,
+      "n": 7168,
+      "k": 65536,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 32,
+      "n": 7168,
+      "k": 65536,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 48,
+      "n": 7168,
+      "k": 65536,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 64,
+      "n": 7168,
+      "k": 65536,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 128,
+      "n": 7168,
+      "k": 65536,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 192,
+      "n": 7168,
+      "k": 65536,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "n": 7168,
+      "k": 65536,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 512,
+      "n": 7168,
+      "k": 65536,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 768,
+      "n": 7168,
+      "k": 65536,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1024,
+      "n": 7168,
+      "k": 65536,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1543,
+      "n": 7168,
+      "k": 65536,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1792,
+      "n": 7168,
+      "k": 65536,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2048,
+      "n": 7168,
+      "k": 65536,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4096,
+      "n": 7168,
+      "k": 65536,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 5376,
+      "n": 7168,
+      "k": 65536,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 7168,
+      "k": 65536,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16384,
+      "n": 7168,
+      "k": 65536,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 32768,
+      "n": 7168,
+      "k": 65536,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 65536,
+      "n": 7168,
+      "k": 65536,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1,
+      "n": 15360,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2,
+      "n": 15360,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 15360,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 15360,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16,
+      "n": 15360,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 32,
+      "n": 15360,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 64,
+      "n": 15360,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 128,
+      "n": 15360,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "n": 15360,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 512,
+      "n": 15360,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1024,
+      "n": 15360,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2048,
+      "n": 15360,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4096,
+      "n": 15360,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 15360,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16384,
+      "n": 15360,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 32768,
+      "n": 15360,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 65536,
+      "n": 15360,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1,
+      "n": 30720,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2,
+      "n": 30720,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 30720,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 30720,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16,
+      "n": 30720,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 18,
+      "n": 30720,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 32,
+      "n": 30720,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 64,
+      "n": 30720,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 128,
+      "n": 30720,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 192,
+      "n": 30720,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "n": 30720,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 512,
+      "n": 30720,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1024,
+      "n": 30720,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2048,
+      "n": 30720,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4096,
+      "n": 30720,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 30720,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16384,
+      "n": 30720,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 32768,
+      "n": 30720,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 65536,
+      "n": 30720,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1,
+      "n": 122880,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2,
+      "n": 122880,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 122880,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 122880,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16,
+      "n": 122880,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 32,
+      "n": 122880,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 48,
+      "n": 122880,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 64,
+      "n": 122880,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 128,
+      "n": 122880,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 192,
+      "n": 122880,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "n": 122880,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 512,
+      "n": 122880,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 768,
+      "n": 122880,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1024,
+      "n": 122880,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1543,
+      "n": 122880,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1792,
+      "n": 122880,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2048,
+      "n": 122880,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4096,
+      "n": 122880,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 5376,
+      "n": 122880,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 122880,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16384,
+      "n": 122880,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 32768,
+      "n": 122880,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 65536,
+      "n": 122880,
+      "k": 1024,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_synthetic"
+    ]
+  }
+]

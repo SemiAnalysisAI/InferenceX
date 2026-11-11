@@ -9,7 +9,7 @@ Inference operator benchmarks: times one op at a time on NVIDIA and AMD through 
 | `mla`, `mla_dsa`, `dsv4_attn`, `gqa`, `qsa`, `gdn`, `kda` | `ops/attention.py` | whole attention modules, one op type each |
 
 - Split over devices: each case's `parallel` arg (`{"tp", "dp", "ep", "dcp"}`), defined in `core/parallel.py`.
-- Testlists: `testlists/*.json`; every entry lists its `sources` (`<org>/<model>/<role>`); a shape from no model uses `operatorx/Synthetic-Shapes/<testlist>`. Dispatch `attn_*` testlists apart from gemm / moe ones (each builds its own vLLM engine).
+- Testlists: `testlists/*.json`; every entry lists its `sources` (`<org>/<model>/<role>`); a shape from no model uses `operatorx/Synthetic-Shapes/<testlist>` and lives in `gemm_synthetic` (except the `gemm_perf` smoke squares). Dispatch `attn_*` testlists apart from gemm / moe ones (each builds its own vLLM engine).
 
 ## Running
 

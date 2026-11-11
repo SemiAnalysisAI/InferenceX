@@ -180,40 +180,6 @@
     "type": "gemm",
     "args": {
       "m": 1,
-      "n": 1088,
-      "k": 7168,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 1,
       "n": 1152,
       "k": 7168,
       "a": {
@@ -1404,40 +1370,6 @@
     "type": "gemm",
     "args": {
       "m": 1,
-      "n": 7168,
-      "k": 65536,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 1,
       "n": 8192,
       "k": 512,
       "a": {
@@ -1520,40 +1452,6 @@
       "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
       "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
       "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 1,
-      "n": 15360,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -1656,40 +1554,6 @@
     "type": "gemm",
     "args": {
       "m": 1,
-      "n": 30720,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 1,
       "n": 32768,
       "k": 512,
       "a": {
@@ -1757,40 +1621,6 @@
       "deepseek-ai/DeepSeek-V4-Pro/mtp.attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/mtp.attn.wq_b"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 1,
-      "n": 122880,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -2107,40 +1937,6 @@
     "sources": [
       "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
       "openai/gpt-oss-120b/q_proj"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 2,
-      "n": 1088,
-      "k": 7168,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -3602,40 +3398,6 @@
     "type": "gemm",
     "args": {
       "m": 2,
-      "n": 7168,
-      "k": 65536,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 2,
       "n": 8192,
       "k": 512,
       "a": {
@@ -3776,40 +3538,6 @@
     "type": "gemm",
     "args": {
       "m": 2,
-      "n": 15360,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 2,
       "n": 16384,
       "k": 512,
       "a": {
@@ -3906,40 +3634,6 @@
     "type": "gemm",
     "args": {
       "m": 2,
-      "n": 30720,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 2,
       "n": 32768,
       "k": 512,
       "a": {
@@ -4007,40 +3701,6 @@
       "deepseek-ai/DeepSeek-V4-Pro/mtp.attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/mtp.attn.wq_b"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 2,
-      "n": 122880,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -6380,40 +6040,6 @@
       "deepseek-ai/DeepSeek-V4-Pro-0813/attn.wo_a",
       "deepseek-ai/DeepSeek-V4-Pro/attn.wo_a",
       "sgl-project/DeepSeek-V4-Pro-FP8/attn.wo_a"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 4,
-      "n": 1088,
-      "k": 7168,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -9915,40 +9541,6 @@
     "type": "gemm",
     "args": {
       "m": 4,
-      "n": 7168,
-      "k": 65536,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 4,
       "n": 8192,
       "k": 512,
       "a": {
@@ -10151,40 +9743,6 @@
     "type": "gemm",
     "args": {
       "m": 4,
-      "n": 15360,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 4,
       "n": 16384,
       "k": 512,
       "a": {
@@ -10281,40 +9839,6 @@
     "type": "gemm",
     "args": {
       "m": 4,
-      "n": 30720,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 4,
       "n": 32768,
       "k": 512,
       "a": {
@@ -10382,40 +9906,6 @@
       "deepseek-ai/DeepSeek-V4-Pro/mtp.attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/mtp.attn.wq_b"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 4,
-      "n": 122880,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -14674,40 +14164,6 @@
       "deepseek-ai/DeepSeek-V4-Pro-0813/attn.wo_a",
       "deepseek-ai/DeepSeek-V4-Pro/attn.wo_a",
       "sgl-project/DeepSeek-V4-Pro-FP8/attn.wo_a"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 8,
-      "n": 1088,
-      "k": 7168,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -18204,40 +17660,6 @@
     "type": "gemm",
     "args": {
       "m": 8,
-      "n": 7168,
-      "k": 65536,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 8,
       "n": 8192,
       "k": 512,
       "a": {
@@ -18582,40 +18004,6 @@
     "type": "gemm",
     "args": {
       "m": 8,
-      "n": 15360,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 8,
       "n": 16384,
       "k": 512,
       "a": {
@@ -18731,40 +18119,6 @@
     "type": "gemm",
     "args": {
       "m": 8,
-      "n": 30720,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 8,
       "n": 32768,
       "k": 512,
       "a": {
@@ -18851,40 +18205,6 @@
       "deepseek-ai/DeepSeek-V4-Pro/mtp.attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/mtp.attn.wq_b"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 8,
-      "n": 122880,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -19545,56 +18865,6 @@
     },
     "sources": [
       "deepseek-ai/DeepSeek-R1-0528/kv_b_proj"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 10,
-      "n": 384,
-      "k": 7168,
-      "a": {
-        "dtype": "e2m1",
-        "scale": {
-          "dtype": "e4m3",
-          "static": false,
-          "group": [
-            1,
-            16
-          ]
-        },
-        "scale2": {
-          "dtype": "fp32",
-          "static": true,
-          "group": [
-            -1,
-            -1
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e2m1",
-        "scale": {
-          "dtype": "e4m3",
-          "static": true,
-          "group": [
-            1,
-            16
-          ]
-        },
-        "scale2": {
-          "dtype": "fp32",
-          "static": true,
-          "group": [
-            -1,
-            -1
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -25721,40 +24991,6 @@
       "deepseek-ai/DeepSeek-V4-Pro-0813/attn.wo_a",
       "deepseek-ai/DeepSeek-V4-Pro/attn.wo_a",
       "sgl-project/DeepSeek-V4-Pro-FP8/attn.wo_a"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 16,
-      "n": 1088,
-      "k": 7168,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -29189,40 +28425,6 @@
     "type": "gemm",
     "args": {
       "m": 16,
-      "n": 7168,
-      "k": 65536,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 16,
       "n": 8192,
       "k": 512,
       "a": {
@@ -29425,40 +28627,6 @@
     "type": "gemm",
     "args": {
       "m": 16,
-      "n": 15360,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 16,
       "n": 16384,
       "k": 512,
       "a": {
@@ -29574,40 +28742,6 @@
     "type": "gemm",
     "args": {
       "m": 16,
-      "n": 30720,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 16,
       "n": 32768,
       "k": 512,
       "a": {
@@ -29699,40 +28833,6 @@
   {
     "type": "gemm",
     "args": {
-      "m": 16,
-      "n": 122880,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
       "m": 18,
       "n": 576,
       "k": 7168,
@@ -29785,40 +28885,6 @@
     },
     "sources": [
       "deepseek-ai/DeepSeek-R1-0528/kv_a_proj_with_mqa"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 18,
-      "n": 1088,
-      "k": 7168,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -30412,40 +29478,6 @@
     },
     "sources": [
       "deepseek-ai/DeepSeek-R1-0528/q_b_proj"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 18,
-      "n": 30720,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -38580,40 +37612,6 @@
     "type": "gemm",
     "args": {
       "m": 32,
-      "n": 1088,
-      "k": 7168,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 32,
       "n": 1152,
       "k": 7168,
       "a": {
@@ -41791,40 +40789,6 @@
     "type": "gemm",
     "args": {
       "m": 32,
-      "n": 7168,
-      "k": 65536,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 32,
       "n": 8192,
       "k": 512,
       "a": {
@@ -42169,40 +41133,6 @@
     "type": "gemm",
     "args": {
       "m": 32,
-      "n": 15360,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 32,
       "n": 16384,
       "k": 512,
       "a": {
@@ -42318,40 +41248,6 @@
     "type": "gemm",
     "args": {
       "m": 32,
-      "n": 30720,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 32,
       "n": 32768,
       "k": 512,
       "a": {
@@ -42438,40 +41334,6 @@
       "deepseek-ai/DeepSeek-V4-Pro/mtp.attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/mtp.attn.wq_b"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 32,
-      "n": 122880,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -45980,56 +44842,6 @@
     },
     "sources": [
       "deepseek-ai/DeepSeek-R1-0528/kv_b_proj"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 42,
-      "n": 384,
-      "k": 7168,
-      "a": {
-        "dtype": "e2m1",
-        "scale": {
-          "dtype": "e4m3",
-          "static": false,
-          "group": [
-            1,
-            16
-          ]
-        },
-        "scale2": {
-          "dtype": "fp32",
-          "static": true,
-          "group": [
-            -1,
-            -1
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e2m1",
-        "scale": {
-          "dtype": "e4m3",
-          "static": true,
-          "group": [
-            1,
-            16
-          ]
-        },
-        "scale2": {
-          "dtype": "fp32",
-          "static": true,
-          "group": [
-            -1,
-            -1
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -47303,40 +46115,6 @@
     "type": "gemm",
     "args": {
       "m": 48,
-      "n": 1088,
-      "k": 7168,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 48,
       "n": 1536,
       "k": 7168,
       "a": {
@@ -48260,40 +47038,6 @@
     "type": "gemm",
     "args": {
       "m": 48,
-      "n": 7168,
-      "k": 65536,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 48,
       "n": 8192,
       "k": 512,
       "a": {
@@ -48558,40 +47302,6 @@
       "deepseek-ai/DeepSeek-V4-Pro/mtp.attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/mtp.attn.wq_b"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 48,
-      "n": 122880,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -52956,40 +51666,6 @@
     "type": "gemm",
     "args": {
       "m": 64,
-      "n": 1088,
-      "k": 7168,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 64,
       "n": 1152,
       "k": 7168,
       "a": {
@@ -56265,40 +54941,6 @@
     "type": "gemm",
     "args": {
       "m": 64,
-      "n": 7168,
-      "k": 65536,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 64,
       "n": 8192,
       "k": 512,
       "a": {
@@ -56501,40 +55143,6 @@
     "type": "gemm",
     "args": {
       "m": 64,
-      "n": 15360,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 64,
       "n": 16384,
       "k": 512,
       "a": {
@@ -56650,40 +55258,6 @@
     "type": "gemm",
     "args": {
       "m": 64,
-      "n": 30720,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 64,
       "n": 32768,
       "k": 512,
       "a": {
@@ -56770,40 +55344,6 @@
       "deepseek-ai/DeepSeek-V4-Pro/mtp.attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/mtp.attn.wq_b"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 64,
-      "n": 122880,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -60958,56 +59498,6 @@
     },
     "sources": [
       "deepseek-ai/DeepSeek-R1-0528/down_proj"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 85,
-      "n": 384,
-      "k": 7168,
-      "a": {
-        "dtype": "e2m1",
-        "scale": {
-          "dtype": "e4m3",
-          "static": false,
-          "group": [
-            1,
-            16
-          ]
-        },
-        "scale2": {
-          "dtype": "fp32",
-          "static": true,
-          "group": [
-            -1,
-            -1
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e2m1",
-        "scale": {
-          "dtype": "e4m3",
-          "static": true,
-          "group": [
-            1,
-            16
-          ]
-        },
-        "scale2": {
-          "dtype": "fp32",
-          "static": true,
-          "group": [
-            -1,
-            -1
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -68392,40 +66882,6 @@
     "type": "gemm",
     "args": {
       "m": 128,
-      "n": 1088,
-      "k": 7168,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 128,
       "n": 1152,
       "k": 7168,
       "a": {
@@ -71687,40 +70143,6 @@
     "type": "gemm",
     "args": {
       "m": 128,
-      "n": 7168,
-      "k": 65536,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 128,
       "n": 8192,
       "k": 512,
       "a": {
@@ -71889,40 +70311,6 @@
     "type": "gemm",
     "args": {
       "m": 128,
-      "n": 15360,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 128,
       "n": 16384,
       "k": 512,
       "a": {
@@ -72074,40 +70462,6 @@
     "type": "gemm",
     "args": {
       "m": 128,
-      "n": 30720,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 128,
       "n": 32768,
       "k": 512,
       "a": {
@@ -72230,40 +70584,6 @@
       "deepseek-ai/DeepSeek-V4-Pro/mtp.attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/mtp.attn.wq_b"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 128,
-      "n": 122880,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -77953,56 +76273,6 @@
       "nvidia/DeepSeek-R1-0528-NVFP4-v2/kv_b_proj",
       "nvidia/Kimi-K2.5-NVFP4/kv_b_proj",
       "nvidia/Kimi-K2.6-NVFP4/kv_b_proj"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 170,
-      "n": 384,
-      "k": 7168,
-      "a": {
-        "dtype": "e2m1",
-        "scale": {
-          "dtype": "e4m3",
-          "static": false,
-          "group": [
-            1,
-            16
-          ]
-        },
-        "scale2": {
-          "dtype": "fp32",
-          "static": true,
-          "group": [
-            -1,
-            -1
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e2m1",
-        "scale": {
-          "dtype": "e4m3",
-          "static": true,
-          "group": [
-            1,
-            16
-          ]
-        },
-        "scale2": {
-          "dtype": "fp32",
-          "static": true,
-          "group": [
-            -1,
-            -1
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -79854,40 +78124,6 @@
     "type": "gemm",
     "args": {
       "m": 192,
-      "n": 1088,
-      "k": 7168,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 192,
       "n": 1152,
       "k": 7168,
       "a": {
@@ -80406,40 +78642,6 @@
     "type": "gemm",
     "args": {
       "m": 192,
-      "n": 7168,
-      "k": 65536,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 192,
       "n": 12288,
       "k": 1536,
       "a": {
@@ -80559,40 +78761,6 @@
     "type": "gemm",
     "args": {
       "m": 192,
-      "n": 30720,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 192,
       "n": 32768,
       "k": 512,
       "a": {
@@ -80660,40 +78828,6 @@
       "deepseek-ai/DeepSeek-V4-Pro/mtp.attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/mtp.attn.wq_b"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 192,
-      "n": 122880,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -84441,40 +82575,6 @@
       "deepseek-ai/DeepSeek-V4-Pro-0813/attn.wo_a",
       "deepseek-ai/DeepSeek-V4-Pro/attn.wo_a",
       "sgl-project/DeepSeek-V4-Pro-FP8/attn.wo_a"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 256,
-      "n": 1088,
-      "k": 7168,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -87631,40 +85731,6 @@
     "type": "gemm",
     "args": {
       "m": 256,
-      "n": 7168,
-      "k": 65536,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 256,
       "n": 8192,
       "k": 512,
       "a": {
@@ -87833,40 +85899,6 @@
     "type": "gemm",
     "args": {
       "m": 256,
-      "n": 15360,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 256,
       "n": 16384,
       "k": 512,
       "a": {
@@ -88018,40 +86050,6 @@
     "type": "gemm",
     "args": {
       "m": 256,
-      "n": 30720,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 256,
       "n": 32768,
       "k": 512,
       "a": {
@@ -88174,40 +86172,6 @@
       "deepseek-ai/DeepSeek-V4-Pro/mtp.attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/mtp.attn.wq_b"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 256,
-      "n": 122880,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -100739,40 +98703,6 @@
       "deepseek-ai/DeepSeek-V4-Pro-0813/attn.wo_a",
       "deepseek-ai/DeepSeek-V4-Pro/attn.wo_a",
       "sgl-project/DeepSeek-V4-Pro-FP8/attn.wo_a"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 512,
-      "n": 1088,
-      "k": 7168,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -103122,40 +101052,6 @@
     "type": "gemm",
     "args": {
       "m": 512,
-      "n": 7168,
-      "k": 65536,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 512,
       "n": 8192,
       "k": 512,
       "a": {
@@ -103251,40 +101147,6 @@
       "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
       "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
       "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 512,
-      "n": 15360,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -103442,40 +101304,6 @@
     "type": "gemm",
     "args": {
       "m": 512,
-      "n": 30720,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 512,
       "n": 32768,
       "k": 512,
       "a": {
@@ -103598,40 +101426,6 @@
       "deepseek-ai/DeepSeek-V4-Pro/mtp.attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/mtp.attn.wq_b"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 512,
-      "n": 122880,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -112203,40 +109997,6 @@
     "type": "gemm",
     "args": {
       "m": 768,
-      "n": 1088,
-      "k": 7168,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 768,
       "n": 1536,
       "k": 7168,
       "a": {
@@ -112656,40 +110416,6 @@
     "type": "gemm",
     "args": {
       "m": 768,
-      "n": 7168,
-      "k": 65536,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 768,
       "n": 12288,
       "k": 1536,
       "a": {
@@ -112837,40 +110563,6 @@
       "deepseek-ai/DeepSeek-V4-Pro/mtp.attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/mtp.attn.wq_b"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 768,
-      "n": 122880,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -115256,40 +112948,6 @@
     "type": "gemm",
     "args": {
       "m": 1024,
-      "n": 1088,
-      "k": 7168,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 1024,
       "n": 1152,
       "k": 7168,
       "a": {
@@ -117031,40 +114689,6 @@
     "type": "gemm",
     "args": {
       "m": 1024,
-      "n": 7168,
-      "k": 65536,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 1024,
       "n": 8192,
       "k": 512,
       "a": {
@@ -117250,40 +114874,6 @@
     "type": "gemm",
     "args": {
       "m": 1024,
-      "n": 15360,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 1024,
       "n": 16384,
       "k": 512,
       "a": {
@@ -117435,40 +115025,6 @@
     "type": "gemm",
     "args": {
       "m": 1024,
-      "n": 30720,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 1024,
       "n": 32768,
       "k": 512,
       "a": {
@@ -117591,40 +115147,6 @@
       "deepseek-ai/DeepSeek-V4-Pro/mtp.attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/mtp.attn.wq_b"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 1024,
-      "n": 122880,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -122171,40 +119693,6 @@
     "type": "gemm",
     "args": {
       "m": 1543,
-      "n": 1088,
-      "k": 7168,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 1543,
       "n": 1536,
       "k": 7168,
       "a": {
@@ -122318,40 +119806,6 @@
     "type": "gemm",
     "args": {
       "m": 1543,
-      "n": 7168,
-      "k": 65536,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 1543,
       "n": 65536,
       "k": 1536,
       "a": {
@@ -122385,40 +119839,6 @@
       "deepseek-ai/DeepSeek-V4-Pro/mtp.attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/mtp.attn.wq_b"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 1543,
-      "n": 122880,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -123356,40 +120776,6 @@
     "type": "gemm",
     "args": {
       "m": 1792,
-      "n": 1088,
-      "k": 7168,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 1792,
       "n": 1536,
       "k": 7168,
       "a": {
@@ -123444,40 +120830,6 @@
     "type": "gemm",
     "args": {
       "m": 1792,
-      "n": 7168,
-      "k": 65536,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 1792,
       "n": 65536,
       "k": 1536,
       "a": {
@@ -123511,40 +120863,6 @@
       "deepseek-ai/DeepSeek-V4-Pro/mtp.attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/mtp.attn.wq_b"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 1792,
-      "n": 122880,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -124127,40 +121445,6 @@
     "sources": [
       "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
       "openai/gpt-oss-120b/q_proj"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 2048,
-      "n": 1088,
-      "k": 7168,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -125332,40 +122616,6 @@
     "type": "gemm",
     "args": {
       "m": 2048,
-      "n": 7168,
-      "k": 65536,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 2048,
       "n": 8192,
       "k": 512,
       "a": {
@@ -125459,40 +122709,6 @@
       "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
       "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
       "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 2048,
-      "n": 15360,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -125614,40 +122830,6 @@
     "type": "gemm",
     "args": {
       "m": 2048,
-      "n": 30720,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 2048,
       "n": 32768,
       "k": 512,
       "a": {
@@ -125734,40 +122916,6 @@
       "deepseek-ai/DeepSeek-V4-Pro/mtp.attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/mtp.attn.wq_b"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 2048,
-      "n": 122880,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -135143,40 +132291,6 @@
       "deepseek-ai/DeepSeek-V4-Pro-0813/attn.wo_a",
       "deepseek-ai/DeepSeek-V4-Pro/attn.wo_a",
       "sgl-project/DeepSeek-V4-Pro-FP8/attn.wo_a"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 4096,
-      "n": 1088,
-      "k": 7168,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -138804,40 +135918,6 @@
     "type": "gemm",
     "args": {
       "m": 4096,
-      "n": 7168,
-      "k": 65536,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 4096,
       "n": 8192,
       "k": 512,
       "a": {
@@ -139182,40 +136262,6 @@
     "type": "gemm",
     "args": {
       "m": 4096,
-      "n": 15360,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 4096,
       "n": 16384,
       "k": 512,
       "a": {
@@ -139367,40 +136413,6 @@
     "type": "gemm",
     "args": {
       "m": 4096,
-      "n": 30720,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 4096,
       "n": 32768,
       "k": 512,
       "a": {
@@ -139523,40 +136535,6 @@
       "deepseek-ai/DeepSeek-V4-Pro/mtp.attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/mtp.attn.wq_b"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 4096,
-      "n": 122880,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -141038,40 +138016,6 @@
     "type": "gemm",
     "args": {
       "m": 5376,
-      "n": 1088,
-      "k": 7168,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 5376,
       "n": 1536,
       "k": 7168,
       "a": {
@@ -141185,40 +138129,6 @@
     "type": "gemm",
     "args": {
       "m": 5376,
-      "n": 7168,
-      "k": 65536,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 5376,
       "n": 65536,
       "k": 1536,
       "a": {
@@ -141252,40 +138162,6 @@
       "deepseek-ai/DeepSeek-V4-Pro/mtp.attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/mtp.attn.wq_b"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 5376,
-      "n": 122880,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -146739,40 +143615,6 @@
       "deepseek-ai/DeepSeek-V4-Pro-0813/attn.wo_a",
       "deepseek-ai/DeepSeek-V4-Pro/attn.wo_a",
       "sgl-project/DeepSeek-V4-Pro-FP8/attn.wo_a"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 8192,
-      "n": 1088,
-      "k": 7168,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -150165,40 +147007,6 @@
     "type": "gemm",
     "args": {
       "m": 8192,
-      "n": 7168,
-      "k": 65536,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 8192,
       "n": 8192,
       "k": 512,
       "a": {
@@ -150356,142 +147164,6 @@
     "type": "gemm",
     "args": {
       "m": 8192,
-      "n": 8192,
-      "k": 8192,
-      "a": {
-        "dtype": "bf16"
-      },
-      "b": {
-        "dtype": "bf16"
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 8192,
-      "n": 8192,
-      "k": 8192,
-      "a": {
-        "dtype": "e2m1",
-        "scale": {
-          "dtype": "e4m3",
-          "static": false,
-          "group": [
-            1,
-            16
-          ]
-        },
-        "scale2": {
-          "dtype": "fp32",
-          "static": true,
-          "group": [
-            -1,
-            -1
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e2m1",
-        "scale": {
-          "dtype": "e4m3",
-          "static": true,
-          "group": [
-            1,
-            16
-          ]
-        },
-        "scale2": {
-          "dtype": "fp32",
-          "static": true,
-          "group": [
-            -1,
-            -1
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 8192,
-      "n": 8192,
-      "k": 8192,
-      "a": {
-        "dtype": "e2m1",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            32
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e2m1",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            1,
-            32
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 8192,
-      "n": 8192,
-      "k": 8192,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "fp32",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "fp32",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 8192,
       "n": 12288,
       "k": 1536,
       "a": {
@@ -150531,40 +147203,6 @@
       "nvidia/GLM-5-NVFP4/kv_b_proj",
       "nvidia/GLM-5.1-NVFP4/kv_b_proj",
       "nvidia/GLM-5.2-NVFP4/kv_b_proj"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 8192,
-      "n": 15360,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -150722,40 +147360,6 @@
     "type": "gemm",
     "args": {
       "m": 8192,
-      "n": 30720,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 8192,
       "n": 32768,
       "k": 512,
       "a": {
@@ -150878,40 +147482,6 @@
       "deepseek-ai/DeepSeek-V4-Pro/mtp.attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/mtp.attn.wq_b"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 8192,
-      "n": 122880,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -153733,56 +150303,6 @@
       "amd/DeepSeek-R1-0528-MXFP4-Preview/kv_b_proj",
       "amd/DeepSeek-R1-0528-MXFP4-v2/kv_b_proj",
       "amd/DeepSeek-R1-0528-MXFP4/kv_b_proj"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 10922,
-      "n": 384,
-      "k": 7168,
-      "a": {
-        "dtype": "e2m1",
-        "scale": {
-          "dtype": "e4m3",
-          "static": false,
-          "group": [
-            1,
-            16
-          ]
-        },
-        "scale2": {
-          "dtype": "fp32",
-          "static": true,
-          "group": [
-            -1,
-            -1
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e2m1",
-        "scale": {
-          "dtype": "e4m3",
-          "static": true,
-          "group": [
-            1,
-            16
-          ]
-        },
-        "scale2": {
-          "dtype": "fp32",
-          "static": true,
-          "group": [
-            -1,
-            -1
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -159486,40 +156006,6 @@
       "deepseek-ai/DeepSeek-V4-Pro-0813/attn.wo_a",
       "deepseek-ai/DeepSeek-V4-Pro/attn.wo_a",
       "sgl-project/DeepSeek-V4-Pro-FP8/attn.wo_a"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 16384,
-      "n": 1088,
-      "k": 7168,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -162983,40 +159469,6 @@
     "type": "gemm",
     "args": {
       "m": 16384,
-      "n": 7168,
-      "k": 65536,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 16384,
       "n": 8192,
       "k": 512,
       "a": {
@@ -163361,40 +159813,6 @@
     "type": "gemm",
     "args": {
       "m": 16384,
-      "n": 15360,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 16384,
       "n": 16384,
       "k": 512,
       "a": {
@@ -163476,40 +159894,6 @@
     "type": "gemm",
     "args": {
       "m": 16384,
-      "n": 30720,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 16384,
       "n": 32768,
       "k": 512,
       "a": {
@@ -163562,40 +159946,6 @@
       "deepseek-ai/DeepSeek-V4-Pro/mtp.attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/mtp.attn.wq_b"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 16384,
-      "n": 122880,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -171340,40 +167690,6 @@
     "type": "gemm",
     "args": {
       "m": 32768,
-      "n": 1088,
-      "k": 7168,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 32768,
       "n": 1152,
       "k": 7168,
       "a": {
@@ -175031,40 +171347,6 @@
     "type": "gemm",
     "args": {
       "m": 32768,
-      "n": 7168,
-      "k": 65536,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 32768,
       "n": 8192,
       "k": 512,
       "a": {
@@ -175409,40 +171691,6 @@
     "type": "gemm",
     "args": {
       "m": 32768,
-      "n": 15360,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 32768,
       "n": 16384,
       "k": 512,
       "a": {
@@ -175558,40 +171806,6 @@
     "type": "gemm",
     "args": {
       "m": 32768,
-      "n": 30720,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 32768,
       "n": 32768,
       "k": 512,
       "a": {
@@ -175678,40 +171892,6 @@
       "deepseek-ai/DeepSeek-V4-Pro/mtp.attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/mtp.attn.wq_b"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 32768,
-      "n": 122880,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -179781,56 +175961,6 @@
     },
     "sources": [
       "deepseek-ai/DeepSeek-R1-0528/kv_b_proj"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 43690,
-      "n": 384,
-      "k": 7168,
-      "a": {
-        "dtype": "e2m1",
-        "scale": {
-          "dtype": "e4m3",
-          "static": false,
-          "group": [
-            1,
-            16
-          ]
-        },
-        "scale2": {
-          "dtype": "fp32",
-          "static": true,
-          "group": [
-            -1,
-            -1
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e2m1",
-        "scale": {
-          "dtype": "e4m3",
-          "static": true,
-          "group": [
-            1,
-            16
-          ]
-        },
-        "scale2": {
-          "dtype": "fp32",
-          "static": true,
-          "group": [
-            -1,
-            -1
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   },
   {
@@ -186603,40 +182733,6 @@
     "type": "gemm",
     "args": {
       "m": 65536,
-      "n": 1088,
-      "k": 7168,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 65536,
       "n": 1152,
       "k": 7168,
       "a": {
@@ -190056,40 +186152,6 @@
     "type": "gemm",
     "args": {
       "m": 65536,
-      "n": 7168,
-      "k": 65536,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 65536,
       "n": 8192,
       "k": 512,
       "a": {
@@ -190292,40 +186354,6 @@
     "type": "gemm",
     "args": {
       "m": 65536,
-      "n": 15360,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 65536,
       "n": 16384,
       "k": 512,
       "a": {
@@ -190441,40 +186469,6 @@
     "type": "gemm",
     "args": {
       "m": 65536,
-      "n": 30720,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 65536,
       "n": 32768,
       "k": 512,
       "a": {
@@ -190561,40 +186555,6 @@
       "deepseek-ai/DeepSeek-V4-Pro/mtp.attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/mtp.attn.wq_b"
-    ]
-  },
-  {
-    "type": "gemm",
-    "args": {
-      "m": 65536,
-      "n": 122880,
-      "k": 1024,
-      "a": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": false,
-          "group": [
-            1,
-            128
-          ]
-        }
-      },
-      "b": {
-        "dtype": "e4m3",
-        "scale": {
-          "dtype": "ue8m0",
-          "static": true,
-          "group": [
-            128,
-            128
-          ]
-        }
-      },
-      "out": "bf16"
-    },
-    "sources": [
-      "operatorx/Synthetic-Shapes/gemm"
     ]
   }
 ]
