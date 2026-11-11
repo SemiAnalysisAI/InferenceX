@@ -6,7 +6,7 @@ base:
     model: {}
     container: {}
     frameworks:
-      vllm: "0.1.dev24218+g78e9a0c28"
+      vllm: "0.23.1rc1.dev7347+gc92eaa62c"
       dynamo: "3dd0744eb72c707d76d4c520ae4dea9e286a4ab6"
 
   # ai-dynamo/dynamo#18124 head: the first Dynamo that registers the kimi_k31 model type.
@@ -133,6 +133,8 @@ base:
         tensor-parallel-size: 1
         data-parallel-size: 16
         data-parallel-rpc-port: 13355
+        # The image does not pick a power-of-two attention block at TP1 by itself; pin the size, the same on prefill and decode.
+        block-size: 16384
         enable-expert-parallel: true
         moe-backend: deep_gemm_mega_moe
         no-enable-flashinfer-autotune: true
@@ -170,6 +172,8 @@ base:
         tensor-parallel-size: 1
         data-parallel-size: 16
         data-parallel-rpc-port: 13345
+        # The image does not pick a power-of-two attention block at TP1 by itself; pin the size, the same on prefill and decode.
+        block-size: 16384
         enable-expert-parallel: true
         moe-backend: deep_gemm_mega_moe
         no-enable-flashinfer-autotune: true
@@ -227,6 +231,37 @@ override_1p1d_eval:
         dyn-enable-structural-tag: true
     decode:
       args:
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+
+# c=352: explicit KV cache size per rank (the size vLLM reports it can fully use, minus 3 GiB).
+override_1p1d_kvb:
+  roles:
+    prefill:
+      nodes: 4
+      workers: 1
+      args:
+        kv-cache-memory-bytes: 61926160384
+    decode:
+      args:
+        kv-cache-memory-bytes: 64475268096
+
+override_1p1d_kvb_eval:
+  roles:
+    prefill:
+      nodes: 4
+      workers: 1
+      args:
+        kv-cache-memory-bytes: 61926160384
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+    decode:
+      args:
+        kv-cache-memory-bytes: 64475268096
         reasoning-parser: kimi_k3
         dyn-tool-call-parser: kimi_k3
         dyn-reasoning-parser: kimi_k3
