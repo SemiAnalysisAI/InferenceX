@@ -297,7 +297,10 @@ def _launcher(ctx: dict):
     size = next((s for s in sizes if s >= x.shape[0]), None)
     if cap <= 0 or size is None or size > cap:
         return eager
-    xp = torch.randn(size, *x.shape[1:], device=x.device, dtype=x.dtype)
+    # the graph replays on xp: its first rows are the op's tokens; padding rows come from the op's
+    # generator when it has one (MoE: each data-parallel group draws its own)
+    xp = torch.randn(size, *x.shape[1:], device=x.device, dtype=x.dtype, generator=ctx.get("generator"))
+    xp[: x.shape[0]].copy_(x)
     err = None
     try:
         for _ in range(2):
