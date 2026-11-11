@@ -439,6 +439,10 @@ def _engine(b: _Build, split: dict | None) -> _Engine:
     if _ENGINE is not None:
         _ENGINE.close()
         _ENGINE = None
+    # a failed startup leaves its tensors in reference cycles (its exception's frames): collect
+    # them first, or vLLM's free-memory check rejects every later engine in this process
+    gc.collect()
+    torch.cuda.empty_cache()
     _ENGINE = _Engine(key, b, split)
     return _ENGINE
 
