@@ -231,8 +231,7 @@ qwen3.8next-fp8-mi325x-sglang-agentic-mtp:
   scenarios:
     agentic-coding:
     - search-space:
-      - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 12, 16], srt-recipe: agentic.yaml }
-      - { tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 8, 16, 24], srt-recipe: agentic.yaml }
+      - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 24, 32, 48, 64], srt-recipe: agentic.yaml }
 
 # MI355X FP8 AgentX via ATOM with MTP (3 draft tokens), TP4 only, following the
 # standalone recipe (ROCm/ATOM PR 2592). CONC 1-40 serve off the GPU prefix

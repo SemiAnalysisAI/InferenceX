@@ -65,21 +65,6 @@ override_tp2_ep2_c1:
       CONC: '1'
       KV_OFFLOADING: none
 
-override_tp2_ep2_c2:
-  roles:
-    agg:
-      gpus: 2
-      args:
-        tensor-parallel-size: 2
-        expert-parallel-size: 2
-        mem-fraction-static: 0.95
-        max-running-requests: 4
-        cuda-graph-max-bs-decode: 4
-  benchmark:
-    env:
-      CONC: '2'
-      KV_OFFLOADING: none
-
 override_tp2_ep2_c4:
   roles:
     agg:
@@ -135,67 +120,69 @@ override_tp2_ep2_c16:
         mem-fraction-static: 0.95
         max-running-requests: 32
         cuda-graph-max-bs-decode: 32
+        enable-linear-replayssm-spec: true
   benchmark:
     env:
       CONC: '16'
       KV_OFFLOADING: none
 
-override_tp4_ep4_c1:
+override_tp2_ep2_c24:
   roles:
     agg:
-      gpus: 4
+      gpus: 2
       args:
-        tensor-parallel-size: 4
-        expert-parallel-size: 4
-        mem-fraction-static: 0.85
-        max-running-requests: 2
-        cuda-graph-max-bs-decode: 2
-  benchmark:
-    env:
-      CONC: '1'
-      KV_OFFLOADING: none
-
-override_tp4_ep4_c8:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        tensor-parallel-size: 4
-        expert-parallel-size: 4
-        mem-fraction-static: 0.85
-        max-running-requests: 16
-        cuda-graph-max-bs-decode: 16
-  benchmark:
-    env:
-      CONC: '8'
-      KV_OFFLOADING: none
-
-override_tp4_ep4_c16:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        tensor-parallel-size: 4
-        expert-parallel-size: 4
-        mem-fraction-static: 0.85
-        max-running-requests: 32
-        cuda-graph-max-bs-decode: 32
-  benchmark:
-    env:
-      CONC: '16'
-      KV_OFFLOADING: none
-
-override_tp4_ep4_c24:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        tensor-parallel-size: 4
-        expert-parallel-size: 4
-        mem-fraction-static: 0.85
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        mem-fraction-static: 0.95
         max-running-requests: 48
         cuda-graph-max-bs-decode: 48
   benchmark:
     env:
       CONC: '24'
+      KV_OFFLOADING: none
+
+override_tp2_ep2_c32:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        mem-fraction-static: 0.95
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 64
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: none
+
+override_tp2_ep2_c48:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        mem-fraction-static: 0.95
+        max-running-requests: 96
+        cuda-graph-max-bs-decode: 96
+        enable-linear-replayssm-spec: true
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: none
+
+override_tp2_ep2_c64:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        mem-fraction-static: 0.95
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 128
+  benchmark:
+    env:
+      CONC: '64'
       KV_OFFLOADING: none
