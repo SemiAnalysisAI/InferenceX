@@ -251,9 +251,10 @@ def main() -> int:
         except Exception:
             pass
 
-    # side-by-side processes (lanes) exit 0 so a lane with no supported cases does not stop
-    # the others (srun --kill-on-bad-exit); the shard summary fails errors or no ok rows
-    if os.environ.get("OPERATORX_LANES", "1") != "1":
+    # a CI part's processes exit 0, so a lane or part with no supported cases neither stops its
+    # siblings (srun --kill-on-bad-exit) nor fails the shard; the shard summary fails errors or
+    # a shard without ok rows
+    if os.environ.get("OPERATORX_PART") is not None:
         return 0
     return int(args.strict and (counts["error"] > 0 or counts["ok"] == 0))
 
