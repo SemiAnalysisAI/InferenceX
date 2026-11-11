@@ -1,0 +1,145 @@
+base:
+  schema: 2
+  name: glm5.3-fp8-mi325x-sglang-agentic
+  resources:
+    gpu_type: mi325x
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  # Loading 756 GB of weights plus first-request kernel tuning outlasts the 1800 s default.
+  health_check:
+    interval_seconds: 10
+    max_attempts: 540
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: zai-org/GLM-5.3
+        revision: aca966e4e02791568aa6a4ced368624b3d897f42
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        dsa-prefill-backend: tilelang
+        dsa-decode-backend: tilelang
+        dsa-topk-backend: sgl-kernel
+        kv-cache-dtype: fp8_e4m3
+        # GLM-5.3 emits the GLM-4.7 tool-call format.
+        tool-call-parser: glm47
+        reasoning-parser: glm45
+        context-length: 1048576
+        chunked-prefill-size: 16384
+        mem-fraction-static: 0.85
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+        watchdog-timeout: 1800
+        enable-metrics: true
+        enable-cache-report: true
+      env:
+        # Parallel point launches otherwise hit Hugging Face rate limits; weights are cached.
+        HF_HUB_OFFLINE: '1'
+        TRANSFORMERS_OFFLINE: '1'
+        PYTHONNOUSERSITE: '1'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+  benchmark:
+    env:
+      HF_HUB_OFFLINE: ''
+      TRANSFORMERS_OFFLINE: ''
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      # Long responses admitted near the end of the window can take minutes to drain.
+      AIPERF_BENCHMARK_GRACE_PERIOD: '1800'
+
+# Admission and the decode graph batch are 2x CONC with a floor of 8: at a cap of 2,
+# c1 queued parallel sub-agent requests (P90 TTFT 14.1 s vs 4.8 s at c2) with KV usage under 15%.
+override_tp8_c1:
+  roles:
+    agg:
+      args:
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp8_c2:
+  roles:
+    agg:
+      args:
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+  benchmark:
+    env:
+      CONC: '2'
+      KV_OFFLOADING: none
+
+override_tp8_c4:
+  roles:
+    agg:
+      args:
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp8_c6:
+  roles:
+    agg:
+      args:
+        max-running-requests: 12
+        cuda-graph-max-bs-decode: 12
+  benchmark:
+    env:
+      CONC: '6'
+      KV_OFFLOADING: none
+
+override_tp8_c7:
+  roles:
+    agg:
+      args:
+        max-running-requests: 14
+        cuda-graph-max-bs-decode: 14
+  benchmark:
+    env:
+      CONC: '7'
+      KV_OFFLOADING: none
+
+override_tp8_c8:
+  roles:
+    agg:
+      args:
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
+override_tp8_c9_hicache:
+  roles:
+    agg:
+      args:
+        max-running-requests: 18
+        cuda-graph-max-bs-decode: 18
+        enable-hierarchical-cache: true
+        hicache-host-memory-fraction: 0.60
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+  benchmark:
+    env:
+      CONC: '9'
+      KV_OFFLOADING: dram
