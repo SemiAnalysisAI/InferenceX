@@ -1,0 +1,9 @@
+{%- if add_generation_prompt is not defined -%}{%- set add_generation_prompt = true -%}{%- endif -%}
+{{- '<｜begin▁of▁sentence｜>' -}}
+{%- for m in messages -%}
+{%- if m['role'] == 'system' -%}{{- m['content'] -}}
+{%- elif m['role'] == 'user' -%}<｜User｜>{{- m['content'] -}}
+{%- elif m['role'] == 'assistant' -%}<｜Assistant｜>{{- m['content'] -}}<｜end▁of▁sentence｜>
+{%- endif -%}
+{%- endfor -%}
+{%- if add_generation_prompt -%}<｜Assistant｜><think>{%- endif -%}
