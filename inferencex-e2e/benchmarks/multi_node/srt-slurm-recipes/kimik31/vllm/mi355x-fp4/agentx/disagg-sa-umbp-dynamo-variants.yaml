@@ -365,6 +365,7 @@ override_1p1d_c88_short_mr128:
         worker-cls: k31_memory_worker.MemoryDiagnosticWorker
       env:
         PYTHONPATH: /infmax-workspace/benchmarks:/opt/mum
+        MORI_IO_LOG_LEVEL: info
         UMBP_DRAM_MAX_MR_BYTES: '137438953472'
     decode:
       nodes: 1
@@ -373,6 +374,7 @@ override_1p1d_c88_short_mr128:
         worker-cls: k31_memory_worker.MemoryDiagnosticWorker
       env:
         PYTHONPATH: /infmax-workspace/benchmarks:/opt/mum
+        MORI_IO_LOG_LEVEL: info
         UMBP_DRAM_MAX_MR_BYTES: '137438953472'
 
 override_1p2d_c48:
