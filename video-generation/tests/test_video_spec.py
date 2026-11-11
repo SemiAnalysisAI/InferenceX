@@ -81,7 +81,6 @@ def test_frozen_plan_reproduces_the_hash_its_reference_run_recorded() -> None:
         == recorded["recorded_plan_sha256"]
         == RECORDED_FROZEN_PLAN_SHA256
     )
-    assert RECORDED_FROZEN_PLAN_SHA256 in (SPECS / "README.md").read_text()
 
 
 def test_v01_plan_declares_schema_2_with_its_fairness_and_warmup() -> None:

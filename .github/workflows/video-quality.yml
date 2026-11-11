@@ -32,7 +32,10 @@ jobs:
   find:
     name: Find h3-results artifacts
     # Fork runs are scored only by an explicit dispatch.
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.head_repository.full_name == github.repository
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || (github.repository == 'SemiAnalysisAI/InferenceX'
+      && github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
