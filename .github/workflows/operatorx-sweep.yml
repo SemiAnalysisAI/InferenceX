@@ -22,9 +22,9 @@ on:
         type: string
         default: vllm
       testlists:
-        description: Comma-separated testlist stems
+        description: Comma-separated testlist stems (testlists/official/ or testlists/dev/; a dev list is never ingested)
         type: string
-        default: gemm
+        default: gemm_perf
       mode:
         description: timing (latency, telemetry, profiler replay) or counters (per-kernel ncu / rocprofv3 counters; latencies perturbed)
         type: choice
@@ -70,6 +70,7 @@ jobs:
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
       priority: ${{ steps.plan.outputs.priority }}
+      ingestable: ${{ steps.plan.outputs.ingestable }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -80,7 +81,7 @@ jobs:
         env:
           OPERATORX_RUNNER: ${{ inputs.runner || 'cluster:h100-dsxe' }}
           OPERATORX_BACKENDS: ${{ inputs.backends || 'vllm' }}
-          OPERATORX_TESTLISTS: ${{ inputs.testlists || 'gemm' }}
+          OPERATORX_TESTLISTS: ${{ inputs.testlists || 'gemm_perf' }}
           OPERATORX_WORLD_SIZES: ${{ inputs.world_sizes || '1' }}
           OPERATORX_MODE: ${{ inputs.mode || 'timing' }}
           OPERATORX_RECOVERY_RUN: ${{ inputs.recovery_run_id }}
@@ -105,6 +106,16 @@ jobs:
               || { echo 'Recovery requires a numeric run ID and a single-shard selection' >&2; exit 1; }
           fi
           echo "matrix=$(cat operatorx-matrix.json)" >> "$GITHUB_OUTPUT"
+          # results from a dev testlist (testlists/dev/) are never ingested
+          ingestable=true
+          IFS=, read -ra lists <<<"$OPERATORX_TESTLISTS"
+          for t in "${lists[@]}"; do
+            if [ -f "operatorx/testlists/dev/$t.json" ]; then
+              ingestable=false
+              echo "::notice::$t is a dev testlist; this run's results will not be ingested"
+            fi
+          done
+          echo "ingestable=$ingestable" >> "$GITHUB_OUTPUT"
           scored=$(printf '%s' '[{"runner":"operatorx","framework":"operatorx"}]' |
             uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml python -m infx.workflows.ci_priority)
           echo "priority=$(jq -r '.[0].priority' <<<"$scored")" >> "$GITHUB_OUTPUT"
@@ -256,8 +267,9 @@ jobs:
     name: Trigger OperatorX database ingest
     if: >-
       always() && github.event_name == 'workflow_dispatch' && inputs.ingest &&
+      needs.setup.outputs.ingestable == 'true' &&
       (needs.summarize.result == 'success' || needs.summarize.result == 'failure')
-    needs: [summarize]
+    needs: [setup, summarize]
     runs-on: ubuntu-latest
     steps:
       - name: Dispatch ingest to the app repository

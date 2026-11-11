@@ -51,7 +51,11 @@ def _csv(s: str | None) -> list[str]:
 
 def _load_testlists(names: list[str] | None, directory: Path = TESTLIST_DIR) -> dict[str, list[dict]]:
     """{testlist_name: [shape_dict, ...]}; all available by default."""
-    available = {p.stem: p for p in sorted(directory.glob("*.json"))}
+    available = {}
+    for p in sorted(directory.rglob("*.json")):  # official/ and smoke/, or one flat staged dir
+        if p.stem in available:
+            raise SystemExit(f"testlist {p.stem!r} is in both {available[p.stem]} and {p}")
+        available[p.stem] = p
     if names:
         wanted = {n: available[n] for n in names if n in available}
         missing = [n for n in names if n not in available]
@@ -130,7 +134,7 @@ def main() -> int:
     ap.add_argument("--platform", default=None,
                     help="platform override (otherwise inferred from $OPERATORX_CLUSTER)")
     ap.add_argument("--testlists", default=None,
-                    help="comma-separated testlist names; default = all in operatorx/testlists/")
+                    help="comma-separated testlist names; default = all under operatorx/testlists/")
     ap.add_argument("--backends", default=None,
                     help="comma-separated backend names; default = all for the platform")
     ap.add_argument("--testlist-dir", type=Path, default=TESTLIST_DIR)

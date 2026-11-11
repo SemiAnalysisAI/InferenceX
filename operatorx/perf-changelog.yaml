@@ -30,3 +30,10 @@
     - "All unmatched vLLM cases on MI355X now select vllm/vllm-openai-rocm:nightly-e68efc685ab1e6f1eda004ced7157e3ca411da2f@sha256:520e098f54ec96837228aaddea0a833cbf6374dbdffd480c1d65f26ffab7701b instead of vllm/vllm-openai-rocm:nightly-rocm100-df6603f0583375f244d1ac6d36265462b7490392."
     - "All unmatched vLLM cases on B300 now select vllm/vllm-openai:minimax-m31-flash@sha256:86f582dae25ea92802353727164ae4eb03b37b18baf9119b805ffaec2a7ef07c instead of vllm/vllm-openai:nightly-dev-x86_64-cu13-3696c77."
     - "No GPU performance or compatibility evidence is claimed for these runtime changes; new results must retain image and recipe provenance."
+- date: 2026-11-11
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5007
+  operators: [moe, gemm]
+  pools: [h100-dgxc, h200-dgxc, b200-nscale, b300, gb200, gb300, mi300x, mi325x, mi355x]
+  description:
+    - "MoE data-parallel groups time their own tokens: the CUDA graph replays each group's input, and hash and forced routing draw per group. dp>1 rows previously timed one batch repeated on every group."
+    - "Testlists move to testlists/official/ (ingested) and testlists/dev/ (gemm_perf, smoke_parallel; never ingested). gemm.json splits into per-model lists (gemm_deepseek_r1, gemm_kimi_k2, gemm_qwen3_5, gemm_glm5, gemm_minimax_m2_5, gemm_gpt_oss; its DeepSeek-V4 and MiniMax-M3 cases join gemm_deepseek_v4 and gemm_minimax_m3). The gemm_serving_* lists fold into gemm_deepseek_v4 and shapes from no model into gemm_synthetic."

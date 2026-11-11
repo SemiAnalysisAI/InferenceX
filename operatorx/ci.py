@@ -883,9 +883,10 @@ def main() -> None:
         names = args.testlists.split(",")
         if any(not re.fullmatch(r"[A-Za-z0-9_-]+", n) for n in names):
             raise ValueError("invalid testlist name")
-        lists = {
-            n: json.loads((ROOT / "testlists" / f"{n}.json").read_text()) for n in names
-        }
+        paths = {p.stem: p for p in (ROOT / "testlists").glob("*/*.json")}
+        if missing := [n for n in names if n not in paths]:
+            raise ValueError(f"unknown testlist(s): {missing}")
+        lists = {n: json.loads(paths[n].read_text()) for n in names}
         vendor = "amd" if is_amd(args.runner) else "nvidia"
         images = tomllib.loads((ROOT / "containers.toml").read_text())[vendor]
         # fail before any node is allocated for a backend with no module

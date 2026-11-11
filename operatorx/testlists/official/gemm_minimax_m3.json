@@ -17284,7 +17284,13 @@
       "out": "bf16"
     },
     "sources": [
-      "amd/MiniMax-M3-MXFP4/self_attn.o_proj"
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/self_attn.o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
     ]
   },
   {
@@ -17320,7 +17326,13 @@
       "out": "bf16"
     },
     "sources": [
-      "amd/MiniMax-M3-MXFP4/self_attn.o_proj"
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/self_attn.o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
     ]
   },
   {
@@ -17356,7 +17368,13 @@
       "out": "bf16"
     },
     "sources": [
-      "amd/MiniMax-M3-MXFP4/self_attn.o_proj"
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/self_attn.o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
     ]
   },
   {
@@ -17392,7 +17410,13 @@
       "out": "bf16"
     },
     "sources": [
-      "amd/MiniMax-M3-MXFP4/self_attn.o_proj"
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/self_attn.o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
     ]
   },
   {
@@ -17428,7 +17452,13 @@
       "out": "bf16"
     },
     "sources": [
-      "amd/MiniMax-M3-MXFP4/self_attn.o_proj"
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/self_attn.o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
     ]
   },
   {
@@ -17464,7 +17494,13 @@
       "out": "bf16"
     },
     "sources": [
-      "amd/MiniMax-M3-MXFP4/self_attn.o_proj"
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/self_attn.o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
     ]
   },
   {
@@ -17500,7 +17536,13 @@
       "out": "bf16"
     },
     "sources": [
-      "amd/MiniMax-M3-MXFP4/self_attn.o_proj"
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/self_attn.o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
     ]
   },
   {
@@ -17644,7 +17686,13 @@
       "out": "bf16"
     },
     "sources": [
-      "amd/MiniMax-M3-MXFP4/self_attn.o_proj"
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/self_attn.o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
     ]
   },
   {
@@ -17680,7 +17728,13 @@
       "out": "bf16"
     },
     "sources": [
-      "amd/MiniMax-M3-MXFP4/self_attn.o_proj"
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/self_attn.o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
     ]
   },
   {
@@ -17716,7 +17770,13 @@
       "out": "bf16"
     },
     "sources": [
-      "amd/MiniMax-M3-MXFP4/self_attn.o_proj"
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/self_attn.o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
     ]
   },
   {
@@ -17752,7 +17812,13 @@
       "out": "bf16"
     },
     "sources": [
-      "amd/MiniMax-M3-MXFP4/self_attn.o_proj"
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/self_attn.o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
     ]
   },
   {
@@ -17788,7 +17854,13 @@
       "out": "bf16"
     },
     "sources": [
-      "amd/MiniMax-M3-MXFP4/self_attn.o_proj"
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/self_attn.o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
     ]
   },
   {
@@ -18941,6 +19013,2468 @@
     },
     "sources": [
       "amd/MiniMax-M3-MXFP4/self_attn.q_proj+self_attn.k_proj+self_attn.v_proj+self_attn.index_q_proj+self_attn.index_k_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 2048,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/q_a_proj",
+      "amd/GLM-5.2-MXFP4/q_a_proj",
+      "amd/MiniMax-M3-MXFP4/q_proj",
+      "nvidia/GLM-5-NVFP4/q_a_proj",
+      "nvidia/GLM-5.1-NVFP4/q_a_proj",
+      "nvidia/GLM-5.2-NVFP4/q_a_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 3072,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M2.5-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 6144,
+      "k": 2048,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 6144,
+      "k": 3072,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/MiniMax-M2.5-MXFP4/q_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 6144,
+      "k": 4096,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 6144,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 5,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 2048,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/q_a_proj",
+      "amd/GLM-5.2-MXFP4/q_a_proj",
+      "amd/MiniMax-M3-MXFP4/q_proj",
+      "nvidia/GLM-5-NVFP4/q_a_proj",
+      "nvidia/GLM-5.1-NVFP4/q_a_proj",
+      "nvidia/GLM-5.2-NVFP4/q_a_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 3072,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M2.5-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 6144,
+      "k": 2048,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 6144,
+      "k": 3072,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/MiniMax-M2.5-MXFP4/q_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 6144,
+      "k": 4096,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 6144,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 10,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 12,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 15,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16,
+      "n": 2048,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/q_a_proj",
+      "amd/GLM-5.2-MXFP4/q_a_proj",
+      "amd/MiniMax-M3-MXFP4/q_proj",
+      "nvidia/GLM-5-NVFP4/q_a_proj",
+      "nvidia/GLM-5.1-NVFP4/q_a_proj",
+      "nvidia/GLM-5.2-NVFP4/q_a_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16,
+      "n": 3072,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M2.5-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16,
+      "n": 6144,
+      "k": 3072,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/MiniMax-M2.5-MXFP4/q_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16,
+      "n": 6144,
+      "k": 4096,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16,
+      "n": 6144,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 24,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 25,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 30,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 32,
+      "n": 2048,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/q_a_proj",
+      "amd/GLM-5.2-MXFP4/q_a_proj",
+      "amd/MiniMax-M3-MXFP4/q_proj",
+      "nvidia/GLM-5-NVFP4/q_a_proj",
+      "nvidia/GLM-5.1-NVFP4/q_a_proj",
+      "nvidia/GLM-5.2-NVFP4/q_a_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 32,
+      "n": 3072,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M2.5-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 32,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 32,
+      "n": 6144,
+      "k": 3072,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/MiniMax-M2.5-MXFP4/q_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 32,
+      "n": 6144,
+      "k": 4096,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 32,
+      "n": 6144,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 48,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 64,
+      "n": 2048,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/q_a_proj",
+      "amd/GLM-5.2-MXFP4/q_a_proj",
+      "amd/MiniMax-M3-MXFP4/q_proj",
+      "nvidia/GLM-5-NVFP4/q_a_proj",
+      "nvidia/GLM-5.1-NVFP4/q_a_proj",
+      "nvidia/GLM-5.2-NVFP4/q_a_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 64,
+      "n": 3072,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M2.5-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 64,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 64,
+      "n": 6144,
+      "k": 3072,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/MiniMax-M2.5-MXFP4/q_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 64,
+      "n": 6144,
+      "k": 4096,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 64,
+      "n": 6144,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 104,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 105,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 128,
+      "n": 2048,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/q_a_proj",
+      "amd/GLM-5.2-MXFP4/q_a_proj",
+      "amd/MiniMax-M3-MXFP4/q_proj",
+      "nvidia/GLM-5-NVFP4/q_a_proj",
+      "nvidia/GLM-5.1-NVFP4/q_a_proj",
+      "nvidia/GLM-5.2-NVFP4/q_a_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 128,
+      "n": 3072,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M2.5-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 128,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 128,
+      "n": 6144,
+      "k": 3072,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/MiniMax-M2.5-MXFP4/q_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 128,
+      "n": 6144,
+      "k": 4096,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 128,
+      "n": 6144,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "n": 2048,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/q_a_proj",
+      "amd/GLM-5.2-MXFP4/q_a_proj",
+      "amd/MiniMax-M3-MXFP4/q_proj",
+      "nvidia/GLM-5-NVFP4/q_a_proj",
+      "nvidia/GLM-5.1-NVFP4/q_a_proj",
+      "nvidia/GLM-5.2-NVFP4/q_a_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "n": 3072,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M2.5-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "n": 6144,
+      "k": 3072,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/MiniMax-M2.5-MXFP4/q_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "n": 6144,
+      "k": 4096,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "n": 6144,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 512,
+      "n": 2048,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/q_a_proj",
+      "amd/GLM-5.2-MXFP4/q_a_proj",
+      "amd/MiniMax-M3-MXFP4/q_proj",
+      "nvidia/GLM-5-NVFP4/q_a_proj",
+      "nvidia/GLM-5.1-NVFP4/q_a_proj",
+      "nvidia/GLM-5.2-NVFP4/q_a_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 512,
+      "n": 3072,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M2.5-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 512,
+      "n": 6144,
+      "k": 4096,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1024,
+      "n": 3072,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M2.5-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1024,
+      "n": 6144,
+      "k": 3072,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/MiniMax-M2.5-MXFP4/q_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4096,
+      "n": 2048,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/q_a_proj",
+      "amd/GLM-5.2-MXFP4/q_a_proj",
+      "amd/MiniMax-M3-MXFP4/q_proj",
+      "nvidia/GLM-5-NVFP4/q_a_proj",
+      "nvidia/GLM-5.1-NVFP4/q_a_proj",
+      "nvidia/GLM-5.2-NVFP4/q_a_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4096,
+      "n": 3072,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M2.5-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4096,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4096,
+      "n": 6144,
+      "k": 2048,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4096,
+      "n": 6144,
+      "k": 3072,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/MiniMax-M2.5-MXFP4/q_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4096,
+      "n": 6144,
+      "k": 4096,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4096,
+      "n": 6144,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 5120,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 2048,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/q_a_proj",
+      "amd/GLM-5.2-MXFP4/q_a_proj",
+      "amd/MiniMax-M3-MXFP4/q_proj",
+      "nvidia/GLM-5-NVFP4/q_a_proj",
+      "nvidia/GLM-5.1-NVFP4/q_a_proj",
+      "nvidia/GLM-5.2-NVFP4/q_a_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 3072,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M2.5-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 6144,
+      "k": 3072,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/MiniMax-M2.5-MXFP4/q_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 6144,
+      "k": 4096,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 6144,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 10240,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 15360,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16384,
+      "n": 2048,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/q_a_proj",
+      "amd/GLM-5.2-MXFP4/q_a_proj",
+      "amd/MiniMax-M3-MXFP4/q_proj",
+      "nvidia/GLM-5-NVFP4/q_a_proj",
+      "nvidia/GLM-5.1-NVFP4/q_a_proj",
+      "nvidia/GLM-5.2-NVFP4/q_a_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16384,
+      "n": 3072,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M2.5-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16384,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16384,
+      "n": 6144,
+      "k": 3072,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/MiniMax-M2.5-MXFP4/q_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16384,
+      "n": 6144,
+      "k": 4096,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16384,
+      "n": 6144,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 25600,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 32768,
+      "n": 2048,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/q_a_proj",
+      "amd/GLM-5.2-MXFP4/q_a_proj",
+      "amd/MiniMax-M3-MXFP4/q_proj",
+      "nvidia/GLM-5-NVFP4/q_a_proj",
+      "nvidia/GLM-5.1-NVFP4/q_a_proj",
+      "nvidia/GLM-5.2-NVFP4/q_a_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 32768,
+      "n": 3072,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M2.5-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 32768,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 32768,
+      "n": 6144,
+      "k": 2048,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 32768,
+      "n": 6144,
+      "k": 3072,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/MiniMax-M2.5-MXFP4/q_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 32768,
+      "n": 6144,
+      "k": 4096,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 32768,
+      "n": 6144,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 40960,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 65536,
+      "n": 2048,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/q_a_proj",
+      "amd/GLM-5.2-MXFP4/q_a_proj",
+      "amd/MiniMax-M3-MXFP4/q_proj",
+      "nvidia/GLM-5-NVFP4/q_a_proj",
+      "nvidia/GLM-5.1-NVFP4/q_a_proj",
+      "nvidia/GLM-5.2-NVFP4/q_a_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 65536,
+      "n": 3072,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M2.5-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 65536,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 65536,
+      "n": 6144,
+      "k": 3072,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/MiniMax-M2.5-MXFP4/q_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 65536,
+      "n": 6144,
+      "k": 4096,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 65536,
+      "n": 6144,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj"
     ]
   }
 ]

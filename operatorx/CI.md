@@ -19,12 +19,12 @@
 ```bash
 gh workflow run operatorx-sweep.yml --repo SemiAnalysisAI/InferenceX \
   --ref <branch> -f runner=cluster:h100-dsxe -f backends=vllm \
-  -f testlists=gemm -f world_sizes=1 -f chunk_size=500 -f ingest=false
+  -f testlists=gemm_deepseek_v4 -f world_sizes=1 -f chunk_size=500 -f ingest=false
 ```
 
 - Inputs: `runner`, `backends` (`vllm`; AMD also `torch`), `testlists`, `mode` (`timing` | `counters`), `world_sizes` (1, 2, 4, 8), `chunk_size` (1-500), `recovery_run_id`, `ingest` (default true; `false` for test runs).
 - `mode=counters`: each op once under Nsight Compute (NVIDIA) or rocprofv3 (AMD, 12 passes: use a smaller `chunk_size`); raw files in `results/counters/`; latencies perturbed.
-- Smoke check: `testlists=gemm_perf`, `chunk_size=50`. Dispatch `attn_*` testlists apart from gemm / moe ones.
+- Testlists: `testlists/official/` are ingested; `testlists/dev/` (`gemm_perf`, `smoke_parallel`) check the harness and are never ingested, whatever `ingest` says. Quick check: `testlists=gemm_perf`, `chunk_size=50`. Dispatch `attn_*` testlists apart from gemm / moe ones.
 
 ## Execution contract
 
