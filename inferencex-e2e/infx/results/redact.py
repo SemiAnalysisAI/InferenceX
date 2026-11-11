@@ -1,7 +1,7 @@
-"""Redact IP addresses, Oracle VCN domains, and credentials from stored CI artifacts.
+"""Sanitize stored CI artifacts before upload.
 
 ``python -m infx.results.redact PATH [PATH ...]`` rewrites text files, ``.gz`` files, and
-``.tar.gz`` archives in place. One random key per invocation tags each address consistently
+``.tar.gz`` archives in place. One random key per invocation tags each value consistently
 across every file it rewrites, and tags from different invocations cannot be linked.
 """
 
@@ -136,7 +136,7 @@ def _ipv6(match: re.Match[str], key: bytes) -> str:
 
 
 def redact_text(text: str, key: bytes) -> str:
-    """``text`` with credentials, Oracle VCN domains, and IP addresses redacted under ``key``."""
+    """``text`` sanitized under ``key``."""
     for pattern in _CREDENTIALS:
         text = pattern.sub(REDACTED, text)
     text = _URL_PASSWORD.sub(rf"\1{REDACTED}@", text)

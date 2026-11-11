@@ -360,21 +360,10 @@ Reuse fails closed when authorized but ineligible or invalid. Pushes to `main`
 never run a sweep: `run-sweep.yml` is PR-only, and without reuse authorization
 the Merge Ingest run fails and nothing is benchmarked or ingested.
 
-## Stored Artifact Redaction
+## Stored Artifact Sanitization
 
-Any signed-in GitHub user can download Actions artifacts, so benchmark,
-multi-node, SpeedBench AL, and profile jobs run `Redact stored artifacts`
-(`python -m infx.results.redact`) on exactly the files their log and result
-uploads include, right before the first of them. It rewrites text files,
-`.gz` files, and `.tar.gz` members in place. Credentials and URL passwords
-become `***REDACTED***`, Oracle VCN domains keep only their host label, and
-private, CGNAT, link-local, and public IP addresses become `***REDACTED-<hex6>***`.
-The tag is an HMAC under a random key generated for that job, so one address
-keeps one tag within a job but cannot be linked across jobs. Node, cluster,
-and Slurm names, paths, GPU UUIDs and serials, MAC addresses, ports, image
-references, loopback addresses, and version strings are kept. A file whose
-sha256 a JSON `*sha256` field records, such as power `samples.csv`, is left
-unchanged with a warning. Profile traces and live job logs are not redacted.
+Benchmark, multi-node, SpeedBench AL, and profile jobs run `Redact stored artifacts`
+(`python -m infx.results.redact`) on the files they upload, right before the first upload.
 
 ## Repository Scope
 

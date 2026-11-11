@@ -3,18 +3,18 @@
   "cases": [
     {
       "name": "private ipv4 keeps port",
-      "input": "connect http://172.29.37.221:8000/v1",
-      "output": "connect http://***REDACTED-f58c3e***:8000/v1"
+      "input": "connect http://10.0.0.11:8000/v1",
+      "output": "connect http://***REDACTED-842ff3***:8000/v1"
     },
     {
       "name": "same ip same tag, ports differ",
-      "input": "10.3.10.34:9405 10.3.10.35:9405 10.3.10.34:7500",
-      "output": "***REDACTED-51671e***:9405 ***REDACTED-050a41***:9405 ***REDACTED-51671e***:7500"
+      "input": "10.0.0.21:9100 10.0.0.22:9100 10.0.0.21:7500",
+      "output": "***REDACTED-95c83f***:9100 ***REDACTED-9b0b8d***:9100 ***REDACTED-95c83f***:7500"
     },
     {
       "name": "public ipv4",
-      "input": "ssh-keygen -F 64.139.223.123",
-      "output": "ssh-keygen -F ***REDACTED-06b842***"
+      "input": "ssh-keygen -F 198.51.100.7",
+      "output": "ssh-keygen -F ***REDACTED-392122***"
     },
     {
       "name": "cgnat ipv4",
@@ -23,8 +23,8 @@
     },
     {
       "name": "sentence-final ip",
-      "input": "Host IP: 10.30.1.165.",
-      "output": "Host IP: ***REDACTED-a3817e***."
+      "input": "Host IP: 10.0.0.31.",
+      "output": "Host IP: ***REDACTED-13a709***."
     },
     {
       "name": "json address value",
@@ -73,8 +73,8 @@
     },
     {
       "name": "mac address kept",
-      "input": "mac 04:90:81:37:24:68",
-      "output": "mac 04:90:81:37:24:68"
+      "input": "mac 02:00:00:00:00:01",
+      "output": "mac 02:00:00:00:00:01"
     },
     {
       "name": "timestamp kept",
@@ -83,18 +83,18 @@
     },
     {
       "name": "oracle vcn domain",
-      "input": "remote=[watchtower-navy-cn16.sub07252334101.gb200manual.oraclevcn.com]:29501",
-      "output": "remote=[watchtower-navy-cn16.***REDACTED***]:29501"
+      "input": "remote=[node-a.subnet1.vcn1.oraclevcn.com]:29501",
+      "output": "remote=[node-a.***REDACTED***]:29501"
     },
     {
       "name": "internal node names kept",
-      "input": "im-gb300-r03-c001.gb300.internal: timedatectl NTPSynchronized=yes",
-      "output": "im-gb300-r03-c001.gb300.internal: timedatectl NTPSynchronized=yes"
+      "input": "node-b.cluster.internal: timedatectl NTPSynchronized=yes",
+      "output": "node-b.cluster.internal: timedatectl NTPSynchronized=yes"
     },
     {
       "name": "gpu uuid kept",
-      "input": "GPU-9b587c56-f016-a909-bdc7-47a717c50e25",
-      "output": "GPU-9b587c56-f016-a909-bdc7-47a717c50e25"
+      "input": "GPU-00000000-0000-0000-0000-000000000001",
+      "output": "GPU-00000000-0000-0000-0000-000000000001"
     },
     {
       "name": "hf token",
