@@ -35,7 +35,7 @@ def _point(tmp_path: Path, *, require_power: bool) -> tuple[SimpleNamespace, Sim
     workspace.mkdir()
     for name in (EXPORTER_PROVENANCE, "power-producer-sha.txt"):
         (workspace / name).write_text(f"{name}\n")
-    request = SimpleNamespace(eval_only=False, require_power=require_power, result_filename="point")
+    request = SimpleNamespace(eval_only=False, al_gate=False, require_power=require_power, result_filename="point")
     run = SimpleNamespace(backend=_Backend(output), request=request, workspace=workspace, life=Lifecycle())
     submitted = SimpleNamespace(recover=lambda backend: object())
     return run, submitted, workspace

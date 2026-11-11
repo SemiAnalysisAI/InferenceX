@@ -53,7 +53,11 @@ jobs:
                   jq -c '.changelog_metadata' "$RUNNER_TEMP/plan.json" > "$GITHUB_WORKSPACE/changelog_metadata.json"
                   agentic=$(jq '((.single_node.agentic // []) + (.multi_node.agentic // [])) | length > 0' "$RUNNER_TEMP/plan.json")
                   retirement_only=$(jq '.changelog_metadata.entries | length > 0 and all(.[]; .retired == true)' "$RUNNER_TEMP/plan.json")
+                  video=$(jq '(.single_node.video // []) | length > 0' "$RUNNER_TEMP/plan.json")
+                  llm=$(jq '[.single_node | to_entries[] | select(.key != "video") | .value[]] + [.multi_node | .[][]] + .evals + .agentic_evals + .multinode_evals + .multinode_agentic_evals | length > 0' "$RUNNER_TEMP/plan.json")
                   echo "agentic=$agentic" >> "$GITHUB_OUTPUT"
+                  echo "video=$video" >> "$GITHUB_OUTPUT"
+                  echo "llm=$llm" >> "$GITHUB_OUTPUT"
                   echo "retirement-only=$retirement_only" >> "$GITHUB_OUTPUT"
 
             - name: Resolve reused sweep
@@ -97,13 +101,55 @@ jobs:
                   path: changelog_metadata.json
                   if-no-files-found: error
 
+            # Matching the manifest too keeps one bundle in its named directory; a single match unpacks flat.
+            - name: Download the reused video bundles and matrix
+              if: steps.plan.outputs.video == 'true'
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              with:
+                  github-token: ${{ github.token }}
+                  run-id: ${{ steps.reuse.outputs.reuse-source-run-id }}
+                  pattern: '{h3-results-*,video-sweep-manifest}'
+                  path: video-artifacts
+
+            - name: Validate reused video coverage
+              if: steps.plan.outputs.video == 'true'
+              env:
+                  SOURCE_RUN_ID: ${{ steps.reuse.outputs.reuse-source-run-id }}
+                  SOURCE_HEAD_SHA: ${{ steps.reuse.outputs.reuse-source-head-sha }}
+                  SOURCE_RUN_ATTEMPT: ${{ steps.reuse.outputs.reuse-source-run-attempt }}
+              run: |
+                  python3 -m infx.results.video_artifacts --artifacts-dir video-artifacts \
+                    --run-id "$SOURCE_RUN_ID" --run-attempt "$SOURCE_RUN_ATTEMPT" --head-sha "$SOURCE_HEAD_SHA"
+
+            - name: Publish reused videos
+              if: steps.plan.outputs.video == 'true'
+              uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+              env:
+                  SOURCE_RUN_ID: ${{ steps.reuse.outputs.reuse-source-run-id }}
+                  MERGE_RUN_ID: ${{ github.run_id }}
+                  APP_REPO: ${{ vars.APP_REPO || 'SemiAnalysisAI/InferenceX-app' }}
+              with:
+                  github-token: ${{ secrets.FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
+                  script: |
+                    const [owner, repo] = process.env.APP_REPO.split("/");
+                    await github.rest.repos.createDispatchEvent({
+                      owner,
+                      repo,
+                      event_type: "publish-video-results",
+                      client_payload: {
+                        source_run_id: process.env.SOURCE_RUN_ID,
+                        merge_run_id: process.env.MERGE_RUN_ID,
+                      },
+                    });
+
             - name: Trigger database ingest
-              if: steps.plan.outputs.retirement-only != 'true'
+              if: steps.plan.outputs.retirement-only != 'true' && steps.plan.outputs.llm == 'true'
               uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
               env:
                   AGENTIC: ${{ steps.plan.outputs.agentic }}
                   SOURCE_RUN_ID: ${{ steps.reuse.outputs.reuse-source-run-id }}
                   MERGE_RUN_ID: ${{ github.run_id }}
+                  APP_REPO: ${{ vars.APP_REPO || 'SemiAnalysisAI/InferenceX-app' }}
               with:
                   github-token: ${{ secrets.FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
                   script: |
@@ -113,9 +159,10 @@ jobs:
                       "merge-run-id": process.env.MERGE_RUN_ID,
                     };
                     if (agentic) client_payload["database-target"] = "production";
+                    const [owner, repo] = process.env.APP_REPO.split("/");
                     await github.rest.repos.createDispatchEvent({
-                      owner: "SemiAnalysisAI",
-                      repo: "InferenceX-app",
+                      owner,
+                      repo,
                       event_type: agentic ? "ingest-agentic-results" : "ingest-results",
                       client_payload,
                     });

@@ -1,3 +1,4 @@
+import functools
 import json
 import re
 import subprocess
@@ -383,6 +384,7 @@ def test_publishing_an_attempt_warns_when_no_eval_matches_the_baseline(
     assert (warning in capsys.readouterr().out) is warned
 
 
+@functools.cache
 def workflow_env(template):
     return yaml.safe_load((WORKFLOWS / template).read_text())["env"]
 

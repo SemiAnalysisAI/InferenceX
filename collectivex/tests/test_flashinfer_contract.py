@@ -296,13 +296,12 @@ class OracleContract(unittest.TestCase):
 
 class Provenance(unittest.TestCase):
     def test_kernel_generation_and_library_version_carry_the_wheel(self):
-        for version, slug, reduction in (("0.6.8.post1", "0.6.8.post1", "topk-slot-tree"),
-                                         ("0.7.1+cu130", "0.7.1-cu130", "domain-fp32")):
+        for version, slug in (("0.7.1", "0.7.1"), ("0.7.1+cu130", "0.7.1-cu130")):
             with self.subTest(version=version):
                 backend = Harness(self, version=version).backend
                 self.assertEqual(backend.library_version, version)
                 self.assertEqual(backend.kernel_generation, f"flashinfer-mnnvl-one-sided-staged-{slug}")
-                self.assertEqual(backend.combine_reduction, reduction)
+                self.assertEqual(backend.combine_reduction, "domain-fp32")
                 with mock.patch.dict(os.environ, {"COLLX_CUDA_GRAPH": "1"}):
                     self.assertEqual(ep_harness.kernel_generation(backend),
                                      f"flashinfer-mnnvl-one-sided-staged-{slug}-cudagraph-spin-ar")
