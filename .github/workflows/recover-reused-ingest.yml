@@ -28,6 +28,7 @@ jobs:
         runs-on: ubuntu-latest
         permissions:
             contents: read
+            pull-requests: read # Find the pull request original-merge-sha merged.
         steps:
             - name: Validate inputs
               env:
@@ -68,20 +69,25 @@ jobs:
               env:
                   ORIGINAL_MERGE_SHA: ${{ inputs.original-merge-sha }}
                   PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
+                  GH_TOKEN: ${{ github.token }}
               run: |
                   git merge-base --is-ancestor "$ORIGINAL_MERGE_SHA" origin/main || {
                     echo "::error::$ORIGINAL_MERGE_SHA is not on main"
                     exit 1
                   }
+                  pull_request=$(gh api "repos/$GITHUB_REPOSITORY/commits/$ORIGINAL_MERGE_SHA/pulls" \
+                    --jq "[.[] | select(.merge_commit_sha == \"$ORIGINAL_MERGE_SHA\")][0].number // empty")
                   cd "$GITHUB_WORKSPACE/inferencex-e2e"
                   uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
                     python -m infx.matrix.plan \
                     --changelog-file perf-changelog.yaml \
+                    --repository "$GITHUB_REPOSITORY" \
+                    ${pull_request:+--pull-request "$pull_request"} \
                     --base-ref "${ORIGINAL_MERGE_SHA}^" \
                     --head-ref "$ORIGINAL_MERGE_SHA" > "$RUNNER_TEMP/plan.json"
                   jq -c '.changelog_metadata' "$RUNNER_TEMP/plan.json" > "$GITHUB_WORKSPACE/changelog_metadata.json"
                   jq -e '(.entries // []) | length > 0' "$GITHUB_WORKSPACE/changelog_metadata.json" >/dev/null || {
-                    echo "::error::$ORIGINAL_MERGE_SHA appended no changelog entries"
+                    echo "::error::$ORIGINAL_MERGE_SHA appended no changelog entries from this repository"
                     exit 1
                   }
                   agentic=$(jq '((.single_node.agentic // []) + (.multi_node.agentic // [])) | length > 0' "$RUNNER_TEMP/plan.json")
