@@ -285,11 +285,13 @@ override_tp2_c64:
     env:
       CONC: '64'
 
-override_dp2_c128:
+override_dp2_umbp_c128:
   frontend: &dp2_router
     type: vllm-router
     args:
       policy: consistent_hash
+      prometheus-host: 127.0.0.1
+      prometheus-port: 18000
       request-timeout-secs: 14400
       disable-retries: true
   setup_script: vllm-router.sh
@@ -324,11 +326,12 @@ override_dp2_c128:
       args:
         tensor-parallel-size: 1
         data-parallel-size: 2
-        # Mono decode supports TP 2/4/8 only and fails at startup with DP.
-        monokernel: false
         engram-config: '{"cpu_offload":true}'
         max-cudagraph-capture-size: 1024
         max-num-batched-tokens: 16384
+        # The DP2 points were tuned without mono decode.
+        monokernel: null
+        prefill-schedule-interval: 11
         kv-transfer-config: '{"kv_connector":"UMBPStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"mode":"standalone","endpoint":"unix:///tmp/umbp/standalone.grpc.sock"}}'
   benchmark:
     env:
@@ -336,7 +339,7 @@ override_dp2_c128:
       KV_OFFLOADING: 'dram'
       TOTAL_CPU_DRAM_GB: '449'
 
-override_dp2_c256:
+override_dp2_umbp_c256:
   frontend: *dp2_router
   setup_script: vllm-router.sh
   services: *umbp_server
@@ -348,7 +351,7 @@ override_dp2_c256:
       KV_OFFLOADING: 'dram'
       TOTAL_CPU_DRAM_GB: '449'
 
-override_dp2_c384:
+override_dp2_umbp_c384:
   frontend: *dp2_router
   setup_script: vllm-router.sh
   services: *umbp_server

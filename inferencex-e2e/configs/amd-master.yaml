@@ -968,14 +968,13 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark-umbp:
   framework: vllm
   multinode: false
   srt-recipe-dir: dsv41flash/vllm/mi355x-fp4-mtp
-  router: { name: vllm-router, version: "0.1.14" }
   scenarios:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      - { tp: 2, ep: 1, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: umbp, version: "1.2.3.post1" }, spec-decoding: mtp, conc-list: [128], srt-recipe: agentic.yaml:override_dp2_c128 }
-      - { tp: 2, ep: 1, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: umbp, version: "1.2.3.post1" }, spec-decoding: mtp, conc-list: [256], srt-recipe: agentic.yaml:override_dp2_c256 }
-      - { tp: 2, ep: 1, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: umbp, version: "1.2.3.post1" }, spec-decoding: mtp, conc-list: [384], srt-recipe: agentic.yaml:override_dp2_c384 }
+      - { tp: 2, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: umbp, version: "1.2.3.post1" }, spec-decoding: mtp, conc-list: [128], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml:override_dp2_umbp_c128 }
+      - { tp: 2, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: umbp, version: "1.2.3.post1" }, spec-decoding: mtp, conc-list: [256], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml:override_dp2_umbp_c256 }
+      - { tp: 2, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: umbp, version: "1.2.3.post1" }, spec-decoding: mtp, conc-list: [384], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml:override_dp2_umbp_c384 }
 
 minimaxm31flash-fp4-mi355x-vllm-agentic-dspark:
   image: vllm/vllm-openai-rocm:minimax-m31-flash-75bc8cf1@sha256:f8e8ab239e5edb7c3070c5802fc7fc0cbb889513bf81183dfc98ce1c77e1dfe1
