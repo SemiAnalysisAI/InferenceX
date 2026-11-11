@@ -12733,3 +12733,12 @@
     - "Single-node: row-sharded prefill MoE and residual stream and fused DFLASH ring locations at every concurrency (was 48 and 56 only); add concurrency 24 with 13 running requests and 5-token verify."
     - "Add 1P1D PD at concurrency 128 and 144: TP8 DCP8 prefill and decode, KV over Mooncake RDMA, prefill HiCache."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4928
+
+- config-keys:
+    - dsv41flash-fp4-gb300-tilert-agentic-dspark-tp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add TileRT on GB300 NVL72 for DeepSeek-V4.1-Flash FP4 AgentX at concurrency 1: one vLLM prefill (TP4, vllm/vllm-openai:nightly-00b6c4c5 by digest) sends the prompt KV over NVLink to one TileRT decode, at TP8 (two trays) and at 24 GPUs (three TP8 groups, six trays). The decode runs tilert 0.1.8 from PyPI on the CUDA 13.2 runtime image by digest; the TileRT router runs on the prefill's node in the prefill image and tokenizes with vLLM's DeepSeek-V4.1 tokenizer mode."
+    - "DSpark with five drafts at the golden simulated acceptance 3.51; the public decode masks tool-call tokens and the prefill runs without a tool-call parser."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4979
