@@ -1,5 +1,5 @@
 kimik31-sa-umbp-dynamo:
-  image: yukiozzz/vllm-openai-rocm:apex-k31-umbp-diagnostic-1111-r01@sha256:3970b356d8e751b3612c9a8160e25a42473c126a66a62016f2b9d59ca9a13c0c
+  image: yukiozzz/vllm-openai-rocm:apex-k31-umbp-combined-1111-r03@sha256:786986b04f8ee62141eb274680fd3ed60dfe6be247ae96a93bba8a8efea9aa0f
   model: moonshotai/Kimi-K3.1-Pro
   model-prefix: kimik3.1
   runner: cluster:mi355x-amds
@@ -27,7 +27,7 @@ kimik31-sa-umbp-dynamo:
           num-worker: 2
           tp: 8
           dcp-size: 8
-          ep: 1
+          ep: 8
           dp-attn: false
           additional-settings:
           - TOTAL_CPU_DRAM_GB=1799
