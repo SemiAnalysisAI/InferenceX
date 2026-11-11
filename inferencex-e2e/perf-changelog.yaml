@@ -12728,4 +12728,5 @@
   description:
     - "Add the H3 video workload (h3-v2.yaml release-v1, C1) on 2, 4 and 8 A100-SXM4-80GB GPUs of the a100-cw cluster for SGLang v0.5.23 and vLLM-Omni v0.32.0, with each engine's H100 flags and parallelism: DiT TP2 with Ulysses 1, 2 and 4, since H3 does not fit one 80 GB GPU."
     - "No one stages H3 on a100-cw, so its launcher downloads the pinned snapshot without the Ref2VA weights (355 GB) into the shared hub cache before it submits a video job; a complete snapshot costs one Hub listing."
+    - "A100 video jobs get a 330-minute Slurm limit and a 345-minute job timeout instead of 150 and 165: an A100 pair serves one H3 request in about 10 minutes, so the 21-request set takes about 3.5 hours."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5018

@@ -100,7 +100,9 @@ env:
   PORT: '8888'
   INFMAX_CONTAINER_WORKSPACE: '/workspace'
   ENROOT_IMPORT_TIME_LIMIT: '120'
-  SALLOC_TIME_LIMIT: ${{ inputs.scenario-type == 'video-generation' && '150' || '480' }}
+  # An A100 serves one 2-GPU H3 request in about 10 minutes, so its 21-request video set
+  # takes about 3.5 hours; every other video SKU finishes within 150 minutes.
+  SALLOC_TIME_LIMIT: ${{ inputs.scenario-type == 'video-generation' && (contains(inputs.runner, 'a100') && '330' || '150') || '480' }}
   IS_MULTINODE: 'false'
   REQUIRE_POWER: ${{ inputs.require-power && '1' || '0' }}
   CPU_POWER: ${{ fromJSON(inputs.config)['cpu-power'] && '1' || '0' }}
@@ -190,7 +192,7 @@ jobs:
         ) ||
         format('[{0}]', toJSON(inputs.runner))
       ) }}
-    timeout-minutes: ${{ inputs.scenario-type == 'video-generation' && 165 || inputs.runner == 'cluster:h200-dgxc' && fromJSON(inputs.config).model-prefix == 'dsv41flash' && fromJSON(inputs.config).framework == 'sglang' && inputs.scenario-type == 'agentic-coding' && !inputs.eval-only && fromJSON(inputs.config).conc >= 64 && 1470 || 500 }}
+    timeout-minutes: ${{ inputs.scenario-type == 'video-generation' && (contains(inputs.runner, 'a100') && 345 || 165) || inputs.runner == 'cluster:h200-dgxc' && fromJSON(inputs.config).model-prefix == 'dsv41flash' && fromJSON(inputs.config).framework == 'sglang' && inputs.scenario-type == 'agentic-coding' && !inputs.eval-only && fromJSON(inputs.config).conc >= 64 && 1470 || 500 }}
     name: >-
       ${{ inputs.klaud-run && 'klaud | ' || '' }}p${{ inputs.priority }} | ${{ fromJSON(inputs.config).model-prefix }} ${{ fromJSON(inputs.config).precision }} ${{ inputs.runner }} ${{ fromJSON(inputs.config).framework == 'sglang' && 'sgl' || fromJSON(inputs.config).framework == 'dynamo-sglang' && 'dyn-sgl' || fromJSON(inputs.config).framework == 'sglang-disagg' && 'sgl-disagg' || fromJSON(inputs.config).framework }}
       ${{ inputs.scenario-type == 'video-generation' && format('{0} GPU', fromJSON(inputs.config).gpus) || format('TP{0}', fromJSON(inputs.config).tp) }}${{ format('{0}', fromJSON(inputs.config).pp) != '' && format('{0}', fromJSON(inputs.config).pp) != '1' && format('/PP{0}', fromJSON(inputs.config).pp) || '' }}${{ format('{0}', fromJSON(inputs.config).dcp-size) != '' && format('{0}', fromJSON(inputs.config).dcp-size) != '1' && format('/DCP{0}', fromJSON(inputs.config).dcp-size) || '' }}${{ format('{0}', fromJSON(inputs.config).pcp-size) != '' && format('{0}', fromJSON(inputs.config).pcp-size) != '1' && format('/PCP{0}', fromJSON(inputs.config).pcp-size) || '' }}${{ format('{0}', fromJSON(inputs.config).ep) != '' && format('{0}', fromJSON(inputs.config).ep) != '1' && format('/EP{0}', fromJSON(inputs.config).ep) || '' }}${{ inputs.dp-attn && '/DPA' || '' }}
