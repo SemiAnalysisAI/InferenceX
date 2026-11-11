@@ -12768,6 +12768,6 @@
     - minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg
   description:
     - "Add DEP16 decode points at conc 500 to 950 with 8 to 16 DEP2 prefill workers and stream interval 20."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5021
   scenario-type: [agentic-coding]
   append-only: true
