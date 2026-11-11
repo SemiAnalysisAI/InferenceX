@@ -51,10 +51,12 @@ def test_merge_ingest_routes_video_and_llm_independently(tmp_path):
     result = subprocess.run(["bash", "-e", "-c", step["run"]], text=True, capture_output=True,
         env={**os.environ, "PATH": str(bindir) + os.pathsep + os.environ["PATH"], "FIXTURE_PLAN": json.dumps(plan),
              "GITHUB_WORKSPACE": str(workspace), "RUNNER_TEMP": str(tmp_path), "GITHUB_OUTPUT": str(output),
-             "PUSH_BEFORE": "a", "PUSH_AFTER": "b"})
+             "PUSH_BEFORE": "a", "PUSH_AFTER": "b", "GITHUB_REPOSITORY": "SemiAnalysisAI/InferenceX"})
     assert result.returncode == 0, result.stderr
     outputs = dict(line.split("=", 1) for line in output.read_text().splitlines())
-    assert (outputs["video"], outputs["llm"], outputs["retirement-only"]) == ("true", "true", "false")
+    assert (outputs["entries"], outputs["video"], outputs["llm"], outputs["retirement-only"]) == (
+        "true", "true", "true", "false"
+    )
 
 
 @pytest.mark.parametrize("agentx_fast,manifest", [("false", True), ("true", False)])
