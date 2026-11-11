@@ -76,7 +76,7 @@ jobs:
             });
             core.setOutput('comment-id', String(comment.data.id));
 
-      - name: Dispatch InferenceX-app staging workflow
+      - name: Dispatch the app repository's staging workflow
         if: steps.request.outputs.run-id != ''
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
@@ -85,12 +85,14 @@ jobs:
           RUN_DATE: ${{ steps.request.outputs.run-date }}
           REQUESTED_BY: ${{ steps.request.outputs.requested-by }}
           COMMENT_ID: ${{ steps.acknowledge.outputs.comment-id }}
+          APP_REPO: ${{ vars.APP_REPO || 'SemiAnalysisAI/InferenceX-app' }}
         with:
           github-token: ${{ secrets.FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
           script: |
+            const [owner, repo] = process.env.APP_REPO.split('/');
             await github.rest.repos.createDispatchEvent({
-              owner: 'SemiAnalysisAI',
-              repo: 'InferenceX-app',
+              owner,
+              repo,
               event_type: 'stage-results',
               client_payload: {
                 'source-repository': `${context.repo.owner}/${context.repo.repo}`,
