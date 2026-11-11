@@ -308,8 +308,8 @@ qwen3.8next-fp8-mi300x-sglang-agentic-mtp:
   scenarios:
     agentic-coding:
     - search-space:
-      - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8], srt-recipe: agentic.yaml }
-      - { tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 16, 24], srt-recipe: agentic.yaml }
+      - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [4, 6, 8, 12, 16, 20, 24, 32], srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [4], srt-recipe: agentic.yaml }
 
 glm5.3flash-fp8-mi300x-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.22-rocm10-mi30x@sha256:5658cd0d8de0c68de10d2e349296f55ceff98053182fa87b2a7e942e5e7f3c2a
