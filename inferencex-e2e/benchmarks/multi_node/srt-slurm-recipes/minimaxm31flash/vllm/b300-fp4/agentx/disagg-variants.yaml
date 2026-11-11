@@ -23,21 +23,26 @@ base:
     # vllm-mooncake-efa.sh installs libfabric to efa-1.50 when the host mounts /opt/amazon/efa read-only.
     LD_LIBRARY_PATH: &efa-library-path /opt/amazon/efa-1.50/lib:/opt/amazon/efa/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib64:/usr/local/nvidia/lib
   services:
-  - name: etcd
+  - &etcd
+    name: etcd
     type: etcd
     placement:
       node: infra
-  - name: nats
+  - &nats
+    name: nats
     type: nats
     placement:
       node: infra
     options:
       max_payload_mb: 32
-  - name: mooncake-master
+  - &mooncake-master
+    name: mooncake-master
     type: mooncake-master
     preamble: bash /configs/vllm-mooncake.sh
     args:
-    - --default_kv_lease_ttl=60000
+    # A store GET that outlives its lease sends the whole request back to recompute; 60 s was too short
+    # for GETs queued behind a loaded pool.
+    - --default_kv_lease_ttl=600000
     - --eviction_high_watermark_ratio=0.95
     - --eviction_ratio=0.10
     options:
@@ -50,16 +55,17 @@ base:
         protocol: efa
         mode: standalone-store
         enable_offload: false
-  # Each store binds its socket's memory, and the stores, not the workers, own the pool: 697 GiB beside
-  # prefill and 1396 GiB beside decode, the two DRAM shares. EFA needs a segment this large on 2 MB pages,
+  # Each store binds its socket's memory, and the stores, not the workers, own the pool. The sizes here
+  # are the 2-GPU prefill and 4-GPU decode DRAM shares: 697 GiB beside prefill and 1396 GiB beside decode.
+  # The DEP8 overrides replace this list with larger stores. EFA needs a segment this large on 2 MB pages,
   # which glibc requests from THP. Registering them can take many minutes, hence the long waits.
   - name: mooncake-store-prefill-numa0
     type: mooncake-store
     placement:
       node: prefill
-    command: [numactl, --cpunodebind=0, --membind=0, python3, -m, mooncake.mooncake_store_service]
-    args: [--config=/tmp/mooncake-store-numa0.json, --port=8090, --max-wait-time=3600]
-    readiness:
+    command: &store-command-numa0 [numactl, --cpunodebind=0, --membind=0, python3, -m, mooncake.mooncake_store_service]
+    args: &store-args-numa0 [--config=/tmp/mooncake-store-numa0.json, --port=8090, --max-wait-time=3600]
+    readiness: &store-readiness-numa0
       port: 8090
       timeout_seconds: 3600
     env:
@@ -93,9 +99,9 @@ base:
     type: mooncake-store
     placement:
       node: prefill
-    command: [numactl, --cpunodebind=1, --membind=1, python3, -m, mooncake.mooncake_store_service]
-    args: [--config=/tmp/mooncake-store-numa1.json, --port=8091, --max-wait-time=3600]
-    readiness:
+    command: &store-command-numa1 [numactl, --cpunodebind=1, --membind=1, python3, -m, mooncake.mooncake_store_service]
+    args: &store-args-numa1 [--config=/tmp/mooncake-store-numa1.json, --port=8091, --max-wait-time=3600]
+    readiness: &store-readiness-numa1
       port: 8091
       timeout_seconds: 3600
     env:
@@ -155,7 +161,8 @@ base:
       # Same-node peers otherwise take libfabric's shm path, which copies on Mooncake's CQ poller thread.
       FI_EFA_ENABLE_SHM_TRANSFER: '0'
     preamble: *store-preamble
-  - name: otel-collector
+  - &otel-collector
+    name: otel-collector
     type: otel-collector
     enabled: false
   frontend:
@@ -224,6 +231,7 @@ base:
         disable-hybrid-kv-cache-manager: true
         max-model-len: 1048576
         kernel-config: '{"moe_backend":"deep_gemm_mega_moe"}'
+        numa-bind: true
         dyn-tool-call-parser: minimax_m3
         dyn-reasoning-parser: minimax_m3
         speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
@@ -238,8 +246,8 @@ base:
         enable-prefix-caching: true
         # EFA RMA sets CUDA sync-memops on each MR, which VMM memory rejects, so libfabric returns EINVAL.
         no-enable-extensible-kv-cache: true
-        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
-        max-cudagraph-capture-size: 2048
+        # Prefill runs eagerly: no torch.compile and no CUDA graphs.
+        enforce-eager: true
         kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["LIBFABRIC"],"enforce_handshake_compat":false,"kv_lease_duration":120}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}]}}'
     decode:
       nodes: 1
@@ -259,9 +267,11 @@ base:
         DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: '1024'
         DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT: '1024'
         DYN_BACKEND_ADMISSION_REQUEST_QUEUE_LIMIT: '2048'
+        VLLM_RANDOMIZE_DP_DUMMY_INPUTS: '1'
         VLLM_MAX_ASYNC_KV_ADMITS_PER_STEP: '4'
         NCCL_CUMEM_ENABLE: '1'
         NCCL_NVLS_ENABLE: '1'
+        VLLM_ALLREDUCE_USE_SYMM_MEM: '0'
       args:
         served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
         language-model-only: true
@@ -271,11 +281,11 @@ base:
         attention-config: '{"indexer_kv_dtype":"nvfp4","use_prefill_query_quantization":true}'
         disable-hybrid-kv-cache-manager: true
         max-model-len: 1048576
+        numa-bind: true
         dyn-tool-call-parser: minimax_m3
         dyn-reasoning-parser: minimax_m3
         speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         gpu-memory-utilization: 0.95
-        max-num-seqs: 48
         # A decode preemption recomputes the whole context locally; 8192-token steps plus the
         # watermark keep running requests below the KV limit instead.
         max-num-batched-tokens: 8192
@@ -283,8 +293,6 @@ base:
         enable-prefix-caching: true
         # EFA RMA sets CUDA sync-memops on each MR, which VMM memory rejects, so libfabric returns EINVAL.
         no-enable-extensible-kv-cache: true
-        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
-        max-cudagraph-capture-size: 384
         # Decode takes prompt KV over NIXL only; the Mooncake pool serves prefill.
         kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["LIBFABRIC"],"enforce_handshake_compat":false,"kv_lease_duration":120}}'
   benchmark:
@@ -299,20 +307,220 @@ base:
     container-remap-root: ''
   setup_script: vllm-mooncake-efa.sh
 
+# Each override is one point: the decode layout and its per-rank batch cap (max-num-seqs) set the tokens/s
+# per user, and the prefill worker count is the fewest that keeps every decode slot busy at that cap.
+# The capped points capture a decode CUDA graph for every request count up to the cap: vLLM's default
+# grid skips counts above 6, and a skipped count pads to the next graph.
+
+# Throughput point, conc 144: 1 DEP2 prefill + 1 DEP4 decode, no batch cap below concurrency.
 override_1p1d_dep2_dep4:
   roles:
     decode:
-      env:
-        VLLM_RANDOMIZE_DP_DUMMY_INPUTS: '1'
-        VLLM_ALLREDUCE_USE_SYMM_MEM: '0'
       args:
         enable-expert-parallel: true
         kernel-config: '{"moe_backend":"deep_gemm_mega_moe"}'
         tensor-parallel-size: 1
         data-parallel-size: 4
+        max-num-seqs: 48
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
+        max-cudagraph-capture-size: 384
 
-override_1p1d_dep2_tp4_c24:
+# 350 tokens/s per user, conc 40: 1 DEP2 prefill + 1 TP4 decode capped at 4 requests. One prefill worker
+# is idle most of the time at this decode rate.
+override_1p1d_dep2_tp4_bs4:
   roles:
     decode:
       args:
         tensor-parallel-size: 4
+        max-num-seqs: 4
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","max_decode_cudagraph_capture_requests":4,"decode_cudagraph_capture_request_sizes":[1,2,3,4]}'
+
+# 300 tokens/s per user, conc 200: 2 DEP2 prefill + 1 DEP8 decode capped at 3 requests per rank. One
+# prefill worker left a fifth of the decode slots empty; two keep them full.
+override_2p1d_dep2_dep8_bs3:
+  services:
+  - *etcd
+  - *nats
+  - *mooncake-master
+  # 1395 GiB beside prefill, the DRAM share of its two workers, and 2400 GiB of the decode node's 2793.
+  - name: mooncake-store-prefill-numa0
+    type: mooncake-store
+    placement:
+      node: prefill
+    command: *store-command-numa0
+    args: *store-args-numa0
+    readiness: *store-readiness-numa0
+    env:
+      STORE_CONFIG: /tmp/mooncake-store-numa0.json
+      STORE_SEGMENT_SIZE: 697GB
+      LD_LIBRARY_PATH: *efa-library-path
+      GLIBC_TUNABLES: glibc.malloc.hugetlb=1
+      MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+      MC_SLICE_SIZE: '1048576'
+      MC_WORKERS_PER_CTX: '4'
+      MC_MS_FILTERS: '@fabric.rdma-devices'
+      FI_EFA_ENABLE_SHM_TRANSFER: '0'
+    preamble: *store-preamble
+  - name: mooncake-store-prefill-numa1
+    type: mooncake-store
+    placement:
+      node: prefill
+    command: *store-command-numa1
+    args: *store-args-numa1
+    readiness: *store-readiness-numa1
+    env:
+      STORE_CONFIG: /tmp/mooncake-store-numa1.json
+      STORE_SEGMENT_SIZE: 698GB
+      LD_LIBRARY_PATH: *efa-library-path
+      GLIBC_TUNABLES: glibc.malloc.hugetlb=1
+      MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+      MC_SLICE_SIZE: '1048576'
+      MC_WORKERS_PER_CTX: '4'
+      MC_MS_FILTERS: '@fabric.rdma-devices'
+      FI_EFA_ENABLE_SHM_TRANSFER: '0'
+    preamble: *store-preamble
+  - name: mooncake-store-decode-numa0
+    type: mooncake-store
+    placement:
+      node: decode
+    command: *store-command-numa0
+    args: *store-args-numa0
+    readiness: *store-readiness-numa0
+    env:
+      STORE_CONFIG: /tmp/mooncake-store-numa0.json
+      STORE_SEGMENT_SIZE: 1200GB
+      LD_LIBRARY_PATH: *efa-library-path
+      GLIBC_TUNABLES: glibc.malloc.hugetlb=1
+      MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+      MC_SLICE_SIZE: '1048576'
+      MC_WORKERS_PER_CTX: '4'
+      MC_MS_FILTERS: '@fabric.rdma-devices'
+      FI_EFA_ENABLE_SHM_TRANSFER: '0'
+    preamble: *store-preamble
+  - name: mooncake-store-decode-numa1
+    type: mooncake-store
+    placement:
+      node: decode
+    command: *store-command-numa1
+    args: *store-args-numa1
+    readiness: *store-readiness-numa1
+    env:
+      STORE_CONFIG: /tmp/mooncake-store-numa1.json
+      STORE_SEGMENT_SIZE: 1200GB
+      LD_LIBRARY_PATH: *efa-library-path
+      GLIBC_TUNABLES: glibc.malloc.hugetlb=1
+      MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+      MC_SLICE_SIZE: '1048576'
+      MC_WORKERS_PER_CTX: '4'
+      MC_MS_FILTERS: '@fabric.rdma-devices'
+      FI_EFA_ENABLE_SHM_TRANSFER: '0'
+    preamble: *store-preamble
+  - *otel-collector
+  roles:
+    prefill:
+      workers: 2
+      # One worker per socket.
+      gpu_indices: [[0, 1], [4, 5]]
+    decode:
+      gpus: 8
+      args:
+        enable-expert-parallel: true
+        kernel-config: '{"moe_backend":"deep_gemm_mega_moe"}'
+        tensor-parallel-size: 1
+        data-parallel-size: 8
+        max-num-seqs: 3
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","max_decode_cudagraph_capture_requests":3,"decode_cudagraph_capture_request_sizes":[1,2,3]}'
+
+# 250 tokens/s per user, conc 480: 8 DEP2 prefill on two nodes + 1 DEP8 decode capped at 8 requests per rank.
+override_8p1d_dep2_dep8_bs8:
+  services:
+  - *etcd
+  - *nats
+  - *mooncake-master
+  # 1800 GiB on each prefill node and 2000 GiB on the decode node, 5600 GiB in all.
+  - name: mooncake-store-prefill-numa0
+    type: mooncake-store
+    placement:
+      node: prefill
+    command: *store-command-numa0
+    args: *store-args-numa0
+    readiness: *store-readiness-numa0
+    env:
+      STORE_CONFIG: /tmp/mooncake-store-numa0.json
+      STORE_SEGMENT_SIZE: 900GB
+      LD_LIBRARY_PATH: *efa-library-path
+      GLIBC_TUNABLES: glibc.malloc.hugetlb=1
+      MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+      MC_SLICE_SIZE: '1048576'
+      MC_WORKERS_PER_CTX: '4'
+      MC_MS_FILTERS: '@fabric.rdma-devices'
+      FI_EFA_ENABLE_SHM_TRANSFER: '0'
+    preamble: *store-preamble
+  - name: mooncake-store-prefill-numa1
+    type: mooncake-store
+    placement:
+      node: prefill
+    command: *store-command-numa1
+    args: *store-args-numa1
+    readiness: *store-readiness-numa1
+    env:
+      STORE_CONFIG: /tmp/mooncake-store-numa1.json
+      STORE_SEGMENT_SIZE: 900GB
+      LD_LIBRARY_PATH: *efa-library-path
+      GLIBC_TUNABLES: glibc.malloc.hugetlb=1
+      MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+      MC_SLICE_SIZE: '1048576'
+      MC_WORKERS_PER_CTX: '4'
+      MC_MS_FILTERS: '@fabric.rdma-devices'
+      FI_EFA_ENABLE_SHM_TRANSFER: '0'
+    preamble: *store-preamble
+  - name: mooncake-store-decode-numa0
+    type: mooncake-store
+    placement:
+      node: decode
+    command: *store-command-numa0
+    args: *store-args-numa0
+    readiness: *store-readiness-numa0
+    env:
+      STORE_CONFIG: /tmp/mooncake-store-numa0.json
+      STORE_SEGMENT_SIZE: 1000GB
+      LD_LIBRARY_PATH: *efa-library-path
+      GLIBC_TUNABLES: glibc.malloc.hugetlb=1
+      MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+      MC_SLICE_SIZE: '1048576'
+      MC_WORKERS_PER_CTX: '4'
+      MC_MS_FILTERS: '@fabric.rdma-devices'
+      FI_EFA_ENABLE_SHM_TRANSFER: '0'
+    preamble: *store-preamble
+  - name: mooncake-store-decode-numa1
+    type: mooncake-store
+    placement:
+      node: decode
+    command: *store-command-numa1
+    args: *store-args-numa1
+    readiness: *store-readiness-numa1
+    env:
+      STORE_CONFIG: /tmp/mooncake-store-numa1.json
+      STORE_SEGMENT_SIZE: 1000GB
+      LD_LIBRARY_PATH: *efa-library-path
+      GLIBC_TUNABLES: glibc.malloc.hugetlb=1
+      MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+      MC_SLICE_SIZE: '1048576'
+      MC_WORKERS_PER_CTX: '4'
+      MC_MS_FILTERS: '@fabric.rdma-devices'
+      FI_EFA_ENABLE_SHM_TRANSFER: '0'
+    preamble: *store-preamble
+  - *otel-collector
+  roles:
+    prefill:
+      nodes: 2
+      workers: 8
+    decode:
+      gpus: 8
+      args:
+        enable-expert-parallel: true
+        kernel-config: '{"moe_backend":"deep_gemm_mega_moe"}'
+        tensor-parallel-size: 1
+        data-parallel-size: 8
+        max-num-seqs: 8
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","max_decode_cudagraph_capture_requests":8,"decode_cudagraph_capture_request_sizes":[1,2,3,4,5,6,7,8]}'
