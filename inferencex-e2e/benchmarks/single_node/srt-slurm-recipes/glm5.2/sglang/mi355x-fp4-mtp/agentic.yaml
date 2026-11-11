@@ -222,8 +222,8 @@ override_tp8_c1:
         expert-parallel-size: 1
         moe-runner-backend: gluon
         speculative-moe-runner-backend: auto
-        # Gluon MoE faults (HSA 0x1016) on full 32k uncached prefill chunks.
-        chunked-prefill-size: 16384
+        # SGLang #48397 fixes Gluon FP32 partial stores beyond 2 GiB.
+        chunked-prefill-size: 32768
         max-running-requests: 2
         cuda-graph-max-bs-decode: 2
   benchmark:
@@ -240,8 +240,8 @@ override_tp8_c2:
         expert-parallel-size: 1
         moe-runner-backend: gluon
         speculative-moe-runner-backend: auto
-        # Gluon MoE faults (HSA 0x1016) on full 32k uncached prefill chunks.
-        chunked-prefill-size: 16384
+        # SGLang #48397 fixes Gluon FP32 partial stores beyond 2 GiB.
+        chunked-prefill-size: 32768
         max-running-requests: 4
         cuda-graph-max-bs-decode: 4
   benchmark:
