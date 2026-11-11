@@ -22,7 +22,7 @@ gh workflow run operatorx-sweep.yml --repo SemiAnalysisAI/InferenceX \
   -f testlists=gemm_deepseek_v4 -f world_sizes=1 -f chunk_size=500 -f ingest=false
 ```
 
-- Inputs: `runner`, `backends` (`vllm`; AMD also `torch`), `testlists`, `mode` (`timing` | `counters`), `world_sizes` (1, 2, 4, 8), `chunk_size` (1-500), `recovery_run_id`, `ingest` (default true; `false` for test runs), `low_priority` (default false; `true` queues the shards behind all other CI jobs).
+- Inputs: `runner`, `backends` (`vllm`; AMD also `torch`), `testlists`, `mode` (`timing` | `counters`), `world_sizes` (1, 2, 4, 8), `chunk_size` (1-500), `recovery_run_id`, `ingest` (default true; `false` for test runs).
 - `mode=counters`: each op once under Nsight Compute (NVIDIA) or rocprofv3 (AMD, 12 passes: use a smaller `chunk_size`); raw files in `results/counters/`; latencies perturbed.
 - Testlists: `testlists/official/` are ingested. `testlists/dev/` (`gemm_perf`, `smoke_parallel`) check the harness, and `testlists/deprecated/` holds models that get no new data (`gemm_deepseek_r1`, `gemm_kimi_k2`, `gemm_minimax_m2_5`); a run is ingested only if every testlist it names is in `official/`, whatever `ingest` says. Quick check: `testlists=gemm_perf`, `chunk_size=50`. Dispatch `attn_*` testlists apart from gemm / moe ones.
 
