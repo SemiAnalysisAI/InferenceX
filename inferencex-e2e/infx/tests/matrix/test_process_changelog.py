@@ -436,52 +436,6 @@ def committed_planning_repo(planning_repo):
     return root, base, head
 
 
-@pytest.mark.parametrize("ambient", [False, True])
-def test_recovery_plans_with_the_checkouts_own_planner_and_recipes(
-    committed_planning_repo, monkeypatch, tmp_path_factory, ambient
-):
-    from infx.workflows.recover_failed_ingest import build_config
-
-    root, base, head = committed_planning_repo
-    master_path = root / "configs/nvidia-master.yaml"
-    master = yaml.safe_load(master_path.read_text())
-    master["multi"]["scenarios"]["fixed-seq-len"][0]["search-space"][0][
-        "srt-recipe"
-    ] = "recovery-fixture.yaml"
-    master_path.write_text(yaml.safe_dump(master, sort_keys=False))
-    recipe = root / "benchmarks/multi_node/srt-slurm-recipes/fixture/recovery-fixture.yaml"
-    recipe.write_text("schema: 2\nroles:\n  prefill: {nodes: 3}\n  decode: {nodes: 4}\n")
-    changelog = root / "perf-changelog.yaml"
-    entries = yaml.safe_load(changelog.read_text())
-    entries[0]["config-keys"] = ["multi"]
-    changelog.write_text(yaml.safe_dump(entries, sort_keys=False))
-    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
-    subprocess.run(["git", "commit", "-qm", "recipe fixture"], cwd=root, check=True)
-    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
-    if ambient:
-        shadow = tmp_path_factory.mktemp("ambient")
-        (shadow / "infx").mkdir()
-        (shadow / "infx/__init__.py").write_text("raise RuntimeError('ambient tooling imported')\n")
-        monkeypatch.setenv("PYTHONPATH", str(shadow))
-        monkeypatch.setenv("INFERENCEX_REPOSITORY_ROOT", str(tmp_path_factory.mktemp("other")))
-    changelog.write_text("\n" + yaml.safe_dump(entries, sort_keys=False))
-    output, metadata = root / "config.json", root / "metadata.json"
-
-    result = build_config(root, base, head, 1, "perf-changelog.yaml", output, metadata)
-
-    assert result["fixed_rows"] == 1
-    assert result["agentic_rows"] == result["eval_jobs"] == 0
-    config = json.loads(output.read_text())
-    assert [row["conc"] for row in config["multi_node"]["8k1k"]] == [[16, 32, 64]]
-    assert [row["node-count"] for row in config["multi_node"]["8k1k"]] == [7]
-    written_metadata = json.loads(metadata.read_text())
-    assert written_metadata["base_ref"] == base
-    assert written_metadata["head_ref"] == head
-    assert [entry["pr-link"] for entry in written_metadata["entries"]] == [
-        "https://github.com/SemiAnalysisAI/InferenceX/pull/1"
-    ]
-
-
 @pytest.mark.parametrize("nested_layout", [False, True])
 def test_historical_generator_uses_snapshot_recipes_not_inherited_recovery_root(
     planning_repo, monkeypatch, nested_layout

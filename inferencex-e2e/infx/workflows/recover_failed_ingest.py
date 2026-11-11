@@ -14,9 +14,8 @@ from typing import Any
 
 import yaml
 
-from infx import github, yamlio
-from infx.config import git_path_at_ref, git_repository_root, project_root
-from infx.matrix.revision import PLANNER, Revision
+from infx import github
+from infx.config import git_path_at_ref, git_repository_root
 
 from .reuse import resolve_reusable_run
 from .sweep_runs import pr_commit_shas, trusted_external_pr
@@ -259,20 +258,6 @@ def audit_changelog_bytes(raw: bytes, label: str) -> dict[str, Any]:
     }
 
 
-def create_worktree(ref: str, destination: Path) -> None:
-    """Create a detached worktree at the exact historical merge."""
-    if destination.exists():
-        raise RecoveryError(f"worktree destination already exists: {destination}")
-    run_command(["git", "worktree", "add", "--detach", str(destination), ref])
-    actual = run_command(
-        ["git", "rev-parse", "HEAD"],
-        cwd=destination,
-    ).stdout.strip()
-    expected = run_command(["git", "rev-parse", ref]).stdout.strip()
-    if actual != expected:
-        raise RecoveryError(f"worktree HEAD is {actual}, expected historical ref {expected}")
-
-
 def validate_reconstruction(
     base_raw: bytes,
     repaired_raw: bytes,
@@ -310,229 +295,6 @@ def validate_reconstruction(
     if wrong_links:
         raise RecoveryError(f"reconstructed entries must all use {expected_link}: {wrong_links}")
     return len(additions), 0
-
-
-def create_synthetic_commit(
-    worktree: Path,
-    base_ref: str,
-    merge_ref: str,
-    pr_number: int,
-    changelog_path: str,
-) -> tuple[str, int]:
-    """Stage only the repaired changelog in its detached worktree."""
-    worktree = git_repository_root(worktree)
-    try:
-        changelog_path = git_path_at_ref(merge_ref, changelog_path, cwd=worktree)
-    except ValueError as exc:
-        raise RecoveryError(str(exc)) from exc
-    actual_head = run_command(
-        ["git", "rev-parse", "HEAD"],
-        cwd=worktree,
-    ).stdout.strip()
-    expected_head = run_command(
-        ["git", "rev-parse", merge_ref],
-        cwd=worktree,
-    ).stdout.strip()
-    if actual_head != expected_head:
-        raise RecoveryError(f"recovery worktree is at {actual_head}, expected {expected_head}")
-
-    status_lines = run_command(
-        ["git", "status", "--porcelain"],
-        cwd=worktree,
-    ).stdout.splitlines()
-    unrelated = [line for line in status_lines if line[3:] != changelog_path]
-    if unrelated:
-        raise RecoveryError("recovery worktree has unrelated changes: " + ", ".join(unrelated))
-
-    additions, _ = validate_reconstruction(
-        read_git_file_from(worktree, base_ref, changelog_path),
-        (worktree / changelog_path).read_bytes(),
-        pr_number,
-    )
-    with tempfile.TemporaryDirectory(prefix="infx-recovery-index-") as temp_dir:
-        index_env = {
-            **os.environ,
-            "GIT_INDEX_FILE": str(Path(temp_dir) / "index"),
-        }
-        run_command(
-            ["git", "read-tree", base_ref],
-            cwd=worktree,
-            env=index_env,
-        )
-        run_command(
-            ["git", "add", "--", changelog_path],
-            cwd=worktree,
-            env=index_env,
-        )
-        run_command(
-            ["git", "diff", "--cached", "--check", "--", changelog_path],
-            cwd=worktree,
-            env=index_env,
-        )
-        tree = run_command(
-            ["git", "write-tree"],
-            cwd=worktree,
-            env=index_env,
-        ).stdout.strip()
-    fixed_sha = run_command(
-        [
-            "git",
-            "-c",
-            "user.name=InferenceX Recovery",
-            "-c",
-            "user.email=actions@users.noreply.github.com",
-            "commit-tree",
-            tree,
-            "-p",
-            base_ref,
-        ],
-        cwd=worktree,
-        input_text=f"Synthetic PR #{pr_number} recovery tree\n",
-    ).stdout.strip()
-    changed_paths = run_command(
-        ["git", "diff", "--name-only", base_ref, fixed_sha],
-        cwd=worktree,
-    ).stdout.splitlines()
-    if changed_paths != [changelog_path]:
-        raise RecoveryError(f"synthetic commit changed unexpected paths: {changed_paths}")
-    return fixed_sha, additions
-
-
-def build_config(
-    worktree: Path,
-    base_ref: str,
-    merge_ref: str,
-    pr_number: int,
-    changelog_path: str,
-    config_output: Path,
-    metadata_output: Path,
-) -> dict[str, Any]:
-    """Build the exact synthetic config from a repaired detached worktree."""
-    worktree = git_repository_root(worktree)
-    try:
-        changelog_path = git_path_at_ref(merge_ref, changelog_path, cwd=worktree)
-    except ValueError as exc:
-        raise RecoveryError(str(exc)) from exc
-    fixed_sha, additions = create_synthetic_commit(
-        worktree,
-        base_ref,
-        merge_ref,
-        pr_number,
-        changelog_path,
-    )
-    revision = Revision(project_root(worktree))
-    try:
-        command, env = revision.invocation(
-            PLANNER,
-            [
-                "--changelog-file",
-                str(worktree / changelog_path),
-                "--base-ref",
-                base_ref,
-                "--head-ref",
-                fixed_sha,
-            ],
-        )
-    except ValueError as exc:
-        raise RecoveryError(str(exc)) from exc
-    result = run_command(command, cwd=revision.root, env=env)
-    try:
-        config = json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        raise RecoveryError(f"the merged revision's planner returned invalid JSON: {exc}") from exc
-
-    expected_link = f"https://github.com/{DEFAULT_REPO}/pull/{pr_number}"
-    metadata = config.get("changelog_metadata", {})
-    metadata_entries = metadata.get("entries", [])
-    if not metadata_entries or any(
-        entry.get("pr-link") != expected_link for entry in metadata_entries
-    ):
-        raise RecoveryError("generated changelog metadata includes entries outside the target PR")
-    metadata["base_ref"] = base_ref
-    metadata["head_ref"] = merge_ref
-
-    config_output.parent.mkdir(parents=True, exist_ok=True)
-    metadata_output.parent.mkdir(parents=True, exist_ok=True)
-    config_output.write_text(json.dumps(config, indent=2) + "\n")
-    metadata_output.write_text(json.dumps(metadata, indent=2) + "\n")
-    return {
-        "synthetic_sha": fixed_sha,
-        "appended_entries": additions,
-        "fixed_rows": sum(
-            len(config.get("single_node", {}).get(key, []) or [])
-            + len(config.get("multi_node", {}).get(key, []) or [])
-            for key in ("1k1k", "8k1k")
-        ),
-        "agentic_rows": len(config.get("single_node", {}).get("agentic", []) or [])
-        + len(config.get("multi_node", {}).get("agentic", []) or []),
-        "eval_jobs": len(config.get("evals", []) or [])
-        + len(config.get("agentic_evals", []) or [])
-        + len(config.get("multinode_evals", []) or [])
-        + len(config.get("multinode_agentic_evals", []) or []),
-    }
-
-
-def validate_recovery_workflow(path: Path, pr_number: int) -> None:
-    """Reject recovery workflows that could schedule benchmark compute."""
-    text = path.read_text()
-    data = yamlio.load(text, yamlio.UniqueKeyLoader)
-    if not isinstance(data, dict):
-        raise RecoveryError("recovery workflow root must be a mapping")
-
-    trigger = data.get("on", data.get(True))
-    if not isinstance(trigger, dict) or set(trigger) != {"workflow_dispatch"}:
-        raise RecoveryError("recovery workflow must only use workflow_dispatch")
-    dispatch = trigger["workflow_dispatch"]
-    if not isinstance(dispatch, dict):
-        raise RecoveryError("workflow_dispatch must define a confirm input")
-    inputs = dispatch.get("inputs", {})
-    confirm = inputs.get("confirm") if isinstance(inputs, dict) else None
-    if not isinstance(confirm, dict):
-        raise RecoveryError("recovery workflow needs a confirm input")
-    if confirm.get("required") is not True or confirm.get("type") != "string":
-        raise RecoveryError("recovery confirm input must be a required string")
-
-    permissions = data.get("permissions")
-    if not isinstance(permissions, dict) or any(
-        value not in {"read", "none"} for value in permissions.values()
-    ):
-        raise RecoveryError("recovery workflow permissions must be explicitly read-only")
-
-    jobs = data.get("jobs")
-    if not isinstance(jobs, dict) or len(jobs) != 1:
-        raise RecoveryError("recovery workflow must contain exactly one job")
-    job = next(iter(jobs.values()))
-    if not isinstance(job, dict) or job.get("runs-on") != "ubuntu-latest":
-        raise RecoveryError("recovery job must run only on ubuntu-latest")
-    if "strategy" in job or "uses" in job:
-        raise RecoveryError("recovery job may not use a matrix or reusable workflow")
-    job_permissions = job.get("permissions")
-    if job_permissions is not None and (
-        not isinstance(job_permissions, dict)
-        or any(value not in {"read", "none"} for value in job_permissions.values())
-    ):
-        raise RecoveryError("recovery job permissions must be explicitly read-only")
-
-    expected_confirmation = f"recover-pr-{pr_number}"
-    confirmation_pattern = re.compile(
-        rf"(?:\$\{{\{{\s*)?"
-        rf"inputs\.confirm\s*==\s*"
-        rf"(?P<quote>['\"]){re.escape(expected_confirmation)}(?P=quote)"
-        rf"(?:\s*\}}\}})?"
-    )
-    if not confirmation_pattern.fullmatch(str(job.get("if") or "").strip()):
-        raise RecoveryError(f"recovery job must require confirmation {expected_confirmation!r}")
-
-    forbidden = (
-        ".github/workflows/benchmark-tmpl.yml",
-        ".github/workflows/benchmark-multinode-tmpl.yml",
-        "workflow_call",
-    )
-    for value in forbidden:
-        if value in text:
-            raise RecoveryError(
-                f"recovery workflow contains forbidden benchmark construct: {value}"
-            )
 
 
 def pr_url(pr_number: int) -> str:
@@ -894,23 +656,6 @@ def main() -> int:
     audit.add_argument("--ref", required=True)
     audit.add_argument("--changelog-file", default="perf-changelog.yaml")
 
-    worktree = subparsers.add_parser("create-worktree")
-    worktree.add_argument("--ref", required=True)
-    worktree.add_argument("--directory", required=True, type=Path)
-
-    build = subparsers.add_parser("build-config")
-    build.add_argument("--worktree", required=True, type=Path)
-    build.add_argument("--base-ref", required=True)
-    build.add_argument("--merge-ref", required=True)
-    build.add_argument("--pr-number", required=True, type=int)
-    build.add_argument("--changelog-file", default="perf-changelog.yaml")
-    build.add_argument("--config-output", required=True, type=Path)
-    build.add_argument("--metadata-output", required=True, type=Path)
-
-    workflow = subparsers.add_parser("validate-workflow")
-    workflow.add_argument("path", type=Path)
-    workflow.add_argument("--pr-number", required=True, type=int)
-
     create = subparsers.add_parser(
         "create-pr", help="Open a reuse recovery PR; a dry run unless --execute is given"
     )
@@ -939,25 +684,8 @@ def main() -> int:
                 f"{args.changelog_file} at {args.ref}",
             )
             print(json.dumps(result, indent=2))
-        elif args.command == "create-worktree":
-            create_worktree(args.ref, args.directory)
-            print(args.directory)
-        elif args.command == "build-config":
-            result = build_config(
-                args.worktree,
-                args.base_ref,
-                args.merge_ref,
-                args.pr_number,
-                args.changelog_file,
-                args.config_output,
-                args.metadata_output,
-            )
-            print(json.dumps(result, indent=2))
-        elif args.command == "create-pr":
-            create_recovery_pr(args)
         else:
-            validate_recovery_workflow(args.path, args.pr_number)
-            print(f"Validated CPU-only recovery workflow: {args.path}")
+            create_recovery_pr(args)
     except (
         ChangelogValidationError,
         RecoveryError,
