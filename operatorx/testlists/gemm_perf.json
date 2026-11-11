@@ -147,7 +147,9 @@
       },
       "out": "bf16"
     },
-    "sources": []
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_perf"
+    ]
   },
   {
     "type": "gemm",
@@ -163,7 +165,9 @@
       },
       "out": "bf16"
     },
-    "sources": []
+    "sources": [
+      "operatorx/Synthetic-Shapes/gemm_perf"
+    ]
   },
   {
     "type": "gemm",
