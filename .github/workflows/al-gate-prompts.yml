@@ -1,0 +1,107 @@
+name: AL Gate Prompts Cache
+
+# Prepares the 80 SPEED-Bench coding prompts that agentic speculative evals replay before their
+# eval, on the same server (inferencex-e2e/infx/evals/EVALS.md#speculative-acceptance-gate).
+# Pushes to main and the weekly schedule keep the cache warm; sweeps call it with upload: true
+# to hand the prompts to their eval jobs. Report-only: callers' evals run without the gate if it
+# fails, and the gate records why.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - inferencex-e2e/infx/bench/speedbench.py
+      - .github/workflows/al-gate-prompts.yml
+  schedule:
+    - cron: '41 5 * * 1'
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      upload:
+        description: "Upload the prompts as the al_gate_dataset artifact"
+        type: boolean
+        default: false
+    secrets:
+      INFERENCEX_OFFICIAL_RO_HF_TOKEN:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  warm:
+    name: warm
+    if: >-
+      github.event_name == 'workflow_dispatch' || github.repository == 'SemiAnalysisAI/InferenceX'
+      || inputs.upload
+    runs-on: ubuntu-latest
+    # A sweep's evals wait for this job: a stall ends it and they run without the gate.
+    timeout-minutes: ${{ inputs.upload && 30 || 360 }}
+    continue-on-error: ${{ inputs.upload == true }}
+    # Cache warming runs one at a time; a sweep's call prepares its own prompts on a miss.
+    concurrency:
+      group: ${{ inputs.upload && format('al-gate-prompts-{0}-{1}', github.run_id, github.run_attempt) || 'al-gate-prompts' }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        continue-on-error: ${{ inputs.upload == true }} # A sweep's evals run without the gate.
+        with:
+          persist-credentials: false
+
+      - name: Restore cached prompts
+        continue-on-error: ${{ inputs.upload == true }} # A sweep's evals run without the gate.
+        id: cached
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/al_gate_dataset
+          key: al-gate-speedbench-${{ hashFiles('inferencex-e2e/infx/bench/speedbench.py') }}
+          lookup-only: ${{ !inputs.upload }}
+
+      - name: Free hosted-runner disk for SPEED-Bench
+        continue-on-error: ${{ inputs.upload == true }} # A sweep's evals run without the gate.
+        if: ${{ steps.cached.outputs.cache-hit != 'true' }}
+        run: |
+          # The pinned resolver materializes about 35 GB of coding source datasets.
+          # These preinstalled SDKs are unused by this hosted Python-only job.
+          sudo rm -rf -- /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+            /usr/local/.ghcup /usr/local/swift /opt/hostedtoolcache/CodeQL
+          df -h / /mnt
+
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        continue-on-error: ${{ inputs.upload == true }} # A sweep's evals run without the gate.
+        if: ${{ steps.cached.outputs.cache-hit != 'true' }}
+        with:
+          enable-cache: false
+
+      - name: Prepare gate prompts
+        continue-on-error: ${{ inputs.upload == true }} # A sweep's evals run without the gate.
+        id: prepare
+        if: ${{ steps.cached.outputs.cache-hit != 'true' }}
+        env:
+          # Read-only Hugging Face credential; it only lifts anonymous Hub rate limits.
+          HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }} # zizmor: ignore[secrets-outside-env]
+          HF_HOME: /mnt/al-gate-hf-home # The ~35 GB of SPEED-Bench sources exceed the root disk's free space.
+        run: |
+          cd "$GITHUB_WORKSPACE/inferencex-e2e"
+          sudo install -d -o "$(id -u)" -g "$(id -g)" "$HF_HOME"
+          uv run --no-project --exclude-newer 2026-10-27T00:00:00Z --python 3.12 \
+            --with datasets --with numpy --with pandas --with tiktoken \
+            python -m infx.bench.speedbench --output-dir "$RUNNER_TEMP/al_gate_dataset"
+
+      - name: Cache gate prompts
+        continue-on-error: ${{ inputs.upload == true }} # A sweep's evals run without the gate.
+        if: ${{ steps.prepare.outcome == 'success' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/al_gate_dataset
+          key: al-gate-speedbench-${{ hashFiles('inferencex-e2e/infx/bench/speedbench.py') }}
+
+      - name: Upload gate prompts
+        continue-on-error: ${{ inputs.upload == true }} # A sweep's evals run without the gate.
+        if: ${{ inputs.upload }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: al_gate_dataset
+          path: ${{ runner.temp }}/al_gate_dataset/speedbench_coding.jsonl
+          if-no-files-found: error

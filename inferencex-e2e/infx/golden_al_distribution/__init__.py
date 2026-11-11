@@ -1,9 +1,9 @@
 """Committed golden acceptance-length (AL) curves for AgentX synthetic acceptance.
 
-Each ``<curve>.yaml`` beside this module maps one measured model to
-``{thinking_mode: {num_speculative_tokens: AL}}``. ``curve_name`` turns an
-InferenceX model prefix and speculative config into a curve, and
-``golden_length`` returns the committed value. From a shell, use
+Each ``<model>__<method>__<draft>__<draft_sample>-<verify>.yaml`` beside this module maps one
+measured model to ``{thinking_mode: {num_speculative_tokens: AL}}``. ``identities.yaml`` says
+which runs select each curve and how it was collected. ``curve_name`` turns an InferenceX model
+prefix and speculative config into a curve, and ``golden_length`` returns the committed value. From a shell, use
 ``python -m infx.golden_al_distribution {list,show,lookup}``.
 """
 

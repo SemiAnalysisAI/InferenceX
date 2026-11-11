@@ -8,6 +8,17 @@ base:
     install: true
     source:
       wheel: 1.6.0.dev20261023
+    request_plane: tcp
+    event_plane: zmq
+    # Native vLLM engines (Rust frontend, gRPC) behind Dynamo sidecars, which parse tools and reasoning.
+    sidecar: true
+    sidecar_args:
+    - --grpc-startup-deadline-secs
+    - '3600'
+    - --dyn-tool-call-parser
+    - minimax_m3
+    - --dyn-reasoning-parser
+    - minimax_m3
   resources:
     gpu_type: gb300
     gpus_per_node: 4
@@ -25,12 +36,6 @@ base:
     type: etcd
     placement:
       node: infra
-  - name: nats
-    type: nats
-    placement:
-      node: infra
-    options:
-      max_payload_mb: 32
   frontend:
     type: dynamo
     enable_multiple_frontends: false
@@ -64,12 +69,11 @@ base:
         DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: '1024'
         DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT: '1024'
         DYN_BACKEND_ADMISSION_REQUEST_QUEUE_LIMIT: '2048'
+        VLLM_RS_TOKEN_IDS_AS_BYTES: '1'
       args:
         served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
         language-model-only: true
         trust-remote-code: true
-        dyn-tool-call-parser: minimax_m3
-        dyn-reasoning-parser: minimax_m3
         # MSA sparse/index cache needs 128-token blocks.
         block-size: 128
         # The checkpoint is QAT-trained for an NVFP4 KV cache.
@@ -103,63 +107,9 @@ override_tp4_c1:
       args:
         max-num-seqs: 2
 
-override_tp4_c4:
-  name: minimaxm31flash-gb300-dynamo-agg-tp4-c4
-  roles:
-    agg:
-      args:
-        max-num-seqs: 8
-
-override_tp4_c8:
-  name: minimaxm31flash-gb300-dynamo-agg-tp4-c8
-  roles:
-    agg:
-      args:
-        max-num-seqs: 16
-
 override_tp4_c16:
   name: minimaxm31flash-gb300-dynamo-agg-tp4-c16
   roles:
     agg:
       args:
         max-num-seqs: 32
-
-override_tp4_c32:
-  name: minimaxm31flash-gb300-dynamo-agg-tp4-c32
-  roles:
-    agg:
-      args:
-        max-num-seqs: 64
-
-override_tp4_c40:
-  name: minimaxm31flash-gb300-dynamo-agg-tp4-dram-c40
-  roles:
-    agg:
-      env:
-        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
-      args:
-        max-num-seqs: 64
-        gpu-memory-utilization: 0.86
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":860000000000,"lazy_offload":true}}'
-
-override_tp4_c48:
-  name: minimaxm31flash-gb300-dynamo-agg-tp4-dram-c48
-  roles:
-    agg:
-      env:
-        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
-      args:
-        max-num-seqs: 64
-        gpu-memory-utilization: 0.86
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":860000000000,"lazy_offload":true}}'
-
-override_tp4_c56:
-  name: minimaxm31flash-gb300-dynamo-agg-tp4-dram-c56
-  roles:
-    agg:
-      env:
-        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
-      args:
-        max-num-seqs: 96
-        gpu-memory-utilization: 0.86
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":860000000000,"lazy_offload":true}}'

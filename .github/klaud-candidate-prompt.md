@@ -64,6 +64,13 @@ they form one AgentX dashboard curve, and the newest normal run replaces that wh
 The keys may start on different images. Update every listed key's master image to the same new
 image, and change each key's own recipe compatibility settings only as needed. Never leave a key
 of the family on an old image.
+AgentX policy requires an effective stream interval of at most 60 (≤ 60, inclusive) for every
+rerun point (see
+[AgentX stream interval](../inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md#agentx-stream-interval)).
+Lower any family value above 60 (including an unset value whose pinned engine default
+is above 60) to 60, and name that as the changelog's compatibility adjustment.
+Preserve compliant values and defaults at or below 60, including those below 20; there is no
+policy-imposed lower bound.
 The master `router` (Dynamo) record is frozen point identity: never change it. When a new
 engine needs a newer Dynamo, bump it only in the family's recipe (`dynamo.source.rev` or its
 install pin), and try that before reporting incompatible for a Dynamo version gap.

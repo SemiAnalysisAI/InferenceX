@@ -193,6 +193,9 @@ jobs:
         outputs:
             tooling-ref: ${{ steps.tooling.outputs.result }}
             search-space-config: ${{ steps.setup.outputs.search-space-config }}
+            # Empty when the priority scheduler is disabled, as for setup's own scoring.
+            priority-criteria: ${{ steps.priority-criteria.outputs.criteria }}
+            has-benchmark-results: ${{ steps.setup.outputs.has-benchmark-results }}
         steps:
             - name: Checkout code
               id: checkout
@@ -218,67 +221,16 @@ jobs:
                       ]).write();
                       return data.sha;
             - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-            - name: Install Claude Code 2.1.282
-              id: claude_cli
-              if: vars.PRIORITY_SCHEDULER_ENABLED == 'true'
-              run: | # zizmor: ignore[adhoc-packages] Claude CLI and its native packages are pinned to 2.1.282
-                npm install --prefix "$RUNNER_TEMP/claude-code" --no-audit --no-fund @anthropic-ai/claude-code@2.1.282
-                claude_cli="$RUNNER_TEMP/claude-code/node_modules/.bin/claude"
-                test "$("$claude_cli" --version)" = "2.1.282 (Claude Code)"
-                echo "path=$claude_cli" >> "$GITHUB_OUTPUT"
             - name: Classify priority criteria
-              id: classify
-              if: vars.PRIORITY_SCHEDULER_ENABLED == 'true'
-              continue-on-error: true
-              uses: anthropics/claude-code-action@9171db3e57d6a3140a37ddc2ba92788584e0ead6 # v1.0.234
-              with:
-                  path_to_claude_code_executable: ${{ steps.claude_cli.outputs.path }}
-                  github_token: ${{ github.token }}
-                  anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
-                  track_progress: false
-                  settings: |
-                      {"fastMode": true}
-                  claude_args: |
-                      --model 'claude-opus-5-5'
-                      --effort low
-                      --max-turns 8
-                      --allowedTools "Read,Glob,Grep,Bash(git diff:*)"
-                      --json-schema '{"type":"object","properties":{"criteria":{"type":"array","items":{"type":"string","enum":["multi-node","agentic","eval-only","fp4","mtp","draft_model","sglang","vllm","dynamo-sglang","dynamo-vllm","musespark","dsv41flash","kimik3","glm5.3","glm5.2","dsv4","minimaxm31flash","minimaxm3","qwen3.5","qwen3.8next","dsr1","checklist-complete","patchwork"]},"uniqueItems":true},"reason":{"type":"string"}},"required":["criteria","reason"]}'
-                  prompt: |
-                      Inspect this pull request's diff against its base branch.
-
-                      Return every matching priority criterion:
-
-                      - multi-node: separate prefill and decode workers
-                      - agentic: agentic-coding or AgentX workload
-                      - eval-only: evaluation without throughput measurement
-                      - fp4: FP4 precision
-                      - mtp, draft_model: speculative decoding method
-                      - sglang, vllm, dynamo-sglang, dynamo-vllm: runtime framework
-                      - model criterion: the config model-prefix itself (minimaxm31flash, not minimaxm3)
-                      - checklist-complete: PR checklist is satisfied
-                      - patchwork: modified upstream engine or runtime source
-
-                      Patchwork includes patch files, git apply, source mutation,
-                      monkey-patching, local engine builds, forks, or images
-                      containing unmerged engine changes.
-
-                      Return a concise reason grounded in the diff.
-
-            - name: Normalize priority classification
               id: priority-criteria
-              if: vars.PRIORITY_SCHEDULER_ENABLED == 'true' && always()
-              env:
-                  OUTPUT: ${{ steps.classify.outputs.structured_output || '{}' }}
-              run: |
-                  if jq -e 'type == "object" and (.criteria | type == "array")' \
-                    >/dev/null <<<"$OUTPUT"; then
-                      criteria=$(jq -c '.criteria' <<<"$OUTPUT")
-                  else
-                      criteria='["patchwork"]'
-                  fi
-                  echo "criteria=$criteria" >> "$GITHUB_OUTPUT"
-                  echo "Priority criteria: $criteria"
+              if: vars.PRIORITY_SCHEDULER_ENABLED == 'true'
+              uses: $/.github/actions/classify-priority
+              with:
+                  base-ref: origin/${{ github.base_ref }}
+                  head-ref: ${{ github.event.pull_request.head.sha }}
+                  pr-number: ${{ github.event.pull_request.number }}
+                  anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
+                  github-token: ${{ github.token }}
 
             - id: setup
               env:
@@ -313,15 +265,21 @@ jobs:
                     --criteria-json "$PRIORITY_CRITERIA")
 
                   echo "search-space-config=$CONFIG_JSON" >> "$GITHUB_OUTPUT"
+                  has_benchmark_results=$(jq '[.single_node | to_entries[] | select(.key != "video") | .value[]] + [.multi_node | .[][]] | length > 0' <<<"$CONFIG_JSON")
+                  echo "has-benchmark-results=$has_benchmark_results" >> "$GITHUB_OUTPUT"
 
     canary-select:
         name: canary-select
         needs: setup
         if: >-
-            (
-              contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
-              contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast')
-            )
+            ${{
+              !cancelled() &&
+              needs.setup.result == 'success' &&
+              (
+                contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
+                contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast')
+              )
+            }}
         runs-on: ubuntu-latest
         outputs:
             canary-config: ${{ steps.pick.outputs.canary-config }}
@@ -340,10 +298,10 @@ jobs:
                         | if $idx == null then . else del(.[$idx]) end
                       end;
 
-                    (((.single_node["1k1k"] // []) + (.single_node["8k1k"] // []) + (.single_node.agentic // []))
+                    (((.single_node["1k1k"] // []) + (.single_node["8k1k"] // []) + (.single_node.agentic // []) + (.single_node.video // []))
                       | map(select(.["run-eval"] != true))) as $single_candidates
                     | ((.multi_node.agentic // []) | map(select(.["run-eval"] != true))) as $multi_candidates
-                    | (if ($single_candidates | length) == 0 then null else ($single_candidates | min_by(.conc)) end) as $canary
+                    | (if ($single_candidates | length) == 0 then null else ($single_candidates | min_by(.conc // .["conc-list"][0])) end) as $canary
                     | (if $canary != null or ($multi_candidates | length) == 0 then null
                        else ($multi_candidates | min_by(.conc[0])) end) as $multi_canary
                     | {
@@ -355,6 +313,7 @@ jobs:
                           | .single_node["1k1k"] = ((.single_node["1k1k"] // []) | remove_one($canary))
                           | .single_node["8k1k"] = ((.single_node["8k1k"] // []) | remove_one($canary))
                           | .single_node.agentic = ((.single_node.agentic // []) | remove_one($canary))
+                          | .single_node.video = ((.single_node.video // []) | remove_one($canary))
                           | .multi_node = (.multi_node // {})
                           | .multi_node.agentic = ((.multi_node.agentic // []) | remove_one($multi_canary))
                         )
@@ -368,7 +327,7 @@ jobs:
 
     canary-sweep:
         needs: canary-select
-        if: ${{ needs.canary-select.outputs.canary-config != '' && needs.canary-select.outputs.canary-config != '[]' }}
+        if: ${{ !cancelled() && needs.canary-select.result == 'success' && needs.canary-select.outputs.canary-config != '' && needs.canary-select.outputs.canary-config != '[]' }}
         uses: $/.github/workflows/benchmark-tmpl.yml
         name: canary /
         strategy:
@@ -386,13 +345,14 @@ jobs:
             queue-token: ${{ matrix.config['queue-token'] }}
             dp-attn: ${{ matrix.config.dp-attn }}
             run-eval: false
+            require-power: ${{ matrix.config['require-power'] == true }}
             scenario-type: ${{ matrix.config['scenario-type'] || 'fixed-seq-len' }}
             duration: ${{ matrix.config.duration || '3600' }}
             agentx-fast: ${{ contains(github.event.pull_request.labels.*.name, 'agentx-fast') }}
 
     canary-multi-node-sweep:
         needs: canary-select
-        if: ${{ needs.canary-select.outputs.multi-node-canary-config != '' && needs.canary-select.outputs.multi-node-canary-config != '[]' }}
+        if: ${{ !cancelled() && needs.canary-select.result == 'success' && needs.canary-select.outputs.multi-node-canary-config != '' && needs.canary-select.outputs.multi-node-canary-config != '[]' }}
         uses: $/.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node canary /
         strategy:
@@ -413,8 +373,28 @@ jobs:
             conc: ${{ matrix.config.conc[0] }}
             duration: ${{ matrix.config.duration }}
             run-eval: false
+            require-power: ${{ matrix.config['require-power'] == true }}
             scenario-type: agentic-coding
             agentx-fast: ${{ contains(github.event.pull_request.labels.*.name, 'agentx-fast') }}
+
+    # Prompts for the report-only acceptance gate that agentic speculative evals run before their
+    # eval, on the same server (inferencex-e2e/infx/evals/EVALS.md#speculative-acceptance-gate).
+    al-gate-prompts:
+        needs: setup
+        if: >-
+            ${{
+              !cancelled() &&
+              needs.setup.result == 'success' &&
+              (
+                (toJson(fromJson(needs.setup.outputs.search-space-config).agentic_evals) != '[]' && toJson(fromJson(needs.setup.outputs.search-space-config).agentic_evals) != 'null') ||
+                (toJson(fromJson(needs.setup.outputs.search-space-config).multinode_agentic_evals) != '[]' && toJson(fromJson(needs.setup.outputs.search-space-config).multinode_agentic_evals) != 'null')
+              )
+            }}
+        uses: $/.github/workflows/al-gate-prompts.yml
+        secrets:
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+        with:
+            upload: true
 
     sweep-multi-node-1k1k:
         needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
@@ -545,8 +525,39 @@ jobs:
             dp-attn: ${{ matrix.config.dp-attn }}
             duration: ${{ matrix.config.duration }}
             run-eval: false
+            require-power: ${{ matrix.config['require-power'] == true }}
             scenario-type: agentic-coding
             agentx-fast: ${{ contains(github.event.pull_request.labels.*.name, 'agentx-fast') }}
+
+    sweep-video:
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
+        if: >-
+            ${{
+              !cancelled() &&
+              needs.setup.result == 'success' &&
+              (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
+              toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['video']) != 'null' &&
+              toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['video']) != '[]'
+            }}
+        uses: $/.github/workflows/benchmark-tmpl.yml
+        name: video /
+        strategy:
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
+            matrix:
+                config: ${{ fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['video'] }}
+        secrets:
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+        with:
+            config: ${{ toJSON(matrix.config) }}
+            pr-number: *pr-number
+            klaud-run: *klaud-run
+            runner: ${{ matrix.config.runner }}
+            priority: ${{ matrix.config.priority }}
+            queue-token: ${{ matrix.config['queue-token'] }}
+            dp-attn: ${{ matrix.config.dp-attn }}
+            run-eval: false
+            scenario-type: video-generation
 
     sweep-multi-node-agentic:
         needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
@@ -579,11 +590,29 @@ jobs:
             conc: ${{ matrix.config.conc[0] }}
             duration: ${{ matrix.config.duration }}
             run-eval: false
+            require-power: ${{ matrix.config['require-power'] == true }}
             scenario-type: agentic-coding
             agentx-fast: ${{ contains(github.event.pull_request.labels.*.name, 'agentx-fast') }}
 
     sweep-evals:
-        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
+        # Throughput runs go first; evals wait for them to finish (any result).
+        # Under evals-only the throughput jobs are skipped, so evals start right away.
+        # Agentic evals also need al-gate-prompts, a short job that runs only when they do.
+        needs: &eval-needs
+            [
+                setup,
+                canary-select,
+                canary-sweep,
+                canary-multi-node-sweep,
+                al-gate-prompts,
+                sweep-single-node-1k1k,
+                sweep-single-node-8k1k,
+                sweep-agentic,
+                sweep-video,
+                sweep-multi-node-1k1k,
+                sweep-multi-node-8k1k,
+                sweep-multi-node-agentic,
+            ]
         if: >-
             ${{
               !cancelled() &&
@@ -615,7 +644,8 @@ jobs:
             eval-only: true
 
     sweep-agentic-evals:
-        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
+        # The acceptance gate is report-only: the evals run whether or not its prompts were prepared.
+        needs: *eval-needs
         if: >-
             ${{
               !cancelled() &&
@@ -649,7 +679,7 @@ jobs:
             scenario-type: agentic-coding
 
     sweep-multi-node-evals:
-        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
+        needs: *eval-needs
         if: >-
             ${{
               !cancelled() &&
@@ -683,7 +713,8 @@ jobs:
             eval-conc: ${{ (matrix.config['eval-framework'] || 'lm-eval') == 'lm-eval' && matrix.config['eval-all-concs'] && join(matrix.config.conc, ' ') || matrix.config['eval-conc'] }}
 
     sweep-multi-node-agentic-evals:
-        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
+        # The acceptance gate is report-only: the evals run whether or not its prompts were prepared.
+        needs: *eval-needs
         if: >-
             ${{
               !cancelled() &&
@@ -737,13 +768,16 @@ jobs:
             ${{
               always() &&
               needs.setup.result == 'success' &&
+              needs.setup.outputs.has-benchmark-results == 'true' &&
               (
                 needs.canary-sweep.result == 'success' ||
                 needs.canary-multi-node-sweep.result == 'success' ||
                 needs.sweep-single-node-1k1k.result != 'skipped' ||
                 needs.sweep-single-node-8k1k.result != 'skipped' ||
+                needs.sweep-agentic.result != 'skipped' ||
                 needs.sweep-multi-node-1k1k.result != 'skipped' ||
-                needs.sweep-multi-node-8k1k.result != 'skipped'
+                needs.sweep-multi-node-8k1k.result != 'skipped' ||
+                needs.sweep-multi-node-agentic.result != 'skipped'
               )
             }}
         uses: $/.github/workflows/collect-results.yml
@@ -769,6 +803,7 @@ jobs:
                 sweep-single-node-1k1k,
                 sweep-single-node-8k1k,
                 sweep-agentic,
+                sweep-video,
                 sweep-multi-node-1k1k,
                 sweep-multi-node-8k1k,
                 sweep-multi-node-agentic,
@@ -787,7 +822,7 @@ jobs:
 
     upload-changelog-metadata:
         name: upload-changelog-metadata
-        needs: [setup, collect-results, collect-evals]
+        needs: [setup, collect-results, collect-evals, sweep-video]
         if: ${{ always() && needs.setup.result == 'success' }}
         runs-on: ubuntu-latest
         steps:
@@ -812,6 +847,9 @@ jobs:
                       'head': os.environ['SWEEP_HEAD'], 'run-id': int(os.environ['GITHUB_RUN_ID']),
                       'run-attempt': int(os.environ['GITHUB_RUN_ATTEMPT']),
                       'full-sweep': sweep_labels == {'full-sweep-fail-fast'},
+                      'video-full-sweep': bool(sweep_labels & {
+                          'full-sweep-enabled', 'non-canary-full-sweep-enabled', 'full-sweep-fail-fast',
+                      }) and not bool(sweep_labels & {'evals-only', 'agentx-fast'}),
                       'matrix': matrix,
                   }))
                   PY
@@ -821,6 +859,16 @@ jobs:
               with:
                   name: changelog-metadata
                   path: changelog_metadata.json
+                  overwrite: true
+
+            - name: Upload selected video matrix
+              if: ${{ (contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') || contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') || contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast')) && !contains(github.event.pull_request.labels.*.name, 'evals-only') && !contains(github.event.pull_request.labels.*.name, 'agentx-fast') && toJson(fromJson(needs.setup.outputs.search-space-config).single_node.video) != 'null' && toJson(fromJson(needs.setup.outputs.search-space-config).single_node.video) != '[]' }}
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: video-sweep-manifest
+                  path: sweep_manifest.json
+                  overwrite: true
+                  if-no-files-found: error
 
             - name: Upload Klaud validation manifest
               if: *klaud-run
@@ -830,9 +878,34 @@ jobs:
                   path: sweep_manifest.json
                   if-no-files-found: error
 
+    validate-video-results:
+        name: validate-video-results
+        needs: [setup, canary-sweep, sweep-video, upload-changelog-metadata]
+        if: ${{ !cancelled() && (contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') || contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') || contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast')) && !contains(github.event.pull_request.labels.*.name, 'evals-only') && !contains(github.event.pull_request.labels.*.name, 'agentx-fast') && needs.setup.result == 'success' && toJson(fromJson(needs.setup.outputs.search-space-config).single_node.video) != 'null' && toJson(fromJson(needs.setup.outputs.search-space-config).single_node.video) != '[]' }}
+        runs-on: ubuntu-latest
+        permissions:
+            actions: read # Download the current run's video artifacts.
+            contents: read # Check out the video validator.
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+            # Matching the manifest too keeps one bundle in its named directory; a single match unpacks flat.
+            - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              with:
+                  pattern: '{h3-results-*,video-sweep-manifest}'
+                  path: video-artifacts
+            - name: Validate the complete selected video matrix
+              env:
+                  PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+              run: |
+                  python3 -m infx.results.video_artifacts --artifacts-dir video-artifacts \
+                    --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" --head-sha "$PR_HEAD_SHA"
+
     calc-success-rate:
         name: calc-success-rate
-        needs: [setup, collect-results]
+        # Wait for evals so in-flight eval jobs are not counted as failures.
+        needs: [setup, collect-results, sweep-video, sweep-evals, sweep-agentic-evals, sweep-multi-node-evals, sweep-multi-node-agentic-evals]
         if: ${{ always() && needs.collect-results.result != 'skipped'}}
         runs-on: ubuntu-latest
         permissions:
@@ -857,23 +930,8 @@ jobs:
                   path: ${{ env.RESULTS_DIR }}
                   pattern: results_*
 
-            - name: Select Python project
-              run: |
-                python_project="$GITHUB_WORKSPACE"
-                if [[ -f "$python_project/inferencex-e2e/pyproject.toml" ]]; then
-                  python_project="$python_project/inferencex-e2e"
-                fi
-                test -f "$python_project/pyproject.toml"
-                echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
-
-            - name: Set up uv
-              uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-              with:
-                  cache-dependency-glob: |
-                      pyproject.toml
-                      uv.lock
-                      inferencex-e2e/pyproject.toml
-                      inferencex-e2e/uv.lock
+            - name: Set up Python project
+              uses: $/.github/actions/setup-python-project
 
             - name: Calculate success rate
               run: >-
@@ -912,23 +970,8 @@ jobs:
                   path: results/
                   pattern: results_bmk
 
-            - name: Select Python project
-              run: |
-                python_project="$GITHUB_WORKSPACE"
-                if [[ -f "$python_project/inferencex-e2e/pyproject.toml" ]]; then
-                  python_project="$python_project/inferencex-e2e"
-                fi
-                test -f "$python_project/pyproject.toml"
-                echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
-
-            - name: Set up uv
-              uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-              with:
-                  cache-dependency-glob: |
-                      pyproject.toml
-                      uv.lock
-                      inferencex-e2e/pyproject.toml
-                      inferencex-e2e/uv.lock
+            - name: Set up Python project
+              uses: $/.github/actions/setup-python-project
 
             - name: Compare results against main
               run: >-

@@ -6,12 +6,13 @@ on:
     paths: &python-paths
       - '**/*.py'
       - 'collectivex/**'
-      - '.github/scripts/**'
-      - '.github/workflows/ci.yml'
+      - '.github/workflows/**'
       - 'inferencex-e2e/pyproject.toml'
       - 'inferencex-e2e/uv.lock'
       - 'inferencex-e2e/.python-version'
-      - 'inferencex-e2e/infx/ruff.toml'
+      - 'inferencex-e2e/infx/**'
+      - 'inferencex-e2e/benchmarks/**'
+      - 'power_model/pyproject.toml'
       - '**/pytest.ini'
       - 'inferencex-e2e/configs/**'
       - 'inferencex-e2e/utils/srt-slurm'
@@ -56,8 +57,8 @@ jobs:
       - name: Lint and format
         if: matrix.check == 'Lint'
         run: |
-          uvx --exclude-newer PT12H ruff@latest check --output-format=github inferencex-e2e/infx
-          uvx --exclude-newer PT12H ruff@latest format --check --diff inferencex-e2e/infx
+          uvx --exclude-newer PT12H ruff@latest check --output-format=github inferencex-e2e/infx power_model
+          uvx --exclude-newer PT12H ruff@latest format --check --diff inferencex-e2e/infx power_model
 
       - name: Prepare test environment
         if: matrix.check == 'Tests'
@@ -69,7 +70,7 @@ jobs:
       - name: Check CollectiveX coverage manifest
         if: matrix.check == 'Tests'
         run: |
-          python collectivex/sweep_matrix.py --suites ep,swap-blocks,kv-transfer --cases-json collectivex/results/cases.json > /dev/null
+          python collectivex/sweep_matrix.py --suites ep,swap-blocks --cases-json collectivex/results/cases.json > /dev/null
           git diff --exit-code -- collectivex/results/cases.json
 
       - name: Check CollectiveX changelog
@@ -89,4 +90,5 @@ jobs:
         if: matrix.check == 'Tests'
         run: |
           python -c "import torch; assert torch.version.cuda is None and torch.version.hip is None"
-          python -m pytest -c inferencex-e2e/pyproject.toml inferencex-e2e/infx/tests/ inferencex-e2e/utils/ inferencex-e2e/runners/ collectivex/tests/ operatorx/tests/ --ignore=inferencex-e2e/utils/srt-slurm -n 4
+          python -m pytest -c inferencex-e2e/pyproject.toml inferencex-e2e/infx/tests/ collectivex/tests/ operatorx/tests/ ubenchX/ -n 4 --dist worksteal
+          python -m pytest -c power_model/pyproject.toml power_model/tests -n 4

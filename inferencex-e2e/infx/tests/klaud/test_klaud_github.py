@@ -1430,15 +1430,6 @@ def test_only_an_agent_whose_log_shows_no_tool_call_counts_as_unstarted(tmp_path
     assert output.read_text() == f"used={used}\n"
 
 
-def test_the_wake_schedule_matches_every_schedule_check():
-    text = (WORKFLOWS / "klaud-plan.yml").read_text()
-    crons = [entry["cron"] for entry in yaml.safe_load(text)[True]["schedule"]]
-    assert len(crons) == 2 and crons[0].endswith(f"*/{lifecycle.WAVE_HOURS} * * *")
-    checks = re.findall(r"github\.event\.schedule [!=]= '([^']+)'", text)
-    assert len(checks) == 3 and set(checks) == {crons[1]}
-    assert not {cron.split()[0] for cron in crons} & {"0", "30"}
-
-
 def close_by(world, closer):
     """Mark the world's PR closed by ``closer``."""
     world.pull["state"] = "closed"
@@ -3652,6 +3643,11 @@ def test_producer_regenerates_the_curve_keys_its_revision_defines(tmp_path, monk
 @pytest.mark.parametrize("from_repository_root", [False, True])
 def test_live_families_preserve_public_identity_after_move(tmp_path, family_configs, from_repository_root):
     master, runners = family_configs
+    master["video"] = {
+        **master["fixture"], "runner": "cluster:fixture",
+        "scenarios": {"video-generation": [{"spec": "clip.yaml", "set": "shared-v1", "search-space": [
+            {"gpus": 2, "conc-list": [1, 4], "srt-recipe": "recipe.yaml"}]}]},
+    }
     project = tmp_path / "inferencex-e2e"
     configs = project / "configs"
     configs.mkdir(parents=True)

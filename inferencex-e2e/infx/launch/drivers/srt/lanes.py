@@ -51,7 +51,9 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
     ("b200-nscale", LaunchPath.SRT_MULTI): SrtLane(frameworks=_DYNAMO),
     ("b300-dsxe", LaunchPath.SRT_MULTI): SrtLane(frameworks=_DYNAMO),
     ("gb200-nv", LaunchPath.SRT_MULTI): SrtLane(
-        frameworks=any_of("dynamo-sglang", "dynamo-trt", "dynamo-vllm", "llmd-vllm"),
+        frameworks=any_of(
+            "dynamo-sglang", "dynamo-trt", "dynamo-vllm", "llmd-vllm", "sglang", "vllm"
+        ),
         setup_scripts={"dynamo-sglang": "install-torchao.sh"},
         mounts=(
             LaneMount(
@@ -62,7 +64,7 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
             ),
         ),
         shared_run_root=(
-            Match(any_of("kimik3", "qwen3.5", "glm5.2")),
+            Match(any_of("kimik3.1", "qwen3.5", "glm5.2")),
             Match(any_of("dsv41flash"), frameworks=any_of("dynamo-vllm")),
         ),
     ),

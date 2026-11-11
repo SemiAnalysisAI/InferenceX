@@ -299,11 +299,13 @@ a green sweep alone is not enough. Verify the command directly from the comments
   Inline mentions and bare `/use` do not count.
   ```bash
   gh api repos/${REPO}/issues/${PR_NUMBER}/comments \
-    --paginate --jq '.[] | {user: .user.login, association: .author_association, body: .body}'
+    --paginate --jq '.[] | {user: .user.login, body: .body}'
+  gh api repos/${REPO}/collaborators/<user>/permission --jq '{permission, role_name}'
   ```
-- PASS only if a matching comment exists whose `author_association` is `OWNER`,
-  `MEMBER`, or `COLLABORATOR`. Both command names share this requirement; the newest
-  authorized matching comment across both names determines the requested source.
+- PASS only if a matching comment exists whose author has write access to the repository:
+  both `permission` and `role_name` are `admin`, `maintain`, or `write`. Both command names
+  share this requirement; the newest authorized matching comment across both names
+  determines the requested source.
 - WARN if no authorized reuse command is present. This is an advisory warning,
   not a failing criterion, but it must always be shown expanded in the verdict.
   State: "No authorized reuse command has been posted on this PR" and tell the
@@ -559,10 +561,14 @@ Verify BOTH:
   Name the config/script and line.
 - (b) AL VALUE MATCHES THE GOLDEN CURVE. Read the committed golden AL YAML for the
   model in `inferencex-e2e/infx/golden_al_distribution/` on the default-branch checkout. Examples include
-  `qwen3.5_mtp.yaml` and `minimaxm3_eagle3.yaml`. Confirm the pinned AL equals the golden value for that
+  `qwen3.5-397b-a17b-nvfp4__mtp__native__default-default.yaml` and `minimax-m3__eagle3__minimax-m3-eagle3__default-default.yaml`. Confirm the pinned AL equals the golden value for that
   model, thinking mode, and the config's `num_speculative_tokens` / MTP level (e.g.
   qwen3.5 thinking_on with 3 speculative tokens -> 3.39; `signoff_facts golden-al` returns
-  the expected value and setting). For TRT-LLM configs, compare
+  the expected value and setting; pass the generation role's verifier, as `identities.yaml` may select on it:
+  `--verify block` for vLLM `rejection_sample_method: block` or `synthetic` and SGLang
+  `speculative-use-block-verification`, `--verify relaxed` for TRT-LLM
+  `use_relaxed_acceptance_for_thinking`, `--verify standard` for vLLM, SGLang and TRT-LLM roles
+  that set none, and no `--verify` for ATOM and TileRT). For TRT-LLM configs, compare
   the pinned `TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS` value PLUS 1 against the
   golden AL (the env var excludes the bonus token). A submission may choose any
   supported draft length, but it may NOT substitute a different acceptance target.
@@ -944,7 +950,7 @@ implementation, rather than requiring one flag spelling.
 APPLICABILITY: changes to master configs, recipes, benchmark images,
 `perf-changelog.yaml`, external orchestration pins, or cross-repository dispatch.
 N/A otherwise. Inspect every changed master entry and recipe pair at the PINNED SHA.
-Requirements (a)-(g) FAIL when violated or when a lookup they need fails ("could not
+Requirements (a)-(g) and (i) FAIL when violated or when a lookup they need fails ("could not
 be verified"). (h) is report-only. Name the config, file and line, and the mismatch.
 
 ### (a) `CONFIG_FILE` resolves
@@ -997,6 +1003,21 @@ recipe fingerprint are re-tuned, not removed; they appear under `retuned_deltas`
 Report `retuned_deltas` (throughput and interactivity change per point) in the row,
 plus any eval lane change from Check 2. For an image-only bump, also compare with the
 closest prior run on the old image. A small diff is not evidence of low risk.
+
+### (i) AgentX stream interval is at most 60
+Every `agentic-coding` point the PR adds or reruns must have an effective stream interval
+at most 60 tokens (≤ 60, inclusive) in every serving role (aggregated, prefill, decode).
+There is no policy-imposed lower bound; valid engine-supported values below 20 are allowed.
+Resolve the effective value at the PINNED SHA through every control surface: `stream-interval` /
+`--stream-interval` (SGLang, vLLM), `stream_interval` (TRT-LLM and Dynamo engine
+configs), shared `*-variants.yaml` or base recipes, and benchmark scripts. An unset value
+uses the pinned engine's default, which must also be at most 60; compliant defaults need no
+explicit override. FAIL on any value above 60, naming the config key, concurrency,
+role, file and line. Untouched points that are not rerun are not assessed, except that an
+`append-only: true` entry FAILs when any
+existing point of the same AgentX curve runs above 60. There are no
+per-submission exceptions. See
+[AgentX stream interval](../inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md#agentx-stream-interval).
 
 ## Verdict and output
 Decide PASS only if Checks 0-18 ALL pass. A check reported as `N/A` counts as a pass,

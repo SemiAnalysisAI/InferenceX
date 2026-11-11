@@ -18,8 +18,8 @@ InferenceX-e2e runs on a fixed GPU pool with a small team, so scenarios, precisi
 
 In general, we should be benchmarking free & ~open engines that is used in production by actual customers. Priority goes towards stuff that is used more in prod
 
-- **Pending A/B baseline retirement (not yet enacted):** standalone non-spec-decode baselines kept only for comparison with speculative decoding are slated for retirement. This covers `qwen3.5` non-MTP and `kimik3` non-DSpark, whose active configs still contain non-spec-decode points. `glm5.2` has no active non-spec-decode configs. Retire one only once replacement coverage exists for the affected model, hardware, and engine. A spec-decode counterpart existing is not by itself a reason to remove a config.
-- **No separate A/B tracks for new models:** [`infx/golden_al_distribution/`](../infx/golden_al_distribution) pins speculative AgentX runs to one measured acceptance-length curve, so spec-decode results are comparable on their own. New models, including Kimi-K3, do not need a non-spec-decode baseline from day 0.
+- **Pending A/B baseline retirement (not yet enacted):** standalone non-spec-decode baselines kept only for comparison with speculative decoding are slated for retirement. This covers `qwen3.5` non-MTP, whose active configs still contain non-spec-decode points. `glm5.2` has no active non-spec-decode configs. Retire one only once replacement coverage exists for the affected model, hardware, and engine. A spec-decode counterpart existing is not by itself a reason to remove a config.
+- **No separate A/B tracks for new models:** [`infx/golden_al_distribution/`](../infx/golden_al_distribution) pins speculative AgentX runs to one measured acceptance-length curve, so spec-decode results are comparable on their own. New models do not need a non-spec-decode baseline from day 0.
 - **Publish the best Pareto points, with or without speculative decoding.** Recipes may disable MTP, EAGLE/EAGLE3, DSpark, or another draft method when that gives a better operating point. Valid non-spec-decode results stay eligible under the [North-star Pareto policy](#north-star-pareto-policy), so a frontier may mix both.
 
 ## all-reduce policy
@@ -36,6 +36,7 @@ For non-grandfathered models, `ROCM_QUICK_REDUCE_QUANTIZATION`, `VLLM_ROCM_QUICK
 |---|---|---|
 | Agentic coding | Long Context, Multi Turn Realistic traffic trace replay with sub agents | Active. This is the trace-replay agentic-coding benchmark (see the srt-slurm recipes under [`benchmarks/single_node/srt-slurm-recipes/`](../benchmarks/single_node/srt-slurm-recipes) and the shared client [`benchmarks/srt_agentic.sh`](../benchmarks/srt_agentic.sh)). Going forward, new models will likely be onboarded with agentic coding only. Speculative decoding may be enabled or disabled to produce the best Pareto points; a separate non-spec-decode A/B baseline is not required (see [Deprecation policy](#deprecation-policy)). |
 | Single-turn 8k1k | 8192 / 1024 | Active. This is the primary fixed-sequence-length scenario. |
+| Video generation | H3: 124 frames at 24 fps, 1344x768, C1 | MiniMax-H3 uses native srt-slurm: SGLang selects 20-clip `h3-v2.yaml` C1 points on 1, 2, 4 and 8 B200, H200 or MI355X GPUs and 2, 4 and 8 H100 GPUs, and vLLM-Omni the same B200 points. The client and server live in [`video-generation`](../../video-generation); energy is reported per valid clip. Config presence does not qualify execution, power, or quality. See [video delivery](video-generation.md). |
 | Single-turn 1k1k | 1024 / 1024 | Deprecated since 2026-07-17 ([#2263](https://github.com/SemiAnalysisAI/InferenceX/pull/2263)), to save GPU cluster time for higher-priority real-world agentic-coding benchmarks and new frontier models. Archived configs lived in `configs/deprecated/` until it was deleted (#3463); see git history. The GLM-5.1 B200 TileRT point added later in [#2533](https://github.com/SemiAnalysisAI/InferenceX/pull/2533) was the last 1k1k config; it was retired on 2026-10-01 ([#3638](https://github.com/SemiAnalysisAI/InferenceX/pull/3638)). |
 | Single-turn 1k8k | 1024 / 8192 | **Deprecated for all models** since 2026-03-27 ([#911](https://github.com/SemiAnalysisAI/InferenceX/pull/911)), to save GPU cluster time for higher-priority real-world agentic-coding benchmarks and new frontier models. Configs were removed, not archived. |
 
@@ -96,8 +97,8 @@ The table also records both the agreed plan-of-record (PoR) draft-model mapping 
 
 | Model | Primary native/upstream engines | Agreed draft model(s) (PoR) | Proposed draft model(s) pending partner alignment | Additional engines |
 |---|---|---|---|---|
-| Kimi-K3 (`kimik3`) | native/upstream vLLM engine | `Inferact/Kimi-K3-DSpark` | None | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
 | GLM-5.2 (`glm5.2`) | native/upstream SGLang engine | native MTP | None | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
+| GLM-5.3-Flash (`glm5.3flash`) | native/upstream SGLang engine | native MTP | None | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
 | Qwen3.5-397B-A17B (`qwen3.5`) | native/upstream SGLang engine | native MTP | None | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
 | Qwen3.8-Flash-Next (`qwen3.8next`) | native/upstream SGLang engine | TBD | native MTP (built-in 4B multi-step module; golden AL collector: [`qwen3.8next_fp4_b300_vllm.sh`](../benchmarks/single_node/speedbench/qwen3.8next_fp4_b300_vllm.sh)) | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
 
@@ -120,23 +121,49 @@ The 3 TB limit prevents an unrealistic memory-capacity race in which hardware ve
 
 Other offloading tiers, including NVMe KV cache offloading, are outside the initial scope and may be introduced after the InferenceX v3 release. NVMe KV cache offloading is tentatively targeted as a fast follow-up in InferenceX v3.5 or as part of InferenceX v4.
 
+### Kimi K3.1 Pro week-1 precision policy
+
+Agreed by the vLLM and SGLang communities for week-1 official AgentX results. "Native" means the precision of the original released checkpoint.
+
+| Component | Rule |
+|---|---|
+| Linear ops | Must match native (BF16) |
+| Shared expert | Must match native (BF16) |
+| MoE weights | MXFP4 or NVFP4 |
+| MoE activations | A4W4 allowed |
+| MoE dispatch | MX/NV-style quantization allowed |
+| MoE combine | Must match native (BF16) |
+| AllReduce / AG / RS | Must match native (BF16) |
+| KDA cache | FP32 |
+| Conv cache | Native (BF16) |
+| Indexer cache | FP4 allowed |
+| KV cache | FP8 allowed. FP4 only if the native checkpoint ships an FP4 KV cache |
+
+- EPLB: dynamic only, static EPLB not allowed.
+- A4W4 and NVFP4 MoE are allowed because AMD has no W4A8 (FP4 weight, FP8 activation) MoE kernel.
+- FP4 KV cache without native support is not allowed in official AgentX results for week 1; it may be reconsidered once it passes KVV (and/or TB 4.0). Vendor blogs may still show it on the AgentX harness: such results must be labeled unofficial per the InferenceX/AgentX trademark and should include the full KVV suite showing FP4 KV cache passes or is near every KVV eval.
+- Engines outside vLLM, SGLang, TileRT and TokenSpeed on widely available hardware (i.e. not MI455X, Rubin, etc.) must first pass KVV (and/or TB 4.0), with logs and reproduction scripts, before submitting.
+- Any rule may be revisited after week 1 with a passing KVV (and/or TB 4.0) result. Passing requires public reproduction scripts and full logs.
+
 ## Model support matrix
 
 | Model architecture class | Prefix | Date added | Active scenarios | Deprecated scenarios |
 |---|---|---|---|---|
-| MiniMax-M3.1-Flash | `minimaxm31flash` | 2026-10-23 | Agentic coding (vLLM DSpark; golden AL curve `minimaxm31flash_dspark.yaml`) | |
-| Muse Spark Open 816B-A42B | `musespark` | 2026-10-15 | Agentic coding (SGLang and GB300 TensorRT-LLM with DFlash2 draft `RadixArk/Muse-Spark-Open-DFlash2`; golden AL curve `musespark_dflash.yaml`) | |
+| GLM-5.3-Flash | `glm5.3flash` | 2026-11-05 ([#4708](https://github.com/SemiAnalysisAI/InferenceX/pull/4708)) | Agentic coding (SGLang MTP; golden AL curve `glm-5.3-flash__mtp__native__default-default.yaml`) | |
+| Kimi-K3.1-Pro | `kimik3.1` | 2026-11-04 ([#4795](https://github.com/SemiAnalysisAI/InferenceX/pull/4795)) | Agentic coding (vLLM and SGLang DSpark; golden AL curve `kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark-preview__probabilistic-block.yaml`; [week-1 precision policy](#kimi-k31-pro-week-1-precision-policy)) | |
+| MiniMax-M3.1-Flash | `minimaxm31flash` | 2026-10-23 | Agentic coding (vLLM DSpark; golden AL curve `minimax-m3.1-flash__dspark__native__probabilistic-block.yaml`) | |
+| Muse Spark Open 816B-A42B | `musespark` | 2026-10-15 | Agentic coding (SGLang and GB300 TensorRT-LLM with DFlash2 draft `RadixArk/Muse-Spark-Open-DFlash2`; golden AL curve `muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml`) | |
 | DeepSeek-V4.1-Flash | `dsv41flash` | 2026-09-10 | Agentic coding (vLLM: DSpark, Engram UVA offload; SGLang: DSpark arms added per SKU from 2026-09-17; ATOM: MI355X TP2/TP4 DSpark added 2026-09-23, removed in #3463, restored on srt-slurm 2026-09-30; GPU validation pending) | |
 | GLM-5.3 | `glm5.3` | 2026-09-22 ([#3366](https://github.com/SemiAnalysisAI/InferenceX/pull/3366)) | Agentic coding (MTP only, per the deprecation policy) | Single-turn 1k1k (deprecated for all models before this model was added; never run) |
 | Qwen3.8-Flash-Next | `qwen3.8next` | 2026-08-26 ([#2742](https://github.com/SemiAnalysisAI/InferenceX/pull/2742)) | Agentic coding | |
-| Kimi-K3 | `kimik3` | 2026-07-27 ([#2391](https://github.com/SemiAnalysisAI/InferenceX/pull/2391)) | Agentic coding (DSpark may be disabled for better Pareto points) | Standalone non-DSpark A/B baseline (not required from day 0) |
+| Kimi-K3 | `kimik3` | 2026-07-27 ([#2391](https://github.com/SemiAnalysisAI/InferenceX/pull/2391)) | None (retired 2026-11-03) | Agentic coding, including DSpark and non-DSpark points |
 | GLM-5.2 | `glm5.2` | 2026-07-18 ([#2268](https://github.com/SemiAnalysisAI/InferenceX/pull/2268)) | Agentic coding (non-MTP points remain eligible under the Pareto policy; see the deprecation policy) | |
 | MiniMax-M3 | `minimaxm3` | 2026-06-12 ([#1724](https://github.com/SemiAnalysisAI/InferenceX/pull/1724)) | None (fully retired 2026-10-29) | Agentic coding (removed 2026-10-29); Single-turn 1k1k, Single-turn 8k1k (removed 2026-08-04, [#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493)) |
 | DeepSeek-V4-Pro | `dsv4` | 2026-04-24 ([#1130](https://github.com/SemiAnalysisAI/InferenceX/pull/1130)) | None (fully retired 2026-10-29) | Agentic coding (removed 2026-10-29); Single-turn 1k1k, Single-turn 8k1k (removed 2026-09-09, [#2921](https://github.com/SemiAnalysisAI/InferenceX/pull/2921)) |
 | GLM-5 / GLM-5.1 | `glm5`, `glm5.1` | 2026-03-06 ([#762](https://github.com/SemiAnalysisAI/InferenceX/pull/762)), with GLM-5.1 added 2026-04-21 ([#1098](https://github.com/SemiAnalysisAI/InferenceX/pull/1098)) | None (fully retired 2026-10-01, [#3638](https://github.com/SemiAnalysisAI/InferenceX/pull/3638)) | The earlier GLM-5 / GLM-5.1 recipes were retired 2026-07-18 ([#2276](https://github.com/SemiAnalysisAI/InferenceX/pull/2276)); the GLM-5.1 B200 TileRT 1k1k and 8k1k points (added 2026-08-09, [#2533](https://github.com/SemiAnalysisAI/InferenceX/pull/2533)) were retired 2026-10-01 ([#3638](https://github.com/SemiAnalysisAI/InferenceX/pull/3638)) |
 | MiniMax-M2.5/2.7 | `minimaxm2.5` | 2026-02-18 ([#755](https://github.com/SemiAnalysisAI/InferenceX/pull/755)) | None (retired 2026-06-20, [#1874](https://github.com/SemiAnalysisAI/InferenceX/pull/1874)) | Single-turn 1k1k, Single-turn 1k8k, Single-turn 8k1k |
 | Kimi-K2.5/2.6/2.7-Code | `kimik2.5` | 2026-02-17 ([#734](https://github.com/SemiAnalysisAI/InferenceX/pull/734)) | None (fully retired 2026-08-07, [#2527](https://github.com/SemiAnalysisAI/InferenceX/pull/2527)) | Single-turn 1k1k, Single-turn 1k8k, Agentic coding (removed 2026-08-04, [#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493)), Single-turn 8k1k (removed 2026-08-07, [#2527](https://github.com/SemiAnalysisAI/InferenceX/pull/2527)) |
-| Qwen3.5-397B-A17B | `qwen3.5` | 2026-02-16 ([#704](https://github.com/SemiAnalysisAI/InferenceX/pull/704)) | Single-turn 8k1k and Agentic coding, both limited to fp8/fp4 | Single-turn 1k1k, Single-turn 1k8k, all bf16 recipes (removed 2026-08-04, [#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493)) |
+| Qwen3.5-397B-A17B | `qwen3.5` | 2026-02-16 ([#704](https://github.com/SemiAnalysisAI/InferenceX/pull/704)) | Agentic coding, limited to fp8/fp4 | Single-turn 8k1k (removed 2026-11-02, [#4697](https://github.com/SemiAnalysisAI/InferenceX/pull/4697)); Single-turn 1k1k, Single-turn 1k8k, all bf16 recipes (removed 2026-08-04, [#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493)) |
 | gpt-oss-120b | `gptoss` | 2025-09-09 | None (retired 2026-07-06, [#2101](https://github.com/SemiAnalysisAI/InferenceX/pull/2101)) | Single-turn 1k1k, Single-turn 1k8k, Single-turn 8k1k |
 | DeepSeek-R1-0528 | `dsr1` | 2025-08-13 | Single-turn 8k1k | Single-turn 1k1k, Single-turn 1k8k |
 | Llama-3.1-70B-Instruct | `llama70b` | 2025-08-12 | None (retired 2025-10-29, [#149](https://github.com/SemiAnalysisAI/InferenceX/pull/149)) | Single-turn 1k1k, Single-turn 1k8k, Single-turn 8k1k [^1] |
@@ -148,6 +175,7 @@ Other offloading tiers, including NVMe KV cache offloading, are outside the init
 - The `Prefix` column is the canonical `model-prefix` used in `configs/*-master.yaml` and by the `full-sweep` subcommand's `--model-prefix` filter, for example `python -m infx.matrix.generate full-sweep --config-files configs/nvidia-master.yaml --model-prefix dsr1`.
 - "Retired" means the model no longer has any active scenario. Retired models' configs are deleted from the master configs; the former `configs/deprecated/` archive was removed in #3463, so past settings live in git history and `perf-changelog.yaml`.
 - MiniMax-M3 and DeepSeek-V4-Pro retirement does not affect MiniMax-M3.1-Flash or DeepSeek-V4.1-Flash. Their SPEED-Bench collectors, golden AL curves, and B300 checkpoint mappings remain available for acceptance-length research and historical result interpretation; CollectiveX's DeepSeek-V4-Pro communication shape is also independent of serving benchmark coverage.
+- Kimi-K3 retirement removes all serving benchmark configs. Its SPEED-Bench collectors, golden AL curves, B300 checkpoint mapping, and vendor-eval tooling remain available for research and historical result interpretation. OperatorX retains Kimi-K3 operator shapes, but no longer inherits their retired serving recipes. Those cases use the current hardware/backend default image without recipe-specific env or engine args. Removing the entries also changes the vLLM default images for other unmatched cases on MI355X and B300; [`operatorx/perf-changelog.yaml`](../../operatorx/perf-changelog.yaml) records the runtime changes.
 - Deprecating a precision (e.g. Qwen3.5 bf16) or one arm of an A/B pair (e.g. non-MTP) narrows a model's recipe coverage without retiring the model. The model stays listed as active as long as one scenario still runs.
 - Klaud Cold reads the Scenarios table and this page's Model support matrix when it freezes an image-refresh baseline. A published single-turn point is exempt from re-measurement only if the family no longer runs any point with its ISL/OSL; the only Scenarios row for that ISL/OSL starts with `Deprecated since YYYY-MM-DD ([#N](PR link))` or `**Deprecated for all models** since YYYY-MM-DD ([#N](PR link))`, dated after the baseline and linking a PR of this repository; and the model's row lists that scenario under deprecated and not under active scenarios. Removing only some topologies or concurrencies exempts nothing. Keep that wording, one row per ISL/OSL and per model, and one cell per column when editing these tables; see [Klaud Cold reporting instructions](../../.github/klaud-candidate-prompt.md).
 - `dsr1` began as the DeepSeek-V3 workflow templates in the initial repo import and was switched to DeepSeek-R1 benchmarking on 2025-08-13 (renamed `dsv3` → `dsr1` on 2025-08-20).

@@ -150,7 +150,7 @@ def test_invalid_pinned_run_never_publishes_outputs(staging, monkeypatch, tmp_pa
     with pytest.raises(RuntimeError, match=reason):
         invoke(staging, monkeypatch, tmp_path)
     assert not staging["output"].exists()
-    assert staging["comments"] == []
+    assert len(staging["comments"]) == 1 and reason in staging["comments"][0]
 
 
 @pytest.mark.parametrize("expired_index,reason", [
@@ -229,12 +229,24 @@ def test_malformed_permission_response_fails_closed(staging, access):
     assert staging["reads"] == ["/collaborators/reviewer/permission"]
 
 
-def test_non_full_sweep_label_does_not_authorize_staging(staging):
+def test_current_labels_do_not_gate_staging(staging):
     staging["responses"]["/pulls/7"]["labels"] = [{"name": "documentation"}]
-    with pytest.raises(RuntimeError, match="PR does not have a full-sweep label"):
+    staging["responses"]["/issues/7/timeline"].append(
+        {"event": "unlabeled", "label": {"name": "full-sweep-enabled"},
+         "created_at": "2026-09-02T00:00:00Z"})
+    assert stage_results.request("example/project", staging["event"], "token")["run-id"] == "123"
+    assert staging["comments"] == []
+
+
+@pytest.mark.parametrize("body", ["/stage-results", "/stage-results 123"])
+def test_run_without_full_sweep_label_history_is_rejected_with_comment(staging, body):
+    staging["event"]["comment"]["body"] = body
+    staging["responses"]["/pulls/7"]["labels"] = [{"name": "full-sweep-enabled"}]
+    staging["responses"]["/issues/7/timeline"][0]["created_at"] = "2026-09-01T13:00:00Z"
+    with pytest.raises(RuntimeError):
         stage_results.request("example/project", staging["event"], "token")
-    assert "requires a completed run from a PR using one of:" in staging["comments"][0]
-    assert "/issues/7/timeline" not in staging["reads"]
+    assert len(staging["comments"]) == 1
+    assert staging["comments"][0].startswith("@reviewer ")
 
 
 @pytest.mark.parametrize("path", ["/issues/7/timeline", "/pulls/7/commits", "/actions/runs/123/artifacts"])
@@ -290,12 +302,15 @@ def test_pinned_trusted_external_run_stages_on_its_pr(
         stage_results.request("example/project", staging["event"], "token")
 
 
-def recovery_pr(staging, association="MEMBER"):
+def recovery_pr(staging, login="reviewer"):
     staging["responses"]["/pulls/7"] = {"labels": [], "head": {"ref": "recovery"}, "state": "open"}
     staging["responses"]["/pulls/7/commits"] = [{"sha": "recovery-head"}]
     staging["responses"]["/issues/7/timeline"] = []
+    staging["responses"]["/collaborators/reader/permission"] = {
+        "permission": "read", "role_name": "read",
+    }
     staging["responses"]["/issues/7/comments"] = [{
-        "id": 50, "created_at": "2026-09-02T00:00:00Z", "author_association": association,
+        "id": 50, "created_at": "2026-09-02T00:00:00Z", "user": {"login": login},
         "body": "/use 123",
     }]
 
@@ -322,8 +337,8 @@ def test_recovery_pr_only_stages_its_pinned_run(staging):
 
 
 def test_recovery_pr_rejects_unauthorized_or_invalid_reuse_source(staging):
-    recovery_pr(staging, association="CONTRIBUTOR")
-    with pytest.raises(RuntimeError, match="PR does not have a full-sweep label"):
+    recovery_pr(staging, login="reader")
+    with pytest.raises(RuntimeError, match="Run 123 cannot be staged"):
         stage_results.request("example/project", staging["event"], "token")
     recovery_pr(staging)
     staging["responses"]["/actions/runs/123"]["status"] = "in_progress"
