@@ -188,7 +188,7 @@ git diff --check origin/main...HEAD || exit 1
 git push origin "$BRANCH"
 ```
 
-An authorized `OWNER`, `MEMBER`, or `COLLABORATOR` then pins the source with
+A maintainer with write access to the repository then pins the source with
 `/use $SOURCE_RUN_ID` (legacy `/reuse-sweep-run <run_id>` is also accepted). The
 source commit belongs to the original PR, not the recovery PR, so expect the bot to
 react 👍 and post an outside-PR warning comment. Require the 👍 before merging.
@@ -208,7 +208,7 @@ Require passing `check-changelog` and `reuse-sweep-gate`, with `setup` and GPU j
 skipped. Merge only with explicit authorization; never bypass failed or pending
 checks. Admin merge is allowed only when passing checks leave repository policy as
 the sole blocker. Do not use `merge_with_reuse` here. It posts its own
-`/reuse-sweep-run` chosen from the recovery PR's commits, which supersedes the pinned
+`/use <run_id>` chosen from the recovery PR's commits, which supersedes the pinned
 source and finds no sweep. Merge directly:
 
 ```bash
