@@ -12663,6 +12663,6 @@
     - agentic-coding
   description:
     - "Add native GLM-5.3 FP8 AgentX on MI325X with the digest-pinned SGLang v0.5.22 ROCm 7.2.0 MI30x image, TP8 and MTP (EAGLE 3/1/4)."
-    - "GPU-resident KV at TP8 concurrency 1, 2, 3, 4, 6 and 8; SGLang HiCache with the auto-sized host tier at TP8 concurrency 10 and 12."
+    - "GPU-resident KV at TP8 concurrency 1, 2, 4, 6, 7, 8 and 9; SGLang HiCache with the auto-sized host tier at TP8 concurrency 10 and 12."
     - "Use gfx942 TileLang DSA with Torch DSA top-k, FP8 KV and full 1M context."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4985

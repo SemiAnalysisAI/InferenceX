@@ -88,17 +88,6 @@ override_tp8_c2:
       CONC: '2'
       KV_OFFLOADING: none
 
-override_tp8_c3:
-  roles:
-    agg:
-      args:
-        max-running-requests: 8
-        cuda-graph-max-bs-decode: 8
-  benchmark:
-    env:
-      CONC: '3'
-      KV_OFFLOADING: none
-
 override_tp8_c4:
   roles:
     agg:
@@ -121,6 +110,17 @@ override_tp8_c6:
       CONC: '6'
       KV_OFFLOADING: none
 
+override_tp8_c7:
+  roles:
+    agg:
+      args:
+        max-running-requests: 14
+        cuda-graph-max-bs-decode: 14
+  benchmark:
+    env:
+      CONC: '7'
+      KV_OFFLOADING: none
+
 override_tp8_c8:
   roles:
     agg:
@@ -130,6 +130,17 @@ override_tp8_c8:
   benchmark:
     env:
       CONC: '8'
+      KV_OFFLOADING: none
+
+override_tp8_c9:
+  roles:
+    agg:
+      args:
+        max-running-requests: 18
+        cuda-graph-max-bs-decode: 18
+  benchmark:
+    env:
+      CONC: '9'
       KV_OFFLOADING: none
 
 override_tp8_c10_hicache:

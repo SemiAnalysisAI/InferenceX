@@ -1166,7 +1166,7 @@ glm5.3-fp8-mi325x-sglang-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 3, 4, 6, 8], srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 6, 7, 8, 9], srt-recipe: agentic.yaml }
       - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [10, 12], srt-recipe: agentic.yaml }
 
 h3-bf16-mi355x-sglang-video:
