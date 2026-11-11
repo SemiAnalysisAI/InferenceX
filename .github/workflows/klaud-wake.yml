@@ -33,7 +33,7 @@ jobs:
   wake:
     name: Wake Klaud recovery
     if: >-
-      github.event_name == 'workflow_run'
+      vars.KLAUD_ENABLED == 'true' && github.event_name == 'workflow_run'
       && github.event.workflow_run.head_repository.full_name == github.repository
       && github.event.workflow_run.conclusion != 'skipped'
       && (startsWith(github.event.workflow_run.display_title, 'e2e Test - klaud-')
@@ -109,7 +109,8 @@ jobs:
   due:
     name: Wake Klaud recovery when a rerun is due
     if: >-
-      github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+      vars.KLAUD_ENABLED == 'true' && github.event_name == 'workflow_dispatch'
+      && github.ref == 'refs/heads/main'
       && github.actor == 'Klaud-Cold'
     runs-on: ubuntu-latest
     timeout-minutes: 250
