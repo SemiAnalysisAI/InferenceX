@@ -39,9 +39,9 @@ jobs:
           token=$(curl -fsS -H @- "https://ghcr.io/token?scope=repository:${PACKAGE}:pull,push" \
             <<< "Authorization: Basic $basic" | jq -r .token)
           echo "::add-mask::$token"
-          code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H @- \
+          code=$(curl -sS -o upload.json -w '%{http_code}' -X POST -H @- \
             "https://ghcr.io/v2/${PACKAGE}/blobs/uploads/" <<< "Authorization: Bearer $token")
-          echo "blob upload session: HTTP $code"
+          echo "blob upload session: HTTP $code $(head -c 400 upload.json)"
           test "$code" = 202
 
       - name: Free disk space
