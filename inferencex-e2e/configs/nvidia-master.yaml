@@ -4348,7 +4348,7 @@ minimaxm31flash-fp4-b300-vllm-agentic-dspark:
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [48], srt-recipe: 'agentic.yaml:zip_override_tp2[3]' }
 
 minimaxm31flash-fp4-b300-dynamo-vllm-agentic-dspark-disagg:
-  image: vllm/vllm-openai:minimax-m31-flash-x86_64-cu134-05caae0-mc0.3.13.post1@sha256:885ef87bdef7ce7f9ce048c066b6f51018bc31ec06fd605f2957abc591f659bd
+  image: vllm/vllm-openai:minimax-m31-flash-x86_64-cu134-5e21ce1-mc0.3.13.post1@sha256:d8294e75fa949cf5905409d399ec2384c68aa543e93f24aff8074628b94848a1
   model: MiniMaxAI/MiniMax-M3.1-Flash
   model-prefix: minimaxm31flash
   runner: cluster:b300-dsxe
