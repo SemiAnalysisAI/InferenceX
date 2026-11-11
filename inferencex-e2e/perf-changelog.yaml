@@ -12645,3 +12645,11 @@
     - "DEP4 (TP1 x DP4 + EP4, DeepGEMM MegaMoE, FlashMLA mega-attention with sparse-MLA prefill workspace factor 4, deep_select top-k, Engram host tables shared across DP ranks, prefill-schedule-interval 96, NUMA binding) behind the consistent-hash vLLM Router at concurrency 136 (24 GiB KV pool), 170 (28 GiB), 200 (32 GiB), 256 (40 GiB), 320 (48 GiB), 384 (56 GiB), 512 (72 GiB, max-num-seqs 192), 640 (96 GiB, max-num-seqs 224), 768 (112 GiB, max-num-seqs 256) and 1024 (128 GiB, max-num-seqs 320), max-num-seqs 128 otherwise, each with a 65536-token prefill budget and long-prefill-token-threshold 8192. Removes TP4 at concurrency 8 and DEP2 at concurrency 8-192."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4844
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark-dp2
+  scenario-type: [agentic-coding]
+  description:
+    - "Add DeepSeek-V4.1-Flash FP4 AgentX on MI355X at TP1 x DP2 (attention data parallel, experts TP-sharded, no expert parallelism) behind a consistent-hash vLLM router at concurrency 256, on vllm/vllm-openai-rocm:nightly-083fbac02 (index digest sha256:07ebdd53fe5b6dfb37f99b6cd084df2734faa2fef17c79317e283a68d30b5d2a)."
+    - "Prefill uses the engine's cadence scheduling (prefill-schedule-interval 11, 16384-token budget): prefill is admitted once every 11 steps, so the DP ranks prefill in the same step and decode runs in longer uninterrupted stretches. The cross-DP delayer (vllm-project/vllm#65655) is not used."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD

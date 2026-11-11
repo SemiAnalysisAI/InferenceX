@@ -904,6 +904,21 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp8-c1:
       search-space:
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1], srt-recipe: agentic.yaml }
 
+dsv41flash-fp4-mi355x-vllm-agentic-dspark-dp2:
+  image: vllm/vllm-openai-rocm:nightly-083fbac021348c2c7af8a7bc71ba18199d0dd7a4@sha256:07ebdd53fe5b6dfb37f99b6cd084df2734faa2fef17c79317e283a68d30b5d2a
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  srt-recipe-dir: dsv41flash/vllm/mi355x-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.60
+      search-space:
+      - { tp: 2, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [256], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
+
 # MiniMax-M3.1-Flash AgentX on MI355X: day-zero vLLM ROCm image from
 # https://vllm.ai/blog/2026-10-23-minimax-m31-flash, verified 2026-10-23.
 # AMD's Quark MXFP4 export (routed experts in MXFP4, W4A4 on the AITER MoE)
