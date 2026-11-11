@@ -254,7 +254,43 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 12288,
+      "n": 6144,
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/mlp.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 12288,
+      "n": 6144,
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/mlp.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "a": {
         "dtype": "bf16"
       },
@@ -362,6 +398,24 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3072,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 12288,
+      "n": 6144,
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/mlp.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4096,
       "a": {
         "dtype": "bf16"
@@ -488,6 +542,24 @@
   {
     "type": "gemm",
     "args": {
+      "m": 49152,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 12288,
+      "n": 6144,
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/mlp.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 65536,
       "a": {
         "dtype": "bf16"
@@ -898,7 +970,63 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "n": 6144,
       "k": 1536,
       "a": {
@@ -1066,6 +1194,34 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3072,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4096,
       "n": 6144,
       "k": 1536,
@@ -1262,6 +1418,34 @@
   {
     "type": "gemm",
     "args": {
+      "m": 49152,
+      "n": 6144,
+      "k": 1536,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/Kimi-K2.5-MXFP4/q_b_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "moonshotai/Kimi-K2.5/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-FP4-V2/q_b_proj",
+      "nvidia/DeepSeek-R1-0528-NVFP4-v2/q_b_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/Kimi-K2.5-NVFP4/q_b_proj",
+      "nvidia/Kimi-K2.6-NVFP4/q_b_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 65536,
       "n": 6144,
       "k": 1536,
@@ -1612,7 +1796,53 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "n": 6144,
+      "k": 2048,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "n": 6144,
+      "k": 2048,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "n": 6144,
       "k": 2048,
       "a": {
@@ -1750,6 +1980,29 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3072,
+      "n": 6144,
+      "k": 2048,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4096,
       "n": 6144,
       "k": 2048,
@@ -1911,6 +2164,29 @@
   {
     "type": "gemm",
     "args": {
+      "m": 49152,
+      "n": 6144,
+      "k": 2048,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 65536,
       "n": 6144,
       "k": 2048,
@@ -2270,7 +2546,55 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "n": 6144,
+      "k": 3072,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/MiniMax-M2.5-MXFP4/q_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "n": 6144,
+      "k": 3072,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/MiniMax-M2.5-MXFP4/q_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "n": 6144,
       "k": 3072,
       "a": {
@@ -2414,6 +2738,30 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3072,
+      "n": 6144,
+      "k": 3072,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/MiniMax-M2.5-MXFP4/q_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4096,
       "n": 6144,
       "k": 3072,
@@ -2582,6 +2930,30 @@
   {
     "type": "gemm",
     "args": {
+      "m": 49152,
+      "n": 6144,
+      "k": 3072,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/MiniMax-M2.5-MXFP4/q_proj",
+      "amd/MiniMax-M3-MXFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 65536,
       "n": 6144,
       "k": 3072,
@@ -2928,7 +3300,53 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "n": 6144,
+      "k": 4096,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "n": 6144,
+      "k": 4096,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "n": 6144,
       "k": 4096,
       "a": {
@@ -3066,6 +3484,29 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3072,
+      "n": 6144,
+      "k": 4096,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4096,
       "n": 6144,
       "k": 4096,
@@ -3227,6 +3668,29 @@
   {
     "type": "gemm",
     "args": {
+      "m": 49152,
+      "n": 6144,
+      "k": 4096,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 65536,
       "n": 6144,
       "k": 4096,
@@ -3544,7 +4008,49 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 128,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/block_sparse_moe.gate",
+      "amd/MiniMax-M3-MXFP4/block_sparse_moe.gate",
+      "amd/MiniMax-M3-MXFP4/self_attn.index_k_proj",
+      "nvidia/MiniMax-M3-NVFP4/block_sparse_moe.gate"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 128,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/block_sparse_moe.gate",
+      "amd/MiniMax-M3-MXFP4/block_sparse_moe.gate",
+      "amd/MiniMax-M3-MXFP4/self_attn.index_k_proj",
+      "nvidia/MiniMax-M3-NVFP4/block_sparse_moe.gate"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "a": {
         "dtype": "bf16"
       },
@@ -3670,6 +4176,27 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3072,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 128,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/block_sparse_moe.gate",
+      "amd/MiniMax-M3-MXFP4/block_sparse_moe.gate",
+      "amd/MiniMax-M3-MXFP4/self_attn.index_k_proj",
+      "nvidia/MiniMax-M3-NVFP4/block_sparse_moe.gate"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4096,
       "a": {
         "dtype": "bf16"
@@ -3817,6 +4344,27 @@
   {
     "type": "gemm",
     "args": {
+      "m": 49152,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 128,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/block_sparse_moe.gate",
+      "amd/MiniMax-M3-MXFP4/block_sparse_moe.gate",
+      "amd/MiniMax-M3-MXFP4/self_attn.index_k_proj",
+      "nvidia/MiniMax-M3-NVFP4/block_sparse_moe.gate"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 65536,
       "a": {
         "dtype": "bf16"
@@ -4118,7 +4666,47 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 128,
+      "out": "fp32"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/block_sparse_moe.gate",
+      "amd/MiniMax-M3-MXFP4/block_sparse_moe.gate",
+      "nvidia/MiniMax-M3-NVFP4/block_sparse_moe.gate"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 128,
+      "out": "fp32"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/block_sparse_moe.gate",
+      "amd/MiniMax-M3-MXFP4/block_sparse_moe.gate",
+      "nvidia/MiniMax-M3-NVFP4/block_sparse_moe.gate"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "a": {
         "dtype": "bf16"
       },
@@ -4219,6 +4807,26 @@
     "type": "gemm",
     "args": {
       "m": 2048,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 128,
+      "out": "fp32"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/block_sparse_moe.gate",
+      "amd/MiniMax-M3-MXFP4/block_sparse_moe.gate",
+      "nvidia/MiniMax-M3-NVFP4/block_sparse_moe.gate"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3072,
       "a": {
         "dtype": "bf16"
       },
@@ -4359,6 +4967,26 @@
     "type": "gemm",
     "args": {
       "m": 32768,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 128,
+      "out": "fp32"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/block_sparse_moe.gate",
+      "amd/MiniMax-M3-MXFP4/block_sparse_moe.gate",
+      "nvidia/MiniMax-M3-NVFP4/block_sparse_moe.gate"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 49152,
       "a": {
         "dtype": "bf16"
       },
@@ -4678,7 +5306,47 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 200064,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/lm_head",
+      "amd/MiniMax-M3-MXFP4/lm_head",
+      "nvidia/MiniMax-M3-NVFP4/lm_head"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 200064,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/lm_head",
+      "amd/MiniMax-M3-MXFP4/lm_head",
+      "nvidia/MiniMax-M3-NVFP4/lm_head"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "a": {
         "dtype": "bf16"
       },
@@ -4798,6 +5466,26 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3072,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 200064,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/lm_head",
+      "amd/MiniMax-M3-MXFP4/lm_head",
+      "nvidia/MiniMax-M3-NVFP4/lm_head"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4096,
       "a": {
         "dtype": "bf16"
@@ -4938,6 +5626,26 @@
   {
     "type": "gemm",
     "args": {
+      "m": 49152,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 200064,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/lm_head",
+      "amd/MiniMax-M3-MXFP4/lm_head",
+      "nvidia/MiniMax-M3-NVFP4/lm_head"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 65536,
       "a": {
         "dtype": "bf16"
@@ -5280,7 +5988,53 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "n": 2048,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/q_a_proj",
+      "amd/GLM-5.2-MXFP4/q_a_proj",
+      "amd/MiniMax-M3-MXFP4/q_proj",
+      "nvidia/GLM-5-NVFP4/q_a_proj",
+      "nvidia/GLM-5.1-NVFP4/q_a_proj",
+      "nvidia/GLM-5.2-NVFP4/q_a_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "n": 2048,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/q_a_proj",
+      "amd/GLM-5.2-MXFP4/q_a_proj",
+      "amd/MiniMax-M3-MXFP4/q_proj",
+      "nvidia/GLM-5-NVFP4/q_a_proj",
+      "nvidia/GLM-5.1-NVFP4/q_a_proj",
+      "nvidia/GLM-5.2-NVFP4/q_a_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "n": 2048,
       "k": 6144,
       "a": {
@@ -5418,6 +6172,29 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3072,
+      "n": 2048,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/q_a_proj",
+      "amd/GLM-5.2-MXFP4/q_a_proj",
+      "amd/MiniMax-M3-MXFP4/q_proj",
+      "nvidia/GLM-5-NVFP4/q_a_proj",
+      "nvidia/GLM-5.1-NVFP4/q_a_proj",
+      "nvidia/GLM-5.2-NVFP4/q_a_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4096,
       "n": 2048,
       "k": 6144,
@@ -5579,6 +6356,29 @@
   {
     "type": "gemm",
     "args": {
+      "m": 49152,
+      "n": 2048,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/q_a_proj",
+      "amd/GLM-5.2-MXFP4/q_a_proj",
+      "amd/MiniMax-M3-MXFP4/q_proj",
+      "nvidia/GLM-5-NVFP4/q_a_proj",
+      "nvidia/GLM-5.1-NVFP4/q_a_proj",
+      "nvidia/GLM-5.2-NVFP4/q_a_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 65536,
       "n": 2048,
       "k": 6144,
@@ -5854,7 +6654,43 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 24576,
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/mlp.gate_proj+mlp.up_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 24576,
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/mlp.gate_proj+mlp.up_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "a": {
         "dtype": "bf16"
       },
@@ -5962,6 +6798,24 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3072,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 24576,
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/mlp.gate_proj+mlp.up_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4096,
       "a": {
         "dtype": "bf16"
@@ -6088,6 +6942,24 @@
   {
     "type": "gemm",
     "args": {
+      "m": 49152,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 24576,
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/mlp.gate_proj+mlp.up_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 65536,
       "a": {
         "dtype": "bf16"
@@ -6442,7 +7314,55 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "n": 3072,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M2.5-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "n": 3072,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M2.5-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "n": 3072,
       "k": 6144,
       "a": {
@@ -6586,6 +7506,30 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3072,
+      "n": 3072,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M2.5-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4096,
       "n": 3072,
       "k": 6144,
@@ -6754,6 +7698,30 @@
   {
     "type": "gemm",
     "args": {
+      "m": 49152,
+      "n": 3072,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M2.5-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj",
+      "nvidia/MiniMax-M2.5-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 65536,
       "n": 3072,
       "k": 6144,
@@ -7030,7 +7998,43 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 512,
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/self_attn.index_q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 512,
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/self_attn.index_q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "a": {
         "dtype": "bf16"
       },
@@ -7138,6 +8142,24 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3072,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 512,
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/self_attn.index_q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4096,
       "a": {
         "dtype": "bf16"
@@ -7264,6 +8286,24 @@
   {
     "type": "gemm",
     "args": {
+      "m": 49152,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 512,
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/self_attn.index_q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 65536,
       "a": {
         "dtype": "bf16"
@@ -7646,7 +8686,59 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "n": 6144,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "n": 6144,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "n": 6144,
       "k": 6144,
       "a": {
@@ -7802,6 +8894,32 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3072,
+      "n": 6144,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4096,
       "n": 6144,
       "k": 6144,
@@ -7984,6 +9102,32 @@
   {
     "type": "gemm",
     "args": {
+      "m": 49152,
+      "n": 6144,
+      "k": 6144,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/down_proj",
+      "amd/GLM-5.1-MXFP4/gate_up_proj",
+      "amd/GLM-5.2-MXFP4/down_proj",
+      "amd/GLM-5.2-MXFP4/gate_up_proj",
+      "amd/MiniMax-M3-MXFP4/gate_up_proj",
+      "nvidia/GLM-5.1-NVFP4/down_proj",
+      "nvidia/GLM-5.1-NVFP4/gate_up_proj",
+      "nvidia/GLM-5.2-NVFP4/down_proj",
+      "nvidia/GLM-5.2-NVFP4/gate_up_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 65536,
       "n": 6144,
       "k": 6144,
@@ -8290,7 +9434,47 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 640,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/self_attn.index_q_proj+self_attn.index_k_proj",
+      "amd/MiniMax-M3-MXFP4/self_attn.index_q_proj+self_attn.index_k_proj",
+      "nvidia/MiniMax-M3-NVFP4/self_attn.index_q_proj+self_attn.index_k_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 640,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/self_attn.index_q_proj+self_attn.index_k_proj",
+      "amd/MiniMax-M3-MXFP4/self_attn.index_q_proj+self_attn.index_k_proj",
+      "nvidia/MiniMax-M3-NVFP4/self_attn.index_q_proj+self_attn.index_k_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "a": {
         "dtype": "bf16"
       },
@@ -8410,6 +9594,26 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3072,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 640,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/self_attn.index_q_proj+self_attn.index_k_proj",
+      "amd/MiniMax-M3-MXFP4/self_attn.index_q_proj+self_attn.index_k_proj",
+      "nvidia/MiniMax-M3-NVFP4/self_attn.index_q_proj+self_attn.index_k_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4096,
       "a": {
         "dtype": "bf16"
@@ -8550,6 +9754,26 @@
   {
     "type": "gemm",
     "args": {
+      "m": 49152,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 640,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/self_attn.index_q_proj+self_attn.index_k_proj",
+      "amd/MiniMax-M3-MXFP4/self_attn.index_q_proj+self_attn.index_k_proj",
+      "nvidia/MiniMax-M3-NVFP4/self_attn.index_q_proj+self_attn.index_k_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 65536,
       "a": {
         "dtype": "bf16"
@@ -8822,7 +10046,43 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 9216,
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/self_attn.q_proj+self_attn.k_proj+self_attn.v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 9216,
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/self_attn.q_proj+self_attn.k_proj+self_attn.v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "a": {
         "dtype": "bf16"
       },
@@ -8913,6 +10173,24 @@
     "type": "gemm",
     "args": {
       "m": 2048,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 9216,
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/self_attn.q_proj+self_attn.k_proj+self_attn.v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3072,
       "a": {
         "dtype": "bf16"
       },
@@ -9039,6 +10317,24 @@
     "type": "gemm",
     "args": {
       "m": 32768,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 9216,
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/self_attn.q_proj+self_attn.k_proj+self_attn.v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 49152,
       "a": {
         "dtype": "bf16"
       },
@@ -9326,7 +10622,43 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 9856,
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/self_attn.q_proj+self_attn.k_proj+self_attn.v_proj+self_attn.index_q_proj+self_attn.index_k_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 9856,
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/self_attn.q_proj+self_attn.k_proj+self_attn.v_proj+self_attn.index_q_proj+self_attn.index_k_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "a": {
         "dtype": "bf16"
       },
@@ -9417,6 +10749,24 @@
     "type": "gemm",
     "args": {
       "m": 2048,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 9856,
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/self_attn.q_proj+self_attn.k_proj+self_attn.v_proj+self_attn.index_q_proj+self_attn.index_k_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3072,
       "a": {
         "dtype": "bf16"
       },
@@ -9543,6 +10893,24 @@
     "type": "gemm",
     "args": {
       "m": 32768,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 9856,
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/self_attn.q_proj+self_attn.k_proj+self_attn.v_proj+self_attn.index_q_proj+self_attn.index_k_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 49152,
       "a": {
         "dtype": "bf16"
       },
@@ -9914,7 +11282,55 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 8192,
+      "n": 6144,
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/self_attn.o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 8192,
+      "n": 6144,
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/self_attn.o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "a": {
         "dtype": "bf16"
       },
@@ -10035,6 +11451,30 @@
     "type": "gemm",
     "args": {
       "m": 2048,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 8192,
+      "n": 6144,
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/self_attn.o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3072,
       "a": {
         "dtype": "bf16"
       },
@@ -10203,6 +11643,30 @@
     "type": "gemm",
     "args": {
       "m": 32768,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 8192,
+      "n": 6144,
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/GLM-5.1-MXFP4/o_proj",
+      "amd/GLM-5.2-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/o_proj",
+      "amd/MiniMax-M3-MXFP4/self_attn.o_proj",
+      "nvidia/GLM-5-NVFP4/o_proj",
+      "nvidia/GLM-5.1-NVFP4/o_proj",
+      "nvidia/GLM-5.2-NVFP4/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 49152,
       "a": {
         "dtype": "bf16"
       },
@@ -10530,7 +11994,47 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "fp32"
+      },
+      "k": 6144,
+      "n": 128,
+      "out": "fp32"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/block_sparse_moe.gate",
+      "amd/MiniMax-M3-MXFP4/block_sparse_moe.gate",
+      "nvidia/MiniMax-M3-NVFP4/block_sparse_moe.gate"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "fp32"
+      },
+      "k": 6144,
+      "n": 128,
+      "out": "fp32"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/block_sparse_moe.gate",
+      "amd/MiniMax-M3-MXFP4/block_sparse_moe.gate",
+      "nvidia/MiniMax-M3-NVFP4/block_sparse_moe.gate"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "a": {
         "dtype": "bf16"
       },
@@ -10631,6 +12135,26 @@
     "type": "gemm",
     "args": {
       "m": 2048,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "fp32"
+      },
+      "k": 6144,
+      "n": 128,
+      "out": "fp32"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/block_sparse_moe.gate",
+      "amd/MiniMax-M3-MXFP4/block_sparse_moe.gate",
+      "nvidia/MiniMax-M3-NVFP4/block_sparse_moe.gate"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3072,
       "a": {
         "dtype": "bf16"
       },
@@ -10771,6 +12295,26 @@
     "type": "gemm",
     "args": {
       "m": 32768,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "fp32"
+      },
+      "k": 6144,
+      "n": 128,
+      "out": "fp32"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/block_sparse_moe.gate",
+      "amd/MiniMax-M3-MXFP4/block_sparse_moe.gate",
+      "nvidia/MiniMax-M3-NVFP4/block_sparse_moe.gate"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 49152,
       "a": {
         "dtype": "bf16"
       },
@@ -11286,7 +12830,75 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "a": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 3072,
+      "n": 6144,
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/block_sparse_moe.shared_experts.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "a": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 3072,
+      "n": 6144,
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/block_sparse_moe.shared_experts.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "a": {
         "dtype": "e2m1",
         "scale": {
@@ -11457,6 +13069,40 @@
     "type": "gemm",
     "args": {
       "m": 2048,
+      "a": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 3072,
+      "n": 6144,
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/block_sparse_moe.shared_experts.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3072,
       "a": {
         "dtype": "e2m1",
         "scale": {
@@ -11695,6 +13341,40 @@
     "type": "gemm",
     "args": {
       "m": 32768,
+      "a": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 3072,
+      "n": 6144,
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/block_sparse_moe.shared_experts.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 49152,
       "a": {
         "dtype": "e2m1",
         "scale": {
@@ -12238,7 +13918,75 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "a": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 6144,
+      "n": 6144,
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/block_sparse_moe.shared_experts.gate_proj+block_sparse_moe.shared_experts.up_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "a": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 6144,
+      "n": 6144,
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/block_sparse_moe.shared_experts.gate_proj+block_sparse_moe.shared_experts.up_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "a": {
         "dtype": "e2m1",
         "scale": {
@@ -12409,6 +14157,40 @@
     "type": "gemm",
     "args": {
       "m": 2048,
+      "a": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 6144,
+      "n": 6144,
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/block_sparse_moe.shared_experts.gate_proj+block_sparse_moe.shared_experts.up_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3072,
       "a": {
         "dtype": "e2m1",
         "scale": {
@@ -12647,6 +14429,40 @@
     "type": "gemm",
     "args": {
       "m": 32768,
+      "a": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e2m1",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 6144,
+      "n": 6144,
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/MiniMax-M3-MXFP4/block_sparse_moe.shared_experts.gate_proj+block_sparse_moe.shared_experts.up_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 49152,
       "a": {
         "dtype": "e2m1",
         "scale": {
@@ -13204,7 +15020,77 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 12288,
+      "n": 6144,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/mlp.down_proj",
+      "nvidia/MiniMax-M3-NVFP4/mlp.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 12288,
+      "n": 6144,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/mlp.down_proj",
+      "nvidia/MiniMax-M3-NVFP4/mlp.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "a": {
         "dtype": "e4m3",
         "scale": {
@@ -13380,6 +15266,41 @@
     "type": "gemm",
     "args": {
       "m": 2048,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 12288,
+      "n": 6144,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/mlp.down_proj",
+      "nvidia/MiniMax-M3-NVFP4/mlp.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3072,
       "a": {
         "dtype": "e4m3",
         "scale": {
@@ -13625,6 +15546,41 @@
     "type": "gemm",
     "args": {
       "m": 32768,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 12288,
+      "n": 6144,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/mlp.down_proj",
+      "nvidia/MiniMax-M3-NVFP4/mlp.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 49152,
       "a": {
         "dtype": "e4m3",
         "scale": {
@@ -14184,7 +16140,77 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 3072,
+      "n": 6144,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/block_sparse_moe.shared_experts.down_proj",
+      "nvidia/MiniMax-M3-NVFP4/block_sparse_moe.shared_experts.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 3072,
+      "n": 6144,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/block_sparse_moe.shared_experts.down_proj",
+      "nvidia/MiniMax-M3-NVFP4/block_sparse_moe.shared_experts.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "a": {
         "dtype": "e4m3",
         "scale": {
@@ -14360,6 +16386,41 @@
     "type": "gemm",
     "args": {
       "m": 2048,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 3072,
+      "n": 6144,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/block_sparse_moe.shared_experts.down_proj",
+      "nvidia/MiniMax-M3-NVFP4/block_sparse_moe.shared_experts.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3072,
       "a": {
         "dtype": "e4m3",
         "scale": {
@@ -14605,6 +16666,41 @@
     "type": "gemm",
     "args": {
       "m": 32768,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 3072,
+      "n": 6144,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/block_sparse_moe.shared_experts.down_proj",
+      "nvidia/MiniMax-M3-NVFP4/block_sparse_moe.shared_experts.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 49152,
       "a": {
         "dtype": "e4m3",
         "scale": {
@@ -15164,7 +17260,77 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 6144,
+      "n": 128,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/self_attn.index_k_proj",
+      "nvidia/MiniMax-M3-NVFP4/self_attn.index_k_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 6144,
+      "n": 128,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/self_attn.index_k_proj",
+      "nvidia/MiniMax-M3-NVFP4/self_attn.index_k_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "a": {
         "dtype": "e4m3",
         "scale": {
@@ -15340,6 +17506,41 @@
     "type": "gemm",
     "args": {
       "m": 2048,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 6144,
+      "n": 128,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/self_attn.index_k_proj",
+      "nvidia/MiniMax-M3-NVFP4/self_attn.index_k_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3072,
       "a": {
         "dtype": "e4m3",
         "scale": {
@@ -15585,6 +17786,41 @@
     "type": "gemm",
     "args": {
       "m": 32768,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 6144,
+      "n": 128,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/self_attn.index_k_proj",
+      "nvidia/MiniMax-M3-NVFP4/self_attn.index_k_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 49152,
       "a": {
         "dtype": "e4m3",
         "scale": {
@@ -16144,7 +18380,77 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 6144,
+      "n": 24576,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/mlp.gate_proj+mlp.up_proj",
+      "nvidia/MiniMax-M3-NVFP4/mlp.gate_proj+mlp.up_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 6144,
+      "n": 24576,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/mlp.gate_proj+mlp.up_proj",
+      "nvidia/MiniMax-M3-NVFP4/mlp.gate_proj+mlp.up_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "a": {
         "dtype": "e4m3",
         "scale": {
@@ -16320,6 +18626,41 @@
     "type": "gemm",
     "args": {
       "m": 2048,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 6144,
+      "n": 24576,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/mlp.gate_proj+mlp.up_proj",
+      "nvidia/MiniMax-M3-NVFP4/mlp.gate_proj+mlp.up_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3072,
       "a": {
         "dtype": "e4m3",
         "scale": {
@@ -16565,6 +18906,41 @@
     "type": "gemm",
     "args": {
       "m": 32768,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 6144,
+      "n": 24576,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/mlp.gate_proj+mlp.up_proj",
+      "nvidia/MiniMax-M3-NVFP4/mlp.gate_proj+mlp.up_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 49152,
       "a": {
         "dtype": "e4m3",
         "scale": {
@@ -17124,7 +19500,77 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 6144,
+      "n": 512,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/self_attn.index_q_proj",
+      "nvidia/MiniMax-M3-NVFP4/self_attn.index_q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 6144,
+      "n": 512,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/self_attn.index_q_proj",
+      "nvidia/MiniMax-M3-NVFP4/self_attn.index_q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "a": {
         "dtype": "e4m3",
         "scale": {
@@ -17300,6 +19746,41 @@
     "type": "gemm",
     "args": {
       "m": 2048,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 6144,
+      "n": 512,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/self_attn.index_q_proj",
+      "nvidia/MiniMax-M3-NVFP4/self_attn.index_q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3072,
       "a": {
         "dtype": "e4m3",
         "scale": {
@@ -17545,6 +20026,41 @@
     "type": "gemm",
     "args": {
       "m": 32768,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 6144,
+      "n": 512,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/self_attn.index_q_proj",
+      "nvidia/MiniMax-M3-NVFP4/self_attn.index_q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 49152,
       "a": {
         "dtype": "e4m3",
         "scale": {
@@ -18104,7 +20620,77 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 6144,
+      "n": 6144,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/block_sparse_moe.shared_experts.gate_proj+block_sparse_moe.shared_experts.up_proj",
+      "nvidia/MiniMax-M3-NVFP4/block_sparse_moe.shared_experts.gate_proj+block_sparse_moe.shared_experts.up_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 6144,
+      "n": 6144,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/block_sparse_moe.shared_experts.gate_proj+block_sparse_moe.shared_experts.up_proj",
+      "nvidia/MiniMax-M3-NVFP4/block_sparse_moe.shared_experts.gate_proj+block_sparse_moe.shared_experts.up_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "a": {
         "dtype": "e4m3",
         "scale": {
@@ -18280,6 +20866,41 @@
     "type": "gemm",
     "args": {
       "m": 2048,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 6144,
+      "n": 6144,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/block_sparse_moe.shared_experts.gate_proj+block_sparse_moe.shared_experts.up_proj",
+      "nvidia/MiniMax-M3-NVFP4/block_sparse_moe.shared_experts.gate_proj+block_sparse_moe.shared_experts.up_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3072,
       "a": {
         "dtype": "e4m3",
         "scale": {
@@ -18525,6 +21146,41 @@
     "type": "gemm",
     "args": {
       "m": 32768,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 6144,
+      "n": 6144,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/block_sparse_moe.shared_experts.gate_proj+block_sparse_moe.shared_experts.up_proj",
+      "nvidia/MiniMax-M3-NVFP4/block_sparse_moe.shared_experts.gate_proj+block_sparse_moe.shared_experts.up_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 49152,
       "a": {
         "dtype": "e4m3",
         "scale": {
@@ -19084,7 +21740,77 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 6144,
+      "n": 9216,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/self_attn.q_proj+self_attn.k_proj+self_attn.v_proj",
+      "nvidia/MiniMax-M3-NVFP4/self_attn.q_proj+self_attn.k_proj+self_attn.v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 6144,
+      "n": 9216,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/self_attn.q_proj+self_attn.k_proj+self_attn.v_proj",
+      "nvidia/MiniMax-M3-NVFP4/self_attn.q_proj+self_attn.k_proj+self_attn.v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "a": {
         "dtype": "e4m3",
         "scale": {
@@ -19260,6 +21986,41 @@
     "type": "gemm",
     "args": {
       "m": 2048,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 6144,
+      "n": 9216,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/self_attn.q_proj+self_attn.k_proj+self_attn.v_proj",
+      "nvidia/MiniMax-M3-NVFP4/self_attn.q_proj+self_attn.k_proj+self_attn.v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3072,
       "a": {
         "dtype": "e4m3",
         "scale": {
@@ -19505,6 +22266,41 @@
     "type": "gemm",
     "args": {
       "m": 32768,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 6144,
+      "n": 9216,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/self_attn.q_proj+self_attn.k_proj+self_attn.v_proj",
+      "nvidia/MiniMax-M3-NVFP4/self_attn.q_proj+self_attn.k_proj+self_attn.v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 49152,
       "a": {
         "dtype": "e4m3",
         "scale": {
@@ -20064,7 +22860,77 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 6144,
+      "n": 9856,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/self_attn.q_proj+self_attn.k_proj+self_attn.v_proj+self_attn.index_q_proj+self_attn.index_k_proj",
+      "nvidia/MiniMax-M3-NVFP4/self_attn.q_proj+self_attn.k_proj+self_attn.v_proj+self_attn.index_q_proj+self_attn.index_k_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 6144,
+      "n": 9856,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/self_attn.q_proj+self_attn.k_proj+self_attn.v_proj+self_attn.index_q_proj+self_attn.index_k_proj",
+      "nvidia/MiniMax-M3-NVFP4/self_attn.q_proj+self_attn.k_proj+self_attn.v_proj+self_attn.index_q_proj+self_attn.index_k_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "a": {
         "dtype": "e4m3",
         "scale": {
@@ -20240,6 +23106,41 @@
     "type": "gemm",
     "args": {
       "m": 2048,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 6144,
+      "n": 9856,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/self_attn.q_proj+self_attn.k_proj+self_attn.v_proj+self_attn.index_q_proj+self_attn.index_k_proj",
+      "nvidia/MiniMax-M3-NVFP4/self_attn.q_proj+self_attn.k_proj+self_attn.v_proj+self_attn.index_q_proj+self_attn.index_k_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3072,
       "a": {
         "dtype": "e4m3",
         "scale": {
@@ -20485,6 +23386,41 @@
     "type": "gemm",
     "args": {
       "m": 32768,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 6144,
+      "n": 9856,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/self_attn.q_proj+self_attn.k_proj+self_attn.v_proj+self_attn.index_q_proj+self_attn.index_k_proj",
+      "nvidia/MiniMax-M3-NVFP4/self_attn.q_proj+self_attn.k_proj+self_attn.v_proj+self_attn.index_q_proj+self_attn.index_k_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 49152,
       "a": {
         "dtype": "e4m3",
         "scale": {
@@ -21044,7 +23980,77 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 8192,
+      "n": 6144,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/self_attn.o_proj",
+      "nvidia/MiniMax-M3-NVFP4/self_attn.o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 8192,
+      "n": 6144,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/self_attn.o_proj",
+      "nvidia/MiniMax-M3-NVFP4/self_attn.o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "a": {
         "dtype": "e4m3",
         "scale": {
@@ -21220,6 +24226,41 @@
     "type": "gemm",
     "args": {
       "m": 2048,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 8192,
+      "n": 6144,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/self_attn.o_proj",
+      "nvidia/MiniMax-M3-NVFP4/self_attn.o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 3072,
       "a": {
         "dtype": "e4m3",
         "scale": {
@@ -21465,6 +24506,41 @@
     "type": "gemm",
     "args": {
       "m": 32768,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 8192,
+      "n": 6144,
+      "out": "bf16"
+    },
+    "sources": [
+      "MiniMaxAI/MiniMax-M3-MXFP8/self_attn.o_proj",
+      "nvidia/MiniMax-M3-NVFP4/self_attn.o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 49152,
       "a": {
         "dtype": "e4m3",
         "scale": {

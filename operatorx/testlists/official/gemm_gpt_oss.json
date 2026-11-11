@@ -40,7 +40,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3,
+      "n": 2880,
+      "k": 1024,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4,
+      "n": 2880,
+      "k": 1024,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6,
       "n": 2880,
       "k": 1024,
       "a": {
@@ -78,7 +116,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 12,
+      "n": 2880,
+      "k": 1024,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 16,
+      "n": 2880,
+      "k": 1024,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 24,
       "n": 2880,
       "k": 1024,
       "a": {
@@ -116,7 +192,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 48,
+      "n": 2880,
+      "k": 1024,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 64,
+      "n": 2880,
+      "k": 1024,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 96,
       "n": 2880,
       "k": 1024,
       "a": {
@@ -154,7 +268,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "n": 2880,
+      "k": 1024,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "n": 2880,
+      "k": 1024,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "n": 2880,
       "k": 1024,
       "a": {
@@ -192,7 +344,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 768,
+      "n": 2880,
+      "k": 1024,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 1024,
+      "n": 2880,
+      "k": 1024,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1536,
       "n": 2880,
       "k": 1024,
       "a": {
@@ -230,7 +420,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3072,
+      "n": 2880,
+      "k": 1024,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4096,
+      "n": 2880,
+      "k": 1024,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6144,
       "n": 2880,
       "k": 1024,
       "a": {
@@ -268,6 +496,25 @@
   {
     "type": "gemm",
     "args": {
+      "m": 12288,
+      "n": 2880,
+      "k": 1024,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 16384,
       "n": 2880,
       "k": 1024,
@@ -287,7 +534,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 24576,
+      "n": 2880,
+      "k": 1024,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 32768,
+      "n": 2880,
+      "k": 1024,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 49152,
       "n": 2880,
       "k": 1024,
       "a": {
@@ -363,7 +648,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3,
+      "n": 2880,
+      "k": 2048,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4,
+      "n": 2880,
+      "k": 2048,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6,
       "n": 2880,
       "k": 2048,
       "a": {
@@ -401,7 +724,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 12,
+      "n": 2880,
+      "k": 2048,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 16,
+      "n": 2880,
+      "k": 2048,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 24,
       "n": 2880,
       "k": 2048,
       "a": {
@@ -439,7 +800,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 48,
+      "n": 2880,
+      "k": 2048,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 64,
+      "n": 2880,
+      "k": 2048,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 96,
       "n": 2880,
       "k": 2048,
       "a": {
@@ -477,7 +876,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "n": 2880,
+      "k": 2048,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "n": 2880,
+      "k": 2048,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "n": 2880,
       "k": 2048,
       "a": {
@@ -515,7 +952,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 768,
+      "n": 2880,
+      "k": 2048,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 1024,
+      "n": 2880,
+      "k": 2048,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1536,
       "n": 2880,
       "k": 2048,
       "a": {
@@ -553,7 +1028,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3072,
+      "n": 2880,
+      "k": 2048,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4096,
+      "n": 2880,
+      "k": 2048,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6144,
       "n": 2880,
       "k": 2048,
       "a": {
@@ -591,6 +1104,25 @@
   {
     "type": "gemm",
     "args": {
+      "m": 12288,
+      "n": 2880,
+      "k": 2048,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 16384,
       "n": 2880,
       "k": 2048,
@@ -610,7 +1142,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 24576,
+      "n": 2880,
+      "k": 2048,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 32768,
+      "n": 2880,
+      "k": 2048,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 49152,
       "n": 2880,
       "k": 2048,
       "a": {
@@ -686,7 +1256,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3,
+      "n": 1024,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4,
+      "n": 1024,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6,
       "n": 1024,
       "k": 2880,
       "a": {
@@ -724,7 +1332,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 12,
+      "n": 1024,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 16,
+      "n": 1024,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 24,
       "n": 1024,
       "k": 2880,
       "a": {
@@ -762,7 +1408,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 48,
+      "n": 1024,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 64,
+      "n": 1024,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 96,
       "n": 1024,
       "k": 2880,
       "a": {
@@ -800,7 +1484,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "n": 1024,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "n": 1024,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "n": 1024,
       "k": 2880,
       "a": {
@@ -838,7 +1560,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 768,
+      "n": 1024,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 1024,
+      "n": 1024,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1536,
       "n": 1024,
       "k": 2880,
       "a": {
@@ -876,7 +1636,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3072,
+      "n": 1024,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4096,
+      "n": 1024,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6144,
       "n": 1024,
       "k": 2880,
       "a": {
@@ -914,6 +1712,25 @@
   {
     "type": "gemm",
     "args": {
+      "m": 12288,
+      "n": 1024,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 16384,
       "n": 1024,
       "k": 2880,
@@ -933,7 +1750,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 24576,
+      "n": 1024,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 32768,
+      "n": 1024,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 49152,
       "n": 1024,
       "k": 2880,
       "a": {
@@ -1013,7 +1868,49 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3,
+      "n": 128,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4,
+      "n": 128,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6,
       "n": 128,
       "k": 2880,
       "a": {
@@ -1055,7 +1952,49 @@
   {
     "type": "gemm",
     "args": {
+      "m": 12,
+      "n": 128,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 16,
+      "n": 128,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 24,
       "n": 128,
       "k": 2880,
       "a": {
@@ -1097,7 +2036,49 @@
   {
     "type": "gemm",
     "args": {
+      "m": 48,
+      "n": 128,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 64,
+      "n": 128,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 96,
       "n": 128,
       "k": 2880,
       "a": {
@@ -1139,7 +2120,49 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "n": 128,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "n": 128,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "n": 128,
       "k": 2880,
       "a": {
@@ -1181,7 +2204,49 @@
   {
     "type": "gemm",
     "args": {
+      "m": 768,
+      "n": 128,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 1024,
+      "n": 128,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1536,
       "n": 128,
       "k": 2880,
       "a": {
@@ -1223,7 +2288,49 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3072,
+      "n": 128,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4096,
+      "n": 128,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6144,
       "n": 128,
       "k": 2880,
       "a": {
@@ -1265,6 +2372,27 @@
   {
     "type": "gemm",
     "args": {
+      "m": 12288,
+      "n": 128,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 16384,
       "n": 128,
       "k": 2880,
@@ -1286,7 +2414,49 @@
   {
     "type": "gemm",
     "args": {
+      "m": 24576,
+      "n": 128,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 32768,
+      "n": 128,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 49152,
       "n": 128,
       "k": 2880,
       "a": {
@@ -1366,7 +2536,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3,
+      "n": 2048,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4,
+      "n": 2048,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6,
       "n": 2048,
       "k": 2880,
       "a": {
@@ -1404,7 +2612,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 12,
+      "n": 2048,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 16,
+      "n": 2048,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 24,
       "n": 2048,
       "k": 2880,
       "a": {
@@ -1442,7 +2688,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 48,
+      "n": 2048,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 64,
+      "n": 2048,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 96,
       "n": 2048,
       "k": 2880,
       "a": {
@@ -1480,7 +2764,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "n": 2048,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "n": 2048,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "n": 2048,
       "k": 2880,
       "a": {
@@ -1518,7 +2840,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 768,
+      "n": 2048,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 1024,
+      "n": 2048,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1536,
       "n": 2048,
       "k": 2880,
       "a": {
@@ -1556,7 +2916,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3072,
+      "n": 2048,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4096,
+      "n": 2048,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6144,
       "n": 2048,
       "k": 2880,
       "a": {
@@ -1594,6 +2992,25 @@
   {
     "type": "gemm",
     "args": {
+      "m": 12288,
+      "n": 2048,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 16384,
       "n": 2048,
       "k": 2880,
@@ -1613,7 +3030,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 24576,
+      "n": 2048,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 32768,
+      "n": 2048,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 49152,
       "n": 2048,
       "k": 2880,
       "a": {
@@ -1697,7 +3152,53 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3,
+      "n": 256,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/q_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4,
+      "n": 256,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/q_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6,
       "n": 256,
       "k": 2880,
       "a": {
@@ -1743,7 +3244,53 @@
   {
     "type": "gemm",
     "args": {
+      "m": 12,
+      "n": 256,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/q_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 16,
+      "n": 256,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/q_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 24,
       "n": 256,
       "k": 2880,
       "a": {
@@ -1789,7 +3336,53 @@
   {
     "type": "gemm",
     "args": {
+      "m": 48,
+      "n": 256,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/q_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 64,
+      "n": 256,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/q_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 96,
       "n": 256,
       "k": 2880,
       "a": {
@@ -1835,7 +3428,53 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "n": 256,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/q_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "n": 256,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/q_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "n": 256,
       "k": 2880,
       "a": {
@@ -1881,7 +3520,53 @@
   {
     "type": "gemm",
     "args": {
+      "m": 768,
+      "n": 256,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/q_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 1024,
+      "n": 256,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/q_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1536,
       "n": 256,
       "k": 2880,
       "a": {
@@ -1927,7 +3612,53 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3072,
+      "n": 256,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/q_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4096,
+      "n": 256,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/q_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6144,
       "n": 256,
       "k": 2880,
       "a": {
@@ -1973,6 +3704,29 @@
   {
     "type": "gemm",
     "args": {
+      "m": 12288,
+      "n": 256,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/q_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 16384,
       "n": 256,
       "k": 2880,
@@ -1996,7 +3750,53 @@
   {
     "type": "gemm",
     "args": {
+      "m": 24576,
+      "n": 256,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/q_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 32768,
+      "n": 256,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/q_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 49152,
       "n": 256,
       "k": 2880,
       "a": {
@@ -2080,7 +3880,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3,
+      "n": 4096,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4,
+      "n": 4096,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6,
       "n": 4096,
       "k": 2880,
       "a": {
@@ -2118,7 +3956,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 12,
+      "n": 4096,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 16,
+      "n": 4096,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 24,
       "n": 4096,
       "k": 2880,
       "a": {
@@ -2156,7 +4032,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 48,
+      "n": 4096,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 64,
+      "n": 4096,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 96,
       "n": 4096,
       "k": 2880,
       "a": {
@@ -2194,7 +4108,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "n": 4096,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "n": 4096,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "n": 4096,
       "k": 2880,
       "a": {
@@ -2232,7 +4184,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 768,
+      "n": 4096,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 1024,
+      "n": 4096,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1536,
       "n": 4096,
       "k": 2880,
       "a": {
@@ -2270,7 +4260,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3072,
+      "n": 4096,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4096,
+      "n": 4096,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6144,
       "n": 4096,
       "k": 2880,
       "a": {
@@ -2308,6 +4336,25 @@
   {
     "type": "gemm",
     "args": {
+      "m": 12288,
+      "n": 4096,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 16384,
       "n": 4096,
       "k": 2880,
@@ -2327,7 +4374,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 24576,
+      "n": 4096,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 32768,
+      "n": 4096,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "openai/gpt-oss-120b/q_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 49152,
       "n": 4096,
       "k": 2880,
       "a": {
@@ -2411,7 +4496,53 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3,
+      "n": 512,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/q_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4,
+      "n": 512,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/q_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6,
       "n": 512,
       "k": 2880,
       "a": {
@@ -2457,7 +4588,53 @@
   {
     "type": "gemm",
     "args": {
+      "m": 12,
+      "n": 512,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/q_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 16,
+      "n": 512,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/q_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 24,
       "n": 512,
       "k": 2880,
       "a": {
@@ -2503,7 +4680,53 @@
   {
     "type": "gemm",
     "args": {
+      "m": 48,
+      "n": 512,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/q_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 64,
+      "n": 512,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/q_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 96,
       "n": 512,
       "k": 2880,
       "a": {
@@ -2549,7 +4772,53 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "n": 512,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/q_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "n": 512,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/q_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "n": 512,
       "k": 2880,
       "a": {
@@ -2595,7 +4864,53 @@
   {
     "type": "gemm",
     "args": {
+      "m": 768,
+      "n": 512,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/q_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 1024,
+      "n": 512,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/q_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1536,
       "n": 512,
       "k": 2880,
       "a": {
@@ -2641,7 +4956,53 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3072,
+      "n": 512,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/q_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4096,
+      "n": 512,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/q_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6144,
       "n": 512,
       "k": 2880,
       "a": {
@@ -2687,6 +5048,29 @@
   {
     "type": "gemm",
     "args": {
+      "m": 12288,
+      "n": 512,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/q_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 16384,
       "n": 512,
       "k": 2880,
@@ -2710,7 +5094,53 @@
   {
     "type": "gemm",
     "args": {
+      "m": 24576,
+      "n": 512,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/q_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 32768,
+      "n": 512,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/q_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/q_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 49152,
       "n": 512,
       "k": 2880,
       "a": {
@@ -2798,7 +5228,49 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3,
+      "n": 64,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4,
+      "n": 64,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6,
       "n": 64,
       "k": 2880,
       "a": {
@@ -2840,7 +5312,49 @@
   {
     "type": "gemm",
     "args": {
+      "m": 12,
+      "n": 64,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 16,
+      "n": 64,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 24,
       "n": 64,
       "k": 2880,
       "a": {
@@ -2882,7 +5396,49 @@
   {
     "type": "gemm",
     "args": {
+      "m": 48,
+      "n": 64,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 64,
+      "n": 64,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 96,
       "n": 64,
       "k": 2880,
       "a": {
@@ -2924,7 +5480,49 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "n": 64,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "n": 64,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "n": 64,
       "k": 2880,
       "a": {
@@ -2966,7 +5564,49 @@
   {
     "type": "gemm",
     "args": {
+      "m": 768,
+      "n": 64,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 1024,
+      "n": 64,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1536,
       "n": 64,
       "k": 2880,
       "a": {
@@ -3008,7 +5648,49 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3072,
+      "n": 64,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4096,
+      "n": 64,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6144,
       "n": 64,
       "k": 2880,
       "a": {
@@ -3050,6 +5732,27 @@
   {
     "type": "gemm",
     "args": {
+      "m": 12288,
+      "n": 64,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 16384,
       "n": 64,
       "k": 2880,
@@ -3071,7 +5774,49 @@
   {
     "type": "gemm",
     "args": {
+      "m": 24576,
+      "n": 64,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 32768,
+      "n": 64,
+      "k": 2880,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/k_proj",
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/v_proj",
+      "openai/gpt-oss-120b/k_proj",
+      "openai/gpt-oss-120b/v_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 49152,
       "n": 64,
       "k": 2880,
       "a": {
@@ -3151,7 +5896,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3,
+      "n": 2880,
+      "k": 4096,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4,
+      "n": 2880,
+      "k": 4096,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6,
       "n": 2880,
       "k": 4096,
       "a": {
@@ -3189,7 +5972,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 12,
+      "n": 2880,
+      "k": 4096,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 16,
+      "n": 2880,
+      "k": 4096,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 24,
       "n": 2880,
       "k": 4096,
       "a": {
@@ -3227,7 +6048,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 48,
+      "n": 2880,
+      "k": 4096,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 64,
+      "n": 2880,
+      "k": 4096,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 96,
       "n": 2880,
       "k": 4096,
       "a": {
@@ -3265,7 +6124,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "n": 2880,
+      "k": 4096,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "n": 2880,
+      "k": 4096,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "n": 2880,
       "k": 4096,
       "a": {
@@ -3303,7 +6200,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 768,
+      "n": 2880,
+      "k": 4096,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 1024,
+      "n": 2880,
+      "k": 4096,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1536,
       "n": 2880,
       "k": 4096,
       "a": {
@@ -3341,7 +6276,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3072,
+      "n": 2880,
+      "k": 4096,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4096,
+      "n": 2880,
+      "k": 4096,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6144,
       "n": 2880,
       "k": 4096,
       "a": {
@@ -3379,6 +6352,25 @@
   {
     "type": "gemm",
     "args": {
+      "m": 12288,
+      "n": 2880,
+      "k": 4096,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 16384,
       "n": 2880,
       "k": 4096,
@@ -3398,7 +6390,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 24576,
+      "n": 2880,
+      "k": 4096,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 32768,
+      "n": 2880,
+      "k": 4096,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 49152,
       "n": 2880,
       "k": 4096,
       "a": {
@@ -3474,7 +6504,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3,
+      "n": 2880,
+      "k": 512,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4,
+      "n": 2880,
+      "k": 512,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6,
       "n": 2880,
       "k": 512,
       "a": {
@@ -3512,7 +6580,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 12,
+      "n": 2880,
+      "k": 512,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 16,
+      "n": 2880,
+      "k": 512,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 24,
       "n": 2880,
       "k": 512,
       "a": {
@@ -3550,7 +6656,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 48,
+      "n": 2880,
+      "k": 512,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 64,
+      "n": 2880,
+      "k": 512,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 96,
       "n": 2880,
       "k": 512,
       "a": {
@@ -3588,7 +6732,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 192,
+      "n": 2880,
+      "k": 512,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 256,
+      "n": 2880,
+      "k": 512,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 384,
       "n": 2880,
       "k": 512,
       "a": {
@@ -3626,7 +6808,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 768,
+      "n": 2880,
+      "k": 512,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 1024,
+      "n": 2880,
+      "k": 512,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1536,
       "n": 2880,
       "k": 512,
       "a": {
@@ -3664,7 +6884,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 3072,
+      "n": 2880,
+      "k": 512,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 4096,
+      "n": 2880,
+      "k": 512,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6144,
       "n": 2880,
       "k": 512,
       "a": {
@@ -3702,6 +6960,25 @@
   {
     "type": "gemm",
     "args": {
+      "m": 12288,
+      "n": 2880,
+      "k": 512,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 16384,
       "n": 2880,
       "k": 512,
@@ -3721,7 +6998,45 @@
   {
     "type": "gemm",
     "args": {
+      "m": 24576,
+      "n": 2880,
+      "k": 512,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
       "m": 32768,
+      "n": 2880,
+      "k": 512,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "out": "bf16"
+    },
+    "sources": [
+      "amd/gpt-oss-120b-w-mxfp4-a-fp8/o_proj",
+      "openai/gpt-oss-120b/o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 49152,
       "n": 2880,
       "k": 512,
       "a": {
