@@ -1,0 +1,273 @@
+diff --git a/src/srtctl/backends/tilert.py b/src/srtctl/backends/tilert.py
+index 933495e7..bc49b997 100644
+--- a/src/srtctl/backends/tilert.py
++++ b/src/srtctl/backends/tilert.py
+@@ -7,8 +7,9 @@
+ from __future__ import annotations
+ 
+ import builtins
+-from collections.abc import Mapping, Sequence
+-from dataclasses import field
++from collections.abc import Callable, Mapping, Sequence
++from dataclasses import dataclass as plain_dataclass
++from dataclasses import field, replace
+ from pathlib import Path
+ from typing import TYPE_CHECKING, ClassVar, Literal
+ 
+@@ -16,13 +17,70 @@ from marshmallow import Schema
+ from marshmallow_dataclass import dataclass
+ 
+ from srtctl.backends.base import Backend, BoundRolesField, RoleSettings, WorkerMode
+-from srtctl.ports import DYN_SYSTEM_PORT_BASE
++from srtctl.ports import DIST_INIT_PORTS, DYN_SYSTEM_PORT_BASE, HTTP_PORTS
+ 
+ if TYPE_CHECKING:
+     from srtctl.core.runtime import RuntimeContext
+     from srtctl.core.schema import ProfilingConfig
+     from srtctl.core.topology import Endpoint, NodePortAllocator, Process
+ 
++DECODE_SERVER_MODULE = "tilert.pd_vllm.decode_server"
++SINGLE_NODE_ONLY = "TileRT supports single-node decode workers only"
++
++
++@plain_dataclass(frozen=True)
++class DecodeRendezvous:
++    """Where one node of a multi-node TileRT decode worker joins the others."""
++
++    nnodes: int
++    node_rank: int
++    nproc_per_node: int
++    master_addr: str
++    master_port: int
++
++
++def _torchrun_launcher(rdzv: DecodeRendezvous) -> list[str]:
++    """torchrun starts one decode-server rank per local GPU and sets RANK / LOCAL_RANK itself."""
++    return [
++        "torchrun",
++        "--nnodes",
++        str(rdzv.nnodes),
++        "--nproc-per-node",
++        str(rdzv.nproc_per_node),
++        "--node-rank",
++        str(rdzv.node_rank),
++        "--master-addr",
++        rdzv.master_addr,
++        "--master-port",
++        str(rdzv.master_port),
++        "-m",
++        DECODE_SERVER_MODULE,
++    ]
++
++
++def _node_env_launcher(rdzv: DecodeRendezvous) -> list[str]:
++    """One decode server per node; it re-executes itself under torch.distributed.run with a static rendezvous.
++
++    TileRT reads the node count, this node's rank and the rendezvous address from these variables and starts its
++    local ranks itself; with LOCAL_RANK already set (the torchrun form) it does not.
++    """
++    return [
++        "env",
++        f"TILERT_PD_NNODES={rdzv.nnodes}",
++        f"TILERT_PD_NODE_RANK={rdzv.node_rank}",
++        f"TILERT_PD_RDZV={rdzv.master_addr}:{rdzv.master_port}",
++        "python",
++        "-m",
++        DECODE_SERVER_MODULE,
++    ]
++
++
++# `engine.multi_node_launch` values and the launcher each one renders for a decode worker spanning nodes.
++MULTI_NODE_LAUNCHERS: dict[str, Callable[[DecodeRendezvous], list[str]]] = {
++    "node-env": _node_env_launcher,
++    "torchrun": _torchrun_launcher,
++}
++
+ 
+ @dataclass(frozen=True)
+ class TileRTBackend(Backend):
+@@ -32,6 +90,13 @@ class TileRTBackend(Backend):
+     type: Literal["tilert"] = "tilert"
+     # Model name the server reports to clients; unset uses the default served name.
+     served_model_name: str | None = None
++    # How a decode worker that spans several nodes starts on each node; unset keeps decode workers single-node.
++    # `node-env` (recommended) runs one `python -m tilert.pd_vllm.decode_server ...` per node under
++    # TILERT_PD_NNODES, TILERT_PD_NODE_RANK and TILERT_PD_RDZV, and the server starts its local ranks; `torchrun`
++    # starts them with `torchrun --nnodes --nproc-per-node --node-rank --master-addr --master-port -m
++    # tilert.pd_vllm.decode_server ...`. Only the worker's first node is advertised to the router; see
++    # docs/tilert.md#multi-node-decode.
++    multi_node_launch: Literal["node-env", "torchrun"] | None = None
+     # The roles this engine runs (`roles.<role>` of the recipe), bound by SrtConfig and
+     # never written on `engine:`. The decode role's env and args are read from here.
+     roles: Mapping[str, RoleSettings] = field(default_factory=dict, metadata={"marshmallow_field": BoundRolesField()})
+@@ -69,6 +134,11 @@ class TileRTBackend(Backend):
+             gpu_indices_by_mode=gpu_indices_by_mode,
+         )
+ 
++    @property
++    def allows_multi_node_decode(self) -> bool:
++        """Whether a decode worker may span nodes (`multi_node_launch` is set)."""
++        return self.multi_node_launch is not None
++
+     def endpoints_to_processes(
+         self,
+         endpoints: list[Endpoint],
+@@ -77,13 +147,65 @@ class TileRTBackend(Backend):
+         frontend_type: str = "tilert-router",
+         dynamo_sidecar: bool = False,
+     ) -> list[Process]:
+-        from srtctl.core.topology import endpoints_to_processes
++        """One process per node of each decode worker.
++
++        A worker spanning nodes (only with `multi_node_launch`) gets one rendezvous port, allocated on its first
++        node and shared by every node, and an HTTP port of their own for the nodes after the first, so a decode
++        server that binds on every node does not collide; the router is given the first node only.
++        """
++        from srtctl.core.topology import endpoints_to_processes, port_allocator_for
+ 
+         if dynamo_sidecar:
+             raise ValueError("TileRT does not support Dynamo sidecars")
+-        if any(ep.mode != "decode" or len(ep.nodes) != 1 for ep in endpoints):
+-            raise ValueError("TileRT supports single-node decode workers only")
+-        return endpoints_to_processes(endpoints, base_sys_port=base_sys_port, port_allocator=port_allocator)
++        if any(ep.mode != "decode" for ep in endpoints) or (
++            not self.allows_multi_node_decode and any(ep.is_multi_node for ep in endpoints)
++        ):
++            raise ValueError(SINGLE_NODE_ONLY)
++        allocator = port_allocator_for(port_allocator, base_sys_port)
++        processes = endpoints_to_processes(endpoints, port_allocator=allocator)
++        master_ports = {ep.index: allocator.next(DIST_INIT_PORTS, ep.nodes[0]) for ep in endpoints if ep.is_multi_node}
++        if not master_ports:
++            return processes
++        return [
++            replace(
++                process,
++                dist_init_port=master_ports[process.endpoint_index],
++                http_port=process.http_port or allocator.next(HTTP_PORTS, process.node),
++            )
++            if process.endpoint_index in master_ports
++            else process
++            for process in processes
++        ]
++
++    def router_worker_address(self, process: Process, frontend_node: str | None = None) -> tuple[str, int] | None:
++        """Only a decode worker's first node is routed; the other nodes of a multi-node worker serve its ranks."""
++        if not process.is_leader:
++            return None
++        return super().router_worker_address(process, frontend_node)
++
++    def _launcher(self, process: Process, endpoint_processes: list[Process], runtime: RuntimeContext) -> list[str]:
++        """`python -m` the decode server on a single node, or this node's multi-node launcher."""
++        nodes = list(dict.fromkeys(p.node for p in endpoint_processes))
++        if len(nodes) == 1:
++            return ["python", "-m", DECODE_SERVER_MODULE]
++        if self.multi_node_launch is None:
++            raise ValueError(SINGLE_NODE_ONLY)
++        if process.dist_init_port is None:
++            raise ValueError(
++                f"TileRT decode process {process.node} rank {process.node_rank} has no rendezvous port; "
++                "build the topology with TileRTBackend.endpoints_to_processes"
++            )
++        from srtctl.core.slurm import get_hostname_ip
++
++        leader = next(p for p in endpoint_processes if p.is_leader)
++        rendezvous = DecodeRendezvous(
++            nnodes=len(nodes),
++            node_rank=process.node_rank,
++            nproc_per_node=len(process.gpu_indices),
++            master_addr=get_hostname_ip(leader.node, runtime.network_interface),
++            master_port=process.dist_init_port,
++        )
++        return MULTI_NODE_LAUNCHERS[self.multi_node_launch](rendezvous)
+ 
+     def build_worker_command(
+         self,
+@@ -95,8 +217,8 @@ class TileRTBackend(Backend):
+         dump_config_path: Path | None = None,
+         profiling: ProfilingConfig | None = None,
+     ) -> list[str]:
+-        if process.endpoint_mode != "decode" or len({p.node for p in endpoint_processes}) != 1:
+-            raise ValueError("TileRT supports single-node decode workers only")
++        if process.endpoint_mode != "decode":
++            raise ValueError(SINGLE_NODE_ONLY)
+         if process.nixl_port is None:
+             raise ValueError("TileRT decode worker needs an allocated control port")
+         config = self.get_config_for_mode("decode")
+@@ -105,9 +227,7 @@ class TileRTBackend(Backend):
+             raise ValueError(f"TileRT arguments are owned by srtctl: {sorted(managed)}")
+         command = [
+             *(nsys_prefix or []),
+-            "python",
+-            "-m",
+-            "tilert.pd_vllm.decode_server",
++            *self._launcher(process, endpoint_processes, runtime),
+             "--engine",
+             "tilert",
+             "--http-port",
+diff --git a/src/srtctl/frontends/tilert_router.py b/src/srtctl/frontends/tilert_router.py
+index bf825aa0..e75927c7 100644
+--- a/src/srtctl/frontends/tilert_router.py
++++ b/src/srtctl/frontends/tilert_router.py
+@@ -20,6 +20,14 @@ if TYPE_CHECKING:
+     from srtctl.core.topology import Process
+ 
+ ROUTER_MANAGED_ARGS = frozenset({"vllm-url", "decode", "host", "port"})
++ROUTER_WORKERS_REQUIRED = "TileRT router requires at least one prefill worker and at least one decode worker"
++
++
++def decode_spans_nodes(backend: Any) -> bool:
++    """Whether the decode engine may start one worker across several nodes."""
++    from srtctl.backends.tilert import TileRTBackend
++
++    return isinstance(backend, TileRTBackend) and backend.allows_multi_node_decode
+ 
+ 
+ @register_frontend("tilert-router")
+@@ -46,15 +54,19 @@ class TileRTRouterFrontend(StaticRouterFrontend):
+         if config.backend_for_role("decode").type != "tilert":
+             raise ValueError("tilert-router requires a TileRT decode engine")
+         resources = config.topology
+-        if resources.num_agg or resources.num_prefill != 1 or resources.num_decode < 1:
+-            raise ValueError("TileRT router requires exactly one prefill worker and at least one decode worker")
++        if resources.num_agg or resources.num_prefill < 1 or resources.num_decode < 1:
++            raise ValueError(ROUTER_WORKERS_REQUIRED)
+         if config.backend_for_role("prefill").type != "vllm":
+             raise ValueError("tilert-router requires vLLM prefill with TileRTConnector")
+         model_name = config.served_model_name
+         if config.backend_for_role("decode").get_served_model_name(model_name) != model_name:
+             raise ValueError("TileRT served_model_name must match the prefill served-model-name")
+-        if resources.gpus_per_decode > resources.gpus_per_node:
+-            raise ValueError("TileRT decode workers must fit on one node")
++        if resources.gpus_per_decode > resources.gpus_per_node and not decode_spans_nodes(
++            config.backend_for_role("decode")
++        ):
++            raise ValueError(
++                "TileRT decode workers must fit on one node unless roles.decode.engine.multi_node_launch is set"
++            )
+         if config.profiling.is_torch:
+             raise ValueError("TileRT does not support torch profiling")
+ 
+@@ -98,8 +110,8 @@ class TileRTRouterFrontend(StaticRouterFrontend):
+     def build_router_command(self, workers: list[RouterWorker], host: str, port: int, backend: Any) -> list[str]:
+         prefills = [worker for worker in workers if worker.mode == "prefill"]
+         decodes = [worker for worker in workers if worker.mode == "decode"]
+-        if len(prefills) != 1 or not decodes or len(prefills) + len(decodes) != len(workers):
+-            raise ValueError("TileRT router requires exactly one prefill worker and at least one decode worker")
++        if not prefills or not decodes or len(prefills) + len(decodes) != len(workers):
++            raise ValueError(ROUTER_WORKERS_REQUIRED)
+ 
+         decode_specs: list[str] = []
+         for worker in decodes:
+@@ -108,10 +120,11 @@ class TileRTRouterFrontend(StaticRouterFrontend):
+                 raise ValueError(f"Incomplete TileRT decode endpoint: {worker}")
+             decode_specs.append(f"{parsed.hostname}:{worker.bootstrap_port}:{parsed.port}")
+         # --decode is a single nargs="+" option; repeating the flag would keep only the last worker.
++        # --vllm-url takes every prefill worker as one comma-separated value; one worker renders its URL alone.
+         return [
+             *self.executable,
+             "--vllm-url",
+-            prefills[0].url,
++            ",".join(worker.url for worker in prefills),
+             "--decode",
+             *decode_specs,
+             "--host",

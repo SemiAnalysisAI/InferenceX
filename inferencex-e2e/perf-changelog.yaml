@@ -12735,6 +12735,28 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4928
 
 - config-keys:
+    - dsv41flash-fp4-gb300-tilert-agentic-dspark-tp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add TileRT on GB300 NVL72 for DeepSeek-V4.1-Flash FP4 AgentX at concurrency 1: one vLLM prefill (TP4, vllm/vllm-openai:nightly-00b6c4c5 by digest) sends the prompt KV over NVLink to one TileRT decode, at TP8 (two trays) and at 24 GPUs (three TP8 groups, six trays). The decode runs tilert 0.1.8 from PyPI on the CUDA 13.2 runtime image by digest; the TileRT router runs on the prefill's node in the prefill image and tokenizes with vLLM's DeepSeek-V4.1 tokenizer mode."
+    - "DSpark with five drafts at the golden simulated acceptance 3.51; the public decode masks tool-call tokens and the prefill runs without a tool-call parser."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4979
+
+- config-keys:
+    - glm5.2-fp4-mi355x-atom-disagg-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GLM-5.2 MXFP4 on MI355X with ATOM prefill/decode disaggregation behind AToMesh, Mooncake RDMA transfer and MTP, on rocm/atom-dev:nightly_202611110332 (ATOM 920a200a3, Mooncake 206d634), pinned by digest."
+    - "Every point has one PP4 x TP1 prefill (layers 20/20/20/18) with a Mooncake Store prefix tier in DRAM: 1P1D with a colocated TP4 DCP4 decode at concurrency 56, 72, 96, 112 and 128; 1P2D with two TP4 DCP4 decodes at 56; 1P3D with three TP4 decodes at 12, 16 and 24."
+    - "MTP draft length 3 for 1P1D, 4 for 1P2D and 5 for 1P3D. 1P1D shares one Store pool (2 x 768 GiB owners); 1P2D and 1P3D use a pool per prefill NIC (4 x 349 GiB) and cache-aware routing. dram-utilization is 1.0."
+    - "Mooncake 206d634 includes kvcache-ai/Mooncake#5151: the RDMA Store owners back their segments with THP through madvise, so no hugepages are reserved."
+    - "Weights run as shipped in amd/GLM-5.2-MXFP4: MXFP4 routed and shared experts in layers 3-77, BF16 elsewhere, with no online quantization flag. ATOM's default MLA absorb runs the kv_b_proj up-projections as FP8 batched GEMMs. All-reduce is BF16 (AITER quick reduce unset, default NONE) and the KV and indexer caches are FP8."
+    - "No change to the MTP draft (model.layers.78): it is stored in BF16, including its routed and shared experts, and is served through the image defaults with no draft override, so its kv_b_proj takes the same FP8 MLA absorb as the target and it shares the target's FP8 KV and indexer caches."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4045
+
+- config-keys:
     - qwen3.5-fp8-mi300x-sglang-agentic-mtp
   description:
     - "Update the SGLang image from v0.5.16-rocm720-mi30x-20260730 to v0.5.22-rocm720-mi30x-20261024, pinned by digest."
