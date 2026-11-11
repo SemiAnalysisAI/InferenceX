@@ -22,7 +22,7 @@ on:
         type: string
         default: vllm
       testlists:
-        description: Comma-separated testlist stems (testlists/official/, dev/ or deprecated/; dev and deprecated lists are never ingested)
+        description: Comma-separated testlist stems (a run is ingested only if every list is in testlists/official/)
         type: string
         default: gemm_perf
       mode:
@@ -106,16 +106,14 @@ jobs:
               || { echo 'Recovery requires a numeric run ID and a single-shard selection' >&2; exit 1; }
           fi
           echo "matrix=$(cat operatorx-matrix.json)" >> "$GITHUB_OUTPUT"
-          # results from a dev or deprecated testlist (testlists/dev/, testlists/deprecated/) are never ingested
+          # only runs whose every testlist is in testlists/official/ are ingested
           ingestable=true
           IFS=, read -ra lists <<<"$OPERATORX_TESTLISTS"
           for t in "${lists[@]}"; do
-            for d in dev deprecated; do
-              if [ -f "operatorx/testlists/$d/$t.json" ]; then
-                ingestable=false
-                echo "::notice::$t is a $d testlist; this run's results will not be ingested"
-              fi
-            done
+            if [ ! -f "operatorx/testlists/official/$t.json" ]; then
+              ingestable=false
+              echo "::notice::$t is not an official testlist; this run's results will not be ingested"
+            fi
           done
           echo "ingestable=$ingestable" >> "$GITHUB_OUTPUT"
           scored=$(printf '%s' '[{"runner":"operatorx","framework":"operatorx"}]' |

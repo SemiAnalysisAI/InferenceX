@@ -9,7 +9,7 @@ Inference operator benchmarks: times one op at a time on NVIDIA and AMD through 
 | `mla`, `mla_dsa`, `dsv4_attn`, `gqa`, `qsa`, `gdn`, `kda` | `ops/attention.py` | whole attention modules, one op type each |
 
 - Split over devices: each case's `parallel` arg (`{"tp", "dp", "ep", "dcp"}`), defined in `core/parallel.py`.
-- Testlists: `testlists/official/<op>_<model>.json` (ingested), `testlists/dev/` (harness checks) and `testlists/deprecated/` (models that get no new data); dev and deprecated runs are never ingested, and names are unique across all three. Every entry lists its `sources` (`<org>/<model>/<role>`); a shape from no model uses `operatorx/Synthetic-Shapes/m<M>_n<N>_k<K>` and lives in `gemm_synthetic` (except the `gemm_perf` squares). Dispatch `attn_*` testlists apart from gemm / moe ones (each builds its own vLLM engine).
+- Testlists: `testlists/official/<op>_<model>.json` (ingested), `testlists/dev/` (harness checks) and `testlists/deprecated/` (models that get no new data); only runs of `official/` lists are ingested, and names are unique across all three. Every entry lists its `sources` (`<org>/<model>/<role>`); a shape from no model uses `operatorx/Synthetic-Shapes/m<M>_n<N>_k<K>` and lives in `gemm_synthetic` (except the `gemm_perf` squares). Dispatch `attn_*` testlists apart from gemm / moe ones (each builds its own vLLM engine).
 
 ## Running
 
