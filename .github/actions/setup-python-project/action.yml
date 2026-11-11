@@ -1,0 +1,38 @@
+name: Set up the InferenceX Python project
+description: >-
+    Export INFERENCEX_PYTHON_PROJECT for the checked-out layout and install uv with the
+    project's cache keys.
+
+inputs:
+    python-version:
+        description: Python version for uv; empty keeps uv's default
+        required: false
+        default: ""
+    enable-cache:
+        description: setup-uv cache mode
+        required: false
+        default: auto
+
+runs:
+    using: composite
+    steps:
+        - name: Select Python project
+          shell: bash
+          run: | # zizmor: ignore[github-env] writes only a path under $GITHUB_WORKSPACE
+              python_project="$GITHUB_WORKSPACE"
+              if [[ -f "$python_project/inferencex-e2e/pyproject.toml" ]]; then
+                python_project="$python_project/inferencex-e2e"
+              fi
+              test -f "$python_project/pyproject.toml"
+              echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
+
+        - name: Set up uv
+          uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+          with:
+              python-version: ${{ inputs.python-version }}
+              enable-cache: ${{ inputs.enable-cache }}
+              cache-dependency-glob: |
+                  pyproject.toml
+                  uv.lock
+                  inferencex-e2e/pyproject.toml
+                  inferencex-e2e/uv.lock

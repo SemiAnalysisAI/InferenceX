@@ -1,0 +1,24 @@
+name: Set up Claude Code
+description: Install the pinned Claude Code CLI for anthropics/claude-code-action, retrying once.
+
+outputs:
+    path:
+        description: Path of the installed claude executable
+        value: ${{ steps.install.outputs.path }}
+
+runs:
+    using: composite
+    steps:
+        - name: Install Claude Code 2.1.282
+          id: install
+          shell: bash
+          run: | # zizmor: ignore[adhoc-packages] Claude CLI and its native packages are pinned to 2.1.282
+              claude_cli="$RUNNER_TEMP/claude-code/node_modules/.bin/claude"
+              for attempt in 1 2; do
+                rm -rf "$RUNNER_TEMP/claude-code"
+                npm install --prefix "$RUNNER_TEMP/claude-code" --no-audit --no-fund @anthropic-ai/claude-code@2.1.282 &&
+                  [ "$("$claude_cli" --version 2>&1)" = "2.1.282 (Claude Code)" ] && break
+                [ "$attempt" = 2 ] && exit 1
+                sleep 15
+              done
+              echo "path=$claude_cli" >> "$GITHUB_OUTPUT"
