@@ -223,7 +223,7 @@ def load_inventory(runner_config: str | Path | Mapping[str, Any] | None = None) 
         data = runner_config
     else:
         with open(runner_config) as file:
-            data = yamlio.safe_load(file)
+            data = yamlio.load(file, yamlio.UniqueKeySafeLoader)
         if not isinstance(data, Mapping):
             raise ValueError(f"{runner_config}: runner config must be a mapping")
     return RunnerInventory.model_validate(data)
