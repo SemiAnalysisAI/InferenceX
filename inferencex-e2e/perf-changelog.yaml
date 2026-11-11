@@ -12742,3 +12742,14 @@
     - "Add TileRT on GB300 NVL72 for DeepSeek-V4.1-Flash FP4 AgentX at concurrency 1: one vLLM prefill (TP4, vllm/vllm-openai:nightly-00b6c4c5 by digest) sends the prompt KV over NVLink to one TileRT decode, at TP8 (two trays) and at 24 GPUs (three TP8 groups, six trays). The decode runs tilert 0.1.8 from PyPI on the CUDA 13.2 runtime image by digest; the TileRT router runs on the prefill's node in the prefill image and tokenizes with vLLM's DeepSeek-V4.1 tokenizer mode."
     - "DSpark with five drafts at the golden simulated acceptance 3.51; the public decode masks tool-call tokens and the prefill runs without a tool-call parser."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4979
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark-umbp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "New key on vllm/vllm-openai-rocm:nightly-96710245ece8fe57a0df3ea18cdc79cbb8ce93cf (2026-11-10, digest sha256:6eeac5c66fa566c8f44f79528df9db5eaadff6cc4afb76ad583fedfd5b64e51b), the first nightly with vllm-project/vllm#64715 (UMBP standalone mode for DeepSeek-V4.1-Flash on ROCm). Its MORI v1.2.3.post1 is built with UMBP. The TP4/TP2 key dsv41flash-fp4-mi355x-vllm-agentic-dspark and the TP8 c1 key are unchanged and are not rerun."
+    - "Add concurrency 128, 256 and 384 on two GPUs with attention DP2 and the MoE tensor-parallel across both ranks (tensor-parallel-size 1, data-parallel-size 2, no expert parallelism), fronted by vllm-router 0.1.14 with consistent_hash. --monokernel is off because mono decode rejects DP; the other shared settings match TP2 c64: five-token DSpark, block size 128, the MXFP4 sparse-logits indexer, Engram tables in host memory, max-num-batched-tokens 16384 and cudagraph capture up to 1024."
+    - "KV offloading to host DRAM through UMBPStoreConnector in standalone mode: a node-local umbp_standalone_server, launched as a critical srt-slurm service before the workers, owns one 449 GB pool (dram-utilization 0.60 of the two-GPU share, 4 KiB pages) shared by both DP ranks; failed loads are recomputed."
+    - "Draft data types unchanged: the DSpark draft (mtp.0-2 in the target checkpoint) loads with the checkpoint's FP8 config, as shipped, and inherits the target fp8_ds_mla KV cache."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
