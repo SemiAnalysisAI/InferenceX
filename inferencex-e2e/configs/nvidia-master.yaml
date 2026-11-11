@@ -6746,21 +6746,6 @@ dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-hicache:
           ep: 32
           dp-attn: true
       - spec-decoding: mtp
-        conc-list: [2884]
-        srt-recipe: disagg-dep16-hicache-variants.yaml:override_5p1d_dep2_dep16_c2884
-        kv-offloading: dram
-        kv-offload-backend: { name: hicache }
-        prefill:
-          num-worker: 5
-          tp: 2
-          ep: 2
-          dp-attn: true
-        decode:
-          num-worker: 1
-          tp: 16
-          ep: 16
-          dp-attn: true
-      - spec-decoding: mtp
         conc-list: [5540]
         srt-recipe: disagg-dep16-hicache-variants.yaml:override_7p1d_dep2_dep16_b96_c5540
         kv-offloading: dram

@@ -12677,6 +12677,6 @@
   description:
     - "Move dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg and dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-hicache to nightly-dev-cu13-20261111-314bce7c (Dynamo 1.7.0.dev20261110, SGLang 0.0.0.dev1+g314bce7cf), pinned by digest."
     - "Add a DEP32 decode point: 6 DEP2 prefill workers and one DEP32 decode worker on 8 nodes at c3018 (decode CUDA graph batch 18, max-running-requests 576, extra slots 80, 32 redundant EPLB experts, total_requests DP balancing, block-wise rejection for the sampled DSpark verify)."
-    - "Drop 3 prefill workers at c700 and c1228 (DEP16 decode). The DEP32 c3018 point has both higher p90 interactivity and higher throughput per GPU than each of them."
-    - "Agg TP4 c1, c4 and c16 and disagg 5P c2884, 7P c5540 and 9P c7480 change only by the image. The agg key is listed so the whole Dynamo + SGLang curve, agg points included, comes from this sweep."
+    - "Drop 3 prefill workers at c700 and c1228 (DEP16 decode): the DEP32 c3018 point has both higher p90 interactivity and higher throughput per GPU than each of them. Drop 5 prefill workers at c2884 (DEP16 decode): it lies under the line between DEP32 c3018 and 7P c5540 on p90 interactivity."
+    - "Agg TP4 c1, c4 and c16 and disagg 7P c5540 and 9P c7480 change only by the image. The agg key is listed so the whole Dynamo + SGLang curve, agg points included, comes from this sweep."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4997

@@ -213,18 +213,6 @@ base:
       AIPERF_EXTRA_INPUTS: '{"chat_template_kwargs":{"reasoning_effort":"high","thinking":true},"temperature":1}'
       AIPERF_DATASET_MMAP_CACHE_ENABLED: "true"
 
-override_5p1d_dep2_dep16_c2884:
-  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep16-hicache-5p1d-dep2-dep16-c2884
-  roles:
-    prefill:
-      nodes: 3
-      workers: 5
-    decode:
-      args:
-        max-running-requests: 640
-        cuda-graph-max-bs-decode: 40
-        disaggregation-decode-extra-slots: 80
-
 override_7p1d_dep2_dep16_b96_c5540:
   name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep16-hicache-7p1d-dep2-dep16-b96-c5540
   roles:
