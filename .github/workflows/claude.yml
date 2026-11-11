@@ -14,7 +14,9 @@ jobs:
     concurrency:
       group: pr-review-${{ github.event.pull_request.number }}
       cancel-in-progress: false
-    if: contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association)
+    if: >-
+      github.repository == 'SemiAnalysisAI/InferenceX'
+      && contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association)
     permissions:
       contents: read
       pull-requests: write # Publish PR feedback.
