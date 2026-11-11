@@ -361,6 +361,7 @@ clusters:
     models:
       entries:
         DeepSeek-V4.1-Flash: {root: data-models, dir: DeepSeek-V4.1-Flash}
+        Hy3-FP8: {root: hf-hub-cache, dir: Hy3-FP8}
         Kimi-K3.1-Pro: {root: scratch, dir: Kimi-K3.1-Pro}
         Muse-Spark-Open-816B-A42B-NVFP4: {root: data-models, dir: Muse-Spark-Open-816B-A42B-NVFP4}
         Qwen3.5-397B-A17B-FP8: {root: data-models, dir: Qwen3.5-397B-A17B-FP8}
