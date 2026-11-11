@@ -339,17 +339,31 @@ override_2p3d_c176:
     prefill:
       args:
         worker-cls: k31_memory_worker.MemoryDiagnosticWorker
+        gpu-memory-utilization: 0.89
       env:
         PYTHONPATH: /infmax-workspace/benchmarks:/opt/mum
         MORI_IO_LOG_LEVEL: info
         UMBP_DRAM_MAX_MR_BYTES: '137438953472'
+        HSA_NO_SCRATCH_RECLAIM: '0'
+        MORI_IO_SQ_BACKOFF_TIMEOUT_US: '500000'
+        MORI_IO_QP_MAX_SEND_WR: '8192'
+        MORI_IO_QP_MAX_CQE: '16384'
+        MORI_IO_QP_MAX_SGE: '2'
+        MORI_IO_TC_DISABLE: '0'
     decode:
       args:
         worker-cls: k31_memory_worker.MemoryDiagnosticWorker
+        gpu-memory-utilization: 0.89
       env:
         PYTHONPATH: /infmax-workspace/benchmarks:/opt/mum
         MORI_IO_LOG_LEVEL: info
         UMBP_DRAM_MAX_MR_BYTES: '137438953472'
+        HSA_NO_SCRATCH_RECLAIM: '0'
+        MORI_IO_SQ_BACKOFF_TIMEOUT_US: '500000'
+        MORI_IO_QP_MAX_SEND_WR: '8192'
+        MORI_IO_QP_MAX_CQE: '16384'
+        MORI_IO_QP_MAX_SGE: '2'
+        MORI_IO_TC_DISABLE: '0'
 
 override_2p3d_c176_short_mr128:
   name: k31-sa-umbp-dynamo-p2d3-c176-short-mr128
