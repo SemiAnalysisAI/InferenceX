@@ -5415,7 +5415,9 @@ minimaxm31flash-fp4-gb200-dynamo-sglang-agentic-dspark-disagg:
   srt-recipe-dir: minimaxm31flash/sglang/gb200-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    # Covers the 800 GB per prefill node of HiCache and the 680 GB per decode
+    # node of Mooncake stores.
+    - dram-utilization: 0.89
       search-space:
       - spec-decoding: mtp
         kv-offloading: dram
@@ -5429,6 +5431,15 @@ minimaxm31flash-fp4-gb200-dynamo-sglang-agentic-dspark-disagg:
         kv-offload-backend: { name: hicache }
         conc-list: [224]
         srt-recipe: disagg-variants.yaml:override_1p_dep8_dep8
+        prefill: { num-worker: 1, tp: 8, ep: 8, dp-attn: true }
+        decode: { num-worker: 1, tp: 8, ep: 8, dp-attn: true }
+      # The backend name keeps this point's experiment name apart from the
+      # L2-only hicache point above.
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache-mooncake }
+        conc-list: [224]
+        srt-recipe: disagg-variants.yaml:override_1p_dep8_dep8_l3
         prefill: { num-worker: 1, tp: 8, ep: 8, dp-attn: true }
         decode: { num-worker: 1, tp: 8, ep: 8, dp-attn: true }
       - spec-decoding: mtp

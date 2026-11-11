@@ -11776,7 +11776,7 @@
   scenario-type: [agentic-coding]
   description:
     - "Add disaggregated SGLang behind Dynamo for MiniMax-M3.1-Flash AgentX on GB200 with lmsysorg/sglang:nightly-cu134-20261030-e371881 (Dynamo 1.7.0.dev20261030, Mooncake transfer, minimax-msa kernels)."
-    - "2 DEP4 prefill workers with a DEP8 decode at conc 224 and 256, 3 DEP4 prefill workers with a DEP8 decode at conc 256 and 288, or 3 DEP4 prefill workers with a DEP16 decode at conc 280-360; MegaMoE, DSpark block 7 with fp8 draft KV, Dynamo KV router with fastokens for prefill and least-loaded routing across decode DP ranks."
-    - "Prefill: shortest-prefill-first, chunk 32768 (8192 per DP rank), mem-fraction-static 0.85, HiCache 180 GB per rank write_back. Decode: mem-fraction-static 0.90 on DEP8, 0.85 on DEP16."
+    - "2 DEP4 prefill workers with a DEP8 decode at conc 224 and 256, 1 DEP8 prefill worker with a DEP8 decode at conc 224 (HiCache alone, and HiCache with a Mooncake L3), 3 DEP4 prefill workers with a DEP8 decode at conc 256 and 288, or 3 DEP4 prefill workers with a DEP16 decode at conc 280-360; MegaMoE, DSpark block 7 with fp8 draft KV, Dynamo KV router with fastokens for prefill and least-loaded routing across decode DP ranks."
+    - "Prefill: shortest-prefill-first, 8192 tokens per DP rank per chunk, mem-fraction-static 0.88, HiCache 200 GB per rank write_back; the DEP8 prefill caps MegaMoE at 16384 tokens per rank. The L3 point adds a Mooncake store of 4 x 170 GB on each decode node behind the prefill HiCache. Decode: mem-fraction-static 0.90 on DEP8, 0.85 on DEP16."
     - "Agg: TP4 at conc 1-16, and TP4 with HiCache 180 GB per rank at conc 32-56, behind the same Dynamo frontend."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4695

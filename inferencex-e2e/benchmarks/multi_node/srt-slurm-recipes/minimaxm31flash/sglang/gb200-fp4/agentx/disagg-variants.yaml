@@ -105,8 +105,7 @@ base:
         max-running-requests: 256
         mem-fraction-static: 0.88
         enable-hierarchical-cache: true
-        # 180 GB per rank: 720 GB per node, the matrix's 0.80 DRAM share, leaving
-        # headroom for the engine, Mooncake and the OS.
+        # 200 GB per rank: 800 GB per node, inside the matrix's 0.89 DRAM share.
         hicache-size: 200
         hicache-write-policy: write_back
         speculative-algorithm: DSPARK
@@ -204,6 +203,110 @@ override_1p_dep8_dep8:
         chunked-prefill-size: 65536
         max-running-requests: 512
         mem-fraction-static: 0.88
+
+override_1p_dep8_dep8_l3:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-l3
+  # Lists replace on merge, so this repeats every base service.
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+    - name: mooncake-master
+      type: mooncake-master
+      # The image ships mooncake-transfer-engine-cuda13 without the master
+      # binary on PATH; find it or reinstall the same version.
+      preamble: |
+        export PATH="$(dirname "$(python3 -c 'import sys; print(sys.executable)')"):$PATH"
+        if ! command -v mooncake_master >/dev/null; then
+          MC_DIR=$(python3 -c 'import mooncake, os; print(os.path.dirname(mooncake.__file__))')
+          if [ -x "$MC_DIR/mooncake_master" ]; then
+            export PATH="$MC_DIR:$PATH"
+          else
+            pip_install=(python3 -m pip install)
+            if python3 -m pip install --help 2>/dev/null | grep -q -- --break-system-packages; then
+              pip_install+=(--break-system-packages)
+            fi
+            "${pip_install[@]}" --quiet --no-cache-dir --no-deps --force-reinstall \
+              "mooncake-transfer-engine-cuda13==$(python3 -c 'import importlib.metadata as m; print(m.version("mooncake-transfer-engine-cuda13"))')"
+          fi
+        fi
+        command -v mooncake_master
+      args:
+        # Past 95% full the master evicts the 10% of objects with the oldest
+        # lease. The lease sets when an object becomes evictable, not the
+        # order; 120 s stays above the slowest load batch.
+        - --default_kv_lease_ttl=120000
+        - --eviction_high_watermark_ratio=0.95
+        - --eviction_ratio=0.10
+        - --rpc_thread_num=64
+    # Each store runs once on every decode node: 4 x 170 GB x 2 nodes = 1.36 TB.
+    - &decode-store
+      name: store-decode-0
+      type: mooncake-store
+      command: ["python3", "-m", "mooncake.mooncake_store_service"]
+      placement:
+        node: decode
+      args: ["--port", "8800"]
+      env:
+        MOONCAKE_PROTOCOL: rdma
+        MOONCAKE_DEVICE: "@fabric.rdma-devices"
+        MOONCAKE_GLOBAL_SEGMENT_SIZE: 170gb
+        MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+        MC_TCP_BIND_ADDRESS: "{node_ip}"
+      preamble: |
+        ulimit -n 1048576
+        ulimit -l unlimited
+      readiness:
+        port: 8800
+        timeout_seconds: 600
+    - <<: *decode-store
+      name: store-decode-1
+      args: ["--port", "8801"]
+      readiness:
+        port: 8801
+        timeout_seconds: 600
+    - <<: *decode-store
+      name: store-decode-2
+      args: ["--port", "8802"]
+      readiness:
+        port: 8802
+        timeout_seconds: 600
+    - <<: *decode-store
+      name: store-decode-3
+      args: ["--port", "8803"]
+      readiness:
+        port: 8803
+        timeout_seconds: 600
+    # Disables Dynamo's per-request lifecycle span export; InferenceX does not read it.
+    - name: otel-collector
+      type: otel-collector
+      enabled: false
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "16384"
+        MOONCAKE_PROTOCOL: rdma
+        MOONCAKE_DEVICE: "@fabric.rdma-devices"
+        # The prefill nodes' DRAM already holds the 200 GB L2 per rank, so the
+        # prefill clients keep the default 4 GB segment and the L3 lives on the
+        # decode stores.
+        MOONCAKE_GLOBAL_SEGMENT_SIZE: 4gb
+        MOONCAKE_STANDALONE_STORAGE: "0"
+      args:
+        tensor-parallel-size: 8
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        chunked-prefill-size: 65536
+        max-running-requests: 512
+        mem-fraction-static: 0.88
+        hicache-storage-backend: mooncake
+        # Group semantics make every present key refresh its whole group under
+        # a global lock; per-request leases are enough here.
+        hicache-storage-backend-extra-config: '{"enable_group_semantics":false}'
 
 override_3p_dep4_dep8:
   name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-3p-dep4-dep8
