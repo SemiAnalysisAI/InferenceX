@@ -19,7 +19,7 @@ def request_case(monkeypatch):
 
 def make_request_case(monkeypatch) -> dict:
     comment = {
-        "id": 41, "body": "/use 123", "author_association": "MEMBER",
+        "id": 41, "body": "/use 123", "user": {"login": "maintainer"},
         "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-01T00:00:00Z",
     }
     case = {
@@ -59,6 +59,10 @@ def make_request_case(monkeypatch) -> dict:
             reaction_id = int(path.rsplit("/", 1)[-1])
             case["reactions"][:] = [r for r in case["reactions"] if r["id"] != reaction_id]
             return None
+        if path == "/collaborators/maintainer/permission":
+            return {"permission": "write", "role_name": "maintain"}
+        if path == "/collaborators/triager/permission":
+            return {"permission": "read", "role_name": "triage"}
         if path == "/issues/comments/41":
             return copy.deepcopy(case["comment"])
         if path == "/issues/comments/41/reactions":
@@ -179,7 +183,7 @@ def test_source_in_pr_posts_no_warning(request_case):
 
 
 @pytest.mark.parametrize("problem,reason", [
-    ("unauthorized", "OWNER, MEMBER, or COLLABORATOR"),
+    ("unauthorized", "write access"),
     ("syntax", "Usage:"),
     ("closed", "not open"),
     ("workflow", "expected .github/workflows/run-sweep.yml"),
@@ -193,7 +197,7 @@ def test_source_in_pr_posts_no_warning(request_case):
 def test_rejects_invalid_requests_without_approving(request_case, capsys, problem, reason):
     case = request_case
     if problem == "unauthorized":
-        case["comment"]["author_association"] = "CONTRIBUTOR"
+        case["comment"]["user"] = {"login": "triager"}
     elif problem == "syntax":
         case["comment"]["body"] = "/use nope"
     elif problem == "closed":

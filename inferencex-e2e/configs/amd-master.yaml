@@ -701,7 +701,7 @@ dsv41flash-fp4-mi300x-vllm-agentic-dspark:
 # GPU-resident-KV c1/c2/c3/c4/c5/c6/c8 curve from Actions run 29657732517
 # and enables EAGLE MTP with the committed thinking-on golden AL.
 glm5.2-fp8-mi325x-sglang-agentic-mtp:
-  image: lmsysorg/sglang:v0.5.22-rocm720-mi30x@sha256:58b6bc333f527c88fe5ff1b4bd8d17e82214eabcb3044549117159878967c930
+  image: lmsysorg/sglang:v0.5.23-rocm720-mi30x@sha256:a3a6eb293187b20012a5abc8f00423e6ab51d0169113a6e58a91da5614200170
   model: zai-org/GLM-5.2-FP8
   model-prefix: glm5.2
   runner: cluster:mi325x-amd
@@ -904,14 +904,8 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp8-c1:
       search-space:
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1], srt-recipe: agentic.yaml }
 
-# MiniMax-M3.1-Flash AgentX on MI355X: day-zero vLLM ROCm image from
-# https://vllm.ai/blog/2026-10-23-minimax-m31-flash, verified 2026-10-23.
-# AMD's Quark MXFP4 export (routed experts in MXFP4, W4A4 on the AITER MoE)
-# at TP4 with native DSpark: 7 drafts, mono decode and an FP8 KV cache at
-# c1-c8; 7 drafts, an NVFP4 KV cache and DBO at c16-c32; 3 drafts, DBO and a
-# CPU KV tier at c64. Throughput runs use the minimax-m3.1-flash__dspark__native__probabilistic-block golden AL.
 minimaxm31flash-fp4-mi355x-vllm-agentic-dspark:
-  image: vllm/vllm-openai-rocm:minimax-m31-flash@sha256:ae8681212aa5291d8c27f06e90016435e3fca144a68fd5c439231f6475f74569
+  image: vllm/vllm-openai-rocm:nightly-4fab5a07475822c6eaa971dceb2e2220d0446808@sha256:6f126f27a3b58959da3c16076248fc99eb31e26d0a3ae9f8563bda7317d6a7e6
   model: amd/MiniMax-M3.1-Flash-Quark-MXFP4
   model-prefix: minimaxm31flash
   runner: cluster:mi355x-amds
