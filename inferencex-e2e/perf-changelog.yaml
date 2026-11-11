@@ -12757,6 +12757,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4045
 
 - config-keys:
+    - musespark-fp4-mi355x-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Lower the TP8 concurrency 6 stream interval from 128 to 50 and rerun every point on the same lmsysorg/sglang-rocm:muse-spark-open-mi355-1106 image; the rest of the recipe and the search space are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4983
+
+- config-keys:
     - qwen3.5-fp8-mi355x-atom-agentic-mtp
   description:
     - "Update the ATOM image from rocm/atom-dev:nightly_202610181506 to nightly_202610291449."
