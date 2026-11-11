@@ -1,7 +1,9 @@
 import functools
+import io
 import json
 import re
 import subprocess
+import zipfile
 from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
@@ -102,6 +104,45 @@ def test_reads_never_retry_client_errors_or_rate_limits(monkeypatch, sleeps, err
 
     with pytest.raises(subprocess.CalledProcessError):
         github.read("example/project", "pulls/7")
+    assert len(calls) == 1
+    assert sleeps == []
+
+
+def artifact_download(monkeypatch, failures):
+    """Make the artifact download fail with each of ``failures`` (gh stderr bytes), then serve
+    a zip holding ``plan.json``; return the recorded gh argv of every attempt."""
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w") as bundle:
+        bundle.writestr("plan.json", '{"ok": true}')
+    calls = []
+
+    def run(argv, **kwargs):
+        calls.append(argv)
+        if len(calls) <= len(failures):
+            raise subprocess.CalledProcessError(1, argv, stderr=failures[len(calls) - 1])
+        return subprocess.CompletedProcess(argv, 0, archive.getvalue(), b"")
+
+    monkeypatch.setattr(github.subprocess, "run", run)
+    return calls
+
+
+ARTIFACT = {"id": 9, "expired": False, "size_in_bytes": 64}
+
+
+def test_an_artifact_download_retries_a_server_error(monkeypatch, sleeps, tmp_path):
+    calls = artifact_download(monkeypatch, [b"gh: Bad Gateway (HTTP 502)\n"])
+
+    github.download_json("example/project", ARTIFACT, tmp_path)
+    assert json.loads((tmp_path / "plan.json").read_text()) == {"ok": True}
+    assert calls == [["gh", "api", "repos/example/project/actions/artifacts/9/zip"]] * 2
+    assert sleeps == [1]
+
+
+def test_an_artifact_download_does_not_retry_a_missing_artifact(monkeypatch, sleeps, tmp_path):
+    calls = artifact_download(monkeypatch, [b"gh: Not Found (HTTP 404)\n"])
+
+    with pytest.raises(subprocess.CalledProcessError):
+        github.download_json("example/project", ARTIFACT, tmp_path)
     assert len(calls) == 1
     assert sleeps == []
 
