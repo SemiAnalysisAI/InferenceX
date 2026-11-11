@@ -917,7 +917,7 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark-dp2:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      - { tp: 2, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [256], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
+      - { tp: 2, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [128, 256, 384], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
 
 # MiniMax-M3.1-Flash AgentX on MI355X: day-zero vLLM ROCm image from
 # https://vllm.ai/blog/2026-10-23-minimax-m31-flash, verified 2026-10-23.
