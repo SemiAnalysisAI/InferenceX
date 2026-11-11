@@ -868,7 +868,9 @@ def rank() -> None:
         MPLCONFIGDIR=str(cache / "matplotlib"),
     )
     testlists = Path("/opx/testlists") / f"p{part}-l{lane}"
-    if not testlists.is_dir():
+    if testlists.is_dir():  # this process's lists only (the shard env names them all)
+        os.environ["OPERATORX_TESTLISTS"] = ",".join(sorted(p.stem for p in testlists.glob("*.json")))
+    else:
         testlists = Path("/opx/testlists")
     bench = [
         sys.executable,
