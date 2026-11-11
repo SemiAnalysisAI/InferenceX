@@ -195,6 +195,12 @@ def release_built() -> None:
     moe.forget()
 
 
+def resident() -> bool:
+    """Whether a built GEMM or MoE layer is cached."""
+    from operatorx.runners.common.vllm import moe
+    return "layer" in BUILT or moe.resident()
+
+
 def _build_gemm(a: dict) -> dict:
     """Build the layer once per ladder: weights, quantization and kernel choice do not depend on M."""
     from vllm.model_executor.layers.linear import RowParallelLinear

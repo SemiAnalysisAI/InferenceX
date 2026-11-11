@@ -403,6 +403,10 @@ def _generic_block(a: dict, prefix: str) -> _MoeBlock:
     return block
 
 
+def resident() -> bool:
+    return "block" in _BUILT
+
+
 def forget() -> None:
     """Drop the cached MoE layer (another op's layer is being built)."""
     if _BUILT:

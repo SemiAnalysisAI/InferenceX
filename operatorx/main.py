@@ -129,6 +129,57 @@ def _resolve_split() -> dict:
     return split
 
 
+# Recovery (CI parts; OPERATORX_PROGRESS names this rank's progress file). A case that raised
+# an error (OOM, device fault), or that failed with no layer or engine left cached while the
+# process still holds device memory (a failed startup vLLM never freed), ends the process after
+# its checkpoint (RESTART); ci.py's rank wrapper starts a fresh one, which runs that case once
+# more and goes on. A process that dies mid-case is resumed by the wrapper too (one device):
+# the case is recorded as an error. Every rank of a group decides together.
+RESTART = 75
+_USED_FLOOR = float(os.environ.get("OPERATORX_RECOVER_USED_GIB", "8")) * 2**30
+_USED_FRACTION = float(os.environ.get("OPERATORX_RECOVER_USED_FRACTION", "0.12"))
+
+
+def _read_progress(path: Path) -> dict:
+    try:
+        return json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def _write_progress(path: Path, state: dict) -> None:
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(state))
+    tmp.replace(path)
+
+
+def _restart_reason(status: str, residents: list) -> str | None:
+    """Why this process should not run another case, agreed by every rank; None to go on."""
+    import gc
+
+    from operatorx.runners.common import ranks
+    reason = "the case raised an error" if status == "error" else None
+    try:
+        import torch
+        # with a layer or engine cached, the failure was this case's own (e.g. a batch the engine
+        # rejected); without one, whatever device memory remains is a failed build's leftovers
+        if reason is None and torch.cuda.is_available() and not any(r() for r in residents):
+            gc.collect()
+            torch.cuda.empty_cache()
+            free, total = torch.cuda.mem_get_info()
+            used = total - free
+            if used > max(_USED_FLOOR, _USED_FRACTION * total):
+                reason = f"{used / 2**30:.1f} of {total / 2**30:.0f} GiB in use with nothing cached"
+    except Exception as e:  # noqa: BLE001 - a device that cannot even report is not reusable
+        reason = f"recovery check failed: {type(e).__name__}: {e}"[:300]
+    try:
+        if ranks.any_(reason is not None):
+            return reason or "another rank must restart"
+    except Exception as e:  # noqa: BLE001 - a broken group cannot run more cases
+        return f"ranks could not agree: {type(e).__name__}: {e}"[:300]
+    return None
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     ap.add_argument("--platform", default=None,
@@ -187,7 +238,31 @@ def main() -> int:
     results: list[Result] = []
     counts = {"ok": 0, "unsupported": 0, "error": 0}
     out_path = args.results_dir / platform / (run.cluster or "unknown") / f"{run.id}.json"
-    for op, tl in entries:
+    progress = Path(os.environ["OPERATORX_PROGRESS"]) if os.environ.get("OPERATORX_PROGRESS") else None
+    start = 0
+    residents = []
+    retried = None
+    if progress is not None:
+        state = _read_progress(progress)
+        start = int(state.get("next", 0))
+        retried = state.get("retry")
+        residents = [r for b in backends for r in [getattr(importlib.import_module(
+            f"operatorx.runners.{platform}.backends.{b}"), "resident", None)] if r]
+        crashed = state.get("running")
+        if crashed is not None and int(crashed) == start and start < len(entries):
+            op, tl = entries[start]  # the process died during this case
+            results.append(Result(op=op, metrics={}, status="error", testlist=tl,
+                                  message=f"the process exited with code {os.environ.get('OPERATORX_CRASH_RC', '?')} "
+                                          "during this case"))
+            counts["error"] += 1
+            start += 1
+        if start and rank == 0:
+            print(f"[run_smoke] resuming at case {start} of {len(entries)}", flush=True)
+    for index, (op, tl) in enumerate(entries):
+        if index < start:
+            continue
+        if progress is not None:
+            _write_progress(progress, {"next": index, "running": index})
         _t0 = _time.perf_counter()
         try:
             if op.type not in backend_ops.get(op.backend, set()):
@@ -235,6 +310,22 @@ def main() -> int:
                 _torch.cuda.empty_cache()
         except Exception:
             pass
+        if progress is not None:
+            _write_progress(progress, {"next": index + 1})
+            reason = _restart_reason(status, residents) if status != "ok" else None
+            if reason is not None and retried != index:  # run this case once more, in a fresh process
+                results.pop()
+                counts[status] -= 1
+                _write_progress(progress, {"next": index, "retry": index})
+            if reason is not None and (retried != index or index + 1 < len(entries)):
+                if rank == 0:
+                    run.finished_at = utc_now_iso()
+                    write_run_result(out_path, run, results)
+                    print(f"[run_smoke] {counts} -> {out_path}", flush=True)
+                    print(f"[run_smoke] restarting after case {index}: {reason}", flush=True)
+                sys.stdout.flush()
+                sys.stderr.flush()
+                os._exit(RESTART)  # skip vLLM's exit-time teardown of a broken state
 
     run.finished_at = utc_now_iso()
 

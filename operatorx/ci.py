@@ -847,6 +847,55 @@ def _visible_devices(lane: int, ws: int) -> None:
     os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(base[pick])
 
 
+MAX_RESTARTS = 25
+RESTART = 75  # main.py: this process must not run another case
+
+
+def _supervise(bench: list[str], part: str, task: int, ws: int) -> int:
+    """Run the benchmark process, starting a fresh one after main.py asks (RESTART) or, on one
+    device, after it dies mid-case; it resumes from this rank's progress file. Every rank of a
+    group restarts together (main.py agrees first); a multi-rank crash ends the group."""
+    progress = Path("/opx/progress") / f"p{part}-t{task}.json"
+    progress.parent.mkdir(parents=True, exist_ok=True)
+    port = int(os.environ["MASTER_PORT"])
+    env = dict(os.environ, OPERATORX_PROGRESS=str(progress))
+    child = None
+
+    def stop(signum, frame):
+        if child is not None and child.poll() is None:
+            child.send_signal(signum)
+        raise SystemExit(128 + signum)
+
+    for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        signal.signal(sig, stop)
+    def state() -> dict:
+        try:
+            return json.loads(progress.read_text())
+        except (OSError, ValueError):
+            return {}
+
+    for attempt in range(MAX_RESTARTS + 1):
+        env["MASTER_PORT"] = str(port + 1000 * attempt)  # the last group's ports may linger
+        before = state().get("next", 0)
+        child = subprocess.Popen(bench, env=env)
+        rc = child.wait()
+        if rc == 0:
+            return 0
+        crashed = rc != RESTART
+        if crashed and ws > 1:  # the other ranks wait in a collective for this one
+            return rc
+        now = state()
+        if crashed and "running" not in now and now.get("next", 0) == before:
+            return rc  # died before its first case (startup): a fresh process would too
+        if attempt == MAX_RESTARTS:
+            print(f"[operatorx] giving up after {MAX_RESTARTS} restarts", file=sys.stderr, flush=True)
+            return rc
+        env["OPERATORX_CRASH_RC"] = str(rc)
+        print(f"[operatorx] task {task}: {'crashed with code ' + str(rc) if crashed else 'restart'}"
+              f" (restart {attempt + 1})", file=sys.stderr, flush=True)
+    return 1
+
+
 def rank() -> None:
     for key in ("SLURM_PROCID", "SLURM_LOCALID", "WORLD_SIZE"):
         if not os.environ.get(key):
@@ -893,6 +942,8 @@ def rank() -> None:
         "/opx/results",
     ]
     if os.environ.get("OPERATORX_MODE", "timing") != "counters":
+        if Path("/opx/cache").is_dir():  # a stage planned with parts: recover from failures
+            sys.exit(_supervise(bench, part, task, ws))
         os.execv(sys.executable, bench)
     # one marked, profiled replay per op so counters join to ops; no timing warmups
     os.environ.update(

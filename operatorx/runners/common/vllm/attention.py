@@ -447,6 +447,10 @@ def _engine(b: _Build, split: dict | None) -> _Engine:
     return _ENGINE
 
 
+def resident() -> bool:
+    return _ENGINE is not None
+
+
 def _backends(runner) -> dict[str, str]:
     return {", ".join(g.layer_names): getattr(g.backend, "__name__", type(g.backend).__name__)
             for gs in runner.attn_groups for g in gs}
