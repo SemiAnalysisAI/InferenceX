@@ -12696,3 +12696,10 @@
   description:
     - "Update SGLang image to lmsysorg/sglang:nightly-dev-cu13-20261107-e45e1d0c."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4900
+
+- config-keys:
+    - glm5.2-fp8-mi325x-sglang-agentic-mtp
+  description:
+    - "Update the SGLang ROCm image from v0.5.22 to v0.5.23, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4870
+  scenario-type: [agentic-coding]
