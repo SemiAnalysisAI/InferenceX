@@ -321,11 +321,13 @@ Caches live on the shared `/mnt/data` volume: `hf-hub-cache`, `aiperf-cache` and
 Image imports run on a compute node; the login pod cannot write enroot's default paths.
 
 The cluster runs no Slurm collector, so the priority controller has no telemetry for it and
-fences both runners with `ci-slurm-unavailable`. Its jobs skip admission instead:
-`benchmark-tmpl.yml` requests `cluster:a100-cw` alone and GitHub dispatches each job to an
-idle runner. Every single-node job takes a whole node, so two runners match the two nodes
-and Slurm queues anything beyond that. Deploy a collector and remove that exception before
-the cluster shares capacity with multi-node or externally submitted work.
+fences both runners with `ci-slurm-unavailable`. Its benchmark jobs skip admission instead:
+`benchmark-tmpl.yml` requests the job's runner label alone (`a100`, `cluster:a100-cw` or a
+node name) and GitHub dispatches each job to an idle runner. Every single-node job takes a
+whole node, so two runners match the two nodes and Slurm queues anything beyond that. The
+other workflows (profiling, SpeedBench, multi-node) keep their admission labels and cannot
+run here. Deploy a collector and remove that exception before the cluster shares capacity
+with multi-node or externally submitted work.
 
 The login node (where the runners live) and the Slurm compute nodes (where benchmarks
 run) exchange everything through the filesystem, so every path the CI touches must be
