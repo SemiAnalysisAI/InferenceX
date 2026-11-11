@@ -44,8 +44,6 @@ EST_CASE_S = {"gemm": 1.0, "moe": 1.5}
 EST_ATTENTION_LAYER_S = 120.0
 EST_ATTENTION_CASE_S = 6.0
 EST_SHARD_S = 30 * 60
-# the case dimension a layer's ladder sweeps; a layer is its args without it
-LADDER_ARG = {"gemm": "m", "moe": "tokens"}
 # per-kernel hardware counters; a counters run's latencies are perturbed by the profiler
 NCU_METRICS = ",".join((
     "gpu__time_duration.sum", "sm__cycles_elapsed.avg.per_second",
@@ -168,21 +166,12 @@ def write_json(path: Path, value: object) -> None:
     temporary.replace(path)
 
 
-def layer_key(shape: dict) -> str:
-    """A case's layer: its op and args without the dimension its ladder sweeps."""
-    args = dict(shape["args"])
-    if shape["type"] in LADDER_ARG:
-        args.pop(LADDER_ARG[shape["type"]], None)
-    else:  # attention: the batch (requests, query and context lengths) is the ladder
-        args.pop("batch", None)
-    return json.dumps([shape["type"], args], sort_keys=True)
-
-
 def layer_groups(cases: list[dict]) -> list[list[dict]]:
     """Cases grouped by layer, in first-appearance order, each ladder kept in its order."""
+    from operatorx.core.ladder import layer_key
     groups: dict[str, list[dict]] = {}
     for c in cases:
-        groups.setdefault(layer_key(c["shape"]), []).append(c)
+        groups.setdefault(layer_key(c["shape"]["type"], c["shape"]["args"]), []).append(c)
     return list(groups.values())
 
 
@@ -847,7 +836,7 @@ def _visible_devices(lane: int, ws: int) -> None:
     os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(base[pick])
 
 
-MAX_RESTARTS = 25
+MAX_RESTARTS = 100
 RESTART = 75  # main.py: this process must not run another case
 
 
@@ -875,7 +864,8 @@ def _supervise(bench: list[str], part: str, task: int, ws: int) -> int:
             return {}
 
     for attempt in range(MAX_RESTARTS + 1):
-        env["MASTER_PORT"] = str(port + 1000 * attempt)  # the last group's ports may linger
+        # a fresh port per attempt (the last group's may linger), kept within 20000-59999
+        env["MASTER_PORT"] = str(20000 + (port - 20000 + 997 * attempt) % 40000)
         before = state().get("next", 0)
         child = subprocess.Popen(bench, env=env)
         rc = child.wait()

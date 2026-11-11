@@ -17,6 +17,7 @@ from pathlib import Path
 
 import operatorx.ops  # noqa: F401  populates op registry
 from operatorx.core import op_registry, parallel
+from operatorx.core.ladder import layer_key
 from operatorx import Op, Result, UnsupportedOpError, write_run_result
 from operatorx.clusters import CLUSTER_PLATFORMS
 from operatorx.runtime import runtime_snapshot, utc_now_iso
@@ -153,6 +154,14 @@ def _write_progress(path: Path, state: dict) -> None:
     tmp.replace(path)
 
 
+def _agree_any(flag: bool) -> bool:
+    from operatorx.runners.common import ranks
+    try:
+        return ranks.any_(flag)
+    except Exception:  # noqa: BLE001 - a broken group: decide alone (the process restarts anyway)
+        return flag
+
+
 def _restart_reason(status: str, residents: list) -> str | None:
     """Why this process should not run another case, agreed by every rank; None to go on."""
     import gc
@@ -242,10 +251,14 @@ def main() -> int:
     start = 0
     residents = []
     retried = None
+    failed_layers: dict[str, list] = {}
+    repeats: dict[str, int] = {}  # cases of a layer that failed again in a fresh process
     if progress is not None:
         state = _read_progress(progress)
         start = int(state.get("next", 0))
         retried = state.get("retry")
+        failed_layers = state.get("failed_layers", {})
+        repeats = state.get("repeats", {})
         residents = [r for b in backends for r in [getattr(importlib.import_module(
             f"operatorx.runners.{platform}.backends.{b}"), "resident", None)] if r]
         crashed = state.get("running")
@@ -262,8 +275,20 @@ def main() -> int:
         if index < start:
             continue
         if progress is not None:
-            _write_progress(progress, {"next": index, "running": index})
+            _write_progress(progress, {"next": index, "running": index, "failed_layers": failed_layers, "repeats": repeats})
         _t0 = _time.perf_counter()
+        stage = ""
+        layer = layer_key(op.type, op.args)
+        if layer in failed_layers:  # its build failed in a fresh process too: not run again
+            status, message = failed_layers[layer]
+            results.append(Result(op=op, metrics={}, status=status, testlist=tl,
+                                  message=f"{message} | not run: this layer's build failed in a fresh process"))
+            counts[status] += 1
+            if rank == 0:
+                print(f"[ws={ws}] {tl:12} {status:11} {op.type:18} {op.backend:10}  (layer's build failed)", flush=True)
+            if progress is not None:
+                _write_progress(progress, {"next": index + 1, "failed_layers": failed_layers, "repeats": repeats})
+            continue
         try:
             if op.type not in backend_ops.get(op.backend, set()):
                 raise UnsupportedOpError(f"{platform}/{op.backend} has no implementation for {op.type}")
@@ -276,12 +301,14 @@ def main() -> int:
             status = "ok"
             latency_str = f"{r.metrics['latency_us']:>10.2f} us"
         except UnsupportedOpError as e:
+            stage = getattr(e, "operatorx_stage", "")
             results.append(Result(op=op, metrics={}, status="unsupported",
                                   message=str(e), testlist=tl))
             counts["unsupported"] += 1
             status = "unsupported"
             latency_str = "         unsupported"
         except Exception as e:
+            stage = getattr(e, "operatorx_stage", "")
             import traceback as _tb
             tb_tail = "".join(_tb.format_exception(type(e), e, e.__traceback__)).splitlines()[-6:]
             results.append(Result(op=op, metrics={}, status="error",
@@ -311,12 +338,21 @@ def main() -> int:
         except Exception:
             pass
         if progress is not None:
-            _write_progress(progress, {"next": index + 1})
+            _write_progress(progress, {"next": index + 1, "failed_layers": failed_layers, "repeats": repeats})
             reason = _restart_reason(status, residents) if status != "ok" else None
             if reason is not None and retried != index:  # run this case once more, in a fresh process
                 results.pop()
                 counts[status] -= 1
-                _write_progress(progress, {"next": index, "retry": index})
+                _write_progress(progress, {"next": index, "retry": index, "failed_layers": failed_layers,
+                                           "repeats": repeats})
+            elif reason is not None:
+                # failed again in a fresh process: after a build failure, or a second such case,
+                # the rest of the layer is recorded the same way without running
+                repeats[layer] = repeats.get(layer, 0) + 1
+                if _agree_any(stage.startswith("build")) or repeats[layer] >= 2:
+                    failed_layers[layer] = [status, results[-1].message or ""]
+                _write_progress(progress, {"next": index + 1, "failed_layers": failed_layers,
+                                           "repeats": repeats})
             if reason is not None and (retried != index or index + 1 < len(entries)):
                 if rank == 0:
                     run.finished_at = utc_now_iso()
