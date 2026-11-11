@@ -52,10 +52,10 @@ def registry_reference(image: str) -> tuple[str, str, str]:
     return "registry-1.docker.io", name if "/" in name else f"library/{name}", tag
 
 
-def resolve_image_digest(image: str, timeout: float = 10.0, opener=None) -> str:
-    """Manifest digest for a tag via anonymous registry-v2 HEADs (docker.io, ghcr.io and
-    nvcr.io all speak the token dance for public images; nothing is pulled). Empty string
-    on any failure -- the launcher then reuses whatever squash is already staged."""
+def _manifest_head(image: str, timeout: float, opener) -> tuple[int, str]:
+    """HTTP status and digest header of an anonymous registry-v2 manifest HEAD (docker.io,
+    ghcr.io and nvcr.io all speak the token dance for public images; nothing is pulled).
+    Status 0 when the registry gave no answer for the manifest."""
     host, repository, tag = registry_reference(image)
     opener = opener or urllib.request.build_opener()
     url = f"https://{host}/v2/{repository}/manifests/{tag}"
@@ -71,11 +71,13 @@ def resolve_image_digest(image: str, timeout: float = 10.0, opener=None) -> str:
         try:
             response = head()
         except urllib.error.HTTPError as error:
+            if error.code != 401:
+                return error.code, ""
             challenge = dict(re.findall(r'([A-Za-z_]+)="([^"]*)"',
                                         error.headers.get("WWW-Authenticate", "")))
             realm = challenge.get("realm", "")
-            if error.code != 401 or not realm.startswith("https://"):
-                return ""
+            if not realm.startswith("https://"):
+                return 0, ""
             query = {"scope": f"repository:{repository}:pull"}
             if challenge.get("service"):
                 query["service"] = challenge["service"]
@@ -84,13 +86,28 @@ def resolve_image_digest(image: str, timeout: float = 10.0, opener=None) -> str:
                 body = json.loads(grant.read().decode())
             token = body.get("token") or body.get("access_token") or ""
             if not token:
-                return ""
-            response = head(token)
+                return 0, ""
+            try:
+                response = head(token)
+            except urllib.error.HTTPError as denied:
+                return denied.code, ""
         with response:
-            digest = response.headers.get("Docker-Content-Digest", "") or ""
+            return 200, response.headers.get("Docker-Content-Digest", "") or ""
     except (OSError, ValueError):
-        return ""
-    return digest if DIGEST_PATTERN.fullmatch(digest) else ""
+        return 0, ""
+
+
+def resolve_image_digest(image: str, timeout: float = 10.0, opener=None) -> str:
+    """Manifest digest for a tag. Empty string on any failure -- the launcher then reuses
+    whatever squash is already staged."""
+    status, digest = _manifest_head(image, timeout, opener)
+    return digest if status == 200 and DIGEST_PATTERN.fullmatch(digest) else ""
+
+
+def image_tag_missing(image: str, timeout: float = 10.0, opener=None) -> bool:
+    """Whether the registry answered that the tag does not exist; a registry that could not
+    be asked has not said so."""
+    return _manifest_head(image, timeout, opener)[0] == 404
 
 
 def validate_cuda_context(expected: int) -> None:
