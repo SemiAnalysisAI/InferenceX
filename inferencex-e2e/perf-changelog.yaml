@@ -12686,7 +12686,7 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Add GLM-5.2 MXFP4 on MI355X with ATOM prefill/decode disaggregation (AToMesh router, Mooncake transfer, MTP) on rocm/atom-dev:nightly_202610131249."
+    - "Add GLM-5.2 MXFP4 on MI355X with ATOM prefill/decode disaggregation (AToMesh router, Mooncake transfer, MTP) on rocm/atom-dev:nightly_202611110332."
     - "Target: MXFP4 routed experts, every other layer (including the MTP draft) in BF16 as shipped with no online quantization, BF16 all-reduce; FP8 KV cache."
     - "One PP4 prefill with a Mooncake Store prefix tier; 1P1D with a DCP4 decode at concurrency 56-128, 1P2D with DCP4 decodes at 56, 1P3D with TP4 decodes at 12-24."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4045

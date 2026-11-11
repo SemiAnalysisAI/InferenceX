@@ -88,14 +88,6 @@ base:
       TRANSFORMERS_VERBOSITY: error
 
 override_1p1d_mcstore:
-  host_setup:
-    nodes: all
-    timeout_seconds: 1800
-    commands:
-      # Reserves the Store owners' 2 MiB pages on the head node, where srtctl starts the prefill.
-      - HEAD_NODE_HUGEPAGES_PER_NUMA=393216 IBDEVICES=rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/setup.sh"
-    teardown:
-      - HUGEPAGES_TARGET=0 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/hugepage_sanity.sh"
   services:
     - &master
       name: mc-master
@@ -124,8 +116,6 @@ override_1p1d_mcstore:
       command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "0", mooncake_client, "--host={node_ip}", --port=26052, --master_server_address=127.0.0.1:26051, --metadata_server=http://127.0.0.1:26080/metadata, --protocol=rdma, "--device_names=rdma0,rdma1,rdma2,rdma3", --global_segment_size=824633720832, --local_buffer_size=0, --threads=4]
       env:
         <<: *store_env
-        # Back the segment with the reserved 2 MiB pages; the NIC cannot register 64 GiB regions of 4 KiB pages.
-        MC_STORE_USE_HUGEPAGE: "1"
         MC_MAX_MR_SIZE: "68719476736"
         MC_TCP_BIND_ADDRESS: "{node_ip}"
       # The remapped container root lacks host CAP_IPC_LOCK, so registering the segment counts against RLIMIT_MEMLOCK.
@@ -187,14 +177,6 @@ override_1p2d_mcstore_c56:
       balance-abs-threshold: 2
       balance-rel-threshold: 2.0
       eviction-interval: 300
-  host_setup: &prefill_budget_host_setup
-    nodes: all
-    timeout_seconds: 1800
-    commands:
-      # Reserves the Store owners' 2 MiB pages on the head node, where srtctl starts the prefill.
-      - HEAD_NODE_HUGEPAGES_PER_NUMA=357376 IBDEVICES=rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/setup.sh"
-    teardown:
-      - HUGEPAGES_TARGET=0 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/hugepage_sanity.sh"
   services: &prefill_budget_services
     - <<: *master
       name: mc-master-rdma0
@@ -258,7 +240,6 @@ override_1p3d_mcstore_c12:
   resources: *spread
   frontend:
     args: *cache_aware
-  host_setup: *prefill_budget_host_setup
   services: *prefill_budget_services
   roles:
     prefill:
@@ -284,7 +265,6 @@ override_1p3d_mcstore_c16:
   resources: *spread
   frontend:
     args: *cache_aware
-  host_setup: *prefill_budget_host_setup
   services: *prefill_budget_services
   roles:
     prefill:
@@ -308,7 +288,6 @@ override_1p3d_mcstore_c24:
   resources: *spread
   frontend:
     args: *cache_aware
-  host_setup: *prefill_budget_host_setup
   services: *prefill_budget_services
   roles:
     prefill:
