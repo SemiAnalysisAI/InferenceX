@@ -1,0 +1,175 @@
+# DeepSeek-V4.1-Flash AgentX on GB300 NVL72 at concurrency 1: one vLLM prefill (TP4) and one TileRT
+# decode, at TP8 (two trays) and at 24 GPUs (TP8 x3, six trays), from the same public tilert release.
+schema: 2
+
+base:
+  name: dsv41flash-fp4-gb300-tilert-agentx-tp
+  # Installs the pinned tilert release from PyPI; the prefill takes only its KV connector.
+  setup_script: dsv41flash-tilert-nv.sh
+  slurm:
+    time_limit: "04:00:00"
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  environment:
+    PYTHONHASHSEED: "0"
+  health_check:
+    max_attempts: 2160
+    interval_seconds: 10
+  roles:
+    prefill:
+      engine:
+        type: vllm
+        set_visible_devices: true
+      container: vllm/vllm-openai:nightly-00b6c4c565a8732c131e1f452d4a17803bb0842b@sha256:76a9614ed4ed20694914c87e82a0344bd73e1c6e081459a2467175ab903657e4
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env:
+        TILERT_ROLE: prefill
+        HF_HUB_CACHE: "/hf_hub_cache"
+        HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
+        TRANSFORMERS_CACHE: "/hf_hub_cache"
+        VLLM_USE_V2_MODEL_RUNNER: "1"
+        # The router reads the first token id from the Python front end's response.
+        VLLM_USE_RUST_FRONTEND: "0"
+        VLLM_ENGINE_READY_TIMEOUT_S: "7200"
+        NCCL_CUMEM_ENABLE: "1"
+        NCCL_MNNVL_ENABLE: "1"
+      args:
+        served-model-name: "deepseek-ai/DeepSeek-V4.1-Flash"
+        trust-remote-code: true
+        language-model-only: true
+        tokenizer-mode: deepseek_v41
+        tensor-parallel-size: 4
+        max-model-len: 1048576
+        gpu-memory-utilization: 0.85
+        # The router reads the first token id from the prefill's logprobs.
+        return-tokens-as-token-ids: true
+        # vLLM 00b6c4c5, the image InferenceX pins for DSv4.1, writes token-interleaved KV records.
+        kv-cache-dtype: nvfp4_ds_mla
+        attention-config: '{"indexer_kv_dtype":"mxfp4"}'
+        no-swa-bounded-replay: true
+        # The DSpark draft runs on the prefill too, so the decode receives its window state.
+        speculative-config: '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
+        # No tool-call parsing in public builds. The router asks the prefill for one token and reads
+        # its id from the logprobs.
+        reasoning-parser: deepseek_v41
+        engram-config: '{"cpu_offload":true,"use_thp":true}'
+        # With FlashInfer autotuning on, the memory profile run fails in a batched GEMM.
+        kernel-config: '{"enable_flashinfer_autotune":false}'
+        compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092]}'
+        max-cudagraph-capture-size: 4092
+        # This vLLM reserves no draft slots in a DSpark prefill chunk, so a full chunk is
+        # max-num-batched-tokens; equal to the largest capture size, it replays the piecewise CUDA graph.
+        # On a vLLM bump, keep max-num-batched-tokens minus the draft slots <= the largest capture size,
+        # or every full prefill chunk runs eagerly.
+        max-num-batched-tokens: 4092
+        max-num-seqs: 8
+        disable-uvicorn-access-log: true
+        kv-transfer-config: >-
+          {"kv_connector":"TileRTConnector","kv_connector_module_path":"tilert.pd_vllm.prefill_connector",
+           "kv_role":"kv_producer","kv_connector_extra_config":{
+             "tilert_model":"dsv41","tilert_max_seq_len":1048576,"tilert_transport":"nvlink"}}
+    decode:
+      engine:
+        type: tilert
+        # One decode instance spans the point's nodes: each node starts one decode_server, which
+        # starts its 4 ranks (TILERT_PD_NNODES / _NODE_RANK / _RDZV); only the first node serves HTTP
+        # and receives the KV.
+        multi_node_launch: node-env
+      container: nvidia/cuda:13.2.0-runtime-ubuntu24.04@sha256:5f070a8f89e13ce9247188d7ed71a77119ed44e8be360e53c9ae1719e3089ea0
+      workers: 1
+      env:
+        TILERT_ROLE: decode
+        # The CUDA runtime image (arm64) carries no Python stack: the setup script installs the
+        # official Torch wheel the release library is built against, then the pinned serving stack.
+        BOOTSTRAP_TORCH: "torch==2.13.0+cu132"
+        # GB300: 152 SMs; the setup script refuses another part.
+        DECODE_EXPECTED_SMS: "152"
+        # The serving stack pinned for this release.
+        SERVE_DEPS: "fastapi==0.162.0 uvicorn==0.54.0 starlette==1.10.0 pydantic==2.14.2 pydantic_core==2.50.2 anyio==4.16.0 h11==0.16.0 httpx==0.28.1 httpcore==1.0.9 requests==2.34.2 pillow==13.0.0 transformers==5.20.2 tokenizers==0.23.3"
+        # Wake the stream on every token instead of the 200 ms default.
+        TILERT_DECODE_POLL_MS: "2"
+        # One request at a time: one KV receive slot on the decode's first node.
+        TILERT_PD_SLOTS: "1"
+        # The decode's TP group: 8 ranks on both points.
+        TILERT_MP_GROUP_SIZE: "8"
+        # Lazy CUDA module loading, as the release was measured; decode_server otherwise sets EAGER
+        # for its ranks.
+        CUDA_MODULE_LOADING: "LAZY"
+      args:
+        model: dsv41
+        # TileRT reads the Hugging Face checkpoint directly; no converted weights.
+        model-weights-dir: /hf_hub_cache/models--deepseek-ai--DeepSeek-V4.1-Flash/snapshots/314113f8a7dadb388215396ba5fbee2c610a04d6
+        # AgentX inputs reach 990,016 tokens.
+        max-seq-len: 1048576
+        transport: nvlink
+        # DSpark with five drafts: golden AL 3.51 (thinking_on). InferenceX sets
+        # TILERT_SIMULATE_ACC_LEN / TILERT_SIMULATE_ACC_METHOD from these two keys.
+        with-mtp: true
+        num-mtp: 5
+  frontend:
+    type: tilert-router
+    # The router renders and tokenizes each request itself, the way the prefill does: it reads the
+    # prefill's served flags (--tokenizer-mode deepseek_v41) from the vllm serve process on its node
+    # and uses vLLM's DeepSeek-V4.1 tokenizer. So it runs on the prefill's node, in the prefill
+    # image, with tilert/pd_vllm added the same way. It checks its rendering against the prefill's
+    # /tokenize at startup and logs "router-side tokenization ON"; on a mismatch it stays off and
+    # the prefill tokenizes.
+    container_image: vllm/vllm-openai:nightly-00b6c4c565a8732c131e1f452d4a17803bb0842b@sha256:76a9614ed4ed20694914c87e82a0344bd73e1c6e081459a2467175ab903657e4
+    placement:
+      node: head
+    enable_multiple_frontends: false
+    env:
+      TILERT_ROLE: router
+    args:
+      model: dsv41
+      # No tool-call parsing in public builds; the AgentX replay sends no tools.
+      parser: none
+      model-path: /hf_hub_cache/models--deepseek-ai--DeepSeek-V4.1-Flash/snapshots/314113f8a7dadb388215396ba5fbee2c610a04d6
+      queue-timeout: 1800
+      decode-capacity: 1
+  sbatch_directives:
+    cpus-per-task: "144"
+    mem: "0"
+  srun_options:
+    mem: "0"
+    container-writable: ""
+    container-remap-root: ""
+  # The eval needs Python too (902-post-eval-container-image.patch).
+  post_eval:
+    container_image: vllm/vllm-openai:nightly-00b6c4c565a8732c131e1f452d4a17803bb0842b@sha256:76a9614ed4ed20694914c87e82a0344bd73e1c6e081459a2467175ab903657e4
+  benchmark:
+    # The client needs Python; the model container is the bare CUDA runtime the decode bootstraps.
+    container_image: vllm/vllm-openai:nightly-00b6c4c565a8732c131e1f452d4a17803bb0842b@sha256:76a9614ed4ed20694914c87e82a0344bd73e1c6e081459a2467175ab903657e4
+    env:
+      TOKENIZER: /hf_hub_cache/models--deepseek-ai--DeepSeek-V4.1-Flash/snapshots/314113f8a7dadb388215396ba5fbee2c610a04d6
+      SERVED_MODEL_NAME: deepseek-ai/DeepSeek-V4.1-Flash
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
+      # Thinking on with high effort, the regime of the golden acceptance curve.
+      AIPERF_EXTRA_INPUTS: '{"chat_template_kwargs":{"reasoning_effort":"high","thinking":true},"temperature":1}'
+      HF_HOME: /logs/hf_cache
+      HF_HUB_OFFLINE: ""
+      TRANSFORMERS_VERBOSITY: error
+      TOKENIZERS_PARALLELISM: "false"
+
+override_1p1d_tp4_tp8_c1:
+  name: dsv41flash-fp4-gb300-tilert-agentx-c1-1p1d-tp4-tp8
+  roles:
+    decode:
+      nodes: 2
+      gpus: 8
+      env:
+        # The public point: 1 = TP8.
+        TILERT_DSV41_TP8XN: "1"
+
+override_1p1d_tp4_tp8x3_c1:
+  name: dsv41flash-fp4-gb300-tilert-agentx-c1-1p1d-tp4-tp8x3
+  roles:
+    decode:
+      nodes: 6
+      gpus: 24
+      env:
+        # The public point: 3 = TP8x3 (three TP8 groups, MoE over all 24 ranks).
+        TILERT_DSV41_TP8XN: "3"
