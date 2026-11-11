@@ -18,7 +18,9 @@ Native power is accepted only when its sampled GPU UUIDs match the server's
 `spec.json` and `launch.json` assignment. On ROCm the server names each GPU by
 its board serial, which is how the AMD power exporter identifies it.
 The H100 runner provides an HF hub cache mount, but the pinned H3 snapshot must
-be verified there before execution. Historical artifacts remain evidence of their
+be verified there before execution. On the clusters in `HUB_DOWNLOAD_CLUSTERS`
+([`models.py`](../infx/launch/drivers/srt/models.py)) the launcher downloads the
+snapshot, without the Ref2VA weights, into that cache before it submits. Historical artifacts remain evidence of their
 original workloads.
 
 Each video service uses `command: [python3, -m, infx.bench, video, serve]`.

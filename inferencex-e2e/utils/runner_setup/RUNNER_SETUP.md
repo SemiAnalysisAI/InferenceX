@@ -318,6 +318,8 @@ bash ~/gharunners/start_runners.sh 0 1 ~/gharunners
 ```
 
 Caches live on the shared `/mnt/data` volume: `hf-hub-cache`, `aiperf-cache` and `squash`.
+A video job downloads a missing model snapshot into `hf-hub-cache` from the login pod before it
+submits; H3 takes about 355 GB.
 Image imports run on a compute node; the login pod cannot write enroot's default paths.
 
 The cluster runs no Slurm collector, so the priority controller has no telemetry for it and
