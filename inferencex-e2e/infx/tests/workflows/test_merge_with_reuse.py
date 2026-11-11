@@ -931,20 +931,32 @@ class TestMergePrEligibility:
 
 
 class TestMergePrCommentPosting:
-    """Test that the reuse comment is posted with the correct run ID."""
+    """Test when the reuse comment is posted and which run ID it carries."""
 
-    def test_comment_posted_with_eligible_run_id(self):
+    def test_comment_posted_with_eligible_run_id_before_the_push(self):
         pull = make_mock_pull()
         gh = make_mock_gh(pull)
         git_ops = make_mock_git_ops()
-        git_ops.fetch.side_effect = StopIteration("stop after comment")
-        with patch(
-            "infx.workflows.merge_with_reuse.find_eligible_run",
-            return_value=123,
+        git_ops.push.side_effect = StopIteration("stop at push")
+        with (
+            patch("infx.workflows.merge_with_reuse.find_eligible_run", return_value=123),
+            patch("infx.workflows.merge_with_reuse.canonicalize_changelog"),
+            pytest.raises(StopIteration),
         ):
-            with pytest.raises(StopIteration):
-                merge_pr(7, repo="example/repo", _git_ops=git_ops, _gh=gh)
-        pull.create_issue_comment.assert_called_once_with("/reuse-sweep-run 123")
+            merge_pr(7, repo="example/repo", _git_ops=git_ops, _gh=gh)
+        pull.create_issue_comment.assert_called_once_with("/use 123")
+
+    def test_a_merge_that_aborts_on_a_conflict_posts_no_comment(self):
+        pull = make_mock_pull()
+        gh = make_mock_gh(pull)
+        git_ops = make_mock_git_ops()
+        git_ops.merge.return_value = 1
+        git_ops.diff_name_only_unmerged.return_value = "README.md"
+        with patch("infx.workflows.merge_with_reuse.find_eligible_run", return_value=123):
+            result = merge_pr(7, repo="example/repo", _git_ops=git_ops, _gh=gh)
+        assert result == 1
+        pull.create_issue_comment.assert_not_called()
+        git_ops.push.assert_not_called()
 
 
 class TestMergePrFullFlow:
