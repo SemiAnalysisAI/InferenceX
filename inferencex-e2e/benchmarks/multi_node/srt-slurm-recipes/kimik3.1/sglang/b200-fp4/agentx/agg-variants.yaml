@@ -134,22 +134,23 @@ override_tp16_ep4_dcp8_c12:
   roles:
     agg:
       args:
-        max-running-requests: 24
-        cuda-graph-max-bs-decode: 24
+        # Running requests can exceed CONC, so the cap itself keeps 18 x 8 within 146 verify tokens.
+        max-running-requests: 18
+        cuda-graph-max-bs-decode: 18
 
 override_tp16_ep4_dcp8_c16:
   roles:
     agg:
       args:
-        max-running-requests: 24
-        cuda-graph-max-bs-decode: 24
+        max-running-requests: 18
+        cuda-graph-max-bs-decode: 18
 
 override_tp16_ep4_dcp8_c20:
   roles:
     agg:
       args:
-        max-running-requests: 28
-        cuda-graph-max-bs-decode: 28
+        max-running-requests: 24
+        cuda-graph-max-bs-decode: 24
         # The verify batch grows with the running requests, so larger points verify fewer tokens per step.
         speculative-num-draft-tokens: 6
 
@@ -157,9 +158,8 @@ override_tp16_ep4_dcp8_c24:
   roles:
     agg:
       args:
-        max-running-requests: 36
-        cuda-graph-max-bs-decode: 36
-        # 24 x 6 keeps MSCCL++ verify all-reduces within 146 tokens per step.
+        max-running-requests: 24
+        cuda-graph-max-bs-decode: 24
         speculative-num-draft-tokens: 6
 
 override_tp16_ep4_dcp8_c28:
