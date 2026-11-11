@@ -12656,3 +12656,13 @@
     - "Aggregated TP4: the same image, with the engine behind a Dynamo sidecar (TCP request plane, ZMQ event plane, no NATS) that parses tools and reasoning. Engine settings are unchanged; only concurrency 1 and 16 remain, and concurrency 4, 8, 32, 40, 48 and 56 are dropped."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4967
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-a100-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the A100 AgentX arm for DeepSeek-V4.1-Flash on vLLM: TP8 over eight A100-SXM4-80GB on the new CoreWeave a100-cw cluster, five-token DSpark, concurrency 1, 2, 4, 8, 16, 24 and 28."
+    - "Image ghcr.io/semianalysisai/vllm-openai:pr66497-0fe642ac is vLLM at the head (0fe642ac) of the unmerged vllm-project/vllm#66497, which adds the SM80 decode kernels: the official nightly-cf5cea2d image with vLLM reinstalled from that commit through VLLM_USE_PRECOMPILED=1 and the merge-base (116025c6) wheel. The PR changes Python only."
+    - "The recipe is the H100 arm's without the c20 point and without PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True: SM80 falls back to the custom all-reduce, which cannot IPC-register CUDA graph buffers backed by CUDA VMM memory."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4993
