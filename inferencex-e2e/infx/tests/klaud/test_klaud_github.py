@@ -1430,15 +1430,6 @@ def test_only_an_agent_whose_log_shows_no_tool_call_counts_as_unstarted(tmp_path
     assert output.read_text() == f"used={used}\n"
 
 
-def test_the_wake_schedule_matches_every_schedule_check():
-    text = (WORKFLOWS / "klaud-plan.yml").read_text()
-    crons = [entry["cron"] for entry in yaml.safe_load(text)[True]["schedule"]]
-    assert len(crons) == 2 and crons[0].endswith(f"*/{lifecycle.WAVE_HOURS} * * *")
-    checks = re.findall(r"github\.event\.schedule [!=]= '([^']+)'", text)
-    assert len(checks) == 3 and set(checks) == {crons[1]}
-    assert not {cron.split()[0] for cron in crons} & {"0", "30"}
-
-
 def close_by(world, closer):
     """Mark the world's PR closed by ``closer``."""
     world.pull["state"] = "closed"

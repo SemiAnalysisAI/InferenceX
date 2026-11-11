@@ -5599,7 +5599,7 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
 # GLM-5.2 NVFP4 TensorRT-LLM AgentX on GB300 with Dynamo disaggregated serving.
 # Six topology variants use NIXL KV transfer and MTP3/MTP5 decoding.
 glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
-  image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc28.dev202609210001
+  image: nvcr.io/nvidia/tensorrt-llm/release:1.4.0rc2@sha256:93a3eaf1fa574813d608a7147735134bcfbd06d18d1aa98e8ee0d5da09e51e3a
   model: nvidia/GLM-5.2-NVFP4
   model-prefix: glm5.2
   runner: cluster:gb300-nv
@@ -5807,7 +5807,7 @@ dsv41flash-fp4-h100-sglang-agentic-dspark-dpa:
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [4, 8, 16, 20], srt-recipe: agentic.yaml }
 
 dsv41flash-fp4-gb200-vllm-agentic-dspark:
-  image: vllm/vllm-openai:cu134-nightly-1648fefab91204f3b15bf8062217316f07f2c4bb@sha256:bec82f0f8415716ccee67dc06d7d0064a9834682a5dc1c972bb422a79f7d535d
+  image: vllm/vllm-openai:cu134-nightly-cf5cea2da37d3dfed27d2e0aa3041c3e553c2d57@sha256:78d6583c2d9c63d69e4250733eb0aacaa30d9afd4f867b65f1b7f1f51e20da4a
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:gb200-nv
@@ -6530,9 +6530,9 @@ qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg:
           ep: 2
           dp-attn: false
 
-# Official 2026-10-20 CUDA 13 nightly, multiarch manifest pinned for B300.
+# Official 2026-11-07 CUDA 13 nightly, multiarch manifest pinned for B300.
 dsv41flash-fp4-b300-sglang-agentic-dspark:
-  image: lmsysorg/sglang:nightly-dev-cu13-20261020-ab580b2e@sha256:0af411bb320a95bb5e1c58b4c20c9852920a19aa9f12f148f69731b0dca3b576
+  image: lmsysorg/sglang:nightly-dev-cu13-20261107-e45e1d0c@sha256:81eb456abfaa3cf50a2ac463abe02705486f3f1e10929ca306e5929b937d5388
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:b300-dsxe
@@ -6548,9 +6548,9 @@ dsv41flash-fp4-b300-sglang-agentic-dspark:
       - { tp: 2, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [16, 32, 48], srt-recipe: agentic.yaml }
       - { tp: 2, ep: 2, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [64, 256], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: agentic.yaml }
 
-# Official 2026-10-14 CUDA 13 nightly, multiarch manifest pinned for B300.
+# Official 2026-11-07 CUDA 13 nightly, multiarch manifest pinned for B300.
 dsv41flash-fp4-b300-sglang-agentic-dspark-lowconc:
-  image: lmsysorg/sglang:nightly-dev-cu13-20261014-684fea8a@sha256:ddae0e399d3d94f7827f16183301cf8dac4cf0eae0ef25590b7dac5881d713d8
+  image: lmsysorg/sglang:nightly-dev-cu13-20261107-e45e1d0c@sha256:81eb456abfaa3cf50a2ac463abe02705486f3f1e10929ca306e5929b937d5388
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:b300-dsxe
@@ -7935,7 +7935,7 @@ kimik3.1-fp4-gb200-vllm-agentic-dspark-tp16-disagg:
         decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: false }
 
 minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg:
-  image: vllm/vllm-openai:minimax-m31-flash-arm64-cu134@sha256:5d76347628973fb80519a919a2f2740b6645b62cba3fe2bd87b25f111bd0e948
+  image: vllm/vllm-openai:cu134-arm64-1107-mdev@sha256:1b4a9b46c217ae3665b5e793341892d555b9bd5ca81230eed26e1b94a42b5801
   model: MiniMaxAI/MiniMax-M3.1-Flash
   model-prefix: minimaxm31flash
   runner: cluster:gb300-nv
@@ -7958,54 +7958,13 @@ minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg:
         worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
       - spec-decoding: mtp
         kv-offloading: none
-        conc-list: [4]
-        num-nodes: 1
-        srt-recipe: agg-variants.yaml:override_tp4_c4
-        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
-      - spec-decoding: mtp
-        kv-offloading: none
-        conc-list: [8]
-        num-nodes: 1
-        srt-recipe: agg-variants.yaml:override_tp4_c8
-        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
-      - spec-decoding: mtp
-        kv-offloading: none
         conc-list: [16]
         num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c16
         worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
-      - spec-decoding: mtp
-        kv-offloading: none
-        conc-list: [32]
-        num-nodes: 1
-        srt-recipe: agg-variants.yaml:override_tp4_c32
-        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
-    - dram-utilization: 1.0
-      search-space:
-      - spec-decoding: mtp
-        kv-offloading: dram
-        kv-offload-backend: { name: vllm-simple }
-        conc-list: [40]
-        num-nodes: 1
-        srt-recipe: agg-variants.yaml:override_tp4_c40
-        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
-      - spec-decoding: mtp
-        kv-offloading: dram
-        kv-offload-backend: { name: vllm-simple }
-        conc-list: [48]
-        num-nodes: 1
-        srt-recipe: agg-variants.yaml:override_tp4_c48
-        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
-      - spec-decoding: mtp
-        kv-offloading: dram
-        kv-offload-backend: { name: vllm-simple }
-        conc-list: [56]
-        num-nodes: 1
-        srt-recipe: agg-variants.yaml:override_tp4_c56
-        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
 
 minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg:
-  image: vllm/vllm-openai:minimax-m31-flash-arm64-cu134@sha256:5d76347628973fb80519a919a2f2740b6645b62cba3fe2bd87b25f111bd0e948
+  image: vllm/vllm-openai:cu134-arm64-1107-mdev@sha256:1b4a9b46c217ae3665b5e793341892d555b9bd5ca81230eed26e1b94a42b5801
   model: MiniMaxAI/MiniMax-M3.1-Flash
   model-prefix: minimaxm31flash
   runner: cluster:gb300-nv
@@ -8024,17 +7983,38 @@ minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg:
       search-space:
       - spec-decoding: mtp
         kv-offloading: dram
-        kv-offload-backend: { name: mooncake, version: 0.3.13.post1 }
-        conc-list: [280, 320, 360, 400]
-        srt-recipe: disagg-mooncake.yaml:override_3p2d8
-        prefill: { num-worker: 6, tp: 2, ep: 2, dp-attn: true }
-        decode: { num-worker: 1, tp: 8, ep: 8, dp-attn: true }
+        kv-offload-backend: { name: mooncake, version: 0.3.13.post1+hbm }
+        conc-list: [200]
+        srt-recipe: disagg-mooncake.yaml:override_1p1d_dep16_c200
+        prefill: { num-worker: 1, tp: 4, ep: 4, dp-attn: true }
+        decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: true }
       - spec-decoding: mtp
         kv-offloading: dram
-        kv-offload-backend: { name: mooncake, version: 0.3.13.post1 }
-        conc-list: [300, 360]
-        srt-recipe: disagg-mooncake.yaml:override_3p4d16
-        prefill: { num-worker: 6, tp: 2, ep: 2, dp-attn: true }
+        kv-offload-backend: { name: mooncake, version: 0.3.13.post1+hbm }
+        conc-list: [500]
+        srt-recipe: disagg-mooncake.yaml:override_3p1d_dep16_c500
+        prefill: { num-worker: 3, tp: 4, ep: 4, dp-attn: true }
+        decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: true }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: 0.3.13.post1+hbm }
+        conc-list: [600]
+        srt-recipe: disagg-mooncake.yaml:override_3p1d_dep16_c600
+        prefill: { num-worker: 3, tp: 4, ep: 4, dp-attn: true }
+        decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: true }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: 0.3.13.post1+hbm }
+        conc-list: [800]
+        srt-recipe: disagg-mooncake.yaml:override_4p1d_dep16_c800
+        prefill: { num-worker: 4, tp: 4, ep: 4, dp-attn: true }
+        decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: true }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: 0.3.13.post1+hbm }
+        conc-list: [800]
+        srt-recipe: disagg-mooncake.yaml:override_5p1d_dep16_c800
+        prefill: { num-worker: 5, tp: 4, ep: 4, dp-attn: true }
         decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: true }
 
 kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-disagg:
