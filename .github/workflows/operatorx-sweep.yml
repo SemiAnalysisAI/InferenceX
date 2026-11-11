@@ -46,6 +46,10 @@ on:
         description: Ingest the results into the OperatorX database (false for test runs)
         type: boolean
         default: true
+      low_priority:
+        description: Queue shards behind all other CI jobs (score 0, the lowest the scheduler gives)
+        type: boolean
+        default: false
   pull_request:
     paths:
       - operatorx/**
@@ -85,6 +89,7 @@ jobs:
           OPERATORX_WORLD_SIZES: ${{ inputs.world_sizes || '1' }}
           OPERATORX_MODE: ${{ inputs.mode || 'timing' }}
           OPERATORX_RECOVERY_RUN: ${{ inputs.recovery_run_id }}
+          OPERATORX_LOW_PRIORITY: ${{ inputs.low_priority && 'true' || 'false' }}
           OPERATORX_CHUNK_SIZE: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.chunk_size) || '500' }}
           PYTHONPATH: .:inferencex-e2e
         run: |
@@ -117,7 +122,8 @@ jobs:
           done
           echo "ingestable=$ingestable" >> "$GITHUB_OUTPUT"
           scored=$(printf '%s' '[{"runner":"operatorx","framework":"operatorx"}]' |
-            uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml python -m infx.workflows.ci_priority)
+            uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml python -m infx.workflows.ci_priority \
+              $([ "$OPERATORX_LOW_PRIORITY" = true ] && echo --criteria-json '["patchwork"]'))
           echo "priority=$(jq -r '.[0].priority' <<<"$scored")" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
