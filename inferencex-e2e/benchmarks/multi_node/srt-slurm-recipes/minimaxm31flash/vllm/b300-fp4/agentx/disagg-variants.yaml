@@ -36,7 +36,6 @@ base:
   - &mooncake-master
     name: mooncake-master
     type: mooncake-master
-    preamble: bash /configs/vllm-mooncake.sh
     args:
     # A store GET that outlives its lease sends the whole request back to recompute; 60 s was too short
     # for GETs queued behind a loaded pool.
@@ -73,12 +72,12 @@ base:
       MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
       MC_SLICE_SIZE: '1048576'
       MC_WORKERS_PER_CTX: '4'
+      MC_RDMA_SIGNAL_INTERVAL: '16'
       # The two non-EFA InfiniBand HCAs otherwise shift every NIC index EfaTransport selects.
       MC_MS_FILTERS: '@fabric.rdma-devices'
       # Same-node peers otherwise take libfabric's shm path, which copies on Mooncake's CQ poller thread.
       FI_EFA_ENABLE_SHM_TRANSFER: '0'
     preamble: &store-preamble |
-      bash /configs/vllm-mooncake-efa.sh
       python3 - <<'PY'
       import json, os
       json.dump({
@@ -108,6 +107,7 @@ base:
       MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
       MC_SLICE_SIZE: '1048576'
       MC_WORKERS_PER_CTX: '4'
+      MC_RDMA_SIGNAL_INTERVAL: '16'
       # The two non-EFA InfiniBand HCAs otherwise shift every NIC index EfaTransport selects.
       MC_MS_FILTERS: '@fabric.rdma-devices'
       # Same-node peers otherwise take libfabric's shm path, which copies on Mooncake's CQ poller thread.
@@ -129,6 +129,7 @@ base:
       MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
       MC_SLICE_SIZE: '1048576'
       MC_WORKERS_PER_CTX: '4'
+      MC_RDMA_SIGNAL_INTERVAL: '16'
       # The two non-EFA InfiniBand HCAs otherwise shift every NIC index EfaTransport selects.
       MC_MS_FILTERS: '@fabric.rdma-devices'
       # Same-node peers otherwise take libfabric's shm path, which copies on Mooncake's CQ poller thread.
@@ -150,6 +151,7 @@ base:
       MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
       MC_SLICE_SIZE: '1048576'
       MC_WORKERS_PER_CTX: '4'
+      MC_RDMA_SIGNAL_INTERVAL: '16'
       # The two non-EFA InfiniBand HCAs otherwise shift every NIC index EfaTransport selects.
       MC_MS_FILTERS: '@fabric.rdma-devices'
       # Same-node peers otherwise take libfabric's shm path, which copies on Mooncake's CQ poller thread.
@@ -210,6 +212,7 @@ base:
         MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
         MC_SLICE_SIZE: '1048576'
         MC_WORKERS_PER_CTX: '4'
+        MC_RDMA_SIGNAL_INTERVAL: '16'
         # The two non-EFA InfiniBand HCAs otherwise shift every NIC index EfaTransport selects.
         MC_MS_FILTERS: '@fabric.rdma-devices'
         # Same-node peers otherwise take libfabric's shm path, which copies on Mooncake's CQ poller thread.
@@ -299,7 +302,6 @@ base:
       node: dedicated
   srun_options:
     container-remap-root: ''
-  setup_script: vllm-mooncake-efa.sh
 
 # Each override is one point: the decode layout and its per-rank batch cap (max-num-seqs) set the tokens/s
 # per user, and the prefill worker count is the fewest that keeps every decode slot busy at that cap.
@@ -351,6 +353,7 @@ override_2p1d_dep2_dep8_bs3:
       MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
       MC_SLICE_SIZE: '1048576'
       MC_WORKERS_PER_CTX: '4'
+      MC_RDMA_SIGNAL_INTERVAL: '16'
       MC_MS_FILTERS: '@fabric.rdma-devices'
       FI_EFA_ENABLE_SHM_TRANSFER: '0'
     preamble: *store-preamble
@@ -368,6 +371,7 @@ override_2p1d_dep2_dep8_bs3:
       MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
       MC_SLICE_SIZE: '1048576'
       MC_WORKERS_PER_CTX: '4'
+      MC_RDMA_SIGNAL_INTERVAL: '16'
       MC_MS_FILTERS: '@fabric.rdma-devices'
       FI_EFA_ENABLE_SHM_TRANSFER: '0'
     preamble: *store-preamble
@@ -385,6 +389,7 @@ override_2p1d_dep2_dep8_bs3:
       MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
       MC_SLICE_SIZE: '1048576'
       MC_WORKERS_PER_CTX: '4'
+      MC_RDMA_SIGNAL_INTERVAL: '16'
       MC_MS_FILTERS: '@fabric.rdma-devices'
       FI_EFA_ENABLE_SHM_TRANSFER: '0'
     preamble: *store-preamble
@@ -402,6 +407,7 @@ override_2p1d_dep2_dep8_bs3:
       MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
       MC_SLICE_SIZE: '1048576'
       MC_WORKERS_PER_CTX: '4'
+      MC_RDMA_SIGNAL_INTERVAL: '16'
       MC_MS_FILTERS: '@fabric.rdma-devices'
       FI_EFA_ENABLE_SHM_TRANSFER: '0'
     preamble: *store-preamble
@@ -442,6 +448,7 @@ override_8p1d_dep2_dep8_bs8:
       MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
       MC_SLICE_SIZE: '1048576'
       MC_WORKERS_PER_CTX: '4'
+      MC_RDMA_SIGNAL_INTERVAL: '16'
       MC_MS_FILTERS: '@fabric.rdma-devices'
       FI_EFA_ENABLE_SHM_TRANSFER: '0'
     preamble: *store-preamble
@@ -459,6 +466,7 @@ override_8p1d_dep2_dep8_bs8:
       MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
       MC_SLICE_SIZE: '1048576'
       MC_WORKERS_PER_CTX: '4'
+      MC_RDMA_SIGNAL_INTERVAL: '16'
       MC_MS_FILTERS: '@fabric.rdma-devices'
       FI_EFA_ENABLE_SHM_TRANSFER: '0'
     preamble: *store-preamble
@@ -476,6 +484,7 @@ override_8p1d_dep2_dep8_bs8:
       MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
       MC_SLICE_SIZE: '1048576'
       MC_WORKERS_PER_CTX: '4'
+      MC_RDMA_SIGNAL_INTERVAL: '16'
       MC_MS_FILTERS: '@fabric.rdma-devices'
       FI_EFA_ENABLE_SHM_TRANSFER: '0'
     preamble: *store-preamble
@@ -493,6 +502,7 @@ override_8p1d_dep2_dep8_bs8:
       MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
       MC_SLICE_SIZE: '1048576'
       MC_WORKERS_PER_CTX: '4'
+      MC_RDMA_SIGNAL_INTERVAL: '16'
       MC_MS_FILTERS: '@fabric.rdma-devices'
       FI_EFA_ENABLE_SHM_TRANSFER: '0'
     preamble: *store-preamble
