@@ -12652,7 +12652,7 @@
     - agentic-coding
   description:
     - "Add Qwen3.8-Flash-Next FP8 AgentX on MI300X with the digest-pinned SGLang v0.5.22 ROCm 7.2.0 MI30x image and MTP (EAGLE 3/1/4)."
-    - "TP2/EP2 at concurrency 4, 6, 8, 12, 16, 20, 24 and 32; TP4/EP4 at concurrency 4."
-    - "ReplaySSM speculative verification from concurrency 8 up and bfloat16 SSM states at concurrency 24 and 32."
+    - "TP2/EP2 at concurrency 4, 6, 8, 10, 12, 14 and 16; TP4/EP4 at concurrency 4."
+    - "ReplaySSM speculative verification from concurrency 8 up."
     - "Use AITER attention with the Triton FP8 MoE runner (SGLANG_USE_AITER=0), following the upstream gfx942 nightly test."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4988
