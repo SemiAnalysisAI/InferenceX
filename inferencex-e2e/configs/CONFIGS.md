@@ -265,7 +265,8 @@ schema; unknown keys fail.
 - `slurm.srt-slurm` is the cluster's srt-slurm profile: `volume-mounts` maps
   volumes every job mounts to container paths, `mounts` does the same for host
   paths outside the volumes (devices), `agentic-volume-mounts` adds world-writable
-  volumes for multi-node AgentX jobs, `power-exporter-port` is the DCGM exporter port
+  volumes for multi-node AgentX jobs (a single-node AgentX benchmark mounts only its
+  `aiperf-cache`, the shared replay dataset cache), `power-exporter-port` is the DCGM exporter port
   of multi-node power points (without it they use `extra.default_gpu_exporter`), `cpu-power-exporter` (`source: acpi` or `rapl`) is the CPU power exporter native
   single-node points and `cpu-power` rows bind beside it (`make setup` installs it from the pinned srt-slurm
   release; a RAPL job's host setup gives the job user the RAPL counters until teardown, so `rapl`
