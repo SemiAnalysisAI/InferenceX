@@ -12669,3 +12669,13 @@
     - "No point changes: concurrency 1, 2, 4, 8, 16 and 32 on TP8, TP4 and TP2 (18 points), all re-measured on the new image."
     - "DSpark draft: vLLM builds it with the checkpoint's own quantization config and the target's fp8_ds_mla KV cache, and its weights are used as shipped (FP8 E4M3 with UE8M0 block scales, MXFP4 routed experts). On the TP4 points --monokernel also runs the routed-expert FFN of the three draft layers as one launch. That launch quantizes the FFN input to MXFP8 against the same MXFP4 expert weights, as it does for the target layers, where vLLM's gfx942 MoE multiplies bf16 activations with them. The draft weights, its KV cache and its attention are unchanged, and the target model's output does not depend on this launch, only how many drafts it accepts."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4617
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
+    - minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg
+  scenario-type: [agentic-coding]
+  description:
+    - "Set stream-interval 20 on every role (prefill, decode and aggregated); it was unset, so vLLM streamed every token. The whole curve is re-measured."
+    - "P/D (DEP4 prefill + DEP16 decode, max-cudagraph-capture-size = 8 x max-num-seqs): keep 1 prefill at conc 200 (max-num-seqs 5), 3 prefill at conc 500 (10) and 5 prefill at conc 800 (22); add 4 prefill at conc 640 (16), 680 (16) and 700 (17), 5 prefill at conc 850 (22), and 6 prefill at conc 900 (20), 950 (22) and 1000 (24). Drop 3 prefill at conc 600 and 4 prefill at conc 800."
+    - "Aggregated TP4: prefill-schedule-interval 24 at every point; keep concurrency 1 and 16 and add 4 (max-num-seqs 8), 8 (16) and 32 (64). The image is unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4998
