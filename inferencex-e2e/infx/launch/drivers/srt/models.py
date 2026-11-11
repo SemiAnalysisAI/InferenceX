@@ -74,6 +74,7 @@ OVERRIDES: dict[str, tuple[Override, ...]] = {
             require_config=True,
             single_node_staged=True,
         ),
+        Override(Match(any_of("hy3"), any_of("fp8"), any_of("sglang")), single_node_staged=True),
         Override(Match(model_glob="*/Muse-Spark-Open-816B-A42B-NVFP4"), single_node_staged=True),
         Override(
             Match(any_of("dsr1"), any_of("fp8"), any_of("dynamo-trt")),
