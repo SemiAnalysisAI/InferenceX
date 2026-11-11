@@ -360,6 +360,22 @@ Reuse fails closed when authorized but ineligible or invalid. Pushes to `main`
 never run a sweep: `run-sweep.yml` is PR-only, and without reuse authorization
 the Merge Ingest run fails and nothing is benchmarked or ingested.
 
+## Stored Artifact Redaction
+
+Any signed-in GitHub user can download Actions artifacts, so benchmark,
+multi-node, SpeedBench AL, and profile jobs run `Redact stored artifacts`
+(`python -m infx.results.redact`) on exactly the files their log and result
+uploads include, right before the first of them. It rewrites text files,
+`.gz` files, and `.tar.gz` members in place. Credentials and URL passwords
+become `***REDACTED***`, Oracle VCN domains keep only their host label, and
+private, CGNAT, link-local, and public IP addresses become `***REDACTED-<hex6>***`.
+The tag is an HMAC under a random key generated for that job, so one address
+keeps one tag within a job but cannot be linked across jobs. Node, cluster,
+and Slurm names, paths, GPU UUIDs and serials, MAC addresses, ports, image
+references, loopback addresses, and version strings are kept. A file whose
+sha256 a JSON `*sha256` field records, such as power `samples.csv`, is left
+unchanged with a warning. Profile traces and live job logs are not redacted.
+
 ## Repository Scope
 
 Scheduled and run-completion jobs (Klaud, the runner offline digest,
@@ -372,7 +388,7 @@ configured by these repository variables:
 | Variable          | Default                                                       | Effect                                                                                                                                                                                                                                                         |
 | ----------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `APP_REPO`        | `SemiAnalysisAI/InferenceX-app`                               | App repository that `merge-ingest`, `recover-reused-ingest`, `operatorx-sweep`, and `stage-results` dispatch ingest, video, and staging events to, and the only source the ingest and staging callbacks accept. `FRONTEND_PAT` must be able to dispatch to it. |
-| `STAGING_APP_URL` | `https://inferencemax-app-git-staging-semianalysisai.vercel.app` | Origin of that app's staging site, without a trailing slash. Staged-run comments link to it, and the staging callback accepts chart links only on it. Set it to the app repository's own `STAGING_APP_URL`.                                                   |
+| `STAGING_APP_URL` | Required, no default                                          | Origin of that app's staging site, without a trailing slash. Staged-run comments link to it, and the staging callback accepts chart links only on it. Set it to the app repository's own `STAGING_APP_URL`; the callback fails while it is unset.               |
 
 ## Validation Architecture
 

@@ -1,0 +1,115 @@
+{
+  "key": "test-key",
+  "cases": [
+    {
+      "name": "private ipv4 keeps port",
+      "input": "connect http://172.29.37.221:8000/v1",
+      "output": "connect http://***REDACTED-f58c3e***:8000/v1"
+    },
+    {
+      "name": "same ip same tag, ports differ",
+      "input": "10.3.10.34:9405 10.3.10.35:9405 10.3.10.34:7500",
+      "output": "***REDACTED-51671e***:9405 ***REDACTED-050a41***:9405 ***REDACTED-51671e***:7500"
+    },
+    {
+      "name": "public ipv4",
+      "input": "ssh-keygen -F 64.139.223.123",
+      "output": "ssh-keygen -F ***REDACTED-06b842***"
+    },
+    {
+      "name": "cgnat ipv4",
+      "input": "peer 100.64.1.9 up",
+      "output": "peer ***REDACTED-ae47f2*** up"
+    },
+    {
+      "name": "sentence-final ip",
+      "input": "Host IP: 10.30.1.165.",
+      "output": "Host IP: ***REDACTED-a3817e***."
+    },
+    {
+      "name": "json address value",
+      "input": "{\"MASTER_ADDR\": \"203.0.113.7\"}",
+      "output": "{\"MASTER_ADDR\": \"***REDACTED-86a251***\"}"
+    },
+    {
+      "name": "loopback and unspecified kept",
+      "input": "bind 0.0.0.0:8000 then 127.0.0.1:9000",
+      "output": "bind 0.0.0.0:8000 then 127.0.0.1:9000"
+    },
+    {
+      "name": "pip pin kept",
+      "input": "\"z3-solver==4.15.4.0\",",
+      "output": "\"z3-solver==4.15.4.0\","
+    },
+    {
+      "name": "wheel name kept",
+      "input": "nvidia_cudnn_cu13-9.20.0.48-py3-none-any.whl",
+      "output": "nvidia_cudnn_cu13-9.20.0.48-py3-none-any.whl"
+    },
+    {
+      "name": "json version map kept",
+      "input": "{\"opencv-python-headless\":\"4.13.0.92\"}",
+      "output": "{\"opencv-python-headless\":\"4.13.0.92\"}"
+    },
+    {
+      "name": "private ip in version map still redacted",
+      "input": "{\"weird\":\"10.0.0.5\"}",
+      "output": "{\"weird\":\"***REDACTED-4000fa***\"}"
+    },
+    {
+      "name": "longer dotted run kept",
+      "input": "build 1.2.3.4.5",
+      "output": "build 1.2.3.4.5"
+    },
+    {
+      "name": "ipv6",
+      "input": "addr [fd00:1:2::3]:29500",
+      "output": "addr [***REDACTED-8db16c***]:29500"
+    },
+    {
+      "name": "ipv6 loopback kept",
+      "input": "listen [::1]:8000",
+      "output": "listen [::1]:8000"
+    },
+    {
+      "name": "mac address kept",
+      "input": "mac 04:90:81:37:24:68",
+      "output": "mac 04:90:81:37:24:68"
+    },
+    {
+      "name": "timestamp kept",
+      "input": "[W826 06:57:11.697279908 TCPStore.cpp:125]",
+      "output": "[W826 06:57:11.697279908 TCPStore.cpp:125]"
+    },
+    {
+      "name": "oracle vcn domain",
+      "input": "remote=[watchtower-navy-cn16.sub07252334101.gb200manual.oraclevcn.com]:29501",
+      "output": "remote=[watchtower-navy-cn16.***REDACTED***]:29501"
+    },
+    {
+      "name": "internal node names kept",
+      "input": "im-gb300-r03-c001.gb300.internal: timedatectl NTPSynchronized=yes",
+      "output": "im-gb300-r03-c001.gb300.internal: timedatectl NTPSynchronized=yes"
+    },
+    {
+      "name": "gpu uuid kept",
+      "input": "GPU-9b587c56-f016-a909-bdc7-47a717c50e25",
+      "output": "GPU-9b587c56-f016-a909-bdc7-47a717c50e25"
+    },
+    {
+      "name": "hf token",
+      "input": "HF_TOKEN=hf_abcdefghijklmnopqrstuvwxyzABCDEF12",
+      "output": "HF_TOKEN=***REDACTED***"
+    },
+    {
+      "name": "github token",
+      "input": "token ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "output": "token ***REDACTED***"
+    },
+    {
+      "name": "url password and ip host",
+      "input": "postgres://reader:s3cret@10.1.2.3:5432/db",
+      "output": "postgres://reader:***REDACTED***@***REDACTED-d722dd***:5432/db"
+    }
+  ]
+}

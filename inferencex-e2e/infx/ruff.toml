@@ -1,5 +1,5 @@
 target-version = "py312"
-per-file-target-version = { "bench/**" = "py310" }
+per-file-target-version = { "bench/**" = "py310", "results/redact.py" = "py310" }
 line-length = 100
 extend-exclude = ["tests"]
 
