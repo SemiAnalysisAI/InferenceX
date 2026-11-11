@@ -1,7 +1,7 @@
 name: PR Recipe Reminder
 
 on:
-  pull_request:
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
     types: [opened, reopened, ready_for_review, review_requested]
     paths:
       - 'inferencex-e2e/configs/amd-master.yaml'
@@ -31,9 +31,11 @@ jobs:
             const issue_number = context.payload.pull_request.number;
 
             // Check if we already left this comment to avoid duplicates
-            const comments = await github.rest.issues.listComments({ owner, repo, issue_number });
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number, per_page: 100,
+            });
             const marker = '<!-- recipe-reminder -->';
-            const alreadyCommented = comments.data.some(c => c.body.includes(marker));
+            const alreadyCommented = comments.some(c => c.body.includes(marker));
             if (alreadyCommented) {
               core.info('Recipe reminder already posted, skipping.');
               return;
