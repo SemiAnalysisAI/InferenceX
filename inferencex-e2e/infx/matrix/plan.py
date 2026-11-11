@@ -73,16 +73,25 @@ def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
     return "\n".join(added_lines)
 
 
-PULL_REQUEST_LINK = re.compile(r"https://github\.com/([^/]+/[^/]+)/pull/[0-9]+")
+PULL_REQUEST_LINK = re.compile(
+    r"https?://(?:www\.)?github\.com/([^/\s]+/[^/\s]+)/pull/([0-9]+)(?:[/?#]\S*)?", re.IGNORECASE
+)
 
 
-def entries_from_repository(entries: list, repository: str) -> list:
-    """Return the entries whose pr-link is not a pull request in a repository other than ``repository``."""
+def entries_from_repository(entries: list, repository: str, pull_request: int | None) -> list:
+    """Return the entries except those linking another repository's pull request.
+
+    A link numbered ``pull_request``, the pull request the push merged, is kept whatever its owner.
+    """
 
     def elsewhere(entry: object) -> bool:
-        link = str(entry.get("pr-link", "")) if isinstance(entry, dict) else ""
+        link = str(entry.get("pr-link", "")).strip() if isinstance(entry, dict) else ""
         match = PULL_REQUEST_LINK.fullmatch(link)
-        return match is not None and match.group(1).lower() != repository.lower()
+        return (
+            match is not None
+            and match.group(1).lower() != repository.lower()
+            and int(match.group(2)) != pull_request
+        )
 
     return [entry for entry in entries if not elsewhere(entry)]
 
@@ -552,7 +561,12 @@ def main() -> None:
     )
     parser.add_argument(
         "--repository",
-        help="Plan only entries whose pr-link is not a pull request in another owner/name repository.",
+        help="Leave out entries whose pr-link is a pull request in another owner/name repository.",
+    )
+    parser.add_argument(
+        "--pull-request",
+        type=int,
+        help="Number of the pull request the push merged; --repository keeps entries linking it.",
     )
     args = parser.parse_args()
 
@@ -563,7 +577,7 @@ def main() -> None:
 
     changelog_data = yamlio.load(added_yaml, yamlio.UniqueKeySafeLoader)
     if args.repository and isinstance(changelog_data, list):
-        changelog_data = entries_from_repository(changelog_data, args.repository)
+        changelog_data = entries_from_repository(changelog_data, args.repository, args.pull_request)
         if not changelog_data:
             metadata = ChangelogMetadata(base_ref=args.base_ref, head_ref=args.head_ref, entries=[])
             empty = ChangelogMatrixEntry(changelog_metadata=metadata)

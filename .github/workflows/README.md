@@ -331,8 +331,9 @@ and sends one `repository_dispatch` to the app repository (`APP_REPO`, below): `
 (with `database-target: production`) when the delta has agentic entries,
 otherwise `ingest-results`. The payload's `source-run-id` is the reused PR
 `run-sweep.yml` run and its `merge-run-id` is the Merge Ingest run. The delta
-leaves out entries whose `pr-link` is a pull request in another repository; when
-none remain, Merge Ingest uploads and dispatches nothing.
+leaves out entries whose `pr-link` is a pull request in another repository,
+unless it has the number of the pull request the push merged; when none remain,
+Merge Ingest uploads and dispatches nothing. Recovery applies the same rule.
 
 For a nonempty delta consisting entirely of `retired: true` entries, the planner
 verifies that the selected configs existed in the base and are absent from the
@@ -362,12 +363,11 @@ the Merge Ingest run fails and nothing is benchmarked or ingested.
 ## Repository Scope
 
 Scheduled and run-completion jobs (Klaud, the runner offline digest,
-`close-inactive`, AL gate prompt warming, video quality scoring) and the pull
-request bots (Claude review, recipe reminder, infx diff comment, CODEOWNER
-sign-off verification) run only in `SemiAnalysisAI/InferenceX`.
-`test_upstream_only_automation.py` fails for an unattended job without that
-check. Sweeps, CI, staging, and ingest run in any repository, configured by
-these repository variables:
+`close-inactive`, scheduled AL gate prompt warming, video quality scoring) and
+the pull request bots (Claude review, recipe reminder, infx diff comment,
+CODEOWNER sign-off verification) run only in `SemiAnalysisAI/InferenceX`.
+Sweeps, CI, staging, ingest, and manual dispatches run in any repository,
+configured by these repository variables:
 
 | Variable          | Default                                                       | Effect                                                                                                                                                                                                                                                         |
 | ----------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

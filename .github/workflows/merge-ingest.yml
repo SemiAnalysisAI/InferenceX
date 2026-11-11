@@ -36,11 +36,21 @@ jobs:
 
             - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
+            - name: Find the merged pull request
+              id: merged
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: |
+                  number=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" \
+                    --jq "[.[] | select(.merge_commit_sha == \"$GITHUB_SHA\")][0].number // empty")
+                  echo "number=$number" >> "$GITHUB_OUTPUT"
+
             - name: Extract changelog metadata
               id: plan
               env:
                   PUSH_BEFORE: ${{ github.event.before }}
                   PUSH_AFTER: ${{ github.event.after }}
+                  PULL_REQUEST: ${{ steps.merged.outputs.number }}
               run: |
                   source "$GITHUB_WORKSPACE/inferencex-e2e/benchmarks/check_env.sh"
                   check_env_vars GITHUB_WORKSPACE RUNNER_TEMP GITHUB_OUTPUT GITHUB_REPOSITORY PUSH_BEFORE PUSH_AFTER
@@ -50,7 +60,8 @@ jobs:
                     --changelog-file perf-changelog.yaml \
                     --base-ref "$PUSH_BEFORE" \
                     --head-ref "$PUSH_AFTER" \
-                    --repository "$GITHUB_REPOSITORY" > "$RUNNER_TEMP/plan.json"
+                    --repository "$GITHUB_REPOSITORY" \
+                    ${PULL_REQUEST:+--pull-request "$PULL_REQUEST"} > "$RUNNER_TEMP/plan.json"
                   jq -c '.changelog_metadata' "$RUNNER_TEMP/plan.json" > "$GITHUB_WORKSPACE/changelog_metadata.json"
                   agentic=$(jq '((.single_node.agentic // []) + (.multi_node.agentic // [])) | length > 0' "$RUNNER_TEMP/plan.json")
                   entries=$(jq '.changelog_metadata.entries | length > 0' "$RUNNER_TEMP/plan.json")

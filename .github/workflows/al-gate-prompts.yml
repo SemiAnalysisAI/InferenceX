@@ -32,7 +32,9 @@ permissions:
 jobs:
   warm:
     name: warm
-    if: github.repository == 'SemiAnalysisAI/InferenceX' || inputs.upload
+    if: >-
+      github.event_name == 'workflow_dispatch' || github.repository == 'SemiAnalysisAI/InferenceX'
+      || inputs.upload
     runs-on: ubuntu-latest
     # A sweep's evals wait for this job: a stall ends it and they run without the gate.
     timeout-minutes: ${{ inputs.upload && 30 || 360 }}
