@@ -1002,16 +1002,19 @@ Report `retuned_deltas` (throughput and interactivity change per point) in the r
 plus any eval lane change from Check 2. For an image-only bump, also compare with the
 closest prior run on the old image. A small diff is not evidence of low risk.
 
-### (i) AgentX stream interval is at most 20
+### (i) AgentX stream interval is at most 60
 Every `agentic-coding` point the PR adds or reruns must have an effective stream interval
-of at most 20 tokens in every serving role (aggregated, prefill, decode). Resolve the
-effective value at the PINNED SHA through every control surface: `stream-interval` /
+at most 60 tokens (≤ 60, inclusive) in every serving role (aggregated, prefill, decode).
+There is no policy-imposed lower bound; valid engine-supported values below 20 are allowed.
+Resolve the effective value at the PINNED SHA through every control surface: `stream-interval` /
 `--stream-interval` (SGLang, vLLM), `stream_interval` (TRT-LLM and Dynamo engine
 configs), shared `*-variants.yaml` or base recipes, and benchmark scripts. An unset value
-uses the pinned engine's default, which must also be at most 20. FAIL on any value above
-20, naming the config key, concurrency, role, file and line. Untouched points that are not
-rerun are not assessed, except that an `append-only: true` entry FAILs when any existing
-point of the same AgentX curve runs above 20. There are no per-submission exceptions. See
+uses the pinned engine's default, which must also be at most 60; compliant defaults need no
+explicit override. FAIL on any value above 60, naming the config key, concurrency,
+role, file and line. Untouched points that are not rerun are not assessed, except that an
+`append-only: true` entry FAILs when any
+existing point of the same AgentX curve runs above 60. There are no
+per-submission exceptions. See
 [AgentX stream interval](../inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md#agentx-stream-interval).
 
 ## Verdict and output

@@ -1,12 +1,3 @@
-# MiniMax-M3.1-Flash AgentX on MI355X with vLLM, following the MI355X TP4
-# recipe at https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3.1-Flash and
-# https://vllm.ai/blog/2026-10-23-minimax-m31-flash, with native DSpark.
-# Checkpoint: AMD's Quark export amd/MiniMax-M3.1-Flash-Quark-MXFP4 (routed
-# experts stored in OCP MXFP4, run as W4A4 on the AITER MoE; every other layer
-# and the dspark/ draft as in MiniMaxAI/MiniMax-M3.1-Flash). Long prefill
-# steps run with dual-batch overlap (DBO). Sequence-parallel prefill
-# (VLLM_ROCM_MINIMAX_M3_SP_PREFILL) stays off: the image does not
-# enable it on this checkpoint.
 base:
   schema: 2
   name: minimaxm31flash-fp4-mi355x-vllm-agentic
@@ -36,7 +27,7 @@ base:
       args:
         served-model-name: amd/MiniMax-M3.1-Flash-Quark-MXFP4
         tensor-parallel-size: 4
-        # Reserve headroom for DBO prefill and allocations after memory profiling.
+        # Reserve headroom for allocations after memory profiling.
         gpu-memory-utilization: 0.85
         language-model-only: true
         trust-remote-code: true
@@ -54,13 +45,7 @@ base:
         disable-hybrid-kv-cache-manager: true
         enable-prefix-caching: true
         max-model-len: 1048576
-        # 32K-token prefill steps, so DBO (from 16384 tokens) can split them.
         max-num-batched-tokens: 32768
-        # DBO: a prefill step of 16384+ tokens runs as two microbatches, one's
-        # all-reduce under the other's compute; decode steps stay whole.
-        enable-dbo: true
-        dbo-prefill-token-threshold: 16384
-        dbo-decode-token-threshold: 32768
         disable-uvicorn-access-log: true
       env:
         # The export's recommended MoE setup: AITER MoE, and the MXFP8 shared
@@ -68,17 +53,25 @@ base:
         VLLM_ROCM_USE_AITER: '1'
         VLLM_ROCM_USE_AITER_MOE: '1'
         VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: '0'
-        # DBO needs the V2 model runner (the V1 runner refuses DSpark).
         VLLM_USE_V2_MODEL_RUNNER: '1'
-        # Bind each HIP stream to one hardware queue. The image's HIP moves an
-        # active stream to the least loaded queue, which can put DBO's
-        # all-reduce stream on the compute stream's queue and serialize them.
         DEBUG_HIP_DYNAMIC_QUEUES: '0'
         PYTHONNOUSERSITE: '1'
         PYTHONUNBUFFERED: '1'
         VLLM_ENGINE_READY_TIMEOUT_S: '7200'
         # Outlast AIPerf's pooled-connection idle gaps.
         VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '900'
+        # Rust API frontend from the image's vllm package: frees the Python
+        # API server from tokenization and streaming at AgentX request rates.
+        VLLM_USE_RUST_FRONTEND: '1'
+        # The draft LM head's skinny GEMM takes about 5x longer at exactly 5
+        # requests than at 4 (0.28 vs 0.05 ms per call); the regular GEMM has no such cliff.
+        VLLM_ROCM_USE_SKINNY_GEMM: '0'
+        # Parallel top-16 block selection for the NVFP4 indexer; the FP8 indexer
+        # of the mono points bypasses it.
+        VLLM_ROCM_PARALLEL_INDEX_TOPK: '1'
+        # Fused FlyDSL kernels for DSpark 7 draft steps of up to 10 requests;
+        # the 3-token draft keeps the stock draft layers.
+        VLLM_ROCM_MINIMAX_M3_MONO_DRAFTER: '1'
   benchmark:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
@@ -92,7 +85,7 @@ base:
 # and steps with prefill run on the normal path, eager. AgentX tool-call gaps
 # keep fewer requests decoding than CONC, so c4 and c8 still reach it. Mono
 # needs FP8 KV and indexer caches in the shuffled KV layout and no piecewise
-# graphs. No DBO here: 8192-token prefill steps on the V1 runner.
+# graphs. 8192-token prefill steps on the V1 runner.
 zip_override_tp4_dspark7_mono:
   roles:
     agg:
@@ -102,9 +95,6 @@ zip_override_tp4_dspark7_mono:
         attention-config: '{"indexer_kv_dtype":"fp8"}'
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
         max-num-batched-tokens: 8192
-        enable-dbo: null
-        dbo-prefill-token-threshold: null
-        dbo-decode-token-threshold: null
         speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         max-num-seqs: [2, 4, 8, 16]
       env:
@@ -116,12 +106,19 @@ zip_override_tp4_dspark7_mono:
     env:
       CONC: ['1', '2', '4', '8']
 
-# c16-c32: DSpark 7 on the NVFP4 KV cache with DBO, at the base 0.85 memory
-# budget (headroom for DBO prefill). Admission is 2x CONC.
+# c16-c32: DSpark 7 on the NVFP4 KV cache. Breakable CUDA graphs capture the
+# prefill and mixed steps too. The capture list (every multiple of 8 up to 256,
+# then 384-8192; a coarse list makes decode about 10% slower) is a deprecated
+# alias on the V2 runner that sets both the prefill token sizes and the decode
+# request sizes (1-32 at c16); the new per-kind fields would change the decode
+# graphs. Admission is 2x CONC.
 zip_override_tp4_dspark7:
   roles:
     agg:
+      env:
+        VLLM_USE_BREAKABLE_CUDAGRAPH: '1'
       args:
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,4,8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192,200,208,216,224,232,240,248,256,384,512,768,1024,1536,2048,3072,4096,6144,8192]}'
         speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         max-num-seqs: [32, 64]
   benchmark:
@@ -129,7 +126,7 @@ zip_override_tp4_dspark7:
       CONC: ['16', '32']
 
 # c64: DSpark 3 (the blog's MI355X draft length from c8) on the NVFP4 KV cache
-# with DBO, sequence-parallel prefill, 0.90 memory utilization, and a CPU KV tier. The c64 working set
+# with sequence-parallel prefill, 0.90 memory utilization, and a CPU KV tier. The c64 working set
 # outgrows the 14.2M-token GPU KV cache; SimpleCPUOffloadConnector (eager)
 # holds about 24M tokens in 1349 GB of host memory (dram-utilization 0.9 of the
 # TP4 lane) and serves the misses.
