@@ -285,7 +285,7 @@ override_tp2_c64:
     env:
       CONC: '64'
 
-override_dp2_umbp_c128:
+override_dp2_umbp_c256:
   frontend: &dp2_router
     type: vllm-router
     args:
@@ -333,18 +333,6 @@ override_dp2_umbp_c128:
         monokernel: null
         prefill-schedule-interval: 11
         kv-transfer-config: '{"kv_connector":"UMBPStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"mode":"standalone","endpoint":"unix:///tmp/umbp/standalone.grpc.sock"}}'
-  benchmark:
-    env:
-      CONC: '128'
-      KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '449'
-
-override_dp2_umbp_c256:
-  frontend: *dp2_router
-  setup_script: vllm-router.sh
-  services: *umbp_server
-  roles:
-    agg: *dp2_umbp_agg
   benchmark:
     env:
       CONC: '256'
