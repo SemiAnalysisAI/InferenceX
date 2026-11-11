@@ -12634,7 +12634,7 @@
     - agentic-coding
   description:
     - "Add native GLM-5.3 FP8 AgentX on MI300X with the digest-pinned SGLang v0.5.22 ROCm 7.2.0 MI30x image, TP8 and MTP (EAGLE 3/1/4)."
-    - "GPU-resident KV at concurrency 1, 2, 3, 4, 5 and 6; SGLang HiCache with the auto-sized host tier at concurrency 8 and 10."
+    - "GPU-resident KV at concurrency 1, 2 and 3; SGLang HiCache with the auto-sized host tier at concurrency 4, 6, 8 and 10, where sessions overflow the 1.28M-token GPU pool."
     - "Use gfx942 TileLang DSA with Torch DSA top-k, FP8 KV, full 1M context, 8k prefill chunks and mem-fraction-static 0.82."
-    - "Serve from the node-local HF cache with HF_HUB_OFFLINE=1; concurrent launches otherwise hit the Hub 429 API rate limit."
+    - "Pin the checkpoint revision; nodes without the 704 GB snapshot download it on first launch, so the health check allows 150 minutes."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4986

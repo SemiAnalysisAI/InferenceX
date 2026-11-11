@@ -12,10 +12,10 @@ base:
     tachometer:
       enabled: false
   engine: sglang
-  # Loading 756 GB of weights plus first-request kernel tuning outlasts the 1800 s default.
+  # A node without the 704 GB snapshot downloads it first: 80 min at the 9 GB/min seen for concurrent pulls here, plus 10 min to load.
   health_check:
     interval_seconds: 10
-    max_attempts: 540
+    max_attempts: 900
   roles:
     agg:
       nodes: 1
@@ -46,9 +46,6 @@ base:
         enable-metrics: true
         enable-cache-report: true
       env:
-        # Concurrent launches otherwise exhaust the Hub API rate limit; weights are in the node-local cache.
-        HF_HUB_OFFLINE: '1'
-        TRANSFORMERS_OFFLINE: '1'
         PYTHONNOUSERSITE: '1'
         # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
@@ -57,21 +54,19 @@ base:
         SGLANG_OPT_USE_TOPK_V2: 'false'
   benchmark:
     env:
-      HF_HUB_OFFLINE: ''
-      TRANSFORMERS_OFFLINE: ''
       # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       # Long responses admitted near the end of the window can take minutes to drain.
       AIPERF_BENCHMARK_GRACE_PERIOD: '1800'
 
-# Admission and the decode graph batch are 2x CONC.
+# Sub-agent requests arrive in bursts: at CONC 1 a cap of 2 left requests queued while KV usage peaked at 31%, so admission is 4x CONC with a floor of 8.
 override_tp8_c1:
   roles:
     agg:
       args:
-        max-running-requests: 2
-        cuda-graph-max-bs-decode: 2
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
   benchmark:
     env:
       CONC: '1'
@@ -81,8 +76,8 @@ override_tp8_c2:
   roles:
     agg:
       args:
-        max-running-requests: 4
-        cuda-graph-max-bs-decode: 4
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
   benchmark:
     env:
       CONC: '2'
@@ -92,45 +87,43 @@ override_tp8_c3:
   roles:
     agg:
       args:
-        max-running-requests: 6
-        cuda-graph-max-bs-decode: 6
+        max-running-requests: 12
+        cuda-graph-max-bs-decode: 12
   benchmark:
     env:
       CONC: '3'
       KV_OFFLOADING: none
 
-override_tp8_c4:
+# Six sessions overflow the 1.28M-token GPU pool (55-67% prefix hits, 85 min warmup), so CONC 4 and up use the host tier; admission is 2x CONC.
+override_tp8_c4_hicache:
   roles:
     agg:
       args:
         max-running-requests: 8
         cuda-graph-max-bs-decode: 8
+        enable-hierarchical-cache: true
+        hicache-host-memory-fraction: 0.60
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
   benchmark:
     env:
       CONC: '4'
-      KV_OFFLOADING: none
+      KV_OFFLOADING: dram
 
-override_tp8_c5:
-  roles:
-    agg:
-      args:
-        max-running-requests: 10
-        cuda-graph-max-bs-decode: 10
-  benchmark:
-    env:
-      CONC: '5'
-      KV_OFFLOADING: none
-
-override_tp8_c6:
+override_tp8_c6_hicache:
   roles:
     agg:
       args:
         max-running-requests: 12
         cuda-graph-max-bs-decode: 12
+        enable-hierarchical-cache: true
+        hicache-host-memory-fraction: 0.60
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
   benchmark:
     env:
       CONC: '6'
-      KV_OFFLOADING: none
+      KV_OFFLOADING: dram
 
 override_tp8_c8_hicache:
   roles:
