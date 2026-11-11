@@ -12733,3 +12733,10 @@
     - "Single-node: row-sharded prefill MoE and residual stream and fused DFLASH ring locations at every concurrency (was 48 and 56 only); add concurrency 24 with 13 running requests and 5-token verify."
     - "Add 1P1D PD at concurrency 128 and 144: TP8 DCP8 prefill and decode, KV over Mooncake RDMA, prefill HiCache."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4928
+
+- config-keys:
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+  description:
+    - "Update the vLLM ROCm nightly image from edad8b03 to f5d93296, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5014
+  scenario-type: [agentic-coding]
