@@ -9,7 +9,7 @@ Inference operator benchmarks: times one op at a time on NVIDIA and AMD through 
 | `mla`, `mla_dsa`, `dsv4_attn`, `gqa`, `qsa`, `gdn`, `kda` | `ops/attention.py` | whole attention modules, one op type each |
 
 - Split over devices: each case's `parallel` arg (`{"tp", "dp", "ep", "dcp"}`), defined in `core/parallel.py`.
-- Testlists: `testlists/official/<op>_<model>.json` (ingested) and `testlists/dev/` (harness checks, never ingested); names are unique across both. Every entry lists its `sources` (`<org>/<model>/<role>`); a shape from no model uses `operatorx/Synthetic-Shapes/m<M>_n<N>_k<K>` and lives in `gemm_synthetic` (except the `gemm_perf` squares). Dispatch `attn_*` testlists apart from gemm / moe ones (each builds its own vLLM engine).
+- Testlists: `testlists/official/<op>_<model>.json` (ingested), `testlists/dev/` (harness checks) and `testlists/deprecated/` (models that get no new data); dev and deprecated runs are never ingested, and names are unique across all three. Every entry lists its `sources` (`<org>/<model>/<role>`); a shape from no model uses `operatorx/Synthetic-Shapes/m<M>_n<N>_k<K>` and lives in `gemm_synthetic` (except the `gemm_perf` squares). Dispatch `attn_*` testlists apart from gemm / moe ones (each builds its own vLLM engine).
 
 ## Running
 
@@ -28,7 +28,7 @@ Results: one JSON per run under `results/<platform>/<cluster>/`; in CI, the `ope
 
 - Backend: `runners/<platform>/backends/<name>.py` exporting `IMPLS = [BackendImpl(...)]`; its image in `containers.toml`.
 - Op: `ops/<name>.py` calling `register(OpSpec(type=..., arg_schema=..., parallel_axes=...))`.
-- Shapes: `testlists/official/<name>.json` or `testlists/dev/<name>.json`.
+- Shapes: `testlists/{official,dev,deprecated}/<name>.json`.
 
 ## Ascend reproduction harness
 
