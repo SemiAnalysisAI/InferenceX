@@ -320,6 +320,22 @@ glm5.3flash-fp8-mi300x-sglang-agentic-mtp:
       - { tp: 4, ep: 4, conc-list: [32], spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, srt-recipe: agentx/agg-variants.yaml:override_tp4_ep4_c32_hicache }
       - { tp: 4, ep: 4, conc-list: [40], spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, srt-recipe: agentx/agg-variants.yaml:override_tp4_ep4_c40_hicache }
 
+glm5.3-fp8-mi300x-sglang-agentic-mtp:
+  image: lmsysorg/sglang:v0.5.22-rocm720-mi30x@sha256:58b6bc333f527c88fe5ff1b4bd8d17e82214eabcb3044549117159878967c930
+  model: zai-org/GLM-5.3
+  model-prefix: glm5.3
+  runner: cluster:mi300x-amd
+  precision: fp8
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: glm5.3/sglang/mi300x-fp8-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 3], srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [4, 5, 6, 7, 8], srt-recipe: agentic.yaml }
+
 dsr1-fp8-mi355x-atom:
   image: rocm/atom-dev:nightly_202610161458@sha256:7782d69e15b5cf88ad550095a8ec18429af852d07897824b8c35f9ce32f89f33
   model: deepseek-ai/DeepSeek-R1-0528
