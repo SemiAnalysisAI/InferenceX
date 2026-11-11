@@ -113,6 +113,27 @@ class ImageDigestResolutionTests(unittest.TestCase):
             self.assertEqual(
                 probe.resolve_image_digest("ghcr.io/org/image:tag", opener=opener), "")
 
+    def test_only_a_registry_404_reports_the_tag_missing(self) -> None:
+        def answering(code):
+            def open_(request, timeout=None):
+                url = request if isinstance(request, str) else request.full_url
+                if "scope=" in url:
+                    return _FakeRegistry._Response(
+                        body=json.dumps({"token": "anonymous"}).encode())
+                if not request.get_header("Authorization"):
+                    raise urllib.error.HTTPError(url, 401, "unauthorized", {
+                        "WWW-Authenticate": 'Bearer realm="https://auth.example/token"',
+                    }, None)
+                raise urllib.error.HTTPError(url, code, "denied", {}, None)
+            return types.SimpleNamespace(open=open_)
+
+        image = "ghcr.io/org/image:tag"
+        down = types.SimpleNamespace(open=mock.Mock(side_effect=OSError("no route")))
+        self.assertTrue(probe.image_tag_missing(image, opener=answering(404)))
+        self.assertEqual(probe.resolve_image_digest(image, opener=answering(404)), "")
+        for opener in (answering(429), answering(500), down, _FakeRegistry(self.DIGEST)):
+            self.assertFalse(probe.image_tag_missing(image, opener=opener))
+
 
 # The staged squash path is a pure function of platform + image reference (keying it by run
 # re-imports tens of GB per run; by digest, a registry blip misses the staged file), and
@@ -364,26 +385,23 @@ class EfaPluginProfileTests(unittest.TestCase):
 
 class PlacementTests(unittest.TestCase):
     @staticmethod
-    def _transport(fabric: str, nodes: str, scale_up: str) -> str:
+    def _transport(nodes: str, scale_up: str) -> str:
         return run_common(
-            f'unset COLLX_NODES COLLX_GPUS_PER_NODE COLLX_SCALE_UP_DOMAIN COLLX_NGPUS;'
-            f' COLLX_FABRIC="{fabric}"; collx_set_placement {nodes} 4 72 {scale_up}'
+            'unset COLLX_NODES COLLX_GPUS_PER_NODE COLLX_SCALE_UP_DOMAIN COLLX_NGPUS;'
+            f' collx_set_placement {nodes} 4 72 {scale_up}'
             ' && echo "$COLLX_TRANSPORT"').stdout.strip()
 
-    def test_only_a_kv_rdma_leg_leaves_the_nvl_domain(self) -> None:
-        # GB EP shards (no fabric) and the kv MNNVL legs stay in the domain; a kv leg that
-        # names the rdma fabric takes the scale-out transport, like any x86 two-node shard.
-        for fabric, nodes, scale_up, expected in (
-            ("", "2", "mnnvl", "mnnvl"),
-            ("mnnvl", "2", "mnnvl", "mnnvl"),
-            ("rdma", "2", "mnnvl", "mnnvl-rdma"),
-            ("rdma", "1", "mnnvl", "mnnvl"),
-            ("", "2", "nvlink", "nvlink-rdma"),
-            ("rdma", "2", "nvlink", "nvlink-rdma"),
-            ("", "1", "nvlink", "nvlink"),
+    def test_only_a_multi_node_nvlink_shard_scales_out(self) -> None:
+        # An MNNVL domain spans its nodes, so a GB shard stays in it; a two-node x86 shard
+        # crosses the network.
+        for nodes, scale_up, expected in (
+            ("2", "mnnvl", "mnnvl"),
+            ("1", "mnnvl", "mnnvl"),
+            ("2", "nvlink", "nvlink-rdma"),
+            ("1", "nvlink", "nvlink"),
         ):
-            with self.subTest(fabric=fabric, nodes=nodes, scale_up=scale_up):
-                self.assertEqual(self._transport(fabric, nodes, scale_up), expected)
+            with self.subTest(nodes=nodes, scale_up=scale_up):
+                self.assertEqual(self._transport(nodes, scale_up), expected)
 
 
 class RendezvousTests(unittest.TestCase):
@@ -402,8 +420,8 @@ class RendezvousTests(unittest.TestCase):
         return result.stdout.strip()
 
     def test_the_nvl_domain_resolves_rank_zero_by_hostname(self) -> None:
-        # The GB registry names a socket interface for the kv rdma legs only; inside MNNVL it is
-        # never validated, so EP and kv MNNVL shards keep resolving rank zero by host name.
+        # Inside MNNVL the socket interface is never validated, so rank zero resolves by host
+        # name; a scale-out transport uses the address on the interface.
         self.assertEqual(self._master_addr("mnnvl"), "node-a")
         self.assertEqual(self._master_addr("mnnvl-rdma"), "192.0.2.7")
 
@@ -447,17 +465,6 @@ class EfaHostMountTests(unittest.TestCase):
             "/usr/include/rdma:/opt/collectivex/host-efa/include/rdma:ro",
         ])
         self.assertEqual(mounts[1:-2], self._mounts("efa", 2).stdout.strip().split(",")[1:])
-
-    def test_nixl_shards_also_bind_the_host_hwloc_alone(self) -> None:
-        # NIXL's LIBFABRIC plugin links libhwloc.so.15, absent from the vLLM image.
-        result = run_common(
-            'COLLX_RDMA_FABRIC=efa NODES=2 COLLX_TRANSPORT=nvlink-rdma COLLX_BENCH=nixl'
-            ' COLLX_IMAGE_PLATFORM=linux/amd64 CONTAINER_MOUNTS=/stage:/ix;'
-            ' collx_add_efa_host_mounts && echo "$CONTAINER_MOUNTS"')
-        mounts = result.stdout.strip().split(",")
-        self.assertEqual(mounts[-1], f"{self.LIBDIR}/libhwloc.so.15"
-                                     ":/opt/collectivex/host-efa/lib/libhwloc.so.15:ro")
-        self.assertEqual(mounts[1:-1], self._mounts("efa", 2).stdout.strip().split(",")[1:])
 
     def test_single_node_and_non_efa_shards_keep_their_mounts(self) -> None:
         for fabric, nodes in (("efa", 1), ("", 2)):
@@ -821,37 +828,6 @@ class CaseArgvContract(unittest.TestCase):
         with self.assertRaises(subprocess.CalledProcessError):
             self._case_argv(["8", "1", "8", "8"], case=case, entrypoint="run_swap_blocks")
 
-    def test_a_kv_transfer_case_round_trips_through_its_own_parser(self) -> None:
-        import run_kv
-        import sweep_matrix
-
-        platform = {"h200-dgxc": {
-            "launcher": "single-slurm", "product": "h200", "scale_up_domain": 8,
-            "scale_up_transport": "nvlink", "kv_backends": {"mooncake": ["rdma"]},
-        }}
-        with mock.patch.object(sweep_matrix, "PLATFORMS", platform):
-            shard, = sweep_matrix.resolve_matrix(suites="kv-transfer")["include"]
-        case, = shard["cases"]
-        argv = self._case_argv(["2", "2", "1", "8"], case=case, entrypoint="run_kv")
-        with mock.patch.object(argparse.ArgumentParser, "parse_args", autospec=True,
-                               side_effect=SystemExit) as parse:
-            with self.assertRaises(SystemExit):
-                run_kv.main()
-        args = vars(parse.call_args.args[0].parse_args(argv))
-        renamed = {"workload": "workload_name", "mode": "fabric"}
-        self.assertEqual({renamed.get(key, key): value for key, value in case.items()
-                          if renamed.get(key, key) in args},
-                         {key: args[key] for key in (renamed.get(k, k) for k in case)
-                          if key in args})
-        self.assertEqual((args["backend"], args["fabric"], args["runner"]),
-                         ("mooncake", "rdma", "h200-dgxc"))
-        args = argparse.Namespace(**args)
-        # run_kv recomputes the identity from its parsed factors and refuses a mismatch.
-        self.assertEqual(ep_harness.case_id("h200-dgxc", run_kv.kv_case(args)), case["case_id"])
-        self.assertEqual(args.out, f"results/h200-dgxc/{case['case_id']}.json")
-        with self.assertRaises(subprocess.CalledProcessError):
-            self._case_argv(["8", "1", "8", "8"], case=case, entrypoint="run_kv")
-
     def test_a_case_from_an_unknown_suite_cannot_reach_a_run(self) -> None:
         with self.assertRaises(subprocess.CalledProcessError):
             self._case_argv(["16", "2", "8", "8"], case={**self.CASE, "suite": "turbo"})
@@ -873,8 +849,6 @@ class CaseArgvContract(unittest.TestCase):
                  "ARGV bench/run_swap_blocks.py --layout random"),
                 (["--entrypoint", "run_ep", "--backend", "mori"], 0,
                  "ARGV bench/run_ep.py --backend mori"),
-                (["--entrypoint", "run_kv", "--backend", "nixl"], 0,
-                 "ARGV bench/run_kv.py --backend nixl"),
                 (["--entrypoint", "../../bin/sh"], 67, ""),
                 (["--backend", "mori"], 67, ""),
             ):

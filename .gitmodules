@@ -1,3 +1,6 @@
 [submodule "utils/srt-slurm"]
 	path = inferencex-e2e/utils/srt-slurm
 	url = https://github.com/NVIDIA/srt-slurm.git
+[submodule "pretraining/torchtitan"]
+	path = pretraining/torchtitan
+	url = https://github.com/pytorch/torchtitan.git
