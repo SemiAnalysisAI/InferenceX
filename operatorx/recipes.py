@@ -122,8 +122,8 @@ def find(framework: str, hardware: str, checkpoints: list[str], split: dict | No
 
 
 def checkpoints(sources) -> list[str]:
-    """The distinct checkpoints ("org/model") a case's "<org>/<model>[/<role>]" sources name."""
-    return list(dict.fromkeys("/".join(s.split("/")[:2]) for s in sources or ()))
+    """The distinct checkpoints ("org/model") a case's "<org>/<model>/<role>" sources name."""
+    return list(dict.fromkeys(s.rsplit("/", 1)[0] for s in sources or ()))
 
 
 def serve_argv(args: dict[str, Any]) -> list[str]:

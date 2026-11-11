@@ -22,7 +22,7 @@ from operatorx.clusters import CLUSTER_PLATFORMS
 from operatorx.runtime import runtime_snapshot, utc_now_iso
 
 # a testlist source: "<org>/<model>/<role>"
-_SOURCE = re.compile(r"[^/\s]+/[^/\s]+(?:/[^/\s]+)?")  # <org>/<model>/<role>, or <org>/<model> for no layer
+_SOURCE = re.compile(r"[^/\s]+/[^/\s]+/[^/\s]+")
 
 
 _REPO_ROOT = Path(__file__).resolve().parent
@@ -69,7 +69,7 @@ def _load_testlists(names: list[str] | None, directory: Path = TESTLIST_DIR) -> 
             v = entry.get("sources")
             if not isinstance(v, list) or not all(isinstance(s, str) and _SOURCE.fullmatch(s) for s in v):
                 raise SystemExit(f"{name}[{i}]: every testlist entry needs a 'sources' list of "
-                                 f"'<org>/<model>/<role>' strings ('operatorx/Synthetic-Shapes' for a shape from no model)")
+                                 f"'<org>/<model>/<role>' strings (operatorx/Synthetic-Shapes/m<M>_n<N>_k<K> for a shape from no model)")
             if "name" in entry:
                 raise SystemExit(f"{name}[{i}]: 'name' is gone; the role is the last part of each source")
     return lists

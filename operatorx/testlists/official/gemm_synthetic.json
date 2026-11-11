@@ -14,7 +14,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1_n24_k40960"
     ]
   },
   {
@@ -32,7 +32,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2_n24_k40960"
     ]
   },
   {
@@ -50,7 +50,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m3_n24_k40960"
     ]
   },
   {
@@ -68,7 +68,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4_n24_k40960"
     ]
   },
   {
@@ -86,7 +86,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6_n24_k40960"
     ]
   },
   {
@@ -104,7 +104,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8_n24_k40960"
     ]
   },
   {
@@ -122,7 +122,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m725_n24_k40960"
     ]
   },
   {
@@ -140,7 +140,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1684_n24_k40960"
     ]
   },
   {
@@ -158,7 +158,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2335_n24_k40960"
     ]
   },
   {
@@ -176,7 +176,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m3161_n24_k40960"
     ]
   },
   {
@@ -194,7 +194,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4717_n24_k40960"
     ]
   },
   {
@@ -212,7 +212,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6042_n24_k40960"
     ]
   },
   {
@@ -230,7 +230,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6072_n24_k40960"
     ]
   },
   {
@@ -248,7 +248,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m7152_n24_k40960"
     ]
   },
   {
@@ -266,7 +266,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m7586_n24_k40960"
     ]
   },
   {
@@ -284,7 +284,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m7936_n24_k40960"
     ]
   },
   {
@@ -302,7 +302,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m10236_n24_k40960"
     ]
   },
   {
@@ -320,7 +320,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m11304_n24_k40960"
     ]
   },
   {
@@ -338,7 +338,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m11872_n24_k40960"
     ]
   },
   {
@@ -356,7 +356,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m12560_n24_k40960"
     ]
   },
   {
@@ -374,7 +374,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m12930_n24_k40960"
     ]
   },
   {
@@ -392,7 +392,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m12936_n24_k40960"
     ]
   },
   {
@@ -410,7 +410,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m12960_n24_k40960"
     ]
   },
   {
@@ -428,7 +428,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m13072_n24_k40960"
     ]
   },
   {
@@ -446,7 +446,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16384_n24_k40960"
     ]
   },
   {
@@ -464,7 +464,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16386_n24_k40960"
     ]
   },
   {
@@ -482,7 +482,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1_n24_k49152"
     ]
   },
   {
@@ -500,7 +500,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2_n24_k49152"
     ]
   },
   {
@@ -518,7 +518,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m3_n24_k49152"
     ]
   },
   {
@@ -536,7 +536,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4_n24_k49152"
     ]
   },
   {
@@ -554,7 +554,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6_n24_k49152"
     ]
   },
   {
@@ -572,7 +572,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8_n24_k49152"
     ]
   },
   {
@@ -590,7 +590,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m725_n24_k49152"
     ]
   },
   {
@@ -608,7 +608,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1684_n24_k49152"
     ]
   },
   {
@@ -626,7 +626,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2813_n24_k49152"
     ]
   },
   {
@@ -644,7 +644,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4868_n24_k49152"
     ]
   },
   {
@@ -662,7 +662,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6072_n24_k49152"
     ]
   },
   {
@@ -680,7 +680,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6515_n24_k49152"
     ]
   },
   {
@@ -698,7 +698,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m7112_n24_k49152"
     ]
   },
   {
@@ -716,7 +716,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m7936_n24_k49152"
     ]
   },
   {
@@ -734,7 +734,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8177_n24_k49152"
     ]
   },
   {
@@ -752,7 +752,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8192_n24_k49152"
     ]
   },
   {
@@ -770,7 +770,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m10442_n24_k49152"
     ]
   },
   {
@@ -788,7 +788,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m10776_n24_k49152"
     ]
   },
   {
@@ -806,7 +806,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m13072_n24_k49152"
     ]
   },
   {
@@ -824,7 +824,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m13116_n24_k49152"
     ]
   },
   {
@@ -842,7 +842,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16384_n24_k49152"
     ]
   },
   {
@@ -860,7 +860,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16386_n24_k49152"
     ]
   },
   {
@@ -878,7 +878,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1_n64_k10240"
     ]
   },
   {
@@ -896,7 +896,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2_n64_k10240"
     ]
   },
   {
@@ -914,7 +914,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m3_n64_k10240"
     ]
   },
   {
@@ -932,7 +932,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4_n64_k10240"
     ]
   },
   {
@@ -950,7 +950,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6_n64_k10240"
     ]
   },
   {
@@ -968,7 +968,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8_n64_k10240"
     ]
   },
   {
@@ -986,7 +986,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m725_n64_k10240"
     ]
   },
   {
@@ -1004,7 +1004,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1684_n64_k10240"
     ]
   },
   {
@@ -1022,7 +1022,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2335_n64_k10240"
     ]
   },
   {
@@ -1040,7 +1040,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m3161_n64_k10240"
     ]
   },
   {
@@ -1058,7 +1058,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4717_n64_k10240"
     ]
   },
   {
@@ -1076,7 +1076,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6042_n64_k10240"
     ]
   },
   {
@@ -1094,7 +1094,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6072_n64_k10240"
     ]
   },
   {
@@ -1112,7 +1112,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m7152_n64_k10240"
     ]
   },
   {
@@ -1130,7 +1130,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m7586_n64_k10240"
     ]
   },
   {
@@ -1148,7 +1148,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m7936_n64_k10240"
     ]
   },
   {
@@ -1166,7 +1166,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m10236_n64_k10240"
     ]
   },
   {
@@ -1184,7 +1184,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m11304_n64_k10240"
     ]
   },
   {
@@ -1202,7 +1202,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m11872_n64_k10240"
     ]
   },
   {
@@ -1220,7 +1220,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m12560_n64_k10240"
     ]
   },
   {
@@ -1238,7 +1238,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m12930_n64_k10240"
     ]
   },
   {
@@ -1256,7 +1256,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m12936_n64_k10240"
     ]
   },
   {
@@ -1274,7 +1274,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m12960_n64_k10240"
     ]
   },
   {
@@ -1292,7 +1292,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m13072_n64_k10240"
     ]
   },
   {
@@ -1310,7 +1310,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16384_n64_k10240"
     ]
   },
   {
@@ -1328,7 +1328,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16386_n64_k10240"
     ]
   },
   {
@@ -1346,7 +1346,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1_n64_k12288"
     ]
   },
   {
@@ -1364,7 +1364,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2_n64_k12288"
     ]
   },
   {
@@ -1382,7 +1382,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m3_n64_k12288"
     ]
   },
   {
@@ -1400,7 +1400,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4_n64_k12288"
     ]
   },
   {
@@ -1418,7 +1418,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6_n64_k12288"
     ]
   },
   {
@@ -1436,7 +1436,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8_n64_k12288"
     ]
   },
   {
@@ -1454,7 +1454,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m725_n64_k12288"
     ]
   },
   {
@@ -1472,7 +1472,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1684_n64_k12288"
     ]
   },
   {
@@ -1490,7 +1490,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2813_n64_k12288"
     ]
   },
   {
@@ -1508,7 +1508,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4868_n64_k12288"
     ]
   },
   {
@@ -1526,7 +1526,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6072_n64_k12288"
     ]
   },
   {
@@ -1544,7 +1544,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6515_n64_k12288"
     ]
   },
   {
@@ -1562,7 +1562,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m7112_n64_k12288"
     ]
   },
   {
@@ -1580,7 +1580,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m7936_n64_k12288"
     ]
   },
   {
@@ -1598,7 +1598,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8177_n64_k12288"
     ]
   },
   {
@@ -1616,7 +1616,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8192_n64_k12288"
     ]
   },
   {
@@ -1634,7 +1634,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m10442_n64_k12288"
     ]
   },
   {
@@ -1652,7 +1652,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m10776_n64_k12288"
     ]
   },
   {
@@ -1670,7 +1670,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m13072_n64_k12288"
     ]
   },
   {
@@ -1688,7 +1688,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m13116_n64_k12288"
     ]
   },
   {
@@ -1706,7 +1706,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16384_n64_k12288"
     ]
   },
   {
@@ -1724,7 +1724,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16386_n64_k12288"
     ]
   },
   {
@@ -1742,7 +1742,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1_n120_k12288"
     ]
   },
   {
@@ -1760,7 +1760,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2_n120_k12288"
     ]
   },
   {
@@ -1778,7 +1778,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m3_n120_k12288"
     ]
   },
   {
@@ -1796,7 +1796,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4_n120_k12288"
     ]
   },
   {
@@ -1814,7 +1814,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6_n120_k12288"
     ]
   },
   {
@@ -1832,7 +1832,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8_n120_k12288"
     ]
   },
   {
@@ -1850,7 +1850,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m725_n120_k12288"
     ]
   },
   {
@@ -1868,7 +1868,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1684_n120_k12288"
     ]
   },
   {
@@ -1886,7 +1886,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2813_n120_k12288"
     ]
   },
   {
@@ -1904,7 +1904,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4868_n120_k12288"
     ]
   },
   {
@@ -1922,7 +1922,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6072_n120_k12288"
     ]
   },
   {
@@ -1940,7 +1940,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6515_n120_k12288"
     ]
   },
   {
@@ -1958,7 +1958,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m7112_n120_k12288"
     ]
   },
   {
@@ -1976,7 +1976,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m7936_n120_k12288"
     ]
   },
   {
@@ -1994,7 +1994,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8177_n120_k12288"
     ]
   },
   {
@@ -2012,7 +2012,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8192_n120_k12288"
     ]
   },
   {
@@ -2030,7 +2030,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m10442_n120_k12288"
     ]
   },
   {
@@ -2048,7 +2048,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m10776_n120_k12288"
     ]
   },
   {
@@ -2066,7 +2066,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m13072_n120_k12288"
     ]
   },
   {
@@ -2084,7 +2084,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m13116_n120_k12288"
     ]
   },
   {
@@ -2102,7 +2102,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16384_n120_k12288"
     ]
   },
   {
@@ -2120,7 +2120,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16386_n120_k12288"
     ]
   },
   {
@@ -2138,7 +2138,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1_n192_k10240"
     ]
   },
   {
@@ -2156,7 +2156,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2_n192_k10240"
     ]
   },
   {
@@ -2174,7 +2174,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m3_n192_k10240"
     ]
   },
   {
@@ -2192,7 +2192,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4_n192_k10240"
     ]
   },
   {
@@ -2210,7 +2210,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6_n192_k10240"
     ]
   },
   {
@@ -2228,7 +2228,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8_n192_k10240"
     ]
   },
   {
@@ -2246,7 +2246,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m725_n192_k10240"
     ]
   },
   {
@@ -2264,7 +2264,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1684_n192_k10240"
     ]
   },
   {
@@ -2282,7 +2282,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2335_n192_k10240"
     ]
   },
   {
@@ -2300,7 +2300,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m3161_n192_k10240"
     ]
   },
   {
@@ -2318,7 +2318,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4717_n192_k10240"
     ]
   },
   {
@@ -2336,7 +2336,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6042_n192_k10240"
     ]
   },
   {
@@ -2354,7 +2354,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6072_n192_k10240"
     ]
   },
   {
@@ -2372,7 +2372,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m7152_n192_k10240"
     ]
   },
   {
@@ -2390,7 +2390,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m7586_n192_k10240"
     ]
   },
   {
@@ -2408,7 +2408,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m7936_n192_k10240"
     ]
   },
   {
@@ -2426,7 +2426,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m10236_n192_k10240"
     ]
   },
   {
@@ -2444,7 +2444,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m11304_n192_k10240"
     ]
   },
   {
@@ -2462,7 +2462,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m11872_n192_k10240"
     ]
   },
   {
@@ -2480,7 +2480,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m12560_n192_k10240"
     ]
   },
   {
@@ -2498,7 +2498,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m12930_n192_k10240"
     ]
   },
   {
@@ -2516,7 +2516,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m12936_n192_k10240"
     ]
   },
   {
@@ -2534,7 +2534,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m12960_n192_k10240"
     ]
   },
   {
@@ -2552,7 +2552,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m13072_n192_k10240"
     ]
   },
   {
@@ -2570,7 +2570,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16384_n192_k10240"
     ]
   },
   {
@@ -2588,7 +2588,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16386_n192_k10240"
     ]
   },
   {
@@ -2606,7 +2606,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1_n256_k10240"
     ]
   },
   {
@@ -2624,7 +2624,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2_n256_k10240"
     ]
   },
   {
@@ -2642,7 +2642,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m3_n256_k10240"
     ]
   },
   {
@@ -2660,7 +2660,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4_n256_k10240"
     ]
   },
   {
@@ -2678,7 +2678,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6_n256_k10240"
     ]
   },
   {
@@ -2696,7 +2696,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8_n256_k10240"
     ]
   },
   {
@@ -2714,7 +2714,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m725_n256_k10240"
     ]
   },
   {
@@ -2732,7 +2732,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1684_n256_k10240"
     ]
   },
   {
@@ -2750,7 +2750,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2335_n256_k10240"
     ]
   },
   {
@@ -2768,7 +2768,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m3161_n256_k10240"
     ]
   },
   {
@@ -2786,7 +2786,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4717_n256_k10240"
     ]
   },
   {
@@ -2804,7 +2804,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6042_n256_k10240"
     ]
   },
   {
@@ -2822,7 +2822,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6072_n256_k10240"
     ]
   },
   {
@@ -2840,7 +2840,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m7152_n256_k10240"
     ]
   },
   {
@@ -2858,7 +2858,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m7586_n256_k10240"
     ]
   },
   {
@@ -2876,7 +2876,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m7936_n256_k10240"
     ]
   },
   {
@@ -2894,7 +2894,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m10236_n256_k10240"
     ]
   },
   {
@@ -2912,7 +2912,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m11304_n256_k10240"
     ]
   },
   {
@@ -2930,7 +2930,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m11872_n256_k10240"
     ]
   },
   {
@@ -2948,7 +2948,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m12560_n256_k10240"
     ]
   },
   {
@@ -2966,7 +2966,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m12930_n256_k10240"
     ]
   },
   {
@@ -2984,7 +2984,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m12936_n256_k10240"
     ]
   },
   {
@@ -3002,7 +3002,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m12960_n256_k10240"
     ]
   },
   {
@@ -3020,7 +3020,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m13072_n256_k10240"
     ]
   },
   {
@@ -3038,7 +3038,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16384_n256_k10240"
     ]
   },
   {
@@ -3056,7 +3056,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16386_n256_k10240"
     ]
   },
   {
@@ -3074,7 +3074,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1_n256_k12288"
     ]
   },
   {
@@ -3092,7 +3092,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2_n256_k12288"
     ]
   },
   {
@@ -3110,7 +3110,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m3_n256_k12288"
     ]
   },
   {
@@ -3128,7 +3128,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4_n256_k12288"
     ]
   },
   {
@@ -3146,7 +3146,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6_n256_k12288"
     ]
   },
   {
@@ -3164,7 +3164,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8_n256_k12288"
     ]
   },
   {
@@ -3182,7 +3182,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m725_n256_k12288"
     ]
   },
   {
@@ -3200,7 +3200,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1684_n256_k12288"
     ]
   },
   {
@@ -3218,7 +3218,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2813_n256_k12288"
     ]
   },
   {
@@ -3236,7 +3236,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4868_n256_k12288"
     ]
   },
   {
@@ -3254,7 +3254,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6072_n256_k12288"
     ]
   },
   {
@@ -3272,7 +3272,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6515_n256_k12288"
     ]
   },
   {
@@ -3290,7 +3290,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m7112_n256_k12288"
     ]
   },
   {
@@ -3308,7 +3308,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m7936_n256_k12288"
     ]
   },
   {
@@ -3326,7 +3326,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8177_n256_k12288"
     ]
   },
   {
@@ -3344,7 +3344,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8192_n256_k12288"
     ]
   },
   {
@@ -3362,7 +3362,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m10442_n256_k12288"
     ]
   },
   {
@@ -3380,7 +3380,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m10776_n256_k12288"
     ]
   },
   {
@@ -3398,7 +3398,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m13072_n256_k12288"
     ]
   },
   {
@@ -3416,7 +3416,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m13116_n256_k12288"
     ]
   },
   {
@@ -3434,7 +3434,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16384_n256_k12288"
     ]
   },
   {
@@ -3452,7 +3452,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16386_n256_k12288"
     ]
   },
   {
@@ -3470,7 +3470,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1_n320_k7168"
     ]
   },
   {
@@ -3488,7 +3488,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2_n320_k7168"
     ]
   },
   {
@@ -3506,7 +3506,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m3_n320_k7168"
     ]
   },
   {
@@ -3524,7 +3524,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4_n320_k7168"
     ]
   },
   {
@@ -3542,7 +3542,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6_n320_k7168"
     ]
   },
   {
@@ -3560,7 +3560,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8_n320_k7168"
     ]
   },
   {
@@ -3578,7 +3578,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m9_n320_k7168"
     ]
   },
   {
@@ -3596,7 +3596,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m11_n320_k7168"
     ]
   },
   {
@@ -3614,7 +3614,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m14_n320_k7168"
     ]
   },
   {
@@ -3632,7 +3632,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m725_n320_k7168"
     ]
   },
   {
@@ -3650,7 +3650,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m978_n320_k7168"
     ]
   },
   {
@@ -3668,7 +3668,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1684_n320_k7168"
     ]
   },
   {
@@ -3686,7 +3686,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2420_n320_k7168"
     ]
   },
   {
@@ -3704,7 +3704,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m3161_n320_k7168"
     ]
   },
   {
@@ -3722,7 +3722,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4049_n320_k7168"
     ]
   },
   {
@@ -3740,7 +3740,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m5290_n320_k7168"
     ]
   },
   {
@@ -3758,7 +3758,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6736_n320_k7168"
     ]
   },
   {
@@ -3776,7 +3776,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6830_n320_k7168"
     ]
   },
   {
@@ -3794,7 +3794,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m7112_n320_k7168"
     ]
   },
   {
@@ -3812,7 +3812,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m7936_n320_k7168"
     ]
   },
   {
@@ -3830,7 +3830,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m9446_n320_k7168"
     ]
   },
   {
@@ -3848,7 +3848,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m10128_n320_k7168"
     ]
   },
   {
@@ -3866,7 +3866,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m12136_n320_k7168"
     ]
   },
   {
@@ -3884,7 +3884,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m13790_n320_k7168"
     ]
   },
   {
@@ -3902,7 +3902,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m15312_n320_k7168"
     ]
   },
   {
@@ -3920,7 +3920,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m15982_n320_k7168"
     ]
   },
   {
@@ -3938,7 +3938,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1_n512_k10240"
     ]
   },
   {
@@ -3956,7 +3956,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2_n512_k10240"
     ]
   },
   {
@@ -3974,7 +3974,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m3_n512_k10240"
     ]
   },
   {
@@ -3992,7 +3992,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4_n512_k10240"
     ]
   },
   {
@@ -4010,7 +4010,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6_n512_k10240"
     ]
   },
   {
@@ -4028,7 +4028,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8_n512_k10240"
     ]
   },
   {
@@ -4046,7 +4046,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m725_n512_k10240"
     ]
   },
   {
@@ -4064,7 +4064,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1684_n512_k10240"
     ]
   },
   {
@@ -4082,7 +4082,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2335_n512_k10240"
     ]
   },
   {
@@ -4100,7 +4100,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m3161_n512_k10240"
     ]
   },
   {
@@ -4118,7 +4118,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4717_n512_k10240"
     ]
   },
   {
@@ -4136,7 +4136,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6042_n512_k10240"
     ]
   },
   {
@@ -4154,7 +4154,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6072_n512_k10240"
     ]
   },
   {
@@ -4172,7 +4172,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m7152_n512_k10240"
     ]
   },
   {
@@ -4190,7 +4190,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m7586_n512_k10240"
     ]
   },
   {
@@ -4208,7 +4208,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m7936_n512_k10240"
     ]
   },
   {
@@ -4226,7 +4226,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m10236_n512_k10240"
     ]
   },
   {
@@ -4244,7 +4244,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m11304_n512_k10240"
     ]
   },
   {
@@ -4262,7 +4262,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m11872_n512_k10240"
     ]
   },
   {
@@ -4280,7 +4280,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m12560_n512_k10240"
     ]
   },
   {
@@ -4298,7 +4298,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m12930_n512_k10240"
     ]
   },
   {
@@ -4316,7 +4316,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m12936_n512_k10240"
     ]
   },
   {
@@ -4334,7 +4334,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m12960_n512_k10240"
     ]
   },
   {
@@ -4352,7 +4352,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m13072_n512_k10240"
     ]
   },
   {
@@ -4370,7 +4370,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16384_n512_k10240"
     ]
   },
   {
@@ -4388,7 +4388,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16386_n512_k10240"
     ]
   },
   {
@@ -4406,7 +4406,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1_n512_k12288"
     ]
   },
   {
@@ -4424,7 +4424,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2_n512_k12288"
     ]
   },
   {
@@ -4442,7 +4442,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m3_n512_k12288"
     ]
   },
   {
@@ -4460,7 +4460,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4_n512_k12288"
     ]
   },
   {
@@ -4478,7 +4478,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6_n512_k12288"
     ]
   },
   {
@@ -4496,7 +4496,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8_n512_k12288"
     ]
   },
   {
@@ -4514,7 +4514,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m725_n512_k12288"
     ]
   },
   {
@@ -4532,7 +4532,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1684_n512_k12288"
     ]
   },
   {
@@ -4550,7 +4550,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2813_n512_k12288"
     ]
   },
   {
@@ -4568,7 +4568,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4868_n512_k12288"
     ]
   },
   {
@@ -4586,7 +4586,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6072_n512_k12288"
     ]
   },
   {
@@ -4604,7 +4604,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6515_n512_k12288"
     ]
   },
   {
@@ -4622,7 +4622,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m7112_n512_k12288"
     ]
   },
   {
@@ -4640,7 +4640,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m7936_n512_k12288"
     ]
   },
   {
@@ -4658,7 +4658,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8177_n512_k12288"
     ]
   },
   {
@@ -4676,7 +4676,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8192_n512_k12288"
     ]
   },
   {
@@ -4694,7 +4694,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m10442_n512_k12288"
     ]
   },
   {
@@ -4712,7 +4712,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m10776_n512_k12288"
     ]
   },
   {
@@ -4730,7 +4730,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m13072_n512_k12288"
     ]
   },
   {
@@ -4748,7 +4748,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m13116_n512_k12288"
     ]
   },
   {
@@ -4766,7 +4766,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16384_n512_k12288"
     ]
   },
   {
@@ -4784,7 +4784,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16386_n512_k12288"
     ]
   },
   {
@@ -4802,7 +4802,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1_n1024_k10240"
     ]
   },
   {
@@ -4820,7 +4820,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2_n1024_k10240"
     ]
   },
   {
@@ -4838,7 +4838,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m3_n1024_k10240"
     ]
   },
   {
@@ -4856,7 +4856,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4_n1024_k10240"
     ]
   },
   {
@@ -4874,7 +4874,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6_n1024_k10240"
     ]
   },
   {
@@ -4892,7 +4892,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8_n1024_k10240"
     ]
   },
   {
@@ -4910,7 +4910,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m725_n1024_k10240"
     ]
   },
   {
@@ -4928,7 +4928,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1684_n1024_k10240"
     ]
   },
   {
@@ -4946,7 +4946,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2335_n1024_k10240"
     ]
   },
   {
@@ -4964,7 +4964,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m3161_n1024_k10240"
     ]
   },
   {
@@ -4982,7 +4982,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4717_n1024_k10240"
     ]
   },
   {
@@ -5000,7 +5000,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6042_n1024_k10240"
     ]
   },
   {
@@ -5018,7 +5018,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6072_n1024_k10240"
     ]
   },
   {
@@ -5036,7 +5036,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m7152_n1024_k10240"
     ]
   },
   {
@@ -5054,7 +5054,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m7586_n1024_k10240"
     ]
   },
   {
@@ -5072,7 +5072,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m7936_n1024_k10240"
     ]
   },
   {
@@ -5090,7 +5090,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m10236_n1024_k10240"
     ]
   },
   {
@@ -5108,7 +5108,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m11304_n1024_k10240"
     ]
   },
   {
@@ -5126,7 +5126,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m11872_n1024_k10240"
     ]
   },
   {
@@ -5144,7 +5144,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m12560_n1024_k10240"
     ]
   },
   {
@@ -5162,7 +5162,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m12930_n1024_k10240"
     ]
   },
   {
@@ -5180,7 +5180,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m12936_n1024_k10240"
     ]
   },
   {
@@ -5198,7 +5198,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m12960_n1024_k10240"
     ]
   },
   {
@@ -5216,7 +5216,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m13072_n1024_k10240"
     ]
   },
   {
@@ -5234,7 +5234,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16384_n1024_k10240"
     ]
   },
   {
@@ -5252,7 +5252,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16386_n1024_k10240"
     ]
   },
   {
@@ -5270,7 +5270,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1_n1024_k12288"
     ]
   },
   {
@@ -5288,7 +5288,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2_n1024_k12288"
     ]
   },
   {
@@ -5306,7 +5306,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m3_n1024_k12288"
     ]
   },
   {
@@ -5324,7 +5324,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4_n1024_k12288"
     ]
   },
   {
@@ -5342,7 +5342,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6_n1024_k12288"
     ]
   },
   {
@@ -5360,7 +5360,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8_n1024_k12288"
     ]
   },
   {
@@ -5378,7 +5378,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m725_n1024_k12288"
     ]
   },
   {
@@ -5396,7 +5396,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1684_n1024_k12288"
     ]
   },
   {
@@ -5414,7 +5414,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2813_n1024_k12288"
     ]
   },
   {
@@ -5432,7 +5432,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4868_n1024_k12288"
     ]
   },
   {
@@ -5450,7 +5450,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6072_n1024_k12288"
     ]
   },
   {
@@ -5468,7 +5468,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m6515_n1024_k12288"
     ]
   },
   {
@@ -5486,7 +5486,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m7112_n1024_k12288"
     ]
   },
   {
@@ -5504,7 +5504,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m7936_n1024_k12288"
     ]
   },
   {
@@ -5522,7 +5522,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8177_n1024_k12288"
     ]
   },
   {
@@ -5540,7 +5540,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8192_n1024_k12288"
     ]
   },
   {
@@ -5558,7 +5558,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m10442_n1024_k12288"
     ]
   },
   {
@@ -5576,7 +5576,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m10776_n1024_k12288"
     ]
   },
   {
@@ -5594,7 +5594,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m13072_n1024_k12288"
     ]
   },
   {
@@ -5612,7 +5612,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m13116_n1024_k12288"
     ]
   },
   {
@@ -5630,7 +5630,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16384_n1024_k12288"
     ]
   },
   {
@@ -5648,7 +5648,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16386_n1024_k12288"
     ]
   },
   {
@@ -5666,7 +5666,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1_n8080_k10240"
     ]
   },
   {
@@ -5684,7 +5684,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1_n8080_k12288"
     ]
   },
   {
@@ -5702,7 +5702,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8192_n8192_k8192"
     ]
   },
   {
@@ -5720,7 +5720,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16384_n8192_k8192"
     ]
   },
   {
@@ -5738,7 +5738,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1_n129280_k10240"
     ]
   },
   {
@@ -5756,7 +5756,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2_n129280_k10240"
     ]
   },
   {
@@ -5774,7 +5774,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m3_n129280_k10240"
     ]
   },
   {
@@ -5792,7 +5792,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4_n129280_k10240"
     ]
   },
   {
@@ -5810,7 +5810,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1_n129280_k12288"
     ]
   },
   {
@@ -5828,7 +5828,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2_n129280_k12288"
     ]
   },
   {
@@ -5846,7 +5846,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m3_n129280_k12288"
     ]
   },
   {
@@ -5864,7 +5864,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4_n129280_k12288"
     ]
   },
   {
@@ -5914,7 +5914,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m10_n384_k7168"
     ]
   },
   {
@@ -5964,7 +5964,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m42_n384_k7168"
     ]
   },
   {
@@ -6014,7 +6014,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m85_n384_k7168"
     ]
   },
   {
@@ -6064,7 +6064,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m170_n384_k7168"
     ]
   },
   {
@@ -6114,7 +6114,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m10922_n384_k7168"
     ]
   },
   {
@@ -6164,7 +6164,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m43690_n384_k7168"
     ]
   },
   {
@@ -6214,7 +6214,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8192_n8192_k8192"
     ]
   },
   {
@@ -6248,7 +6248,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8192_n8192_k8192"
     ]
   },
   {
@@ -6282,7 +6282,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8192_n8192_k8192"
     ]
   },
   {
@@ -6316,7 +6316,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1_n1088_k7168"
     ]
   },
   {
@@ -6350,7 +6350,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2_n1088_k7168"
     ]
   },
   {
@@ -6384,7 +6384,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4_n1088_k7168"
     ]
   },
   {
@@ -6418,7 +6418,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8_n1088_k7168"
     ]
   },
   {
@@ -6452,7 +6452,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16_n1088_k7168"
     ]
   },
   {
@@ -6486,7 +6486,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m18_n1088_k7168"
     ]
   },
   {
@@ -6520,7 +6520,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m32_n1088_k7168"
     ]
   },
   {
@@ -6554,7 +6554,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m48_n1088_k7168"
     ]
   },
   {
@@ -6588,7 +6588,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m64_n1088_k7168"
     ]
   },
   {
@@ -6622,7 +6622,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m128_n1088_k7168"
     ]
   },
   {
@@ -6656,7 +6656,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m192_n1088_k7168"
     ]
   },
   {
@@ -6690,7 +6690,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m256_n1088_k7168"
     ]
   },
   {
@@ -6724,7 +6724,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m512_n1088_k7168"
     ]
   },
   {
@@ -6758,7 +6758,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m768_n1088_k7168"
     ]
   },
   {
@@ -6792,7 +6792,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1024_n1088_k7168"
     ]
   },
   {
@@ -6826,7 +6826,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1543_n1088_k7168"
     ]
   },
   {
@@ -6860,7 +6860,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1792_n1088_k7168"
     ]
   },
   {
@@ -6894,7 +6894,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2048_n1088_k7168"
     ]
   },
   {
@@ -6928,7 +6928,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4096_n1088_k7168"
     ]
   },
   {
@@ -6962,7 +6962,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m5376_n1088_k7168"
     ]
   },
   {
@@ -6996,7 +6996,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8192_n1088_k7168"
     ]
   },
   {
@@ -7030,7 +7030,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16384_n1088_k7168"
     ]
   },
   {
@@ -7064,7 +7064,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m32768_n1088_k7168"
     ]
   },
   {
@@ -7098,7 +7098,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m65536_n1088_k7168"
     ]
   },
   {
@@ -7132,7 +7132,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1_n7168_k65536"
     ]
   },
   {
@@ -7166,7 +7166,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2_n7168_k65536"
     ]
   },
   {
@@ -7200,7 +7200,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4_n7168_k65536"
     ]
   },
   {
@@ -7234,7 +7234,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8_n7168_k65536"
     ]
   },
   {
@@ -7268,7 +7268,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16_n7168_k65536"
     ]
   },
   {
@@ -7302,7 +7302,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m32_n7168_k65536"
     ]
   },
   {
@@ -7336,7 +7336,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m48_n7168_k65536"
     ]
   },
   {
@@ -7370,7 +7370,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m64_n7168_k65536"
     ]
   },
   {
@@ -7404,7 +7404,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m128_n7168_k65536"
     ]
   },
   {
@@ -7438,7 +7438,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m192_n7168_k65536"
     ]
   },
   {
@@ -7472,7 +7472,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m256_n7168_k65536"
     ]
   },
   {
@@ -7506,7 +7506,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m512_n7168_k65536"
     ]
   },
   {
@@ -7540,7 +7540,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m768_n7168_k65536"
     ]
   },
   {
@@ -7574,7 +7574,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1024_n7168_k65536"
     ]
   },
   {
@@ -7608,7 +7608,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1543_n7168_k65536"
     ]
   },
   {
@@ -7642,7 +7642,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1792_n7168_k65536"
     ]
   },
   {
@@ -7676,7 +7676,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2048_n7168_k65536"
     ]
   },
   {
@@ -7710,7 +7710,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4096_n7168_k65536"
     ]
   },
   {
@@ -7744,7 +7744,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m5376_n7168_k65536"
     ]
   },
   {
@@ -7778,7 +7778,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8192_n7168_k65536"
     ]
   },
   {
@@ -7812,7 +7812,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16384_n7168_k65536"
     ]
   },
   {
@@ -7846,7 +7846,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m32768_n7168_k65536"
     ]
   },
   {
@@ -7880,7 +7880,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m65536_n7168_k65536"
     ]
   },
   {
@@ -7914,7 +7914,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1_n15360_k1024"
     ]
   },
   {
@@ -7948,7 +7948,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2_n15360_k1024"
     ]
   },
   {
@@ -7982,7 +7982,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4_n15360_k1024"
     ]
   },
   {
@@ -8016,7 +8016,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8_n15360_k1024"
     ]
   },
   {
@@ -8050,7 +8050,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16_n15360_k1024"
     ]
   },
   {
@@ -8084,7 +8084,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m32_n15360_k1024"
     ]
   },
   {
@@ -8118,7 +8118,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m64_n15360_k1024"
     ]
   },
   {
@@ -8152,7 +8152,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m128_n15360_k1024"
     ]
   },
   {
@@ -8186,7 +8186,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m256_n15360_k1024"
     ]
   },
   {
@@ -8220,7 +8220,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m512_n15360_k1024"
     ]
   },
   {
@@ -8254,7 +8254,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1024_n15360_k1024"
     ]
   },
   {
@@ -8288,7 +8288,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2048_n15360_k1024"
     ]
   },
   {
@@ -8322,7 +8322,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4096_n15360_k1024"
     ]
   },
   {
@@ -8356,7 +8356,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8192_n15360_k1024"
     ]
   },
   {
@@ -8390,7 +8390,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16384_n15360_k1024"
     ]
   },
   {
@@ -8424,7 +8424,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m32768_n15360_k1024"
     ]
   },
   {
@@ -8458,7 +8458,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m65536_n15360_k1024"
     ]
   },
   {
@@ -8492,7 +8492,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1_n30720_k1024"
     ]
   },
   {
@@ -8526,7 +8526,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2_n30720_k1024"
     ]
   },
   {
@@ -8560,7 +8560,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4_n30720_k1024"
     ]
   },
   {
@@ -8594,7 +8594,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8_n30720_k1024"
     ]
   },
   {
@@ -8628,7 +8628,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16_n30720_k1024"
     ]
   },
   {
@@ -8662,7 +8662,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m18_n30720_k1024"
     ]
   },
   {
@@ -8696,7 +8696,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m32_n30720_k1024"
     ]
   },
   {
@@ -8730,7 +8730,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m64_n30720_k1024"
     ]
   },
   {
@@ -8764,7 +8764,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m128_n30720_k1024"
     ]
   },
   {
@@ -8798,7 +8798,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m192_n30720_k1024"
     ]
   },
   {
@@ -8832,7 +8832,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m256_n30720_k1024"
     ]
   },
   {
@@ -8866,7 +8866,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m512_n30720_k1024"
     ]
   },
   {
@@ -8900,7 +8900,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1024_n30720_k1024"
     ]
   },
   {
@@ -8934,7 +8934,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2048_n30720_k1024"
     ]
   },
   {
@@ -8968,7 +8968,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4096_n30720_k1024"
     ]
   },
   {
@@ -9002,7 +9002,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8192_n30720_k1024"
     ]
   },
   {
@@ -9036,7 +9036,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16384_n30720_k1024"
     ]
   },
   {
@@ -9070,7 +9070,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m32768_n30720_k1024"
     ]
   },
   {
@@ -9104,7 +9104,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m65536_n30720_k1024"
     ]
   },
   {
@@ -9138,7 +9138,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1_n122880_k1024"
     ]
   },
   {
@@ -9172,7 +9172,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2_n122880_k1024"
     ]
   },
   {
@@ -9206,7 +9206,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4_n122880_k1024"
     ]
   },
   {
@@ -9240,7 +9240,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8_n122880_k1024"
     ]
   },
   {
@@ -9274,7 +9274,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16_n122880_k1024"
     ]
   },
   {
@@ -9308,7 +9308,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m32_n122880_k1024"
     ]
   },
   {
@@ -9342,7 +9342,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m48_n122880_k1024"
     ]
   },
   {
@@ -9376,7 +9376,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m64_n122880_k1024"
     ]
   },
   {
@@ -9410,7 +9410,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m128_n122880_k1024"
     ]
   },
   {
@@ -9444,7 +9444,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m192_n122880_k1024"
     ]
   },
   {
@@ -9478,7 +9478,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m256_n122880_k1024"
     ]
   },
   {
@@ -9512,7 +9512,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m512_n122880_k1024"
     ]
   },
   {
@@ -9546,7 +9546,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m768_n122880_k1024"
     ]
   },
   {
@@ -9580,7 +9580,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1024_n122880_k1024"
     ]
   },
   {
@@ -9614,7 +9614,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1543_n122880_k1024"
     ]
   },
   {
@@ -9648,7 +9648,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m1792_n122880_k1024"
     ]
   },
   {
@@ -9682,7 +9682,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m2048_n122880_k1024"
     ]
   },
   {
@@ -9716,7 +9716,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m4096_n122880_k1024"
     ]
   },
   {
@@ -9750,7 +9750,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m5376_n122880_k1024"
     ]
   },
   {
@@ -9784,7 +9784,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8192_n122880_k1024"
     ]
   },
   {
@@ -9818,7 +9818,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16384_n122880_k1024"
     ]
   },
   {
@@ -9852,7 +9852,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m32768_n122880_k1024"
     ]
   },
   {
@@ -9886,7 +9886,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m65536_n122880_k1024"
     ]
   }
 ]

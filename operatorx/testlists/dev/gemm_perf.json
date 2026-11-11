@@ -148,7 +148,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m8192_n8192_k8192"
     ]
   },
   {
@@ -166,7 +166,7 @@
       "out": "bf16"
     },
     "sources": [
-      "operatorx/Synthetic-Shapes"
+      "operatorx/Synthetic-Shapes/m16384_n8192_k8192"
     ]
   },
   {
