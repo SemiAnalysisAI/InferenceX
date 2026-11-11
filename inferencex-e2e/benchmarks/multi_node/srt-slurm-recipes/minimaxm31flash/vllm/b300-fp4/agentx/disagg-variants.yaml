@@ -20,8 +20,6 @@ base:
     interval_seconds: 5
   environment:
     PYTHONHASHSEED: '0'
-    # vllm-mooncake-efa.sh installs libfabric to efa-1.50 when the host mounts /opt/amazon/efa read-only.
-    LD_LIBRARY_PATH: &efa-library-path /opt/amazon/efa-1.50/lib:/opt/amazon/efa/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib64:/usr/local/nvidia/lib
   services:
   - &etcd
     name: etcd
@@ -71,7 +69,6 @@ base:
     env:
       STORE_CONFIG: /tmp/mooncake-store-numa0.json
       STORE_SEGMENT_SIZE: 348GB
-      LD_LIBRARY_PATH: *efa-library-path
       GLIBC_TUNABLES: glibc.malloc.hugetlb=1
       MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
       MC_SLICE_SIZE: '1048576'
@@ -107,7 +104,6 @@ base:
     env:
       STORE_CONFIG: /tmp/mooncake-store-numa1.json
       STORE_SEGMENT_SIZE: 349GB
-      LD_LIBRARY_PATH: *efa-library-path
       GLIBC_TUNABLES: glibc.malloc.hugetlb=1
       MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
       MC_SLICE_SIZE: '1048576'
@@ -129,7 +125,6 @@ base:
     env:
       STORE_CONFIG: /tmp/mooncake-store-numa0.json
       STORE_SEGMENT_SIZE: 698GB
-      LD_LIBRARY_PATH: *efa-library-path
       GLIBC_TUNABLES: glibc.malloc.hugetlb=1
       MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
       MC_SLICE_SIZE: '1048576'
@@ -151,7 +146,6 @@ base:
     env:
       STORE_CONFIG: /tmp/mooncake-store-numa1.json
       STORE_SEGMENT_SIZE: 698GB
-      LD_LIBRARY_PATH: *efa-library-path
       GLIBC_TUNABLES: glibc.malloc.hugetlb=1
       MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
       MC_SLICE_SIZE: '1048576'
@@ -353,7 +347,6 @@ override_2p1d_dep2_dep8_bs3:
     env:
       STORE_CONFIG: /tmp/mooncake-store-numa0.json
       STORE_SEGMENT_SIZE: 697GB
-      LD_LIBRARY_PATH: *efa-library-path
       GLIBC_TUNABLES: glibc.malloc.hugetlb=1
       MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
       MC_SLICE_SIZE: '1048576'
@@ -371,7 +364,6 @@ override_2p1d_dep2_dep8_bs3:
     env:
       STORE_CONFIG: /tmp/mooncake-store-numa1.json
       STORE_SEGMENT_SIZE: 698GB
-      LD_LIBRARY_PATH: *efa-library-path
       GLIBC_TUNABLES: glibc.malloc.hugetlb=1
       MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
       MC_SLICE_SIZE: '1048576'
@@ -389,7 +381,6 @@ override_2p1d_dep2_dep8_bs3:
     env:
       STORE_CONFIG: /tmp/mooncake-store-numa0.json
       STORE_SEGMENT_SIZE: 1200GB
-      LD_LIBRARY_PATH: *efa-library-path
       GLIBC_TUNABLES: glibc.malloc.hugetlb=1
       MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
       MC_SLICE_SIZE: '1048576'
@@ -407,7 +398,6 @@ override_2p1d_dep2_dep8_bs3:
     env:
       STORE_CONFIG: /tmp/mooncake-store-numa1.json
       STORE_SEGMENT_SIZE: 1200GB
-      LD_LIBRARY_PATH: *efa-library-path
       GLIBC_TUNABLES: glibc.malloc.hugetlb=1
       MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
       MC_SLICE_SIZE: '1048576'
@@ -448,7 +438,6 @@ override_8p1d_dep2_dep8_bs8:
     env:
       STORE_CONFIG: /tmp/mooncake-store-numa0.json
       STORE_SEGMENT_SIZE: 900GB
-      LD_LIBRARY_PATH: *efa-library-path
       GLIBC_TUNABLES: glibc.malloc.hugetlb=1
       MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
       MC_SLICE_SIZE: '1048576'
@@ -466,7 +455,6 @@ override_8p1d_dep2_dep8_bs8:
     env:
       STORE_CONFIG: /tmp/mooncake-store-numa1.json
       STORE_SEGMENT_SIZE: 900GB
-      LD_LIBRARY_PATH: *efa-library-path
       GLIBC_TUNABLES: glibc.malloc.hugetlb=1
       MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
       MC_SLICE_SIZE: '1048576'
@@ -484,7 +472,6 @@ override_8p1d_dep2_dep8_bs8:
     env:
       STORE_CONFIG: /tmp/mooncake-store-numa0.json
       STORE_SEGMENT_SIZE: 1000GB
-      LD_LIBRARY_PATH: *efa-library-path
       GLIBC_TUNABLES: glibc.malloc.hugetlb=1
       MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
       MC_SLICE_SIZE: '1048576'
@@ -502,7 +489,6 @@ override_8p1d_dep2_dep8_bs8:
     env:
       STORE_CONFIG: /tmp/mooncake-store-numa1.json
       STORE_SEGMENT_SIZE: 1000GB
-      LD_LIBRARY_PATH: *efa-library-path
       GLIBC_TUNABLES: glibc.malloc.hugetlb=1
       MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
       MC_SLICE_SIZE: '1048576'
