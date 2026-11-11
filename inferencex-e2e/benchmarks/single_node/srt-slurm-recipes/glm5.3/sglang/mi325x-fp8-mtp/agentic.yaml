@@ -45,6 +45,9 @@ base:
         enable-metrics: true
         enable-cache-report: true
       env:
+        # Parallel point launches otherwise hit Hugging Face rate limits; weights are cached.
+        HF_HUB_OFFLINE: '1'
+        TRANSFORMERS_OFFLINE: '1'
         PYTHONNOUSERSITE: '1'
         # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
@@ -53,19 +56,22 @@ base:
         SGLANG_OPT_USE_TOPK_V2: 'false'
   benchmark:
     env:
+      HF_HUB_OFFLINE: ''
+      TRANSFORMERS_OFFLINE: ''
       # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       # Long responses admitted near the end of the window can take minutes to drain.
       AIPERF_BENCHMARK_GRACE_PERIOD: '1800'
 
-# Admission and the decode graph batch are 2x CONC.
+# Admission and the decode graph batch are 2x CONC with a floor of 8: at a cap of 2,
+# c1 queued parallel sub-agent requests (P90 TTFT 14.1 s vs 4.8 s at c2) with KV usage under 15%.
 override_tp8_c1:
   roles:
     agg:
       args:
-        max-running-requests: 2
-        cuda-graph-max-bs-decode: 2
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
   benchmark:
     env:
       CONC: '1'
@@ -75,8 +81,8 @@ override_tp8_c2:
   roles:
     agg:
       args:
-        max-running-requests: 4
-        cuda-graph-max-bs-decode: 4
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
   benchmark:
     env:
       CONC: '2'
@@ -86,8 +92,8 @@ override_tp8_c3:
   roles:
     agg:
       args:
-        max-running-requests: 6
-        cuda-graph-max-bs-decode: 6
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
   benchmark:
     env:
       CONC: '3'
@@ -126,6 +132,21 @@ override_tp8_c8:
       CONC: '8'
       KV_OFFLOADING: none
 
+override_tp8_c10_hicache:
+  roles:
+    agg:
+      args:
+        max-running-requests: 20
+        cuda-graph-max-bs-decode: 20
+        enable-hierarchical-cache: true
+        hicache-host-memory-fraction: 0.60
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+  benchmark:
+    env:
+      CONC: '10'
+      KV_OFFLOADING: dram
+
 override_tp8_c12_hicache:
   roles:
     agg:
@@ -140,50 +161,3 @@ override_tp8_c12_hicache:
     env:
       CONC: '12'
       KV_OFFLOADING: dram
-
-override_tp8_c16_hicache:
-  roles:
-    agg:
-      args:
-        max-running-requests: 32
-        cuda-graph-max-bs-decode: 32
-        enable-hierarchical-cache: true
-        hicache-host-memory-fraction: 0.60
-        hicache-io-backend: direct
-        hicache-mem-layout: page_first_direct
-  benchmark:
-    env:
-      CONC: '16'
-      KV_OFFLOADING: dram
-
-override_tp4_c2:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        tensor-parallel-size: 4
-        # Four cards hold 189 GB of weights each, so the pool needs the higher fraction.
-        mem-fraction-static: 0.92
-        chunked-prefill-size: 8192
-        max-running-requests: 4
-        cuda-graph-max-bs-decode: 4
-  benchmark:
-    env:
-      CONC: '2'
-      KV_OFFLOADING: none
-
-override_tp4_c3:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        tensor-parallel-size: 4
-        # Four cards hold 189 GB of weights each, so the pool needs the higher fraction.
-        mem-fraction-static: 0.92
-        chunked-prefill-size: 8192
-        max-running-requests: 6
-        cuda-graph-max-bs-decode: 6
-  benchmark:
-    env:
-      CONC: '3'
-      KV_OFFLOADING: none
