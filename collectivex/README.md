@@ -12,7 +12,7 @@ results to the CollectiveX database is the publish step: the dashboard shows the
 Results are not committed to this repository. CollectiveX does not rank, recommend, or select; any
 downstream display or comparison is the consumer's responsibility.
 [docs/methodology.md](docs/methodology.md) states the measurement rules in a summary, including
-each backend's engine contract, and holds the evidence behind them.
+each backend's engine contract, and then defines each published field.
 
 ## Coverage
 
