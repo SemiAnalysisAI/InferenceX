@@ -34,7 +34,7 @@ base:
         max-prefill-tokens: 16384
         chunked-prefill-size: 16384
         scheduler-recv-interval: 60
-        stream-interval: 20
+        stream-interval: 50
         # Parallel tokenization keeps 256k warmups within the client timeout.
         tokenizer-worker-num: 6
         reasoning-parser: qwen3
@@ -53,6 +53,9 @@ base:
         SGLANG_MAMBA_SSM_DTYPE: bfloat16
         # Outlast AIPerf's 300 s client connection pool.
         SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+        ROCM_QUICK_REDUCE_QUANTIZATION: NONE
+        # aiter scales an explicit mem-fraction-static by 0.85 above 8k context; keep the 0.8 set above.
+        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
   benchmark:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'

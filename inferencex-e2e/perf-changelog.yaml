@@ -12726,6 +12726,7 @@
   scenario-type: [agentic-coding]
   description:
     - "Update the SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261020 to lmsysorg/sglang-rocm:v0.5.23-rocm720-mi35x-20261109 (amd64 digest sha256:e728a52213cce18493a46ac8ac62d5c9eaee66591941871acd213fe989e55957). The other MI355X arms stay on their current tags."
-    - "Lower stream-interval from 50 to 20 in the shared aggregated-role args of the srt-slurm recipe, so all 19 points (c1 through c80) stream at most 20 tokens per chunk, the AgentX limit. No point overrides it. This sweep therefore changes both the image and the stream interval."
-    - "The HiCache write_through policy, the TP4 concurrency grid and every other serving flag are unchanged."
+    - "Set ROCM_QUICK_REDUCE_QUANTIZATION=NONE in the shared aggregated-role env of the srt-slurm recipe. The 20261020 image set INT8 by default and the 20261109 image no longer does (sgl-project/sglang#47163), so this pins a full-precision all-reduce instead of relying on the image default."
+    - "Set SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION=1 so the recipe's mem-fraction-static 0.8 is used as-is. With the aiter attention backend and context above 8192, SGLang otherwise multiplies it by 0.85, so 0.8 ran as 0.68 (KV pool 7.83M tokens); with the variable set the KV pool is 11.32M tokens (+45%). This applies to all 19 points (c1 through c80) and also grows the HiCache host pool at c16 through c28, which is sized by ratio. This sweep therefore changes the image, the all-reduce precision setting and the effective memory fraction."
+    - "The HiCache write_through policy, stream-interval 50, the TP4 concurrency grid and every other serving flag are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4975
