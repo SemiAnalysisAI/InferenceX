@@ -6871,7 +6871,7 @@ dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg:
           dp-attn: true
 
 dsv41flash-fp4-gb200-dynamo-vllm-agentic-dspark-agg:
-  image: vllm/vllm-openai:cu134-nightly-aarch64-26evr5b5537344b103ed10de7764378ef09604ef3d
+  image: vllm/vllm-openai:cu134-nightly-aarch64-01fba62-1111d@sha256:9aa51d63c0f9e408a6a38df5aaeac2794da5de766d7398035a380bdf3d41389a
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:gb200-nv
@@ -6917,7 +6917,7 @@ dsv41flash-fp4-gb200-dynamo-vllm-agentic-dspark-agg:
           dp-attn: false
 
 dsv41flash-fp4-gb200-dynamo-vllm-agentic-dspark-disagg:
-  image: vllm/vllm-openai:cu134-nightly-aarch64-26evr5b5537344b103ed10de7764378ef09604ef3d
+  image: vllm/vllm-openai:cu134-nightly-aarch64-01fba62-1111d@sha256:9aa51d63c0f9e408a6a38df5aaeac2794da5de766d7398035a380bdf3d41389a
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:gb200-nv
