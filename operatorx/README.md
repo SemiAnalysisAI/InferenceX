@@ -17,7 +17,7 @@ Dispatch the **OperatorX Sweep** workflow ([CI.md](CI.md)). The same planner run
 
 ```bash
 PYTHONPATH=.:inferencex-e2e python3 -m operatorx.ci plan --platform-config operatorx/platforms.json \
-  --runner cluster:h200-dgxc --backends vllm --testlists gemm_parallel --world-sizes 1,2,4,8 \
+  --runner cluster:h200-dgxc --backends vllm --testlists gemm_kimi_k3 --world-sizes 1,2,4,8 \
   --chunk-size 500 --mode timing --run-id local --attempt 1 --source-sha "$(git rev-parse HEAD)" \
   --out manifest.json
 ```

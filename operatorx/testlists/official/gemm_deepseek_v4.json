@@ -183772,5 +183772,745 @@
       "sgl-project/DeepSeek-V4-Pro-FP8/attn.wq_b",
       "sgl-project/DeepSeek-V4-Pro-FP8/mtp.attn.wq_b"
     ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "k": 16384,
+      "n": 7168,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4-Pro-0813/attn.wo_b"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "k": 16384,
+      "n": 7168,
+      "out": "bf16",
+      "parallel": {
+        "tp": 4
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4-Pro/attn.wo_b"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "k": 16384,
+      "n": 7168,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4-Pro-0813/attn.wo_b"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "k": 16384,
+      "n": 7168,
+      "out": "bf16",
+      "parallel": {
+        "tp": 4
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4-Pro/attn.wo_b"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "k": 3072,
+      "n": 7168,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4-Pro-0813/ffn.shared_experts.w2"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "k": 3072,
+      "n": 7168,
+      "out": "bf16",
+      "parallel": {
+        "tp": 4
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4-Pro/ffn.shared_experts.w2"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "k": 3072,
+      "n": 7168,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4-Pro-0813/ffn.shared_experts.w2"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            128
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            128,
+            128
+          ],
+          "static": true
+        }
+      },
+      "k": 3072,
+      "n": 7168,
+      "out": "bf16",
+      "parallel": {
+        "tp": 4
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4-Pro/ffn.shared_experts.w2"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            32,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 8192,
+      "n": 5120,
+      "out": "bf16",
+      "parallel": {
+        "tp": 2
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4.1-Flash/attn.wo_b"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            32,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 8192,
+      "n": 5120,
+      "out": "bf16",
+      "parallel": {
+        "tp": 4
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4.1-Flash/attn.wo_b"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            32,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 8192,
+      "n": 5120,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4.1-Flash/attn.wo_b"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            32,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 8192,
+      "n": 5120,
+      "out": "bf16",
+      "parallel": {
+        "tp": 2
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4.1-Flash/attn.wo_b"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            32,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 8192,
+      "n": 5120,
+      "out": "bf16",
+      "parallel": {
+        "tp": 4
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4.1-Flash/attn.wo_b"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            32,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 8192,
+      "n": 5120,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4.1-Flash/attn.wo_b"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            32,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 2304,
+      "n": 5120,
+      "out": "bf16",
+      "parallel": {
+        "tp": 2
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4.1-Flash/ffn.shared_experts.w2"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            32,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 2304,
+      "n": 5120,
+      "out": "bf16",
+      "parallel": {
+        "tp": 4
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4.1-Flash/ffn.shared_experts.w2"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            32,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 2304,
+      "n": 5120,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4.1-Flash/ffn.shared_experts.w2"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            32,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 2304,
+      "n": 5120,
+      "out": "bf16",
+      "parallel": {
+        "tp": 2
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4.1-Flash/ffn.shared_experts.w2"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            32,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 2304,
+      "n": 5120,
+      "out": "bf16",
+      "parallel": {
+        "tp": 4
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4.1-Flash/ffn.shared_experts.w2"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            1,
+            32
+          ],
+          "static": false
+        }
+      },
+      "b": {
+        "dtype": "e4m3",
+        "scale": {
+          "dtype": "ue8m0",
+          "group": [
+            32,
+            32
+          ],
+          "static": true
+        }
+      },
+      "k": 2304,
+      "n": 5120,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "deepseek-ai/DeepSeek-V4.1-Flash/ffn.shared_experts.w2"
+    ]
   }
 ]

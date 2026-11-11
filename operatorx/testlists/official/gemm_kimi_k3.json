@@ -13278,5 +13278,131 @@
     "sources": [
       "moonshotai/Kimi-K3/self_attn.q_proj+self_attn.k_proj+self_attn.v_proj+self_attn.g_proj+self_attn.f_a_proj+self_attn.b_proj"
     ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 7168,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe.shared_experts.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 6144,
+      "n": 7168,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/block_sparse_moe.shared_experts.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 33792,
+      "n": 7168,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/mlp.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 33792,
+      "n": 7168,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/mlp.down_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 12288,
+      "n": 7168,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/self_attn.o_proj"
+    ]
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "a": {
+        "dtype": "bf16"
+      },
+      "b": {
+        "dtype": "bf16"
+      },
+      "k": 12288,
+      "n": 7168,
+      "out": "bf16",
+      "parallel": {
+        "tp": 8
+      }
+    },
+    "sources": [
+      "moonshotai/Kimi-K3/self_attn.o_proj"
+    ]
   }
 ]
