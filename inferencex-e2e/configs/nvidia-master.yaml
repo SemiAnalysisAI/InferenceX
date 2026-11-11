@@ -3867,6 +3867,34 @@ qwen3.5-fp4-b300-sglang-agentic-mtp:
       - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32], srt-recipe: agentic.yaml }
       - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [36, 44, 52], srt-recipe: agentic.yaml }
 
+qwen3.5-fp4-b300-sglang-agentic-mtp-pareto:
+  image: lmsysorg/sglang:nightly-dev-20261013-7224fce1
+  model: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
+  model-prefix: qwen3.5
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: qwen3.5/sglang/b300-fp4-mtp-pareto
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [4], srt-recipe: 'agentic.yaml:override_tp4_ep1_c4_cap1_arf' }
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [6], srt-recipe: 'agentic.yaml:override_tp4_ep1_c6_cap1_arf' }
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [12], srt-recipe: 'agentic.yaml:override_tp4_ep1_c12_cap2_arf' }
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [14], srt-recipe: 'agentic.yaml:override_tp4_ep1_c14_cap2_arf' }
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [16], srt-recipe: 'agentic.yaml:override_tp4_ep1_c16_cap3_arf' }
+      - { tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [22], srt-recipe: 'agentic.yaml:override_tp4_ep4_c22_cap4' }
+      - { tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [26], srt-recipe: 'agentic.yaml:override_tp4_ep4_c26_cap5' }
+      - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [16], srt-recipe: 'agentic.yaml:override_tp2_ep2_c16_cap4' }
+      - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [20], srt-recipe: 'agentic.yaml:override_tp2_ep2_c20_cap5' }
+      - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [24], srt-recipe: 'agentic.yaml:override_tp2_ep2_c24_cap8' }
+      - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [32], srt-recipe: 'agentic.yaml:override_tp2_ep2_c32_cap13_pf' }
+      - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [40], srt-recipe: 'agentic.yaml:override_tp2_ep2_c40_cap17_pf' }
+      - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [48], srt-recipe: 'agentic.yaml:override_tp2_ep2_c48_cap32_pf' }
+      - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64], srt-recipe: 'agentic.yaml:override_tp2_ep2_c64_cap128_pf_hicache' }
+
 # Qwen3.5 NVFP4 B300 Dynamo/SGLang AgentX variants using the pinned
 # SGLang image and committed golden acceptance-length curve.
 qwen3.5-fp4-b300-dynamo-sglang-agentic-pareto:
