@@ -12,7 +12,11 @@ from urllib.parse import parse_qs, quote, urlsplit
 
 from infx import github
 
-STAGING_SITE = "https://inferencemax-app-git-staging-semianalysisai.vercel.app"
+APP_REPOSITORY = os.environ.get("APP_REPO") or "SemiAnalysisAI/InferenceX-app"
+STAGING_SITE = (
+    os.environ.get("STAGING_APP_URL")
+    or "https://inferencemax-app-git-staging-semianalysisai.vercel.app"
+)
 INFERENCE_PATH = "/infx/inference"
 
 
@@ -57,7 +61,7 @@ def report(repo: str, event: dict[str, Any], token: str, server_url: str) -> Non
     Raises RuntimeError if the payload is malformed or from an unexpected source.
     """
     payload = event["client_payload"]
-    if payload.get("source-repository") != "SemiAnalysisAI/InferenceX-app":
+    if payload.get("source-repository") != APP_REPOSITORY:
         raise RuntimeError("Unsupported staging callback source")
     run_id, pr_number, app_run_id = (
         str(payload.get(key, "")) for key in ("run-id", "pr-number", "app-run-id")
@@ -80,7 +84,7 @@ def report(repo: str, event: dict[str, Any], token: str, server_url: str) -> Non
     if callback_type == "stage-results-completed" and succeeded not in {"true", "false"}:
         raise RuntimeError("Callback stage-succeeded value must be true or false")
 
-    app_url = f"{server_url}/SemiAnalysisAI/InferenceX-app/actions/runs/{app_run_id}"
+    app_url = f"{server_url}/{APP_REPOSITORY}/actions/runs/{app_run_id}"
     source_url = f"{server_url}/{repo}/actions/runs/{run_id}"
     if callback_type == "stage-results-started":
         body = (
