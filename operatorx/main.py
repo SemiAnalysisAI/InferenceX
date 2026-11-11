@@ -162,12 +162,24 @@ def _agree_any(flag: bool) -> bool:
         return flag
 
 
-def _restart_reason(status: str, residents: list) -> str | None:
+def _is_oom(e: BaseException) -> bool:
+    """A device allocation failure (torch's, or one a kernel library reports in its message)."""
+    try:
+        import torch
+        if isinstance(e, torch.OutOfMemoryError):
+            return True
+    except Exception:  # noqa: BLE001 - torch is not importable here
+        pass
+    text = str(e).lower()
+    return "out of memory" in text or "hipErrorOutOfMemory".lower() in text
+
+
+def _restart_reason(status: str, residents: list, oom: bool = False) -> str | None:
     """Why this process should not run another case, agreed by every rank; None to go on."""
     import gc
 
     from operatorx.runners.common import ranks
-    reason = "the case raised an error" if status == "error" else None
+    reason = "the case raised an error" if status == "error" else "out of memory" if oom else None
     try:
         import torch
         # with a layer or engine cached, the failure was this case's own (e.g. a batch the engine
@@ -278,6 +290,7 @@ def main() -> int:
             _write_progress(progress, {"next": index, "running": index, "failed_layers": failed_layers, "repeats": repeats})
         _t0 = _time.perf_counter()
         stage = ""
+        oom = False
         layer = layer_key(op.type, op.args)
         if layer in failed_layers:  # its build failed in a fresh process too: not run again
             status, message = failed_layers[layer]
@@ -311,12 +324,16 @@ def main() -> int:
             stage = getattr(e, "operatorx_stage", "")
             import traceback as _tb
             tb_tail = "".join(_tb.format_exception(type(e), e, e.__traceback__)).splitlines()[-6:]
-            results.append(Result(op=op, metrics={}, status="error",
-                                  message=f"{type(e).__name__}: {e} | tb: " + " || ".join(tb_tail),
+            # the case does not fit this device: unsupported (a CI part first retries it in a
+            # fresh process, so memory an earlier case left behind is not the cause)
+            status = "unsupported" if _is_oom(e) else "error"
+            oom = status == "unsupported"
+            results.append(Result(op=op, metrics={}, status=status,
+                                  message=("out of memory: " if oom else "")
+                                  + f"{type(e).__name__}: {e} | tb: " + " || ".join(tb_tail),
                                   testlist=tl))
-            counts["error"] += 1
-            status = "error"
-            latency_str = f"        ERROR ({type(e).__name__})"
+            counts[status] += 1
+            latency_str = "  unsupported (OOM)" if oom else f"        ERROR ({type(e).__name__})"
         wall_s = _time.perf_counter() - _t0
         if rank == 0:
             # checkpoint after each op, outside timing, so cancellation keeps completed rows
@@ -339,7 +356,7 @@ def main() -> int:
             pass
         if progress is not None:
             _write_progress(progress, {"next": index + 1, "failed_layers": failed_layers, "repeats": repeats})
-            reason = _restart_reason(status, residents) if status != "ok" else None
+            reason = _restart_reason(status, residents, oom) if status != "ok" else None
             if reason is not None and retried != index:  # run this case once more, in a fresh process
                 results.pop()
                 counts[status] -= 1
