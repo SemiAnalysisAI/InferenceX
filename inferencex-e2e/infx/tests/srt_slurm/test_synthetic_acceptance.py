@@ -182,7 +182,7 @@ def test_tokenspeed_non_synthetic_runs_remove_forced_acceptance(
     ({"speculative-num-draft-tokens": True}, "must equal"),
     ({"speculative-eagle-topk": 2}, "topk 1"),
     ({"speculative-algorithm": "EAGLE3"}, "MTP and DFLASH"),
-    ({"speculative-config": {"method": "mtp"}}, "explicit speculative flags"),
+    ({"speculative-config": {"method": "mtp"}}, "explicit MTP flags"),
 ])
 def test_tokenspeed_rejects_unsupported_speculation(golden_dir: Path, change, message) -> None:
     recipe = {"roles": {"agg": {"args": {

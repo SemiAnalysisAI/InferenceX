@@ -57,24 +57,17 @@ def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
     if engine == "tokenspeed":
         if "speculative-config" in args:
             raise ValueError(
-                "TokenSpeed AgentX requires explicit speculative flags, not speculative-config"
+                "TokenSpeed AgentX requires explicit MTP flags, not speculative-config"
             )
         algorithm = str(args.get("speculative-algorithm", "")).lower()
         if not algorithm:
             return {}
-        if algorithm == "mtp":
-            return {
-                "method": "mtp",
-                "num_speculative_tokens": args.get("speculative-num-steps"),
-            }
+        if algorithm not in ("mtp", "dflash"):
+            raise ValueError("TokenSpeed AgentX supports MTP and DFLASH speculation")
+        spec = {"method": algorithm, "num_speculative_tokens": args.get("speculative-num-steps")}
         if algorithm == "dflash":
-            # DFlash drafts its steps in one block; the verify window adds the current token.
-            return {
-                "method": "dflash",
-                "num_speculative_tokens": args.get("speculative-num-steps"),
-                "model": args.get("speculative-draft-model-path", ""),
-            }
-        raise ValueError("TokenSpeed AgentX supports MTP and DFLASH speculation")
+            spec["model"] = args.get("speculative-draft-model-path", "")
+        return spec
     if engine == "tilert":
         if args.get("with-mtp") is not True:
             return {}

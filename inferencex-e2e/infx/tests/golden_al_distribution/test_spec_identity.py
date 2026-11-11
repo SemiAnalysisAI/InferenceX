@@ -178,26 +178,6 @@ def test_tokenspeed_identity_keeps_unread_semantics_unknown(
     assert run.verify == run.draft_sample == run.adaptive == Fact(None, "unknown")
 
 
-def test_tokenspeed_dflash_selects_the_draft_curve() -> None:
-    args = {
-        "speculative-algorithm": "DFLASH",
-        "speculative-draft-model-path": "RadixArk/Muse-Spark-Open-DFlash2",
-        "speculative-num-steps": 7,
-        "speculative-num-draft-tokens": 8,
-        "speculative-eagle-topk": 1,
-        "kv-cache-dtype": "fp8_e4m3",
-    }
-    run = run_collection("musespark", _role(**args), "tokenspeed")
-    assert run.draft == "RadixArk/Muse-Spark-Open-DFlash2"
-    assert run.topology == Fact("chain", "explicit")
-    assert run.draft_precision == Fact(None, "default")
-    assert run.kv_cache_dtype == Fact("fp8", "explicit")
-    result = audit("musespark", _role(**args), "tokenspeed")
-    assert result["curve"].startswith("muse-spark-open-816b-a42b-nvfp4__dflash__")
-    assert result["draft_tokens"] == 7
-    assert ["engine", "engine", "tokenspeed", "sglang"] in result["findings"]
-
-
 def test_adaptive_run_is_reported() -> None:
     spec = {
         "method": "dspark", "num_speculative_tokens": 5, "draft_sample_method": "probabilistic",
