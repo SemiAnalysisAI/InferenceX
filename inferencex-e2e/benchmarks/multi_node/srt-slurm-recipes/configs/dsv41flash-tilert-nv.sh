@@ -11,6 +11,18 @@ case "$TILERT_ROLE" in
     *) echo "Unknown TileRT role: $TILERT_ROLE" >&2; exit 1 ;;
 esac
 
+# Every node pulls several GB of Torch / CUDA wheels at once; a download that arrives corrupted
+# fails pip's hash check (seen on the six-node decode), so retry before failing the role.
+pip_retry() {
+    local attempt
+    for attempt in 1 2 3 4; do
+        python3 -m pip "$@" && return 0
+        echo "pip $1 failed (attempt $attempt of 4); retrying" >&2
+        sleep $((attempt * 15))
+    done
+    return 1
+}
+
 # BOOTSTRAP_TORCH=<torch spec>: the decode container is the plain CUDA runtime image (no Python
 # stack); install Python, pip and the pinned official Torch wheel before tilert.
 if [[ "$TILERT_ROLE" == decode && -n "${BOOTSTRAP_TORCH:-}" ]]; then
@@ -20,7 +32,7 @@ if [[ "$TILERT_ROLE" == decode && -n "${BOOTSTRAP_TORCH:-}" ]]; then
         apt-get install -y -qq --no-install-recommends python3 python3-pip python3-dev >/dev/null
     fi
     export PIP_BREAK_SYSTEM_PACKAGES=1  # the container's own Python is the serving Python
-    python3 -m pip install --quiet --no-cache-dir --index-url "${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cu132}" "$BOOTSTRAP_TORCH"
+    pip_retry install --quiet --no-cache-dir --index-url "${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cu132}" "$BOOTSTRAP_TORCH"
 fi
 
 # Every role runs the exact wheel that was tested and signed off for this recipe: download it,
@@ -34,7 +46,7 @@ if [[ -z "$want_sha" ]]; then
     exit 1
 fi
 wheel_dir=/tmp/tilert-wheel
-python3 -m pip download --quiet --no-cache-dir --no-deps -d "$wheel_dir" "tilert==$ROUTER_VERSION"
+pip_retry download --quiet --no-cache-dir --no-deps -d "$wheel_dir" "tilert==$ROUTER_VERSION"
 tilert_wheel=$(python3 - "$wheel_dir" "$want_sha" <<'PY'
 import hashlib, pathlib, sys
 (wheel,) = pathlib.Path(sys.argv[1]).glob("tilert-*.whl")
@@ -65,7 +77,7 @@ PY
     fi
 else
     # The tilert release carries the serving layer (PD code and its engine API).
-    python3 -m pip install --quiet --no-cache-dir "$tilert_wheel"
+    pip_retry install --quiet --no-cache-dir "$tilert_wheel"
 fi
 
 # srt-slurm starts the decode server and the router as `python -m ...`; the CUDA runtime decode
@@ -79,12 +91,12 @@ if [[ "$TILERT_ROLE" == decode ]]; then
     if [[ -n "${SERVE_DEPS:-}" ]]; then
         # The recipe pins the serving stack the release was gated with.
         # shellcheck disable=SC2086
-        python3 -m pip install --quiet --no-cache-dir $SERVE_DEPS
+        pip_retry install --quiet --no-cache-dir $SERVE_DEPS
     elif ! python3 -c 'import uvicorn' >/dev/null 2>&1; then
-        python3 -m pip install --quiet --no-cache-dir fastapi uvicorn httpx
+        pip_retry install --quiet --no-cache-dir fastapi uvicorn httpx
     fi
     if ! python3 -c 'import transformers' >/dev/null 2>&1; then
-        python3 -m pip install --quiet --no-cache-dir 'transformers>=4.56'
+        pip_retry install --quiet --no-cache-dir 'transformers>=4.56'
     fi
 fi
 
