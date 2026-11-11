@@ -948,7 +948,7 @@ implementation, rather than requiring one flag spelling.
 APPLICABILITY: changes to master configs, recipes, benchmark images,
 `perf-changelog.yaml`, external orchestration pins, or cross-repository dispatch.
 N/A otherwise. Inspect every changed master entry and recipe pair at the PINNED SHA.
-Requirements (a)-(g) FAIL when violated or when a lookup they need fails ("could not
+Requirements (a)-(g) and (i) FAIL when violated or when a lookup they need fails ("could not
 be verified"). (h) is report-only. Name the config, file and line, and the mismatch.
 
 ### (a) `CONFIG_FILE` resolves
@@ -1001,6 +1001,21 @@ recipe fingerprint are re-tuned, not removed; they appear under `retuned_deltas`
 Report `retuned_deltas` (throughput and interactivity change per point) in the row,
 plus any eval lane change from Check 2. For an image-only bump, also compare with the
 closest prior run on the old image. A small diff is not evidence of low risk.
+
+### (i) AgentX stream interval is strictly below 60
+Every `agentic-coding` point the PR adds or reruns must have an effective stream interval
+strictly below 60 tokens in every serving role (aggregated, prefill, decode).
+There is no policy-imposed lower bound; valid engine-supported values below 20 are allowed.
+Resolve the effective value at the PINNED SHA through every control surface: `stream-interval` /
+`--stream-interval` (SGLang, vLLM), `stream_interval` (TRT-LLM and Dynamo engine
+configs), shared `*-variants.yaml` or base recipes, and benchmark scripts. An unset value
+uses the pinned engine's default, which must also be below 60; compliant defaults need no
+explicit override. FAIL on any value at or above 60, naming the config key, concurrency,
+role, file and line. Untouched points that are not rerun are not assessed, except that an
+`append-only: true` entry FAILs when any
+existing point of the same AgentX curve runs at or above 60. There are no
+per-submission exceptions. See
+[AgentX stream interval](../inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md#agentx-stream-interval).
 
 ## Verdict and output
 Decide PASS only if Checks 0-18 ALL pass. A check reported as `N/A` counts as a pass,
