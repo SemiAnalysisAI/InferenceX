@@ -6,6 +6,7 @@ activation, as a CUDA graph where vLLM would capture one. The chosen kernel is r
 """
 from __future__ import annotations
 
+import json
 import os
 import sys
 
@@ -183,25 +184,21 @@ def _param_dtypes(layer) -> dict[str, str]:
     return {n: str(p.dtype).removeprefix("torch.") for n, p in layer.named_parameters(recurse=False)}
 
 
-def _prepare_gemm(op: Op) -> dict:
-    a = op.args
-    if a.get("activation") is not None:
-        raise UnsupportedOpError(f"vllm linear has no fused activation; got {a['activation']!r}")
-    m, n, k = a["m"], a["n"], a["k"]
-    if min(m, n, k) <= 0:
-        raise UnsupportedOpError(f"degenerate gemm shape m={m} n={n} k={k}")
-    if a["a"].get("input", "bf16") != "bf16":
-        raise UnsupportedOpError("vLLM linear layers take a bf16 activation")
-    if a.get("out", "bf16") == "fp32" or a["b"]["dtype"] == "fp32":
-        return _prepare_fp32_out(op)
-    if a.get("out", "bf16") != "bf16":
-        raise UnsupportedOpError(f"vLLM linear layers return bf16 or fp32; got {a['out']!r}")
-    tp = (a.get("parallel") or {}).get("tp", 1)
-    if k % tp:
-        raise UnsupportedOpError(f"k={k} does not split {tp} ways")
-    engine.context(a.get("parallel"))
-    import vllm.envs as envs
+# the last built layer (GEMM here, MoE in moe.py), reused by the next case of its ladder
+BUILT: dict = {}
+
+
+def release_built() -> None:
+    """Drop the cached layer before building another (one layer resident at a time)."""
+    BUILT.clear()
+    from operatorx.runners.common.vllm import moe
+    moe.forget()
+
+
+def _build_gemm(a: dict) -> dict:
+    """Build the layer once per ladder: weights, quantization and kernel choice do not depend on M."""
     from vllm.model_executor.layers.linear import RowParallelLinear
+    k, n = a["k"], a["n"]
     with ranks.together("build this layer"):
         qc = _quant_config(a)
         _set_quant_fp8_op(qc)
@@ -225,6 +222,38 @@ def _prepare_gemm(op: Op) -> dict:
         kernels = _kernel_names(layer)
         if any(v.startswith("Emulation") for v in kernels.values()):
             raise UnsupportedOpError(f"vLLM has only an emulation kernel for {a} here: {kernels}")
+    return {"layer": layer, "qm": qm, "kernels": kernels, "loaded": loaded}
+
+
+def _prepare_gemm(op: Op) -> dict:
+    a = op.args
+    if a.get("activation") is not None:
+        raise UnsupportedOpError(f"vllm linear has no fused activation; got {a['activation']!r}")
+    m, n, k = a["m"], a["n"], a["k"]
+    if min(m, n, k) <= 0:
+        raise UnsupportedOpError(f"degenerate gemm shape m={m} n={n} k={k}")
+    if a["a"].get("input", "bf16") != "bf16":
+        raise UnsupportedOpError("vLLM linear layers take a bf16 activation")
+    if a.get("out", "bf16") == "fp32" or a["b"]["dtype"] == "fp32":
+        return _prepare_fp32_out(op)
+    if a.get("out", "bf16") != "bf16":
+        raise UnsupportedOpError(f"vLLM linear layers return bf16 or fp32; got {a['out']!r}")
+    tp = (a.get("parallel") or {}).get("tp", 1)
+    if k % tp:
+        raise UnsupportedOpError(f"k={k} does not split {tp} ways")
+    engine.context(a.get("parallel"))
+    import vllm.envs as envs
+    key = json.dumps({k: v for k, v in a.items() if k != "m"}, sort_keys=True)
+    if BUILT.get("key") != key:
+        release_built()
+        try:
+            BUILT.update(key=key, **_build_gemm(a))
+        except UnsupportedOpError as e:  # the rest of the ladder is unsupported for the same reason
+            BUILT.update(key=key, unsupported=str(e))
+            raise
+    if "unsupported" in BUILT:
+        raise UnsupportedOpError(BUILT["unsupported"])
+    layer, qm, kernels, loaded = BUILT["layer"], BUILT["qm"], BUILT["kernels"], BUILT["loaded"]
     x = torch.randn(m, layer.input_size_per_partition, device=device(), dtype=torch.bfloat16)
     ctx = {"layer": layer, "x": x,
            "meta": {"vllm_quant_method": type(qm).__name__, "vllm_kernels": kernels,

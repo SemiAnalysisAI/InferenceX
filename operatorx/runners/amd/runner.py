@@ -11,7 +11,8 @@ import torch
 from operatorx.core import Op, Result, UnsupportedOpError
 from operatorx.runners.common import profiling, ranks, telemetry, timing
 
-_COOLDOWN_RATIO = float(os.environ.get("OPERATORX_COOLDOWN_RATIO", "4"))
+# off by default: telemetry flags a throttled op and the timing retries it
+_COOLDOWN_RATIO = float(os.environ.get("OPERATORX_COOLDOWN_RATIO", "0"))
 _COOLDOWN_MAX_S = float(os.environ.get("OPERATORX_COOLDOWN_MAX_S", "1.0"))
 # ROCm reports only the per-XCD L2 slice: size the flush buffer for the whole hierarchy
 _FLUSH_MB = int(os.environ.get("OPERATORX_FLUSH_MB", "512"))

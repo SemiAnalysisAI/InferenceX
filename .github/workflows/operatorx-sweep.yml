@@ -35,9 +35,9 @@ on:
         type: string
         default: '1'
       chunk_size:
-        description: Maximum shapes per shard (1-500)
+        description: Maximum shapes per shard (1-4000; shards also stop at about 30 min of estimated work)
         type: number
-        default: 500
+        default: 4000
       recovery_run_id:
         description: Optional recent OperatorX run on this runner whose failed cleanup should be retried
         type: string
@@ -85,7 +85,7 @@ jobs:
           OPERATORX_WORLD_SIZES: ${{ inputs.world_sizes || '1' }}
           OPERATORX_MODE: ${{ inputs.mode || 'timing' }}
           OPERATORX_RECOVERY_RUN: ${{ inputs.recovery_run_id }}
-          OPERATORX_CHUNK_SIZE: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.chunk_size) || '500' }}
+          OPERATORX_CHUNK_SIZE: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.chunk_size) || '4000' }}
           PYTHONPATH: .:inferencex-e2e
         run: |
           set -eo pipefail
@@ -266,7 +266,7 @@ jobs:
   trigger-ingest:
     name: Trigger OperatorX database ingest
     if: >-
-      always() && github.event_name == 'workflow_dispatch' && inputs.ingest &&
+      !cancelled() && github.event_name == 'workflow_dispatch' && inputs.ingest &&
       needs.setup.outputs.ingestable == 'true' &&
       (needs.summarize.result == 'success' || needs.summarize.result == 'failure')
     needs: [setup, summarize]

@@ -225,7 +225,8 @@ def main() -> int:
                 f"{k}={json.dumps(v, separators=(',', ':')) if isinstance(v, (dict, list)) else v}"
                 for k, v in op.args.items() if not k.startswith("dtype")
             )
-            print(f"[ws={ws}] {tl:12} {status:11} {op.type:18} {op.backend:10}  "
+            lane = f" lane={os.environ['OPERATORX_LANE']}" if os.environ.get("OPERATORX_LANES", "1") != "1" else ""
+            print(f"[ws={ws}{lane}] {tl:12} {status:11} {op.type:18} {op.backend:10}  "
                   f"{latency_str}  wall={wall_s:6.1f}s   {shape_str}", flush=True)
         # release cached blocks, else the next big shape can OOM on the previous op's buffers
         try:

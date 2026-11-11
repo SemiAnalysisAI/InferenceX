@@ -34,6 +34,14 @@ RUNNERS = {
     "cluster:mi355x-amds": ("mi355x_8x", "mi355x"),
 }
 MODES = ("timing", "counters")
+MAX_CHUNK = 4000
+# Planning estimate of one shard's benchmark time, for sizing shards to the Slurm time.
+# A layer's first case pays its kernel JIT and autotuning; the rest of its ladder reuses it.
+EST_LAYER_S = 45.0
+EST_CASE_S = 2.0
+EST_SHARD_S = 30 * 60
+# the case dimension a layer's ladder sweeps; a layer is its args without it
+LADDER_ARG = {"gemm": "m", "moe": "tokens"}
 # per-kernel hardware counters; a counters run's latencies are perturbed by the profiler
 NCU_METRICS = ",".join((
     "gpu__time_duration.sum", "sm__cycles_elapsed.avg.per_second",
@@ -156,6 +164,24 @@ def write_json(path: Path, value: object) -> None:
     temporary.replace(path)
 
 
+def layer_key(shape: dict) -> str:
+    """A case's layer: its op and args without the dimension its ladder sweeps."""
+    args = dict(shape["args"])
+    if shape["type"] in LADDER_ARG:
+        args.pop(LADDER_ARG[shape["type"]], None)
+    else:  # attention: the batch (requests, query and context lengths) is the ladder
+        args.pop("batch", None)
+    return json.dumps([shape["type"], args], sort_keys=True)
+
+
+def layer_groups(cases: list[dict]) -> list[list[dict]]:
+    """Cases grouped by layer, in first-appearance order, each ladder kept in its order."""
+    groups: dict[str, list[dict]] = {}
+    for c in cases:
+        groups.setdefault(layer_key(c["shape"]), []).append(c)
+    return list(groups.values())
+
+
 def plan(
     runner: str,
     backends: list[str],
@@ -201,8 +227,8 @@ def plan(
         raise ValueError(f"world size exceeds the runner's {gpus}-GPU physical node")
     if "torch" in backends and world_sizes != [1]:
         raise ValueError("the torch backend runs single-device GEMM only")
-    if not 1 <= chunk_size <= 500:
-        raise ValueError("chunk size must be between 1 and 500")
+    if not 1 <= chunk_size <= MAX_CHUNK:
+        raise ValueError(f"chunk size must be between 1 and {MAX_CHUNK}")
     groups = defaultdict(list)
     recipes_seen: dict[str, dict] = {}
     excluded = 0
@@ -226,42 +252,86 @@ def plan(
         # the image InferenceX serves the backend with on this hardware, else operatorx's own
         image = default_image and default_image(backend, family(runner))
         image_groups[image or images[backend]["image"]].append(backend)
-    cells = []
-    shards = []
-    for (split, recipe, _state), cases in sorted(groups.items()):
+    # units: one layer's ladder under one split, image and recipe
+    units = []
+    for (split, recipe, state), cases in sorted(groups.items()):
         split = json.loads(split)
-        ws = parallel.world_size(split)
         rest = image_groups
+        runs = []
         if recipe:
             r = recipes_seen[recipe]
             framework = next(b for b in backends if b in FRAMEWORKS)
-            shards.append((r["image"], [framework], ws, cases,
-                           {"parallel": split, "recipe": recipe, "recipe_match": r["match"],
-                            "checkpoint": r["checkpoint"], "env": r["env"], "engine_args": r["engine_args"]}))
+            runs.append((r["image"], [framework],
+                         {"recipe": recipe, "recipe_match": r["match"], "checkpoint": r["checkpoint"],
+                          "env": r["env"], "engine_args": r["engine_args"]}))
             # the other backends run the same cases on their own images
             rest = {i: [b for b in bs if b != framework] for i, bs in image_groups.items()}
-        shards += [(image, selected, ws, cases, {"parallel": split})
-                   for image, selected in sorted(rest.items()) if selected]
-    for image, selected, ws, cases, extra in shards:
-            for offset in range(0, len(cases), chunk_size):
-                cell = {
-                    "runner": runner,
-                    "cluster": RUNNERS[runner][0],
-                    "nodes": 1,
-                    "gpus_per_node": gpus,
-                    "image_platform": image_platform,
-                    "world_size": ws,
-                    "image": image,
-                    "mode": mode,
-                    "backends": selected,
-                    "offset": offset,
-                    "cases": cases[offset : offset + chunk_size],
-                    **extra,
-                }
-                identity = hashlib.sha256(
-                    json.dumps(cell, sort_keys=True).encode()
-                ).hexdigest()[:16]
-                cells.append({"id": f"{runner.removeprefix('cluster:')}-{identity}", **cell})
+        runs += [(image, selected, {}) for image, selected in sorted(rest.items()) if selected]
+        for image, selected, extra in runs:
+            for layer in layer_groups(cases):
+                for offset in range(0, len(layer), chunk_size):
+                    units.append((image, selected, extra, split, state, layer[offset : offset + chunk_size]))
+    # counters runs keep one split and one process per shard (profiler output is per rank)
+    lanes_for = (lambda ws: max(1, gpus // ws)) if mode == "timing" else (lambda ws: 1)
+    packs = defaultdict(list)  # (image, backends, recipe) -> shards in progress
+    shards = []
+    for image, selected, extra, split, state, cases in units:
+        key = json.dumps([image, selected, extra], sort_keys=True)
+        part_key = json.dumps([split, state], sort_keys=True)
+        cost = EST_LAYER_S + EST_CASE_S * len(cases)
+        open_ = packs[key][-1] if packs[key] else None
+        if open_ is not None and mode != "timing" and part_key not in open_["parts"]:
+            open_ = None
+        if open_ is not None:
+            part = open_["parts"].get(part_key) or {"loads": [0.0] * lanes_for(parallel.world_size(split))}
+            lane = min(range(len(part["loads"])), key=part["loads"].__getitem__)
+            before = max(part["loads"])
+            after = max(before, part["loads"][lane] + cost)
+            if (len(open_["cases"]) + len(cases) > chunk_size
+                    or open_["cost"] - before + after > EST_SHARD_S and open_["cases"]):
+                open_ = None
+        if open_ is None:
+            # offset: cases planned before this shard under the same image and recipe
+            offset = sum(len(p["cases"]) for p in packs[key])
+            open_ = {"image": image, "backends": selected, "extra": extra, "parts": {}, "cases": [], "cost": 0.0,
+                     "offset": offset}
+            packs[key].append(open_)
+            shards.append(open_)
+        part = open_["parts"].setdefault(
+            part_key, {"loads": [0.0] * lanes_for(parallel.world_size(split)), "index": len(open_["parts"])})
+        lane = min(range(len(part["loads"])), key=part["loads"].__getitem__)
+        before = max(part["loads"])
+        part["loads"][lane] += cost
+        open_["cost"] += max(part["loads"]) - before
+        part.setdefault("lanes", [[] for _ in part["loads"]])
+        part["lanes"][lane] += range(len(open_["cases"]), len(open_["cases"]) + len(cases))
+        part["split"] = split
+        open_["cases"] += cases
+    cells = []
+    for shard in shards:
+        splits = {json.dumps(json.loads(k)[0], sort_keys=True) for k in shard["parts"]}
+        sizes = [parallel.world_size(json.loads(k)[0]) for k in shard["parts"]]
+        cell = {
+            "runner": runner,
+            "cluster": RUNNERS[runner][0],
+            "nodes": 1,
+            "gpus_per_node": gpus,
+            "image_platform": image_platform,
+            "world_size": max(sizes),
+            "image": shard["image"],
+            "mode": mode,
+            "backends": shard["backends"],
+            "offset": shard["offset"],
+            "cases": shard["cases"],
+            **shard["extra"],
+        }
+        if len(splits) == 1:
+            cell["parallel"] = json.loads(next(iter(splits)))
+        # processes run part by part; a part's lanes (case indices) run side by side on the node
+        cell["parts"] = [{"parallel": p["split"], "lanes": [lane for lane in p["lanes"] if lane]}
+                         for p in sorted(shard["parts"].values(), key=lambda p: p["index"])]
+        identity = hashlib.sha256(json.dumps(cell, sort_keys=True).encode()).hexdigest()[:16]
+        cells.append({"id": f"{runner.removeprefix('cluster:')}-{identity}", **cell})
     if not cells:
         raise ValueError("selection contains no runnable shapes")
     if len(cells) > 256:
@@ -505,6 +575,18 @@ def recover(
     print(f"Recovered {recovered} execution(s) from run {run_id}", flush=True)
 
 
+def parallel_world_size(split: dict | None) -> int:
+    split = split or {}
+    return int(split.get("tp", 1)) * int(split.get("dp", 1))
+
+
+def cell_parts(cell: dict) -> list[dict]:
+    """The cell's parts; a manifest planned before parts is one part of one process."""
+    if cell.get("parts"):
+        return cell["parts"]
+    return [{"parallel": cell.get("parallel") or {}, "lanes": [list(range(len(cell["cases"])))]}]
+
+
 def execute(args) -> None:
     root = args.output.resolve()
     root.mkdir(parents=True, exist_ok=False, mode=0o700)
@@ -523,6 +605,9 @@ def execute(args) -> None:
         or cell["world_size"] > gpus
     ):
         raise ValueError("manifest hardware differs from the selected runner")
+    parts = cell_parts(cell)
+    if any(parallel_world_size(p["parallel"]) * len(p["lanes"]) > gpus for p in parts):
+        raise ValueError("a part's processes need more GPUs than the node has")
     base = shared_base(profile, cell["runner"])
     base.mkdir(mode=0o700, exist_ok=True)
     if (
@@ -565,11 +650,15 @@ def execute(args) -> None:
             )
         if cell.get("checkpoint"):
             stage_model_config(cell["checkpoint"], stage / "models")
-        for name in sorted({c["testlist"] for c in cell["cases"]}):
-            write_json(
-                stage / "testlists" / f"{name}.json",
-                [c["shape"] for c in cell["cases"] if c["testlist"] == name],
-            )
+        (stage / "cache").mkdir()  # per-process compile caches, kept across parts
+        for i, part in enumerate(parts):
+            for j, lane in enumerate(part["lanes"]):
+                cases = [cell["cases"][k] for k in lane]
+                for name in sorted({c["testlist"] for c in cases}):
+                    write_json(
+                        stage / "testlists" / f"p{i}-l{j}" / f"{name}.json",
+                        [c["shape"] for c in cases if c["testlist"] == name],
+                    )
         (stage / "results").mkdir()
         allocation = [
             "salloc",
@@ -649,8 +738,6 @@ def execute(args) -> None:
             ),
             PYTHONPATH="/opx/source",
             PYTHONDONTWRITEBYTECODE="1",
-            WORLD_SIZE=str(cell["world_size"]),
-            OPERATORX_PARALLEL=json.dumps(cell.get("parallel") or {}),
             MASTER_ADDR="127.0.0.1",
             MASTER_PORT=str(29500 + int(hashlib.sha256(f"{job}:{cell['id']}".encode()).hexdigest(), 16) % 2000),
         )
@@ -677,12 +764,7 @@ def execute(args) -> None:
                 env["OPERATORX_NCU"] = str(ncu)
         if hw in ("mi300x", "mi325x"):
             mounts += ",/dev/kfd:/dev/kfd,/dev/dri:/dev/dri"
-        run = [
-            "srun",
-            f"--jobid={job}",
-            "--nodes=1",
-            f"--ntasks={cell['world_size']}",
-            f"--ntasks-per-node={cell['world_size']}",
+        container = [
             "--kill-on-bad-exit=1",
             "--chdir=/tmp",
             f"--container-image={cache / (key + '.sqsh')}",
@@ -694,15 +776,39 @@ def execute(args) -> None:
             "--export=ALL",
         ]
         if hw in ("h200", "b300", "h100", "gb200", "gb300") or is_amd(cell["runner"]):
-            run.append("--container-remap-root")
+            container.append("--container-remap-root")
         # the AWS dsxe pools (b300, h100) share one Slurm and pyxis setup
         if hw in ("b300", "h100"):
-            run.append("--mpi=none")
-        # by path: an image's own PYTHONPATH (ROCm images set one) replaces the host's
-        run += ["python3", "/opx/source/operatorx/ci.py", "rank"]
-        # bound a collective that hangs without failing
-        run = ["timeout", "-k", "30", str(max(300, args.time_minutes * 60 - 300)), *run]
-        command(run, root / "benchmark.log", env=env)
+            container.append("--mpi=none")
+        # parts run one after another in the allocation, each part's lanes side by side
+        deadline = time.monotonic() + max(300, args.time_minutes * 60 - 300)
+        failed = None
+        for i, part in enumerate(parts):
+            ws = parallel_world_size(part["parallel"])
+            tasks = ws * len(part["lanes"])
+            left = int(deadline - time.monotonic())
+            if left < 60:
+                failed = failed or RuntimeError(f"no time left for parts {i}..{len(parts) - 1}")
+                break
+            part_env = dict(
+                env,
+                WORLD_SIZE=str(ws),
+                OPERATORX_PARALLEL=json.dumps(part["parallel"] or {}),
+                OPERATORX_PART=str(i),
+                OPERATORX_LANES=str(len(part["lanes"])),
+                MASTER_PORT=str(int(env["MASTER_PORT"]) + 40 * i),
+            )
+            # by path: an image's own PYTHONPATH (ROCm images set one) replaces the host's;
+            # timeout bounds a collective that hangs without failing
+            run = ["timeout", "-k", "30", str(left), "srun", f"--jobid={job}", "--nodes=1",
+                   f"--ntasks={tasks}", f"--ntasks-per-node={tasks}", *container,
+                   "python3", "/opx/source/operatorx/ci.py", "rank"]
+            try:
+                command(run, root / "benchmark.log", env=part_env)
+            except subprocess.CalledProcessError as e:  # later parts still run; finished rows are kept
+                failed = failed or e
+        if failed is not None:
+            raise failed
         rc = 0
     finally:
         # stop writers before collecting; a failed cleanup keeps the evidence
@@ -714,31 +820,63 @@ def execute(args) -> None:
         )
 
 
+def _visible_devices(lane: int, ws: int) -> None:
+    """Restrict this process to its lane's GPUs (the node's GPUs in order, ws per lane)."""
+    gpus = int(os.environ.get("OPERATORX_GPUS_PER_NODE", "8"))
+    pick = slice(lane * ws, (lane + 1) * ws)
+    if Path("/dev/kfd").exists():  # ROCm: the lowest layer, then HIP/CUDA renumber from 0
+        base = os.environ.get("ROCR_VISIBLE_DEVICES", "").split(",") if os.environ.get(
+            "ROCR_VISIBLE_DEVICES") else [str(i) for i in range(gpus)]
+        os.environ["ROCR_VISIBLE_DEVICES"] = ",".join(base[pick])
+        for name in ("HIP_VISIBLE_DEVICES", "CUDA_VISIBLE_DEVICES"):
+            if os.environ.get(name):
+                os.environ[name] = ",".join(str(i) for i in range(ws))
+        return
+    base = os.environ.get("CUDA_VISIBLE_DEVICES", "").split(",") if os.environ.get(
+        "CUDA_VISIBLE_DEVICES") else [str(i) for i in range(gpus)]
+    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(base[pick])
+
+
 def rank() -> None:
     for key in ("SLURM_PROCID", "SLURM_LOCALID", "WORLD_SIZE"):
         if not os.environ.get(key):
             raise ValueError(f"required rank input missing: {key}")
-    os.environ["RANK"] = os.environ["SLURM_PROCID"]
+    # a part runs `lanes` independent process groups of WORLD_SIZE ranks side by side,
+    # each on its own GPUs, with its own cases (testlists/p<part>-l<lane>)
+    ws = int(os.environ["WORLD_SIZE"])
+    task = int(os.environ["SLURM_LOCALID"])
+    lane, local = divmod(task, ws)
+    lanes = int(os.environ.get("OPERATORX_LANES", "1"))
+    part = os.environ.get("OPERATORX_PART", "0")
+    os.environ["RANK"] = str(local)
+    os.environ["LOCAL_RANK"] = str(local)
+    os.environ["OPERATORX_LANE"] = str(lane)
+    os.environ["MASTER_PORT"] = str(int(os.environ["MASTER_PORT"]) + lane)
+    if lanes > 1:
+        _visible_devices(lane, ws)
     source = "/opx/source"
     paths = [x for x in os.environ.get("PYTHONPATH", "").split(":") if x and x != source]
     os.environ["PYTHONPATH"] = ":".join([source, *paths])
-    os.environ["LOCAL_RANK"] = os.environ["SLURM_LOCALID"]
-    cache = (
-        Path("/tmp") / f"operatorx-{os.environ['SLURM_JOB_ID']}-{os.environ['RANK']}"
-    )
-    cache.mkdir(mode=0o700, exist_ok=True)
+    # per task, kept on the stage across parts so later parts reuse the compiled kernels
+    cache = Path("/opx/cache") / f"task{task}"
+    if not Path("/opx/cache").is_dir():  # a stage planned before parts
+        cache = Path("/tmp") / f"operatorx-{os.environ['SLURM_JOB_ID']}-{task}"
+    cache.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.environ.update(
         HOME=str(cache),
         TRITON_CACHE_DIR=str(cache / "triton"),
         MPLCONFIGDIR=str(cache / "matplotlib"),
     )
+    testlists = Path("/opx/testlists") / f"p{part}-l{lane}"
+    if not testlists.is_dir():
+        testlists = Path("/opx/testlists")
     bench = [
         sys.executable,
         "-m",
         "operatorx",
         "--strict",
         "--testlist-dir",
-        "/opx/testlists",
+        str(testlists),
         "--results-dir",
         "/opx/results",
     ]

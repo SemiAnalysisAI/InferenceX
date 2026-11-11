@@ -7,6 +7,7 @@ sequence-parallel chunking follow DeepseekV2MLP / DeepseekV2MoE.
 """
 from __future__ import annotations
 
+import json
 import os
 
 import torch
@@ -23,6 +24,8 @@ __all__ = ["IMPLS", "versions"]
 _DTYPES = {"bf16": torch.bfloat16, "fp32": torch.float32}
 _MAX_TOKENS = 65536  # the largest token count in the testlists
 _LAYER = 0
+# the last built layer, reused by the next case of its ladder (same args but tokens)
+_BUILT: dict = {}
 
 
 def _quant(x: dict, w: dict, where: str):
@@ -400,19 +403,20 @@ def _generic_block(a: dict, prefix: str) -> _MoeBlock:
     return block
 
 
-def _prepare_moe(op: Op) -> dict:
+def forget() -> None:
+    """Drop the cached MoE layer (another op's layer is being built)."""
+    if _BUILT:
+        _BUILT.clear()
+        _release_previous()
+
+
+def _build_moe(a: dict) -> dict:
+    """Build the layer once per ladder: weights, quantization and kernel choice do not depend
+    on the token count (the routing buffers cover the largest)."""
     global _LAYER
-    a = op.args
-    if a.get("out", "bf16") != "bf16":
-        raise UnsupportedOpError("vLLM MoE layers return bf16")
-    if a["tokens"] > _MAX_TOKENS:
-        raise UnsupportedOpError(f"tokens > {_MAX_TOKENS} is not wired")
     routing = a.get("routing") or {"distribution": "natural", "seed": 0}
-    engine.context(a.get("parallel"))
-    _release_previous()
-    import vllm.envs as envs
     torch.manual_seed(routing["seed"])
-    _LAYER += 1  # vLLM registers layers by name; each op builds a fresh one
+    _LAYER += 1  # vLLM registers layers by name; each layer is built fresh
     prefix = f"model.layers.{_LAYER}.mlp"
     with ranks.together("build this layer"):
         prev = torch.get_default_dtype()
@@ -432,6 +436,31 @@ def _prepare_moe(op: Op) -> dict:
         kernels = _describe(block)
         if any("Emulation" in str(v) for e in kernels.values() for v in e.values()):
             raise UnsupportedOpError(f"vLLM has only an emulation kernel for this MoE layer here: {kernels}")
+    return {"block": block, "kernels": kernels}
+
+
+def _prepare_moe(op: Op) -> dict:
+    a = op.args
+    if a.get("out", "bf16") != "bf16":
+        raise UnsupportedOpError("vLLM MoE layers return bf16")
+    if a["tokens"] > _MAX_TOKENS:
+        raise UnsupportedOpError(f"tokens > {_MAX_TOKENS} is not wired")
+    routing = a.get("routing") or {"distribution": "natural", "seed": 0}
+    engine.context(a.get("parallel"))
+    import vllm.envs as envs
+    key = json.dumps({k: v for k, v in a.items() if k != "tokens"}, sort_keys=True)
+    if _BUILT.get("key") != key:
+        vllm_linear.BUILT.clear()
+        _BUILT.clear()
+        _release_previous()
+        try:
+            _BUILT.update(key=key, **_build_moe(a))
+        except UnsupportedOpError as e:  # the rest of the ladder is unsupported for the same reason
+            _BUILT.update(key=key, unsupported=str(e))
+            raise
+    if "unsupported" in _BUILT:
+        raise UnsupportedOpError(_BUILT["unsupported"])
+    block, kernels = _BUILT["block"], _BUILT["kernels"]
     # the tokens of one data-parallel group, identical on its tensor-parallel ranks
     g = torch.Generator(device=device()).manual_seed(routing["seed"] * 1000 + _dp_rank())
     x = torch.randn(a["tokens"], a["hidden"], device=device(), dtype=torch.bfloat16, generator=g)
