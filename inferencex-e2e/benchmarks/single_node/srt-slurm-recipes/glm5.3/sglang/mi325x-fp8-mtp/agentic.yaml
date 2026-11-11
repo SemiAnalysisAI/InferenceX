@@ -29,7 +29,7 @@ base:
         expert-parallel-size: 1
         dsa-prefill-backend: tilelang
         dsa-decode-backend: tilelang
-        dsa-topk-backend: torch
+        dsa-topk-backend: sgl-kernel
         kv-cache-dtype: fp8_e4m3
         # GLM-5.3 emits the GLM-4.7 tool-call format.
         tool-call-parser: glm47
@@ -51,9 +51,6 @@ base:
         PYTHONNOUSERSITE: '1'
         # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
-        # gfx942 uses portable top-k instead of CUDA-header JIT kernels.
-        SGLANG_DSA_FUSE_TOPK: 'false'
-        SGLANG_OPT_USE_TOPK_V2: 'false'
   benchmark:
     env:
       HF_HUB_OFFLINE: ''
@@ -132,16 +129,20 @@ override_tp8_c8:
       CONC: '8'
       KV_OFFLOADING: none
 
-override_tp8_c9:
+override_tp8_c9_hicache:
   roles:
     agg:
       args:
         max-running-requests: 18
         cuda-graph-max-bs-decode: 18
+        enable-hierarchical-cache: true
+        hicache-host-memory-fraction: 0.60
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
   benchmark:
     env:
       CONC: '9'
-      KV_OFFLOADING: none
+      KV_OFFLOADING: dram
 
 override_tp8_c10_hicache:
   roles:
