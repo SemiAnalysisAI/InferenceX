@@ -511,9 +511,17 @@ override_8p1d_dep2_dep8_bs8:
     prefill:
       nodes: 2
       workers: 8
+      env:
+        VLLM_MOONCAKE_LOAD_RECV_THREADS: '16'
+      args:
+        # NIXL push: prefill writes the KV into blocks decode reserved, as in the off-CI run of this point.
+        # In pull mode it missed the 250 tokens/s target there.
+        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["LIBFABRIC"],"enforce_handshake_compat":false,"kv_lease_duration":120,"transfer_mode":"push"}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}]}}'
     decode:
       gpus: 8
       args:
+        kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["LIBFABRIC"],"enforce_handshake_compat":false,"kv_lease_duration":120,"transfer_mode":"push"}}'
+        gpu-memory-utilization: 0.92
         enable-expert-parallel: true
         kernel-config: '{"moe_backend":"deep_gemm_mega_moe"}'
         tensor-parallel-size: 1
