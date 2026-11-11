@@ -12689,6 +12689,29 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4951
 
 - config-keys:
+    - dsv41flash-fp4-b300-sglang-agentic-dspark
+    - dsv41flash-fp4-b300-sglang-agentic-dspark-lowconc
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update SGLang image to lmsysorg/sglang:nightly-dev-cu13-20261107-e45e1d0c."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4900
+
+- config-keys:
+    - glm5.2-fp8-mi325x-sglang-agentic-mtp
+  description:
+    - "Update the SGLang ROCm image from v0.5.22 to v0.5.23, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4870
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp
+  description:
+    - "Update the TensorRT-LLM image from 1.3.0rc28.dev202609210001 to 1.4.0rc2."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4626
+  scenario-type: [agentic-coding]
+
+- config-keys:
     - qwen3.5-fp4-mi355x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding

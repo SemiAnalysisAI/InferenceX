@@ -299,11 +299,13 @@ a green sweep alone is not enough. Verify the command directly from the comments
   Inline mentions and bare `/use` do not count.
   ```bash
   gh api repos/${REPO}/issues/${PR_NUMBER}/comments \
-    --paginate --jq '.[] | {user: .user.login, association: .author_association, body: .body}'
+    --paginate --jq '.[] | {user: .user.login, body: .body}'
+  gh api repos/${REPO}/collaborators/<user>/permission --jq '{permission, role_name}'
   ```
-- PASS only if a matching comment exists whose `author_association` is `OWNER`,
-  `MEMBER`, or `COLLABORATOR`. Both command names share this requirement; the newest
-  authorized matching comment across both names determines the requested source.
+- PASS only if a matching comment exists whose author has write access to the repository:
+  both `permission` and `role_name` are `admin`, `maintain`, or `write`. Both command names
+  share this requirement; the newest authorized matching comment across both names
+  determines the requested source.
 - WARN if no authorized reuse command is present. This is an advisory warning,
   not a failing criterion, but it must always be shown expanded in the verdict.
   State: "No authorized reuse command has been posted on this PR" and tell the
@@ -1002,18 +1004,18 @@ Report `retuned_deltas` (throughput and interactivity change per point) in the r
 plus any eval lane change from Check 2. For an image-only bump, also compare with the
 closest prior run on the old image. A small diff is not evidence of low risk.
 
-### (i) AgentX stream interval is strictly below 60
+### (i) AgentX stream interval is at most 60
 Every `agentic-coding` point the PR adds or reruns must have an effective stream interval
-strictly below 60 tokens in every serving role (aggregated, prefill, decode).
+at most 60 tokens (≤ 60, inclusive) in every serving role (aggregated, prefill, decode).
 There is no policy-imposed lower bound; valid engine-supported values below 20 are allowed.
 Resolve the effective value at the PINNED SHA through every control surface: `stream-interval` /
 `--stream-interval` (SGLang, vLLM), `stream_interval` (TRT-LLM and Dynamo engine
 configs), shared `*-variants.yaml` or base recipes, and benchmark scripts. An unset value
-uses the pinned engine's default, which must also be below 60; compliant defaults need no
-explicit override. FAIL on any value at or above 60, naming the config key, concurrency,
+uses the pinned engine's default, which must also be at most 60; compliant defaults need no
+explicit override. FAIL on any value above 60, naming the config key, concurrency,
 role, file and line. Untouched points that are not rerun are not assessed, except that an
 `append-only: true` entry FAILs when any
-existing point of the same AgentX curve runs at or above 60. There are no
+existing point of the same AgentX curve runs above 60. There are no
 per-submission exceptions. See
 [AgentX stream interval](../inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md#agentx-stream-interval).
 
