@@ -21,7 +21,7 @@ base:
         served-model-name: Qwen/Qwen3.8-Flash-Next-FP8
         trust-remote-code: true
         tensor-parallel-size: 4
-        expert-parallel-size: 1
+        expert-parallel-size: 4
         data-parallel-size: 1
         disable-radix-cache: true
         max-running-requests: 128
