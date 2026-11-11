@@ -3270,12 +3270,12 @@ qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg:
           tp: 8
           ep: 4
           dp-attn: false
-      # 1P2D: 1 prefill (TP4/EP4), 2 decode (TP8/EP4), batch 16, conc=115
+      # 1P2D: 1 prefill (TP4/EP4), 2 decode (TP8/EP4), batch 16, conc=128
       - spec-decoding: "mtp"
         kv-offloading: dram
         kv-offload-backend: { name: native, version: "1.4.0rc3.dev202611020007" }
-        conc-list: [115]
-        srt-recipe: disagg-variants.yaml:override_1p2d_tep4_tep8_c115
+        conc-list: [128]
+        srt-recipe: disagg-variants.yaml:override_1p2d_tep4_tep8_c128
         prefill:
           num-worker: 1
           tp: 4
@@ -3302,12 +3302,12 @@ qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg:
           tp: 8
           ep: 4
           dp-attn: false
-      # 2P2D: 2 prefill (TP2/EP2), 2 decode (TP8/EP4), batch 32, conc=158
+      # 2P2D: 2 prefill (TP2/EP2), 2 decode (TP8/EP4), batch 32, conc=176
       - spec-decoding: "mtp"
         kv-offloading: dram
         kv-offload-backend: { name: native, version: "1.4.0rc3.dev202611020007" }
-        conc-list: [158]
-        srt-recipe: disagg-variants.yaml:override_2p2d_tep2_tep8_c158
+        conc-list: [176]
+        srt-recipe: disagg-variants.yaml:override_2p2d_tep2_tep8_c176
         prefill:
           num-worker: 2
           tp: 2
