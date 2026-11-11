@@ -181,19 +181,10 @@ jobs:
             ${{ runner.temp }}/klaud/cluster-state.json
           if-no-files-found: error
           retention-days: 1
-      - name: Install Claude Code 2.1.282
+      - name: Install Claude Code
         id: claude_cli
         if: steps.prepare.outputs.has_candidates == 'true'
-        run: | # zizmor: ignore[adhoc-packages] Claude CLI and its native packages are pinned to 2.1.282
-          claude_cli="$RUNNER_TEMP/claude-code/node_modules/.bin/claude"
-          for attempt in 1 2; do
-            rm -rf "$RUNNER_TEMP/claude-code"
-            npm install --prefix "$RUNNER_TEMP/claude-code" --no-audit --no-fund @anthropic-ai/claude-code@2.1.282 &&
-              [ "$("$claude_cli" --version 2>&1)" = "2.1.282 (Claude Code)" ] && break
-            [ "$attempt" = 2 ] && exit 1
-            sleep 15
-          done
-          echo "path=$claude_cli" >> "$GITHUB_OUTPUT"
+        uses: $/.github/actions/setup-claude-code
       - name: Check for overlapping open PRs
         id: review
         if: steps.prepare.outputs.has_candidates == 'true'
