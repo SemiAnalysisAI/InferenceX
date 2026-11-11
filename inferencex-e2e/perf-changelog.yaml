@@ -12647,6 +12647,30 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
+    - minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
+    - minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg
+  description:
+    - "Move to the GB200 P/D recipe and image of #4865 (vllm/vllm-openai:cu134-arm64-1107-mdev, Mooncake 0.3.13.post1+hbm): vLLM engines behind Dynamo sidecars (TCP request plane, ZMQ event plane, no NATS, no setup script), KV routing without KV events or busy thresholds at temperature 0 with prefill to the least-loaded worker and soft session affinity on decode, the auto-sized Mooncake HBM pool on prefill, decode EPLB, and at most 64 in-flight async KV loads with 4 new per step."
+    - "Keep the GB300 Mooncake DRAM segment (180GB) and cpus-per-task (144). gpu-memory-utilization 0.85 -> 0.90 on prefill and 0.95 -> 0.92 on decode. max-num-seqs per decode DP rank is set per point (5 to 22, max-cudagraph-capture-size = 8 x max-num-seqs)."
+    - "Prefill moves from DEP2 to DEP4 workers. Points: 1 DEP4 prefill + DEP16 decode at conc 200 (max-num-seqs 5), 3 DEP4 prefill + DEP16 decode at conc 500 (10) and 600 (14), 4 DEP4 prefill + DEP16 decode at conc 800 (20), and 5 DEP4 prefill + DEP16 decode at conc 800 (22). Drop 6 DEP2 prefill + DEP8 decode at conc 280, 320, 360 and 400, and 6 DEP2 prefill + DEP16 decode at conc 300 and 360."
+    - "Aggregated TP4: the same image, with the engine behind a Dynamo sidecar (TCP request plane, ZMQ event plane, no NATS) that parses tools and reasoning. Engine settings are unchanged; only concurrency 1 and 16 remain, and concurrency 4, 8, 32, 40, 48 and 56 are dropped."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4967
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image from v0.32.0 to nightly-rocm100-edad8b03c5285a1c12e7e4f83c1af709b319a01b (digest sha256:009169c114af5b15e25eddc808afb3c1fc3f12c94e746472b16f39fcf39cd716), the 2026-10-28 ROCm 10.0 nightly. It contains vllm-project/vllm#60731 (gfx942 mono decode), its fix #63576 and #59039."
+    - "Add --monokernel to the six TP4 points. vllm-project/vllm#60731 runs each backbone layer of a decode step as two persistent launches on gfx942, and the FFN of the three DSpark draft layers as one launch, for steps of up to 42 rows, i.e. concurrency 1-7 with five DSpark drafts. Larger steps take the regular path. The gfx942 kernels build for TP4 only, so TP2 and TP8 stay without it and change only by the image. The vLLM recipe turns it on for MI325X TP4 in vllm-project/vllm#62713."
+    - "Remove --no-swa-bounded-replay, which turns on decoder SWA bounded replay from vllm-project/vllm#59039 at every point: in eager prefill steps, layer 20 (the last KV source layer) writes its KV for every token, and the rest of layer 20 and layers 21-39 run on each request's last 128 tokens only. Prefix-cache SWA replay, the path whose missing window clamp the flag worked around, stays off: vLLM still forces it off on ROCm."
+    - "Adaptive DSpark verification stays off. With --monokernel on gfx942 the server faults during its CUDA graph profile until vllm-project/vllm#63816 merges."
+    - "No point changes: concurrency 1, 2, 4, 8, 16 and 32 on TP8, TP4 and TP2 (18 points), all re-measured on the new image."
+    - "DSpark draft: vLLM builds it with the checkpoint's own quantization config and the target's fp8_ds_mla KV cache, and its weights are used as shipped (FP8 E4M3 with UE8M0 block scales, MXFP4 routed experts). On the TP4 points --monokernel also runs the routed-expert FFN of the three draft layers as one launch. That launch quantizes the FFN input to MXFP8 against the same MXFP4 expert weights, as it does for the target layers, where vLLM's gfx942 MoE multiplies bf16 activations with them. The draft weights, its KV cache and its attention are unchanged, and the target model's output does not depend on this launch, only how many drafts it accepts."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4617
+
+- config-keys:
     - qwen3.5-fp4-mi355x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
