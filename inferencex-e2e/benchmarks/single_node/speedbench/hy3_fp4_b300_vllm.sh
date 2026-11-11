@@ -43,7 +43,10 @@ export VLLM_FLASHINFER_ALLREDUCE_BACKEND=trtllm
 
 mkdir -p "$RESULTS_DIR"
 nvidia-smi
-if [[ "$SERVE_MODEL" != /* ]]; then hf download "$SERVE_MODEL"; fi
+if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
+    echo "=== $MODEL_PATH is empty; downloading $MODEL (first run only) ==="
+    hf download "$MODEL" --local-dir "$MODEL_PATH"
+fi
 
 # Some nodes run another service on the default port; serve on a free one instead.
 if ! python3 -c 'import socket, sys; socket.socket().bind(("0.0.0.0", int(sys.argv[1])))' "$PORT" 2>/dev/null; then
