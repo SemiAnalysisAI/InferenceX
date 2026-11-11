@@ -210,7 +210,7 @@ override_3p1d_dep8_cap32:
         max-prefill-tokens: 32768
         chunked-prefill-size: 32768
         hicache-mem-layout: page_first_direct
-        hicache-ratio: 0.9
+        hicache-ratio: 0.6
         pp-async-batch-depth: 1
     decode:
       nodes: 2
@@ -275,7 +275,7 @@ override_3p1d_dep16_cap12:
         max-prefill-tokens: 32768
         chunked-prefill-size: 32768
         hicache-mem-layout: page_first_direct
-        hicache-ratio: 0.9
+        hicache-ratio: 0.6
         pp-async-batch-depth: 1
         linear-attn-prefill-backend: flashinfer
     decode:
@@ -335,7 +335,7 @@ override_3p1d_dep16_cap9:
         max-prefill-tokens: 32768
         chunked-prefill-size: 32768
         hicache-mem-layout: page_first_direct
-        hicache-ratio: 0.9
+        hicache-ratio: 0.6
         pp-async-batch-depth: 1
         linear-attn-prefill-backend: flashinfer
     decode:
@@ -395,7 +395,7 @@ override_2p1d_dep16_cap6:
         max-prefill-tokens: 32768
         chunked-prefill-size: 32768
         hicache-mem-layout: page_first_direct
-        hicache-ratio: 0.9
+        hicache-ratio: 0.6
         pp-async-batch-depth: 1
         linear-attn-prefill-backend: flashinfer
     decode:
@@ -1579,7 +1579,7 @@ override_3p1d_dep8_cap36:
         max-prefill-tokens: 32768
         chunked-prefill-size: 32768
         hicache-mem-layout: page_first_direct
-        hicache-ratio: 1.0
+        hicache-ratio: 0.6
         pp-async-batch-depth: 1
         cuda-graph-backend-prefill: breakable
         cuda-graph-max-bs-prefill: 32768
