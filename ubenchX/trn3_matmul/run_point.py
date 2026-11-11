@@ -64,18 +64,21 @@ def main():
     ap.add_argument("--core", type=int, default=0, help="NeuronCore to run on (NEURON_RT_VISIBLE_CORES)")
     ap.add_argument("--num-exec", type=int, default=12, help="executions per capture (first ones are warm-up)")
     ap.add_argument("--profile-every", type=int, default=4, help="profile every Nth execution")
+    ap.add_argument("--warmup", type=int, default=0,
+                    help="fixed-stationary N=512 matmuls issued before the burst to release the TensorE throttle")
     a = ap.parse_args()
 
     out = os.path.abspath(a.out)
     os.makedirs(out, exist_ok=True)
     K, M = 128, a.m
     meta = {"kernel": a.kernel, "K": K, "M": M, "N": a.n, "num_mm": a.mm, "flops_per_mm": 2 * K * M * a.n,
-            "core": a.core, "num_exec": a.num_exec, "profile_every": a.profile_every, "lnc": 1, "target": a.target}
+            "core": a.core, "num_exec": a.num_exec, "profile_every": a.profile_every, "lnc": 1, "target": a.target,
+            "warmup_mm": a.warmup}
 
     inp = os.path.join(out, "input.npy")
-    np.save(inp, np.random.default_rng(0).standard_normal((K, M + a.n)).astype(np.float32))
+    np.save(inp, np.random.default_rng(0).standard_normal((K, M + a.n + (512 if a.warmup else 0))).astype(np.float32))
     t0 = time.time()
-    neff, param = compile_neff(get_kernel(a.kernel, a.mm, a.m), np.load(inp), out, a.target)
+    neff, param = compile_neff(get_kernel(a.kernel, a.mm, a.m, a.warmup), np.load(inp), out, a.target)
     meta["compile_s"] = round(time.time() - t0, 1)
 
     env = dict(os.environ, NEURON_LOGICAL_NC_CONFIG="1", NEURON_RT_VISIBLE_CORES=str(a.core))

@@ -8,9 +8,14 @@ KERNEL=${KERNEL:-mm_bf16_fixed}  # mm_bf16_fixed or ls_bf16_alt
 # bf16, K=128, 1,024 matmuls per execution. mm_bf16_fixed reuses one stationary; ls_bf16_alt
 # alternates two, so every matmul has its own LoadStationary.
 # Sweep 1: N at M=128. Sweep 2: M at N=512. (M=128, N=512 is shared and runs once.)
+# NS / MS override the lists (MS="" skips sweep 2), M_NS the N of sweep 2. N > 512 spans PSUM banks
+# (NeuronCore-v4, N <= 4096).
+NS=${NS-"8 32 64 128 256 512"}
+MS=${MS-"16 32 64 96"}
+M_NS=${M_NS-512}
 points=()
-for n in 8 32 64 128 256 512; do points+=("128 $n"); done
-for m in 16 32 64 96; do points+=("$m 512"); done
+for n in $NS; do points+=("128 $n"); done
+for mn in $M_NS; do for m in $MS; do points+=("$m $mn"); done; done
 
 mkdir -p "$OUT_DIR"
 for pt in "${points[@]}"; do

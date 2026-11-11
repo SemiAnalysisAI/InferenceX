@@ -43,23 +43,25 @@ ax.plot(x, x + OVERHEAD, color=INK2, lw=1.5, ls=(0, (4, 3)), zorder=2, label=f"P
 ax.plot(ns, ii, color=BLUE, lw=2, marker="o", ms=8, markeredgecolor=SURFACE, markeredgewidth=2, zorder=3,
         label="Measured")
 for n, v in ii.items():
-    ax.annotate(f"{v:.0f}", (n, v), xytext=(-8, 8), textcoords="offset points", ha="right", va="bottom",
-                color=INK2, fontsize=10)
+    first = n == ns[0]  # label the first point on its right, away from the y axis
+    ax.annotate(f"{v:.0f}", (n, v), xytext=(8, 8) if first else (-8, 8), textcoords="offset points",
+                ha="left" if first else "right", va="bottom", color=INK2, fontsize=10)
 
 ax.set_xscale("log", base=2)
 ax.xaxis.set_major_locator(FixedLocator(ns))
 ax.xaxis.set_minor_locator(NullLocator())
 ax.set_xticklabels([str(n) for n in ns])
 ax.set_xlim(ns[0] / 1.3, ns[-1] * 1.3)
+top = float(ii.max())
 if lat:
-    ax.set_ylim(0, 1000)  # linear from 0 so the ~393-cycle fixed part is visible
+    ax.set_ylim(0, 1000 * np.ceil(top * 1.08 / 1000))  # linear from 0 so the ~393-cycle fixed part is visible
 else:
     ax.set_yscale("log", base=2)
-    yt = [8, 16, 32, 64, 128, 256, 512, 1024]
+    yt = [2 ** k for k in range(3, int(np.ceil(np.log2(top * 1.3))) + 1)]
     ax.yaxis.set_major_locator(FixedLocator(yt))
     ax.yaxis.set_minor_locator(NullLocator())
     ax.set_yticklabels([str(y) for y in yt])
-    ax.set_ylim(8, 1024)
+    ax.set_ylim(yt[0], yt[-1])
 ax.set_xlabel("N (moving columns per matmul)", color=INK2)
 ax.set_ylabel(YLABEL, color=INK2)
 ax.grid(axis="y", color=GRID, lw=0.8)
