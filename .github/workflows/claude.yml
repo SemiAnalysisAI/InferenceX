@@ -264,10 +264,10 @@ jobs:
             - Comment: "MTP benchmark scripts MUST include `--use-chat-template` flag in the benchmark client configuration. This ensures proper tokenization for speculative decoding. Please add `--use-chat-template` to the benchmark command."
 
             ## AgentX Stream Interval Validation:
-            When a PR adds or reruns `agentic-coding` (AgentX) points, resolve each point's effective stream interval in every serving role (aggregated, prefill, decode): `stream-interval` / `--stream-interval` (SGLang, vLLM), `stream_interval` (TRT-LLM and Dynamo engine configs), including values inherited from shared `*-variants.yaml` or base recipes and serve commands in benchmark scripts. An unset value uses the pinned engine's default, which must also be between 20 and 60.
-            - Any value below 20 or above 60 is a 🔴 **BLOCKING** issue.
-            - Comment: "AgentX points must use a stream interval between 20 and 60 tokens, inclusive. Values above 60 merge short responses into a single client chunk, which inflates TTFT and makes interactivity meaningless; values below 20 add per-token streaming CPU overhead and make submissions incomparable. Please set it within 20-60. See `inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md#agentx-stream-interval`."
-            - An `append-only: true` entry for an AgentX curve whose existing points run outside 20-60 is also 🔴 **BLOCKING**: the curve must be fully rerun within 20-60.
+            When a PR adds or reruns `agentic-coding` (AgentX) points, resolve each point's effective stream interval in every serving role (aggregated, prefill, decode): `stream-interval` / `--stream-interval` (SGLang, vLLM), `stream_interval` (TRT-LLM and Dynamo engine configs), including values inherited from shared `*-variants.yaml` or base recipes and serve commands in benchmark scripts. An unset value uses the pinned engine's default, which must also be at most 60; compliant defaults need no explicit override.
+            - Any value above 60 is a 🔴 **BLOCKING** issue. There is no policy-imposed lower bound; do not flag valid engine-supported values below 20.
+            - Comment: "AgentX points must use a stream interval at most 60 tokens (≤ 60, inclusive). Buffering short responses into a single client chunk can inflate TTFT and prevent meaningful interactivity measurement. Please set it to 60 or lower; values below 20 are allowed. See `inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md#agentx-stream-interval`."
+            - An `append-only: true` entry for an AgentX curve whose existing points run above 60 is also 🔴 **BLOCKING**: the curve must be fully rerun at 60 or lower.
             - Do not flag fixed-sequence (non-AgentX) scenarios or untouched points the PR does not rerun.
 
             ## Model Prefix Validation:
