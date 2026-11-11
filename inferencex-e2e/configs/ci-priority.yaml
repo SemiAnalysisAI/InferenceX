@@ -22,7 +22,7 @@ adjustments:
     draft_model: 0.1
   framework-prefix:
     collectivex: 10.0
-    operatorx: 10.0
+    operatorx: 0.0 # below every serving sweep; above patchwork only
     sglang: 1.5
     vllm: 1.5
     dynamo-sglang: 1.5
