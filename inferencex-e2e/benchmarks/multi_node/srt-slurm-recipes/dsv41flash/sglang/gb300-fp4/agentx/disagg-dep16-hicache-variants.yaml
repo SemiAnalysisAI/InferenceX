@@ -106,6 +106,7 @@ base:
         disaggregation-transfer-backend: mooncake
         chunked-prefill-size: 65536
         max-prefill-tokens: 32768
+        stream-interval: 32
         # 64 per DP rank, as vLLM's prefill max-num-seqs; absorbs the client's turn burst.
         max-running-requests: 128
         swa-prefix-tails: 2048
@@ -235,8 +236,6 @@ override_9p1d_dep2_dep16_b192_c7480:
         cuda-graph-max-bs-decode: 192
         load-balance-method: total_requests
 
-# One DEP32 decode worker on 8 nodes. At this request rate each rank runs about 18 requests,
-# so the decode step stays short and interactivity sits above the DEP16 points.
 override_6p1d_dep2_dep32_c3018:
   name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep32-hicache-6p1d-dep2-dep32-c3018
   roles:
