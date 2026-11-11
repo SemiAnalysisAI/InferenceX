@@ -4518,64 +4518,12 @@
           {
             "count": 1,
             "q": 1,
-            "ctx": 1024
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 1,
-            "q": 1,
             "ctx": 4096
           }
         ]
       },
       "parallel": {
         "tp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 1,
-            "q": 1,
-            "ctx": 4096
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
       }
     },
     "sources": [
@@ -4620,32 +4568,6 @@
           {
             "count": 1,
             "q": 1,
-            "ctx": 16384
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 1,
-            "q": 1,
             "ctx": 65536
           }
         ]
@@ -4671,64 +4593,12 @@
           {
             "count": 1,
             "q": 1,
-            "ctx": 65536
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 1,
-            "q": 1,
             "ctx": 131072
           }
         ]
       },
       "parallel": {
         "tp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 1,
-            "q": 1,
-            "ctx": 131072
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
       }
     },
     "sources": [
@@ -4773,64 +4643,12 @@
           {
             "count": 4,
             "q": 1,
-            "ctx": 1024
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 4,
-            "q": 1,
             "ctx": 4096
           }
         ]
       },
       "parallel": {
         "tp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 4,
-            "q": 1,
-            "ctx": 4096
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
       }
     },
     "sources": [
@@ -4875,32 +4693,6 @@
           {
             "count": 4,
             "q": 1,
-            "ctx": 16384
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 4,
-            "q": 1,
             "ctx": 65536
           }
         ]
@@ -4926,64 +4718,12 @@
           {
             "count": 4,
             "q": 1,
-            "ctx": 65536
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 4,
-            "q": 1,
             "ctx": 131072
           }
         ]
       },
       "parallel": {
         "tp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 4,
-            "q": 1,
-            "ctx": 131072
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
       }
     },
     "sources": [
@@ -5028,90 +4768,12 @@
           {
             "count": 16,
             "q": 1,
-            "ctx": 1024
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 16,
-            "q": 1,
             "ctx": 4096
           }
         ]
       },
       "parallel": {
         "tp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 16,
-            "q": 1,
-            "ctx": 4096
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 16,
-            "q": 1,
-            "ctx": 16384
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
       }
     },
     "sources": [
@@ -5156,64 +4818,12 @@
           {
             "count": 16,
             "q": 1,
-            "ctx": 65536
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 16,
-            "q": 1,
             "ctx": 131072
           }
         ]
       },
       "parallel": {
         "tp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 16,
-            "q": 1,
-            "ctx": 131072
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
       }
     },
     "sources": [
@@ -5258,64 +4868,12 @@
           {
             "count": 64,
             "q": 1,
-            "ctx": 1024
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 64,
-            "q": 1,
             "ctx": 4096
           }
         ]
       },
       "parallel": {
         "tp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 64,
-            "q": 1,
-            "ctx": 4096
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
       }
     },
     "sources": [
@@ -5360,84 +4918,7 @@
           {
             "count": 64,
             "q": 1,
-            "ctx": 16384
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 64,
-            "q": 1,
             "ctx": 65536
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 64,
-            "q": 1,
-            "ctx": 65536
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 64,
-            "q": 1,
-            "ctx": 131072
           }
         ]
       },
@@ -5467,8 +4948,7 @@
         ]
       },
       "parallel": {
-        "tp": 8,
-        "dcp": 8
+        "tp": 8
       }
     },
     "sources": [
@@ -5513,64 +4993,12 @@
           {
             "count": 256,
             "q": 1,
-            "ctx": 1024
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 256,
-            "q": 1,
             "ctx": 4096
           }
         ]
       },
       "parallel": {
         "tp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 256,
-            "q": 1,
-            "ctx": 4096
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
       }
     },
     "sources": [
@@ -5615,84 +5043,7 @@
           {
             "count": 256,
             "q": 1,
-            "ctx": 16384
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 256,
-            "q": 1,
             "ctx": 65536
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 256,
-            "q": 1,
-            "ctx": 65536
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 256,
-            "q": 1,
-            "ctx": 131072
           }
         ]
       },
@@ -5722,8 +5073,7 @@
         ]
       },
       "parallel": {
-        "tp": 8,
-        "dcp": 8
+        "tp": 8
       }
     },
     "sources": [
@@ -5767,58 +5117,6 @@
         "groups": [
           {
             "count": 1,
-            "q": 1024,
-            "ctx": 0
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 1,
-            "q": 4096,
-            "ctx": 0
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 1,
             "q": 16384,
             "ctx": 0
           }
@@ -5826,32 +5124,6 @@
       },
       "parallel": {
         "tp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 1,
-            "q": 16384,
-            "ctx": 0
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
       }
     },
     "sources": [
@@ -5895,32 +5167,6 @@
         "groups": [
           {
             "count": 1,
-            "q": 32768,
-            "ctx": 0
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 1,
             "q": 8192,
             "ctx": 8192
           }
@@ -5928,32 +5174,6 @@
       },
       "parallel": {
         "tp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 1,
-            "q": 8192,
-            "ctx": 8192
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
       }
     },
     "sources": [
@@ -5998,64 +5218,12 @@
           {
             "count": 1,
             "q": 8192,
-            "ctx": 32768
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 1,
-            "q": 8192,
             "ctx": 131072
           }
         ]
       },
       "parallel": {
         "tp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 1,
-            "q": 8192,
-            "ctx": 131072
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
       }
     },
     "sources": [
@@ -6099,37 +5267,6 @@
       "heads": 96,
       "head_dim": 128,
       "conv_kernel": 4,
-      "state_dtype": "fp32",
-      "batch": {
-        "groups": [
-          {
-            "count": 1,
-            "q": 8192,
-            "ctx": 8192
-          },
-          {
-            "count": 64,
-            "q": 1,
-            "ctx": 8192
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
       "state_dtype": "bf16",
       "batch": {
         "groups": [
@@ -6161,64 +5298,12 @@
           {
             "count": 1,
             "q": 1,
-            "ctx": 1024
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 1,
-            "q": 1,
             "ctx": 4096
           }
         ]
       },
       "parallel": {
         "tp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 1,
-            "q": 1,
-            "ctx": 4096
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
       }
     },
     "sources": [
@@ -6263,32 +5348,6 @@
           {
             "count": 1,
             "q": 1,
-            "ctx": 16384
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 1,
-            "q": 1,
             "ctx": 65536
           }
         ]
@@ -6314,64 +5373,12 @@
           {
             "count": 1,
             "q": 1,
-            "ctx": 65536
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 1,
-            "q": 1,
             "ctx": 131072
           }
         ]
       },
       "parallel": {
         "tp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 1,
-            "q": 1,
-            "ctx": 131072
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
       }
     },
     "sources": [
@@ -6416,64 +5423,12 @@
           {
             "count": 4,
             "q": 1,
-            "ctx": 1024
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 4,
-            "q": 1,
             "ctx": 4096
           }
         ]
       },
       "parallel": {
         "tp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 4,
-            "q": 1,
-            "ctx": 4096
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
       }
     },
     "sources": [
@@ -6518,32 +5473,6 @@
           {
             "count": 4,
             "q": 1,
-            "ctx": 16384
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 4,
-            "q": 1,
             "ctx": 65536
           }
         ]
@@ -6569,64 +5498,12 @@
           {
             "count": 4,
             "q": 1,
-            "ctx": 65536
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 4,
-            "q": 1,
             "ctx": 131072
           }
         ]
       },
       "parallel": {
         "tp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 4,
-            "q": 1,
-            "ctx": 131072
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
       }
     },
     "sources": [
@@ -6671,90 +5548,12 @@
           {
             "count": 16,
             "q": 1,
-            "ctx": 1024
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 16,
-            "q": 1,
             "ctx": 4096
           }
         ]
       },
       "parallel": {
         "tp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 16,
-            "q": 1,
-            "ctx": 4096
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 16,
-            "q": 1,
-            "ctx": 16384
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
       }
     },
     "sources": [
@@ -6799,64 +5598,12 @@
           {
             "count": 16,
             "q": 1,
-            "ctx": 65536
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 16,
-            "q": 1,
             "ctx": 131072
           }
         ]
       },
       "parallel": {
         "tp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 16,
-            "q": 1,
-            "ctx": 131072
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
       }
     },
     "sources": [
@@ -6901,64 +5648,12 @@
           {
             "count": 64,
             "q": 1,
-            "ctx": 1024
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 64,
-            "q": 1,
             "ctx": 4096
           }
         ]
       },
       "parallel": {
         "tp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 64,
-            "q": 1,
-            "ctx": 4096
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
       }
     },
     "sources": [
@@ -7003,84 +5698,7 @@
           {
             "count": 64,
             "q": 1,
-            "ctx": 16384
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 64,
-            "q": 1,
             "ctx": 65536
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 64,
-            "q": 1,
-            "ctx": 65536
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 64,
-            "q": 1,
-            "ctx": 131072
           }
         ]
       },
@@ -7110,8 +5728,7 @@
         ]
       },
       "parallel": {
-        "tp": 8,
-        "dcp": 8
+        "tp": 8
       }
     },
     "sources": [
@@ -7156,64 +5773,12 @@
           {
             "count": 256,
             "q": 1,
-            "ctx": 1024
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 256,
-            "q": 1,
             "ctx": 4096
           }
         ]
       },
       "parallel": {
         "tp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 256,
-            "q": 1,
-            "ctx": 4096
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
       }
     },
     "sources": [
@@ -7258,84 +5823,7 @@
           {
             "count": 256,
             "q": 1,
-            "ctx": 16384
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 256,
-            "q": 1,
             "ctx": 65536
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 256,
-            "q": 1,
-            "ctx": 65536
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 256,
-            "q": 1,
-            "ctx": 131072
           }
         ]
       },
@@ -7365,8 +5853,7 @@
         ]
       },
       "parallel": {
-        "tp": 8,
-        "dcp": 8
+        "tp": 8
       }
     },
     "sources": [
@@ -7410,58 +5897,6 @@
         "groups": [
           {
             "count": 1,
-            "q": 1024,
-            "ctx": 0
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 1,
-            "q": 4096,
-            "ctx": 0
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 1,
             "q": 16384,
             "ctx": 0
           }
@@ -7469,32 +5904,6 @@
       },
       "parallel": {
         "tp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 1,
-            "q": 16384,
-            "ctx": 0
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
       }
     },
     "sources": [
@@ -7538,32 +5947,6 @@
         "groups": [
           {
             "count": 1,
-            "q": 32768,
-            "ctx": 0
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 1,
             "q": 8192,
             "ctx": 8192
           }
@@ -7571,32 +5954,6 @@
       },
       "parallel": {
         "tp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 1,
-            "q": 8192,
-            "ctx": 8192
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
       }
     },
     "sources": [
@@ -7641,89 +5998,7 @@
           {
             "count": 1,
             "q": 8192,
-            "ctx": 32768
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 1,
-            "q": 8192,
             "ctx": 131072
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 1,
-            "q": 8192,
-            "ctx": 131072
-          }
-        ]
-      },
-      "parallel": {
-        "tp": 8,
-        "dcp": 8
-      }
-    },
-    "sources": [
-      "moonshotai/Kimi-K3/self_attn"
-    ]
-  },
-  {
-    "type": "kda",
-    "args": {
-      "hidden": 7168,
-      "heads": 96,
-      "head_dim": 128,
-      "conv_kernel": 4,
-      "state_dtype": "bf16",
-      "batch": {
-        "groups": [
-          {
-            "count": 1,
-            "q": 8192,
-            "ctx": 8192
-          },
-          {
-            "count": 64,
-            "q": 1,
-            "ctx": 8192
           }
         ]
       },
@@ -7758,8 +6033,7 @@
         ]
       },
       "parallel": {
-        "tp": 8,
-        "dcp": 8
+        "tp": 8
       }
     },
     "sources": [

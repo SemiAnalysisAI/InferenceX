@@ -35,10 +35,14 @@ RUNNERS = {
 }
 MODES = ("timing", "counters")
 MAX_CHUNK = 4000
-# Planning estimate of one shard's benchmark time, for sizing shards to the Slurm time.
-# A layer's first case pays its kernel JIT and autotuning; the rest of its ladder reuses it.
-EST_LAYER_S = 45.0
-EST_CASE_S = 2.0
+# Planning estimate of one shard's benchmark time, for sizing shards to the Slurm time (from
+# H100 runs): a part's processes start (imports, distributed init); a layer's first case pays
+# its kernel JIT and autotuning (attention: an engine); the rest of its ladder reuses it.
+EST_PART_S = 180.0
+EST_LAYER_S = {"gemm": 30.0, "moe": 60.0}
+EST_CASE_S = {"gemm": 1.0, "moe": 1.5}
+EST_ATTENTION_LAYER_S = 120.0
+EST_ATTENTION_CASE_S = 6.0
 EST_SHARD_S = 30 * 60
 # the case dimension a layer's ladder sweeps; a layer is its args without it
 LADDER_ARG = {"gemm": "m", "moe": "tokens"}
@@ -278,7 +282,9 @@ def plan(
     for image, selected, extra, split, state, cases in units:
         key = json.dumps([image, selected, extra], sort_keys=True)
         part_key = json.dumps([split, state], sort_keys=True)
-        cost = EST_LAYER_S + EST_CASE_S * len(cases)
+        op = cases[0]["shape"]["type"]
+        cost = (EST_LAYER_S.get(op, EST_ATTENTION_LAYER_S)
+                + EST_CASE_S.get(op, EST_ATTENTION_CASE_S) * len(cases))
         open_ = packs[key][-1] if packs[key] else None
         if open_ is not None and mode != "timing" and part_key not in open_["parts"]:
             open_ = None
@@ -287,6 +293,8 @@ def plan(
             lane = min(range(len(part["loads"])), key=part["loads"].__getitem__)
             before = max(part["loads"])
             after = max(before, part["loads"][lane] + cost)
+            if part_key not in open_["parts"]:
+                after += EST_PART_S
             if (len(open_["cases"]) + len(cases) > chunk_size
                     or open_["cost"] - before + after > EST_SHARD_S and open_["cases"]):
                 open_ = None
@@ -297,6 +305,8 @@ def plan(
                      "offset": offset}
             packs[key].append(open_)
             shards.append(open_)
+        if part_key not in open_["parts"]:
+            open_["cost"] += EST_PART_S
         part = open_["parts"].setdefault(
             part_key, {"loads": [0.0] * lanes_for(parallel.world_size(split)), "index": len(open_["parts"])})
         lane = min(range(len(part["loads"])), key=part["loads"].__getitem__)
