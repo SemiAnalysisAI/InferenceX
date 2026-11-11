@@ -12713,6 +12713,7 @@
 
 - config-keys:
     - minimaxm31flash-fp4-b300-dynamo-vllm-agentic-dspark-disagg
+    - minimaxm31flash-fp4-b300-dynamo-vllm-agentic-dspark-agg
   description:
     - "Add MiniMax-M3.1-Flash AgentX on B300 with Dynamo 1.6.0.dev20261023 and vLLM 5e21ce1 (minimax-m31-flash-x86_64-cu134-5e21ce1-mc0.3.13.post1, the head of vllm-project/vllm#66795 with its NIXL connector fixes), prefill/decode disaggregated with DEP2 prefill workers: one point per interactivity target, each with decode capped per rank (max-num-seqs), and one uncapped throughput point."
     - "Conc 40 (350 tokens/s per user): 1 DEP2 prefill + 1 TP4 decode capped at 4 requests, 6 GPUs. Conc 200 (300): 2 DEP2 prefill + 1 DEP8 decode capped at 3 requests per rank, 12 GPUs. Conc 480 (250): 8 DEP2 prefill on two nodes + 1 DEP8 decode capped at 8 requests per rank, 24 GPUs. Conc 144 (throughput): 1 DEP2 prefill + 1 DEP4 decode, 6 GPUs."
@@ -12722,5 +12723,6 @@
     - "Use the EFA fabric on b300-dsxe: a setup script adds AWS EFA 1.50.0 and the EFA Mooncake wheel at 0.3.13.post1 to the image, Mooncake runs with protocol efa and auto-discovered NICs, and NIXL uses the LIBFABRIC backend."
     - "Mooncake EFA settings for b300-dsxe: filter discovery to the 16 EFA NICs so the two InfiniBand HCAs do not shift NIC indices, register GPU KV on the NICs beside its GPU, and send same-node store reads over the EFA device instead of libfabric shm."
     - "Disable the extensible KV cache on prefill and decode: it is VMM-backed, and cuPointerSetAttribute(SYNC_MEMOPS), which the libfabric EFA provider runs on the first RMA of each CUDA MR, returns NOT_SUPPORTED on VMM memory, so every NIXL and Mooncake transfer failed with EINVAL. The KV cache is sized from gpu-memory-utilization instead of measured free memory."
+    - "Add the low-latency end of the curve as minimaxm31flash-fp4-b300-dynamo-vllm-agentic-dspark-agg on the same image and Dynamo build: one TP4 worker on one node behind the Dynamo frontend at conc 1, 4, 8 and 16, with the engine arguments of the single-node TP4 points of minimaxm31flash-fp4-b300-vllm-agentic-dspark (max-num-seqs twice the concurrency, 7 DSpark tokens, KV on the GPUs only). These points use neither Mooncake, NIXL nor the EFA setup script."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4826
   scenario-type: [agentic-coding]
