@@ -76,6 +76,10 @@ OVERRIDES: dict[str, tuple[Override, ...]] = {
         ),
         Override(Match(model_glob="*/Muse-Spark-Open-816B-A42B-NVFP4"), single_node_staged=True),
         Override(
+            Match(any_of("qwen3.8next"), any_of("fp8"), any_of("sglang"), agentic=False),
+            single_node_staged=True,
+        ),
+        Override(
             Match(any_of("dsr1"), any_of("fp8"), any_of("dynamo-trt")),
             served_name="DeepSeek-R1-0528",
         ),

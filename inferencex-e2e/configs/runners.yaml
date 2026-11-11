@@ -400,6 +400,7 @@ clusters:
         Kimi-K3.1-Pro: {root: hf-hub-cache, dir: Kimi-K3.1-Pro}
         Muse-Spark-Open-816B-A42B-NVFP4: {root: hf-hub-cache, dir: Muse-Spark-Open-816B-A42B-NVFP4}
         Qwen3.5-397B-A17B-FP8: {root: hf-hub-cache, dir: Qwen3.5-397B-A17B-FP8}
+        Qwen3.8-Flash-Next-FP8: {root: hf-hub-cache, dir: Qwen3.8-Flash-Next-FP8}
     scheduler: slurm
     slurm:
       partition: main
