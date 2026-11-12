@@ -30,7 +30,7 @@ RUNNERS = {
     "cluster:gb200-nv": ("gb200_nvl72_4x", "gb200"),
     "cluster:gb300-nv": ("gb300_nvl72_4x", "gb300"),
     "cluster:mi300x-amd": ("mi300x_amds_8x", "mi300x"),
-    "cluster:mi325x-amds": ("mi325x_amds_8x", "mi325x"),
+    "cluster:mi325x-amd": ("mi325x_amds_8x", "mi325x"),
     "cluster:mi355x-amds": ("mi355x_8x", "mi355x"),
 }
 MODES = ("timing", "counters")

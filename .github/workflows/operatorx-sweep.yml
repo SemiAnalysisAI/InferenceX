@@ -15,7 +15,7 @@ on:
           - cluster:gb200-nv
           - cluster:gb300-nv
           - cluster:mi300x-amd
-          - cluster:mi325x-amds
+          - cluster:mi325x-amd
           - cluster:mi355x-amds
       backends:
         description: Comma-separated backends (vllm GEMM; AMD also torch GEMM)

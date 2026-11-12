@@ -11,7 +11,7 @@
 | GB200 | `cluster:gb200-nv` | 4 | `linux/arm64` | `gb200_nvl72_4x` |
 | GB300 | `cluster:gb300-nv` | 4 | `linux/arm64` | `gb300_nvl72_4x` |
 | MI300X | `cluster:mi300x-amd` | 8 | `linux/amd64` | `mi300x_amds_8x` |
-| MI325X | `cluster:mi325x-amds` | 8 | `linux/amd64` | `mi325x_amds_8x` |
+| MI325X | `cluster:mi325x-amd` | 8 | `linux/amd64` | `mi325x_amds_8x` |
 | MI355X | `cluster:mi355x-amds` | 8 | `linux/amd64` | `mi355x_8x` |
 
 ## Dispatch
