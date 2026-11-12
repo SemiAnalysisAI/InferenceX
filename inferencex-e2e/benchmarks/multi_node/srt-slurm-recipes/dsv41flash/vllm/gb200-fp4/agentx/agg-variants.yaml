@@ -85,6 +85,7 @@ base:
         attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV41","indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
         kv-cache-dtype: "fp8"
         speculative-config: '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
+        additional-config: '{"dspark_fused_markov":true}'
         max-model-len: 1048576
         gpu-memory-utilization: 0.93
         max-num-batched-tokens: 8192
