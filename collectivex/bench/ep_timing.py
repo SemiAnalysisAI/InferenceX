@@ -165,11 +165,17 @@ def _series(starts, ends, drop):
     return [start.elapsed_time(end) * 1000.0 for start, end in zip(starts[drop:], ends[drop:])]
 
 
-def _chain_result(pair, floors, drop, combined):
+def _span_us(start, end, kept):
+    """Time per kept pair (us) of a chain with no event between its pairs."""
+    return start.elapsed_time(end) * 1000.0 / kept
+
+
+def _chain_result(pair, floors, span, drop, combined):
     pair_start, pair_end = pair
     return {
         "pair": _series(pair_start, pair_end, drop),
         "start_to_start": _series(pair_start[:-1], pair_start[1:], drop),
+        "span": span,
         "dispatch": _series(*floors["dispatch"], drop),
         "combine": _series(*floors["combine"], drop),
         # The period chain's final output, cloned post-sync so the caller can compare it against a
@@ -347,10 +353,13 @@ class EagerTiming(_SpinAlignment):
         raise RuntimeError(f"unknown timed component {name!r}")
 
     def chain(self, problem, staged, iters, drop):
-        """A floors chain (op windows only), then a period chain (one outer window per pair).
+        """A floors chain (op windows only), a span chain (one window around every kept pair), then
+        a period chain (one outer window per pair).
 
-        Two siblings because per-op events inside a pair land the host's record() cost in the pair
-        window: six events per pair published a +10-30us host constant on every vendor.
+        Separate siblings because per-op events inside a pair land the host's record() cost in the
+        pair window: six events per pair published a +10-30us host constant on every vendor. An
+        event also costs device time of its own, so the pair windows read above pairs that run
+        with nothing between them; the span chain times those and sets the period's level.
         Events are allocated before the loops so no allocation lands inside a window.
 
         Each sibling opens with the all-reduce alone. A spin in front would let the host queue a
@@ -369,6 +378,7 @@ class EagerTiming(_SpinAlignment):
 
         floors = {"dispatch": (events(), events()), "combine": (events(), events())}
         pair = (events(), events())
+        span_start, span_end = (torch.cuda.Event(enable_timing=True) for _ in range(2))
         out = {}
 
         def floors_chain():
@@ -383,6 +393,19 @@ class EagerTiming(_SpinAlignment):
                 floors["combine"][0][i].record()
                 b.combine(problem, handle)
                 floors["combine"][1][i].record()
+
+        def span_chain():
+            for kept in (False, True):
+                if kept:
+                    span_start.record()
+                for _ in range(iters - drop if kept else drop):
+                    handle = b.dispatch(problem)
+                    if staged is None:
+                        b.stage(problem, handle)
+                    else:
+                        handle.combine_input = staged
+                    b.combine(problem, handle)
+            span_end.record()
 
         def period_chain():
             for i in range(iters):
@@ -403,7 +426,7 @@ class EagerTiming(_SpinAlignment):
         collecting = gc.isenabled()
         gc.disable()
         try:
-            for sibling in (floors_chain, period_chain):
+            for sibling in (floors_chain, span_chain, period_chain):
                 for attempt in range(self.CHAIN_RETRIES + 1):
                     if gated:
                         self.gate.hold()
@@ -419,7 +442,8 @@ class EagerTiming(_SpinAlignment):
         finally:
             if collecting:
                 gc.enable()
-        result = _chain_result(pair, floors, drop, out["combined"])
+        span = _span_us(span_start, span_end, iters - drop)
+        result = _chain_result(pair, floors, span, drop, out["combined"])
         result["host_retries"] = retries if gated else None
         result["host_stalled"] = bool(stalled) if gated else None
         return result
@@ -531,9 +555,10 @@ class GraphTiming(_SpinAlignment):
     def components(self):
         return ["roundtrip", "dispatch", "combine"]
 
-    def capture_pairs(self, problem, staged, pairs, marks):
+    def capture_pairs(self, problem, staged, pairs, marks, span_head=0):
         """Capture `pairs` back-to-back pairs into one graph; `marks` picks the windows that get
-        event nodes ("pair", "dispatch", "combine"). Returns (graph, {mark: (starts, ends)},
+        event nodes: "pair", "dispatch" and "combine" one per pair, "span" a single window from
+        before pair `span_head` to after the last pair. Returns (graph, {mark: (starts, ends)},
         last combined output, last dispatch handle)."""
         import torch
         import torch.distributed as dist
@@ -544,7 +569,8 @@ class GraphTiming(_SpinAlignment):
             self._all_reduce()
         if self.spin_cycles is None:
             self.calibrate_spin()
-        stamps = {mark: ([graph_event() for _ in range(pairs)], [graph_event() for _ in range(pairs)])
+        stamps = {mark: tuple([graph_event() for _ in range(1 if mark == "span" else pairs)]
+                              for _ in range(2))
                   for mark in marks}
 
         def record(mark, edge, i):
@@ -567,6 +593,8 @@ class GraphTiming(_SpinAlignment):
             torch.cuda._sleep(self.spin_cycles)
             dist.all_reduce(self._align_token)
             for i in range(pairs):
+                if i == span_head:
+                    record("span", 0, 0)
                 record("pair", 0, i)
                 record("dispatch", 0, i)
                 handle = b.dispatch(problem)
@@ -576,6 +604,7 @@ class GraphTiming(_SpinAlignment):
                 combined = b.combine(problem, handle)
                 record("combine", 1, i)
                 record("pair", 1, i)
+            record("span", 1, 0)
         torch.cuda.synchronize()
         return graph, stamps, combined, handle
 
@@ -617,18 +646,29 @@ class GraphTiming(_SpinAlignment):
 
     def chain(self, problem, staged, iters, drop):
         """Each sibling is ONE graph of `iters` unrolled pairs, the shape of a decode graph, replayed
-        once untimed (upload) and once timed, with alignment captured before the first event."""
+        once untimed (upload) and once timed, with alignment captured before the first event. The
+        span sibling holds two event nodes, around the kept pairs: an event node costs device time
+        of its own, so a window around every pair reads above the pairs of a graph without them."""
         import torch
 
+        def replay_twice(graph):
+            for _ in range(2):
+                graph.replay()
+                torch.cuda.synchronize()
+
         self.calibrate_spin()
+        # Replayed and released before the other two are captured, so no more chain graphs are
+        # ever alive at once than the floors and period siblings.
+        graph, stamps, _, _ = self.capture_pairs(problem, staged, iters, ("span",), span_head=drop)
+        replay_twice(graph)
+        (span_start,), (span_end,) = stamps["span"]
+        span = _span_us(span_start, span_end, iters - drop)
+        del graph
         floors, floor_stamps, _, _ = self.capture_pairs(problem, staged, iters, ("dispatch", "combine"))
         period, period_stamps, combined, _ = self.capture_pairs(problem, staged, iters, ("pair",))
         for graph in (floors, period):
-            graph.replay()
-            torch.cuda.synchronize()
-            graph.replay()
-            torch.cuda.synchronize()
-        result = _chain_result(period_stamps["pair"], floor_stamps, drop, combined)
+            replay_twice(graph)
+        result = _chain_result(period_stamps["pair"], floor_stamps, span, drop, combined)
         result["host_retries"] = result["host_stalled"] = None
         return result
 
