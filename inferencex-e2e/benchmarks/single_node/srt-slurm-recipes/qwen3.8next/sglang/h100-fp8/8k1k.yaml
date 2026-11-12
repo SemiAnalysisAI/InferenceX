@@ -29,6 +29,8 @@ base:
         chunked-prefill-size: 16384
         max-prefill-tokens: 16384
         mem-fraction-static: 0.82
+        # Prefill CUDA graph capture exhausts H100 memory at the 16K chunk.
+        cuda-graph-backend-prefill: disabled
         linear-attn-prefill-backend: flashinfer
         linear-attn-decode-backend: flashinfer
         mamba-ssm-dtype: float32
