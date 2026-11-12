@@ -12775,3 +12775,12 @@
     - "Concurrency 12 and 24: CUDA graphs also for prefill and mixed steps up to 4096 tokens (#4878 recipe without the TEP shared-expert variable); DSpark drafts 3 tokens; prefill-schedule-interval 8."
     - "Concurrency 48 and 64: EP8 MegaMoE with FULL_DECODE_ONLY graphs, max-num-batched-tokens 16384, prefill-schedule-interval 8 and gpu-memory-utilization 0.97."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4871
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "TP2 concurrency 32: enable --monokernel-backend amd and --schedule-policy shortest-prefill-first, and drop SGLANG_HIP_DSV41_INDEX_K_PAGE8=1, which the monokernel refuses."
+    - "The image, the other points and the search space are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
