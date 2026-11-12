@@ -246,6 +246,12 @@ def fetch_catalog(policy: Policy) -> tuple[list[dict], list[str]]:
     return catalog(images, datetime.now(UTC), policy)
 
 
+def display_models() -> dict[str, str]:
+    """Map each public model key to the display model the benchmarks API accepts."""
+    options = fetch("options").payload["models"]
+    return {key: entry["name"] for entry in options for key in entry["dbKeys"]}
+
+
 def fresh(value: Any, now: datetime, policy: Policy) -> bool:
     """Return True if timestamp ``value`` is within the response age limit at ``now``."""
     try:

@@ -470,8 +470,8 @@ def test_claimed_families_commit_their_full_sweep_capped_at_cluster_size():
 
 def wave_context(name, clusters, demand=1, sweep=None):
     return {"id": candidate_id(name), "family": f"configs/nvidia-master.yaml:{name}",
-            "base": "a" * 40, "source": {}, "clusters": clusters, "node-demand": demand,
-            "sweep-node-demand": demand if sweep is None else sweep}  # fmt: skip
+            "base": "a" * 40, "source": {}, "baseline-model": "Model", "clusters": clusters,
+            "node-demand": demand, "sweep-node-demand": demand if sweep is None else sweep}  # fmt: skip
 
 
 def select_wave(tmp_path, monkeypatch, contexts, capacity, committed=None, backoff=(),
@@ -484,7 +484,7 @@ def select_wave(tmp_path, monkeypatch, contexts, capacity, committed=None, backo
                     "finished-backlog": backlog or {}}))  # fmt: skip
     review = {"decisions": [
         {"candidate-id": context["id"], "decision": "proceed", "family": context["family"],
-         "pull-requests": [], "baseline-model": "Model", "reason": "No overlap"}
+         "pull-requests": [], "reason": "No overlap"}
         for context in contexts
     ]}  # fmt: skip
 
@@ -680,6 +680,8 @@ def test_plan_holds_no_op_images_and_claimed_demand_and_orders_idle_clusters_fir
     monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
     monkeypatch.setattr(klaud.subprocess, "check_output", lambda *_args, **_kwargs: "a" * 40)
     monkeypatch.setattr(klaud, "fetch_catalog", lambda _policy: (items, []))
+    monkeypatch.setattr(klaud, "display_models", lambda: {
+        source["model"]: source["model"].upper() for source in sources.values()})  # fmt: skip
     monkeypatch.setattr(klaud, "github_read", read)
     monkeypatch.setattr(klaud, "live_families", lambda _root: families)
     monkeypatch.setattr(claims, "family_owners", lambda _repository: [
@@ -713,10 +715,11 @@ def open_pull(number, finished):
 
 
 def plan_curves(tmp_path, monkeypatch, curves, *, history=None, closed=None, pulls=(), batch=64,
-                slots=5):  # fmt: skip
+                slots=5, models=None):  # fmt: skip
     """Plan ``curves`` that all serve one feed observation; return their order and cluster state.
 
-    ``pulls`` lists (number, master config, finished) of open Klaud PRs.
+    ``pulls`` lists (number, master config, finished) of open Klaud PRs. ``models`` replaces the
+    public dashboard models, which by default show the observation's model "m1" as "Model One".
     """
     source = feed_source("m1", "example/sglang:v1")
     target = klaud.Family(frozenset({"a"}), 1, 1, False)
@@ -738,6 +741,8 @@ def plan_curves(tmp_path, monkeypatch, curves, *, history=None, closed=None, pul
     monkeypatch.setattr(klaud, "fetch_catalog", lambda _policy: ([
         {"source-status": "baseline", "source-id": "1", "source": source,
          "benchmark-age-days": 0}], []))  # fmt: skip
+    monkeypatch.setattr(api, "fetch", lambda _resource: SimpleNamespace(payload={"models": (
+        [{"name": "Model One", "dbKeys": ["m0", "m1"]}] if models is None else models)}))  # fmt: skip
     monkeypatch.setattr(klaud, "github_read", read)
     monkeypatch.setattr(klaud, "live_families", lambda _root: {
         klaud.observation_key(source): dict.fromkeys(curves, target)})  # fmt: skip
@@ -766,6 +771,19 @@ def test_plan_holds_a_curve_sharing_a_key_with_a_timed_out_curve(tmp_path, monke
     planned, _ = plan_curves(tmp_path, monkeypatch, curves, history=history)
 
     assert planned == ["configs/nvidia-master.yaml:other"]
+
+
+@pytest.mark.parametrize(("models", "baseline_models"), [
+    pytest.param(None, ["Model One"], id="pooled-key"),
+    pytest.param([{"name": "Other", "dbKeys": ["m2"]}], [], id="not-shown"),
+])  # fmt: skip
+def test_plan_gives_candidates_their_display_model_and_leaves_out_unshown_ones(
+    tmp_path, monkeypatch, models, baseline_models
+):
+    plan_curves(tmp_path, monkeypatch, ["configs/nvidia-master.yaml:agg"], models=models)
+
+    contexts = json.loads((tmp_path / "klaud/candidates.json").read_text())
+    assert [context["baseline-model"] for context in contexts] == baseline_models
 
 
 def test_plan_retries_a_requeued_candidate_despite_its_maintainer_close(tmp_path, monkeypatch):
@@ -831,7 +849,7 @@ def regeneration_wave(tmp_path, monkeypatch, proceeding, blocked=0, cluster=None
         {"candidate-id": context["id"],
          "decision": "duplicate" if context is duplicate else "proceed",
          "family": context["family"], "pull-requests": [9] if context is duplicate else [],
-         "baseline-model": None if context is duplicate else "Model", "reason": "Reviewed"}
+         "reason": "Reviewed"}
         for context in contexts
     ]}))  # fmt: skip
     published = []

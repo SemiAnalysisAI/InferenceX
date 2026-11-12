@@ -1887,7 +1887,8 @@ def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch
     ]
     contexts = [
         {"id": candidate_id, "family": family, "base": base, "source": {},
-         "clusters": ["cluster-a"], "node-demand": 1, "sweep-node-demand": 1}
+         "baseline-model": "Model", "clusters": ["cluster-a"], "node-demand": 1,
+         "sweep-node-demand": 1}
         for candidate_id, family in zip((first_id, second_id), families, strict=True)
     ]
     (tmp_path / "candidates.json").write_text(json.dumps(contexts))
@@ -1901,7 +1902,6 @@ def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch
                 "decision": "proceed",
                 "family": family,
                 "pull-requests": [],
-                "baseline-model": "Model",
                 "reason": "No overlap",
             }
             for candidate_id, family in zip(
@@ -1963,7 +1963,8 @@ def test_select_needs_headroom_on_every_target_cluster_and_shares_it_within_a_wa
                "elsewhere": (["h200-dgxc"], 1)}
     contexts = [
         {"id": ids[name], "family": f"configs/nvidia-master.yaml:{name}", "base": "a" * 40,
-         "source": {}, "clusters": clusters, "node-demand": demand, "sweep-node-demand": demand}
+         "source": {}, "baseline-model": "Model", "clusters": clusters, "node-demand": demand,
+         "sweep-node-demand": demand}
         for name, (clusters, demand) in targets.items()
     ]  # fmt: skip
     (tmp_path / "candidates.json").write_text(json.dumps(contexts))
@@ -1973,7 +1974,7 @@ def test_select_needs_headroom_on_every_target_cluster_and_shares_it_within_a_wa
     (tmp_path / "producers.json").write_text("{}\n")
     review = {"decisions": [
         {"candidate-id": context["id"], "decision": "proceed", "family": context["family"],
-         "pull-requests": [], "baseline-model": "Model", "reason": "No overlap"}
+         "pull-requests": [], "reason": "No overlap"}
         for context in contexts
     ]}  # fmt: skip
 
@@ -2018,8 +2019,8 @@ def test_select_leaves_the_slots_of_running_and_resumed_sessions_to_them(
     ids = [f"{digit * 16}-{digit * 16}" for digit in "123"]
     contexts = [
         {"id": candidate_id, "family": f"configs/nvidia-master.yaml:family-{digit}",
-         "base": "a" * 40, "source": {}, "clusters": ["cluster-a"], "node-demand": 1,
-         "sweep-node-demand": 1}
+         "base": "a" * 40, "source": {}, "baseline-model": "Model", "clusters": ["cluster-a"],
+         "node-demand": 1, "sweep-node-demand": 1}
         for candidate_id, digit in zip(ids, "123", strict=True)
     ]  # fmt: skip
     (tmp_path / "candidates.json").write_text(json.dumps(contexts))
@@ -2029,7 +2030,7 @@ def test_select_leaves_the_slots_of_running_and_resumed_sessions_to_them(
     (tmp_path / "producers.json").write_text("{}\n")
     review = {"decisions": [
         {"candidate-id": context["id"], "decision": "proceed", "family": context["family"],
-         "pull-requests": [], "baseline-model": "Model", "reason": "No overlap"}
+         "pull-requests": [], "reason": "No overlap"}
         for context in contexts
     ]}  # fmt: skip
 
@@ -2502,7 +2503,8 @@ def test_select_freezes_a_mixed_image_curve_or_defers_a_key_without_published_po
     context, producers, matrix = serve_mixed_curve(monkeypatch, agg)
     (tmp_path / "candidates.json").write_text(json.dumps([{
         **context, "id": CANDIDATE_ID, "family": MIXED_FAMILY, "base": "a" * 40,
-        "clusters": ["cluster-a"], "node-demand": 1, "sweep-node-demand": 1,
+        "baseline-model": "DeepSeek-R1", "clusters": ["cluster-a"], "node-demand": 1,
+        "sweep-node-demand": 1,
     }]))  # fmt: skip
     (tmp_path / "producers.json").write_text(json.dumps({MIXED_FAMILY: producers}))
     (tmp_path / "cluster-state.json").write_text(
@@ -2512,7 +2514,7 @@ def test_select_freezes_a_mixed_image_curve_or_defers_a_key_without_published_po
     monkeypatch.setenv("GITHUB_RUN_ID", "42")
     monkeypatch.setenv("KLAUD_PR_REVIEW", json.dumps({"decisions": [{
         "candidate-id": CANDIDATE_ID, "decision": "proceed", "family": MIXED_FAMILY,
-        "pull-requests": [], "baseline-model": "DeepSeek-R1", "reason": "No overlap",
+        "pull-requests": [], "reason": "No overlap",
     }]}))  # fmt: skip
     monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: api.Capacity(
         idle={"cluster-a": 1}, queued={}, size={"cluster-a": 1}))  # fmt: skip
@@ -2816,7 +2818,8 @@ def review_candidate(directory, monkeypatch, source):
     directory.mkdir()
     (directory / "candidates.json").write_text(json.dumps(
         [{"id": CANDIDATE_ID, "family": FAMILY, "base": "a" * 40, "source": source,
-          "clusters": ["cluster-a"], "node-demand": 1, "sweep-node-demand": 1}]
+          "baseline-model": "DeepSeek-R1", "clusters": ["cluster-a"], "node-demand": 1,
+          "sweep-node-demand": 1}]
     ))
     (directory / "cluster-state.json").write_text(json.dumps({
         "committed-demand": {}, "infra-backoff": [], "headroom": {"cluster-a": 1},
@@ -2825,7 +2828,7 @@ def review_candidate(directory, monkeypatch, source):
     monkeypatch.setenv("GITHUB_RUN_ID", "42")
     monkeypatch.setenv("KLAUD_PR_REVIEW", json.dumps({"decisions": [{
         "candidate-id": CANDIDATE_ID, "decision": "proceed", "family": FAMILY, "pull-requests": [],
-        "baseline-model": "DeepSeek-R1", "reason": "No overlap",
+        "reason": "No overlap",
     }]}))
 
 
@@ -3973,6 +3976,7 @@ def test_plan_blocks_a_curve_sharing_a_key_with_a_blocked_or_held_family(
     monkeypatch.setattr(klaud, "fetch_catalog", lambda _policy: ([{
         "source-status": "baseline", "source-id": "1", "source": source,
         "benchmark-age-days": 0}], []))  # fmt: skip
+    monkeypatch.setattr(klaud, "display_models", lambda: {"dsr1": "DeepSeek-R1-0528"})
     monkeypatch.setattr(klaud, "github_read", lambda *_a, **_k: [[]])
     monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: api.Capacity(
         idle={"h100-cw": 1}, queued={}, size={"h100-cw": 1}))
