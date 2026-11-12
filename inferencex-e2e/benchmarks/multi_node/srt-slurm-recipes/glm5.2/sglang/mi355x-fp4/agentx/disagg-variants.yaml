@@ -34,6 +34,7 @@ base:
       workers: 1
       gpus: 4
       env: &environment
+        # srtctl's pre-download sees only HF_HOME, so the node-local cache is mounted at $HF_HOME/hub.
         HF_HOME: /hf_hub_cache
         HF_HUB_CACHE: /hf_hub_cache/hub
         HUGGINGFACE_HUB_CACHE: /hf_hub_cache/hub
@@ -105,8 +106,11 @@ base:
     mem: "0"
     container-writable: ""
     container-remap-root: ""
+  extra_mount:
+    # The node-local hub cache the single-node GLM-5.2 points already fill.
+    - /var/lib/hf-hub-cache:/hf_hub_cache/hub
   health_check:
-    # Leaves room for the first point to pull the ~438 GB checkpoint from the Hub.
+    # Leaves room for a node whose cache lacks the ~438 GB checkpoint to pull it from the Hub.
     max_attempts: 1440
     interval_seconds: 5
   benchmark:
