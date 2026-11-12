@@ -286,6 +286,10 @@ override_tp2_c64:
       CONC: '64'
 
 override_dp2_umbp_c256:
+  # Each srtctl step has its own mount namespace; a node-local host directory is
+  # the one place the UMBP server and the engine workers both see its sockets.
+  container_mounts: &umbp_host_dir
+    /dev/shm: /umbp-host
   frontend: &dp2_router
     type: vllm-router
     args:
@@ -300,14 +304,14 @@ override_dp2_umbp_c256:
     type: generic
     start: before_workers
     critical: true
-    preamble: mkdir -p /tmp/umbp
+    preamble: mkdir -p /umbp-host/umbp
     # The server binary ships inside the MORI package and loads its libraries from there.
     command:
     - bash
     - -c
-    - P=$(python3 -c 'import mori, os; print(os.path.dirname(mori.__file__))') && LD_LIBRARY_PATH=$P:$LD_LIBRARY_PATH exec $P/umbp_standalone_server unix:///tmp/umbp/standalone.grpc.sock
+    - P=$(python3 -c 'import mori, os; print(os.path.dirname(mori.__file__))') && LD_LIBRARY_PATH=$P:$LD_LIBRARY_PATH exec $P/umbp_standalone_server unix:///umbp-host/umbp/standalone.grpc.sock
     env:
-      UMBP_STANDALONE_ADDRESS: unix:///tmp/umbp/standalone.grpc.sock
+      UMBP_STANDALONE_ADDRESS: unix:///umbp-host/umbp/standalone.grpc.sock
       # TOTAL_CPU_DRAM_GB in bytes.
       UMBP_DRAM_CAPACITY: '449000000000'
       # The mi355x-amds host setup releases hugepages, so the pool uses 4 KiB pages.
@@ -332,7 +336,7 @@ override_dp2_umbp_c256:
         # The DP2 points were tuned without mono decode.
         monokernel: null
         prefill-schedule-interval: 11
-        kv-transfer-config: '{"kv_connector":"UMBPStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"mode":"standalone","endpoint":"unix:///tmp/umbp/standalone.grpc.sock"}}'
+        kv-transfer-config: '{"kv_connector":"UMBPStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"mode":"standalone","endpoint":"unix:///umbp-host/umbp/standalone.grpc.sock"}}'
   benchmark:
     env:
       CONC: '256'
@@ -340,6 +344,7 @@ override_dp2_umbp_c256:
       TOTAL_CPU_DRAM_GB: '449'
 
 override_dp2_umbp_c384:
+  container_mounts: *umbp_host_dir
   frontend: *dp2_router
   setup_script: vllm-router.sh
   services: *umbp_server
