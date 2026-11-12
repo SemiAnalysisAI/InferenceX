@@ -12806,5 +12806,5 @@
     - "Remove --no-swa-bounded-replay. The flag worked around a memory fault at the first prefix hit, from a ROCm sparse SWA path without the replay window clamp. The new image has vllm-project/vllm#59039 (decoder SWA bounded replay on ROCm) and vllm-project/vllm#65249 (prefix-cache SWA replay on gfx942, with the window clamp), the same as the MI325X entry since InferenceX#4617."
     - "The new image also routes gfx942 sparse MLA prefill of 512 or more query rows to AITER pa_prefill_sparse (vllm-project/vllm#60102)."
     - "--monokernel stays off: its gfx942 weight copies leave about 2.7 GiB beside the weights on a 192 GB card at TP4 (vllm-project/vllm#62713). Integer quick reduce stays off. All-reduce stays BF16."
-    - "No point changes: concurrency 1, 2, 4, 8, 16 and 32 on TP8 and TP4 (12 points), all re-measured on the new image."
+    - "Add concurrency 64 and 128 on TP8 and TP4. The sweep stopped at 32, where the GPU KV cache was only 14 to 17% full, so the throughput end of the curve was not measured. Both keep the base max-num-seqs 128 and graph capture up to 1024 tokens. The 12 existing points are re-measured on the new image: 16 points in total."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5046
