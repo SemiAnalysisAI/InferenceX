@@ -1,6 +1,8 @@
 schema: 2
 
 # Low-latency points: one TP4 worker on one node behind the Dynamo frontend, with KV on the GPUs only.
+# The Dynamo side (sidecar hosting, planes, frontend and worker settings) mirrors the GB300 recipe,
+# minimaxm31flash/vllm/gb300-fp4/agentx/agg-variants.yaml.
 # The engine arguments are those of the single-node TP4 points in
 # single_node/srt-slurm-recipes/minimaxm31flash/vllm/b300-fp4-mtp/agentic.yaml; nothing here uses the
 # EFA fabric.
@@ -13,6 +15,17 @@ base:
     install: true
     source:
       wheel: 1.6.0.dev20261023
+    request_plane: tcp
+    event_plane: zmq
+    # Native vLLM engines (Rust frontend, gRPC) behind Dynamo sidecars, which parse tools and reasoning.
+    sidecar: true
+    sidecar_args:
+    - --grpc-startup-deadline-secs
+    - '3600'
+    - --dyn-tool-call-parser
+    - minimax_m3
+    - --dyn-reasoning-parser
+    - minimax_m3
   resources:
     gpu_type: b300
     gpus_per_node: 8
@@ -30,12 +43,6 @@ base:
     type: etcd
     placement:
       node: infra
-  - name: nats
-    type: nats
-    placement:
-      node: infra
-    options:
-      max_payload_mb: 32
   frontend:
     type: dynamo
     enable_multiple_frontends: false
@@ -46,14 +53,6 @@ base:
       DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: '3600'
       DYN_TCP_CONNECT_TIMEOUT: '120'
       DYN_TOKENIZER: fastokens
-      # The default ~5 s request-plane timeout drops workers during AgentX's no-delay warmup burst.
-      DYN_TCP_REQUEST_TIMEOUT: '60'
-      DYN_TCP_MAX_MESSAGE_SIZE: '67108864'
-      DYN_TCP_CHANNEL_BUFFER: '128'
-      DYN_HTTP_BACKEND_TTFT_STREAM_TIMEOUT_SECS: '1800'
-      DYN_HTTP_SSE_INACTIVITY_TIMEOUT_SECS: '3600'
-      DYN_TOKENIZER_CACHE: '1'
-      DYN_TOKENIZER_CACHE_BYTES: '8000000000'
   engine:
     type: vllm
     connector: null
@@ -68,16 +67,16 @@ base:
         VLLM_ENGINE_READY_TIMEOUT_S: '7200'
         PYTHONUNBUFFERED: '1'
         VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '600'
+        VLLM_CHAT_TEMPLATE_RENDER_TIMEOUT: '600'
         DYN_TCP_CONNECT_TIMEOUT: '120'
         DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: '1024'
         DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT: '1024'
         DYN_BACKEND_ADMISSION_REQUEST_QUEUE_LIMIT: '2048'
+        VLLM_RS_TOKEN_IDS_AS_BYTES: '1'
       args:
         served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
         language-model-only: true
         trust-remote-code: true
-        dyn-tool-call-parser: minimax_m3
-        dyn-reasoning-parser: minimax_m3
         # MSA sparse/index cache needs 128-token blocks.
         block-size: 128
         # The checkpoint is QAT-trained for an NVFP4 KV cache.
@@ -97,6 +96,8 @@ base:
         # Golden AL 4.04.
         speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASH_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         stream-interval: 20
+        # Admit prefill on every 24th engine step, so the steps in between decode alone.
+        prefill-schedule-interval: 24
   srun_options:
     container-remap-root: ''
   benchmark:
@@ -126,10 +127,3 @@ override_tp4_c8:
     agg:
       args:
         max-num-seqs: 16
-
-override_tp4_c16:
-  name: minimaxm31flash-b300-dynamo-agg-tp4-c16
-  roles:
-    agg:
-      args:
-        max-num-seqs: 32

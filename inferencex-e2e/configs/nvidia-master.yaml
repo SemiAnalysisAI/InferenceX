@@ -4384,12 +4384,6 @@ minimaxm31flash-fp4-b300-dynamo-vllm-agentic-dspark-agg:
         num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c8
         worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
-      - spec-decoding: mtp
-        kv-offloading: none
-        conc-list: [16]
-        num-nodes: 1
-        srt-recipe: agg-variants.yaml:override_tp4_c16
-        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
 
 minimaxm31flash-fp4-b300-dynamo-vllm-agentic-dspark-disagg:
   image: vllm/vllm-openai:minimax-m31-flash-x86_64-cu134-5e21ce1-mc0.3.14@sha256:f6e2bdea4e8cc3ccc9bbd500169bc9365e58ac3bf395cf10c4514986e1487eb2
