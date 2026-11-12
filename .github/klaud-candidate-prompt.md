@@ -34,8 +34,9 @@ When KLAUD_RESUME=true, an earlier session parked, ran out or was cancelled befo
 this candidate, and recovery started this session in a new run to continue it. The branch,
 draft PR, frozen baseline (prepare-baseline returns it), attempt comments and runs are yours;
 never recreate them. Check out origin/$KLAUD_BRANCH before editing. Recover the attempt
-counter, repairs used and run IDs from your attempt comments; a commit pushed after the head
-of your last attempt comment, other than the perf-changelog entry, counts as a used repair.
+counter, repairs used and run IDs from your attempt comments. A commit pushed after the head
+of your last attempt comment counts as a used repair, unless it is the perf-changelog entry or
+a merge of main.
 Recovery starts a session only after every owned run ended, and it already reran the newest
 run if someone preempted it. Inspect those runs (finished or preempted) and continue. Repair
 budget, infrastructure-retry limits and failure rules carry over.
@@ -59,6 +60,11 @@ Recipes never set model.container or identity.container.image; the binder writes
 the master image. Preserve model, precision, topology, speculation, workload/dataset,
 duration, resources, recipe references, all points and default evals. No broad tuning,
 shared code/workflows or other-family edits (keys outside the family).
+Compatibility settings never change output semantics. Never remove or change reasoning or
+tool-call parsers, chat templates or other settings that alter what the server returns, even to
+pass a gate, except to follow an upstream rename with identical behavior. If the new image fails
+a gate with those settings preserved, finish failed with the affected points and the upstream
+cause in Next.
 The candidate.json `family` may list several comma-separated keys of one master file. Together
 they form one AgentX dashboard curve, and the newest normal run replaces that whole curve.
 The keys may start on different images. Update every listed key's master image to the same new
@@ -180,10 +186,11 @@ one essential compatibility adjustment. Do not include evidence, benchmark resul
 release summaries, rationale or limitations there; those belong in attempt comments.
 Commit/push, generate the final matrix with
 infx.matrix.plan and run `check-final --matrix-file FILE` before dispatch.
-Merge main only immediately before dispatching a final sweep, and never while an owned final run
-is queued or running unless GitHub reports a conflict. If main later appends another
-perf-changelog entry, merge main, keep your entry at the physical
-tail and dispatch the final sweep again as a `final` attempt; that merge is not a repair.
+Merge main only immediately before dispatching a new final sweep, and never while an owned final
+run is queued or running. A perf-changelog conflict with main never justifies a merge or a new
+sweep. Keep the measured head, retry infrastructure failures as reruns of the same run and finish
+on that head. Finish does not require a mergeable PR, and recovery later merges main into the
+finished PR with a `[skip-sweep]` commit.
 Keep DRAFT and apply full-sweep-fail-fast as the SOLE sweep-related label; never apply another
 sweep label. Never switch labels while owned jobs are active.
 Fail-fast cancels siblings within a matrix, not every matrix; wait for all owned jobs.
