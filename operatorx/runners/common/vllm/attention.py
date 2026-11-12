@@ -324,12 +324,15 @@ class _Engine:
 
     def _output(self, new: list, scheduled: dict, finished: set):
         from vllm.v1.core.sched.output import CachedRequestData, SchedulerOutput
-        return SchedulerOutput(
+        kwargs = dict(
             scheduled_new_reqs=new, scheduled_cached_reqs=CachedRequestData.make_empty(),
             num_scheduled_tokens=scheduled, total_num_scheduled_tokens=sum(scheduled.values()),
             scheduled_spec_decode_tokens={}, scheduled_encoder_inputs={},
+            # no shared prefix (no cascade attention); newer vLLM no longer takes this field
             num_common_prefix_blocks=[0] * len(self.runner.kv_cache_config.kv_cache_groups),
             finished_req_ids=finished, free_encoder_mm_hashes=[])
+        accepted = {f.name for f in fields(SchedulerOutput)}
+        return SchedulerOutput(**{k: v for k, v in kwargs.items() if k in accepted})
 
     def _configured(self):
         from vllm.config import set_current_vllm_config
