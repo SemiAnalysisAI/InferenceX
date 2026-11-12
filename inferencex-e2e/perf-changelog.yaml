@@ -12775,3 +12775,12 @@
     - "Concurrency 12 and 24: CUDA graphs also for prefill and mixed steps up to 4096 tokens (#4878 recipe without the TEP shared-expert variable); DSpark drafts 3 tokens; prefill-schedule-interval 8."
     - "Concurrency 48 and 64: EP8 MegaMoE with FULL_DECODE_ONLY graphs, max-num-batched-tokens 16384, prefill-schedule-interval 8 and gpu-memory-utilization 0.97."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4871
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Run EAGLE target verify on aiter unified_attention (split-KV) instead of the legacy Triton extend kernel: set page-size 16 and SGLANG_USE_AITER_UNIFIED_ATTN=1, as the MI325X Qwen3.5 FP8 recipe already does on the same gfx942 architecture."
+    - "Update the image from lmsysorg/sglang-rocm:v0.5.16-rocm720-mi30x-20260730 to the MI325X recipe's lmsysorg/sglang:v0.5.22-rocm720-mi30x (sha256:58b6bc33), and rename the cuda-graph-max-bs overrides to cuda-graph-max-bs-decode with unchanged values (the old name is ambiguous on that image). Concurrencies, TP/EP, memory fraction and admission limits are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5032
