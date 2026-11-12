@@ -225,8 +225,9 @@ def follow_single_node(
     status = run.backend.state(job)
     with run.life.event.stage("collect"):
         logs = run.backend.fetch_outputs(job, fetched) / "logs"
+        node_rc = collect.verify_node_health(run, job, status, logs)
         rc = finalize(logs, job.id, status)
-    return rc or int(not status.succeeded)
+    return rc or node_rc or int(not status.succeeded)
 
 
 def run_batch(launch: Launch) -> int:
@@ -262,7 +263,10 @@ def run_batch(launch: Launch) -> int:
         return 1
     status = backend.state(job)
     event.adopt_reentry()
-    return 0 if status.succeeded else status.exit_code or 1
+    node_rc = backend.check_node_health(
+        job, status, request.workspace / "LOGS" / "slurm-batch-node-health.json"
+    )
+    return node_rc if status.succeeded else status.exit_code or 1
 
 
 def run_multinode(launch: Launch) -> int:
