@@ -28,6 +28,7 @@ from .api import (
     PUBLIC,
     Capacity,
     ReadError,
+    display_models,
     fetch_capacity,
     fetch_catalog,
 )
@@ -800,7 +801,9 @@ def plan(
     CLUSTER_STATE gives ``select`` the claimed families' committed demand, the clusters under
     infrastructure backoff and the finished and claimed candidates of each master config, and
     gives ``regenerate-producers`` this plan's headroom and cluster sizes. Stale finished PRs
-    that main superseded are first closed for requeue and left out of the index.
+    that main superseded are first closed for requeue and left out of the index. Each candidate carries its ``baseline-model``, the display
+    model the public benchmarks API shows its source under, and a candidate the API shows under
+    no display model is left out.
     """
     from . import claims
     from .finished import finished, requeue_superseded
@@ -856,6 +859,12 @@ def plan(
         if weights_key(candidate["source"]) not in history.paused_weights
         and not image_held(candidate, history.held_images, now)
         and not family_prefixes(candidate["family"]) & history.held_families
+    ]
+    models = display_models()
+    candidates = [
+        {**candidate, "baseline-model": models[candidate["source"]["model"]]}
+        for candidate in candidates
+        if candidate["source"]["model"] in models
     ]
     recent = {
         candidate: label
@@ -1335,8 +1344,8 @@ def regenerate_producers(directory: Path, max_candidates: int, active_sessions: 
     contexts = json.loads((directory / "candidates.json").read_text())
     review, _ = reviewed(contexts)
     excluded = {decision.family for decision in review.decisions if decision.decision != "proceed"}
-    models = {
-        decision.candidate_id: decision.baseline_model
+    proceeds = {
+        decision.candidate_id
         for decision in review.decisions
         if decision.decision == "proceed" and decision.family not in excluded
     }
@@ -1352,7 +1361,7 @@ def regenerate_producers(directory: Path, max_candidates: int, active_sessions: 
         if len(proceeding) >= (slots + PRODUCER_MARGIN if slots else 0):
             break
         if (
-            candidate["id"] in models
+            candidate["id"] in proceeds
             and candidate["family"] not in taken
             and not wave.blocker(candidate)
             and all(prepared[cluster] < PRODUCER_ALTERNATES for cluster in candidate["clusters"])
@@ -1363,9 +1372,8 @@ def regenerate_producers(directory: Path, max_candidates: int, active_sessions: 
     repository = os.environ["GITHUB_REPOSITORY"]
     families: dict[str, dict[str, dict]] = {}
     for candidate in proceeding:
-        model = models[candidate["id"]]
         try:
-            heads = publication(repository, candidate, model).heads
+            heads = publication(repository, candidate, candidate["baseline-model"]).heads
         except (OSError, ValueError, KeyError, TypeError):
             print(
                 f"::warning::Klaud: public producers of candidate {candidate['id']} are unavailable."
@@ -1483,7 +1491,7 @@ def select(
                 os.environ["GITHUB_REPOSITORY"],
                 owned,
                 candidate,
-                decision.baseline_model,
+                candidate["baseline-model"],
                 Prose(
                     en="Verify the complete published baseline before candidate dispatch.",
                     zh="在调度候选任务前验证完整的已发布基线。",
@@ -1494,7 +1502,7 @@ def select(
             preflight = BaselinePreflight(
                 candidate_id=candidate["id"],
                 base=candidate["base"],
-                baseline_model=decision.baseline_model,
+                baseline_model=candidate["baseline-model"],
                 source_identity=identity(candidate["source"]),
                 baseline=baseline,
             )
@@ -1536,7 +1544,6 @@ def select(
         selected.append(
             {
                 **candidate,
-                "baseline-model": decision.baseline_model,
                 "pr-review": decision.model_dump(by_alias=True),
             }
         )
