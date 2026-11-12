@@ -12782,10 +12782,10 @@
     - agentic-coding
   description:
     - "Update the image from rocm/atom-dev:nightly_202610121516 to nightly_202611101510 (ATOM e5b74bc86, ROCm 7.2.4) in the master config, and the AToMesh frontend container_image from sha256:a60811a8467b43e3e50e9e9eb8cec34f68b7bca03f8c6dbd6a0ff813dde49d4c to sha256:160a4ec49379e7f1980a4e783254366b1d5c643b012abca57a21c0bcbbfe83a7, the same image."
-    - "Replace plain TP2 at concurrency [1, 2, 4, 6, 8, 16, 32, 64] and plain TP4 at [1, 8, 32] with plain TP2 at [1, 2, 16, 32], DTP2 (DP attention) at 64, DEP2 (DP attention plus expert parallelism) at [128, 256] and plain TP4 at [1, 2, 4, 8]. TP2 c4, c6, c8 and c64 and TP4 c32 are dropped; TP4 c2 and c4 are new."
+    - "Replace plain TP2 at concurrency [1, 2, 4, 6, 8, 16, 32, 64] and plain TP4 at [1, 8, 32] with plain TP2 at [1, 2, 16, 32], DTP2 (DP attention) at 64, DEP2 (DP attention plus expert parallelism) at [128, 256] and plain TP4 at [1, 2, 4, 8, 32]. TP2 c4, c6, c8 and c64 are dropped; TP4 c2 and c4 are new."
     - "Switch the KV cache from BF16 to MXFP8 (kv_cache_dtype fp8) at every point; the index cache stays FP4."
     - "Drop max-num-seqs 128, so every point except concurrency 1 runs ATOM's default admission. Concurrency 1 (TP2 and TP4) runs max-num-seqs 2, decode graphs [1, 2] and ATOM_PREFILL_DECODE_INTERVAL=1000000, the C1 recipe of ATOM's recipes/Kimi-K3.md (ROCm/ATOM#2659). The c256 point also captures graph size 256."
-    - "Set ATOM_PREFILL_DECODE_INTERVAL per point: 192 at TP2 c2 and TP4 c2, c4 and c8, 96 at TP2 c16, 40 at TP2 c32 and 10 at the DP points (previously unset except 4 at TP2 c64 and 16 at TP4 c32)."
+    - "Set ATOM_PREFILL_DECODE_INTERVAL per point: 192 at TP2 c2 and TP4 c2, c4 and c8, 96 at TP2 c16, 40 at TP2 c32, 16 at TP4 c32 (unchanged) and 10 at the DP points (previously unset except 4 at TP2 c64 and 16 at TP4 c32)."
     - "The DP points add dp-load-balance least_tokens, ATOM_DP_SESSION_AFFINITY=1, ATOM_DP_LB_REQ_EQUIV=512 and GPU_MAX_HW_QUEUES=5, and AIPerf sends the correlation ID as the X-Dynamo-Session-Id header for session affinity."
     - "Every point adds timeout-keep-alive 900 so the server keeps AIPerf's pooled connections open past uvicorn's 5 s default."
     - "The new ATOM brings DeepSeek-V4.1 DP attention (ROCm/ATOM#2376), the V4.1 MXFP8 KV cache with DSpark on an FP8 cache (ROCm/ATOM#2725), DP-attention prefill balancing and graph replay (ROCm/ATOM#2551, #2696, #2697) and the default HIP Mega-MHC kernel on gfx950 (ROCm/ATOM#2568)."
