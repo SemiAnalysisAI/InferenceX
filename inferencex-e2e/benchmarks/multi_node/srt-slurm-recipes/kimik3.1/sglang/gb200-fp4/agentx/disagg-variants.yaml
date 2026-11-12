@@ -251,3 +251,132 @@ override_1p2d_tp16_c32:
         weight-loader-drop-cache-after-load: false
         dist-timeout: 3600
         speculative-num-draft-tokens: 8
+
+# PP2-prefill design: a TP8 x PP2 prefill (DCP8, EP2) and TP16 decode workers that run
+# DCP8 x attention DP2 with EP16 DeepGEMM MegaMoE. override_1p1d_pp2_c200 carries the settings
+# the PP2 points share (anchored below); the other PP2 overrides inherit them through YAML merge
+# keys and list only their own changes.
+override_1p1d_pp2_c200:
+  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-disagg-1p1d-pp2-c200-dflash5
+  roles:
+    prefill:
+      # A single prefill worker leaves the KV router nothing to choose, so it publishes no KV events.
+      kv_events: null
+      env: &pp2_prefill_env
+        # The last stage also runs the DFLASH draft and lm_head; 48/45 evens the two stages.
+        SGLANG_PP_LAYER_PARTITION: 48,45
+        # In-batch prefix deferral holds cold requests behind shared prefixes and doubles the TTFT tail at a saturated prefill.
+        IN_BATCH_PREFIX_CACHING_CHECK_THRESHOLD: '-1'
+      args: &pp2_prefill_args
+        tensor-parallel-size: 8
+        pipeline-parallel-size: 2
+        dcp-size: 8
+        expert-parallel-size: 2
+        page-size: 64
+        # At 0.85 a prefill rank can fall under 0.1 GiB free and fail the draft GEMM in cuBLAS.
+        mem-fraction-static: 0.82
+        # The Run:ai streamer cannot load a pipeline-parallel model.
+        load-format: auto
+        weight-loader-drop-cache-after-load: false
+        dist-timeout: 3600
+        # Host KV, Mamba and DSA indexer pools total ~1.1 x hicache-size per rank; 108 fits a tray's 487 GB offload share.
+        hicache-size: 108
+        speculative-num-draft-tokens: 6
+    decode:
+      kv_events: null
+      env: &pp2_decode_env
+        # MegaMoE replaces the sharded MoE front.
+        SGLANG_K3_SHARDED_MOE: null
+        # SGLang's Kimi MegaMoE check bounds a rank's rows by max-running-requests / attention DP x draft tokens.
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '1152'
+        NVSHMEM_REMOTE_TRANSPORT: none
+      args: &pp2_decode_args
+        # TP16 attention runs as DCP8 x attention DP2: 12 KDA heads per rank engage the fused KDA decode.
+        dcp-size: 8
+        attn-dp-size: 2
+        # DFLASH with attention DP needs the DP LM head.
+        enable-dp-lm-head: true
+        expert-parallel-size: 16
+        moe-a2a-backend: megamoe
+        # Shards the replicated BF16 shared experts (~22 GiB) under MegaMoE.
+        shared-experts-tp-size: 8
+        page-size: 64
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 64
+        load-format: runai_streamer
+        model-loader-extra-config: '{"concurrency":16,"distributed":true}'
+        weight-loader-prefetch-checkpoints: null
+        weight-loader-drop-cache-after-load: false
+        dist-timeout: 3600
+        speculative-num-draft-tokens: 6
+
+override_1p2d_pp2_c76:
+  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-disagg-1p2d-pp2-c76-dflash7
+  frontend:
+    args:
+      # Balances the decode hop across the two workers by active requests.
+      router-decode-active-request-weight: '1000000'
+  roles:
+    prefill:
+      kv_events: null
+      env: *pp2_prefill_env
+      args:
+        <<: *pp2_prefill_args
+        speculative-num-draft-tokens: 8
+    decode:
+      nodes: 8
+      workers: 2
+      kv_events: null
+      env: *pp2_decode_env
+      args:
+        <<: *pp2_decode_args
+        speculative-num-draft-tokens: 8
+
+override_1p2d_pp2_c150:
+  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-disagg-1p2d-pp2-c150-dflash5
+  frontend:
+    args:
+      router-decode-active-request-weight: '1000000'
+  roles:
+    prefill:
+      kv_events: null
+      env:
+        <<: *pp2_prefill_env
+        # Warms the BF16 GEMMs up to the 32k chunk.
+        SGLANG_WARMUP_BF16_GEMM_MAX_M: '32768'
+        # Halves the DSA indexer logits transient of a 32k chunk.
+        SGLANG_DSA_MQA_LOGITS_FREE_MEM_FRACTION: '0.1'
+      args:
+        <<: *pp2_prefill_args
+        chunked-prefill-size: 32768
+        max-prefill-tokens: 32768
+    decode:
+      nodes: 8
+      workers: 2
+      kv_events: null
+      env: *pp2_decode_env
+      args: *pp2_decode_args
+
+override_1p1d_pp2_c150:
+  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-disagg-1p1d-pp2-c150-dflash4
+  roles:
+    prefill:
+      kv_events: null
+      env:
+        <<: *pp2_prefill_env
+        SGLANG_WARMUP_BF16_GEMM_MAX_M: '32768'
+        SGLANG_DSA_MQA_LOGITS_FREE_MEM_FRACTION: '0.1'
+      args:
+        <<: *pp2_prefill_args
+        chunked-prefill-size: 32768
+        max-prefill-tokens: 32768
+        speculative-num-draft-tokens: 5
+    decode:
+      kv_events: null
+      env: *pp2_decode_env
+      args:
+        <<: *pp2_decode_args
+        mem-fraction-static: 0.87
+        max-running-requests: 192
+        cuda-graph-max-bs-decode: 96
+        speculative-num-draft-tokens: 5
