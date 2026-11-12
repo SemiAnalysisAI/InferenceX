@@ -25,6 +25,7 @@ sys.path.insert(0, str(BENCH))
 
 import probe  # noqa: E402
 import config  # noqa: E402
+import redact  # noqa: E402
 import stage  # noqa: E402
 import ep_harness  # noqa: E402  (stdlib-only at module top)
 import ep_backend  # noqa: E402  (torch is imported lazily inside its methods)
@@ -302,6 +303,26 @@ class RelaxedOrderingProfileTests(unittest.TestCase):
                     check=True,
                 ).stdout
                 self.assertEqual(stdout.strip().splitlines()[-1], expected)
+
+
+class InheritedUcclKnobTests(unittest.TestCase):
+    KNOBS = ("UCCL_RDMA_ADAPTIVE_SLEEP", "UCCL_EP_TRANSPORT",
+             "UCCL_EP_DISPATCH_CONFIG", "UCCL_EP_COMBINE_CONFIG")
+
+    def test_no_placement_hands_the_launching_shells_knobs_to_the_ranks(self) -> None:
+        # Ranks get the launcher's exported environment (srun --export=ALL), and UCCL reads these
+        # at run time: one left over in the launching shell would change the proxy's sleep policy
+        # or transport, or the dispatch and combine configs, under an unchanged label.
+        for placement, devices in (
+                ("1 nvlink", ""), ("2 mnnvl", ""), ("2 nvlink-rdma", "mlx5_0:1")):
+            with self.subTest(placement=placement):
+                exported = run_common(
+                    f"collx_apply_network_profile {placement} && env", check=True,
+                    env={"PATH": os.environ["PATH"], "COLLX_RDMA_DEVICES": devices,
+                         **dict.fromkeys(self.KNOBS, "stale")},
+                ).stdout.splitlines()
+                self.assertEqual(
+                    [line for line in exported if line.partition("=")[0] in self.KNOBS], [])
 
 
 class DeepepSourceSelectionTests(unittest.TestCase):
@@ -711,6 +732,93 @@ echo "JOB_ID=$JOB_ID"
         self.assertIn("COLLX_ALLOCATION must be salloc or sbatch", proc.stderr)
         self.assertIsNone(sbatch_args)
         self.assertFalse(salloc_called)
+
+
+def _executables(directory: Path, scripts: dict) -> None:
+    directory.mkdir()
+    for name, body in scripts.items():
+        (directory / name).write_text("#!/bin/bash\n" + body)
+        (directory / name).chmod(0o755)
+
+
+class LogTailRedaction(unittest.TestCase):
+    """Failure paths print a log tail into the CI job log, which is public."""
+
+    def test_addresses_are_masked_and_lookalikes_are_kept(self) -> None:
+        for text, expected in (
+            ("connect to 10.20.30.40:29551 failed", "connect to <ipv4>:29551 failed"),
+            ("addr=192.168.1.7,clientaddr=10.0.0.9", "addr=<ipv4>,clientaddr=<ipv4>"),
+            ("peer fe80::506b:4b03:a1:b2c3%ib0 down", "peer <ipv6>%ib0 down"),
+            ("listening on [2001:db8::1]:443", "listening on [<ipv6>]:443"),
+            ("GID fe80:0000:0000:0000:506b:4b03:00a1:b2c3", "GID <ipv6>"),
+            ("mapped ::ffff:10.1.2.3", "mapped ::ffff:<ipv4>"),
+            ("smac 0c:42:a1:5e:9f:10", "smac <mac>"),
+            # A C++ scope, a clock time, Python slices, and dotted versions are none of these.
+            ("std::runtime_error at 12:34:56", "std::runtime_error at 12:34:56"),
+            ("x[1::2] + y[::2] + z[::-1]", "x[1::2] + y[::2] + z[::-1]"),
+            ("torch 2.13.0, v0.7.1.2, patchelf==0.17.2.1, build 1.2.3.4.5",
+             "torch 2.13.0, v0.7.1.2, patchelf==0.17.2.1, build 1.2.3.4.5"),
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(redact.redact(text), expected)
+
+    def test_host_names_are_masked_as_slurm_and_dns_spell_them(self) -> None:
+        hosts = ["login-2.cluster.example", "gpu-node07", "gpu-node08"]
+        for text, expected in (
+            ("srun: error: gpu-node07: task 3: Exited with exit code 1",
+             "srun: error: <host>: task 3: Exited with exit code 1"),
+            ("srun: error: gpu-node[07-08]: tasks 0-15: Killed",
+             "srun: error: <host>: tasks 0-15: Killed"),
+            ("gpu-node08.cluster.example:4242:4242 [0] NCCL INFO",
+             "<host>:4242:4242 [0] NCCL INFO"),
+            # Another node of the same pool, by its interface alias, and the submit host.
+            ("gpu-node12-ib0 unreachable from login-2", "<host> unreachable from <host>"),
+            # Words that only share letters with a host name stay.
+            ("gpu-nodes: 2, cpu-node07, node07, login-server, gpu-node-pool",
+             "gpu-nodes: 2, cpu-node07, node07, login-server, gpu-node-pool"),
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(redact.redact(text, hosts), expected)
+
+    LOG = ("gpu-node07:4242:4242 [0] NCCL WARN connect to 10.20.30.40<29551> failed\n"
+           "srun: error: gpu-node[07-08]: tasks 0-15: Exited with exit code 1, see login-2\n"
+           "worker-a7: rank 3 lost its peer\n")
+    MASKED = ("<host>:4242:4242 [0] NCCL WARN connect to <ipv4><29551> failed\n"
+              "srun: error: <host>: tasks 0-15: Exited with exit code 1, see <host>\n"
+              "<host>: rank 3 lost its peer\n")
+    # The job's nodes are listed only while $ROOT/gone is absent. sinfo gives the kernel host
+    # names, which this pool sets apart from its node names.
+    SLURM = {
+        "squeue": '[ -e "$ROOT/gone" ] || echo "gpu-node[07-08]"\n',
+        "scontrol": 'printf "gpu-node07\\ngpu-node08\\n"\n',
+        "hostname": "echo login-2.cluster.example\n",
+        "sinfo": 'printf "worker-a7\\nworker-a8\\n"\n',
+    }
+
+    def _tail(self, script: str, **fakes: str) -> str:
+        root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        _executables(root / "bin", {**self.SLURM, **fakes})
+        (root / "step.log").write_text(self.LOG)
+        return run_common(
+            script, str(root / "step.log"), check=True,
+            env={**os.environ, "PATH": f"{root / 'bin'}:{os.environ['PATH']}", "ROOT": str(root)},
+        ).stderr
+
+    def test_a_tail_names_neither_the_nodes_nor_the_submit_host(self) -> None:
+        # The second tail comes after the job is gone, when Slurm no longer lists its nodes.
+        printed = self._tail(
+            'JOB_ID=4242; collx_log_tail "$1"; : > "$ROOT/gone"; collx_log_tail "$1"')
+        framed = ("[collectivex] --- command log tail ---\n" + self.MASKED
+                  + "[collectivex] --- end command log tail ---\n")
+        self.assertEqual(printed, framed * 2)
+
+    def test_a_tail_that_cannot_be_masked_is_not_printed(self) -> None:
+        printed = self._tail(
+            'JOB_ID=4242; collx_log_tail "$1"',
+            python3='echo "Traceback: /home/operator/redact.py" >&2; exit 1\n')
+        self.assertIn("log tail withheld", printed)
+        for private in ("gpu-node", "worker-a", "10.20.30.40", "login-2", "/home/operator"):
+            self.assertNotIn(private, printed)
 
 
 # config.py case-args encodes each case as a null-delimited argv for the entrypoint its leading

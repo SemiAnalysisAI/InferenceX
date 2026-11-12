@@ -76,7 +76,8 @@ launcher, and copies every result to `results/<sku>/<case_id>.json`, replacing t
 for that case. A failed shard does not stop the others; the closing summary lists each shard's exit
 code and runs `summarize.py` over the pool's results. Interrupting `run.sh` releases its
 allocations. Runtime logs stay under `/tmp/inferencex-collectivex-<uid>/logs/<execution>/` on the
-login node.
+login node. A failed step prints the tail of its log with IP and MAC addresses and the allocation's
+host names masked (`<ipv4>`, `<host>`); the files keep them.
 
 h200-dgxc, b200-nscale and gb200 run from the registry alone. h100-dgxc, b300, gb300 and the AMD
 pools also need an operator document that names a stage directory (see

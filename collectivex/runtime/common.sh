@@ -85,17 +85,24 @@ COLLX_HWLOC_SHA256="c7fd8a1404a9719c76aadc642864b9f77aed1dc1fc8882d6af861a9260ba
 COLLX_PCIACCESS_VERSION="0.16"
 COLLX_PCIACCESS_SHA256="84413553994aef0070cf420050aa5c0a51b1956b404920e21b81e96db6a61a27"
 
+# A tail lands in the CI job log, which is public, so redact.py masks addresses and host names
+# first.
 collx_log_tail() {
   local log_path="$1"
   if [ -s "$log_path" ]; then
+    collx_note_allocation_hosts
     collx_log "--- command log tail ---"
-    tail -n 100 -- "$log_path" >&2 || true
+    tail -n 100 -- "$log_path" \
+      | python3 "$COLLX_RUNTIME_DIR/redact.py" "$(hostname 2>/dev/null),${COLLX_TAIL_HOSTS:-}" \
+        >&2 2>/dev/null \
+      || collx_log "log tail withheld: it could not be redacted"
     collx_log "--- end command log tail ---"
   fi
 }
 
 collx_launcher_prologue() {
   JOB_ID=""
+  COLLX_TAIL_HOSTS=""
   # One stable timestamp per launcher invocation: the refresh path discards only
   # squashes staged before this moment, across salloc retries and both nodes.
   : "${COLLX_LAUNCH_EPOCH:=$(date +%s)}"
@@ -357,6 +364,9 @@ collx_apply_network_profile() {
   unset MORI_RDMA_TC MORI_IO_TC MORI_RDMA_SL MORI_IO_SL
   unset UCCL_SOCKET_IFNAME UCCL_IB_HCA UCCL_IB_GID_INDEX UCCL_IB_SL UCCL_IB_TC
   unset UCCL_IB_MAX_INFLIGHT_BYTES UCCL_IB_MAX_INFLIGHT_NORMAL UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC
+  # UCCL reads these at run time too: the proxy thread's sleep policy and transport, and the
+  # configs Buffer.get_dispatch_config / get_combine_config return in place of the recommended ones.
+  unset UCCL_RDMA_ADAPTIVE_SLEEP UCCL_EP_TRANSPORT UCCL_EP_DISPATCH_CONFIG UCCL_EP_COMBINE_CONFIG
   # Single-node and MNNVL runs need only the scrub above. Single-node low-latency kernels run
   # over NVLink/XGMI (DeepEP allow_nvlink_for_low_latency_mode) and must NOT force IBGDA
   # (/dev/gdrdrv is absent on h200). Exception: a SKU may pin a single-node HCA list.
@@ -542,6 +552,20 @@ collx_allocation_nodes_csv() {
   printf '%s' "$output"
 }
 
+# Keeps the allocation's node names for collx_log_tail: Slurm stops listing them once the job is
+# gone, and a tail printed after that still names them. Ranks log the kernel host name, which a
+# pool may set apart from the Slurm node name, so both are kept.
+collx_note_allocation_hosts() {
+  local nodes hostnames
+  [ -n "${JOB_ID:-}" ] && nodes="$(collx_allocation_nodes_csv "$JOB_ID")" || return 0
+  hostnames="$(sinfo -h -n "$nodes" -o %n 2>/dev/null | sort -u | paste -sd, -)" || hostnames=""
+  [ -z "$hostnames" ] || nodes="$nodes,$hostnames"
+  case ",${COLLX_TAIL_HOSTS:-}," in
+    *",$nodes,"*) ;;
+    *) COLLX_TAIL_HOSTS="${COLLX_TAIL_HOSTS:+$COLLX_TAIL_HOSTS,}$nodes" ;;
+  esac
+}
+
 collx_resolve_slurm_rendezvous() {
   local job_id="$1" master_addr master_port socket_ifname="${COLLX_SOCKET_IFNAME:-}"
   [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || collx_die "invalid rendezvous allocation"
@@ -671,6 +695,7 @@ collx_salloc_jobid() {
       's/.*Granted job allocation ([1-9][0-9]*).*/\1/p' "$log" | head -n1)"
   [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || return 1
   JOB_ID="$job_id"
+  collx_note_allocation_hosts
 }
 
 # COLLX_ALLOCATION=sbatch holds the same nodes with a batch job that only sleeps, for pools whose
@@ -706,6 +731,7 @@ collx_sbatch_hold_jobid() {
     sleep 5
   done
   printf 'Granted job allocation %s\n' "$job_id" >> "$log"
+  collx_note_allocation_hosts
 }
 
 # Cancels only this launcher's own allocation, by job id.
