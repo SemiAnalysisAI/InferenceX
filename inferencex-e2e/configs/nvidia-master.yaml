@@ -4197,6 +4197,116 @@ hy3-fp8-h200-sglang-agentic-mtp:
     - search-space:
       - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 16], srt-recipe: agentic.yaml }
 
+hy3-fp8-b200-sglang:
+  image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
+  model: tencent/Hy3-FP8
+  model-prefix: hy3
+  runner: cluster:b200-nscale
+  precision: fp8
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: hy3/sglang/b200-fp8
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - tp: 8
+        ep: 1
+        conc-start: 4
+        conc-end: 64
+        srt-recipe: 8k1k.yaml
+
+hy3-fp8-b200-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
+  model: tencent/Hy3-FP8
+  model-prefix: hy3
+  runner: cluster:b200-nscale
+  precision: fp8
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: hy3/sglang/b200-fp8-mtp
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - tp: 8
+        ep: 1
+        conc-start: 4
+        conc-end: 64
+        spec-decoding: mtp
+        srt-recipe: 8k1k.yaml
+
+hy3-fp8-b200-sglang-agentic-mtp:
+  image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
+  model: tencent/Hy3-FP8
+  model-prefix: hy3
+  runner: cluster:b200-nscale
+  precision: fp8
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: hy3/sglang/b200-fp8-mtp
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 16], srt-recipe: agentic.yaml }
+
+hy3-fp8-b300-sglang:
+  image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
+  model: tencent/Hy3-FP8
+  model-prefix: hy3
+  runner: cluster:b300-dsxe
+  precision: fp8
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: hy3/sglang/b300-fp8
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - tp: 8
+        ep: 1
+        conc-start: 4
+        conc-end: 64
+        srt-recipe: 8k1k.yaml
+
+hy3-fp8-b300-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
+  model: tencent/Hy3-FP8
+  model-prefix: hy3
+  runner: cluster:b300-dsxe
+  precision: fp8
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: hy3/sglang/b300-fp8-mtp
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - tp: 8
+        ep: 1
+        conc-start: 4
+        conc-end: 64
+        spec-decoding: mtp
+        srt-recipe: 8k1k.yaml
+
+hy3-fp8-b300-sglang-agentic-mtp:
+  image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
+  model: tencent/Hy3-FP8
+  model-prefix: hy3
+  runner: cluster:b300-dsxe
+  precision: fp8
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: hy3/sglang/b300-fp8-mtp
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 16], srt-recipe: agentic.yaml }
+
 # MiniMax-M3.1-Flash AgentX on H100: day-zero vLLM image from
 # https://vllm.ai/blog/2026-10-23-minimax-m31-flash, multiarch manifest verified
 # 2026-10-23 (amd64 is minimax-m31-flash-x86_64-cu134). Serve flags follow the

@@ -1,0 +1,43 @@
+base:
+  schema: 2
+  name: hy3-fp8-b200-sglang-agentic-mtp
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: tencent/Hy3-FP8
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        data-parallel-size: 1
+        expert-parallel-size: 1
+        kv-cache-dtype: fp8_e4m3
+        mem-fraction-static: 0.82
+        stream-interval: 50
+        scheduler-recv-interval: 10
+        tokenizer-worker-num: 6
+        enable-metrics: true
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 2
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 3
+      env:
+        PYTHONNOUSERSITE: '1'
+        SGLANG_ENABLE_SPEC_V2: '1'
+
+override_gpu_kv:
+  benchmark:
+    env:
+      KV_OFFLOADING: none

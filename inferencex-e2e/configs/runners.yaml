@@ -462,6 +462,7 @@ clusters:
         GLM-5.2-NVFP4: {root: scratch, dir: GLM-5.2-NVFP4}
         GLM-5.3-Flash: {root: data-models, dir: GLM-5.3-Flash}
         GLM-5.3-Flash-NVFP4: {root: data-models, dir: GLM-5.3-Flash-NVFP4}
+        Hy3-FP8: {root: writable-models, dir: Hy3-FP8}
         Kimi-K3.1-Pro: {root: scratch, dir: Kimi-K3.1-Pro}
         MiniMax-M3.1-Flash: {root: data-models, dir: MiniMax-M3.1-Flash}
         Muse-Spark-Open-816B-A42B-NVFP4: {root: data-models, dir: Muse-Spark-Open-816B-A42B-NVFP4}
@@ -529,6 +530,7 @@ clusters:
         GLM-5.3-NVFP4: {root: scratch, dir: GLM-5.3-NVFP4}
         GLM-5.3-Flash: {root: data-models, dir: GLM-5.3-Flash}
         GLM-5.3-Flash-NVFP4: {root: data-models, dir: GLM-5.3-Flash-NVFP4}
+        Hy3-FP8: {root: writable-models, dir: Hy3-FP8}
         Kimi-K3: {root: scratch, dir: Kimi-K3}
         Kimi-K3.1-Pro: {root: scratch, dir: Kimi-K3.1-Pro}
         MiniMax-M3: {root: scratch, dir: MiniMax-M3}
