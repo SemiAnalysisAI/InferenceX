@@ -316,3 +316,35 @@ override_1p1d_p_pp4_d_dp4_hicache_c96:
         enable-dp-lm-head: true
         max-running-requests: 192
         cuda-graph-max-bs-decode: 48
+
+# Test only: the C=48 point with every rank on the Python TreeCore (no runtime Rust build).
+override_1p1d_p_pp4_d_dp4_hicache_c48_pytree:
+  roles:
+    prefill:
+      env:
+        SGLANG_PP_LAYER_PARTITION: "20,20,20,18"
+        HSA_USERPTR_FOR_PAGED_MEM: "0"
+        # Matches the C=48 point validated on InferenceMINI (Vultr MI355X).
+        SGLANG_DISAGGREGATION_NUM_PRE_ALLOCATE_REQS: "32"
+        SGLANG_UNIFIED_RADIX_TREE_CORE_BACKEND: python
+      args:
+        tp-size: 1
+        pp-size: 4
+        mem-fraction-static: 0.95
+        max-running-requests: 96
+        enable-hierarchical-cache: true
+        hicache-size: 350
+        hicache-write-policy: write_through
+    decode:
+      env:
+        SGLANG_DISAGGREGATION_NUM_PRE_ALLOCATE_REQS: "32"
+        SGLANG_UNIFIED_RADIX_TREE_CORE_BACKEND: python
+      args:
+        mem-fraction-static: 0.95
+        dp-size: 4
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        max-running-requests: 96
+        cuda-graph-max-bs-decode: 24
+        chunked-prefill-size: 32768
+        enable-request-time-stats-logging: false
