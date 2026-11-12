@@ -32,7 +32,7 @@ df = df[df.placement.isin(STYLES)]
 sizes = sorted(df.bytes.unique())
 
 plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 10})
-fig, axes = plt.subplots(2, 4, figsize=(17, 8), facecolor=SURFACE, sharex=True)
+fig, axes = plt.subplots(2, 4, figsize=(17, 8.6), facecolor=SURFACE)  # each row keeps its own x labels
 for c, op in enumerate(OPS):
     for r, (col, ylabel) in enumerate([("time_us", "Time per collective (µs)"), ("busbw_GBps", "Bus bandwidth (GB/s)")]):
         ax = axes[r, c]
@@ -75,7 +75,7 @@ for c, op in enumerate(OPS):
             ax.set_title(op, loc="left", color=INK, fontsize=12)
         else:
             ax.set_ylim(0, 600)
-            ax.set_xlabel("Size (bytes)", color=INK2)
+        ax.set_xlabel("Size (bytes)", color=INK2)
         if c == 0:
             ax.set_ylabel(ylabel, color=INK2)
         ax.grid(axis="y", color=GRID, lw=0.8)
