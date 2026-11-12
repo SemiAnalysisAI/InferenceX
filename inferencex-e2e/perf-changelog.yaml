@@ -12681,6 +12681,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4617
 
 - config-keys:
+    - minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
+    - minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg
+  scenario-type: [agentic-coding]
+  description:
+    - "Set stream-interval 20 on every role (prefill, decode and aggregated); it was unset, so vLLM streamed every token. The whole curve is re-measured."
+    - "P/D (DEP4 prefill + DEP16 decode, max-cudagraph-capture-size = 8 x max-num-seqs): keep 1 prefill at conc 200 (max-num-seqs 5), 3 prefill at conc 500 (10) and 5 prefill at conc 800 (22); add 4 prefill at conc 640 (16), 680 (16) and 700 (17), 5 prefill at conc 850 (22), and 6 prefill at conc 900 (20), 950 (22) and 1000 (24). Drop 3 prefill at conc 600 and 4 prefill at conc 800."
+    - "Aggregated TP4: prefill-schedule-interval 24 at every point; keep concurrency 1 and 16 and add 4 (max-num-seqs 8), 8 (16) and 32 (64). The image is unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4998
+
+- config-keys:
     - minimaxm31flash-fp4-mi355x-vllm-agentic-dspark
   scenario-type: [agentic-coding]
   description:
@@ -12775,6 +12785,17 @@
     - "Concurrency 12 and 24: CUDA graphs also for prefill and mixed steps up to 4096 tokens (#4878 recipe without the TEP shared-expert variable); DSpark drafts 3 tokens; prefill-schedule-interval 8."
     - "Concurrency 48 and 64: EP8 MegaMoE with FULL_DECODE_ONLY graphs, max-num-batched-tokens 16384, prefill-schedule-interval 8 and gpu-memory-utilization 0.97."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4871
+
+- config-keys:
+    - minimaxm31flash-fp4-mi355x-vllm-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Image nightly-4fab5a07475822c6eaa971dceb2e2220d0446808 -> vllm/vllm-openai-rocm:minimax-m31-flash-75bc8cf1 (vLLM 0.33.0rc1.dev910+g4fab5a074 with the MiniMax-M3.1 ROCm serving stack, the amd_kernels FlyDSL library and FlyDSL 0.5.0), pinned by digest. The image routes the dense GEMMs, MoE, qkv, sparse attention, indexer, norms, DSpark draft, sampling, top-p and sequence-parallel prefill to amd_kernels by default, with no env switch."
+    - "Every point serves the NVFP4 KV and indexer caches with decode indexer CP, DBO (prefill from 16384 tokens, decode from 32768), breakable CUDA graphs up to 2048 tokens on the V2 runner, 8 renderer workers, prompt-token details, DEBUG_HIP_DYNAMIC_QUEUES=0 and DEBUG_HIP_IGNORE_STREAM_PRIORITY=0, and admission 2x CONC. Batch-sharded sampling is on from c2; vLLM refuses it at c1, where max-num-seqs 2 is below TP 4."
+    - "C1-C16 run DSpark 7 with the KV cache on the GPUs. The c1-c8 mono decode lane (FP8 KV and indexer caches, VLLM_ROCM_MINIMAX_M3_MONO, shuffled KV layout, FULL_DECODE_ONLY graphs, 8192-token prefill steps) is removed: mono decode takes over the MoE and norm paths and turns the image's MoE, norm and sequence-parallel prefill routes off, while the NVFP4 lane keeps every route on."
+    - "C32 joins C64 on the SimpleCPUOffloadConnector tier (1349 GB, dram-utilization 0.90) with LRU eviction (cpu_lru_eviction). C32 keeps DSpark 7; C64 keeps DSpark 3 at 0.90 GPU memory utilization."
+    - "Removed env switches, which the image's validation runs do not set: VLLM_USE_RUST_FRONTEND, VLLM_ROCM_USE_SKINNY_GEMM, VLLM_ROCM_PARALLEL_INDEX_TOPK, VLLM_ROCM_MINIMAX_M3_MONO_DRAFTER, VLLM_ROCM_MINIMAX_M3_SP_PREFILL. PYTHONHASHSEED is 0 at every point (42 at c64 before)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
 
 - config-keys:
     - qwen3.5-fp8-h200-sglang-agentic-hicache-mtp
