@@ -361,8 +361,12 @@ jobs:
       - name: Redact stored artifacts
         if: ${{ always() && env.INFERENCEX_RESULTS_PYTHON != '' }}
         env:
+          RUNNER_LABEL: ${{ inputs.runner }}
           PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
         run: |
+          if [[ "$RUNNER_LABEL" == cluster:mi355x-amds ]]; then
+            sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE"
+          fi
           source "$PYTHONPATH/benchmarks/check_env.sh"
           check_env_vars INFERENCEX_RESULTS_PYTHON INFERENCEX_E2E_ROOT RESULT_FILENAME SCENARIO_TYPE EVAL_ONLY RUN_EVAL
           cd "$INFERENCEX_E2E_ROOT"
@@ -397,9 +401,6 @@ jobs:
               meta_env.json results*.json al_gate_*.json ./*_report.json ./*_results.jsonl
               ./*_artifacts.tar.gz sample*.jsonl
             )
-          fi
-          if [[ "$SCENARIO_TYPE" == video-generation ]]; then
-            paths+=(h3-results)
           fi
           "$INFERENCEX_RESULTS_PYTHON" -P -m infx.results.redact "${paths[@]}"
 

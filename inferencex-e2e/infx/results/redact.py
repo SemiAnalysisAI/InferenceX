@@ -38,7 +38,7 @@ _CREDENTIALS = tuple(
         r"\bsk-(?:ant-|proj-)?[A-Za-z0-9_-]{32,}",
     )
 )
-_URL_PASSWORD = re.compile(r"(\b[a-z][a-z0-9+.-]*://[^\s:/@]+:)[^\s@/]+@", re.ASCII)
+_URL_PASSWORD = re.compile(r"(\b[a-z][a-z0-9+.-]*://[^\s:/@\"',;<>]*:)[^\s@/\"',;<>]+@", re.ASCII)
 _ORACLE_VCN = re.compile(
     r"\b([A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)(?:\.[A-Za-z0-9-]+)*\.oraclevcn\.com\b",
     re.ASCII | re.IGNORECASE,

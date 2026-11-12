@@ -129,6 +129,16 @@
       "name": "url password, private host kept",
       "input": "postgres://reader:s3cret@10.1.2.3:5432/db",
       "output": "postgres://reader:***REDACTED***@10.1.2.3:5432/db"
+    },
+    {
+      "name": "url password with empty user",
+      "input": "redis://:s3cret@10.1.2.4:6379",
+      "output": "redis://:***REDACTED***@10.1.2.4:6379"
+    },
+    {
+      "name": "compact json url next to an email kept",
+      "input": "{\"url\":\"http://10.0.0.5:8000\",\"owner\":\"a@example.com\"}",
+      "output": "{\"url\":\"http://10.0.0.5:8000\",\"owner\":\"a@example.com\"}"
     }
   ]
 }
