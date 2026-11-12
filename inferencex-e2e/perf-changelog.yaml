@@ -12795,4 +12795,4 @@
     - "The image bump and the flag removal go together. On v0.33.0 the flag removal turns on only the decoder path while ROCm still forces prefix-cache SWA replay off, so a prefix hit followed by an untrimmed tail of 128 tokens or fewer can read sliding-window KV of layers 21-39 that an earlier trimmed step never wrote (vllm-project/vllm#64094 review)."
     - "No data-type or precision change to the DSpark draft: vLLM builds it with the checkpoint's own quantization config and the target's fp8_ds_mla KV cache, and the recipe sets no draft dtype or quantization."
     - "No point changes: TP8 and TP4 at concurrency 1, 2, 4, 8, 16 and 32 (12 points), all re-measured on the new image."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5037
