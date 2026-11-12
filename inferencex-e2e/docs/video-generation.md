@@ -2,8 +2,8 @@
 
 The `video-generation` scenario schedules one server job per deployment. SGLang
 selects C1 deployments on 1, 2, 4 and 8 B200, H200 or MI355X GPUs (Ulysses
-across all GPUs) and on 2, 4 and 8 H100 GPUs (TP2, since the model does not fit
-one 80 GB GPU), and vLLM-Omni the same four B200 deployments, all using
+across all GPUs) and on 2, 4 and 8 H100 or A100 GPUs (TP2, since the model does
+not fit one 80 GB GPU), and vLLM-Omni the same B200 and A100 deployments, all using
 `h3-v2.yaml`: 20 distinct measured prompts, a separate warmup, 49 denoising
 updates, and 124 frames at 24 fps and 1344×768. A five-second request produces
 124/24 seconds of video. Config presence is not GPU or quality qualification.
@@ -18,7 +18,9 @@ Native power is accepted only when its sampled GPU UUIDs match the server's
 `spec.json` and `launch.json` assignment. On ROCm the server names each GPU by
 its board serial, which is how the AMD power exporter identifies it.
 The H100 runner provides an HF hub cache mount, but the pinned H3 snapshot must
-be verified there before execution. Historical artifacts remain evidence of their
+be verified there before execution. On the clusters in `HUB_DOWNLOAD_CLUSTERS`
+([`models.py`](../infx/launch/drivers/srt/models.py)) the launcher downloads the
+snapshot, without the Ref2VA weights, into that cache before it submits. Historical artifacts remain evidence of their
 original workloads.
 
 Each video service uses `command: [python3, -m, infx.bench, video, serve]`.
