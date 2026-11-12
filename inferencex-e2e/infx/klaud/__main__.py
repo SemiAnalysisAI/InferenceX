@@ -66,6 +66,7 @@ INFRA_OUTCOMES = frozenset({"missing-assets", "weights-missing", *LIMIT_REASONS}
 INFRA_COOLDOWN_DAYS = 7
 LONG_HOLD_HOURS = 72
 LONG_HOLD_OUTCOMES = frozenset({"already-updated", "duplicate", "route-mismatch"})
+REPEAT_HOLD_OUTCOMES = frozenset({"failed", "incompatible", "inconclusive"})
 PAUSED_WEIGHTS = frozenset(ASSET_REASONS)
 UNDATED_IMAGE_HOLD_DAYS = 7
 DATED_TAG = re.compile(r"(?<!\d)20\d\d(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])(?!\d)")
@@ -371,12 +372,16 @@ def offered_images(
     return offered
 
 
-def hold(label: str | None, phase: str | None, cooldown_hours: int) -> timedelta:
+def hold(
+    label: str | None, phase: str | None, previous: str | None, cooldown_hours: int
+) -> timedelta:
     """Return how long outcome ``label``, recorded in ``phase``, keeps its candidate out of plans.
 
-    Infrastructure outcomes (INFRA_OUTCOMES) hold for INFRA_COOLDOWN_DAYS. Outcomes a retry soon
-    would repeat (LONG_HOLD_OUTCOMES, infrastructure faults in INFRA_REASONS, incompatible at
-    resolve) hold for LONG_HOLD_HOURS, others for ``cooldown_hours``.
+    ``previous`` is the label of the candidate's session before it. Infrastructure outcomes
+    (INFRA_OUTCOMES) hold for INFRA_COOLDOWN_DAYS. Outcomes a retry soon would repeat
+    (LONG_HOLD_OUTCOMES, infrastructure faults in INFRA_REASONS, incompatible at resolve, and a
+    REPEAT_HOLD_OUTCOMES outcome following another) hold for LONG_HOLD_HOURS, others for
+    ``cooldown_hours``.
     """
     if label in INFRA_OUTCOMES:
         return timedelta(days=INFRA_COOLDOWN_DAYS)
@@ -384,6 +389,7 @@ def hold(label: str | None, phase: str | None, cooldown_hours: int) -> timedelta
         label in LONG_HOLD_OUTCOMES
         or label in INFRA_REASONS
         or (label == "incompatible" and phase == "resolve")
+        or (label in REPEAT_HOLD_OUTCOMES and previous in REPEAT_HOLD_OUTCOMES)
     ):
         return timedelta(hours=max(cooldown_hours, LONG_HOLD_HOURS))
     return timedelta(hours=cooldown_hours)
@@ -392,11 +398,13 @@ def hold(label: str | None, phase: str | None, cooldown_hours: int) -> timedelta
 def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> History:
     """Return the recent outcomes that still hold candidates, families, weights, images or clusters.
 
-    Each candidate's newest session artifact counts and holds the candidate for ``hold``. While
-    held, missing weights and route mismatches (PAUSED_WEIGHTS) pause their (model, precision,
-    hardware) key, and a cluster time limit (LIMIT_REASONS) holds the branch prefixes of the
-    candidate's curve and of its keys whatever its image. An already-updated outcome holds its
-    image from its newest time, and INFRA_BACKOFF_OUTCOMES infrastructure failures within
+    Each candidate's newest session artifact counts and holds the candidate for ``hold``, given
+    the finished outcome of its previous attempt (the newest finished session of an earlier
+    planner run) when the newest one is in REPEAT_HOLD_OUTCOMES. While held, missing weights and
+    route mismatches (PAUSED_WEIGHTS) pause their (model, precision, hardware) key, and a cluster
+    time limit (LIMIT_REASONS) holds the branch prefixes of the candidate's curve and of its keys
+    whatever its image. An already-updated outcome holds its image from its newest time, and
+    INFRA_BACKOFF_OUTCOMES infrastructure failures within
     INFRA_BACKOFF_HOURS back off a target cluster. A wave's baseline deferral for a
     BASELINE_HOLD_REASONS reason holds the candidate for LONG_HOLD_HOURS unless a session of it
     started after that wave. Only scheduled auto-sweeps and Klaud Cold's resume runs hold
@@ -442,7 +450,7 @@ def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> History:
             listings = dict(zip(ordered, pool.map(artifacts, ordered), strict=True))
         except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
             raise ReadError("candidate-history-unavailable") from error
-        latest: dict[str, tuple[dict, int]] = {}
+        sessions: dict[str, dict[int, tuple[dict, int]]] = {}
         for run_id in ordered:
             for artifact in listings[run_id]:
                 try:
@@ -455,16 +463,20 @@ def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> History:
                         or utc(artifact["created_at"]) < window
                     ):
                         continue
-                    if match[1] not in latest or artifact["id"] > latest[match[1]][0]["id"]:
-                        latest[match[1]] = (artifact, run_id)
+                    sessions.setdefault(match[1], {})[artifact["id"]] = (artifact, run_id)
                 except (AttributeError, KeyError, TypeError, ValueError):
                     continue
+        ranked = {
+            candidate: [found[artifact_id] for artifact_id in sorted(found, reverse=True)]
+            for candidate, found in sessions.items()
+        }
+        latest = {candidate: found[0] for candidate, found in ranked.items()}
         deferring = [
             (created, run_id)
             for created, run_id in dated
             if plans[run_id] == run_id and now - created < timedelta(hours=LONG_HOLD_HOURS)
         ]
-        outcomes = pool.map(lambda pair: recorded_outcome(repository, pair[0]), latest.values())
+        pending = pool.map(lambda pair: recorded_outcome(repository, pair[0]), latest.values())
         records = dict(
             zip(
                 [run_id for _, run_id in deferring],
@@ -472,12 +484,31 @@ def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> History:
                 strict=True,
             )
         )
+        outcomes = dict(zip(latest, pending, strict=True))
+
+        def previous_outcome(candidate: str) -> str | None:
+            attempts = {plans[ranked[candidate][0][1]]}
+            for artifact, run_id in ranked[candidate][1:]:
+                if plans[run_id] in attempts:
+                    continue
+                attempts.add(plans[run_id])
+                label = recorded_outcome(repository, artifact)[0]
+                if label not in {None, "no-outcome"}:
+                    return label
+            return None
+
+        repeats = [
+            candidate
+            for candidate, (label, _) in outcomes.items()
+            if label in REPEAT_HOLD_OUTCOMES and len(ranked[candidate]) > 1
+        ]
+        previous = dict(zip(repeats, pool.map(previous_outcome, repeats), strict=True))
         result: dict[str, str | None] = {}
         held_images: dict[str, datetime] = {}
         held_families: set[str] = set()
         planned_labels: dict[int, dict[str, str]] = {}
         for (candidate, (artifact, run_id)), (label, phase) in zip(
-            latest.items(), outcomes, strict=True
+            latest.items(), outcomes.values(), strict=True
         ):
             created = utc(artifact["created_at"])
             if label == "already-updated":
@@ -485,7 +516,7 @@ def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> History:
                 held_images[image] = max(held_images.get(image, created), created)
             if label in INFRA_REASONS and now - created < timedelta(hours=INFRA_BACKOFF_HOURS):
                 planned_labels.setdefault(plans[run_id], {})[candidate] = label
-            if now - created >= hold(label, phase, cooldown_hours):
+            if now - created >= hold(label, phase, previous.get(candidate), cooldown_hours):
                 continue
             result[candidate] = label
             if label in LIMIT_REASONS:
