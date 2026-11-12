@@ -49,7 +49,6 @@ base:
         TRITON_HIP_USE_ASYNC_COPY: '0'
         ROCM_QUICK_REDUCE_QUANTIZATION: INT8
         SGLANG_OPT_HIP_OPUS_SPARSE_PREFILL: 'true'
-        SGLANG_OPT_HIP_FLYDSL_MXFP8: '1'
         SGLANG_HIP_FP4_INDEXER_ROWGROUP: '1'
         TORCH_BLAS_PREFER_HIPBLASLT: '1'
         HSA_NO_SCRATCH_RECLAIM: '0'
@@ -76,7 +75,7 @@ override_tp2_c1:
         schedule-policy: lpm
         swa-prefix-tails: 128
         max-running-requests: 2
-        monokernel-backend: amd
+        enable-amd-monokernel: true
   benchmark:
     env:
       CONC: '1'
@@ -93,7 +92,7 @@ override_tp2_c2:
         schedule-policy: lpm
         swa-prefix-tails: 128
         max-running-requests: 4
-        monokernel-backend: amd
+        enable-amd-monokernel: true
   benchmark:
     env:
       CONC: '2'
@@ -110,7 +109,7 @@ override_tp2_c4:
         schedule-policy: lpm
         swa-prefix-tails: 256
         max-running-requests: 8
-        monokernel-backend: amd
+        enable-amd-monokernel: true
   benchmark:
     env:
       CONC: '4'
@@ -127,7 +126,7 @@ override_tp2_c8:
         schedule-policy: lpm
         swa-prefix-tails: 512
         max-running-requests: 16
-        monokernel-backend: amd
+        enable-amd-monokernel: true
   benchmark:
     env:
       CONC: '8'
@@ -143,7 +142,7 @@ override_tp2_c16:
         prefill-decode-interval: 96
         swa-prefix-tails: 1024
         max-running-requests: 32
-        monokernel-backend: amd
+        enable-amd-monokernel: true
   benchmark:
     env:
       CONC: '16'
@@ -280,7 +279,7 @@ override_tp4_c1:
         schedule-policy: lpm
         swa-prefix-tails: 128
         max-running-requests: 2
-        monokernel-backend: amd
+        enable-amd-monokernel: true
   benchmark:
     env:
       CONC: '1'
@@ -297,7 +296,7 @@ override_tp4_c2:
         schedule-policy: lpm
         swa-prefix-tails: 128
         max-running-requests: 4
-        monokernel-backend: amd
+        enable-amd-monokernel: true
   benchmark:
     env:
       CONC: '2'
@@ -314,7 +313,7 @@ override_tp4_c4:
         schedule-policy: lpm
         swa-prefix-tails: 256
         max-running-requests: 8
-        monokernel-backend: amd
+        enable-amd-monokernel: true
   benchmark:
     env:
       CONC: '4'
@@ -331,7 +330,7 @@ override_tp4_c8:
         schedule-policy: lpm
         swa-prefix-tails: 512
         max-running-requests: 16
-        monokernel-backend: amd
+        enable-amd-monokernel: true
   benchmark:
     env:
       CONC: '8'
@@ -347,7 +346,7 @@ override_tp4_c16:
         prefill-decode-interval: 96
         swa-prefix-tails: 1024
         max-running-requests: 32
-        monokernel-backend: amd
+        enable-amd-monokernel: true
   benchmark:
     env:
       CONC: '16'
