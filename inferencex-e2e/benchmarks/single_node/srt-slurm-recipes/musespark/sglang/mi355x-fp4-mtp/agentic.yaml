@@ -68,7 +68,7 @@ override_tp8_c6:
         monokernel-backend: amd
         max-running-requests: 1
         cuda-graph-max-bs-decode: 1
-        stream-interval: 128
+        stream-interval: 50
   benchmark:
     env:
       CONC: '6'
