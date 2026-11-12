@@ -39,10 +39,6 @@ base:
   engine: tokenspeed
   setup_script: tokenspeed-nightly-rocm.sh
   environment:
-    PYTHONNOUSERSITE: '1'
-    PYTHONUNBUFFERED: '1'
-    PYTHONSAFEPATH: '1'
-    NO_COLOR: '1'
     TOKENSPEED_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-nightly-v0.1.1.post20261110/tokenspeed-0.1.1.post20261110-py3-none-any.whl#sha256=5efa0ecdb4e84e44a9407f48d8ca1b1e83feb71057483e2eacaabc88aa5c065b
     TOKENSPEED_KERNEL_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-nightly-v0.1.4.post20261110-rocm72/tokenspeed_kernel-0.1.4.post20261110-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=46c32a9bbad19134083667a0b8f1989bb558ae9e2b63d1fd4d6d058973ce5ce7
     TOKENSPEED_KERNEL_AMD_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-amd-nightly-v0.1.4.post20261110/tokenspeed_kernel_amd-0.1.4.post20261110-py3-none-any.whl#sha256=b340c4cff4e4492b31202d0bc7b13cac393097f3f0a3cf900b2f835c01ef3707
@@ -54,13 +50,11 @@ base:
       workers: 1
       gpus: 8
       env:
+        PYTHONNOUSERSITE: '1'
         # One HIP queue per graph keeps the two-stream speculative decode graph
         # off the runtime's slow per-node launch path.
         DEBUG_HIP_FORCE_GRAPH_QUEUES: '1'
         DEBUG_HIP_GRAPH_BATCH_SIZE: '1'
-        # Kernels still specialize on first use while serving; report them instead of failing.
-        TOKENSPEED_JIT_COMPILE_CHECK: warn
-        TOKENSPEED_HEALTH_CHECK_TIMEOUT: '600'
         # Serve from the pre-seeded shared HF cache with no Hub API calls.
         HF_HUB_OFFLINE: '1'
       args:
