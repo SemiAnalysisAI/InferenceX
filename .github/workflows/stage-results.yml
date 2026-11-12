@@ -32,23 +32,8 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
-      - name: Select Python project
-        run: |
-          python_project="$GITHUB_WORKSPACE"
-          if [[ -f "$python_project/inferencex-e2e/pyproject.toml" ]]; then
-            python_project="$python_project/inferencex-e2e"
-          fi
-          test -f "$python_project/pyproject.toml"
-          echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
-
-      - name: Set up uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          cache-dependency-glob: |
-            pyproject.toml
-            uv.lock
-            inferencex-e2e/pyproject.toml
-            inferencex-e2e/uv.lock
+      - name: Set up Python project
+        uses: $/.github/actions/setup-python-project
 
       - name: Authorize request and resolve source run
         id: request
@@ -76,7 +61,7 @@ jobs:
             });
             core.setOutput('comment-id', String(comment.data.id));
 
-      - name: Dispatch InferenceX-app staging workflow
+      - name: Dispatch the app repository's staging workflow
         if: steps.request.outputs.run-id != ''
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
@@ -85,12 +70,14 @@ jobs:
           RUN_DATE: ${{ steps.request.outputs.run-date }}
           REQUESTED_BY: ${{ steps.request.outputs.requested-by }}
           COMMENT_ID: ${{ steps.acknowledge.outputs.comment-id }}
+          APP_REPO: ${{ vars.APP_REPO || 'SemiAnalysisAI/InferenceX-app' }}
         with:
           github-token: ${{ secrets.FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
           script: |
+            const [owner, repo] = process.env.APP_REPO.split('/');
             await github.rest.repos.createDispatchEvent({
-              owner: 'SemiAnalysisAI',
-              repo: 'InferenceX-app',
+              owner,
+              repo,
               event_type: 'stage-results',
               client_payload: {
                 'source-repository': `${context.repo.owner}/${context.repo.repo}`,
