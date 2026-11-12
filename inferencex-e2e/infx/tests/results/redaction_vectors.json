@@ -1,40 +1,54 @@
 {
-  "key": "test-key",
   "cases": [
     {
-      "name": "private ipv4 keeps port",
+      "name": "private ipv4 kept",
       "input": "connect http://10.0.0.11:8000/v1",
-      "output": "connect http://***REDACTED-842ff3***:8000/v1"
+      "output": "connect http://10.0.0.11:8000/v1"
     },
     {
-      "name": "same ip same tag, ports differ",
-      "input": "10.0.0.21:9100 10.0.0.22:9100 10.0.0.21:7500",
-      "output": "***REDACTED-95c83f***:9100 ***REDACTED-9b0b8d***:9100 ***REDACTED-95c83f***:7500"
+      "name": "private 172.16/12 kept",
+      "input": "peer 172.16.5.4:9100 ready",
+      "output": "peer 172.16.5.4:9100 ready"
     },
     {
-      "name": "public ipv4",
-      "input": "ssh-keygen -F 198.51.100.7",
-      "output": "ssh-keygen -F ***REDACTED-392122***"
-    },
-    {
-      "name": "cgnat ipv4",
+      "name": "cgnat kept",
       "input": "peer 100.64.1.9 up",
-      "output": "peer ***REDACTED-ae47f2*** up"
+      "output": "peer 100.64.1.9 up"
     },
     {
-      "name": "sentence-final ip",
-      "input": "Host IP: 10.0.0.31.",
-      "output": "Host IP: ***REDACTED-13a709***."
-    },
-    {
-      "name": "json address value",
-      "input": "{\"MASTER_ADDR\": \"203.0.113.7\"}",
-      "output": "{\"MASTER_ADDR\": \"***REDACTED-86a251***\"}"
+      "name": "link-local kept",
+      "input": "metadata 169.254.169.254",
+      "output": "metadata 169.254.169.254"
     },
     {
       "name": "loopback and unspecified kept",
       "input": "bind 0.0.0.0:8000 then 127.0.0.1:9000",
       "output": "bind 0.0.0.0:8000 then 127.0.0.1:9000"
+    },
+    {
+      "name": "public ipv4",
+      "input": "ssh-keygen -F 198.51.100.7",
+      "output": "ssh-keygen -F ***REDACTED***"
+    },
+    {
+      "name": "public ipv4 keeps port",
+      "input": "http://198.51.100.8:8000/v1",
+      "output": "http://***REDACTED***:8000/v1"
+    },
+    {
+      "name": "sentence-final public ipv4",
+      "input": "Host IP: 198.51.100.9.",
+      "output": "Host IP: ***REDACTED***."
+    },
+    {
+      "name": "public in address json value",
+      "input": "{\"MASTER_ADDR\": \"203.0.113.7\"}",
+      "output": "{\"MASTER_ADDR\": \"***REDACTED***\"}"
+    },
+    {
+      "name": "public inside longer json value",
+      "input": "{\"cmd\": \"1.2.3.4 foo\"}",
+      "output": "{\"cmd\": \"***REDACTED*** foo\"}"
     },
     {
       "name": "pip pin kept",
@@ -52,24 +66,29 @@
       "output": "{\"opencv-python-headless\":\"4.13.0.92\"}"
     },
     {
-      "name": "private ip in version map still redacted",
-      "input": "{\"weird\":\"10.0.0.5\"}",
-      "output": "{\"weird\":\"***REDACTED-4000fa***\"}"
-    },
-    {
       "name": "longer dotted run kept",
       "input": "build 1.2.3.4.5",
       "output": "build 1.2.3.4.5"
     },
     {
-      "name": "ipv6",
+      "name": "ipv6 unique-local kept",
       "input": "addr [fd00:1:2::3]:29500",
-      "output": "addr [***REDACTED-8db16c***]:29500"
+      "output": "addr [fd00:1:2::3]:29500"
+    },
+    {
+      "name": "ipv6 link-local kept",
+      "input": "via fe80::1c2:3ff:fe4d:5e6f",
+      "output": "via fe80::1c2:3ff:fe4d:5e6f"
     },
     {
       "name": "ipv6 loopback kept",
       "input": "listen [::1]:8000",
       "output": "listen [::1]:8000"
+    },
+    {
+      "name": "ipv6 global",
+      "input": "addr [2001:db8::7]:29500",
+      "output": "addr [***REDACTED***]:29500"
     },
     {
       "name": "mac address kept",
@@ -87,7 +106,7 @@
       "output": "remote=[node-a.***REDACTED***]:29501"
     },
     {
-      "name": "internal node names kept",
+      "name": "internal node name kept",
       "input": "node-b.cluster.internal: timedatectl NTPSynchronized=yes",
       "output": "node-b.cluster.internal: timedatectl NTPSynchronized=yes"
     },
@@ -107,9 +126,9 @@
       "output": "token ***REDACTED***"
     },
     {
-      "name": "url password and ip host",
+      "name": "url password, private host kept",
       "input": "postgres://reader:s3cret@10.1.2.3:5432/db",
-      "output": "postgres://reader:***REDACTED***@***REDACTED-d722dd***:5432/db"
+      "output": "postgres://reader:***REDACTED***@10.1.2.3:5432/db"
     }
   ]
 }

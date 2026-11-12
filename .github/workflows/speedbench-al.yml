@@ -365,7 +365,7 @@ jobs:
             --head "$BRANCH"
 
       - name: Redact stored artifacts
-        if: always()
+        if: ${{ always() && env.INFERENCEX_LAUNCH_PYTHON != '' }}
         env:
           PYTHONPATH: ${{ github.workspace }}/.launch-tooling/inferencex-e2e
         run: |

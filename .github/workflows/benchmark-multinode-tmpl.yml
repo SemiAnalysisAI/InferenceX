@@ -384,7 +384,7 @@ jobs:
           "$INFERENCEX_RESULTS_PYTHON" -P -m infx.results.fixed_sequence --all
 
       - name: Redact stored artifacts
-        if: always()
+        if: ${{ always() && env.INFERENCEX_RESULTS_PYTHON != '' }}
         env:
           PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
         run: |

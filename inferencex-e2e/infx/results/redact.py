@@ -1,8 +1,7 @@
 """Sanitize stored CI artifacts before upload.
 
 ``python -m infx.results.redact PATH [PATH ...]`` rewrites text files, ``.gz`` files, and
-``.tar.gz`` archives in place. One random key per invocation tags each value consistently
-across every file it rewrites, and tags from different invocations cannot be linked.
+``.tar.gz`` archives in place.
 """
 
 from __future__ import annotations
@@ -10,11 +9,9 @@ from __future__ import annotations
 import argparse
 import gzip
 import hashlib
-import hmac
 import ipaddress
 import os
 import re
-import secrets
 import shutil
 import sys
 import tarfile
@@ -56,10 +53,12 @@ _ADDRESS_KEY = re.compile(
     r"host|addr|ip|url|uri|endpoint|server|peer|remote|bind|master|node|target",
     re.ASCII | re.IGNORECASE,
 )
-_ALWAYS_TAGGED = tuple(
+_KEPT_IPV4 = tuple(
     ipaddress.IPv4Network(network)
     for network in (
+        "0.0.0.0/8",
         "10.0.0.0/8",
+        "127.0.0.0/8",
         "172.16.0.0/12",
         "192.168.0.0/16",
         "100.64.0.0/10",
@@ -69,11 +68,6 @@ _ALWAYS_TAGGED = tuple(
 _VERSION_OPERATORS = ("==", "!=", ">=", "<=", "~=")
 _JSON_SPACE = " \t\n\r\f\v"
 _DIGEST_FIELD = re.compile(rb'"[^"]*sha256"\s*:\s*"([0-9A-Fa-f]{64})"', re.IGNORECASE)
-
-
-def _tag(text: str, key: bytes) -> str:
-    digest = hmac.new(key, text.lower().encode(), hashlib.sha256).hexdigest()
-    return f"***REDACTED-{digest[:6]}***"
 
 
 def _json_key_before(text: str, start: int) -> str | None:
@@ -111,38 +105,39 @@ def _version_context(text: str, start: int, end: int) -> bool:
     return key is not None and text[end : end + 1] == '"' and not _ADDRESS_KEY.search(key)
 
 
-def _ipv4(match: re.Match[str], key: bytes) -> str:
+def _ipv4(match: re.Match[str]) -> str:
     text = match.group()
     address = ipaddress.IPv4Address(text)
-    first_octet = int(text.split(".", 1)[0])
-    if first_octet in (0, 127) or first_octet >= 224:
-        return text
-    if not any(address in network for network in _ALWAYS_TAGGED) and _version_context(
-        match.string, match.start(), match.end()
+    if (
+        address.is_multicast
+        or address.is_reserved
+        or any(address in network for network in _KEPT_IPV4)
     ):
         return text
-    return _tag(text, key)
-
-
-def _ipv6(match: re.Match[str], key: bytes) -> str:
-    text = match.group()
-    if text in ("::", "::1"):
+    if _version_context(match.string, match.start(), match.end()):
         return text
+    return REDACTED
+
+
+def _ipv6(match: re.Match[str]) -> str:
+    text = match.group()
     try:
         ipaddress.IPv6Address(text)
     except ValueError:
         return text
-    return _tag(text, key)
+    if int(text.split(":", 1)[0] or "0", 16) & 0xE000 != 0x2000:
+        return text
+    return REDACTED
 
 
-def redact_text(text: str, key: bytes) -> str:
-    """``text`` sanitized under ``key``."""
+def redact_text(text: str) -> str:
+    """``text`` sanitized."""
     for pattern in _CREDENTIALS:
         text = pattern.sub(REDACTED, text)
     text = _URL_PASSWORD.sub(rf"\1{REDACTED}@", text)
     text = _ORACLE_VCN.sub(rf"\1.{REDACTED}", text)
-    text = _IPV6.sub(lambda match: _ipv6(match, key), text)
-    return _IPV4.sub(lambda match: _ipv4(match, key), text)
+    text = _IPV6.sub(_ipv6, text)
+    return _IPV4.sub(_ipv4, text)
 
 
 def _lines(head: bytes, stream: IO[bytes]) -> Iterator[bytes]:
@@ -156,11 +151,11 @@ def _lines(head: bytes, stream: IO[bytes]) -> Iterator[bytes]:
     yield from stream
 
 
-def _redact_lines(lines: Iterable[bytes], sink: IO[bytes], key: bytes) -> bool:
+def _redact_lines(lines: Iterable[bytes], sink: IO[bytes]) -> bool:
     changed = False
     for line in lines:
         decoded = line.decode("utf-8", "surrogateescape")
-        redacted = redact_text(decoded, key)
+        redacted = redact_text(decoded)
         if redacted != decoded:
             changed = True
             line = redacted.encode("utf-8", "surrogateescape")
@@ -198,9 +193,7 @@ def _file_sha256(path: Path) -> str:
         return _sha256(handle)
 
 
-def _redact_member(
-    data: IO[bytes], buffer: IO[bytes], key: bytes, digests: frozenset[str], label: str
-) -> bool:
+def _redact_member(data: IO[bytes], buffer: IO[bytes], digests: frozenset[str], label: str) -> bool:
     """Write member ``data`` to ``buffer``, redacted unless binary or referenced by a digest."""
     head = data.read(_SNIFF_BYTES)
     if b"\0" in head:
@@ -208,12 +201,12 @@ def _redact_member(
         shutil.copyfileobj(data, buffer)
         return False
     if not digests:
-        return _redact_lines(_lines(head, data), buffer, key)
+        return _redact_lines(_lines(head, data), buffer)
     with tempfile.SpooledTemporaryFile(max_size=_SPOOL_BYTES) as original:
         original.write(head)
         shutil.copyfileobj(data, original)
         original.seek(0)
-        if not _redact_lines(original, buffer, key):
+        if not _redact_lines(original, buffer):
             return False
         original.seek(0)
         if _sha256(original) not in digests:
@@ -226,7 +219,7 @@ def _redact_member(
         return False
 
 
-def _redact_tar(path: Path, sink: IO[bytes], key: bytes, digests: frozenset[str]) -> bool:
+def _redact_tar(path: Path, sink: IO[bytes], digests: frozenset[str]) -> bool:
     changed = False
     with (
         tarfile.open(path, "r:gz") as source,
@@ -238,17 +231,17 @@ def _redact_tar(path: Path, sink: IO[bytes], key: bytes, digests: frozenset[str]
                 archive.addfile(member)
                 continue
             with tempfile.SpooledTemporaryFile(max_size=_SPOOL_BYTES) as buffer:
-                changed |= _redact_member(data, buffer, key, digests, f"{path}:{member.name}")
+                changed |= _redact_member(data, buffer, digests, f"{path}:{member.name}")
                 member.size = buffer.tell()
                 buffer.seek(0)
                 archive.addfile(member, buffer)
     return changed
 
 
-def redact_file(path: Path, key: bytes, digests: frozenset[str]) -> Outcome:
+def redact_file(path: Path, digests: frozenset[str]) -> Outcome:
     """Redact ``path`` in place unless it is binary or its sha256 is in ``digests``."""
     if path.name.endswith((".tar.gz", ".tgz")):
-        return _replace(path, lambda sink: _redact_tar(path, sink, key, digests), digests)
+        return _replace(path, lambda sink: _redact_tar(path, sink, digests), digests)
     if path.name.endswith(".gz"):
         with gzip.open(path, "rb") as source:
             head = source.read(_SNIFF_BYTES)
@@ -259,14 +252,14 @@ def redact_file(path: Path, key: bytes, digests: frozenset[str]) -> Outcome:
                 with gzip.GzipFile(
                     filename=path.name, mode="wb", fileobj=sink, compresslevel=6, mtime=source.mtime
                 ) as compressed:
-                    return _redact_lines(_lines(head, source), compressed, key)
+                    return _redact_lines(_lines(head, source), compressed)
 
             return _replace(path, write, digests)
     with path.open("rb") as source:
         head = source.read(_SNIFF_BYTES)
         if b"\0" in head:
             return "unchanged"
-        return _replace(path, lambda sink: _redact_lines(_lines(head, source), sink, key), digests)
+        return _replace(path, lambda sink: _redact_lines(_lines(head, source), sink), digests)
 
 
 def _files(paths: Iterable[Path]) -> list[Path]:
@@ -317,19 +310,18 @@ def _referenced_digests(files: Iterable[Path]) -> frozenset[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Redact every file under the paths in ``argv`` with one fresh key and return 0."""
+    """Redact every file under the paths in ``argv`` and return 0."""
     parser = argparse.ArgumentParser(prog="python -m infx.results.redact", description=__doc__)
     parser.add_argument(
         "paths", nargs="+", type=Path, help="files or directories; missing ones are ignored"
     )
     args = parser.parse_args(argv)
-    key = secrets.token_bytes(32)
     files = _files(args.paths)
     digests = _referenced_digests(files)
     outcomes: Counter[str] = Counter()
     for path in files:
         try:
-            outcome = redact_file(path, key, digests)
+            outcome = redact_file(path, digests)
         except (OSError, EOFError, ValueError, tarfile.TarError, zlib.error) as error:
             print(f"::warning::could not redact {path}: {error}")
             continue
