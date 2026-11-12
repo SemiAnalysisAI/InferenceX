@@ -39,9 +39,11 @@ MAX_CHUNK = 4000
 # H100 runs): a part's processes start (imports, distributed init); a layer's first case pays
 # its kernel JIT and autotuning (attention: an engine); the rest of its ladder reuses it.
 EST_PART_S = 180.0
-EST_LAYER_S = {"gemm": 30.0, "moe": 60.0}
-EST_CASE_S = {"gemm": 1.0, "moe": 1.5}
-EST_ATTENTION_LAYER_S = 120.0
+# per op type; attention layers each start a fresh process and engine; DeepSeek-V4 attention
+# measured up to 20 s per case on B200
+EST_LAYER_S = {"gemm": 30.0, "moe": 60.0, "dsv4_attn": 240.0}
+EST_CASE_S = {"gemm": 1.0, "moe": 1.5, "dsv4_attn": 20.0}
+EST_ATTENTION_LAYER_S = 210.0
 EST_ATTENTION_CASE_S = 6.0
 EST_SHARD_S = 30 * 60
 # per-kernel hardware counters; a counters run's latencies are perturbed by the profiler

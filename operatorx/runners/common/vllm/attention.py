@@ -18,7 +18,7 @@ from pathlib import Path
 
 import torch
 
-from operatorx.core import BackendImpl, Op, UnsupportedOpError, parallel
+from operatorx.core import BackendImpl, FreshProcessError, Op, UnsupportedOpError, parallel
 from operatorx.runners.common import ranks
 from operatorx.runners.common.vllm import engine as vllm_engine
 from operatorx.runners.common.vllm import linear as vllm_linear
@@ -440,6 +440,10 @@ def _engine(b: _Build, split: dict | None) -> _Engine:
     if _ENGINE is not None and _ENGINE.key == key:
         return _ENGINE
     if _ENGINE is not None:
+        # a second engine in one process can hang in its process-group setup (seen on dcp and on
+        # ROCm images): under a CI part, build every engine in a fresh process instead
+        if os.environ.get("OPERATORX_PROGRESS"):
+            raise FreshProcessError(f"a {b.family} engine after {_ENGINE.key[:60]}...")
         _ENGINE.close()
         _ENGINE = None
     # a failed startup leaves its tensors in reference cycles (its exception's frames): collect

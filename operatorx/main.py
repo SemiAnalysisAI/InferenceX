@@ -19,6 +19,7 @@ import operatorx.ops  # noqa: F401  populates op registry
 from operatorx.core import op_registry, parallel
 from operatorx.core.ladder import layer_key
 from operatorx import Op, Result, UnsupportedOpError, write_run_result
+from operatorx.core.errors import FreshProcessError
 from operatorx.clusters import CLUSTER_PLATFORMS
 from operatorx.runtime import runtime_snapshot, utc_now_iso
 
@@ -313,6 +314,16 @@ def main() -> int:
             counts["ok"] += 1
             status = "ok"
             latency_str = f"{r.metrics['latency_us']:>10.2f} us"
+        except FreshProcessError as e:  # before any result: a CI part restarts and runs it first
+            if rank == 0:
+                run.finished_at = utc_now_iso()
+                write_run_result(out_path, run, results)
+                print(f"[run_smoke] {counts} -> {out_path}", flush=True)
+                print(f"[run_smoke] fresh process for case {index}: {e}", flush=True)
+            _write_progress(progress, {"next": index, "failed_layers": failed_layers, "repeats": repeats})
+            sys.stdout.flush()
+            sys.stderr.flush()
+            os._exit(RESTART)
         except UnsupportedOpError as e:
             stage = getattr(e, "operatorx_stage", "")
             results.append(Result(op=op, metrics={}, status="unsupported",
