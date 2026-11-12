@@ -167,6 +167,39 @@ def test_outcomes_hold_their_candidate_and_weights_until_their_hold_ends(
     assert history.paused_weights == ({("dsr1", "fp8", "b200")} if paused else set())
 
 
+@pytest.mark.parametrize(("earlier", "hours", "held"), [
+    pytest.param(None, 23 + 59 / 60, True, id="single-failure-held"),
+    pytest.param(None, 24, False, id="single-failure-cools-down"),
+    pytest.param(outcome("failed"), 24, True, id="second-failure-held"),
+    pytest.param(outcome("failed"), 72, False, id="second-failure-released"),
+    pytest.param(outcome("inconclusive"), 24, True, id="failure-after-inconclusive-held"),
+    pytest.param(outcome("failed", "final-sweep", "infra-node-fault"), 24, False,
+                 id="failure-after-infra-fault-cools-down"),
+])  # fmt: skip
+def test_a_repeated_failure_holds_its_candidate_longer(monkeypatch, earlier, hours, held):
+    candidate = candidate_id("family")
+    runs, artifacts, records = [], {}, {}
+
+    def attempt(plan, hours, record):
+        """A parked first session in planner run ``plan``, then a finishing resume session."""
+        resume = f"Klaud Cold resume {plan} {candidate} session 2"
+        runs.extend([workflow_run(plan, "schedule", hours=hours + 4),
+                     workflow_run(plan + 1, "workflow_dispatch", title=resume,
+                                  actor="Klaud-Cold", hours=hours)])  # fmt: skip
+        artifacts[plan] = [session(plan * 10, candidate, hours + 4)]
+        artifacts[plan + 1] = [session(plan * 10 + 10, candidate, hours)]
+        records[plan * 10], records[plan * 10 + 10] = None, record
+
+    if earlier:
+        attempt(1, hours + 24, earlier)
+    attempt(3, hours, outcome("failed"))
+    serve_history(monkeypatch, runs, artifacts, records)
+
+    history = klaud.recent_candidate_outcomes("example/project", 24)
+
+    assert (candidate in history.recent) is held
+
+
 @pytest.mark.parametrize(("reason", "hours", "held"), [
     pytest.param("baseline-point-mismatch", 71 + 59 / 60, True, id="mismatch-held"),
     pytest.param("baseline-point-mismatch", 72, False, id="mismatch-released"),
