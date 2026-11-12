@@ -8,7 +8,8 @@ Every matmul loads a new stationary. TFLOP/s = 2 K M N / II, median over profile
 TensorE's throttle was released; II is the full-rate window (until a re-throttle, if any; points
 whose full-rate window is under 4 matmuls have no value). PSUM-capacity-limited tiled points (EXCLUDE)
 are left out. Later CSVs
-in a list replace earlier ones per (kernel, K, N). Color = K; solid = row-tiled (128 / kp tiles running
+in a list replace earlier ones per (kernel, K, N). Legend: Kp = partitions (PE rows) per matmul, each
+holding one x4 element per column, so K = 4 Kp fp8 values (Kp 128 / 64 / 32 = K 512 / 256 / 128). Color = Kp; solid = row-tiled (128 / kp tiles running
 side by side), dashed = untiled (one kp-partition matmul at a time). Dashed grey: MX peak, 128 x 128 PEs
 x 4 MACs x 2 FLOP x 2.4 GHz = 314.6 TFLOP/s.
 """
@@ -33,18 +34,18 @@ for a in args:
 SURFACE, INK, INK2, MUTED, GRID, AXIS = "#fcfcfb", "#0b0b0b", "#52514e", "#898781", "#e1e0d9", "#c3c2b7"
 PEAK = 4 * 128 * 128 * 2 * 2.4e9 / 1e12
 # (source, kernel, K, legend, line color, text color, linestyle)
-SERIES = [("--k512", "ls_mx_alt", 512, "K=512 (full array)", "#1baf7a", "#0f7a55", "-"),
-          ("--small", "ls_mx_alt_tiled", 256, "K=256, 2 row tiles", "#2a78d6", "#1f5fae", "-"),
-          ("--small", "ls_mx_alt_untiled", 256, "K=256, untiled", "#2a78d6", "#1f5fae", (0, (4, 2))),
-          ("--small", "ls_mx_alt_tiled", 128, "K=128, 4 row tiles", "#eb6834", "#c4501f", "-"),
-          ("--small", "ls_mx_alt_untiled", 128, "K=128, untiled", "#eb6834", "#c4501f", (0, (4, 2)))]
+SERIES = [("--k512", "ls_mx_alt", 512, "Kp=128 (full array)", "#1baf7a", "#0f7a55", "-"),
+          ("--small", "ls_mx_alt_tiled", 256, "Kp=64, 2 row tiles", "#2a78d6", "#1f5fae", "-"),
+          ("--small", "ls_mx_alt_untiled", 256, "Kp=64, untiled", "#2a78d6", "#1f5fae", (0, (4, 2))),
+          ("--small", "ls_mx_alt_tiled", 128, "Kp=32, 4 row tiles", "#eb6834", "#c4501f", "-"),
+          ("--small", "ls_mx_alt_untiled", 128, "Kp=32, untiled", "#eb6834", "#c4501f", (0, (4, 2)))]
 LABEL_NS = [64]  # direct labels per line, kept few (5 lines share the axis): N=64 and each line's last N
 # PSUM-capacity-limited points left out: T row tiles in flight need T PSUM destinations, but one [128, N]
 # fp32 result takes N/512 of the 8 banks, so at N = 2048 (K=128, 4 tiles) and N = 4096 (both tiled K)
 # the tiles share destinations and serialize; that measures PSUM capacity, not tiling.
 EXCLUDE = {("ls_mx_alt_tiled", 128): [2048, 4096], ("ls_mx_alt_tiled", 256): [4096]}
-PLACE = {("K=256, 2 row tiles", 2048): ((0, -12), "center", "top"),  # default (right of the point) collides
-         ("K=128, 4 row tiles", 1024): ((0, -12), "center", "top")}
+PLACE = {("Kp=64, 2 row tiles", 2048): ((0, -12), "center", "top"),  # default (right of the point) collides
+         ("Kp=32, 4 row tiles", 1024): ((0, -12), "center", "top")}
 
 
 def load(paths, kernel, K):
@@ -97,7 +98,7 @@ for s in ("left", "bottom"):
 ax.tick_params(colors=MUTED, labelcolor=INK2)
 ax.legend(loc="upper left", bbox_to_anchor=(0.0, 0.88), frameon=False, labelcolor=INK, fontsize=10,
           handlelength=3.6)
-fig.suptitle("Alternating Stationary MXFP8 Throughput across K (M=128)", x=0.03, y=0.97, ha="left", color=INK,
+fig.suptitle("Alternating Stationary MXFP8 Throughput across Kp (M=128)", x=0.03, y=0.97, ha="left", color=INK,
              fontsize=13.5)
 fig.tight_layout(rect=(0, 0, 1, 0.96))
 fig.savefig(out, dpi=200, facecolor=SURFACE)
