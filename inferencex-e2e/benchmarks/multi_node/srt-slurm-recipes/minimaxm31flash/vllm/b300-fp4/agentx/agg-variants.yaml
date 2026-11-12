@@ -3,7 +3,7 @@ schema: 2
 # Low-latency points: one TP4 worker on one node behind the Dynamo frontend, with KV on the GPUs only.
 # The engine arguments are those of the single-node TP4 points in
 # single_node/srt-slurm-recipes/minimaxm31flash/vllm/b300-fp4-mtp/agentic.yaml; nothing here uses the
-# EFA fabric, so the EFA setup script of disagg-variants.yaml is not needed.
+# EFA fabric.
 base:
   name: minimaxm31flash-b300-dynamo-agg
   identity:
@@ -86,6 +86,9 @@ base:
         disable-hybrid-kv-cache-manager: true
         enable-prefix-caching: true
         tensor-parallel-size: 4
+        # GPUs 0-3 hang off socket 0. Unbound, the conc 1 decode step ran 5% slower than in the single-node job,
+        # which Slurm confines to that socket.
+        numa-bind: true
         gpu-memory-utilization: 0.92
         max-model-len: 1048576
         max-num-batched-tokens: 32768
