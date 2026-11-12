@@ -1037,15 +1037,6 @@ def run_plan(
                                     record["outcome"] = "interrupted"
                                     interrupted, abort_reason = exc, record["error"]
                                     stop.set()
-                            finally:
-                                record["latency_seconds"] = (
-                                    time.monotonic()
-                                    - record["timing_window"]["start_monotonic_seconds"]
-                                )
-                                record["timing_window"]["end_monotonic_seconds"] = (
-                                    record["timing_window"]["start_monotonic_seconds"]
-                                    + record["latency_seconds"]
-                                )
                         retain(record)
                 except KeyboardInterrupt as exc:
                     interrupted, abort_reason = exc, "interrupted by operator"
