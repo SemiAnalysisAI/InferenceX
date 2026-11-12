@@ -143,6 +143,8 @@ base:
         attention-config: '{"indexer_kv_dtype":"nvfp4","use_prefill_query_quantization":true}'
         disable-hybrid-kv-cache-manager: true
         max-model-len: 1048576
+        # AgentX requires a stream interval of 20 to 60 tokens; vLLM defaults to 1.
+        stream-interval: 20
         load-format: fastsafetensors
         kernel-config: '{"moe_backend":"deep_gemm_mega_moe"}'
         numa-bind: true
@@ -204,6 +206,8 @@ base:
         attention-config: '{"indexer_kv_dtype":"nvfp4","use_prefill_query_quantization":true}'
         disable-hybrid-kv-cache-manager: true
         max-model-len: 1048576
+        # AgentX requires a stream interval of 20 to 60 tokens; vLLM defaults to 1.
+        stream-interval: 20
         load-format: fastsafetensors
         kernel-config: '{"moe_backend":"deep_gemm_mega_moe"}'
         numa-bind: true
@@ -267,19 +271,64 @@ override_3p1d_dep16_c500:
         eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
         max-num-seqs: 10
         max-cudagraph-capture-size: 80
-override_3p1d_dep16_c600:
-  name: minimaxm31flash-gb300-disagg-mooncake-3p1d-dep16-c600
+override_5p1d_dep16_c800:
+  name: minimaxm31flash-gb300-disagg-mooncake-5p1d-dep16-c800
   roles:
+    prefill:
+      nodes: 5
+      workers: 5
     decode:
       nodes: 4
       gpus: 16
       args:
         data-parallel-size: 16
         eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
-        max-num-seqs: 14
-        max-cudagraph-capture-size: 112
-override_4p1d_dep16_c800:
-  name: minimaxm31flash-gb300-disagg-mooncake-4p1d-dep16-c800
+        max-num-seqs: 22
+        max-cudagraph-capture-size: 176
+override_6p1d_dep16_c900:
+  name: minimaxm31flash-gb300-disagg-mooncake-6p1d-dep16-c900
+  roles:
+    prefill:
+      nodes: 6
+      workers: 6
+    decode:
+      nodes: 4
+      gpus: 16
+      args:
+        data-parallel-size: 16
+        eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
+        max-num-seqs: 20
+        max-cudagraph-capture-size: 160
+override_6p1d_dep16_c950:
+  name: minimaxm31flash-gb300-disagg-mooncake-6p1d-dep16-c950
+  roles:
+    prefill:
+      nodes: 6
+      workers: 6
+    decode:
+      nodes: 4
+      gpus: 16
+      args:
+        data-parallel-size: 16
+        eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
+        max-num-seqs: 22
+        max-cudagraph-capture-size: 176
+override_6p1d_dep16_c1000:
+  name: minimaxm31flash-gb300-disagg-mooncake-6p1d-dep16-c1000
+  roles:
+    prefill:
+      nodes: 6
+      workers: 6
+    decode:
+      nodes: 4
+      gpus: 16
+      args:
+        data-parallel-size: 16
+        eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
+        max-num-seqs: 24
+        max-cudagraph-capture-size: 192
+override_4p1d_dep16_c640:
+  name: minimaxm31flash-gb300-disagg-mooncake-4p1d-dep16-c640
   roles:
     prefill:
       nodes: 4
@@ -290,10 +339,38 @@ override_4p1d_dep16_c800:
       args:
         data-parallel-size: 16
         eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
-        max-num-seqs: 20
-        max-cudagraph-capture-size: 160
-override_5p1d_dep16_c800:
-  name: minimaxm31flash-gb300-disagg-mooncake-5p1d-dep16-c800
+        max-num-seqs: 16
+        max-cudagraph-capture-size: 128
+override_4p1d_dep16_c680:
+  name: minimaxm31flash-gb300-disagg-mooncake-4p1d-dep16-c680
+  roles:
+    prefill:
+      nodes: 4
+      workers: 4
+    decode:
+      nodes: 4
+      gpus: 16
+      args:
+        data-parallel-size: 16
+        eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
+        max-num-seqs: 16
+        max-cudagraph-capture-size: 128
+override_4p1d_dep16_c700:
+  name: minimaxm31flash-gb300-disagg-mooncake-4p1d-dep16-c700
+  roles:
+    prefill:
+      nodes: 4
+      workers: 4
+    decode:
+      nodes: 4
+      gpus: 16
+      args:
+        data-parallel-size: 16
+        eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
+        max-num-seqs: 17
+        max-cudagraph-capture-size: 136
+override_5p1d_dep16_c850:
+  name: minimaxm31flash-gb300-disagg-mooncake-5p1d-dep16-c850
   roles:
     prefill:
       nodes: 5
