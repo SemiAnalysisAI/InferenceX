@@ -121,11 +121,13 @@ def ops_only(calls):
 
 
 def chain_sections(calls):
-    """(floors_chain, period_chain) raw-trace slices; the chains sit between the last three syncs."""
+    """(floors_chain, span_chain, period_chain) raw-trace slices; the chains sit between the last
+    four syncs."""
     sync_idx = [i for i, entry in enumerate(calls) if entry == "sync"]
-    end_period, end_floors = sync_idx[-1], sync_idx[-2]
-    start_floors = sync_idx[-3] + 1 if len(sync_idx) >= 3 else 0
-    return calls[start_floors:end_floors], calls[end_floors + 1:end_period]
+    end_period, end_span, end_floors = sync_idx[-1], sync_idx[-2], sync_idx[-3]
+    start_floors = sync_idx[-4] + 1 if len(sync_idx) >= 4 else 0
+    return (calls[start_floors:end_floors], calls[end_floors + 1:end_span],
+            calls[end_span + 1:end_period])
 
 
 class ChainedPairPeriod(unittest.TestCase):
@@ -142,9 +144,8 @@ class ChainedPairPeriod(unittest.TestCase):
             timed_tail(backend.calls, iters, 2), ["dispatch", "combine"] * iters
         )
         for section in chain_sections(backend.calls):
-            first_event = section.index("record")
-            self.assertEqual(section[:first_event], ["all_reduce"])
-            self.assertNotIn("all_reduce", section[first_event:])
+            self.assertEqual(section[0], "all_reduce")
+            self.assertNotIn("all_reduce", section[1:])
         self.assertNotIn("dist_barrier", backend.calls)
         self.assertNotIn("align_spin", backend.calls)
 
@@ -160,13 +161,13 @@ class ChainedPairPeriod(unittest.TestCase):
                 self.assertTrue(backend.stage_excluded_from_roundtrip)
                 series = run_chain(backend, iters, 2)
                 self.assertEqual(backend.calls.count("stage"), 1)
-                self.assertEqual(backend.consumed, ["staged-by-stage"] * (2 * iters + 1))
-                floors, period = chain_sections(backend.calls)
-                self.assertEqual(ops_only(floors), ["dispatch", "combine"] * iters)
-                self.assertEqual(ops_only(period), ["dispatch", "combine"] * iters)
+                self.assertEqual(backend.consumed, ["staged-by-stage"] * (3 * iters + 1))
+                for section in chain_sections(backend.calls):
+                    self.assertEqual(ops_only(section), ["dispatch", "combine"] * iters)
                 # The staged cost is absent from the pair window, not merely from the trace.
                 for value in series["pair"]:
                     self.assertAlmostEqual(value, 8000.0)  # 3ms dispatch + 5ms combine
+                self.assertAlmostEqual(series["span"], 8000.0)
                 for value in series["start_to_start"]:
                     self.assertAlmostEqual(value, 8000.0)
                 for value in series["dispatch"]:
@@ -181,7 +182,7 @@ class ChainedPairPeriod(unittest.TestCase):
                 self.assertEqual(
                     sorted(series),
                     ["combine", "combined", "dispatch", "host_retries", "host_stalled", "pair",
-                     "start_to_start"],
+                     "span", "start_to_start"],
                 )
                 # Only a dispatch that waits on the host passes its chain through the host gate.
                 self.assertEqual((series["host_retries"], series["host_stalled"]), (None, None))
@@ -189,15 +190,17 @@ class ChainedPairPeriod(unittest.TestCase):
                     self.assertEqual(len(series[key]), kept)
                 # Start-to-start is a difference series: one fewer than the kept pairs.
                 self.assertEqual(len(series["start_to_start"]), gaps)
+                # The span is one window around the kept pairs, reported per pair.
+                self.assertAlmostEqual(series["span"], 8000.0)
 
     def test_the_dropped_iterations_are_the_head_of_each_chain(self):
-        # `drop` discards pipeline fill, so it must cut the head of both chains -- the period
-        # chain refills after the inter-chain synchronize.
+        # `drop` discards pipeline fill, so it must cut the head of every chain -- each sibling
+        # refills after the inter-chain synchronize.
         iters, drop = 6, 2
         slow_head = [50.0] * drop + [DISPATCH_MS] * (iters - drop)
         backend = _ChainBackend(
             stage_device_work=False, fp8_consume="native", precision="bf16",
-            dispatch_schedule=slow_head * 2,  # floors chain runs first, then the period chain
+            dispatch_schedule=slow_head * 3,  # floors, then span, then period
         )
         series = run_chain(backend, iters, drop)
         self.assertEqual(len(series["dispatch"]), 4)
@@ -205,6 +208,7 @@ class ChainedPairPeriod(unittest.TestCase):
             self.assertAlmostEqual(value, 3000.0)
         for value in series["pair"]:
             self.assertAlmostEqual(value, 15000.0)  # 3ms dispatch + 7ms stage + 5ms combine
+        self.assertAlmostEqual(series["span"], 15000.0)
 
 
 class ChainHostGate(unittest.TestCase):
@@ -229,24 +233,25 @@ class ChainHostGate(unittest.TestCase):
         return backend, series
 
     def test_each_sibling_is_held_then_aligned_and_a_stalled_one_restarts(self):
-        backend, series = self._gated_chain([False, True, False])
+        backend, series = self._gated_chain([False, False, True, False])
         calls = backend.calls
         barriers = [i for i, call in enumerate(calls) if call == "all_reduce"]
-        # Floors once; the period sibling twice, the first attempt discarded.
-        self.assertEqual(len(barriers), 3)
+        # Floors and span once; the period sibling twice, the first attempt discarded.
+        self.assertEqual(len(barriers), 4)
         for i in barriers:
             self.assertEqual(calls[i - 1], "probe")  # the hold, outside every window
-            self.assertEqual(calls[i + 1], "record")
             self.assertEqual(calls.index("stall_check", i), calls.index("sync", i) + 1)
-        self.assertEqual(calls.count("stall_check"), 3)
+        # The windowed siblings open at once; the span sibling runs its dropped pair first.
+        self.assertEqual([calls[i + 1] for i in barriers], ["record", "dispatch", "record", "record"])
+        self.assertEqual(calls.count("stall_check"), 4)
         self.assertEqual((series["host_retries"], series["host_stalled"]), (1, False))
         self.assertEqual(len(series["pair"]), 3)
 
     def test_a_sibling_still_stalled_after_its_last_restart_marks_the_trial(self):
         attempts = ep_timing.EagerTiming.CHAIN_RETRIES + 1
-        backend, series = self._gated_chain([True] * (2 * attempts))
-        self.assertEqual(backend.calls.count("all_reduce"), 2 * attempts)
-        self.assertEqual(series["host_retries"], 2 * (attempts - 1))
+        backend, series = self._gated_chain([True] * (3 * attempts))
+        self.assertEqual(backend.calls.count("all_reduce"), 3 * attempts)
+        self.assertEqual(series["host_retries"], 3 * (attempts - 1))
         self.assertIs(series["host_stalled"], True)
 
     def test_every_rank_restarts_when_any_ranks_host_stalled(self):
@@ -275,13 +280,13 @@ class ChainHostGate(unittest.TestCase):
                     self.assertIs(timing._host_stalled_anywhere(), expected)
                 self.assertEqual(timing.gate.stalled, [0])  # this rank's own check ran
 
-    def test_garbage_collection_is_off_inside_both_sibling_chains(self):
+    def test_garbage_collection_is_off_inside_every_sibling_chain(self):
         backend = _ChainBackend()
         seen = []
         original = backend.dispatch
         backend.dispatch = lambda problem: seen.append(gc.isenabled()) or original(problem)
         run_chain(backend, 4, 1)
-        self.assertEqual(seen[-8:], [False] * 8)
+        self.assertEqual(seen[-12:], [False] * 12)
         self.assertTrue(gc.isenabled())
 
     def test_a_chain_without_a_host_synced_dispatch_takes_no_probe(self):
@@ -371,17 +376,21 @@ class CudaGraphRoundtrip(unittest.TestCase):
         calls = backend.calls
         begin = [i for i, call in enumerate(calls) if call == "capture_begin"]
         end = [i for i, call in enumerate(calls) if call == "capture_end"]
-        # Floors and period siblings: one capture each holding every pair, each replayed once
-        # untimed and once behind the barrier.
-        self.assertEqual(len(begin), 2)
+        # Floors, span and period siblings: one capture each holding every pair, each replayed
+        # once untimed and once behind the barrier.
+        self.assertEqual(len(begin), 3)
         for lo, hi in zip(begin, end):
             self.assertEqual(ops_only(calls[lo:hi]), ["dispatch", "stage", "combine"] * iters)
-        self.assertEqual(calls.count("graph_replay"), 4)
+        self.assertEqual(calls.count("graph_replay"), 6)
         for lo, hi in zip(begin, end):
-            first_event = calls.index("record", lo)
-            self.assertEqual(calls[lo + 1:first_event], ["align_spin", "all_reduce"])
-            self.assertNotIn("all_reduce", calls[first_event:hi])
-            self.assertNotIn("align_spin", calls[first_event:hi])
+            self.assertEqual(calls[lo + 1:lo + 3], ["align_spin", "all_reduce"])
+            self.assertNotIn("all_reduce", calls[lo + 3:hi])
+            self.assertNotIn("align_spin", calls[lo + 3:hi])
+        # The span capture holds two event nodes: after the dropped pair and after the last one.
+        pair = ["dispatch", "stage", "combine"]
+        self.assertEqual(calls[begin[1] + 3:end[1]],
+                         pair * drop + ["record"] + pair * (iters - drop) + ["record"])
+        self.assertAlmostEqual(series["span"], 15000.0)  # 3ms dispatch + 7ms stage + 5ms combine
         self.assertEqual({len(series[k]) for k in ("pair", "dispatch", "combine")}, {iters - drop})
         self.assertEqual(len(series["start_to_start"]), iters - drop - 1)
         self.assertTrue(series["combined"].cloned)
@@ -754,9 +763,20 @@ class EventPlacement(unittest.TestCase):
         # host work nothing, so this asserts record placement rather than window values.
         backend = _ChainBackend(stage_device_work=False, fp8_consume="native", precision="bf16")
         run_chain(backend, 4, 1)
-        _, period = chain_sections(backend.calls)
+        _, _, period = chain_sections(backend.calls)
         self.assertEqual(
             period, ["all_reduce"] + ["record", "dispatch", "stage", "combine", "record"] * 4)
+
+    def test_the_span_chain_records_only_around_the_kept_pairs(self):
+        # An event between two pairs costs device time the pairs of a real graph never pay, so the
+        # chain that sets the period's level opens after the dropped head and closes after the
+        # last pair, with nothing recorded in between.
+        backend = _ChainBackend(stage_device_work=False, fp8_consume="native", precision="bf16")
+        series = run_chain(backend, 4, 1)
+        _, span, _ = chain_sections(backend.calls)
+        pair = ["dispatch", "stage", "combine"]
+        self.assertEqual(span, ["all_reduce"] + pair + ["record"] + pair * 3 + ["record"])
+        self.assertAlmostEqual(series["span"], 15000.0)
 
 
 class ChainBudgetGate(unittest.TestCase):
@@ -810,8 +830,8 @@ class ChainComponentContract(unittest.TestCase):
         )
         self.assertIsNone(ep_harness._component(None, 0)["origin"])
 
-        overridden = ep_harness._component(percentiles, 3, origin="chained-median")
-        self.assertEqual(overridden["origin"], "chained-median")
+        overridden = ep_harness._component(percentiles, 3, origin="chained-span-median")
+        self.assertEqual(overridden["origin"], "chained-span-median")
         self.assertEqual(overridden["availability"], "measured")
         self.assertEqual(overridden["percentiles_us"], percentiles)
         self.assertEqual(overridden["sample_count"], 3)
@@ -823,6 +843,8 @@ CHAIN_ITERS, CHAIN_DROP, CHAIN_TRIALS = 8, 2, 2
 # traceable to the op it came from; start_to_start sits a fixed GAP above the pair window.
 PAIR_US, DISPATCH_FLOOR_US, COMBINE_FLOOR_US = 50.0, 20.0, 25.0
 GAP_US, DRIFT_US = 4.0, 8.0
+# What the event window around one pair adds to it; the span chain's pairs run without it.
+WINDOW_US = 6.0
 UNAVAILABLE = {
     "availability": "unavailable", "origin": None, "percentiles_us": None, "sample_count": 0,
 }
@@ -962,10 +984,12 @@ class _SweepBackend(ep_backend.EPBackend):
     def benchmark_chain(self, problem, warmup, iters, drop):
         self.events.append(("chain", problem.T))
         kept = iters - drop
-        pair = self.pair_series(kept)
+        period = self.pair_series(kept)
+        pair = [value + WINDOW_US for value in period]
         return {
             "pair": pair,
             "start_to_start": [value + GAP_US for value in pair[:-1]],
+            "span": sum(period) / kept,
             "dispatch": [DISPATCH_FLOOR_US] * kept,
             "combine": [COMBINE_FLOOR_US] * kept,
             "combined": f"chained-{problem.T}",
@@ -1132,7 +1156,7 @@ def phases_by_index(oracle_count, points):
 
 
 def _sweep(fail_indices, error_indices, chain_error, backend_factory=None,
-           chain_output_ok=True):
+           chain_output_ok=True, chain_output_error=1.0):
     """One full run_sweep against the stubs; failures scripted by oracle call index."""
     backend = (backend_factory or _SweepBackend)()
     events = backend.events
@@ -1153,7 +1177,7 @@ def _sweep(fail_indices, error_indices, chain_error, backend_factory=None,
 
     def fake_output_match(chained, drained):
         output_checks.append((chained, drained))
-        return chain_output_ok, 0.0 if chain_output_ok else 1.0
+        return chain_output_ok, 0.0 if chain_output_ok else chain_output_error
 
     with tempfile.TemporaryDirectory() as directory:
         out = Path(directory) / "result.json"
@@ -1198,7 +1222,8 @@ def _assert_tails_withheld(test, block, p50=None):
     test.assertEqual([tails[k] for k in ("p90", "p95", "p99")], [None] * 3)
 
 
-def drive(*, fail_phases=(), chain_error=0.0, backend_factory=None, chain_output_ok=True):
+def drive(*, fail_phases=(), chain_error=0.0, backend_factory=None, chain_output_ok=True,
+          chain_output_error=1.0):
     """Run the sweep, optionally failing every oracle of a given pass; a clean probe run first
     learns the oracle call count, so failures are selected by phase rather than by hardcoded index."""
     probe = _sweep(frozenset(), frozenset(), 0.0, backend_factory)
@@ -1210,7 +1235,7 @@ def drive(*, fail_phases=(), chain_error=0.0, backend_factory=None, chain_output
     return _sweep(
         selected(set(fail_phases)),
         selected({"chain"}) if chain_error else frozenset(), chain_error, backend_factory,
-        chain_output_ok=chain_output_ok,
+        chain_output_ok=chain_output_ok, chain_output_error=chain_output_error,
     )
 
 
@@ -1254,6 +1279,26 @@ class ChainedRegimeOracleGate(unittest.TestCase):
                 self.assertIs(row["correctness"]["passed"], False)
                 # The magnitude rides along so the verdict can be judged, not just believed.
                 self.assertGreater(row["correctness"]["chain_last_output_error"], 0.0)
+
+    def test_an_error_that_is_not_finite_still_writes_an_invalid_document(self):
+        # A NaN output or a shape mismatch compares as infinity, which JSON cannot carry: the
+        # case must end as an `invalid` document with the magnitude null, not as a crashed writer
+        # and no document at all.
+        for label, run, field in (
+            ("chained output", drive(chain_output_ok=False, chain_output_error=float("inf")),
+             "chain_last_output_error"),
+            ("graph replay", drive(chain_output_ok=False, chain_output_error=float("inf"),
+                                   backend_factory=_GraphSweepBackend),
+             "cuda_graph_last_output_error"),
+            ("oracle", drive(fail_phases=("chain",), chain_error=float("nan")),
+             "max_relative_error"),
+        ):
+            with self.subTest(source=label):
+                self.assertEqual(run.rc, 3)
+                self.assertEqual(run.doc["outcome"]["status"], "invalid")
+                for row in run.rows:
+                    self.assertIsNone(row["correctness"][field])
+                    self.assertIs(row["correctness"]["passed"], False)
 
     def test_the_drained_oracles_still_red_the_case_on_their_own(self):
         # The chained gate is an addition, not a replacement.
@@ -1321,9 +1366,10 @@ class ChainedPublication(unittest.TestCase):
         for row in self.swept.rows:
             with self.subTest(tokens=row["tokens_per_rank"]):
                 period = row["components"]["pair_period"]
+                # The span chain's time per pair, not the pair windows' PAIR_US + WINDOW_US.
                 self.assertEqual(period["percentiles_us"]["p50"], PAIR_US)
-                self.assertIsNotNone(period["percentiles_us"]["p99"])
-                self.assertEqual(period["origin"], "chained-median")
+                self.assertEqual(period["percentiles_us"]["p99"], PAIR_US)
+                self.assertEqual(period["origin"], "chained-span-median")
                 self.assertEqual(period["availability"], "measured")
                 self.assertEqual(period["sample_count"], 12)  # six kept pairs in each of two trials
                 for op, expected in (
@@ -1346,6 +1392,10 @@ class ChainedPublication(unittest.TestCase):
                 drift = health["settle_drift_us"]
                 self.assertEqual(drift["percentiles_us"]["p50"], 0.0)
                 self.assertEqual(drift["sample_count"], CHAIN_TRIALS)
+                # What the event window adds to a pair, so a reader can tell it from the period.
+                overhead = health["window_overhead_us"]
+                self.assertEqual(overhead["percentiles_us"]["p50"], WINDOW_US)
+                self.assertEqual(overhead["sample_count"], CHAIN_TRIALS)
                 # No dispatch here waits on the host, so the chain has no host counts to report.
                 self.assertIsNone(health["host_retried_siblings"])
                 self.assertIsNone(health["host_stalled_trials"])
@@ -1573,6 +1623,19 @@ class SettleDrift(unittest.TestCase):
                 self.assertEqual(drift["percentiles_us"]["p50"], DRIFT_US)
                 self.assertEqual(drift["sample_count"], CHAIN_TRIALS)
 
+    def test_the_pair_windows_keep_their_spread_around_the_span_level(self):
+        # Three kept pairs at PAIR_US and three DRIFT_US above it: the span chain reads their mean,
+        # and each window is shifted by what the trial's windowed median sits above that mean, so
+        # the published tail stays DRIFT_US over the published median.
+        run = drive(backend_factory=_DriftingBackend)
+        for row in run.rows:
+            with self.subTest(tokens=row["tokens_per_rank"]):
+                period = row["components"]["pair_period"]["percentiles_us"]
+                self.assertEqual(period["p50"], PAIR_US + DRIFT_US / 2)
+                self.assertEqual(period["p99"], PAIR_US + DRIFT_US / 2 + DRIFT_US)
+                overhead = row["chain_health"]["window_overhead_us"]["percentiles_us"]
+                self.assertEqual(overhead["p50"], WINDOW_US - DRIFT_US / 2)
+
 
 class _Vec:
     """Just enough elementwise tensor for `_chain_output_matches`: a flat list of floats."""
@@ -1644,7 +1707,7 @@ def document(with_period):
     }
     if with_period:
         components["pair_period"] = {
-            "percentiles_us": dict(PERIOD), "origin": "chained-median",
+            "percentiles_us": dict(PERIOD), "origin": "chained-span-median",
         }
     return {
         "version": 1,
