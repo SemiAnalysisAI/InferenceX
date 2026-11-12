@@ -12816,3 +12816,14 @@
     - "Use image lmsysorg/sglang:nightly-dev-20261013-7224fce1."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5006
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-mi300x-vllm-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Update the image from v0.33.0 to nightly-rocm100-f5d93296c8ec82b7e7dabdb308d24d43cb1907bf (digest sha256:1b1b0c7c62d8ba3503d4f2e448795ed00e261bc73ad681f6811c3690613c7084), the 2026-11-11 ROCm 10.0 nightly. It contains vllm-project/vllm#65249, which enables prefix-cache SWA replay on CDNA3 (CDNA4 already had it from vllm-project/vllm#64094)."
+    - "Remove --no-swa-bounded-replay at every point. On this image both SWA replay paths run: decoder bounded replay from vllm-project/vllm#59039 (in eager prefill steps layer 20 writes its KV for every token, and the rest of layer 20 and layers 21-39 run on each request's last 128 tokens only) and prefix-cache SWA replay, so the sliding-window cache no longer takes part in prefix caching."
+    - "The image bump and the flag removal go together. On v0.33.0 the flag removal turns on only the decoder path while ROCm still forces prefix-cache SWA replay off, so a prefix hit followed by an untrimmed tail of 128 tokens or fewer can read sliding-window KV of layers 21-39 that an earlier trimmed step never wrote (vllm-project/vllm#64094 review)."
+    - "No data-type or precision change to the DSpark draft: vLLM builds it with the checkpoint's own quantization config and the target's fp8_ds_mla KV cache, and the recipe sets no draft dtype or quantization."
+    - "No point changes: TP8 and TP4 at concurrency 1, 2, 4, 8, 16 and 32 (12 points), all re-measured on the new image."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
