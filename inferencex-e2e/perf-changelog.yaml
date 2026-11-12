@@ -12606,3 +12606,13 @@
     - "Disaggregated: add musespark-fp4-gb300-dynamo-sglang-agentic-dflash-disagg with TP8 prefill and TP8 decode workers: 1P2D at c160 and c224, 1P3D at c224, 1P4D at c32, c56 and c112, 1P5D at c120, 2P3D at c352 and 3P4D at c672. Mooncake KV transfer and prefill HiCache (150 GB per rank, 0.80 DRAM utilization)."
     - "Remove musespark-fp4-gb300-dynamo-sglang-agentic-dflash (TP4 c8, c16, c20, c32 and c40 and TP8 c3, c4, c10 and c14 on the dev-muse-spark-open image)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4757
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Run the DeepSeek-V4.1-Flash MI355X SGLang AgentX points on lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261111."
+    - "Add TP2 at c64, DP2 attention at c128, DP2 attention with EP2 at c128, and DP4 attention with EP4 at c128 and c256."
+    - "From c128, DP attention points use shortest-prefill-first with prefill-decode-interval 24 (TP2 DPA), 32 (TP2 DPA EP2, TP4 DPA EP4 c128) or 40 (TP4 DPA EP4 c256), the shared Engram host table layout and, with EP, SGLANG_DP_SHARED_EXPERT_LOCAL=1; TP4 DPA EP4 c256 also uses a 65536-token prefill chunk and a 0.85 prefill-delayer low watermark."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
