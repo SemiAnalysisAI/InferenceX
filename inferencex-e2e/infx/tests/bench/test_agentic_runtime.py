@@ -5,11 +5,14 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
 import pytest
 
+from infx.bench.agentic import venv as agentic_venv
 from infx.bench.agentic.venv import Runtime, bootstrap
 from infx.bench.env import BenchError
 from infx.tests.bench.stubs import executable
@@ -21,6 +24,7 @@ if [ "$1" = venv ]; then
     [ "$FAIL" = venv ] && exit 3
     for target; do :; done
     mkdir -p "$target/bin"
+    if [ "$SLOW" = 1 ]; then sleep 0.2; fi
 elif [ "$1" = pip ]; then
     [ "$FAIL" = pip ] && exit 2
     [ "$FAIL" = incomplete ] && exit 0
@@ -104,6 +108,76 @@ def test_failed_venv_creation_returns_uv_status_without_installing(tmp_path, too
     assert bootstrap(Runtime(tmp_path / "runtime")) == 3
 
     assert "pip" not in (tmp_path / "uv-calls").read_text().splitlines()
+
+
+def test_bootstrap_reuses_a_matching_venv_without_calling_uv(tmp_path: Path, tools: Path):
+    executable(tools / "uv", FAKE_UV)
+    runtime = Runtime(tmp_path / "runtime")
+    assert bootstrap(runtime) == 0
+    (tmp_path / "uv-calls").unlink()
+
+    assert bootstrap(runtime) == 0
+
+    assert not (tmp_path / "uv-calls").exists()
+
+
+def test_bootstrap_rebuilds_when_requirements_change(
+    tmp_path: Path, tools: Path, monkeypatch: pytest.MonkeyPatch
+):
+    executable(tools / "uv", FAKE_UV)
+    requirements = tmp_path / "requirements.txt"
+    requirements.write_text("agentx==1\n")
+    monkeypatch.setattr(agentic_venv, "REQUIREMENTS", requirements)
+    runtime = Runtime(tmp_path / "runtime")
+    assert bootstrap(runtime) == 0
+    first_calls = (tmp_path / "uv-calls").read_text()
+
+    requirements.write_text("agentx==2\n")
+    assert bootstrap(runtime) == 0
+
+    calls = (tmp_path / "uv-calls").read_text()
+    assert calls.startswith(first_calls)
+    assert calls.count("venv\n--python\n") == 2
+    assert calls.count("pip\ninstall\n") == 2
+
+
+def test_bootstrap_honours_the_callers_uv_cache(
+    tmp_path: Path, tools: Path, monkeypatch: pytest.MonkeyPatch
+):
+    executable(tools / "uv", FAKE_UV)
+    cache = tmp_path / "caller-cache"
+    monkeypatch.setenv("UV_CACHE_DIR", str(cache))
+
+    assert bootstrap(Runtime(tmp_path / "runtime")) == 0
+
+    recorded = set((tmp_path / "uv-caches").read_text().splitlines())
+    assert recorded == {str(cache)}
+    assert cache.is_dir()
+
+
+def test_concurrent_bootstrap_builds_the_runtime_once(
+    tmp_path: Path, tools: Path, monkeypatch: pytest.MonkeyPatch
+):
+    executable(tools / "uv", FAKE_UV)
+    monkeypatch.setenv("SLOW", "1")
+    runtime = Runtime(tmp_path / "runtime")
+    package_root = Path(__file__).parents[3]
+    env = {
+        **os.environ,
+        "PYTHONPATH": str(package_root),
+        "RUNTIME": str(runtime.root),
+    }
+    child = (
+        "from pathlib import Path; from infx.bench.agentic.venv import Runtime, bootstrap; "
+        "raise SystemExit(bootstrap(Runtime(Path(__import__('os').environ['RUNTIME']))))"
+    )
+
+    processes = [subprocess.Popen([sys.executable, "-c", child], env=env) for _ in range(2)]
+    assert [process.wait(timeout=10) for process in processes] == [0, 0]
+
+    calls = (tmp_path / "uv-calls").read_text().splitlines()
+    assert calls.count("venv") == 1
+    assert calls.count("pip") == 1
 
 
 @pytest.mark.parametrize(
