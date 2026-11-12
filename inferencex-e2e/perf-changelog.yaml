@@ -12796,3 +12796,14 @@
     - "C32 joins C64 on the SimpleCPUOffloadConnector tier (1349 GB, dram-utilization 0.90) with LRU eviction (cpu_lru_eviction). C32 keeps DSpark 7; C64 keeps DSpark 3 at 0.90 GPU memory utilization."
     - "Removed env switches, which the image's validation runs do not set: VLLM_USE_RUST_FRONTEND, VLLM_ROCM_USE_SKINNY_GEMM, VLLM_ROCM_PARALLEL_INDEX_TOPK, VLLM_ROCM_MINIMAX_M3_MONO_DRAFTER, VLLM_ROCM_MINIMAX_M3_SP_PREFILL. PYTHONHASHSEED is 0 at every point (42 at c64 before)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image from nightly-rocm100-edad8b03c5285a1c12e7e4f83c1af709b319a01b to nightly-rocm100-be47189f37f6162991366ff6b91539f6e9d1f432 (digest sha256:a6263de19d7e68fc12d7ee37da0cc0d2817b8eb9a83c4f22911783befd133ebc), the 2026-11-12 ROCm 10.0 nightly. The recipe, the search space and every server flag are unchanged."
+    - "The new image adds, among others: vllm-project/vllm#65249, which turns on prefix-cache SWA replay on gfx942, so a prefix-cache hit rewinds by the 128-token sliding window instead of recomputing the window from the start of the cached prefix; vllm-project/vllm#60102, which routes gfx942 sparse MLA prefill of 512 or more query rows to AITER pa_prefill_sparse; vllm-project/vllm#63816, which guards NaN router scores in the gfx942 mono routing; and the fixes vllm-project/vllm#62725, #64001 and #65995."
+    - "Adaptive DSpark verification stays off in this PR, so that the numbers measure only the image."
+    - "No point changes: concurrency 1, 2, 4, 8, 16 and 32 on TP8, TP4 (with --monokernel) and TP2 (18 points), all re-measured on the new image."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
