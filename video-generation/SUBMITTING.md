@@ -46,8 +46,8 @@ binding.
   The binder rejects any other value, and the server records it as the engine
   revision.
 - Pin the image by SHA256 digest, and use its real interpreter and architecture.
-  The H100, H200, and B200 SGLang rows and the B200 vLLM-Omni row use the public CUDA
-  amd64 image. The MI355X row uses its ROCm MI35x build.
+  The H100, H200, and B200 SGLang rows and the B200 and H200 vLLM-Omni rows use the
+  public CUDA amd64 image. The MI355X row uses its ROCm MI35x build.
 
 A shared image does not qualify a different topology or SKU. Each selected
 deployment qualifies through its own sweep. Maintainers stage model snapshots in the
