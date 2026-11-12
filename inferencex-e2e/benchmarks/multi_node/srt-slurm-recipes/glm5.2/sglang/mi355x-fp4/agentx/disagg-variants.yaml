@@ -248,6 +248,8 @@ override_1p1d_p_pp4_d_dp4_hicache_c48:
       env:
         SGLANG_PP_LAYER_PARTITION: "20,20,20,18"
         HSA_USERPTR_FOR_PAGED_MEM: "0"
+        # Matches the C=48 point validated on InferenceMINI (Vultr MI355X).
+        SGLANG_DISAGGREGATION_NUM_PRE_ALLOCATE_REQS: "32"
       args:
         tp-size: 1
         pp-size: 4
@@ -257,6 +259,8 @@ override_1p1d_p_pp4_d_dp4_hicache_c48:
         hicache-size: 350
         hicache-write-policy: write_through
     decode:
+      env:
+        SGLANG_DISAGGREGATION_NUM_PRE_ALLOCATE_REQS: "32"
       args:
         mem-fraction-static: 0.95
         dp-size: 4
@@ -264,6 +268,8 @@ override_1p1d_p_pp4_d_dp4_hicache_c48:
         enable-dp-lm-head: true
         max-running-requests: 96
         cuda-graph-max-bs-decode: 24
+        chunked-prefill-size: 32768
+        enable-request-time-stats-logging: false
 
 override_1p1d_p_pp4_d_dp4_hicache_c56:
   roles:
