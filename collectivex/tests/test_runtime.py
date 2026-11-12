@@ -937,7 +937,7 @@ case "$FAKE_LAUNCHER" in
   hold)
     trap : PIPE
     trap 'sleep 0.5; echo "$shard" >> "$ROOT/released"; exit 143' TERM
-    sleep 300 ;;
+    bash -c 'bash -c "echo \$\$ > \"$ROOT/deep.pid\"; exec sleep 300"; true' ;;
   fail-first) [ "$(wc -l < "$ROOT/started")" -gt 1 ] || exit 3 ;;
 esac
 """
@@ -998,7 +998,7 @@ esac
         for number, to_group in ((signal.SIGINT, False), (signal.SIGTERM, False),
                                  (signal.SIGINT, True)):
             with self.subTest(signal=number.name, to_group=to_group):
-                for name in ("started", "released", "launcher.pid"):
+                for name in ("started", "released", "launcher.pid", "deep.pid"):
                     (self.root / name).unlink(missing_ok=True)
                 process = self._start(FAKE_LAUNCHER="hold")
                 _await(self.root / "started", process)
@@ -1012,6 +1012,9 @@ esac
                 self.assertEqual(self._lines("released"), self.shards[:1], output)
                 self.assertEqual(code, 128 + number, output)
                 self.assertEqual(self._lines("started"), self.shards[:1], output)
+                # A process two levels under the launcher, as a login-node image import is.
+                with self.assertRaises(ProcessLookupError):
+                    os.kill(int(self._lines("deep.pid")[0]), 0)
 
     def test_an_interrupted_run_whose_output_has_no_reader_left_still_waits(self) -> None:
         # Ctrl-C on `run.sh | tee` ends tee as well: what run.sh then says goes into a pipe nobody

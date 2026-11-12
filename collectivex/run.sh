@@ -75,18 +75,21 @@ fi
 shard_dir="$HERE/.shards/run-$$"
 mkdir -p "$shard_dir"
 trap 'rm -rf "$shard_dir"' EXIT
-# An interrupt ends the run. The shard in flight is a background child (see the loop), so this
-# runs at once: TERM goes to its launcher and to the command the launcher is running, the launcher
-# then cancels its own job, and the wait keeps this script alive until it has. PIPE is ignored with
-# the rest because the terminal or a pipe reader may already be gone, and a message written to it
-# must not end this script first.
+descendants() {
+  local child
+  for child in $(pgrep -P "$1"); do
+    echo "$child"
+    descendants "$child"
+  done
+}
+# The shard ignores SIGINT (see the loop), so TERM goes to its launcher and everything under it.
 interrupt() {
   local pid
+  # The reader of these messages may already be gone.
   trap '' HUP INT TERM PIPE
   for pid in $(jobs -pr); do
     echo "=== interrupted: stopping shard $id and releasing its allocation" >&2 || true
-    kill -TERM "$pid" 2>/dev/null || true
-    pkill -TERM -P "$pid" 2>/dev/null || true
+    kill -TERM "$pid" $(descendants "$pid") 2>/dev/null || true
   done
   wait
   echo "=== interrupted: the remaining shards were not run" >&2 || true
@@ -148,10 +151,8 @@ for row in "${rows[@]}"; do
   # of each other's stage directory.
   execution="manual-$stamp-$$-$id"
   echo "=== shard $id: $backend, ${nodes}x${gpn} GPUs, $ncases case(s)"
-  # A subshell keeps one shard's image and placement from leaking into the next. It is waited on
-  # in the background because bash holds a trap until its foreground command returns. Without job
-  # control it stays in this script's process group and ignores SIGINT, so a Ctrl-C reaches the
-  # launcher only as the TERM that interrupt() sends.
+  # A subshell keeps one shard's image and placement from leaking into the next. In the
+  # background, because bash holds a trap until its foreground command returns.
   (
     unset COLLX_NGPUS
     export COLLX_SHARD_FILE="$control" COLLX_SHARD_SKU="$SKU" COLLX_BENCH="$backend"
@@ -174,7 +175,6 @@ for row in "${rows[@]}"; do
       exit 0
     fi
     echo "logs: $COLLX_LOG_DIR"
-    # exec makes the launcher the process this script waits for and signals.
     exec bash "$HERE/launchers/launch_$launcher.sh"
   ) </dev/null &
   wait "$!" && rc=0 || rc=$?

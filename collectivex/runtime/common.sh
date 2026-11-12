@@ -672,9 +672,7 @@ collx_salloc_jobid() {
   # salloc --no-shell does not notice a job that ends between the grant and its own poll (a node
   # prolog that fails the job ten seconds in leaves it waiting forever), so the job is watched
   # here: once Slurm no longer lists the queued job and no grant was logged, salloc is stopped.
-  # An interrupt before JOB_ID is recorded finds the request through this log (see
-  # collx_adopt_interrupted_request). salloc is the background job itself, with no subshell around
-  # it, so the TERM that cleanup sends reaches it and it withdraws the request.
+  # No subshell around salloc, so cleanup's TERM reaches it and it withdraws the request.
   COLLX_SCHEDULER_LOG="$log"
   salloc "$@" --no-shell > "$log" 2>&1 &
   local salloc_pid=$! queued=""
@@ -1236,9 +1234,7 @@ collx_run_shard() {
     runtime_log="$(collx_private_log_path "runtime-c$(printf '%03d' "$ci")")"
     # A hang guard, not a work budget: FP8 prefill and multi-node EP16 prefill on pools with
     # slow GPU-NIC p2p (see docs/methodology.md) legitimately run past 30 minutes. 5400 stays
-    # inside the 300-minute allocation. The step is waited on in the background because bash holds
-    # a trap until its foreground command returns, which would keep an interrupt from releasing the
-    # allocation for as long as the case runs.
+    # inside the 300-minute allocation. In the background, so an interrupt's trap runs at once.
     timeout -k 30 "${COLLX_RUN_TIMEOUT:-5400}" \
       srun --jobid="$JOB_ID" --nodes="$NODES" \
       --ntasks="$NGPUS" --ntasks-per-node="$GPN" --chdir=/tmp \
@@ -1273,10 +1269,8 @@ collx_remove_distributed_container() {
     </dev/null >/dev/null 2>&1 || true
 }
 
-# An interrupted launch can still own a queued salloc or a running case step, both background
-# children. Stopping them first lets salloc revoke its own request and leaves the container idle
-# for removal. Nothing is printed before the allocation is released: with the terminal or a pipe
-# reader already gone the write fails, and errexit would end the launcher there.
+# Stops a queued salloc or a running case step. Prints nothing: a failed write would end the
+# launcher under errexit before the allocation is released.
 collx_stop_launch_children() {
   local pid
   for pid in $(jobs -pr); do
@@ -1329,10 +1323,6 @@ collx_install_launcher_fail_safe() {
   trap 'collx_launcher_cleanup 129' HUP
   trap 'collx_launcher_cleanup 130' INT
   trap 'collx_launcher_cleanup 143' TERM
-  # run.sh stops a launcher with TERM to it and to the command it is running, and bash reports
-  # that command's death on stderr. With the reader of that output gone (a tee
-  # ended by the same Ctrl-C) the report raises SIGPIPE; left fatal, it cuts the cleanup short.
-  # A handler rather than '': an ignored signal is inherited, and every `producer | head` below
-  # would report a write error instead of ending quietly.
+  # A handler, not '': children must inherit the default SIGPIPE.
   trap : PIPE
 }
