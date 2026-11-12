@@ -12785,3 +12785,11 @@
     - "Concurrency 12 and 24: CUDA graphs also for prefill and mixed steps up to 4096 tokens (#4878 recipe without the TEP shared-expert variable); DSpark drafts 3 tokens; prefill-schedule-interval 8."
     - "Concurrency 48 and 64: EP8 MegaMoE with FULL_DECODE_ONLY graphs, max-num-batched-tokens 16384, prefill-schedule-interval 8 and gpu-memory-utilization 0.97."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4871
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg
+  description:
+    - "Add DEP16 decode points at conc 500 to 950 with 6 to 12 DEP2 prefill workers and stream interval 20."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5021
+  scenario-type: [agentic-coding]
+  append-only: true
