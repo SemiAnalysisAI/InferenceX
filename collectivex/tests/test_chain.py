@@ -376,7 +376,7 @@ class CudaGraphRoundtrip(unittest.TestCase):
         calls = backend.calls
         begin = [i for i, call in enumerate(calls) if call == "capture_begin"]
         end = [i for i, call in enumerate(calls) if call == "capture_end"]
-        # Floors, span and period siblings: one capture each holding every pair, each replayed
+        # Span, floors and period siblings: one capture each holding every pair, each replayed
         # once untimed and once behind the barrier.
         self.assertEqual(len(begin), 3)
         for lo, hi in zip(begin, end):
@@ -388,8 +388,10 @@ class CudaGraphRoundtrip(unittest.TestCase):
             self.assertNotIn("align_spin", calls[lo + 3:hi])
         # The span capture holds two event nodes: after the dropped pair and after the last one.
         pair = ["dispatch", "stage", "combine"]
-        self.assertEqual(calls[begin[1] + 3:end[1]],
+        self.assertEqual(calls[begin[0] + 3:end[0]],
                          pair * drop + ["record"] + pair * (iters - drop) + ["record"])
+        # It is replayed and released before the next sibling is captured.
+        self.assertEqual(calls[end[0]:begin[1]].count("graph_replay"), 2)
         self.assertAlmostEqual(series["span"], 15000.0)  # 3ms dispatch + 7ms stage + 5ms combine
         self.assertEqual({len(series[k]) for k in ("pair", "dispatch", "combine")}, {iters - drop})
         self.assertEqual(len(series["start_to_start"]), iters - drop - 1)

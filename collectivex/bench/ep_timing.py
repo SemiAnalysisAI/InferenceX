@@ -165,14 +165,17 @@ def _series(starts, ends, drop):
     return [start.elapsed_time(end) * 1000.0 for start, end in zip(starts[drop:], ends[drop:])]
 
 
+def _span_us(start, end, kept):
+    """Time per kept pair (us) of a chain with no event between its pairs."""
+    return start.elapsed_time(end) * 1000.0 / kept
+
+
 def _chain_result(pair, floors, span, drop, combined):
     pair_start, pair_end = pair
-    span_start, span_end = span
     return {
         "pair": _series(pair_start, pair_end, drop),
         "start_to_start": _series(pair_start[:-1], pair_start[1:], drop),
-        # Time per kept pair with no event between the pairs.
-        "span": span_start.elapsed_time(span_end) * 1000.0 / (len(pair_start) - drop),
+        "span": span,
         "dispatch": _series(*floors["dispatch"], drop),
         "combine": _series(*floors["combine"], drop),
         # The period chain's final output, cloned post-sync so the caller can compare it against a
@@ -439,7 +442,8 @@ class EagerTiming(_SpinAlignment):
         finally:
             if collecting:
                 gc.enable()
-        result = _chain_result(pair, floors, (span_start, span_end), drop, out["combined"])
+        span = _span_us(span_start, span_end, iters - drop)
+        result = _chain_result(pair, floors, span, drop, out["combined"])
         result["host_retries"] = retries if gated else None
         result["host_stalled"] = bool(stalled) if gated else None
         return result
@@ -647,17 +651,24 @@ class GraphTiming(_SpinAlignment):
         of its own, so a window around every pair reads above the pairs of a graph without them."""
         import torch
 
+        def replay_twice(graph):
+            for _ in range(2):
+                graph.replay()
+                torch.cuda.synchronize()
+
         self.calibrate_spin()
+        # Replayed and released before the other two are captured, so no more chain graphs are
+        # ever alive at once than the floors and period siblings.
+        graph, stamps, _, _ = self.capture_pairs(problem, staged, iters, ("span",), span_head=drop)
+        replay_twice(graph)
+        (span_start,), (span_end,) = stamps["span"]
+        span = _span_us(span_start, span_end, iters - drop)
+        del graph
         floors, floor_stamps, _, _ = self.capture_pairs(problem, staged, iters, ("dispatch", "combine"))
-        span, span_stamps, _, _ = self.capture_pairs(problem, staged, iters, ("span",), span_head=drop)
         period, period_stamps, combined, _ = self.capture_pairs(problem, staged, iters, ("pair",))
-        for graph in (floors, span, period):
-            graph.replay()
-            torch.cuda.synchronize()
-            graph.replay()
-            torch.cuda.synchronize()
-        (span_start,), (span_end,) = span_stamps["span"]
-        result = _chain_result(period_stamps["pair"], floor_stamps, (span_start, span_end), drop, combined)
+        for graph in (floors, period):
+            replay_twice(graph)
+        result = _chain_result(period_stamps["pair"], floor_stamps, span, drop, combined)
         result["host_retries"] = result["host_stalled"] = None
         return result
 
