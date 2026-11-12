@@ -131,6 +131,28 @@ override_tp8_c32:
     env:
       CONC: '32'
 
+override_tp8_c64:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        engram-config: '{"cpu_offload":false}'
+  benchmark:
+    env:
+      CONC: '64'
+
+override_tp8_c128:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        engram-config: '{"cpu_offload":false}'
+  benchmark:
+    env:
+      CONC: '128'
+
 override_tp4_c1:
   roles:
     agg:
@@ -203,6 +225,30 @@ override_tp4_c32:
   benchmark:
     env:
       CONC: '32'
+
+override_tp4_c64:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        engram-config: '{"cpu_offload":true}'
+        monokernel: true
+  benchmark:
+    env:
+      CONC: '64'
+
+override_tp4_c128:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        engram-config: '{"cpu_offload":true}'
+        monokernel: true
+  benchmark:
+    env:
+      CONC: '128'
 
 override_tp2_c1:
   roles:
@@ -287,3 +333,17 @@ override_tp2_c32:
   benchmark:
     env:
       CONC: '32'
+
+override_tp2_c64:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        engram-config: '{"cpu_offload":true}'
+        max-num-batched-tokens: 8192
+        max-num-seqs: 128
+        max-cudagraph-capture-size: 512
+  benchmark:
+    env:
+      CONC: '64'
