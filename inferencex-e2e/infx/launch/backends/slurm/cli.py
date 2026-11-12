@@ -241,10 +241,15 @@ def observe(job: Job) -> JobStatus:
     """
     env = {**os.environ, "SLURM_TIME_FORMAT": "%s"}
     argv = ["sacct", "-X", "-n", "-P", "-j", job.id]
-    accounting = _query([*argv, "--format=State,ExitCode,NodeList,Submit,Start,End"], env)
+    accounting = _query([*argv, "--format=State,ExitCode,NodeList,Submit,Start,End,AllocTRES"], env)
     first = accounting.splitlines()[0] if accounting.strip() else ""
-    state, exit_code, nodes, submitted, started, ended = [*first.split("|"), *[""] * 6][:6]
-    if not state.strip():
+    state, exit_code, nodes, submitted, started, ended, alloc_tres = [*first.split("|"), *[""] * 7][
+        :7
+    ]
+    alloc_tres = alloc_tres.strip()
+    if alloc_tres in {"Unknown", "None", "(null)"}:
+        alloc_tres = ""
+    if not state.strip() or not alloc_tres:
         fields = dict(
             item.split("=", 1)
             for item in _query(["scontrol", "show", "job", "-o", job.id], env).split()
@@ -252,10 +257,22 @@ def observe(job: Job) -> JobStatus:
         )
         if fields.get("JobId") != job.id:
             fields = {}
-        state, exit_code, nodes, submitted, started, ended = (
-            fields.get(name, "")
-            for name in ("JobState", "ExitCode", "NodeList", "SubmitTime", "StartTime", "EndTime")
-        )
+        if not state.strip():
+            state, exit_code, nodes, submitted, started, ended = (
+                fields.get(name, "")
+                for name in (
+                    "JobState",
+                    "ExitCode",
+                    "NodeList",
+                    "SubmitTime",
+                    "StartTime",
+                    "EndTime",
+                )
+            )
+        if not alloc_tres:
+            alloc_tres = fields.get("AllocTRES", "").strip()
+            if alloc_tres in {"Unknown", "None", "(null)"}:
+                alloc_tres = ""
     nodes, state = nodes.strip(), state.strip()
     started = "" if state == "PENDING" else started
     ended = "" if state in {"PENDING", "CONFIGURING", "RUNNING"} else ended
@@ -265,6 +282,7 @@ def observe(job: Job) -> JobStatus:
         submitted_at=_time(submitted),
         started_at=_time(started),
         ended_at=_time(ended),
+        alloc_tres=alloc_tres or None,
     )
 
 
@@ -311,13 +329,24 @@ def final_status(job: Job, *, attempts: int = 10, delay_s: float = 1.0) -> JobSt
     return status
 
 
+def _left_queue(job: Job) -> bool:
+    """Whether the job has left the queue.
+
+    When squeue keeps failing, accounting decides; a job neither can place is waited on.
+    """
+    try:
+        return _listed_state(job, echo_command=False) is None
+    except SlurmError:
+        return observe(job).state not in _UNSETTLED
+
+
 def wait_for_log(job: Job, path: Path, *, wait_s: float = 5.0) -> None:
     """Wait until ``job`` creates ``path``.
 
     Raises ``SlurmError``, after printing ``scontrol show job``, if the job ends first.
     """
     while not path.exists():
-        if queue_state(job, echo_command=False) is None and not path.exists():
+        if _left_queue(job) and not path.exists():
             print(f"ERROR: job {job.id} failed before creating {path}", file=sys.stderr)
             with contextlib.suppress(FileNotFoundError):
                 proc.run(["scontrol", "show", "job", job.id])
@@ -333,7 +362,7 @@ def follow_log(job: Job, path: Path) -> None:
     echo(tail_argv)
     tail = subprocess.Popen(tail_argv, stderr=subprocess.DEVNULL)
     try:
-        while queue_state(job, echo_command=False) is not None:
+        while not _left_queue(job):
             time.sleep(10)
     finally:
         sentinel.kill()

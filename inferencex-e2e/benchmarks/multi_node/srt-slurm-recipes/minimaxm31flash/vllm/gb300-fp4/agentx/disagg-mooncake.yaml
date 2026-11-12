@@ -1,5 +1,8 @@
 schema: 2
 base:
+  observability:
+    tachometer:
+      enabled: false
   identity:
     frameworks:
       dynamo: 1.6.0.dev20261023
@@ -7,12 +10,20 @@ base:
     install: true
     source:
       wheel: 1.6.0.dev20261023
+    request_plane: tcp
+    event_plane: zmq
+    # Native vLLM engines (Rust frontend, gRPC) behind Dynamo sidecars, which parse tools and reasoning.
+    sidecar: true
+    sidecar_args:
+    - --grpc-startup-deadline-secs
+    - '3600'
+    - --dyn-tool-call-parser
+    - minimax_m3
+    - --dyn-reasoning-parser
+    - minimax_m3
   resources:
     gpu_type: gb300
     gpus_per_node: 4
-  observability:
-    tachometer:
-      enabled: false
   health_check:
     max_attempts: 1440
     interval_seconds: 5
@@ -27,15 +38,8 @@ base:
     type: etcd
     placement:
       node: infra
-  - name: nats
-    type: nats
-    placement:
-      node: infra
-    options:
-      max_payload_mb: 32
   - name: mooncake-master
     type: mooncake-master
-    preamble: bash /configs/vllm-mooncake.sh
     args:
     - --default_kv_lease_ttl=60000
     - --eviction_high_watermark_ratio=0.95
@@ -54,15 +58,41 @@ base:
   frontend:
     type: dynamo
     enable_multiple_frontends: false
+    numa_bind: true
+    # KV router without KV events (it predicts prefix caches from its own routing) or busy
+    # thresholds, temperature 0; soft session affinity keeps each session on one decode rank.
     args:
       router-mode: kv
       router-session-affinity-ttl-secs: 14400
+      active-decode-blocks-threshold: None
+      active-prefill-tokens-threshold: None
+      active-prefill-tokens-threshold-frac: None
+      no-router-kv-events: true
     env:
+      DYN_ROUTER_SESSION_AFFINITY_MODE: soft
+      DYN_ROUTER_TEMPERATURE: '0'
+      DYN_ROUTER_QUEUE_THRESHOLD: None
+      DYN_ROUTER_TTL_SECS: '3600'
       DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: '3600'
+      DYN_LOG: warn
       HF_HOME: /hf_hub_cache
       HF_HUB_CACHE: /hf_hub_cache
       DYN_TCP_CONNECT_TIMEOUT: '120'
+      DYN_TCP_CHANNEL_BUFFER: '128'
+      DYN_TCP_REQUEST_TIMEOUT: '60'
+      DYN_TCP_POOL_SIZE: '8192'
       DYN_TOKENIZER: fastokens
+      DYN_TOKENIZER_CACHE: '1'
+      DYN_TOKENIZER_CACHE_BYTES: '8000000000'
+    # Prefill goes to the least-loaded worker (cache_threshold 1.0 selects the active-request
+    # cost tier), ignoring session affinity; decode keeps the default, affinity-bound selection.
+    worker_selection:
+      prefill: prefill-least-loaded
+      instances:
+      - name: prefill-least-loaded
+        type: dynamo-two-tier-cost-fn
+        parameters:
+          cache_threshold: 1.0
     placement:
       node: dedicated
   engine:
@@ -71,10 +101,10 @@ base:
     dp_launch_mode: per_node
   roles:
     prefill:
-      kv_events: true
+      kv_events: false
       nodes: 3
-      workers: 6
-      gpus: 2
+      workers: 3
+      gpus: 4
       env:
         HF_HOME: /hf_hub_cache
         HF_HUB_CACHE: /hf_hub_cache
@@ -91,8 +121,6 @@ base:
         NIXL_UCX_SGL_ENABLE: '1'
         NCCL_IB_HCA: '@fabric.rdma-devices'
         VLLM_USE_V2_MODEL_RUNNER: '1'
-        NIXL_TELEMETRY_ENABLE: 'y'
-        NIXL_TELEMETRY_PROMETHEUS_PORT: '0'
         UCX_NET_DEVICES: '@fabric.rdma-device-ports'
         VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '600'
         DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: '1024'
@@ -103,6 +131,8 @@ base:
         MC_MAX_MR_SIZE: '4294967296'
         MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
         WITH_NVIDIA_PEERMEM: '0'
+        VLLM_RANDOMIZE_DP_DUMMY_INPUTS: '1'
+        VLLM_RS_TOKEN_IDS_AS_BYTES: '1'
       args:
         served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
         language-model-only: true
@@ -113,22 +143,23 @@ base:
         attention-config: '{"indexer_kv_dtype":"nvfp4","use_prefill_query_quantization":true}'
         disable-hybrid-kv-cache-manager: true
         max-model-len: 1048576
+        # AgentX requires a stream interval of 20 to 60 tokens; vLLM defaults to 1.
+        stream-interval: 20
+        load-format: fastsafetensors
         kernel-config: '{"moe_backend":"deep_gemm_mega_moe"}'
         numa-bind: true
-        dyn-tool-call-parser: minimax_m3
-        dyn-reasoning-parser: minimax_m3
         speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         tensor-parallel-size: 1
-        gpu-memory-utilization: 0.85
+        gpu-memory-utilization: 0.90
         max-num-seqs: 64
-        max-num-batched-tokens: 32768
+        max-num-batched-tokens: 16384
         long-prefill-token-threshold: 4096
         prefill-schedule-interval: 1
         enable-prefix-caching: true
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
         max-cudagraph-capture-size: 2048
-        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["UCX"],"enforce_handshake_compat":false,"kv_lease_duration":120}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}]}}'
-        data-parallel-size: 2
+        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["UCX"],"enforce_handshake_compat":false,"kv_lease_duration":120}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false,"hbm_pool":{"segment_size":"auto"}}}]}}'
+        data-parallel-size: 4
     decode:
       nodes: 2
       workers: 1
@@ -149,8 +180,6 @@ base:
         NIXL_UCX_SGL_ENABLE: '1'
         NCCL_IB_HCA: '@fabric.rdma-devices'
         VLLM_USE_V2_MODEL_RUNNER: '1'
-        NIXL_TELEMETRY_ENABLE: 'y'
-        NIXL_TELEMETRY_PROMETHEUS_PORT: '0'
         UCX_NET_DEVICES: '@fabric.rdma-device-ports'
         VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '600'
         DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: '1024'
@@ -162,7 +191,7 @@ base:
         MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
         WITH_NVIDIA_PEERMEM: '0'
         VLLM_RANDOMIZE_DP_DUMMY_INPUTS: '1'
-        VLLM_MAX_ASYNC_KV_ADMITS_PER_STEP: '4'
+        VLLM_RS_TOKEN_IDS_AS_BYTES: '1'
         NCCL_CUMEM_ENABLE: '1'
         NCCL_MNNVL_ENABLE: '1'
         NCCL_NVLS_ENABLE: '1'
@@ -177,24 +206,29 @@ base:
         attention-config: '{"indexer_kv_dtype":"nvfp4","use_prefill_query_quantization":true}'
         disable-hybrid-kv-cache-manager: true
         max-model-len: 1048576
+        # AgentX requires a stream interval of 20 to 60 tokens; vLLM defaults to 1.
+        stream-interval: 20
+        load-format: fastsafetensors
         kernel-config: '{"moe_backend":"deep_gemm_mega_moe"}'
         numa-bind: true
-        dyn-tool-call-parser: minimax_m3
-        dyn-reasoning-parser: minimax_m3
         speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         tensor-parallel-size: 1
-        gpu-memory-utilization: 0.95
-        max-num-seqs: 48
+        gpu-memory-utilization: 0.92
+        max-num-seqs: 10
         max-num-batched-tokens: 8192
         watermark: 0.05
+        max-num-inflight-kv-loads: 64
+        max-async-kv-loads-per-step: 4
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
-        max-cudagraph-capture-size: 384
+        max-cudagraph-capture-size: 80
+        enable-eplb: true
+        eplb-config: '{"communicator":"symm_mem","num_redundant_experts":8,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
         numa-bind-nodes:
         - 0
         - 0
         - 1
         - 1
-        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["UCX"],"enforce_handshake_compat":false,"kv_lease_duration":120}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false,"save_decode_cache":true}}]}}'
+        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["UCX"],"enforce_handshake_compat":false,"kv_lease_duration":120}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_consumer","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false,"save_decode_cache":false,"enable_lookup":false}}]}}'
         data-parallel-size: 8
         enable-prefix-caching: true
         data-parallel-rpc-port: 13345
@@ -212,14 +246,140 @@ base:
     placement:
       node: dedicated
   name: minimaxm31flash-gb300-disagg-mooncake
-  setup_script: vllm-mooncake.sh
-override_3p2d8:
-  name: minimaxm31flash-gb300-disagg-mooncake-3p2d8
-override_3p4d16:
-  name: minimaxm31flash-gb300-disagg-mooncake-3p4d16
+override_1p1d_dep16_c200:
+  name: minimaxm31flash-gb300-disagg-mooncake-1p1d-dep16-c200
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+    decode:
+      nodes: 4
+      gpus: 16
+      args:
+        data-parallel-size: 16
+        eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
+        max-num-seqs: 5
+        max-cudagraph-capture-size: 40
+override_3p1d_dep16_c500:
+  name: minimaxm31flash-gb300-disagg-mooncake-3p1d-dep16-c500
   roles:
     decode:
       nodes: 4
       gpus: 16
       args:
         data-parallel-size: 16
+        eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
+        max-num-seqs: 10
+        max-cudagraph-capture-size: 80
+override_5p1d_dep16_c800:
+  name: minimaxm31flash-gb300-disagg-mooncake-5p1d-dep16-c800
+  roles:
+    prefill:
+      nodes: 5
+      workers: 5
+    decode:
+      nodes: 4
+      gpus: 16
+      args:
+        data-parallel-size: 16
+        eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
+        max-num-seqs: 22
+        max-cudagraph-capture-size: 176
+override_6p1d_dep16_c900:
+  name: minimaxm31flash-gb300-disagg-mooncake-6p1d-dep16-c900
+  roles:
+    prefill:
+      nodes: 6
+      workers: 6
+    decode:
+      nodes: 4
+      gpus: 16
+      args:
+        data-parallel-size: 16
+        eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
+        max-num-seqs: 20
+        max-cudagraph-capture-size: 160
+override_6p1d_dep16_c950:
+  name: minimaxm31flash-gb300-disagg-mooncake-6p1d-dep16-c950
+  roles:
+    prefill:
+      nodes: 6
+      workers: 6
+    decode:
+      nodes: 4
+      gpus: 16
+      args:
+        data-parallel-size: 16
+        eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
+        max-num-seqs: 22
+        max-cudagraph-capture-size: 176
+override_6p1d_dep16_c1000:
+  name: minimaxm31flash-gb300-disagg-mooncake-6p1d-dep16-c1000
+  roles:
+    prefill:
+      nodes: 6
+      workers: 6
+    decode:
+      nodes: 4
+      gpus: 16
+      args:
+        data-parallel-size: 16
+        eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
+        max-num-seqs: 24
+        max-cudagraph-capture-size: 192
+override_4p1d_dep16_c640:
+  name: minimaxm31flash-gb300-disagg-mooncake-4p1d-dep16-c640
+  roles:
+    prefill:
+      nodes: 4
+      workers: 4
+    decode:
+      nodes: 4
+      gpus: 16
+      args:
+        data-parallel-size: 16
+        eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
+        max-num-seqs: 16
+        max-cudagraph-capture-size: 128
+override_4p1d_dep16_c680:
+  name: minimaxm31flash-gb300-disagg-mooncake-4p1d-dep16-c680
+  roles:
+    prefill:
+      nodes: 4
+      workers: 4
+    decode:
+      nodes: 4
+      gpus: 16
+      args:
+        data-parallel-size: 16
+        eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
+        max-num-seqs: 16
+        max-cudagraph-capture-size: 128
+override_4p1d_dep16_c700:
+  name: minimaxm31flash-gb300-disagg-mooncake-4p1d-dep16-c700
+  roles:
+    prefill:
+      nodes: 4
+      workers: 4
+    decode:
+      nodes: 4
+      gpus: 16
+      args:
+        data-parallel-size: 16
+        eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
+        max-num-seqs: 17
+        max-cudagraph-capture-size: 136
+override_5p1d_dep16_c850:
+  name: minimaxm31flash-gb300-disagg-mooncake-5p1d-dep16-c850
+  roles:
+    prefill:
+      nodes: 5
+      workers: 5
+    decode:
+      nodes: 4
+      gpus: 16
+      args:
+        data-parallel-size: 16
+        eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
+        max-num-seqs: 22
+        max-cudagraph-capture-size: 176

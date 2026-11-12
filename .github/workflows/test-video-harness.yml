@@ -1,0 +1,43 @@
+name: Test Video Harness
+
+on:
+  pull_request:
+    paths: &video-harness-paths
+      - 'video-generation/**'
+      - 'inferencex-e2e/infx/bench/video.py'
+      - 'inferencex-e2e/infx/results/power/**'
+      - 'inferencex-e2e/infx/results/video_artifacts.py'
+      - '.github/workflows/test-video-harness.yml'
+  push:
+    paths: *video-harness-paths
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Video harness, spec loader and hashes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: Test the harness, spec loader and hashes
+        working-directory: video-generation
+        env:
+          PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
+        run: >-
+          uv run --no-project --python 3.12
+          --with 'av==16.1.0' --with 'numpy==2.3.5'
+          --with 'pyyaml>=6,<7' --with 'pytest==9.2.0'
+          python -m pytest -q
+      - name: Lint and format
+        run: |
+          uvx ruff@0.14.0 check video-generation
+          uvx ruff@0.14.0 format --check video-generation

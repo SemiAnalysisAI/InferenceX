@@ -1,7 +1,7 @@
 """Compose srt-slurm recipe fragments and bind the master-owned workload into them.
 
 A fragment holds only recipe-specific srt-slurm settings. Its lane's shared block, and the
-DCGM telemetry block for a point that measures power, is merged under it, a variant is
+GPU telemetry block for a point that measures power, is merged under it, a variant is
 selected, and the binder then writes the matrix point's and the launcher's values and
 replaces ``'@fabric.<name>'`` values with the job's cluster facts.
 """
@@ -9,6 +9,7 @@ replaces ``'@fabric.<name>'`` values with the job's cluster facts.
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import os
 import re
@@ -29,6 +30,7 @@ from infx.srt_slurm.synthetic_acceptance import (
     selected_recipes,
     spec_parameters,
 )
+from infx.srt_slurm.variants import expand_variants
 
 SHARED_BLOCKS = {
     (False, False): Path("configs/srt-recipes/fixed-sequence-single.yaml"),
@@ -41,6 +43,11 @@ TELEMETRY_BLOCK = Path("configs/srt-recipes/telemetry-dcgm.yaml")
 # The CPU power exporter sources a cluster declares (srt-slurm.cpu-power-exporter).
 CpuPowerSource = Literal["acpi", "rapl"]
 NATIVE_TELEMETRY_BLOCK = Path("configs/srt-recipes/telemetry-native.yaml")
+VIDEO_BLOCK = Path("configs/srt-recipes/video.yaml")
+# How a recipe measures GPU power: the DCGM telemetry block with its exporter on this port, or
+# NATIVE, the cluster's own GPU exporter.
+NATIVE = "native"
+GpuPower = int | Literal["native"]
 _POINT_KEYS = (
     ("model", "path"),
     ("model", "container"),
@@ -77,6 +84,7 @@ BOUND_ENV = {
         *_AGENTIC_ENV,
         *_WORKFLOW_ENV,
         *_SINGLE_NODE_ENV,
+        "AIPERF_DATASET_MMAP_CACHE_DIR",
         "ENABLE_AGENTX_POWER",
     ),
     (True, True): (
@@ -91,7 +99,9 @@ BOUND_ENV = {
 }
 FABRIC_REFERENCE = "@fabric."
 INSTALLERS = {
+    "tokenspeed-nightly.sh": ("router", "smg"),
     "glm5.3-tilert-rocm.sh": ("router", "tilert-pd-router"),
+    "dsv41flash-tilert-nv.sh": ("router", "tilert-pd-router"),
     "vllm-mooncake.sh": ("kv-offload-backend", "mooncake"),
     "vllm-router.sh": ("router", "vllm-router"),
 }
@@ -143,8 +153,8 @@ def _fragment_versions(block: Any, path: str) -> Iterator[str]:
                 yield from _fragment_versions(value, where)
 
 
-def check_fragment(raw: Mapping[str, Any], source: Path, *, agentic: bool, multinode: bool) -> None:
-    """Reject a fragment that sets a bound key, even to the value the binder would write."""
+def _bound_keys(raw: Mapping[str, Any], *, agentic: bool, multinode: bool) -> list[str]:
+    """Where a fragment sets a bound key, even to the value the binder would write."""
     keys = (
         *_POINT_KEYS,
         *(("benchmark", "env", name) for name in BOUND_ENV[agentic, multinode]),
@@ -162,11 +172,13 @@ def check_fragment(raw: Mapping[str, Any], source: Path, *, agentic: bool, multi
             if present and not (conc_allowed and key == ("benchmark", "env", "CONC")):
                 found.append(f"{'.'.join(filter(None, (name, *key)))} (= {value!r})")
         found.extend(_fragment_versions(block, name or ""))
-    if found:
-        raise ValueError(
-            f"{source}: remove {', '.join(found)} from the fragment; "
-            "the launcher or the workflow sets them"
-        )
+    return found
+
+
+@functools.lru_cache(maxsize=512)
+def _text_bound_keys(text: str, agentic: bool, multinode: bool) -> tuple[str, ...]:
+    """``_bound_keys`` of the fragment with this YAML ``text``, computed once per process."""
+    return tuple(_bound_keys(yamlio.safe_load(text), agentic=agentic, multinode=multinode))
 
 
 def _block(path: Path) -> dict[str, Any]:
@@ -199,33 +211,41 @@ def compose_recipe(
     agentic: bool,
     multinode: bool,
     root: Path,
-    power_port: int | None = None,
+    gpu_power: GpuPower | None = None,
     cpu_power_source: CpuPowerSource | None = None,
-    native_power: bool = False,
 ) -> dict[str, Any]:
     """The fragment at ``path`` over its lane's shared block, under ``base`` for bundles.
 
-    ``power_port`` adds the DCGM telemetry block with its exporter on that port, and
-    ``cpu_power_source`` the cluster's CPU power exporter to the telemetry block.
+    ``gpu_power`` adds its telemetry block, and ``cpu_power_source`` the cluster's CPU power
+    exporter to the telemetry block.
     """
-    raw = yamlio.safe_load(path.read_text())
+    text = path.read_text()
+    raw = yamlio.safe_load(text)
     if not isinstance(raw, dict):
         raise ValueError(f"{path}: recipe must be a mapping")
-    check_fragment(raw, path, agentic=agentic, multinode=multinode)
+    if found := _text_bound_keys(text, agentic, multinode):
+        raise ValueError(
+            f"{path}: remove {', '.join(found)} from the fragment; "
+            "the launcher or the workflow sets them"
+        )
     shared = _block(root / SHARED_BLOCKS[agentic, multinode])
-    if native_power:
+    if gpu_power == NATIVE:
         shared = merge_blocks(shared, _block(root / NATIVE_TELEMETRY_BLOCK))
+    dcgm = gpu_power if isinstance(gpu_power, int) else None
     exporters: dict[str, Any] = {}
-    if power_port is not None:
-        exporters["dcgm_exporter"] = {"port": power_port}
+    if dcgm is not None:
+        exporters["dcgm_exporter"] = {"port": dcgm}
     if cpu_power_source is not None:
         exporters["cpu_power_exporter"] = {"source": cpu_power_source}
     if exporters:
-        dcgm = _block(root / TELEMETRY_BLOCK) if power_port is not None else {}
-        shared = merge_blocks(shared, merge_blocks(dcgm, {"telemetry": exporters}))
+        block = _block(root / TELEMETRY_BLOCK) if dcgm is not None else {}
+        shared = merge_blocks(shared, merge_blocks(block, {"telemetry": exporters}))
     if "base" in raw:
         return {**raw, "base": merge_blocks(shared, raw["base"])}
     return merge_blocks(shared, raw)
+
+
+POWER_FLAGS = frozenset({"1", "true", "TRUE", "yes", "YES"})
 
 
 def _required(environment: Mapping[str, str], name: str) -> str:
@@ -241,6 +261,11 @@ def _positive(value: str, name: str) -> int:
     if not value.isascii() or not value.isdecimal() or int(value) <= 0:
         raise ValueError(f"{name} must be a positive integer: {value!r}")
     return int(value)
+
+
+def point_concurrency(environment: Mapping[str, str]) -> int:
+    """Return the point's CONC, or raise ValueError if it is blank or not a positive integer."""
+    return _positive(_required(environment, "CONC"), "CONC")
 
 
 def parse_concurrencies(conc_list: str) -> list[int]:
@@ -333,7 +358,7 @@ def bind_workload(
     if multinode:
         concurrencies = parse_concurrencies(_required(environment, "CONC_LIST"))
     else:
-        conc = _positive(_required(environment, "CONC"), "CONC")
+        conc = point_concurrency(environment)
         if "CONC" in workload and str(workload["CONC"]) != str(conc):
             raise ValueError(f"CONC: recipe {workload['CONC']} != point {conc}")
         workload.update(MODEL=model, CONC=str(conc))
@@ -354,9 +379,12 @@ def bind_workload(
     )
     if (bound.get("telemetry") or {}).get("enabled") is True:
         benchmark["concurrencies"] = concurrencies
+        required = environment.get("REQUIRE_POWER", "0") in POWER_FLAGS
+        # A multi-node point measures power by default; only its power field makes srtctl skip
+        # the benchmark when telemetry fails.
+        required = required or (multinode and environment.get("POWER") == "1")
+        bound["telemetry"]["required"] = required
         if not multinode:
-            required = environment.get("REQUIRE_POWER", "0") in {"1", "true", "TRUE", "yes", "YES"}
-            bound["telemetry"]["required"] = required
             workload["REQUIRE_POWER"] = "1" if required else "0"
     if agentic and not multinode:
         workload["ENABLE_AGENTX_POWER"] = (
@@ -372,30 +400,80 @@ def bind_multinode(
     *,
     root: Path,
     expand: Callable[..., list[tuple[str | None, dict[str, Any]]]] = selected_recipes,
-    power_port: int | None = None,
+    gpu_power: GpuPower | None = None,
     cpu_power_source: CpuPowerSource | None = None,
     client_env: Mapping[str, str] | None = None,
 ) -> tuple[str | None, dict[str, Any]]:
     """Bind the one variant ``recipe`` (``fragment[:selector]``) selects; return its name too."""
     agentic = environment["IS_AGENTIC"] == "1"
+    name, selected = select_multinode(
+        recipe,
+        agentic=agentic,
+        root=root,
+        expand=expand,
+        gpu_power=gpu_power,
+        cpu_power_source=cpu_power_source,
+    )
+    bound = bind_workload(
+        selected, environment, agentic=agentic, multinode=True, client_env=client_env
+    )
+    bind_speculation(bound, environment)
+    return name, bound
+
+
+def select_multinode(
+    recipe: str,
+    *,
+    agentic: bool,
+    root: Path,
+    expand: Callable[..., list[tuple[str | None, dict[str, Any]]]] = selected_recipes,
+    gpu_power: GpuPower | None = None,
+    cpu_power_source: CpuPowerSource | None = None,
+) -> tuple[str | None, dict[str, Any]]:
+    """The one composed, unbound variant ``recipe`` (``fragment[:selector]``) selects."""
     path, _, selector = recipe.partition(":")
     composed = compose_recipe(
         Path(path),
         agentic=agentic,
         multinode=True,
         root=root,
-        power_port=power_port,
+        gpu_power=gpu_power,
         cpu_power_source=cpu_power_source,
     )
     variants = expand(composed, selector or None)
     if len(variants) != 1:
         raise ValueError(f"{recipe} selects {len(variants)} variants, not one")
-    name, selected = variants[0]
-    bound = bind_workload(
-        selected, environment, agentic=agentic, multinode=True, client_env=client_env
-    )
-    bind_speculation(bound, environment)
-    return name, bound
+    return variants[0]
+
+
+def discovery_on_dedicated_node(recipe: Mapping[str, Any]) -> bool:
+    """Whether ``recipe`` runs etcd and NATS on a node of their own.
+
+    srtctl then refuses GPU power telemetry: its samples would leave the benchmark's clock.
+    """
+    discovery = [
+        service
+        for service in recipe.get("services") or []
+        if service.get("enabled", True) and service.get("type") in ("etcd", "nats")
+    ]
+    if not discovery:
+        return bool((recipe.get("infra") or {}).get("etcd_nats_dedicated_node", False))
+    placements = {
+        (service.get("placement") or {}).get("node") == "dedicated" for service in discovery
+    }
+    if len(placements) != 1:
+        raise ValueError("Recipe etcd and nats must agree on dedicated placement")
+    return placements.pop()
+
+
+def selects_dedicated_discovery(recipe: str, *, agentic: bool, root: Path) -> bool:
+    """Whether the variant ``recipe`` (``fragment[:selector]``) selects runs etcd and NATS on a
+    node of their own.
+
+    Expands variants without srtctl, which the launcher's environment does not install.
+    """
+    _, selected = select_multinode(recipe, agentic=agentic, root=root, expand=expand_variants)
+    return discovery_on_dedicated_node(selected)
 
 
 def bind_speculation(recipe: dict[str, Any], environment: Mapping[str, str]) -> None:
@@ -465,6 +543,11 @@ def add_cpu_power_source_argument(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _gpu_power(text: str) -> GpuPower:
+    """Parse ``--gpu-power``: a DCGM exporter port, or NATIVE."""
+    return NATIVE if text == NATIVE else int(text)
+
+
 def _assignment(text: str) -> tuple[str, str]:
     """Split a ``NAME=VALUE`` argument, or raise ArgumentTypeError if malformed."""
     name, separator, value = text.partition("=")
@@ -479,7 +562,10 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("recipe", help="fragment[:selector]")
     parser.add_argument("output", type=Path)
     parser.add_argument(
-        "--power-port", type=int, help="merge the DCGM telemetry block, its exporter on this port"
+        "--gpu-power",
+        type=_gpu_power,
+        help=f"merge a GPU telemetry block: the DCGM one with its exporter on this port, or "
+        f"{NATIVE!r} for the cluster's own exporter",
     )
     add_cpu_power_source_argument(parser)
     parser.add_argument(
@@ -498,7 +584,7 @@ def main(argv: list[str] | None = None) -> None:
             args.recipe,
             os.environ,
             root=root,
-            power_port=args.power_port,
+            gpu_power=args.gpu_power,
             cpu_power_source=args.cpu_power_source,
             client_env=dict(args.client_env),
         )

@@ -1,0 +1,109 @@
+name: Video Quality
+run-name: >-
+  Video quality - run ${{ inputs.run_id || github.event.workflow_run.id }}
+  attempt ${{ inputs.run_attempt || github.event.workflow_run.run_attempt }}
+
+on:
+  workflow_run: # zizmor: ignore[dangerous-triggers] reads the triggering run's artifacts only as data
+    workflows: [Run Sweep]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Run whose h3-results artifacts to score
+        type: string
+        required: true
+      run_attempt:
+        description: Attempt that names the quality artifact
+        type: string
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: video-quality-${{ inputs.run_id || github.event.workflow_run.id }}-${{ inputs.run_attempt || github.event.workflow_run.run_attempt }}
+  cancel-in-progress: false
+
+env:
+  RUN_ID: ${{ inputs.run_id || github.event.workflow_run.id }}
+  RUN_ATTEMPT: ${{ inputs.run_attempt || github.event.workflow_run.run_attempt }}
+
+jobs:
+  find:
+    name: Find h3-results artifacts
+    # Fork runs are scored only by an explicit dispatch.
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || (github.repository == 'SemiAnalysisAI/InferenceX'
+      && github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read # List the run's artifacts.
+    outputs:
+      artifacts: ${{ steps.list.outputs.artifacts }}
+    steps:
+      - name: List the newest h3-results bundle of each deployment
+        id: list
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eo pipefail
+          [[ "$RUN_ID" =~ ^[0-9]+$ && "$RUN_ATTEMPT" =~ ^[0-9]+$ ]] || {
+            echo "::error::run_id and run_attempt must be numeric"
+            exit 1
+          }
+          # Names are h3-results-<run>-<attempt>-<fingerprint>; a rerun's bundle replaces the
+          # earlier attempt's, and a bundle from a later attempt is never scored.
+          artifacts=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" \
+            --jq '.artifacts[] | select((.expired | not) and (.name | startswith("h3-results-"))) | {id, name}' \
+            | jq -sc --arg run "$RUN_ID" --argjson attempt "$RUN_ATTEMPT" '
+                [.[] | (.name | split("-")) as $p
+                  | select(($p | length) == 5 and $p[2] == $run and ($p[3] | tonumber) <= $attempt)
+                  | {id, attempt: ($p[3] | tonumber), fingerprint: $p[4]}]
+                | group_by(.fingerprint) | map(max_by(.attempt).id) | sort')
+          echo "artifacts=$artifacts" >> "$GITHUB_OUTPUT"
+          [[ "$artifacts" != "[]" ]] || echo "Run $RUN_ID has no h3-results artifacts; nothing to score."
+
+  score:
+    name: Score H3 clips against references
+    needs: find
+    if: needs.find.outputs.artifacts != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      actions: read # Download the run's h3-results artifacts.
+      contents: read # Check out main and download the reference release.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: Download references and result bundles
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACTS: ${{ needs.find.outputs.artifacts }}
+        run: |
+          tag=$(jq -r .release.tag video-generation/reference/h3-v2.json)
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern '*.mp4' \
+            --dir "$RUNNER_TEMP/references"
+          mkdir "$RUNNER_TEMP/bundles"
+          for id in $(jq -r '.[]' <<< "$ARTIFACTS"); do
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > "$RUNNER_TEMP/bundles/$id.zip"
+          done
+      - name: Score every measured clip
+        working-directory: video-generation
+        run: |
+          bundles=()
+          for zip in "$RUNNER_TEMP"/bundles/*.zip; do
+            bundles+=("$(basename "$zip" .zip)=$zip")
+          done
+          uv run --no-project --python 3.12 --with 'av==16.1.0' --with 'numpy==2.3.5' \
+            python -m evaluator.cli score-quality "${bundles[@]}" \
+            --descriptor reference/h3-v2.json --references "$RUNNER_TEMP/references" \
+            --run-id "$RUN_ID" --source-revision "$GITHUB_SHA" --output "$RUNNER_TEMP/h3-quality"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: h3-quality-${{ env.RUN_ID }}-${{ env.RUN_ATTEMPT }}
+          path: ${{ runner.temp }}/h3-quality
+          if-no-files-found: error
