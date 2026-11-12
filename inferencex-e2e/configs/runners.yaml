@@ -547,6 +547,9 @@ clusters:
       partition: batch_1
       account: benchmark
       exclusive: true
+      # 2026-11-12: gpu-00 fails every job launch within 3 s (Slurm requeues and holds it)
+      # since its 23:12 UTC NODE_FAIL, while still reporting idle. Remove after ops repairs it.
+      exclude: [dsxe-sa-b300-prd0-gpu-00]
       gres: "gpu:{gpus}"
       cpus-per-gpu: 24
       salloc-args: [--mem=0]
