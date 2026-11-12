@@ -74,9 +74,12 @@ collectivex/run.sh h200-dgxc --shard h200-dgxc-nccl-ep-bf16-n2   # rerun one fai
 each shard (one backend, mode, precision and node count) its own allocation through the pool's
 launcher, and copies every result to `results/<sku>/<case_id>.json`, replacing the previous result
 for that case. A failed shard does not stop the others; the closing summary lists each shard's exit
-code and runs `summarize.py` over the pool's results. Interrupting `run.sh` releases its
-allocations. Runtime logs stay under `/tmp/inferencex-collectivex-<uid>/logs/<execution>/` on the
-login node.
+code and runs `summarize.py` over the pool's results. Interrupting `run.sh` (Ctrl-C, SIGTERM or a
+hangup) ends the run and releases its allocation: the shard in flight cancels its own Slurm job,
+queued or granted, and no later shard starts. Runtime logs stay under
+`/tmp/inferencex-collectivex-<uid>/logs/<execution>/` on the login node. A failed step prints the
+tail of its log with IP and MAC addresses and the allocation's host names masked (`<ipv4>`,
+`<host>`); the files keep them.
 
 h200-dgxc, b200-nscale and gb200 run from the registry alone. h100-dgxc, b300, gb300 and the AMD
 pools also need an operator document that names a stage directory (see
