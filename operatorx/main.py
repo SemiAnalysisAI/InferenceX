@@ -150,6 +150,9 @@ def _read_progress(path: Path) -> dict:
 
 
 def _write_progress(path: Path, state: dict) -> None:
+    """The group's progress; its rank 0 writes it (every rank reaches the same points)."""
+    if os.environ.get("RANK", "0") != "0":
+        return
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(state))
     tmp.replace(path)
@@ -261,6 +264,10 @@ def main() -> int:
     counts = {"ok": 0, "unsupported": 0, "error": 0}
     out_path = args.results_dir / platform / (run.cluster or "unknown") / f"{run.id}.json"
     progress = Path(os.environ["OPERATORX_PROGRESS"]) if os.environ.get("OPERATORX_PROGRESS") else None
+    if progress is not None:  # stacks on SIGUSR1: the supervisor dumps a rank it must stop
+        import faulthandler
+        import signal
+        faulthandler.register(signal.SIGUSR1, all_threads=True)
     start = 0
     residents = []
     retried = None
@@ -275,7 +282,8 @@ def main() -> int:
         residents = [r for b in backends for r in [getattr(importlib.import_module(
             f"operatorx.runners.{platform}.backends.{b}"), "resident", None)] if r]
         crashed = state.get("running")
-        if crashed is not None and int(crashed) == start and start < len(entries):
+        restarted = os.environ.get("OPERATORX_CRASH_RC") == str(RESTART)  # not a crash
+        if not restarted and crashed is not None and int(crashed) == start and start < len(entries):
             op, tl = entries[start]  # the process died during this case
             results.append(Result(op=op, metrics={}, status="error", testlist=tl,
                                   message=f"the process exited with code {os.environ.get('OPERATORX_CRASH_RC', '?')} "

@@ -843,11 +843,18 @@ RESTART = 75  # main.py: this process must not run another case
 
 
 def _supervise(bench: list[str], part: str, task: int, ws: int) -> int:
-    """Run the benchmark process, starting a fresh one after main.py asks (RESTART) or, on one
-    device, after it dies mid-case; it resumes from this rank's progress file. Every rank of a
-    group restarts together (main.py agrees first); a multi-rank crash ends the group."""
-    progress = Path("/opx/progress") / f"p{part}-t{task}.json"
-    progress.parent.mkdir(parents=True, exist_ok=True)
+    """Run the benchmark process and start a fresh one when it asks (RESTART) or dies mid-case.
+
+    A process group (the ws ranks of a lane) restarts as one: the rank that exits first marks
+    the attempt (/opx/progress/<lane>.gen<attempt>), and every other rank's supervisor sees the
+    mark, dumps its process's stacks (SIGUSR1, faulthandler) and kills it, so no rank is left
+    waiting in a collective or a rendezvous. The group's progress file is written by its rank 0;
+    all ranks resume from it. A crash (not RESTART) records the case in flight as an error.
+    """
+    lane = task // ws
+    root = Path("/opx/progress")
+    root.mkdir(parents=True, exist_ok=True)
+    progress = root / f"p{part}-l{lane}.json"
     port = int(os.environ["MASTER_PORT"])
     env = dict(os.environ, OPERATORX_PROGRESS=str(progress))
     child = None
@@ -859,31 +866,63 @@ def _supervise(bench: list[str], part: str, task: int, ws: int) -> int:
 
     for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
         signal.signal(sig, stop)
+
     def state() -> dict:
         try:
             return json.loads(progress.read_text())
         except (OSError, ValueError):
             return {}
 
+    def mark(attempt: int) -> Path:
+        return root / f"p{part}-l{lane}.gen{attempt}"
+
     for attempt in range(MAX_RESTARTS + 1):
         # a fresh port per attempt (the last group's may linger), kept within 20000-59999
         env["MASTER_PORT"] = str(20000 + (port - 20000 + 997 * attempt) % 40000)
         before = state().get("next", 0)
         child = subprocess.Popen(bench, env=env)
-        rc = child.wait()
-        if rc == 0:
+        sibling = None
+        while (rc := child.poll()) is None:
+            if ws > 1 and mark(attempt).exists():  # another rank of the group ended this attempt
+                sibling = mark(attempt).read_text().strip() or "restart"
+                child.send_signal(signal.SIGUSR1)  # its stacks, for the log
+                try:
+                    rc = child.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    child.kill()
+                    rc = child.wait()
+                break
+            time.sleep(0.5)
+        if rc == 0 and sibling is None:
             return 0
-        crashed = rc != RESTART
-        if crashed and ws > 1:  # the other ranks wait in a collective for this one
-            return rc
+        if sibling is None and ws > 1:
+            try:  # the first to end the attempt tells the others why
+                with open(mark(attempt), "x") as f:
+                    f.write("restart" if rc == RESTART else f"crash {rc}")
+            except FileExistsError:
+                sibling = mark(attempt).read_text().strip() or "restart"
+        reason = sibling or ("restart" if rc == RESTART else f"crash {rc}")
+        crashed = reason.startswith("crash")
+        ready = root / f"p{part}-l{lane}.ready{attempt}"
+        if task % ws == 0:
+            if not crashed and "running" in state():
+                # a restart the group agreed on that this rank did not reach: its case was not run
+                now = state()
+                now.pop("running", None)
+                progress.write_text(json.dumps(now))
+            ready.touch()  # its process is gone: the progress file is final for this attempt
+        else:
+            deadline = time.monotonic() + 120
+            while not ready.exists() and time.monotonic() < deadline:
+                time.sleep(0.2)
         now = state()
         if crashed and "running" not in now and now.get("next", 0) == before:
-            return rc  # died before its first case (startup): a fresh process would too
+            return rc or 1  # died before its first case (startup): a fresh process would too
         if attempt == MAX_RESTARTS:
             print(f"[operatorx] giving up after {MAX_RESTARTS} restarts", file=sys.stderr, flush=True)
-            return rc
-        env["OPERATORX_CRASH_RC"] = str(rc)
-        print(f"[operatorx] task {task}: {'crashed with code ' + str(rc) if crashed else 'restart'}"
+            return rc or 1
+        env["OPERATORX_CRASH_RC"] = reason.split()[-1] if crashed else str(RESTART)
+        print(f"[operatorx] task {task}: {reason}{' (another rank)' if sibling else ''}"
               f" (restart {attempt + 1})", file=sys.stderr, flush=True)
     return 1
 
