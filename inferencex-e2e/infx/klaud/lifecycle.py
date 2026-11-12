@@ -34,7 +34,7 @@ from .models import (
     stamp,
     utc,
 )
-from .reporting import Prose, latest_next, translated
+from .reporting import Prose, latest_next, reported_repairs, translated
 from .validation import verify_sweep
 
 BOT = "Klaud-Cold"
@@ -1440,7 +1440,7 @@ def reconcile(session: Session, now: datetime) -> bool:
                 phase="cleanup",
                 pull_request=pull["number"],
                 run_ids=[run["id"] for run in runs],
-                repairs_used=None,
+                repairs_used=reported_repairs(session, pull),
             )
         )
         return True
@@ -1474,7 +1474,7 @@ def reconcile(session: Session, now: datetime) -> bool:
                 phase="final-sweep" if stuck["event"] == "pull_request" else "targeted",
                 pull_request=pull["number"] if pull else None,
                 run_ids=[run["id"] for run in runs],
-                repairs_used=None,
+                repairs_used=reported_repairs(session, pull),
             )
         )
         return True
@@ -1518,7 +1518,7 @@ def reconcile(session: Session, now: datetime) -> bool:
         phase="final-sweep" if validated else "cleanup",
         pull_request=pull["number"] if pull else None,
         run_ids=[r["id"] for r in runs],
-        repairs_used=None,
+        repairs_used=reported_repairs(session, pull),
     )
     session.finish(outcome)
     return True

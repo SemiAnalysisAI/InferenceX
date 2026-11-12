@@ -822,15 +822,36 @@ def reported_runs(session: Session, pull: dict) -> set[int]:
     }
 
 
-def latest_next(session: Session, pull: dict) -> Prose | None:
-    """Return the next step of the session's latest attempt report on ``pull``, or None."""
-    attempts = [
+def attempt_comments(session: Session, pull: dict) -> list[dict]:
+    """Return the comments holding the session's attempt reports on ``pull``."""
+    return [
         c
         for c in github.items(session.repository, f"issues/{pull['number']}/comments?per_page=100")
         if c["user"]["login"] == "Klaud-Cold"
         and re.fullmatch(r"run-\d+-\d+", name := c["body"].split("\n", 1)[0].rpartition(":")[2])
         and c["body"].startswith(marker(session, name))
     ]
+
+
+def reported_repairs(session: Session, pull: dict | None) -> int:
+    """Return the highest repair number among the session's attempt reports on ``pull``.
+
+    Without a PR or a repair report it is 0.
+    """
+    if not pull:
+        return 0
+    numbers = [0]
+    for comment in attempt_comments(session, pull):
+        value = json.loads(comment["body"].split("\n", 1)[1].split("\n-->", 1)[0])
+        record = value.get("record", value)
+        if record["kind"] == "repair":
+            numbers.append(record["number"])
+    return max(numbers)
+
+
+def latest_next(session: Session, pull: dict) -> Prose | None:
+    """Return the next step of the session's latest attempt report on ``pull``, or None."""
+    attempts = attempt_comments(session, pull)
     if not attempts:
         return None
     body = max(attempts, key=lambda c: c["id"])["body"]

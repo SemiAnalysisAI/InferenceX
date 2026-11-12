@@ -625,7 +625,7 @@ def test_sweep_frees_klaud_work_only_after_its_session_and_final_sweep_end(
 
 
 UNEXPECTED_ERROR = CandidateOutcome(
-    outcome="no-outcome", phase="cleanup", pull_request=7, run_ids=[9], repairs_used=None,
+    outcome="no-outcome", phase="cleanup", pull_request=7, run_ids=[9], repairs_used=0,
 )
 
 
