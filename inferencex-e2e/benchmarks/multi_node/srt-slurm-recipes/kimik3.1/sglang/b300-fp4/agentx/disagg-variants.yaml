@@ -1,0 +1,210 @@
+schema: 2
+
+base:
+  name: kimik3.1-fp4-b300-dynamo-sglang-agentx-disagg
+  identity:
+    model: {}
+    container: {}
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  dynamo:
+    install: false
+    request_plane: tcp
+    event_plane: zmq
+  services:
+    - name: etcd
+      type: etcd
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+    env:
+      DYN_ROUTER_TEMPERATURE: '0'
+      DYN_ROUTER_QUEUE_THRESHOLD: None
+      DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: '3600'
+      DYN_TCP_CHANNEL_BUFFER: '128'
+      DYN_TCP_REQUEST_TIMEOUT: '60'
+      DYN_TOKENIZER_CACHE: '1'
+      DYN_TOKENIZER_CACHE_BYTES: '8000000000'
+    args:
+      router-mode: kv
+      router-session-affinity-ttl-secs: '14400'
+      # Balances the decode hop across decode workers by active requests.
+      router-decode-active-request-weight: '1000000'
+      # The frontend's own tokenizer cannot load kimi_k31; SGLang's chat processor renders requests.
+      dyn-chat-processor: sglang
+      dyn-preprocess-workers: '4'
+      trust-remote-code: true
+      active-decode-blocks-threshold: None
+      active-prefill-tokens-threshold: None
+      active-prefill-tokens-threshold-frac: None
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      env:
+        PYTHONUNBUFFERED: '1'
+        PYTHONNOUSERSITE: '1'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '3600'
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '3600'
+        SGLANG_CUSTOM_ALL_REDUCE_V2_MAX_SIZE_KB: '32768'
+        SGLANG_DCP_PUSH_COMBINE_MAX_ROWS: '1536'
+        SGLANG_DSA_MQA_LOGITS_FREE_MEM_FRACTION: '0.1'
+        SGLANG_NUMA_BIND_V2: '0'
+        CUDA_MODULE_LOADING: EAGER
+        NCCL_CUMEM_ENABLE: '1'
+        # Mooncake moves P->D KV over TCP, in 4 MiB slices with deep per-peer queues.
+        MC_FORCE_TCP: '1'
+        MC_TCP_BIND_ADDRESS: '{node}'
+        MC_TCP_SLICE_SIZE: '4194304'
+        MC_TCP_ADMISSION_TIMEOUT_MS: '600000'
+        MC_TCP_MAX_PENDING_ADMISSIONS_PER_PEER: '65535'
+        MC_TCP_MAX_QUEUED_TRANSFERS_PER_PEER: '65535'
+        SGLANG_MOONCAKE_MAX_TRANSFER_BATCH_INDICES: '64'
+      args:
+        served-model-name: moonshotai/Kimi-K3.1-Pro
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        dcp-size: 8
+        dcp-comm-backend: fi_a2a
+        expert-parallel-size: 2
+        mem-fraction-static: 0.85
+        weight-loader-prefetch-checkpoints: true
+        weight-loader-drop-cache-after-load: false
+        model-loader-extra-config: '{"enable_multithread_load": true}'
+        kv-cache-dtype: fp8_e4m3
+        page-size: 64
+        # The K3.1 week-1 precision policy requires FP32 KDA recurrent state.
+        mamba-ssm-dtype: float32
+        mamba-radix-cache-strategy: extra_buffer
+        mamba-track-interval: 256
+        mamba-max-states-per-path: 1
+        mamba-full-memory-ratio: 1.2
+        # K3.1 with DCP rejects every other PD transfer backend.
+        disaggregation-transfer-backend: mooncake
+        disaggregation-decode-allocation-policy: early
+        chunked-prefill-size: 16384
+        max-prefill-tokens: 16384
+        schedule-policy: shortest-prefill-first
+        max-running-requests: 16
+        gc-threshold: [700, 10, 1000]
+        dyn-reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: RadixArk/Kimi-K3.1-Dflash2-Preview
+        # Prefill launches with the decode role's verification width.
+        speculative-num-draft-tokens: 6
+        speculative-use-block-verification: true
+        speculative-draft-kv-cache-dtype: fp8_e4m3
+        speculative-draft-attention-backend: cutedsl_mla
+        # 8 x 230 GB leaves room for the DSA indexer and KDA host pools beside hicache-size.
+        enable-hierarchical-cache: true
+        hicache-size: 230
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+        hicache-write-policy: write_back
+        # A session's turns stay on one prefill worker.
+        router-mode: kv
+        router-host-cache-hit-weight: 1
+        router-kv-overlap-score-credit: 4
+        router-session-affinity-ttl-secs: '14400'
+        watchdog-timeout: 3600
+        enable-metrics: true
+        enable-cache-report: true
+    decode:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      env:
+        PYTHONUNBUFFERED: '1'
+        PYTHONNOUSERSITE: '1'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '3600'
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '3600'
+        SGLANG_CUSTOM_ALL_REDUCE_V2_MAX_SIZE_KB: '32768'
+        SGLANG_DCP_PUSH_COMBINE_MAX_ROWS: '1536'
+        NCCL_CUMEM_ENABLE: '1'
+        MC_FORCE_TCP: '1'
+        MC_TCP_BIND_ADDRESS: '{node}'
+        MC_TCP_SLICE_SIZE: '4194304'
+        MC_TCP_ADMISSION_TIMEOUT_MS: '600000'
+        MC_TCP_MAX_PENDING_ADMISSIONS_PER_PEER: '65535'
+        MC_TCP_MAX_QUEUED_TRANSFERS_PER_PEER: '65535'
+        SGLANG_MOONCAKE_MAX_TRANSFER_BATCH_INDICES: '64'
+      args:
+        served-model-name: moonshotai/Kimi-K3.1-Pro
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        dcp-size: 8
+        dcp-comm-backend: fi_a2a
+        expert-parallel-size: 2
+        mem-fraction-static: 0.85
+        weight-loader-prefetch-checkpoints: true
+        weight-loader-drop-cache-after-load: false
+        model-loader-extra-config: '{"enable_multithread_load": true}'
+        kv-cache-dtype: fp8_e4m3
+        page-size: 64
+        mamba-ssm-dtype: float32
+        disaggregation-transfer-backend: mooncake
+        disaggregation-decode-extra-slots: 16
+        disaggregation-decode-enable-radix-cache: true
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 64
+        gc-threshold: [700, 10, 1000]
+        dyn-reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: RadixArk/Kimi-K3.1-Dflash2-Preview
+        speculative-num-draft-tokens: 6
+        speculative-use-block-verification: true
+        speculative-draft-kv-cache-dtype: fp8_e4m3
+        speculative-draft-attention-backend: cutedsl_mla
+        # Without ReplaySSM DFLASH keeps one KDA state per draft token and the KV pool collapses;
+        # prefill never verifies and rejects the flag.
+        enable-linear-replayssm-spec: true
+        watchdog-timeout: 3600
+        enable-metrics: true
+        enable-cache-report: true
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 10
+  benchmark:
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+      # The client splits this value on whitespace, so it has none.
+      AIPERF_EXTRA_INPUTS: '{"chat_template_kwargs":{"thinking":true},"temperature":1,"top_p":0.95}'
+  sbatch_directives:
+    mem: '0'
+  srun_options:
+    mem: '0'
+    container-remap-root: ''
+
+override_1p1d_tp8_c48:
+  name: kimik3.1-fp4-b300-dynamo-sglang-agentx-disagg-1p1d-tp8-c48
+
+override_1p2d_tp8_c24:
+  name: kimik3.1-fp4-b300-dynamo-sglang-agentx-disagg-1p2d-tp8-c24
+  roles:
+    decode:
+      nodes: 2
+      workers: 2
+
+override_1p2d_tp8_c56:
+  name: kimik3.1-fp4-b300-dynamo-sglang-agentx-disagg-1p2d-tp8-c56
+  roles:
+    decode:
+      nodes: 2
+      workers: 2

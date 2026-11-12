@@ -1,0 +1,214 @@
+schema: 2
+
+base:
+  name: kimik3.1-fp4-b300-dynamo-sglang-agentx-agg
+  identity:
+    model: {}
+    container: {}
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  dynamo:
+    install: false
+    request_plane: tcp
+    event_plane: zmq
+  services:
+    - name: etcd
+      type: etcd
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+    env:
+      DYN_ROUTER_TEMPERATURE: '0'
+      DYN_ROUTER_QUEUE_THRESHOLD: None
+      DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: '3600'
+      DYN_TCP_CHANNEL_BUFFER: '128'
+      DYN_TCP_REQUEST_TIMEOUT: '60'
+      DYN_TOKENIZER_CACHE: '1'
+      DYN_TOKENIZER_CACHE_BYTES: '8000000000'
+    args:
+      router-mode: kv
+      router-session-affinity-ttl-secs: '14400'
+      # The frontend's own tokenizer cannot load kimi_k31; SGLang's chat processor renders requests.
+      dyn-chat-processor: sglang
+      dyn-preprocess-workers: '4'
+      trust-remote-code: true
+      active-decode-blocks-threshold: None
+      active-prefill-tokens-threshold: None
+      active-prefill-tokens-threshold-frac: None
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      env:
+        PYTHONUNBUFFERED: '1'
+        PYTHONNOUSERSITE: '1'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+      args:
+        served-model-name: moonshotai/Kimi-K3.1-Pro
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        mem-fraction-static: 0.85
+        weight-loader-prefetch-checkpoints: true
+        weight-loader-drop-cache-after-load: false
+        model-loader-extra-config: '{"enable_multithread_load": true}'
+        kv-cache-dtype: fp8_e4m3
+        page-size: 64
+        # The K3.1 week-1 precision policy requires FP32 KDA recurrent state.
+        mamba-ssm-dtype: float32
+        mamba-radix-cache-strategy: extra_buffer
+        mamba-track-interval: 256
+        mamba-max-states-per-path: 1
+        chunked-prefill-size: 16384
+        max-prefill-tokens: 16384
+        dyn-reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: RadixArk/Kimi-K3.1-Dflash2-Preview
+        # The golden AL curve was collected with block verification.
+        speculative-use-block-verification: true
+        speculative-draft-kv-cache-dtype: fp8_e4m3
+        speculative-draft-attention-backend: cutedsl_mla
+        # Without ReplaySSM DFLASH keeps one KDA state per draft token and the KV pool collapses.
+        enable-linear-replayssm-spec: true
+        # 8 x 230 GB leaves room for the DSA indexer and KDA host pools beside hicache-size.
+        enable-hierarchical-cache: true
+        hicache-size: 230
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+        watchdog-timeout: 3600
+        enable-metrics: true
+        enable-cache-report: true
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 10
+  benchmark:
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+      # The client splits this value on whitespace, so it has none.
+      AIPERF_EXTRA_INPUTS: '{"chat_template_kwargs":{"thinking":true},"temperature":1,"top_p":0.95}'
+  sbatch_directives:
+    mem: '0'
+  srun_options:
+    mem: '0'
+    container-remap-root: ''
+
+# The image's K3.1 GB runtime bundle trims the single-request decode step by ~1.3%. Explicit
+# non-expandable segments keep the KV pool the bundle would otherwise shrink.
+override_tp8_c1:
+  roles:
+    agg:
+      env:
+        SGLANG_ENABLE_NV_MEGA_RUNTIME_K31_GB_OPTIMIZATION: '1'
+        PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:False'
+        CUDA_MODULE_LOADING: LAZY
+      args:
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+        speculative-num-draft-tokens: 8
+        gc-threshold: [700, 10, 100000]
+
+override_tp8_c4:
+  roles:
+    agg:
+      args:
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+        speculative-num-draft-tokens: 8
+        # Full collections run 10,000x less often than with the default threshold.
+        gc-threshold: [700, 10, 100000]
+
+# DCP8 shards the TP-replicated MLA KV across the eight ranks; EP2 speeds up the decode
+# down-projection. The TRT-LLM DSA kernels take an FP8 query.
+override_tp8_ep2_dcp8_c32:
+  roles:
+    agg:
+      env:
+        SGLANG_CUSTOM_ALL_REDUCE_V2_MAX_SIZE_KB: '32768'
+        SGLANG_DCP_PUSH_COMBINE_MAX_ROWS: '1536'
+        SGLANG_DSA_MQA_LOGITS_FREE_MEM_FRACTION: '0.1'
+      args:
+        expert-parallel-size: 2
+        dcp-size: 8
+        dcp-comm-backend: fi_a2a
+        dsa-prefill-backend: trtllm
+        dsa-decode-backend: trtllm
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 64
+        speculative-num-draft-tokens: 6
+        prefill-decode-interval: 32
+        prefill-decode-interval-min-bs: 8
+
+override_tp8_ep2_dcp8_c40:
+  roles:
+    agg:
+      env:
+        SGLANG_CUSTOM_ALL_REDUCE_V2_MAX_SIZE_KB: '32768'
+        SGLANG_DCP_PUSH_COMBINE_MAX_ROWS: '1536'
+      args:
+        expert-parallel-size: 2
+        dcp-size: 8
+        dcp-comm-backend: fi_a2a
+        dsa-prefill-backend: trtllm
+        dsa-decode-backend: trtllm
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 64
+        speculative-num-draft-tokens: 6
+        prefill-decode-interval: 28
+        prefill-decode-interval-min-bs: 8
+
+override_tp8_ep2_dcp8_c48:
+  roles:
+    agg:
+      env:
+        SGLANG_CUSTOM_ALL_REDUCE_V2_MAX_SIZE_KB: '32768'
+        SGLANG_DCP_PUSH_COMBINE_MAX_ROWS: '1536'
+        SGLANG_DSA_MQA_LOGITS_FREE_MEM_FRACTION: '0.1'
+      args:
+        expert-parallel-size: 2
+        dcp-size: 8
+        dcp-comm-backend: fi_a2a
+        dsa-prefill-backend: trtllm
+        dsa-decode-backend: trtllm
+        max-running-requests: 96
+        cuda-graph-max-bs-decode: 96
+        # The verify batch grows with the running requests, so larger points verify fewer tokens per step.
+        speculative-num-draft-tokens: 5
+        prefill-decode-interval: 16
+        prefill-decode-interval-min-bs: 8
+
+override_tp8_ep2_dcp8_c56:
+  roles:
+    agg:
+      env:
+        SGLANG_CUSTOM_ALL_REDUCE_V2_MAX_SIZE_KB: '32768'
+        SGLANG_DCP_PUSH_COMBINE_MAX_ROWS: '1536'
+        SGLANG_DSA_MQA_LOGITS_FREE_MEM_FRACTION: '0.1'
+      args:
+        expert-parallel-size: 2
+        dcp-size: 8
+        dcp-comm-backend: fi_a2a
+        dsa-prefill-backend: trtllm
+        dsa-decode-backend: trtllm
+        mem-fraction-static: 0.89
+        max-running-requests: 48
+        cuda-graph-max-bs-decode: 48
+        speculative-num-draft-tokens: 5
+        prefill-decode-interval: 16
+        prefill-decode-interval-min-bs: 30
+        mamba-full-memory-ratio: 0.66
+        max-mamba-cache-size: 240
+        gc-threshold: [700, 10, 100000]
