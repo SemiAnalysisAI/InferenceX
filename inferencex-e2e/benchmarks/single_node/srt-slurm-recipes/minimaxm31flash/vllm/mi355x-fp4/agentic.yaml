@@ -40,24 +40,12 @@ base:
         # scoring splits across TP ranks by context.
         kv-cache-dtype: nvfp4
         attention-config: '{"indexer_kv_dtype":"nvfp4","indexer_decode_cp":true}'
-        # The export's MXFP4 experts load as stored (W4A4).
+        # The export's MXFP4 experts load as stored (W4A4, AITER_MXFP4_MXFP4).
         moe-backend: aiter
         disable-hybrid-kv-cache-manager: true
         enable-prefix-caching: true
         max-model-len: 1048576
         max-num-batched-tokens: 32768
-        # Two microbatches overlap each one's TP all-reduces with the other's
-        # compute on prefill steps from 16384 tokens and decode steps from 32768.
-        enable-dbo: true
-        dbo-prefill-token-threshold: 16384
-        dbo-decode-token-threshold: 32768
-        # With VLLM_USE_BREAKABLE_CUDAGRAPH, graphs cover decode, prefill and
-        # mixed steps up to 2048 tokens.
-        compilation-config: '{"max_cudagraph_capture_size":2048}'
-        # One renderer thread queues short AgentX turns behind long prompt
-        # renders; eight render them in parallel.
-        renderer-num-workers: 8
-        enable-prompt-tokens-details: true
         disable-uvicorn-access-log: true
       env:
         # The export's recommended MoE setup: AITER MoE, and the MXFP8 shared
@@ -66,17 +54,24 @@ base:
         VLLM_ROCM_USE_AITER_MOE: '1'
         VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: '0'
         VLLM_USE_V2_MODEL_RUNNER: '1'
-        VLLM_USE_BREAKABLE_CUDAGRAPH: '1'
-        # ROCm 10 HIP otherwise can put the DBO communication stream on the
-        # same hardware queue as compute, which serializes their kernels.
         DEBUG_HIP_DYNAMIC_QUEUES: '0'
-        DEBUG_HIP_IGNORE_STREAM_PRIORITY: '0'
-        PYTHONHASHSEED: '0'
         PYTHONNOUSERSITE: '1'
         PYTHONUNBUFFERED: '1'
         VLLM_ENGINE_READY_TIMEOUT_S: '7200'
         # Outlast AIPerf's pooled-connection idle gaps.
         VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '900'
+        # Rust API frontend from the image's vllm package: frees the Python
+        # API server from tokenization and streaming at AgentX request rates.
+        VLLM_USE_RUST_FRONTEND: '1'
+        # The draft LM head's skinny GEMM takes about 5x longer at exactly 5
+        # requests than at 4 (0.28 vs 0.05 ms per call); the regular GEMM has no such cliff.
+        VLLM_ROCM_USE_SKINNY_GEMM: '0'
+        # Parallel top-16 block selection for the NVFP4 indexer; the FP8 indexer
+        # of the mono points bypasses it.
+        VLLM_ROCM_PARALLEL_INDEX_TOPK: '1'
+        # Fused FlyDSL kernels for DSpark 7 draft steps of up to 10 requests;
+        # the 3-token draft keeps the stock draft layers.
+        VLLM_ROCM_MINIMAX_M3_MONO_DRAFTER: '1'
   benchmark:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
@@ -85,38 +80,72 @@ base:
 # upstream MI355X layout; admission is 2x CONC. Throughput runs replace block
 # rejection with the golden acceptance length.
 
-# c1-c16: DSpark 7 with the KV cache on the GPUs. Batch-sharded sampling
-# splits the sampler across the TP ranks; vLLM refuses it when max-num-seqs is
-# below the TP size, so c1 runs without it.
+# c1-c8: DSpark 7 with the recipe's mono decode. A pure decode step of up to
+# 16 tokens (2 requests x 8) runs each layer as one fused kernel; larger steps
+# and steps with prefill run on the normal path, eager. AgentX tool-call gaps
+# keep fewer requests decoding than CONC, so c4 and c8 still reach it. Mono
+# needs FP8 KV and indexer caches in the shuffled KV layout and no piecewise
+# graphs. 8192-token prefill steps on the V1 runner.
+zip_override_tp4_dspark7_mono:
+  roles:
+    agg:
+      args:
+        gpu-memory-utilization: 0.85
+        kv-cache-dtype: fp8
+        attention-config: '{"indexer_kv_dtype":"fp8"}'
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
+        max-num-batched-tokens: 8192
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        max-num-seqs: [2, 4, 8, 16]
+      env:
+        VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT: '1'
+        VLLM_ROCM_MINIMAX_M3_MONO: '1'
+        VLLM_USE_V2_MODEL_RUNNER: null
+        DEBUG_HIP_DYNAMIC_QUEUES: null
+  benchmark:
+    env:
+      CONC: ['1', '2', '4', '8']
+
+# c16-c32: DSpark 7 on the NVFP4 KV cache. Breakable CUDA graphs capture the
+# prefill and mixed steps too. The capture list (every multiple of 8 up to 256,
+# then 384-8192; a coarse list makes decode about 10% slower) is a deprecated
+# alias on the V2 runner that sets both the prefill token sizes and the decode
+# request sizes (1-32 at c16); the new per-kind fields would change the decode
+# graphs. Admission is 2x CONC.
 zip_override_tp4_dspark7:
   roles:
     agg:
+      env:
+        VLLM_USE_BREAKABLE_CUDAGRAPH: '1'
       args:
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,4,8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192,200,208,216,224,232,240,248,256,384,512,768,1024,1536,2048,3072,4096,6144,8192]}'
         speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-        max-num-seqs: [2, 4, 8, 16, 32]
-        enable-batch-sharded-sampling: [null, true, true, true, true]
+        max-num-seqs: [32, 64]
   benchmark:
     env:
-      CONC: ['1', '2', '4', '8', '16']
+      CONC: ['16', '32']
 
-# c32-c64: the working set outgrows the GPU KV cache, so
-# SimpleCPUOffloadConnector (eager) keeps about 24M tokens in 1349 GB of host
-# memory (dram-utilization 0.9 of the TP4 lane). LRU eviction drops the least
-# recently used prefixes from their tail, so a hot session's chain stays
-# whole. c64 runs DSpark 3 at 0.90 memory utilization.
-zip_override_tp4_offload:
+# c64: DSpark 3 (the blog's MI355X draft length from c8) on the NVFP4 KV cache
+# with sequence-parallel prefill, 0.90 memory utilization, and a CPU KV tier. The c64 working set
+# outgrows the 14.2M-token GPU KV cache; SimpleCPUOffloadConnector (eager)
+# holds about 24M tokens in 1349 GB of host memory (dram-utilization 0.9 of the
+# TP4 lane) and serves the misses.
+override_tp4_dspark3_c64_offload:
   roles:
     agg:
       args:
-        gpu-memory-utilization: [0.85, 0.9]
-        speculative-config:
-          - '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-          - '{"method":"dspark","num_speculative_tokens":3,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-        max-num-seqs: [64, 128]
-        enable-batch-sharded-sampling: true
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1349000000000,"lazy_offload":false,"cpu_lru_eviction":true}}'
+        gpu-memory-utilization: 0.9
+        speculative-config: '{"method":"dspark","num_speculative_tokens":3,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        max-num-seqs: 128
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1349000000000,"lazy_offload":false}}'
+      env:
+        # Sequence-parallel prefill, from #4463. Upstream (vllm#63491) supports
+        # the MXFP4 W4A4 MoE; whether the Quark export's dense layers reach its
+        # MXFP8 kernel is untested, so this arm is the first check.
+        VLLM_ROCM_MINIMAX_M3_SP_PREFILL: '1'
+        PYTHONHASHSEED: '42'
   benchmark:
     env:
-      CONC: ['32', '64']
+      CONC: '64'
       KV_OFFLOADING: 'dram'
       TOTAL_CPU_DRAM_GB: '1349'

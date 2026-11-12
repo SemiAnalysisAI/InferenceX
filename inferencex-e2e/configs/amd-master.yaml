@@ -958,7 +958,7 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp8-c1:
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1], srt-recipe: agentic.yaml }
 
 minimaxm31flash-fp4-mi355x-vllm-agentic-dspark:
-  image: vllm/vllm-openai-rocm:minimax-m31-flash-75bc8cf1@sha256:f8e8ab239e5edb7c3070c5802fc7fc0cbb889513bf81183dfc98ce1c77e1dfe1
+  image: vllm/vllm-openai-rocm:nightly-4fab5a07475822c6eaa971dceb2e2220d0446808@sha256:6f126f27a3b58959da3c16076248fc99eb31e26d0a3ae9f8563bda7317d6a7e6
   model: amd/MiniMax-M3.1-Flash-Quark-MXFP4
   model-prefix: minimaxm31flash
   runner: cluster:mi355x-amds
@@ -970,8 +970,8 @@ minimaxm31flash-fp4-mi355x-vllm-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.90
       search-space:
-      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16], srt-recipe: agentic.yaml }
-      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [32, 64], srt-recipe: agentic.yaml }
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32], srt-recipe: agentic.yaml }
+      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [64], srt-recipe: agentic.yaml:override_tp4_dspark3_c64_offload }
 
 kimik3.1-fp4-mi355x-vllm-agentic-dspark:
   image: vllm/vllm-openai-rocm:kimi-k31-d73dd529@sha256:5b54f223a150a9baad41a5d511e159e7cbf43e308c6cd44ad3f6a2463c245b3c
