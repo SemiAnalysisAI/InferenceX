@@ -165,6 +165,10 @@ override_1p1d_p_tp4_d_tp4_c4:
 override_1p1d_p_tp4_d_tp4_hicache_c8:
   roles:
     prefill:
+      env:
+        # Pinned (hipHostMalloc) HiCache host pools: registered pageable pools hit a GPU memory
+        # fault in hicache_transfer_per_layer under C=48/56 load on MI355X (sgl-project/sglang#42553).
+        HSA_USERPTR_FOR_PAGED_MEM: "0"
       args:
         max-running-requests: 16
         enable-hierarchical-cache: true
@@ -181,6 +185,8 @@ override_1p1d_p_tp4_d_tp4_hicache_c8:
 override_1p1d_p_tp4_d_tp4_hicache_c16:
   roles:
     prefill:
+      env:
+        HSA_USERPTR_FOR_PAGED_MEM: "0"
       args:
         max-running-requests: 32
         enable-hierarchical-cache: true
@@ -195,6 +201,8 @@ override_1p1d_p_tp4_d_tp4_hicache_c16:
 override_1p1d_p_tp4_d_dp4_hicache_c24:
   roles:
     prefill:
+      env:
+        HSA_USERPTR_FOR_PAGED_MEM: "0"
       args:
         max-running-requests: 48
         enable-hierarchical-cache: true
@@ -216,6 +224,7 @@ override_1p1d_p_pp4_d_dp4_hicache_c32:
       env:
         # The default 19,19,20,20 split also gives the last stage the LM head and MTP draft layer.
         SGLANG_PP_LAYER_PARTITION: "20,20,20,18"
+        HSA_USERPTR_FOR_PAGED_MEM: "0"
       args:
         tp-size: 1
         pp-size: 4
@@ -238,6 +247,7 @@ override_1p1d_p_pp4_d_dp4_hicache_c48:
     prefill:
       env:
         SGLANG_PP_LAYER_PARTITION: "20,20,20,18"
+        HSA_USERPTR_FOR_PAGED_MEM: "0"
       args:
         tp-size: 1
         pp-size: 4
@@ -260,6 +270,7 @@ override_1p1d_p_pp4_d_dp4_hicache_c56:
     prefill:
       env:
         SGLANG_PP_LAYER_PARTITION: "20,20,20,18"
+        HSA_USERPTR_FOR_PAGED_MEM: "0"
       args:
         tp-size: 1
         pp-size: 4
@@ -282,6 +293,7 @@ override_1p1d_p_pp4_d_dp4_hicache_c96:
     prefill:
       env:
         SGLANG_PP_LAYER_PARTITION: "20,20,20,18"
+        HSA_USERPTR_FOR_PAGED_MEM: "0"
       args:
         tp-size: 1
         pp-size: 4
