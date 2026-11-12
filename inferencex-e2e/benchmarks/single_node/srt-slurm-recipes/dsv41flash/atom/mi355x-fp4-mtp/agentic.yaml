@@ -143,6 +143,17 @@ override_tp4_c8:
     env:
       CONC: '8'
 
+override_tp4_c32:
+  roles:
+    agg:
+      gpus: 4
+      env:
+        ATOM_ENABLE_PREFILL_DELAYER: '1'
+        ATOM_PREFILL_DECODE_INTERVAL: '40'
+  benchmark:
+    env:
+      CONC: '32'
+
 override_tp2_c64_dtp:
   roles:
     agg:
