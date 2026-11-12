@@ -7277,8 +7277,6 @@ musespark-fp4-gb300-trt-agentic-dflash:
           ep: 4
           dp-attn: false
 
-# Muse-Spark-Open NVFP4 TensorRT-LLM AgentX on GB300 behind Dynamo: six GB300 frontier points (five TEP4 context
-# + TEP8 generation, one aggregated TEP4), DFlash2 K=7 with rejection sampling.
 musespark-fp4-gb300-dynamo-trt-agentic-dflash-disagg:
   image: nvcr.io/nvidia/tensorrt-llm/release:musespark-open-1.4.0a0.dev202611120346
   model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4

@@ -1,15 +1,3 @@
-# Muse-Spark-Open NVFP4 GB300 TensorRT-LLM AgentX, aggregated behind Dynamo: one aggregated GB300 frontier
-# point (TEP4, batch 80, DFlash2 draft K=7 with rejection sampling). context_sequence_parallel is on by knob:
-# the image turns it off under auto (for the disaggregated context), and at batch 80 the engine runs out of
-# GPU memory in CUDA-graph capture without it.
-# The image is nvcr.io/nvidia/tensorrt-llm/release:musespark-open-1.4.0a0.dev202611120346, which resolves each
-# point's decode levers on auto from MUSESPARK_OPEN_LEVER__ROLE.
-# Serving: Dynamo frontend and router (KV routing with session affinity on prefill, least-loaded decode); the
-# cluster injects its fabric env and infx the golden AL; the checkpoint's chat template; the DFlash2 draft from
-# the HF hub cache; UCX_TLS / UCX_NET_DEVICES left to the cluster; iteration stats every 20 iterations with the
-# iteration log off; on the disaggregated roles the C++ agent bounce engaged on every write (1 GiB,
-# 4MB / 1 descriptor gate) and a 600 s KV transfer timeout.
-
 schema: 2
 base:
   name: musespark-fp4-gb300-dynamo-trt-agentx-agg
@@ -87,6 +75,7 @@ base:
         TLLM_PROFILE_LOG_RANKS: '0'
         TRTLLM_GPU_KEEPALIVE: '1'
         MUSESPARK_OPEN_ALLREDUCE: MNNVL
+        # auto turns it off; without it batch 80 runs out of GPU memory in CUDA-graph capture.
         MUSESPARK_OPEN_LEVER_CONTEXT_SEQUENCE_PARALLEL: 'on'
         TRTLLM_DFLASH_WINDOWED_CTX_ARENA: '1'
         MUSESPARK_OPEN_FUSED_FINALIZE_AR_MNNVL: '1'

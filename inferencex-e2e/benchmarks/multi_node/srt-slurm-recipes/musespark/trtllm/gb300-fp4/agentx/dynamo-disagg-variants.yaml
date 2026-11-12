@@ -1,13 +1,3 @@
-# Muse-Spark-Open NVFP4 GB300 TensorRT-LLM AgentX, disaggregated behind Dynamo: five disaggregated GB300
-# frontier points (TEP4 context + TEP8 generation, DFlash2 draft K=7 with rejection sampling).
-# The image is nvcr.io/nvidia/tensorrt-llm/release:musespark-open-1.4.0a0.dev202611120346, which resolves each
-# point's decode levers on auto from MUSESPARK_OPEN_LEVER__ROLE.
-# Serving: Dynamo frontend and router (KV routing with session affinity on prefill, least-loaded decode); the
-# cluster injects its fabric env and infx the golden AL; the checkpoint's chat template; the DFlash2 draft from
-# the HF hub cache; UCX_TLS / UCX_NET_DEVICES left to the cluster; iteration stats every 20 iterations with the
-# iteration log off; on the disaggregated roles the C++ agent bounce engaged on every write (1 GiB,
-# 4MB / 1 descriptor gate) and a 600 s KV transfer timeout.
-
 schema: 2
 base:
   name: musespark-fp4-gb300-dynamo-trt-agentx-disagg
