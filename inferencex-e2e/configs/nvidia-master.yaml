@@ -5983,8 +5983,24 @@ mimov2.6flash-fp4-b200-sglang-agentic-dflash:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 8, 16], srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 8, 16, 24], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [32, 64, 128, 256], srt-recipe: agentic.yaml }
+
+mimov2.6flash-fp4-b200-sglang-agentic-dflash-k7c32:
+  # Probe: same as mimov2.6flash-fp4-b200-sglang-agentic-dflash at CONC 32, but with 7 drafts instead of 3.
+  image: lmsysorg/sglang:nightly-dev-cu13-20261107-e45e1d0c@sha256:81eb456abfaa3cf50a2ac463abe02705486f3f1e10929ca306e5929b937d5388
+  model: XiaomiMiMo/MiMo-V2.6-Flash-RL
+  model-prefix: mimov2.6flash
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: mimov2.6flash/sglang/b200-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [32], srt-recipe: agentic-k7c32.yaml }
 
 mimov2.6flash-fp4-b200-sglang-agentic-fp8kv-probe:
   image: lmsysorg/sglang:nightly-dev-cu13-20261107-e45e1d0c@sha256:81eb456abfaa3cf50a2ac463abe02705486f3f1e10929ca306e5929b937d5388

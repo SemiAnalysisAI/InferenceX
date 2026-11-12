@@ -56,7 +56,7 @@ base:
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
-# The verify block is the current token plus 7 drafts up to CONC 16 and 3 above.
+# The verify block is the current token plus 7 drafts up to CONC 24 and 3 above.
 # HiCache DRAM points: the DFLASH draft host pool sits outside hicache-size at 0.705x it, so
 # 4 ranks x (120 + 85) GB = 819 GB of host KV, under the 858 GB DRAM budget.
 override_tp4_c1:
@@ -105,6 +105,18 @@ override_tp4_c16:
   benchmark:
     env:
       CONC: '16'
+      KV_OFFLOADING: none
+
+override_tp4_c24:
+  roles:
+    agg:
+      args:
+        max-running-requests: 48
+        cuda-graph-max-bs-decode: 24
+        speculative-num-draft-tokens: 8
+  benchmark:
+    env:
+      CONC: '24'
       KV_OFFLOADING: none
 
 override_tp4_c32:

@@ -1,0 +1,193 @@
+# Probe: 7 drafts at CONC 32 (agentic.yaml uses 3) to split MiMo's c16->c32 interactivity drop into draft length vs load.
+base:
+  schema: 2
+  name: mimov2.6flash-fp4-b200-sglang-agentic-dflash-k7c32
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  setup_script: mimov2.6flash-dflash-draft.sh
+  health_check:
+    interval_seconds: 10
+    max_attempts: 720
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        served-model-name: XiaomiMiMo/MiMo-V2.6-Flash-RL
+        revision: f657ba2f7d24c9adc5730675baaa2d34de878a49
+        trust-remote-code: true
+        tensor-parallel-size: 4
+        data-parallel-size: 1
+        expert-parallel-size: 1
+        # FA4 cannot read an fp8 KV cache, so KV stays BF16. trtllm_mha would read MiMoV2's
+        # 128-wide V rows at the 192-wide K head dim.
+        attention-backend: fa4
+        moe-runner-backend: flashinfer_mxfp4
+        chunked-prefill-size: 16384
+        mem-fraction-static: 0.85
+        # SGLang's MiMo-V2.6-Flash value; the 0.8 default spent 84 GiB/rank on 128-token windows.
+        swa-full-tokens-ratio: 0.03
+        stream-interval: 50
+        scheduler-recv-interval: 10
+        tokenizer-worker-num: 6
+        reasoning-parser: mimo
+        tool-call-parser: mimo
+        watchdog-timeout: 3600
+        enable-metrics: true
+        enable-cache-report: true
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: /mnt/hf_hub_cache/models--XiaomiMiMo--MiMo-V2.6-Flash-RL/snapshots/f657ba2f7d24c9adc5730675baaa2d34de878a49/dflash
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        # Outlast AIPerf's 300 s client connection pool.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+  benchmark:
+    env:
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+# The verify block is the current token plus 7 drafts up to CONC 24 and 3 above.
+# HiCache DRAM points: the DFLASH draft host pool sits outside hicache-size at 0.705x it, so
+# 4 ranks x (120 + 85) GB = 819 GB of host KV, under the 858 GB DRAM budget.
+override_tp4_c1:
+  roles:
+    agg:
+      args:
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 1
+        speculative-num-draft-tokens: 8
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp4_c4:
+  roles:
+    agg:
+      args:
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 4
+        speculative-num-draft-tokens: 8
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp4_c8:
+  roles:
+    agg:
+      args:
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 8
+        speculative-num-draft-tokens: 8
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
+override_tp4_c16:
+  roles:
+    agg:
+      args:
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 16
+        speculative-num-draft-tokens: 8
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: none
+
+override_tp4_c24:
+  roles:
+    agg:
+      args:
+        max-running-requests: 48
+        cuda-graph-max-bs-decode: 24
+        speculative-num-draft-tokens: 8
+  benchmark:
+    env:
+      CONC: '24'
+      KV_OFFLOADING: none
+
+override_tp4_c32:
+  roles:
+    agg:
+      args:
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 32
+        speculative-num-draft-tokens: 8
+        enable-hierarchical-cache: true
+        hicache-size: 120
+        hicache-write-policy: write_through
+        hicache-mem-layout: page_first_direct
+        hicache-io-backend: direct
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '858'
+
+override_tp4_c64:
+  roles:
+    agg:
+      args:
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 64
+        speculative-num-draft-tokens: 4
+        enable-hierarchical-cache: true
+        hicache-size: 120
+        hicache-write-policy: write_through
+        hicache-mem-layout: page_first_direct
+        hicache-io-backend: direct
+  benchmark:
+    env:
+      CONC: '64'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '858'
+
+override_tp4_c128:
+  roles:
+    agg:
+      args:
+        max-running-requests: 256
+        cuda-graph-max-bs-decode: 128
+        speculative-num-draft-tokens: 4
+        enable-hierarchical-cache: true
+        hicache-size: 120
+        hicache-write-policy: write_through
+        hicache-mem-layout: page_first_direct
+        hicache-io-backend: direct
+  benchmark:
+    env:
+      CONC: '128'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '858'
+
+override_tp4_c256:
+  roles:
+    agg:
+      args:
+        max-running-requests: 512
+        cuda-graph-max-bs-decode: 256
+        speculative-num-draft-tokens: 4
+        enable-hierarchical-cache: true
+        hicache-size: 120
+        hicache-write-policy: write_through
+        hicache-mem-layout: page_first_direct
+        hicache-io-backend: direct
+  benchmark:
+    env:
+      CONC: '256'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '858'
