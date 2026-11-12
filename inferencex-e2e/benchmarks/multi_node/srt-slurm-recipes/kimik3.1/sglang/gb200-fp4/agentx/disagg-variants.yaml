@@ -189,30 +189,6 @@ override_1p1d_tp16_c16:
         max-running-requests: 32
         cuda-graph-max-bs-decode: 32
 
-override_1p1d_tp16_c32:
-  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-disagg-1p1d-tp16-c32-dflash5
-  roles:
-    prefill:
-      args:
-        speculative-num-draft-tokens: 6
-    decode:
-      args:
-        speculative-num-draft-tokens: 6
-        max-running-requests: 64
-        cuda-graph-max-bs-decode: 64
-
-override_1p1d_tp16_c48:
-  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-disagg-1p1d-tp16-c48-dflash5
-  roles:
-    prefill:
-      args:
-        speculative-num-draft-tokens: 6
-    decode:
-      args:
-        speculative-num-draft-tokens: 6
-        max-running-requests: 96
-        cuda-graph-max-bs-decode: 96
-
 # EP16 decode with DeepGEMM MegaMoE (MXFP8 dispatch, BF16 combine) frees about 5 GB of
 # weights per GPU, which raises the decode KV pool from 878k to 1.18M tokens per rank.
 override_1p1d_tp16_ep16:

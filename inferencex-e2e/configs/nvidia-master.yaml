@@ -5298,7 +5298,7 @@ kimik3.1-fp4-gb200-dynamo-sglang-agentic-dflash-agg:
   srt-recipe-dir: kimik3.1/sglang/gb200-fp4/agentx
   scenarios:
     agentic-coding:
-    # 120 GB of HiCache per rank is 480 GB of each 4-GPU tray's host DRAM.
+    # 0.54 of each 4-GPU tray's host DRAM is a 487 GB offload share; 108 GB of HiCache per rank fits it.
     - dram-utilization: 0.54
       search-space:
       - spec-decoding: draft_model
@@ -5306,98 +5306,7 @@ kimik3.1-fp4-gb200-dynamo-sglang-agentic-dflash-agg:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         num-nodes: 4
-        srt-recipe: agg-variants.yaml:override_tp16_c1
-        power: true
-        worker:
-          num-worker: 1
-          tp: 16
-          dcp-size: 16
-          ep: 1
-          dp-attn: false
-      - spec-decoding: draft_model
-        conc-list: [4]
-        kv-offloading: dram
-        kv-offload-backend: { name: hicache }
-        num-nodes: 4
-        srt-recipe: agg-variants.yaml:override_tp16_c4
-        power: true
-        worker:
-          num-worker: 1
-          tp: 16
-          dcp-size: 16
-          ep: 1
-          dp-attn: false
-      - spec-decoding: draft_model
-        conc-list: [8]
-        kv-offloading: dram
-        kv-offload-backend: { name: hicache }
-        num-nodes: 4
-        srt-recipe: agg-variants.yaml:override_tp16_c8
-        power: true
-        worker:
-          num-worker: 1
-          tp: 16
-          dcp-size: 16
-          ep: 1
-          dp-attn: false
-      - spec-decoding: draft_model
-        conc-list: [24]
-        kv-offloading: dram
-        kv-offload-backend: { name: hicache }
-        num-nodes: 4
-        srt-recipe: agg-variants.yaml:override_tp16_c24
-        power: true
-        worker:
-          num-worker: 1
-          tp: 16
-          dcp-size: 16
-          ep: 1
-          dp-attn: false
-      - spec-decoding: draft_model
-        conc-list: [32]
-        kv-offloading: dram
-        kv-offload-backend: { name: hicache }
-        num-nodes: 4
-        srt-recipe: agg-variants.yaml:override_tp16_c32
-        power: true
-        worker:
-          num-worker: 1
-          tp: 16
-          dcp-size: 16
-          ep: 1
-          dp-attn: false
-      - spec-decoding: draft_model
-        conc-list: [48]
-        kv-offloading: dram
-        kv-offload-backend: { name: hicache }
-        num-nodes: 4
-        srt-recipe: agg-variants.yaml:override_tp16_c48
-        power: true
-        worker:
-          num-worker: 1
-          tp: 16
-          dcp-size: 16
-          ep: 1
-          dp-attn: false
-      - spec-decoding: draft_model
-        conc-list: [56]
-        kv-offloading: dram
-        kv-offload-backend: { name: hicache }
-        num-nodes: 4
-        srt-recipe: agg-variants.yaml:override_tp16_c56
-        power: true
-        worker:
-          num-worker: 1
-          tp: 16
-          dcp-size: 16
-          ep: 1
-          dp-attn: false
-      - spec-decoding: draft_model
-        conc-list: [1]
-        kv-offloading: dram
-        kv-offload-backend: { name: hicache }
-        num-nodes: 4
-        srt-recipe: agg-dcp8-variants.yaml:override_tp16_dcp8_c1
+        srt-recipe: agg-variants.yaml:override_tp16_dcp8_c1
         power: true
         worker:
           num-worker: 1
@@ -5410,7 +5319,7 @@ kimik3.1-fp4-gb200-dynamo-sglang-agentic-dflash-agg:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         num-nodes: 4
-        srt-recipe: agg-dcp8-variants.yaml:override_tp16_ep4_dcp8_c4
+        srt-recipe: agg-variants.yaml:override_tp16_ep4_dcp8_c4
         power: true
         worker:
           num-worker: 1
@@ -5443,23 +5352,7 @@ kimik3.1-fp4-gb200-dynamo-sglang-agentic-dflash-disagg:
         prefill: { num-worker: 1, tp: 16, dcp-size: 16, ep: 1, dp-attn: false }
         decode: { num-worker: 1, tp: 16, dcp-size: 16, ep: 1, dp-attn: false }
       - spec-decoding: draft_model
-        conc-list: [32]
-        kv-offloading: dram
-        kv-offload-backend: { name: hicache }
-        srt-recipe: disagg-variants.yaml:override_1p1d_tp16_c32
-        power: true
-        prefill: { num-worker: 1, tp: 16, dcp-size: 16, ep: 1, dp-attn: false }
-        decode: { num-worker: 1, tp: 16, dcp-size: 16, ep: 1, dp-attn: false }
-      - spec-decoding: draft_model
-        conc-list: [48]
-        kv-offloading: dram
-        kv-offload-backend: { name: hicache }
-        srt-recipe: disagg-variants.yaml:override_1p1d_tp16_c48
-        power: true
-        prefill: { num-worker: 1, tp: 16, dcp-size: 16, ep: 1, dp-attn: false }
-        decode: { num-worker: 1, tp: 16, dcp-size: 16, ep: 1, dp-attn: false }
-      - spec-decoding: draft_model
-        conc-list: [64, 76, 96]
+        conc-list: [64]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         srt-recipe: disagg-variants.yaml:override_1p1d_tp16_ep16
