@@ -1,0 +1,318 @@
+schema: 2
+base:
+  name: glm5.2-fp4-mi355x-sglang-agentx-disagg
+  identity:
+    model: {}
+    container: {}
+    frameworks:
+      sglang: 0.5.23.dev20261111+g6be0d75ae0
+      sglang-router: 0.3.2
+      amd-mori: 0.5.23.dev20261111+g6be0d75ae0
+  slurm:
+    time_limit: "08:00:00"
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: sglang-router
+    enable_multiple_frontends: false
+    args:
+      policy: consistent_hashing
+      dp-aware: true
+      decode-policy: round_robin
+      cache-threshold: 0.3
+      balance-abs-threshold: 2
+      balance-rel-threshold: 1.1
+      disable-circuit-breaker: true
+      health-failure-threshold: 100
+      health-check-timeout-secs: 600
+      health-check-interval-secs: 30
+  engine: sglang
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env: &environment
+        # srtctl's pre-download sees only HF_HOME, so the node-local cache is mounted at $HF_HOME/hub.
+        HF_HOME: /hf_hub_cache
+        HF_HUB_CACHE: /hf_hub_cache/hub
+        HUGGINGFACE_HUB_CACHE: /hf_hub_cache/hub
+        PYTHONNOUSERSITE: "1"
+        PYTHONUNBUFFERED: "1"
+        NCCL_IB_HCA: "@fabric.rdma-devices"
+        GLOO_SOCKET_IFNAME: "@fabric.socket-ifname"
+        NCCL_SOCKET_IFNAME: "@fabric.socket-ifname"
+        IBDEVICES: "@fabric.rdma-devices"
+        MORI_RDMA_TC: "@fabric.rdma-tc"
+        MORI_IO_TC: "@fabric.rdma-tc"
+        MORI_IO_QP_MAX_SEND_WR: "32767"
+        MORI_SHMEM_MODE: ISOLATION
+        AITER_LOG_LEVEL: ERROR
+        AITER_USE_FLYDSL_MOE_SORTING: "1"
+        # GLM-5.2 is grandfathered under the integer all-reduce policy (docs/MODELS.md).
+        ROCM_QUICK_REDUCE_QUANTIZATION: INT4
+        SGLANG_USE_AITER: "1"
+        # The DSA indexer uses the top-k v2 kernel, which HIP leaves off when unset.
+        SGLANG_OPT_USE_TOPK_V2: "true"
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: "900"
+        SGLANG_MORI_QP_PER_TRANSFER: "4"
+        SGLANG_MORI_NUM_WORKERS: "4"
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "3600"
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "3600"
+        SGLANG_HEALTH_CHECK_TIMEOUT: "600"
+      args: &server
+        served-model-name: amd/GLM-5.2-MXFP4
+        trust-remote-code: true
+        tp-size: 4
+        kv-cache-dtype: fp8_e4m3
+        dsa-prefill-backend: triton
+        dsa-decode-backend: triton
+        # GLM-5.2 emits GLM-4.7-style tool calls; glm45 keeps hybrid thinking
+        # in reasoning_content.
+        tool-call-parser: glm47
+        reasoning-parser: glm45
+        disaggregation-transfer-backend: mori
+        disaggregation-ib-device: "@fabric.rdma-devices"
+        load-balance-method: round_robin
+        watchdog-timeout: 3600
+        log-level: info
+        log-level-http: error
+        mem-fraction-static: 0.85
+        chunked-prefill-size: 16384
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 5
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 6
+        enable-metrics: true
+        enable-request-time-stats-logging: true
+        enable-cache-report: true
+        disable-cuda-graph: true
+    decode:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env:
+        <<: *environment
+      args:
+        <<: *server
+        enable-cache-report: false
+        disable-cuda-graph: false
+  sbatch_directives:
+    cpus-per-task: "128"
+    mem: "0"
+  srun_options:
+    mem: "0"
+    container-writable: ""
+    container-remap-root: ""
+  extra_mount:
+    # The node-local hub cache the single-node GLM-5.2 points already fill.
+    - /var/lib/hf-hub-cache:/hf_hub_cache/hub
+  health_check:
+    # Leaves room for a node whose cache lacks the ~438 GB checkpoint to pull it from the Hub.
+    max_attempts: 1440
+    interval_seconds: 5
+  benchmark:
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: "900000"
+      TOKENIZERS_PARALLELISM: "false"
+      TRANSFORMERS_VERBOSITY: error
+
+override_1p1d_p_tp2_d_tp4_c1:
+  roles:
+    prefill:
+      gpus: 2
+      args:
+        tp-size: 2
+        mem-fraction-static: 0.90
+        # Admission is 2x CONC on both roles; decode graphs are captured up to it.
+        max-running-requests: 2
+        # HIP keeps prefill eager unless a prefill graph backend is named.
+        cuda-graph-backend-prefill: breakable
+    decode:
+      args:
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+
+override_1p1d_p_tp2_d_tp4_c2:
+  roles:
+    prefill:
+      gpus: 2
+      args:
+        tp-size: 2
+        mem-fraction-static: 0.90
+        max-running-requests: 4
+        cuda-graph-backend-prefill: breakable
+    decode:
+      args:
+        max-running-requests: 4
+        cuda-graph-max-bs-decode: 4
+
+override_1p1d_p_tp4_d_tp4_c4:
+  roles:
+    prefill:
+      args:
+        max-running-requests: 8
+        cuda-graph-backend-prefill: breakable
+    decode:
+      args:
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+
+override_1p1d_p_tp4_d_tp4_hicache_c8:
+  roles:
+    prefill:
+      env:
+        # Pinned (hipHostMalloc) HiCache host pools: registered pageable pools hit a GPU memory
+        # fault in hicache_transfer_per_layer under C=48/56 load on MI355X (sgl-project/sglang#42553).
+        HSA_USERPTR_FOR_PAGED_MEM: "0"
+      args:
+        max-running-requests: 16
+        enable-hierarchical-cache: true
+        # With the ~22 GB/rank DSA indexer host pool, the four ranks stay within
+        # the 1.5 TB AgentX DRAM share of a 4-GPU server.
+        hicache-size: 350
+        hicache-write-policy: write_through
+        cuda-graph-backend-prefill: breakable
+    decode:
+      args:
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+
+override_1p1d_p_tp4_d_tp4_hicache_c16:
+  roles:
+    prefill:
+      env:
+        HSA_USERPTR_FOR_PAGED_MEM: "0"
+      args:
+        max-running-requests: 32
+        enable-hierarchical-cache: true
+        hicache-size: 350
+        hicache-write-policy: write_through
+        cuda-graph-backend-prefill: breakable
+    decode:
+      args:
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+
+override_1p1d_p_tp4_d_dp4_hicache_c24:
+  roles:
+    prefill:
+      env:
+        HSA_USERPTR_FOR_PAGED_MEM: "0"
+      args:
+        max-running-requests: 48
+        enable-hierarchical-cache: true
+        hicache-size: 350
+        hicache-write-policy: write_through
+        cuda-graph-backend-prefill: breakable
+    decode:
+      args:
+        dp-size: 4
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        max-running-requests: 48
+        # Per attention-DP rank: 2x CONC over four ranks.
+        cuda-graph-max-bs-decode: 12
+
+override_1p1d_p_pp4_d_dp4_hicache_c32:
+  roles:
+    prefill:
+      env:
+        # The default 19,19,20,20 split also gives the last stage the LM head and MTP draft layer.
+        SGLANG_PP_LAYER_PARTITION: "20,20,20,18"
+        HSA_USERPTR_FOR_PAGED_MEM: "0"
+      args:
+        tp-size: 1
+        pp-size: 4
+        mem-fraction-static: 0.95
+        max-running-requests: 64
+        enable-hierarchical-cache: true
+        hicache-size: 350
+        hicache-write-policy: write_through
+    decode:
+      args:
+        mem-fraction-static: 0.95
+        dp-size: 4
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 16
+
+override_1p1d_p_pp4_d_dp4_hicache_c48:
+  roles:
+    prefill:
+      env:
+        SGLANG_PP_LAYER_PARTITION: "20,20,20,18"
+        HSA_USERPTR_FOR_PAGED_MEM: "0"
+        # Matches the C=48 point validated on InferenceMINI (Vultr MI355X).
+        SGLANG_DISAGGREGATION_NUM_PRE_ALLOCATE_REQS: "32"
+      args:
+        tp-size: 1
+        pp-size: 4
+        mem-fraction-static: 0.95
+        max-running-requests: 96
+        enable-hierarchical-cache: true
+        hicache-size: 350
+        hicache-write-policy: write_through
+    decode:
+      env:
+        SGLANG_DISAGGREGATION_NUM_PRE_ALLOCATE_REQS: "32"
+      args:
+        mem-fraction-static: 0.95
+        dp-size: 4
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        max-running-requests: 96
+        cuda-graph-max-bs-decode: 24
+        chunked-prefill-size: 32768
+        enable-request-time-stats-logging: false
+
+override_1p1d_p_pp4_d_dp4_hicache_c56:
+  roles:
+    prefill:
+      env:
+        SGLANG_PP_LAYER_PARTITION: "20,20,20,18"
+        HSA_USERPTR_FOR_PAGED_MEM: "0"
+      args:
+        tp-size: 1
+        pp-size: 4
+        mem-fraction-static: 0.95
+        max-running-requests: 112
+        enable-hierarchical-cache: true
+        hicache-size: 350
+        hicache-write-policy: write_through
+    decode:
+      args:
+        mem-fraction-static: 0.95
+        dp-size: 4
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        max-running-requests: 112
+        cuda-graph-max-bs-decode: 28
+
+override_1p1d_p_pp4_d_dp4_hicache_c96:
+  roles:
+    prefill:
+      env:
+        SGLANG_PP_LAYER_PARTITION: "20,20,20,18"
+        HSA_USERPTR_FOR_PAGED_MEM: "0"
+      args:
+        tp-size: 1
+        pp-size: 4
+        mem-fraction-static: 0.95
+        max-running-requests: 192
+        enable-hierarchical-cache: true
+        hicache-size: 350
+        hicache-write-policy: write_through
+    decode:
+      args:
+        mem-fraction-static: 0.95
+        dp-size: 4
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        max-running-requests: 192
+        cuda-graph-max-bs-decode: 48
