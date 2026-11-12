@@ -109,7 +109,7 @@ override_tp4_c4:
       args:
         max-num-seqs: 8
         max-num-active-seqs: 1
-        prefill-schedule-interval: 16
+        prefill-schedule-interval: 24
         gpu-memory-utilization: 0.93
         kernel-config: '{"enable_flashinfer_autotune":true,"sparse_indexer_topk_backend":"deep_select"}'
         compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092]}'
