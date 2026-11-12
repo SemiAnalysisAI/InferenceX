@@ -69,7 +69,8 @@ The grid and the images are data in `configs/swap_sweep.json`. CUDA and AMD pool
 official vLLM images it names; GB pools get the ARM64 variant through the registry's
 `image_platform`, and `sku_images` pins a pool to its own image. To run another vLLM version,
 change the config and commit it before running. Every profile covers all three directions and
-both layouts, and checks the actual GPU copies before and after timing; backend preparation asserts
+both layouts, takes 40 timed iterations per point (so p99 is the slowest sample), and checks the
+actual GPU copies before and after timing; backend preparation asserts
 the `swap_blocks` import before any case runs. `smoke` (the default, up to 256 KiB blocks, 168
 points) and `standard` (4 KiB to 1 MiB, 126 points) keep every grid point under their 2 GiB
 payload cap. `large-blocks` sweeps 257 B to 1 GiB blocks under a **1 GiB copied-payload cap**, so
