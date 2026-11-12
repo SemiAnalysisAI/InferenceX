@@ -1391,3 +1391,50 @@ glm5.2-fp4-mi355x-sglang-disagg-agentic-mtp-test-1112:
         srt-recipe: disagg-variants.yaml:override_1p1d_p_pp4_d_dp4_hicache_c48
         prefill: {num-worker: 1, tp: 1, pp: 4, ep: 1, dp-attn: false}
         decode: {num-worker: 1, tp: 4, ep: 1, dp-attn: true}
+
+glm5.2-fp4-mi355x-sglang-disagg-agentic-mtp-test-nohc:
+  image: lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261111@sha256:190c60d49255f084121606f63728265c27dfd98acbfa3eb4996928c128b57a1c
+  model: amd/GLM-5.2-MXFP4
+  model-prefix: glm5.2
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: sglang-disagg
+  router: { name: sglang-router, version: "0.3.2" }
+  kv-p2p-transfer: mori
+  multinode: true
+  disagg: true
+  srt-recipe-dir: glm5.2/sglang/mi355x-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 1.0
+      search-space:
+      - spec-decoding: mtp
+        conc-list: [48]
+        kv-offloading: none
+        srt-recipe: disagg-variants.yaml:override_1p1d_p_pp4_d_dp4_c48_nohc
+        prefill: {num-worker: 1, tp: 1, pp: 4, ep: 1, dp-attn: false}
+        decode: {num-worker: 1, tp: 4, ep: 1, dp-attn: true}
+
+glm5.2-fp4-mi355x-sglang-disagg-agentic-mtp-test-hc250:
+  image: lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261111@sha256:190c60d49255f084121606f63728265c27dfd98acbfa3eb4996928c128b57a1c
+  model: amd/GLM-5.2-MXFP4
+  model-prefix: glm5.2
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: sglang-disagg
+  router: { name: sglang-router, version: "0.3.2" }
+  kv-p2p-transfer: mori
+  multinode: true
+  disagg: true
+  srt-recipe-dir: glm5.2/sglang/mi355x-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 1.0
+      search-space:
+      - spec-decoding: mtp
+        conc-list: [48]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        srt-recipe: disagg-variants.yaml:override_1p1d_p_pp4_d_dp4_hicache_c48_hc250
+        prefill: {num-worker: 1, tp: 1, pp: 4, ep: 1, dp-attn: false}
+        decode: {num-worker: 1, tp: 4, ep: 1, dp-attn: true}
