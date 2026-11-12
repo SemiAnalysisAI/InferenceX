@@ -12807,4 +12807,4 @@
     - "The new image also routes gfx942 sparse MLA prefill of 512 or more query rows to AITER pa_prefill_sparse (vllm-project/vllm#60102)."
     - "--monokernel stays off: its gfx942 weight copies leave about 2.7 GiB beside the weights on a 192 GB card at TP4 (vllm-project/vllm#62713). Integer quick reduce stays off. All-reduce stays BF16."
     - "No point changes: concurrency 1, 2, 4, 8, 16 and 32 on TP8 and TP4 (12 points), all re-measured on the new image."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5046
