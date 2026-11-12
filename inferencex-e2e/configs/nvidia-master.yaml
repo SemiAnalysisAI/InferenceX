@@ -4347,6 +4347,93 @@ minimaxm31flash-fp4-b300-vllm-agentic-dspark:
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [40], srt-recipe: 'agentic.yaml:zip_override_tp2[2]' }
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [48], srt-recipe: 'agentic.yaml:zip_override_tp2[3]' }
 
+# Low-latency end of the B300 MiniMax-M3.1-Flash curve: the single-node TP4 points of
+# minimaxm31flash-fp4-b300-vllm-agentic-dspark at conc 1 to 16, behind the Dynamo frontend and on the
+# image of the P/D config below.
+minimaxm31flash-fp4-b300-dynamo-vllm-agentic-dspark-agg:
+  image: vllm/vllm-openai:minimax-m31-flash-x86_64-cu134-5e21ce1-mc0.3.14@sha256:f6e2bdea4e8cc3ccc9bbd500169bc9365e58ac3bf395cf10c4514986e1487eb2
+  model: MiniMaxAI/MiniMax-M3.1-Flash
+  model-prefix: minimaxm31flash
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: dynamo-vllm
+  router:
+    name: dynamo-router
+    version: 1.6.0.dev20261023
+  multinode: true
+  disagg: false
+  srt-recipe-dir: minimaxm31flash/vllm/b300-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [1]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp4_c1
+        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [4]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp4_c4
+        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [8]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp4_c8
+        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
+
+minimaxm31flash-fp4-b300-dynamo-vllm-agentic-dspark-disagg:
+  image: vllm/vllm-openai:minimax-m31-flash-x86_64-cu134-5e21ce1-mc0.3.14@sha256:f6e2bdea4e8cc3ccc9bbd500169bc9365e58ac3bf395cf10c4514986e1487eb2
+  model: MiniMaxAI/MiniMax-M3.1-Flash
+  model-prefix: minimaxm31flash
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: dynamo-vllm
+  router:
+    name: dynamo-router
+    version: 1.6.0.dev20261023
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  srt-recipe-dir: minimaxm31flash/vllm/b300-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 1.0
+      search-space:
+      # One point per interactivity target: decode is capped per rank (max-num-seqs in the recipe) at 4, 3
+      # and 8 requests for 350, 300 and 250 tokens/s per user; conc 144 is the uncapped throughput point.
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: 0.3.14 }
+        conc-list: [40]
+        srt-recipe: disagg-variants.yaml:override_1p1d_dep2_tp4_bs4
+        prefill: { num-worker: 1, tp: 2, ep: 2, dp-attn: true }
+        decode: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: 0.3.14 }
+        conc-list: [200]
+        srt-recipe: disagg-variants.yaml:override_2p1d_dep2_dep8_bs3
+        prefill: { num-worker: 2, tp: 2, ep: 2, dp-attn: true }
+        decode: { num-worker: 1, tp: 8, ep: 8, dp-attn: true }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: 0.3.14 }
+        conc-list: [480]
+        srt-recipe: disagg-variants.yaml:override_8p1d_dep2_dep8_bs8
+        prefill: { num-worker: 8, tp: 2, ep: 2, dp-attn: true }
+        decode: { num-worker: 1, tp: 8, ep: 8, dp-attn: true }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: 0.3.14 }
+        conc-list: [144]
+        srt-recipe: disagg-variants.yaml:override_1p1d_dep2_dep4
+        prefill: { num-worker: 1, tp: 2, ep: 2, dp-attn: true }
+        decode: { num-worker: 1, tp: 4, ep: 4, dp-attn: true }
+
 # MiniMax-M3.1-Flash AgentX on GB200 with SGLang: day-zero image from the SGLang
 # cookbook (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1),
 # manifest digest verified 2026-10-24.
