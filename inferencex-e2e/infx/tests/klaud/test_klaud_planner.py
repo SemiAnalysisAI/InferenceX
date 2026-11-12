@@ -620,23 +620,24 @@ def test_select_counts_the_sessions_running_when_it_selects(
         assert f"Selection stopped: {reason}." in summary
 
 
-def test_select_defers_candidates_of_a_master_config_with_a_finished_pr_backlog(
+def test_select_defers_candidates_of_a_master_config_whose_backlog_the_wave_fills(
     tmp_path, monkeypatch
 ):
-    capacity = api.Capacity(idle={"a": 4, "b": 4}, queued={}, size={"a": 4, "b": 4})
+    capacity = api.Capacity(idle=dict.fromkeys("abc", 4), queued={}, size=dict.fromkeys("abc", 4))
     busy = wave_context("busy", ["a"])
-    quiet = {**wave_context("quiet", ["b"]), "family": "configs/amd-master.yaml:quiet"}
+    quiet, later = ({**wave_context(name, [cluster]), "family": f"configs/amd-master.yaml:{name}"}
+                    for name, cluster in (("quiet", "b"), ("later", "c")))  # fmt: skip
 
     selection, summary = select_wave(
-        tmp_path, monkeypatch, [busy, quiet], lambda _policy: capacity,
+        tmp_path, monkeypatch, [busy, quiet, later], lambda _policy: capacity,
         backlog={"nvidia-master.yaml": 8, "amd-master.yaml": 7})  # fmt: skip
 
     assert selection["candidates"] == [quiet["id"]]
-    assert selection["backlog-deferred-candidates"] == [busy["id"]]
-    assert selection["backlogged-configs"] == ["nvidia-master.yaml"]
+    assert selection["backlog-deferred-candidates"] == [busy["id"], later["id"]]
+    assert selection["backlogged-configs"] == ["amd-master.yaml", "nvidia-master.yaml"]
     assert (
-        "1 reviewed candidates wait because nvidia-master.yaml already have 8 or more"
-        " finished Klaud PRs awaiting review."
+        "2 reviewed candidates wait because amd-master.yaml, nvidia-master.yaml already have 8 or"
+        " more Klaud candidates running or awaiting review."
     ) in summary
 
 
@@ -733,7 +734,8 @@ def test_plan_holds_no_op_images_and_claimed_demand_and_orders_idle_clusters_fir
         ("idle", 2, True), ("dated", 2, False)]  # fmt: skip
     assert json.loads((directory / klaud.CLUSTER_STATE).read_text()) == {
         "committed-demand": {"big": 20}, "infra-backoff": ["a"], "headroom": {"a": 2, "b": 6},
-        "size": {"a": 8, "b": 8, "big": 20}, "finished-backlog": {}}  # fmt: skip
+        "size": {"a": 8, "b": 8, "big": 20},
+        "finished-backlog": {"nvidia-master.yaml": 1}}  # fmt: skip
 
 
 def open_pull(number, finished):
@@ -746,10 +748,10 @@ def open_pull(number, finished):
 
 
 def plan_curves(tmp_path, monkeypatch, curves, *, history=None, closed=None, pulls=(), batch=64,
-                slots=5):  # fmt: skip
+                slots=5, owners=()):  # fmt: skip
     """Plan ``curves`` that all serve one feed observation; return their order and cluster state.
 
-    ``pulls`` lists (number, master config, finished) of open Klaud PRs.
+    ``pulls`` lists (number, master config, finished) of open Klaud PRs, ``owners`` the claims.
     """
     source = feed_source("m1", "example/sglang:v1")
     target = klaud.Family(frozenset({"a"}), 1, 1, False)
@@ -774,7 +776,7 @@ def plan_curves(tmp_path, monkeypatch, curves, *, history=None, closed=None, pul
     monkeypatch.setattr(klaud, "github_read", read)
     monkeypatch.setattr(klaud, "live_families", lambda _root: {
         klaud.observation_key(source): dict.fromkeys(curves, target)})  # fmt: skip
-    monkeypatch.setattr(claims, "family_owners", lambda _repository: [])
+    monkeypatch.setattr(claims, "family_owners", lambda _repository: list(owners))
     monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: api.Capacity(
         idle={"a": 8}, queued={}, size={"a": 8}))  # fmt: skip
     monkeypatch.setattr(klaud, "maintainer_closed_families", lambda _repository, _now: (
@@ -815,14 +817,18 @@ def test_plan_retries_a_requeued_candidate_despite_its_maintainer_close(tmp_path
     assert planned == [requeued]
 
 
-def test_plan_counts_finished_prs_per_master_config_and_reviews_backlogged_ones_last(
+def test_plan_counts_finished_and_claimed_candidates_per_master_config_and_orders_backlog_last(
     tmp_path, monkeypatch
 ):
     busy, quiet = "configs/nvidia-master.yaml:busy", "configs/amd-master.yaml:quiet"
-    pulls = [*((number, "nvidia-master.yaml", True) for number in range(8)),
+    pulls = [*((number, "nvidia-master.yaml", True) for number in range(6)),
              (8, "nvidia-master.yaml", False), (9, "amd-master.yaml", True)]  # fmt: skip
+    claimed = [OwnedCandidate(id=f"{number:016x}-{'0' * 16}",
+                              family=f"configs/nvidia-master.yaml:running-{number}", base="a" * 40)
+               for number in (0, 10, 11)]  # fmt: skip
 
-    planned, state = plan_curves(tmp_path, monkeypatch, [busy, quiet], pulls=pulls)
+    planned, state = plan_curves(tmp_path, monkeypatch, [busy, quiet], pulls=pulls,
+                                 owners=[Ownership(run_id=42, candidates=claimed)])  # fmt: skip
 
     assert planned == [quiet, busy]
     assert state["finished-backlog"] == {"nvidia-master.yaml": 8, "amd-master.yaml": 1}

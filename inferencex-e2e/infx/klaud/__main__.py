@@ -357,19 +357,18 @@ def family_prefixes(family: str) -> set[str]:
     return {identity(member)[:16] for member in {family, *key_families(family)}}
 
 
-def offered_images(
-    items: list[dict], families: dict[tuple, dict[str, Family]]
-) -> dict[str, set[str]]:
-    """Return the image keys ``choose`` builds candidate IDs from under each family prefix."""
-    offered: dict[str, set[str]] = {}
-    for item in items:
-        if item["source-status"] != "baseline":
-            continue
-        image = identity(observation_key(item["source"])[-1])[:16]
-        for family in families.get(observation_key(item["source"]), {}):
-            for prefix in family_prefixes(family):
-                offered.setdefault(prefix, set()).add(image)
-    return offered
+def master_images(root: Path) -> dict[str, str]:
+    """Return the normalized image of each master config key at ``root``, by single-key family."""
+    from infx.config import project_root
+    from infx.matrix.validation import load_config_files
+
+    root = project_root(root)
+    images = {}
+    for path in sorted((root / "configs").glob("*-master.yaml")):
+        source = path.relative_to(root).as_posix()
+        for key, entry in load_config_files([str(path)], validate=False).items():
+            images[f"{source}:{key}"] = normalized_image(entry["image"])
+    return images
 
 
 def hold(
@@ -748,17 +747,22 @@ class WaveCapacity:
     ) -> None:
         """Start from ``headroom`` of clusters of ``size`` nodes, with ``backoff`` clusters.
 
-        ``backlog`` counts the open finished Klaud PRs of each master config.
+        ``backlog`` counts the finished and running Klaud candidates of each master config.
         """
         self.headroom, self.size, self.backoff = dict(headroom), size, backoff
-        self.backlogged = {group for group, n in backlog.items() if n >= FINISHED_BACKLOG_CAP}
+        self.backlog = Counter(backlog)
         self.backed_off: set[str] = set()
+
+    @property
+    def backlogged(self) -> set[str]:
+        """The master configs with FINISHED_BACKLOG_CAP finished or running Klaud candidates."""
+        return {group for group, n in self.backlog.items() if n >= FINISHED_BACKLOG_CAP}
 
     def blocker(self, candidate: dict) -> str | None:
         """Return why the wave cannot take ``candidate`` now, or None.
 
-        That is "backlog" while its master config has FINISHED_BACKLOG_CAP finished PRs awaiting
-        review, then "backoff" or "capacity".
+        That is "backlog" while its master config has FINISHED_BACKLOG_CAP Klaud candidates
+        running or awaiting review, then "backoff" or "capacity".
         """
         clusters = candidate["clusters"]
         if config_group(candidate["family"]) in self.backlogged:
@@ -770,10 +774,11 @@ class WaveCapacity:
         return None
 
     def take(self, candidate: dict) -> None:
-        """Reserve ``candidate``'s full sweep on each target cluster for the rest of the wave."""
+        """Reserve ``candidate``'s full sweep and a backlog place for the rest of the wave."""
         for cluster in candidate["clusters"]:
             self.headroom[cluster] -= min(candidate["sweep-node-demand"], self.size[cluster])
         self.backed_off.update(self.backoff.intersection(candidate["clusters"]))
+        self.backlog[config_group(candidate["family"])] += 1
 
 
 def klaud_pulls(pulls: list[dict]) -> list[dict]:
@@ -790,12 +795,12 @@ def plan(
     are ordered toward idle clusters, cooled down by ``cooldown_hours`` and the recent-outcome
     holds, held while a maintainer recently closed their family's PR unless it was requeued,
     and capped at REVIEW_PER_SLOT per free slot plus REVIEW_MARGIN, at most
-    ``review_batch_size``. Candidates of master configs with FINISHED_BACKLOG_CAP finished PRs
-    awaiting review go last. Only open Klaud PRs are indexed. CLUSTER_STATE gives ``select``
-    the claimed families' committed demand, the clusters under infrastructure backoff and the
-    finished PRs of each master config, and gives ``regenerate-producers`` this plan's headroom
-    and cluster sizes. Stale finished PRs whose family the feed now offers on another image are
-    first closed for requeue, which frees their families from the next wave on.
+    ``review_batch_size``. Candidates of master configs with FINISHED_BACKLOG_CAP Klaud
+    candidates running or awaiting review go last. Only open Klaud PRs are indexed.
+    CLUSTER_STATE gives ``select`` the claimed families' committed demand, the clusters under
+    infrastructure backoff and the finished and claimed candidates of each master config, and
+    gives ``regenerate-producers`` this plan's headroom and cluster sizes. Stale finished PRs
+    that main superseded are first closed for requeue and left out of the index.
     """
     from . import claims
     from .finished import finished, requeue_superseded
@@ -822,12 +827,10 @@ def plan(
     blocked = {candidate.family for owner in owners for candidate in owner.candidates}
     families = live_families(root)
     now = datetime.now(UTC)
-    requeue_superseded(
-        repository,
-        [pr for page in pulls for pr in page],
-        offered_images(items, families),
-        owners,
-        now,
+    superseded = set(
+        requeue_superseded(
+            repository, [pr for page in pulls for pr in page], master_images(root), owners, now
+        )
     )
     capacity = fetch_capacity(policy) or Capacity(idle={}, queued={}, size={})
     committed = committed_demand(blocked, families, capacity.size)
@@ -872,6 +875,7 @@ def plan(
             "finished": finished(repository, pr) is not None,
         }
         for pr in klaud_pulls([pr for page in pulls for pr in page])
+        if pr["number"] not in superseded
     ]
     if candidates:
         for pr in open_prs:
@@ -894,11 +898,18 @@ def plan(
                 }
             )
             pr["files-complete"] = sum(len(page) for page in pages) < 3000
+    awaiting = {pr["branch"].removeprefix("klaud/auto-") for pr in open_prs if pr["finished"]}
     backlog = Counter(
         group
         for pr in open_prs
         if pr["finished"]
         for group in {config_group(name) for name in pr.get("files", [])} - {None}
+    )
+    backlog.update(
+        config_group(candidate.family)
+        for owner in owners
+        for candidate in owner.candidates
+        if candidate.id not in awaiting
     )
     wave = WaveCapacity({}, {}, set(), backlog)
     candidates = sorted(candidates, key=lambda candidate: wave.blocker(candidate) == "backlog")
@@ -1392,7 +1403,8 @@ def select(
     the cap, and writes their context, ownership.json and selection.json under ``directory``.
     Those sessions are the larger of ``active_sessions``, counted by recovery before the
     review, and the ``running_sessions`` counted now. Selection stops if they are unreadable.
-    Candidates whose master config has FINISHED_BACKLOG_CAP finished PRs awaiting review wait.
+    Candidates whose master config has FINISHED_BACKLOG_CAP Klaud candidates running or awaiting
+    review, counting those this wave takes, wait.
     """
     from . import claims, validation
     from .reporting import (
@@ -1596,7 +1608,7 @@ def select(
         summary += (
             f" {len(backlog_deferred)} reviewed candidates wait because"
             f" {', '.join(sorted(wave.backlogged))} already have {FINISHED_BACKLOG_CAP} or more"
-            " finished Klaud PRs awaiting review."
+            " Klaud candidates running or awaiting review."
         )
     if baseline_deferred:
         summary += f" {len(baseline_deferred)} candidates lacked a verifiable full baseline: " + (
