@@ -12784,4 +12784,4 @@
     - "Run the DeepSeek-V4.1-Flash MI355X SGLang AgentX points on lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261111."
     - "Add TP2 at c64, DP2 attention at c128, DP2 attention with EP2 at c128, and DP4 attention with EP4 at c128 and c256."
     - "From c128, DP attention points use shortest-prefill-first with prefill-decode-interval 24 (TP2 DPA), 32 (TP2 DPA EP2, TP4 DPA EP4 c128) or 40 (TP4 DPA EP4 c256), the shared Engram host table layout and, with EP, SGLANG_DP_SHARED_EXPERT_LOCAL=1; TP4 DPA EP4 c256 also uses a 65536-token prefill chunk and a 0.85 prefill-delayer low watermark."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5031
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5034
