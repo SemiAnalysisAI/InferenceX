@@ -473,7 +473,6 @@ class Session:
             if pull and (
                 pull["state"] != "closed"
                 or (not pull["draft"] and not self.closed_by_maintainer(pull))
-                or any(label["name"] in SWEEP_LABELS for label in pull["labels"])
             ):
                 raise VerificationError("Failure/deferral PR cleanup is incomplete")
             if pull and require_branch_deleted and self.branch_exists():
@@ -562,15 +561,6 @@ class Session:
                     "Cancellation requested; wait for terminal jobs then finish again"
                 )
             if pull:
-                current = self.refresh(pull)
-                for label in current["labels"]:
-                    if label["name"] in SWEEP_LABELS:
-                        self.refresh(pull)
-                        github.write(
-                            self.repository,
-                            f"issues/{pull['number']}/labels/{label['name']}",
-                            "DELETE",
-                        )
                 current = self.refresh(pull)
                 if current["state"] == "open" and not current["draft"]:
                     subprocess_ready(self.repository, pull["number"])

@@ -234,8 +234,8 @@ code. The fixed code appears in sanitized diagnostics and the completion report.
 For a verified `validated` outcome, finish itself posts `/use <verified-final-run-id>` once on
 this PR. Never post `/use` yourself.
 Otherwise finish reports the failure/deferral, cancels owned work, confirms every job
-terminal, removes sweep labels, drafts/closes the PR, deletes the candidate branch and releases
-the family claim so a later wave may retry it. Pending cleanup means wait and retry finish.
+terminal, drafts/closes the PR, deletes the candidate branch and releases the family claim so a
+later wave may retry it. Pending cleanup means wait and retry finish.
 Uncertainty is not incompatibility. Your open PR blocks the family until cleanup completes.
 Without an owned PR, report without a placeholder or deleting someone else's claim.
 

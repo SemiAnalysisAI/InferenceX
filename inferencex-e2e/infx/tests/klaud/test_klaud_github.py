@@ -1496,6 +1496,32 @@ def test_finishing_a_pr_a_maintainer_closed_leaves_it_closed_as_is(monkeypatch, 
     assert "PR closed; branch deleted.\n" in world.comments[-1]["body"]
 
 
+def test_finishing_a_failed_candidate_closes_its_pr_without_unlabeling_it(monkeypatch):
+    world = ended_session_sweep(monkeypatch, conclusion="failure", sessions=("failure",))
+    world.reads[f"git/ref/heads/{world.session.branch}"] = {"object": {"sha": "c" * 40}}
+    monkeypatch.setattr(lifecycle, "subprocess_ready", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(lifecycle.Session, "finish", REAL_FINISH)
+    serve = github.write
+
+    def write(repository, path, method, payload=None):
+        if (method, path) == ("PATCH", "pulls/7"):
+            world.pull["state"] = "closed"
+        if (method, path) == ("DELETE", f"git/refs/heads/{world.session.branch}"):
+            world.listings[f"git/matching-refs/heads/{world.session.branch}"] = []
+        return serve(repository, path, method, payload)
+
+    monkeypatch.setattr(github, "write", write)
+
+    outcome = world.session.finish(CandidateOutcome(
+        outcome="failed", phase="final-sweep", pull_request=7, run_ids=[9], repairs_used=1,
+    ))
+
+    assert [path for method, path in world.writes
+            if method == "DELETE" and path.startswith("issues/7/labels/")] == []
+    assert world.pull["state"] == "closed"
+    world.session.verify(outcome)
+
+
 def test_a_session_whose_pr_a_maintainer_closed_may_stop_without_its_own_outcome(
     tmp_path, monkeypatch
 ):
