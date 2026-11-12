@@ -164,7 +164,7 @@ override_tp2_c32:
         # 8 running x (1 + 5 drafts) = 48 rows, all within the monokernel; it
         # refuses SGLANG_HIP_DSV41_INDEX_K_PAGE8, so that layout stays off here.
         monokernel-backend: amd
-        # Needs an image that ships fastokens (sglang#49724).
+        # Needs an image that ships fastokens (sglang#47923).
         tokenizer-backend: fastokens
   benchmark:
     env:

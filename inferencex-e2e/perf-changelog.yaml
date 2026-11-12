@@ -12822,15 +12822,8 @@
   scenario-type:
     - agentic-coding
   description:
+    - "Update the image from lmsysorg/sglang-rocm:v0.5.22-rocm10-mi35x-20261021 to v0.5.23-rocm10-mi35x-20261111, which pins sgl-amd-mono 7113024f (sglang#49428) and ships fastokens (sglang#47923)."
     - "Cap running requests for P90 interactivity: TP4 concurrency 1 from 2 to 1, TP2 concurrency 4 from 8 to 1, 16 from 32 to 4, and 32 from 64 to 8. Sessions past the cap queue instead of joining the decode batch."
-    - "Image, search space and every other flag are unchanged."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
-
-- config-keys:
-    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
-  scenario-type:
-    - agentic-coding
-  description:
     - "TP2 concurrency 32: enable the AMD monokernel (8 running requests x 6 rows fit its 48-row launch), drop SGLANG_HIP_DSV41_INDEX_K_PAGE8 which the monokernel refuses, lower prefill-decode-interval from 32 to 8, and use the fastokens tokenizer backend (DeepSeek-V4.1 segmented prompt encoding)."
-    - "Image, search space and every other flag are unchanged."
+    - "Search space and every other flag are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
