@@ -215,6 +215,24 @@ override_6p_dep2_dep16:
         expert-parallel-size: 16
         max-running-requests: 768
 
+override_6p_dep2_dep16_si20:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-6p-dep2-dep16-si20
+  roles:
+    prefill:
+      nodes: 3
+      workers: 6
+      args:
+        stream-interval: 20
+    decode:
+      nodes: 4
+      gpus: 16
+      args:
+        tensor-parallel-size: 16
+        data-parallel-size: 16
+        expert-parallel-size: 16
+        max-running-requests: 768
+        stream-interval: 20
+
 override_8p_dep2_dep16_si20:
   name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-8p-dep2-dep16-si20
   roles:
@@ -257,42 +275,6 @@ override_12p_dep2_dep16_si20:
     prefill:
       nodes: 6
       workers: 12
-      args:
-        stream-interval: 20
-    decode:
-      nodes: 4
-      gpus: 16
-      args:
-        tensor-parallel-size: 16
-        data-parallel-size: 16
-        expert-parallel-size: 16
-        max-running-requests: 768
-        stream-interval: 20
-
-override_14p_dep2_dep16_si20:
-  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-14p-dep2-dep16-si20
-  roles:
-    prefill:
-      nodes: 7
-      workers: 14
-      args:
-        stream-interval: 20
-    decode:
-      nodes: 4
-      gpus: 16
-      args:
-        tensor-parallel-size: 16
-        data-parallel-size: 16
-        expert-parallel-size: 16
-        max-running-requests: 768
-        stream-interval: 20
-
-override_16p_dep2_dep16_si20:
-  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-16p-dep2-dep16-si20
-  roles:
-    prefill:
-      nodes: 8
-      workers: 16
       args:
         stream-interval: 20
     decode:
