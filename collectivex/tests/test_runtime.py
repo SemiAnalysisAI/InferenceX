@@ -781,14 +781,18 @@ class LogTailRedaction(unittest.TestCase):
                 self.assertEqual(redact.redact(text, hosts), expected)
 
     LOG = ("gpu-node07:4242:4242 [0] NCCL WARN connect to 10.20.30.40<29551> failed\n"
-           "srun: error: gpu-node[07-08]: tasks 0-15: Exited with exit code 1, see login-2\n")
+           "srun: error: gpu-node[07-08]: tasks 0-15: Exited with exit code 1, see login-2\n"
+           "worker-a7: rank 3 lost its peer\n")
     MASKED = ("<host>:4242:4242 [0] NCCL WARN connect to <ipv4><29551> failed\n"
-              "srun: error: <host>: tasks 0-15: Exited with exit code 1, see <host>\n")
-    # The job's nodes are listed only while $ROOT/gone is absent.
+              "srun: error: <host>: tasks 0-15: Exited with exit code 1, see <host>\n"
+              "<host>: rank 3 lost its peer\n")
+    # The job's nodes are listed only while $ROOT/gone is absent. sinfo gives the kernel host
+    # names, which this pool sets apart from its node names.
     SLURM = {
         "squeue": '[ -e "$ROOT/gone" ] || echo "gpu-node[07-08]"\n',
         "scontrol": 'printf "gpu-node07\\ngpu-node08\\n"\n',
         "hostname": "echo login-2.cluster.example\n",
+        "sinfo": 'printf "worker-a7\\nworker-a8\\n"\n',
     }
 
     def _tail(self, script: str, **fakes: str) -> str:
@@ -813,7 +817,7 @@ class LogTailRedaction(unittest.TestCase):
             'JOB_ID=4242; collx_log_tail "$1"',
             python3='echo "Traceback: /home/operator/redact.py" >&2; exit 1\n')
         self.assertIn("log tail withheld", printed)
-        for private in ("gpu-node", "10.20.30.40", "login-2", "/home/operator"):
+        for private in ("gpu-node", "worker-a", "10.20.30.40", "login-2", "/home/operator"):
             self.assertNotIn(private, printed)
 
 

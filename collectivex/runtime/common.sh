@@ -553,10 +553,13 @@ collx_allocation_nodes_csv() {
 }
 
 # Keeps the allocation's node names for collx_log_tail: Slurm stops listing them once the job is
-# gone, and a tail printed after that still names them.
+# gone, and a tail printed after that still names them. Ranks log the kernel host name, which a
+# pool may set apart from the Slurm node name, so both are kept.
 collx_note_allocation_hosts() {
-  local nodes
+  local nodes hostnames
   [ -n "${JOB_ID:-}" ] && nodes="$(collx_allocation_nodes_csv "$JOB_ID")" || return 0
+  hostnames="$(sinfo -h -n "$nodes" -o %n 2>/dev/null | sort -u | paste -sd, -)" || hostnames=""
+  [ -z "$hostnames" ] || nodes="$nodes,$hostnames"
   case ",${COLLX_TAIL_HOSTS:-}," in
     *",$nodes,"*) ;;
     *) COLLX_TAIL_HOSTS="${COLLX_TAIL_HOSTS:+$COLLX_TAIL_HOSTS,}$nodes" ;;
