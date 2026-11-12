@@ -12783,4 +12783,4 @@
   description:
     - "TP2 concurrency 32: enable --monokernel-backend amd and --schedule-policy shortest-prefill-first, and drop SGLANG_HIP_DSV41_INDEX_K_PAGE8=1, which the monokernel refuses."
     - "The image, the other points and the search space are unchanged."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5023
