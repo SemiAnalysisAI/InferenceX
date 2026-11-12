@@ -137,7 +137,7 @@ base:
     mem: "0"
     container-writable: ""
     container-remap-root: ""
-  # The eval needs Python too (902-post-eval-container-image.patch).
+  # The eval needs Python too, so run it in the vLLM image (post_eval.container_image, NVIDIA/srt-slurm#666).
   post_eval:
     container_image: vllm/vllm-openai:nightly-00b6c4c565a8732c131e1f452d4a17803bb0842b@sha256:76a9614ed4ed20694914c87e82a0344bd73e1c6e081459a2467175ab903657e4
   benchmark:

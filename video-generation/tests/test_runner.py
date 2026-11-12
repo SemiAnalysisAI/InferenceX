@@ -696,6 +696,7 @@ def test_serving_overlaps_requests_without_waiting_for_local_validation(
 
     def validate_after_submissions(path, expected):
         assert submitted.wait(2), "local validation blocked later submissions"
+        time.sleep(0.2)
         return analyzer(path, expected)
 
     monkeypatch.setattr(sys.modules["evaluator.media"], "analyze_media", validate_after_submissions)
@@ -722,6 +723,8 @@ def test_serving_overlaps_requests_without_waiting_for_local_validation(
             <= record["submit_to_terminal_seconds"]
             <= record["submit_to_media_seconds"]
             <= record["latency_seconds"]
+            < record["submit_to_media_seconds"] + 0.2
+            <= record["submit_to_media_seconds"] + record["media_validation_seconds"]
         )
     assert len(state["posts"]) == 4
 
