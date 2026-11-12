@@ -7610,6 +7610,45 @@ h3-bf16-a100-sglang-video:
             srt-recipe: serving-client-tp2-ulysses4.yaml
             conc-list: [1]
 
+h3-bf16-a100-sglang-video-tp4:
+  image: lmsysorg/sglang:v0.5.23@sha256:f7876bef696ccf9cf75a2bf7ccb82970f5fac577f082fb8ca95c9a59d2160eb5
+  model: MiniMaxAI/MiniMax-H3
+  model-prefix: h3
+  runner: cluster:a100-cw
+  precision: bf16
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: h3/sglang/a100-bf16
+  scenarios:
+    video-generation:
+      - spec: h3-v2.yaml
+        set: release-v1
+        search-space:
+          - gpus: 4
+            srt-recipe: serving-client-tp4.yaml
+            conc-list: [1]
+          - gpus: 8
+            srt-recipe: serving-client-tp4-ulysses2.yaml
+            conc-list: [1]
+
+h3-bf16-a100-sglang-video-tp8:
+  image: lmsysorg/sglang:v0.5.23@sha256:f7876bef696ccf9cf75a2bf7ccb82970f5fac577f082fb8ca95c9a59d2160eb5
+  model: MiniMaxAI/MiniMax-H3
+  model-prefix: h3
+  runner: cluster:a100-cw
+  precision: bf16
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: h3/sglang/a100-bf16
+  scenarios:
+    video-generation:
+      - spec: h3-v2.yaml
+        set: release-v1
+        search-space:
+          - gpus: 8
+            srt-recipe: serving-client-tp8.yaml
+            conc-list: [1]
+
 h3-bf16-a100-vllm-omni-video:
   image: vllm/vllm-omni:v0.32.0@sha256:6b44ee504a0dc3a21eacf72e7dc5da318b7bcc8ed0e349dc928e67278414430c
   model: MiniMaxAI/MiniMax-H3
