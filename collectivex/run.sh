@@ -75,6 +75,26 @@ fi
 shard_dir="$HERE/.shards/run-$$"
 mkdir -p "$shard_dir"
 trap 'rm -rf "$shard_dir"' EXIT
+# An interrupt ends the run. The shard in flight is a background child (see the loop), so this
+# runs at once: TERM goes to its launcher and to the command the launcher is running, the launcher
+# then cancels its own job, and the wait keeps this script alive until it has. PIPE is ignored with
+# the rest because the terminal or a pipe reader may already be gone, and a message written to it
+# must not end this script first.
+interrupt() {
+  local pid
+  trap '' HUP INT TERM PIPE
+  for pid in $(jobs -pr); do
+    echo "=== interrupted: stopping shard $id and releasing its allocation" >&2 || true
+    kill -TERM "$pid" 2>/dev/null || true
+    pkill -TERM -P "$pid" 2>/dev/null || true
+  done
+  wait
+  echo "=== interrupted: the remaining shards were not run" >&2 || true
+  exit "$1"
+}
+trap 'interrupt 129' HUP
+trap 'interrupt 130' INT
+trap 'interrupt 143' TERM
 matrix="$shard_dir/matrix-$SKU.json"
 python3 "$HERE/sweep_matrix.py" "${matrix_args[@]}" --out "$matrix" >/dev/null
 
@@ -128,7 +148,10 @@ for row in "${rows[@]}"; do
   # of each other's stage directory.
   execution="manual-$stamp-$$-$id"
   echo "=== shard $id: $backend, ${nodes}x${gpn} GPUs, $ncases case(s)"
-  # A subshell keeps one shard's image and placement from leaking into the next.
+  # A subshell keeps one shard's image and placement from leaking into the next. It is waited on
+  # in the background because bash holds a trap until its foreground command returns. Without job
+  # control it stays in this script's process group and ignores SIGINT, so a Ctrl-C reaches the
+  # launcher only as the TERM that interrupt() sends.
   (
     unset COLLX_NGPUS
     export COLLX_SHARD_FILE="$control" COLLX_SHARD_SKU="$SKU" COLLX_BENCH="$backend"
@@ -151,8 +174,10 @@ for row in "${rows[@]}"; do
       exit 0
     fi
     echo "logs: $COLLX_LOG_DIR"
-    bash "$HERE/launchers/launch_$launcher.sh"
-  ) && rc=0 || rc=$?
+    # exec makes the launcher the process this script waits for and signals.
+    exec bash "$HERE/launchers/launch_$launcher.sh"
+  ) </dev/null &
+  wait "$!" && rc=0 || rc=$?
   rcs+=("$rc")
 done
 [ "$dry" = 0 ] || exit 0
