@@ -71,6 +71,9 @@ python -m evaluator.cli score-quality <artifact-id>=<bundle.zip|dir> ... \
 `quality_status` 仍为 `unjudged`。如需为较早的运行补算，按其 `run_id` 与
 `run_attempt` 手动触发该 workflow。
 
+仪表板上的[质量指南](https://inferencex.semianalysis.com/zh/vgx/quality)说明如何用这些分数
+评估有损加速，并按 GPU 展示一次已发布运行中每段视频的 PSNR。
+
 ## 本地检查
 
 ```bash
