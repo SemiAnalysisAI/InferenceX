@@ -12565,10 +12565,12 @@
 
 - config-keys:
     - kimik31-umbp-1p1d-al319
+    - kimik31-umbp-1p1d-prefix512
     - kimik31-sa-umbp-dynamo
     - kimik31-sa-umbp-dynamo-short
   scenario-type: [agentic-coding]
   description:
+    - Add a c128 candidate with prefix-match-unit 512 on both roles, retaining the AL3.19 baseline image, graph sizes, physical cache pages, distributed pool and transport. This tests checkpoint-boundary reuse; no formal performance gain is assumed.
     - Run K4 UMBP 1P1D with prefill max sequences 48, 16K batches and breakable graphs through 4096; scale decode sequences and full verify graphs to c128/c144. Reuse the protected shared image, 8 GiB unused-cache cap, full-NIC TC104 and 128 GiB MR segments. MINI includes explicitly labeled AL3.25 diagnostics alongside native DSpark AL3.19; SA uses native AL only.
     - Add Kimi-K3.1-Pro 2P3D c176 with Dynamo, MoRIIO READ, and distributed UMBP on MI355X.
     - Pin the validated PD base image with MoRI e65d1a3e READ-cap support; set MORI_IO_QP_MAX_RD_ATOMIC=1 only for standalone pools.

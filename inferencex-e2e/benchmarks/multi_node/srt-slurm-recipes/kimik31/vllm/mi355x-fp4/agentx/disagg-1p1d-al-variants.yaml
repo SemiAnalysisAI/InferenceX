@@ -349,3 +349,15 @@ override_c128_al319:
         max-num-seqs: 144
         max-num-batched-tokens: 720
         compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":720,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[5,10,15,20,25,30,35,40,50,60,70,80,90,100,110,120,130,140,150,160,200,220,240,260,280,300,320,360,400,440,480,520,560,600,640,680,720]}'
+
+override_c128_prefix512:
+  roles:
+    decode:
+      args:
+        max-num-seqs: 144
+        max-num-batched-tokens: 720
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":720,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[5,10,15,20,25,30,35,40,50,60,70,80,90,100,110,120,130,140,150,160,200,220,240,260,280,300,320,360,400,440,480,520,560,600,640,680,720]}'
+        prefix-match-unit: 512
+    prefill:
+      args:
+        prefix-match-unit: 512
