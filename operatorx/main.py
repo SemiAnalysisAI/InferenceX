@@ -138,6 +138,11 @@ def _resolve_split() -> dict:
 # more and goes on. A process that dies mid-case is resumed by the wrapper too (one device):
 # the case is recorded as an error. Every rank of a group decides together.
 RESTART = 75
+TIMED_OUT = 76  # the case watchdog ended a case that did not finish
+# a case (build, timing, profile) that runs longer is stopped: a collective that hangs otherwise
+# waits for NCCL's 10-minute watchdog; a process's first case also compiles and builds
+_CASE_TIMEOUT_S = float(os.environ.get("OPERATORX_CASE_TIMEOUT_S", "300"))
+_FIRST_CASE_TIMEOUT_S = float(os.environ.get("OPERATORX_FIRST_CASE_TIMEOUT_S", "900"))
 _USED_FLOOR = float(os.environ.get("OPERATORX_RECOVER_USED_GIB", "8")) * 2**30
 _USED_FRACTION = float(os.environ.get("OPERATORX_RECOVER_USED_FRACTION", "0.12"))
 
@@ -156,6 +161,34 @@ def _write_progress(path: Path, state: dict) -> None:
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(state))
     tmp.replace(path)
+
+
+class _Watchdog:
+    """Stops this process (TIMED_OUT, stacks on stderr) if a case runs past its limit."""
+
+    def __init__(self, progress: Path):
+        import threading
+        self.progress, self.lock, self.timer = progress, threading.Lock(), None
+
+    def arm(self, index: int, seconds: float, state: dict) -> None:
+        import threading
+        self.cancel()
+        self.timer = threading.Timer(seconds, self._fire, (index, seconds, state))
+        self.timer.daemon = True
+        self.timer.start()
+
+    def cancel(self) -> None:
+        if self.timer is not None:
+            self.timer.cancel()
+            self.timer = None
+
+    def _fire(self, index: int, seconds: float, state: dict) -> None:
+        import faulthandler
+        _write_progress(self.progress, {**state, "next": index, "running": index, "timeout_s": int(seconds)})
+        print(f"[run_smoke] case {index} did not finish within {seconds:.0f} s; stopping this process",
+              file=sys.stderr, flush=True)
+        faulthandler.dump_traceback(all_threads=True)
+        os._exit(TIMED_OUT)
 
 
 def _agree_any(flag: bool) -> bool:
@@ -284,19 +317,30 @@ def main() -> int:
         crashed = state.get("running")
         restarted = os.environ.get("OPERATORX_CRASH_RC") == str(RESTART)  # not a crash
         if not restarted and crashed is not None and int(crashed) == start and start < len(entries):
-            op, tl = entries[start]  # the process died during this case
-            results.append(Result(op=op, metrics={}, status="error", testlist=tl,
-                                  message=f"the process exited with code {os.environ.get('OPERATORX_CRASH_RC', '?')} "
-                                          "during this case"))
+            op, tl = entries[start]  # the process died (or hung) during this case
+            rc = os.environ.get("OPERATORX_CRASH_RC", "?")
+            what = (f"did not finish within {state.get('timeout_s', '?')} s (the harness stopped it)"
+                    if rc == str(TIMED_OUT) else f"the process exited with code {rc} during this case")
+            results.append(Result(op=op, metrics={}, status="error", testlist=tl, message=what))
             counts["error"] += 1
+            # a layer two of whose cases kill or hang the process: the rest is recorded the same
+            layer = layer_key(op.type, op.args)
+            repeats[layer] = repeats.get(layer, 0) + 1
+            if repeats[layer] >= 2:
+                failed_layers[layer] = ["error", what]
             start += 1
         if start and rank == 0:
             print(f"[run_smoke] resuming at case {start} of {len(entries)}", flush=True)
+        watchdog = _Watchdog(progress)
+    first_case = True  # a process's first case run also compiles kernels and builds
     for index, (op, tl) in enumerate(entries):
         if index < start:
             continue
         if progress is not None:
-            _write_progress(progress, {"next": index, "running": index, "failed_layers": failed_layers, "repeats": repeats})
+            running = {"next": index, "running": index, "failed_layers": failed_layers, "repeats": repeats}
+            _write_progress(progress, running)
+            watchdog.arm(index, _FIRST_CASE_TIMEOUT_S if first_case else _CASE_TIMEOUT_S, running)
+            first_case = False
         _t0 = _time.perf_counter()
         stage = ""
         oom = False
@@ -353,6 +397,8 @@ def main() -> int:
                                   testlist=tl))
             counts[status] += 1
             latency_str = "  unsupported (OOM)" if oom else f"        ERROR ({type(e).__name__})"
+        if progress is not None:
+            watchdog.cancel()
         wall_s = _time.perf_counter() - _t0
         if rank == 0:
             # checkpoint after each op, outside timing, so cancellation keeps completed rows

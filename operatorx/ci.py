@@ -367,7 +367,7 @@ def command(argv: list[str], log: Path, *, env=None) -> None:
                     process.kill()
                     process.wait()
         if rc:
-            print(log.read_text()[-16000:], file=sys.stderr)
+            print(log.read_text(errors="replace")[-16000:], file=sys.stderr)
             raise subprocess.CalledProcessError(rc, argv)
 
 
@@ -840,6 +840,7 @@ def _visible_devices(lane: int, ws: int) -> None:
 
 MAX_RESTARTS = 100
 RESTART = 75  # main.py: this process must not run another case
+# main.py's case watchdog exits 76 (TIMED_OUT): a crash, recorded against the case in flight
 
 
 def _supervise(bench: list[str], part: str, task: int, ws: int) -> int:
@@ -902,7 +903,7 @@ def _supervise(bench: list[str], part: str, task: int, ws: int) -> int:
             except FileExistsError:
                 sibling = mark(attempt).read_text().strip() or "restart"
         reason = sibling or ("restart" if rc == RESTART else f"crash {rc}")
-        crashed = reason.startswith("crash")
+        crashed = reason.startswith("crash")  # including the case watchdog (TIMED_OUT)
         ready = root / f"p{part}-l{lane}.ready{attempt}"
         if task % ws == 0:
             if not crashed and "running" in state():
