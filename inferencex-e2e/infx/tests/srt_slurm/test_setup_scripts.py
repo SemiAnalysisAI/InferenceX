@@ -95,3 +95,30 @@ def test_tokenspeed_installer_uses_direct_private_wheels_and_one_public_index(tm
          "--flashinfer-version", "0.7.2.post1"],
         ["-m", "pip", "check"],
     ]
+
+
+def test_tokenspeed_rocm_installer_keeps_the_image_torch_and_checks_it(tmp_path):
+    result, installs = run(tmp_path, "tokenspeed-nightly-rocm.sh", {
+        "TOKENSPEED_WHEEL_URL": "https://example.test/tokenspeed.whl#sha256=abc",
+        "TOKENSPEED_KERNEL_WHEEL_URL": "https://example.test/kernel.whl#sha256=def",
+        "TOKENSPEED_KERNEL_AMD_WHEEL_URL": "https://example.test/kernel_amd.whl#sha256=456",
+        "TOKENSPEED_ENGINE_WHEEL_URL": "https://example.test/engine.whl#sha256=123",
+        "TOKENSPEED_SCHEDULER_VERSION": "0.1.52",
+        "ROUTER_VERSION": "1.13.0.post20261027",
+    })
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert installs == [[
+        "-m", "pip", "install", "--break-system-packages", "--upgrade",
+        "--upgrade-strategy", "only-if-needed",
+        "--index-url", "https://pypi.org/simple",
+        "https://example.test/tokenspeed.whl#sha256=abc",
+        "https://example.test/kernel.whl#sha256=def",
+        "https://example.test/kernel_amd.whl#sha256=456",
+        "https://example.test/engine.whl#sha256=123",
+        "tokenspeed-scheduler==0.1.52",
+        "tokenspeed-smg==1.13.0.post20261027",
+    ]]
+    calls = [json.loads(line) for line in (tmp_path / "python3.jsonl").read_text().splitlines()]
+    assert calls[-2][0] == "-c" and "torch.version.hip" in calls[-2][1]
+    assert calls[-1] == ["-m", "pip", "check"]

@@ -12808,3 +12808,13 @@
     - "TEP prefill uses MTP with max_draft_len 1, max_num_tokens 16384, TWOSHOT allreduce, Mamba branch snapshots and breakable prefill CUDA graphs to 16384 tokens; DEP prefill keeps max_num_tokens 8192 with piecewise CUDA graphs to 8192 tokens, and a context request pending for 30 scheduler iterations takes up to 2048 tokens per iteration ahead of the shortest-first order (context_starvation_iterations). TEP decode uses the TRTLLM MoE backend with MoE TP2."
     - "Launch workers under numactl --cpunodebind/--preferred on the GPU's NUMA node (numa_cpu_bind with numa_memory_bind: preferred, srt-slurm v2.65.2) with TLLM_NUMA_AWARE_WORKER_AFFINITY=1, serve the model as Qwen3.5-397B-A17B-NVFP4-V2, send token IDs as bytes from the Dynamo frontend (DYN_TOKEN_IDS_AS_BYTES=1), place the frontend on the first decode node, and route prefill by KV with 14400 s session affinity and decode by least-loaded."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4834
+
+- config-keys:
+    - musespark-fp4-mi355x-tokenspeed-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Muse Spark Open MXFP4 MI355X AgentX on TokenSpeed: attention TP8, MoE TP8/EP1, the DFlash2 draft as it ships (BF16, seven draft tokens), FP8 KV cache and 1M context, at concurrency 1, 2, 4, 8 and 16 with per-concurrency running-request caps and prefill/decode intervals."
+    - "Pin the TokenSpeed 0.1.1.post20261110 nightly, ROCm 7.2 kernel and kernel-amd 0.1.4.post20261110 and engine 0.1.0.post20261110 (all from e8b98dd83f65795d554bb51b54684e088c69552c) by SHA256, scheduler 0.1.53, the runner image by digest, and the checkpoint and DFlash2 draft revisions. Add tokenspeed-nightly-rocm.sh, which keeps the image's ROCm torch."
+    - "Select golden DFlash2 acceptance and the greedy sampler for TokenSpeed DFLASH throughput; evals verify for real with the triton sampler and speculative sampling."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4962

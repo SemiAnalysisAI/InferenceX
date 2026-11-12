@@ -1,0 +1,158 @@
+base:
+  schema: 2
+  name: musespark-fp4-mi355x-tokenspeed-agentic-dflash
+  identity:
+    model:
+      revision: c7bc74fd64371315a091bc15f9723882eead0dc1
+    container: {}
+    frameworks:
+      tokenspeed: 0.1.1.post20261110
+      tokenspeed-kernel: 0.1.4.post20261110
+      tokenspeed-kernel-amd: 0.1.4.post20261110
+      tokenspeed-engine: 0.1.0.post20261110
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  # Weight loading, graph capture and the first kernel compilations.
+  health_check:
+    max_attempts: 720
+    interval_seconds: 10
+  frontend:
+    type: smg
+    enable_multiple_frontends: false
+    # srtctl runs SMG directly: these are the gateway settings `ts serve` uses for Muse Spark.
+    args:
+      reasoning-parser: muse
+      tool-call-parser: muse
+      parser: symphony
+      policy: round_robin
+      disable-circuit-breaker: true
+      disable-retries: true
+      disable-load-monitoring: true
+      tokenizer-cache-enable-l0: true
+      tokenizer-cache-enable-l1: true
+      health-check-timeout-secs: 610
+  engine: tokenspeed
+  setup_script: tokenspeed-nightly-rocm.sh
+  environment:
+    TOKENSPEED_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-nightly-v0.1.1.post20261110/tokenspeed-0.1.1.post20261110-py3-none-any.whl#sha256=5efa0ecdb4e84e44a9407f48d8ca1b1e83feb71057483e2eacaabc88aa5c065b
+    TOKENSPEED_KERNEL_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-nightly-v0.1.4.post20261110-rocm72/tokenspeed_kernel-0.1.4.post20261110-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=46c32a9bbad19134083667a0b8f1989bb558ae9e2b63d1fd4d6d058973ce5ce7
+    TOKENSPEED_KERNEL_AMD_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-amd-nightly-v0.1.4.post20261110/tokenspeed_kernel_amd-0.1.4.post20261110-py3-none-any.whl#sha256=b340c4cff4e4492b31202d0bc7b13cac393097f3f0a3cf900b2f835c01ef3707
+    TOKENSPEED_ENGINE_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-engine-nightly-v0.1.0.post20261110/tokenspeed_engine-0.1.0.post20261110-cp312-cp312-linux_x86_64.whl#sha256=13aa5eb7408419f53466e0186bb0b7ab2946314b95cd8be72bc541f37f600909
+    TOKENSPEED_SCHEDULER_VERSION: 0.1.53
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      env:
+        PYTHONNOUSERSITE: '1'
+        # One HIP queue per graph keeps the two-stream speculative decode graph
+        # off the runtime's slow per-node launch path.
+        DEBUG_HIP_FORCE_GRAPH_QUEUES: '1'
+        DEBUG_HIP_GRAPH_BATCH_SIZE: '1'
+        # Serve from the pre-seeded shared HF cache with no Hub API calls.
+        HF_HUB_OFFLINE: '1'
+      args:
+        served-model-name: amd/Muse-Spark-Open-816B-A42B-Quark-MXFP4
+        revision: c7bc74fd64371315a091bc15f9723882eead0dc1
+        dtype: bfloat16
+        quantization: mxfp4
+        # Attention TP8; MoE TP8 with EP1 keeps all 256 experts on every GPU.
+        attn-tp-size: 8
+        data-parallel-size: 1
+        moe-tp-size: 8
+        ep-size: 1
+        pipeline-parallel-size: 1
+        init-expert-location: trivial
+        moe-backend: gluon
+        all2all-backend: none
+        kv-cache-dtype: fp8_e4m3
+        max-model-len: 1048576
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        cudagraph-capture-sizes: [1, 2, 3, 4, 5, 6, 8, 12, 16, 32, 64]
+        max-cudagraph-capture-size: 64
+        disable-prefill-graph: true
+        enable-prefix-caching: true
+        disable-kvstore: true
+        kvstore-ratio: 0.0
+        gpu-memory-utilization: 0.92
+        reasoning-parser: muse
+        grammar-backend: xgrammar
+        # DFlash2 drafts seven tokens per step; the verify window adds the current token.
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: RadixArk/Muse-Spark-Open-DFlash2
+        speculative-draft-model-revision: 46c90f412549c472941a68382d91a99e5e6372a0
+        speculative-num-steps: 7
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 8
+        # Real verification. The connector selects greedy sampling only for synthetic throughput.
+        sampling-backend: triton
+        enable-speculative-sampling: true
+        enable-metrics: true
+        metrics-host: 0.0.0.0
+  benchmark:
+    env:
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'tokenspeed:'
+
+override_tp8_c1:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 1
+        prefill-decode-interval: 0
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp8_c2:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 2
+        prefill-decode-interval: 192
+  benchmark:
+    env:
+      CONC: '2'
+      KV_OFFLOADING: none
+
+override_tp8_c4:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 2
+        prefill-decode-interval: 96
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp8_c8:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 2
+        prefill-decode-interval: 256
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
+override_tp8_c16:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 3
+        prefill-decode-interval: 384
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: none
