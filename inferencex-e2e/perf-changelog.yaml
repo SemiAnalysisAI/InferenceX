@@ -12775,3 +12775,12 @@
     - "Concurrency 12 and 24: CUDA graphs also for prefill and mixed steps up to 4096 tokens (#4878 recipe without the TEP shared-expert variable); DSpark drafts 3 tokens; prefill-schedule-interval 8."
     - "Concurrency 48 and 64: EP8 MegaMoE with FULL_DECODE_ONLY graphs, max-num-batched-tokens 16384, prefill-schedule-interval 8 and gpu-memory-utilization 0.97."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4871
+
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-disagg-agentic-mtp
+  description:
+    - "Add GLM-5.2 MXFP4 disaggregated AgentX on two MI355X nodes: SGLang 1P1D over MoRI with EAGLE MTP 5/1/6 on the digest-pinned lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261111 nightly at concurrency 1-96. TP2 prefill and TP4 decode at 1-2, TP4 prefill and decode at 4-16, TP4 prefill and attention-DP4 decode at 24, TP1 x PP4 prefill and attention-DP4 decode at 32-96; the prefill keeps a 350 GB/rank HiCache DRAM tier from concurrency 8."
+    - "Every worker sets ROCM_QUICK_REDUCE_QUANTIZATION=INT4 and AITER_USE_FLYDSL_MOE_SORTING=1; the TP2 and TP4 prefill runs breakable prefill CUDA graphs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  scenario-type: [agentic-coding]
