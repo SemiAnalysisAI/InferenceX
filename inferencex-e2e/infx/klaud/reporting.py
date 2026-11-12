@@ -353,30 +353,51 @@ def label_workload(label: str) -> tuple[int, int] | None:
     return (int(match[1]), int(match[2])) if match else None
 
 
+def request_counts(row: dict) -> tuple[int | None, int | None]:
+    """The failed and requested counts of result ``row`` without AgentX warmup requests.
+
+    AgentX accounting counts an errored warmup record as both warmup and error, so profiling
+    errors are the records dropped beyond warmup. Either count is None when unreported.
+    """
+    if "request_metrics" in row.get("metrics", row):
+        accounting = row.get("request_accounting", {})
+        warmup = accounting.get("records_warmup_dropped")
+        dropped, total = accounting.get("records_dropped_total"), accounting.get("records_total")
+        if warmup is None or dropped is None or total is None:
+            return None, None
+        return dropped - warmup, total - warmup
+    outcome = row.get("benchmark_outcome", {})
+    return outcome.get("failed"), outcome.get("requested")
+
+
 def values(row: dict) -> Values:
     """Return the throughput, latency in ms and error count of result ``row``.
 
     Collector and API metrics are seconds, and only this presentation layer converts to ms.
+    Disaggregated output throughput is per decode GPU, the basis the public API publishes.
     """
     metrics = row.get("metrics", row)
     if "request_metrics" in metrics:
         request = metrics["request_metrics"]
         throughput = request["throughput"]["per_gpu"]
+        output = throughput.get("output_tput_tps")
+        if output is not None and row.get("disagg") and row.get("num_decode_gpu"):
+            output *= row["num_gpus"] / row["num_decode_gpu"]
         ttft = request["latency"]["ttft"].get("mean")
         tpot = request["latency"]["tpot"].get("mean")
         return Values(
             total_tps_gpu=throughput.get("total_tput_tps"),
-            output_tps_gpu=throughput.get("output_tput_tps"),
+            output_tps_gpu=output,
             ttft_ms=ttft * 1000 if ttft is not None else None,
             tpot_ms=tpot * 1000 if tpot is not None else None,
-            request_errors=row.get("request_accounting", {}).get("records_error_dropped"),
+            request_errors=request_counts(row)[0],
         )
     return Values(
         total_tps_gpu=metrics.get("tput_per_gpu"),
         output_tps_gpu=metrics.get("output_tput_per_gpu"),
         ttft_ms=metrics["mean_ttft"] * 1000 if metrics.get("mean_ttft") is not None else None,
         tpot_ms=metrics["mean_tpot"] * 1000 if metrics.get("mean_tpot") is not None else None,
-        request_errors=row.get("benchmark_outcome", {}).get("failed"),
+        request_errors=request_counts(row)[0],
     )
 
 
@@ -1244,13 +1265,8 @@ FLOORED_EVAL_SUITES = (
 
 
 def request_error_rate(row: dict) -> float | None:
-    """The share of result ``row``'s requests that errored, or None without a request count."""
-    if "request_metrics" in row.get("metrics", row):
-        accounting = row.get("request_accounting", {})
-        errors, total = accounting.get("records_error_dropped"), accounting.get("records_total")
-    else:
-        outcome = row.get("benchmark_outcome", {})
-        errors, total = outcome.get("failed"), outcome.get("requested")
+    """The share of result ``row``'s profiled requests that errored, or None without a count."""
+    errors, total = request_counts(row)
     return errors / total if errors is not None and total else None
 
 
@@ -1260,7 +1276,7 @@ def check_regressions(
     """Raise VerificationError if passed final sweep ``run`` regressed against ``baseline``.
 
     Validation is blocked by a matched point whose output throughput fell more than
-    MAX_THROUGHPUT_DROP or cannot be compared (missing or zero), and by any point whose
+    MAX_THROUGHPUT_DROP or cannot be compared (missing or zero), and by any point whose profiled
     request error rate exceeds the serving client's MAX_FAILURE_RATE. A frozen point without
     a dataset is assumed to share the new corpus, and only a different known corpus is skipped.
     An eval is blocked below MIN_EVAL_RETENTION of its baseline score, and FLOORED_EVAL_SUITES

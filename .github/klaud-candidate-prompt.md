@@ -219,7 +219,7 @@ legends, boilerplate, limitations and redundant milestones. Briefly note failure
 reasons; preserve sources and uncertainty. Report observations on material changes or after
 30 minutes waiting. Improvement is best effort, but final-sweep validation (never smoke) blocks
 validated when a matched point's output tok/s/GPU falls over 30% below baseline or has no
-baseline throughput, any point's request errors exceed 5%, or an eval falls below half its
+baseline throughput, any point's profiled request errors exceed 5%, or an eval falls below half its
 baseline score or below 50% for gsm8k and the Kimi/MiniMax tool-call suites;
 repair within budget, else finish failed with the affected points.
 
