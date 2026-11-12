@@ -12809,4 +12809,4 @@
     - "Serving: Dynamo KV routing with conversation affinity on prefill and least-loaded decode, fastokens with its cache, NUMA binding, the checkpoint's chat template, the DFlash2 draft from the HF hub cache, iteration stats every 20 iterations with the iteration log off, and on prefill and decode a 1024 MB C++ agent bounce buffer (4MB maximum average descriptor size, minimum descriptor count 1) with a 600 s KV transfer timeout. UCX_TLS and UCX_NET_DEVICES are left to the cluster; acceptance comes from the golden curve."
     - "Native DRAM KV offload: 154.6 GB per context rank at 1P4D/1P2D c52, 192.2 GB at the other disaggregated points, 171.8 GB per aggregated rank."
     - "The aggregated point sets MUSESPARK_OPEN_LEVER_CONTEXT_SEQUENCE_PARALLEL=on: the image turns context_sequence_parallel off under auto (for the disaggregated context), and at batch 80 the engine runs out of GPU memory in CUDA-graph capture without it."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5047
