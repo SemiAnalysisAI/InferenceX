@@ -13,7 +13,7 @@ concurrency:
 jobs:
   comment:
     name: comment
-    if: ${{ !github.event.pull_request.draft }}
+    if: github.repository == 'SemiAnalysisAI/InferenceX' && !github.event.pull_request.draft
     permissions:
       pull-requests: write # Publish PR feedback.
     runs-on: ubuntu-latest
