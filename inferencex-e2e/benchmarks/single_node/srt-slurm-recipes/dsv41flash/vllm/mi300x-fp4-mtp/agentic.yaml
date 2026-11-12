@@ -46,9 +46,6 @@ base:
         # The sparse-attention indexer allocates a [batched-tokens, 1M] fp8
         # logits buffer at startup.
         max-num-batched-tokens: 8192
-        # The ROCm sparse SWA path lacks the replay window clamp; bounded replay
-        # memory-faulted at the first prefix hit with a replay start.
-        no-swa-bounded-replay: true
         # Piecewise capture segfaulted on gfx942; capture only full decode
         # graphs and run prefill eagerly.
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY"}'

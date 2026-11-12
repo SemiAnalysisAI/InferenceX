@@ -12796,3 +12796,15 @@
     - "C32 joins C64 on the SimpleCPUOffloadConnector tier (1349 GB, dram-utilization 0.90) with LRU eviction (cpu_lru_eviction). C32 keeps DSpark 7; C64 keeps DSpark 3 at 0.90 GPU memory utilization."
     - "Removed env switches, which the image's validation runs do not set: VLLM_USE_RUST_FRONTEND, VLLM_ROCM_USE_SKINNY_GEMM, VLLM_ROCM_PARALLEL_INDEX_TOPK, VLLM_ROCM_MINIMAX_M3_MONO_DRAFTER, VLLM_ROCM_MINIMAX_M3_SP_PREFILL. PYTHONHASHSEED is 0 at every point (42 at c64 before)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - dsv41flash-fp4-mi300x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image from v0.33.0 to nightly-rocm100-be47189f37f6162991366ff6b91539f6e9d1f432 (digest sha256:a6263de19d7e68fc12d7ee37da0cc0d2817b8eb9a83c4f22911783befd133ebc), the 2026-11-12 ROCm 10.0 nightly."
+    - "Remove --no-swa-bounded-replay. The flag worked around a memory fault at the first prefix hit, from a ROCm sparse SWA path without the replay window clamp. The new image has vllm-project/vllm#59039 (decoder SWA bounded replay on ROCm) and vllm-project/vllm#65249 (prefix-cache SWA replay on gfx942, with the window clamp), the same as the MI325X entry since InferenceX#4617."
+    - "The new image also routes gfx942 sparse MLA prefill of 512 or more query rows to AITER pa_prefill_sparse (vllm-project/vllm#60102)."
+    - "--monokernel stays off: its gfx942 weight copies leave about 2.7 GiB beside the weights on a 192 GB card at TP4 (vllm-project/vllm#62713). Integer quick reduce stays off. All-reduce stays BF16."
+    - "No point changes: concurrency 1, 2, 4, 8, 16 and 32 on TP8 and TP4 (12 points), all re-measured on the new image."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
