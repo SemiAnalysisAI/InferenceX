@@ -170,6 +170,14 @@ def test_invalid_cluster_is_rejected(path, value, message):
         load_inventory(inventory(alpha=with_change(path, value)))
 
 
+def test_a_runner_config_file_with_a_repeated_key_is_rejected(tmp_path):
+    path = tmp_path / "runners.yaml"
+    text = yaml.safe_dump(inventory(alpha=CLUSTER))
+    path.write_text(text + "clusters:\n  alpha: {}\n")
+    with pytest.raises(yaml.YAMLError, match="found duplicate key 'clusters'"):
+        load_inventory(path)
+
+
 def test_env_and_host_setup_env_take_the_clusters_fabric_by_reference():
     record = with_change("slurm.srt-slurm", {
         "network-interface": "",

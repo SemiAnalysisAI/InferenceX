@@ -774,8 +774,10 @@ jobs:
                 needs.canary-multi-node-sweep.result == 'success' ||
                 needs.sweep-single-node-1k1k.result != 'skipped' ||
                 needs.sweep-single-node-8k1k.result != 'skipped' ||
+                needs.sweep-agentic.result != 'skipped' ||
                 needs.sweep-multi-node-1k1k.result != 'skipped' ||
-                needs.sweep-multi-node-8k1k.result != 'skipped'
+                needs.sweep-multi-node-8k1k.result != 'skipped' ||
+                needs.sweep-multi-node-agentic.result != 'skipped'
               )
             }}
         uses: $/.github/workflows/collect-results.yml
@@ -928,23 +930,8 @@ jobs:
                   path: ${{ env.RESULTS_DIR }}
                   pattern: results_*
 
-            - name: Select Python project
-              run: |
-                python_project="$GITHUB_WORKSPACE"
-                if [[ -f "$python_project/inferencex-e2e/pyproject.toml" ]]; then
-                  python_project="$python_project/inferencex-e2e"
-                fi
-                test -f "$python_project/pyproject.toml"
-                echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
-
-            - name: Set up uv
-              uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-              with:
-                  cache-dependency-glob: |
-                      pyproject.toml
-                      uv.lock
-                      inferencex-e2e/pyproject.toml
-                      inferencex-e2e/uv.lock
+            - name: Set up Python project
+              uses: $/.github/actions/setup-python-project
 
             - name: Calculate success rate
               run: >-
@@ -983,23 +970,8 @@ jobs:
                   path: results/
                   pattern: results_bmk
 
-            - name: Select Python project
-              run: |
-                python_project="$GITHUB_WORKSPACE"
-                if [[ -f "$python_project/inferencex-e2e/pyproject.toml" ]]; then
-                  python_project="$python_project/inferencex-e2e"
-                fi
-                test -f "$python_project/pyproject.toml"
-                echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
-
-            - name: Set up uv
-              uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-              with:
-                  cache-dependency-glob: |
-                      pyproject.toml
-                      uv.lock
-                      inferencex-e2e/pyproject.toml
-                      inferencex-e2e/uv.lock
+            - name: Set up Python project
+              uses: $/.github/actions/setup-python-project
 
             - name: Compare results against main
               run: >-
