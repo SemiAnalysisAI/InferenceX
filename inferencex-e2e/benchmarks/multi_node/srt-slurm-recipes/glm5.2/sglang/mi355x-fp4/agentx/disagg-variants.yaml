@@ -406,3 +406,59 @@ override_1p1d_p_pp4_d_dp4_hicache_c48_hc250:
         cuda-graph-max-bs-decode: 24
         chunked-prefill-size: 32768
         enable-request-time-stats-logging: false
+
+# Test only: C=48 with USERPTR (no HSA_USERPTR_FOR_PAGED_MEM), HiCache off.
+override_1p1d_p_pp4_d_dp4_c48_nohc_userptr:
+  roles:
+    prefill:
+      env:
+        SGLANG_PP_LAYER_PARTITION: "20,20,20,18"
+        # Matches the C=48 point validated on InferenceMINI (Vultr MI355X).
+        SGLANG_DISAGGREGATION_NUM_PRE_ALLOCATE_REQS: "32"
+      args:
+        tp-size: 1
+        pp-size: 4
+        mem-fraction-static: 0.95
+        max-running-requests: 96
+        enable-hierarchical-cache: false
+    decode:
+      env:
+        SGLANG_DISAGGREGATION_NUM_PRE_ALLOCATE_REQS: "32"
+      args:
+        mem-fraction-static: 0.95
+        dp-size: 4
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        max-running-requests: 96
+        cuda-graph-max-bs-decode: 24
+        chunked-prefill-size: 32768
+        enable-request-time-stats-logging: false
+
+# Test only: C=48 with USERPTR, HiCache 350 GB.
+override_1p1d_p_pp4_d_dp4_hicache_c48_userptr:
+  roles:
+    prefill:
+      env:
+        SGLANG_PP_LAYER_PARTITION: "20,20,20,18"
+        # Matches the C=48 point validated on InferenceMINI (Vultr MI355X).
+        SGLANG_DISAGGREGATION_NUM_PRE_ALLOCATE_REQS: "32"
+      args:
+        tp-size: 1
+        pp-size: 4
+        mem-fraction-static: 0.95
+        max-running-requests: 96
+        enable-hierarchical-cache: true
+        hicache-size: 350
+        hicache-write-policy: write_through
+    decode:
+      env:
+        SGLANG_DISAGGREGATION_NUM_PRE_ALLOCATE_REQS: "32"
+      args:
+        mem-fraction-static: 0.95
+        dp-size: 4
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        max-running-requests: 96
+        cuda-graph-max-bs-decode: 24
+        chunked-prefill-size: 32768
+        enable-request-time-stats-logging: false
