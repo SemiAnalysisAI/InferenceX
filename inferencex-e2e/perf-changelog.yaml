@@ -12866,3 +12866,11 @@
     - "Aggregated TP4 on one node: concurrency 4 (max-num-seqs 8, max-num-active-seqs 1, prefill-schedule-interval 24, deep_select indexer top-k), 10 (max-num-seqs 16, max-num-active-seqs 2) and 16 (max-num-seqs 64, max-num-active-seqs 3), with THP Engram host tables."
     - "Disaggregated DEP4 prefill / DEP16 or DEP32 decode with push NIXL transfer and 2 to 7 async KV loads started per decode step: 3P1D DEP32 at c3018 (max-num-seqs 18), 3P1D DEP16 at c3018 (max-num-seqs 48, 70 GiB CPU KV per prefill rank), 4P1D DEP16 at c4096 (max-num-seqs 64) and 5P1D DEP16 at c5600 (max-num-seqs 112); the others offload up to 90 GiB of CPU KV per prefill rank."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4618
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the SGLang ROCm image from v0.5.20-rocm720-mi35x-20260927 to v0.5.22-rocm720-mi35x."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4579
