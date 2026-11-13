@@ -211,6 +211,40 @@ def test_single_node_point_stages_workflow_artifacts(harness):
     assert "recipe.yaml" not in event["artifacts"]
 
 
+@pytest.mark.parametrize("shape", ["single", "multi", "video"])
+@pytest.mark.parametrize("failure", ["drain", "query"])
+def test_successful_job_with_unhealthy_nodes_fails_and_retains_its_artifacts(harness, shape, failure):
+    extra = {"FAKE_NODE_STATE": "IDLE+DRAIN", "FAKE_NODE_REASON": "Kill task failed (JobId=42 StepId=5)"}
+    if failure == "query":
+        extra = {"FAKE_NODE_QUERY_RC": "1"}
+    if shape == "single":
+        env = single_node_env(harness, "h100-cw", **extra)
+    elif shape == "multi":
+        env = lane_env(harness, "b300-dsxe", MODEL_PREFIX="dsr1", PRECISION="fp4",
+                       FRAMEWORK="dynamo-trt", MODEL="deepseek-r1-fp4", **extra)
+    else:
+        env = video_env(harness, "b200-nscale", **extra)
+    result = launch(env, harness.config, harness.workspace)
+    assert result.returncode == 1, result.stdout + result.stderr
+    event = job_event(harness.workspace)
+    assert event["outcome"] == "failure"
+    assert event["error"]["type"] == "NodeCleanupFailed"
+    assert event["error"]["stage"] == "collect"
+    report = json.loads((harness.workspace / "slurm-node-health.json").read_text())
+    assert report["job_id"] == "42"
+    assert report["errors"]
+    if failure == "drain":
+        assert report["nodes"][0]["state"] == "IDLE+DRAIN"
+        assert "StepId=5" in report["nodes"][0]["reason"]
+    bundles = list(harness.workspace.glob("*logs.tar.gz"))
+    assert bundles
+    with tarfile.open(bundles[0]) as bundle:
+        assert any(name.endswith("slurm-node-health.json") for name in bundle.getnames())
+    if shape == "single":
+        assert (harness.workspace / "point-identity.json").is_file()
+        assert (harness.workspace / "LOGS/power/native-job-status.txt").read_text() == "42|COMPLETED|0:0\n"
+
+
 VIDEO_ENV = {
     "FRAMEWORK": "sglang", "MODEL": "MiniMaxAI/MiniMax-H3", "IMAGE": "test:tag", "PRECISION": "bf16",
     "MODEL_PREFIX": "h3", "SPEC_DECODING": "none", "IS_AGENTIC": "0", "ISL": "0", "OSL": "0",
