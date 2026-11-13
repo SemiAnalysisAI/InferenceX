@@ -61,7 +61,7 @@ for the pinned SHA. It ran no PR code. Each section is named for the check it se
 | `check_1_latest_validated` | Newest satisfied commit that is an ancestor of the pinned SHA |
 | `check_1_later_commits` | First-parent commits after it, with `merge` flag and changed files |
 | `check_2_eval_gaps` | Per run and eval row: gap and 2-sigma threshold against the best sibling and the closest ingested cohort |
-| `check_18g_points` | Generated points added and removed per config key, with measurements, dominance, and re-tuned deltas |
+| `check_18g_points` | Generated points added and removed per config key, with measurements, dominance, re-tuned deltas on throughput and every dashboard x axis, and `regressions` more than 10% worse |
 | `check_18c_images` | Newly referenced images and whether `docker manifest inspect` resolves them (`tag@digest` pins by digest) |
 
 Facts are inputs, not verdicts. Apply each check's rules to them, and spot-check a fact
@@ -951,7 +951,7 @@ APPLICABILITY: changes to master configs, recipes, benchmark images,
 `perf-changelog.yaml`, external orchestration pins, or cross-repository dispatch.
 N/A otherwise. Inspect every changed master entry and recipe pair at the PINNED SHA.
 Requirements (a)-(g) and (i) FAIL when violated or when a lookup they need fails ("could not
-be verified"). (h) is report-only. Name the config, file and line, and the mismatch.
+be verified"). (h) may WARN but never FAILs. Name the config, file and line, and the mismatch.
 
 ### (a) `CONFIG_FILE` resolves
 Each added `CONFIG_FILE` resolves to the intended recipe and launcher branch.
@@ -999,10 +999,20 @@ points, take measurements from the most recent sweep run that measured them
 (`gh run download`) and run `signoff_facts dominance`. Points with the same shape and concurrency but a new
 recipe fingerprint are re-tuned, not removed; they appear under `retuned_deltas`.
 
-### (h) Image-only and re-tune deltas (report only)
-Report `retuned_deltas` (throughput and interactivity change per point) in the row,
-plus any eval lane change from Check 2. For an image-only bump, also compare with the
-closest prior run on the old image. A small diff is not evidence of low risk.
+### (h) Dashboard metric regressions (WARN)
+Report `retuned_deltas` in the row, plus any eval lane change from Check 2. They give each
+re-tuned point's percent change in throughput (`tput_per_gpu`) and every dashboard x axis
+(interactivity, E2E latency, TTFT, and for AgentX E2E normalized interactivity) at the
+dashboard's default statistic, P90 for AgentX and median for fixed sequence.
+`regressions` lists each point and metric more than 10% worse in its better direction
+(lower throughput or interactivity, higher E2E latency or TTFT). For an image-only bump,
+also compare with the closest prior run on the old image on the same metrics and statistic.
+WARN, never FAIL, when `regressions` is non-empty or your own comparison shows any of these
+metrics more than 10% worse at any point, naming each point, metric, and old and new values
+with the delta. When another requirement of Check 18 fails, the row is FAIL and still names
+the regressions. If `normalized_interactivity_unavailable` is set, ingested AgentX points
+lack E2E normalized interactivity, so say that axis was not compared. A small diff is not
+evidence of low risk.
 
 ### (i) AgentX stream interval is at most 60
 Every `agentic-coding` point the PR adds or reruns must have an effective stream interval
@@ -1023,8 +1033,10 @@ per-submission exceptions. See
 Decide PASS only if Checks 0-18 ALL pass. A check reported as `N/A` counts as a pass,
 but its row still starts with ➖, never ✅.
 Checks 4, 14, 15, and 16 may WARN but never FAIL. Check 13 may WARN for unavailable
-evidence and FAIL for a demonstrated violation. If any check warns and none fails,
-use the WARN header below. Any FAIL requires REJECTED, even when other checks warn.
+evidence and FAIL for a demonstrated violation. Check 18 may WARN for a dashboard metric
+regression under (h) and FAILs when any other requirement of it fails. If any check warns
+and none fails, use the WARN header below. Any FAIL requires REJECTED, even when other
+checks warn.
 Keep the `N/A — <reason>` row so the reviewer sees it was considered.
 Write the complete verdict to `/tmp/codeowner-signoff-verdict.md` using the Write
 or Bash tool. Do not post, edit, or delete GitHub comments, labels, or commit
@@ -1049,7 +1061,7 @@ single terse line. Rules:
     on pass: `## ✅✅✅ **Verdict: PASS** ✅✅✅`
     on fail: `## ❌❌❌ **REJECTED** ❌❌❌`
     on warnings without failures: `## ⚠️ **Verdict: WARN** ⚠️`
-- Keep failing criteria AND Check 4/13/14/15/16 warnings in the main body, beneath the verdict header and
+- Keep failing criteria AND Check 4/13/14/15/16/18 warnings in the main body, beneath the verdict header and
   blocking summary. Put every PASS and N/A criterion in ONE collapsed HTML details
   group after the failures and warnings. Use exactly this structure (replace the placeholders;
   the rows below illustrate the format, not actual findings):
@@ -1080,12 +1092,13 @@ single terse line. Rules:
     `⚠️ Check 14 (Pareto coverage): WARN — <curve, count or unverifiable reason; admin-exception state; evidence>`
     `⚠️ Check 15 (PR description): WARN — <claim versus actual configuration/evidence; correction needed>`
     `⚠️ Check 16 (NVIDIA overview): WARN — <model/framework, NVIDIA SKUs, missing or unverified listing; upstream and overview links>`
+    `⚠️ Check 18 (Recipe consistency): WARN — <point, metric, old and new values and delta for each regression; compared run or image>`
   The status word alone selects the emoji. An N/A row starts with ➖ even when it is the
   only N/A row among PASS rows; Check 12 is N/A on most PRs. Keep each row on one line,
   with its reason after ` — `. Never end a row at its status and continue the reason on
   later lines or in sub-bullets; the publisher rejects such rows.
-  Never hide Check 4, 13, 14, 15, or 16 WARN inside the collapsed group.
-  Check 4, 13, 15, and 16 warnings must not trigger the Pareto-coverage escalation.
+  Never hide Check 4, 13, 14, 15, 16, or 18 WARN inside the collapsed group.
+  Check 4, 13, 15, 16, and 18 warnings must not trigger the Pareto-coverage escalation.
   For Check 14 WARN, the publisher adds the warning and the configured Pareto-reviewer
   mentions above the findings. Do not write that escalation text, those mentions, or
   any names yourself. Do not add escalation mentions for PASS/N/A coverage or to the
@@ -1099,13 +1112,13 @@ single terse line. Rules:
 - If all checks pass or are N/A: write the PASS verdict header followed by the
   collapsed group containing all nineteen PASS/N/A rows. No criteria appear expanded.
 - If there are warnings but no failures: write the WARN header, the expanded
-  Check 4, 13, 14, 15, and/or 16 warning rows, then the collapsed PASS/N/A group.
+  Check 4, 13, 14, 15, 16, and/or 18 warning rows, then the collapsed PASS/N/A group.
   The publisher adds reviewer mentions only for Check 14 warnings.
 - If any check other than Checks 4, 14, 15, and 16 fails: immediately after the REJECTED header, write a
   line that @-mentions the sign-off author as `@${SIGNOFF_AUTHOR}` with the blocking
   summary. Then show only FAIL rows, each led by its root issue (e.g. "No passing
   sweep/eval on any commit in this PR") with the supporting link after. Keep any
-  Check 4, 13, 14, 15, and 16 warnings expanded too. Finish with
+  Check 4, 13, 14, 15, 16, and 18 warnings expanded too. Finish with
   the collapsed PASS/N/A group.
 
 Use no emojis anywhere in the comment other than the ✅ / ❌ / ➖ / ⚠️ status emojis

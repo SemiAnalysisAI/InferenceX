@@ -25,6 +25,7 @@ def verdict(
     draft_warning=False,
     body_warning=False,
     nvidia_warning=False,
+    regression_warning=False,
     prefix="",
 ):
     rows = [
@@ -65,7 +66,12 @@ def verdict(
     else:
         rows.append("➖ Check 16 (NVIDIA overview): N/A — No affected NVIDIA configurations.")
     rows.append("➖ Check 17 (Metrics publication): N/A — No affected serving paths.")
-    rows.append("➖ Check 18 (Recipe consistency): N/A — No recipe or image changes.")
+    if regression_warning:
+        expanded.append(
+            "⚠️ Check 18 (Recipe consistency): WARN — x tp4 conc 64: TTFT +14.2% (0.70 s to 0.80 s)."
+        )
+    else:
+        rows.append("➖ Check 18 (Recipe consistency): N/A — No recipe or image changes.")
     return (
         header
         + "\n\n"
@@ -246,6 +252,7 @@ def test_update_errors_other_than_missing_comment_propagate(publish):
         ),
         (verdict(PASS, nvidia_warning=True), True),
         (verdict(REJECT, nvidia_warning=True), True),
+        (verdict(PASS, regression_warning=True), True),
         (
             verdict().replace(
                 "➖ Check 16 (NVIDIA overview): N/A — No affected NVIDIA configurations.\n", ""
@@ -330,7 +337,8 @@ def test_coverage_warning_escalates_once_without_masking_other_failures(
     [(False, False), (True, False), (False, True), (True, True)],
 )
 @pytest.mark.parametrize(
-    "advisory_warning", ["reuse_warning", "draft_warning", "body_warning", "nvidia_warning"]
+    "advisory_warning",
+    ["reuse_warning", "draft_warning", "body_warning", "nvidia_warning", "regression_warning"],
 )
 def test_advisory_warning_preserves_verdict_and_only_coverage_escalates(
     publish, failure, coverage_warning, advisory_warning
@@ -350,6 +358,9 @@ def test_advisory_warning_preserves_verdict_and_only_coverage_escalates(
         "body_warning": "⚠️ Check 15 (PR description): WARN — Body claims 16 GiB; recipe sets 8 GiB.",
         "nvidia_warning": (
             "⚠️ Check 16 (NVIDIA overview): WARN — Kimi-K3 / vLLM on B300: missing listing."
+        ),
+        "regression_warning": (
+            "⚠️ Check 18 (Recipe consistency): WARN — x tp4 conc 64: TTFT +14.2% (0.70 s to 0.80 s)."
         ),
     }[advisory_warning]
     assert expected_warning in body.split("<details>")[0]
