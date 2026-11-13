@@ -193,7 +193,12 @@ generate routing.
 
 ## Measurement
 
-Every window is a pair of CUDA events. `roundtrip` is dispatch then combine. Expert-output staging is
+Every window is a pair of CUDA events. An event costs device time of its own: two adjacent event
+nodes in a replayed graph sit 2.4 to 3.3 µs apart on NVIDIA GPUs and about 6 µs on AMD, and a window around
+real kernels carries more. Every windowed number includes that cost; only the pair period is
+measured without an event between its pairs.
+
+`roundtrip` is dispatch then combine. Expert-output staging is
 outside it and is reported as `stage` where it does device work. Under FP8, `stage` converts the
 received payload to BF16 in place of the expert GEMM; each adapter converts a different amount, so do
 not compare or sum it. `isolated_sum` is isolated dispatch plus combine, never `stage`.
@@ -206,7 +211,8 @@ The diagram ([source](img/ep-timing-methodologies.excalidraw)) shows the publish
    ranks by MAX (a layer finishes with its slowest rank). `combine` runs behind an untimed dispatch.
 2. **Stage**: eager FP8 rows only.
 3. **Chain floors** (`chain_floor_us`): events around each op, MIN across ranks.
-4. **Pair period** (`pair_period`), the headline: events around each pair, MEDIAN across ranks.
+4. **Pair period** (`pair_period`), the headline: back-to-back pairs between two events, MEDIAN
+   across ranks.
 
 Every row also carries `cross_rank_min_us` and `cross_rank_spread_us`. Read MAX and MIN as a bracket:
 two cells whose MAX gap is smaller than the larger spread are not separated. Isolated `dispatch` and
@@ -250,18 +256,24 @@ A decode loop pays the pipeline's steady-state **period** per MoE layer. `benchm
 dispatch→combine pairs back to back with no host sync, drops the first 16 as fill, and pools 4
 trials.
 
-![Two sibling chains](img/chained-pairs.svg)
+![Three sibling chains](img/chained-pairs.svg)
 
-Each trial runs two sibling chains of 128 pairs, so one chain's event-recording cost does not enter
-the other's numbers: the **floors chain** records only op windows, the **period chain** only pair
-windows.
+Each trial runs three sibling chains of 128 pairs, so one chain's events never enter another's
+numbers: the **floors chain** records op windows, the **period chain** pair windows, and the **span
+chain** two events only, one before its first kept pair and one after its last.
 
-- `components.pair_period` (`chained-median`): pair windows reduced by MEDIAN, since collectives
-  phase-lock the ranks into one cadence and a MAX would publish whichever rank hiccuped.
-- `chain_floor_us.dispatch` / `.combine` (`chained-cross-rank-min`): op windows reduced by MIN,
-  within ~10% of profiler kernel time. `period - Σfloors` > 0 is per-pair inter-rank wait.
-- `chain_health.pair_spread_us`, `interpair_gap_us` and `settle_drift_us` check that the point is a
-  steady state.
+- `components.pair_period` (`chained-span-median`): the span chain's time per kept pair, reduced by
+  MEDIAN, since collectives phase-lock the ranks into one cadence and a MAX would publish whichever
+  rank hiccuped. An engine's decode graph has no event between its layers, and a window around each
+  pair reads above the span: 4 to 14 µs at T=1 on NVIDIA EP8 and about 6 µs on AMD, by pool and
+  library. The pair windows supply the spread: each trial's windows are shifted so their median
+  sits at that trial's span value, and the percentiles are taken over the shifted windows.
+- `chain_floor_us.dispatch` / `.combine` (`chained-cross-rank-min`): op windows reduced by MIN.
+  Each window holds its own events' cost, so the two floors can sum to more than the pair period;
+  read them as per-op upper bounds, not as a split of the period.
+- `chain_health.window_overhead_us` is what the pair windows read above the span.
+  `pair_spread_us`, `interpair_gap_us` and `settle_drift_us` check that the point is a steady
+  state.
 
 Chained per-op medians and p99s are never published: without a host sync, each rank's wait lands in
 an arbitrary op window, while the period is conserved. The period is always free-running, which every
@@ -276,7 +288,8 @@ Defined in `configs/sweep.json` and recorded in `measurement.sampling`:
 
 - Fresh entry: 256 trials x 8 iterations = 2048 samples per component, nearest-rank p50/p90/p95/p99
   of the per-sample cross-rank MAX.
-- Chained: 4 trials x (128 - 16) = 448 pairs each for the period and the floors.
+- Chained: 4 trials x (128 - 16) = 448 windows each for the period's spread and the floors; the
+  period's level is each trial's span over its 112 kept pairs.
 - 32 warm-ups before each component and chain trial; component order and ladder rotate per trial.
 - Every shape gets 8 untimed settling roundtrips and its correctness check before any timing.
 
@@ -288,8 +301,9 @@ or report the best of a config sweep. Expect this suite's headline to read above
 
 ### Bandwidth
 
-Rows carry bytes and latency; `bandwidth.py` and the dashboard derive
-`wire_payload_bytes / measured_latency_seconds`, excluding metadata, padding and buffer capacity.
+Rows carry bytes and latency; `bandwidth.py` and the dashboard derive a per-GPU rate,
+`wire_payload_bytes / measured_latency_seconds / ep` (a row's bytes are the whole world's),
+excluding metadata, padding and buffer capacity.
 `byte_provenance` (one copy per unique token and destination rank) is the comparable basis;
 `wire_byte_provenance` is what the kernels move (per token and expert for low-latency kernels that
 weight in combine), and `logical_copies` says which applies. Bandwidth is never labelled physical.
@@ -307,7 +321,8 @@ an identity roundtrip, verifies for every rank and point:
    data.
 
 Any failure makes the case `invalid` (`correctness.passed`). Interior chain pairs stay unvalidated,
-since checking them would put work in the timed loop.
+since checking them would put work in the timed loop. An error that is not finite (a NaN output or a
+shape mismatch) is recorded as `null` beside its failed verdict.
 
 The chain check gates only where the chain stages per pair and reports `null` otherwise, which covers
 every FP8 row by default. Run `CX_FP8_CONSUME=dequant` when an FP8 period moves without its BF16
