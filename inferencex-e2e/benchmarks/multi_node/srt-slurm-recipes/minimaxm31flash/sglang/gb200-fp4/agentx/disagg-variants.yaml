@@ -1,0 +1,724 @@
+schema: 2
+
+base:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg
+  identity:
+    model: {}
+    frameworks:
+      dynamo: "1.7.0.dev20261030"
+      sglang: "0.0.0.dev1+ge3718813e"
+  dynamo:
+    install: false
+    request_plane: tcp
+    event_plane: zmq
+  environment:
+    HF_HUB_CACHE: /hf_hub_cache
+  # Tachometer's per-node exporters slow decode steps and add host memory;
+  # InferenceX does not read its output.
+  observability:
+    tachometer:
+      enabled: false
+  slurm:
+    time_limit: "6:00:00"
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 10
+  resources:
+    gpu_type: gb200
+    gpus_per_node: 4
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+    # Disables Dynamo's per-request lifecycle span export; InferenceX does not read it.
+    - name: otel-collector
+      type: otel-collector
+      enabled: false
+  # Keeps tokenize, route and stream CPU work off the engine trays.
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+    placement:
+      node: dedicated
+    env:
+      DYN_ROUTER_TEMPERATURE: "0"
+      DYN_ROUTER_QUEUE_THRESHOLD: None
+      DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: "3600"
+      DYN_TCP_CONNECT_TIMEOUT: "120"
+      # The default frontend tokenizer disables its prefix cache for this model,
+      # so every turn would re-tokenize the full prompt.
+      DYN_TOKENIZER: "fastokens"
+      DYN_TOKENIZER_CACHE: "1"
+      DYN_TOKENIZER_CACHE_BYTES: "8000000000"
+    args:
+      router-mode: kv
+      router-session-affinity-ttl-secs: "14400"
+      active-decode-blocks-threshold: "None"
+      active-prefill-tokens-threshold: "None"
+      active-prefill-tokens-threshold-frac: "None"
+  engine: sglang
+  roles:
+    prefill:
+      nodes: 2
+      workers: 2
+      gpus: 4
+      env:
+        PYTHONUNBUFFERED: "1"
+        PYTHONNOUSERSITE: "1"
+        FMHA_SM100_ALLOW_JIT: "1"
+        SGLANG_TIMEOUT_KEEP_ALIVE: "1800"
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "3600"
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "3600"
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "32768"
+        NCCL_MNNVL_ENABLE: "1"
+        NCCL_CUMEM_ENABLE: "1"
+        MC_FORCE_MNNVL: "1"
+        MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+        # Some nodes list a BMC interface with the same address on every node first.
+        MC_TCP_BIND_ADDRESS: "{node}"
+        WITH_NVIDIA_PEERMEM: "0"
+        # Dynamo 1.7 backend admission rejects turns with 529 once a DP rank is full;
+        # the SGLang scheduler queues them instead.
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: "10000"
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT: "10000"
+        DYN_BACKEND_ADMISSION_REQUEST_QUEUE_LIMIT: "10000"
+      args:
+        served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
+        trust-remote-code: true
+        reasoning-parser: minimax-m3
+        tool-call-parser: minimax-m3
+        tensor-parallel-size: 4
+        data-parallel-size: 4
+        expert-parallel-size: 4
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        # flashinfer_trtllm_routed needs attention TP to match EP, which attention DP breaks.
+        moe-a2a-backend: megamoe
+        disaggregation-transfer-backend: mooncake
+        chunked-prefill-size: 32768
+        # Shortest uncached prefill first: short cached turns stop queueing
+        # behind long uncached prompts, which cuts the TTFT tail.
+        schedule-policy: shortest-prefill-first
+        # 64 per DP rank.
+        max-running-requests: 256
+        mem-fraction-static: 0.88
+        enable-hierarchical-cache: true
+        # 200 GB per rank: 800 GB per node, inside the matrix's 0.89 DRAM share.
+        hicache-size: 200
+        hicache-write-policy: write_back
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 7
+        speculative-use-block-verification: true
+        speculative-draft-kv-cache-dtype: fp8_e4m3
+        # A session's turns stay on one prefill worker.
+        router-mode: kv
+        router-session-affinity-ttl-secs: "14400"
+        watchdog-timeout: 3600
+        enable-metrics: true
+        enable-cache-report: true
+      kv_events: true
+    decode:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        PYTHONUNBUFFERED: "1"
+        PYTHONNOUSERSITE: "1"
+        FMHA_SM100_ALLOW_JIT: "1"
+        SGLANG_TIMEOUT_KEEP_ALIVE: "1800"
+        DYN_SGL_GATEWAY_WORKERS: "8"
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "3600"
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "3600"
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "16384"
+        NCCL_MNNVL_ENABLE: "1"
+        NCCL_CUMEM_ENABLE: "1"
+        MC_FORCE_MNNVL: "1"
+        MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+        MC_TCP_BIND_ADDRESS: "{node}"
+        WITH_NVIDIA_PEERMEM: "0"
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: "10000"
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT: "10000"
+        DYN_BACKEND_ADMISSION_REQUEST_QUEUE_LIMIT: "10000"
+      args:
+        served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
+        trust-remote-code: true
+        reasoning-parser: minimax-m3
+        tool-call-parser: minimax-m3
+        tensor-parallel-size: 8
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        moe-a2a-backend: megamoe
+        disaggregation-transfer-backend: mooncake
+        # The frontend picks the decode DP rank; least-loaded sends each request to
+        # the rank with the fewest in flight, where round-robin left the busiest rank
+        # at 1.45x the mean and every DP rank waits for it each step.
+        router-mode: least-loaded
+        load-balance-method: total_tokens
+        # 48 per DP rank.
+        max-running-requests: 384
+        cuda-graph-max-bs-decode: 48
+        mem-fraction-static: 0.90
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 7
+        speculative-use-block-verification: true
+        speculative-draft-kv-cache-dtype: fp8_e4m3
+        watchdog-timeout: 3600
+        enable-metrics: true
+      kv_events: false
+  sbatch_directives:
+    mem: "0"
+    exclusive: ""
+  srun_options:
+    container-remap-root: ""
+    mem: "0"
+  benchmark:
+    placement:
+      node: dedicated
+    env:
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
+
+override_2p_dep4_dep8:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-2p-dep4-dep8
+
+override_1p_dep8_dep8:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "16384"
+      args:
+        tensor-parallel-size: 8
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        chunked-prefill-size: 65536
+        max-running-requests: 512
+        mem-fraction-static: 0.88
+
+override_1p_dep8_dep8_hrrn:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-hrrn
+  # Shortest-prefill-first starves mid-size prefills: at the same uncached
+  # length, 8-32K-token turns waited 3x longer than on vLLM. HRRN ages each
+  # waiting request by the prefill tokens processed since it arrived.
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "16384"
+      args:
+        tensor-parallel-size: 8
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        chunked-prefill-size: 65536
+        max-running-requests: 512
+        mem-fraction-static: 0.88
+        schedule-policy: hrrn
+
+override_1p_dep8_dep8_soft_affinity:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-soft-affinity
+  # Hard session affinity pins a session to one prefill DP rank, and the
+  # busiest rank queued 3.5x longer than the idlest. Soft affinity keeps the
+  # binding as a preference the router can override.
+  frontend:
+    args:
+      router-session-affinity-mode: soft
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "16384"
+      args:
+        tensor-parallel-size: 8
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        chunked-prefill-size: 65536
+        max-running-requests: 512
+        mem-fraction-static: 0.88
+        router-session-affinity-mode: soft
+
+override_1p_dep8_dep8_l3:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-l3
+  # Lists replace on merge, so this repeats every base service.
+  services:
+    - &l3-etcd
+      name: etcd
+      type: etcd
+      placement:
+        node: infra
+    - &l3-master
+      name: mooncake-master
+      type: mooncake-master
+      # The image ships mooncake-transfer-engine-cuda13 without the master
+      # binary on PATH; find it or reinstall the same version.
+      preamble: |
+        export PATH="$(dirname "$(python3 -c 'import sys; print(sys.executable)')"):$PATH"
+        if ! command -v mooncake_master >/dev/null; then
+          MC_DIR=$(python3 -c 'import mooncake, os; print(os.path.dirname(mooncake.__file__))')
+          if [ -x "$MC_DIR/mooncake_master" ]; then
+            export PATH="$MC_DIR:$PATH"
+          else
+            pip_install=(python3 -m pip install)
+            if python3 -m pip install --help 2>/dev/null | grep -q -- --break-system-packages; then
+              pip_install+=(--break-system-packages)
+            fi
+            "${pip_install[@]}" --quiet --no-cache-dir --no-deps --force-reinstall \
+              "mooncake-transfer-engine-cuda13==$(python3 -c 'import importlib.metadata as m; print(m.version("mooncake-transfer-engine-cuda13"))')"
+          fi
+        fi
+        command -v mooncake_master
+      args:
+        # Past 95% full the master evicts the 10% of objects with the oldest
+        # lease. The lease sets when an object becomes evictable, not the
+        # order; 120 s stays above the slowest load batch.
+        - --default_kv_lease_ttl=120000
+        - --eviction_high_watermark_ratio=0.95
+        - --eviction_ratio=0.10
+        - --rpc_thread_num=64
+    # Each store runs once on every decode node: 4 x 170 GB x 2 nodes = 1.36 TB.
+    - &decode-store
+      name: store-decode-0
+      type: mooncake-store
+      command: ["python3", "-m", "mooncake.mooncake_store_service"]
+      placement:
+        node: decode
+      args: ["--port", "8800"]
+      env:
+        MOONCAKE_PROTOCOL: rdma
+        MOONCAKE_DEVICE: "@fabric.rdma-devices"
+        MOONCAKE_GLOBAL_SEGMENT_SIZE: 170gb
+        MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+        MC_TCP_BIND_ADDRESS: "{node_ip}"
+      preamble: |
+        ulimit -n 1048576
+        ulimit -l unlimited
+      readiness:
+        port: 8800
+        timeout_seconds: 600
+    - <<: *decode-store
+      name: store-decode-1
+      args: ["--port", "8801"]
+      readiness:
+        port: 8801
+        timeout_seconds: 600
+    - <<: *decode-store
+      name: store-decode-2
+      args: ["--port", "8802"]
+      readiness:
+        port: 8802
+        timeout_seconds: 600
+    - <<: *decode-store
+      name: store-decode-3
+      args: ["--port", "8803"]
+      readiness:
+        port: 8803
+        timeout_seconds: 600
+    # Disables Dynamo's per-request lifecycle span export; InferenceX does not read it.
+    - &l3-otel
+      name: otel-collector
+      type: otel-collector
+      enabled: false
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "16384"
+        MOONCAKE_PROTOCOL: rdma
+        MOONCAKE_DEVICE: "@fabric.rdma-devices"
+        # The prefill nodes' DRAM already holds the 200 GB L2 per rank, so the
+        # prefill clients keep the default 4 GB segment and the L3 lives on the
+        # decode stores.
+        MOONCAKE_GLOBAL_SEGMENT_SIZE: 4gb
+        MOONCAKE_STANDALONE_STORAGE: "0"
+      args:
+        tensor-parallel-size: 8
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        chunked-prefill-size: 65536
+        max-running-requests: 512
+        mem-fraction-static: 0.88
+        hicache-storage-backend: mooncake
+        # Group semantics make every present key refresh its whole group under
+        # a global lock; per-request leases are enough here.
+        hicache-storage-backend-extra-config: '{"enable_group_semantics":false}'
+
+override_1p_dep8_dep8_l3_buffer:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-l3-buffer
+  # L3 = 8 prefill ranks x 150 GB + 4 x 190 GB on each decode node + 2 x 160 GB
+  # on the infra node = 3040 GB, the size of the vLLM 2P DEP4 + DEP8 store.
+  services:
+    - *l3-etcd
+    - *l3-master
+    - &big-decode-store
+      <<: *decode-store
+      env:
+        MOONCAKE_PROTOCOL: rdma
+        MOONCAKE_DEVICE: "@fabric.rdma-devices"
+        MOONCAKE_GLOBAL_SEGMENT_SIZE: 190gb
+        MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+        MC_TCP_BIND_ADDRESS: "{node_ip}"
+    - <<: *big-decode-store
+      name: store-decode-1
+      args: ["--port", "8801"]
+      readiness:
+        port: 8801
+        timeout_seconds: 600
+    - <<: *big-decode-store
+      name: store-decode-2
+      args: ["--port", "8802"]
+      readiness:
+        port: 8802
+        timeout_seconds: 600
+    - <<: *big-decode-store
+      name: store-decode-3
+      args: ["--port", "8803"]
+      readiness:
+        port: 8803
+        timeout_seconds: 600
+    - &infra-store
+      <<: *decode-store
+      name: store-infra-0
+      placement:
+        node: infra
+      args: ["--port", "8810"]
+      env:
+        MOONCAKE_PROTOCOL: rdma
+        MOONCAKE_DEVICE: "@fabric.rdma-devices"
+        MOONCAKE_GLOBAL_SEGMENT_SIZE: 160gb
+        MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+        MC_TCP_BIND_ADDRESS: "{node_ip}"
+      readiness:
+        port: 8810
+        timeout_seconds: 600
+    - <<: *infra-store
+      name: store-infra-1
+      args: ["--port", "8811"]
+      readiness:
+        port: 8811
+        timeout_seconds: 600
+    - *l3-otel
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "16384"
+        MOONCAKE_PROTOCOL: rdma
+        MOONCAKE_DEVICE: "@fabric.rdma-devices"
+        MOONCAKE_GLOBAL_SEGMENT_SIZE: 150gb
+        MOONCAKE_STANDALONE_STORAGE: "0"
+      args:
+        tensor-parallel-size: 8
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        chunked-prefill-size: 65536
+        max-running-requests: 512
+        mem-fraction-static: 0.88
+        # Host memory only stages writes and prefetches, so the DRAM it frees
+        # goes to L3; 48 GB covers the longest prompt (908K tokens at 44 KB).
+        hicache-host-memory-mode: buffer_only
+        hicache-size: 48
+        hicache-write-policy: write_through
+        hicache-storage-backend: mooncake
+        hicache-storage-backend-extra-config: '{"enable_group_semantics":false}'
+
+override_1p_dep8_dep8_l3_buffer150:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-l3-buffer150
+  # A 48 GB staging buffer deferred half of the L3 prefetches, so each prefill
+  # rank gets 150 GB of staging (~1.2x its device KV) and a 50 GB segment. The
+  # 150 GB hicache-size already covers the draft and index host pools, and "gb"
+  # here is GiB, so a 75gb segment (80.5 GB) ran the prefill node out of host
+  # memory. L3 = 8 x 50 GB + 4 x 190 GB on each decode node + 4 x 190 GB on the
+  # infra node = 2680 GB.
+  services:
+    - *l3-etcd
+    - *l3-master
+    - *big-decode-store
+    - <<: *big-decode-store
+      name: store-decode-1
+      args: ["--port", "8801"]
+      readiness:
+        port: 8801
+        timeout_seconds: 600
+    - <<: *big-decode-store
+      name: store-decode-2
+      args: ["--port", "8802"]
+      readiness:
+        port: 8802
+        timeout_seconds: 600
+    - <<: *big-decode-store
+      name: store-decode-3
+      args: ["--port", "8803"]
+      readiness:
+        port: 8803
+        timeout_seconds: 600
+    - &big-infra-store
+      <<: *infra-store
+      env:
+        MOONCAKE_PROTOCOL: rdma
+        MOONCAKE_DEVICE: "@fabric.rdma-devices"
+        MOONCAKE_GLOBAL_SEGMENT_SIZE: 190gb
+        MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+        MC_TCP_BIND_ADDRESS: "{node_ip}"
+    - <<: *big-infra-store
+      name: store-infra-1
+      args: ["--port", "8811"]
+      readiness:
+        port: 8811
+        timeout_seconds: 600
+    - <<: *big-infra-store
+      name: store-infra-2
+      args: ["--port", "8812"]
+      readiness:
+        port: 8812
+        timeout_seconds: 600
+    - <<: *big-infra-store
+      name: store-infra-3
+      args: ["--port", "8813"]
+      readiness:
+        port: 8813
+        timeout_seconds: 600
+    - *l3-otel
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "16384"
+        MOONCAKE_PROTOCOL: rdma
+        MOONCAKE_DEVICE: "@fabric.rdma-devices"
+        MOONCAKE_GLOBAL_SEGMENT_SIZE: 50gb
+        MOONCAKE_STANDALONE_STORAGE: "0"
+      args:
+        tensor-parallel-size: 8
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        chunked-prefill-size: 65536
+        max-running-requests: 512
+        mem-fraction-static: 0.88
+        hicache-host-memory-mode: buffer_only
+        hicache-size: 150
+        hicache-write-policy: write_through
+        hicache-storage-backend: mooncake
+        hicache-storage-backend-extra-config: '{"enable_group_semantics":false}'
+
+override_1p_dep8_dep8_nightly1112:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-nightly1112
+  # The 1P DEP8 HiCache point on the 2026-11-12 nightly, as the control for the
+  # linker points below.
+  identity:
+    frameworks:
+      sglang: "0.0.0.dev1+g36027fd15"
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "16384"
+      args:
+        tensor-parallel-size: 8
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        chunked-prefill-size: 65536
+        max-running-requests: 512
+        mem-fraction-static: 0.88
+
+override_1p_dep8_dep8_linker:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-linker
+  # The unified-cache external linker replaces the prefill HiCache: one
+  # Mooncake pool read by RDMA straight into device memory. Each prefill rank
+  # contributes a 190 GB segment; decode keeps its radix cache off (the linker
+  # needs it on, which DP attention marks experimental), so decode nodes host
+  # 4 x 190 GB stores instead. L3 = 8 x 190 GB (prefill) + 2 x 4 x 190 GB
+  # (decode) + 4 x 190 GB (infra) = 3800 GB. Prefetch mode loads before the
+  # forward pass; layer-wise reads stalled the forward on DSV4.1 GB300 (#4595).
+  identity:
+    frameworks:
+      sglang: "0.0.0.dev1+g36027fd15"
+  services:
+    - *l3-etcd
+    - *l3-master
+    - *big-decode-store
+    - <<: *big-decode-store
+      name: store-decode-1
+      args: ["--port", "8801"]
+      readiness:
+        port: 8801
+        timeout_seconds: 600
+    - <<: *big-decode-store
+      name: store-decode-2
+      args: ["--port", "8802"]
+      readiness:
+        port: 8802
+        timeout_seconds: 600
+    - <<: *big-decode-store
+      name: store-decode-3
+      args: ["--port", "8803"]
+      readiness:
+        port: 8803
+        timeout_seconds: 600
+    - *big-infra-store
+    - <<: *big-infra-store
+      name: store-infra-1
+      args: ["--port", "8811"]
+      readiness:
+        port: 8811
+        timeout_seconds: 600
+    - <<: *big-infra-store
+      name: store-infra-2
+      args: ["--port", "8812"]
+      readiness:
+        port: 8812
+        timeout_seconds: 600
+    - <<: *big-infra-store
+      name: store-infra-3
+      args: ["--port", "8813"]
+      readiness:
+        port: 8813
+        timeout_seconds: 600
+    - *l3-otel
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env: &linker-env
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "16384"
+        MOONCAKE_PROTOCOL: rdma
+        MOONCAKE_DEVICE: "@fabric.rdma-devices"
+        MOONCAKE_GLOBAL_SEGMENT_SIZE: 190gb
+        MOONCAKE_STANDALONE_STORAGE: "0"
+      args:
+        tensor-parallel-size: 8
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        chunked-prefill-size: 65536
+        max-running-requests: 512
+        mem-fraction-static: 0.88
+        enable-hierarchical-cache: null
+        hicache-size: null
+        hicache-write-policy: null
+        enable-unified-cache-external-linker: true
+        unified-cache-external-linker-backend: mooncake
+        unified-cache-external-linker-config: &linker-config '{"load_mode":"prefetch","enable_group_semantics":false}'
+
+override_1p_dep8_dep8_linker_least_loaded:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-linker-least-loaded
+  # The linker point with vLLM's routing: prefill goes to the least-loaded rank
+  # with no session affinity (the shared pool serves any rank's prefix), and
+  # decode keeps soft affinity.
+  identity:
+    frameworks:
+      sglang: "0.0.0.dev1+g36027fd15"
+  services:
+    - *l3-etcd
+    - *l3-master
+    - *big-decode-store
+    - <<: *big-decode-store
+      name: store-decode-1
+      args: ["--port", "8801"]
+      readiness:
+        port: 8801
+        timeout_seconds: 600
+    - <<: *big-decode-store
+      name: store-decode-2
+      args: ["--port", "8802"]
+      readiness:
+        port: 8802
+        timeout_seconds: 600
+    - <<: *big-decode-store
+      name: store-decode-3
+      args: ["--port", "8803"]
+      readiness:
+        port: 8803
+        timeout_seconds: 600
+    - *big-infra-store
+    - <<: *big-infra-store
+      name: store-infra-1
+      args: ["--port", "8811"]
+      readiness:
+        port: 8811
+        timeout_seconds: 600
+    - <<: *big-infra-store
+      name: store-infra-2
+      args: ["--port", "8812"]
+      readiness:
+        port: 8812
+        timeout_seconds: 600
+    - <<: *big-infra-store
+      name: store-infra-3
+      args: ["--port", "8813"]
+      readiness:
+        port: 8813
+        timeout_seconds: 600
+    - *l3-otel
+  frontend:
+    env:
+      DYN_ROUTER_SESSION_AFFINITY_MODE: soft
+    worker_selection:
+      prefill: prefill-least-loaded
+      instances:
+        - name: prefill-least-loaded
+          type: dynamo-two-tier-cost-fn
+          parameters:
+            cache_threshold: 1.0
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env: *linker-env
+      args:
+        tensor-parallel-size: 8
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        chunked-prefill-size: 65536
+        max-running-requests: 512
+        mem-fraction-static: 0.88
+        router-session-affinity-ttl-secs: null
+        enable-hierarchical-cache: null
+        hicache-size: null
+        hicache-write-policy: null
+        enable-unified-cache-external-linker: true
+        unified-cache-external-linker-backend: mooncake
+        unified-cache-external-linker-config: *linker-config
+
+override_3p_dep4_dep8:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-3p-dep4-dep8
+  roles:
+    prefill:
+      nodes: 3
+      workers: 3
+
+override_3p_dep4_dep16:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-3p-dep4-dep16
+  roles:
+    prefill:
+      nodes: 3
+      workers: 3
+    decode:
+      nodes: 4
+      gpus: 16
+      args:
+        tensor-parallel-size: 16
+        data-parallel-size: 16
+        expert-parallel-size: 16
+        max-running-requests: 768
+        mem-fraction-static: 0.85
