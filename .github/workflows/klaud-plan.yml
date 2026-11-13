@@ -207,15 +207,14 @@ jobs:
             evidence only. Verify the exact current family; the candidate agent, not this review, owns
             upstream image research and compatibility. Never substitute a sibling or retired workload.
             Duplicate means overlapping edits or shared dependencies, not merely the same model/image on
-            a different family. For every proceed decision, resolve baseline-model to the exact display
-            model accepted by the public benchmark API using the supplied OpenAPI schema.
-            Target clusters and their capacity are resolved and checked in code, not by this review.
+            a different family. The baseline model, target clusters and their capacity are resolved and
+            checked in code, not by this review.
             Mark duplicate when an indexed Klaud PR owns that family's image refresh or overlapping
             compatibility work, even with another image tag; unrelated work on the same hardware
             is not a duplicate; touching the same recipe file for unrelated settings is not overlap.
             Return the supplied schema: candidate-id, decision
             (proceed/duplicate/uncertain), family (null if unresolved), pull-requests (overlapping
-            PR numbers), baseline-model (required for proceed; otherwise null), reason (brief evidence).
+            PR numbers), reason (brief evidence).
             Missing evidence or ambiguity means uncertain.
             Review EVERY supplied candidate in shuffled order, returning exactly one decision per ID.
             Duplicate/uncertain candidates do not consume dispatch slots. Do not stop after ten reviews
