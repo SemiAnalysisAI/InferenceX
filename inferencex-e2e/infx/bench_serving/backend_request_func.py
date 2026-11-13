@@ -274,27 +274,28 @@ async def async_request_openai_completions(
                         if chunk.startswith((":", "event:")):
                             continue
                         chunk = chunk.removeprefix("data: ")
-                        if chunk == "[DONE]":
-                            break
-                        data = json.loads(chunk)
+                        if chunk != "[DONE]":
+                            data = json.loads(chunk)
 
-                        if choices := data.get("choices"):
-                            text = choices[0].get("text")
-                            timestamp = time.perf_counter()
-                            if not first_chunk_received:
-                                first_chunk_received = True
-                                ttft = time.perf_counter() - st
-                                output.ttft = ttft
+                            if choices := data.get("choices"):
+                                text = choices[0].get("text")
+                                timestamp = time.perf_counter()
+                                if not first_chunk_received:
+                                    first_chunk_received = True
+                                    ttft = time.perf_counter() - st
+                                    output.ttft = ttft
 
-                            else:
-                                output.itl.append(timestamp - most_recent_timestamp)
+                                else:
+                                    output.itl.append(timestamp - most_recent_timestamp)
 
-                            most_recent_timestamp = timestamp
-                            generated_text += text or ""
-                        elif usage := data.get("usage"):
-                            output.output_tokens = usage.get("completion_tokens")
-                        elif error := data.get("error"):
-                            output.error = json.dumps(error)
+                                most_recent_timestamp = timestamp
+                                generated_text += text or ""
+                            elif usage := data.get("usage"):
+                                output.output_tokens = usage.get("completion_tokens")
+                            elif error := data.get("error"):
+                                output.error = json.dumps(error)
+                                break
+                        else:
                             break
                     if output.error:
                         output.success = False
@@ -376,28 +377,29 @@ async def async_request_openai_chat_completions(
                         if chunk.startswith((":", "event:")):
                             continue
                         chunk = chunk.removeprefix("data: ")
-                        if chunk == "[DONE]":
+                        if chunk != "[DONE]":
+                            timestamp = time.perf_counter()
+                            data = json.loads(chunk)
+
+                            if choices := data.get("choices"):
+                                content = choices[0]["delta"].get("content")
+                                if ttft == 0.0:
+                                    ttft = timestamp - st
+                                    output.ttft = ttft
+
+                                else:
+                                    output.itl.append(timestamp - most_recent_timestamp)
+
+                                generated_text += content or ""
+                            elif usage := data.get("usage"):
+                                output.output_tokens = usage.get("completion_tokens")
+                            elif error := data.get("error"):
+                                output.error = json.dumps(error)
+                                break
+
+                            most_recent_timestamp = timestamp
+                        else:
                             break
-                        timestamp = time.perf_counter()
-                        data = json.loads(chunk)
-
-                        if choices := data.get("choices"):
-                            content = choices[0]["delta"].get("content")
-                            if ttft == 0.0:
-                                ttft = timestamp - st
-                                output.ttft = ttft
-
-                            else:
-                                output.itl.append(timestamp - most_recent_timestamp)
-
-                            generated_text += content or ""
-                        elif usage := data.get("usage"):
-                            output.output_tokens = usage.get("completion_tokens")
-                        elif error := data.get("error"):
-                            output.error = json.dumps(error)
-                            break
-
-                        most_recent_timestamp = timestamp
 
                     output.generated_text = generated_text
                     if not output.error and ttft == 0.0:
