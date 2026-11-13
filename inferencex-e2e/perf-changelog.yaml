@@ -12855,3 +12855,15 @@
     - "The new ATOM brings DeepSeek-V4.1 DP attention (ROCm/ATOM#2376), the V4.1 MXFP8 KV cache with DSpark on an FP8 cache (ROCm/ATOM#2725), DP-attention prefill balancing and graph replay (ROCm/ATOM#2551, #2696, #2697) and the default HIP Mega-MHC kernel on gfx950 (ROCm/ATOM#2568)."
     - "No change to the DSpark draft's weight precision: ATOM loads the checkpoint's mtp.0-2 layers as shipped (FP8 E4M3 attention, shared experts and main_proj with 32x32 UE8M0 scales, MXFP4 routed experts, BF16 router, norms and heads) at both images. The draft shares the target's KV pool, so its KV cache follows the target from BF16 to MXFP8."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3965
+
+- config-keys:
+    - dsv41flash-fp4-mi300x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image from v0.33.0 to nightly-rocm100-be47189f37f6162991366ff6b91539f6e9d1f432 (digest sha256:a6263de19d7e68fc12d7ee37da0cc0d2817b8eb9a83c4f22911783befd133ebc), the 2026-11-12 ROCm 10.0 nightly."
+    - "Remove --no-swa-bounded-replay. The flag worked around a memory fault at the first prefix hit, from a ROCm sparse SWA path without the replay window clamp. The new image has vllm-project/vllm#59039 (decoder SWA bounded replay on ROCm) and vllm-project/vllm#65249 (prefix-cache SWA replay on gfx942, with the window clamp), the same as the MI325X entry since InferenceX#4617."
+    - "The new image also routes gfx942 sparse MLA prefill of 512 or more query rows to AITER pa_prefill_sparse (vllm-project/vllm#60102)."
+    - "--monokernel stays off: its gfx942 weight copies leave about 2.7 GiB beside the weights on a 192 GB card at TP4 (vllm-project/vllm#62713). Integer quick reduce stays off. All-reduce stays BF16."
+    - "Add concurrency 64 and 128 on TP8 and TP4. The sweep stopped at 32, where the GPU KV cache was only 14 to 17% full, so the throughput end of the curve was not measured. Both keep the base max-num-seqs 128 and graph capture up to 1024 tokens. The 12 existing points are re-measured on the new image: 16 points in total."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5046

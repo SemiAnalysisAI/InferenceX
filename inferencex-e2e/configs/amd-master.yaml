@@ -670,7 +670,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
 # golden AL 3.51 for throughput, real block verification for evals, adaptive
 # verification off on ROCm.
 dsv41flash-fp4-mi300x-vllm-agentic-dspark:
-  image: vllm/vllm-openai-rocm:v0.33.0@sha256:4fcd39b758b660c4e9c345c021e2ea8f0ccdb31e3c32507d676cc3005ae83fba
+  image: vllm/vllm-openai-rocm:nightly-rocm100-be47189f37f6162991366ff6b91539f6e9d1f432@sha256:a6263de19d7e68fc12d7ee37da0cc0d2817b8eb9a83c4f22911783befd133ebc
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi300x-amd
@@ -687,10 +687,10 @@ dsv41flash-fp4-mi300x-vllm-agentic-dspark:
       # the tables would not fit beside the checkpoint share on a 192 GB card.
       # vllm-project/vllm#57491 widened the two is_cuda() gates to
       # is_cuda_alike(), so engram_config resolves on gfx942 in this image.
-      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32], srt-recipe: agentic.yaml }
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128], srt-recipe: agentic.yaml }
       # TP4 halves the GPUs per server. With the Engram tables in pinned host
       # memory the resident weights are ~81 GiB per rank.
-      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32], srt-recipe: agentic.yaml }
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128], srt-recipe: agentic.yaml }
       # No TP2 arm on this SKU. Measured in run 35671005506: at TP2 the resident
       # weights are ~145 GiB per rank, and even with the indexer buffer halved
       # to 4096 batched tokens the engine reported "Available KV cache memory:
