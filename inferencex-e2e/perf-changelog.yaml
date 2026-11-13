@@ -12855,3 +12855,11 @@
     - "The new ATOM brings DeepSeek-V4.1 DP attention (ROCm/ATOM#2376), the V4.1 MXFP8 KV cache with DSpark on an FP8 cache (ROCm/ATOM#2725), DP-attention prefill balancing and graph replay (ROCm/ATOM#2551, #2696, #2697) and the default HIP Mega-MHC kernel on gfx950 (ROCm/ATOM#2568)."
     - "No change to the DSpark draft's weight precision: ATOM loads the checkpoint's mtp.0-2 layers as shipped (FP8 E4M3 attention, shared experts and main_proj with 32x32 UE8M0 scales, MXFP4 routed experts, BF16 router, norms and heads) at both images. The draft shares the target's KV pool, so its KV cache follows the target from BF16 to MXFP8."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3965
+
+- config-keys:
+    - kimik3.1-fp4-gb300-llmd-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3.1-fp4-gb300-llmd-vllm-agentic-dspark-mooncake-dep16-disagg
+  scenario-type: [agentic-coding]
+  description:
+    - "Add Kimi-K3.1-Pro FP4/FP8-KV AgentX disaggregated recipes on GB300 behind llm-d-router v1.0.0 (llmd-vllm) with load-aware and session-affinity routing, NIXL P/D transfer, embedded Mooncake RDMA prefix-cache sharing (4 GB local buffer, 160 GB segment), and DSpark speculative decoding across DCP8 (1P3D, 2P1D hybrid DP4xTP8xDCP8, and 3P1D hybrid DP4xTP8xDCP8) and DEP16 (1P1D external-LB) topologies."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4961
