@@ -1,0 +1,151 @@
+{
+ "note": "nccom/chain.sh on node 0, 2026-11-13: host-clock slope over chains of 12 and 62 all_gathers, ring pairs, GB/s per chip and direction (median over the 16 chips); crossNode: 500-op unchecked nccom-test runs across the 4 nodes (xnode-steady), 8 tiles / mean; node mask 1 measured on chip masks 0 and 2 (all even masks ran alike at 50 ops), node mask 3 on chip mask 0; odd chip masks 3-15 (two hops): default mesh with NEURON_RT_DBG_MESH_CHANNEL_BUFFER_SIZE=268435456 (the ring refuses these pairs; without the setting the mesh stops at 80 MiB per message), chain slope on mask 3 = 112, 50-op checked runs on all seven masks 120-124 by mean (runs/nccom/xtwohop); node mask 3, chip masks 1-15 (EFA): two-node job on nodes 0 and 3 (nccom/xnode2.sh, runs/nccom/xnode-ring3), ring, 50 checked ops, 8 tiles / mean; the same job gives 105 on the cable (chip mask 0) against 100 in steady state; bothLinksGbps: one chip pair on the tray link and one on the plane at once, cores 2,3,6,7 to the tray and 0,1,4,5 to the plane (nccom/share.sh, README 'What sets the ceiling')",
+ "tileBytes": 67108864,
+ "nodeMask": 0,
+ "gbpsByChipMask": {
+  "1": 385,
+  "2": 245,
+  "4": 245,
+  "6": 245,
+  "8": 245,
+  "10": 245,
+  "12": 245,
+  "14": 245,
+  "3": 112,
+  "5": 112,
+  "7": 112,
+  "9": 112,
+  "11": 112,
+  "13": 112,
+  "15": 112
+ },
+ "crossNode": [
+  {
+   "nodeMask": 1,
+   "chipMasks": [
+    0,
+    2,
+    4,
+    6,
+    8,
+    10,
+    12,
+    14
+   ],
+   "gbps": 149
+  },
+  {
+   "nodeMask": 3,
+   "chipMasks": [
+    0
+   ],
+   "gbps": 100
+  },
+  {
+   "nodeMask": 3,
+   "chipMasks": [
+    1
+   ],
+   "gbps": 34.6
+  },
+  {
+   "nodeMask": 3,
+   "chipMasks": [
+    2
+   ],
+   "gbps": 32.8
+  },
+  {
+   "nodeMask": 3,
+   "chipMasks": [
+    3
+   ],
+   "gbps": 33.7
+  },
+  {
+   "nodeMask": 3,
+   "chipMasks": [
+    4
+   ],
+   "gbps": 34.1
+  },
+  {
+   "nodeMask": 3,
+   "chipMasks": [
+    5
+   ],
+   "gbps": 35.6
+  },
+  {
+   "nodeMask": 3,
+   "chipMasks": [
+    6
+   ],
+   "gbps": 34.1
+  },
+  {
+   "nodeMask": 3,
+   "chipMasks": [
+    7
+   ],
+   "gbps": 33.8
+  },
+  {
+   "nodeMask": 3,
+   "chipMasks": [
+    8
+   ],
+   "gbps": 34.4
+  },
+  {
+   "nodeMask": 3,
+   "chipMasks": [
+    9
+   ],
+   "gbps": 36.7
+  },
+  {
+   "nodeMask": 3,
+   "chipMasks": [
+    10
+   ],
+   "gbps": 33.7
+  },
+  {
+   "nodeMask": 3,
+   "chipMasks": [
+    11
+   ],
+   "gbps": 35.8
+  },
+  {
+   "nodeMask": 3,
+   "chipMasks": [
+    12
+   ],
+   "gbps": 36.3
+  },
+  {
+   "nodeMask": 3,
+   "chipMasks": [
+    13
+   ],
+   "gbps": 35.7
+  },
+  {
+   "nodeMask": 3,
+   "chipMasks": [
+    14
+   ],
+   "gbps": 35.4
+  },
+  {
+   "nodeMask": 3,
+   "chipMasks": [
+    15
+   ],
+   "gbps": 35.5
+  }
+ ],
+ "bothLinksGbps": 499
+}

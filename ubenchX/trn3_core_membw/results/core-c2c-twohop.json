@@ -1,0 +1,2693 @@
+{
+ "clockGHz": 1.2,
+ "pairs": [
+  {
+   "chip": 0,
+   "seq": "4-3",
+   "a": 0,
+   "b": 7,
+   "hops": 2,
+   "via": 4,
+   "nsPerExchange": 16026.920103092778
+  },
+  {
+   "chip": 0,
+   "seq": "4-3",
+   "a": 1,
+   "b": 6,
+   "hops": 2,
+   "via": 5,
+   "nsPerExchange": 16026.920103092778
+  },
+  {
+   "chip": 0,
+   "seq": "4-3",
+   "a": 2,
+   "b": 5,
+   "hops": 2,
+   "via": 6,
+   "nsPerExchange": 16026.920103092778
+  },
+  {
+   "chip": 0,
+   "seq": "4-3",
+   "a": 3,
+   "b": 4,
+   "hops": 2,
+   "via": 7,
+   "nsPerExchange": 16026.920103092778
+  },
+  {
+   "chip": 0,
+   "seq": "5",
+   "a": 0,
+   "b": 5,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 13874.109536082471
+  },
+  {
+   "chip": 0,
+   "seq": "5",
+   "a": 1,
+   "b": 4,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 13874.109536082471
+  },
+  {
+   "chip": 0,
+   "seq": "5",
+   "a": 2,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 13874.109536082471
+  },
+  {
+   "chip": 0,
+   "seq": "5",
+   "a": 3,
+   "b": 6,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 13874.109536082471
+  },
+  {
+   "chip": 0,
+   "seq": "2",
+   "a": 0,
+   "b": 2,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11485.447164948451
+  },
+  {
+   "chip": 0,
+   "seq": "2",
+   "a": 1,
+   "b": 3,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11485.447164948451
+  },
+  {
+   "chip": 0,
+   "seq": "2",
+   "a": 4,
+   "b": 6,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11485.447164948451
+  },
+  {
+   "chip": 0,
+   "seq": "2",
+   "a": 5,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11485.447164948451
+  },
+  {
+   "chip": 0,
+   "seq": "4-2",
+   "a": 0,
+   "b": 6,
+   "hops": 2,
+   "via": 4,
+   "nsPerExchange": 15995.641752577316
+  },
+  {
+   "chip": 0,
+   "seq": "4-2",
+   "a": 1,
+   "b": 7,
+   "hops": 2,
+   "via": 5,
+   "nsPerExchange": 15995.641752577316
+  },
+  {
+   "chip": 0,
+   "seq": "4-2",
+   "a": 2,
+   "b": 4,
+   "hops": 2,
+   "via": 6,
+   "nsPerExchange": 15995.641752577316
+  },
+  {
+   "chip": 0,
+   "seq": "4-2",
+   "a": 3,
+   "b": 5,
+   "hops": 2,
+   "via": 7,
+   "nsPerExchange": 15995.641752577316
+  },
+  {
+   "chip": 0,
+   "seq": "3",
+   "a": 0,
+   "b": 3,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11465.817010309276
+  },
+  {
+   "chip": 0,
+   "seq": "3",
+   "a": 1,
+   "b": 2,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11465.817010309276
+  },
+  {
+   "chip": 0,
+   "seq": "3",
+   "a": 4,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11465.817010309276
+  },
+  {
+   "chip": 0,
+   "seq": "3",
+   "a": 5,
+   "b": 6,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11465.817010309276
+  },
+  {
+   "chip": 0,
+   "seq": "4",
+   "a": 0,
+   "b": 4,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4425.594072164948
+  },
+  {
+   "chip": 0,
+   "seq": "4",
+   "a": 1,
+   "b": 5,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4425.594072164948
+  },
+  {
+   "chip": 0,
+   "seq": "4",
+   "a": 2,
+   "b": 6,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4425.594072164948
+  },
+  {
+   "chip": 0,
+   "seq": "4",
+   "a": 3,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4425.594072164948
+  },
+  {
+   "chip": 0,
+   "seq": "3-4",
+   "a": 0,
+   "b": 7,
+   "hops": 2,
+   "via": 3,
+   "nsPerExchange": 16077.925257731951
+  },
+  {
+   "chip": 0,
+   "seq": "3-4",
+   "a": 1,
+   "b": 6,
+   "hops": 2,
+   "via": 2,
+   "nsPerExchange": 16077.925257731951
+  },
+  {
+   "chip": 0,
+   "seq": "3-4",
+   "a": 2,
+   "b": 5,
+   "hops": 2,
+   "via": 1,
+   "nsPerExchange": 16077.925257731951
+  },
+  {
+   "chip": 0,
+   "seq": "3-4",
+   "a": 3,
+   "b": 4,
+   "hops": 2,
+   "via": 0,
+   "nsPerExchange": 16077.925257731951
+  },
+  {
+   "chip": 0,
+   "seq": "1",
+   "a": 0,
+   "b": 1,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 3998.4278350515456
+  },
+  {
+   "chip": 0,
+   "seq": "1",
+   "a": 2,
+   "b": 3,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 3998.4278350515456
+  },
+  {
+   "chip": 0,
+   "seq": "1",
+   "a": 4,
+   "b": 5,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 3998.4278350515456
+  },
+  {
+   "chip": 0,
+   "seq": "1",
+   "a": 6,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 3998.4278350515456
+  },
+  {
+   "chip": 0,
+   "seq": "2-4",
+   "a": 0,
+   "b": 6,
+   "hops": 2,
+   "via": 2,
+   "nsPerExchange": 16086.128865979375
+  },
+  {
+   "chip": 0,
+   "seq": "2-4",
+   "a": 1,
+   "b": 7,
+   "hops": 2,
+   "via": 3,
+   "nsPerExchange": 16086.128865979375
+  },
+  {
+   "chip": 0,
+   "seq": "2-4",
+   "a": 2,
+   "b": 4,
+   "hops": 2,
+   "via": 0,
+   "nsPerExchange": 16086.128865979375
+  },
+  {
+   "chip": 0,
+   "seq": "2-4",
+   "a": 3,
+   "b": 5,
+   "hops": 2,
+   "via": 1,
+   "nsPerExchange": 16086.128865979375
+  },
+  {
+   "chip": 1,
+   "seq": "4-3",
+   "a": 0,
+   "b": 7,
+   "hops": 2,
+   "via": 4,
+   "nsPerExchange": 16046.912371134014
+  },
+  {
+   "chip": 1,
+   "seq": "4-3",
+   "a": 1,
+   "b": 6,
+   "hops": 2,
+   "via": 5,
+   "nsPerExchange": 16046.912371134014
+  },
+  {
+   "chip": 1,
+   "seq": "4-3",
+   "a": 2,
+   "b": 5,
+   "hops": 2,
+   "via": 6,
+   "nsPerExchange": 16046.912371134014
+  },
+  {
+   "chip": 1,
+   "seq": "4-3",
+   "a": 3,
+   "b": 4,
+   "hops": 2,
+   "via": 7,
+   "nsPerExchange": 16046.912371134014
+  },
+  {
+   "chip": 1,
+   "seq": "5",
+   "a": 0,
+   "b": 5,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 13896.396907216491
+  },
+  {
+   "chip": 1,
+   "seq": "5",
+   "a": 1,
+   "b": 4,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 13896.396907216491
+  },
+  {
+   "chip": 1,
+   "seq": "5",
+   "a": 2,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 13896.396907216491
+  },
+  {
+   "chip": 1,
+   "seq": "5",
+   "a": 3,
+   "b": 6,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 13896.396907216491
+  },
+  {
+   "chip": 1,
+   "seq": "2",
+   "a": 0,
+   "b": 2,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11492.04768041237
+  },
+  {
+   "chip": 1,
+   "seq": "2",
+   "a": 1,
+   "b": 3,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11492.04768041237
+  },
+  {
+   "chip": 1,
+   "seq": "2",
+   "a": 4,
+   "b": 6,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11492.04768041237
+  },
+  {
+   "chip": 1,
+   "seq": "2",
+   "a": 5,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11492.04768041237
+  },
+  {
+   "chip": 1,
+   "seq": "4-2",
+   "a": 0,
+   "b": 6,
+   "hops": 2,
+   "via": 4,
+   "nsPerExchange": 15894.239690721644
+  },
+  {
+   "chip": 1,
+   "seq": "4-2",
+   "a": 1,
+   "b": 7,
+   "hops": 2,
+   "via": 5,
+   "nsPerExchange": 15894.239690721644
+  },
+  {
+   "chip": 1,
+   "seq": "4-2",
+   "a": 2,
+   "b": 4,
+   "hops": 2,
+   "via": 6,
+   "nsPerExchange": 15894.239690721644
+  },
+  {
+   "chip": 1,
+   "seq": "4-2",
+   "a": 3,
+   "b": 5,
+   "hops": 2,
+   "via": 7,
+   "nsPerExchange": 15894.239690721644
+  },
+  {
+   "chip": 1,
+   "seq": "3",
+   "a": 0,
+   "b": 3,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11410.28092783505
+  },
+  {
+   "chip": 1,
+   "seq": "3",
+   "a": 1,
+   "b": 2,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11410.28092783505
+  },
+  {
+   "chip": 1,
+   "seq": "3",
+   "a": 4,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11410.28092783505
+  },
+  {
+   "chip": 1,
+   "seq": "3",
+   "a": 5,
+   "b": 6,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11410.28092783505
+  },
+  {
+   "chip": 1,
+   "seq": "4",
+   "a": 0,
+   "b": 4,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4385.356958762885
+  },
+  {
+   "chip": 1,
+   "seq": "4",
+   "a": 1,
+   "b": 5,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4385.356958762885
+  },
+  {
+   "chip": 1,
+   "seq": "4",
+   "a": 2,
+   "b": 6,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4385.356958762885
+  },
+  {
+   "chip": 1,
+   "seq": "4",
+   "a": 3,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4385.356958762885
+  },
+  {
+   "chip": 1,
+   "seq": "3-4",
+   "a": 0,
+   "b": 7,
+   "hops": 2,
+   "via": 3,
+   "nsPerExchange": 15955.690721649478
+  },
+  {
+   "chip": 1,
+   "seq": "3-4",
+   "a": 1,
+   "b": 6,
+   "hops": 2,
+   "via": 2,
+   "nsPerExchange": 15955.690721649478
+  },
+  {
+   "chip": 1,
+   "seq": "3-4",
+   "a": 2,
+   "b": 5,
+   "hops": 2,
+   "via": 1,
+   "nsPerExchange": 15955.690721649478
+  },
+  {
+   "chip": 1,
+   "seq": "3-4",
+   "a": 3,
+   "b": 4,
+   "hops": 2,
+   "via": 0,
+   "nsPerExchange": 15955.690721649478
+  },
+  {
+   "chip": 1,
+   "seq": "1",
+   "a": 0,
+   "b": 1,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4016.1507731958745
+  },
+  {
+   "chip": 1,
+   "seq": "1",
+   "a": 2,
+   "b": 3,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4016.1507731958745
+  },
+  {
+   "chip": 1,
+   "seq": "1",
+   "a": 4,
+   "b": 5,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4016.1507731958745
+  },
+  {
+   "chip": 1,
+   "seq": "1",
+   "a": 6,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4016.1507731958745
+  },
+  {
+   "chip": 1,
+   "seq": "2-4",
+   "a": 0,
+   "b": 6,
+   "hops": 2,
+   "via": 2,
+   "nsPerExchange": 16099.064432989686
+  },
+  {
+   "chip": 1,
+   "seq": "2-4",
+   "a": 1,
+   "b": 7,
+   "hops": 2,
+   "via": 3,
+   "nsPerExchange": 16099.064432989686
+  },
+  {
+   "chip": 1,
+   "seq": "2-4",
+   "a": 2,
+   "b": 4,
+   "hops": 2,
+   "via": 0,
+   "nsPerExchange": 16099.064432989686
+  },
+  {
+   "chip": 1,
+   "seq": "2-4",
+   "a": 3,
+   "b": 5,
+   "hops": 2,
+   "via": 1,
+   "nsPerExchange": 16099.064432989686
+  },
+  {
+   "chip": 3,
+   "seq": "4-3",
+   "a": 0,
+   "b": 7,
+   "hops": 2,
+   "via": 4,
+   "nsPerExchange": 15983.15979381443
+  },
+  {
+   "chip": 3,
+   "seq": "4-3",
+   "a": 1,
+   "b": 6,
+   "hops": 2,
+   "via": 5,
+   "nsPerExchange": 15983.15979381443
+  },
+  {
+   "chip": 3,
+   "seq": "4-3",
+   "a": 2,
+   "b": 5,
+   "hops": 2,
+   "via": 6,
+   "nsPerExchange": 15983.15979381443
+  },
+  {
+   "chip": 3,
+   "seq": "4-3",
+   "a": 3,
+   "b": 4,
+   "hops": 2,
+   "via": 7,
+   "nsPerExchange": 15983.15979381443
+  },
+  {
+   "chip": 3,
+   "seq": "5",
+   "a": 0,
+   "b": 5,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 13949.889175257731
+  },
+  {
+   "chip": 3,
+   "seq": "5",
+   "a": 1,
+   "b": 4,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 13949.889175257731
+  },
+  {
+   "chip": 3,
+   "seq": "5",
+   "a": 2,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 13949.889175257731
+  },
+  {
+   "chip": 3,
+   "seq": "5",
+   "a": 3,
+   "b": 6,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 13949.889175257731
+  },
+  {
+   "chip": 3,
+   "seq": "2",
+   "a": 0,
+   "b": 2,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11446.44716494845
+  },
+  {
+   "chip": 3,
+   "seq": "2",
+   "a": 1,
+   "b": 3,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11446.44716494845
+  },
+  {
+   "chip": 3,
+   "seq": "2",
+   "a": 4,
+   "b": 6,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11446.44716494845
+  },
+  {
+   "chip": 3,
+   "seq": "2",
+   "a": 5,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11446.44716494845
+  },
+  {
+   "chip": 3,
+   "seq": "4-2",
+   "a": 0,
+   "b": 6,
+   "hops": 2,
+   "via": 4,
+   "nsPerExchange": 15933.479381443294
+  },
+  {
+   "chip": 3,
+   "seq": "4-2",
+   "a": 1,
+   "b": 7,
+   "hops": 2,
+   "via": 5,
+   "nsPerExchange": 15933.479381443294
+  },
+  {
+   "chip": 3,
+   "seq": "4-2",
+   "a": 2,
+   "b": 4,
+   "hops": 2,
+   "via": 6,
+   "nsPerExchange": 15933.479381443294
+  },
+  {
+   "chip": 3,
+   "seq": "4-2",
+   "a": 3,
+   "b": 5,
+   "hops": 2,
+   "via": 7,
+   "nsPerExchange": 15933.479381443294
+  },
+  {
+   "chip": 3,
+   "seq": "3",
+   "a": 0,
+   "b": 3,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11492.475515463915
+  },
+  {
+   "chip": 3,
+   "seq": "3",
+   "a": 1,
+   "b": 2,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11492.475515463915
+  },
+  {
+   "chip": 3,
+   "seq": "3",
+   "a": 4,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11492.475515463915
+  },
+  {
+   "chip": 3,
+   "seq": "3",
+   "a": 5,
+   "b": 6,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11492.475515463915
+  },
+  {
+   "chip": 3,
+   "seq": "4",
+   "a": 0,
+   "b": 4,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4394.730670103091
+  },
+  {
+   "chip": 3,
+   "seq": "4",
+   "a": 1,
+   "b": 5,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4394.730670103091
+  },
+  {
+   "chip": 3,
+   "seq": "4",
+   "a": 2,
+   "b": 6,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4394.730670103091
+  },
+  {
+   "chip": 3,
+   "seq": "4",
+   "a": 3,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4394.730670103091
+  },
+  {
+   "chip": 3,
+   "seq": "3-4",
+   "a": 0,
+   "b": 7,
+   "hops": 2,
+   "via": 3,
+   "nsPerExchange": 15974.976804123706
+  },
+  {
+   "chip": 3,
+   "seq": "3-4",
+   "a": 1,
+   "b": 6,
+   "hops": 2,
+   "via": 2,
+   "nsPerExchange": 15974.976804123706
+  },
+  {
+   "chip": 3,
+   "seq": "3-4",
+   "a": 2,
+   "b": 5,
+   "hops": 2,
+   "via": 1,
+   "nsPerExchange": 15974.976804123706
+  },
+  {
+   "chip": 3,
+   "seq": "3-4",
+   "a": 3,
+   "b": 4,
+   "hops": 2,
+   "via": 0,
+   "nsPerExchange": 15974.976804123706
+  },
+  {
+   "chip": 3,
+   "seq": "1",
+   "a": 0,
+   "b": 1,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4015.215206185566
+  },
+  {
+   "chip": 3,
+   "seq": "1",
+   "a": 2,
+   "b": 3,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4015.215206185566
+  },
+  {
+   "chip": 3,
+   "seq": "1",
+   "a": 4,
+   "b": 5,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4015.215206185566
+  },
+  {
+   "chip": 3,
+   "seq": "1",
+   "a": 6,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4015.215206185566
+  },
+  {
+   "chip": 3,
+   "seq": "2-4",
+   "a": 0,
+   "b": 6,
+   "hops": 2,
+   "via": 2,
+   "nsPerExchange": 16059.242268041231
+  },
+  {
+   "chip": 3,
+   "seq": "2-4",
+   "a": 1,
+   "b": 7,
+   "hops": 2,
+   "via": 3,
+   "nsPerExchange": 16059.242268041231
+  },
+  {
+   "chip": 3,
+   "seq": "2-4",
+   "a": 2,
+   "b": 4,
+   "hops": 2,
+   "via": 0,
+   "nsPerExchange": 16059.242268041231
+  },
+  {
+   "chip": 3,
+   "seq": "2-4",
+   "a": 3,
+   "b": 5,
+   "hops": 2,
+   "via": 1,
+   "nsPerExchange": 16059.242268041231
+  },
+  {
+   "chip": 2,
+   "seq": "4-3",
+   "a": 0,
+   "b": 7,
+   "hops": 2,
+   "via": 4,
+   "nsPerExchange": 16063.26804123711
+  },
+  {
+   "chip": 2,
+   "seq": "4-3",
+   "a": 1,
+   "b": 6,
+   "hops": 2,
+   "via": 5,
+   "nsPerExchange": 16063.26804123711
+  },
+  {
+   "chip": 2,
+   "seq": "4-3",
+   "a": 2,
+   "b": 5,
+   "hops": 2,
+   "via": 6,
+   "nsPerExchange": 16063.26804123711
+  },
+  {
+   "chip": 2,
+   "seq": "4-3",
+   "a": 3,
+   "b": 4,
+   "hops": 2,
+   "via": 7,
+   "nsPerExchange": 16063.26804123711
+  },
+  {
+   "chip": 2,
+   "seq": "5",
+   "a": 0,
+   "b": 5,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 13945.269329896906
+  },
+  {
+   "chip": 2,
+   "seq": "5",
+   "a": 1,
+   "b": 4,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 13945.269329896906
+  },
+  {
+   "chip": 2,
+   "seq": "5",
+   "a": 2,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 13945.269329896906
+  },
+  {
+   "chip": 2,
+   "seq": "5",
+   "a": 3,
+   "b": 6,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 13945.269329896906
+  },
+  {
+   "chip": 2,
+   "seq": "2",
+   "a": 0,
+   "b": 2,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11458.033505154635
+  },
+  {
+   "chip": 2,
+   "seq": "2",
+   "a": 1,
+   "b": 3,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11458.033505154635
+  },
+  {
+   "chip": 2,
+   "seq": "2",
+   "a": 4,
+   "b": 6,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11458.033505154635
+  },
+  {
+   "chip": 2,
+   "seq": "2",
+   "a": 5,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11458.033505154635
+  },
+  {
+   "chip": 2,
+   "seq": "4-2",
+   "a": 0,
+   "b": 6,
+   "hops": 2,
+   "via": 4,
+   "nsPerExchange": 16011.396907216487
+  },
+  {
+   "chip": 2,
+   "seq": "4-2",
+   "a": 1,
+   "b": 7,
+   "hops": 2,
+   "via": 5,
+   "nsPerExchange": 16011.396907216487
+  },
+  {
+   "chip": 2,
+   "seq": "4-2",
+   "a": 2,
+   "b": 4,
+   "hops": 2,
+   "via": 6,
+   "nsPerExchange": 16011.396907216487
+  },
+  {
+   "chip": 2,
+   "seq": "4-2",
+   "a": 3,
+   "b": 5,
+   "hops": 2,
+   "via": 7,
+   "nsPerExchange": 16011.396907216487
+  },
+  {
+   "chip": 2,
+   "seq": "3",
+   "a": 0,
+   "b": 3,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11542.41881443299
+  },
+  {
+   "chip": 2,
+   "seq": "3",
+   "a": 1,
+   "b": 2,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11542.41881443299
+  },
+  {
+   "chip": 2,
+   "seq": "3",
+   "a": 4,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11542.41881443299
+  },
+  {
+   "chip": 2,
+   "seq": "3",
+   "a": 5,
+   "b": 6,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11542.41881443299
+  },
+  {
+   "chip": 2,
+   "seq": "4",
+   "a": 0,
+   "b": 4,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4372.1507731958745
+  },
+  {
+   "chip": 2,
+   "seq": "4",
+   "a": 1,
+   "b": 5,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4372.1507731958745
+  },
+  {
+   "chip": 2,
+   "seq": "4",
+   "a": 2,
+   "b": 6,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4372.1507731958745
+  },
+  {
+   "chip": 2,
+   "seq": "4",
+   "a": 3,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4372.1507731958745
+  },
+  {
+   "chip": 2,
+   "seq": "3-4",
+   "a": 0,
+   "b": 7,
+   "hops": 2,
+   "via": 3,
+   "nsPerExchange": 15997.15979381443
+  },
+  {
+   "chip": 2,
+   "seq": "3-4",
+   "a": 1,
+   "b": 6,
+   "hops": 2,
+   "via": 2,
+   "nsPerExchange": 15997.15979381443
+  },
+  {
+   "chip": 2,
+   "seq": "3-4",
+   "a": 2,
+   "b": 5,
+   "hops": 2,
+   "via": 1,
+   "nsPerExchange": 15997.15979381443
+  },
+  {
+   "chip": 2,
+   "seq": "3-4",
+   "a": 3,
+   "b": 4,
+   "hops": 2,
+   "via": 0,
+   "nsPerExchange": 15997.15979381443
+  },
+  {
+   "chip": 2,
+   "seq": "1",
+   "a": 0,
+   "b": 1,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4020.5902061855654
+  },
+  {
+   "chip": 2,
+   "seq": "1",
+   "a": 2,
+   "b": 3,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4020.5902061855654
+  },
+  {
+   "chip": 2,
+   "seq": "1",
+   "a": 4,
+   "b": 5,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4020.5902061855654
+  },
+  {
+   "chip": 2,
+   "seq": "1",
+   "a": 6,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4020.5902061855654
+  },
+  {
+   "chip": 2,
+   "seq": "2-4",
+   "a": 0,
+   "b": 6,
+   "hops": 2,
+   "via": 2,
+   "nsPerExchange": 15927.268041237106
+  },
+  {
+   "chip": 2,
+   "seq": "2-4",
+   "a": 1,
+   "b": 7,
+   "hops": 2,
+   "via": 3,
+   "nsPerExchange": 15927.268041237106
+  },
+  {
+   "chip": 2,
+   "seq": "2-4",
+   "a": 2,
+   "b": 4,
+   "hops": 2,
+   "via": 0,
+   "nsPerExchange": 15927.268041237106
+  },
+  {
+   "chip": 2,
+   "seq": "2-4",
+   "a": 3,
+   "b": 5,
+   "hops": 2,
+   "via": 1,
+   "nsPerExchange": 15927.268041237106
+  },
+  {
+   "chip": 9,
+   "seq": "4-3",
+   "a": 0,
+   "b": 7,
+   "hops": 2,
+   "via": 4,
+   "nsPerExchange": 15982.52835051546
+  },
+  {
+   "chip": 9,
+   "seq": "4-3",
+   "a": 1,
+   "b": 6,
+   "hops": 2,
+   "via": 5,
+   "nsPerExchange": 15982.52835051546
+  },
+  {
+   "chip": 9,
+   "seq": "4-3",
+   "a": 2,
+   "b": 5,
+   "hops": 2,
+   "via": 6,
+   "nsPerExchange": 15982.52835051546
+  },
+  {
+   "chip": 9,
+   "seq": "4-3",
+   "a": 3,
+   "b": 4,
+   "hops": 2,
+   "via": 7,
+   "nsPerExchange": 15982.52835051546
+  },
+  {
+   "chip": 9,
+   "seq": "5",
+   "a": 0,
+   "b": 5,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 13890.681701030924
+  },
+  {
+   "chip": 9,
+   "seq": "5",
+   "a": 1,
+   "b": 4,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 13890.681701030924
+  },
+  {
+   "chip": 9,
+   "seq": "5",
+   "a": 2,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 13890.681701030924
+  },
+  {
+   "chip": 9,
+   "seq": "5",
+   "a": 3,
+   "b": 6,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 13890.681701030924
+  },
+  {
+   "chip": 9,
+   "seq": "2",
+   "a": 0,
+   "b": 2,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11459.708762886594
+  },
+  {
+   "chip": 9,
+   "seq": "2",
+   "a": 1,
+   "b": 3,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11459.708762886594
+  },
+  {
+   "chip": 9,
+   "seq": "2",
+   "a": 4,
+   "b": 6,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11459.708762886594
+  },
+  {
+   "chip": 9,
+   "seq": "2",
+   "a": 5,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11459.708762886594
+  },
+  {
+   "chip": 9,
+   "seq": "4-2",
+   "a": 0,
+   "b": 6,
+   "hops": 2,
+   "via": 4,
+   "nsPerExchange": 15960.317010309273
+  },
+  {
+   "chip": 9,
+   "seq": "4-2",
+   "a": 1,
+   "b": 7,
+   "hops": 2,
+   "via": 5,
+   "nsPerExchange": 15960.317010309273
+  },
+  {
+   "chip": 9,
+   "seq": "4-2",
+   "a": 2,
+   "b": 4,
+   "hops": 2,
+   "via": 6,
+   "nsPerExchange": 15960.317010309273
+  },
+  {
+   "chip": 9,
+   "seq": "4-2",
+   "a": 3,
+   "b": 5,
+   "hops": 2,
+   "via": 7,
+   "nsPerExchange": 15960.317010309273
+  },
+  {
+   "chip": 9,
+   "seq": "3",
+   "a": 0,
+   "b": 3,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11514.087628865977
+  },
+  {
+   "chip": 9,
+   "seq": "3",
+   "a": 1,
+   "b": 2,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11514.087628865977
+  },
+  {
+   "chip": 9,
+   "seq": "3",
+   "a": 4,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11514.087628865977
+  },
+  {
+   "chip": 9,
+   "seq": "3",
+   "a": 5,
+   "b": 6,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11514.087628865977
+  },
+  {
+   "chip": 9,
+   "seq": "4",
+   "a": 0,
+   "b": 4,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4395.7951030927825
+  },
+  {
+   "chip": 9,
+   "seq": "4",
+   "a": 1,
+   "b": 5,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4395.7951030927825
+  },
+  {
+   "chip": 9,
+   "seq": "4",
+   "a": 2,
+   "b": 6,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4395.7951030927825
+  },
+  {
+   "chip": 9,
+   "seq": "4",
+   "a": 3,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4395.7951030927825
+  },
+  {
+   "chip": 9,
+   "seq": "3-4",
+   "a": 0,
+   "b": 7,
+   "hops": 2,
+   "via": 3,
+   "nsPerExchange": 15925.82216494845
+  },
+  {
+   "chip": 9,
+   "seq": "3-4",
+   "a": 1,
+   "b": 6,
+   "hops": 2,
+   "via": 2,
+   "nsPerExchange": 15925.82216494845
+  },
+  {
+   "chip": 9,
+   "seq": "3-4",
+   "a": 2,
+   "b": 5,
+   "hops": 2,
+   "via": 1,
+   "nsPerExchange": 15925.82216494845
+  },
+  {
+   "chip": 9,
+   "seq": "3-4",
+   "a": 3,
+   "b": 4,
+   "hops": 2,
+   "via": 0,
+   "nsPerExchange": 15925.82216494845
+  },
+  {
+   "chip": 9,
+   "seq": "1",
+   "a": 0,
+   "b": 1,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 3994.5747422680397
+  },
+  {
+   "chip": 9,
+   "seq": "1",
+   "a": 2,
+   "b": 3,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 3994.5747422680397
+  },
+  {
+   "chip": 9,
+   "seq": "1",
+   "a": 4,
+   "b": 5,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 3994.5747422680397
+  },
+  {
+   "chip": 9,
+   "seq": "1",
+   "a": 6,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 3994.5747422680397
+  },
+  {
+   "chip": 9,
+   "seq": "2-4",
+   "a": 0,
+   "b": 6,
+   "hops": 2,
+   "via": 2,
+   "nsPerExchange": 16078.533505154632
+  },
+  {
+   "chip": 9,
+   "seq": "2-4",
+   "a": 1,
+   "b": 7,
+   "hops": 2,
+   "via": 3,
+   "nsPerExchange": 16078.533505154632
+  },
+  {
+   "chip": 9,
+   "seq": "2-4",
+   "a": 2,
+   "b": 4,
+   "hops": 2,
+   "via": 0,
+   "nsPerExchange": 16078.533505154632
+  },
+  {
+   "chip": 9,
+   "seq": "2-4",
+   "a": 3,
+   "b": 5,
+   "hops": 2,
+   "via": 1,
+   "nsPerExchange": 16078.533505154632
+  },
+  {
+   "chip": 8,
+   "seq": "4-3",
+   "a": 0,
+   "b": 7,
+   "hops": 2,
+   "via": 4,
+   "nsPerExchange": 15877.876288659787
+  },
+  {
+   "chip": 8,
+   "seq": "4-3",
+   "a": 1,
+   "b": 6,
+   "hops": 2,
+   "via": 5,
+   "nsPerExchange": 15877.876288659787
+  },
+  {
+   "chip": 8,
+   "seq": "4-3",
+   "a": 2,
+   "b": 5,
+   "hops": 2,
+   "via": 6,
+   "nsPerExchange": 15877.876288659787
+  },
+  {
+   "chip": 8,
+   "seq": "4-3",
+   "a": 3,
+   "b": 4,
+   "hops": 2,
+   "via": 7,
+   "nsPerExchange": 15877.876288659787
+  },
+  {
+   "chip": 8,
+   "seq": "5",
+   "a": 0,
+   "b": 5,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 13898.342783505152
+  },
+  {
+   "chip": 8,
+   "seq": "5",
+   "a": 1,
+   "b": 4,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 13898.342783505152
+  },
+  {
+   "chip": 8,
+   "seq": "5",
+   "a": 2,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 13898.342783505152
+  },
+  {
+   "chip": 8,
+   "seq": "5",
+   "a": 3,
+   "b": 6,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 13898.342783505152
+  },
+  {
+   "chip": 8,
+   "seq": "2",
+   "a": 0,
+   "b": 2,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11449.38273195876
+  },
+  {
+   "chip": 8,
+   "seq": "2",
+   "a": 1,
+   "b": 3,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11449.38273195876
+  },
+  {
+   "chip": 8,
+   "seq": "2",
+   "a": 4,
+   "b": 6,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11449.38273195876
+  },
+  {
+   "chip": 8,
+   "seq": "2",
+   "a": 5,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11449.38273195876
+  },
+  {
+   "chip": 8,
+   "seq": "4-2",
+   "a": 0,
+   "b": 6,
+   "hops": 2,
+   "via": 4,
+   "nsPerExchange": 15972.845360824736
+  },
+  {
+   "chip": 8,
+   "seq": "4-2",
+   "a": 1,
+   "b": 7,
+   "hops": 2,
+   "via": 5,
+   "nsPerExchange": 15972.845360824736
+  },
+  {
+   "chip": 8,
+   "seq": "4-2",
+   "a": 2,
+   "b": 4,
+   "hops": 2,
+   "via": 6,
+   "nsPerExchange": 15972.845360824736
+  },
+  {
+   "chip": 8,
+   "seq": "4-2",
+   "a": 3,
+   "b": 5,
+   "hops": 2,
+   "via": 7,
+   "nsPerExchange": 15972.845360824736
+  },
+  {
+   "chip": 8,
+   "seq": "3",
+   "a": 0,
+   "b": 3,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11455.21649484536
+  },
+  {
+   "chip": 8,
+   "seq": "3",
+   "a": 1,
+   "b": 2,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11455.21649484536
+  },
+  {
+   "chip": 8,
+   "seq": "3",
+   "a": 4,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11455.21649484536
+  },
+  {
+   "chip": 8,
+   "seq": "3",
+   "a": 5,
+   "b": 6,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11455.21649484536
+  },
+  {
+   "chip": 8,
+   "seq": "4",
+   "a": 0,
+   "b": 4,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4381.202319587628
+  },
+  {
+   "chip": 8,
+   "seq": "4",
+   "a": 1,
+   "b": 5,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4381.202319587628
+  },
+  {
+   "chip": 8,
+   "seq": "4",
+   "a": 2,
+   "b": 6,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4381.202319587628
+  },
+  {
+   "chip": 8,
+   "seq": "4",
+   "a": 3,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4381.202319587628
+  },
+  {
+   "chip": 8,
+   "seq": "3-4",
+   "a": 0,
+   "b": 7,
+   "hops": 2,
+   "via": 3,
+   "nsPerExchange": 15956.943298969067
+  },
+  {
+   "chip": 8,
+   "seq": "3-4",
+   "a": 1,
+   "b": 6,
+   "hops": 2,
+   "via": 2,
+   "nsPerExchange": 15956.943298969067
+  },
+  {
+   "chip": 8,
+   "seq": "3-4",
+   "a": 2,
+   "b": 5,
+   "hops": 2,
+   "via": 1,
+   "nsPerExchange": 15956.943298969067
+  },
+  {
+   "chip": 8,
+   "seq": "3-4",
+   "a": 3,
+   "b": 4,
+   "hops": 2,
+   "via": 0,
+   "nsPerExchange": 15956.943298969067
+  },
+  {
+   "chip": 8,
+   "seq": "1",
+   "a": 0,
+   "b": 1,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4013.2126288659783
+  },
+  {
+   "chip": 8,
+   "seq": "1",
+   "a": 2,
+   "b": 3,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4013.2126288659783
+  },
+  {
+   "chip": 8,
+   "seq": "1",
+   "a": 4,
+   "b": 5,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4013.2126288659783
+  },
+  {
+   "chip": 8,
+   "seq": "1",
+   "a": 6,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4013.2126288659783
+  },
+  {
+   "chip": 8,
+   "seq": "2-4",
+   "a": 0,
+   "b": 6,
+   "hops": 2,
+   "via": 2,
+   "nsPerExchange": 16043.090206185561
+  },
+  {
+   "chip": 8,
+   "seq": "2-4",
+   "a": 1,
+   "b": 7,
+   "hops": 2,
+   "via": 3,
+   "nsPerExchange": 16043.090206185561
+  },
+  {
+   "chip": 8,
+   "seq": "2-4",
+   "a": 2,
+   "b": 4,
+   "hops": 2,
+   "via": 0,
+   "nsPerExchange": 16043.090206185561
+  },
+  {
+   "chip": 8,
+   "seq": "2-4",
+   "a": 3,
+   "b": 5,
+   "hops": 2,
+   "via": 1,
+   "nsPerExchange": 16043.090206185561
+  },
+  {
+   "chip": 10,
+   "seq": "4-3",
+   "a": 0,
+   "b": 7,
+   "hops": 2,
+   "via": 4,
+   "nsPerExchange": 16045.456185567005
+  },
+  {
+   "chip": 10,
+   "seq": "4-3",
+   "a": 1,
+   "b": 6,
+   "hops": 2,
+   "via": 5,
+   "nsPerExchange": 16045.456185567005
+  },
+  {
+   "chip": 10,
+   "seq": "4-3",
+   "a": 2,
+   "b": 5,
+   "hops": 2,
+   "via": 6,
+   "nsPerExchange": 16045.456185567005
+  },
+  {
+   "chip": 10,
+   "seq": "4-3",
+   "a": 3,
+   "b": 4,
+   "hops": 2,
+   "via": 7,
+   "nsPerExchange": 16045.456185567005
+  },
+  {
+   "chip": 10,
+   "seq": "5",
+   "a": 0,
+   "b": 5,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 13882.033505154635
+  },
+  {
+   "chip": 10,
+   "seq": "5",
+   "a": 1,
+   "b": 4,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 13882.033505154635
+  },
+  {
+   "chip": 10,
+   "seq": "5",
+   "a": 2,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 13882.033505154635
+  },
+  {
+   "chip": 10,
+   "seq": "5",
+   "a": 3,
+   "b": 6,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 13882.033505154635
+  },
+  {
+   "chip": 10,
+   "seq": "2",
+   "a": 0,
+   "b": 2,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11487.806701030926
+  },
+  {
+   "chip": 10,
+   "seq": "2",
+   "a": 1,
+   "b": 3,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11487.806701030926
+  },
+  {
+   "chip": 10,
+   "seq": "2",
+   "a": 4,
+   "b": 6,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11487.806701030926
+  },
+  {
+   "chip": 10,
+   "seq": "2",
+   "a": 5,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11487.806701030926
+  },
+  {
+   "chip": 10,
+   "seq": "4-2",
+   "a": 0,
+   "b": 6,
+   "hops": 2,
+   "via": 4,
+   "nsPerExchange": 15998.371134020612
+  },
+  {
+   "chip": 10,
+   "seq": "4-2",
+   "a": 1,
+   "b": 7,
+   "hops": 2,
+   "via": 5,
+   "nsPerExchange": 15998.371134020612
+  },
+  {
+   "chip": 10,
+   "seq": "4-2",
+   "a": 2,
+   "b": 4,
+   "hops": 2,
+   "via": 6,
+   "nsPerExchange": 15998.371134020612
+  },
+  {
+   "chip": 10,
+   "seq": "4-2",
+   "a": 3,
+   "b": 5,
+   "hops": 2,
+   "via": 7,
+   "nsPerExchange": 15998.371134020612
+  },
+  {
+   "chip": 10,
+   "seq": "3",
+   "a": 0,
+   "b": 3,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11538.271907216493
+  },
+  {
+   "chip": 10,
+   "seq": "3",
+   "a": 1,
+   "b": 2,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11538.271907216493
+  },
+  {
+   "chip": 10,
+   "seq": "3",
+   "a": 4,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11538.271907216493
+  },
+  {
+   "chip": 10,
+   "seq": "3",
+   "a": 5,
+   "b": 6,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11538.271907216493
+  },
+  {
+   "chip": 10,
+   "seq": "4",
+   "a": 0,
+   "b": 4,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4378.076030927834
+  },
+  {
+   "chip": 10,
+   "seq": "4",
+   "a": 1,
+   "b": 5,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4378.076030927834
+  },
+  {
+   "chip": 10,
+   "seq": "4",
+   "a": 2,
+   "b": 6,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4378.076030927834
+  },
+  {
+   "chip": 10,
+   "seq": "4",
+   "a": 3,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4378.076030927834
+  },
+  {
+   "chip": 10,
+   "seq": "3-4",
+   "a": 0,
+   "b": 7,
+   "hops": 2,
+   "via": 3,
+   "nsPerExchange": 15994.956185567005
+  },
+  {
+   "chip": 10,
+   "seq": "3-4",
+   "a": 1,
+   "b": 6,
+   "hops": 2,
+   "via": 2,
+   "nsPerExchange": 15994.956185567005
+  },
+  {
+   "chip": 10,
+   "seq": "3-4",
+   "a": 2,
+   "b": 5,
+   "hops": 2,
+   "via": 1,
+   "nsPerExchange": 15994.956185567005
+  },
+  {
+   "chip": 10,
+   "seq": "3-4",
+   "a": 3,
+   "b": 4,
+   "hops": 2,
+   "via": 0,
+   "nsPerExchange": 15994.956185567005
+  },
+  {
+   "chip": 10,
+   "seq": "1",
+   "a": 0,
+   "b": 1,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 3996.442010309277
+  },
+  {
+   "chip": 10,
+   "seq": "1",
+   "a": 2,
+   "b": 3,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 3996.442010309277
+  },
+  {
+   "chip": 10,
+   "seq": "1",
+   "a": 4,
+   "b": 5,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 3996.442010309277
+  },
+  {
+   "chip": 10,
+   "seq": "1",
+   "a": 6,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 3996.442010309277
+  },
+  {
+   "chip": 10,
+   "seq": "2-4",
+   "a": 0,
+   "b": 6,
+   "hops": 2,
+   "via": 2,
+   "nsPerExchange": 16046.8118556701
+  },
+  {
+   "chip": 10,
+   "seq": "2-4",
+   "a": 1,
+   "b": 7,
+   "hops": 2,
+   "via": 3,
+   "nsPerExchange": 16046.8118556701
+  },
+  {
+   "chip": 10,
+   "seq": "2-4",
+   "a": 2,
+   "b": 4,
+   "hops": 2,
+   "via": 0,
+   "nsPerExchange": 16046.8118556701
+  },
+  {
+   "chip": 10,
+   "seq": "2-4",
+   "a": 3,
+   "b": 5,
+   "hops": 2,
+   "via": 1,
+   "nsPerExchange": 16046.8118556701
+  },
+  {
+   "chip": 11,
+   "seq": "4-3",
+   "a": 0,
+   "b": 7,
+   "hops": 2,
+   "via": 4,
+   "nsPerExchange": 15929.878865979377
+  },
+  {
+   "chip": 11,
+   "seq": "4-3",
+   "a": 1,
+   "b": 6,
+   "hops": 2,
+   "via": 5,
+   "nsPerExchange": 15929.878865979377
+  },
+  {
+   "chip": 11,
+   "seq": "4-3",
+   "a": 2,
+   "b": 5,
+   "hops": 2,
+   "via": 6,
+   "nsPerExchange": 15929.878865979377
+  },
+  {
+   "chip": 11,
+   "seq": "4-3",
+   "a": 3,
+   "b": 4,
+   "hops": 2,
+   "via": 7,
+   "nsPerExchange": 15929.878865979377
+  },
+  {
+   "chip": 11,
+   "seq": "5",
+   "a": 0,
+   "b": 5,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 13955.506443298967
+  },
+  {
+   "chip": 11,
+   "seq": "5",
+   "a": 1,
+   "b": 4,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 13955.506443298967
+  },
+  {
+   "chip": 11,
+   "seq": "5",
+   "a": 2,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 13955.506443298967
+  },
+  {
+   "chip": 11,
+   "seq": "5",
+   "a": 3,
+   "b": 6,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 13955.506443298967
+  },
+  {
+   "chip": 11,
+   "seq": "2",
+   "a": 0,
+   "b": 2,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11512.036082474224
+  },
+  {
+   "chip": 11,
+   "seq": "2",
+   "a": 1,
+   "b": 3,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11512.036082474224
+  },
+  {
+   "chip": 11,
+   "seq": "2",
+   "a": 4,
+   "b": 6,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11512.036082474224
+  },
+  {
+   "chip": 11,
+   "seq": "2",
+   "a": 5,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11512.036082474224
+  },
+  {
+   "chip": 11,
+   "seq": "4-2",
+   "a": 0,
+   "b": 6,
+   "hops": 2,
+   "via": 4,
+   "nsPerExchange": 16041.216494845357
+  },
+  {
+   "chip": 11,
+   "seq": "4-2",
+   "a": 1,
+   "b": 7,
+   "hops": 2,
+   "via": 5,
+   "nsPerExchange": 16041.216494845357
+  },
+  {
+   "chip": 11,
+   "seq": "4-2",
+   "a": 2,
+   "b": 4,
+   "hops": 2,
+   "via": 6,
+   "nsPerExchange": 16041.216494845357
+  },
+  {
+   "chip": 11,
+   "seq": "4-2",
+   "a": 3,
+   "b": 5,
+   "hops": 2,
+   "via": 7,
+   "nsPerExchange": 16041.216494845357
+  },
+  {
+   "chip": 11,
+   "seq": "3",
+   "a": 0,
+   "b": 3,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11534.265463917523
+  },
+  {
+   "chip": 11,
+   "seq": "3",
+   "a": 1,
+   "b": 2,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11534.265463917523
+  },
+  {
+   "chip": 11,
+   "seq": "3",
+   "a": 4,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11534.265463917523
+  },
+  {
+   "chip": 11,
+   "seq": "3",
+   "a": 5,
+   "b": 6,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 11534.265463917523
+  },
+  {
+   "chip": 11,
+   "seq": "4",
+   "a": 0,
+   "b": 4,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4412.454896907216
+  },
+  {
+   "chip": 11,
+   "seq": "4",
+   "a": 1,
+   "b": 5,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4412.454896907216
+  },
+  {
+   "chip": 11,
+   "seq": "4",
+   "a": 2,
+   "b": 6,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4412.454896907216
+  },
+  {
+   "chip": 11,
+   "seq": "4",
+   "a": 3,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4412.454896907216
+  },
+  {
+   "chip": 11,
+   "seq": "3-4",
+   "a": 0,
+   "b": 7,
+   "hops": 2,
+   "via": 3,
+   "nsPerExchange": 16007.304123711336
+  },
+  {
+   "chip": 11,
+   "seq": "3-4",
+   "a": 1,
+   "b": 6,
+   "hops": 2,
+   "via": 2,
+   "nsPerExchange": 16007.304123711336
+  },
+  {
+   "chip": 11,
+   "seq": "3-4",
+   "a": 2,
+   "b": 5,
+   "hops": 2,
+   "via": 1,
+   "nsPerExchange": 16007.304123711336
+  },
+  {
+   "chip": 11,
+   "seq": "3-4",
+   "a": 3,
+   "b": 4,
+   "hops": 2,
+   "via": 0,
+   "nsPerExchange": 16007.304123711336
+  },
+  {
+   "chip": 11,
+   "seq": "1",
+   "a": 0,
+   "b": 1,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4009.586340206184
+  },
+  {
+   "chip": 11,
+   "seq": "1",
+   "a": 2,
+   "b": 3,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4009.586340206184
+  },
+  {
+   "chip": 11,
+   "seq": "1",
+   "a": 4,
+   "b": 5,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4009.586340206184
+  },
+  {
+   "chip": 11,
+   "seq": "1",
+   "a": 6,
+   "b": 7,
+   "hops": 1,
+   "via": null,
+   "nsPerExchange": 4009.586340206184
+  },
+  {
+   "chip": 11,
+   "seq": "2-4",
+   "a": 0,
+   "b": 6,
+   "hops": 2,
+   "via": 2,
+   "nsPerExchange": 15984.845360824736
+  },
+  {
+   "chip": 11,
+   "seq": "2-4",
+   "a": 1,
+   "b": 7,
+   "hops": 2,
+   "via": 3,
+   "nsPerExchange": 15984.845360824736
+  },
+  {
+   "chip": 11,
+   "seq": "2-4",
+   "a": 2,
+   "b": 4,
+   "hops": 2,
+   "via": 0,
+   "nsPerExchange": 15984.845360824736
+  },
+  {
+   "chip": 11,
+   "seq": "2-4",
+   "a": 3,
+   "b": 5,
+   "hops": 2,
+   "via": 1,
+   "nsPerExchange": 15984.845360824736
+  }
+ ],
+ "bySequence": {
+  "4-3": {
+   "median_ns": 16005.039948453603,
+   "min_ns": 15877.876288659787,
+   "max_ns": 16063.26804123711,
+   "n": 32
+  },
+  "5": {
+   "median_ns": 13897.369845360821,
+   "min_ns": 13874.109536082471,
+   "max_ns": 13955.506443298967,
+   "n": 32
+  },
+  "2": {
+   "median_ns": 11472.577963917523,
+   "min_ns": 11446.44716494845,
+   "max_ns": 11512.036082474224,
+   "n": 32
+  },
+  "4-2": {
+   "median_ns": 15984.243556701025,
+   "min_ns": 15894.239690721644,
+   "max_ns": 16041.216494845357,
+   "n": 32
+  },
+  "3": {
+   "median_ns": 11503.281572164946,
+   "min_ns": 11410.28092783505,
+   "max_ns": 11542.41881443299,
+   "n": 32
+  },
+  "4": {
+   "median_ns": 4390.043814432988,
+   "min_ns": 4372.1507731958745,
+   "max_ns": 4425.594072164948,
+   "n": 32
+  },
+  "3-4": {
+   "median_ns": 15984.966494845356,
+   "min_ns": 15925.82216494845,
+   "max_ns": 16077.925257731951,
+   "n": 32
+  },
+  "1": {
+   "median_ns": 4011.399484536081,
+   "min_ns": 3994.5747422680397,
+   "max_ns": 4020.5902061855654,
+   "n": 32
+  },
+  "2-4": {
+   "median_ns": 16053.027061855664,
+   "min_ns": 15927.268041237106,
+   "max_ns": 16099.064432989686,
+   "n": 32
+  }
+ },
+ "failures": [],
+ "stalls": {
+  "4-3": {
+   "over_1p5x_floor": 276,
+   "spans": 576
+  },
+  "5": {
+   "over_1p5x_floor": 5,
+   "spans": 576
+  },
+  "2": {
+   "over_1p5x_floor": 3,
+   "spans": 576
+  },
+  "4-2": {
+   "over_1p5x_floor": 242,
+   "spans": 576
+  },
+  "3": {
+   "over_1p5x_floor": 6,
+   "spans": 576
+  },
+  "4": {
+   "over_1p5x_floor": 67,
+   "spans": 576
+  },
+  "3-4": {
+   "over_1p5x_floor": 284,
+   "spans": 576
+  },
+  "1": {
+   "over_1p5x_floor": 27,
+   "spans": 576
+  },
+  "2-4": {
+   "over_1p5x_floor": 212,
+   "spans": 576
+  }
+ },
+ "method": "HBM nki.collectives.all_gather chains, 8 ranks per chip, replica group cycling through XOR matchings; cost per collective = slope of in-trace collectives span vs collectives; a relay is two collectives."
+}
