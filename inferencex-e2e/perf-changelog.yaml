@@ -12818,6 +12818,33 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-hicache
+  scenario-type: [agentic-coding]
+  description:
+    - "Move dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-hicache to nightly-dev-cu13-20261111-314bce7c (Dynamo 1.7.0.dev20261110, SGLang 0.0.0.dev1+g314bce7cf), pinned by digest. The agg key stays on nightly-dev-cu13-20261030-302b78cc: on the 20261111 image the NVIDIA megakernel plugin rejects the bundled FlashInfer low-latency block-scaled GEMM at startup."
+    - "Add a DEP32 decode point: 6 DEP2 prefill workers and one DEP32 decode worker on 8 nodes at c3018 (decode CUDA graph batch 18, max-running-requests 576, extra slots 80, 32 redundant EPLB experts, total_requests DP balancing, block-wise rejection for the sampled DSpark verify)."
+    - "Drop 3 prefill workers at c700 and c1228 (DEP16 decode): the DEP32 c3018 point has both higher interactivity and higher throughput per GPU than each of them. Drop 5 prefill workers at c2884 (DEP16 decode): it lies under the line between DEP32 c3018 and 7P c5540."
+    - "Set stream-interval 32 on the agg role and on the disagg prefill role, which used the SGLang default of 1; disagg decode already used 32. Agg TP4 c1, c4 and c16 change otherwise not at all; disagg 7P c5540 and 9P c7480 change otherwise only by the image. The agg key is listed so the whole Dynamo + SGLang curve, agg points included, comes from this sweep."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4997
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-atom-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image from rocm/atom-dev:nightly_202610121516 to nightly_202611101510 (ATOM e5b74bc86, ROCm 7.2.4) in the master config, and the AToMesh frontend container_image from sha256:a60811a8467b43e3e50e9e9eb8cec34f68b7bca03f8c6dbd6a0ff813dde49d4c to sha256:160a4ec49379e7f1980a4e783254366b1d5c643b012abca57a21c0bcbbfe83a7, the same image."
+    - "Replace plain TP2 at concurrency [1, 2, 4, 6, 8, 16, 32, 64] and plain TP4 at [1, 8, 32] with plain TP2 at [1, 2, 16, 32], DTP2 (DP attention) at 64, DEP2 (DP attention plus expert parallelism) at [128, 256] and plain TP4 at [1, 2, 4, 8, 32]. TP2 c4, c6, c8 and c64 are dropped; TP4 c2 and c4 are new."
+    - "Switch the KV cache from BF16 to MXFP8 (kv_cache_dtype fp8) at every point; the index cache stays FP4."
+    - "Drop max-num-seqs 128, so every point except concurrency 1 runs ATOM's default admission. Concurrency 1 (TP2 and TP4) runs max-num-seqs 2, decode graphs [1, 2] and ATOM_PREFILL_DECODE_INTERVAL=1000000, the C1 recipe of ATOM's recipes/Kimi-K3.md (ROCm/ATOM#2659). The c256 point also captures graph size 256."
+    - "Set ATOM_PREFILL_DECODE_INTERVAL per point: 192 at TP2 c2 and TP4 c2, c4 and c8, 96 at TP2 c16, 40 at TP2 c32, 16 at TP4 c32 (unchanged) and 10 at the DP points (previously unset except 4 at TP2 c64 and 16 at TP4 c32)."
+    - "The DP points add dp-load-balance least_tokens, ATOM_DP_SESSION_AFFINITY=1, ATOM_DP_LB_REQ_EQUIV=512 and GPU_MAX_HW_QUEUES=5, and AIPerf sends the correlation ID as the X-Dynamo-Session-Id header for session affinity."
+    - "Every point adds timeout-keep-alive 900 so the server keeps AIPerf's pooled connections open past uvicorn's 5 s default."
+    - "The new ATOM brings DeepSeek-V4.1 DP attention (ROCm/ATOM#2376), the V4.1 MXFP8 KV cache with DSpark on an FP8 cache (ROCm/ATOM#2725), DP-attention prefill balancing and graph replay (ROCm/ATOM#2551, #2696, #2697) and the default HIP Mega-MHC kernel on gfx950 (ROCm/ATOM#2568)."
+    - "No change to the DSpark draft's weight precision: ATOM loads the checkpoint's mtp.0-2 layers as shipped (FP8 E4M3 attention, shared experts and main_proj with 32x32 UE8M0 scales, MXFP4 routed experts, BF16 router, norms and heads) at both images. The draft shares the target's KV pool, so its KV cache follows the target from BF16 to MXFP8."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3965
+
+- config-keys:
     - qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
