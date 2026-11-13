@@ -28,13 +28,14 @@ jobs:
   resolve:
     name: Resolve sign-off
     if: |
+      github.repository == 'SemiAnalysisAI/InferenceX' && (
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
        contains(github.event.comment.body || '', 'As a PR reviewer and CODEOWNER')) ||
       (github.event_name == 'pull_request_review' &&
        contains(github.event.review.body || '', 'As a PR reviewer and CODEOWNER')) ||
       (github.event_name == 'pull_request_review_comment' &&
-       contains(github.event.comment.body || '', 'As a PR reviewer and CODEOWNER'))
+       contains(github.event.comment.body || '', 'As a PR reviewer and CODEOWNER')))
     runs-on: ubuntu-latest
     concurrency:
       group: codeowner-signoff-resolve-pr-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr-number }}
@@ -58,23 +59,8 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
 
-      - name: Select Python project
-        run: |
-          python_project="$GITHUB_WORKSPACE"
-          if [[ -f "$python_project/inferencex-e2e/pyproject.toml" ]]; then
-            python_project="$python_project/inferencex-e2e"
-          fi
-          test -f "$python_project/pyproject.toml"
-          echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
-
-      - name: Set up uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          cache-dependency-glob: |
-            pyproject.toml
-            uv.lock
-            inferencex-e2e/pyproject.toml
-            inferencex-e2e/uv.lock
+      - name: Set up Python project
+        uses: $/.github/actions/setup-python-project
 
       - name: Check changed-file ownership
         id: scope
@@ -109,23 +95,8 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
 
-      - name: Select Python project
-        run: |
-          python_project="$GITHUB_WORKSPACE"
-          if [[ -f "$python_project/inferencex-e2e/pyproject.toml" ]]; then
-            python_project="$python_project/inferencex-e2e"
-          fi
-          test -f "$python_project/pyproject.toml"
-          echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
-
-      - name: Set up uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          cache-dependency-glob: |
-            pyproject.toml
-            uv.lock
-            inferencex-e2e/pyproject.toml
-            inferencex-e2e/uv.lock
+      - name: Set up Python project
+        uses: $/.github/actions/setup-python-project
 
       - name: Add in-progress reaction
         env:
@@ -157,23 +128,8 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
 
-      - name: Select Python project
-        run: |
-          python_project="$GITHUB_WORKSPACE"
-          if [[ -f "$python_project/inferencex-e2e/pyproject.toml" ]]; then
-            python_project="$python_project/inferencex-e2e"
-          fi
-          test -f "$python_project/pyproject.toml"
-          echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
-
-      - name: Set up uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          cache-dependency-glob: |
-            pyproject.toml
-            uv.lock
-            inferencex-e2e/pyproject.toml
-            inferencex-e2e/uv.lock
+      - name: Set up Python project
+        uses: $/.github/actions/setup-python-project
 
       - name: Render verifier prompt
         env:
@@ -207,13 +163,9 @@ jobs:
             --repo "$REPO" --pr "$PR_NUMBER" --sha "$HEAD_SHA" \
             --base-ref "origin/${DEFAULT_BRANCH}" --out /tmp/signoff-facts.json
 
-      - name: Install Claude Code 2.1.282
+      - name: Install Claude Code
         id: claude_cli
-        run: | # zizmor: ignore[adhoc-packages] Claude CLI and its native packages are pinned to 2.1.282
-          npm install --prefix "$RUNNER_TEMP/claude-code" --no-audit --no-fund @anthropic-ai/claude-code@2.1.282
-          claude_cli="$RUNNER_TEMP/claude-code/node_modules/.bin/claude"
-          test "$("$claude_cli" --version)" = "2.1.282 (Claude Code)"
-          echo "path=$claude_cli" >> "$GITHUB_OUTPUT"
+        uses: $/.github/actions/setup-claude-code
       - name: Verify sign-off with Claude
         id: claude
         uses: anthropics/claude-code-action@9171db3e57d6a3140a37ddc2ba92788584e0ead6 # v1.0.234
@@ -284,23 +236,8 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
 
-      - name: Select Python project
-        run: |
-          python_project="$GITHUB_WORKSPACE"
-          if [[ -f "$python_project/inferencex-e2e/pyproject.toml" ]]; then
-            python_project="$python_project/inferencex-e2e"
-          fi
-          test -f "$python_project/pyproject.toml"
-          echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
-
-      - name: Set up uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          cache-dependency-glob: |
-            pyproject.toml
-            uv.lock
-            inferencex-e2e/pyproject.toml
-            inferencex-e2e/uv.lock
+      - name: Set up Python project
+        uses: $/.github/actions/setup-python-project
 
       - name: Download verdict
         if: needs.verify.outputs.verification-succeeded == 'true'

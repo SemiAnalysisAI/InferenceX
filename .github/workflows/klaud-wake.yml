@@ -12,6 +12,8 @@ run-name: >-
 # holds until a set time (a parked infrastructure rerun, or a preempted run's grace period); that
 # run sleeps until then and wakes recovery for the candidate. No checkout and no event data
 # reaches a shell: the event gates the job and the pinned script reads it as data.
+# A PR sweep of a [skip-sweep] head runs no benchmark. Recovery pushes such heads only to finished
+# PRs when it syncs their changelog, so that sweep's end wakes nothing.
 on: # zizmor: ignore[concurrency-limits]
   workflow_run: # zizmor: ignore[dangerous-triggers] runs no code from the triggering run
     workflows: [End-to-End Tests, Run Sweep]
@@ -33,11 +35,12 @@ jobs:
   wake:
     name: Wake Klaud recovery
     if: >-
-      vars.KLAUD_ENABLED == 'true' && github.event_name == 'workflow_run'
+      github.repository == 'SemiAnalysisAI/InferenceX' && github.event_name == 'workflow_run'
       && github.event.workflow_run.head_repository.full_name == github.repository
       && github.event.workflow_run.conclusion != 'skipped'
       && (startsWith(github.event.workflow_run.display_title, 'e2e Test - klaud-')
-      || startsWith(github.event.workflow_run.head_branch, 'klaud/auto-'))
+      || (startsWith(github.event.workflow_run.head_branch, 'klaud/auto-')
+      && !contains(github.event.workflow_run.head_commit.message, '[skip-sweep]')))
     runs-on: ubuntu-latest
     permissions:
       actions: write # Read the candidate's runs and jobs and dispatch the planner's recovery-only wake.
@@ -45,6 +48,7 @@ jobs:
       - name: Dispatch a recovery-only planner pass
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
+          retries: 3
           script: |
             const ended = context.payload.workflow_run;
             const id = '[0-9a-f]{16}-[0-9a-f]{16}';
@@ -109,7 +113,7 @@ jobs:
   due:
     name: Wake Klaud recovery when a rerun is due
     if: >-
-      vars.KLAUD_ENABLED == 'true' && github.event_name == 'workflow_dispatch'
+      github.repository == 'SemiAnalysisAI/InferenceX' && github.event_name == 'workflow_dispatch'
       && github.ref == 'refs/heads/main'
       && github.actor == 'Klaud-Cold'
     runs-on: ubuntu-latest
@@ -127,6 +131,7 @@ jobs:
           CANDIDATE: ${{ inputs.candidate }}
           NOT_BEFORE: ${{ inputs.not-before }}
         with:
+          retries: 3
           script: |
             const { CANDIDATE: candidate, NOT_BEFORE: notBefore } = process.env;
             const wait = Date.parse(notBefore) - Date.now();
