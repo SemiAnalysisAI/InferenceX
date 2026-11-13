@@ -18,11 +18,15 @@ REQUEST = {
 }
 
 
-def stream(endpoint: str, events: list[object]) -> req.RequestFuncOutput:
+def stream(
+    endpoint: str, events: list[object], *, hold_open: bool = False
+) -> req.RequestFuncOutput:
     """Serve ``events`` as one SSE stream on HTTP 200 and run the request function on it.
 
     ``bytes`` events are written verbatim, anything else as one ``data:`` event.
     """
+
+    release = asyncio.Event()
 
     async def handler(request: web.Request) -> web.StreamResponse:
         await request.read()
@@ -34,6 +38,9 @@ def stream(endpoint: str, events: list[object]) -> req.RequestFuncOutput:
                 continue
             data = event if isinstance(event, str) else json.dumps(event)
             await response.write(f"data: {data}\n\n".encode())
+        if hold_open:
+            await release.wait()
+            return response
         await response.write_eof()
         return response
 
@@ -46,7 +53,7 @@ def stream(endpoint: str, events: list[object]) -> req.RequestFuncOutput:
         await site.start()
         port = runner.addresses[0][1]
         try:
-            return await REQUEST[endpoint](
+            request = REQUEST[endpoint](
                 req.RequestFuncInput(
                     prompt="p",
                     api_url=f"http://127.0.0.1:{port}/v1/{endpoint}",
@@ -55,7 +62,9 @@ def stream(endpoint: str, events: list[object]) -> req.RequestFuncOutput:
                     model="m",
                 )
             )
+            return await asyncio.wait_for(request, timeout=2)
         finally:
+            release.set()
             await runner.cleanup()
 
     return asyncio.run(run())
@@ -90,3 +99,15 @@ def test_sse_comment_and_event_lines_are_not_parsed_as_data(endpoint):
     assert output.error == ""
     assert output.success is True
     assert output.generated_text == "hi"
+
+
+@pytest.mark.parametrize("endpoint", ["completions", "chat/completions"])
+def test_done_finishes_request_before_http_body_closes(endpoint):
+    usage = {"usage": {"completion_tokens": 2}}
+
+    output = stream(endpoint, [CHOICE[endpoint], usage, "[DONE]"], hold_open=True)
+
+    assert output.success is True
+    assert output.error == ""
+    assert output.generated_text == "hi"
+    assert output.output_tokens == 2
