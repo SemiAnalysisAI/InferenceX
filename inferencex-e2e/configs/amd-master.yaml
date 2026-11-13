@@ -219,6 +219,20 @@ qwen3.5-fp8-mi325x-sglang-agentic-mtp:
       - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 24, 32, 40, 48, 64, 80], srt-recipe: agentic.yaml }
       - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [4, 16, 24, 32, 40, 48, 64], srt-recipe: agentic.yaml }
 
+qwen3.8next-fp8-mi325x-sglang-agentic-mtp:
+  image: lmsysorg/sglang-rocm:v0.5.23-rocm10-mi30x-20261110@sha256:368f0934d21d3cb2b23e208a0a96337f69534f9725df479d298fb3d890fffccb
+  model: Qwen/Qwen3.8-Flash-Next-FP8
+  model-prefix: qwen3.8next
+  runner: cluster:mi325x-amd
+  precision: fp8
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: qwen3.8next/sglang/mi325x-fp8-mtp
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [4, 6, 8, 10, 12, 16, 20, 24, 28], srt-recipe: agentic.yaml }
+
 # MI355X FP8 AgentX via ATOM with MTP (3 draft tokens), TP4 only, following the
 # standalone recipe (ROCm/ATOM PR 2592). CONC 1-40 serve off the GPU prefix
 # cache; CONC 48-80 add the LMCache DRAM tier at 363 GB per rank (253 GB KV +

@@ -12855,3 +12855,14 @@
     - "The new ATOM brings DeepSeek-V4.1 DP attention (ROCm/ATOM#2376), the V4.1 MXFP8 KV cache with DSpark on an FP8 cache (ROCm/ATOM#2725), DP-attention prefill balancing and graph replay (ROCm/ATOM#2551, #2696, #2697) and the default HIP Mega-MHC kernel on gfx950 (ROCm/ATOM#2568)."
     - "No change to the DSpark draft's weight precision: ATOM loads the checkpoint's mtp.0-2 layers as shipped (FP8 E4M3 attention, shared experts and main_proj with 32x32 UE8M0 scales, MXFP4 routed experts, BF16 router, norms and heads) at both images. The draft shares the target's KV pool, so its KV cache follows the target from BF16 to MXFP8."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3965
+
+- config-keys:
+    - qwen3.8next-fp8-mi325x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Qwen3.8-Flash-Next FP8 AgentX on MI325X with the digest-pinned lmsysorg/sglang-rocm:v0.5.23-rocm10-mi30x-20261110 image (SGLang 670265cd4b, AITER 285579b6) and MTP (EAGLE 3/1/4), using the recipe from PR #4987."
+    - "TP2/EP2 at concurrency 4, 6, 8, 10, 12, 16, 20, 24 and 28, with ReplaySSM speculative verify (enable-linear-replayssm-spec) at concurrency 8 to 24."
+    - "Apply the open sglang#46945 through a setup script under a waiver: the image's QSA prefill indexer needs 80 KiB of LDS and fails to launch on gfx942 without it."
+    - "Use AITER attention with the Triton FP8 MoE runner (SGLANG_USE_AITER=0) and full-precision all-reduce (ROCM_QUICK_REDUCE_QUANTIZATION=NONE)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5064
