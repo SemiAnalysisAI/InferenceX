@@ -5,7 +5,8 @@ selects C1 deployments on 1, 2, 4 and 8 B200, H200 or MI355X GPUs (Ulysses
 across all GPUs) and on 2, 4 and 8 H100 GPUs (TP2, since the model does not fit
 one 80 GB GPU), vLLM-Omni the same four B200 deployments, and Sol-Engine
 the same three H100 deployments (per-layer weight sharding and Ulysses across
-all GPUs, dense attention), all using
+all GPUs, dense attention) and on 1, 2 and 4 GB200 GPUs (whole pipeline per
+GPU, Ulysses context parallelism across all GPUs, dense attention), all using
 `h3-v2.yaml`: 20 distinct measured prompts, a separate warmup, 49 denoising
 updates, and 124 frames at 24 fps and 1344×768. A five-second request produces
 124/24 seconds of video. Config presence is not GPU or quality qualification.

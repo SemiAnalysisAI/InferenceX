@@ -7741,6 +7741,30 @@ h3-bf16-h100-sol-engine-video:
             srt-recipe: serving-client.yaml
             conc-list: [1]
 
+h3-bf16-gb200-sol-engine-video:
+  image: ghcr.io/lyttttt3333/sol-engine-gb200:0.6.0-gd23f2ebf5@sha256:6eebd484e018041f74af84b088da5bc4772f19feeab7a0d2e41613cb5011bc9d
+  model: MiniMaxAI/MiniMax-H3
+  model-prefix: h3
+  runner: cluster:gb200-nv
+  precision: bf16
+  framework: sol-engine
+  multinode: false
+  srt-recipe-dir: h3/sol-engine/gb200-bf16
+  scenarios:
+    video-generation:
+      - spec: h3-v2.yaml
+        set: release-v1
+        search-space:
+          - gpus: 1
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
+          - gpus: 2
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
+          - gpus: 4
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
+
 h3-bf16-h200-sglang-video:
   image: lmsysorg/sglang:v0.5.23@sha256:f7876bef696ccf9cf75a2bf7ccb82970f5fac577f082fb8ca95c9a59d2160eb5
   model: MiniMaxAI/MiniMax-H3

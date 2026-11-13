@@ -12873,3 +12873,10 @@
   description:
     - "Add Sol-Engine as a video runtime and serve MiniMax-H3 with it on 2, 4 and 8 H100 GPUs: per-layer weight sharding plus Ulysses over all GPUs, exact dense attention, BF16. Requests use SGLang's H3 JSON contract."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4938
+
+- config-keys:
+    - h3-bf16-gb200-sol-engine-video
+  scenario-type: [video-generation]
+  description:
+    - "Serve MiniMax-H3 with Sol-Engine on 1, 2 and 4 GB200 GPUs: the whole pipeline on every GPU, Ulysses context parallelism across all of them, exact dense attention, BF16."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4940
