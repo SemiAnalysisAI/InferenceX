@@ -1,0 +1,567 @@
+{
+ "clockGHz": 1.2,
+ "method": "LD_PRELOAD shim swaps logical-to-physical NC map entries 1 and b; stock LNC=2 sendrecv NEFF; slope of device time against chain length",
+ "rows": [
+  {
+   "partner": 1,
+   "route": "LNC pair (same SEngine)",
+   "kernel": "xchg_dma",
+   "tileBytes": 512,
+   "cycles": 2253.9354910714287,
+   "GBpsPerDirection": 0.27258987776439836,
+   "deviceOk": true,
+   "chainLengths": [
+    64,
+    128,
+    256
+   ],
+   "swap": null,
+   "physicalCores": [
+    "nc4",
+    "nc5"
+   ],
+   "node": "raw",
+   "run": "xseng-long",
+   "chip": 0
+  },
+  {
+   "partner": 1,
+   "route": "LNC pair (same SEngine)",
+   "kernel": "xchg_dma",
+   "tileBytes": 131072,
+   "cycles": 2382.1091517857144,
+   "GBpsPerDirection": 66.02820860752433,
+   "deviceOk": true,
+   "chainLengths": [
+    64,
+    128,
+    256
+   ],
+   "swap": null,
+   "physicalCores": [
+    "nc4",
+    "nc5"
+   ],
+   "node": "raw",
+   "run": "xseng-long",
+   "chip": 0
+  },
+  {
+   "partner": 1,
+   "route": "LNC pair (same SEngine)",
+   "kernel": "xchg_dma",
+   "tileBytes": 2097152,
+   "cycles": 6216.730816505707,
+   "GBpsPerDirection": 404.8080050881981,
+   "deviceOk": true,
+   "chainLengths": [
+    1,
+    4,
+    16,
+    64
+   ],
+   "swap": null,
+   "physicalCores": [
+    "nc4",
+    "nc5"
+   ],
+   "node": "raw",
+   "run": "xseng",
+   "chip": 0
+  },
+  {
+   "partner": 1,
+   "route": "LNC pair (same SEngine)",
+   "kernel": "xchg_gpsimd",
+   "tileBytes": 512,
+   "cycles": 857.8683055311675,
+   "GBpsPerDirection": 0.7161938447179036,
+   "deviceOk": true,
+   "chainLengths": [
+    1,
+    4,
+    16,
+    64
+   ],
+   "swap": null,
+   "physicalCores": [
+    "nc4",
+    "nc5"
+   ],
+   "node": "raw",
+   "run": "xseng",
+   "chip": 0
+  },
+  {
+   "partner": 1,
+   "route": "LNC pair (same SEngine)",
+   "kernel": "xchg_gpsimd",
+   "tileBytes": 131072,
+   "cycles": 3741.658823529411,
+   "GBpsPerDirection": 42.03654245836229,
+   "deviceOk": true,
+   "chainLengths": [
+    1,
+    4,
+    16,
+    64
+   ],
+   "swap": null,
+   "physicalCores": [
+    "nc4",
+    "nc5"
+   ],
+   "node": "raw",
+   "run": "xseng",
+   "chip": 0
+  },
+  {
+   "partner": 2,
+   "route": "same die, other SEngine",
+   "kernel": "xchg_dma",
+   "tileBytes": 512,
+   "cycles": 2677.285714285714,
+   "GBpsPerDirection": 0.22948615335360975,
+   "deviceOk": true,
+   "chainLengths": [
+    64,
+    128,
+    256
+   ],
+   "swap": "1:2",
+   "physicalCores": [
+    "nc4",
+    "nc6"
+   ],
+   "node": "raw",
+   "run": "xseng-long",
+   "chip": 0
+  },
+  {
+   "partner": 2,
+   "route": "same die, other SEngine",
+   "kernel": "xchg_dma",
+   "tileBytes": 131072,
+   "cycles": 2816.752232142857,
+   "GBpsPerDirection": 55.83962913214545,
+   "deviceOk": true,
+   "chainLengths": [
+    64,
+    128,
+    256
+   ],
+   "swap": "1:2",
+   "physicalCores": [
+    "nc4",
+    "nc6"
+   ],
+   "node": "raw",
+   "run": "xseng-long",
+   "chip": 0
+  },
+  {
+   "partner": 2,
+   "route": "same die, other SEngine",
+   "kernel": "xchg_dma",
+   "tileBytes": 2097152,
+   "cycles": 6659.669183494292,
+   "GBpsPerDirection": 377.8839955349799,
+   "deviceOk": true,
+   "chainLengths": [
+    1,
+    4,
+    16,
+    64
+   ],
+   "swap": "1:2",
+   "physicalCores": [
+    "nc4",
+    "nc6"
+   ],
+   "node": "raw",
+   "run": "xseng",
+   "chip": 0
+  },
+  {
+   "partner": 2,
+   "route": "same die, other SEngine",
+   "kernel": "xchg_gpsimd",
+   "tileBytes": 512,
+   "cycles": null,
+   "GBpsPerDirection": null,
+   "deviceOk": false,
+   "chainLengths": [],
+   "swap": "1:2",
+   "physicalCores": [
+    "nc4",
+    "nc6"
+   ],
+   "node": "raw",
+   "run": "xseng",
+   "chip": 0
+  },
+  {
+   "partner": 2,
+   "route": "same die, other SEngine",
+   "kernel": "xchg_gpsimd",
+   "tileBytes": 131072,
+   "cycles": null,
+   "GBpsPerDirection": null,
+   "deviceOk": false,
+   "chainLengths": [],
+   "swap": "1:2",
+   "physicalCores": [
+    "nc4",
+    "nc6"
+   ],
+   "node": "raw",
+   "run": "xseng",
+   "chip": 0
+  },
+  {
+   "partner": 3,
+   "route": "same die, other SEngine",
+   "kernel": "xchg_dma",
+   "tileBytes": 512,
+   "cycles": 2687.6732142857145,
+   "GBpsPerDirection": 0.22859921985094644,
+   "deviceOk": true,
+   "chainLengths": [
+    64,
+    128,
+    256
+   ],
+   "swap": "1:3",
+   "physicalCores": [
+    "nc4",
+    "nc7"
+   ],
+   "node": "raw",
+   "run": "xseng-long",
+   "chip": 0
+  },
+  {
+   "partner": 3,
+   "route": "same die, other SEngine",
+   "kernel": "xchg_dma",
+   "tileBytes": 131072,
+   "cycles": 2824.7229910714286,
+   "GBpsPerDirection": 55.6820617445184,
+   "deviceOk": true,
+   "chainLengths": [
+    64,
+    128,
+    256
+   ],
+   "swap": "1:3",
+   "physicalCores": [
+    "nc4",
+    "nc7"
+   ],
+   "node": "raw",
+   "run": "xseng-long",
+   "chip": 0
+  },
+  {
+   "partner": 3,
+   "route": "same die, other SEngine",
+   "kernel": "xchg_dma",
+   "tileBytes": 2097152,
+   "cycles": 6642.916769095697,
+   "GBpsPerDirection": 378.83696085245145,
+   "deviceOk": true,
+   "chainLengths": [
+    1,
+    4,
+    16,
+    64
+   ],
+   "swap": "9:11",
+   "physicalCores": [
+    "nc4",
+    "nc7"
+   ],
+   "node": "raw",
+   "run": "xseng",
+   "chip": 1
+  },
+  {
+   "partner": 3,
+   "route": "same die, other SEngine",
+   "kernel": "xchg_gpsimd",
+   "tileBytes": 512,
+   "cycles": null,
+   "GBpsPerDirection": null,
+   "deviceOk": false,
+   "chainLengths": [],
+   "swap": "9:11",
+   "physicalCores": [
+    "nc4",
+    "nc7"
+   ],
+   "node": "raw",
+   "run": "xseng",
+   "chip": 1
+  },
+  {
+   "partner": 4,
+   "route": "other die (i+4)",
+   "kernel": "xchg_dma",
+   "tileBytes": 512,
+   "cycles": 2707.334598214286,
+   "GBpsPerDirection": 0.2269390715153008,
+   "deviceOk": true,
+   "chainLengths": [
+    64,
+    128,
+    256
+   ],
+   "swap": "1:4",
+   "physicalCores": [
+    "nc2",
+    "nc4"
+   ],
+   "node": "raw",
+   "run": "xseng-long",
+   "chip": 0
+  },
+  {
+   "partner": 4,
+   "route": "other die (i+4)",
+   "kernel": "xchg_dma",
+   "tileBytes": 131072,
+   "cycles": 2894.162276785714,
+   "GBpsPerDirection": 54.34608876689661,
+   "deviceOk": true,
+   "chainLengths": [
+    64,
+    128,
+    256
+   ],
+   "swap": "1:4",
+   "physicalCores": [
+    "nc2",
+    "nc4"
+   ],
+   "node": "raw",
+   "run": "xseng-long",
+   "chip": 0
+  },
+  {
+   "partner": 4,
+   "route": "other die (i+4)",
+   "kernel": "xchg_dma",
+   "tileBytes": 2097152,
+   "cycles": 8715.487500000001,
+   "GBpsPerDirection": 288.748323028402,
+   "deviceOk": true,
+   "chainLengths": [
+    16,
+    64
+   ],
+   "swap": "1:4",
+   "physicalCores": [
+    "nc2",
+    "nc4"
+   ],
+   "node": "raw",
+   "run": "xseng",
+   "chip": 0
+  },
+  {
+   "partner": 5,
+   "route": "other die, other lane",
+   "kernel": "xchg_dma",
+   "tileBytes": 512,
+   "cycles": 2704.6500000000005,
+   "GBpsPerDirection": 0.22716432810160275,
+   "deviceOk": true,
+   "chainLengths": [
+    64,
+    128,
+    256
+   ],
+   "swap": "1:5",
+   "physicalCores": [
+    "nc3",
+    "nc4"
+   ],
+   "node": "raw",
+   "run": "xseng-long",
+   "chip": 0
+  },
+  {
+   "partner": 5,
+   "route": "other die, other lane",
+   "kernel": "xchg_dma",
+   "tileBytes": 131072,
+   "cycles": 2895.082366071429,
+   "GBpsPerDirection": 54.328816977126145,
+   "deviceOk": true,
+   "chainLengths": [
+    64,
+    128,
+    256
+   ],
+   "swap": "1:5",
+   "physicalCores": [
+    "nc3",
+    "nc4"
+   ],
+   "node": "raw",
+   "run": "xseng-long",
+   "chip": 0
+  },
+  {
+   "partner": 5,
+   "route": "other die, other lane",
+   "kernel": "xchg_dma",
+   "tileBytes": 2097152,
+   "cycles": 8720.900000000001,
+   "GBpsPerDirection": 288.5691155729339,
+   "deviceOk": true,
+   "chainLengths": [
+    16,
+    64
+   ],
+   "swap": "1:5",
+   "physicalCores": [
+    "nc3",
+    "nc4"
+   ],
+   "node": "raw",
+   "run": "xseng",
+   "chip": 0
+  },
+  {
+   "partner": 6,
+   "route": "diagonal (unrouted for collectives)",
+   "kernel": "xchg_dma",
+   "tileBytes": 512,
+   "cycles": 3142.198660714286,
+   "GBpsPerDirection": 0.19553187635193453,
+   "deviceOk": true,
+   "chainLengths": [
+    64,
+    128,
+    256
+   ],
+   "swap": "1:6",
+   "physicalCores": [
+    "nc0",
+    "nc4"
+   ],
+   "node": "raw",
+   "run": "xseng-long",
+   "chip": 0
+  },
+  {
+   "partner": 6,
+   "route": "diagonal (unrouted for collectives)",
+   "kernel": "xchg_dma",
+   "tileBytes": 131072,
+   "cycles": 3330.860491071429,
+   "GBpsPerDirection": 47.22095098897586,
+   "deviceOk": true,
+   "chainLengths": [
+    64,
+    128,
+    256
+   ],
+   "swap": "1:6",
+   "physicalCores": [
+    "nc0",
+    "nc4"
+   ],
+   "node": "raw",
+   "run": "xseng-long",
+   "chip": 0
+  },
+  {
+   "partner": 6,
+   "route": "diagonal (unrouted for collectives)",
+   "kernel": "xchg_dma",
+   "tileBytes": 2097152,
+   "cycles": 8955.625000000002,
+   "GBpsPerDirection": 281.0057812827133,
+   "deviceOk": true,
+   "chainLengths": [
+    16,
+    64
+   ],
+   "swap": "1:6",
+   "physicalCores": [
+    "nc0",
+    "nc4"
+   ],
+   "node": "raw",
+   "run": "xseng",
+   "chip": 0
+  },
+  {
+   "partner": 7,
+   "route": "diagonal (unrouted for collectives)",
+   "kernel": "xchg_dma",
+   "tileBytes": 512,
+   "cycles": 3142.008482142858,
+   "GBpsPerDirection": 0.1955437114482191,
+   "deviceOk": true,
+   "chainLengths": [
+    64,
+    128,
+    256
+   ],
+   "swap": "1:7",
+   "physicalCores": [
+    "nc1",
+    "nc4"
+   ],
+   "node": "raw",
+   "run": "xseng-long",
+   "chip": 0
+  },
+  {
+   "partner": 7,
+   "route": "diagonal (unrouted for collectives)",
+   "kernel": "xchg_dma",
+   "tileBytes": 131072,
+   "cycles": 3333.738616071428,
+   "GBpsPerDirection": 47.180183605801325,
+   "deviceOk": true,
+   "chainLengths": [
+    64,
+    128,
+    256
+   ],
+   "swap": "1:7",
+   "physicalCores": [
+    "nc1",
+    "nc4"
+   ],
+   "node": "raw",
+   "run": "xseng-long",
+   "chip": 0
+  },
+  {
+   "partner": 7,
+   "route": "diagonal (unrouted for collectives)",
+   "kernel": "xchg_dma",
+   "tileBytes": 2097152,
+   "cycles": 8957.625000000002,
+   "GBpsPerDirection": 280.9430401473604,
+   "deviceOk": true,
+   "chainLengths": [
+    16,
+    64
+   ],
+   "swap": "1:7",
+   "physicalCores": [
+    "nc1",
+    "nc4"
+   ],
+   "node": "raw",
+   "run": "xseng",
+   "chip": 0
+  }
+ ]
+}

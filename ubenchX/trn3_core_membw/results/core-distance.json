@@ -1,0 +1,1530 @@
+{
+ "intra-d0": [
+  {
+   "a": 0,
+   "b": 1,
+   "ranks": 2,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 9.48,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 9.47,
+     "algbwGBps": 0.43
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 9.73,
+     "algbwGBps": 6.73
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 16.47,
+     "algbwGBps": 63.68
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 244.58,
+     "algbwGBps": 68.6
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 958.74,
+     "algbwGBps": 70.0
+    }
+   ]
+  },
+  {
+   "a": 0,
+   "b": 2,
+   "ranks": 3,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 8.56,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 8.55,
+     "algbwGBps": 0.48
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 8.69,
+     "algbwGBps": 7.54
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 15.58,
+     "algbwGBps": 67.29
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 202.33,
+     "algbwGBps": 82.92
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 790.47,
+     "algbwGBps": 84.9
+    }
+   ]
+  },
+  {
+   "a": 0,
+   "b": 3,
+   "ranks": 4,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 7.85,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 7.85,
+     "algbwGBps": 0.52
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 7.96,
+     "algbwGBps": 8.23
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 14.73,
+     "algbwGBps": 71.18
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 183.28,
+     "algbwGBps": 91.54
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 744.02,
+     "algbwGBps": 90.2
+    }
+   ]
+  },
+  {
+   "a": 0,
+   "b": 4,
+   "ranks": 5,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 8.47,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 8.47,
+     "algbwGBps": 0.48
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 8.58,
+     "algbwGBps": 7.64
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 18.33,
+     "algbwGBps": 57.21
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 191.13,
+     "algbwGBps": 87.78
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 747.05,
+     "algbwGBps": 89.83
+    }
+   ]
+  },
+  {
+   "a": 0,
+   "b": 5,
+   "ranks": 6,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 8.02,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 8.02,
+     "algbwGBps": 0.51
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 8.11,
+     "algbwGBps": 8.08
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 16.55,
+     "algbwGBps": 63.35
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 178.45,
+     "algbwGBps": 94.02
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 692.42,
+     "algbwGBps": 96.92
+    }
+   ]
+  },
+  {
+   "a": 1,
+   "b": 2,
+   "ranks": 2,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 10.47,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 10.48,
+     "algbwGBps": 0.39
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 10.66,
+     "algbwGBps": 6.15
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 17.08,
+     "algbwGBps": 61.4
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 248.17,
+     "algbwGBps": 67.61
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 1008.62,
+     "algbwGBps": 66.54
+    }
+   ]
+  },
+  {
+   "a": 1,
+   "b": 3,
+   "ranks": 3,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 8.9,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 8.91,
+     "algbwGBps": 0.46
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 9.07,
+     "algbwGBps": 7.23
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 15.53,
+     "algbwGBps": 67.53
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 209.39,
+     "algbwGBps": 80.13
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 913.38,
+     "algbwGBps": 73.47
+    }
+   ]
+  },
+  {
+   "a": 1,
+   "b": 4,
+   "ranks": 4,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 9.21,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 9.21,
+     "algbwGBps": 0.44
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 9.34,
+     "algbwGBps": 7.02
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 17.8,
+     "algbwGBps": 58.91
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 207.95,
+     "algbwGBps": 80.68
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 808.99,
+     "algbwGBps": 82.95
+    }
+   ]
+  },
+  {
+   "a": 1,
+   "b": 5,
+   "ranks": 5,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 8.52,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 8.52,
+     "algbwGBps": 0.48
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 8.61,
+     "algbwGBps": 7.61
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 16.88,
+     "algbwGBps": 62.11
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 200.58,
+     "algbwGBps": 83.64
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 785.45,
+     "algbwGBps": 85.44
+    }
+   ]
+  },
+  {
+   "a": 2,
+   "b": 3,
+   "ranks": 2,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 9.97,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 9.95,
+     "algbwGBps": 0.41
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 10.22,
+     "algbwGBps": 6.41
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 16.62,
+     "algbwGBps": 63.1
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 244.99,
+     "algbwGBps": 68.48
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 959.31,
+     "algbwGBps": 69.96
+    }
+   ]
+  },
+  {
+   "a": 2,
+   "b": 6,
+   "ranks": 5,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 8.52,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 8.52,
+     "algbwGBps": 0.48
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 8.61,
+     "algbwGBps": 7.61
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 17.05,
+     "algbwGBps": 61.51
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 189.65,
+     "algbwGBps": 88.46
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 733.67,
+     "algbwGBps": 91.47
+    }
+   ]
+  },
+  {
+   "a": 2,
+   "b": 7,
+   "ranks": 6,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 8.03,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 8.03,
+     "algbwGBps": 0.51
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 8.11,
+     "algbwGBps": 8.08
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 15.93,
+     "algbwGBps": 65.82
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 177.43,
+     "algbwGBps": 94.56
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 689.04,
+     "algbwGBps": 97.39
+    }
+   ]
+  },
+  {
+   "a": 3,
+   "b": 6,
+   "ranks": 4,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 9.2,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 9.19,
+     "algbwGBps": 0.45
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 9.28,
+     "algbwGBps": 7.06
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 17.41,
+     "algbwGBps": 60.23
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 207.21,
+     "algbwGBps": 80.97
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 808.01,
+     "algbwGBps": 83.05
+    }
+   ]
+  },
+  {
+   "a": 3,
+   "b": 7,
+   "ranks": 5,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 8.46,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 8.47,
+     "algbwGBps": 0.48
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 8.54,
+     "algbwGBps": 7.67
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 16.63,
+     "algbwGBps": 63.04
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 197.43,
+     "algbwGBps": 84.98
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 787.57,
+     "algbwGBps": 85.21
+    }
+   ]
+  },
+  {
+   "a": 4,
+   "b": 5,
+   "ranks": 2,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 9.95,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 9.95,
+     "algbwGBps": 0.41
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 10.23,
+     "algbwGBps": 6.41
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 16.56,
+     "algbwGBps": 63.31
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 245.08,
+     "algbwGBps": 68.46
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 959.13,
+     "algbwGBps": 69.97
+    }
+   ]
+  },
+  {
+   "a": 4,
+   "b": 6,
+   "ranks": 3,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 8.64,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 8.64,
+     "algbwGBps": 0.47
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 8.77,
+     "algbwGBps": 7.47
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 15.31,
+     "algbwGBps": 68.48
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 202.37,
+     "algbwGBps": 82.91
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 790.32,
+     "algbwGBps": 84.91
+    }
+   ]
+  },
+  {
+   "a": 4,
+   "b": 7,
+   "ranks": 4,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 8.08,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 8.07,
+     "algbwGBps": 0.51
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 8.14,
+     "algbwGBps": 8.05
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 14.71,
+     "algbwGBps": 71.28
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 182.11,
+     "algbwGBps": 92.13
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 730.69,
+     "algbwGBps": 91.84
+    }
+   ]
+  },
+  {
+   "a": 5,
+   "b": 6,
+   "ranks": 2,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 10.03,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 10.02,
+     "algbwGBps": 0.41
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 10.25,
+     "algbwGBps": 6.39
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 16.73,
+     "algbwGBps": 62.69
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 248.74,
+     "algbwGBps": 67.45
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 1031.99,
+     "algbwGBps": 65.03
+    }
+   ]
+  },
+  {
+   "a": 5,
+   "b": 7,
+   "ranks": 3,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 8.81,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 8.81,
+     "algbwGBps": 0.46
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 8.97,
+     "algbwGBps": 7.31
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 15.48,
+     "algbwGBps": 67.75
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 206.69,
+     "algbwGBps": 81.17
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 907.91,
+     "algbwGBps": 73.92
+    }
+   ]
+  },
+  {
+   "a": 6,
+   "b": 7,
+   "ranks": 2,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 9.44,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 9.45,
+     "algbwGBps": 0.43
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 9.74,
+     "algbwGBps": 6.73
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 16.41,
+     "algbwGBps": 63.9
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 244.62,
+     "algbwGBps": 68.58
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 958.83,
+     "algbwGBps": 69.99
+    }
+   ]
+  }
+ ],
+ "intra-d9": [
+  {
+   "a": 72,
+   "b": 73,
+   "ranks": 2,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 9.97,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 9.96,
+     "algbwGBps": 0.41
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 10.24,
+     "algbwGBps": 6.4
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 16.6,
+     "algbwGBps": 63.17
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 244.98,
+     "algbwGBps": 68.48
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 958.92,
+     "algbwGBps": 69.98
+    }
+   ]
+  },
+  {
+   "a": 72,
+   "b": 74,
+   "ranks": 3,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 8.66,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 8.65,
+     "algbwGBps": 0.47
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 8.78,
+     "algbwGBps": 7.47
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 15.25,
+     "algbwGBps": 68.77
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 201.95,
+     "algbwGBps": 83.08
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 789.66,
+     "algbwGBps": 84.98
+    }
+   ]
+  },
+  {
+   "a": 72,
+   "b": 75,
+   "ranks": 4,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 8.07,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 8.06,
+     "algbwGBps": 0.51
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 8.15,
+     "algbwGBps": 8.04
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 14.81,
+     "algbwGBps": 70.78
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 181.43,
+     "algbwGBps": 92.47
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 726.51,
+     "algbwGBps": 92.37
+    }
+   ]
+  },
+  {
+   "a": 72,
+   "b": 76,
+   "ranks": 5,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 8.42,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 8.42,
+     "algbwGBps": 0.49
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 8.53,
+     "algbwGBps": 7.69
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 18.23,
+     "algbwGBps": 57.53
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 191.07,
+     "algbwGBps": 87.81
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 742.59,
+     "algbwGBps": 90.37
+    }
+   ]
+  },
+  {
+   "a": 72,
+   "b": 77,
+   "ranks": 6,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 7.94,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 7.95,
+     "algbwGBps": 0.52
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 8.04,
+     "algbwGBps": 8.15
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 16.8,
+     "algbwGBps": 62.4
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 179.58,
+     "algbwGBps": 93.43
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 691.32,
+     "algbwGBps": 97.07
+    }
+   ]
+  },
+  {
+   "a": 73,
+   "b": 74,
+   "ranks": 2,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 10.06,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 10.07,
+     "algbwGBps": 0.41
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 10.23,
+     "algbwGBps": 6.4
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 16.66,
+     "algbwGBps": 62.95
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 246.62,
+     "algbwGBps": 68.03
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 1009.87,
+     "algbwGBps": 66.45
+    }
+   ]
+  },
+  {
+   "a": 73,
+   "b": 75,
+   "ranks": 3,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 8.81,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 8.81,
+     "algbwGBps": 0.46
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 8.96,
+     "algbwGBps": 7.32
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 15.68,
+     "algbwGBps": 66.89
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 206.83,
+     "algbwGBps": 81.12
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 896.3,
+     "algbwGBps": 74.87
+    }
+   ]
+  },
+  {
+   "a": 73,
+   "b": 76,
+   "ranks": 4,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 9.06,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 9.06,
+     "algbwGBps": 0.45
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 9.19,
+     "algbwGBps": 7.13
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 18.09,
+     "algbwGBps": 57.97
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 207.56,
+     "algbwGBps": 80.83
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 808.76,
+     "algbwGBps": 82.98
+    }
+   ]
+  },
+  {
+   "a": 73,
+   "b": 77,
+   "ranks": 5,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 8.36,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 8.36,
+     "algbwGBps": 0.49
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 8.46,
+     "algbwGBps": 7.74
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 16.66,
+     "algbwGBps": 62.96
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 196.64,
+     "algbwGBps": 85.32
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 791.25,
+     "algbwGBps": 84.81
+    }
+   ]
+  },
+  {
+   "a": 74,
+   "b": 75,
+   "ranks": 2,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 9.47,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 9.54,
+     "algbwGBps": 0.43
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 9.76,
+     "algbwGBps": 6.72
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 16.57,
+     "algbwGBps": 63.28
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 244.75,
+     "algbwGBps": 68.55
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 958.77,
+     "algbwGBps": 69.99
+    }
+   ]
+  },
+  {
+   "a": 74,
+   "b": 78,
+   "ranks": 5,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 8.37,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 8.37,
+     "algbwGBps": 0.49
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 8.44,
+     "algbwGBps": 7.76
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 16.98,
+     "algbwGBps": 61.75
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 191.33,
+     "algbwGBps": 87.69
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 756.0,
+     "algbwGBps": 88.77
+    }
+   ]
+  },
+  {
+   "a": 74,
+   "b": 79,
+   "ranks": 6,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 7.93,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 7.93,
+     "algbwGBps": 0.52
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 7.99,
+     "algbwGBps": 8.2
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 16.58,
+     "algbwGBps": 63.22
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 190.58,
+     "algbwGBps": 88.03
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 749.71,
+     "algbwGBps": 89.51
+    }
+   ]
+  },
+  {
+   "a": 75,
+   "b": 78,
+   "ranks": 4,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 9.08,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 9.08,
+     "algbwGBps": 0.45
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 9.22,
+     "algbwGBps": 7.11
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 17.2,
+     "algbwGBps": 60.95
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 207.16,
+     "algbwGBps": 80.99
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 814.57,
+     "algbwGBps": 82.39
+    }
+   ]
+  },
+  {
+   "a": 75,
+   "b": 79,
+   "ranks": 5,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 8.41,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 8.41,
+     "algbwGBps": 0.49
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 8.5,
+     "algbwGBps": 7.71
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 16.5,
+     "algbwGBps": 63.54
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 199.08,
+     "algbwGBps": 84.27
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 788.88,
+     "algbwGBps": 85.07
+    }
+   ]
+  },
+  {
+   "a": 76,
+   "b": 77,
+   "ranks": 2,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 9.43,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 9.46,
+     "algbwGBps": 0.43
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 9.76,
+     "algbwGBps": 6.72
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 16.52,
+     "algbwGBps": 63.48
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 244.74,
+     "algbwGBps": 68.55
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 958.76,
+     "algbwGBps": 70.0
+    }
+   ]
+  },
+  {
+   "a": 76,
+   "b": 78,
+   "ranks": 3,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 8.56,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 8.54,
+     "algbwGBps": 0.48
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 8.7,
+     "algbwGBps": 7.53
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 15.22,
+     "algbwGBps": 68.88
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 201.5,
+     "algbwGBps": 83.26
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 787.86,
+     "algbwGBps": 85.18
+    }
+   ]
+  },
+  {
+   "a": 76,
+   "b": 79,
+   "ranks": 4,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 7.85,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 7.88,
+     "algbwGBps": 0.52
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 7.94,
+     "algbwGBps": 8.25
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 14.51,
+     "algbwGBps": 72.27
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 181.49,
+     "algbwGBps": 92.44
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 735.14,
+     "algbwGBps": 91.29
+    }
+   ]
+  },
+  {
+   "a": 77,
+   "b": 78,
+   "ranks": 2,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 10.47,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 10.46,
+     "algbwGBps": 0.39
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 10.63,
+     "algbwGBps": 6.16
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 17.09,
+     "algbwGBps": 61.35
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 247.18,
+     "algbwGBps": 67.88
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 996.85,
+     "algbwGBps": 67.32
+    }
+   ]
+  },
+  {
+   "a": 77,
+   "b": 79,
+   "ranks": 3,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 8.91,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 8.9,
+     "algbwGBps": 0.46
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 9.05,
+     "algbwGBps": 7.24
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 15.52,
+     "algbwGBps": 67.57
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 209.48,
+     "algbwGBps": 80.09
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 916.4,
+     "algbwGBps": 73.23
+    }
+   ]
+  },
+  {
+   "a": 78,
+   "b": 79,
+   "ranks": 2,
+   "rows": [
+    {
+     "bytes": 8,
+     "timeUs": 9.97,
+     "algbwGBps": 0.0
+    },
+    {
+     "bytes": 4096,
+     "timeUs": 9.97,
+     "algbwGBps": 0.41
+    },
+    {
+     "bytes": 65536,
+     "timeUs": 10.22,
+     "algbwGBps": 6.41
+    },
+    {
+     "bytes": 1048576,
+     "timeUs": 16.58,
+     "algbwGBps": 63.25
+    },
+    {
+     "bytes": 16777216,
+     "timeUs": 244.96,
+     "algbwGBps": 68.49
+    },
+    {
+     "bytes": 67108864,
+     "timeUs": 958.79,
+     "algbwGBps": 69.99
+    }
+   ]
+  }
+ ],
+ "sendrecv-pair": [
+  {
+   "a": 40,
+   "b": 41,
+   "ranks": 2,
+   "rows": [
+    {
+     "bytes": 512,
+     "timeUs": 9.95,
+     "algbwGBps": 0.05
+    },
+    {
+     "bytes": 8192,
+     "timeUs": 9.95,
+     "algbwGBps": 0.82
+    },
+    {
+     "bytes": 32768,
+     "timeUs": 9.97,
+     "algbwGBps": 3.29
+    },
+    {
+     "bytes": 131072,
+     "timeUs": 10.31,
+     "algbwGBps": 12.72
+    },
+    {
+     "bytes": 524288,
+     "timeUs": 13.15,
+     "algbwGBps": 39.87
+    },
+    {
+     "bytes": 2097152,
+     "timeUs": 23.52,
+     "algbwGBps": 89.17
+    },
+    {
+     "bytes": 8388608,
+     "timeUs": 125.94,
+     "algbwGBps": 66.61
+    }
+   ]
+  }
+ ]
+}

@@ -15,6 +15,7 @@ repository root in an environment with the required device libraries.
 | [trn3_psum_bw](trn3_psum_bw/) | Trainium3 PSUM-to-SBUF `tensor_copy` bandwidth on VectorE and ScalarE, alone and concurrently | Trainium3 instance with the Neuron driver and Docker |
 | [trn3_exp_bw](trn3_exp_bw/) | Trainium3 exp and activation-function throughput on VectorE and ScalarE | Trainium3 instance with the Neuron driver and Docker |
 | [trn3_matmul](trn3_matmul/) | Trainium3 TensorE bf16 matmul initiation interval and latency across N and M, with a fixed or a new stationary per matmul | Trainium3 instance with the Neuron driver and Docker |
+| [trn3_core_membw](trn3_core_membw/) | Trainium3 per-core memory bandwidth, core-to-core and chip-to-chip collectives across a node and the two racks, and a core-map shim for cross-SEngine runs | Trainium3 UltraServer with the Neuron driver and Docker |
 
 ## GEMM
 

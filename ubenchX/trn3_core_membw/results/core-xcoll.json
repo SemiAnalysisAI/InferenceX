@@ -1,0 +1,545 @@
+{
+ "clockGHz": 1.2,
+ "runs": [
+  {
+   "variant": "diag",
+   "kernel": "ag_hbm",
+   "outputsOk": true,
+   "points": 3,
+   "error": null,
+   "pairs": [
+    {
+     "ranks": [
+      0,
+      1
+     ],
+     "physical": [
+      4,
+      0
+     ],
+     "kind": "diagonal (stock: no route)",
+     "cyclesPerRank": [
+      16881.50192307692,
+      16878.76730769231
+     ]
+    },
+    {
+     "ranks": [
+      2,
+      3
+     ],
+     "physical": [
+      6,
+      7
+     ],
+     "kind": "same SEngine",
+     "cyclesPerRank": [
+      5150.711538461538,
+      5146.197115384614
+     ]
+    },
+    {
+     "ranks": [
+      4,
+      5
+     ],
+     "physical": [
+      2,
+      3
+     ],
+     "kind": "same SEngine",
+     "cyclesPerRank": [
+      5078.183653846154,
+      5143.609615384616
+     ]
+    },
+    {
+     "ranks": [
+      6,
+      7
+     ],
+     "physical": [
+      5,
+      1
+     ],
+     "kind": "diagonal (stock: no route)",
+     "cyclesPerRank": [
+      16802.49807692308,
+      16735.16826923077
+     ]
+    }
+   ]
+  },
+  {
+   "variant": "diag",
+   "kernel": "ag_sbuf",
+   "outputsOk": false,
+   "points": 3,
+   "error": "17:25.228721   356:376   ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/xcoll/diag-ag_sbuf/f4/n1/kernel.neff with status 2",
+   "pairs": [
+    {
+     "ranks": [
+      0,
+      1
+     ],
+     "physical": [
+      4,
+      0
+     ],
+     "kind": "diagonal (stock: no route)",
+     "cyclesPerRank": []
+    },
+    {
+     "ranks": [
+      2,
+      3
+     ],
+     "physical": [
+      6,
+      7
+     ],
+     "kind": "same SEngine",
+     "cyclesPerRank": []
+    },
+    {
+     "ranks": [
+      4,
+      5
+     ],
+     "physical": [
+      2,
+      3
+     ],
+     "kind": "same SEngine",
+     "cyclesPerRank": []
+    },
+    {
+     "ranks": [
+      6,
+      7
+     ],
+     "physical": [
+      5,
+      1
+     ],
+     "kind": "diagonal (stock: no route)",
+     "cyclesPerRank": []
+    }
+   ]
+  },
+  {
+   "variant": "diag",
+   "kernel": "cp_hbm",
+   "outputsOk": true,
+   "points": 3,
+   "error": null,
+   "pairs": [
+    {
+     "ranks": [
+      0,
+      1
+     ],
+     "physical": [
+      4,
+      0
+     ],
+     "kind": "diagonal (stock: no route)",
+     "cyclesPerRank": [
+      16448.264423076926,
+      16480.6875
+     ]
+    },
+    {
+     "ranks": [
+      2,
+      3
+     ],
+     "physical": [
+      6,
+      7
+     ],
+     "kind": "same SEngine",
+     "cyclesPerRank": [
+      13800.233653846157,
+      13986.475961538466
+     ]
+    },
+    {
+     "ranks": [
+      4,
+      5
+     ],
+     "physical": [
+      2,
+      3
+     ],
+     "kind": "same SEngine",
+     "cyclesPerRank": [
+      13907.783653846158,
+      13932.314423076925
+     ]
+    },
+    {
+     "ranks": [
+      6,
+      7
+     ],
+     "physical": [
+      5,
+      1
+     ],
+     "kind": "diagonal (stock: no route)",
+     "cyclesPerRank": [
+      16388.590384615385,
+      16355.247115384615
+     ]
+    }
+   ]
+  },
+  {
+   "variant": "diag",
+   "kernel": "cpi_sbuf",
+   "outputsOk": true,
+   "points": 3,
+   "error": null,
+   "pairs": [
+    {
+     "ranks": [
+      0,
+      1
+     ],
+     "physical": [
+      4,
+      0
+     ],
+     "kind": "diagonal (stock: no route)",
+     "cyclesPerRank": [
+      16483.843269230772,
+      16589.50673076923
+     ]
+    },
+    {
+     "ranks": [
+      2,
+      3
+     ],
+     "physical": [
+      6,
+      7
+     ],
+     "kind": "same SEngine",
+     "cyclesPerRank": [
+      13820.175000000005,
+      13921.48557692308
+     ]
+    },
+    {
+     "ranks": [
+      4,
+      5
+     ],
+     "physical": [
+      2,
+      3
+     ],
+     "kind": "same SEngine",
+     "cyclesPerRank": [
+      14029.667307692309,
+      13909.044230769234
+     ]
+    },
+    {
+     "ranks": [
+      6,
+      7
+     ],
+     "physical": [
+      5,
+      1
+     ],
+     "kind": "diagonal (stock: no route)",
+     "cyclesPerRank": [
+      16612.857692307694,
+      16559.515384615388
+     ]
+    }
+   ]
+  },
+  {
+   "variant": "stock",
+   "kernel": "ag_hbm",
+   "outputsOk": true,
+   "points": 3,
+   "error": null,
+   "pairs": [
+    {
+     "ranks": [
+      0,
+      1
+     ],
+     "physical": [
+      4,
+      5
+     ],
+     "kind": "same SEngine",
+     "cyclesPerRank": [
+      5076.444230769231,
+      4793.777884615384
+     ]
+    },
+    {
+     "ranks": [
+      2,
+      3
+     ],
+     "physical": [
+      6,
+      7
+     ],
+     "kind": "same SEngine",
+     "cyclesPerRank": [
+      4929.9346153846145,
+      5259.075
+     ]
+    },
+    {
+     "ranks": [
+      4,
+      5
+     ],
+     "physical": [
+      2,
+      3
+     ],
+     "kind": "same SEngine",
+     "cyclesPerRank": [
+      10013.26153846154,
+      4971.620192307692
+     ]
+    },
+    {
+     "ranks": [
+      6,
+      7
+     ],
+     "physical": [
+      0,
+      1
+     ],
+     "kind": "same SEngine",
+     "cyclesPerRank": [
+      4885.984615384616,
+      4763.284615384616
+     ]
+    }
+   ]
+  },
+  {
+   "variant": "stock",
+   "kernel": "ag_sbuf",
+   "outputsOk": true,
+   "points": 3,
+   "error": null,
+   "pairs": [
+    {
+     "ranks": [
+      0,
+      1
+     ],
+     "physical": [
+      4,
+      5
+     ],
+     "kind": "same SEngine",
+     "cyclesPerRank": [
+      4631.81826923077,
+      5029.583653846154
+     ]
+    },
+    {
+     "ranks": [
+      2,
+      3
+     ],
+     "physical": [
+      6,
+      7
+     ],
+     "kind": "same SEngine",
+     "cyclesPerRank": [
+      4958.33076923077,
+      5330.749038461539
+     ]
+    },
+    {
+     "ranks": [
+      4,
+      5
+     ],
+     "physical": [
+      2,
+      3
+     ],
+     "kind": "same SEngine",
+     "cyclesPerRank": [
+      5291.417307692307,
+      5323.119230769231
+     ]
+    },
+    {
+     "ranks": [
+      6,
+      7
+     ],
+     "physical": [
+      0,
+      1
+     ],
+     "kind": "same SEngine",
+     "cyclesPerRank": [
+      4699.964423076924,
+      4993.214423076924
+     ]
+    }
+   ]
+  },
+  {
+   "variant": "stock",
+   "kernel": "cp_hbm",
+   "outputsOk": true,
+   "points": 3,
+   "error": null,
+   "pairs": [
+    {
+     "ranks": [
+      0,
+      1
+     ],
+     "physical": [
+      4,
+      5
+     ],
+     "kind": "same SEngine",
+     "cyclesPerRank": [
+      13132.110576923076,
+      13079.434615384615
+     ]
+    },
+    {
+     "ranks": [
+      2,
+      3
+     ],
+     "physical": [
+      6,
+      7
+     ],
+     "kind": "same SEngine",
+     "cyclesPerRank": [
+      13831.061538461543,
+      13980.360576923078
+     ]
+    },
+    {
+     "ranks": [
+      4,
+      5
+     ],
+     "physical": [
+      2,
+      3
+     ],
+     "kind": "same SEngine",
+     "cyclesPerRank": [
+      13903.459615384616,
+      13884.204807692311
+     ]
+    },
+    {
+     "ranks": [
+      6,
+      7
+     ],
+     "physical": [
+      0,
+      1
+     ],
+     "kind": "same SEngine",
+     "cyclesPerRank": [
+      13263.738461538464,
+      13040.720192307694
+     ]
+    }
+   ]
+  },
+  {
+   "variant": "stock",
+   "kernel": "cpi_sbuf",
+   "outputsOk": true,
+   "points": 3,
+   "error": null,
+   "pairs": [
+    {
+     "ranks": [
+      0,
+      1
+     ],
+     "physical": [
+      4,
+      5
+     ],
+     "kind": "same SEngine",
+     "cyclesPerRank": [
+      13277.270192307693,
+      13277.682692307693
+     ]
+    },
+    {
+     "ranks": [
+      2,
+      3
+     ],
+     "physical": [
+      6,
+      7
+     ],
+     "kind": "same SEngine",
+     "cyclesPerRank": [
+      14389.776923076925,
+      13890.608653846157
+     ]
+    },
+    {
+     "ranks": [
+      4,
+      5
+     ],
+     "physical": [
+      2,
+      3
+     ],
+     "kind": "same SEngine",
+     "cyclesPerRank": [
+      13870.332692307698,
+      13922.177884615388
+     ]
+    },
+    {
+     "ranks": [
+      6,
+      7
+     ],
+     "physical": [
+      0,
+      1
+     ],
+     "kind": "same SEngine",
+     "cyclesPerRank": [
+      13055.769230769232,
+      13157.55
+     ]
+    }
+   ]
+  }
+ ]
+}

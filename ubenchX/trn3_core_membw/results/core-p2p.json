@@ -1,0 +1,1970 @@
+{
+ "clockGHz": 1.2,
+ "routes": {
+  "m1": "LNC pair (i, i^1)",
+  "m2": "same die, other pair (i^2)",
+  "m3": "same die, other pair (i^3)",
+  "m4": "other die, same lane (i+4)",
+  "m5": "other die, other lane (i^5)",
+  "x8": "chip c to c^1 (same core)",
+  "x16": "chip c to c^2 (same core)",
+  "lnc": "ONE pair alone: LNC (cores 0-1)",
+  "die": "ONE pair alone: same die, other pair (cores 1-2)",
+  "xchip": "ONE pair alone: chip c core 7 to c+1 core 0",
+  "x8r": "chip c to c^1, repeat on chips 2-3"
+ },
+ "methods": {
+  "sendrecv": "nisa.sendrecv (SBUF, raw DMA)",
+  "sendrecv_gpsimd": "nisa.sendrecv gpsimd_dma (SBUF)",
+  "ag_sbuf": "all_gather (SBUF)",
+  "cpi_sbuf": "collective_permute_implicit (SBUF)",
+  "ag_hbm": "all_gather (HBM)",
+  "cp_hbm": "collective_permute (HBM)"
+ },
+ "rows": [
+  {
+   "method": "ag_hbm",
+   "route": "x16",
+   "tile": 512,
+   "ns": 4636.153846153847,
+   "cycles": 5563.384615384616,
+   "GBps": 0.11043636966981914,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "x16",
+   "tile": 8388608,
+   "ns": 304282.4086538462,
+   "cycles": 365138.8903846154,
+   "GBps": 27.568494797682963,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "x16",
+   "tile": 131072,
+   "ns": 9385.057692307691,
+   "cycles": 11262.06923076923,
+   "GBps": 13.966030289556027,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "x16",
+   "tile": 1048576,
+   "ns": 42108.17307692308,
+   "cycles": 50529.807692307695,
+   "GBps": 24.901959011246216,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "x16",
+   "tile": 512,
+   "ns": 5476.048076923077,
+   "cycles": 6571.257692307692,
+   "GBps": 0.09349808343678502,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "x16",
+   "tile": 131072,
+   "ns": 9234.721153846154,
+   "cycles": 11081.665384615384,
+   "GBps": 14.19339012152089,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "x16",
+   "tile": 1048576,
+   "ns": 43508.19711538462,
+   "cycles": 52209.83653846154,
+   "GBps": 24.10065388871792,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "x8",
+   "tile": 512,
+   "ns": 13624.29807692308,
+   "cycles": 16349.157692307695,
+   "GBps": 0.03757991766689461,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "x8",
+   "tile": 8388608,
+   "ns": 287186.41826923075,
+   "cycles": 344623.7019230769,
+   "GBps": 29.209626452932987,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "x8",
+   "tile": 131072,
+   "ns": 14201.341346153848,
+   "cycles": 17041.609615384616,
+   "GBps": 9.229550702652341,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "x8",
+   "tile": 1048576,
+   "ns": 20136.03846153846,
+   "cycles": 24163.246153846154,
+   "GBps": 52.07459262669114,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "x8",
+   "tile": 512,
+   "ns": 6398.983173076924,
+   "cycles": 7678.779807692308,
+   "GBps": 0.08001271235626753,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "x8",
+   "tile": 131072,
+   "ns": 9189.007211538463,
+   "cycles": 11026.808653846156,
+   "GBps": 14.264000123475293,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "x8",
+   "tile": 1048576,
+   "ns": 37982.82451923077,
+   "cycles": 45579.38942307693,
+   "GBps": 27.606583061486226,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "x16",
+   "tile": 512,
+   "ns": 13312.992788461539,
+   "cycles": 15975.591346153846,
+   "GBps": 0.03845867027313001,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "x16",
+   "tile": 8388608,
+   "ns": 294128.7932692308,
+   "cycles": 352954.551923077,
+   "GBps": 28.52018636720645,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "x16",
+   "tile": 131072,
+   "ns": 13968.406250000002,
+   "cycles": 16762.0875,
+   "GBps": 9.383461337974758,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "x16",
+   "tile": 1048576,
+   "ns": 22339.992788461535,
+   "cycles": 26807.99134615384,
+   "GBps": 46.937168240339936,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "x8",
+   "tile": 512,
+   "ns": 13000.58653846154,
+   "cycles": 15600.703846153849,
+   "GBps": 0.039382838496192105,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "x8",
+   "tile": 8388608,
+   "ns": 130833.02403846155,
+   "cycles": 156999.62884615385,
+   "GBps": 64.11690061932654,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "x8",
+   "tile": 131072,
+   "ns": 13832.139423076926,
+   "cycles": 16598.56730769231,
+   "GBps": 9.475902171816264,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "x8",
+   "tile": 1048576,
+   "ns": 20254.439903846156,
+   "cycles": 24305.327884615388,
+   "GBps": 51.770180018697225,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "x8",
+   "tile": 512,
+   "ns": 5388.673076923077,
+   "cycles": 6466.407692307693,
+   "GBps": 0.0950141143638187,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "x8",
+   "tile": 8388608,
+   "ns": 89706.32692307692,
+   "cycles": 107647.5923076923,
+   "GBps": 93.51188804322824,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "x8",
+   "tile": 131072,
+   "ns": 9241.990384615385,
+   "cycles": 11090.388461538461,
+   "GBps": 14.18222639770196,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "x8",
+   "tile": 1048576,
+   "ns": 34172.95913461539,
+   "cycles": 41007.550961538465,
+   "GBps": 30.684378132704587,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "x16",
+   "tile": 512,
+   "ns": 12875.27403846154,
+   "cycles": 15450.328846153849,
+   "GBps": 0.039766143887154,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "x16",
+   "tile": 8388608,
+   "ns": 147528.82692307694,
+   "cycles": 177034.5923076923,
+   "GBps": 56.860805952004945,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "x16",
+   "tile": 131072,
+   "ns": 13859.824519230771,
+   "cycles": 16631.789423076923,
+   "GBps": 9.45697399113063,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "x16",
+   "tile": 1048576,
+   "ns": 22105.459134615383,
+   "cycles": 26526.550961538458,
+   "GBps": 47.435160410579925,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "m1",
+   "tile": 512,
+   "ns": 10923.389423076924,
+   "cycles": 13108.067307692309,
+   "GBps": 0.04687189847121451,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "m1",
+   "tile": 8388608,
+   "ns": 127724.24038461542,
+   "cycles": 153269.0884615385,
+   "GBps": 65.67749375325641,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "m1",
+   "tile": 131072,
+   "ns": 11702.78605769231,
+   "cycles": 14043.343269230772,
+   "GBps": 11.20006803113739,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "m1",
+   "tile": 1048576,
+   "ns": 18182.125000000004,
+   "cycles": 21818.550000000003,
+   "GBps": 57.67070680682262,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "m4",
+   "tile": 512,
+   "ns": 4416.533653846154,
+   "cycles": 5299.840384615385,
+   "GBps": 0.11592801960291256,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "m4",
+   "tile": 8388608,
+   "ns": 165447.21394230772,
+   "cycles": 198536.65673076926,
+   "GBps": 50.702624723104435,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "m4",
+   "tile": 131072,
+   "ns": 5529.961538461539,
+   "cycles": 6635.953846153847,
+   "GBps": 23.702154000236472,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "m4",
+   "tile": 1048576,
+   "ns": 12999.670673076924,
+   "cycles": 15599.604807692307,
+   "GBps": 80.66173569855597,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "m3",
+   "tile": 512,
+   "ns": 11506.959134615387,
+   "cycles": 13808.350961538463,
+   "GBps": 0.04449481344378767,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "m3",
+   "tile": 8388608,
+   "ns": 137510.20673076925,
+   "cycles": 165012.2480769231,
+   "GBps": 61.00352984287215,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "m3",
+   "tile": 131072,
+   "ns": 15297.728365384617,
+   "cycles": 18357.27403846154,
+   "GBps": 8.568069511326074,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "m3",
+   "tile": 1048576,
+   "ns": 27333.281250000004,
+   "cycles": 32799.9375,
+   "GBps": 38.36260968485077,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "m1",
+   "tile": 512,
+   "ns": 10954.276442307693,
+   "cycles": 13145.131730769232,
+   "GBps": 0.04673973700559076,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "m1",
+   "tile": 8388608,
+   "ns": 286418.25721153844,
+   "cycles": 343701.9086538461,
+   "GBps": 29.287965375071987,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "m1",
+   "tile": 131072,
+   "ns": 11268.23076923077,
+   "cycles": 13521.876923076923,
+   "GBps": 11.631994647989242,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "m1",
+   "tile": 1048576,
+   "ns": 17379.278846153848,
+   "cycles": 20855.134615384617,
+   "GBps": 60.33483951102246,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "m1",
+   "tile": 512,
+   "ns": 4152.5504807692305,
+   "cycles": 4983.060576923076,
+   "GBps": 0.12329771844342652,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "m1",
+   "tile": 131072,
+   "ns": 5189.84375,
+   "cycles": 6227.8125,
+   "GBps": 25.255480957398767,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "m1",
+   "tile": 1048576,
+   "ns": 15891.120192307691,
+   "cycles": 19069.344230769228,
+   "GBps": 65.98502731780842,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "m2",
+   "tile": 512,
+   "ns": 11533.776442307693,
+   "cycles": 13840.531730769231,
+   "GBps": 0.044391358074351434,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "m2",
+   "tile": 8388608,
+   "ns": 137561.85336538462,
+   "cycles": 165074.22403846154,
+   "GBps": 60.98062649474936,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "m2",
+   "tile": 131072,
+   "ns": 15274.497596153848,
+   "cycles": 18329.397115384618,
+   "GBps": 8.581100568113234,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "m2",
+   "tile": 1048576,
+   "ns": 27370.692307692312,
+   "cycles": 32844.83076923077,
+   "GBps": 38.31017455504062,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "m5",
+   "tile": 512,
+   "ns": 13956.701923076926,
+   "cycles": 16748.04230769231,
+   "GBps": 0.03668488463978912,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "m5",
+   "tile": 8388608,
+   "ns": 165404.79807692306,
+   "cycles": 198485.75769230767,
+   "GBps": 50.71562673834165,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "m5",
+   "tile": 131072,
+   "ns": 18413.165865384617,
+   "cycles": 22095.79903846154,
+   "GBps": 7.118384799129281,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "m5",
+   "tile": 1048576,
+   "ns": 33170.59134615385,
+   "cycles": 39804.70961538462,
+   "GBps": 31.611616116743814,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "m3",
+   "tile": 512,
+   "ns": 11636.754807692309,
+   "cycles": 13964.10576923077,
+   "GBps": 0.043998520933134194,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "m3",
+   "tile": 8388608,
+   "ns": 132864.11778846156,
+   "cycles": 159436.94134615388,
+   "GBps": 63.13674556855033,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "m3",
+   "tile": 131072,
+   "ns": 12003.199519230771,
+   "cycles": 14403.839423076925,
+   "GBps": 10.919755169445004,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "m3",
+   "tile": 1048576,
+   "ns": 18266.48076923077,
+   "cycles": 21919.776923076923,
+   "GBps": 57.404379817172476,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "m4",
+   "tile": 512,
+   "ns": 14184.644230769234,
+   "cycles": 17021.57307692308,
+   "GBps": 0.03609537128110503,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "m4",
+   "tile": 8388608,
+   "ns": 155846.12740384616,
+   "cycles": 187015.3528846154,
+   "GBps": 53.82622038635896,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "m4",
+   "tile": 131072,
+   "ns": 15007.766826923078,
+   "cycles": 18009.320192307692,
+   "GBps": 8.733611170241819,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "m4",
+   "tile": 1048576,
+   "ns": 23822.29807692308,
+   "cycles": 28586.757692307696,
+   "GBps": 44.016576260363685,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "m5",
+   "tile": 512,
+   "ns": 14158.09375,
+   "cycles": 16989.712499999998,
+   "GBps": 0.036163060440251714,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "m5",
+   "tile": 8388608,
+   "ns": 156227.9903846154,
+   "cycles": 187473.5884615385,
+   "GBps": 53.69465471166984,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "m5",
+   "tile": 131072,
+   "ns": 14996.53125,
+   "cycles": 17995.837499999998,
+   "GBps": 8.740154494060084,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "m5",
+   "tile": 1048576,
+   "ns": 23808.663461538465,
+   "cycles": 28570.396153846155,
+   "GBps": 44.04178343290519,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "m2",
+   "tile": 512,
+   "ns": 11644.36778846154,
+   "cycles": 13973.241346153849,
+   "GBps": 0.043969755104037785,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "m2",
+   "tile": 8388608,
+   "ns": 127550.50000000003,
+   "cycles": 153060.60000000003,
+   "GBps": 65.76695504917659,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "m2",
+   "tile": 131072,
+   "ns": 12002.115384615388,
+   "cycles": 14402.538461538466,
+   "GBps": 10.920741535947185,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "m2",
+   "tile": 1048576,
+   "ns": 18242.5625,
+   "cycles": 21891.075,
+   "GBps": 57.47964410153453,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "m4",
+   "tile": 512,
+   "ns": 4545.711538461539,
+   "cycles": 5454.8538461538465,
+   "GBps": 0.1126336318677367,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "m4",
+   "tile": 131072,
+   "ns": 5642.608173076923,
+   "cycles": 6771.129807692308,
+   "GBps": 23.228974257931903,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "m4",
+   "tile": 1048576,
+   "ns": 17847.5625,
+   "cycles": 21417.075,
+   "GBps": 58.75177632799997,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "m4",
+   "tile": 512,
+   "ns": 14194.52403846154,
+   "cycles": 17033.42884615385,
+   "GBps": 0.03607024783731266,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "m4",
+   "tile": 8388608,
+   "ns": 315210.8966346154,
+   "cycles": 378253.0759615384,
+   "GBps": 26.61268404602099,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "m4",
+   "tile": 131072,
+   "ns": 14591.84134615385,
+   "cycles": 17510.209615384618,
+   "GBps": 8.982553804599052,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "m4",
+   "tile": 1048576,
+   "ns": 23579.406250000004,
+   "cycles": 28295.287500000002,
+   "GBps": 44.46999169031238,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "m3",
+   "tile": 512,
+   "ns": 11557.6875,
+   "cycles": 13869.225,
+   "GBps": 0.04429951925936741,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "m3",
+   "tile": 8388608,
+   "ns": 303832.47355769237,
+   "cycles": 364598.96826923086,
+   "GBps": 27.60932003671146,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "m3",
+   "tile": 131072,
+   "ns": 12015.002403846154,
+   "cycles": 14418.002884615385,
+   "GBps": 10.909028196119394,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "m3",
+   "tile": 1048576,
+   "ns": 17595.17548076923,
+   "cycles": 21114.210576923077,
+   "GBps": 59.59451789191011,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "m1",
+   "tile": 512,
+   "ns": 4004.6586538461543,
+   "cycles": 4805.590384615385,
+   "GBps": 0.12785109649938953,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "m1",
+   "tile": 8388608,
+   "ns": 137615.5480769231,
+   "cycles": 165138.6576923077,
+   "GBps": 60.95683312841229,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "m1",
+   "tile": 131072,
+   "ns": 4875.966346153847,
+   "cycles": 5851.159615384616,
+   "GBps": 26.881235573619033,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "m1",
+   "tile": 1048576,
+   "ns": 11799.89903846154,
+   "cycles": 14159.878846153848,
+   "GBps": 88.86313319988476,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "m2",
+   "tile": 512,
+   "ns": 11620.771634615387,
+   "cycles": 13944.925961538464,
+   "GBps": 0.044059036361654286,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "m2",
+   "tile": 8388608,
+   "ns": 296380.71875,
+   "cycles": 355656.8625,
+   "GBps": 28.303487606681568,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "m2",
+   "tile": 131072,
+   "ns": 11968.605769230773,
+   "cycles": 14362.326923076927,
+   "GBps": 10.951317348672605,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "m2",
+   "tile": 1048576,
+   "ns": 17596.733173076922,
+   "cycles": 21116.079807692306,
+   "GBps": 59.58924248532255,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "m5",
+   "tile": 512,
+   "ns": 14153.903846153848,
+   "cycles": 16984.684615384616,
+   "GBps": 0.036173765596064146,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "m5",
+   "tile": 8388608,
+   "ns": 315192.0649038462,
+   "cycles": 378230.4778846154,
+   "GBps": 26.61427406987249,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "m5",
+   "tile": 131072,
+   "ns": 14543.451923076926,
+   "cycles": 17452.14230769231,
+   "GBps": 9.012440835453967,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "m5",
+   "tile": 1048576,
+   "ns": 23576.649038461543,
+   "cycles": 28291.978846153852,
+   "GBps": 44.4751923095354,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "lnc",
+   "tile": 512,
+   "ns": 10946.028846153846,
+   "cycles": 13135.234615384614,
+   "GBps": 0.0467749543872163,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "lnc",
+   "tile": 8388608,
+   "ns": 286166.93750000006,
+   "cycles": 343400.32500000007,
+   "GBps": 29.313686875514744,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "lnc",
+   "tile": 1048576,
+   "ns": 17396.865384615387,
+   "cycles": 20876.23846153846,
+   "GBps": 60.273846857910954,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "xchip",
+   "tile": 512,
+   "ns": 13009.971153846156,
+   "cycles": 15611.965384615387,
+   "GBps": 0.03935443007101801,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "xchip",
+   "tile": 8388608,
+   "ns": 128193.90865384619,
+   "cycles": 153832.69038461542,
+   "GBps": 65.43686894399345,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "xchip",
+   "tile": 1048576,
+   "ns": 20120.502403846156,
+   "cycles": 24144.602884615386,
+   "GBps": 52.11480205382736,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "die",
+   "tile": 512,
+   "ns": 11642.766826923082,
+   "cycles": 13971.320192307698,
+   "GBps": 0.043975801251643715,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "die",
+   "tile": 8388608,
+   "ns": 127805.20192307694,
+   "cycles": 153366.24230769233,
+   "GBps": 65.63588863189554,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "die",
+   "tile": 1048576,
+   "ns": 18215.646634615383,
+   "cycles": 21858.77596153846,
+   "GBps": 57.56457736764503,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "lnc",
+   "tile": 512,
+   "ns": 4142.192307692308,
+   "cycles": 4970.630769230769,
+   "GBps": 0.12360604287956024,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "lnc",
+   "tile": 1048576,
+   "ns": 16043.725961538465,
+   "cycles": 19252.471153846156,
+   "GBps": 65.35738658923404,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "lnc",
+   "tile": 512,
+   "ns": 3987.4182692307695,
+   "cycles": 4784.901923076924,
+   "GBps": 0.12840388578015222,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "lnc",
+   "tile": 8388608,
+   "ns": 138223.29326923078,
+   "cycles": 165867.95192307694,
+   "GBps": 60.688815912240656,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "lnc",
+   "tile": 1048576,
+   "ns": 13896.312500000002,
+   "cycles": 16675.575,
+   "GBps": 75.45714015858523,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "die",
+   "tile": 512,
+   "ns": 11445.38701923077,
+   "cycles": 13734.464423076923,
+   "GBps": 0.044734179730202855,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "die",
+   "tile": 8388608,
+   "ns": 137489.65625000003,
+   "cycles": 164987.58750000002,
+   "GBps": 61.01264799692885,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_hbm",
+   "route": "die",
+   "tile": 1048576,
+   "ns": 27308.495192307695,
+   "cycles": 32770.19423076923,
+   "GBps": 38.39742880799103,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "lnc",
+   "tile": 512,
+   "ns": 10975.963942307691,
+   "cycles": 13171.15673076923,
+   "GBps": 0.04664738356386694,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "lnc",
+   "tile": 8388608,
+   "ns": 127561.84375000003,
+   "cycles": 153074.21250000002,
+   "GBps": 65.76110656130273,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cp_hbm",
+   "route": "lnc",
+   "tile": 1048576,
+   "ns": 18132.221153846152,
+   "cycles": 21758.665384615382,
+   "GBps": 57.829429230052114,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "die",
+   "tile": 512,
+   "ns": 11661.526442307695,
+   "cycles": 13993.831730769234,
+   "GBps": 0.04390505844436267,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "die",
+   "tile": 8388608,
+   "ns": 296391.1057692308,
+   "cycles": 355669.32692307694,
+   "GBps": 28.302495711633615,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "die",
+   "tile": 1048576,
+   "ns": 17551.314903846156,
+   "cycles": 21061.577884615388,
+   "GBps": 59.74344405217283,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "x8r",
+   "tile": 512,
+   "ns": 6390.360576923078,
+   "cycles": 7668.432692307693,
+   "GBps": 0.08012067454361473,
+   "nsteps": [
+    1,
+    9,
+    33
+   ]
+  },
+  {
+   "method": "sendrecv",
+   "route": "m1",
+   "tile": 32768,
+   "ns": 1857.8045068773777,
+   "cycles": 2229.3654082528533,
+   "GBps": 17.63802374183971
+  },
+  {
+   "method": "sendrecv",
+   "route": "m1",
+   "tile": 8192,
+   "ns": 1810.1536435469704,
+   "cycles": 2172.1843722563644,
+   "GBps": 4.525582692498904
+  },
+  {
+   "method": "sendrecv",
+   "route": "m1",
+   "tile": 524288,
+   "ns": 2624.5797483172364,
+   "cycles": 3149.4956979806834,
+   "GBps": 199.76074277649596
+  },
+  {
+   "method": "sendrecv",
+   "route": "m1",
+   "tile": 8388608,
+   "ns": 15430.47483172373,
+   "cycles": 18516.569798068474,
+   "GBps": 543.6390060242179
+  },
+  {
+   "method": "sendrecv",
+   "route": "m1",
+   "tile": 2097152,
+   "ns": 5194.146034533215,
+   "cycles": 6232.975241439858,
+   "GBps": 403.75299155185684
+  },
+  {
+   "method": "sendrecv",
+   "route": "m1",
+   "tile": 512,
+   "ns": 1879.571700321919,
+   "cycles": 2255.4860403863026,
+   "GBps": 0.27240248398734057
+  },
+  {
+   "method": "sendrecv",
+   "route": "m1",
+   "tile": 131072,
+   "ns": 1987.239098624524,
+   "cycles": 2384.6869183494287,
+   "GBps": 65.9568343289552
+  },
+  {
+   "method": "sendrecv_gpsimd",
+   "route": "m1",
+   "tile": 32768,
+   "ns": 1220.7453906935907,
+   "cycles": 1464.8944688323088,
+   "GBps": 26.842616199748427
+  },
+  {
+   "method": "sendrecv_gpsimd",
+   "route": "m1",
+   "tile": 8192,
+   "ns": 783.6861281826162,
+   "cycles": 940.4233538191395,
+   "GBps": 10.453164481802697
+  },
+  {
+   "method": "sendrecv_gpsimd",
+   "route": "m1",
+   "tile": 512,
+   "ns": 712.3781094527361,
+   "cycles": 854.8537313432834,
+   "GBps": 0.7187194457636117
+  },
+  {
+   "method": "sendrecv_gpsimd",
+   "route": "m1",
+   "tile": 131072,
+   "ns": 3118.0427275387765,
+   "cycles": 3741.6512730465315,
+   "GBps": 42.03662728620192
+  }
+ ],
+ "failures": [
+  {
+   "method": "ag_sbuf",
+   "route": "x16",
+   "tile": 4194304,
+   "nstep": 9,
+   "why": "eff with status 2\n2026-Nov-11 08:39:48.699170 64250:64265 ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/sweep/ag_sbuf-x16/f32768/n9/kernel.neff with status 2\n"
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "x16",
+   "tile": 4194304,
+   "nstep": 1,
+   "why": "eff with status 2\n2026-Nov-11 08:39:28.000091 63697:63739 ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/sweep/ag_sbuf-x16/f32768/n1/kernel.neff with status 2\n"
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "x16",
+   "tile": 4194304,
+   "nstep": 33,
+   "why": "ff with status 2\n2026-Nov-11 08:40:09.723418 64753:64807 ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/sweep/ag_sbuf-x16/f32768/n33/kernel.neff with status 2\n"
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "x8",
+   "tile": 4194304,
+   "nstep": 9,
+   "why": "l.neff, exec_id 77\n2026-Nov-11 08:32:43.695446 34859:34859 ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/sweep/ag_sbuf-x8/f32768/n9/kernel.neff with status 2\n"
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "x8",
+   "tile": 4194304,
+   "nstep": 1,
+   "why": "neff with status 2\n2026-Nov-11 08:32:26.615238 34387:34420 ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/sweep/ag_sbuf-x8/f32768/n1/kernel.neff with status 2\n"
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "x8",
+   "tile": 4194304,
+   "nstep": 33,
+   "why": "eff with status 2\n2026-Nov-11 08:33:01.620886 35336:35358 ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/sweep/ag_sbuf-x8/f32768/n33/kernel.neff with status 2\n"
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "m1",
+   "tile": 4194304,
+   "nstep": 9,
+   "why": "20\nrsp    0x7fee3bff70e0\nr8     0x16\nr9     0x0\nr10    0x22\nr11    0x246\nr12    0x6\nr13    0x7fc93466d000\nr14    0x1000\nr15    0x0\nrip    0x7fee8a4421ac\nrflags 0x246\ncs     0x33\nfs     0x0\ngs     0x0\n"
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "m1",
+   "tile": 4194304,
+   "nstep": 1,
+   "why": "20\nrsp    0x7f30fd7f30e0\nr8     0x16\nr9     0x0\nr10    0x22\nr11    0x246\nr12    0x6\nr13    0x7f1e9fa43000\nr14    0x1000\nr15    0x0\nrip    0x7f31ecbd81ac\nrflags 0x246\ncs     0x33\nfs     0x0\ngs     0x0\n"
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "m1",
+   "tile": 4194304,
+   "nstep": 33,
+   "why": "20\nrsp    0x7fcf2bff70e0\nr8     0x16\nr9     0x0\nr10    0x22\nr11    0x246\nr12    0x6\nr13    0x7faaa2a9e000\nr14    0x1000\nr15    0x0\nrip    0x7fcff4ca01ac\nrflags 0x246\ncs     0x33\nfs     0x0\ngs     0x0\n"
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "m4",
+   "tile": 4194304,
+   "nstep": 9,
+   "why": "20\nrsp    0x7f6b73ff70e0\nr8     0x16\nr9     0x0\nr10    0x22\nr11    0x246\nr12    0x6\nr13    0x7f46c67df000\nr14    0x1000\nr15    0x0\nrip    0x7f6c1552d1ac\nrflags 0x246\ncs     0x33\nfs     0x0\ngs     0x0\n"
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "m4",
+   "tile": 4194304,
+   "nstep": 1,
+   "why": "20\nrsp    0x7ff5b8df20e0\nr8     0x16\nr9     0x0\nr10    0x22\nr11    0x246\nr12    0x6\nr13    0x7fd0ff46b000\nr14    0x1000\nr15    0x0\nrip    0x7ff64d4301ac\nrflags 0x246\ncs     0x33\nfs     0x0\ngs     0x0\n"
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "m4",
+   "tile": 4194304,
+   "nstep": 33,
+   "why": "c0\nrsp    0x7ffce2a05c80\nr8     0x16\nr9     0x0\nr10    0x22\nr11    0x246\nr12    0x6\nr13    0x7f2ccef5c000\nr14    0x1000\nr15    0x0\nrip    0x7f5224ed91ac\nrflags 0x246\ncs     0x33\nfs     0x0\ngs     0x0\n"
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "die",
+   "tile": 512,
+   "nstep": 9,
+   "why": "l.neff with status 2\n2026-Nov-11 09:22:31.876610   759:776   ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/single/ag_sbuf-die/f4/n9/kernel.neff with status 2\n"
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "die",
+   "tile": 512,
+   "nstep": 1,
+   "why": "l.neff with status 2\n2026-Nov-11 09:22:19.435520   359:399   ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/single/ag_sbuf-die/f4/n1/kernel.neff with status 2\n"
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "die",
+   "tile": 512,
+   "nstep": 33,
+   "why": ".neff with status 2\n2026-Nov-11 09:22:43.711207  1080:1116  ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/single/ag_sbuf-die/f4/n33/kernel.neff with status 2\n"
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "die",
+   "tile": 1048576,
+   "nstep": 9,
+   "why": "l.neff, exec_id 8\n2026-Nov-11 09:23:09.255130  1848:1848  ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/single/ag_sbuf-die/f8192/n9/kernel.neff with status 2\n"
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "die",
+   "tile": 1048576,
+   "nstep": 1,
+   "why": "eff with status 2\n2026-Nov-11 09:22:56.604542  1474:1477  ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/single/ag_sbuf-die/f8192/n1/kernel.neff with status 2\n"
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "die",
+   "tile": 1048576,
+   "nstep": 33,
+   "why": "ff with status 2\n2026-Nov-11 09:23:21.347064  2265:2304  ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/single/ag_sbuf-die/f8192/n33/kernel.neff with status 2\n"
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "xchip",
+   "tile": 512,
+   "nstep": 9,
+   "why": "neff with status 2\n2026-Nov-11 09:22:12.319452   699:701   ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/single/ag_sbuf-xchip/f4/n9/kernel.neff with status 2\n"
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "xchip",
+   "tile": 512,
+   "nstep": 1,
+   "why": "neff with status 2\n2026-Nov-11 09:22:00.060346   363:410   ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/single/ag_sbuf-xchip/f4/n1/kernel.neff with status 2\n"
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "xchip",
+   "tile": 512,
+   "nstep": 33,
+   "why": "eff with status 2\n2026-Nov-11 09:22:23.448946  1102:1124  ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/single/ag_sbuf-xchip/f4/n33/kernel.neff with status 2\n"
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "xchip",
+   "tile": 1048576,
+   "nstep": 9,
+   "why": "f with status 2\n2026-Nov-11 09:22:48.777905  1833:1833  ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/single/ag_sbuf-xchip/f8192/n9/kernel.neff with status 2\n"
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "xchip",
+   "tile": 1048576,
+   "nstep": 1,
+   "why": "f with status 2\n2026-Nov-11 09:22:36.306997  1433:1473  ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/single/ag_sbuf-xchip/f8192/n1/kernel.neff with status 2\n"
+  },
+  {
+   "method": "ag_sbuf",
+   "route": "xchip",
+   "tile": 1048576,
+   "nstep": 33,
+   "why": " with status 2\n2026-Nov-11 09:23:00.173310  2171:2173  ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/single/ag_sbuf-xchip/f8192/n33/kernel.neff with status 2\n"
+  },
+  {
+   "method": "ag_hbm",
+   "route": "xchip",
+   "tile": 512,
+   "nstep": 9,
+   "why": ".neff with status 2\n2026-Nov-11 09:16:43.104397   719:742   ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/single/ag_hbm-xchip/f4/n9/kernel.neff with status 2\n"
+  },
+  {
+   "method": "ag_hbm",
+   "route": "xchip",
+   "tile": 512,
+   "nstep": 1,
+   "why": ".neff with status 2\n2026-Nov-11 09:16:30.296220   378:429   ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/single/ag_hbm-xchip/f4/n1/kernel.neff with status 2\n"
+  },
+  {
+   "method": "ag_hbm",
+   "route": "xchip",
+   "tile": 512,
+   "nstep": 33,
+   "why": "neff with status 2\n2026-Nov-11 09:16:55.310117  1025:1054  ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/single/ag_hbm-xchip/f4/n33/kernel.neff with status 2\n"
+  },
+  {
+   "method": "ag_hbm",
+   "route": "xchip",
+   "tile": 8388608,
+   "nstep": 9,
+   "why": "f with status 2\n2026-Nov-11 09:17:56.768494  2879:2928  ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/single/ag_hbm-xchip/f65536/n9/kernel.neff with status 2\n"
+  },
+  {
+   "method": "ag_hbm",
+   "route": "xchip",
+   "tile": 8388608,
+   "nstep": 1,
+   "why": "f with status 2\n2026-Nov-11 09:17:44.892342  2479:2531  ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/single/ag_hbm-xchip/f65536/n1/kernel.neff with status 2\n"
+  },
+  {
+   "method": "ag_hbm",
+   "route": "xchip",
+   "tile": 8388608,
+   "nstep": 33,
+   "why": " with status 2\n2026-Nov-11 09:18:09.092362  3296:3300  ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/single/ag_hbm-xchip/f65536/n33/kernel.neff with status 2\n"
+  },
+  {
+   "method": "ag_hbm",
+   "route": "xchip",
+   "tile": 1048576,
+   "nstep": 9,
+   "why": "ff with status 2\n2026-Nov-11 09:17:20.116654  1722:1722  ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/single/ag_hbm-xchip/f8192/n9/kernel.neff with status 2\n"
+  },
+  {
+   "method": "ag_hbm",
+   "route": "xchip",
+   "tile": 1048576,
+   "nstep": 1,
+   "why": "ff with status 2\n2026-Nov-11 09:17:08.692055  1322:1338  ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/single/ag_hbm-xchip/f8192/n1/kernel.neff with status 2\n"
+  },
+  {
+   "method": "ag_hbm",
+   "route": "xchip",
+   "tile": 1048576,
+   "nstep": 33,
+   "why": "f with status 2\n2026-Nov-11 09:17:32.182090  2128:2149  ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/single/ag_hbm-xchip/f8192/n33/kernel.neff with status 2\n"
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "xchip",
+   "tile": 512,
+   "nstep": 9,
+   "why": "eff with status 2\n2026-Nov-11 09:20:26.626697   735:759   ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/single/cpi_sbuf-xchip/f4/n9/kernel.neff with status 2\n"
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "xchip",
+   "tile": 512,
+   "nstep": 1,
+   "why": "eff with status 2\n2026-Nov-11 09:20:15.296477   441:441   ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/single/cpi_sbuf-xchip/f4/n1/kernel.neff with status 2\n"
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "xchip",
+   "tile": 512,
+   "nstep": 33,
+   "why": "ff with status 2\n2026-Nov-11 09:20:37.669429  1066:1120  ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/single/cpi_sbuf-xchip/f4/n33/kernel.neff with status 2\n"
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "xchip",
+   "tile": 8388608,
+   "nstep": 9,
+   "why": "with status 2\n2026-Nov-11 09:21:35.332975  2870:2870  ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/single/cpi_sbuf-xchip/f65536/n9/kernel.neff with status 2\n"
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "xchip",
+   "tile": 8388608,
+   "nstep": 1,
+   "why": "with status 2\n2026-Nov-11 09:21:23.947129  2472:2472  ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/single/cpi_sbuf-xchip/f65536/n1/kernel.neff with status 2\n"
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "xchip",
+   "tile": 8388608,
+   "nstep": 33,
+   "why": "f, exec_id 9\n2026-Nov-11 09:21:47.550009  3170:3188  ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/single/cpi_sbuf-xchip/f65536/n33/kernel.neff with status 2\n"
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "xchip",
+   "tile": 1048576,
+   "nstep": 9,
+   "why": " with status 2\n2026-Nov-11 09:21:00.063050  1737:1755  ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/single/cpi_sbuf-xchip/f8192/n9/kernel.neff with status 2\n"
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "xchip",
+   "tile": 1048576,
+   "nstep": 1,
+   "why": " with status 2\n2026-Nov-11 09:20:48.942908  1334:1374  ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/single/cpi_sbuf-xchip/f8192/n1/kernel.neff with status 2\n"
+  },
+  {
+   "method": "cpi_sbuf",
+   "route": "xchip",
+   "tile": 1048576,
+   "nstep": 33,
+   "why": "with status 2\n2026-Nov-11 09:21:11.698028  2143:2196  ERROR   NRT:nrt_execute_repeat                      Failed to execute model /w/runs/p2p/single/cpi_sbuf-xchip/f8192/n33/kernel.neff with status 2\n"
+  }
+ ]
+}
