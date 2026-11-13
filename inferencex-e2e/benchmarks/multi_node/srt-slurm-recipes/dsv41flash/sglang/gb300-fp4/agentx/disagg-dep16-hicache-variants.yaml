@@ -5,8 +5,8 @@ base:
   identity:
     model: {}
     frameworks:
-      dynamo: "1.7.0.dev20261029"
-      sglang: "0.0.0.dev1+g52604e1d4"
+      dynamo: "1.7.0.dev20261110"
+      sglang: "0.0.0.dev1+g314bce7cf"
   dynamo:
     install: false
     request_plane: tcp
@@ -106,6 +106,7 @@ base:
         disaggregation-transfer-backend: mooncake
         chunked-prefill-size: 65536
         max-prefill-tokens: 32768
+        stream-interval: 32
         # 64 per DP rank, as vLLM's prefill max-num-seqs; absorbs the client's turn burst.
         max-running-requests: 128
         swa-prefix-tails: 2048
@@ -213,44 +214,6 @@ base:
       AIPERF_EXTRA_INPUTS: '{"chat_template_kwargs":{"reasoning_effort":"high","thinking":true},"temperature":1}'
       AIPERF_DATASET_MMAP_CACHE_ENABLED: "true"
 
-override_3p1d_dep2_dep16_c700:
-  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep16-hicache-3p1d-dep2-dep16-c700
-  roles:
-    prefill:
-      # Three DEP2 workers leave two GPUs of the second node idle.
-      nodes: 2
-      workers: 3
-    decode:
-      args:
-        max-running-requests: 288
-        cuda-graph-max-bs-decode: 18
-        disaggregation-decode-extra-slots: 27
-
-override_3p1d_dep2_dep16_c1228:
-  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep16-hicache-3p1d-dep2-dep16-c1228
-  roles:
-    prefill:
-      # Three DEP2 workers leave two GPUs of the second node idle.
-      nodes: 2
-      workers: 3
-    decode:
-      args:
-        max-running-requests: 384
-        cuda-graph-max-bs-decode: 24
-        disaggregation-decode-extra-slots: 36
-
-override_5p1d_dep2_dep16_c2884:
-  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep16-hicache-5p1d-dep2-dep16-c2884
-  roles:
-    prefill:
-      nodes: 3
-      workers: 5
-    decode:
-      args:
-        max-running-requests: 640
-        cuda-graph-max-bs-decode: 40
-        disaggregation-decode-extra-slots: 80
-
 override_7p1d_dep2_dep16_b96_c5540:
   name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep16-hicache-7p1d-dep2-dep16-b96-c5540
   roles:
@@ -271,4 +234,25 @@ override_9p1d_dep2_dep16_b192_c7480:
       args:
         max-running-requests: 3072
         cuda-graph-max-bs-decode: 192
+        load-balance-method: total_requests
+
+override_6p1d_dep2_dep32_c3018:
+  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep32-hicache-6p1d-dep2-dep32-c3018
+  roles:
+    prefill:
+      nodes: 3
+      workers: 6
+    decode:
+      nodes: 8
+      gpus: 32
+      env:
+        SGLANG_OPT_DSV41_BLOCKWISE_REJECTION: "1"
+      args:
+        tensor-parallel-size: 32
+        data-parallel-size: 32
+        expert-parallel-size: 32
+        ep-num-redundant-experts: 32
+        max-running-requests: 576
+        cuda-graph-max-bs-decode: 18
+        disaggregation-decode-extra-slots: 80
         load-balance-method: total_requests
