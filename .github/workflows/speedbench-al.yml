@@ -19,13 +19,25 @@ on: # zizmor: ignore[concurrency-limits]
         type: string
         default: 'dsv4'
       framework:
-        description: "Serving framework; selects the <model-prefix>_fp4_b300_<framework>[_<collector-variant>].sh collector"
+        description: "Serving framework; selects the <model-prefix>_<precision>_b300_<framework>[_<collector-variant>].sh collector"
         required: false
         type: choice
         options: [vllm, sglang]
         default: 'vllm'
+      precision:
+        description: "Checkpoint precision; selects and labels the collector"
+        required: false
+        type: choice
+        options: [fp4, fp8]
+        default: 'fp4'
+      tp:
+        description: "Tensor parallel size and allocated GPUs"
+        required: false
+        type: choice
+        options: ['1', '2', '4', '8']
+        default: '8'
       collector-variant:
-        description: "Collector variant suffix; non-empty selects <model-prefix>_fp4_b300_<framework>_<collector-variant>.sh (e.g. probabilistic_sample_method_block_rejection_sample_method)"
+        description: "Collector variant suffix; non-empty selects <model-prefix>_<precision>_b300_<framework>_<collector-variant>.sh"
         required: false
         type: string
         default: ''
@@ -97,11 +109,11 @@ env:
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
   MODEL: ${{ inputs.model }}
   MODEL_PREFIX: ${{ inputs.model-prefix }}
-  PRECISION: fp4
+  PRECISION: ${{ inputs.precision }}
   FRAMEWORK: ${{ inputs.framework }}
   EXP_NAME: ${{ inputs.model-prefix }}_speedbench
   IMAGE: ${{ inputs.image }}
-  TP: '8'
+  TP: ${{ inputs.tp }}
   EP_SIZE: '1'
   DP_ATTENTION: 'false'
   SPEC_DECODING: mtp
@@ -155,11 +167,12 @@ jobs:
             --arg runner "$RUNNER" \
             --arg model_prefix "$MODEL_PREFIX" \
             --arg framework "$FRAMEWORK" \
+            --arg precision "$PRECISION" \
             '[{
               runner: $runner,
               framework: $framework,
               "model-prefix": $model_prefix,
-              precision: "fp4",
+              precision: $precision,
               "spec-decoding": "mtp"
             }]')
           scored=$(printf '%s' "$entry" |
@@ -188,7 +201,7 @@ jobs:
             toJSON(format('ci-attempt-{0}', github.run_attempt))
           ) ||
           format(
-            '["self-hosted",{0},{1},{2}]',
+            '["self-hosted",{0},"nodes:1",{1},{2}]',
             toJSON(inputs.runner),
             toJSON(format(
               'ci-job-{0}-{1}',
@@ -198,7 +211,7 @@ jobs:
             toJSON(format('ci-attempt-{0}', github.run_attempt))
           )
         ) ||
-        format('[{0}]', toJSON(inputs.runner))
+        format('["self-hosted",{0},"nodes:1"]', toJSON(inputs.runner))
       ) }}
     timeout-minutes: 600
     name: "p${{ needs.setup.outputs.priority }} | SpeedBench AL matrix | ${{ inputs.category }} | mtp=[${{ inputs.mtp-list }}] | thinking=[${{ inputs.thinking-modes }}]"
@@ -250,7 +263,7 @@ jobs:
         run: |
           if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           collector_dir=benchmarks/single_node/speedbench
-          collector="${MODEL_PREFIX}_fp4_b300_${FRAMEWORK}"
+          collector="${MODEL_PREFIX}_${PRECISION}_b300_${FRAMEWORK}"
           if [[ -n "$COLLECTOR_VARIANT" ]]; then
             collector+="_${COLLECTOR_VARIANT}"
           fi

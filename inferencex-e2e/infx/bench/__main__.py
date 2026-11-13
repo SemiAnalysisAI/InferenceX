@@ -14,6 +14,7 @@ COMMANDS = {
     "agentic": "infx.bench.agentic.run",
     "eval": "infx.bench.eval",
     "al-gate": "infx.bench.al_gate",
+    "speedbench-al": "infx.bench.speedbench_al",
     "video": "infx.bench.video",
 }
 
