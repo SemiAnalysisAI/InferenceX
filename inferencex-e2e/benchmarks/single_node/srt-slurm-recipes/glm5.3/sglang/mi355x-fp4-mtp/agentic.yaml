@@ -42,6 +42,10 @@ base:
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
         # HIP defaults DSA models to its own top-k; select the v2 kernel explicitly.
         SGLANG_OPT_USE_TOPK_V2: 'true'
+        # Ranks pick the Rust or Python TreeCore on their own, and the two fold the write-back
+        # reclaim digest differently, so mixed ranks fail the HiCache sync assertion
+        # (sgl-project/sglang#48112); pin every rank to the Python core.
+        SGLANG_UNIFIED_RADIX_TREE_CORE_BACKEND: 'python'
   benchmark:
     env:
       # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
@@ -60,7 +64,9 @@ override_tp4_c8_hicache:
         cuda-graph-backend-prefill: breakable
         enable-hierarchical-cache: true
         hicache-size: 180
-        hicache-write-policy: write_through
+        # Pages reach the host tier on eviction, so it adds to device KV
+        # capacity instead of mirroring it.
+        hicache-write-policy: write_back
   benchmark:
     env:
       CONC: '8'
@@ -78,7 +84,7 @@ override_tp4_c10_hicache:
         cuda-graph-backend-prefill: breakable
         enable-hierarchical-cache: true
         hicache-size: 180
-        hicache-write-policy: write_through
+        hicache-write-policy: write_back
   benchmark:
     env:
       CONC: '10'
@@ -96,7 +102,7 @@ override_tp4_c12_hicache:
         cuda-graph-backend-prefill: breakable
         enable-hierarchical-cache: true
         hicache-size: 180
-        hicache-write-policy: write_through
+        hicache-write-policy: write_back
   benchmark:
     env:
       CONC: '12'
@@ -114,7 +120,7 @@ override_tp4_c14_hicache:
         cuda-graph-backend-prefill: breakable
         enable-hierarchical-cache: true
         hicache-size: 180
-        hicache-write-policy: write_through
+        hicache-write-policy: write_back
   benchmark:
     env:
       CONC: '14'
@@ -132,8 +138,26 @@ override_tp4_c16_hicache:
         cuda-graph-backend-prefill: breakable
         enable-hierarchical-cache: true
         hicache-size: 180
-        hicache-write-policy: write_through
+        hicache-write-policy: write_back
   benchmark:
     env:
       CONC: '16'
+      KV_OFFLOADING: dram
+
+override_tp4_c20_hicache:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        max-running-requests: 40
+        cuda-graph-max-bs-decode: 40
+        cuda-graph-backend-prefill: breakable
+        enable-hierarchical-cache: true
+        hicache-size: 180
+        hicache-write-policy: write_back
+  benchmark:
+    env:
+      CONC: '20'
       KV_OFFLOADING: dram

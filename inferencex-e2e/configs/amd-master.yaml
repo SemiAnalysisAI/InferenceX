@@ -1048,7 +1048,7 @@ glm5.3-fp4-mi355x-sglang-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.85
       search-space:
-      - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [8, 10, 12, 14, 16], spec-decoding: mtp, srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [8, 10, 12, 14, 16, 20], spec-decoding: mtp, srt-recipe: agentic.yaml }
 
 # The golden acceptance curve is the GLM-5.3 NVFP4 SGLang curve in
 # infx/golden_al_distribution/glm-5.3-nvfp4__mtp__native__default-default.yaml.
